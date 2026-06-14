@@ -9,22 +9,22 @@ use pantograph_dependency_planning::{
 };
 use pantograph_runtime_host_contracts::{
     ReservationLifecycleApplication, ReservationLifecycleApplicationState,
-    ReservationLifecycleEvent, ReservationLifecyclePort, ReservationLifecyclePortError,
-    RuntimeHostBatchExecutionMemberRequest, RuntimeHostBatchExecutionMemberResponse,
-    RuntimeHostBatchExecutionMemberState, RuntimeHostBatchExecutionPort,
-    RuntimeHostBatchExecutionRequest, RuntimeHostBatchExecutionResponse,
-    RuntimeHostBatchExecutionState, RuntimeHostBatchMemberFailurePolicy,
-    RuntimeHostBatchMemberReservationDisposition, RuntimeHostBatchMemberReservationPolicy,
-    RuntimeHostBatchMemberRetryDisposition, RuntimeHostDispatchError,
-    RuntimeHostExecutionCancellationContext, RuntimeHostExecutionCancellationHandle,
-    RuntimeHostExecutionCancellationSnapshot, RuntimeHostExecutionCancellationState,
-    RuntimeHostExecutionContractError, RuntimeHostExecutionDiagnostic,
-    RuntimeHostExecutionDiagnosticCode, RuntimeHostExecutionDiagnosticSeverity,
-    RuntimeHostExecutionInputValue, RuntimeHostExecutionPort, RuntimeHostExecutionPortError,
-    RuntimeHostExecutionRequest, RuntimeHostExecutionResponse,
-    RuntimeHostExecutionTerminalMetadata, SchedulerRuntimeHostBatchDispatcher,
-    SchedulerRuntimeHostDispatcher, RESERVATION_LIFECYCLE_CONTRACT_VERSION,
-    RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
+    ReservationLifecycleEvent, ReservationLifecycleOutcome, ReservationLifecyclePort,
+    ReservationLifecyclePortError, RuntimeHostBatchExecutionMemberRequest,
+    RuntimeHostBatchExecutionMemberResponse, RuntimeHostBatchExecutionMemberState,
+    RuntimeHostBatchExecutionPort, RuntimeHostBatchExecutionRequest,
+    RuntimeHostBatchExecutionResponse, RuntimeHostBatchExecutionState,
+    RuntimeHostBatchMemberFailurePolicy, RuntimeHostBatchMemberReservationDisposition,
+    RuntimeHostBatchMemberReservationPolicy, RuntimeHostBatchMemberRetryDisposition,
+    RuntimeHostDispatchError, RuntimeHostExecutionCancellationContext,
+    RuntimeHostExecutionCancellationHandle, RuntimeHostExecutionCancellationSnapshot,
+    RuntimeHostExecutionCancellationState, RuntimeHostExecutionContractError,
+    RuntimeHostExecutionDiagnostic, RuntimeHostExecutionDiagnosticCode,
+    RuntimeHostExecutionDiagnosticSeverity, RuntimeHostExecutionInputValue,
+    RuntimeHostExecutionPort, RuntimeHostExecutionPortError, RuntimeHostExecutionRequest,
+    RuntimeHostExecutionResponse, RuntimeHostExecutionTerminalMetadata,
+    SchedulerRuntimeHostBatchDispatcher, SchedulerRuntimeHostDispatcher,
+    RESERVATION_LIFECYCLE_CONTRACT_VERSION, RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
 };
 use pantograph_scheduler::{
     select_scheduler_dispatch, SchedulableTaskIntent, SchedulerDispatchSelectionRequest,
@@ -50,6 +50,7 @@ use crate::workflow::{
 
 use super::super::WorkflowExecutionSessionStore;
 use super::{
+    StartedRuntimeTaskBatchMember, WorkflowSchedulerRuntimeBatchMemberMutation,
     WorkflowSchedulerStartedRuntimeTaskSupervisor, WorkflowSchedulerTaskOrchestrator,
     WorkflowSchedulerTaskOrchestratorError,
 };
@@ -164,6 +165,10 @@ impl RecordingRuntimeHostBatchPort {
         }
     }
 
+    fn set_response(&self, response: RuntimeHostBatchExecutionResponse) {
+        *self.response.lock().expect("batch response lock") = Some(response);
+    }
+
     fn requests(&self) -> Vec<RuntimeHostBatchExecutionRequest> {
         self.requests.lock().expect("batch request lock").clone()
     }
@@ -210,6 +215,40 @@ impl ReservationLifecyclePort for AcceptingReservationLifecyclePort {
         &self,
         event: ReservationLifecycleEvent,
     ) -> Result<ReservationLifecycleApplication, ReservationLifecyclePortError> {
+        Ok(ReservationLifecycleApplication {
+            contract_version: RESERVATION_LIFECYCLE_CONTRACT_VERSION,
+            lifecycle_event_id: event.lifecycle_event_id,
+            reservation_lease_id: event.reservation_lease_id,
+            state: ReservationLifecycleApplicationState::Applied,
+            diagnostics: Vec::new(),
+        })
+    }
+}
+
+#[derive(Default)]
+struct RecordingReservationLifecyclePort {
+    events: Mutex<Vec<ReservationLifecycleEvent>>,
+}
+
+impl RecordingReservationLifecyclePort {
+    fn events(&self) -> Vec<ReservationLifecycleEvent> {
+        self.events
+            .lock()
+            .expect("reservation lifecycle events lock")
+            .clone()
+    }
+}
+
+#[async_trait]
+impl ReservationLifecyclePort for RecordingReservationLifecyclePort {
+    async fn apply_reservation_lifecycle(
+        &self,
+        event: ReservationLifecycleEvent,
+    ) -> Result<ReservationLifecycleApplication, ReservationLifecyclePortError> {
+        self.events
+            .lock()
+            .expect("reservation lifecycle events lock")
+            .push(event.clone());
         Ok(ReservationLifecycleApplication {
             contract_version: RESERVATION_LIFECYCLE_CONTRACT_VERSION,
             lifecycle_event_id: event.lifecycle_event_id,
@@ -354,6 +393,228 @@ async fn orchestrator_dispatches_runtime_batch_through_injected_batch_port() {
         cancellation_snapshots[0].state,
         RuntimeHostExecutionCancellationState::Running
     );
+}
+
+#[tokio::test]
+async fn orchestrator_builds_started_runtime_task_batch_request_from_member_inputs() {
+    let single_port = Arc::new(RecordingRuntimeHostPort::default());
+    let batch_port = Arc::new(RecordingRuntimeHostBatchPort::default());
+    let orchestrator = WorkflowSchedulerTaskOrchestrator::new(SchedulerRuntimeHostDispatcher::new(
+        single_port.clone(),
+    ))
+    .with_runtime_host_batch_dispatcher(SchedulerRuntimeHostBatchDispatcher::new(
+        batch_port.clone(),
+    ))
+    .with_reservation_lifecycle_port(Arc::new(AcceptingReservationLifecyclePort));
+    let (_store, _session_id, _workflow_run_id, first_member) =
+        started_runtime_batch_member_fixture(&orchestrator, "workflow-service-assignment-1").await;
+    let second_member = StartedRuntimeTaskBatchMember::new(
+        "workflow-service-assignment-2",
+        first_member.started().clone(),
+        first_member.selected_dispatch().clone(),
+    );
+    let members = vec![first_member, second_member];
+
+    let request = orchestrator
+        .runtime_host_batch_request_from_started_runtime_tasks(
+            "workflow-service-started-runtime-batch-1",
+            &members,
+        )
+        .expect("started runtime task batch request");
+
+    assert_eq!(
+        request.batch_execution_request_id,
+        "workflow-service-started-runtime-batch-1"
+    );
+    assert_eq!(request.members.len(), 2);
+    assert_eq!(
+        request.anchor_execution_request_id,
+        request.members[0].execution_request_id
+    );
+    assert_eq!(
+        request.members[0].reservation_policy,
+        RuntimeHostBatchMemberReservationPolicy::DeferToScheduler
+    );
+    assert_eq!(
+        request.members[0].failure_policy,
+        RuntimeHostBatchMemberFailurePolicy::Retryable
+    );
+    assert_eq!(request.members[0].materialized_inputs.len(), 1);
+    assert_eq!(request.members[0].materialized_inputs[0].port_id, "text");
+    assert_eq!(
+        request.members[0].materialized_inputs[0].value,
+        RuntimeHostExecutionInputValue::String("paint a red cube".to_string())
+    );
+    assert!(single_port.requests().is_empty());
+    assert!(batch_port.requests().is_empty());
+}
+
+#[tokio::test]
+async fn orchestrator_dispatches_started_runtime_task_batch_without_single_dispatch_fallback() {
+    let single_port = Arc::new(RecordingRuntimeHostPort::default());
+    let batch_port = Arc::new(RecordingRuntimeHostBatchPort::default());
+    let orchestrator = WorkflowSchedulerTaskOrchestrator::new(SchedulerRuntimeHostDispatcher::new(
+        single_port.clone(),
+    ))
+    .with_runtime_host_batch_dispatcher(SchedulerRuntimeHostBatchDispatcher::new(
+        batch_port.clone(),
+    ))
+    .with_reservation_lifecycle_port(Arc::new(AcceptingReservationLifecyclePort));
+    let (_store, _session_id, _workflow_run_id, first_member) =
+        started_runtime_batch_member_fixture(&orchestrator, "workflow-service-assignment-1").await;
+    let second_member = StartedRuntimeTaskBatchMember::new(
+        "workflow-service-assignment-2",
+        first_member.started().clone(),
+        first_member.selected_dispatch().clone(),
+    );
+    let members = vec![first_member, second_member];
+    let request = orchestrator
+        .runtime_host_batch_request_from_started_runtime_tasks(
+            "workflow-service-started-runtime-batch-2",
+            &members,
+        )
+        .expect("started runtime task batch request");
+    batch_port.set_response(runtime_host_batch_response_fixture(&request));
+
+    let response = orchestrator
+        .dispatch_started_runtime_task_batch("workflow-service-started-runtime-batch-2", &members)
+        .await
+        .expect("started runtime task batch should reach batch dispatcher");
+
+    assert_eq!(response.as_ref().members.len(), 2);
+    assert!(single_port.requests().is_empty());
+    let recorded = batch_port.requests();
+    assert_eq!(recorded.len(), 1);
+    assert_eq!(
+        recorded[0].batch_execution_request_id,
+        "workflow-service-started-runtime-batch-2"
+    );
+}
+
+#[tokio::test]
+async fn orchestrator_applies_batch_member_retryable_response_without_terminal_result() {
+    let reservation_port = Arc::new(RecordingReservationLifecyclePort::default());
+    let orchestrator = orchestrator_without_runtime_host_response()
+        .with_reservation_lifecycle_port(reservation_port.clone());
+    let (mut store, session_id, workflow_run_id, member) =
+        started_runtime_batch_member_fixture(&orchestrator, "workflow-service-assignment-1").await;
+    let response = runtime_host_batch_member_response(
+        &member,
+        RuntimeHostBatchExecutionMemberState::Failed,
+        RuntimeHostBatchMemberRetryDisposition::Retryable,
+        RuntimeHostBatchMemberReservationDisposition::DeferredToScheduler,
+    );
+
+    let mutation = orchestrator
+        .apply_runtime_batch_member_response_mutation(
+            &mut store,
+            &session_id,
+            &workflow_run_id,
+            &member,
+            &response,
+        )
+        .expect("apply retryable batch member response");
+    let WorkflowSchedulerRuntimeBatchMemberMutation::Retryable(record) = mutation else {
+        panic!("expected retryable mutation");
+    };
+    assert_eq!(record.state.kind(), SchedulerTaskStateKind::RetryableFailed);
+    assert_eq!(
+        orchestrator
+            .active_task_lifecycle_handle_count()
+            .expect("lifecycle handle count"),
+        0
+    );
+    assert!(store
+        .active_run_scheduler_task_results(&session_id, &workflow_run_id)
+        .expect("stored task results")
+        .iter()
+        .all(|result| result.task_id != member.started().task().task_id.as_str()));
+
+    let application = orchestrator
+        .apply_runtime_batch_member_reservation_lifecycle(&member, &response)
+        .await
+        .expect("apply retryable reservation lifecycle");
+    assert_eq!(
+        application.as_ref().state,
+        ReservationLifecycleApplicationState::Applied
+    );
+    let events = reservation_port.events();
+    assert_eq!(events.len(), 1);
+    assert_eq!(
+        events[0].outcome,
+        ReservationLifecycleOutcome::RetryDeferred
+    );
+}
+
+#[tokio::test]
+async fn orchestrator_applies_batch_member_completed_response_as_terminal_result() {
+    let orchestrator = orchestrator_without_runtime_host_response()
+        .with_reservation_lifecycle_port(Arc::new(AcceptingReservationLifecyclePort));
+    let (mut store, session_id, workflow_run_id, member) =
+        started_runtime_batch_member_fixture(&orchestrator, "workflow-service-assignment-1").await;
+    let response = runtime_host_batch_member_response(
+        &member,
+        RuntimeHostBatchExecutionMemberState::Completed,
+        RuntimeHostBatchMemberRetryDisposition::NotRetryable,
+        RuntimeHostBatchMemberReservationDisposition::Released,
+    );
+
+    let mutation = orchestrator
+        .apply_runtime_batch_member_response_mutation(
+            &mut store,
+            &session_id,
+            &workflow_run_id,
+            &member,
+            &response,
+        )
+        .expect("apply completed batch member response");
+
+    let WorkflowSchedulerRuntimeBatchMemberMutation::Terminal(mutation) = mutation else {
+        panic!("expected terminal mutation");
+    };
+    let record = applied_test_terminal_task_state_record(mutation.apply_result);
+    assert_eq!(record.state.kind(), SchedulerTaskStateKind::Completed);
+    let results = store
+        .active_run_scheduler_task_results(&session_id, &workflow_run_id)
+        .expect("stored task results");
+    assert!(results.iter().any(|result| {
+        result.task_id == member.started().task().task_id.as_str()
+            && result.status == WorkflowSchedulerTaskResultStatus::Completed
+    }));
+}
+
+#[tokio::test]
+async fn orchestrator_applies_batch_member_deferred_response_without_terminal_result() {
+    let orchestrator = orchestrator_without_runtime_host_response()
+        .with_reservation_lifecycle_port(Arc::new(AcceptingReservationLifecyclePort));
+    let (mut store, session_id, workflow_run_id, member) =
+        started_runtime_batch_member_fixture(&orchestrator, "workflow-service-assignment-1").await;
+    let response = runtime_host_batch_member_response(
+        &member,
+        RuntimeHostBatchExecutionMemberState::Deferred,
+        RuntimeHostBatchMemberRetryDisposition::Deferred,
+        RuntimeHostBatchMemberReservationDisposition::DeferredToScheduler,
+    );
+
+    let mutation = orchestrator
+        .apply_runtime_batch_member_response_mutation(
+            &mut store,
+            &session_id,
+            &workflow_run_id,
+            &member,
+            &response,
+        )
+        .expect("apply deferred batch member response");
+
+    let WorkflowSchedulerRuntimeBatchMemberMutation::Deferred(record) = mutation else {
+        panic!("expected deferred mutation");
+    };
+    assert_eq!(record.state.kind(), SchedulerTaskStateKind::PausedDeferred);
+    assert!(store
+        .active_run_scheduler_task_results(&session_id, &workflow_run_id)
+        .expect("stored task results")
+        .iter()
+        .all(|result| result.task_id != member.started().task().task_id.as_str()));
 }
 
 #[tokio::test]
@@ -2269,6 +2530,125 @@ fn runtime_host_batch_response_fixture(
                 }),
             })
             .collect(),
+    }
+}
+
+async fn started_runtime_batch_member_fixture(
+    orchestrator: &WorkflowSchedulerTaskOrchestrator,
+    assignment_id: &str,
+) -> (
+    WorkflowExecutionSessionStore,
+    String,
+    String,
+    StartedRuntimeTaskBatchMember,
+) {
+    let selection_request = dispatch_selection_request_fixture();
+    let mut runtime_task = task_from_intent(selection_request.task_intent.clone());
+    runtime_task.dependency_task_ids = vec![SchedulerTaskId::parse("prompt").expect("task id")];
+    runtime_task.input_bindings = vec![text_binding("prompt", runtime_task.task_id.as_str())];
+    let task_graph = task_graph(vec![
+        text_input_task_for_runtime_intent(&selection_request.task_intent, "prompt"),
+        runtime_task,
+    ]);
+    let workflow_run_id = task_graph.workflow_run_id.as_str().to_string();
+    let task_id = selection_request.task_intent.task_id.as_str().to_string();
+    let mut store = WorkflowExecutionSessionStore::new(2, 1);
+    let session_id = begin_active_run_for_task_graph(&mut store, &task_graph);
+    orchestrator
+        .initialize_active_run_task_state(
+            &mut store,
+            &session_id,
+            &workflow_run_id,
+            task_graph.clone(),
+        )
+        .expect("initialize active run task state");
+    orchestrator
+        .materialize_external_inputs_for_active_run(
+            &mut store,
+            &session_id,
+            &workflow_run_id,
+            &[WorkflowPortBinding {
+                node_id: "prompt".to_string(),
+                port_id: "text".to_string(),
+                value: json!("paint a red cube"),
+            }],
+        )
+        .expect("materialize source input");
+    orchestrator
+        .advance_awaiting_runtime_task_inputs(&mut store, &session_id, &workflow_run_id, &task_id)
+        .expect("advance runtime task inputs")
+        .expect("runtime task should advance");
+    orchestrator
+        .apply_runtime_dependency_readiness_admission(
+            &mut store,
+            &session_id,
+            &workflow_run_id,
+            &task_id,
+            DependencyReadinessPolicy::CheckOnly,
+            Some(selection_request.readiness_proof.clone()),
+        )
+        .expect("admit runtime task readiness");
+    let started = orchestrator
+        .start_ready_runtime_task(&mut store, &session_id, &workflow_run_id, &task_id)
+        .expect("start ready runtime task");
+    let selected_dispatch = orchestrator
+        .select_runtime_task_dispatch(
+            started.task(),
+            ValidatedSchedulerDispatchSelectionRequest::try_from(selection_request)
+                .expect("selection request fixture must validate"),
+        )
+        .await
+        .expect("select runtime task dispatch");
+    let member =
+        StartedRuntimeTaskBatchMember::new(assignment_id.to_string(), started, selected_dispatch);
+    (store, session_id, workflow_run_id, member)
+}
+
+fn runtime_host_batch_member_response(
+    member: &StartedRuntimeTaskBatchMember,
+    state: RuntimeHostBatchExecutionMemberState,
+    retry_disposition: RuntimeHostBatchMemberRetryDisposition,
+    reservation_disposition: RuntimeHostBatchMemberReservationDisposition,
+) -> RuntimeHostBatchExecutionMemberResponse {
+    let task = member.started().task();
+    let completed = state == RuntimeHostBatchExecutionMemberState::Completed;
+    RuntimeHostBatchExecutionMemberResponse {
+        execution_request_id: format!("workflow-runtime-batch-member:{}", member.assignment_id()),
+        assignment_id: member.assignment_id().to_string(),
+        workflow_id: task.workflow_id.clone(),
+        workflow_run_id: task.workflow_run_id.clone(),
+        node_id: task.node_id.clone(),
+        task_id: task.task_id.clone(),
+        state,
+        retry_disposition,
+        reservation_disposition,
+        outputs: if completed {
+            runtime_host_response_fixture().outputs
+        } else {
+            Vec::new()
+        },
+        diagnostics: vec![RuntimeHostExecutionDiagnostic {
+            severity: if completed {
+                RuntimeHostExecutionDiagnosticSeverity::Info
+            } else {
+                RuntimeHostExecutionDiagnosticSeverity::Warning
+            },
+            code: if completed {
+                RuntimeHostExecutionDiagnosticCode::ExecutionCompleted
+            } else {
+                RuntimeHostExecutionDiagnosticCode::RuntimeUnavailable
+            },
+            message: if completed {
+                "runtime host completed batch member".to_string()
+            } else {
+                "runtime host asked scheduler to retry batch member".to_string()
+            },
+            hint: None,
+        }],
+        terminal_metadata: Some(RuntimeHostExecutionTerminalMetadata {
+            completed_at_ms: Some(2_000),
+            attempt: Some(1),
+        }),
     }
 }
 

@@ -5,18 +5,22 @@ use async_trait::async_trait;
 use pantograph_dependency_planning::{DependencyReadinessPolicy, DependencyReadinessProofEnvelope};
 #[cfg(test)]
 use pantograph_runtime_host_contracts::RuntimeHostExecutionInput;
-#[cfg(test)]
-use pantograph_runtime_host_contracts::ValidatedRuntimeHostBatchExecutionResponse;
 use pantograph_runtime_host_contracts::{
     ReservationLifecycleApplicationState, ReservationLifecycleContractError,
     ReservationLifecycleDiagnostic, ReservationLifecycleDiagnosticCode,
     ReservationLifecycleDiagnosticSeverity, ReservationLifecycleEvent, ReservationLifecycleOutcome,
-    ReservationLifecyclePort, ReservationLifecyclePortError, RuntimeHostBatchExecutionPort,
-    RuntimeHostBatchExecutionRequest, RuntimeHostDispatchError,
+    ReservationLifecyclePort, ReservationLifecyclePortError,
+    RuntimeHostBatchExecutionMemberRequest, RuntimeHostBatchExecutionMemberResponse,
+    RuntimeHostBatchExecutionMemberState, RuntimeHostBatchExecutionPort,
+    RuntimeHostBatchExecutionRequest, RuntimeHostBatchMemberFailurePolicy,
+    RuntimeHostBatchMemberReservationDisposition, RuntimeHostBatchMemberReservationPolicy,
+    RuntimeHostBatchMemberRetryDisposition, RuntimeHostDispatchError,
     RuntimeHostExecutionCancellationContext, RuntimeHostExecutionCancellationHandle,
-    RuntimeHostExecutionPortError, SchedulerRuntimeHostBatchDispatcher,
-    SchedulerRuntimeHostDispatcher, ValidatedReservationLifecycleApplication,
-    ValidatedReservationLifecycleEvent, RESERVATION_LIFECYCLE_CONTRACT_VERSION,
+    RuntimeHostExecutionDiagnosticSeverity, RuntimeHostExecutionPortError,
+    SchedulerRuntimeHostBatchDispatcher, SchedulerRuntimeHostDispatcher,
+    ValidatedReservationLifecycleApplication, ValidatedReservationLifecycleEvent,
+    ValidatedRuntimeHostBatchExecutionRequest, ValidatedRuntimeHostBatchExecutionResponse,
+    RESERVATION_LIFECYCLE_CONTRACT_VERSION, RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
 };
 use pantograph_scheduler::{
     plan_scheduler_readiness_admission, select_scheduler_dispatch, SchedulerContractError,
@@ -39,12 +43,12 @@ use thiserror::Error;
 
 use crate::workflow::{
     execute_non_runtime_scheduler_task, materialize_external_workflow_inputs,
-    materialize_runtime_host_inputs, runtime_host_response_to_task_result,
-    WorkflowExternalInputMaterializationError, WorkflowPortBinding,
-    WorkflowRuntimeHostTaskInputMappingError, WorkflowRuntimeHostTaskResultMappingError,
-    WorkflowSchedulerNonRuntimeTaskAdapterError, WorkflowSchedulerNonRuntimeTaskTemplate,
-    WorkflowSchedulerSourceInputTemplate, WorkflowSchedulerTask,
-    WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskGraph,
+    materialize_runtime_host_inputs, runtime_host_batch_member_response_to_task_result,
+    runtime_host_response_to_task_result, WorkflowExternalInputMaterializationError,
+    WorkflowPortBinding, WorkflowRuntimeHostTaskInputMappingError,
+    WorkflowRuntimeHostTaskResultMappingError, WorkflowSchedulerNonRuntimeTaskAdapterError,
+    WorkflowSchedulerNonRuntimeTaskTemplate, WorkflowSchedulerSourceInputTemplate,
+    WorkflowSchedulerTask, WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskGraph,
     WorkflowSchedulerTaskInputBinding, WorkflowSchedulerTaskProjectionDiagnostic,
     WorkflowSchedulerTaskProjectionDiagnosticSeverity, WorkflowSchedulerTaskResult,
     WorkflowSchedulerTaskResultStatus, WorkflowSchedulerTaskResultValue, WorkflowServiceError,
@@ -96,6 +100,24 @@ pub(crate) struct StartedRuntimeTaskExecution {
     running_record: SchedulerTaskStateRecord,
     attempt_id: WorkflowSchedulerTaskAttemptId,
     started_at_ms: u64,
+}
+
+#[derive(Debug, Clone)]
+#[must_use]
+#[allow(dead_code)]
+pub(crate) struct StartedRuntimeTaskBatchMember {
+    assignment_id: String,
+    started: StartedRuntimeTaskExecution,
+    selected_dispatch: SelectedRuntimeTaskDispatch,
+}
+
+#[derive(Debug, Clone)]
+#[must_use]
+#[allow(dead_code)]
+pub(crate) enum WorkflowSchedulerRuntimeBatchMemberMutation {
+    Terminal(WorkflowSchedulerTaskTerminalMutation),
+    Deferred(SchedulerTaskStateRecord),
+    Retryable(SchedulerTaskStateRecord),
 }
 
 #[derive(Debug, Clone)]
@@ -187,6 +209,36 @@ impl StartedRuntimeTaskExecution {
 
     pub(crate) fn started_at_ms(&self) -> u64 {
         self.started_at_ms
+    }
+}
+
+impl StartedRuntimeTaskBatchMember {
+    #[allow(dead_code)]
+    pub(crate) fn new(
+        assignment_id: impl Into<String>,
+        started: StartedRuntimeTaskExecution,
+        selected_dispatch: SelectedRuntimeTaskDispatch,
+    ) -> Self {
+        Self {
+            assignment_id: assignment_id.into(),
+            started,
+            selected_dispatch,
+        }
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn assignment_id(&self) -> &str {
+        &self.assignment_id
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn started(&self) -> &StartedRuntimeTaskExecution {
+        &self.started
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn selected_dispatch(&self) -> &SelectedRuntimeTaskDispatch {
+        &self.selected_dispatch
     }
 }
 
@@ -442,6 +494,62 @@ impl WorkflowSchedulerTaskOrchestrator {
             .map_err(WorkflowSchedulerTaskOrchestratorError::RuntimeHostDispatch)
     }
 
+    #[allow(dead_code)]
+    pub(crate) fn runtime_host_batch_request_from_started_runtime_tasks(
+        &self,
+        batch_execution_request_id: impl Into<String>,
+        members: &[StartedRuntimeTaskBatchMember],
+    ) -> Result<RuntimeHostBatchExecutionRequest, WorkflowSchedulerTaskOrchestratorError> {
+        let batch_execution_request_id = batch_execution_request_id.into();
+        if members.is_empty() {
+            return Err(WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+                WorkflowServiceError::InvalidRequest(
+                    "runtime-host batch request requires at least one started runtime task"
+                        .to_string(),
+                ),
+            ));
+        }
+        let anchor_execution_request_id =
+            runtime_batch_member_execution_request_id(members[0].assignment_id());
+        let request_members = members
+            .iter()
+            .map(runtime_host_batch_member_request_from_started_task)
+            .collect::<Result<Vec<_>, WorkflowSchedulerTaskOrchestratorError>>()?;
+        let request = RuntimeHostBatchExecutionRequest {
+            contract_version: RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
+            batch_execution_request_id: batch_execution_request_id.clone(),
+            anchor_execution_request_id,
+            cancellation_context: RuntimeHostExecutionCancellationContext::workflow_service(
+                &batch_execution_request_id,
+            ),
+            members: request_members,
+        };
+        let validated =
+            ValidatedRuntimeHostBatchExecutionRequest::try_from(request).map_err(|error| {
+                WorkflowSchedulerTaskOrchestratorError::RuntimeHostDispatch(
+                    RuntimeHostDispatchError::RequestContract(error),
+                )
+            })?;
+        Ok(validated.into_inner())
+    }
+
+    #[allow(dead_code)]
+    pub(crate) async fn dispatch_started_runtime_task_batch(
+        &self,
+        batch_execution_request_id: impl Into<String>,
+        members: &[StartedRuntimeTaskBatchMember],
+    ) -> Result<ValidatedRuntimeHostBatchExecutionResponse, WorkflowSchedulerTaskOrchestratorError>
+    {
+        let request = self.runtime_host_batch_request_from_started_runtime_tasks(
+            batch_execution_request_id,
+            members,
+        )?;
+        self.runtime_host_batch_dispatcher
+            .dispatch_batch(request)
+            .await
+            .map_err(WorkflowSchedulerTaskOrchestratorError::RuntimeHostDispatch)
+    }
+
     #[cfg(test)]
     pub(crate) async fn select_and_dispatch_runtime_task(
         &self,
@@ -689,6 +797,20 @@ impl WorkflowSchedulerTaskOrchestrator {
             )?)
             .await?;
         Ok(())
+    }
+
+    #[allow(dead_code)]
+    pub(crate) async fn apply_runtime_batch_member_reservation_lifecycle(
+        &self,
+        member: &StartedRuntimeTaskBatchMember,
+        response: &RuntimeHostBatchExecutionMemberResponse,
+    ) -> Result<ValidatedReservationLifecycleApplication, WorkflowSchedulerTaskOrchestratorError>
+    {
+        validate_runtime_batch_member_response_correlation(member, response)?;
+        self.apply_reservation_cleanup_lifecycle_event(runtime_host_batch_member_lifecycle_event(
+            member, response,
+        )?)
+        .await
     }
 
     async fn apply_unselected_candidate_lifecycle_events(
@@ -1241,6 +1363,98 @@ impl WorkflowSchedulerTaskOrchestrator {
         Ok(mutation)
     }
 
+    #[allow(dead_code)]
+    pub(crate) fn apply_runtime_batch_member_response_mutation(
+        &self,
+        store: &mut WorkflowExecutionSessionStore,
+        session_id: &str,
+        workflow_run_id: &str,
+        member: &StartedRuntimeTaskBatchMember,
+        response: &RuntimeHostBatchExecutionMemberResponse,
+    ) -> Result<WorkflowSchedulerRuntimeBatchMemberMutation, WorkflowSchedulerTaskOrchestratorError>
+    {
+        validate_runtime_batch_member_response_correlation(member, response)?;
+        match batch_member_scheduler_mutation_kind(response)? {
+            RuntimeBatchMemberSchedulerMutationKind::Terminal => {
+                let result = runtime_host_batch_member_response_to_task_result(response).map_err(
+                    WorkflowSchedulerTaskOrchestratorError::RuntimeHostTaskResultMapping,
+                )?;
+                let mutation = self.complete_started_runtime_task_terminal_mutation(
+                    store,
+                    session_id,
+                    workflow_run_id,
+                    member.started(),
+                    result,
+                )?;
+                Ok(WorkflowSchedulerRuntimeBatchMemberMutation::Terminal(
+                    mutation,
+                ))
+            }
+            RuntimeBatchMemberSchedulerMutationKind::Cancelled => {
+                let mutation = self.cancel_started_runtime_task_terminal_mutation(
+                    store,
+                    session_id,
+                    workflow_run_id,
+                    member.started(),
+                    &runtime_batch_member_diagnostic_summary(response),
+                )?;
+                Ok(WorkflowSchedulerRuntimeBatchMemberMutation::Terminal(
+                    mutation,
+                ))
+            }
+            RuntimeBatchMemberSchedulerMutationKind::Deferred => {
+                let transition = paused_deferred_transition_from_running(
+                    &member.started().running_record,
+                    runtime_batch_member_scheduler_diagnostics(
+                        response,
+                        SchedulerTaskStateDiagnosticCode::TaskDeferred,
+                        SchedulerTaskStateDiagnosticSeverity::Warning,
+                    ),
+                )?;
+                let record = store
+                    .apply_active_run_scheduler_task_transition(
+                        session_id,
+                        workflow_run_id,
+                        transition,
+                    )
+                    .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
+                    .and_then(applied_task_state_record)?;
+                self.release_task_lifecycle_handle(
+                    &member.started().task.task_id,
+                    member.started().attempt_id(),
+                )?;
+                Ok(WorkflowSchedulerRuntimeBatchMemberMutation::Deferred(
+                    record,
+                ))
+            }
+            RuntimeBatchMemberSchedulerMutationKind::Retryable => {
+                let transition = retryable_failed_transition_from_running(
+                    &member.started().running_record,
+                    runtime_batch_member_scheduler_diagnostics(
+                        response,
+                        SchedulerTaskStateDiagnosticCode::RetryableFailure,
+                        SchedulerTaskStateDiagnosticSeverity::Warning,
+                    ),
+                )?;
+                let record = store
+                    .apply_active_run_scheduler_task_transition(
+                        session_id,
+                        workflow_run_id,
+                        transition,
+                    )
+                    .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
+                    .and_then(applied_task_state_record)?;
+                self.release_task_lifecycle_handle(
+                    &member.started().task.task_id,
+                    member.started().attempt_id(),
+                )?;
+                Ok(WorkflowSchedulerRuntimeBatchMemberMutation::Retryable(
+                    record,
+                ))
+            }
+        }
+    }
+
     pub(crate) fn cancel_running_tasks_for_workflow_timeout(
         &self,
         store: &mut WorkflowExecutionSessionStore,
@@ -1776,6 +1990,408 @@ fn selected_candidate_id(
         .map(|candidate| candidate.candidate_id.clone())
 }
 
+#[allow(dead_code)]
+fn runtime_host_batch_member_request_from_started_task(
+    member: &StartedRuntimeTaskBatchMember,
+) -> Result<RuntimeHostBatchExecutionMemberRequest, WorkflowSchedulerTaskOrchestratorError> {
+    validate_started_runtime_batch_member(member)?;
+    let materialized_inputs = materialize_runtime_host_inputs(
+        member.started().task(),
+        &member.started().materialized_results,
+    )
+    .map_err(WorkflowSchedulerTaskOrchestratorError::RuntimeHostTaskInputMapping)?;
+    Ok(RuntimeHostBatchExecutionMemberRequest {
+        execution_request_id: runtime_batch_member_execution_request_id(member.assignment_id()),
+        assignment_id: member.assignment_id().to_string(),
+        handoff: member.selected_dispatch().runtime_handoff().clone(),
+        materialized_inputs,
+        timeout_ms: None,
+        failure_policy: RuntimeHostBatchMemberFailurePolicy::Retryable,
+        reservation_policy: RuntimeHostBatchMemberReservationPolicy::DeferToScheduler,
+    })
+}
+
+#[allow(dead_code)]
+fn runtime_batch_member_execution_request_id(assignment_id: &str) -> String {
+    format!("workflow-runtime-batch-member:{assignment_id}")
+}
+
+#[allow(dead_code)]
+fn validate_started_runtime_batch_member(
+    member: &StartedRuntimeTaskBatchMember,
+) -> Result<(), WorkflowSchedulerTaskOrchestratorError> {
+    if member.assignment_id().trim().is_empty() {
+        return Err(WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+            WorkflowServiceError::InvalidRequest(
+                "runtime-host batch member assignment id must be non-empty".to_string(),
+            ),
+        ));
+    }
+    let started = member.started();
+    if started.running_record.state.kind() != SchedulerTaskStateKind::Running {
+        return Err(WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+            WorkflowServiceError::InvalidRequest(format!(
+                "runtime-host batch member '{}' must reference a running scheduler task",
+                member.assignment_id()
+            )),
+        ));
+    }
+    let handoff = member.selected_dispatch().runtime_handoff();
+    if handoff.workflow_id != started.task.workflow_id
+        || handoff.workflow_run_id != started.task.workflow_run_id
+        || handoff.node_id != started.task.node_id
+        || handoff.task_id != started.task.task_id
+    {
+        return Err(WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+            WorkflowServiceError::InvalidRequest(format!(
+                "runtime-host batch member '{}' selected handoff does not match started scheduler task",
+                member.assignment_id()
+            )),
+        ));
+    }
+    Ok(())
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
+enum RuntimeBatchMemberSchedulerMutationKind {
+    Terminal,
+    Cancelled,
+    Deferred,
+    Retryable,
+}
+
+#[allow(dead_code)]
+fn batch_member_scheduler_mutation_kind(
+    response: &RuntimeHostBatchExecutionMemberResponse,
+) -> Result<RuntimeBatchMemberSchedulerMutationKind, WorkflowSchedulerTaskOrchestratorError> {
+    match response.state {
+        RuntimeHostBatchExecutionMemberState::Completed => {
+            Ok(RuntimeBatchMemberSchedulerMutationKind::Terminal)
+        }
+        RuntimeHostBatchExecutionMemberState::Cancelled => {
+            Ok(RuntimeBatchMemberSchedulerMutationKind::Cancelled)
+        }
+        RuntimeHostBatchExecutionMemberState::Deferred => {
+            Ok(RuntimeBatchMemberSchedulerMutationKind::Deferred)
+        }
+        RuntimeHostBatchExecutionMemberState::Failed
+        | RuntimeHostBatchExecutionMemberState::Rejected => match response.retry_disposition {
+            RuntimeHostBatchMemberRetryDisposition::NotRetryable => {
+                Ok(RuntimeBatchMemberSchedulerMutationKind::Terminal)
+            }
+            RuntimeHostBatchMemberRetryDisposition::Retryable => {
+                Ok(RuntimeBatchMemberSchedulerMutationKind::Retryable)
+            }
+            RuntimeHostBatchMemberRetryDisposition::Deferred => {
+                Ok(RuntimeBatchMemberSchedulerMutationKind::Deferred)
+            }
+            _ => Ok(RuntimeBatchMemberSchedulerMutationKind::Terminal),
+        },
+        RuntimeHostBatchExecutionMemberState::Accepted => {
+            Err(WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+                WorkflowServiceError::InvalidRequest(
+                    "runtime-host batch member response is not terminal or deferred".to_string(),
+                ),
+            ))
+        }
+        _ => Err(WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+            WorkflowServiceError::InvalidRequest(
+                "runtime-host batch member response state is unsupported by workflow-service"
+                    .to_string(),
+            ),
+        )),
+    }
+}
+
+#[allow(dead_code)]
+fn validate_runtime_batch_member_response_correlation(
+    member: &StartedRuntimeTaskBatchMember,
+    response: &RuntimeHostBatchExecutionMemberResponse,
+) -> Result<(), WorkflowSchedulerTaskOrchestratorError> {
+    let expected_execution_request_id =
+        runtime_batch_member_execution_request_id(member.assignment_id());
+    if response.execution_request_id != expected_execution_request_id {
+        return Err(runtime_batch_member_correlation_error(
+            member,
+            "execution request id",
+        ));
+    }
+    if response.assignment_id != member.assignment_id() {
+        return Err(runtime_batch_member_correlation_error(
+            member,
+            "assignment id",
+        ));
+    }
+    let task = member.started().task();
+    if response.workflow_id != task.workflow_id
+        || response.workflow_run_id != task.workflow_run_id
+        || response.node_id != task.node_id
+        || response.task_id != task.task_id
+    {
+        return Err(runtime_batch_member_correlation_error(
+            member,
+            "scheduler task identity",
+        ));
+    }
+    Ok(())
+}
+
+#[allow(dead_code)]
+fn runtime_batch_member_correlation_error(
+    member: &StartedRuntimeTaskBatchMember,
+    field: &'static str,
+) -> WorkflowSchedulerTaskOrchestratorError {
+    WorkflowSchedulerTaskOrchestratorError::WorkflowService(WorkflowServiceError::InvalidRequest(
+        format!(
+            "runtime-host batch member '{}' response {field} does not match started scheduler task",
+            member.assignment_id()
+        ),
+    ))
+}
+
+#[allow(dead_code)]
+fn runtime_batch_member_diagnostic_summary(
+    response: &RuntimeHostBatchExecutionMemberResponse,
+) -> String {
+    response
+        .diagnostics
+        .first()
+        .map(|diagnostic| diagnostic.message.clone())
+        .unwrap_or_else(|| {
+            format!(
+                "runtime-host batch member '{}' returned {:?}",
+                response.execution_request_id, response.state
+            )
+        })
+}
+
+#[allow(dead_code)]
+fn runtime_batch_member_scheduler_diagnostics(
+    response: &RuntimeHostBatchExecutionMemberResponse,
+    code: SchedulerTaskStateDiagnosticCode,
+    fallback_severity: SchedulerTaskStateDiagnosticSeverity,
+) -> Vec<SchedulerTaskStateDiagnostic> {
+    if response.diagnostics.is_empty() {
+        return vec![SchedulerTaskStateDiagnostic {
+            severity: fallback_severity,
+            code,
+            message: format!(
+                "runtime-host batch member '{}' returned {:?}",
+                response.execution_request_id, response.state
+            ),
+            hint: Some("Inspect runtime-host batch member diagnostics.".to_string()),
+        }];
+    }
+    response
+        .diagnostics
+        .iter()
+        .map(|diagnostic| SchedulerTaskStateDiagnostic {
+            severity: scheduler_diagnostic_severity_from_runtime(&diagnostic.severity),
+            code: code.clone(),
+            message: diagnostic.message.clone(),
+            hint: Some(runtime_host_diagnostic_code_label(&diagnostic.code).to_string()),
+        })
+        .collect()
+}
+
+#[allow(dead_code)]
+fn scheduler_diagnostic_severity_from_runtime(
+    severity: &RuntimeHostExecutionDiagnosticSeverity,
+) -> SchedulerTaskStateDiagnosticSeverity {
+    match severity {
+        RuntimeHostExecutionDiagnosticSeverity::Info => SchedulerTaskStateDiagnosticSeverity::Info,
+        RuntimeHostExecutionDiagnosticSeverity::Warning => {
+            SchedulerTaskStateDiagnosticSeverity::Warning
+        }
+        RuntimeHostExecutionDiagnosticSeverity::Error => {
+            SchedulerTaskStateDiagnosticSeverity::Error
+        }
+        _ => SchedulerTaskStateDiagnosticSeverity::Error,
+    }
+}
+
+#[allow(dead_code)]
+fn runtime_host_diagnostic_code_label(
+    code: &pantograph_runtime_host_contracts::RuntimeHostExecutionDiagnosticCode,
+) -> &'static str {
+    match code {
+        pantograph_runtime_host_contracts::RuntimeHostExecutionDiagnosticCode::HandoffAccepted => {
+            "runtime_host.handoff_accepted"
+        }
+        pantograph_runtime_host_contracts::RuntimeHostExecutionDiagnosticCode::HandoffRejected => {
+            "runtime_host.handoff_rejected"
+        }
+        pantograph_runtime_host_contracts::RuntimeHostExecutionDiagnosticCode::PumasLoadTargetRequired => {
+            "runtime_host.pumas_load_target_required"
+        }
+        pantograph_runtime_host_contracts::RuntimeHostExecutionDiagnosticCode::PumasLoadTargetUnavailable => {
+            "runtime_host.pumas_load_target_unavailable"
+        }
+        pantograph_runtime_host_contracts::RuntimeHostExecutionDiagnosticCode::RuntimeUnavailable => {
+            "runtime_host.runtime_unavailable"
+        }
+        pantograph_runtime_host_contracts::RuntimeHostExecutionDiagnosticCode::CancellationRequested => {
+            "runtime_host.cancellation_requested"
+        }
+        pantograph_runtime_host_contracts::RuntimeHostExecutionDiagnosticCode::ShutdownRequested => {
+            "runtime_host.shutdown_requested"
+        }
+        pantograph_runtime_host_contracts::RuntimeHostExecutionDiagnosticCode::ExecutionFailed => {
+            "runtime_host.execution_failed"
+        }
+        pantograph_runtime_host_contracts::RuntimeHostExecutionDiagnosticCode::ExecutionCompleted => {
+            "runtime_host.execution_completed"
+        }
+        _ => "runtime_host.unknown",
+    }
+}
+
+#[allow(dead_code)]
+fn runtime_host_batch_member_lifecycle_event(
+    member: &StartedRuntimeTaskBatchMember,
+    response: &RuntimeHostBatchExecutionMemberResponse,
+) -> Result<ReservationLifecycleEvent, WorkflowSchedulerTaskOrchestratorError> {
+    let outcome = runtime_host_batch_member_reservation_outcome(response)?;
+    let diagnostics = runtime_host_batch_member_reservation_diagnostics(response, &outcome);
+    reservation_lifecycle_event(
+        member.started().task(),
+        member.selected_dispatch().reservation_lease_id().clone(),
+        member.selected_dispatch().candidate_id().cloned(),
+        outcome,
+        diagnostics,
+    )
+}
+
+#[allow(dead_code)]
+fn runtime_host_batch_member_reservation_outcome(
+    response: &RuntimeHostBatchExecutionMemberResponse,
+) -> Result<ReservationLifecycleOutcome, WorkflowSchedulerTaskOrchestratorError> {
+    if response.reservation_disposition
+        == RuntimeHostBatchMemberReservationDisposition::DeferredToScheduler
+    {
+        return Ok(ReservationLifecycleOutcome::RetryDeferred);
+    }
+    match response.state {
+        RuntimeHostBatchExecutionMemberState::Completed => {
+            Ok(ReservationLifecycleOutcome::RuntimeHostCompleted)
+        }
+        RuntimeHostBatchExecutionMemberState::Cancelled => {
+            Ok(ReservationLifecycleOutcome::WorkflowCancelled)
+        }
+        RuntimeHostBatchExecutionMemberState::Rejected
+        | RuntimeHostBatchExecutionMemberState::Failed => {
+            if response.retry_disposition == RuntimeHostBatchMemberRetryDisposition::Retryable {
+                Ok(ReservationLifecycleOutcome::RetryDeferred)
+            } else {
+                Ok(ReservationLifecycleOutcome::RuntimeHostFailed)
+            }
+        }
+        RuntimeHostBatchExecutionMemberState::Deferred => {
+            Ok(ReservationLifecycleOutcome::RetryDeferred)
+        }
+        RuntimeHostBatchExecutionMemberState::Accepted => {
+            Err(WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+                WorkflowServiceError::InvalidRequest(
+                    "runtime-host batch member response is not terminal or deferred".to_string(),
+                ),
+            ))
+        }
+        _ => Err(WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+            WorkflowServiceError::InvalidRequest(
+                "runtime-host batch member reservation disposition is unsupported".to_string(),
+            ),
+        )),
+    }
+}
+
+#[allow(dead_code)]
+fn runtime_host_batch_member_reservation_diagnostics(
+    response: &RuntimeHostBatchExecutionMemberResponse,
+    outcome: &ReservationLifecycleOutcome,
+) -> Vec<ReservationLifecycleDiagnostic> {
+    let diagnostic_code = reservation_lifecycle_diagnostic_code_for_batch_member(outcome);
+    if response.diagnostics.is_empty() {
+        return vec![reservation_lifecycle_diagnostic(
+            reservation_lifecycle_severity_for_batch_member(outcome),
+            diagnostic_code,
+            format!(
+                "runtime-host batch member '{}' returned {:?}",
+                response.execution_request_id, response.state
+            ),
+        )];
+    }
+    response
+        .diagnostics
+        .iter()
+        .map(|diagnostic| {
+            reservation_lifecycle_diagnostic(
+                reservation_lifecycle_severity_from_runtime(&diagnostic.severity),
+                diagnostic_code.clone(),
+                diagnostic.message.clone(),
+            )
+        })
+        .collect()
+}
+
+#[allow(dead_code)]
+fn reservation_lifecycle_diagnostic_code_for_batch_member(
+    outcome: &ReservationLifecycleOutcome,
+) -> ReservationLifecycleDiagnosticCode {
+    match outcome {
+        ReservationLifecycleOutcome::RuntimeHostCompleted => {
+            ReservationLifecycleDiagnosticCode::RuntimeHostCompleted
+        }
+        ReservationLifecycleOutcome::RuntimeHostFailed => {
+            ReservationLifecycleDiagnosticCode::RuntimeHostFailed
+        }
+        ReservationLifecycleOutcome::WorkflowCancelled => {
+            ReservationLifecycleDiagnosticCode::WorkflowCancelled
+        }
+        ReservationLifecycleOutcome::RetryDeferred => {
+            ReservationLifecycleDiagnosticCode::RetryDeferred
+        }
+        _ => ReservationLifecycleDiagnosticCode::RuntimeHostFailed,
+    }
+}
+
+#[allow(dead_code)]
+fn reservation_lifecycle_severity_for_batch_member(
+    outcome: &ReservationLifecycleOutcome,
+) -> ReservationLifecycleDiagnosticSeverity {
+    match outcome {
+        ReservationLifecycleOutcome::RuntimeHostCompleted => {
+            ReservationLifecycleDiagnosticSeverity::Info
+        }
+        ReservationLifecycleOutcome::RetryDeferred => {
+            ReservationLifecycleDiagnosticSeverity::Warning
+        }
+        ReservationLifecycleOutcome::RuntimeHostFailed
+        | ReservationLifecycleOutcome::WorkflowCancelled => {
+            ReservationLifecycleDiagnosticSeverity::Error
+        }
+        _ => ReservationLifecycleDiagnosticSeverity::Error,
+    }
+}
+
+#[allow(dead_code)]
+fn reservation_lifecycle_severity_from_runtime(
+    severity: &RuntimeHostExecutionDiagnosticSeverity,
+) -> ReservationLifecycleDiagnosticSeverity {
+    match severity {
+        RuntimeHostExecutionDiagnosticSeverity::Info => {
+            ReservationLifecycleDiagnosticSeverity::Info
+        }
+        RuntimeHostExecutionDiagnosticSeverity::Warning => {
+            ReservationLifecycleDiagnosticSeverity::Warning
+        }
+        RuntimeHostExecutionDiagnosticSeverity::Error => {
+            ReservationLifecycleDiagnosticSeverity::Error
+        }
+        _ => ReservationLifecycleDiagnosticSeverity::Error,
+    }
+}
+
 fn runtime_host_terminal_lifecycle_event(
     task: &WorkflowSchedulerTask,
     reservation_lease_id: SchedulerReservationLeaseId,
@@ -2238,6 +2854,55 @@ fn terminal_failure_transition_from_running_diagnostics(
         SchedulerTaskStateKind::Running,
         SchedulerTaskState::TerminalFailed { diagnostics },
     )
+}
+
+#[allow(dead_code)]
+fn paused_deferred_transition_from_running(
+    record: &SchedulerTaskStateRecord,
+    diagnostics: Vec<SchedulerTaskStateDiagnostic>,
+) -> Result<SchedulerTaskStateTransition, WorkflowSchedulerTaskOrchestratorError> {
+    let execution_intent = running_execution_intent(record)?;
+    task_state_transition(
+        record,
+        "runtime-host-batch-deferred",
+        SchedulerTaskStateKind::Running,
+        SchedulerTaskState::PausedDeferred {
+            execution_intent,
+            diagnostics,
+        },
+    )
+}
+
+#[allow(dead_code)]
+fn retryable_failed_transition_from_running(
+    record: &SchedulerTaskStateRecord,
+    diagnostics: Vec<SchedulerTaskStateDiagnostic>,
+) -> Result<SchedulerTaskStateTransition, WorkflowSchedulerTaskOrchestratorError> {
+    let execution_intent = running_execution_intent(record)?;
+    task_state_transition(
+        record,
+        "runtime-host-batch-retryable",
+        SchedulerTaskStateKind::Running,
+        SchedulerTaskState::RetryableFailed {
+            execution_intent,
+            diagnostics,
+        },
+    )
+}
+
+#[allow(dead_code)]
+fn running_execution_intent(
+    record: &SchedulerTaskStateRecord,
+) -> Result<SchedulerTaskExecutionIntent, WorkflowSchedulerTaskOrchestratorError> {
+    let SchedulerTaskState::Running { execution_intent } = &record.state else {
+        return Err(WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+            WorkflowServiceError::InvalidRequest(format!(
+                "scheduler task '{}' must be running before runtime-host batch response mapping",
+                record.task_id.as_str()
+            )),
+        ));
+    };
+    Ok(execution_intent.clone())
 }
 
 fn runtime_result_failure_diagnostics(

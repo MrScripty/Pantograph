@@ -6683,6 +6683,44 @@ lifecycle, retry/defer, and notification mutations behind focused boundary
 tests. Do not enable worker grouped assignment claiming until this mapping
 owner is covered and fail-closed when no real batch dispatcher is configured.
 
+2026-06-14 workflow-service runtime batch mapping slice completed. Smallest
+useful vertical slice: add workflow-service ownership for converting started
+runtime task batch members into canonical `RuntimeHostBatchExecutionRequest`
+members, dispatching only through the injected batch dispatcher, and mapping
+per-member batch responses back into task result, reservation lifecycle,
+retry/defer, cancellation, and terminal mutation boundaries. Allowed files
+touched:
+`crates/pantograph-workflow-service/src/scheduler/task_orchestrator.rs`,
+`crates/pantograph-workflow-service/src/scheduler/task_orchestrator_tests.rs`,
+`crates/pantograph-workflow-service/src/workflow/runtime_host_task_result_mapping.rs`,
+`crates/pantograph-workflow-service/src/workflow.rs`, and this plan.
+
+No-fallback/no-legacy confirmation: grouped worker claiming remains disabled
+until the next slice, and the new batch path does not call the single
+runtime-host dispatcher, loop through member single-task dispatch, execute only
+the anchor member, or carry workflow inputs forward from another run. Each
+request member is built from that started task's current materialized results,
+uses an assignment-derived member execution id, and fails closed through typed
+diagnostics when response correlation or runtime-host member state is invalid.
+`DeferToScheduler`, retryable failures, and deferred responses map to
+non-terminal scheduler/reservation lifecycle outcomes rather than terminal
+fallback execution.
+
+Verification passed:
+`cargo fmt -p pantograph-workflow-service -- --check`,
+`cargo check -p pantograph-workflow-service`,
+`cargo test -p pantograph-workflow-service started_runtime_task_batch --lib`,
+`cargo test -p pantograph-workflow-service batch_member_ --lib`, and
+`git diff --check`.
+
+Deviation and follow-up: this slice intentionally adds the mapping boundary
+before wiring production grouped assignment claiming, so several new
+batch-mapping helpers are temporarily marked with targeted `dead_code`
+allowances. The next grouped-claim integration slice must connect
+`WorkflowRuntimeDispatchAssignmentRepository::claim_compatible_running_batch`
+outcomes to this boundary, remove those allowances, and keep fail-closed
+behavior when no real batch dispatcher is configured.
+
 ## Standards Rule
 
 The standards constraints in

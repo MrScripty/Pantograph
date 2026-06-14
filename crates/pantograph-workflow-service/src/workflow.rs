@@ -172,7 +172,8 @@ pub(crate) use self::runtime_host_task_input_mapping::{
     materialize_runtime_host_inputs, WorkflowRuntimeHostTaskInputMappingError,
 };
 pub(crate) use self::runtime_host_task_result_mapping::{
-    runtime_host_response_to_task_result, WorkflowRuntimeHostTaskResultMappingError,
+    runtime_host_batch_member_response_to_task_result, runtime_host_response_to_task_result,
+    WorkflowRuntimeHostTaskResultMappingError,
 };
 pub(crate) use self::runtime_preflight::runtime_issue_for_capability;
 pub use self::runtime_preflight::{evaluate_runtime_preflight, format_runtime_not_ready_message};
