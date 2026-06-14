@@ -7575,6 +7575,48 @@ run finalization and durable assignment terminal-state marking after scheduler
 response mutation. Keep runtime-host batch dispatch disabled until finalization
 and assignment state transitions are covered by focused tests.
 
+2026-06-14 batch response durable assignment terminal-state slice completed.
+Smallest useful vertical slice: after validated scheduler-owned batch response
+mutation, prevalidate that all service-owned durable assignments are still
+running, then mark terminal response members completed, cancelled, or failed
+while leaving retryable and deferred members running for scheduler retry.
+Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/runtime_branch_batch_execution.rs`
+and this plan.
+
+No-fallback/no-legacy confirmation: this slice does not enable runtime-host
+batch dispatch, does not finalize workflow runs, does not add single-member
+fallback dispatch, and does not coerce retryable/deferred responses into
+terminal assignment states. Unsupported future runtime-host member states fail
+closed with typed diagnostics instead of being treated as a fallback
+non-terminal state.
+
+Verification passed:
+`cargo fmt -p pantograph-workflow-service`,
+`cargo test -p pantograph-workflow-service runtime_branch_batch_execution --lib`,
+`cargo test -p pantograph-workflow-service runtime_dispatch_assignment_repository --lib`,
+`cargo check -p pantograph-workflow-service`,
+`cargo fmt -p pantograph-workflow-service -- --check`, and
+`git diff --check`.
+
+Focused test update: batch-owner fixtures now persist claimed assignments in
+the service-owned runtime dispatch assignment repository, completed response
+mutation asserts both assignments become completed, and mixed failed/retryable
+response coverage asserts the non-retryable member becomes failed while the
+retryable member remains running.
+
+Deviation recorded: the prior follow-up named workflow-run finalization and
+durable assignment terminal marking together. This slice intentionally split
+out durable assignment terminal marking first because workflow-run finalization
+crosses session run lifecycle, artifact/event recording, and batch outcome
+aggregation. Keeping those concerns separate preserves the thin-slice standard
+and avoids mixing terminal assignment persistence with run response assembly.
+
+Remaining follow-up: continue option 1 step 3 by adding per-member workflow
+run finalization after scheduler mutation and durable assignment terminal
+marking. Keep runtime-host batch dispatch disabled until per-member run
+finalization is covered by focused tests.
+
 ## Standards Rule
 
 The standards constraints in

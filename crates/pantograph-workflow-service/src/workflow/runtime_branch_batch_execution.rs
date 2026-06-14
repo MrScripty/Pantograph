@@ -5,6 +5,7 @@ use crate::scheduler::task_orchestrator::{
     WorkflowSchedulerRuntimeBatchMemberMutation, WorkflowSchedulerTaskOrchestrator,
     WorkflowSchedulerTaskOrchestratorError,
 };
+use crate::scheduler::unix_timestamp_ms;
 use pantograph_runtime_host_contracts::{
     RuntimeHostBatchExecutionMemberRequest, RuntimeHostBatchExecutionMemberResponse,
     RuntimeHostBatchExecutionMemberState, RuntimeHostBatchExecutionRequest,
@@ -19,8 +20,10 @@ use pantograph_scheduler::{
 
 use super::runtime_dispatch_assignment::{
     WorkflowRuntimeDispatchAssignmentBatchClaim,
-    WorkflowRuntimeDispatchAssignmentBatchClaimOutcome, WorkflowRuntimeDispatchAssignmentId,
-    WorkflowRuntimeDispatchAssignmentRecord, WorkflowRuntimeDispatchAssignmentState,
+    WorkflowRuntimeDispatchAssignmentBatchClaimOutcome,
+    WorkflowRuntimeDispatchAssignmentDiagnostic, WorkflowRuntimeDispatchAssignmentId,
+    WorkflowRuntimeDispatchAssignmentRecord, WorkflowRuntimeDispatchAssignmentRepository,
+    WorkflowRuntimeDispatchAssignmentState,
 };
 use super::runtime_dispatch_selection::WorkflowRuntimeDispatchCandidateFact;
 use super::runtime_task_attempt_fact::WorkflowRuntimeTaskAttemptFactRecord;
@@ -149,6 +152,7 @@ pub(super) enum WorkflowRuntimeBranchBatchExecutionDiagnosticCode {
     RuntimeHostBatchMemberResponseMissing,
     RuntimeHostBatchMemberResponseUnknown,
     RuntimeHostBatchMemberMutationInvalid,
+    RuntimeDispatchAssignmentTerminalStateInvalid,
     ResponderFanOutUnavailable,
 }
 
@@ -205,6 +209,7 @@ where
         WorkflowRuntimeBranchBatchExecutionFailure,
     > {
         validate_batch_response_matches_plan(plan, response)?;
+        validate_service_assignments_are_running(service, plan)?;
         let mut store = service.session_store_guard().map_err(|error| {
             WorkflowRuntimeBranchBatchExecutionFailure::global(
                 WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
@@ -261,6 +266,8 @@ where
                 &mutation,
             ));
         }
+        drop(store);
+        mark_terminal_service_assignments(service, plan, response)?;
         Ok(WorkflowRuntimeBranchBatchResponseMutationOutcome {
             member_outcomes: outcomes,
         })
@@ -649,6 +656,153 @@ fn validate_batch_response_matches_plan(
     Ok(())
 }
 
+fn validate_service_assignments_are_running(
+    service: &WorkflowService,
+    plan: &WorkflowRuntimeBranchBatchExecutionPlan,
+) -> Result<(), WorkflowRuntimeBranchBatchExecutionFailure> {
+    let repository = service
+        .runtime_dispatch_assignment_repository
+        .lock()
+        .map_err(|error| {
+            WorkflowRuntimeBranchBatchExecutionFailure::global(
+                WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
+                    WorkflowRuntimeBranchBatchExecutionDiagnosticCode::RuntimeDispatchAssignmentTerminalStateInvalid,
+                    format!("runtime branch batch execution could not read dispatch assignments: {error}"),
+                ),
+            )
+        })?;
+    for member in &plan.members {
+        let Some(record) = repository.get(&member.assignment_id) else {
+            return Err(
+                WorkflowRuntimeBranchBatchExecutionFailure::active_run_member(
+                    member,
+                    WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
+                        WorkflowRuntimeBranchBatchExecutionDiagnosticCode::RuntimeDispatchAssignmentTerminalStateInvalid,
+                        format!(
+                            "runtime branch batch assignment '{}' is not persisted",
+                            member.assignment_id.as_str()
+                        ),
+                    ),
+                ),
+            );
+        };
+        if record.state != WorkflowRuntimeDispatchAssignmentState::Running {
+            return Err(
+                WorkflowRuntimeBranchBatchExecutionFailure::active_run_member(
+                    member,
+                    WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
+                        WorkflowRuntimeBranchBatchExecutionDiagnosticCode::RuntimeDispatchAssignmentTerminalStateInvalid,
+                        format!(
+                            "runtime branch batch assignment '{}' must be running before response mutation",
+                            member.assignment_id.as_str()
+                        ),
+                    ),
+                ),
+            );
+        }
+    }
+    Ok(())
+}
+
+fn mark_terminal_service_assignments(
+    service: &WorkflowService,
+    plan: &WorkflowRuntimeBranchBatchExecutionPlan,
+    response: &RuntimeHostBatchExecutionResponse,
+) -> Result<(), WorkflowRuntimeBranchBatchExecutionFailure> {
+    let now_ms = unix_timestamp_ms();
+    let mut repository = service
+        .runtime_dispatch_assignment_repository
+        .lock()
+        .map_err(|error| {
+            WorkflowRuntimeBranchBatchExecutionFailure::global(
+                WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
+                    WorkflowRuntimeBranchBatchExecutionDiagnosticCode::RuntimeDispatchAssignmentTerminalStateInvalid,
+                    format!("runtime branch batch execution could not write dispatch assignments: {error}"),
+                ),
+            )
+        })?;
+    for member in &plan.members {
+        let response_member =
+            response_member_for_assignment(response, member.assignment_id.as_str())
+                .expect("response membership was validated before mutation");
+        match assignment_terminal_transition(member, response_member)? {
+            Some(AssignmentTerminalTransition::Completed) => {
+                let _record = repository
+                    .mark_completed(&member.assignment_id, now_ms)
+                    .map_err(|diagnostic| assignment_terminal_failure(member, diagnostic))?;
+            }
+            Some(AssignmentTerminalTransition::Cancelled) => {
+                let _record = repository
+                    .mark_cancelled(&member.assignment_id, now_ms)
+                    .map_err(|diagnostic| assignment_terminal_failure(member, diagnostic))?;
+            }
+            Some(AssignmentTerminalTransition::Failed) => {
+                let _record = repository
+                    .mark_failed(&member.assignment_id, now_ms)
+                    .map_err(|diagnostic| assignment_terminal_failure(member, diagnostic))?;
+            }
+            None => {}
+        }
+    }
+    Ok(())
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AssignmentTerminalTransition {
+    Completed,
+    Cancelled,
+    Failed,
+}
+
+fn assignment_terminal_transition(
+    member: &WorkflowRuntimeBranchBatchExecutionMember,
+    response: &RuntimeHostBatchExecutionMemberResponse,
+) -> Result<Option<AssignmentTerminalTransition>, WorkflowRuntimeBranchBatchExecutionFailure> {
+    match response.state {
+        RuntimeHostBatchExecutionMemberState::Completed => {
+            Ok(Some(AssignmentTerminalTransition::Completed))
+        }
+        RuntimeHostBatchExecutionMemberState::Cancelled => {
+            Ok(Some(AssignmentTerminalTransition::Cancelled))
+        }
+        RuntimeHostBatchExecutionMemberState::Failed
+        | RuntimeHostBatchExecutionMemberState::Rejected => match response.retry_disposition {
+            pantograph_runtime_host_contracts::RuntimeHostBatchMemberRetryDisposition::Retryable
+            | pantograph_runtime_host_contracts::RuntimeHostBatchMemberRetryDisposition::Deferred => Ok(None),
+            _ => Ok(Some(AssignmentTerminalTransition::Failed)),
+        },
+        RuntimeHostBatchExecutionMemberState::Accepted
+        | RuntimeHostBatchExecutionMemberState::Deferred => Ok(None),
+        _ => Err(WorkflowRuntimeBranchBatchExecutionFailure::active_run_member(
+            member,
+            WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
+                WorkflowRuntimeBranchBatchExecutionDiagnosticCode::RuntimeDispatchAssignmentTerminalStateInvalid,
+                format!(
+                    "runtime branch batch assignment '{}' received unsupported runtime-host member state",
+                    member.assignment_id.as_str()
+                ),
+            ),
+        )),
+    }
+}
+
+fn assignment_terminal_failure(
+    member: &WorkflowRuntimeBranchBatchExecutionMember,
+    diagnostic: WorkflowRuntimeDispatchAssignmentDiagnostic,
+) -> WorkflowRuntimeBranchBatchExecutionFailure {
+    WorkflowRuntimeBranchBatchExecutionFailure::active_run_member(
+        member,
+        WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
+            WorkflowRuntimeBranchBatchExecutionDiagnosticCode::RuntimeDispatchAssignmentTerminalStateInvalid,
+            format!(
+                "runtime branch batch assignment '{}' terminal transition failed: {}",
+                member.assignment_id.as_str(),
+                diagnostic.message
+            ),
+        ),
+    )
+}
+
 fn response_member_for_assignment<'a>(
     response: &'a RuntimeHostBatchExecutionResponse,
     assignment_id: &str,
@@ -851,7 +1005,6 @@ mod tests {
         WorkflowRuntimeBranchTaskEventClaimOwnerId, WorkflowRuntimeBranchTaskEventId,
     };
     use super::super::runtime_dispatch_assignment::{
-        InMemoryWorkflowRuntimeDispatchAssignmentRepository,
         WorkflowRuntimeDispatchAssignmentBatchClaimOwnerId,
         WorkflowRuntimeDispatchAssignmentRepository, WorkflowRuntimeDispatchAssignmentRequest,
     };
@@ -881,7 +1034,7 @@ mod tests {
             &responder_fan_out,
         );
         let members = active_batch_members(&service);
-        let claim_outcome = batch_claim_outcome(&members);
+        let claim_outcome = batch_claim_outcome(&service, &members);
 
         let plan = owner
             .prepare_claimed_batch(&service, claim_outcome.clone())
@@ -1039,7 +1192,7 @@ mod tests {
         );
         let members = active_batch_members(&service);
         let plan = owner
-            .prepare_claimed_batch(&service, batch_claim_outcome(&members))
+            .prepare_claimed_batch(&service, batch_claim_outcome(&service, &members))
             .expect("claimed batch execution plan");
         assert_eq!(
             service
@@ -1081,7 +1234,55 @@ mod tests {
                 result.task_id == member.scheduler_task_id
                     && result.status == WorkflowSchedulerTaskResultStatus::Completed
             }));
+            assert_eq!(
+                persisted_assignment_state(&service, &member.assignment_id),
+                WorkflowRuntimeDispatchAssignmentState::Completed
+            );
         }
+    }
+
+    #[test]
+    fn runtime_branch_batch_execution_owner_leaves_retryable_response_assignment_running() {
+        let service = WorkflowService::new();
+        let responder_fan_out = RecordingResponderFanOut::default();
+        let owner = WorkflowRuntimeBranchBatchExecutionOwner::new(
+            &service.scheduler_task_orchestrator,
+            &responder_fan_out,
+        );
+        let members = active_batch_members(&service);
+        let plan = owner
+            .prepare_claimed_batch(&service, batch_claim_outcome(&service, &members))
+            .expect("claimed batch execution plan");
+        let mut response = runtime_host_batch_response_from_plan(&plan);
+        response.members[0].state = RuntimeHostBatchExecutionMemberState::Failed;
+        response.members[0].retry_disposition =
+            RuntimeHostBatchMemberRetryDisposition::NotRetryable;
+        response.members[1].state = RuntimeHostBatchExecutionMemberState::Failed;
+        response.members[1].retry_disposition = RuntimeHostBatchMemberRetryDisposition::Retryable;
+
+        let outcome = owner
+            .apply_batch_response_mutations(&service, &plan, &response)
+            .expect("apply mixed response mutations");
+
+        assert_eq!(
+            outcome
+                .member_outcomes
+                .iter()
+                .map(|outcome| outcome.state)
+                .collect::<Vec<_>>(),
+            vec![
+                WorkflowRuntimeBranchBatchMemberExecutionOutcomeState::Failed,
+                WorkflowRuntimeBranchBatchMemberExecutionOutcomeState::Retryable,
+            ]
+        );
+        assert_eq!(
+            persisted_assignment_state(&service, &plan.members[0].assignment_id),
+            WorkflowRuntimeDispatchAssignmentState::Failed
+        );
+        assert_eq!(
+            persisted_assignment_state(&service, &plan.members[1].assignment_id),
+            WorkflowRuntimeDispatchAssignmentState::Running
+        );
     }
 
     #[test]
@@ -1094,7 +1295,7 @@ mod tests {
         );
         let members = active_batch_members(&service);
         let plan = owner
-            .prepare_claimed_batch(&service, batch_claim_outcome(&members))
+            .prepare_claimed_batch(&service, batch_claim_outcome(&service, &members))
             .expect("claimed batch execution plan");
         let mut response = runtime_host_batch_response_from_plan(&plan);
         response.members.pop();
@@ -1133,7 +1334,7 @@ mod tests {
             &service.scheduler_task_orchestrator,
             &responder_fan_out,
         );
-        let mut claim_outcome = batch_claim_outcome(&static_batch_members());
+        let mut claim_outcome = batch_claim_outcome(&service, &static_batch_members());
         claim_outcome.assignments[1].task_attempt_fact = None;
 
         let failure = owner
@@ -1167,7 +1368,7 @@ mod tests {
             &service.scheduler_task_orchestrator,
             &responder_fan_out,
         );
-        let mut claim_outcome = batch_claim_outcome(&static_batch_members());
+        let mut claim_outcome = batch_claim_outcome(&service, &static_batch_members());
         claim_outcome.assignments[1]
             .task_attempt_fact
             .as_mut()
@@ -1203,7 +1404,10 @@ mod tests {
         );
 
         let failure = owner
-            .prepare_claimed_batch(&service, batch_claim_outcome(&static_batch_members()))
+            .prepare_claimed_batch(
+                &service,
+                batch_claim_outcome(&service, &static_batch_members()),
+            )
             .expect_err("missing active run state must fail closed");
 
         assert_eq!(
@@ -1230,7 +1434,7 @@ mod tests {
             &service.scheduler_task_orchestrator,
             &responder_fan_out,
         );
-        let mut claim_outcome = batch_claim_outcome(&members);
+        let mut claim_outcome = batch_claim_outcome(&service, &members);
         claim_outcome.assignments[0].scheduler_task_attempt_id =
             "scheduler-task-attempt.stale".to_string();
         claim_outcome.assignments[0]
@@ -1279,7 +1483,7 @@ mod tests {
         );
 
         let failure = owner
-            .prepare_claimed_batch(&service, batch_claim_outcome(&members))
+            .prepare_claimed_batch(&service, batch_claim_outcome(&service, &members))
             .expect_err("missing materialized input must fail closed");
 
         assert_eq!(
@@ -1313,7 +1517,7 @@ mod tests {
         let members = active_batch_members(&service);
 
         let failure = owner
-            .prepare_claimed_batch(&service, batch_claim_outcome(&members))
+            .prepare_claimed_batch(&service, batch_claim_outcome(&service, &members))
             .expect_err("missing responder must fail closed");
 
         assert_eq!(
@@ -1481,9 +1685,13 @@ mod tests {
     }
 
     fn batch_claim_outcome(
+        service: &WorkflowService,
         members: &[DispatchAssignmentFixtureMember],
     ) -> WorkflowRuntimeDispatchAssignmentBatchClaimOutcome {
-        let mut repository = InMemoryWorkflowRuntimeDispatchAssignmentRepository::new();
+        let mut repository = service
+            .runtime_dispatch_assignment_repository
+            .lock()
+            .expect("runtime dispatch assignment repository");
         let first = repository
             .create(assignment_request_for_member(&members[0]))
             .expect("first assignment");
@@ -1499,6 +1707,19 @@ mod tests {
         repository
             .claim_compatible_running_batch(&first.assignment_id, batch_owner_id(), 140, 1_000, 8)
             .expect("compatible batch claim")
+    }
+
+    fn persisted_assignment_state(
+        service: &WorkflowService,
+        assignment_id: &WorkflowRuntimeDispatchAssignmentId,
+    ) -> WorkflowRuntimeDispatchAssignmentState {
+        service
+            .runtime_dispatch_assignment_repository
+            .lock()
+            .expect("runtime dispatch assignment repository")
+            .get(assignment_id)
+            .expect("persisted assignment")
+            .state
     }
 
     fn assignment_request_for_member(
