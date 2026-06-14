@@ -6367,6 +6367,51 @@ Rejected paths:
   shared gateway/backend contracts, lockfiles, saved workflow fixtures, or this
   plan; those remain serial integration-owner work.
 
+2026-06-13 PyTorch image batch worker-envelope inspection gate: completed
+step 1. Smallest useful vertical slice: read the existing PyTorch image
+backend, Rust worker image contract, Python worker image contract, Python
+worker execution path, focused Rust/Python tests, and single-image JSON
+fixtures; update this plan with the finding. Allowed files touched: this plan
+only. No-fallback/no-legacy confirmation: no source code was changed, no
+single-image loop was added, no batch capability was enabled, and no embedded
+runtime-host or workflow-service batch path was wired.
+
+Inspection finding:
+the current PyTorch image worker envelope cannot represent true
+multi-member image-generation batch execution. `PyTorchWorkerEnvelope<T>`
+has a single `request_id`, a single `GenerateImage` operation, and a single
+payload/result envelope. `PyTorchGenerateImageRequest` is one planned image
+request with no stable batch id, member ids, member-local result slots, or
+per-member diagnostics. The Python `generate_image_kwargs_from_envelope`
+validator accepts one payload object and rejects unknown keys, and
+`generate_image_from_envelope` loads the diffusion model and calls
+`generate_image(**planned["generation_kwargs"])` once before returning one
+worker success/error response. Existing fixtures
+`generate_image_request.json` and `generate_image_response.json` likewise
+encode one request id and one response.
+
+Re-plan trigger:
+implementing true batch execution against the existing worker envelope would
+require either looping the single-image path, executing only the anchor member,
+or treating `num_images_per_prompt` as a cross-workflow batch. All three
+violate the no-fallback/no-legacy rule and the reservation-level batch
+architecture. Proceed to backend batch execution sequence step 2 by adding a
+dedicated PyTorch image batch worker contract before backend execution.
+
+Step 1 verification:
+inspection-only slice; `git diff --check` passed after the plan update.
+
+Next thin slice: implement sequence step 2, the dedicated PyTorch image batch
+worker contract. Allowed files are
+`crates/inference/src/backend/pytorch_worker_image_contract.rs`,
+`crates/inference/torch/worker_image_contract.py`, focused Rust/Python
+contract tests, worker JSON fixtures, `crates/inference/src/README.md`, and
+this plan. The slice must add contract/validation only; do not call the batch
+worker contract from `PyTorchBackend`, do not enable
+`BackendCapabilities::image_generation_batch`, do not change generated
+runtime-host contracts, workflow-service worker code, frontend/Tauri DTOs,
+lockfiles, physical-device tables, or runtime-residency tables.
+
 ## Standards Rule
 
 The standards constraints in
