@@ -92,7 +92,7 @@ pub(crate) struct StartedNonRuntimeTaskExecution {
     started_at_ms: u64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[must_use]
 pub(crate) struct StartedRuntimeTaskExecution {
     pub(crate) task: WorkflowSchedulerTask,
@@ -102,7 +102,7 @@ pub(crate) struct StartedRuntimeTaskExecution {
     started_at_ms: u64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[must_use]
 #[allow(dead_code)]
 pub(crate) struct StartedRuntimeTaskBatchMember {
@@ -120,7 +120,7 @@ pub(crate) enum WorkflowSchedulerRuntimeBatchMemberMutation {
     Retryable(SchedulerTaskStateRecord),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[must_use]
 pub(crate) struct SelectedRuntimeTaskDispatch {
     handoff: SchedulerRuntimeHandoff,
@@ -167,6 +167,18 @@ impl WorkflowSchedulerStartedRuntimeTaskSupervisor {
 }
 
 impl SelectedRuntimeTaskDispatch {
+    pub(crate) fn new(
+        handoff: SchedulerRuntimeHandoff,
+        reservation_lease_id: SchedulerReservationLeaseId,
+        candidate_id: Option<SchedulerDispatchCandidateId>,
+    ) -> Self {
+        Self {
+            handoff,
+            reservation_lease_id,
+            candidate_id,
+        }
+    }
+
     pub(crate) fn dispatch_decision(&self) -> Option<&SchedulerDispatchDecision> {
         self.handoff.dispatch_decision.as_ref()
     }
@@ -207,13 +219,16 @@ impl StartedRuntimeTaskExecution {
         &self.attempt_id
     }
 
+    pub(crate) fn running_record(&self) -> &SchedulerTaskStateRecord {
+        &self.running_record
+    }
+
     pub(crate) fn started_at_ms(&self) -> u64 {
         self.started_at_ms
     }
 }
 
 impl StartedRuntimeTaskBatchMember {
-    #[allow(dead_code)]
     pub(crate) fn new(
         assignment_id: impl Into<String>,
         started: StartedRuntimeTaskExecution,
@@ -226,17 +241,14 @@ impl StartedRuntimeTaskBatchMember {
         }
     }
 
-    #[allow(dead_code)]
     pub(crate) fn assignment_id(&self) -> &str {
         &self.assignment_id
     }
 
-    #[allow(dead_code)]
     pub(crate) fn started(&self) -> &StartedRuntimeTaskExecution {
         &self.started
     }
 
-    #[allow(dead_code)]
     pub(crate) fn selected_dispatch(&self) -> &SelectedRuntimeTaskDispatch {
         &self.selected_dispatch
     }
@@ -331,7 +343,6 @@ impl WorkflowSchedulerTaskOrchestrator {
             .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
     }
 
-    #[allow(dead_code)]
     fn ensure_task_lifecycle_handle(
         &self,
         task_id: &SchedulerTaskId,
@@ -1268,7 +1279,6 @@ impl WorkflowSchedulerTaskOrchestrator {
         })
     }
 
-    #[allow(dead_code)]
     pub(crate) fn rehydrate_running_runtime_task(
         &self,
         store: &mut WorkflowExecutionSessionStore,

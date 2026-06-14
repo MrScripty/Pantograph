@@ -1,6 +1,9 @@
 use std::collections::BTreeSet;
 
-use crate::scheduler::WorkflowSchedulerTaskOrchestrator;
+use crate::scheduler::task_orchestrator::{
+    SelectedRuntimeTaskDispatch, StartedRuntimeTaskBatchMember, WorkflowSchedulerTaskOrchestrator,
+    WorkflowSchedulerTaskOrchestratorError,
+};
 use pantograph_runtime_host_contracts::{
     RuntimeHostBatchExecutionMemberRequest, RuntimeHostBatchExecutionRequest,
     RuntimeHostBatchMemberFailurePolicy, RuntimeHostBatchMemberReservationPolicy,
@@ -9,7 +12,7 @@ use pantograph_runtime_host_contracts::{
 };
 use pantograph_scheduler::{
     SchedulerDispatchCandidateId, SchedulerReservationLeaseId, SchedulerRuntimeHandoff,
-    SchedulerTaskStateKind, SchedulerTaskStateRecord,
+    SchedulerTaskStateRecord,
 };
 
 use super::runtime_dispatch_assignment::{
@@ -20,8 +23,8 @@ use super::runtime_dispatch_assignment::{
 use super::runtime_dispatch_selection::WorkflowRuntimeDispatchCandidateFact;
 use super::runtime_task_attempt_fact::WorkflowRuntimeTaskAttemptFactRecord;
 use super::{
-    materialize_runtime_host_inputs, WorkflowSchedulerTask, WorkflowSchedulerTaskExecutionClass,
-    WorkflowSchedulerTaskResult, WorkflowService,
+    materialize_runtime_host_inputs, WorkflowSchedulerTask, WorkflowSchedulerTaskResult,
+    WorkflowService,
 };
 
 #[must_use]
@@ -54,6 +57,7 @@ pub(super) struct WorkflowRuntimeBranchBatchExecutionPlan {
 #[must_use]
 pub(super) struct WorkflowRuntimeBranchBatchActiveRunMember {
     pub(super) assignment_id: WorkflowRuntimeDispatchAssignmentId,
+    pub(super) started_batch_member: StartedRuntimeTaskBatchMember,
     pub(super) runtime_task: WorkflowSchedulerTask,
     pub(super) running_task_record: SchedulerTaskStateRecord,
     pub(super) materialized_results: Vec<WorkflowSchedulerTaskResult>,
@@ -152,9 +156,12 @@ where
         claim_outcome: WorkflowRuntimeDispatchAssignmentBatchClaimOutcome,
     ) -> Result<WorkflowRuntimeBranchBatchExecutionPlan, WorkflowRuntimeBranchBatchExecutionFailure>
     {
-        let _selected_batch_dispatcher_owner = self.scheduler_task_orchestrator;
         let members = validate_claimed_assignments(&claim_outcome)?;
-        let active_run_members = rehydrate_batch_members_from_active_runs(service, &members)?;
+        let active_run_members = rehydrate_batch_members_from_active_runs(
+            self.scheduler_task_orchestrator,
+            service,
+            &members,
+        )?;
         let runtime_host_request = runtime_host_batch_request_from_active_members(
             &claim_outcome.batch_claim,
             &members,
@@ -313,6 +320,7 @@ fn batch_execution_member_from_assignment(
 }
 
 fn rehydrate_batch_members_from_active_runs(
+    scheduler_task_orchestrator: &WorkflowSchedulerTaskOrchestrator,
     service: &WorkflowService,
     members: &[WorkflowRuntimeBranchBatchExecutionMember],
 ) -> Result<
@@ -329,165 +337,67 @@ fn rehydrate_batch_members_from_active_runs(
     })?;
     let mut active_run_members = Vec::with_capacity(members.len());
     for member in members {
-        let (task_graph, task_records) = store
-            .active_run_scheduler_task_state(&member.session_id, &member.workflow_run_id)
-            .map_err(|error| {
-                WorkflowRuntimeBranchBatchExecutionFailure::active_run_member(
-                    member,
-                    WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
-                        WorkflowRuntimeBranchBatchExecutionDiagnosticCode::ActiveRunTaskStateUnavailable,
-                        format!(
-                            "runtime branch batch member '{}' active scheduler state is unavailable: {error}",
-                            member.assignment_id.as_str()
-                        ),
-                    ),
-                )
-            })?
-            .ok_or_else(|| {
-                WorkflowRuntimeBranchBatchExecutionFailure::active_run_member(
-                    member,
-                    WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
-                        WorkflowRuntimeBranchBatchExecutionDiagnosticCode::ActiveRunTaskStateUnavailable,
-                        format!(
-                            "runtime branch batch member '{}' has no active scheduler task state",
-                            member.assignment_id.as_str()
-                        ),
-                    ),
-                )
-            })?;
-        let runtime_task = task_graph
-            .tasks
-            .iter()
-            .find(|task| task.task_id.as_str() == member.scheduler_task_id)
-            .ok_or_else(|| {
-                WorkflowRuntimeBranchBatchExecutionFailure::active_run_member(
-                    member,
-                    WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
-                        WorkflowRuntimeBranchBatchExecutionDiagnosticCode::ActiveRunTaskUnavailable,
-                        format!(
-                            "runtime branch batch member '{}' scheduler task '{}' is not present in the active run",
-                            member.assignment_id.as_str(),
-                            member.scheduler_task_id
-                        ),
-                    ),
-                )
-            })?;
-        if runtime_task.execution_class != WorkflowSchedulerTaskExecutionClass::RuntimeInference {
-            return Err(
-                WorkflowRuntimeBranchBatchExecutionFailure::active_run_member(
-                    member,
-                    WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
-                        WorkflowRuntimeBranchBatchExecutionDiagnosticCode::ActiveRunTaskUnavailable,
-                        format!(
-                            "runtime branch batch member '{}' scheduler task '{}' is not a runtime inference task",
-                            member.assignment_id.as_str(),
-                            member.scheduler_task_id
-                        ),
-                    ),
-                ),
-            );
-        }
-        let running_task_record = task_records
-            .iter()
-            .find(|record| record.task_id.as_str() == member.scheduler_task_id)
-            .ok_or_else(|| {
-                WorkflowRuntimeBranchBatchExecutionFailure::active_run_member(
-                    member,
-                    WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
-                        WorkflowRuntimeBranchBatchExecutionDiagnosticCode::ActiveRunTaskUnavailable,
-                        format!(
-                            "runtime branch batch member '{}' scheduler task '{}' has no active task-state record",
-                            member.assignment_id.as_str(),
-                            member.scheduler_task_id
-                        ),
-                    ),
-                )
-            })?;
-        if running_task_record.state.kind() != SchedulerTaskStateKind::Running {
-            return Err(
-                WorkflowRuntimeBranchBatchExecutionFailure::active_run_member(
-                    member,
-                    WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
-                        WorkflowRuntimeBranchBatchExecutionDiagnosticCode::ActiveRunTaskNotRunning,
-                        format!(
-                            "runtime branch batch member '{}' scheduler task '{}' must be running before batch execution",
-                            member.assignment_id.as_str(),
-                            member.scheduler_task_id
-                        ),
-                    ),
-                ),
-            );
-        }
-        let task_attempt_facts = store
-            .active_run_scheduler_task_attempt_read_facts(
+        let started = scheduler_task_orchestrator
+            .rehydrate_running_runtime_task(
+                &mut store,
                 &member.session_id,
                 &member.workflow_run_id,
+                &member.scheduler_task_id,
+                &member.scheduler_task_attempt_id,
+                member.scheduler_task_attempt_started_at_ms,
             )
-            .map_err(|error| {
-                WorkflowRuntimeBranchBatchExecutionFailure::active_run_member(
-                    member,
-                    WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
-                        WorkflowRuntimeBranchBatchExecutionDiagnosticCode::ActiveRunTaskAttemptMismatch,
-                        format!(
-                            "runtime branch batch member '{}' active scheduler attempt facts are unavailable: {error}",
-                            member.assignment_id.as_str()
-                        ),
-                    ),
-                )
-            })?;
-        let task_attempt = task_attempt_facts
-            .get(&member.scheduler_task_id)
-            .ok_or_else(|| {
-                WorkflowRuntimeBranchBatchExecutionFailure::active_run_member(
-                    member,
-                    WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
-                        WorkflowRuntimeBranchBatchExecutionDiagnosticCode::ActiveRunTaskAttemptMismatch,
-                        format!(
-                            "runtime branch batch member '{}' scheduler task '{}' has no active attempt fact",
-                            member.assignment_id.as_str(),
-                            member.scheduler_task_id
-                        ),
-                    ),
-                )
-            })?;
-        if task_attempt.attempt_id.as_str() != member.scheduler_task_attempt_id
-            || task_attempt.started_at_ms != member.scheduler_task_attempt_started_at_ms
-        {
-            return Err(
-                WorkflowRuntimeBranchBatchExecutionFailure::active_run_member(
-                    member,
-                    WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
-                        WorkflowRuntimeBranchBatchExecutionDiagnosticCode::ActiveRunTaskAttemptMismatch,
-                        format!(
-                            "runtime branch batch member '{}' scheduler attempt does not match the active run attempt",
-                            member.assignment_id.as_str()
-                        ),
-                    ),
-                ),
-            );
-        }
-        let materialized_results = store
-            .active_run_scheduler_task_results(&member.session_id, &member.workflow_run_id)
-            .map_err(|error| {
-                WorkflowRuntimeBranchBatchExecutionFailure::active_run_member(
-                    member,
-                    WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
-                        WorkflowRuntimeBranchBatchExecutionDiagnosticCode::ActiveRunMaterializedInputsUnavailable,
-                        format!(
-                            "runtime branch batch member '{}' active scheduler task results are unavailable: {error}",
-                            member.assignment_id.as_str()
-                        ),
-                    ),
-                )
-            })?;
+            .map_err(|error| rehydration_failure_for_member(member, error))?;
+        let selected_dispatch = SelectedRuntimeTaskDispatch::new(
+            member.selected_runtime_handoff.clone(),
+            member.reservation_lease_id.clone(),
+            member.selected_candidate_id.clone(),
+        );
+        let started_batch_member = StartedRuntimeTaskBatchMember::new(
+            member.assignment_id.as_str().to_string(),
+            started.clone(),
+            selected_dispatch,
+        );
         active_run_members.push(WorkflowRuntimeBranchBatchActiveRunMember {
             assignment_id: member.assignment_id.clone(),
-            runtime_task: runtime_task.clone(),
-            running_task_record: running_task_record.clone(),
-            materialized_results,
+            started_batch_member,
+            runtime_task: started.task().clone(),
+            running_task_record: started.running_record().clone(),
+            materialized_results: started.materialized_results.clone(),
         });
     }
     Ok(active_run_members)
+}
+
+fn rehydration_failure_for_member(
+    member: &WorkflowRuntimeBranchBatchExecutionMember,
+    error: WorkflowSchedulerTaskOrchestratorError,
+) -> WorkflowRuntimeBranchBatchExecutionFailure {
+    let message = error.to_string();
+    let code = if message.contains("does not match")
+        || message.contains("active task attempt")
+        || message.contains("active attempt fact")
+    {
+        WorkflowRuntimeBranchBatchExecutionDiagnosticCode::ActiveRunTaskAttemptMismatch
+    } else if message.contains("must be running") {
+        WorkflowRuntimeBranchBatchExecutionDiagnosticCode::ActiveRunTaskNotRunning
+    } else if message.contains("not a runtime inference task")
+        || message.contains("not in active workflow run")
+        || message.contains("active task-state record")
+    {
+        WorkflowRuntimeBranchBatchExecutionDiagnosticCode::ActiveRunTaskUnavailable
+    } else {
+        WorkflowRuntimeBranchBatchExecutionDiagnosticCode::ActiveRunTaskStateUnavailable
+    };
+    WorkflowRuntimeBranchBatchExecutionFailure::active_run_member(
+        member,
+        WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
+            code,
+            format!(
+                "runtime branch batch member '{}' could not be rehydrated from scheduler active-run state: {message}",
+                member.assignment_id.as_str()
+            ),
+        ),
+    )
 }
 
 fn runtime_host_batch_request_from_active_members(
@@ -872,6 +782,29 @@ mod tests {
                 "prompt owned by run.2026-05-22.001".to_string(),
                 "prompt owned by run.2026-05-22.002".to_string(),
             ]
+        );
+        assert_eq!(
+            plan.active_run_members
+                .iter()
+                .map(|member| { member.started_batch_member.started().attempt_id().as_str() })
+                .collect::<Vec<_>>(),
+            vec![
+                plan.members[0].scheduler_task_attempt_id.as_str(),
+                plan.members[1].scheduler_task_attempt_id.as_str(),
+            ]
+        );
+        assert_eq!(
+            plan.active_run_members
+                .iter()
+                .map(|member| {
+                    member
+                        .started_batch_member
+                        .selected_dispatch()
+                        .reservation_lease_id()
+                        .as_str()
+                })
+                .collect::<Vec<_>>(),
+            vec!["reservation-lease.runtime.1", "reservation-lease.runtime.2"]
         );
         assert_eq!(
             plan.runtime_host_request.batch_execution_request_id,

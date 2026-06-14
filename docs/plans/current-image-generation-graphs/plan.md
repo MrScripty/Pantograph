@@ -7494,6 +7494,42 @@ values for batch response mutation. Keep runtime-host batch dispatch disabled
 until response mutation and per-member run finalization are covered by focused
 tests.
 
+2026-06-14 batch owner started-member rehydration slice completed. Smallest
+useful vertical slice: have the runtime-branch batch execution owner consume
+the scheduler-owned `rehydrate_running_runtime_task` boundary for every
+claimed assignment and carry a `StartedRuntimeTaskBatchMember` in each
+active-run member projection. The owner now joins durable assignment facts to
+active scheduler task attempts through the scheduler orchestrator instead of
+manually reconstructing started runtime task state. Allowed files touched:
+`crates/pantograph-workflow-service/src/scheduler/task_orchestrator.rs`,
+`crates/pantograph-workflow-service/src/workflow/runtime_branch_batch_execution.rs`,
+and this plan.
+
+No-fallback/no-legacy confirmation: this slice does not dispatch a
+runtime-host batch, does not apply batch response mutations, does not add
+single-member fallback dispatch, and does not reuse anchor-run inputs or
+runtime/device state. Batch member rehydration still fails closed when active
+run state, running state, scheduler attempt identity, or scheduler attempt
+start timestamp do not match the durable assignment facts.
+
+Verification passed:
+`cargo fmt -p pantograph-workflow-service`,
+`cargo test -p pantograph-workflow-service runtime_branch_batch_execution --lib`,
+`cargo test -p pantograph-workflow-service orchestrator_rehydrates_same_task_id_distinct_running_attempts --lib`,
+`cargo check -p pantograph-workflow-service`,
+`cargo fmt -p pantograph-workflow-service -- --check`, and
+`git diff --check`.
+
+Focused test update: the accepted batch execution owner test now asserts that
+each active-run member carries a scheduler-owned started batch member with its
+own scheduler attempt id and selected reservation lease, while preserving
+per-run prompt input materialization and fail-closed stale-attempt coverage.
+
+Remaining follow-up: continue option 1 step 3 by using the scheduler-owned
+started batch members for batch response mutation and per-member run
+finalization. Keep runtime-host batch dispatch disabled until response
+mutation and finalization are covered by focused tests.
+
 ## Standards Rule
 
 The standards constraints in
