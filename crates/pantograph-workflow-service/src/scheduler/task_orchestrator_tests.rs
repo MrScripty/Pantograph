@@ -2719,7 +2719,7 @@ fn runtime_host_batch_member_response(
     let task = member.started().task();
     let completed = state == RuntimeHostBatchExecutionMemberState::Completed;
     RuntimeHostBatchExecutionMemberResponse {
-        execution_request_id: format!("workflow-runtime-batch-member:{}", member.assignment_id()),
+        execution_request_id: format!("workflow-runtime-batch-member.{}", member.assignment_id()),
         assignment_id: member.assignment_id().to_string(),
         workflow_id: task.workflow_id.clone(),
         workflow_run_id: task.workflow_run_id.clone(),

@@ -7530,6 +7530,51 @@ started batch members for batch response mutation and per-member run
 finalization. Keep runtime-host batch dispatch disabled until response
 mutation and finalization are covered by focused tests.
 
+2026-06-14 batch response scheduler mutation slice completed. Smallest useful
+vertical slice: apply an already-produced runtime-host batch response through
+the runtime-branch batch execution owner into scheduler-owned started batch
+members, with upfront batch id and response membership validation before any
+member mutation. Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/runtime_branch_batch_execution.rs`,
+`crates/pantograph-workflow-service/src/scheduler/task_orchestrator.rs`,
+`crates/pantograph-workflow-service/src/scheduler/task_orchestrator_tests.rs`,
+and this plan.
+
+No-fallback/no-legacy confirmation: this slice does not enable runtime-host
+batch dispatch, does not finalize workflow runs, does not mark durable
+assignments terminal, does not add single-member fallback dispatch, and does
+not reuse anchor-run inputs or runtime/device state. Batch response processing
+fails closed with typed diagnostics when the response id mismatches, a member
+response is missing, an unknown member response is present, or scheduler-owned
+member mutation rejects the response.
+
+Verification passed:
+`cargo test -p pantograph-workflow-service runtime_branch_batch_execution --lib`,
+`cargo test -p pantograph-workflow-service orchestrator_builds_started_runtime_task_batch_request_from_member_inputs --lib`,
+`cargo test -p pantograph-workflow-service orchestrator_dispatches_started_runtime_task_batch_without_single_dispatch_fallback --lib`,
+`cargo test -p pantograph-workflow-service orchestrator_applies_batch_member --lib`,
+`cargo check -p pantograph-workflow-service`,
+`cargo fmt -p pantograph-workflow-service -- --check`, and
+`git diff --check`.
+
+Focused test update: added batch-owner coverage that applies completed
+runtime-host batch responses for two active runs sharing a scheduler task id,
+asserts both scheduler task lifecycle handles are completed, and verifies each
+active run receives its own completed task result. Added fail-closed coverage
+that removes one member response and verifies no lifecycle handles or active
+run task results are mutated.
+
+Deviation resolved in-slice: the first response mutation implementation could
+mutate an earlier member before discovering a later response member was
+missing. The owner now validates the whole batch response id, unknown members,
+and missing members before acquiring mutable session state for member
+mutation.
+
+Remaining follow-up: continue option 1 step 3 by adding per-member workflow
+run finalization and durable assignment terminal-state marking after scheduler
+response mutation. Keep runtime-host batch dispatch disabled until finalization
+and assignment state transitions are covered by focused tests.
+
 ## Standards Rule
 
 The standards constraints in

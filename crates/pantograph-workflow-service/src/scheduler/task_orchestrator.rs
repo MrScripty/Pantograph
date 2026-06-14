@@ -2145,7 +2145,7 @@ fn runtime_host_batch_member_request_from_started_task(
 
 #[allow(dead_code)]
 fn runtime_batch_member_execution_request_id(assignment_id: &str) -> String {
-    format!("workflow-runtime-batch-member:{assignment_id}")
+    format!("workflow-runtime-batch-member.{assignment_id}")
 }
 
 #[allow(dead_code)]
