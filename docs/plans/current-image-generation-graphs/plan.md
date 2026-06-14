@@ -6887,6 +6887,47 @@ task/reservation mutations, and fan out per-member outcomes. Remove temporary
 batch mapping `dead_code` allowances in the grouped integration slice if the
 production path now calls those helpers.
 
+2026-06-14 grouped batch finalization ownership re-plan trigger: stop before
+enabling grouped assignment claiming. Inspection found that the existing
+single-runtime path does more than scheduler task mutation: it records active
+run started/terminal diagnostics, maps terminal transitions with selected
+dispatch and reservation context, applies reservation cleanup, finishes failed
+admitted runs, validates all scheduler tasks completed, projects workflow
+outputs, and records workflow terminal/artifact diagnostics. The batch mapping
+helpers currently own request/response projection plus per-member task and
+reservation mutation, but they do not yet own the full per-member workflow-run
+finalization contract. Enabling grouped claims directly from the worker would
+either skip that canonical terminal bookkeeping, duplicate private
+`WorkflowSchedulerSessionRunner` logic in the worker, or reintroduce
+single-member fallback execution after batch dispatch.
+
+Standards-aligned options:
+1. Introduce a backend-owned runtime-branch batch execution/finalization owner
+   in workflow-service. It would accept a claimed assignment group, rehydrate
+   every member from that member's durable active-run facts, call the injected
+   runtime-host batch dispatcher once, then apply per-member task mutation,
+   reservation lifecycle, run terminal diagnostics, output projection, active
+   run finish, and responder fan-out. This best matches the architecture
+   standards: one application owner, backend-owned data as source of truth,
+   message-passing through the worker, and boundary invariant tests for no
+   fallback/no cross-run input carry.
+2. Promote the existing single-runtime terminal bookkeeping from
+   `WorkflowSchedulerSessionRunner` into reusable workflow-service finalization
+   helpers first, then build grouped batch execution on top of those helpers.
+   This reduces duplication but is a broader refactor because it changes the
+   ownership boundary before enabling batching.
+3. Add a durable batch-member completion event queue and let a workflow-service
+   finalizer worker consume per-member results after the batch dispatcher
+   returns. This is standards-aligned for higher scale and restartability, but
+   it is larger than the current thin slice because it adds a new durable
+   lifecycle before grouped execution can work.
+
+Do not choose a raw grouped-claim slice that only calls
+`dispatch_started_runtime_task_batch` and `apply_runtime_batch_member_*`
+helpers. That would violate the no-fallback/no-legacy rule by bypassing
+canonical run finalization or forcing per-member fallback through the old
+single-run completion path after a batch dispatch.
+
 ## Standards Rule
 
 The standards constraints in
