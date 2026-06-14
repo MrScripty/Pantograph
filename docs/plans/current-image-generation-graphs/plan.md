@@ -8427,6 +8427,75 @@ broader runtime/session verification and migrating or repairing any stale tests
 that still assume direct runtime execution, singleton fallback, or request-owned
 runtime completion.
 
+2026-06-14 broader session validation after expiry pump: `timeout 180s cargo
+test -p pantograph-workflow-service session_execution --lib` failed with 30
+passed and 8 failed. Seven stale tests now receive the canonical
+`BatchWindowExpired` typed outcome for solo runtime branches that previously
+expected runtime-host dispatch, runtime-host failure, missing reservation-port
+failure, or bootstrap redispatch completion from a single run. One shutdown
+test still waits for single-request runtime-host dispatch to start, but the
+solo branch correctly remains under the scheduler-owned batch broker instead
+of dispatching as a singleton. Next smallest useful vertical slice: migrate
+`workflow_execution_session_dispatches_ready_runtime_task_through_scheduler_selection`
+to create compatible concurrent runtime session runs and assert the grouped
+runtime-host batch path, adding only a local session test batch-port fixture if
+needed. Allowed files for that slice:
+`crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`
+and this plan.
+
+No-fallback/no-legacy confirmation for the next slice: successful runtime-host
+session dispatch coverage must prove a broker-owned grouped claim over
+compatible runs. It must not reduce the broker minimum, restore direct
+single-branch rehydration, use the single-request runtime-host port as a
+fallback, or mark a solo runtime branch successful.
+
+2026-06-14 grouped session dispatch test migration slice completed. Smallest
+useful vertical slice: migrate
+`workflow_execution_session_dispatches_ready_runtime_task_through_scheduler_selection`
+to create two compatible concurrent runtime session runs and assert the
+broker-owned grouped runtime-host batch path. Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`
+and this plan.
+
+No-fallback/no-legacy confirmation: the test now installs only the
+runtime-host batch execution port for successful runtime dispatch, uses two
+compatible session runs to satisfy the broker minimum, and asserts a single
+batch request with two members. It does not restore singleton dispatch, direct
+runtime execution, request-owned completion, or a single-request runtime-host
+fallback.
+
+Verification passed:
+`cargo fmt -p pantograph-workflow-service`,
+`cargo test -p pantograph-workflow-service workflow_execution_session_dispatches_ready_runtime_task_through_scheduler_selection --lib`,
+`cargo check -p pantograph-workflow-service`,
+`cargo fmt -p pantograph-workflow-service -- --check`, and
+`git diff --check`.
+
+Broader verification:
+`timeout 180s cargo test -p pantograph-workflow-service session_execution --lib`
+now fails with 31 passed and 7 failed, improving from the prior 30 passed and
+8 failed. Remaining stale failures:
+`workflow_execution_session_bootstrap_recovery_applies_dependency_readiness_resume_plan`,
+`workflow_execution_session_bootstrap_recovery_applies_progress_loop_before_readiness_resume`,
+`workflow_execution_session_bootstrap_recovery_redispatches_ready_runtime_task`,
+`workflow_execution_session_fails_closed_when_reservation_lifecycle_port_is_missing`,
+`workflow_execution_session_records_failed_runtime_host_result_as_terminal_task_failure`,
+`workflow_execution_session_records_runtime_dispatch_panic_as_terminal_task_failure`,
+and `workflow_shutdown_aborts_blocked_runtime_dispatch_supervisor`.
+
+Focused test update: the migrated test asserts both grouped session responses,
+the single runtime-host batch request, per-member materialized prompt inputs,
+per-run durable runtime-branch event and dispatch-assignment facts, queued
+dependency-readiness provenance for both sessions, and absence of legacy host
+runtime load/run calls.
+
+Remaining follow-up: continue session test migration by intent. Bootstrap
+redispatch/completion tests that need runtime-host completion should provide
+compatible peers; true solo lifecycle, missing-port, panic/failure-before-host,
+and shutdown tests should assert the canonical typed batch wait expiry or be
+moved to a lower-level batch/shutdown owner if they need runtime-host dispatch
+to start.
+
 ## Standards Rule
 
 The standards constraints in

@@ -22,7 +22,11 @@ use pantograph_inference_interface_contracts::{
 use pantograph_runtime_host_contracts::{
     ReservationLifecycleApplication, ReservationLifecycleApplicationState,
     ReservationLifecycleEvent, ReservationLifecycleOutcome, ReservationLifecyclePort,
-    ReservationLifecyclePortError, RuntimeHostExecutionCancellationHandle,
+    ReservationLifecyclePortError, RuntimeHostBatchExecutionMemberResponse,
+    RuntimeHostBatchExecutionMemberState, RuntimeHostBatchExecutionPort,
+    RuntimeHostBatchExecutionRequest, RuntimeHostBatchExecutionResponse,
+    RuntimeHostBatchExecutionState, RuntimeHostBatchMemberReservationDisposition,
+    RuntimeHostBatchMemberRetryDisposition, RuntimeHostExecutionCancellationHandle,
     RuntimeHostExecutionCancellationSnapshot, RuntimeHostExecutionDiagnostic,
     RuntimeHostExecutionDiagnosticCode, RuntimeHostExecutionDiagnosticSeverity,
     RuntimeHostExecutionInputValue, RuntimeHostExecutionMediaArtifactRef,
@@ -862,7 +866,7 @@ async fn workflow_execution_session_dispatches_ready_runtime_task_through_schedu
     let dependency_readiness_provider = DependencyEnvironmentReadinessSnapshotProvider::new();
     let dependency_readiness_work_queue = std::sync::Arc::new(DependencyReadinessWorkQueue::new());
     let source_refresher = Arc::new(RecordingRuntimeDispatchSourceRefresher::default());
-    let runtime_host_port = Arc::new(CompletingRuntimeHostPort::default());
+    let runtime_host_batch_port = Arc::new(CompletingRuntimeHostBatchPort::default());
     let reservation_lifecycle_port = Arc::new(RecordingReservationLifecyclePort::default());
     let runtime = WorkflowSessionExecutionRuntime::new(
         WorkflowService::with_ephemeral_attribution_store()
@@ -875,7 +879,7 @@ async fn workflow_execution_session_dispatches_ready_runtime_task_through_schedu
             .with_runtime_dispatch_candidate_provider(Arc::new(
                 SingleCanonicalRuntimeDispatchCandidateProvider,
             ))
-            .with_runtime_host_execution_port(runtime_host_port.clone())
+            .with_runtime_host_batch_execution_port(runtime_host_batch_port.clone())
             .with_reservation_lifecycle_port(reservation_lifecycle_port.clone()),
         Arc::clone(&host),
     );
@@ -908,7 +912,7 @@ async fn workflow_execution_session_dispatches_ready_runtime_task_through_schedu
         )
         .expect("store dependency readiness snapshot");
 
-    let created = service
+    let first_created = service
         .create_workflow_execution_session(
             host.as_ref(),
             WorkflowExecutionSessionCreateRequest {
@@ -918,166 +922,214 @@ async fn workflow_execution_session_dispatches_ready_runtime_task_through_schedu
             },
         )
         .await
-        .expect("create session");
-    let session_id = created.session_id.clone();
-
-    let response = runtime
-        .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
-            session_id: created.session_id,
-            workflow_semantic_version: workflow_semantic_version.to_string(),
-            inputs: vec![WorkflowPortBinding {
-                node_id: "prompt".to_string(),
-                port_id: "text".to_string(),
-                value: serde_json::json!("paint a red cube"),
-            }],
-            output_targets: Some(vec![WorkflowOutputTarget {
-                node_id: "infer".to_string(),
-                port_id: "image".to_string(),
-            }]),
-            override_selection: None,
-            timeout_ms: None,
-            priority: None,
-        })
+        .expect("create first session");
+    let second_created = service
+        .create_workflow_execution_session(
+            host.as_ref(),
+            WorkflowExecutionSessionCreateRequest {
+                workflow_id: workflow_id.to_string(),
+                usage_profile: None,
+                keep_alive: false,
+            },
+        )
         .await
-        .expect("ready runtime task should dispatch through scheduler selection");
+        .expect("create second session");
+    let first_session_id = first_created.session_id.clone();
+    let second_session_id = second_created.session_id.clone();
 
-    assert_eq!(response.outputs.len(), 1);
-    assert_eq!(response.outputs[0].node_id, "infer");
-    assert_eq!(response.outputs[0].port_id, "image");
-    assert_eq!(
-        response.outputs[0].value,
-        serde_json::json!({
-            "artifact_id": "runtime-output-image",
-            "media_type": "image_png"
-        })
-    );
-    let status = service
-        .workflow_get_execution_session_status(WorkflowExecutionSessionStatusRequest {
-            session_id: session_id.clone(),
-        })
-        .await
-        .expect("session status after worker-owned runtime run finalization");
-    assert_eq!(status.session.run_count, 1);
-    assert_eq!(status.session.queued_runs, 0);
-    let recorded = runtime_host_port.requests();
+    let run_request = |session_id: String, prompt: &str| WorkflowExecutionSessionRunRequest {
+        session_id,
+        workflow_semantic_version: workflow_semantic_version.to_string(),
+        inputs: vec![WorkflowPortBinding {
+            node_id: "prompt".to_string(),
+            port_id: "text".to_string(),
+            value: serde_json::json!(prompt),
+        }],
+        output_targets: Some(vec![WorkflowOutputTarget {
+            node_id: "infer".to_string(),
+            port_id: "image".to_string(),
+        }]),
+        override_selection: None,
+        timeout_ms: None,
+        priority: None,
+    };
+    let first_run = runtime
+        .run_workflow_execution_session(run_request(first_session_id.clone(), "paint a red cube"));
+    let second_run = runtime.run_workflow_execution_session(run_request(
+        second_session_id.clone(),
+        "paint a blue cube",
+    ));
+    let (first_response, second_response) = tokio::join!(first_run, second_run);
+    let first_response =
+        first_response.expect("first compatible runtime task should complete through batch");
+    let second_response =
+        second_response.expect("second compatible runtime task should complete through batch");
+
+    for response in [&first_response, &second_response] {
+        assert_eq!(response.outputs.len(), 1);
+        assert_eq!(response.outputs[0].node_id, "infer");
+        assert_eq!(response.outputs[0].port_id, "image");
+        assert_eq!(
+            response.outputs[0].value,
+            serde_json::json!({
+                "artifact_id": "runtime-output-image",
+                "media_type": "image_png"
+            })
+        );
+    }
+    for session_id in [&first_session_id, &second_session_id] {
+        let status = service
+            .workflow_get_execution_session_status(WorkflowExecutionSessionStatusRequest {
+                session_id: session_id.clone(),
+            })
+            .await
+            .expect("session status after worker-owned runtime run finalization");
+        assert_eq!(status.session.run_count, 1);
+        assert_eq!(status.session.queued_runs, 0);
+    }
+    let recorded = runtime_host_batch_port.requests();
     assert_eq!(recorded.len(), 1);
-    assert_eq!(recorded[0].materialized_inputs.len(), 1);
-    assert_eq!(recorded[0].materialized_inputs[0].port_id, "prompt");
+    assert_eq!(recorded[0].members.len(), 2);
+    let mut recorded_prompts = recorded[0]
+        .members
+        .iter()
+        .map(|member| {
+            assert_eq!(member.materialized_inputs.len(), 1);
+            assert_eq!(member.materialized_inputs[0].port_id, "prompt");
+            assert_eq!(
+                member
+                    .handoff
+                    .dispatch_decision
+                    .as_ref()
+                    .expect("dispatch-selected handoff")
+                    .selected_runtime_id
+                    .as_str(),
+                "pytorch"
+            );
+            let RuntimeHostExecutionInputValue::String(value) =
+                &member.materialized_inputs[0].value
+            else {
+                panic!(
+                    "unexpected runtime host input value: {:?}",
+                    member.materialized_inputs[0].value
+                );
+            };
+            value.clone()
+        })
+        .collect::<Vec<_>>();
+    recorded_prompts.sort();
     assert_eq!(
-        recorded[0].materialized_inputs[0].value,
-        RuntimeHostExecutionInputValue::String("paint a red cube".to_string())
-    );
-    assert_eq!(
-        recorded[0]
-            .handoff
-            .dispatch_decision
-            .as_ref()
-            .expect("dispatch-selected handoff")
-            .selected_runtime_id
-            .as_str(),
-        "pytorch"
-    );
-    let event_id =
-        super::super::runtime_branch_task_event::WorkflowRuntimeBranchTaskEventId::parse(format!(
-            "runtime-branch-task-event.{}.infer",
-            response.workflow_run_id
-        ))
-        .expect("runtime branch event id");
-    let event = service
-        .runtime_branch_task_event_for_test(&event_id)
-        .expect("runtime branch event should persist worker dispatch facts");
-    assert!(event.selected_candidate_fact.is_some());
-    let assignment_link = event
-        .dispatch_assignment_link
-        .as_ref()
-        .expect("runtime branch event should link durable dispatch assignment");
-    assert_eq!(
-        event.scheduler_task_attempt_id.as_deref(),
-        Some(assignment_link.scheduler_task_attempt_id.as_str())
-    );
-    let assignment = service
-        .runtime_dispatch_assignment_for_test(&assignment_link.assignment_id)
-        .expect("runtime dispatch assignment should be persisted");
-    assert_eq!(
-        assignment.runtime_branch_event_id.as_str(),
-        event.event_id.as_str()
-    );
-    assert_eq!(assignment.session_id, session_id);
-    assert_eq!(assignment.workflow_id, workflow_id);
-    assert_eq!(assignment.workflow_run_id, response.workflow_run_id);
-    assert_eq!(assignment.scheduler_task_id, "infer");
-    assert_eq!(assignment.timeout_ms, None);
-    assert_eq!(
-        assignment.runtime_source_context.operation_type,
-        "image-generation.txt2img"
-    );
-    assert_eq!(
-        assignment.runtime_source_context.context_shape_key,
-        "txt2img.1024x1024.steps30"
-    );
-    assert_eq!(
-        assignment.runtime_source_context.cancellation_mode,
-        "per-run-fanout"
-    );
-    assert_eq!(
-        assignment.scheduler_task_attempt_id,
-        assignment_link.scheduler_task_attempt_id.as_str()
-    );
-    assert_eq!(
-        assignment.selected_candidate_fact.candidate_id,
-        event
-            .selected_candidate_fact
-            .as_ref()
-            .expect("selected candidate fact")
-            .candidate_id
-    );
-    assert_eq!(
-        assignment.reservation_lease_id.as_str(),
-        "reservation.runtime_session_test"
-    );
-    let task_attempt_fact = assignment
-        .task_attempt_fact
-        .as_ref()
-        .expect("runtime dispatch assignment should persist task-attempt fact when running");
-    assert_eq!(task_attempt_fact.workflow_id, workflow_id);
-    assert_eq!(task_attempt_fact.workflow_run_id, response.workflow_run_id);
-    assert_eq!(task_attempt_fact.scheduler_task_id, "infer");
-    assert_eq!(
-        task_attempt_fact.scheduler_task_attempt_id,
-        assignment.scheduler_task_attempt_id
-    );
-    assert_eq!(
-        task_attempt_fact.runtime_residency_key,
-        "test-runtime:image/example/tiny-diffusion"
-    );
-    assert_eq!(task_attempt_fact.reservations.len(), 1);
-    assert_eq!(
-        task_attempt_fact.reservations[0].reservation_lease_id,
-        "reservation.runtime_session_test"
-    );
-    assert_eq!(task_attempt_fact.reservations[0].device_id, "cuda:0");
-    assert_eq!(dependency_readiness_work_queue.len(), 1);
-    let work_item = dependency_readiness_work_queue
-        .pop_next()
-        .expect("dependency-readiness work item should be queued after seed");
-    assert_eq!(work_item.provenance.session_id.as_str(), session_id);
-    assert_eq!(work_item.provenance.task_id.as_str(), "infer");
-    assert_eq!(host.runtime_load_attempts.load(Ordering::SeqCst), 0);
-    assert_eq!(host.run_attempts.load(Ordering::SeqCst), 0);
-    let lifecycle_events = reservation_lifecycle_port.events();
-    assert_eq!(
-        lifecycle_events
-            .iter()
-            .map(|event| &event.outcome)
-            .collect::<Vec<_>>(),
+        recorded_prompts,
         vec![
-            &ReservationLifecycleOutcome::DispatchStarted,
-            &ReservationLifecycleOutcome::RuntimeHostCompleted,
+            "paint a blue cube".to_string(),
+            "paint a red cube".to_string()
         ]
     );
-    assert!(lifecycle_events
-        .iter()
-        .all(|event| event.reservation_lease_id.as_str() == "reservation.runtime_session_test"));
+    for (response, session_id) in [
+        (&first_response, &first_session_id),
+        (&second_response, &second_session_id),
+    ] {
+        let event_id =
+            super::super::runtime_branch_task_event::WorkflowRuntimeBranchTaskEventId::parse(
+                format!(
+                    "runtime-branch-task-event.{}.infer",
+                    response.workflow_run_id
+                ),
+            )
+            .expect("runtime branch event id");
+        let event = service
+            .runtime_branch_task_event_for_test(&event_id)
+            .expect("runtime branch event should persist worker dispatch facts");
+        assert!(event.selected_candidate_fact.is_some());
+        let assignment_link = event
+            .dispatch_assignment_link
+            .as_ref()
+            .expect("runtime branch event should link durable dispatch assignment");
+        assert_eq!(
+            event.scheduler_task_attempt_id.as_deref(),
+            Some(assignment_link.scheduler_task_attempt_id.as_str())
+        );
+        let assignment = service
+            .runtime_dispatch_assignment_for_test(&assignment_link.assignment_id)
+            .expect("runtime dispatch assignment should be persisted");
+        assert_eq!(
+            assignment.runtime_branch_event_id.as_str(),
+            event.event_id.as_str()
+        );
+        assert_eq!(assignment.session_id, **session_id);
+        assert_eq!(assignment.workflow_id, workflow_id);
+        assert_eq!(assignment.workflow_run_id, response.workflow_run_id);
+        assert_eq!(assignment.scheduler_task_id, "infer");
+        assert_eq!(assignment.timeout_ms, None);
+        assert_eq!(
+            assignment.runtime_source_context.operation_type,
+            "image-generation.txt2img"
+        );
+        assert_eq!(
+            assignment.runtime_source_context.context_shape_key,
+            "txt2img.1024x1024.steps30"
+        );
+        assert_eq!(
+            assignment.runtime_source_context.cancellation_mode,
+            "per-run-fanout"
+        );
+        assert_eq!(
+            assignment.scheduler_task_attempt_id,
+            assignment_link.scheduler_task_attempt_id.as_str()
+        );
+        assert_eq!(
+            assignment.selected_candidate_fact.candidate_id,
+            event
+                .selected_candidate_fact
+                .as_ref()
+                .expect("selected candidate fact")
+                .candidate_id
+        );
+        assert_eq!(
+            assignment.reservation_lease_id.as_str(),
+            "reservation.runtime_session_test"
+        );
+        let task_attempt_fact = assignment
+            .task_attempt_fact
+            .as_ref()
+            .expect("runtime dispatch assignment should persist task-attempt fact when running");
+        assert_eq!(task_attempt_fact.workflow_id, workflow_id);
+        assert_eq!(task_attempt_fact.workflow_run_id, response.workflow_run_id);
+        assert_eq!(task_attempt_fact.scheduler_task_id, "infer");
+        assert_eq!(
+            task_attempt_fact.scheduler_task_attempt_id,
+            assignment.scheduler_task_attempt_id
+        );
+        assert_eq!(
+            task_attempt_fact.runtime_residency_key,
+            "test-runtime:image/example/tiny-diffusion"
+        );
+        assert_eq!(task_attempt_fact.reservations.len(), 1);
+        assert_eq!(
+            task_attempt_fact.reservations[0].reservation_lease_id,
+            "reservation.runtime_session_test"
+        );
+        assert_eq!(task_attempt_fact.reservations[0].device_id, "cuda:0");
+    }
+    assert_eq!(dependency_readiness_work_queue.len(), 2);
+    let first_work_item = dependency_readiness_work_queue
+        .pop_next()
+        .expect("first dependency-readiness work item should be queued after seed");
+    let second_work_item = dependency_readiness_work_queue
+        .pop_next()
+        .expect("second dependency-readiness work item should be queued after seed");
+    let mut work_item_sessions = vec![
+        first_work_item.provenance.session_id.to_string(),
+        second_work_item.provenance.session_id.to_string(),
+    ];
+    work_item_sessions.sort();
+    let mut expected_sessions = vec![first_session_id.clone(), second_session_id.clone()];
+    expected_sessions.sort();
+    assert_eq!(work_item_sessions, expected_sessions);
+    assert_eq!(first_work_item.provenance.task_id.as_str(), "infer");
+    assert_eq!(second_work_item.provenance.task_id.as_str(), "infer");
+    assert_eq!(host.runtime_load_attempts.load(Ordering::SeqCst), 0);
+    assert_eq!(host.run_attempts.load(Ordering::SeqCst), 0);
     assert_eq!(
         service
             .scheduler_task_orchestrator
@@ -1089,7 +1141,10 @@ async fn workflow_execution_session_dispatches_ready_runtime_task_through_schedu
     );
     assert_eq!(
         source_refresher.model_refs(),
-        vec!["image/example/tiny-diffusion"]
+        vec![
+            "image/example/tiny-diffusion",
+            "image/example/tiny-diffusion"
+        ]
     );
 }
 
@@ -3926,6 +3981,66 @@ impl RuntimeHostExecutionPort for CompletingRuntimeHostPort {
             }],
             diagnostics: Vec::new(),
             terminal_metadata: None,
+        })
+    }
+}
+
+#[derive(Default)]
+struct CompletingRuntimeHostBatchPort {
+    requests: Mutex<Vec<RuntimeHostBatchExecutionRequest>>,
+}
+
+impl CompletingRuntimeHostBatchPort {
+    fn requests(&self) -> Vec<RuntimeHostBatchExecutionRequest> {
+        self.requests
+            .lock()
+            .expect("runtime host batch request lock")
+            .clone()
+    }
+}
+
+#[async_trait::async_trait]
+impl RuntimeHostBatchExecutionPort for CompletingRuntimeHostBatchPort {
+    async fn execute_runtime_host_batch_request(
+        &self,
+        request: RuntimeHostBatchExecutionRequest,
+        _cancellation: RuntimeHostExecutionCancellationHandle,
+    ) -> Result<RuntimeHostBatchExecutionResponse, RuntimeHostExecutionPortError> {
+        self.requests
+            .lock()
+            .expect("runtime host batch request lock")
+            .push(request.clone());
+        Ok(RuntimeHostBatchExecutionResponse {
+            contract_version: RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
+            batch_execution_request_id: request.batch_execution_request_id,
+            state: RuntimeHostBatchExecutionState::Completed,
+            members: request
+                .members
+                .into_iter()
+                .map(|member| RuntimeHostBatchExecutionMemberResponse {
+                    execution_request_id: member.execution_request_id,
+                    assignment_id: member.assignment_id,
+                    workflow_id: member.handoff.workflow_id,
+                    workflow_run_id: member.handoff.workflow_run_id,
+                    node_id: member.handoff.node_id,
+                    task_id: member.handoff.task_id,
+                    state: RuntimeHostBatchExecutionMemberState::Completed,
+                    retry_disposition: RuntimeHostBatchMemberRetryDisposition::NotRetryable,
+                    reservation_disposition: RuntimeHostBatchMemberReservationDisposition::Released,
+                    outputs: vec![RuntimeHostExecutionOutput {
+                        port_id: "image".to_string(),
+                        value: RuntimeHostExecutionOutputValue::MediaArtifactRef(
+                            RuntimeHostExecutionMediaArtifactRef {
+                                artifact_id: "runtime-output-image".to_string(),
+                                media_type: Some("image_png".to_string()),
+                            },
+                        ),
+                    }],
+                    diagnostics: Vec::new(),
+                    terminal_metadata: None,
+                })
+                .collect(),
+            diagnostics: Vec::new(),
         })
     }
 }
