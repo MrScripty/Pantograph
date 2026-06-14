@@ -7411,6 +7411,43 @@ Remaining follow-up: continue option 1 step 3 by introducing the scheduler-owned
 lifecycle key normalization needed before batch response mutation can safely
 complete two simultaneous workflow runs that share the same scheduler task id.
 
+2026-06-14 scheduler task lifecycle attempt-key normalization slice
+completed. Smallest useful vertical slice: normalize
+`WorkflowSchedulerTaskLifecycleManager` active-handle identity from scheduler
+task id only to scheduler task id plus scheduler task attempt id, while keeping
+the existing public lifecycle operations task/attempt based. Allowed files
+touched:
+`crates/pantograph-workflow-service/src/scheduler/task_lifecycle.rs`,
+`crates/pantograph-workflow-service/src/scheduler/task_lifecycle_tests.rs`,
+and this plan.
+
+No-fallback/no-legacy confirmation: this slice does not add compatibility
+shims, does not bypass lifecycle validation, does not enable runtime-host batch
+dispatch, and does not relax stale-attempt diagnostics. Exact duplicate
+task-attempt handles still fail closed; distinct attempts for the same
+scheduler task id can now coexist and complete independently.
+
+Verification passed:
+`cargo fmt -p pantograph-workflow-service`,
+`cargo test -p pantograph-workflow-service task_lifecycle_manager --lib`,
+`cargo test -p pantograph-workflow-service runtime_branch_batch_execution --lib`,
+`cargo check -p pantograph-workflow-service`,
+`cargo fmt -p pantograph-workflow-service -- --check`, and
+`git diff --check`.
+
+Focused test update: lifecycle tests now assert two handles with the same
+scheduler task id and distinct attempt ids can be tracked concurrently, that an
+exact duplicate task attempt is still rejected, and that each attempt can be
+completed independently without clearing the other handle. Existing stale
+completion and stale cancellation tests continue to verify typed
+`StaleTaskHandleAttempt` behavior.
+
+Remaining follow-up: continue option 1 step 3 by adding a scheduler-owned
+rehydration path from active-run batch members into `StartedRuntimeTaskBatchMember`
+values, then use those values for batch response mutation. Keep runtime-host
+batch dispatch disabled until response mutation and per-member run finalization
+are covered by focused tests.
+
 ## Standards Rule
 
 The standards constraints in

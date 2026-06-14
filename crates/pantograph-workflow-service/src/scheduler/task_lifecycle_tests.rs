@@ -35,7 +35,9 @@ fn task_lifecycle_manager_tracks_active_task_handle() {
     assert_eq!(record.task_id, task_id);
     assert_eq!(record.attempt_id, attempt_id);
     assert_eq!(manager.active_task_handle_count(), 1);
-    assert!(manager.active_task_handle(&record.task_id).is_some());
+    assert!(manager
+        .active_task_handle_for_attempt(&record.task_id, &record.attempt_id)
+        .is_some());
     assert_eq!(
         manager
             .runtime_host_dispatch_lifecycle_component()
@@ -46,16 +48,41 @@ fn task_lifecycle_manager_tracks_active_task_handle() {
 }
 
 #[test]
-fn task_lifecycle_manager_rejects_duplicate_active_task_handle() {
+fn task_lifecycle_manager_allows_same_task_id_with_distinct_attempts() {
     let mut manager = lifecycle_manager();
     let task_id = task_id("image-task");
+    let first_attempt_id = attempt_id("scheduler-task-attempt.first");
+    let second_attempt_id = attempt_id("scheduler-task-attempt.second");
+
     manager
-        .track_task_handle(task_id.clone(), attempt_id("scheduler-task-attempt.first"))
+        .track_task_handle(task_id.clone(), first_attempt_id.clone())
+        .expect("track first task handle");
+    manager
+        .track_task_handle(task_id.clone(), second_attempt_id.clone())
+        .expect("track second task handle for same scheduler task");
+
+    assert_eq!(manager.active_task_handle_count(), 2);
+    assert!(manager.active_task_handle(&task_id).is_none());
+    assert!(manager
+        .active_task_handle_for_attempt(&task_id, &first_attempt_id)
+        .is_some());
+    assert!(manager
+        .active_task_handle_for_attempt(&task_id, &second_attempt_id)
+        .is_some());
+}
+
+#[test]
+fn task_lifecycle_manager_rejects_duplicate_active_task_attempt_handle() {
+    let mut manager = lifecycle_manager();
+    let task_id = task_id("image-task");
+    let attempt_id = attempt_id("scheduler-task-attempt.first");
+    manager
+        .track_task_handle(task_id.clone(), attempt_id.clone())
         .expect("track first task handle");
 
     let error = manager
-        .track_task_handle(task_id, attempt_id("scheduler-task-attempt.second"))
-        .expect_err("duplicate task handle must fail");
+        .track_task_handle(task_id, attempt_id)
+        .expect_err("duplicate task attempt handle must fail");
 
     assert!(error.to_string().contains("TaskHandleAlreadyTracked"));
     assert_eq!(manager.active_task_handle_count(), 1);
@@ -82,6 +109,39 @@ fn task_lifecycle_manager_rejects_stale_completion() {
             .attempt_id,
         active_attempt_id
     );
+}
+
+#[test]
+fn task_lifecycle_manager_completes_same_task_id_distinct_attempts_independently() {
+    let mut manager = lifecycle_manager();
+    let task_id = task_id("image-task");
+    let first_attempt_id = attempt_id("scheduler-task-attempt.first");
+    let second_attempt_id = attempt_id("scheduler-task-attempt.second");
+    manager
+        .track_task_handle(task_id.clone(), first_attempt_id.clone())
+        .expect("track first task handle");
+    manager
+        .track_task_handle(task_id.clone(), second_attempt_id.clone())
+        .expect("track second task handle");
+
+    let completed_first = manager
+        .complete_task_handle(&task_id, &first_attempt_id)
+        .expect("complete first matching handle");
+
+    assert_eq!(completed_first.task_id, task_id);
+    assert_eq!(completed_first.attempt_id, first_attempt_id);
+    assert_eq!(manager.active_task_handle_count(), 1);
+    assert!(manager
+        .active_task_handle_for_attempt(&task_id, &second_attempt_id)
+        .is_some());
+
+    let completed_second = manager
+        .complete_task_handle(&task_id, &second_attempt_id)
+        .expect("complete second matching handle");
+
+    assert_eq!(completed_second.task_id, task_id);
+    assert_eq!(completed_second.attempt_id, second_attempt_id);
+    assert_eq!(manager.active_task_handle_count(), 0);
 }
 
 #[test]

@@ -75,7 +75,24 @@ impl WorkflowSchedulerTaskLifecycleManager {
         &self,
         task_id: &SchedulerTaskId,
     ) -> Option<&WorkflowSchedulerTaskLifecycleHandleRecord> {
-        self.active_task_handles.get(task_id.as_str())
+        let mut matching = self
+            .active_task_handles
+            .values()
+            .filter(|record| record.task_id == *task_id);
+        let first = matching.next()?;
+        if matching.next().is_some() {
+            return None;
+        }
+        Some(first)
+    }
+
+    pub(crate) fn active_task_handle_for_attempt(
+        &self,
+        task_id: &SchedulerTaskId,
+        attempt_id: &WorkflowSchedulerTaskAttemptId,
+    ) -> Option<&WorkflowSchedulerTaskLifecycleHandleRecord> {
+        self.active_task_handles
+            .get(&task_lifecycle_handle_key(task_id, attempt_id))
     }
 
     pub(crate) fn runtime_host_dispatch_lifecycle_component(
@@ -103,17 +120,18 @@ impl WorkflowSchedulerTaskLifecycleManager {
             ));
         }
 
-        let task_key = task_id.as_str().to_string();
+        let task_key = task_lifecycle_handle_key(&task_id, &attempt_id);
         if self.active_task_handles.contains_key(&task_key) {
             return Err(lifecycle_error(
                 WorkflowSchedulerTaskLifecycleDiagnostic::error(
                     WorkflowSchedulerTaskLifecycleDiagnosticCode::TaskHandleAlreadyTracked,
                     format!(
-                        "task lifecycle handle is already tracked for task '{}'",
-                        task_id.as_str()
+                        "task lifecycle handle is already tracked for task '{}' attempt '{}'",
+                        task_id.as_str(),
+                        attempt_id.as_str()
                     ),
                     Some(
-                        "Complete or cancel the existing attempt before tracking another handle."
+                        "Complete or cancel the existing task attempt before tracking it again."
                             .to_string(),
                     ),
                 ),
@@ -206,19 +224,18 @@ impl WorkflowSchedulerTaskLifecycleManager {
         task_id: &SchedulerTaskId,
         attempt_id: &WorkflowSchedulerTaskAttemptId,
     ) -> Result<WorkflowSchedulerTaskLifecycleHandleRecord, WorkflowServiceError> {
+        let handle_key = task_lifecycle_handle_key(task_id, attempt_id);
+        if !self.active_task_handles.contains_key(&handle_key) {
+            return Err(self.task_lifecycle_handle_not_found_error(
+                task_id,
+                attempt_id,
+                "Only the active tracked attempt can complete a task handle.",
+            ));
+        }
         let tracked = self
             .active_task_handles
-            .get(task_id.as_str())
-            .ok_or_else(|| {
-                lifecycle_error(WorkflowSchedulerTaskLifecycleDiagnostic::error(
-                    WorkflowSchedulerTaskLifecycleDiagnosticCode::TaskHandleNotTracked,
-                    format!(
-                        "task lifecycle handle is not tracked for task '{}'",
-                        task_id.as_str()
-                    ),
-                    Some("Only the active tracked attempt can complete a task handle.".to_string()),
-                ))
-            })?;
+            .get(&handle_key)
+            .expect("lifecycle handle existence checked before read");
 
         if tracked.attempt_id != *attempt_id {
             return Err(lifecycle_error(
@@ -237,7 +254,7 @@ impl WorkflowSchedulerTaskLifecycleManager {
 
         let completed = self
             .active_task_handles
-            .remove(task_id.as_str())
+            .remove(&handle_key)
             .ok_or_else(|| {
                 lifecycle_error(WorkflowSchedulerTaskLifecycleDiagnostic::error(
                     WorkflowSchedulerTaskLifecycleDiagnosticCode::TaskHandleNotTracked,
@@ -339,19 +356,18 @@ impl WorkflowSchedulerTaskLifecycleManager {
         task_id: &SchedulerTaskId,
         attempt_id: &WorkflowSchedulerTaskAttemptId,
     ) -> Result<&mut WorkflowSchedulerTaskLifecycleHandleRecord, WorkflowServiceError> {
+        let handle_key = task_lifecycle_handle_key(task_id, attempt_id);
+        if !self.active_task_handles.contains_key(&handle_key) {
+            return Err(self.task_lifecycle_handle_not_found_error(
+                task_id,
+                attempt_id,
+                "Only tracked task attempts can receive lifecycle signals.",
+            ));
+        }
         let tracked = self
             .active_task_handles
-            .get_mut(task_id.as_str())
-            .ok_or_else(|| {
-                lifecycle_error(WorkflowSchedulerTaskLifecycleDiagnostic::error(
-                    WorkflowSchedulerTaskLifecycleDiagnosticCode::TaskHandleNotTracked,
-                    format!(
-                        "task lifecycle handle is not tracked for task '{}'",
-                        task_id.as_str()
-                    ),
-                    Some("Only tracked task attempts can receive lifecycle signals.".to_string()),
-                ))
-            })?;
+            .get_mut(&handle_key)
+            .expect("lifecycle handle existence checked before mutable read");
 
         if tracked.attempt_id != *attempt_id {
             return Err(lifecycle_error(
@@ -370,6 +386,47 @@ impl WorkflowSchedulerTaskLifecycleManager {
 
         Ok(tracked)
     }
+
+    fn task_lifecycle_handle_not_found_error(
+        &self,
+        task_id: &SchedulerTaskId,
+        attempt_id: &WorkflowSchedulerTaskAttemptId,
+        hint: &str,
+    ) -> WorkflowServiceError {
+        if let Some(active_for_task) = self
+            .active_task_handles
+            .values()
+            .find(|record| record.task_id == *task_id)
+        {
+            return lifecycle_error(WorkflowSchedulerTaskLifecycleDiagnostic::error(
+                WorkflowSchedulerTaskLifecycleDiagnosticCode::StaleTaskHandleAttempt,
+                format!(
+                    "task lifecycle handle for task '{}' has active attempt '{}', not '{}'",
+                    task_id.as_str(),
+                    active_for_task.attempt_id.as_str(),
+                    attempt_id.as_str()
+                ),
+                Some(hint.to_string()),
+            ));
+        }
+
+        lifecycle_error(WorkflowSchedulerTaskLifecycleDiagnostic::error(
+            WorkflowSchedulerTaskLifecycleDiagnosticCode::TaskHandleNotTracked,
+            format!(
+                "task lifecycle handle is not tracked for task '{}' attempt '{}'",
+                task_id.as_str(),
+                attempt_id.as_str()
+            ),
+            Some(hint.to_string()),
+        ))
+    }
+}
+
+fn task_lifecycle_handle_key(
+    task_id: &SchedulerTaskId,
+    attempt_id: &WorkflowSchedulerTaskAttemptId,
+) -> String {
+    format!("{}::{}", task_id.as_str(), attempt_id.as_str())
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
