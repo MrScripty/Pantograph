@@ -6980,6 +6980,39 @@ if runtime/model/device residency must be hard-linked to workflow ownership,
 or if grouped claiming requires generated DTO, saved workflow fixture,
 lockfile, frontend/Tauri, or runtime-host contract changes in the same slice.
 
+2026-06-14 runtime-branch batch owner contract slice completed. Smallest
+useful vertical slice: define the workflow-service runtime-branch batch
+execution/finalization owner contract with focused validation tests. Allowed
+files touched:
+`crates/pantograph-workflow-service/src/workflow/runtime_branch_batch_execution.rs`,
+`crates/pantograph-workflow-service/src/workflow.rs`, and this plan.
+
+No-fallback/no-legacy confirmation: grouped assignment claiming remains
+disabled; runtime-host batch dispatch remains disabled; no request-scoped
+runtime state, frontend/Tauri policy, single-member dispatch fallback, or
+anchor-run input carry was added. The new owner contract accepts durable
+`WorkflowRuntimeDispatchAssignmentBatchClaimOutcome` data, the scheduler
+orchestrator dependency that owns the selected batch dispatcher, and an
+assignment-key responder fan-out boundary. It fails closed with typed
+diagnostics and per-member failed outcomes when claimed assignments are not
+running, lack a durable batch claim, have a mismatched claim, appear twice, or
+lack task-attempt facts required for finalization.
+
+Verification passed:
+`cargo fmt -p pantograph-workflow-service`,
+`cargo test -p pantograph-workflow-service runtime_branch_batch_execution --lib`,
+`cargo check -p pantograph-workflow-service`,
+`cargo fmt -p pantograph-workflow-service -- --check`, and
+`git diff --check`.
+
+Deviation and follow-up: `workflow.rs` marks the new module with a temporary
+targeted `dead_code` allowance because this slice intentionally defines the
+owner contract before the production worker grouped-claim path calls it. The
+next slice should extract or wrap canonical single-runtime run finalization
+behind reusable workflow-service-owned helpers, then the grouped owner can use
+those helpers and the temporary allowance can be removed when production
+integration reaches this module.
+
 ## Standards Rule
 
 The standards constraints in
