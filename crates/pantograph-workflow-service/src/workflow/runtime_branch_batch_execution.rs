@@ -167,6 +167,7 @@ pub(super) enum WorkflowRuntimeBranchBatchExecutionDiagnosticCode {
     RuntimeHostBatchMemberResponseMissing,
     RuntimeHostBatchMemberResponseUnknown,
     RuntimeHostBatchMemberMutationInvalid,
+    RuntimeBatchMemberLifecycleInvalid,
     RuntimeDispatchAssignmentTerminalStateInvalid,
     WorkflowRunFinalizationInvalid,
     ResponderFanOutUnavailable,
@@ -302,6 +303,7 @@ where
         H: WorkflowHost + ?Sized,
     {
         let plan = self.prepare_claimed_batch(service, claim_outcome)?;
+        self.apply_batch_dispatch_started_lifecycle(&plan).await?;
         let response = self
             .scheduler_task_orchestrator
             .dispatch_runtime_batch_request(plan.runtime_host_request.clone())
@@ -321,6 +323,38 @@ where
         let _mutation = self.apply_batch_response_mutations(service, &plan, &response)?;
         self.finalize_batch_member_runs(service, host, &plan, &response)
             .await
+    }
+
+    async fn apply_batch_dispatch_started_lifecycle(
+        &self,
+        plan: &WorkflowRuntimeBranchBatchExecutionPlan,
+    ) -> Result<(), WorkflowRuntimeBranchBatchExecutionFailure> {
+        for active_member in &plan.active_run_members {
+            let member = plan
+                .members
+                .iter()
+                .find(|member| member.assignment_id == active_member.assignment_id)
+                .expect("active-run member is built from validated plan members");
+            let _application = self
+                .scheduler_task_orchestrator
+                .apply_runtime_batch_member_dispatch_started_lifecycle(
+                    &active_member.started_batch_member,
+                )
+                .await
+                .map_err(|error| {
+                    WorkflowRuntimeBranchBatchExecutionFailure::active_run_member(
+                        member,
+                        WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
+                            WorkflowRuntimeBranchBatchExecutionDiagnosticCode::RuntimeBatchMemberLifecycleInvalid,
+                            format!(
+                                "runtime branch batch member '{}' dispatch-started reservation lifecycle failed: {error}",
+                                member.assignment_id.as_str()
+                            ),
+                        ),
+                    )
+                })?;
+        }
+        Ok(())
     }
 
     pub(super) async fn finalize_batch_member_runs<H>(
@@ -1294,14 +1328,17 @@ mod tests {
         DeviceIntentId, PumasModelRef,
     };
     use pantograph_runtime_host_contracts::{
-        RuntimeHostBatchExecutionMemberRequest, RuntimeHostBatchExecutionMemberResponse,
-        RuntimeHostBatchExecutionMemberState, RuntimeHostBatchExecutionPort,
-        RuntimeHostBatchExecutionRequest, RuntimeHostBatchExecutionResponse,
-        RuntimeHostBatchExecutionState, RuntimeHostBatchMemberFailurePolicy,
-        RuntimeHostBatchMemberReservationDisposition, RuntimeHostBatchMemberReservationPolicy,
-        RuntimeHostBatchMemberRetryDisposition, RuntimeHostExecutionCancellationHandle,
-        RuntimeHostExecutionInputValue, RuntimeHostExecutionOutput,
-        RuntimeHostExecutionOutputValue, RuntimeHostExecutionPortError,
+        ReservationLifecycleApplication, ReservationLifecycleApplicationState,
+        ReservationLifecycleEvent, ReservationLifecycleOutcome, ReservationLifecyclePort,
+        ReservationLifecyclePortError, RuntimeHostBatchExecutionMemberRequest,
+        RuntimeHostBatchExecutionMemberResponse, RuntimeHostBatchExecutionMemberState,
+        RuntimeHostBatchExecutionPort, RuntimeHostBatchExecutionRequest,
+        RuntimeHostBatchExecutionResponse, RuntimeHostBatchExecutionState,
+        RuntimeHostBatchMemberFailurePolicy, RuntimeHostBatchMemberReservationDisposition,
+        RuntimeHostBatchMemberReservationPolicy, RuntimeHostBatchMemberRetryDisposition,
+        RuntimeHostExecutionCancellationHandle, RuntimeHostExecutionInputValue,
+        RuntimeHostExecutionOutput, RuntimeHostExecutionOutputValue, RuntimeHostExecutionPortError,
+        RESERVATION_LIFECYCLE_CONTRACT_VERSION,
     };
     use pantograph_scheduler::{
         SchedulableTaskIntent, SchedulerDispatchCandidateId, SchedulerDispatchDecision,
@@ -1342,6 +1379,40 @@ mod tests {
     use super::*;
     use crate::graph::WorkflowRuntimeSourceContext;
     use crate::scheduler::WorkflowSchedulerTaskAttemptId;
+
+    #[derive(Default)]
+    struct RecordingReservationLifecyclePort {
+        events: Mutex<Vec<ReservationLifecycleEvent>>,
+    }
+
+    impl RecordingReservationLifecyclePort {
+        fn events(&self) -> Vec<ReservationLifecycleEvent> {
+            self.events
+                .lock()
+                .expect("reservation lifecycle events lock")
+                .clone()
+        }
+    }
+
+    #[async_trait]
+    impl ReservationLifecyclePort for RecordingReservationLifecyclePort {
+        async fn apply_reservation_lifecycle(
+            &self,
+            event: ReservationLifecycleEvent,
+        ) -> Result<ReservationLifecycleApplication, ReservationLifecyclePortError> {
+            self.events
+                .lock()
+                .expect("reservation lifecycle events lock")
+                .push(event.clone());
+            Ok(ReservationLifecycleApplication {
+                contract_version: RESERVATION_LIFECYCLE_CONTRACT_VERSION,
+                lifecycle_event_id: event.lifecycle_event_id,
+                reservation_lease_id: event.reservation_lease_id,
+                state: ReservationLifecycleApplicationState::Applied,
+                diagnostics: Vec::new(),
+            })
+        }
+    }
 
     #[test]
     fn runtime_branch_batch_execution_owner_accepts_claimed_running_members_with_facts() {
@@ -1720,8 +1791,10 @@ mod tests {
     #[tokio::test]
     async fn runtime_branch_batch_execution_owner_dispatches_and_finalizes_claimed_batch() {
         let batch_port = Arc::new(RecordingBatchExecutionPort::default());
-        let service =
-            WorkflowService::new().with_runtime_host_batch_execution_port(batch_port.clone());
+        let reservation_lifecycle_port = Arc::new(RecordingReservationLifecyclePort::default());
+        let service = WorkflowService::new()
+            .with_runtime_host_batch_execution_port(batch_port.clone())
+            .with_reservation_lifecycle_port(reservation_lifecycle_port.clone());
         let host = BatchFinalizationHost::default();
         let responder_fan_out = RecordingResponderFanOut::default();
         let owner = WorkflowRuntimeBranchBatchExecutionOwner::new(
@@ -1770,6 +1843,15 @@ mod tests {
             vec!["assignment.1", "assignment.2"]
         );
         assert_eq!(host.workflow_io_call_count(), 2);
+        assert_eq!(
+            reservation_lifecycle_port
+                .events()
+                .iter()
+                .filter(|event| event.outcome == ReservationLifecycleOutcome::DispatchStarted)
+                .count(),
+            2,
+            "successful grouped dispatch must mark each reservation as dispatch-started"
+        );
         assert!(
             service
                 .session_store_guard()

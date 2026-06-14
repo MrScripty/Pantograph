@@ -842,6 +842,25 @@ impl WorkflowSchedulerTaskOrchestrator {
         .await
     }
 
+    pub(crate) async fn apply_runtime_batch_member_dispatch_started_lifecycle(
+        &self,
+        member: &StartedRuntimeTaskBatchMember,
+    ) -> Result<ValidatedReservationLifecycleApplication, WorkflowSchedulerTaskOrchestratorError>
+    {
+        self.apply_reservation_lifecycle_event(reservation_lifecycle_event(
+            member.started().task(),
+            member.selected_dispatch().reservation_lease_id().clone(),
+            member.selected_dispatch().candidate_id().cloned(),
+            ReservationLifecycleOutcome::DispatchStarted,
+            vec![reservation_lifecycle_diagnostic(
+                ReservationLifecycleDiagnosticSeverity::Info,
+                ReservationLifecycleDiagnosticCode::DispatchStarted,
+                "runtime batch member dispatch started for selected scheduler reservation",
+            )],
+        )?)
+        .await
+    }
+
     async fn apply_unselected_candidate_lifecycle_events(
         &self,
         task: &WorkflowSchedulerTask,

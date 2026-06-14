@@ -8599,6 +8599,59 @@ assert typed solo wait expiry or move it behind a grouped path that actually
 reaches reservation lifecycle ownership; rewrite the shutdown test at the
 grouped batch owner/worker level if it must observe runtime-host cancellation.
 
+2026-06-14 grouped batch reservation lifecycle fail-closed slice completed.
+Smallest useful vertical slice: apply scheduler-owned dispatch-started
+reservation lifecycle for each grouped runtime batch member before
+runtime-host batch dispatch, and migrate
+`workflow_execution_session_fails_closed_when_reservation_lifecycle_port_is_missing`
+to two compatible concurrent runtime session runs. Allowed files touched:
+`crates/pantograph-workflow-service/src/scheduler/task_orchestrator.rs`,
+`crates/pantograph-workflow-service/src/workflow/runtime_branch_batch_execution.rs`,
+`crates/pantograph-workflow-service/src/workflow/task_execution_worker.rs`,
+`crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`,
+and this plan.
+
+No-fallback/no-legacy confirmation: grouped runtime batches now fail closed
+through scheduler-owned reservation lifecycle before runtime-host batch
+dispatch when lifecycle ownership is missing. Successful grouped owner and
+worker fixtures install explicit reservation lifecycle ports and assert
+dispatch-started lifecycle events. The slice does not restore singleton
+dispatch, direct runtime execution, request-owned completion, or the
+single-request runtime-host fallback.
+
+Verification passed:
+`cargo fmt -p pantograph-workflow-service`,
+`cargo test -p pantograph-workflow-service workflow_execution_session_fails_closed_when_reservation_lifecycle_port_is_missing --lib`,
+`cargo test -p pantograph-workflow-service runtime_branch_batch_execution --lib`,
+`cargo test -p pantograph-workflow-service task_execution_worker --lib`,
+`cargo test -p pantograph-workflow-service workflow_execution_session_records_runtime_batch_dispatch_rejection_as_typed_error --lib`,
+`cargo test -p pantograph-workflow-service workflow_execution_session_records_failed_runtime_host_result_as_terminal_task_failure --lib`,
+`cargo test -p pantograph-workflow-service workflow_execution_session_dispatches_ready_runtime_task_through_scheduler_selection --lib`,
+`cargo check -p pantograph-workflow-service`,
+`cargo fmt -p pantograph-workflow-service -- --check`, and
+`git diff --check`.
+
+Broader verification:
+`timeout 180s cargo test -p pantograph-workflow-service session_execution --lib`
+now fails with 34 passed and 4 failed, improving from the prior 33 passed and
+5 failed. Remaining stale failures:
+`workflow_execution_session_bootstrap_recovery_applies_dependency_readiness_resume_plan`,
+`workflow_execution_session_bootstrap_recovery_applies_progress_loop_before_readiness_resume`,
+`workflow_execution_session_bootstrap_recovery_redispatches_ready_runtime_task`,
+and `workflow_shutdown_aborts_blocked_runtime_dispatch_supervisor`.
+
+Focused test update: the migrated missing lifecycle-port test now asserts two
+compatible grouped run errors and no runtime-host batch request when
+reservation lifecycle ownership is absent. The grouped batch owner and worker
+success tests now assert dispatch-started reservation lifecycle events for all
+batch members.
+
+Remaining follow-up: migrate the three bootstrap recovery tests to grouped
+peer recovery/completion or split recovery-plan assertions from runtime-host
+completion; rewrite the shutdown test at the grouped batch owner/worker level
+if it must observe cancellation; add dedicated grouped batch diagnostics parity
+coverage for scheduler-attempt terminal diagnostics if required by consumers.
+
 ## Standards Rule
 
 The standards constraints in

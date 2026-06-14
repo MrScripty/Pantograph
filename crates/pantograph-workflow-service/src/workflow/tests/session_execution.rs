@@ -2424,7 +2424,7 @@ async fn workflow_execution_session_fails_closed_when_reservation_lifecycle_port
     let host = Arc::new(RuntimeInferenceSessionHost::new());
     let dependency_readiness_provider = DependencyEnvironmentReadinessSnapshotProvider::new();
     let dependency_readiness_work_queue = std::sync::Arc::new(DependencyReadinessWorkQueue::new());
-    let runtime_host_port = Arc::new(CompletingRuntimeHostPort::default());
+    let runtime_host_batch_port = Arc::new(CompletingRuntimeHostBatchPort::default());
     let runtime = WorkflowSessionExecutionRuntime::new(
         WorkflowService::with_ephemeral_attribution_store()
             .expect("service")
@@ -2435,7 +2435,7 @@ async fn workflow_execution_session_fails_closed_when_reservation_lifecycle_port
             .with_runtime_dispatch_candidate_provider(Arc::new(
                 SingleCanonicalRuntimeDispatchCandidateProvider,
             ))
-            .with_runtime_host_execution_port(runtime_host_port.clone()),
+            .with_runtime_host_batch_execution_port(runtime_host_batch_port.clone()),
         Arc::clone(&host),
     );
     let service = runtime.service();
@@ -2462,7 +2462,7 @@ async fn workflow_execution_session_fails_closed_when_reservation_lifecycle_port
         )
         .expect("store dependency readiness snapshot");
 
-    let created = service
+    let first_created = service
         .create_workflow_execution_session(
             host.as_ref(),
             WorkflowExecutionSessionCreateRequest {
@@ -2472,35 +2472,56 @@ async fn workflow_execution_session_fails_closed_when_reservation_lifecycle_port
             },
         )
         .await
-        .expect("create session");
-    let error = runtime
-        .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
-            session_id: created.session_id,
-            workflow_semantic_version: workflow_semantic_version.to_string(),
-            inputs: vec![WorkflowPortBinding {
-                node_id: "prompt".to_string(),
-                port_id: "text".to_string(),
-                value: serde_json::json!("paint a red cube"),
-            }],
-            output_targets: Some(vec![WorkflowOutputTarget {
-                node_id: "infer".to_string(),
-                port_id: "image".to_string(),
-            }]),
-            override_selection: None,
-            timeout_ms: None,
-            priority: None,
-        })
+        .expect("create first session");
+    let second_created = service
+        .create_workflow_execution_session(
+            host.as_ref(),
+            WorkflowExecutionSessionCreateRequest {
+                workflow_id: workflow_id.to_string(),
+                usage_profile: None,
+                keep_alive: false,
+            },
+        )
         .await
-        .expect_err("missing reservation lifecycle port must fail before runtime dispatch");
+        .expect("create second session");
+    let run_request = |session_id: String, prompt: &str| WorkflowExecutionSessionRunRequest {
+        session_id,
+        workflow_semantic_version: workflow_semantic_version.to_string(),
+        inputs: vec![WorkflowPortBinding {
+            node_id: "prompt".to_string(),
+            port_id: "text".to_string(),
+            value: serde_json::json!(prompt),
+        }],
+        output_targets: Some(vec![WorkflowOutputTarget {
+            node_id: "infer".to_string(),
+            port_id: "image".to_string(),
+        }]),
+        override_selection: None,
+        timeout_ms: None,
+        priority: None,
+    };
+    let first_run = runtime
+        .run_workflow_execution_session(run_request(first_created.session_id, "paint a red cube"));
+    let second_run = runtime.run_workflow_execution_session(run_request(
+        second_created.session_id,
+        "paint a blue cube",
+    ));
+    let (first_error, second_error) = tokio::join!(first_run, second_run);
+    let first_error =
+        first_error.expect_err("first missing lifecycle port run should fail before dispatch");
+    let second_error =
+        second_error.expect_err("second missing lifecycle port run should fail before dispatch");
 
-    assert_eq!(error.code(), WorkflowErrorCode::InternalError);
-    assert!(
-        error
-            .message()
-            .contains("reservation lifecycle port is not configured"),
-        "unexpected error: {error}"
-    );
-    assert!(runtime_host_port.requests().is_empty());
+    for error in [&first_error, &second_error] {
+        assert_eq!(error.code(), WorkflowErrorCode::InternalError);
+        assert!(
+            error
+                .message()
+                .contains("reservation lifecycle port is not configured"),
+            "unexpected error: {error}"
+        );
+    }
+    assert!(runtime_host_batch_port.requests().is_empty());
     assert_eq!(host.runtime_load_attempts.load(Ordering::SeqCst), 0);
     assert_eq!(host.run_attempts.load(Ordering::SeqCst), 0);
 }

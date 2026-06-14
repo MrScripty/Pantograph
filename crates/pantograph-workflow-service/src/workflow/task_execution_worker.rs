@@ -2381,13 +2381,15 @@ mod tests {
         DependencyReadinessWorkflowRunId,
     };
     use pantograph_runtime_host_contracts::{
-        RuntimeHostBatchExecutionMemberResponse, RuntimeHostBatchExecutionMemberState,
-        RuntimeHostBatchExecutionPort, RuntimeHostBatchExecutionRequest,
-        RuntimeHostBatchExecutionResponse, RuntimeHostBatchExecutionState,
-        RuntimeHostBatchMemberReservationDisposition, RuntimeHostBatchMemberRetryDisposition,
-        RuntimeHostExecutionCancellationHandle, RuntimeHostExecutionOutput,
-        RuntimeHostExecutionOutputValue, RuntimeHostExecutionPortError,
-        RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
+        ReservationLifecycleApplication, ReservationLifecycleApplicationState,
+        ReservationLifecycleEvent, ReservationLifecycleOutcome, ReservationLifecyclePort,
+        ReservationLifecyclePortError, RuntimeHostBatchExecutionMemberResponse,
+        RuntimeHostBatchExecutionMemberState, RuntimeHostBatchExecutionPort,
+        RuntimeHostBatchExecutionRequest, RuntimeHostBatchExecutionResponse,
+        RuntimeHostBatchExecutionState, RuntimeHostBatchMemberReservationDisposition,
+        RuntimeHostBatchMemberRetryDisposition, RuntimeHostExecutionCancellationHandle,
+        RuntimeHostExecutionOutput, RuntimeHostExecutionOutputValue, RuntimeHostExecutionPortError,
+        RESERVATION_LIFECYCLE_CONTRACT_VERSION, RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
     };
     use pantograph_scheduler::{
         SchedulableTaskIntent, SchedulerDispatchCandidateId, SchedulerNodeId,
@@ -2400,6 +2402,40 @@ mod tests {
     use std::time::Duration;
 
     struct WorkerHost;
+
+    #[derive(Default)]
+    struct RecordingReservationLifecyclePort {
+        events: std::sync::Mutex<Vec<ReservationLifecycleEvent>>,
+    }
+
+    impl RecordingReservationLifecyclePort {
+        fn events(&self) -> Vec<ReservationLifecycleEvent> {
+            self.events
+                .lock()
+                .expect("reservation lifecycle events lock")
+                .clone()
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl ReservationLifecyclePort for RecordingReservationLifecyclePort {
+        async fn apply_reservation_lifecycle(
+            &self,
+            event: ReservationLifecycleEvent,
+        ) -> Result<ReservationLifecycleApplication, ReservationLifecyclePortError> {
+            self.events
+                .lock()
+                .expect("reservation lifecycle events lock")
+                .push(event.clone());
+            Ok(ReservationLifecycleApplication {
+                contract_version: RESERVATION_LIFECYCLE_CONTRACT_VERSION,
+                lifecycle_event_id: event.lifecycle_event_id,
+                reservation_lease_id: event.reservation_lease_id,
+                state: ReservationLifecycleApplicationState::Applied,
+                diagnostics: Vec::new(),
+            })
+        }
+    }
 
     #[async_trait::async_trait]
     impl WorkflowHost for WorkerHost {
@@ -2675,12 +2711,14 @@ mod tests {
     #[tokio::test]
     async fn task_execution_worker_batches_runtime_branch_peers_and_fans_out_responses() {
         let batch_port = Arc::new(RecordingWorkerBatchExecutionPort::default());
+        let reservation_lifecycle_port = Arc::new(RecordingReservationLifecyclePort::default());
         let service = Arc::new(
             WorkflowService::new()
                 .with_runtime_dispatch_candidate_provider(Arc::new(
                     SingleCanonicalRuntimeDispatchCandidateProvider,
                 ))
-                .with_runtime_host_batch_execution_port(batch_port.clone()),
+                .with_runtime_host_batch_execution_port(batch_port.clone())
+                .with_reservation_lifecycle_port(reservation_lifecycle_port.clone()),
         );
         let first_session_id =
             prepare_ready_runtime_branch_run(service.as_ref(), "run.2026-05-22.101");
@@ -2810,6 +2848,15 @@ mod tests {
         assert_eq!(
             runtime_branch_event_state(service.as_ref(), &second_event_id),
             WorkflowRuntimeBranchTaskEventState::Completed
+        );
+        assert_eq!(
+            reservation_lifecycle_port
+                .events()
+                .iter()
+                .filter(|event| event.outcome == ReservationLifecycleOutcome::DispatchStarted)
+                .count(),
+            2,
+            "worker grouped dispatch must mark each reservation as dispatch-started"
         );
         assert!(
             runtime_dispatch_assignment_for_event(service.as_ref(), &first_event_id)
