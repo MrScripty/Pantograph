@@ -7882,6 +7882,40 @@ Re-plan triggers for Option 2:
 - Any implementation requires request-scoped runtime execution, compatibility
   shims, anchor-run input carry-forward, or workflow-owned runtime instances.
 
+2026-06-14 scheduler batch broker readiness contract slice completed. Smallest
+useful vertical slice: define the runtime dispatch batch broker decision
+contract and add non-mutating broker readiness evaluation over durable running
+assignment facts. The broker decision now distinguishes `ReadyToClaim` from
+`WaitingForPeers` and returns typed diagnostics for invalid, stale, missing, or
+already-claimed facts before any batch claim mutation. Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/runtime_dispatch_assignment.rs`
+and this plan.
+
+No-fallback/no-legacy confirmation: this slice does not wire the worker, does
+not dispatch runtime-host requests, does not call legacy single-run execution,
+does not create one-member fallback batches, and does not mutate assignment
+batch claims during readiness evaluation. It only reads scheduler-owned
+assignment facts and leaves runtime/model/device placement policy separated
+from workflow-run ownership.
+
+Verification passed:
+`cargo fmt -p pantograph-workflow-service`,
+`cargo test -p pantograph-workflow-service runtime_dispatch_assignment --lib`,
+`cargo check -p pantograph-workflow-service`,
+`cargo fmt -p pantograph-workflow-service -- --check`, and
+`git diff --check`.
+
+Focused test update: added repository coverage proving compatible cross-run
+assignments produce `ReadyToClaim` without claims, a lone anchor produces
+`WaitingForPeers` without a one-member claim, incompatible peers are skipped
+without mutation, and missing peer task-attempt facts fail closed without
+claiming either assignment.
+
+Remaining follow-up: continue Option 2 step 3 by adding the broker-owned claim
+step that consumes a `ReadyToClaim` decision, rejects one-member claims under
+the current policy, and calls the existing mutating claim API only after the
+non-mutating broker decision has selected a valid group.
+
 ## Standards Rule
 
 The standards constraints in
