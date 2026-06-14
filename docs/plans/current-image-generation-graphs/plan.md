@@ -6797,6 +6797,37 @@ runtime-branch responder registry keyed by durable assignment/run identity.
 Do not enable grouped assignment claiming until responder registration and
 fan-out are tested.
 
+2026-06-14 runtime-branch responder registry slice completed. Smallest useful
+vertical slice: add a worker-owned runtime-branch responder registry and route
+runtime-branch child-task completions through it using durable workflow-run
+identity. Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/task_execution_worker.rs` and
+this plan.
+
+No-fallback/no-legacy confirmation: this slice does not enable grouped
+assignment claiming, does not call the runtime-host batch dispatcher, does not
+move responder ownership to request handlers or frontend/Tauri code, and does
+not make in-memory responders the source of truth for durable completion. The
+registry rejects duplicate workflow-run responder registration with typed
+diagnostics and removes a responder only when completing that registered run.
+Runtime-branch execution still uses durable task-event claiming,
+dispatch-assignment persistence, rehydration, and the existing worker-owned
+runtime path.
+
+Verification passed:
+`cargo fmt -p pantograph-workflow-service`,
+`cargo test -p pantograph-workflow-service runtime_branch_responder_registry --lib`,
+`cargo test -p pantograph-workflow-service task_execution_worker --lib`,
+`cargo check -p pantograph-workflow-service`,
+`cargo fmt -p pantograph-workflow-service -- --check`, and
+`git diff --check`.
+
+Remaining follow-up: finish Option 1 step 2 by attaching the responder
+registration to the durable runtime dispatch assignment identity after
+assignment creation and before any grouped claim can observe it. Grouped
+assignment claiming remains blocked until assignment-key registration,
+batch-owner fan-out, and missing/stale responder diagnostics are covered.
+
 ## Standards Rule
 
 The standards constraints in

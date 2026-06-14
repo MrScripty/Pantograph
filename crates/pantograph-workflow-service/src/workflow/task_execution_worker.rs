@@ -1,6 +1,7 @@
+use std::collections::BTreeMap;
 use std::fmt;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use crate::scheduler::{
     unix_timestamp_ms, WorkflowSchedulerLifecycleComponentKind,
@@ -242,6 +243,42 @@ pub(super) struct WorkflowTaskExecutionWorkerRuntimeBranchCompletionResponder {
     completion_tx: tokio::sync::oneshot::Sender<WorkflowTaskExecutionWorkerOutcome>,
 }
 
+#[derive(Clone, Default)]
+struct WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistry {
+    responders: Arc<
+        Mutex<
+            BTreeMap<
+                WorkflowTaskExecutionWorkerRuntimeBranchResponderKey,
+                WorkflowTaskExecutionWorkerRuntimeBranchRegisteredResponder,
+            >,
+        >,
+    >,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct WorkflowTaskExecutionWorkerRuntimeBranchResponderKey(String);
+
+struct WorkflowTaskExecutionWorkerRuntimeBranchRegisteredResponder {
+    session_id: String,
+    workflow_run_id: String,
+    workflow_id: String,
+    completion_responder: WorkflowTaskExecutionWorkerRuntimeBranchCompletionResponder,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistration {
+    key: WorkflowTaskExecutionWorkerRuntimeBranchResponderKey,
+    session_id: String,
+    workflow_run_id: String,
+    workflow_id: String,
+}
+
+#[derive(Debug)]
+struct WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistrationFailure {
+    completion_responder: WorkflowTaskExecutionWorkerRuntimeBranchCompletionResponder,
+    outcome: WorkflowTaskExecutionWorkerOutcome,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[must_use]
 pub(super) enum WorkflowTaskExecutionWorkerRuntimeBranchStartReason {
@@ -366,6 +403,8 @@ pub(super) enum WorkflowTaskExecutionWorkerDiagnosticCode {
     RuntimeBranchEventClaimFailed,
     RuntimeBranchRehydrationFailed,
     RuntimeBranchDispatchUnavailable,
+    RuntimeBranchResponderRegistrationFailed,
+    RuntimeBranchResponderUnavailable,
     RuntimeBranchFailed,
 }
 
@@ -416,6 +455,151 @@ impl WorkflowTaskExecutionWorkerRuntimeBranchCompletionResponder {
     ) -> Result<(), WorkflowTaskExecutionWorkerOutcome> {
         self.completion_tx.send(outcome)
     }
+}
+
+impl WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistry {
+    fn new() -> Self {
+        Self::default()
+    }
+
+    fn register_workflow_run(
+        &self,
+        command: &WorkflowTaskExecutionWorkerRuntimeBranchCommand,
+        completion_responder: WorkflowTaskExecutionWorkerRuntimeBranchCompletionResponder,
+    ) -> Result<
+        WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistration,
+        WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistrationFailure,
+    > {
+        let key = WorkflowTaskExecutionWorkerRuntimeBranchResponderKey::workflow_run(
+            command.workflow_run_id.as_str(),
+        );
+        let registered = WorkflowTaskExecutionWorkerRuntimeBranchRegisteredResponder {
+            session_id: command.session_id.clone(),
+            workflow_run_id: command.workflow_run_id.clone(),
+            workflow_id: command.workflow_id.clone(),
+            completion_responder,
+        };
+        let mut responders = match self.responders.lock() {
+            Ok(responders) => responders,
+            Err(_) => {
+                return Err(
+                    WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistrationFailure {
+                        completion_responder: registered.completion_responder,
+                        outcome: runtime_branch_responder_failure_outcome(
+                            &command.session_id,
+                            &command.workflow_run_id,
+                            &command.workflow_id,
+                            WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchResponderRegistrationFailed,
+                            "runtime branch responder registry lock poisoned",
+                        ),
+                    },
+                );
+            }
+        };
+        if responders.contains_key(&key) {
+            return Err(WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistrationFailure {
+                completion_responder: registered.completion_responder,
+                outcome: runtime_branch_responder_failure_outcome(
+                    &command.session_id,
+                    &command.workflow_run_id,
+                    &command.workflow_id,
+                    WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchResponderRegistrationFailed,
+                    format!(
+                        "runtime branch responder is already registered for workflow run '{}'",
+                        command.workflow_run_id
+                    ),
+                ),
+            });
+        }
+        responders.insert(key.clone(), registered);
+        Ok(
+            WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistration {
+                key,
+                session_id: command.session_id.clone(),
+                workflow_run_id: command.workflow_run_id.clone(),
+                workflow_id: command.workflow_id.clone(),
+            },
+        )
+    }
+
+    fn complete(
+        &self,
+        registration: WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistration,
+        outcome: WorkflowTaskExecutionWorkerOutcome,
+    ) -> Result<(), WorkflowTaskExecutionWorkerOutcome> {
+        let registered = {
+            let mut responders = self.responders.lock().map_err(|_| {
+                runtime_branch_responder_failure_outcome(
+                    &registration.session_id,
+                    &registration.workflow_run_id,
+                    &registration.workflow_id,
+                    WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchResponderUnavailable,
+                    "runtime branch responder registry lock poisoned",
+                )
+            })?;
+            responders.remove(&registration.key).ok_or_else(|| {
+                runtime_branch_responder_failure_outcome(
+                    &registration.session_id,
+                    &registration.workflow_run_id,
+                    &registration.workflow_id,
+                    WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchResponderUnavailable,
+                    format!(
+                        "runtime branch responder is not registered for workflow run '{}'",
+                        registration.workflow_run_id
+                    ),
+                )
+            })?
+        };
+        if registered.session_id != registration.session_id
+            || registered.workflow_run_id != registration.workflow_run_id
+            || registered.workflow_id != registration.workflow_id
+        {
+            return Err(runtime_branch_responder_failure_outcome(
+                &registration.session_id,
+                &registration.workflow_run_id,
+                &registration.workflow_id,
+                WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchResponderUnavailable,
+                format!(
+                    "runtime branch responder registration for workflow run '{}' changed before completion",
+                    registration.workflow_run_id
+                ),
+            ));
+        }
+        registered.completion_responder.complete(outcome)
+    }
+
+    #[cfg(test)]
+    fn active_responder_count(&self) -> usize {
+        self.responders
+            .lock()
+            .expect("runtime branch responder registry lock")
+            .len()
+    }
+}
+
+impl WorkflowTaskExecutionWorkerRuntimeBranchResponderKey {
+    fn workflow_run(workflow_run_id: &str) -> Self {
+        Self(format!("workflow-run:{workflow_run_id}"))
+    }
+}
+
+fn runtime_branch_responder_failure_outcome(
+    session_id: &str,
+    workflow_run_id: &str,
+    workflow_id: &str,
+    code: WorkflowTaskExecutionWorkerDiagnosticCode,
+    message: impl Into<String>,
+) -> WorkflowTaskExecutionWorkerOutcome {
+    WorkflowTaskExecutionWorkerOutcome::RuntimeBranchFailed(
+        WorkflowTaskExecutionWorkerRuntimeBranchFailedOutcome {
+            session_id: session_id.to_string(),
+            workflow_run_id: workflow_run_id.to_string(),
+            error_message: format!(
+                "runtime branch responder registry failed for workflow '{workflow_id}'"
+            ),
+            diagnostics: vec![WorkflowTaskExecutionWorkerDiagnostic::new(code, message)],
+        },
+    )
 }
 
 impl WorkflowTaskExecutionWorkerOutcome {
@@ -519,6 +703,8 @@ async fn task_execution_worker_loop(
     observed_runtime_branch_commands: Arc<AtomicU64>,
 ) {
     let mut runtime_branch_tasks = tokio::task::JoinSet::new();
+    let runtime_branch_responder_registry =
+        WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistry::new();
     let mut accepting_commands = true;
 
     loop {
@@ -540,12 +726,30 @@ async fn task_execution_worker_loop(
                     Some(WorkflowTaskExecutionWorkerCommand::ExecuteRuntimeBranch(request)) => {
                         observed_runtime_branch_commands.fetch_add(1, Ordering::SeqCst);
                         let runtime_branch_environment = runtime_branch_environment.clone();
+                        let runtime_branch_responder_registry =
+                            runtime_branch_responder_registry.clone();
                         runtime_branch_tasks.spawn(async move {
+                            let WorkflowTaskExecutionWorkerRuntimeBranchRequest {
+                                command,
+                                completion_responder,
+                            } = request;
+                            let registration = match runtime_branch_responder_registry
+                                .register_workflow_run(&command, completion_responder)
+                            {
+                                Ok(registration) => registration,
+                                Err(failure) => {
+                                    let _ = failure
+                                        .completion_responder
+                                        .complete(failure.outcome);
+                                    return;
+                                }
+                            };
                             let outcome = claim_and_execute_runtime_branch_event(
                                 &runtime_branch_environment,
-                                &request.command,
+                                &command,
                             ).await;
-                            let _ = request.completion_responder.complete(outcome);
+                            let _ = runtime_branch_responder_registry
+                                .complete(registration, outcome);
                         });
                     }
                     Some(WorkflowTaskExecutionWorkerCommand::Shutdown(_)) | None => {
@@ -2081,6 +2285,68 @@ mod tests {
             command.reason,
             WorkflowTaskExecutionWorkerShutdownReason::ServiceShutdown
         );
+    }
+
+    #[tokio::test]
+    async fn runtime_branch_responder_registry_completes_registered_workflow_run() {
+        let registry = WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistry::new();
+        let command = runtime_branch_command_for_run("run.registry");
+        let (completion_responder, completion_rx) =
+            WorkflowTaskExecutionWorkerRuntimeBranchCompletionResponder::channel();
+        let registration = registry
+            .register_workflow_run(&command, completion_responder)
+            .expect("register workflow run responder");
+        assert_eq!(registry.active_responder_count(), 1);
+        let expected = WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
+            &command,
+            "runtime branch failed after dispatch",
+            Vec::new(),
+        );
+
+        registry
+            .complete(registration, expected.clone())
+            .expect("complete registered responder");
+
+        assert_eq!(registry.active_responder_count(), 0);
+        assert_eq!(
+            completion_rx.await.expect("registered responder outcome"),
+            expected
+        );
+    }
+
+    #[test]
+    fn runtime_branch_responder_registry_rejects_duplicate_workflow_run_registration() {
+        let registry = WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistry::new();
+        let command = runtime_branch_command_for_run("run.duplicate");
+        let (first_responder, _first_completion_rx) =
+            WorkflowTaskExecutionWorkerRuntimeBranchCompletionResponder::channel();
+        let (second_responder, _second_completion_rx) =
+            WorkflowTaskExecutionWorkerRuntimeBranchCompletionResponder::channel();
+        let _registration = registry
+            .register_workflow_run(&command, first_responder)
+            .expect("register first responder");
+
+        let failure = registry
+            .register_workflow_run(&command, second_responder)
+            .expect_err("duplicate workflow-run responder must fail closed");
+
+        let WorkflowTaskExecutionWorkerOutcome::RuntimeBranchFailed(outcome) = failure.outcome
+        else {
+            panic!("expected runtime branch failure");
+        };
+        assert_eq!(outcome.workflow_run_id, "run.duplicate");
+        assert_eq!(
+            outcome.diagnostics[0].code,
+            WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchResponderRegistrationFailed
+        );
+        assert!(
+            outcome.diagnostics[0]
+                .message
+                .contains("already registered"),
+            "unexpected diagnostic: {}",
+            outcome.diagnostics[0].message
+        );
+        assert_eq!(registry.active_responder_count(), 1);
     }
 
     fn runtime_branch_command() -> WorkflowTaskExecutionWorkerRuntimeBranchCommand {
