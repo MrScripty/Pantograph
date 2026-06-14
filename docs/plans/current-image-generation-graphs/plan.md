@@ -7448,6 +7448,52 @@ values, then use those values for batch response mutation. Keep runtime-host
 batch dispatch disabled until response mutation and per-member run finalization
 are covered by focused tests.
 
+2026-06-14 scheduler running runtime task rehydration slice completed.
+Smallest useful vertical slice: add a scheduler-owned
+`rehydrate_running_runtime_task` boundary that reconstructs a
+`StartedRuntimeTaskExecution` from backend active-run scheduler state, exact
+active task-attempt facts, and active materialized task results. The helper
+tracks the matching task lifecycle handle by scheduler task id plus attempt id
+so a later batch response mutation can complete simultaneous workflow runs
+that share a scheduler task id without handle collisions. Allowed files
+touched:
+`crates/pantograph-workflow-service/src/scheduler/task_orchestrator.rs`,
+`crates/pantograph-workflow-service/src/scheduler/task_orchestrator_tests.rs`,
+and this plan.
+
+No-fallback/no-legacy confirmation: this slice does not enable runtime-host
+batch dispatch, does not apply batch response mutations, does not add
+single-member fallback dispatch, and does not reuse anchor-run inputs or
+runtime/device state. Rehydration fails closed unless the active run has a
+runtime task in `Running` state and its active scheduler attempt id/start
+timestamp exactly match the durable assignment facts supplied by the caller.
+
+Verification passed:
+`cargo fmt -p pantograph-workflow-service`,
+`cargo test -p pantograph-workflow-service orchestrator_rehydrates_same_task_id_distinct_running_attempts --lib`,
+`cargo test -p pantograph-workflow-service task_lifecycle_manager --lib`,
+`cargo test -p pantograph-workflow-service runtime_branch_batch_execution --lib`,
+`cargo check -p pantograph-workflow-service`,
+`cargo fmt -p pantograph-workflow-service -- --check`, and
+`git diff --check`.
+
+Focused test update: added a scheduler orchestrator test that starts two
+distinct active workflow runs with the same scheduler task id, rehydrates both
+running attempts through a fresh orchestrator, and completes each attempt
+independently while preserving the other lifecycle handle.
+
+Deviation recorded: the new scheduler rehydration helper is marked with a
+narrow `dead_code` allowance because this slice intentionally stops before
+rewiring the batch execution owner away from its existing manual active-run
+projection. `cargo check` is clean. The next slice must consume this helper
+from the batch owner or remove the allowance when rehydration is fully wired.
+
+Remaining follow-up: continue option 1 step 3 by converting active-run batch
+members into scheduler-owned started runtime task members, then use those
+values for batch response mutation. Keep runtime-host batch dispatch disabled
+until response mutation and per-member run finalization are covered by focused
+tests.
+
 ## Standards Rule
 
 The standards constraints in

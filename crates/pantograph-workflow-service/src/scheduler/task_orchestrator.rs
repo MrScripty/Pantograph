@@ -331,6 +331,25 @@ impl WorkflowSchedulerTaskOrchestrator {
             .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
     }
 
+    #[allow(dead_code)]
+    fn ensure_task_lifecycle_handle(
+        &self,
+        task_id: &SchedulerTaskId,
+        attempt_id: &WorkflowSchedulerTaskAttemptId,
+    ) -> Result<(), WorkflowSchedulerTaskOrchestratorError> {
+        let mut task_lifecycle = self.task_lifecycle_manager()?;
+        if task_lifecycle
+            .active_task_handle_for_attempt(task_id, attempt_id)
+            .is_some()
+        {
+            return Ok(());
+        }
+        task_lifecycle
+            .track_task_handle(task_id.clone(), attempt_id.clone())
+            .map(|_record| ())
+            .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
+    }
+
     fn release_task_lifecycle_handle(
         &self,
         task_id: &SchedulerTaskId,
@@ -1246,6 +1265,109 @@ impl WorkflowSchedulerTaskOrchestrator {
             running_record,
             attempt_id,
             started_at_ms,
+        })
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn rehydrate_running_runtime_task(
+        &self,
+        store: &mut WorkflowExecutionSessionStore,
+        session_id: &str,
+        workflow_run_id: &str,
+        task_id: &str,
+        expected_attempt_id: &str,
+        expected_started_at_ms: u64,
+    ) -> Result<StartedRuntimeTaskExecution, WorkflowSchedulerTaskOrchestratorError> {
+        let (task_graph, records) = store
+            .active_run_scheduler_task_state(session_id, workflow_run_id)
+            .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)?
+            .ok_or_else(|| {
+                WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+                    WorkflowServiceError::InvalidRequest(format!(
+                        "active workflow run '{}' has no scheduler task graph",
+                        workflow_run_id
+                    )),
+                )
+            })?;
+        let task = task_graph
+            .tasks
+            .iter()
+            .find(|task| task.task_id.as_str() == task_id)
+            .ok_or_else(|| {
+                WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+                    WorkflowServiceError::InvalidRequest(format!(
+                        "scheduler runtime task '{}' is not in active workflow run '{}'",
+                        task_id, workflow_run_id
+                    )),
+                )
+            })?;
+        if task.execution_class != WorkflowSchedulerTaskExecutionClass::RuntimeInference {
+            return Err(WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+                WorkflowServiceError::InvalidRequest(format!(
+                    "scheduler task '{}' is not a runtime inference task",
+                    task_id
+                )),
+            ));
+        }
+        let running_record = records
+            .iter()
+            .find(|record| record.task_id.as_str() == task_id)
+            .ok_or_else(|| {
+                WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+                    WorkflowServiceError::InvalidRequest(format!(
+                        "scheduler runtime task '{}' has no active task-state record",
+                        task_id
+                    )),
+                )
+            })?;
+        if running_record.state.kind() != SchedulerTaskStateKind::Running {
+            return Err(WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+                WorkflowServiceError::InvalidRequest(format!(
+                    "scheduler runtime task '{}' must be running before rehydrating started execution",
+                    task_id
+                )),
+            ));
+        }
+        let task_attempts = store
+            .active_run_scheduler_task_attempt_read_facts(session_id, workflow_run_id)
+            .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)?;
+        let task_attempt = task_attempts.get(task_id).ok_or_else(|| {
+            WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+                WorkflowServiceError::InvalidRequest(format!(
+                    "scheduler runtime task '{}' has no active task attempt fact",
+                    task_id
+                )),
+            )
+        })?;
+        if task_attempt.attempt_id.as_str() != expected_attempt_id {
+            return Err(WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+                WorkflowServiceError::InvalidRequest(format!(
+                    "scheduler runtime task '{}' active attempt '{}' does not match expected '{}'",
+                    task_id,
+                    task_attempt.attempt_id.as_str(),
+                    expected_attempt_id
+                )),
+            ));
+        }
+        if task_attempt.started_at_ms != expected_started_at_ms {
+            return Err(WorkflowSchedulerTaskOrchestratorError::WorkflowService(
+                WorkflowServiceError::InvalidRequest(format!(
+                    "scheduler runtime task '{}' active attempt start timestamp {} does not match expected {}",
+                    task_id, task_attempt.started_at_ms, expected_started_at_ms
+                )),
+            ));
+        }
+        self.ensure_task_lifecycle_handle(&task.task_id, &task_attempt.attempt_id)?;
+
+        let materialized_results = store
+            .active_run_scheduler_task_results(session_id, workflow_run_id)
+            .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)?;
+        Ok(StartedRuntimeTaskExecution {
+            task: task.clone(),
+            materialized_results,
+            running_record: running_record.clone(),
+            attempt_id: task_attempt.attempt_id.clone(),
+            started_at_ms: task_attempt.started_at_ms,
         })
     }
 

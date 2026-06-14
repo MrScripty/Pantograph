@@ -5,7 +5,8 @@ use pantograph_dependency_planning::{
     DependencyEnvironmentReadinessState, DependencyOverrideFingerprint,
     DependencyReadinessDescriptorFingerprint, DependencyReadinessGraphRevision,
     DependencyReadinessPolicy, DependencyReadinessProofEnvelope,
-    DependencyReadinessValidationSessionId, DependencyRequirementsId,
+    DependencyReadinessValidationSessionId, DependencyReadinessWorkflowRunId,
+    DependencyRequirementsId,
 };
 use pantograph_runtime_host_contracts::{
     ReservationLifecycleApplication, ReservationLifecycleApplicationState,
@@ -1716,6 +1717,100 @@ fn orchestrator_persists_started_runtime_task_result() {
     );
 }
 
+#[test]
+fn orchestrator_rehydrates_same_task_id_distinct_running_attempts() {
+    let starting_orchestrator = orchestrator_without_runtime_host_response();
+    let rehydrating_orchestrator = orchestrator_without_runtime_host_response();
+    let mut store = WorkflowExecutionSessionStore::new(2, 2);
+    let first =
+        start_running_runtime_attempt_for_run(&starting_orchestrator, &mut store, "run.101");
+    let second =
+        start_running_runtime_attempt_for_run(&starting_orchestrator, &mut store, "run.102");
+
+    assert_eq!(first.task_id, second.task_id);
+    assert_ne!(first.workflow_run_id, second.workflow_run_id);
+    assert_ne!(first.attempt_id, second.attempt_id);
+    assert_eq!(
+        starting_orchestrator
+            .active_task_lifecycle_handle_count()
+            .expect("starting lifecycle handle count"),
+        2
+    );
+    assert_eq!(
+        rehydrating_orchestrator
+            .active_task_lifecycle_handle_count()
+            .expect("rehydrating lifecycle handle count"),
+        0
+    );
+
+    let first_rehydrated = rehydrating_orchestrator
+        .rehydrate_running_runtime_task(
+            &mut store,
+            &first.session_id,
+            &first.workflow_run_id,
+            &first.task_id,
+            &first.attempt_id,
+            first.started_at_ms,
+        )
+        .expect("rehydrate first running attempt");
+    let second_rehydrated = rehydrating_orchestrator
+        .rehydrate_running_runtime_task(
+            &mut store,
+            &second.session_id,
+            &second.workflow_run_id,
+            &second.task_id,
+            &second.attempt_id,
+            second.started_at_ms,
+        )
+        .expect("rehydrate second running attempt");
+
+    assert_eq!(
+        first_rehydrated.task.task_id.as_str(),
+        second_rehydrated.task.task_id.as_str()
+    );
+    assert_ne!(
+        first_rehydrated.attempt_id().as_str(),
+        second_rehydrated.attempt_id().as_str()
+    );
+    assert_eq!(
+        rehydrating_orchestrator
+            .active_task_lifecycle_handle_count()
+            .expect("rehydrating lifecycle handle count"),
+        2
+    );
+
+    rehydrating_orchestrator
+        .complete_started_runtime_task(
+            &mut store,
+            &first.session_id,
+            &first.workflow_run_id,
+            &first_rehydrated,
+            runtime_task_result_fixture(first_rehydrated.task()),
+        )
+        .expect("complete first rehydrated runtime task");
+    assert_eq!(
+        rehydrating_orchestrator
+            .active_task_lifecycle_handle_count()
+            .expect("rehydrating lifecycle handle count"),
+        1
+    );
+    rehydrating_orchestrator
+        .complete_started_runtime_task(
+            &mut store,
+            &second.session_id,
+            &second.workflow_run_id,
+            &second_rehydrated,
+            runtime_task_result_fixture(second_rehydrated.task()),
+        )
+        .expect("complete second rehydrated runtime task");
+    assert_eq!(
+        rehydrating_orchestrator
+            .active_task_lifecycle_handle_count()
+            .expect("rehydrating lifecycle handle count"),
+        0
+    );
+}
+
 #[tokio::test]
 async fn orchestrator_dispatches_started_runtime_task_with_lifecycle_cancellation() {
     let mut selection_request = dispatch_selection_request_fixture();
@@ -2450,6 +2545,17 @@ fn ready_readiness_proof() -> DependencyReadinessProofEnvelope {
     runtime_host_request_fixture().handoff.readiness_proof
 }
 
+fn ready_readiness_proof_for_workflow_run(
+    workflow_run_id: &str,
+) -> DependencyReadinessProofEnvelope {
+    let mut proof = ready_readiness_proof();
+    proof.execution_context.workflow_run_id =
+        DependencyReadinessWorkflowRunId::parse(workflow_run_id)
+            .expect("dependency readiness workflow run id");
+    proof.validate().expect("readiness proof fixture");
+    proof
+}
+
 fn runtime_host_response_fixture() -> RuntimeHostExecutionResponse {
     serde_json::from_str(include_str!(
         "../../../pantograph-runtime-host-contracts/tests/fixtures/runtime_host_execution_response_completed_outputs.json"
@@ -2663,6 +2769,51 @@ fn orchestrator_without_runtime_host_response() -> WorkflowSchedulerTaskOrchestr
     WorkflowSchedulerTaskOrchestrator::new(SchedulerRuntimeHostDispatcher::new(Arc::new(
         RecordingRuntimeHostPort::default(),
     )))
+}
+
+struct RunningRuntimeAttemptFixture {
+    session_id: String,
+    workflow_run_id: String,
+    task_id: String,
+    attempt_id: String,
+    started_at_ms: u64,
+}
+
+fn start_running_runtime_attempt_for_run(
+    orchestrator: &WorkflowSchedulerTaskOrchestrator,
+    store: &mut WorkflowExecutionSessionStore,
+    workflow_run_id: &str,
+) -> RunningRuntimeAttemptFixture {
+    let mut task_intent = runtime_host_request_fixture().handoff.task_intent;
+    task_intent.workflow_run_id =
+        SchedulerWorkflowRunId::parse(workflow_run_id).expect("workflow run id");
+    let task_id = task_intent.task_id.as_str().to_string();
+    let task_graph = task_graph(vec![task_from_intent(task_intent)]);
+    let workflow_run_id = task_graph.workflow_run_id.as_str().to_string();
+    let session_id = begin_active_run_for_task_graph(store, &task_graph);
+    orchestrator
+        .initialize_active_run_task_state(store, &session_id, &workflow_run_id, task_graph)
+        .expect("initialize active run task state");
+    orchestrator
+        .apply_runtime_dependency_readiness_admission(
+            store,
+            &session_id,
+            &workflow_run_id,
+            &task_id,
+            DependencyReadinessPolicy::CheckOnly,
+            Some(ready_readiness_proof_for_workflow_run(&workflow_run_id)),
+        )
+        .expect("admit runtime task readiness");
+    let started = orchestrator
+        .start_ready_runtime_task(store, &session_id, &workflow_run_id, &task_id)
+        .expect("start ready runtime task");
+    RunningRuntimeAttemptFixture {
+        session_id,
+        workflow_run_id,
+        task_id,
+        attempt_id: started.attempt_id().as_str().to_string(),
+        started_at_ms: started.started_at_ms(),
+    }
 }
 
 fn task_graph(tasks: Vec<WorkflowSchedulerTask>) -> WorkflowSchedulerTaskGraph {
