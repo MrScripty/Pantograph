@@ -16,21 +16,23 @@ use pantograph_diagnostics_ledger::{
     SchedulerTaskAttemptExecutionClass, SchedulerTaskAttemptLifecycleChangedPayload,
     SchedulerTaskAttemptLifecycleTransition,
 };
-use pantograph_runtime_attribution::{
-    BucketId, ClientId, ClientSessionId, WorkflowId, WorkflowRunId,
-};
+use pantograph_runtime_attribution::{WorkflowId, WorkflowRunId};
 use pantograph_scheduler::{SchedulerTaskStateKind, SchedulerTaskStateRecord};
 
 use crate::scheduler::task_orchestrator::{
     SelectedRuntimeTaskDispatch, StartedRuntimeTaskExecution,
 };
 use crate::scheduler::{
-    unix_timestamp_ms, WorkflowDependencyReadinessLifecycle,
-    WorkflowDependencyReadinessLifecycleError, WorkflowSchedulerRetryLifecycle,
-    WorkflowSchedulerTaskTerminalMutation,
+    WorkflowDependencyReadinessLifecycle, WorkflowDependencyReadinessLifecycleError,
+    WorkflowSchedulerRetryLifecycle, WorkflowSchedulerTaskTerminalMutation,
 };
 
 use super::io_contract::validate_workflow_io;
+use super::runtime_branch_run_finalization::{
+    scheduler_task_attempt_terminal_diagnostic_event,
+    WorkflowSchedulerTaskAttemptDiagnosticAttribution,
+    WorkflowSchedulerTaskAttemptTerminalDiagnosticRequest,
+};
 use super::validation::{
     validate_host_output_bindings, validate_output_targets_against_io,
     validate_requested_outputs_produced,
@@ -217,22 +219,6 @@ impl WorkflowPreDispatchPreparationOutcome {
 struct ReadyRuntimeDispatchContext {
     task: WorkflowSchedulerTask,
     ready_record: SchedulerTaskStateRecord,
-}
-
-struct SchedulerTaskAttemptDiagnosticAttribution {
-    client_id: Option<ClientId>,
-    client_session_id: Option<ClientSessionId>,
-    bucket_id: Option<BucketId>,
-}
-
-impl SchedulerTaskAttemptDiagnosticAttribution {
-    fn none() -> Self {
-        Self {
-            client_id: None,
-            client_session_id: None,
-            bucket_id: None,
-        }
-    }
 }
 
 impl<'a> WorkflowSchedulerSessionRunner<'a> {
@@ -1409,15 +1395,15 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
     fn scheduler_task_attempt_diagnostic_attribution(
         &self,
         workflow_run_id: &str,
-    ) -> Result<SchedulerTaskAttemptDiagnosticAttribution, WorkflowServiceError> {
+    ) -> Result<WorkflowSchedulerTaskAttemptDiagnosticAttribution, WorkflowServiceError> {
         let workflow_run_id = WorkflowRunId::try_from(workflow_run_id.to_string())?;
         let snapshot = self
             .service
             .workflow_run_snapshot_for_execution_resume_if_configured(&workflow_run_id)?;
         let Some(snapshot) = snapshot else {
-            return Ok(SchedulerTaskAttemptDiagnosticAttribution::none());
+            return Ok(WorkflowSchedulerTaskAttemptDiagnosticAttribution::none());
         };
-        Ok(SchedulerTaskAttemptDiagnosticAttribution {
+        Ok(WorkflowSchedulerTaskAttemptDiagnosticAttribution {
             client_id: snapshot.client_id,
             client_session_id: snapshot.client_session_id,
             bucket_id: snapshot.bucket_id,
@@ -1436,97 +1422,23 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
         selected_dispatch: Option<&SelectedRuntimeTaskDispatch>,
         terminal_mutation: Option<&WorkflowSchedulerTaskTerminalMutation>,
     ) -> Result<(), WorkflowServiceError> {
-        let ended_at_ms = unix_timestamp_ms();
-        let duration_ms = ended_at_ms.checked_sub(started_at_ms).ok_or_else(|| {
-            WorkflowServiceError::Internal(format!(
-                "scheduler task '{}' terminal time preceded attempt start time",
-                task.task_id.as_str()
-            ))
-        })?;
-        let started_at_ms = i64::try_from(started_at_ms).map_err(|_| {
-            WorkflowServiceError::Internal(format!(
-                "scheduler task '{}' start time exceeded diagnostics ledger timestamp range",
-                task.task_id.as_str()
-            ))
-        })?;
-        let ended_at_ms = i64::try_from(ended_at_ms).map_err(|_| {
-            WorkflowServiceError::Internal(format!(
-                "scheduler task '{}' terminal time exceeded diagnostics ledger timestamp range",
-                task.task_id.as_str()
-            ))
-        })?;
-        let selected_decision = selected_dispatch.and_then(|dispatch| dispatch.dispatch_decision());
-        let selected_runtime_id =
-            selected_decision.map(|dispatch| dispatch.selected_runtime_id.as_str().to_string());
-        let selected_runtime_variant_id = selected_decision.and_then(|dispatch| {
-            dispatch
-                .selected_runtime_variant_id
-                .as_ref()
-                .map(|runtime_variant_id| runtime_variant_id.as_str().to_string())
-        });
-        let selected_device_id = selected_decision.and_then(|dispatch| {
-            dispatch
-                .selected_device_ids
-                .first()
-                .map(|device_id| device_id.as_str().to_string())
-        });
-        let reservation_id = terminal_mutation
-            .and_then(|mutation| mutation.reservation_release_intent.as_ref())
-            .map(|release_intent| release_intent.reservation_lease_id.as_str().to_string())
-            .or_else(|| {
-                selected_dispatch
-                    .map(|dispatch| dispatch.reservation_lease_id().as_str().to_string())
-            });
         let attribution =
             self.scheduler_task_attempt_diagnostic_attribution(task.workflow_run_id.as_str())?;
-        self.service
-            .workflow_diagnostic_event_record(DiagnosticEventAppendRequest {
-                source_component: DiagnosticEventSourceComponent::Scheduler,
-                source_instance_id: Some("workflow-session-scheduler".to_string()),
-                occurred_at_ms: ended_at_ms,
-                workflow_run_id: Some(WorkflowRunId::try_from(
-                    task.workflow_run_id.as_str().to_string(),
-                )?),
-                workflow_id: Some(WorkflowId::try_from(task.workflow_id.as_str().to_string())?),
-                workflow_version_id: None,
-                workflow_semantic_version: None,
-                node_id: Some(task.node_id.as_str().to_string()),
-                node_type: Some(task.node_type.clone()),
-                node_version: None,
-                runtime_id: selected_runtime_id.clone(),
-                runtime_version: None,
-                model_id: None,
-                model_version: None,
-                client_id: attribution.client_id,
-                client_session_id: attribution.client_session_id,
-                bucket_id: attribution.bucket_id,
-                scheduler_policy_id: Some("priority_then_fifo".to_string()),
-                retention_policy_id: None,
-                privacy_class: DiagnosticEventPrivacyClass::SystemMetadata,
-                retention_class: DiagnosticEventRetentionClass::AuditMetadata,
-                payload_ref: None,
-                payload: DiagnosticEventPayload::SchedulerTaskAttemptLifecycleChanged(
-                    SchedulerTaskAttemptLifecycleChangedPayload {
-                        scheduler_task_id: task.task_id.as_str().to_string(),
-                        scheduler_attempt_id: attempt_id.to_string(),
-                        execution_class: scheduler_task_attempt_execution_class(task)?,
-                        transition,
-                        started_at_ms: Some(started_at_ms),
-                        ended_at_ms: Some(ended_at_ms),
-                        duration_ms: Some(duration_ms),
-                        selected_runtime_id,
-                        selected_runtime_variant_id,
-                        selected_backend_key: None,
-                        selected_device_class: None,
-                        selected_device_id,
-                        selected_network_node_id: None,
-                        reservation_id,
-                        reason: Some(reason.to_string()),
-                        error_summary,
-                        canonical_error_event_id: None,
-                    },
-                ),
-            })?;
+        self.service.workflow_diagnostic_event_record(
+            scheduler_task_attempt_terminal_diagnostic_event(
+                WorkflowSchedulerTaskAttemptTerminalDiagnosticRequest {
+                    task,
+                    attempt_id,
+                    started_at_ms,
+                    transition,
+                    reason,
+                    error_summary,
+                    selected_dispatch,
+                    terminal_mutation,
+                    attribution,
+                },
+            )?,
+        )?;
         Ok(())
     }
 }

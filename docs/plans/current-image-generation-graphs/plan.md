@@ -7013,6 +7013,38 @@ behind reusable workflow-service-owned helpers, then the grouped owner can use
 those helpers and the temporary allowance can be removed when production
 integration reaches this module.
 
+2026-06-14 runtime-branch run finalization terminal-diagnostic helper slice
+completed. Smallest useful vertical slice: extract scheduler runtime-task
+terminal diagnostic event projection from `WorkflowSchedulerSessionRunner` into
+a reusable workflow-service-owned run-finalization helper module, then keep the
+existing single-runtime path calling that helper. Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/runtime_branch_run_finalization.rs`,
+`crates/pantograph-workflow-service/src/workflow/session_scheduler_runner.rs`,
+`crates/pantograph-workflow-service/src/workflow.rs`, and this plan.
+
+No-fallback/no-legacy confirmation: this slice does not enable grouped
+assignment claiming, does not dispatch runtime-host batches, does not move
+finalization to frontend/Tauri or runtime-host adapters, and does not preserve
+old behavior through a compatibility shim. The existing single-runtime path
+still owns runtime dispatch and terminal mutation, but its terminal diagnostic
+projection now flows through a backend-owned helper that grouped finalization
+can call later.
+
+Verification passed:
+`cargo fmt -p pantograph-workflow-service`,
+`cargo test -p pantograph-workflow-service terminal_diagnostic_event_preserves_scheduler_task_attempt_scope --lib`,
+`cargo test -p pantograph-workflow-service workflow_execution_session_records_failed_runtime_host_result_as_terminal_task_failure --lib`,
+`cargo check -p pantograph-workflow-service`,
+`cargo fmt -p pantograph-workflow-service -- --check`, and
+`git diff --check`.
+
+Remaining follow-up: continue option 1 step 2 by moving the next
+single-runtime finalization responsibility behind reusable backend-owned
+helpers: reservation cleanup application, active-run finish/output projection,
+workflow terminal diagnostics, and artifact diagnostics. Do not wire grouped
+batch execution until these helpers cover the full per-run finalization
+contract.
+
 ## Standards Rule
 
 The standards constraints in
