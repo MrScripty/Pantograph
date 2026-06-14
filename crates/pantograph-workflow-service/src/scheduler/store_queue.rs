@@ -246,9 +246,7 @@ impl WorkflowExecutionSessionStore {
         }
         Ok(WorkflowExecutionSessionActiveRunContext {
             workflow_id: state.workflow_id.clone(),
-            enqueued_at_ms: active_run.enqueued_at_ms,
             dequeued_at_ms: active_run.dequeued_at_ms,
-            scheduler_decision_reason: active_run.scheduler_decision_reason,
             workflow_semantic_version: active_run.workflow_semantic_version.clone(),
             inputs: active_run.inputs.clone(),
             output_targets: active_run.output_targets.clone(),

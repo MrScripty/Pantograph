@@ -175,9 +175,7 @@ pub(crate) struct WorkflowExecutionSessionDequeuedRun {
 #[derive(Debug, Clone)]
 pub(crate) struct WorkflowExecutionSessionActiveRunContext {
     pub(crate) workflow_id: String,
-    pub(crate) enqueued_at_ms: u64,
     pub(crate) dequeued_at_ms: u64,
-    pub(crate) scheduler_decision_reason: WorkflowSchedulerDecisionReason,
     pub(crate) workflow_semantic_version: String,
     pub(crate) inputs: Vec<WorkflowPortBinding>,
     pub(crate) output_targets: Option<Vec<WorkflowOutputTarget>>,

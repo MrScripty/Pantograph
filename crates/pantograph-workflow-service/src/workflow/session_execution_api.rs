@@ -1277,67 +1277,6 @@ impl WorkflowService {
         .map_err(WorkflowServiceError::from)
     }
 
-    pub(super) fn record_active_run_started_event_if_configured(
-        &self,
-        session: &WorkflowExecutionSessionSummary,
-        snapshot: Option<&WorkflowRunSnapshotRecord>,
-        workflow_run_id: &str,
-        active_run: &crate::scheduler::WorkflowExecutionSessionActiveRunContext,
-    ) -> Result<(), WorkflowServiceError> {
-        let Some(ledger) = self.diagnostics_ledger.as_ref() else {
-            return Ok(());
-        };
-        let workflow_run_id = WorkflowRunId::try_from(workflow_run_id.to_string())?;
-        let workflow_id = workflow_id_for_scheduler_event(session, snapshot)?;
-        let occurred_at_ms = i64::try_from(active_run.dequeued_at_ms).unwrap_or(i64::MAX);
-        let queue_wait_ms = active_run
-            .dequeued_at_ms
-            .checked_sub(active_run.enqueued_at_ms);
-
-        let mut ledger = ledger.lock().map_err(|_| {
-            WorkflowServiceError::Internal("diagnostics ledger lock poisoned".to_string())
-        })?;
-        self.append_diagnostic_event_and_request_projection_refresh(
-            &mut *ledger,
-            DiagnosticEventAppendRequest {
-                source_component: DiagnosticEventSourceComponent::Scheduler,
-                source_instance_id: Some("workflow-session-scheduler".to_string()),
-                occurred_at_ms,
-                workflow_run_id: Some(workflow_run_id),
-                workflow_id: Some(workflow_id),
-                workflow_version_id: snapshot.map(|snapshot| snapshot.workflow_version_id.clone()),
-                workflow_semantic_version: Some(
-                    snapshot
-                        .map(|snapshot| snapshot.workflow_semantic_version.clone())
-                        .unwrap_or_else(|| active_run.workflow_semantic_version.clone()),
-                ),
-                node_id: None,
-                node_type: None,
-                node_version: None,
-                runtime_id: None,
-                runtime_version: None,
-                model_id: None,
-                model_version: None,
-                client_id: event_client_id(session, snapshot)?,
-                client_session_id: event_client_session_id(session, snapshot)?,
-                bucket_id: event_bucket_id(session, snapshot)?,
-                scheduler_policy_id: Some(WORKFLOW_SESSION_SCHEDULER_POLICY.to_string()),
-                retention_policy_id: snapshot.map(|snapshot| snapshot.retention_policy.clone()),
-                privacy_class: DiagnosticEventPrivacyClass::SystemMetadata,
-                retention_class: DiagnosticEventRetentionClass::AuditMetadata,
-                payload_ref: None,
-                payload: DiagnosticEventPayload::RunStarted(RunStartedPayload {
-                    queue_wait_ms,
-                    scheduler_decision_reason: Some(
-                        active_run.scheduler_decision_reason.as_str().to_string(),
-                    ),
-                }),
-            },
-        )
-        .map(|_| ())
-        .map_err(WorkflowServiceError::from)
-    }
-
     pub(super) fn record_workflow_io_artifact_events_if_configured(
         &self,
         session: &WorkflowExecutionSessionSummary,

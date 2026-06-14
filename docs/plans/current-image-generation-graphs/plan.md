@@ -8123,6 +8123,35 @@ next plan work should continue the task-attempt lifecycle cleanup by removing
 or reusing those stale active-run diagnostic surfaces without restoring
 request-scoped runtime execution.
 
+2026-06-14 active-run diagnostic surface cleanup slice completed. Smallest
+useful vertical slice: remove the unused active-run-context copies of
+`enqueued_at_ms` and `scheduler_decision_reason` and delete the unused
+`record_active_run_started_event_if_configured` helper that depended on those
+copies. Allowed files touched:
+`crates/pantograph-workflow-service/src/scheduler/store.rs`,
+`crates/pantograph-workflow-service/src/scheduler/store_queue.rs`,
+`crates/pantograph-workflow-service/src/workflow/session_execution_api.rs`,
+and this plan.
+
+No-fallback/no-legacy confirmation: the slice removes stale diagnostic surface
+area only. It does not change runtime scheduling, worker dispatch, batch
+broker behavior, queued-run diagnostics, trace queue timestamps, scheduler
+decision reasons, or request-scoped execution boundaries. Queued-run started
+events still use `WorkflowExecutionSessionDequeuedRun`, which remains the
+owner of queue wait and scheduler decision reason metadata.
+
+Verification passed:
+`cargo fmt -p pantograph-workflow-service`,
+`cargo test -p pantograph-workflow-service session_queue --lib`,
+`cargo test -p pantograph-workflow-service runtime_branch_batch_execution --lib`,
+`cargo test -p pantograph-workflow-service task_execution_worker --lib`,
+`cargo check -p pantograph-workflow-service`,
+`cargo fmt -p pantograph-workflow-service -- --check`, and
+`git diff --check`.
+
+Discovered issues and follow-ups: none in this slice. The
+`pantograph-workflow-service` package check is warning-free after this cleanup.
+
 ## Standards Rule
 
 The standards constraints in
