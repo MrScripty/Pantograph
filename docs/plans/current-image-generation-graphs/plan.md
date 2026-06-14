@@ -7985,6 +7985,54 @@ the worker owns responder transport. It also avoids adding a side channel or
 direct responder coupling while giving the worker the exact payload it needs to
 fan out successful grouped runtime branches.
 
+2026-06-14 re-plan decision: use Option 1, batch finalization outcomes carry
+canonical completed run responses. `WorkflowRuntimeBranchBatchExecutionOwner`
+remains the owner of canonical run finalization and must return the
+`WorkflowRunResponse` produced by `finalize_admitted_workflow_run` for each
+completed member. The runtime-branch worker remains the owner of responder
+transport and will later map completed batch member payloads into
+`RuntimeBranchCompleted` responder outcomes. Failed, cancelled, deferred, and
+retryable members continue to carry typed states and diagnostics without
+invented success payloads.
+
+Option 1 execution checklist:
+1. Extend the batch member/finalization outcome DTOs with an optional
+   completed `WorkflowRunResponse` payload. This is a contract change in the
+   workflow-service batch owner only; do not touch worker fan-out in this
+   slice.
+2. Populate the response payload only from the existing canonical
+   `finalize_admitted_workflow_run` result for completed runtime-host members.
+   Failed, cancelled, deferred, retryable, accepted, and unsupported states
+   must not manufacture responses.
+3. Update focused batch finalization tests to assert completed members carry
+   their own workflow-run response and that retryable/deferred/failed members
+   do not carry success payloads.
+4. Run the batch finalization and batch execution tests, then the
+   workflow-service check/format/diff gates.
+5. After this slice is committed, resume worker wiring: evaluate broker
+   readiness after assignment running, keep `WaitingForPeers` non-terminal,
+   execute ready broker claims through `execute_claimed_batch`, and fan out
+   completed member responses through assignment responders.
+
+Option 1 verification plan:
+- Unit/owner test proving two completed batched members return distinct
+  `WorkflowRunResponse` payloads with the correct workflow run ids and outputs.
+- Mixed terminal/non-terminal test proving failed/cancelled/deferred/retryable
+  members do not carry completed responses.
+- Regression check proving no legacy `run_workflow` call, no side-channel
+  response read, no anchor-run input carry-forward, and no worker responder
+  ownership move in this slice.
+
+Re-plan triggers for Option 1:
+- `finalize_admitted_workflow_run` cannot return the completed response without
+  changing unrelated finalization ownership.
+- Worker fan-out requires response durability before in-memory responder
+  completion.
+- The batch owner would need to complete worker responders directly to expose
+  the payload.
+- Any implementation requires fabricated responses, request-scoped runtime
+  execution, single-run fallback, or workflow-owned runtime state.
+
 ## Standards Rule
 
 The standards constraints in
