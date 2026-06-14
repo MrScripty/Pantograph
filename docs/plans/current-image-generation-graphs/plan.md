@@ -8218,7 +8218,66 @@ window/timeout policy needs to be introduced in two commits; Option 4 should
 remain narrow because broad admission prediction can over-couple scheduler
 policy to future workflow arrivals.
 
-Re-plan decision required before the next implementation slice.
+2026-06-14 grouped broker re-plan decision: use Option 3 as the next
+implementation path. The scheduler-owned batch broker must own the wait window
+for solo runtime branches, must record the wait deadline/state durably, and
+must transition expired solo waits to typed deferred, timed-out, or
+unsatisfied-batch diagnostics without runtime-host dispatch. This is the
+canonical behavior for a valid runtime branch that is eligible to batch but has
+no compatible peer yet. The worker may observe and surface the scheduler-owned
+decision, but it must not invent timeout policy, execute singleton batches, or
+restore the removed direct rehydration helper.
+
+Option 3 execution checklist:
+1. Inspect the current runtime dispatch assignment and batch broker state
+   model, then add the smallest scheduler-owned wait-window contract needed to
+   represent when a `WaitingForPeers` assignment started waiting, when the wait
+   expires, and which typed diagnostic is emitted on expiry.
+2. Populate the wait-window facts only when the broker accepts a runtime
+   branch into `WaitingForPeers`; do not attach workflow input, anchor-run
+   state, runtime ownership, or request-scoped execution facts to the wait
+   record.
+3. Extend broker evaluation so expired solo waits transition through canonical
+   assignment/task-event state with a typed non-runtime-host outcome. Expiry
+   must never call the runtime host, never claim a one-member batch, and never
+   complete responders as if inference succeeded.
+4. Surface the expired-wait result through the session runtime/worker response
+   path so callers and tests receive a bounded typed outcome instead of an
+   indefinitely retained responder.
+5. Migrate affected `session_execution` tests by intent: tests whose purpose is
+   grouped runtime-host completion must provide compatible peers; tests whose
+   purpose is solo runtime lifecycle, shutdown, recovery, or failure before
+   dispatch must assert the new typed wait-expiry/deferred diagnostic.
+6. Verify with focused broker, assignment, worker, and `session_execution`
+   tests before running `cargo check -p pantograph-workflow-service`,
+   `cargo fmt -p pantograph-workflow-service -- --check`, and
+   `git diff --check`.
+
+Option 4 follow-up policy: keep admission-time matchability/capacity gating as
+a later, narrow scheduler-owned fail-closed feature for hard impossibility only.
+Examples include an unknown runtime family, unsupported reservation class,
+invalid pinned runtime/device constraints, or a physical device constraint that
+cannot be satisfied from durable scheduler facts. Option 4 must not reject a
+branch merely because no compatible peer exists at the current instant; that is
+Option 3 wait-window territory. Re-plan before implementing Option 4 if it
+would require predicting future workflow arrivals, coupling runtime ownership
+to workflow ownership, or bypassing the broker wait lifecycle.
+
+No-fallback/no-legacy confirmation for the selected direction: valid solo
+runtime branches may wait only under scheduler-owned broker policy, and may
+expire only into typed diagnostics. They may not use request-scoped runtime
+execution, direct single-branch rehydration, singleton batch execution,
+fabricated success responses, or anchor-run input carry-forward.
+
+Re-plan triggers for Option 3:
+- The existing assignment store cannot represent wait-window facts without a
+  broader schema or persistence contract change.
+- Expiry cannot be surfaced to responders without adding a separate durable
+  runtime completion ledger.
+- Shutdown/recovery requires a different lifecycle owner than the scheduler
+  broker.
+- Any implementation path requires singleton runtime-host dispatch, implicit
+  fallback execution, or compatibility shims for old runtime behavior.
 
 ## Standards Rule
 
