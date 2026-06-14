@@ -8848,6 +8848,64 @@ Remaining follow-up: plan and implement grouped batch terminal
 diagnostics-ledger parity without moving diagnostics ownership into the batch
 owner ad hoc.
 
+2026-06-14 grouped batch terminal diagnostics parity re-plan decision: use
+Option 1, the shared scheduler diagnostics boundary. The current grouped batch
+path mutates scheduler task attempts and reservation lifecycle correctly, but
+terminal scheduler-attempt diagnostics are still emitted from the older
+single-request `session_scheduler_runner` path. The standards-aligned fix is
+to extract a backend workflow-service/scheduler-owned terminal attempt
+diagnostics helper and have both single-request and grouped batch paths call
+that helper. Do not emit diagnostics directly from the grouped batch owner with
+ad hoc payload construction, and do not add a grouped-only compatibility shim.
+
+Updated objective: grouped runtime batch member terminal mutations must emit
+the same canonical diagnostics-ledger terminal attempt event as single-request
+runtime task completion/cancellation/failure, while preserving the grouped
+batch owner as the execution/fan-out boundary and keeping diagnostics policy
+owned by one shared scheduler diagnostics boundary.
+
+Standards alignment:
+- Plan Standards: this re-plan records the ownership change before code edits,
+  keeps the next implementation as a thin verified slice, and requires an
+  atomic commit after verification.
+- Coding/Architecture Standards: terminal attempt diagnostics policy belongs
+  behind a single backend-owned boundary rather than being duplicated in
+  grouped batch execution. The grouped batch owner may request diagnostic
+  emission, but must not own ledger payload policy ad hoc.
+- Concurrency Standards: diagnostic emission must not hold session-store or
+  assignment repository locks across async ledger/reservation work; collect the
+  needed facts, release locks, then emit.
+- No-fallback/no-legacy rule: the slice must not restore single-request
+  runtime-host dispatch, request-scoped runtime execution, or static-running
+  batch cancellation. If terminal diagnostics cannot be produced from
+  canonical scheduler/task-attempt facts, return/record a typed diagnostic
+  instead of falling back.
+
+Implementation sequence:
+1. Inspect the existing `session_scheduler_runner` terminal attempt diagnostic
+   construction and identify the smallest shared helper boundary that can be
+   called by both runner and grouped batch code without introducing new shared
+   DTOs.
+2. Extract the shared helper in workflow-service ownership, keeping payload
+   construction centralized and preserving the existing single-request emitted
+   event shape.
+3. Update the single-request runner to call the helper, with focused tests that
+   prove existing runtime terminal diagnostics are unchanged.
+4. Wire grouped batch terminal member response mutations to call the helper
+   after scheduler state mutation and after repository/session-store locks are
+   released.
+5. Add focused grouped batch tests for completed, failed, and cancelled member
+   terminal diagnostics, then run `runtime_branch_batch_execution`,
+   `task_execution_worker`, focused `session_execution`, full
+   `session_execution --lib`, `cargo check -p pantograph-workflow-service`,
+   format check, and `git diff --check`.
+
+Deferred option: a first-class grouped batch diagnostics-ledger event remains a
+future re-plan option only if consumers need batch-level observability beyond
+per-member terminal attempt parity. Do not introduce that broader contract in
+the parity slice unless the shared helper cannot represent grouped member
+events without losing required facts.
+
 ## Standards Rule
 
 The standards constraints in
