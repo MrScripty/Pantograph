@@ -7768,6 +7768,52 @@ handoff is not already production-owned. If the entrypoint cannot make a
 canonical grouped claim decision from durable scheduler facts, stop and
 re-plan instead of falling back to single-member dispatch.
 
+2026-06-14 re-plan trigger: runtime-branch worker batch entrypoint grouping.
+Inspection found that the current worker runs one async task per runtime-branch
+command, creates one durable runtime dispatch assignment, attaches that run's
+responder, marks the assignment/event running, and immediately executes the old
+single runtime branch path. The only batch-claim API available today is
+mutating: `claim_compatible_running_batch` claims the anchor assignment even
+when no second compatible assignment exists. Wiring this directly into the
+worker would either force one-member batch dispatch before related runs can
+join, or mutate batch state and then fall back to legacy single-run execution.
+Both outcomes violate the no-fallback/no-legacy rule and do not provide a
+canonical grouped decision from durable scheduler facts.
+
+Standards-aligned options:
+- Option 1: add a non-mutating compatible-batch readiness probe, then let the
+  worker claim and execute only when at least two compatible running
+  assignments are already present. If no compatible peer exists, return a
+  typed non-terminal deferred/pending outcome and leave execution for retry.
+  Choose this for the thinnest worker integration slice when immediate
+  opportunistic grouping is enough and no batching window is required yet.
+- Option 2: introduce a scheduler-owned batch broker/window at the
+  runtime-dispatch assignment layer. Workers register running assignments with
+  durable facts; the broker decides when enough compatible assignments exist
+  or when an explicit timeout/threshold policy says to dispatch. It then
+  creates the batch claim and calls the batch owner. Choose this when
+  simultaneous runs should batch reliably without relying on async task timing.
+- Option 3: route every runtime branch through the runtime-host batch port,
+  including one-member batches, and remove the old single runtime branch
+  execution path. Choose this only if one-member batch requests are acceptable
+  as the canonical execution unit; it simplifies ownership but does not solve
+  cross-run batching by itself.
+- Option 4: defer production worker integration until the full durable
+  task-attempt lifecycle/broker milestone. Keep the batch owner covered by
+  focused tests but unused by the worker. Choose this if the interim behavior
+  would create unstable semantics or conflict with the intended scheduler
+  broker architecture.
+
+Recommended next direction: Option 2. It best matches the target architecture:
+the scheduler, not a workflow request or host runtime, decides when related
+assignments are grouped; physical devices remain separate from runtime/model
+identity; persistent runtime keep-alive remains a scheduler policy; and no
+workflow run owns a runtime instance or carries inputs forward to future runs.
+Implement it in thin slices: define the broker decision contract, add
+non-mutating readiness/threshold evaluation, persist the broker-selected claim,
+wire the worker to the broker result, then dispatch through
+`execute_claimed_batch` with responder fan-out.
+
 ## Standards Rule
 
 The standards constraints in
