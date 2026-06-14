@@ -6448,6 +6448,38 @@ explicit and testable. Do not begin source edits for the batch worker contract
 until this plan is updated with the selected option and revised allowed write
 set.
 
+2026-06-14 PyTorch batch worker contract scope re-plan decision: use option 1.
+Widen the step-2 allowed write set to include the shared PyTorch worker
+operation discriminators before adding the dedicated image batch worker
+contract. This keeps the Rust/Python wire contract explicit and contract-first,
+avoids overloading the existing `generate_image` operation, and preserves the
+no-fallback/no-legacy rule by refusing to hide single-image behavior behind a
+batch-shaped DTO.
+
+Revised step-2 thin slice:
+add a dedicated PyTorch image batch worker contract and validation only.
+Allowed files are
+`crates/inference/src/backend/pytorch_worker_contract.rs`,
+`crates/inference/torch/worker_contract.py`,
+`crates/inference/src/backend/pytorch_worker_image_contract.rs`,
+`crates/inference/torch/worker_image_contract.py`, focused Rust/Python
+contract tests, worker JSON fixtures,
+`crates/inference/src/README.md`, and this plan. The slice must add an
+explicit `generate_image_batch` operation, dedicated batch payload/result DTOs,
+stable batch/member ids, member-local planned execution facts, per-member
+success/failure diagnostics, cancellation semantics, and resource-observation
+semantics.
+
+Revised step-2 guardrails:
+do not call the batch worker contract from `PyTorchBackend`, do not enable
+`BackendCapabilities::image_generation_batch`, do not implement backend
+execution, do not loop through `generate_image_from_plan` or the single-image
+worker function, do not change generated runtime-host contracts,
+workflow-service worker code, frontend/Tauri DTOs, lockfiles, saved workflow
+fixtures, physical-device tables, or runtime-residency tables. Keep this as
+serial integration-owner work; do not use sub-agents for the shared
+discriminator, worker wire contract, fixtures, README, or plan files.
+
 ## Standards Rule
 
 The standards constraints in
