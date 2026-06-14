@@ -435,7 +435,7 @@ impl WorkflowRuntimeBranchBatchExecutionFailure {
 }
 
 impl WorkflowRuntimeBranchBatchExecutionDiagnostic {
-    fn new(
+    pub(super) fn new(
         code: WorkflowRuntimeBranchBatchExecutionDiagnosticCode,
         message: impl Into<String>,
     ) -> Self {

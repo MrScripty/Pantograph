@@ -8,9 +8,13 @@ use crate::scheduler::{
     WorkflowSchedulerLifecycleComponentRegistryHandle, WorkflowSchedulerLifecycleComponentState,
 };
 
-use super::runtime_branch_rehydration::{
-    rehydrate_runtime_branch_execution_context, WorkflowRuntimeBranchRehydrationDiagnostic,
-    WorkflowRuntimeBranchRehydrationDiagnosticCode,
+use super::runtime_branch_batch_execution::{
+    WorkflowRuntimeBranchBatchExecutionDiagnostic,
+    WorkflowRuntimeBranchBatchExecutionDiagnosticCode, WorkflowRuntimeBranchBatchExecutionFailure,
+    WorkflowRuntimeBranchBatchExecutionMember, WorkflowRuntimeBranchBatchExecutionOwner,
+    WorkflowRuntimeBranchBatchMemberExecutionOutcome,
+    WorkflowRuntimeBranchBatchMemberExecutionOutcomeState,
+    WorkflowRuntimeBranchBatchResponderFanOut,
 };
 use super::runtime_branch_task_event::{
     WorkflowRuntimeBranchTaskEventClaim, WorkflowRuntimeBranchTaskEventClaimOutcome,
@@ -19,13 +23,17 @@ use super::runtime_branch_task_event::{
     WorkflowRuntimeBranchTaskEventRecord, WorkflowRuntimeBranchTaskEventRepository,
 };
 use super::runtime_dispatch_assignment::{
+    WorkflowRuntimeDispatchAssignmentBatchBrokerClaimRequest,
+    WorkflowRuntimeDispatchAssignmentBatchBrokerDecision,
+    WorkflowRuntimeDispatchAssignmentBatchBrokerRequest,
+    WorkflowRuntimeDispatchAssignmentBatchClaimOutcome,
+    WorkflowRuntimeDispatchAssignmentBatchClaimOwnerId,
     WorkflowRuntimeDispatchAssignmentDiagnostic, WorkflowRuntimeDispatchAssignmentDiagnosticCode,
     WorkflowRuntimeDispatchAssignmentId, WorkflowRuntimeDispatchAssignmentRecord,
     WorkflowRuntimeDispatchAssignmentRepository, WorkflowRuntimeDispatchAssignmentRequest,
 };
 use super::runtime_dispatch_selection::WorkflowRuntimeDispatchCandidateFact;
 use super::session_scheduler_runner::WorkflowPreDispatchPreparationBoundary;
-use super::task_execution_owner::WorkflowTaskExecutionOwner;
 use super::{
     WorkflowHost, WorkflowOutputTarget, WorkflowPortBinding, WorkflowRunResponse,
     WorkflowSchedulerTaskExecutionClass, WorkflowService, WorkflowServiceError,
@@ -35,6 +43,11 @@ const TASK_EXECUTION_WORKER_COMMAND_CAPACITY: usize = 64;
 const RUNTIME_BRANCH_TASK_EVENT_CLAIM_LEASE_MS: u64 = 30_000;
 const RUNTIME_BRANCH_DEPENDENCY_READINESS_RETRY_DELAY_MS: u64 = 1_000;
 const TASK_EXECUTION_WORKER_CLAIM_OWNER_ID: &str = "workflow-service.task-execution-worker";
+const RUNTIME_BRANCH_BATCH_BROKER_MIN_ASSIGNMENTS: usize = 2;
+const RUNTIME_BRANCH_BATCH_BROKER_MAX_ASSIGNMENTS: usize = 8;
+const RUNTIME_BRANCH_BATCH_CLAIM_LEASE_MS: u64 = 1_000;
+const RUNTIME_BRANCH_BATCH_CLAIM_OWNER_ID: &str =
+    "workflow-service.task-execution-worker.batch-broker";
 
 #[derive(Debug)]
 pub(super) struct WorkflowTaskExecutionWorker {
@@ -286,6 +299,17 @@ struct WorkflowTaskExecutionWorkerRuntimeBranchResponderAssignmentCompletion {
     workflow_run_id: String,
     workflow_id: String,
     outcome: WorkflowTaskExecutionWorkerOutcome,
+}
+
+enum WorkflowTaskExecutionWorkerRuntimeBranchExecutionResult {
+    CompleteResponder(WorkflowTaskExecutionWorkerOutcome),
+    ResponderRetainedForBatch,
+}
+
+impl WorkflowTaskExecutionWorkerRuntimeBranchExecutionResult {
+    fn complete(outcome: WorkflowTaskExecutionWorkerOutcome) -> Self {
+        Self::CompleteResponder(outcome)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -929,22 +953,24 @@ async fn task_execution_worker_loop(
                                 &runtime_branch_responder_registry,
                                 &mut registration,
                             ).await;
-                            if let Some(assignment_id) =
-                                registration.runtime_dispatch_assignment_id.clone()
-                            {
-                                let completion =
-                                    WorkflowTaskExecutionWorkerRuntimeBranchResponderAssignmentCompletion {
-                                        assignment_id,
-                                        session_id: registration.session_id,
-                                        workflow_run_id: registration.workflow_run_id,
-                                        workflow_id: registration.workflow_id,
-                                        outcome,
-                                    };
-                                let _ = runtime_branch_responder_registry
-                                    .complete_runtime_dispatch_assignments(vec![completion]);
-                            } else {
-                                let _ = runtime_branch_responder_registry
-                                    .complete(registration, outcome);
+                            if let WorkflowTaskExecutionWorkerRuntimeBranchExecutionResult::CompleteResponder(outcome) = outcome {
+                                if let Some(assignment_id) =
+                                    registration.runtime_dispatch_assignment_id.clone()
+                                {
+                                    let completion =
+                                        WorkflowTaskExecutionWorkerRuntimeBranchResponderAssignmentCompletion {
+                                            assignment_id,
+                                            session_id: registration.session_id,
+                                            workflow_run_id: registration.workflow_run_id,
+                                            workflow_id: registration.workflow_id,
+                                            outcome,
+                                        };
+                                    let _ = runtime_branch_responder_registry
+                                        .complete_runtime_dispatch_assignments(vec![completion]);
+                                } else {
+                                    let _ = runtime_branch_responder_registry
+                                        .complete(registration, outcome);
+                                }
                             }
                         });
                     }
@@ -970,7 +996,7 @@ async fn claim_and_execute_runtime_branch_event(
     command: &WorkflowTaskExecutionWorkerRuntimeBranchCommand,
     runtime_branch_responder_registry: &WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistry,
     runtime_branch_responder_registration: &mut WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistration,
-) -> WorkflowTaskExecutionWorkerOutcome {
+) -> WorkflowTaskExecutionWorkerRuntimeBranchExecutionResult {
     let service = environment.service();
     let now_ms = unix_timestamp_ms();
     let claimed =
@@ -981,17 +1007,21 @@ async fn claim_and_execute_runtime_branch_event(
                     WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchEventUnavailable,
                     "no due runtime branch task event is available for workflow run",
                 );
-                return WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
-                    command,
-                    "runtime branch task event is not available for worker claim",
-                    vec![diagnostic],
+                return WorkflowTaskExecutionWorkerRuntimeBranchExecutionResult::complete(
+                    WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
+                        command,
+                        "runtime branch task event is not available for worker claim",
+                        vec![diagnostic],
+                    ),
                 );
             }
             Err(diagnostic) => {
-                return WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
-                    command,
-                    "runtime branch task event claim failed",
-                    vec![diagnostic],
+                return WorkflowTaskExecutionWorkerRuntimeBranchExecutionResult::complete(
+                    WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
+                        command,
+                        "runtime branch task event claim failed",
+                        vec![diagnostic],
+                    ),
                 );
             }
         };
@@ -1004,10 +1034,12 @@ async fn claim_and_execute_runtime_branch_event(
     ) {
         Ok(record) => record,
         Err(diagnostic) => {
-            return WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
-                command,
-                "runtime branch task event dispatching persistence failed",
-                vec![diagnostic],
+            return WorkflowTaskExecutionWorkerRuntimeBranchExecutionResult::complete(
+                WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
+                    command,
+                    "runtime branch task event dispatching persistence failed",
+                    vec![diagnostic],
+                ),
             );
         }
     };
@@ -1015,12 +1047,14 @@ async fn claim_and_execute_runtime_branch_event(
     let active_run_inputs = match runtime_branch_active_run_inputs(service.as_ref(), command) {
         Ok(inputs) => inputs,
         Err(error) => {
-            return fail_runtime_branch_preparation_error(
-                command,
-                service.as_ref(),
-                &dispatching_record.event_id,
-                &claimed.claim,
-                error,
+            return WorkflowTaskExecutionWorkerRuntimeBranchExecutionResult::complete(
+                fail_runtime_branch_preparation_error(
+                    command,
+                    service.as_ref(),
+                    &dispatching_record.event_id,
+                    &claimed.claim,
+                    error,
+                ),
             );
         }
     };
@@ -1030,12 +1064,14 @@ async fn claim_and_execute_runtime_branch_event(
         &command.workflow_run_id,
         &active_run_inputs,
     ) {
-        return fail_runtime_branch_preparation_error(
-            command,
-            service.as_ref(),
-            &dispatching_record.event_id,
-            &claimed.claim,
-            error,
+        return WorkflowTaskExecutionWorkerRuntimeBranchExecutionResult::complete(
+            fail_runtime_branch_preparation_error(
+                command,
+                service.as_ref(),
+                &dispatching_record.event_id,
+                &claimed.claim,
+                error,
+            ),
         );
     }
     let preparation = match preparation_boundary
@@ -1044,35 +1080,41 @@ async fn claim_and_execute_runtime_branch_event(
     {
         Ok(preparation) => preparation,
         Err(error) if error.is_runtime_dependency_readiness_pending() => {
-            return defer_runtime_branch_dependency_readiness(
-                command,
-                service.as_ref(),
-                &dispatching_record.event_id,
-                &claimed.claim,
-                runtime_dependency_pending_task_ids(&error).unwrap_or_default(),
-                error.to_string(),
+            return WorkflowTaskExecutionWorkerRuntimeBranchExecutionResult::complete(
+                defer_runtime_branch_dependency_readiness(
+                    command,
+                    service.as_ref(),
+                    &dispatching_record.event_id,
+                    &claimed.claim,
+                    runtime_dependency_pending_task_ids(&error).unwrap_or_default(),
+                    error.to_string(),
+                ),
             );
         }
         Err(error) => {
-            return fail_runtime_branch_preparation_error(
-                command,
-                service.as_ref(),
-                &dispatching_record.event_id,
-                &claimed.claim,
-                error,
+            return WorkflowTaskExecutionWorkerRuntimeBranchExecutionResult::complete(
+                fail_runtime_branch_preparation_error(
+                    command,
+                    service.as_ref(),
+                    &dispatching_record.event_id,
+                    &claimed.claim,
+                    error,
+                ),
             );
         }
     };
     if !preparation.deferred_task_ids().is_empty() {
-        return defer_runtime_branch_dependency_readiness(
-            command,
-            service.as_ref(),
-            &dispatching_record.event_id,
-            &claimed.claim,
-            preparation.deferred_task_ids().to_vec(),
-            format!(
-                "runtime dependency readiness is pending for scheduler task(s): {}",
-                preparation.deferred_task_ids().join(", ")
+        return WorkflowTaskExecutionWorkerRuntimeBranchExecutionResult::complete(
+            defer_runtime_branch_dependency_readiness(
+                command,
+                service.as_ref(),
+                &dispatching_record.event_id,
+                &claimed.claim,
+                preparation.deferred_task_ids().to_vec(),
+                format!(
+                    "runtime dependency readiness is pending for scheduler task(s): {}",
+                    preparation.deferred_task_ids().join(", ")
+                ),
             ),
         );
     }
@@ -1088,12 +1130,14 @@ async fn claim_and_execute_runtime_branch_event(
     {
         Ok(started_dispatch) => started_dispatch,
         Err(error) => {
-            return fail_runtime_branch_preparation_error(
-                command,
-                service.as_ref(),
-                &dispatching_record.event_id,
-                &claimed.claim,
-                error,
+            return WorkflowTaskExecutionWorkerRuntimeBranchExecutionResult::complete(
+                fail_runtime_branch_preparation_error(
+                    command,
+                    service.as_ref(),
+                    &dispatching_record.event_id,
+                    &claimed.claim,
+                    error,
+                ),
             );
         }
     };
@@ -1105,10 +1149,12 @@ async fn claim_and_execute_runtime_branch_event(
     ) {
         Ok(record) => record,
         Err(diagnostic) => {
-            return WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
-                command,
-                "runtime branch selected-candidate evidence persistence failed",
-                vec![diagnostic],
+            return WorkflowTaskExecutionWorkerRuntimeBranchExecutionResult::complete(
+                WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
+                    command,
+                    "runtime branch selected-candidate evidence persistence failed",
+                    vec![diagnostic],
+                ),
             );
         }
     };
@@ -1121,10 +1167,12 @@ async fn claim_and_execute_runtime_branch_event(
     ) {
         Ok(record) => record,
         Err(diagnostic) => {
-            return WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
-                command,
-                "runtime branch dispatch-assignment persistence failed",
-                vec![diagnostic],
+            return WorkflowTaskExecutionWorkerRuntimeBranchExecutionResult::complete(
+                WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
+                    command,
+                    "runtime branch dispatch-assignment persistence failed",
+                    vec![diagnostic],
+                ),
             );
         }
     };
@@ -1136,10 +1184,10 @@ async fn claim_and_execute_runtime_branch_event(
             *runtime_branch_responder_registration = registration;
         }
         Err(outcome) => {
-            return outcome;
+            return WorkflowTaskExecutionWorkerRuntimeBranchExecutionResult::complete(outcome);
         }
     }
-    let linked_record = match link_runtime_branch_dispatch_assignment(
+    let _linked_record = match link_runtime_branch_dispatch_assignment(
         service.as_ref(),
         &evidence_record.event_id,
         &claimed.claim,
@@ -1153,34 +1201,12 @@ async fn claim_and_execute_runtime_branch_event(
     ) {
         Ok(record) => record,
         Err(diagnostic) => {
-            return WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
-                command,
-                "runtime branch dispatch-assignment link persistence failed",
-                vec![diagnostic],
-            );
-        }
-    };
-
-    let rehydrated = match rehydrate_runtime_branch_execution_context(
-        service.as_ref(),
-        &linked_record,
-        &claimed.claim,
-    ) {
-        Ok(context) => context,
-        Err(diagnostic) => {
-            let mut diagnostics = vec![runtime_branch_rehydration_diagnostic(diagnostic)];
-            if let Err(release_diagnostic) = release_claimed_runtime_branch_task_event(
-                service.as_ref(),
-                &claimed.record.event_id,
-                &claimed.claim,
-                now_ms,
-            ) {
-                diagnostics.push(release_diagnostic);
-            }
-            return WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
-                command,
-                "runtime branch execution context rehydration failed",
-                diagnostics,
+            return WorkflowTaskExecutionWorkerRuntimeBranchExecutionResult::complete(
+                WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
+                    command,
+                    "runtime branch dispatch-assignment link persistence failed",
+                    vec![diagnostic],
+                ),
             );
         }
     };
@@ -1190,10 +1216,12 @@ async fn claim_and_execute_runtime_branch_event(
         &dispatch_assignment.assignment_id,
         unix_timestamp_ms(),
     ) {
-        return WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
-            command,
-            "runtime branch dispatch-assignment running persistence failed",
-            vec![diagnostic],
+        return WorkflowTaskExecutionWorkerRuntimeBranchExecutionResult::complete(
+            WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
+                command,
+                "runtime branch dispatch-assignment running persistence failed",
+                vec![diagnostic],
+            ),
         );
     }
 
@@ -1203,76 +1231,412 @@ async fn claim_and_execute_runtime_branch_event(
         &claimed.claim,
         unix_timestamp_ms(),
     ) {
-        return WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
-            command,
-            "runtime branch task event running persistence failed",
-            vec![diagnostic],
+        return WorkflowTaskExecutionWorkerRuntimeBranchExecutionResult::complete(
+            WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
+                command,
+                "runtime branch task event running persistence failed",
+                vec![diagnostic],
+            ),
         );
     }
 
-    let host = environment.host();
-    let run_result =
-        WorkflowTaskExecutionOwner::run_rehydrated_started_runtime_branch_to_completion(
-            service.as_ref(),
-            host.as_ref(),
-            command,
-            &rehydrated,
-            &started_dispatch.started_runtime_task,
-            &started_dispatch.selected_dispatch,
-        )
-        .await;
-
-    match run_result {
-        Ok(response) => match complete_claimed_runtime_branch_task_event(
-            service.as_ref(),
-            &claimed.record.event_id,
-            &claimed.claim,
-            unix_timestamp_ms(),
-        ) {
-            Ok(_record) => WorkflowTaskExecutionWorkerOutcome::runtime_branch_completed(
-                command,
-                response,
-                Vec::new(),
-            ),
-            Err(diagnostic) => WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
-                command,
-                "runtime branch task event completion failed",
-                vec![diagnostic],
-            ),
-        },
-        Err(error) if error.is_runtime_dependency_readiness_pending() => {
-            let deferred_task_ids = runtime_dependency_pending_task_ids(&error)
-                .filter(|task_ids| !task_ids.is_empty())
-                .unwrap_or_else(|| vec![rehydrated.runtime_task_id.clone()]);
-            defer_runtime_branch_dependency_readiness(
-                command,
-                service.as_ref(),
-                &claimed.record.event_id,
-                &claimed.claim,
-                deferred_task_ids,
-                error.to_string(),
-            )
+    let broker_decision = match evaluate_runtime_branch_batch_broker(
+        service.as_ref(),
+        &dispatch_assignment.assignment_id,
+        unix_timestamp_ms(),
+    ) {
+        Ok(decision) => decision,
+        Err(diagnostic) => {
+            return WorkflowTaskExecutionWorkerRuntimeBranchExecutionResult::complete(
+                fail_runtime_branch_dispatch_diagnostic(
+                    command,
+                    service.as_ref(),
+                    &claimed.record.event_id,
+                    &claimed.claim,
+                    "runtime branch batch broker decision failed",
+                    diagnostic,
+                ),
+            );
         }
-        Err(error) => match fail_claimed_runtime_branch_task_event(
-            service.as_ref(),
-            &claimed.record.event_id,
-            &claimed.claim,
-            unix_timestamp_ms(),
-        ) {
-            Ok(_record) => WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
-                command,
-                error.to_string(),
-                vec![WorkflowTaskExecutionWorkerDiagnostic::new(
-                    WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchFailed,
-                    error.to_string(),
-                )],
-            ),
-            Err(diagnostic) => WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
-                command,
-                "runtime branch task event failure persistence failed",
-                vec![diagnostic],
-            ),
-        },
+    };
+
+    match broker_decision {
+        WorkflowRuntimeDispatchAssignmentBatchBrokerDecision::WaitingForPeers { .. } => {
+            WorkflowTaskExecutionWorkerRuntimeBranchExecutionResult::ResponderRetainedForBatch
+        }
+        WorkflowRuntimeDispatchAssignmentBatchBrokerDecision::ReadyToClaim { .. } => {
+            let claim_outcome = match claim_runtime_branch_batch_broker_decision(
+                service.as_ref(),
+                broker_decision,
+                unix_timestamp_ms(),
+            ) {
+                Ok(claim_outcome) => claim_outcome,
+                Err(diagnostic) => {
+                    return WorkflowTaskExecutionWorkerRuntimeBranchExecutionResult::complete(
+                        fail_runtime_branch_dispatch_diagnostic(
+                            command,
+                            service.as_ref(),
+                            &claimed.record.event_id,
+                            &claimed.claim,
+                            "runtime branch batch broker claim failed",
+                            diagnostic,
+                        ),
+                    );
+                }
+            };
+            match execute_runtime_branch_batch_claim(
+                environment,
+                runtime_branch_responder_registry,
+                claim_outcome,
+            )
+            .await
+            {
+                Ok(()) => {
+                    WorkflowTaskExecutionWorkerRuntimeBranchExecutionResult::ResponderRetainedForBatch
+                }
+                Err(outcome) => {
+                    WorkflowTaskExecutionWorkerRuntimeBranchExecutionResult::complete(outcome)
+                }
+            }
+        }
+    }
+}
+
+fn fail_runtime_branch_dispatch_diagnostic(
+    command: &WorkflowTaskExecutionWorkerRuntimeBranchCommand,
+    service: &WorkflowService,
+    event_id: &WorkflowRuntimeBranchTaskEventId,
+    claim: &WorkflowRuntimeBranchTaskEventClaim,
+    error_message: impl Into<String>,
+    diagnostic: WorkflowTaskExecutionWorkerDiagnostic,
+) -> WorkflowTaskExecutionWorkerOutcome {
+    match fail_claimed_runtime_branch_task_event(service, event_id, claim, unix_timestamp_ms()) {
+        Ok(_record) => WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
+            command,
+            error_message,
+            vec![diagnostic],
+        ),
+        Err(failure_diagnostic) => WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
+            command,
+            "runtime branch task event failure persistence failed",
+            vec![diagnostic, failure_diagnostic],
+        ),
+    }
+}
+
+async fn execute_runtime_branch_batch_claim(
+    environment: &WorkflowTaskExecutionWorkerRuntimeBranchEnvironment,
+    runtime_branch_responder_registry: &WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistry,
+    claim_outcome: WorkflowRuntimeDispatchAssignmentBatchClaimOutcome,
+) -> Result<(), WorkflowTaskExecutionWorkerOutcome> {
+    let service = environment.service();
+    let host = environment.host();
+    let assignments = claim_outcome.assignments.clone();
+    let owner = WorkflowRuntimeBranchBatchExecutionOwner::new(
+        &service.scheduler_task_orchestrator,
+        runtime_branch_responder_registry,
+    );
+    let member_outcomes = match owner
+        .execute_claimed_batch(service.as_ref(), host.as_ref(), claim_outcome)
+        .await
+    {
+        Ok(outcome) => outcome.member_outcomes,
+        Err(failure) => batch_failure_member_outcomes(&assignments, failure),
+    };
+    let completions =
+        runtime_branch_batch_member_completions(service.as_ref(), &assignments, member_outcomes);
+    runtime_branch_responder_registry.complete_runtime_dispatch_assignments(completions)
+}
+
+fn evaluate_runtime_branch_batch_broker(
+    service: &WorkflowService,
+    assignment_id: &WorkflowRuntimeDispatchAssignmentId,
+    now_ms: u64,
+) -> Result<
+    WorkflowRuntimeDispatchAssignmentBatchBrokerDecision,
+    WorkflowTaskExecutionWorkerDiagnostic,
+> {
+    let repository = service
+        .runtime_dispatch_assignment_repository
+        .lock()
+        .map_err(|_| {
+            WorkflowTaskExecutionWorkerDiagnostic::new(
+                WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchDispatchUnavailable,
+                "runtime dispatch-assignment repository lock poisoned",
+            )
+        })?;
+    repository
+        .evaluate_running_batch_broker_decision(
+            WorkflowRuntimeDispatchAssignmentBatchBrokerRequest {
+                anchor_assignment_id: assignment_id.clone(),
+                now_ms,
+                min_assignments: RUNTIME_BRANCH_BATCH_BROKER_MIN_ASSIGNMENTS,
+                max_assignments: RUNTIME_BRANCH_BATCH_BROKER_MAX_ASSIGNMENTS,
+            },
+        )
+        .map_err(runtime_dispatch_assignment_diagnostic)
+}
+
+fn claim_runtime_branch_batch_broker_decision(
+    service: &WorkflowService,
+    decision: WorkflowRuntimeDispatchAssignmentBatchBrokerDecision,
+    now_ms: u64,
+) -> Result<WorkflowRuntimeDispatchAssignmentBatchClaimOutcome, WorkflowTaskExecutionWorkerDiagnostic>
+{
+    let owner_id = WorkflowRuntimeDispatchAssignmentBatchClaimOwnerId::parse(
+        RUNTIME_BRANCH_BATCH_CLAIM_OWNER_ID,
+    )
+    .map_err(runtime_dispatch_assignment_diagnostic)?;
+    let mut repository = service
+        .runtime_dispatch_assignment_repository
+        .lock()
+        .map_err(|_| {
+            WorkflowTaskExecutionWorkerDiagnostic::new(
+                WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchDispatchUnavailable,
+                "runtime dispatch-assignment repository lock poisoned",
+            )
+        })?;
+    repository
+        .claim_batch_broker_decision(WorkflowRuntimeDispatchAssignmentBatchBrokerClaimRequest {
+            decision,
+            owner_id,
+            now_ms,
+            lease_duration_ms: RUNTIME_BRANCH_BATCH_CLAIM_LEASE_MS,
+        })
+        .map_err(runtime_dispatch_assignment_diagnostic)
+}
+
+fn batch_failure_member_outcomes(
+    assignments: &[WorkflowRuntimeDispatchAssignmentRecord],
+    failure: WorkflowRuntimeBranchBatchExecutionFailure,
+) -> Vec<WorkflowRuntimeBranchBatchMemberExecutionOutcome> {
+    let mut member_outcomes = failure.member_outcomes;
+    let mut completed_assignment_ids = member_outcomes
+        .iter()
+        .map(|outcome| outcome.assignment_id.clone())
+        .collect::<BTreeSet<_>>();
+    for assignment in assignments {
+        if completed_assignment_ids.insert(assignment.assignment_id.clone()) {
+            member_outcomes.push(WorkflowRuntimeBranchBatchMemberExecutionOutcome {
+                assignment_id: assignment.assignment_id.clone(),
+                session_id: assignment.session_id.clone(),
+                workflow_id: assignment.workflow_id.clone(),
+                workflow_run_id: assignment.workflow_run_id.clone(),
+                state: WorkflowRuntimeBranchBatchMemberExecutionOutcomeState::Failed,
+                completed_response: None,
+                diagnostics: failure.diagnostics.clone(),
+            });
+        }
+    }
+    member_outcomes
+}
+
+fn runtime_branch_batch_member_completions(
+    service: &WorkflowService,
+    assignments: &[WorkflowRuntimeDispatchAssignmentRecord],
+    member_outcomes: Vec<WorkflowRuntimeBranchBatchMemberExecutionOutcome>,
+) -> Vec<WorkflowTaskExecutionWorkerRuntimeBranchResponderAssignmentCompletion> {
+    member_outcomes
+        .into_iter()
+        .filter_map(|member_outcome| {
+            let assignment = assignments
+                .iter()
+                .find(|assignment| assignment.assignment_id == member_outcome.assignment_id)?;
+            Some(runtime_branch_batch_member_completion(
+                service,
+                assignment,
+                member_outcome,
+            ))
+        })
+        .collect()
+}
+
+fn runtime_branch_batch_member_completion(
+    service: &WorkflowService,
+    assignment: &WorkflowRuntimeDispatchAssignmentRecord,
+    member_outcome: WorkflowRuntimeBranchBatchMemberExecutionOutcome,
+) -> WorkflowTaskExecutionWorkerRuntimeBranchResponderAssignmentCompletion {
+    let mut diagnostics = member_outcome
+        .diagnostics
+        .iter()
+        .cloned()
+        .map(runtime_branch_batch_execution_diagnostic)
+        .collect::<Vec<_>>();
+    let outcome = match member_outcome.state {
+        WorkflowRuntimeBranchBatchMemberExecutionOutcomeState::Completed => {
+            match complete_claimed_runtime_branch_task_event(
+                service,
+                &assignment.runtime_branch_event_id,
+                &assignment.runtime_branch_claim,
+                unix_timestamp_ms(),
+            ) {
+                Ok(_record) => match member_outcome.completed_response {
+                    Some(response) => WorkflowTaskExecutionWorkerOutcome::RuntimeBranchCompleted(
+                        WorkflowTaskExecutionWorkerRuntimeBranchCompletedOutcome {
+                            session_id: member_outcome.session_id.clone(),
+                            workflow_run_id: member_outcome.workflow_run_id.clone(),
+                            response,
+                            diagnostics,
+                        },
+                    ),
+                    None => WorkflowTaskExecutionWorkerOutcome::RuntimeBranchFailed(
+                        WorkflowTaskExecutionWorkerRuntimeBranchFailedOutcome {
+                            session_id: member_outcome.session_id.clone(),
+                            workflow_run_id: member_outcome.workflow_run_id.clone(),
+                            error_message:
+                                "runtime branch batch completed without workflow run response"
+                                    .to_string(),
+                            diagnostics: vec![WorkflowTaskExecutionWorkerDiagnostic::new(
+                                WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchDispatchUnavailable,
+                                "runtime branch batch completed without workflow run response",
+                            )],
+                        },
+                    ),
+                },
+                Err(diagnostic) => {
+                    diagnostics.push(diagnostic);
+                    WorkflowTaskExecutionWorkerOutcome::RuntimeBranchFailed(
+                        WorkflowTaskExecutionWorkerRuntimeBranchFailedOutcome {
+                            session_id: member_outcome.session_id.clone(),
+                            workflow_run_id: member_outcome.workflow_run_id.clone(),
+                            error_message:
+                                "runtime branch task event completion failed after batch"
+                                    .to_string(),
+                            diagnostics,
+                        },
+                    )
+                }
+            }
+        }
+        WorkflowRuntimeBranchBatchMemberExecutionOutcomeState::Deferred
+        | WorkflowRuntimeBranchBatchMemberExecutionOutcomeState::Retryable => {
+            let deferred_at_ms = unix_timestamp_ms();
+            match defer_claimed_runtime_branch_task_event(
+                service,
+                &assignment.runtime_branch_event_id,
+                &assignment.runtime_branch_claim,
+                deferred_at_ms,
+                deferred_at_ms
+                    .saturating_add(RUNTIME_BRANCH_DEPENDENCY_READINESS_RETRY_DELAY_MS),
+            ) {
+                Ok(_record) => WorkflowTaskExecutionWorkerOutcome::RuntimeBranchDeferred(
+                    WorkflowTaskExecutionWorkerRuntimeBranchDeferredOutcome {
+                        session_id: member_outcome.session_id.clone(),
+                        workflow_run_id: member_outcome.workflow_run_id.clone(),
+                        reason:
+                            WorkflowTaskExecutionWorkerRuntimeBranchDeferredReason::RuntimeDispatchUnavailable,
+                        deferred_task_ids: Vec::new(),
+                        diagnostics,
+                    },
+                ),
+                Err(diagnostic) => {
+                    diagnostics.push(diagnostic);
+                    WorkflowTaskExecutionWorkerOutcome::RuntimeBranchFailed(
+                        WorkflowTaskExecutionWorkerRuntimeBranchFailedOutcome {
+                            session_id: member_outcome.session_id.clone(),
+                            workflow_run_id: member_outcome.workflow_run_id.clone(),
+                            error_message:
+                                "runtime branch task event defer failed after batch".to_string(),
+                            diagnostics,
+                        },
+                    )
+                }
+            }
+        }
+        WorkflowRuntimeBranchBatchMemberExecutionOutcomeState::Cancelled
+        | WorkflowRuntimeBranchBatchMemberExecutionOutcomeState::Failed => {
+            match fail_claimed_runtime_branch_task_event(
+                service,
+                &assignment.runtime_branch_event_id,
+                &assignment.runtime_branch_claim,
+                unix_timestamp_ms(),
+            ) {
+                Ok(_record) => WorkflowTaskExecutionWorkerOutcome::RuntimeBranchFailed(
+                    WorkflowTaskExecutionWorkerRuntimeBranchFailedOutcome {
+                        session_id: member_outcome.session_id.clone(),
+                        workflow_run_id: member_outcome.workflow_run_id.clone(),
+                        error_message: "runtime branch batch member failed".to_string(),
+                        diagnostics,
+                    },
+                ),
+                Err(diagnostic) => {
+                    diagnostics.push(diagnostic);
+                    WorkflowTaskExecutionWorkerOutcome::RuntimeBranchFailed(
+                        WorkflowTaskExecutionWorkerRuntimeBranchFailedOutcome {
+                            session_id: member_outcome.session_id.clone(),
+                            workflow_run_id: member_outcome.workflow_run_id.clone(),
+                            error_message:
+                                "runtime branch task event failure persistence failed after batch"
+                                    .to_string(),
+                            diagnostics,
+                        },
+                    )
+                }
+            }
+        }
+    };
+    WorkflowTaskExecutionWorkerRuntimeBranchResponderAssignmentCompletion {
+        assignment_id: member_outcome.assignment_id,
+        session_id: member_outcome.session_id,
+        workflow_run_id: member_outcome.workflow_run_id,
+        workflow_id: member_outcome.workflow_id,
+        outcome,
+    }
+}
+
+fn runtime_branch_batch_execution_diagnostic(
+    diagnostic: WorkflowRuntimeBranchBatchExecutionDiagnostic,
+) -> WorkflowTaskExecutionWorkerDiagnostic {
+    WorkflowTaskExecutionWorkerDiagnostic::new(
+        WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchDispatchUnavailable,
+        format!(
+            "runtime branch batch execution diagnostic ({:?}): {}",
+            diagnostic.code, diagnostic.message
+        ),
+    )
+}
+
+impl WorkflowRuntimeBranchBatchResponderFanOut
+    for WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistry
+{
+    fn ensure_assignment_responders_registered(
+        &self,
+        members: &[WorkflowRuntimeBranchBatchExecutionMember],
+    ) -> Result<(), WorkflowRuntimeBranchBatchExecutionDiagnostic> {
+        let responders = self.responders.lock().map_err(|_| {
+            WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
+                WorkflowRuntimeBranchBatchExecutionDiagnosticCode::ResponderFanOutUnavailable,
+                "runtime branch responder registry lock poisoned",
+            )
+        })?;
+        for member in members {
+            let key =
+                WorkflowTaskExecutionWorkerRuntimeBranchResponderKey::runtime_dispatch_assignment(
+                    &member.assignment_id,
+                );
+            let registered = responders.get(&key).ok_or_else(|| {
+                WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
+                    WorkflowRuntimeBranchBatchExecutionDiagnosticCode::ResponderFanOutUnavailable,
+                    format!(
+                        "runtime branch responder is not registered for dispatch assignment '{}'",
+                        member.assignment_id.as_str()
+                    ),
+                )
+            })?;
+            if registered.session_id != member.session_id
+                || registered.workflow_run_id != member.workflow_run_id
+                || registered.workflow_id != member.workflow_id
+            {
+                return Err(WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
+                    WorkflowRuntimeBranchBatchExecutionDiagnosticCode::ResponderFanOutUnavailable,
+                    format!(
+                        "runtime branch responder registration for dispatch assignment '{}' changed before batch execution",
+                        member.assignment_id.as_str()
+                    ),
+                ));
+            }
+        }
+        Ok(())
     }
 }
 
@@ -1360,31 +1724,6 @@ fn defer_runtime_branch_dependency_readiness(
             )
         }
     }
-}
-
-fn runtime_branch_rehydration_diagnostic(
-    diagnostic: WorkflowRuntimeBranchRehydrationDiagnostic,
-) -> WorkflowTaskExecutionWorkerDiagnostic {
-    let code = match diagnostic.code {
-        WorkflowRuntimeBranchRehydrationDiagnosticCode::ClaimMismatch
-        | WorkflowRuntimeBranchRehydrationDiagnosticCode::ActiveRunUnavailable
-        | WorkflowRuntimeBranchRehydrationDiagnosticCode::TaskStateUnavailable
-        | WorkflowRuntimeBranchRehydrationDiagnosticCode::TaskRunSummaryInvalid
-        | WorkflowRuntimeBranchRehydrationDiagnosticCode::RuntimeTaskUnavailable
-        | WorkflowRuntimeBranchRehydrationDiagnosticCode::TaskAttemptUnavailable
-        | WorkflowRuntimeBranchRehydrationDiagnosticCode::TaskAttemptSourceContextInvalid
-        | WorkflowRuntimeBranchRehydrationDiagnosticCode::DispatchAssignmentUnavailable
-        | WorkflowRuntimeBranchRehydrationDiagnosticCode::CorrelationMismatch => {
-            WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchRehydrationFailed
-        }
-    };
-    WorkflowTaskExecutionWorkerDiagnostic::new(
-        code,
-        format!(
-            "runtime branch rehydration diagnostic ({:?}): {}",
-            diagnostic.code, diagnostic.message
-        ),
-    )
 }
 
 fn claim_runtime_branch_task_event_for_worker(
@@ -1732,15 +2071,39 @@ mod tests {
     use crate::workflow::runtime_branch_task_event::{
         WorkflowRuntimeBranchTaskEventRequest, WorkflowRuntimeBranchTaskEventState,
     };
+    use crate::workflow::runtime_dispatch_selection::{
+        ValidatedWorkflowRuntimeDispatchCandidateFactBundle, WorkflowRuntimeDispatchCandidateFact,
+        WorkflowRuntimeDispatchCandidateFactBundle, WorkflowRuntimeDispatchCandidateProvider,
+        WorkflowRuntimeDispatchCandidateProviderError, WorkflowRuntimeDispatchCandidateSet,
+        WorkflowRuntimeDispatchLoadState,
+        WORKFLOW_RUNTIME_DISPATCH_CANDIDATE_FACT_BUNDLE_CONTRACT_VERSION,
+    };
     use crate::workflow::{
-        WorkflowExecutionSessionRunRequest, WorkflowPortBinding, WorkflowRunHandle,
-        WorkflowRunOptions, WorkflowSchedulerTask, WorkflowSchedulerTaskExecutionClass,
-        WorkflowSchedulerTaskGraph, WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION,
+        WorkflowExecutionSessionRunRequest, WorkflowIoNode, WorkflowIoPort, WorkflowIoResponse,
+        WorkflowPortBinding, WorkflowRunHandle, WorkflowRunOptions, WorkflowSchedulerTask,
+        WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskGraph,
+        WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION,
+    };
+    use pantograph_dependency_planning::{
+        DependencyReadinessProofEnvelope, DependencyReadinessProofId,
+        DependencyReadinessWorkflowRunId,
+    };
+    use pantograph_runtime_host_contracts::{
+        RuntimeHostBatchExecutionMemberResponse, RuntimeHostBatchExecutionMemberState,
+        RuntimeHostBatchExecutionPort, RuntimeHostBatchExecutionRequest,
+        RuntimeHostBatchExecutionResponse, RuntimeHostBatchExecutionState,
+        RuntimeHostBatchMemberReservationDisposition, RuntimeHostBatchMemberRetryDisposition,
+        RuntimeHostExecutionCancellationHandle, RuntimeHostExecutionOutput,
+        RuntimeHostExecutionOutputValue, RuntimeHostExecutionPortError,
+        RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
     };
     use pantograph_scheduler::{
-        SchedulerNodeId, SchedulerTaskId, SchedulerTaskState, SchedulerTaskStateRecord,
-        SchedulerTaskStateTransitionId, SchedulerWorkflowId, SchedulerWorkflowRunId,
-        SCHEDULER_TASK_STATE_CONTRACT_VERSION,
+        SchedulableTaskIntent, SchedulerDispatchCandidateId, SchedulerNodeId,
+        SchedulerReservationLeaseId, SchedulerResourceFitAssessment, SchedulerResourceFitState,
+        SchedulerResourceKind, SchedulerResourceReservation, SchedulerRuntimeHandoff,
+        SchedulerTaskExecutionIntent, SchedulerTaskId, SchedulerTaskState,
+        SchedulerTaskStateRecord, SchedulerTaskStateTransitionId, SchedulerWorkflowId,
+        SchedulerWorkflowRunId, SCHEDULER_TASK_STATE_CONTRACT_VERSION,
     };
     use std::time::Duration;
 
@@ -1748,6 +2111,29 @@ mod tests {
 
     #[async_trait::async_trait]
     impl WorkflowHost for WorkerHost {
+        async fn workflow_io(
+            &self,
+            _workflow_id: &str,
+        ) -> Result<WorkflowIoResponse, WorkflowServiceError> {
+            Ok(WorkflowIoResponse {
+                inputs: Vec::new(),
+                outputs: vec![WorkflowIoNode {
+                    node_id: "node.llm_inference".to_string(),
+                    node_type: "llm-inference".to_string(),
+                    name: Some("Image".to_string()),
+                    description: None,
+                    ports: vec![WorkflowIoPort {
+                        port_id: "image".to_string(),
+                        name: Some("Image".to_string()),
+                        description: None,
+                        data_type: Some("string".to_string()),
+                        required: Some(true),
+                        multiple: Some(false),
+                    }],
+                }],
+            })
+        }
+
         async fn run_workflow(
             &self,
             _workflow_id: &str,
@@ -1995,6 +2381,123 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn task_execution_worker_batches_runtime_branch_peers_and_fans_out_responses() {
+        let batch_port = Arc::new(RecordingWorkerBatchExecutionPort::default());
+        let service = Arc::new(
+            WorkflowService::new()
+                .with_runtime_dispatch_candidate_provider(Arc::new(
+                    SingleCanonicalRuntimeDispatchCandidateProvider,
+                ))
+                .with_runtime_host_batch_execution_port(batch_port.clone()),
+        );
+        let first_session_id =
+            prepare_ready_runtime_branch_run(service.as_ref(), "run.2026-05-22.101");
+        let second_session_id =
+            prepare_ready_runtime_branch_run(service.as_ref(), "run.2026-05-22.102");
+        let first_event_id = enqueue_ready_runtime_branch_event(
+            service.as_ref(),
+            &first_session_id,
+            "run.2026-05-22.101",
+        );
+        let second_event_id = enqueue_ready_runtime_branch_event(
+            service.as_ref(),
+            &second_session_id,
+            "run.2026-05-22.102",
+        );
+        let environment = WorkflowTaskExecutionWorkerRuntimeBranchEnvironment::new(
+            Arc::clone(&service),
+            test_host(),
+        );
+        let registry = WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistry::new();
+        let first_command =
+            runtime_branch_command_for_session_run(&first_session_id, "run.2026-05-22.101");
+        let second_command =
+            runtime_branch_command_for_session_run(&second_session_id, "run.2026-05-22.102");
+        let (first_responder, mut first_completion_rx) =
+            WorkflowTaskExecutionWorkerRuntimeBranchCompletionResponder::channel();
+        let (second_responder, mut second_completion_rx) =
+            WorkflowTaskExecutionWorkerRuntimeBranchCompletionResponder::channel();
+        let mut first_registration = registry
+            .register_workflow_run(&first_command, first_responder)
+            .expect("register first responder");
+        let mut second_registration = registry
+            .register_workflow_run(&second_command, second_responder)
+            .expect("register second responder");
+
+        let first_result = claim_and_execute_runtime_branch_event(
+            &environment,
+            &first_command,
+            &registry,
+            &mut first_registration,
+        )
+        .await;
+
+        assert!(matches!(
+            first_result,
+            WorkflowTaskExecutionWorkerRuntimeBranchExecutionResult::ResponderRetainedForBatch
+        ));
+        assert!(
+            tokio::time::timeout(Duration::from_millis(25), &mut first_completion_rx)
+                .await
+                .is_err(),
+            "first branch responder must wait for a compatible batch peer"
+        );
+        assert!(
+            batch_port.requests().is_empty(),
+            "waiting for peers must not dispatch a one-member runtime-host batch"
+        );
+        assert_eq!(
+            runtime_branch_event_state(service.as_ref(), &first_event_id),
+            WorkflowRuntimeBranchTaskEventState::Running
+        );
+
+        let second_result = claim_and_execute_runtime_branch_event(
+            &environment,
+            &second_command,
+            &registry,
+            &mut second_registration,
+        )
+        .await;
+
+        assert!(matches!(
+            second_result,
+            WorkflowTaskExecutionWorkerRuntimeBranchExecutionResult::ResponderRetainedForBatch
+        ));
+        let first_outcome = tokio::time::timeout(Duration::from_secs(1), &mut first_completion_rx)
+            .await
+            .expect("first branch completion should be fanned out")
+            .expect("first branch completion responder");
+        let second_outcome =
+            tokio::time::timeout(Duration::from_secs(1), &mut second_completion_rx)
+                .await
+                .expect("second branch completion should be fanned out")
+                .expect("second branch completion responder");
+
+        assert_runtime_branch_completed_response(
+            first_outcome,
+            "run.2026-05-22.101",
+            "image for run.2026-05-22.101",
+        );
+        assert_runtime_branch_completed_response(
+            second_outcome,
+            "run.2026-05-22.102",
+            "image for run.2026-05-22.102",
+        );
+        let requests = batch_port.requests();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0].members.len(), 2);
+        assert_eq!(
+            runtime_branch_event_state(service.as_ref(), &first_event_id),
+            WorkflowRuntimeBranchTaskEventState::Completed
+        );
+        assert_eq!(
+            runtime_branch_event_state(service.as_ref(), &second_event_id),
+            WorkflowRuntimeBranchTaskEventState::Completed
+        );
+        assert_eq!(registry.active_responder_count(), 0);
+    }
+
+    #[tokio::test]
     async fn task_execution_worker_executes_runtime_branch_and_fails_invalid_dispatch_state_before_running(
     ) {
         let scheduler_lifecycle = scheduler_lifecycle();
@@ -2169,6 +2672,407 @@ mod tests {
             130 + RUNTIME_BRANCH_DEPENDENCY_READINESS_RETRY_DELAY_MS
         );
         assert!(deferred.claim.is_none());
+    }
+
+    const WORKER_BATCH_WORKFLOW_ID: &str = "workflow.image_generation";
+    const WORKER_BATCH_NODE_ID: &str = "node.llm_inference";
+    const WORKER_BATCH_TASK_ID: &str = "task.image_generation.001";
+
+    #[derive(Default)]
+    struct RecordingWorkerBatchExecutionPort {
+        requests: Mutex<Vec<RuntimeHostBatchExecutionRequest>>,
+    }
+
+    impl RecordingWorkerBatchExecutionPort {
+        fn requests(&self) -> Vec<RuntimeHostBatchExecutionRequest> {
+            self.requests
+                .lock()
+                .expect("runtime host batch requests")
+                .clone()
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl RuntimeHostBatchExecutionPort for RecordingWorkerBatchExecutionPort {
+        async fn execute_runtime_host_batch_request(
+            &self,
+            request: RuntimeHostBatchExecutionRequest,
+            _cancellation: RuntimeHostExecutionCancellationHandle,
+        ) -> Result<RuntimeHostBatchExecutionResponse, RuntimeHostExecutionPortError> {
+            self.requests
+                .lock()
+                .expect("runtime host batch requests")
+                .push(request.clone());
+            Ok(runtime_host_batch_response_from_request(&request))
+        }
+    }
+
+    struct SingleCanonicalRuntimeDispatchCandidateProvider;
+
+    impl WorkflowRuntimeDispatchCandidateProvider for SingleCanonicalRuntimeDispatchCandidateProvider {
+        fn runtime_dispatch_candidates(
+            &self,
+            task: &WorkflowSchedulerTask,
+            _ready_record: &SchedulerTaskStateRecord,
+            readiness_proof: &DependencyReadinessProofEnvelope,
+        ) -> Result<
+            WorkflowRuntimeDispatchCandidateSet,
+            WorkflowRuntimeDispatchCandidateProviderError,
+        > {
+            let intent = task.schedulable_intent.as_ref().ok_or_else(|| {
+                worker_candidate_provider_error(
+                    "worker batch test runtime task is missing a schedulable intent",
+                )
+            })?;
+            let selected_runtime_id =
+                intent
+                    .constraints
+                    .requested_runtime_id
+                    .clone()
+                    .ok_or_else(|| {
+                        worker_candidate_provider_error(
+                            "worker batch test runtime task is missing a requested runtime id",
+                        )
+                    })?;
+            let selected_device_id =
+                intent
+                    .constraints
+                    .requested_device_id
+                    .clone()
+                    .ok_or_else(|| {
+                        worker_candidate_provider_error(
+                            "worker batch test runtime task is missing a requested device id",
+                        )
+                    })?;
+            let environment_ref = readiness_proof
+                .preflight_result
+                .environment_ref
+                .clone()
+                .ok_or_else(|| {
+                    worker_candidate_provider_error(
+                        "worker batch test readiness proof is missing an environment reference",
+                    )
+                })?;
+            let reservation = SchedulerResourceReservation {
+                reservation_lease_id: SchedulerReservationLeaseId::parse(format!(
+                    "reservation.{}",
+                    intent.workflow_run_id.as_str()
+                ))
+                .map_err(|error| worker_candidate_provider_error(error.to_string()))?,
+                workflow_run_id: intent.workflow_run_id.clone(),
+                task_id: intent.task_id.clone(),
+                device_id: selected_device_id.clone(),
+                resource_kind: SchedulerResourceKind::DeviceVram,
+                reserved_bytes: 8_589_934_592,
+            };
+            let fact = WorkflowRuntimeDispatchCandidateFact {
+                candidate_id: SchedulerDispatchCandidateId::parse("candidate.runtime_worker_test")
+                    .map_err(|error| worker_candidate_provider_error(error.to_string()))?,
+                selected_runtime_id,
+                selected_runtime_variant_id: None,
+                selected_backend_key: "test-runtime".to_string(),
+                runtime_family: "test-runtime".to_string(),
+                resolved_load_target: format!("test:{}", intent.model_ref.model_id),
+                runtime_residency_key: format!("test-runtime:{}", intent.model_ref.model_id),
+                loaded_runtime_memory_estimate_bytes: 8_589_934_592,
+                runtime_load_state: WorkflowRuntimeDispatchLoadState::Loaded,
+                runtime_instance_id: Some("runtime.worker-batch-test.001".to_string()),
+                selected_device_ids: vec![selected_device_id],
+                selected_model_ref: intent.model_ref.clone(),
+                runtime_trait_settings: Vec::new(),
+                environment_ref,
+                reservations: vec![reservation],
+                resource_fit_assessment: SchedulerResourceFitAssessment {
+                    workflow_run_id: intent.workflow_run_id.clone(),
+                    task_id: intent.task_id.clone(),
+                    state: SchedulerResourceFitState::Fits,
+                    diagnostics: Vec::new(),
+                },
+                batching_group_id: None,
+            };
+            let bundle = ValidatedWorkflowRuntimeDispatchCandidateFactBundle::try_from(
+                WorkflowRuntimeDispatchCandidateFactBundle {
+                    contract_version:
+                        WORKFLOW_RUNTIME_DISPATCH_CANDIDATE_FACT_BUNDLE_CONTRACT_VERSION,
+                    facts: vec![fact],
+                    diagnostics: Vec::new(),
+                },
+            )
+            .map_err(|error| worker_candidate_provider_error(error.to_string()))?;
+            Ok(WorkflowRuntimeDispatchCandidateSet::from_candidate_fact_bundle(bundle))
+        }
+    }
+
+    fn worker_candidate_provider_error(
+        message: impl Into<String>,
+    ) -> WorkflowRuntimeDispatchCandidateProviderError {
+        WorkflowRuntimeDispatchCandidateProviderError::Failed {
+            message: message.into(),
+        }
+    }
+
+    fn runtime_host_batch_response_from_request(
+        request: &RuntimeHostBatchExecutionRequest,
+    ) -> RuntimeHostBatchExecutionResponse {
+        RuntimeHostBatchExecutionResponse {
+            contract_version: RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
+            batch_execution_request_id: request.batch_execution_request_id.clone(),
+            state: RuntimeHostBatchExecutionState::Completed,
+            diagnostics: Vec::new(),
+            members: request
+                .members
+                .iter()
+                .map(|member| RuntimeHostBatchExecutionMemberResponse {
+                    execution_request_id: member.execution_request_id.clone(),
+                    assignment_id: member.assignment_id.clone(),
+                    workflow_id: member.handoff.workflow_id.clone(),
+                    workflow_run_id: member.handoff.workflow_run_id.clone(),
+                    node_id: member.handoff.node_id.clone(),
+                    task_id: member.handoff.task_id.clone(),
+                    state: RuntimeHostBatchExecutionMemberState::Completed,
+                    retry_disposition: RuntimeHostBatchMemberRetryDisposition::NotRetryable,
+                    reservation_disposition:
+                        RuntimeHostBatchMemberReservationDisposition::RetainedForRuntimeReuse,
+                    outputs: vec![RuntimeHostExecutionOutput {
+                        port_id: "image".to_string(),
+                        value: RuntimeHostExecutionOutputValue::String(format!(
+                            "image for {}",
+                            member.handoff.workflow_run_id
+                        )),
+                    }],
+                    diagnostics: Vec::new(),
+                    terminal_metadata: None,
+                })
+                .collect(),
+        }
+    }
+
+    fn prepare_ready_runtime_branch_run(
+        service: &WorkflowService,
+        workflow_run_id: &str,
+    ) -> String {
+        let mut store = service.session_store_guard().expect("session store");
+        let session_id = store
+            .create_session(
+                WORKER_BATCH_WORKFLOW_ID.to_string(),
+                None,
+                None,
+                vec!["pytorch".to_string()],
+                vec!["stable-diffusion-xl".to_string()],
+                true,
+            )
+            .expect("create session");
+        let run_request = run_request_for_ready_runtime_branch(&session_id);
+        let queued_run_id = store
+            .enqueue_run_with_id(&session_id, &run_request, workflow_run_id.to_string())
+            .expect("enqueue run");
+        store
+            .begin_queued_run(&session_id, &queued_run_id)
+            .expect("begin queued run")
+            .expect("dequeued run");
+        store
+            .set_active_run_scheduler_task_state(
+                &session_id,
+                workflow_run_id,
+                ready_runtime_task_graph(workflow_run_id),
+                vec![ready_runtime_task_record(workflow_run_id)],
+            )
+            .expect("set runtime task state");
+        store
+            .record_active_run_runtime_dispatch_readiness_proof(
+                &session_id,
+                workflow_run_id,
+                WORKER_BATCH_TASK_ID,
+                readiness_proof_for_run(workflow_run_id),
+            )
+            .expect("record readiness proof");
+        session_id
+    }
+
+    fn run_request_for_ready_runtime_branch(
+        session_id: &str,
+    ) -> WorkflowExecutionSessionRunRequest {
+        WorkflowExecutionSessionRunRequest {
+            session_id: session_id.to_string(),
+            workflow_semantic_version: "0.1.0".to_string(),
+            inputs: Vec::new(),
+            output_targets: Some(vec![WorkflowOutputTarget {
+                node_id: WORKER_BATCH_NODE_ID.to_string(),
+                port_id: "image".to_string(),
+            }]),
+            override_selection: None,
+            timeout_ms: Some(500),
+            priority: None,
+        }
+    }
+
+    fn ready_runtime_task_graph(workflow_run_id: &str) -> WorkflowSchedulerTaskGraph {
+        WorkflowSchedulerTaskGraph {
+            schema_version: WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION,
+            workflow_id: SchedulerWorkflowId::parse(WORKER_BATCH_WORKFLOW_ID).expect("workflow id"),
+            workflow_run_id: SchedulerWorkflowRunId::parse(workflow_run_id)
+                .expect("workflow run id"),
+            tasks: vec![WorkflowSchedulerTask {
+                workflow_id: SchedulerWorkflowId::parse(WORKER_BATCH_WORKFLOW_ID)
+                    .expect("workflow id"),
+                workflow_run_id: SchedulerWorkflowRunId::parse(workflow_run_id)
+                    .expect("workflow run id"),
+                node_id: SchedulerNodeId::parse(WORKER_BATCH_NODE_ID).expect("node id"),
+                task_id: SchedulerTaskId::parse(WORKER_BATCH_TASK_ID).expect("task id"),
+                node_type: "llm-inference".to_string(),
+                execution_class: WorkflowSchedulerTaskExecutionClass::RuntimeInference,
+                dependency_task_ids: Vec::new(),
+                input_bindings: Vec::new(),
+                schedulable_intent: Some(task_intent_for_run(workflow_run_id)),
+                schedulable_intent_template: None,
+                non_runtime_task_template: None,
+                source_input_task_template: None,
+                inference_descriptor_fingerprint: None,
+                runtime_source_context: Some(runtime_source_context()),
+                diagnostics: Vec::new(),
+            }],
+        }
+    }
+
+    fn ready_runtime_task_record(workflow_run_id: &str) -> SchedulerTaskStateRecord {
+        SchedulerTaskStateRecord {
+            contract_version: SCHEDULER_TASK_STATE_CONTRACT_VERSION,
+            workflow_id: SchedulerWorkflowId::parse(WORKER_BATCH_WORKFLOW_ID).expect("workflow id"),
+            workflow_run_id: SchedulerWorkflowRunId::parse(workflow_run_id)
+                .expect("workflow run id"),
+            node_id: SchedulerNodeId::parse(WORKER_BATCH_NODE_ID).expect("node id"),
+            task_id: SchedulerTaskId::parse(WORKER_BATCH_TASK_ID).expect("task id"),
+            state: SchedulerTaskState::Ready {
+                execution_intent: SchedulerTaskExecutionIntent::Runtime {
+                    task_intent: task_intent_for_run(workflow_run_id),
+                },
+            },
+            state_version: 1,
+            last_transition_id: SchedulerTaskStateTransitionId::parse(format!(
+                "transition.ready.{workflow_run_id}"
+            ))
+            .expect("transition id"),
+        }
+    }
+
+    fn task_intent_for_run(workflow_run_id: &str) -> SchedulableTaskIntent {
+        let mut intent = runtime_handoff_fixture().task_intent;
+        intent.workflow_id =
+            SchedulerWorkflowId::parse(WORKER_BATCH_WORKFLOW_ID).expect("workflow id");
+        intent.workflow_run_id =
+            SchedulerWorkflowRunId::parse(workflow_run_id).expect("workflow run id");
+        intent.node_id = SchedulerNodeId::parse(WORKER_BATCH_NODE_ID).expect("node id");
+        intent.task_id = SchedulerTaskId::parse(WORKER_BATCH_TASK_ID).expect("task id");
+        intent
+    }
+
+    fn readiness_proof_for_run(workflow_run_id: &str) -> DependencyReadinessProofEnvelope {
+        let mut proof = runtime_handoff_fixture().readiness_proof;
+        proof.execution_context.workflow_run_id =
+            DependencyReadinessWorkflowRunId::parse(workflow_run_id)
+                .expect("readiness workflow run id");
+        proof.readiness_proof_id =
+            DependencyReadinessProofId::parse(format!("readiness-proof.{workflow_run_id}"))
+                .expect("readiness proof id");
+        proof.validate().expect("readiness proof");
+        proof
+    }
+
+    fn runtime_handoff_fixture() -> SchedulerRuntimeHandoff {
+        serde_json::from_str(include_str!(
+            "../../../pantograph-scheduler/tests/fixtures/runtime_handoff_readiness_admitted.json"
+        ))
+        .expect("runtime handoff")
+    }
+
+    fn enqueue_ready_runtime_branch_event(
+        service: &WorkflowService,
+        session_id: &str,
+        workflow_run_id: &str,
+    ) -> WorkflowRuntimeBranchTaskEventId {
+        let event_id = WorkflowRuntimeBranchTaskEventId::parse(format!(
+            "runtime-branch-task-event.{workflow_run_id}.image-task"
+        ))
+        .expect("event id");
+        let record =
+            WorkflowRuntimeBranchTaskEventRecord::ready(WorkflowRuntimeBranchTaskEventRequest {
+                event_id: event_id.clone(),
+                session_id: session_id.to_string(),
+                workflow_id: WORKER_BATCH_WORKFLOW_ID.to_string(),
+                workflow_run_id: workflow_run_id.to_string(),
+                scheduler_task_id: WORKER_BATCH_TASK_ID.to_string(),
+                scheduler_task_attempt_id: None,
+                attempt_generation: 1,
+                queued_input_keys: Vec::new(),
+                output_targets: Some(vec![WorkflowOutputTarget {
+                    node_id: WORKER_BATCH_NODE_ID.to_string(),
+                    port_id: "image".to_string(),
+                }]),
+                timeout_ms: Some(500),
+                batching_key: Some(format!(
+                    "runtime-branch-task.{WORKER_BATCH_WORKFLOW_ID}.{WORKER_BATCH_TASK_ID}"
+                )),
+                runtime_source_context: runtime_source_context(),
+                batch_eligibility: None,
+                ready_at_ms: unix_timestamp_ms().saturating_sub(1),
+            })
+            .expect("runtime branch task event record");
+        service
+            .runtime_branch_task_event_repository
+            .lock()
+            .expect("runtime branch task event repository")
+            .enqueue(record)
+            .expect("enqueue runtime branch task event");
+        event_id
+    }
+
+    fn runtime_branch_command_for_session_run(
+        session_id: &str,
+        workflow_run_id: &str,
+    ) -> WorkflowTaskExecutionWorkerRuntimeBranchCommand {
+        WorkflowTaskExecutionWorkerRuntimeBranchCommand {
+            session_id: session_id.to_string(),
+            workflow_run_id: workflow_run_id.to_string(),
+            workflow_id: WORKER_BATCH_WORKFLOW_ID.to_string(),
+            output_targets: Some(vec![WorkflowOutputTarget {
+                node_id: WORKER_BATCH_NODE_ID.to_string(),
+                port_id: "image".to_string(),
+            }]),
+            timeout_ms: Some(500),
+            start_reason: WorkflowTaskExecutionWorkerRuntimeBranchStartReason::Started,
+        }
+    }
+
+    fn runtime_branch_event_state(
+        service: &WorkflowService,
+        event_id: &WorkflowRuntimeBranchTaskEventId,
+    ) -> WorkflowRuntimeBranchTaskEventState {
+        service
+            .runtime_branch_task_event_repository
+            .lock()
+            .expect("runtime branch task event repository")
+            .get(event_id)
+            .expect("runtime branch task event")
+            .state
+    }
+
+    fn assert_runtime_branch_completed_response(
+        outcome: WorkflowTaskExecutionWorkerOutcome,
+        workflow_run_id: &str,
+        image: &str,
+    ) {
+        let WorkflowTaskExecutionWorkerOutcome::RuntimeBranchCompleted(outcome) = outcome else {
+            panic!("expected runtime branch completed outcome");
+        };
+        assert_eq!(outcome.workflow_run_id, workflow_run_id);
+        assert_eq!(outcome.response.workflow_run_id, workflow_run_id);
+        let output = outcome
+            .response
+            .outputs
+            .iter()
+            .find(|output| output.node_id == WORKER_BATCH_NODE_ID && output.port_id == "image")
+            .expect("image output");
+        assert_eq!(output.value.as_str(), Some(image));
     }
 
     fn prepare_active_runtime_run(service: &WorkflowService) -> String {

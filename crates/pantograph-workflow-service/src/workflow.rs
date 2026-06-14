@@ -49,7 +49,6 @@ mod non_runtime_task_adapter;
 mod preflight_api;
 #[allow(dead_code)]
 mod runtime_branch_batch_execution;
-mod runtime_branch_rehydration;
 mod runtime_branch_run_finalization;
 #[allow(dead_code)]
 mod runtime_branch_task_event;

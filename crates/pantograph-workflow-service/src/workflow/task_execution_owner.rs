@@ -1,12 +1,8 @@
 use std::time::Duration;
 
-use crate::scheduler::task_orchestrator::{
-    SelectedRuntimeTaskDispatch, StartedRuntimeTaskExecution,
-};
 use crate::scheduler::WorkflowExecutionSessionDequeuedRun;
-use pantograph_runtime_attribution::{WorkflowRunId, WorkflowRunSnapshotRecord};
+use pantograph_runtime_attribution::WorkflowRunSnapshotRecord;
 
-use super::runtime_branch_rehydration::WorkflowRuntimeBranchRehydratedContext;
 use super::session_scheduler_runner::WorkflowSchedulerSessionRunner;
 use super::workflow_run_finalization::{
     finalize_admitted_workflow_run, WorkflowRunFinalizationRequest,
@@ -92,99 +88,6 @@ impl WorkflowTaskExecutionOwner {
             },
         )?;
         debug_assert!(!finalization.unload_runtime);
-        finalization.run_result
-    }
-
-    pub(super) async fn run_rehydrated_started_runtime_branch_to_completion<
-        H: WorkflowHost + ?Sized,
-    >(
-        service: &WorkflowService,
-        host: &H,
-        command: &super::task_execution_worker::WorkflowTaskExecutionWorkerRuntimeBranchCommand,
-        rehydrated: &WorkflowRuntimeBranchRehydratedContext,
-        started_runtime_task: &StartedRuntimeTaskExecution,
-        selected_dispatch: &SelectedRuntimeTaskDispatch,
-    ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
-        debug_assert!(rehydrated
-            .task_graph
-            .tasks
-            .iter()
-            .any(|task| task.task_id.as_str() == rehydrated.runtime_task_id));
-        debug_assert!(rehydrated
-            .task_records
-            .iter()
-            .any(|record| record.task_id.as_str() == rehydrated.runtime_task_id));
-        debug_assert_eq!(
-            rehydrated.task_attempt_source_context.workflow_id,
-            command.workflow_id
-        );
-        debug_assert_eq!(
-            rehydrated.task_attempt_source_context.workflow_run_id,
-            command.workflow_run_id
-        );
-        debug_assert_eq!(
-            rehydrated.task_attempt_source_context.scheduler_task_id,
-            rehydrated.runtime_task_id
-        );
-        debug_assert_eq!(
-            started_runtime_task.attempt_id().as_str(),
-            rehydrated.scheduler_task_attempt_id.as_str()
-        );
-        debug_assert_eq!(
-            started_runtime_task.started_at_ms(),
-            rehydrated.scheduler_task_attempt_started_at_ms
-        );
-        let workflow_run_id = WorkflowRunId::try_from(command.workflow_run_id.clone())?;
-        let run_snapshot =
-            service.workflow_run_snapshot_for_execution_resume_if_configured(&workflow_run_id)?;
-        service.record_active_run_started_event_if_configured(
-            &rehydrated.session,
-            run_snapshot.as_ref(),
-            &command.workflow_run_id,
-            &rehydrated.active_run,
-        )?;
-        let run_started_at = std::time::Instant::now();
-        let runner = WorkflowSchedulerSessionRunner::new(service);
-        let run_future = runner.run_started_runtime_dispatch_task_to_completion(
-            host,
-            &command.session_id,
-            &command.workflow_run_id,
-            &command.workflow_id,
-            command.output_targets.as_deref(),
-            &rehydrated.task_run_summary,
-            run_started_at,
-            started_runtime_task,
-            selected_dispatch,
-        );
-        let run_result = if let Some(timeout_ms) = command.timeout_ms {
-            match tokio::time::timeout(Duration::from_millis(timeout_ms), run_future).await {
-                Ok(result) => result,
-                Err(_) => Err(WorkflowServiceError::RuntimeTimeout(format!(
-                    "workflow run exceeded timeout_ms {}",
-                    timeout_ms
-                ))),
-            }
-        } else {
-            run_future.await
-        };
-        if run_result
-            .as_ref()
-            .is_err_and(WorkflowServiceError::is_runtime_dependency_readiness_pending)
-        {
-            return run_result;
-        }
-        let finalization = finalize_admitted_workflow_run(
-            service,
-            WorkflowRunFinalizationRequest {
-                session: &rehydrated.session,
-                run_snapshot: run_snapshot.as_ref(),
-                session_id: &command.session_id,
-                workflow_run_id: &command.workflow_run_id,
-                workflow_semantic_version: &rehydrated.active_run.workflow_semantic_version,
-                io_artifact_inputs: Some(&rehydrated.active_run.inputs),
-                run_result,
-            },
-        )?;
         finalization.run_result
     }
 

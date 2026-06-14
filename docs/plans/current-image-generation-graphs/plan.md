@@ -8067,6 +8067,62 @@ assignment running, keeping `WaitingForPeers` non-terminal, executing ready
 broker claims through `execute_claimed_batch`, and fanning out completed member
 responses through assignment responders without single-run fallback.
 
+2026-06-14 runtime-branch worker batch broker wiring slice completed.
+Smallest useful vertical slice: after a runtime-branch worker creates and marks
+a dispatch assignment running, evaluate scheduler-owned batch broker readiness;
+retain the assignment responder for `WaitingForPeers`; claim ready broker
+groups through the durable assignment repository; execute the claimed group via
+`WorkflowRuntimeBranchBatchExecutionOwner::execute_claimed_batch`; persist each
+runtime-branch task event terminal/deferred state; and fan out completed,
+failed, retryable, deferred, or cancelled outcomes through assignment-keyed
+responders. Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/task_execution_worker.rs`,
+`crates/pantograph-workflow-service/src/workflow/runtime_branch_batch_execution.rs`,
+`crates/pantograph-workflow-service/src/workflow/task_execution_owner.rs`,
+`crates/pantograph-workflow-service/src/workflow/session_scheduler_runner.rs`,
+`crates/pantograph-workflow-service/src/workflow.rs`, removed obsolete
+`crates/pantograph-workflow-service/src/workflow/runtime_branch_rehydration.rs`,
+and this plan.
+
+No-fallback/no-legacy confirmation: the worker no longer calls the old direct
+single-branch rehydrated execution helper after assignment running, the
+composition-root/session runner no longer exposes that direct helper, and the
+now-unused backend rehydration bridge module was removed instead of kept as
+dead fallback-shaped code. `WaitingForPeers` does not dispatch a one-member
+runtime-host batch and does not complete a responder. Successful grouped
+execution uses only broker-owned durable batch claims, canonical runtime-host
+batch execution, canonical run finalization responses, and assignment-keyed
+responder fan-out. Batch failure fan-out now guarantees every claimed
+assignment receives a failed outcome even if the batch owner returns a partial
+failure list.
+
+Verification passed:
+`cargo fmt -p pantograph-workflow-service`,
+`cargo test -p pantograph-workflow-service task_execution_worker --lib`,
+`cargo test -p pantograph-workflow-service runtime_branch_batch_execution --lib`,
+`cargo test -p pantograph-workflow-service runtime_dispatch_assignment --lib`,
+`cargo check -p pantograph-workflow-service`,
+`cargo fmt -p pantograph-workflow-service -- --check`, and
+`git diff --check`.
+
+Focused test update: added a worker-level vertical acceptance test proving the
+first compatible runtime branch remains running and uncompleted while waiting
+for a peer, a second compatible branch triggers exactly one two-member
+runtime-host batch, both responders receive their own finalized
+`WorkflowRunResponse`, both durable runtime-branch task events complete, and
+the responder registry drains to zero. Existing broker and batch-owner suites
+continue to cover non-mutating readiness, durable claim ownership, batch
+execution, finalization, and fail-closed assignment validation.
+
+Discovered issues and follow-ups: `cargo check` still reports two pre-existing
+dead-code warnings for `WorkflowExecutionSessionActiveRunContext.enqueued_at_ms`
+and `scheduler_decision_reason`, plus
+`WorkflowService::record_active_run_started_event_if_configured`; these remain
+outside this slice because they are not introduced by the broker wiring. The
+next plan work should continue the task-attempt lifecycle cleanup by removing
+or reusing those stale active-run diagnostic surfaces without restoring
+request-scoped runtime execution.
+
 ## Standards Rule
 
 The standards constraints in
