@@ -28,7 +28,9 @@ use crate::scheduler::{
 };
 
 use super::runtime_branch_run_finalization::{
-    completed_scheduler_run_response, scheduler_task_attempt_terminal_diagnostic_event,
+    completed_scheduler_run_response, finalize_started_runtime_task_dispatch,
+    scheduler_task_attempt_terminal_diagnostic_event,
+    WorkflowRuntimeTaskDispatchFinalizationOutcome,
     WorkflowSchedulerTaskAttemptDiagnosticAttribution,
     WorkflowSchedulerTaskAttemptTerminalDiagnosticRequest,
 };
@@ -36,7 +38,6 @@ use super::{
     WorkflowHost, WorkflowOutputTarget, WorkflowPortBinding, WorkflowRunResponse,
     WorkflowRuntimeDispatchPreselectionError, WorkflowRuntimeDispatchSelectionBoundary,
     WorkflowSchedulerTask, WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskGraph,
-    WorkflowSchedulerTaskResult, WorkflowSchedulerTaskResultStatus,
     WorkflowSchedulerTaskRunSummary, WorkflowService, WorkflowServiceError,
 };
 
@@ -941,143 +942,25 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                 })?
                 .join()
                 .await;
-            match dispatch_result {
-                Ok(result) => {
-                    let terminal_mutation = {
-                        let mut store = self.service.session_store_guard()?;
-                        self.service
-                            .scheduler_task_orchestrator
-                            .complete_started_runtime_task_terminal_mutation(
-                                &mut store,
-                                session_id,
-                                workflow_run_id,
-                                &started_runtime_task,
-                                result.clone(),
-                            )
-                            .map_err(|error| {
-                                WorkflowServiceError::InvalidRequest(format!(
-                                    "scheduler runtime task completion failed: {error}"
-                                ))
-                            })?
-                    };
-                    let (transition, reason, error_summary) =
-                        scheduler_task_attempt_terminal_transition_from_result(&result);
-                    self.record_scheduler_task_attempt_terminal(
-                        session_id,
-                        started_runtime_task.task(),
-                        started_runtime_task.attempt_id().as_str(),
-                        started_runtime_task.started_at_ms(),
-                        transition,
-                        reason,
-                        error_summary,
-                        Some(&selected_dispatch),
-                        Some(&terminal_mutation),
-                    )?;
-                    self.service
-                        .scheduler_task_orchestrator
-                        .apply_runtime_task_result_reservation_lifecycle(
-                            &started_runtime_task.task,
-                            &terminal_mutation,
-                            &result,
-                        )
-                        .await
-                        .map_err(|error| {
-                            WorkflowServiceError::InvalidRequest(format!(
-                                "scheduler runtime task reservation release failed: {error}"
-                            ))
-                        })?;
+            match finalize_started_runtime_task_dispatch(
+                self.service,
+                session_id,
+                workflow_run_id,
+                &started_runtime_task,
+                &selected_dispatch,
+                dispatch_result,
+            )
+            .await?
+            {
+                WorkflowRuntimeTaskDispatchFinalizationOutcome::Completed => {}
+                WorkflowRuntimeTaskDispatchFinalizationOutcome::Cancelled { message } => {
+                    return Err(WorkflowServiceError::Cancelled(message));
                 }
-                Err(error) => {
-                    if let crate::scheduler::WorkflowSchedulerTaskOrchestratorError::RuntimeTaskSupervisorCancelled { message } = &error {
-                        let terminal_mutation = {
-                            let mut store = self.service.session_store_guard()?;
-                            self.service
-                                .scheduler_task_orchestrator
-                                .cancel_started_runtime_task_terminal_mutation(
-                                    &mut store,
-                                    session_id,
-                                    workflow_run_id,
-                                    &started_runtime_task,
-                                    message,
-                                )
-                                .map_err(|error| {
-                                    WorkflowServiceError::InvalidRequest(format!(
-                                        "scheduler runtime cancellation transition failed: {error}"
-                                    ))
-                                })?
-                        };
-                        self.record_scheduler_task_attempt_terminal(
-                            session_id,
-                            started_runtime_task.task(),
-                            started_runtime_task.attempt_id().as_str(),
-                            started_runtime_task.started_at_ms(),
-                            SchedulerTaskAttemptLifecycleTransition::Cancelled,
-                            "scheduler runtime task cancellation observed",
-                            Some(message.clone()),
-                            Some(&selected_dispatch),
-                            Some(&terminal_mutation),
-                        )?;
-                        self.service
-                            .scheduler_task_orchestrator
-                            .apply_runtime_task_cancellation_reservation_lifecycle(
-                                &started_runtime_task.task,
-                                &terminal_mutation,
-                                message,
-                            )
-                            .await
-                            .map_err(|release_error| {
-                                WorkflowServiceError::InvalidRequest(format!(
-                                    "scheduler runtime task reservation release failed: {release_error}"
-                                ))
-                            })?;
-                        return Err(WorkflowServiceError::Cancelled(message.clone()));
-                    } else {
-                        let terminal_mutation = {
-                            let mut store = self.service.session_store_guard()?;
-                            self.service
-                                .scheduler_task_orchestrator
-                                .fail_started_runtime_task_dispatch_error_terminal_mutation(
-                                    &mut store,
-                                    session_id,
-                                    workflow_run_id,
-                                    &started_runtime_task,
-                                    &error,
-                                )
-                                .map_err(|error| {
-                                    WorkflowServiceError::InvalidRequest(format!(
-                                        "scheduler runtime dispatch error transition failed: {error}"
-                                    ))
-                                })?
-                        };
-                        self.record_scheduler_task_attempt_terminal(
-                            session_id,
-                            started_runtime_task.task(),
-                            started_runtime_task.attempt_id().as_str(),
-                            started_runtime_task.started_at_ms(),
-                            SchedulerTaskAttemptLifecycleTransition::Failed,
-                            "scheduler runtime task dispatch failed",
-                            Some(error.to_string()),
-                            Some(&selected_dispatch),
-                            Some(&terminal_mutation),
-                        )?;
-                        self.service
-                            .scheduler_task_orchestrator
-                            .apply_runtime_task_dispatch_error_reservation_lifecycle(
-                                &started_runtime_task.task,
-                                &terminal_mutation,
-                                &error,
-                            )
-                            .await
-                            .map_err(|release_error| {
-                                WorkflowServiceError::InvalidRequest(format!(
-                                    "scheduler runtime task reservation release failed: {release_error}"
-                                ))
-                            })?;
-                        return Err(WorkflowServiceError::CapabilityViolation(format!(
-                            "runtime scheduler dispatch selection failed closed for {count} runtime inference task(s): {error}",
-                            count = summary.runtime_inference_tasks
-                        )));
-                    }
+                WorkflowRuntimeTaskDispatchFinalizationOutcome::Failed { error } => {
+                    return Err(WorkflowServiceError::CapabilityViolation(format!(
+                        "runtime scheduler dispatch selection failed closed for {count} runtime inference task(s): {error}",
+                        count = summary.runtime_inference_tasks
+                    )));
                 }
             }
         }
@@ -1125,138 +1008,21 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
             })?
             .join()
             .await;
-        match dispatch_result {
-            Ok(result) => {
-                let terminal_mutation = {
-                    let mut store = self.service.session_store_guard()?;
-                    self.service
-                        .scheduler_task_orchestrator
-                        .complete_started_runtime_task_terminal_mutation(
-                            &mut store,
-                            session_id,
-                            workflow_run_id,
-                            started_runtime_task,
-                            result.clone(),
-                        )
-                        .map_err(|error| {
-                            WorkflowServiceError::InvalidRequest(format!(
-                                "scheduler runtime task completion failed: {error}"
-                            ))
-                        })?
-                };
-                let (transition, reason, error_summary) =
-                    scheduler_task_attempt_terminal_transition_from_result(&result);
-                self.record_scheduler_task_attempt_terminal(
-                    session_id,
-                    started_runtime_task.task(),
-                    started_runtime_task.attempt_id().as_str(),
-                    started_runtime_task.started_at_ms(),
-                    transition,
-                    reason,
-                    error_summary,
-                    Some(selected_dispatch),
-                    Some(&terminal_mutation),
-                )?;
-                self.service
-                    .scheduler_task_orchestrator
-                    .apply_runtime_task_result_reservation_lifecycle(
-                        started_runtime_task.task(),
-                        &terminal_mutation,
-                        &result,
-                    )
-                    .await
-                    .map_err(|error| {
-                        WorkflowServiceError::InvalidRequest(format!(
-                            "scheduler runtime task reservation release failed: {error}"
-                        ))
-                    })?;
+        match finalize_started_runtime_task_dispatch(
+            self.service,
+            session_id,
+            workflow_run_id,
+            started_runtime_task,
+            selected_dispatch,
+            dispatch_result,
+        )
+        .await?
+        {
+            WorkflowRuntimeTaskDispatchFinalizationOutcome::Completed => {}
+            WorkflowRuntimeTaskDispatchFinalizationOutcome::Cancelled { message } => {
+                return Err(WorkflowServiceError::Cancelled(message));
             }
-            Err(error) => {
-                if let crate::scheduler::WorkflowSchedulerTaskOrchestratorError::RuntimeTaskSupervisorCancelled { message } = &error {
-                    let terminal_mutation = {
-                        let mut store = self.service.session_store_guard()?;
-                        self.service
-                            .scheduler_task_orchestrator
-                            .cancel_started_runtime_task_terminal_mutation(
-                                &mut store,
-                                session_id,
-                                workflow_run_id,
-                                started_runtime_task,
-                                message,
-                            )
-                            .map_err(|error| {
-                                WorkflowServiceError::InvalidRequest(format!(
-                                    "scheduler runtime cancellation transition failed: {error}"
-                                ))
-                            })?
-                    };
-                    self.record_scheduler_task_attempt_terminal(
-                        session_id,
-                        started_runtime_task.task(),
-                        started_runtime_task.attempt_id().as_str(),
-                        started_runtime_task.started_at_ms(),
-                        SchedulerTaskAttemptLifecycleTransition::Cancelled,
-                        "scheduler runtime task cancellation observed",
-                        Some(message.clone()),
-                        Some(selected_dispatch),
-                        Some(&terminal_mutation),
-                    )?;
-                    self.service
-                        .scheduler_task_orchestrator
-                        .apply_runtime_task_cancellation_reservation_lifecycle(
-                            started_runtime_task.task(),
-                            &terminal_mutation,
-                            message,
-                        )
-                        .await
-                        .map_err(|release_error| {
-                            WorkflowServiceError::InvalidRequest(format!(
-                                "scheduler runtime task reservation release failed: {release_error}"
-                            ))
-                        })?;
-                    return Err(WorkflowServiceError::Cancelled(message.clone()));
-                }
-                let terminal_mutation = {
-                    let mut store = self.service.session_store_guard()?;
-                    self.service
-                        .scheduler_task_orchestrator
-                        .fail_started_runtime_task_dispatch_error_terminal_mutation(
-                            &mut store,
-                            session_id,
-                            workflow_run_id,
-                            started_runtime_task,
-                            &error,
-                        )
-                        .map_err(|error| {
-                            WorkflowServiceError::InvalidRequest(format!(
-                                "scheduler runtime dispatch error transition failed: {error}"
-                            ))
-                        })?
-                };
-                self.record_scheduler_task_attempt_terminal(
-                    session_id,
-                    started_runtime_task.task(),
-                    started_runtime_task.attempt_id().as_str(),
-                    started_runtime_task.started_at_ms(),
-                    SchedulerTaskAttemptLifecycleTransition::Failed,
-                    "scheduler runtime task dispatch failed",
-                    Some(error.to_string()),
-                    Some(selected_dispatch),
-                    Some(&terminal_mutation),
-                )?;
-                self.service
-                    .scheduler_task_orchestrator
-                    .apply_runtime_task_dispatch_error_reservation_lifecycle(
-                        started_runtime_task.task(),
-                        &terminal_mutation,
-                        &error,
-                    )
-                    .await
-                    .map_err(|release_error| {
-                        WorkflowServiceError::InvalidRequest(format!(
-                            "scheduler runtime task reservation release failed: {release_error}"
-                        ))
-                    })?;
+            WorkflowRuntimeTaskDispatchFinalizationOutcome::Failed { error } => {
                 return Err(WorkflowServiceError::CapabilityViolation(format!(
                     "runtime scheduler dispatch selection failed closed for {count} runtime inference task(s): {error}",
                     count = summary.runtime_inference_tasks
@@ -1404,40 +1170,6 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
     }
 }
 
-fn scheduler_task_attempt_terminal_transition_from_result(
-    result: &WorkflowSchedulerTaskResult,
-) -> (
-    SchedulerTaskAttemptLifecycleTransition,
-    &'static str,
-    Option<String>,
-) {
-    match result.status {
-        WorkflowSchedulerTaskResultStatus::Completed => (
-            SchedulerTaskAttemptLifecycleTransition::Completed,
-            "scheduler runtime task attempt completed",
-            None,
-        ),
-        WorkflowSchedulerTaskResultStatus::Failed
-        | WorkflowSchedulerTaskResultStatus::Unavailable
-        | WorkflowSchedulerTaskResultStatus::Invalid => (
-            SchedulerTaskAttemptLifecycleTransition::Failed,
-            "scheduler runtime task result failed",
-            Some(
-                result
-                    .diagnostics
-                    .first()
-                    .map(|diagnostic| diagnostic.message.clone())
-                    .unwrap_or_else(|| {
-                        format!(
-                            "scheduler runtime task result status {}",
-                            scheduler_task_result_status_label(result.status)
-                        )
-                    }),
-            ),
-        ),
-    }
-}
-
 fn scheduler_task_attempt_start_reason(
     transition: SchedulerTaskAttemptLifecycleTransition,
 ) -> &'static str {
@@ -1451,15 +1183,6 @@ fn scheduler_task_attempt_start_reason(
         | SchedulerTaskAttemptLifecycleTransition::Cancelled => {
             unreachable!("terminal scheduler task attempt transition cannot start an attempt")
         }
-    }
-}
-
-fn scheduler_task_result_status_label(status: WorkflowSchedulerTaskResultStatus) -> &'static str {
-    match status {
-        WorkflowSchedulerTaskResultStatus::Completed => "completed",
-        WorkflowSchedulerTaskResultStatus::Failed => "failed",
-        WorkflowSchedulerTaskResultStatus::Unavailable => "unavailable",
-        WorkflowSchedulerTaskResultStatus::Invalid => "invalid",
     }
 }
 

@@ -7077,6 +7077,40 @@ application, active-run finish, workflow terminal diagnostics, and artifact
 diagnostics into backend-owned finalization helpers before grouped assignment
 claiming is enabled.
 
+2026-06-14 runtime task terminal finalization helper slice completed. Smallest
+useful vertical slice: move post-dispatch runtime task terminal mutation,
+scheduler terminal diagnostic event recording, and matching reservation cleanup
+application into a reusable workflow-service-owned runtime-branch finalization
+helper, then keep both current single-runtime completion paths calling that
+helper. Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/runtime_branch_run_finalization.rs`,
+`crates/pantograph-workflow-service/src/workflow/session_scheduler_runner.rs`,
+and this plan.
+
+No-fallback/no-legacy confirmation: this slice does not enable grouped
+assignment claiming, does not dispatch runtime-host batches, and does not add a
+single-member fallback after batch dispatch. The helper consumes the real
+post-supervisor dispatch result for one started runtime task and returns a
+typed completed/cancelled/failed outcome; the runner still owns how those
+outcomes are surfaced to callers. Pre-dispatch selection failures remain in the
+runner because they do not yet have a selected runtime reservation to clean up.
+
+Verification passed:
+`cargo fmt -p pantograph-workflow-service`,
+`cargo test -p pantograph-workflow-service runtime_result_terminal_transition_uses_status_summary_without_diagnostics --lib`,
+`cargo test -p pantograph-workflow-service workflow_execution_session_dispatches_ready_runtime_task_through_scheduler_selection --lib`,
+`cargo test -p pantograph-workflow-service workflow_execution_session_records_failed_runtime_host_result_as_terminal_task_failure --lib`,
+`cargo test -p pantograph-workflow-service workflow_shutdown_aborts_blocked_runtime_dispatch_supervisor --lib`,
+`cargo check -p pantograph-workflow-service`,
+`cargo fmt -p pantograph-workflow-service -- --check`, and
+`git diff --check`.
+
+Remaining follow-up: continue option 1 step 2 by extracting active-run finish,
+workflow terminal diagnostics, and artifact diagnostics behind backend-owned
+finalization helpers. Grouped assignment claiming remains blocked until those
+per-run finalization responsibilities are reusable from the batch owner without
+private runner duplication.
+
 ## Standards Rule
 
 The standards constraints in
