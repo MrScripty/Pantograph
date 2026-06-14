@@ -568,6 +568,62 @@ impl WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistry {
         registered.completion_responder.complete(outcome)
     }
 
+    fn attach_runtime_dispatch_assignment(
+        &self,
+        registration: &WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistration,
+        assignment_id: &WorkflowRuntimeDispatchAssignmentId,
+    ) -> Result<
+        WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistration,
+        WorkflowTaskExecutionWorkerOutcome,
+    > {
+        let assignment_key =
+            WorkflowTaskExecutionWorkerRuntimeBranchResponderKey::runtime_dispatch_assignment(
+                assignment_id,
+            );
+        let mut responders = self.responders.lock().map_err(|_| {
+            runtime_branch_responder_failure_outcome(
+                &registration.session_id,
+                &registration.workflow_run_id,
+                &registration.workflow_id,
+                WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchResponderUnavailable,
+                "runtime branch responder registry lock poisoned",
+            )
+        })?;
+        if responders.contains_key(&assignment_key) {
+            return Err(runtime_branch_responder_failure_outcome(
+                &registration.session_id,
+                &registration.workflow_run_id,
+                &registration.workflow_id,
+                WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchResponderRegistrationFailed,
+                format!(
+                    "runtime branch responder is already attached to dispatch assignment '{}'",
+                    assignment_id.as_str()
+                ),
+            ));
+        }
+        let registered = responders.remove(&registration.key).ok_or_else(|| {
+            runtime_branch_responder_failure_outcome(
+                &registration.session_id,
+                &registration.workflow_run_id,
+                &registration.workflow_id,
+                WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchResponderUnavailable,
+                format!(
+                    "runtime branch responder for workflow run '{}' is not registered for assignment attachment",
+                    registration.workflow_run_id
+                ),
+            )
+        })?;
+        responders.insert(assignment_key.clone(), registered);
+        Ok(
+            WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistration {
+                key: assignment_key,
+                session_id: registration.session_id.clone(),
+                workflow_run_id: registration.workflow_run_id.clone(),
+                workflow_id: registration.workflow_id.clone(),
+            },
+        )
+    }
+
     #[cfg(test)]
     fn active_responder_count(&self) -> usize {
         self.responders
@@ -580,6 +636,13 @@ impl WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistry {
 impl WorkflowTaskExecutionWorkerRuntimeBranchResponderKey {
     fn workflow_run(workflow_run_id: &str) -> Self {
         Self(format!("workflow-run:{workflow_run_id}"))
+    }
+
+    fn runtime_dispatch_assignment(assignment_id: &WorkflowRuntimeDispatchAssignmentId) -> Self {
+        Self(format!(
+            "runtime-dispatch-assignment:{}",
+            assignment_id.as_str()
+        ))
     }
 }
 
@@ -733,7 +796,7 @@ async fn task_execution_worker_loop(
                                 command,
                                 completion_responder,
                             } = request;
-                            let registration = match runtime_branch_responder_registry
+                            let mut registration = match runtime_branch_responder_registry
                                 .register_workflow_run(&command, completion_responder)
                             {
                                 Ok(registration) => registration,
@@ -747,6 +810,8 @@ async fn task_execution_worker_loop(
                             let outcome = claim_and_execute_runtime_branch_event(
                                 &runtime_branch_environment,
                                 &command,
+                                &runtime_branch_responder_registry,
+                                &mut registration,
                             ).await;
                             let _ = runtime_branch_responder_registry
                                 .complete(registration, outcome);
@@ -772,6 +837,8 @@ async fn task_execution_worker_loop(
 async fn claim_and_execute_runtime_branch_event(
     environment: &WorkflowTaskExecutionWorkerRuntimeBranchEnvironment,
     command: &WorkflowTaskExecutionWorkerRuntimeBranchCommand,
+    runtime_branch_responder_registry: &WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistry,
+    runtime_branch_responder_registration: &mut WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistration,
 ) -> WorkflowTaskExecutionWorkerOutcome {
     let service = environment.service();
     let now_ms = unix_timestamp_ms();
@@ -930,6 +997,17 @@ async fn claim_and_execute_runtime_branch_event(
             );
         }
     };
+    match runtime_branch_responder_registry.attach_runtime_dispatch_assignment(
+        runtime_branch_responder_registration,
+        &dispatch_assignment.assignment_id,
+    ) {
+        Ok(registration) => {
+            *runtime_branch_responder_registration = registration;
+        }
+        Err(outcome) => {
+            return outcome;
+        }
+    }
     let linked_record = match link_runtime_branch_dispatch_assignment(
         service.as_ref(),
         &evidence_record.event_id,
@@ -2314,6 +2392,39 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn runtime_branch_responder_registry_attaches_responder_to_dispatch_assignment() {
+        let registry = WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistry::new();
+        let command = runtime_branch_command_for_run("run.assignment");
+        let assignment_id = WorkflowRuntimeDispatchAssignmentId::parse("assignment.registry")
+            .expect("assignment id");
+        let (completion_responder, completion_rx) =
+            WorkflowTaskExecutionWorkerRuntimeBranchCompletionResponder::channel();
+        let registration = registry
+            .register_workflow_run(&command, completion_responder)
+            .expect("register workflow run responder");
+        let expected = WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
+            &command,
+            "runtime branch failed after assignment",
+            Vec::new(),
+        );
+
+        let assignment_registration = registry
+            .attach_runtime_dispatch_assignment(&registration, &assignment_id)
+            .expect("attach assignment responder");
+
+        assert_eq!(registry.active_responder_count(), 1);
+        registry
+            .complete(assignment_registration, expected.clone())
+            .expect("complete attached responder");
+
+        assert_eq!(registry.active_responder_count(), 0);
+        assert_eq!(
+            completion_rx.await.expect("attached responder outcome"),
+            expected
+        );
+    }
+
     #[test]
     fn runtime_branch_responder_registry_rejects_duplicate_workflow_run_registration() {
         let registry = WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistry::new();
@@ -2347,6 +2458,47 @@ mod tests {
             outcome.diagnostics[0].message
         );
         assert_eq!(registry.active_responder_count(), 1);
+    }
+
+    #[test]
+    fn runtime_branch_responder_registry_rejects_duplicate_assignment_attachment() {
+        let registry = WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistry::new();
+        let first_command = runtime_branch_command_for_run("run.assignment.first");
+        let second_command = runtime_branch_command_for_run("run.assignment.second");
+        let assignment_id = WorkflowRuntimeDispatchAssignmentId::parse("assignment.duplicate")
+            .expect("assignment id");
+        let (first_responder, _first_completion_rx) =
+            WorkflowTaskExecutionWorkerRuntimeBranchCompletionResponder::channel();
+        let (second_responder, _second_completion_rx) =
+            WorkflowTaskExecutionWorkerRuntimeBranchCompletionResponder::channel();
+        let first_registration = registry
+            .register_workflow_run(&first_command, first_responder)
+            .expect("register first responder");
+        let second_registration = registry
+            .register_workflow_run(&second_command, second_responder)
+            .expect("register second responder");
+        let _attached = registry
+            .attach_runtime_dispatch_assignment(&first_registration, &assignment_id)
+            .expect("attach first responder");
+
+        let failure = registry
+            .attach_runtime_dispatch_assignment(&second_registration, &assignment_id)
+            .expect_err("duplicate assignment responder must fail closed");
+
+        let WorkflowTaskExecutionWorkerOutcome::RuntimeBranchFailed(outcome) = failure else {
+            panic!("expected runtime branch failure");
+        };
+        assert_eq!(outcome.workflow_run_id, "run.assignment.second");
+        assert_eq!(
+            outcome.diagnostics[0].code,
+            WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchResponderRegistrationFailed
+        );
+        assert!(
+            outcome.diagnostics[0].message.contains("already attached"),
+            "unexpected diagnostic: {}",
+            outcome.diagnostics[0].message
+        );
+        assert_eq!(registry.active_responder_count(), 2);
     }
 
     fn runtime_branch_command() -> WorkflowTaskExecutionWorkerRuntimeBranchCommand {

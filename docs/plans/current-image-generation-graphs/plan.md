@@ -6828,6 +6828,34 @@ assignment creation and before any grouped claim can observe it. Grouped
 assignment claiming remains blocked until assignment-key registration,
 batch-owner fan-out, and missing/stale responder diagnostics are covered.
 
+2026-06-14 runtime-branch responder assignment attachment slice completed.
+Smallest useful vertical slice: re-key worker-owned runtime-branch responder
+registrations from durable workflow-run identity to durable runtime dispatch
+assignment identity immediately after assignment persistence and before link/
+rehydration can proceed. Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/task_execution_worker.rs` and
+this plan.
+
+No-fallback/no-legacy confirmation: grouped assignment claiming remains
+disabled; runtime-host batch dispatch remains disabled; no request-scoped
+runtime state, frontend/Tauri state, or single-member fallback path was added.
+Duplicate or missing assignment responder attachment returns typed worker
+diagnostics instead of silently retaining the workflow-run key or falling back
+to direct request completion.
+
+Verification passed:
+`cargo fmt -p pantograph-workflow-service`,
+`cargo test -p pantograph-workflow-service runtime_branch_responder_registry --lib`,
+`cargo test -p pantograph-workflow-service task_execution_worker --lib`,
+`cargo check -p pantograph-workflow-service`,
+`cargo fmt -p pantograph-workflow-service -- --check`, and
+`git diff --check`.
+
+Remaining follow-up: implement assignment-key fan-out completion so a grouped
+batch owner can notify every registered waiter from per-member durable mutation
+outcomes. Do not enable grouped assignment claiming until fan-out has focused
+coverage and stale/missing responder diagnostics are fail-closed.
+
 ## Standards Rule
 
 The standards constraints in
