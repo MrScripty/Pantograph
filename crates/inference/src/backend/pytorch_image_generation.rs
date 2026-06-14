@@ -75,10 +75,10 @@ impl PyTorchBackend {
 fn reject_cancelled_image_generation(
     context: &BackendExecutionContext,
 ) -> Result<(), BackendError> {
-    context
-        .cancellation_rejection_message("PyTorch image generation")
-        .map(BackendError::Cancelled)
-        .unwrap_or(Ok(()))
+    match context.cancellation_rejection_message("PyTorch image generation") {
+        Some(message) => Err(BackendError::Cancelled(message)),
+        None => Ok(()),
+    }
 }
 
 pub(super) fn generate_image_envelope_from_plan(

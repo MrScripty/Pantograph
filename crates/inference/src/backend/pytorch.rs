@@ -1016,6 +1016,7 @@ impl PyTorchBackend {
         BackendCapabilities {
             vision: false,
             image_generation: true,
+            image_generation_batch: false,
             embeddings: false,
             reranking: false,
             gpu: true,

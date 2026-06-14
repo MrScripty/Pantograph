@@ -131,6 +131,13 @@ only when PyTorch capability facts advertise the matching task, artifact,
 backend hint, and runtime variant support; `diffusers` remains package,
 dependency, display, or capability evidence unless a real executable Diffusers
 backend is registered.
+The PyTorch/Diffusers image worker contract now has separate single-image and
+batch image operations. `generate_image_batch` carries stable batch/member ids,
+member-local planned execution facts, per-member success/failure records,
+envelope cancellation intent, and worker resource-observation semantics. The
+contract is validation-only until backend execution is wired through the same
+explicit operation; backend capability flags must remain closed until that
+execution path exists.
 
 ## Alternatives Rejected
 

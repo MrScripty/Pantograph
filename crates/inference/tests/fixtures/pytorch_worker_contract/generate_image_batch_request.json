@@ -1,0 +1,90 @@
+{
+  "contract_version": 1,
+  "request_id": "req-image-batch-001",
+  "operation": "generate_image_batch",
+  "cancellation": {
+    "drop_stream_cancels": false
+  },
+  "payload": {
+    "batch_execution_id": "image-batch-001",
+    "anchor_member_id": "member-001",
+    "members": [
+      {
+        "member_id": "member-001",
+        "request": {
+          "model_ref": {
+            "model_id": "image/stable-diffusion/tiny-sd"
+          },
+          "artifact_load_target": {
+            "model_ref": {
+              "model_id": "image/stable-diffusion/tiny-sd"
+            },
+            "artifact_kind": "diffusers_bundle",
+            "local_load_path": "/pumas/models/image/stable-diffusion/tiny-sd",
+            "load_path_kind": "directory",
+            "storage_kind": "library_owned",
+            "validation_state": "valid",
+            "package_facts_contract_version": 3
+          },
+          "family": "stable_diffusion",
+          "pipeline_class": "StableDiffusionPipeline",
+          "required_components": [
+            "pipeline_index",
+            "scheduler",
+            "tokenizer",
+            "text_encoder",
+            "unet",
+            "vae"
+          ],
+          "device": "cpu",
+          "prompt": "a compact test image",
+          "negative_prompt": "blur",
+          "width": 512,
+          "height": 512,
+          "num_inference_steps": 8,
+          "guidance_scale": 7.5,
+          "seed": 42,
+          "num_images_per_prompt": 1
+        }
+      },
+      {
+        "member_id": "member-002",
+        "request": {
+          "model_ref": {
+            "model_id": "image/stable-diffusion/tiny-sd"
+          },
+          "artifact_load_target": {
+            "model_ref": {
+              "model_id": "image/stable-diffusion/tiny-sd"
+            },
+            "artifact_kind": "diffusers_bundle",
+            "local_load_path": "/pumas/models/image/stable-diffusion/tiny-sd",
+            "load_path_kind": "directory",
+            "storage_kind": "library_owned",
+            "validation_state": "valid",
+            "package_facts_contract_version": 3
+          },
+          "family": "stable_diffusion",
+          "pipeline_class": "StableDiffusionPipeline",
+          "required_components": [
+            "pipeline_index",
+            "scheduler",
+            "tokenizer",
+            "text_encoder",
+            "unet",
+            "vae"
+          ],
+          "device": "cpu",
+          "prompt": "a second compact test image",
+          "negative_prompt": "blur",
+          "width": 512,
+          "height": 512,
+          "num_inference_steps": 8,
+          "guidance_scale": 7.5,
+          "seed": 43,
+          "num_images_per_prompt": 1
+        }
+      }
+    ]
+  }
+}

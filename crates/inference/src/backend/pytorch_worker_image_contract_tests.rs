@@ -3,7 +3,9 @@ use super::pytorch_worker_contract::{
     PYTORCH_WORKER_CONTRACT_VERSION,
 };
 use super::pytorch_worker_image_contract::{
-    validate_generate_image_envelope, PyTorchGenerateImageRequest, PyTorchGenerateImageResult,
+    validate_generate_image_batch_envelope, validate_generate_image_envelope,
+    PyTorchGenerateImageBatchRequest, PyTorchGenerateImageBatchResult, PyTorchGenerateImageRequest,
+    PyTorchGenerateImageResult,
 };
 use crate::backend::BackendError;
 use crate::device_contracts::{
@@ -112,6 +114,59 @@ fn test_pytorch_worker_generate_image_response_fixture_decodes() {
 }
 
 #[test]
+fn test_pytorch_worker_generate_image_batch_request_fixture_decodes() {
+    let fixture = include_str!(
+        "../../tests/fixtures/pytorch_worker_contract/generate_image_batch_request.json"
+    );
+    let envelope: PyTorchWorkerEnvelope<PyTorchGenerateImageBatchRequest> =
+        serde_json::from_str(fixture).expect("decode worker image batch request fixture");
+
+    assert_eq!(envelope.contract_version, PYTORCH_WORKER_CONTRACT_VERSION);
+    assert_eq!(
+        envelope.operation,
+        PyTorchWorkerOperation::GenerateImageBatch
+    );
+    assert_eq!(envelope.payload.batch_execution_id, "image-batch-001");
+    assert_eq!(envelope.payload.anchor_member_id, "member-001");
+    assert_eq!(envelope.payload.members.len(), 2);
+    assert_eq!(envelope.payload.members[0].member_id, "member-001");
+    assert_eq!(
+        envelope.payload.members[0].request.prompt,
+        "a compact test image"
+    );
+    assert_eq!(envelope.payload.members[1].member_id, "member-002");
+    assert_eq!(
+        envelope.payload.members[1]
+            .request
+            .device
+            .as_ref()
+            .map(|device| device.as_str()),
+        Some("cpu")
+    );
+    validate_generate_image_batch_envelope(&envelope).expect("fixture should validate");
+}
+
+#[test]
+fn test_pytorch_worker_generate_image_batch_response_fixture_decodes() {
+    let fixture = include_str!(
+        "../../tests/fixtures/pytorch_worker_contract/generate_image_batch_response.json"
+    );
+    let response: PyTorchWorkerResponse<PyTorchGenerateImageBatchResult> =
+        serde_json::from_str(fixture).expect("decode worker image batch response fixture");
+
+    let PyTorchWorkerResponse::Ok(success) = response else {
+        panic!("expected image batch response success fixture");
+    };
+    assert_eq!(success.request_id, "req-image-batch-001");
+    assert_eq!(success.result.batch_execution_id, "image-batch-001");
+    assert_eq!(success.result.members.len(), 2);
+    assert_eq!(success.result.members[0].member_id, "member-001");
+    assert!(success.result.members[0].result.is_some());
+    assert_eq!(success.result.members[1].member_id, "member-002");
+    assert!(success.result.members[1].error.is_some());
+}
+
+#[test]
 fn test_pytorch_worker_generate_image_envelope_rejects_wrong_operation() {
     let fixture =
         include_str!("../../tests/fixtures/pytorch_worker_contract/generate_image_request.json");
@@ -141,6 +196,23 @@ fn test_pytorch_worker_generate_image_envelope_rejects_wrong_contract_version() 
             assert!(message.contains("generate_image envelope contract version"));
         }
         other => panic!("expected wrong-version config error, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_pytorch_worker_generate_image_batch_envelope_rejects_duplicate_member_ids() {
+    let fixture = include_str!(
+        "../../tests/fixtures/pytorch_worker_contract/generate_image_batch_request.json"
+    );
+    let mut envelope: PyTorchWorkerEnvelope<PyTorchGenerateImageBatchRequest> =
+        serde_json::from_str(fixture).expect("decode worker image batch request fixture");
+    envelope.payload.members[1].member_id = "member-001".to_string();
+
+    match validate_generate_image_batch_envelope(&envelope) {
+        Err(BackendError::Config(message)) => {
+            assert!(message.contains("duplicate member_id member-001"));
+        }
+        other => panic!("expected duplicate-member config error, got {other:?}"),
     }
 }
 
@@ -271,6 +343,70 @@ fn test_python_worker_generate_image_contract_projects_planned_kwargs() {
                 .extract::<Option<String>>()
                 .expect("denoising scheduler should be optional"),
             None
+        );
+    });
+}
+
+#[test]
+fn test_python_worker_generate_image_batch_contract_projects_member_kwargs() {
+    Python::with_gil(|py| {
+        let module = load_worker_image_contract_module(py);
+        let envelope = include_str!(
+            "../../tests/fixtures/pytorch_worker_contract/generate_image_batch_request.json"
+        );
+
+        let projected = module
+            .call_method1("generate_image_batch_kwargs_from_envelope", (envelope,))
+            .expect("image batch envelope should validate");
+        assert_eq!(
+            projected
+                .get_item("batch_execution_id")
+                .expect("batch execution id key should exist")
+                .extract::<String>()
+                .expect("batch execution id should be a string"),
+            "image-batch-001"
+        );
+        assert_eq!(
+            projected
+                .get_item("anchor_member_id")
+                .expect("anchor member id key should exist")
+                .extract::<String>()
+                .expect("anchor member id should be a string"),
+            "member-001"
+        );
+        let members = projected
+            .get_item("members")
+            .expect("members key should exist");
+        assert_eq!(
+            members
+                .call_method0("__len__")
+                .expect("members should have a length")
+                .extract::<usize>()
+                .expect("members length should be an integer"),
+            2
+        );
+        let first_member = members.get_item(0).expect("first member should exist");
+        assert_eq!(
+            first_member
+                .get_item("member_id")
+                .expect("member id key should exist")
+                .extract::<String>()
+                .expect("member id should be a string"),
+            "member-001"
+        );
+        let planned = first_member
+            .get_item("planned")
+            .expect("planned key should exist");
+        let generation_kwargs = planned
+            .get_item("generation_kwargs")
+            .expect("generation kwargs should exist");
+        assert_eq!(
+            generation_kwargs
+                .get_item("prompt")
+                .expect("prompt key should exist")
+                .extract::<String>()
+                .expect("prompt should be a string"),
+            "a compact test image"
         );
     });
 }

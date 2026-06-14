@@ -1,0 +1,36 @@
+{
+  "status": "ok",
+  "request_id": "req-image-batch-001",
+  "result": {
+    "batch_execution_id": "image-batch-001",
+    "members": [
+      {
+        "member_id": "member-001",
+        "status": "succeeded",
+        "result": {
+          "images": [
+            {
+              "mime_type": "image/png",
+              "data_base64": "iVBORw0KGgo=",
+              "width": 512,
+              "height": 512
+            }
+          ],
+          "seed_used": 42,
+          "metadata": {
+            "denoising_scheduler": null
+          }
+        }
+      },
+      {
+        "member_id": "member-002",
+        "status": "failed",
+        "error": {
+          "kind": "generation_failed",
+          "message": "member image generation failed",
+          "canonical_code": "pytorch_worker_generate_image_failed"
+        }
+      }
+    ]
+  }
+}

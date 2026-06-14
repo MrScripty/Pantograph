@@ -6480,6 +6480,100 @@ fixtures, physical-device tables, or runtime-residency tables. Keep this as
 serial integration-owner work; do not use sub-agents for the shared
 discriminator, worker wire contract, fixtures, README, or plan files.
 
+2026-06-14 PyTorch batch worker contract verification re-plan trigger: stop
+before committing the step-2 source changes. The contract-only slice added the
+explicit `generate_image_batch` operation, Rust/Python batch DTO validation,
+fixtures, and focused contract tests within the revised allowed write set, but
+the required focused verification command
+`cargo test -p inference --features backend-pytorch pytorch_worker_image_contract --lib`
+does not reach the new tests because the existing `backend-pytorch` build is
+already failing in files outside the current slice. The compile errors are:
+`crates/inference/src/backend/pytorch_image_generation.rs` returns
+`BackendError` instead of `Result<(), BackendError>` from cancellation
+validation, and `crates/inference/src/backend/pytorch.rs` does not initialize
+the already-added `BackendCapabilities::image_generation_batch` field.
+
+Standards-aligned options:
+1. Preferred: widen the next immediate slice to repair the feature-gated
+   PyTorch build blockers before committing the batch worker contract. Allowed
+   files would be
+   `crates/inference/src/backend/pytorch_image_generation.rs`,
+   `crates/inference/src/backend/pytorch.rs`, the current contract files,
+   focused tests/fixtures, README, and this plan. The fix must keep
+   `image_generation_batch` set to false, preserve typed cancellation
+   diagnostics, and rerun the feature-gated contract tests before commit.
+   This keeps verification honest without enabling backend execution.
+2. Defer `backend-pytorch` feature verification and commit the contract using
+   only default-feature checks. Reject unless explicitly approved: it would
+   weaken the validation standard for a PyTorch worker contract and hide a
+   feature-gated compile break.
+3. Roll back the batch worker contract changes and repair the feature build as
+   a separate prerequisite slice. This is standards-aligned if the team wants a
+   clean prerequisite commit first, but it slows the contract-first path and
+   discards already-scoped contract work.
+
+Recommended path: option 1. It is the smallest standards-compliant adjustment
+that lets the current contract slice finish with the feature-gated tests that
+actually exercise the Rust/Python PyTorch worker boundary. Do not edit
+`pytorch_image_generation.rs` or `pytorch.rs` until this re-plan is accepted.
+
+2026-06-14 PyTorch batch worker contract verification re-plan decision: use
+option 1. Widen the immediate slice only far enough to repair the
+feature-gated PyTorch build blockers that prevent contract verification:
+`crates/inference/src/backend/pytorch_image_generation.rs` and
+`crates/inference/src/backend/pytorch.rs`. The fixes must keep
+`BackendCapabilities::image_generation_batch` false, preserve typed
+cancellation diagnostics, and must not route backend execution to the new
+`generate_image_batch` worker contract.
+
+2026-06-14 PyTorch batch worker contract slice completed. The Rust and Python
+worker contracts now define an explicit `generate_image_batch` operation with
+dedicated batch request/result DTOs, stable batch/member ids, member-local
+planned image-generation requests, per-member success/failure/cancelled
+results, envelope cancellation semantics, and top-level worker
+resource-observation response semantics. The slice also fixed the
+feature-gated PyTorch compile blockers required to validate the contract:
+`reject_cancelled_image_generation` now returns `Result<(), BackendError>`,
+and PyTorch static capabilities explicitly set `image_generation_batch: false`.
+No backend execution path calls the batch worker contract, and PyTorch does not
+advertise batch image-generation capability.
+
+Step-2 batch worker contract verification:
+`cargo fmt -p inference` passed,
+`cargo fmt -p inference -- --check` passed,
+`cargo check -p inference` passed,
+`cargo check -p inference --features backend-pytorch` passed,
+`cargo test -p inference --features backend-pytorch pytorch_worker_image_contract --lib`
+passed,
+`cargo test -p inference image_generation_batch --lib` passed,
+`cargo test -p inference generate_image_batch --lib` passed,
+`cargo test -p inference --features backend-pytorch generate_image_batch --lib`
+passed, and `git diff --check` passed.
+
+Step-2 batch worker contract files touched:
+`crates/inference/src/backend/pytorch_worker_contract.rs`,
+`crates/inference/torch/worker_contract.py`,
+`crates/inference/src/backend/pytorch_worker_image_contract.rs`,
+`crates/inference/torch/worker_image_contract.py`,
+`crates/inference/src/backend/pytorch_worker_image_contract_tests.rs`,
+`crates/inference/tests/fixtures/pytorch_worker_contract/generate_image_batch_request.json`,
+`crates/inference/tests/fixtures/pytorch_worker_contract/generate_image_batch_response.json`,
+`crates/inference/src/backend/pytorch_image_generation.rs`,
+`crates/inference/src/backend/pytorch.rs`,
+`crates/inference/src/README.md`, and this plan.
+
+Step-2 batch worker contract deviation:
+the slice widened only to repair feature-gated PyTorch compile blockers that
+prevented required Rust/Python worker-boundary verification. The capability
+field remains false, so this does not enable backend batch execution or create
+a hidden single-image fallback.
+
+Next thin slice: implement PyTorch backend batch execution against the frozen
+batch worker contract. Do not enable `BackendCapabilities::image_generation_batch`
+until that backend method calls a real `generate_image_batch` worker operation
+and validates batch/member response correlation without looping through
+`generate_image_from_plan` or the single-image worker operation.
+
 ## Standards Rule
 
 The standards constraints in
