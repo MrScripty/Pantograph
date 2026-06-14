@@ -7728,6 +7728,46 @@ blocked until the owner wires request dispatch to response mutation and
 host-aware run finalization as one validated path, with no single-member
 fallback and typed diagnostics for invalid canonical decisions.
 
+2026-06-14 runtime-host batch dispatch enablement slice completed. Smallest
+useful vertical slice: expose the scheduler-owned runtime-host batch dispatch
+port to production workflow code, then add a batch owner execution boundary
+that prepares a claimed batch, dispatches one grouped runtime-host request,
+applies validated response mutations, persists durable assignment terminal
+state, and finalizes terminal member workflow runs through the host-aware
+canonical finalization path. Allowed files touched:
+`crates/pantograph-workflow-service/src/scheduler/task_orchestrator.rs`,
+`crates/pantograph-workflow-service/src/workflow/runtime_branch_batch_execution.rs`,
+and this plan.
+
+No-fallback/no-legacy confirmation: this slice does not dispatch members one
+at a time after a batch claim, does not call legacy `run_workflow`, does not
+carry anchor-run inputs, runtime state, model state, or device placement
+between workflow runs, and does not preserve a request-scoped runtime
+execution path. Runtime-host batch dispatch failures map to typed batch
+execution diagnostics before mutation or finalization.
+
+Verification passed:
+`cargo fmt -p pantograph-workflow-service`,
+`cargo test -p pantograph-workflow-service runtime_branch_batch_execution --lib`,
+`cargo test -p pantograph-workflow-service orchestrator_dispatches_runtime_batch_through_injected_batch_port --lib`,
+`cargo test -p pantograph-workflow-service orchestrator_fails_closed_when_runtime_host_batch_port_is_unconfigured --lib`,
+`cargo test -p pantograph-workflow-service workflow_service_injects_runtime_host_batch_execution_port --lib`,
+`cargo check -p pantograph-workflow-service`,
+`cargo fmt -p pantograph-workflow-service -- --check`, and
+`git diff --check`.
+
+Focused test update: added owner-level coverage with an injected runtime-host
+batch port proving the owner sends exactly one grouped request for the claimed
+assignments, applies the generated response, finalizes both active workflow
+runs through host projection, records responder fan-out, and leaves no active
+runs behind.
+
+Remaining follow-up: inspect the outer runtime-branch worker/task execution
+entrypoint and wire compatible batch claims to `execute_claimed_batch` if that
+handoff is not already production-owned. If the entrypoint cannot make a
+canonical grouped claim decision from durable scheduler facts, stop and
+re-plan instead of falling back to single-member dispatch.
+
 ## Standards Rule
 
 The standards constraints in

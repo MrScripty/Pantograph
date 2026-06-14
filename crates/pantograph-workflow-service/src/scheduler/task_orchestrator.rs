@@ -512,7 +512,6 @@ impl WorkflowSchedulerTaskOrchestrator {
             .map_err(WorkflowSchedulerTaskOrchestratorError::RuntimeHostTaskResultMapping)
     }
 
-    #[cfg(test)]
     pub(crate) async fn dispatch_runtime_batch_request(
         &self,
         request: RuntimeHostBatchExecutionRequest,

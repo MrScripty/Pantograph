@@ -288,6 +288,40 @@ where
         })
     }
 
+    pub(super) async fn execute_claimed_batch<H>(
+        &self,
+        service: &WorkflowService,
+        host: &H,
+        claim_outcome: WorkflowRuntimeDispatchAssignmentBatchClaimOutcome,
+    ) -> Result<
+        WorkflowRuntimeBranchBatchRunFinalizationOutcome,
+        WorkflowRuntimeBranchBatchExecutionFailure,
+    >
+    where
+        H: WorkflowHost + ?Sized,
+    {
+        let plan = self.prepare_claimed_batch(service, claim_outcome)?;
+        let response = self
+            .scheduler_task_orchestrator
+            .dispatch_runtime_batch_request(plan.runtime_host_request.clone())
+            .await
+            .map_err(|error| {
+                WorkflowRuntimeBranchBatchExecutionFailure::global(
+                    WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
+                        WorkflowRuntimeBranchBatchExecutionDiagnosticCode::RuntimeHostBatchRequestInvalid,
+                        format!(
+                            "runtime branch batch request '{}' dispatch failed: {error}",
+                            plan.batch_execution_request_id
+                        ),
+                    ),
+                )
+            })?
+            .into_inner();
+        let _mutation = self.apply_batch_response_mutations(service, &plan, &response)?;
+        self.finalize_batch_member_runs(service, host, &plan, &response)
+            .await
+    }
+
     pub(super) async fn finalize_batch_member_runs<H>(
         &self,
         service: &WorkflowService,
@@ -1238,7 +1272,7 @@ fn batch_execution_request_id(batch_claim: &WorkflowRuntimeDispatchAssignmentBat
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Mutex;
+    use std::sync::{Arc, Mutex};
 
     use async_trait::async_trait;
     use pantograph_dependency_planning::{
@@ -1248,11 +1282,13 @@ mod tests {
     };
     use pantograph_runtime_host_contracts::{
         RuntimeHostBatchExecutionMemberRequest, RuntimeHostBatchExecutionMemberResponse,
-        RuntimeHostBatchExecutionMemberState, RuntimeHostBatchExecutionResponse,
+        RuntimeHostBatchExecutionMemberState, RuntimeHostBatchExecutionPort,
+        RuntimeHostBatchExecutionRequest, RuntimeHostBatchExecutionResponse,
         RuntimeHostBatchExecutionState, RuntimeHostBatchMemberFailurePolicy,
         RuntimeHostBatchMemberReservationDisposition, RuntimeHostBatchMemberReservationPolicy,
-        RuntimeHostBatchMemberRetryDisposition, RuntimeHostExecutionInputValue,
-        RuntimeHostExecutionOutput, RuntimeHostExecutionOutputValue,
+        RuntimeHostBatchMemberRetryDisposition, RuntimeHostExecutionCancellationHandle,
+        RuntimeHostExecutionInputValue, RuntimeHostExecutionOutput,
+        RuntimeHostExecutionOutputValue, RuntimeHostExecutionPortError,
     };
     use pantograph_scheduler::{
         SchedulableTaskIntent, SchedulerDispatchCandidateId, SchedulerDispatchDecision,
@@ -1649,6 +1685,62 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn runtime_branch_batch_execution_owner_dispatches_and_finalizes_claimed_batch() {
+        let batch_port = Arc::new(RecordingBatchExecutionPort::default());
+        let service =
+            WorkflowService::new().with_runtime_host_batch_execution_port(batch_port.clone());
+        let host = BatchFinalizationHost::default();
+        let responder_fan_out = RecordingResponderFanOut::default();
+        let owner = WorkflowRuntimeBranchBatchExecutionOwner::new(
+            &service.scheduler_task_orchestrator,
+            &responder_fan_out,
+        );
+        let members = active_batch_members(&service);
+        let claim_outcome = batch_claim_outcome(&service, &members);
+
+        let outcome = owner
+            .execute_claimed_batch(&service, &host, claim_outcome)
+            .await
+            .expect("execute claimed batch");
+
+        assert_eq!(
+            outcome
+                .member_outcomes
+                .iter()
+                .map(|outcome| outcome.state)
+                .collect::<Vec<_>>(),
+            vec![
+                WorkflowRuntimeBranchBatchMemberExecutionOutcomeState::Completed,
+                WorkflowRuntimeBranchBatchMemberExecutionOutcomeState::Completed,
+            ]
+        );
+        let requests = batch_port.requests();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0].members.len(), 2);
+        assert_eq!(
+            requests[0]
+                .members
+                .iter()
+                .map(|member| member.assignment_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["assignment.1", "assignment.2"]
+        );
+        assert_eq!(host.workflow_io_call_count(), 2);
+        assert!(
+            service
+                .session_store_guard()
+                .expect("session store")
+                .active_workflow_run_ids()
+                .is_empty(),
+            "executed batch must finalize completed member runs"
+        );
+        assert_eq!(
+            responder_fan_out.observed_assignment_ids(),
+            vec![vec!["assignment.1".to_string(), "assignment.2".to_string()]]
+        );
+    }
+
     #[test]
     fn runtime_branch_batch_execution_owner_rejects_response_missing_member_before_mutation() {
         let service = WorkflowService::new();
@@ -1990,6 +2082,32 @@ mod tests {
             _run_handle: WorkflowRunHandle,
         ) -> Result<Vec<WorkflowPortBinding>, WorkflowServiceError> {
             unreachable!("batch finalization must not call legacy workflow execution")
+        }
+    }
+
+    #[derive(Default)]
+    struct RecordingBatchExecutionPort {
+        requests: Mutex<Vec<RuntimeHostBatchExecutionRequest>>,
+    }
+
+    impl RecordingBatchExecutionPort {
+        fn requests(&self) -> Vec<RuntimeHostBatchExecutionRequest> {
+            self.requests.lock().expect("batch request lock").clone()
+        }
+    }
+
+    #[async_trait]
+    impl RuntimeHostBatchExecutionPort for RecordingBatchExecutionPort {
+        async fn execute_runtime_host_batch_request(
+            &self,
+            request: RuntimeHostBatchExecutionRequest,
+            _cancellation: RuntimeHostExecutionCancellationHandle,
+        ) -> Result<RuntimeHostBatchExecutionResponse, RuntimeHostExecutionPortError> {
+            self.requests
+                .lock()
+                .expect("batch request lock")
+                .push(request.clone());
+            Ok(runtime_host_batch_response_from_request(&request))
         }
     }
 
@@ -2408,13 +2526,18 @@ mod tests {
     fn runtime_host_batch_response_from_plan(
         plan: &WorkflowRuntimeBranchBatchExecutionPlan,
     ) -> RuntimeHostBatchExecutionResponse {
+        runtime_host_batch_response_from_request(&plan.runtime_host_request)
+    }
+
+    fn runtime_host_batch_response_from_request(
+        request: &RuntimeHostBatchExecutionRequest,
+    ) -> RuntimeHostBatchExecutionResponse {
         RuntimeHostBatchExecutionResponse {
             contract_version: RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
-            batch_execution_request_id: plan.batch_execution_request_id.clone(),
+            batch_execution_request_id: request.batch_execution_request_id.clone(),
             state: RuntimeHostBatchExecutionState::Completed,
             diagnostics: Vec::new(),
-            members: plan
-                .runtime_host_request
+            members: request
                 .members
                 .iter()
                 .map(|member| RuntimeHostBatchExecutionMemberResponse {
