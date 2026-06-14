@@ -6412,6 +6412,42 @@ worker contract from `PyTorchBackend`, do not enable
 runtime-host contracts, workflow-service worker code, frontend/Tauri DTOs,
 lockfiles, physical-device tables, or runtime-residency tables.
 
+2026-06-13 PyTorch batch worker contract scope re-plan trigger: stop before
+implementing step 2 as written. A dedicated PyTorch image batch worker
+contract requires a new operation discriminator, but the current allowed file
+set only names image-specific contract files. The discriminator is shared:
+Rust validates operations through `PyTorchWorkerOperation` in
+`crates/inference/src/backend/pytorch_worker_contract.rs`, while Python worker
+operation constants live in `crates/inference/torch/worker_contract.py` and
+image-specific validation compares against those operation strings. Adding a
+true dedicated batch operation without touching those shared worker contract
+files is not possible without overloading `generate_image`, which would
+conflate single-member and batch semantics.
+
+Standards-aligned options:
+1. Preferred: widen the step-2 allowed write set to include the shared PyTorch
+   worker contract discriminators:
+   `crates/inference/src/backend/pytorch_worker_contract.rs` and
+   `crates/inference/torch/worker_contract.py`, plus the already-listed
+   image-specific Rust/Python contracts, focused contract tests, worker JSON
+   fixtures, README, and this plan. Add an explicit
+   `generate_image_batch` operation and dedicated batch payload/result DTOs.
+   This keeps the wire contract explicit, contract-first, and fail-closed.
+2. Keep the allowed write set unchanged and encode batch payloads under the
+   existing `generate_image` operation. Reject this unless explicitly chosen:
+   it hides the operation boundary, makes validation ambiguous, and risks
+   preserving single-image behavior behind a batch-shaped DTO.
+3. Defer PyTorch worker batch execution and return to embedded runtime-host
+   fail-closed wiring. Reject as the immediate path unless backend batching is
+   intentionally deprioritized: it moves the unsupported boundary outward and
+   does not deliver grouped execution.
+
+Recommended path: option 1. It is the only path that preserves the
+no-fallback/no-legacy rule while keeping the Rust/Python interop contract
+explicit and testable. Do not begin source edits for the batch worker contract
+until this plan is updated with the selected option and revised allowed write
+set.
+
 ## Standards Rule
 
 The standards constraints in
