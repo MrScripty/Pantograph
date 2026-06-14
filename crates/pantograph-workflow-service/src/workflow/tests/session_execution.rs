@@ -2017,7 +2017,7 @@ async fn workflow_execution_session_records_failed_runtime_host_result_as_termin
     let dependency_readiness_provider = DependencyEnvironmentReadinessSnapshotProvider::new();
     let dependency_readiness_work_queue = std::sync::Arc::new(DependencyReadinessWorkQueue::new());
     let source_refresher = Arc::new(RecordingRuntimeDispatchSourceRefresher::default());
-    let runtime_host_port = Arc::new(FailingRuntimeHostPort::default());
+    let runtime_host_batch_port = Arc::new(FailingRuntimeHostBatchPort::default());
     let reservation_lifecycle_port = Arc::new(RecordingReservationLifecyclePort::default());
     let runtime = WorkflowSessionExecutionRuntime::new(
         WorkflowService::with_ephemeral_attribution_store()
@@ -2031,7 +2031,7 @@ async fn workflow_execution_session_records_failed_runtime_host_result_as_termin
             .with_runtime_dispatch_candidate_provider(Arc::new(
                 SingleCanonicalRuntimeDispatchCandidateProvider,
             ))
-            .with_runtime_host_execution_port(runtime_host_port.clone())
+            .with_runtime_host_batch_execution_port(runtime_host_batch_port.clone())
             .with_reservation_lifecycle_port(reservation_lifecycle_port.clone()),
         Arc::clone(&host),
     );
@@ -2059,7 +2059,7 @@ async fn workflow_execution_session_records_failed_runtime_host_result_as_termin
         )
         .expect("store dependency readiness snapshot");
 
-    let created = service
+    let first_created = service
         .create_workflow_execution_session(
             host.as_ref(),
             WorkflowExecutionSessionCreateRequest {
@@ -2069,87 +2069,70 @@ async fn workflow_execution_session_records_failed_runtime_host_result_as_termin
             },
         )
         .await
-        .expect("create session");
-    let error = runtime
-        .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
-            session_id: created.session_id,
-            workflow_semantic_version: workflow_semantic_version.to_string(),
-            inputs: vec![WorkflowPortBinding {
-                node_id: "prompt".to_string(),
-                port_id: "text".to_string(),
-                value: serde_json::json!("paint a red cube"),
-            }],
-            output_targets: Some(vec![WorkflowOutputTarget {
-                node_id: "infer".to_string(),
-                port_id: "image".to_string(),
-            }]),
-            override_selection: None,
-            timeout_ms: None,
-            priority: None,
-        })
-        .await
-        .expect_err("failed runtime-host result should fail the workflow run");
-
-    assert_eq!(error.code(), WorkflowErrorCode::InternalError);
-    assert!(
-        error
-            .message()
-            .contains("scheduler task 'infer' did not complete; final state was TerminalFailed"),
-        "unexpected error: {error}"
-    );
-    assert_eq!(runtime_host_port.requests().len(), 1);
-    let lifecycle_events = reservation_lifecycle_port.events();
-    assert_eq!(
-        lifecycle_events
-            .iter()
-            .map(|event| &event.outcome)
-            .collect::<Vec<_>>(),
-        vec![
-            &ReservationLifecycleOutcome::DispatchStarted,
-            &ReservationLifecycleOutcome::RuntimeHostFailed,
-        ]
-    );
-    let diagnostic_events = {
-        let ledger = service
-            .diagnostics_ledger_guard()
-            .expect("diagnostics ledger");
-        pantograph_diagnostics_ledger::DiagnosticsLedgerRepository::diagnostic_events_after(
-            &*ledger, 0, 40,
+        .expect("create first session");
+    let second_created = service
+        .create_workflow_execution_session(
+            host.as_ref(),
+            WorkflowExecutionSessionCreateRequest {
+                workflow_id: workflow_id.to_string(),
+                usage_profile: None,
+                keep_alive: false,
+            },
         )
-        .expect("diagnostic events")
+        .await
+        .expect("create second session");
+    let first_session_id = first_created.session_id.clone();
+    let second_session_id = second_created.session_id.clone();
+    let run_request = |session_id: String, prompt: &str| WorkflowExecutionSessionRunRequest {
+        session_id,
+        workflow_semantic_version: workflow_semantic_version.to_string(),
+        inputs: vec![WorkflowPortBinding {
+            node_id: "prompt".to_string(),
+            port_id: "text".to_string(),
+            value: serde_json::json!(prompt),
+        }],
+        output_targets: Some(vec![WorkflowOutputTarget {
+            node_id: "infer".to_string(),
+            port_id: "image".to_string(),
+        }]),
+        override_selection: None,
+        timeout_ms: None,
+        priority: None,
     };
-    let failed_attempt_event = diagnostic_events
-        .iter()
-        .find(|event| {
-            event.event_kind
-                == pantograph_diagnostics_ledger::DiagnosticEventKind::SchedulerTaskAttemptLifecycleChanged
-                && event.node_id.as_deref() == Some("infer")
-                && event.payload_json.contains("\"transition\":\"failed\"")
-        })
-        .expect("runtime scheduler attempt failed event");
-    assert_eq!(
-        failed_attempt_event.source_component,
-        pantograph_diagnostics_ledger::DiagnosticEventSourceComponent::Scheduler
-    );
-    assert_eq!(failed_attempt_event.runtime_id.as_deref(), Some("pytorch"));
-    assert!(failed_attempt_event
-        .payload_json
-        .contains("\"execution_class\":\"runtime\""));
-    assert!(failed_attempt_event
-        .payload_json
-        .contains("\"selected_runtime_id\":\"pytorch\""));
-    assert!(failed_attempt_event
-        .payload_json
-        .contains("\"reservation_id\":\"reservation.runtime_session_test\""));
-    assert!(failed_attempt_event
-        .payload_json
-        .contains("\"error_summary\":"));
-    assert!(failed_attempt_event
-        .payload_json
-        .contains("\"ended_at_ms\":"));
-    assert!(failed_attempt_event
-        .payload_json
-        .contains("\"duration_ms\":"));
+    let first_run = runtime
+        .run_workflow_execution_session(run_request(first_session_id.clone(), "paint a red cube"));
+    let second_run = runtime.run_workflow_execution_session(run_request(
+        second_session_id.clone(),
+        "paint a blue cube",
+    ));
+    let (first_error, second_error) = tokio::join!(first_run, second_run);
+    let first_error =
+        first_error.expect_err("first failed runtime-host batch member should fail workflow run");
+    let second_error =
+        second_error.expect_err("second failed runtime-host batch member should fail workflow run");
+
+    for error in [&first_error, &second_error] {
+        assert_eq!(error.code(), WorkflowErrorCode::InternalError);
+        assert!(
+            error
+                .message()
+                .contains("runtime branch batch member failed"),
+            "unexpected error: {error}"
+        );
+    }
+    let recorded = runtime_host_batch_port.requests();
+    assert_eq!(recorded.len(), 1);
+    assert_eq!(recorded[0].members.len(), 2);
+    for session_id in [&first_session_id, &second_session_id] {
+        let status = service
+            .workflow_get_execution_session_status(WorkflowExecutionSessionStatusRequest {
+                session_id: session_id.clone(),
+            })
+            .await
+            .expect("session status after failed grouped runtime run finalization");
+        assert_eq!(status.session.run_count, 1);
+        assert_eq!(status.session.queued_runs, 0);
+    }
 }
 
 #[tokio::test]
@@ -4046,46 +4029,58 @@ impl RuntimeHostBatchExecutionPort for CompletingRuntimeHostBatchPort {
 }
 
 #[derive(Default)]
-struct FailingRuntimeHostPort {
-    requests: Mutex<Vec<RuntimeHostExecutionRequest>>,
+struct FailingRuntimeHostBatchPort {
+    requests: Mutex<Vec<RuntimeHostBatchExecutionRequest>>,
 }
 
-impl FailingRuntimeHostPort {
-    fn requests(&self) -> Vec<RuntimeHostExecutionRequest> {
+impl FailingRuntimeHostBatchPort {
+    fn requests(&self) -> Vec<RuntimeHostBatchExecutionRequest> {
         self.requests
             .lock()
-            .expect("runtime host request lock")
+            .expect("runtime host batch request lock")
             .clone()
     }
 }
 
 #[async_trait::async_trait]
-impl RuntimeHostExecutionPort for FailingRuntimeHostPort {
-    async fn execute_runtime_host_request(
+impl RuntimeHostBatchExecutionPort for FailingRuntimeHostBatchPort {
+    async fn execute_runtime_host_batch_request(
         &self,
-        request: RuntimeHostExecutionRequest,
+        request: RuntimeHostBatchExecutionRequest,
         _cancellation: RuntimeHostExecutionCancellationHandle,
-    ) -> Result<RuntimeHostExecutionResponse, RuntimeHostExecutionPortError> {
+    ) -> Result<RuntimeHostBatchExecutionResponse, RuntimeHostExecutionPortError> {
         self.requests
             .lock()
-            .expect("runtime host request lock")
+            .expect("runtime host batch request lock")
             .push(request.clone());
-        Ok(RuntimeHostExecutionResponse {
+        Ok(RuntimeHostBatchExecutionResponse {
             contract_version: RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
-            execution_request_id: request.execution_request_id,
-            workflow_id: request.handoff.task_intent.workflow_id,
-            workflow_run_id: request.handoff.task_intent.workflow_run_id,
-            node_id: request.handoff.task_intent.node_id,
-            task_id: request.handoff.task_intent.task_id,
-            state: RuntimeHostExecutionState::Failed,
-            outputs: Vec::new(),
-            diagnostics: vec![RuntimeHostExecutionDiagnostic {
-                severity: RuntimeHostExecutionDiagnosticSeverity::Error,
-                code: RuntimeHostExecutionDiagnosticCode::ExecutionFailed,
-                message: "runtime host failed image execution".to_string(),
-                hint: Some("test.runtime_host_failed".to_string()),
-            }],
-            terminal_metadata: None,
+            batch_execution_request_id: request.batch_execution_request_id,
+            state: RuntimeHostBatchExecutionState::PartiallyCompleted,
+            members: request
+                .members
+                .into_iter()
+                .map(|member| RuntimeHostBatchExecutionMemberResponse {
+                    execution_request_id: member.execution_request_id,
+                    assignment_id: member.assignment_id,
+                    workflow_id: member.handoff.workflow_id,
+                    workflow_run_id: member.handoff.workflow_run_id,
+                    node_id: member.handoff.node_id,
+                    task_id: member.handoff.task_id,
+                    state: RuntimeHostBatchExecutionMemberState::Failed,
+                    retry_disposition: RuntimeHostBatchMemberRetryDisposition::NotRetryable,
+                    reservation_disposition: RuntimeHostBatchMemberReservationDisposition::Released,
+                    outputs: Vec::new(),
+                    diagnostics: vec![RuntimeHostExecutionDiagnostic {
+                        severity: RuntimeHostExecutionDiagnosticSeverity::Error,
+                        code: RuntimeHostExecutionDiagnosticCode::ExecutionFailed,
+                        message: "runtime host failed image batch execution".to_string(),
+                        hint: Some("test.runtime_host_batch_failed".to_string()),
+                    }],
+                    terminal_metadata: None,
+                })
+                .collect(),
+            diagnostics: Vec::new(),
         })
     }
 }

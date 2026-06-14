@@ -8496,6 +8496,56 @@ and shutdown tests should assert the canonical typed batch wait expiry or be
 moved to a lower-level batch/shutdown owner if they need runtime-host dispatch
 to start.
 
+2026-06-14 grouped session runtime-host failure test migration slice
+completed. Smallest useful vertical slice: migrate
+`workflow_execution_session_records_failed_runtime_host_result_as_terminal_task_failure`
+to use two compatible concurrent runtime session runs and a grouped
+runtime-host batch response whose members fail terminally. Allowed files
+touched:
+`crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`
+and this plan.
+
+No-fallback/no-legacy confirmation: failure coverage now reaches the
+runtime-host only through a broker-owned grouped batch. The stale
+single-request failing runtime-host fixture was removed from the session tests;
+the slice does not add singleton dispatch, direct runtime execution, or
+request-owned completion.
+
+Verification passed:
+`cargo fmt -p pantograph-workflow-service`,
+`cargo test -p pantograph-workflow-service workflow_execution_session_records_failed_runtime_host_result_as_terminal_task_failure --lib`,
+`cargo test -p pantograph-workflow-service workflow_execution_session_dispatches_ready_runtime_task_through_scheduler_selection --lib`,
+`cargo test -p pantograph-workflow-service task_execution_worker --lib`,
+`cargo check -p pantograph-workflow-service`,
+`cargo fmt -p pantograph-workflow-service -- --check`, and
+`git diff --check`.
+
+Broader verification:
+`timeout 180s cargo test -p pantograph-workflow-service session_execution --lib`
+now fails with 32 passed and 6 failed, improving from the prior 31 passed and
+7 failed. Remaining stale failures:
+`workflow_execution_session_bootstrap_recovery_applies_dependency_readiness_resume_plan`,
+`workflow_execution_session_bootstrap_recovery_applies_progress_loop_before_readiness_resume`,
+`workflow_execution_session_bootstrap_recovery_redispatches_ready_runtime_task`,
+`workflow_execution_session_fails_closed_when_reservation_lifecycle_port_is_missing`,
+`workflow_execution_session_records_runtime_dispatch_panic_as_terminal_task_failure`,
+and `workflow_shutdown_aborts_blocked_runtime_dispatch_supervisor`.
+
+Focused test update: the failed-result test now asserts two failed grouped run
+responses, one runtime-host batch request with two members, and finalized
+session status for both runs.
+
+Discovered follow-up: grouped batch terminal failure no longer exposes the
+same scheduler-attempt diagnostic assertion shape used by the old
+single-request path. Add dedicated grouped batch diagnostics parity coverage in
+a later slice instead of preserving the legacy single-request failure fixture.
+
+Remaining follow-up: migrate the runtime-host panic test to a grouped batch
+panic/rejection path or assert typed solo wait expiry by intent; migrate the
+bootstrap recovery tests by providing compatible peer recovery work where they
+need runtime-host completion; keep the shutdown test away from singleton
+runtime-host dispatch unless it is rewritten at the grouped batch owner level.
+
 ## Standards Rule
 
 The standards constraints in
