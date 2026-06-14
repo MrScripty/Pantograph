@@ -2136,12 +2136,12 @@ async fn workflow_execution_session_records_failed_runtime_host_result_as_termin
 }
 
 #[tokio::test]
-async fn workflow_execution_session_records_runtime_dispatch_panic_as_terminal_task_failure() {
+async fn workflow_execution_session_records_runtime_batch_dispatch_rejection_as_typed_error() {
     let host = Arc::new(RuntimeInferenceSessionHost::new());
     let dependency_readiness_provider = DependencyEnvironmentReadinessSnapshotProvider::new();
     let dependency_readiness_work_queue = std::sync::Arc::new(DependencyReadinessWorkQueue::new());
     let source_refresher = Arc::new(RecordingRuntimeDispatchSourceRefresher::default());
-    let runtime_host_port = Arc::new(PanickingRuntimeHostPort);
+    let runtime_host_batch_port = Arc::new(RejectingRuntimeHostBatchPort::default());
     let reservation_lifecycle_port = Arc::new(RecordingReservationLifecyclePort::default());
     let runtime = WorkflowSessionExecutionRuntime::new(
         WorkflowService::with_ephemeral_attribution_store()
@@ -2154,12 +2154,12 @@ async fn workflow_execution_session_records_runtime_dispatch_panic_as_terminal_t
             .with_runtime_dispatch_candidate_provider(Arc::new(
                 SingleCanonicalRuntimeDispatchCandidateProvider,
             ))
-            .with_runtime_host_execution_port(runtime_host_port)
+            .with_runtime_host_batch_execution_port(runtime_host_batch_port.clone())
             .with_reservation_lifecycle_port(reservation_lifecycle_port.clone()),
         Arc::clone(&host),
     );
     let service = runtime.service();
-    let workflow_id = "wf-runtime-host-panic";
+    let workflow_id = "wf-runtime-host-batch-rejection";
     let workflow_semantic_version = "1.2.3";
     let graph = runtime_inference_session_graph();
     let version = service
@@ -2182,7 +2182,7 @@ async fn workflow_execution_session_records_runtime_dispatch_panic_as_terminal_t
         )
         .expect("store dependency readiness snapshot");
 
-    let created = service
+    let first_created = service
         .create_workflow_execution_session(
             host.as_ref(),
             WorkflowExecutionSessionCreateRequest {
@@ -2192,45 +2192,62 @@ async fn workflow_execution_session_records_runtime_dispatch_panic_as_terminal_t
             },
         )
         .await
-        .expect("create session");
-    let error = runtime
-        .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
-            session_id: created.session_id,
-            workflow_semantic_version: workflow_semantic_version.to_string(),
-            inputs: vec![WorkflowPortBinding {
-                node_id: "prompt".to_string(),
-                port_id: "text".to_string(),
-                value: serde_json::json!("paint a red cube"),
-            }],
-            output_targets: Some(vec![WorkflowOutputTarget {
-                node_id: "infer".to_string(),
-                port_id: "image".to_string(),
-            }]),
-            override_selection: None,
-            timeout_ms: None,
-            priority: None,
-        })
+        .expect("create first session");
+    let second_created = service
+        .create_workflow_execution_session(
+            host.as_ref(),
+            WorkflowExecutionSessionCreateRequest {
+                workflow_id: workflow_id.to_string(),
+                usage_profile: None,
+                keep_alive: false,
+            },
+        )
         .await
-        .expect_err("runtime-host dispatch panic should fail the workflow run");
+        .expect("create second session");
+    let first_session_id = first_created.session_id.clone();
+    let second_session_id = second_created.session_id.clone();
+    let run_request = |session_id: String, prompt: &str| WorkflowExecutionSessionRunRequest {
+        session_id,
+        workflow_semantic_version: workflow_semantic_version.to_string(),
+        inputs: vec![WorkflowPortBinding {
+            node_id: "prompt".to_string(),
+            port_id: "text".to_string(),
+            value: serde_json::json!(prompt),
+        }],
+        output_targets: Some(vec![WorkflowOutputTarget {
+            node_id: "infer".to_string(),
+            port_id: "image".to_string(),
+        }]),
+        override_selection: None,
+        timeout_ms: None,
+        priority: None,
+    };
+    let first_run = runtime
+        .run_workflow_execution_session(run_request(first_session_id.clone(), "paint a red cube"));
+    let second_run = runtime.run_workflow_execution_session(run_request(
+        second_session_id.clone(),
+        "paint a blue cube",
+    ));
+    let (first_error, second_error) = tokio::join!(first_run, second_run);
+    let first_error =
+        first_error.expect_err("first rejected runtime-host batch dispatch should fail run");
+    let second_error =
+        second_error.expect_err("second rejected runtime-host batch dispatch should fail run");
 
-    assert_eq!(error.code(), WorkflowErrorCode::InternalError);
-    assert!(
-        error
-            .message()
-            .contains("runtime task supervisor join failed"),
-        "unexpected error: {error}"
-    );
-    let lifecycle_events = reservation_lifecycle_port.events();
-    assert_eq!(
-        lifecycle_events
-            .iter()
-            .map(|event| &event.outcome)
-            .collect::<Vec<_>>(),
-        vec![
-            &ReservationLifecycleOutcome::DispatchStarted,
-            &ReservationLifecycleOutcome::RuntimeHostDispatchRejected,
-        ]
-    );
+    for error in [&first_error, &second_error] {
+        assert_eq!(error.code(), WorkflowErrorCode::InternalError);
+        assert!(
+            error.message().contains("runtime branch batch request"),
+            "unexpected error: {error}"
+        );
+        assert!(
+            error.message().contains("runtime-host dispatch failed"),
+            "unexpected error: {error}"
+        );
+    }
+    let recorded = runtime_host_batch_port.requests();
+    assert_eq!(recorded.len(), 1);
+    assert_eq!(recorded[0].members.len(), 2);
 }
 
 #[tokio::test]
@@ -4085,16 +4102,34 @@ impl RuntimeHostBatchExecutionPort for FailingRuntimeHostBatchPort {
     }
 }
 
-struct PanickingRuntimeHostPort;
+#[derive(Default)]
+struct RejectingRuntimeHostBatchPort {
+    requests: Mutex<Vec<RuntimeHostBatchExecutionRequest>>,
+}
+
+impl RejectingRuntimeHostBatchPort {
+    fn requests(&self) -> Vec<RuntimeHostBatchExecutionRequest> {
+        self.requests
+            .lock()
+            .expect("runtime host batch request lock")
+            .clone()
+    }
+}
 
 #[async_trait::async_trait]
-impl RuntimeHostExecutionPort for PanickingRuntimeHostPort {
-    async fn execute_runtime_host_request(
+impl RuntimeHostBatchExecutionPort for RejectingRuntimeHostBatchPort {
+    async fn execute_runtime_host_batch_request(
         &self,
-        _request: RuntimeHostExecutionRequest,
+        request: RuntimeHostBatchExecutionRequest,
         _cancellation: RuntimeHostExecutionCancellationHandle,
-    ) -> Result<RuntimeHostExecutionResponse, RuntimeHostExecutionPortError> {
-        panic!("runtime host panicked during test dispatch")
+    ) -> Result<RuntimeHostBatchExecutionResponse, RuntimeHostExecutionPortError> {
+        self.requests
+            .lock()
+            .expect("runtime host batch request lock")
+            .push(request);
+        Err(RuntimeHostExecutionPortError::ExecutionFailed {
+            message: "runtime host rejected image batch dispatch".to_string(),
+        })
     }
 }
 
