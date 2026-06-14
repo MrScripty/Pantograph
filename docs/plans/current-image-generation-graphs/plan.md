@@ -7182,6 +7182,43 @@ completion wrapper through the same workflow-run finalization helper. Grouped
 assignment claiming remains blocked until that final per-run finalization path
 is callable without request-scoped duplication.
 
+2026-06-14 direct runtime-resume workflow-run finalization helper slice
+completed. Smallest useful vertical slice: route the direct runtime
+dependency-readiness resume completion wrapper through the generic
+workflow-run finalization helper so active-run finish, workflow terminal
+diagnostics, diagnostic-link attachment, and success IO artifact diagnostics
+are no longer duplicated in `WorkflowService`. Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/session_execution_api.rs`,
+`crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`,
+and this plan.
+
+No-fallback/no-legacy confirmation: this slice does not restore direct
+request-scoped runtime launch, does not enable grouped assignment claiming,
+does not dispatch runtime-host batches, and does not add a compatibility shim.
+It only replaces the remaining direct dependency-readiness resume terminal
+wrapper with the backend-owned finalization helper while preserving typed
+readiness-pending behavior as non-terminal.
+
+Verification passed:
+`cargo fmt -p pantograph-workflow-service`,
+`cargo test -p pantograph-workflow-service workflow_execution_session_resume_consumes_fresh_dependency_readiness_snapshot_and_dispatches_active_run --lib`,
+`cargo test -p pantograph-workflow-service workflow_execution_session_dispatches_ready_runtime_task_through_scheduler_selection --lib`,
+`cargo test -p pantograph-workflow-service workflow_execution_session_records_failed_runtime_host_result_as_terminal_task_failure --lib`,
+`cargo check -p pantograph-workflow-service`,
+`cargo fmt -p pantograph-workflow-service -- --check`, and
+`git diff --check`.
+
+Focused test update: the dependency-readiness resume test now asserts that the
+direct resume completion leaves the execution session with one completed run
+and no queued runs, proving the shared finalization helper closes active-run
+state for this path too.
+
+Remaining follow-up: evaluate the remaining failure-only finalization wrappers
+for scheduler task-state initialization failure and unhandled scheduler task
+classes. Grouped assignment claiming remains blocked until the batch owner can
+finalize successful and failed per-member runs without private runner or
+request-scoped duplication.
+
 ## Standards Rule
 
 The standards constraints in

@@ -60,10 +60,13 @@ use super::validation::{
     validate_workflow_graph_submit_readiness, validate_workflow_id,
     validate_workflow_semantic_version,
 };
+use super::workflow_run_finalization::{
+    finalize_admitted_workflow_run, WorkflowRunFinalizationRequest,
+};
 use super::{
     workflow_scheduler_task_graph, workflow_scheduler_task_graph_with_inference_projections,
     workflow_scheduler_task_run_summary, AttributionRepository, WorkflowCapabilityModel,
-    WorkflowErrorDiagnosticsLink, WorkflowExecutableValidationSnapshotLookupRequest,
+    WorkflowExecutableValidationSnapshotLookupRequest,
     WorkflowExecutionSessionAttributedCreateRequest, WorkflowExecutionSessionAttributionContext,
     WorkflowExecutionSessionBootstrapRecoveryAction,
     WorkflowExecutionSessionBootstrapRecoveryDecision,
@@ -595,34 +598,19 @@ impl WorkflowService {
             return run_result;
         }
 
-        self.finish_failed_workflow_run_after_admission(&session_id, &workflow_run_id)?;
-        if let Err(record_error) = self.record_run_terminal_event_if_configured(
-            &session,
-            run_snapshot.as_ref(),
-            &workflow_run_id,
-            Some(&active_run.workflow_semantic_version),
-            &run_result,
-        ) {
-            if let Err(error) = run_result {
-                return Err(error.with_diagnostics(WorkflowErrorDiagnosticsLink {
-                    workflow_run_id: Some(workflow_run_id),
-                    diagnostic_event_id: None,
-                    diagnostics_unavailable: Some(record_error.message().to_string()),
-                }));
-            }
-            return Err(record_error);
-        }
-        if let Ok(response) = run_result.as_ref() {
-            self.record_workflow_io_artifact_events_if_configured(
-                &session,
-                run_snapshot.as_ref(),
-                &workflow_run_id,
-                &active_run.workflow_semantic_version,
-                &active_run.inputs,
-                &response.outputs,
-            )?;
-        }
-        run_result
+        let finalization = finalize_admitted_workflow_run(
+            self,
+            WorkflowRunFinalizationRequest {
+                session: &session,
+                run_snapshot: run_snapshot.as_ref(),
+                session_id: &session_id,
+                workflow_run_id: &workflow_run_id,
+                workflow_semantic_version: &active_run.workflow_semantic_version,
+                io_artifact_inputs: Some(&active_run.inputs),
+                run_result,
+            },
+        )?;
+        finalization.run_result
     }
 
     pub fn workflow_execution_session_runtime_dependency_readiness_resume_candidates(

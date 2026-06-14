@@ -1126,6 +1126,14 @@ async fn workflow_execution_session_resume_consumes_fresh_dependency_readiness_s
     assert_eq!(response.outputs.len(), 1);
     assert_eq!(response.outputs[0].node_id, "infer");
     assert_eq!(response.outputs[0].port_id, "image");
+    let status = service
+        .workflow_get_execution_session_status(WorkflowExecutionSessionStatusRequest {
+            session_id: session_id.clone(),
+        })
+        .await
+        .expect("session status after direct dependency-readiness resume finalization");
+    assert_eq!(status.session.run_count, 1);
+    assert_eq!(status.session.queued_runs, 0);
     let queue = service
         .workflow_list_execution_session_queue(WorkflowExecutionSessionQueueListRequest {
             session_id: session_id.clone(),
