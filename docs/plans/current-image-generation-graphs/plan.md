@@ -7255,6 +7255,43 @@ terminal wrapper. Grouped assignment claiming remains blocked until the batch
 owner can finalize failed per-member runs without private runner or
 request-scoped duplication.
 
+2026-06-14 scheduler task-state initialization failure finalization helper
+slice completed. Smallest useful vertical slice: route the queue-admitted
+scheduler task-state initialization failure branch through the generic
+workflow-run finalization helper and remove the now-unused
+`finish_failed_workflow_run_after_admission` wrapper. Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/session_execution_api.rs` and
+this plan.
+
+No-fallback/no-legacy confirmation: this slice does not add a retry,
+compatibility queue, request-scoped runtime path, grouped assignment claiming,
+or runtime-host batch dispatch. The branch remains a terminal failed
+admitted-run path; it now uses the same backend-owned active-run finish,
+terminal diagnostics, and diagnostic-link behavior as the other per-run
+finalizers.
+
+Verification passed:
+`cargo fmt -p pantograph-workflow-service`,
+`cargo test -p pantograph-workflow-service workflow_execution_session_initializes_scheduler_task_state_before_run_execution --lib`,
+`cargo test -p pantograph-workflow-service workflow_execution_session_unhandled_scheduler_classes_finalize_failed_run --lib`,
+`cargo check -p pantograph-workflow-service`,
+`cargo fmt -p pantograph-workflow-service -- --check`, and
+`git diff --check`.
+
+Test limitation recorded: no public session fixture currently reaches this
+failure branch because `initialize_admitted_task_state` only fails after queue
+admission when private active-run state or generated scheduler records are
+already inconsistent. The slice therefore verifies adjacent task-state
+initialization success, the fail-closed helper-backed unhandled-class terminal
+path, and the removal of the old finish wrapper. Add an injection seam only if
+future scheduler-owner tests need to deliberately simulate admitted-run
+task-state initialization corruption.
+
+Remaining follow-up: continue option 1 step 3 by implementing batch execution
+owner durable member rehydration using the reusable per-run finalization
+helpers. Grouped assignment claiming remains blocked until successful and
+failed batch-member finalization is covered by owner tests.
+
 ## Standards Rule
 
 The standards constraints in

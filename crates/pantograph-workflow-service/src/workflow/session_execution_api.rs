@@ -394,16 +394,20 @@ impl WorkflowService {
                 initial_scheduler_task_records,
             ),
         ) {
-            self.finish_failed_workflow_run_after_admission(&session_id, &workflow_run_id)?;
             let terminal_result = Err(error);
-            self.record_run_terminal_event_if_configured(
-                &session,
-                run_snapshot.as_ref(),
-                &workflow_run_id,
-                Some(&queued_workflow_semantic_version),
-                &terminal_result,
+            let finalization = finalize_admitted_workflow_run(
+                self,
+                WorkflowRunFinalizationRequest {
+                    session: &session,
+                    run_snapshot: run_snapshot.as_ref(),
+                    session_id: &session_id,
+                    workflow_run_id: &workflow_run_id,
+                    workflow_semantic_version: &queued_workflow_semantic_version,
+                    io_artifact_inputs: Some(&queued_run.queued.inputs),
+                    run_result: terminal_result,
+                },
             )?;
-            return terminal_result;
+            return finalization.run_result;
         }
 
         if scheduler_task_run_summary.is_non_runtime_only() {
@@ -691,16 +695,6 @@ impl WorkflowService {
             final_plan,
             resumed_runs,
         })
-    }
-
-    pub(super) fn finish_failed_workflow_run_after_admission(
-        &self,
-        session_id: &str,
-        workflow_run_id: &str,
-    ) -> Result<(), WorkflowServiceError> {
-        let mut store = self.session_store_guard()?;
-        store.finish_run(session_id, workflow_run_id)?;
-        Ok(())
     }
 
     async fn resume_workflow_execution_session_progress_loop(
