@@ -7219,6 +7219,42 @@ classes. Grouped assignment claiming remains blocked until the batch owner can
 finalize successful and failed per-member runs without private runner or
 request-scoped duplication.
 
+2026-06-14 unhandled scheduler-class workflow-run finalization helper slice
+completed. Smallest useful vertical slice: route
+`WorkflowTaskExecutionOwner::fail_unhandled_scheduler_classes_to_completion`
+through the generic workflow-run finalization helper so fail-closed
+Pumas/unsupported scheduler-class runs use the same backend-owned active-run
+finish, terminal diagnostics, and diagnostic-link behavior as completed
+execution paths. Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/task_execution_owner.rs`,
+`crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`,
+and this plan.
+
+No-fallback/no-legacy confirmation: this slice does not add execution support
+for Pumas materialization, does not route unhandled scheduler classes through
+legacy host execution, does not enable grouped assignment claiming, and does
+not dispatch runtime-host batches. The path remains fail-closed with a typed
+`CapabilityViolation`; only the terminal wrapper is now shared.
+
+Verification passed:
+`cargo fmt -p pantograph-workflow-service`,
+`cargo test -p pantograph-workflow-service workflow_execution_session_unhandled_scheduler_classes_finalize_failed_run --lib`,
+`cargo test -p pantograph-workflow-service workflow_execution_session_records_retained_node_io_artifact_bodies --lib`,
+`cargo test -p pantograph-workflow-service workflow_execution_session_runtime_run_fails_closed_before_legacy_launch --lib`,
+`cargo check -p pantograph-workflow-service`,
+`cargo fmt -p pantograph-workflow-service -- --check`, and
+`git diff --check`.
+
+Focused test update: added a minimal `puma-lib` session fixture that produces
+the canonical unhandled `PumasMaterialization` scheduler class, then asserts
+the run fails closed, leaves one terminal run with an empty queue, and records a
+failed run-terminal diagnostic containing `pumas_materialization=1`.
+
+Remaining follow-up: evaluate the scheduler task-state initialization failure
+terminal wrapper. Grouped assignment claiming remains blocked until the batch
+owner can finalize failed per-member runs without private runner or
+request-scoped duplication.
+
 ## Standards Rule
 
 The standards constraints in

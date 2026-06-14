@@ -421,6 +421,81 @@ async fn workflow_execution_session_runtime_run_fails_closed_before_legacy_launc
 }
 
 #[tokio::test]
+async fn workflow_execution_session_unhandled_scheduler_classes_finalize_failed_run() {
+    let host = PumasMaterializationSessionHost::new();
+    let service = WorkflowService::with_max_sessions(2)
+        .with_diagnostics_ledger(SqliteDiagnosticsLedger::open_in_memory().expect("ledger"));
+    let created = service
+        .create_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionCreateRequest {
+                workflow_id: "wf-pumas-materialization-unhandled".to_string(),
+                usage_profile: None,
+                keep_alive: false,
+            },
+        )
+        .await
+        .expect("create session");
+    let session_id = created.session_id.clone();
+
+    let error = service
+        .run_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionRunRequest {
+                session_id: session_id.clone(),
+                workflow_semantic_version: "1.2.3".to_string(),
+                inputs: Vec::new(),
+                output_targets: None,
+                override_selection: None,
+                timeout_ms: None,
+                priority: None,
+            },
+        )
+        .await
+        .expect_err("unhandled scheduler classes should fail closed");
+
+    assert_eq!(error.code(), WorkflowErrorCode::CapabilityViolation);
+    assert!(error.message().contains("pumas_materialization=1"));
+    let status = service
+        .workflow_get_execution_session_status(WorkflowExecutionSessionStatusRequest {
+            session_id: session_id.clone(),
+        })
+        .await
+        .expect("session status after unhandled scheduler class finalization");
+    assert_eq!(status.session.run_count, 1);
+    assert_eq!(status.session.queued_runs, 0);
+    let queue = service
+        .workflow_list_execution_session_queue(WorkflowExecutionSessionQueueListRequest {
+            session_id,
+        })
+        .await
+        .expect("list queue after unhandled scheduler class failure");
+    assert!(queue.items.is_empty());
+
+    let diagnostic_events = {
+        let ledger = service
+            .diagnostics_ledger_guard()
+            .expect("diagnostics ledger");
+        pantograph_diagnostics_ledger::DiagnosticsLedgerRepository::diagnostic_events_after(
+            &*ledger, 0, 20,
+        )
+        .expect("diagnostic events")
+    };
+    let terminal_event = diagnostic_events
+        .iter()
+        .find(|event| {
+            event.event_kind == pantograph_diagnostics_ledger::DiagnosticEventKind::RunTerminal
+        })
+        .expect("run terminal event");
+    assert!(terminal_event
+        .payload_json
+        .contains("\"status\":\"failed\""));
+    assert!(terminal_event
+        .payload_json
+        .contains("pumas_materialization=1"));
+}
+
+#[tokio::test]
 async fn workflow_execution_session_runtime_run_defers_pending_dependency_readiness_before_dispatch(
 ) {
     let host = Arc::new(RuntimeInferenceSessionHost::new());
@@ -3616,6 +3691,85 @@ impl RuntimeInferenceSessionHost {
     }
 }
 
+struct PumasMaterializationSessionHost {
+    inner: MockWorkflowHost,
+}
+
+impl PumasMaterializationSessionHost {
+    fn new() -> Self {
+        Self {
+            inner: MockWorkflowHost::new(8, 1024),
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl WorkflowHost for PumasMaterializationSessionHost {
+    fn max_input_bindings(&self) -> usize {
+        self.inner.max_input_bindings()
+    }
+
+    fn max_output_targets(&self) -> usize {
+        self.inner.max_output_targets()
+    }
+
+    fn max_value_bytes(&self) -> usize {
+        self.inner.max_value_bytes()
+    }
+
+    async fn validate_workflow(&self, workflow_id: &str) -> Result<(), WorkflowServiceError> {
+        self.inner.validate_workflow(workflow_id).await
+    }
+
+    async fn workflow_graph_fingerprint(
+        &self,
+        _workflow_id: &str,
+    ) -> Result<String, WorkflowServiceError> {
+        Ok("pumas-materialization-session-graph".to_string())
+    }
+
+    async fn workflow_graph(
+        &self,
+        _workflow_id: &str,
+    ) -> Result<WorkflowGraph, WorkflowServiceError> {
+        Ok(pumas_materialization_session_graph())
+    }
+
+    async fn workflow_capabilities(
+        &self,
+        workflow_id: &str,
+    ) -> Result<WorkflowHostCapabilities, WorkflowServiceError> {
+        self.inner.workflow_capabilities(workflow_id).await
+    }
+
+    async fn workflow_io(
+        &self,
+        _workflow_id: &str,
+    ) -> Result<WorkflowIoResponse, WorkflowServiceError> {
+        Ok(WorkflowIoResponse {
+            inputs: Vec::new(),
+            outputs: Vec::new(),
+        })
+    }
+
+    async fn runtime_capabilities(
+        &self,
+    ) -> Result<Vec<WorkflowRuntimeCapability>, WorkflowServiceError> {
+        self.inner.runtime_capabilities().await
+    }
+
+    async fn run_workflow(
+        &self,
+        _workflow_id: &str,
+        _inputs: &[WorkflowPortBinding],
+        _output_targets: Option<&[WorkflowOutputTarget]>,
+        _run_options: WorkflowRunOptions,
+        _run_handle: WorkflowRunHandle,
+    ) -> Result<Vec<WorkflowPortBinding>, WorkflowServiceError> {
+        unreachable!("pumas materialization fail-closed test must not execute workflow runs")
+    }
+}
+
 #[derive(Default)]
 struct RecordingReservationLifecyclePort {
     events: Mutex<Vec<ReservationLifecycleEvent>>,
@@ -4109,6 +4263,19 @@ fn runtime_inference_session_graph() -> WorkflowGraph {
             target: "infer".to_string(),
             target_handle: "prompt".to_string(),
         }],
+        derived_graph: None,
+    }
+}
+
+fn pumas_materialization_session_graph() -> WorkflowGraph {
+    WorkflowGraph {
+        nodes: vec![GraphNode {
+            id: "model".to_string(),
+            node_type: "puma-lib".to_string(),
+            position: Position { x: 0.0, y: 0.0 },
+            data: serde_json::json!({}),
+        }],
+        edges: Vec::new(),
         derived_graph: None,
     }
 }
