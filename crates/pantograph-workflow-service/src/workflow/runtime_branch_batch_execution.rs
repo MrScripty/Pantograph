@@ -96,7 +96,7 @@ pub(super) struct WorkflowRuntimeBranchBatchExecutionMember {
     pub(super) task_attempt_fact: WorkflowRuntimeTaskAttemptFactRecord,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 #[must_use]
 pub(super) struct WorkflowRuntimeBranchBatchMemberExecutionOutcome {
     pub(super) assignment_id: WorkflowRuntimeDispatchAssignmentId,
@@ -104,6 +104,7 @@ pub(super) struct WorkflowRuntimeBranchBatchMemberExecutionOutcome {
     pub(super) workflow_id: String,
     pub(super) workflow_run_id: String,
     pub(super) state: WorkflowRuntimeBranchBatchMemberExecutionOutcomeState,
+    pub(super) completed_response: Option<WorkflowRunResponse>,
     pub(super) diagnostics: Vec<WorkflowRuntimeBranchBatchExecutionDiagnostic>,
 }
 
@@ -117,19 +118,19 @@ pub(super) enum WorkflowRuntimeBranchBatchMemberExecutionOutcomeState {
     Failed,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 #[must_use]
 pub(super) struct WorkflowRuntimeBranchBatchResponseMutationOutcome {
     pub(super) member_outcomes: Vec<WorkflowRuntimeBranchBatchMemberExecutionOutcome>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 #[must_use]
 pub(super) struct WorkflowRuntimeBranchBatchRunFinalizationOutcome {
     pub(super) member_outcomes: Vec<WorkflowRuntimeBranchBatchMemberExecutionOutcome>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 #[must_use]
 pub(super) struct WorkflowRuntimeBranchBatchExecutionFailure {
     pub(super) diagnostics: Vec<WorkflowRuntimeBranchBatchExecutionDiagnostic>,
@@ -408,6 +409,7 @@ impl WorkflowRuntimeBranchBatchExecutionFailure {
                 workflow_id: record.workflow_id.clone(),
                 workflow_run_id: record.workflow_run_id.clone(),
                 state: WorkflowRuntimeBranchBatchMemberExecutionOutcomeState::Failed,
+                completed_response: None,
                 diagnostics: vec![diagnostic],
             }],
         }
@@ -425,6 +427,7 @@ impl WorkflowRuntimeBranchBatchExecutionFailure {
                 workflow_id: member.workflow_id.clone(),
                 workflow_run_id: member.workflow_run_id.clone(),
                 state: WorkflowRuntimeBranchBatchMemberExecutionOutcomeState::Failed,
+                completed_response: None,
                 diagnostics: vec![diagnostic],
             }],
         }
@@ -1047,12 +1050,19 @@ fn member_outcome_from_run_result(
     member: &WorkflowRuntimeBranchBatchExecutionMember,
     run_result: Result<&WorkflowRunResponse, &WorkflowServiceError>,
 ) -> WorkflowRuntimeBranchBatchMemberExecutionOutcome {
-    let state = match run_result {
-        Ok(_response) => WorkflowRuntimeBranchBatchMemberExecutionOutcomeState::Completed,
-        Err(WorkflowServiceError::Cancelled(_message)) => {
-            WorkflowRuntimeBranchBatchMemberExecutionOutcomeState::Cancelled
-        }
-        Err(_error) => WorkflowRuntimeBranchBatchMemberExecutionOutcomeState::Failed,
+    let (state, completed_response) = match run_result {
+        Ok(response) => (
+            WorkflowRuntimeBranchBatchMemberExecutionOutcomeState::Completed,
+            Some(response.clone()),
+        ),
+        Err(WorkflowServiceError::Cancelled(_message)) => (
+            WorkflowRuntimeBranchBatchMemberExecutionOutcomeState::Cancelled,
+            None,
+        ),
+        Err(_error) => (
+            WorkflowRuntimeBranchBatchMemberExecutionOutcomeState::Failed,
+            None,
+        ),
     };
     WorkflowRuntimeBranchBatchMemberExecutionOutcome {
         assignment_id: member.assignment_id.clone(),
@@ -1060,6 +1070,7 @@ fn member_outcome_from_run_result(
         workflow_id: member.workflow_id.clone(),
         workflow_run_id: member.workflow_run_id.clone(),
         state,
+        completed_response,
         diagnostics: Vec::new(),
     }
 }
@@ -1083,6 +1094,7 @@ fn member_outcome_from_response(
             }
             _ => WorkflowRuntimeBranchBatchMemberExecutionOutcomeState::Failed,
         },
+        completed_response: None,
         diagnostics: Vec::new(),
     }
 }
@@ -1141,6 +1153,7 @@ fn member_outcome_from_scheduler_mutation(
         workflow_id: member.workflow_id.clone(),
         workflow_run_id: member.workflow_run_id.clone(),
         state,
+        completed_response: None,
         diagnostics: Vec::new(),
     }
 }
@@ -1524,6 +1537,10 @@ mod tests {
             ]
         );
         assert_eq!(
+            completed_response_run_ids(&outcome.member_outcomes),
+            vec![None, None]
+        );
+        assert_eq!(
             service
                 .scheduler_task_orchestrator
                 .active_task_lifecycle_handle_count()
@@ -1624,6 +1641,17 @@ mod tests {
                 WorkflowRuntimeBranchBatchMemberExecutionOutcomeState::Completed,
             ]
         );
+        assert_eq!(
+            completed_response_run_ids(&outcome.member_outcomes),
+            vec![Some("run.2026-05-22.001"), Some("run.2026-05-22.002")]
+        );
+        assert_eq!(
+            completed_response_image_outputs(&outcome.member_outcomes),
+            vec![
+                Some("image for run.2026-05-22.001"),
+                Some("image for run.2026-05-22.002"),
+            ]
+        );
         assert_eq!(host.workflow_io_call_count(), 2);
         assert!(
             service
@@ -1674,6 +1702,10 @@ mod tests {
                 WorkflowRuntimeBranchBatchMemberExecutionOutcomeState::Retryable,
             ]
         );
+        assert_eq!(
+            completed_response_run_ids(&outcome.member_outcomes),
+            vec![None, None]
+        );
         assert_eq!(host.workflow_io_call_count(), 0);
         assert_eq!(
             service
@@ -1713,6 +1745,17 @@ mod tests {
             vec![
                 WorkflowRuntimeBranchBatchMemberExecutionOutcomeState::Completed,
                 WorkflowRuntimeBranchBatchMemberExecutionOutcomeState::Completed,
+            ]
+        );
+        assert_eq!(
+            completed_response_run_ids(&outcome.member_outcomes),
+            vec![Some("run.2026-05-22.001"), Some("run.2026-05-22.002")]
+        );
+        assert_eq!(
+            completed_response_image_outputs(&outcome.member_outcomes),
+            vec![
+                Some("image for run.2026-05-22.001"),
+                Some("image for run.2026-05-22.002"),
             ]
         );
         let requests = batch_port.requests();
@@ -2521,6 +2564,37 @@ mod tests {
             RuntimeHostExecutionInputValue::String(value) => value.clone(),
             other => panic!("unexpected runtime-host prompt input value: {other:?}"),
         }
+    }
+
+    fn completed_response_run_ids(
+        outcomes: &[WorkflowRuntimeBranchBatchMemberExecutionOutcome],
+    ) -> Vec<Option<&str>> {
+        outcomes
+            .iter()
+            .map(|outcome| {
+                outcome
+                    .completed_response
+                    .as_ref()
+                    .map(|response| response.workflow_run_id.as_str())
+            })
+            .collect()
+    }
+
+    fn completed_response_image_outputs(
+        outcomes: &[WorkflowRuntimeBranchBatchMemberExecutionOutcome],
+    ) -> Vec<Option<&str>> {
+        outcomes
+            .iter()
+            .map(|outcome| {
+                outcome.completed_response.as_ref().and_then(|response| {
+                    response.outputs.iter().find_map(|output| {
+                        (output.node_id == "node.llm_inference" && output.port_id == "image")
+                            .then(|| output.value.as_str())
+                            .flatten()
+                    })
+                })
+            })
+            .collect()
     }
 
     fn runtime_host_batch_response_from_plan(

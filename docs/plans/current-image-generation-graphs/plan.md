@@ -8033,6 +8033,40 @@ Re-plan triggers for Option 1:
 - Any implementation requires fabricated responses, request-scoped runtime
   execution, single-run fallback, or workflow-owned runtime state.
 
+2026-06-14 batch finalization response payload slice completed. Smallest
+useful vertical slice: extend batch member execution outcomes with an optional
+canonical completed `WorkflowRunResponse` and populate it only from
+`finalize_admitted_workflow_run` after runtime-host member finalization.
+Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/runtime_branch_batch_execution.rs`
+and this plan.
+
+No-fallback/no-legacy confirmation: this slice does not wire worker responder
+fan-out, does not move responder ownership into the batch owner, does not add a
+durable response side channel, does not call legacy `run_workflow`, and does
+not fabricate success payloads. Response mutation, failed, deferred, retryable,
+and cancelled member outcomes carry `None`; only completed finalized members
+carry the canonical response returned by run finalization.
+
+Verification passed:
+`cargo fmt -p pantograph-workflow-service`,
+`cargo test -p pantograph-workflow-service runtime_branch_batch_execution --lib`,
+`cargo test -p pantograph-workflow-service runtime_branch_run_finalization --lib`,
+`cargo check -p pantograph-workflow-service`,
+`cargo fmt -p pantograph-workflow-service -- --check`, and
+`git diff --check`.
+
+Focused test update: batch response mutation coverage now proves scheduler
+mutation completion does not expose a completed run response before
+finalization; completed batch finalization and full claimed-batch execution
+prove each member returns its own workflow-run response and image output; mixed
+failed/retryable finalization proves non-completed outcomes remain payload-free.
+
+Remaining follow-up: resume worker wiring by evaluating broker readiness after
+assignment running, keeping `WaitingForPeers` non-terminal, executing ready
+broker claims through `execute_claimed_batch`, and fanning out completed member
+responses through assignment responders without single-run fallback.
+
 ## Standards Rule
 
 The standards constraints in
