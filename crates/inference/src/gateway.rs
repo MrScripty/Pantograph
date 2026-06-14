@@ -4,6 +4,7 @@
 //! Candle, PyTorch, and external-compatible runtimes. It manages backend
 //! lifecycle, switching, and forwards requests to the active backend.
 
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -1435,19 +1436,36 @@ impl InferenceGateway {
         if !guard.is_ready() {
             return Err(GatewayError::Backend(BackendError::NotReady));
         }
+        if !guard.capabilities().image_generation_batch {
+            return Err(image_generation_batch_error(vec![
+                ImageGenerationBatchDiagnostic {
+                    code: ImageGenerationBatchDiagnosticCode::UnsupportedBatchExecution,
+                    severity: ImageGenerationBatchDiagnosticSeverity::Error,
+                    member_id: None,
+                    field_path: "backend".to_string(),
+                    message: format!(
+                        "active backend '{}' does not expose image-generation batch execution",
+                        guard.name()
+                    ),
+                },
+            ]));
+        }
 
-        Err(image_generation_batch_error(vec![
-            ImageGenerationBatchDiagnostic {
-                code: ImageGenerationBatchDiagnosticCode::UnsupportedBatchExecution,
-                severity: ImageGenerationBatchDiagnosticSeverity::Error,
-                member_id: None,
-                field_path: "backend".to_string(),
-                message: format!(
-                    "active backend '{}' does not expose image-generation batch execution",
-                    guard.name()
-                ),
-            },
-        ]))
+        let telemetry_scope = InferenceExecutionTelemetryScope::new();
+        let context =
+            BackendExecutionContext::with_cancellation(telemetry_scope.recorder(), cancellation);
+        let response = guard
+            .generate_image_batch_from_execution_request(request.clone(), context)
+            .await
+            .map_err(GatewayError::Backend)?;
+        let _ = telemetry_scope.drain_resource_observation();
+        if let Err(error) = response.validate() {
+            return Err(image_generation_batch_error(vec![
+                image_generation_batch_contract_diagnostic(error),
+            ]));
+        }
+        validate_image_generation_batch_response_correlation(&request, &response)?;
+        Ok(response)
     }
 
     /// Build and execute one image-generation plan from canonical planning facts.
@@ -3182,6 +3200,53 @@ fn image_generation_batch_contract_diagnostic(
         field_path: "batch".to_string(),
         message: error.to_string(),
     }
+}
+
+fn validate_image_generation_batch_response_correlation(
+    request: &ImageGenerationBatchExecutionRequest,
+    response: &ImageGenerationBatchExecutionResponse,
+) -> Result<(), GatewayError> {
+    if response.batch_execution_id != request.batch_execution_id {
+        return Err(image_generation_batch_error(vec![
+            ImageGenerationBatchDiagnostic {
+                code: ImageGenerationBatchDiagnosticCode::ContractViolation,
+                severity: ImageGenerationBatchDiagnosticSeverity::Error,
+                member_id: None,
+                field_path: "batch_execution_id".to_string(),
+                message: format!(
+                    "image-generation batch response id '{}' does not match request id '{}'",
+                    response.batch_execution_id, request.batch_execution_id
+                ),
+            },
+        ]));
+    }
+
+    let request_member_ids = request
+        .members
+        .iter()
+        .map(|member| member.member_id.as_str())
+        .collect::<HashSet<_>>();
+    let response_member_ids = response
+        .members
+        .iter()
+        .map(|member| member.member_id.as_str())
+        .collect::<HashSet<_>>();
+
+    if request_member_ids != response_member_ids {
+        return Err(image_generation_batch_error(vec![
+            ImageGenerationBatchDiagnostic {
+                code: ImageGenerationBatchDiagnosticCode::ContractViolation,
+                severity: ImageGenerationBatchDiagnosticSeverity::Error,
+                member_id: None,
+                field_path: "members".to_string(),
+                message:
+                    "image-generation batch response member ids do not match request member ids"
+                        .to_string(),
+            },
+        ]));
+    }
+
+    Ok(())
 }
 
 fn start_execution_telemetry_for_process(

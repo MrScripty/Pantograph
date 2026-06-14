@@ -38,6 +38,9 @@ use crate::device_contracts::{
     DeviceResolutionDiagnosticSeverity, InferenceDeviceClass, RuntimeVariantId,
 };
 use crate::execution_telemetry::{BackendExecutionContext, RuntimeNativeTelemetryProvider};
+use crate::image_generation_batch::{
+    ImageGenerationBatchExecutionRequest, ImageGenerationBatchExecutionResponse,
+};
 use crate::image_generation_planner::ImageGenerationExecutionPlan;
 use crate::kv_cache::{KvCacheRuntimeFingerprint, ModelFingerprint};
 use crate::managed_runtime::ManagedBinaryId;
@@ -110,6 +113,10 @@ pub struct BackendCapabilities {
     pub vision: bool,
     /// Supports image generation / diffusion requests
     pub image_generation: bool,
+    /// Supports executing multiple planned image-generation members as one
+    /// backend-owned batch operation.
+    #[serde(default)]
+    pub image_generation_batch: bool,
     /// Supports embedding generation
     pub embeddings: bool,
     /// Supports document reranking
@@ -1153,6 +1160,17 @@ pub trait InferenceBackend: Send + Sync {
     ) -> Result<ImageGenerationResult, BackendError> {
         Err(BackendError::Inference(
             "Planned image generation not supported by this backend".to_string(),
+        ))
+    }
+
+    /// Execute a canonical planned image-generation batch.
+    async fn generate_image_batch_from_execution_request(
+        &self,
+        _request: ImageGenerationBatchExecutionRequest,
+        _context: BackendExecutionContext,
+    ) -> Result<ImageGenerationBatchExecutionResponse, BackendError> {
+        Err(BackendError::Inference(
+            "Planned image generation batch not supported by this backend".to_string(),
         ))
     }
 

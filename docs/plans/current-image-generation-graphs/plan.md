@@ -6231,11 +6231,16 @@ Option 1 gateway-batch execution sequence:
    backend batch execution does not exist yet, the gateway currently fails
    closed with `unsupported_batch_execution` instead of looping through the
    single planned-image method.
-3. Add backend trait support with a default unsupported implementation, then
-   implement real backend batch execution only where the backend can execute a
-   true multi-member batch without looping through the single planned-image
-   method as hidden fallback. If PyTorch/diffusers or the Python worker needs a
-   new envelope, add that as a separate validated slice.
+3. Completed 2026-06-13 for backend trait support only: add
+   `BackendCapabilities::image_generation_batch`, add
+   `InferenceBackend::generate_image_batch_from_execution_request` with a
+   default unsupported implementation, and update the gateway to dispatch to
+   that trait method only when the active backend explicitly advertises batch
+   support. Gateway response validation now rejects invalid response contracts
+   and mismatched response/request member ids. Real PyTorch/diffusers or
+   Python worker batch execution remains a separate future slice and must only
+   be implemented where the backend can execute a true multi-member batch
+   without looping through the single planned-image method as hidden fallback.
 4. Implement `EmbeddedRuntimeHostBatchExecutionPort` against the gateway batch
    operation. The embedded port may share pure projection and artifact-writing
    helpers with the single-task port, but it must not delegate execution to
@@ -6272,17 +6277,31 @@ workflow inputs through the batch boundary. Per-member planning rejection will
 be represented by the caller that builds planned members until a future slice
 adds an explicit owned batch planning DTO.
 
-Next thin slice: start sequence step 3 by adding backend trait support with a
-default unsupported batch method and gateway dispatch to that trait method.
-Allowed files should be limited to `crates/inference/src/backend/mod.rs`,
-`crates/inference/src/gateway.rs`, focused backend/gateway tests,
-`crates/inference/src/README.md`, and this plan. Do not implement PyTorch or
-Python worker batch execution in the trait-support slice, do not loop through
-single planned-image execution, and do not change generated runtime-host
-contracts, workflow-service worker code, frontend/Tauri DTOs, lockfiles, saved
-workflow fixtures, physical-device tables, or runtime-residency tables. Stop
-and re-plan if trait support requires a Python worker envelope or backend
-state-management change in the same slice.
+Step 3 verification:
+`cargo test -p inference generate_image_batch --lib` passed,
+`cargo check -p inference` passed, and
+`cargo fmt -p inference -- --check` passed.
+
+Step 3 files touched:
+`crates/inference/src/backend/mod.rs`, `crates/inference/src/backend/llamacpp.rs`,
+`crates/inference/src/gateway.rs`, `crates/inference/src/gateway_tests.rs`,
+`crates/inference/src/README.md`, and this plan.
+
+Step 3 deviation:
+`crates/inference/src/backend/llamacpp.rs` needed a mechanical
+`image_generation_batch: false` static-capability field because its
+`BackendCapabilities` literal is exhaustive. This does not enable llama.cpp
+batch execution and does not change backend behavior.
+
+Next thin slice: decide whether to implement a real backend batch executor or
+pause gateway/backend work and return to the embedded runtime-host batch port.
+Do not wire `EmbeddedRuntimeHostBatchExecutionPort` to the gateway until at
+least one backend can execute the batch method without looping through
+single-image execution, unless the product decision is to keep embedded batch
+execution fail-closed until backend support lands. If implementing real backend
+execution next, inspect the PyTorch image-generation worker envelope and stop
+to re-plan if true multi-member diffusion batching requires Python-side
+contract or scheduler/runtime-residency changes.
 
 ## Standards Rule
 

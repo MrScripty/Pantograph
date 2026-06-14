@@ -421,7 +421,11 @@ async fn run_image_request(
 - `InferenceGateway::generate_image_batch_from_execution_request` is the
   fail-closed gateway entrypoint for planned batches. It validates the batch
   contract and returns typed `unsupported_batch_execution` diagnostics until
-  backend-level batch execution exists.
+  backend-level batch execution exists. Backends must advertise
+  `BackendCapabilities::image_generation_batch` before the gateway calls
+  `InferenceBackend::generate_image_batch_from_execution_request`; the default
+  trait implementation is unsupported and must not loop over the single-image
+  method.
 - Image-generation request and worker-envelope sampling intent uses
   `denoising_scheduler`. The older overloaded `scheduler` field name is not a
   request compatibility alias; source package facts may still use factual

@@ -92,6 +92,7 @@ impl LlamaCppBackend {
         BackendCapabilities {
             vision: true, // GGUF + mmproj support
             image_generation: false,
+            image_generation_batch: false,
             embeddings: true,       // Via --embedding mode
             reranking: true,        // Via --reranking mode
             gpu: true,              // CUDA and Metal are runtime-variant gated

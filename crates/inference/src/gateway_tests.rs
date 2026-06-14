@@ -17,7 +17,9 @@ use crate::device_contracts::{
 };
 use crate::image_generation_batch::{
     ImageGenerationBatchContractError, ImageGenerationBatchDiagnosticCode,
-    ImageGenerationBatchExecutionMemberRequest, ImageGenerationBatchExecutionRequest,
+    ImageGenerationBatchExecutionMemberRequest, ImageGenerationBatchExecutionMemberResponse,
+    ImageGenerationBatchExecutionRequest, ImageGenerationBatchExecutionResponse,
+    ImageGenerationBatchExecutionState, ImageGenerationBatchMemberExecutionState,
 };
 use crate::image_generation_planner::{
     ImageGenerationExecutionPlan, ImageGenerationPlannerDiagnosticCode,
@@ -55,6 +57,12 @@ use crate::{
 mod start_config;
 
 struct MockImageBackend;
+#[derive(Clone, Default)]
+struct MockImageBatchBackend {
+    calls: Arc<AtomicUsize>,
+    requests: Arc<Mutex<Vec<ImageGenerationBatchExecutionRequest>>>,
+    response_member_id_override: Option<String>,
+}
 #[derive(Clone, Default)]
 struct RecordingCancellationImageBackend {
     calls: Arc<AtomicUsize>,
@@ -534,6 +542,122 @@ impl InferenceBackend for MockImageBackend {
             duration_seconds: Some(1.5),
             segments: Vec::new(),
             metadata: serde_json::Value::Null,
+        })
+    }
+}
+
+#[async_trait]
+impl InferenceBackend for MockImageBatchBackend {
+    fn name(&self) -> &'static str {
+        "Mock image batch backend"
+    }
+
+    fn description(&self) -> &'static str {
+        "Mock backend with image batch support"
+    }
+
+    fn capabilities(&self) -> BackendCapabilities {
+        BackendCapabilities {
+            image_generation: true,
+            image_generation_batch: true,
+            ..BackendCapabilities::default()
+        }
+    }
+
+    async fn start(
+        &mut self,
+        _config: &BackendConfig,
+        _spawner: Arc<dyn ProcessSpawner>,
+    ) -> Result<BackendStartOutcome, BackendError> {
+        Ok(BackendStartOutcome::default())
+    }
+
+    fn stop(&mut self) {}
+
+    fn is_ready(&self) -> bool {
+        true
+    }
+
+    async fn health_check(&self) -> bool {
+        true
+    }
+
+    fn base_url(&self) -> Option<String> {
+        None
+    }
+
+    async fn chat_completion_stream(
+        &self,
+        _request_json: String,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, BackendError>> + Send>>, BackendError>
+    {
+        Ok(Box::pin(stream::empty()))
+    }
+
+    async fn embeddings(
+        &self,
+        texts: Vec<String>,
+        _model: &str,
+    ) -> Result<Vec<EmbeddingResult>, BackendError> {
+        Ok(texts
+            .into_iter()
+            .map(|text| EmbeddingResult {
+                vector: vec![text.len() as f32],
+                token_count: text.split_whitespace().count().max(1),
+            })
+            .collect())
+    }
+
+    async fn rerank(&self, _request: RerankRequest) -> Result<RerankResponse, BackendError> {
+        Ok(RerankResponse {
+            results: Vec::new(),
+            metadata: serde_json::Value::Null,
+        })
+    }
+
+    async fn generate_image_batch_from_execution_request(
+        &self,
+        request: ImageGenerationBatchExecutionRequest,
+        context: BackendExecutionContext,
+    ) -> Result<ImageGenerationBatchExecutionResponse, BackendError> {
+        assert!(
+            matches!(
+                context.cancellation_snapshot().state,
+                InferenceExecutionCancellationState::Running
+            ),
+            "batch backend should receive a running cancellation context"
+        );
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        self.requests
+            .lock()
+            .expect("batch requests lock")
+            .push(request.clone());
+        Ok(ImageGenerationBatchExecutionResponse {
+            batch_execution_id: request.batch_execution_id,
+            state: ImageGenerationBatchExecutionState::Completed,
+            members: request
+                .members
+                .into_iter()
+                .map(|member| ImageGenerationBatchExecutionMemberResponse {
+                    member_id: self
+                        .response_member_id_override
+                        .clone()
+                        .unwrap_or(member.member_id),
+                    state: ImageGenerationBatchMemberExecutionState::Completed,
+                    result: Some(ImageGenerationResult {
+                        images: vec![crate::types::EncodedImage {
+                            data_base64: member.plan.prompt,
+                            mime_type: "image/png".to_string(),
+                            width: member.plan.width,
+                            height: member.plan.height,
+                        }],
+                        seed_used: member.plan.seed,
+                        metadata: serde_json::Value::Null,
+                    }),
+                    diagnostics: Vec::new(),
+                })
+                .collect(),
+            diagnostics: Vec::new(),
         })
     }
 }
@@ -1407,6 +1531,70 @@ async fn test_generate_image_batch_from_execution_request_fails_closed_without_b
     assert!(diagnostics[0]
         .message
         .contains("does not expose image-generation batch execution"));
+}
+
+#[tokio::test]
+async fn test_generate_image_batch_from_execution_request_dispatches_to_batch_backend() {
+    let backend = MockImageBatchBackend::default();
+    let calls = backend.calls.clone();
+    let requests = backend.requests.clone();
+    let gateway = InferenceGateway::with_backend(Box::new(backend), "mock");
+
+    let response = gateway
+        .generate_image_batch_from_execution_request(sample_image_generation_batch_request())
+        .await
+        .expect("batch-capable backend should receive planned batch execution");
+
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    assert_eq!(requests.lock().expect("requests lock").len(), 1);
+    assert_eq!(response.batch_execution_id, "batch-001");
+    assert_eq!(
+        response.state,
+        ImageGenerationBatchExecutionState::Completed
+    );
+    assert_eq!(response.members.len(), 1);
+    assert_eq!(response.members[0].member_id, "member-001");
+    assert_eq!(
+        response.members[0].state,
+        ImageGenerationBatchMemberExecutionState::Completed
+    );
+    assert_eq!(
+        response.members[0]
+            .result
+            .as_ref()
+            .expect("member result")
+            .images[0]
+            .data_base64,
+        "paper lantern"
+    );
+}
+
+#[tokio::test]
+async fn test_generate_image_batch_rejects_mismatched_backend_member_response() {
+    let backend = MockImageBatchBackend {
+        response_member_id_override: Some("unexpected-member".to_string()),
+        ..MockImageBatchBackend::default()
+    };
+    let calls = backend.calls.clone();
+    let gateway = InferenceGateway::with_backend(Box::new(backend), "mock");
+
+    let error = gateway
+        .generate_image_batch_from_execution_request(sample_image_generation_batch_request())
+        .await
+        .expect_err("gateway should reject mismatched backend batch member response");
+
+    let GatewayError::ImageGenerationBatchExecution { diagnostics, .. } = error else {
+        panic!("expected batch contract diagnostics");
+    };
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    assert_eq!(diagnostics.len(), 1);
+    assert_eq!(
+        diagnostics[0].code,
+        ImageGenerationBatchDiagnosticCode::ContractViolation
+    );
+    assert!(diagnostics[0]
+        .message
+        .contains("response member ids do not match request member ids"));
 }
 
 #[tokio::test]
