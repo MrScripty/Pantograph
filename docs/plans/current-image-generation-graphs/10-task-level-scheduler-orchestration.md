@@ -147,6 +147,16 @@ dependency preflight outputs.
   missing or stale readiness proof, reduced execution-plan projections, graph
   paths, local Pumas load targets, scheduler-owned execution payloads, and
   worker launch metadata.
+- `ImageGenerationBatchExecutionRequest` / member response contract (planning
+  name): inference-gateway-owned contract for executing multiple planned image
+  generation members as one scheduler-owned batch. Runtime-host batch execution
+  depends on this gateway boundary before embedded runtime can implement a real
+  `RuntimeHostBatchExecutionPort`. The gateway contract must preserve
+  member-specific workflow/task correlation, inputs, planning diagnostics,
+  outputs, cancellation, retry/defer signals, and terminal state. It must not
+  treat one member's image count as cross-workflow batching, loop the existing
+  single planned-image method as hidden fallback, or carry workflow inputs from
+  the run that first loaded a runtime/model.
 - Runtime residency and keep-alive state are model/runtime lifecycle facts, not
   workflow input memory. Residency may allow a later compatible task to reuse a
   loaded runtime/model instance, but each workflow/session run must provide or

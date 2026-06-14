@@ -6199,6 +6199,49 @@ Recommended path: use option 1. It creates the missing canonical gateway
 boundary required for a real batch executor and avoids adding another
 fail-closed layer around an absent backend capability.
 
+2026-06-13 embedded batch-port re-plan decision: use option 1. Add the
+canonical gateway-level image-generation batch contract before implementing
+the embedded runtime-host batch execution port. The gateway/backend boundary is
+the missing owner for executing multiple planned image-generation members as
+one scheduler-owned batch; embedded runtime must consume that boundary instead
+of manufacturing batch semantics by looping single-member gateway or
+runtime-host calls.
+
+Option 1 gateway-batch execution sequence:
+
+1. Add inference-crate image-generation batch DTOs and validation tests. The
+   contract must use owned member DTOs, stable member ids, member-specific
+   inputs/planning facts, bounded diagnostics, and explicit batch/member
+   terminal states. Do not use borrowed `ImageGenerationPlanningInput` as a
+   persisted/shared DTO, do not conflate one member's image count with multiple
+   workflow/task members, and do not change generated runtime-host contracts in
+   this slice.
+2. Add a gateway operation that validates and plans every batch member before
+   backend execution, preserves member correlation, and returns typed
+   diagnostics when any member cannot be planned. The gateway must fail closed
+   when the active backend does not support the batch execution operation.
+3. Add backend trait support with a default unsupported implementation, then
+   implement real backend batch execution only where the backend can execute a
+   true multi-member batch without looping through the single planned-image
+   method as hidden fallback. If PyTorch/diffusers or the Python worker needs a
+   new envelope, add that as a separate validated slice.
+4. Implement `EmbeddedRuntimeHostBatchExecutionPort` against the gateway batch
+   operation. The embedded port may share pure projection and artifact-writing
+   helpers with the single-task port, but it must not delegate execution to
+   `RuntimeHostExecutionPort` or call the single gateway operation per member.
+5. Resume workflow-service batch mapping and worker grouped dispatch only
+   after the embedded batch port is backed by the canonical gateway batch
+   operation.
+
+Next thin slice: start sequence step 1 in the inference crate. Allowed files
+must be identified after inspecting `crates/inference/src/gateway.rs`,
+`crates/inference/src/backend/mod.rs`, existing image-generation planner
+contracts, and gateway tests. Keep the slice contract/test focused; stop and
+re-plan if the batch DTO requires changing scheduler DTOs, generated
+runtime-host contracts, workflow-service worker code, frontend/Tauri DTOs,
+lockfiles, saved workflow fixtures, physical-device tables, or
+runtime-residency tables.
+
 ## Standards Rule
 
 The standards constraints in
