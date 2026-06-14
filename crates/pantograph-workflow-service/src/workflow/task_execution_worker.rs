@@ -26,11 +26,13 @@ use super::runtime_dispatch_assignment::{
     WorkflowRuntimeDispatchAssignmentBatchBrokerClaimRequest,
     WorkflowRuntimeDispatchAssignmentBatchBrokerDecision,
     WorkflowRuntimeDispatchAssignmentBatchBrokerRequest,
+    WorkflowRuntimeDispatchAssignmentBatchBrokerWaitRequest,
     WorkflowRuntimeDispatchAssignmentBatchClaimOutcome,
     WorkflowRuntimeDispatchAssignmentBatchClaimOwnerId,
     WorkflowRuntimeDispatchAssignmentDiagnostic, WorkflowRuntimeDispatchAssignmentDiagnosticCode,
     WorkflowRuntimeDispatchAssignmentId, WorkflowRuntimeDispatchAssignmentRecord,
     WorkflowRuntimeDispatchAssignmentRepository, WorkflowRuntimeDispatchAssignmentRequest,
+    WORKFLOW_RUNTIME_DISPATCH_ASSIGNMENT_BATCH_BROKER_WAIT_WINDOW_MS,
 };
 use super::runtime_dispatch_selection::WorkflowRuntimeDispatchCandidateFact;
 use super::session_scheduler_runner::WorkflowPreDispatchPreparationBoundary;
@@ -1262,6 +1264,22 @@ async fn claim_and_execute_runtime_branch_event(
 
     match broker_decision {
         WorkflowRuntimeDispatchAssignmentBatchBrokerDecision::WaitingForPeers { .. } => {
+            if let Err(diagnostic) = record_runtime_branch_batch_broker_wait_window(
+                service.as_ref(),
+                broker_decision,
+                unix_timestamp_ms(),
+            ) {
+                return WorkflowTaskExecutionWorkerRuntimeBranchExecutionResult::complete(
+                    fail_runtime_branch_dispatch_diagnostic(
+                        command,
+                        service.as_ref(),
+                        &claimed.record.event_id,
+                        &claimed.claim,
+                        "runtime branch batch broker wait-window persistence failed",
+                        diagnostic,
+                    ),
+                );
+            }
             WorkflowTaskExecutionWorkerRuntimeBranchExecutionResult::ResponderRetainedForBatch
         }
         WorkflowRuntimeDispatchAssignmentBatchBrokerDecision::ReadyToClaim { .. } => {
@@ -1403,6 +1421,32 @@ fn claim_runtime_branch_batch_broker_decision(
             now_ms,
             lease_duration_ms: RUNTIME_BRANCH_BATCH_CLAIM_LEASE_MS,
         })
+        .map_err(runtime_dispatch_assignment_diagnostic)
+}
+
+fn record_runtime_branch_batch_broker_wait_window(
+    service: &WorkflowService,
+    decision: WorkflowRuntimeDispatchAssignmentBatchBrokerDecision,
+    now_ms: u64,
+) -> Result<WorkflowRuntimeDispatchAssignmentRecord, WorkflowTaskExecutionWorkerDiagnostic> {
+    let mut repository = service
+        .runtime_dispatch_assignment_repository
+        .lock()
+        .map_err(|_| {
+            WorkflowTaskExecutionWorkerDiagnostic::new(
+                WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchDispatchUnavailable,
+                "runtime dispatch-assignment repository lock poisoned",
+            )
+        })?;
+    repository
+        .record_batch_broker_waiting_decision(
+            WorkflowRuntimeDispatchAssignmentBatchBrokerWaitRequest {
+                decision,
+                now_ms,
+                wait_window_duration_ms:
+                    WORKFLOW_RUNTIME_DISPATCH_ASSIGNMENT_BATCH_BROKER_WAIT_WINDOW_MS,
+            },
+        )
         .map_err(runtime_dispatch_assignment_diagnostic)
 }
 
@@ -2072,6 +2116,7 @@ mod tests {
     use crate::workflow::runtime_branch_task_event::{
         WorkflowRuntimeBranchTaskEventRequest, WorkflowRuntimeBranchTaskEventState,
     };
+    use crate::workflow::runtime_dispatch_assignment::WorkflowRuntimeDispatchAssignmentBatchBrokerWaitExpiryDiagnosticCode;
     use crate::workflow::runtime_dispatch_selection::{
         ValidatedWorkflowRuntimeDispatchCandidateFactBundle, WorkflowRuntimeDispatchCandidateFact,
         WorkflowRuntimeDispatchCandidateFactBundle, WorkflowRuntimeDispatchCandidateProvider,
@@ -2451,6 +2496,26 @@ mod tests {
             runtime_branch_event_state(service.as_ref(), &first_event_id),
             WorkflowRuntimeBranchTaskEventState::Running
         );
+        let first_waiting_assignment =
+            runtime_dispatch_assignment_for_event(service.as_ref(), &first_event_id);
+        let first_wait_window = first_waiting_assignment
+            .batch_broker_wait_window
+            .as_ref()
+            .expect("first branch wait window");
+        assert_eq!(
+            first_wait_window.required_assignments,
+            RUNTIME_BRANCH_BATCH_BROKER_MIN_ASSIGNMENTS
+        );
+        assert_eq!(
+            first_wait_window.expiry_diagnostic.code,
+            WorkflowRuntimeDispatchAssignmentBatchBrokerWaitExpiryDiagnosticCode::BatchWindowExpired
+        );
+        assert_eq!(
+            first_wait_window.expires_at_ms,
+            first_wait_window
+                .waiting_since_ms
+                .saturating_add(WORKFLOW_RUNTIME_DISPATCH_ASSIGNMENT_BATCH_BROKER_WAIT_WINDOW_MS,)
+        );
 
         let second_result = claim_and_execute_runtime_branch_event(
             &environment,
@@ -2494,6 +2559,12 @@ mod tests {
         assert_eq!(
             runtime_branch_event_state(service.as_ref(), &second_event_id),
             WorkflowRuntimeBranchTaskEventState::Completed
+        );
+        assert!(
+            runtime_dispatch_assignment_for_event(service.as_ref(), &first_event_id)
+                .batch_broker_wait_window
+                .is_none(),
+            "claiming the batch must clear the prior wait window"
         );
         assert_eq!(registry.active_responder_count(), 0);
     }
@@ -3055,6 +3126,27 @@ mod tests {
             .get(event_id)
             .expect("runtime branch task event")
             .state
+    }
+
+    fn runtime_dispatch_assignment_for_event(
+        service: &WorkflowService,
+        event_id: &WorkflowRuntimeBranchTaskEventId,
+    ) -> WorkflowRuntimeDispatchAssignmentRecord {
+        let assignment_id = service
+            .runtime_branch_task_event_repository
+            .lock()
+            .expect("runtime branch task event repository")
+            .get(event_id)
+            .expect("runtime branch task event")
+            .dispatch_assignment_link
+            .expect("runtime branch dispatch assignment link")
+            .assignment_id;
+        service
+            .runtime_dispatch_assignment_repository
+            .lock()
+            .expect("runtime dispatch assignment repository")
+            .get(&assignment_id)
+            .expect("runtime dispatch assignment")
     }
 
     fn assert_runtime_branch_completed_response(

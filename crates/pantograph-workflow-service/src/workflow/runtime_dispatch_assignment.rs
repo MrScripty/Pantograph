@@ -23,6 +23,7 @@ use super::runtime_task_attempt_fact::{
 };
 
 pub(super) const WORKFLOW_RUNTIME_DISPATCH_ASSIGNMENT_SCHEMA_VERSION: u16 = 1;
+pub(super) const WORKFLOW_RUNTIME_DISPATCH_ASSIGNMENT_BATCH_BROKER_WAIT_WINDOW_MS: u64 = 30_000;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 #[must_use]

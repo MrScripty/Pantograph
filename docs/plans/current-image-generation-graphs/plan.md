@@ -8315,6 +8315,38 @@ wait window when it returns `WaitingForPeers`, then add the scheduler-owned
 expiry transition that resolves expired waits into typed diagnostics without
 runtime-host dispatch or singleton fallback.
 
+2026-06-14 runtime-branch worker wait-window recording slice completed.
+Smallest useful vertical slice: wire the runtime-branch worker to persist the
+scheduler-owned broker wait window when `evaluate_running_batch_broker_decision`
+returns `WaitingForPeers`. Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/runtime_dispatch_assignment.rs`,
+`crates/pantograph-workflow-service/src/workflow/task_execution_worker.rs`, and
+this plan.
+
+No-fallback/no-legacy confirmation: the worker now records the assignment
+repository's broker-owned wait-window policy before retaining the responder,
+but still does not execute singleton batches, does not complete waiting
+responders, does not call the runtime host, and does not attach workflow input
+or anchor-run state to the wait record. Claiming a later compatible grouped
+batch clears the prior wait window through the existing batch-claim path.
+
+Verification passed:
+`cargo fmt -p pantograph-workflow-service`,
+`cargo test -p pantograph-workflow-service task_execution_worker --lib`,
+`cargo test -p pantograph-workflow-service runtime_dispatch_assignment --lib`,
+`cargo check -p pantograph-workflow-service`,
+`cargo fmt -p pantograph-workflow-service -- --check`, and
+`git diff --check`.
+
+Focused test update: the worker grouped-batch acceptance test now proves the
+first branch records a `BatchWindowExpired` wait-window diagnostic while
+waiting for a peer, does not dispatch a one-member batch, and clears the wait
+window once the second compatible branch claims and executes the grouped batch.
+
+Remaining follow-up: add the scheduler-owned expiry transition for wait windows
+whose `expires_at_ms` has passed, then surface the typed expired-wait outcome
+through the worker/session runtime boundary without runtime-host dispatch.
+
 ## Standards Rule
 
 The standards constraints in
