@@ -7369,6 +7369,48 @@ back if materialized input mapping or handoff correlation is invalid. Before
 batch response mutation, complete the lifecycle-key normalization follow-up
 above.
 
+2026-06-14 batch execution runtime-host request materialization slice
+completed. Smallest useful vertical slice: build a validated
+`RuntimeHostBatchExecutionRequest` from the durable assignment members and
+active-run member projections, including per-member materialized runtime-host
+inputs, scheduler handoff correlation checks, compact contract-valid execution
+request ids, retryable member failure policy, and scheduler-deferred
+reservation policy. Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/runtime_branch_batch_execution.rs`
+and this plan.
+
+No-fallback/no-legacy confirmation: this slice does not dispatch a runtime-host
+batch, does not call scheduler batch response mutation, does not create
+single-member fallback requests, and does not reuse anchor-run materialized
+inputs. Invalid handoff correlation, missing materialized inputs, or invalid
+runtime-host request contracts return typed batch execution diagnostics before
+responder fan-out.
+
+Verification passed:
+`cargo fmt -p pantograph-workflow-service`,
+`cargo test -p pantograph-workflow-service runtime_branch_batch_execution --lib`,
+`cargo check -p pantograph-workflow-service`,
+`cargo fmt -p pantograph-workflow-service -- --check`, and
+`git diff --check`.
+
+Focused test update: the accepted batch test now asserts the runtime-host batch
+request contains both assignments, uses the anchor member request id, preserves
+each member's own prompt input value, timeout, retry policy, and reservation
+policy, and still delays responder fan-out until request materialization
+succeeds. Added a fail-closed test that clears one member's active materialized
+inputs and verifies a typed input-mapping diagnostic before responder fan-out.
+
+Deviation resolved in-slice: the initial request id shape based on the durable
+batch-claim UUID made the runtime-host cancellation context exceed the
+runtime-host contract identifier length once the cancellation prefix was added.
+The batch execution request id now uses the durable anchor assignment id, which
+is already unique to the claimed batch and keeps the batch id, cancellation
+context id, and member anchor id inside the shared runtime-host contract.
+
+Remaining follow-up: continue option 1 step 3 by introducing the scheduler-owned
+lifecycle key normalization needed before batch response mutation can safely
+complete two simultaneous workflow runs that share the same scheduler task id.
+
 ## Standards Rule
 
 The standards constraints in

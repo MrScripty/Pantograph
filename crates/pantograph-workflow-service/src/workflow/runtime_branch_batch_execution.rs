@@ -1,6 +1,12 @@
 use std::collections::BTreeSet;
 
 use crate::scheduler::WorkflowSchedulerTaskOrchestrator;
+use pantograph_runtime_host_contracts::{
+    RuntimeHostBatchExecutionMemberRequest, RuntimeHostBatchExecutionRequest,
+    RuntimeHostBatchMemberFailurePolicy, RuntimeHostBatchMemberReservationPolicy,
+    RuntimeHostExecutionCancellationContext, ValidatedRuntimeHostBatchExecutionRequest,
+    RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
+};
 use pantograph_scheduler::{
     SchedulerDispatchCandidateId, SchedulerReservationLeaseId, SchedulerRuntimeHandoff,
     SchedulerTaskStateKind, SchedulerTaskStateRecord,
@@ -14,8 +20,8 @@ use super::runtime_dispatch_assignment::{
 use super::runtime_dispatch_selection::WorkflowRuntimeDispatchCandidateFact;
 use super::runtime_task_attempt_fact::WorkflowRuntimeTaskAttemptFactRecord;
 use super::{
-    WorkflowSchedulerTask, WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskResult,
-    WorkflowService,
+    materialize_runtime_host_inputs, WorkflowSchedulerTask, WorkflowSchedulerTaskExecutionClass,
+    WorkflowSchedulerTaskResult, WorkflowService,
 };
 
 #[must_use]
@@ -41,6 +47,7 @@ pub(super) struct WorkflowRuntimeBranchBatchExecutionPlan {
     pub(super) batch_claim: WorkflowRuntimeDispatchAssignmentBatchClaim,
     pub(super) members: Vec<WorkflowRuntimeBranchBatchExecutionMember>,
     pub(super) active_run_members: Vec<WorkflowRuntimeBranchBatchActiveRunMember>,
+    pub(super) runtime_host_request: RuntimeHostBatchExecutionRequest,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -119,6 +126,9 @@ pub(super) enum WorkflowRuntimeBranchBatchExecutionDiagnosticCode {
     ActiveRunTaskNotRunning,
     ActiveRunTaskAttemptMismatch,
     ActiveRunMaterializedInputsUnavailable,
+    RuntimeHostBatchMemberInputMappingInvalid,
+    RuntimeHostBatchMemberHandoffMismatch,
+    RuntimeHostBatchRequestInvalid,
     ResponderFanOutUnavailable,
 }
 
@@ -145,6 +155,11 @@ where
         let _selected_batch_dispatcher_owner = self.scheduler_task_orchestrator;
         let members = validate_claimed_assignments(&claim_outcome)?;
         let active_run_members = rehydrate_batch_members_from_active_runs(service, &members)?;
+        let runtime_host_request = runtime_host_batch_request_from_active_members(
+            &claim_outcome.batch_claim,
+            &members,
+            &active_run_members,
+        )?;
         self.responder_fan_out
             .ensure_assignment_responders_registered(&members)
             .map_err(WorkflowRuntimeBranchBatchExecutionFailure::global)?;
@@ -153,6 +168,7 @@ where
             batch_claim: claim_outcome.batch_claim,
             members,
             active_run_members,
+            runtime_host_request,
         })
     }
 }
@@ -474,6 +490,121 @@ fn rehydrate_batch_members_from_active_runs(
     Ok(active_run_members)
 }
 
+fn runtime_host_batch_request_from_active_members(
+    batch_claim: &WorkflowRuntimeDispatchAssignmentBatchClaim,
+    members: &[WorkflowRuntimeBranchBatchExecutionMember],
+    active_run_members: &[WorkflowRuntimeBranchBatchActiveRunMember],
+) -> Result<RuntimeHostBatchExecutionRequest, WorkflowRuntimeBranchBatchExecutionFailure> {
+    let request_members = members
+        .iter()
+        .map(|member| {
+            let active_member = active_run_members
+                .iter()
+                .find(|active_member| active_member.assignment_id == member.assignment_id)
+                .ok_or_else(|| {
+                    WorkflowRuntimeBranchBatchExecutionFailure::active_run_member(
+                        member,
+                        WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
+                            WorkflowRuntimeBranchBatchExecutionDiagnosticCode::ActiveRunTaskUnavailable,
+                            format!(
+                                "runtime branch batch member '{}' has no active-run projection",
+                                member.assignment_id.as_str()
+                            ),
+                        ),
+                    )
+                })?;
+            runtime_host_batch_member_request_from_active_member(member, active_member)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let batch_execution_request_id = batch_execution_request_id(batch_claim);
+    let anchor_execution_request_id =
+        runtime_batch_member_execution_request_id(batch_claim.anchor_assignment_id.as_str());
+    let request = RuntimeHostBatchExecutionRequest {
+        contract_version: RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
+        batch_execution_request_id: batch_execution_request_id.clone(),
+        anchor_execution_request_id,
+        cancellation_context: RuntimeHostExecutionCancellationContext::workflow_service(
+            &batch_execution_request_id,
+        ),
+        members: request_members,
+    };
+    let validated =
+        ValidatedRuntimeHostBatchExecutionRequest::try_from(request).map_err(|error| {
+            WorkflowRuntimeBranchBatchExecutionFailure::global(
+            WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
+                WorkflowRuntimeBranchBatchExecutionDiagnosticCode::RuntimeHostBatchRequestInvalid,
+                format!("runtime branch batch request is invalid: {error}"),
+            ),
+        )
+        })?;
+    Ok(validated.into_inner())
+}
+
+fn runtime_host_batch_member_request_from_active_member(
+    member: &WorkflowRuntimeBranchBatchExecutionMember,
+    active_member: &WorkflowRuntimeBranchBatchActiveRunMember,
+) -> Result<RuntimeHostBatchExecutionMemberRequest, WorkflowRuntimeBranchBatchExecutionFailure> {
+    validate_runtime_handoff_matches_active_member(member, active_member)?;
+    let materialized_inputs = materialize_runtime_host_inputs(
+        &active_member.runtime_task,
+        &active_member.materialized_results,
+    )
+    .map_err(|error| {
+        WorkflowRuntimeBranchBatchExecutionFailure::active_run_member(
+            member,
+            WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
+                WorkflowRuntimeBranchBatchExecutionDiagnosticCode::RuntimeHostBatchMemberInputMappingInvalid,
+                format!(
+                    "runtime branch batch member '{}' runtime-host inputs are invalid: {error}",
+                    member.assignment_id.as_str()
+                ),
+            ),
+        )
+    })?;
+    Ok(RuntimeHostBatchExecutionMemberRequest {
+        execution_request_id: runtime_batch_member_execution_request_id(
+            member.assignment_id.as_str(),
+        ),
+        assignment_id: member.assignment_id.as_str().to_string(),
+        handoff: member.selected_runtime_handoff.clone(),
+        materialized_inputs,
+        timeout_ms: member.timeout_ms,
+        failure_policy: RuntimeHostBatchMemberFailurePolicy::Retryable,
+        reservation_policy: RuntimeHostBatchMemberReservationPolicy::DeferToScheduler,
+    })
+}
+
+fn validate_runtime_handoff_matches_active_member(
+    member: &WorkflowRuntimeBranchBatchExecutionMember,
+    active_member: &WorkflowRuntimeBranchBatchActiveRunMember,
+) -> Result<(), WorkflowRuntimeBranchBatchExecutionFailure> {
+    let handoff = &member.selected_runtime_handoff;
+    let task = &active_member.runtime_task;
+    if handoff.workflow_id != task.workflow_id
+        || handoff.workflow_run_id != task.workflow_run_id
+        || handoff.node_id != task.node_id
+        || handoff.task_id != task.task_id
+    {
+        return Err(
+            WorkflowRuntimeBranchBatchExecutionFailure::active_run_member(
+                member,
+                WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
+                    WorkflowRuntimeBranchBatchExecutionDiagnosticCode::RuntimeHostBatchMemberHandoffMismatch,
+                    format!(
+                        "runtime branch batch member '{}' scheduler handoff does not match the active runtime task",
+                        member.assignment_id.as_str()
+                    ),
+                ),
+            ),
+        );
+    }
+    Ok(())
+}
+
+fn runtime_batch_member_execution_request_id(assignment_id: &str) -> String {
+    format!("workflow-runtime-batch-member.{assignment_id}")
+}
+
 fn validate_assignment_ready_for_batch_finalization(
     record: &WorkflowRuntimeDispatchAssignmentRecord,
     batch_claim: &WorkflowRuntimeDispatchAssignmentBatchClaim,
@@ -590,8 +721,8 @@ fn validate_task_attempt_fact_matches_assignment(
 
 fn batch_execution_request_id(batch_claim: &WorkflowRuntimeDispatchAssignmentBatchClaim) -> String {
     format!(
-        "workflow-runtime-branch-batch:{}",
-        batch_claim.batch_claim_id.as_str()
+        "workflow-runtime-branch-batch.{}",
+        batch_claim.anchor_assignment_id.as_str()
     )
 }
 
@@ -603,6 +734,10 @@ mod tests {
         DependencyEnvironmentId, DependencyEnvironmentRef, DependencyReadinessProofEnvelope,
         DependencyReadinessProofId, DependencyReadinessWorkflowRunId, DependencyTaskId,
         DeviceIntentId, PumasModelRef,
+    };
+    use pantograph_runtime_host_contracts::{
+        RuntimeHostBatchExecutionMemberRequest, RuntimeHostBatchMemberFailurePolicy,
+        RuntimeHostBatchMemberReservationPolicy, RuntimeHostExecutionInputValue,
     };
     use pantograph_scheduler::{
         SchedulableTaskIntent, SchedulerDispatchCandidateId, SchedulerDispatchDecision,
@@ -661,10 +796,7 @@ mod tests {
         assert_eq!(plan.batch_claim, claim_outcome.batch_claim);
         assert_eq!(
             plan.batch_execution_request_id,
-            format!(
-                "workflow-runtime-branch-batch:{}",
-                claim_outcome.batch_claim.batch_claim_id.as_str()
-            )
+            "workflow-runtime-branch-batch.assignment.1"
         );
         assert_eq!(
             plan.members
@@ -741,6 +873,39 @@ mod tests {
                 "prompt owned by run.2026-05-22.002".to_string(),
             ]
         );
+        assert_eq!(
+            plan.runtime_host_request.batch_execution_request_id,
+            plan.batch_execution_request_id
+        );
+        assert_eq!(
+            plan.runtime_host_request.anchor_execution_request_id,
+            "workflow-runtime-batch-member.assignment.1"
+        );
+        assert_eq!(
+            plan.runtime_host_request
+                .members
+                .iter()
+                .map(|member| member.assignment_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["assignment.1", "assignment.2"]
+        );
+        assert_eq!(
+            plan.runtime_host_request
+                .members
+                .iter()
+                .map(|member| prompt_text_from_runtime_host_member_request(member))
+                .collect::<Vec<_>>(),
+            vec![
+                "prompt owned by run.2026-05-22.001".to_string(),
+                "prompt owned by run.2026-05-22.002".to_string(),
+            ]
+        );
+        assert!(plan.runtime_host_request.members.iter().all(|member| {
+            member.failure_policy == RuntimeHostBatchMemberFailurePolicy::Retryable
+                && member.reservation_policy
+                    == RuntimeHostBatchMemberReservationPolicy::DeferToScheduler
+                && member.timeout_ms == Some(30_000)
+        }));
         assert_eq!(
             responder_fan_out.observed_assignment_ids(),
             vec![vec!["assignment.1".to_string(), "assignment.2".to_string()]]
@@ -877,6 +1042,45 @@ mod tests {
         assert!(
             responder_fan_out.observed_assignment_ids().is_empty(),
             "fan-out must not be consulted after active attempt mismatch"
+        );
+    }
+
+    #[test]
+    fn runtime_branch_batch_execution_owner_rejects_missing_materialized_member_inputs() {
+        let service = WorkflowService::new();
+        let members = active_batch_members(&service);
+        {
+            let mut store = service.session_store_guard().expect("session store");
+            store
+                .set_active_run_scheduler_task_results(
+                    &members[0].session_id,
+                    &members[0].workflow_run_id,
+                    Vec::new(),
+                )
+                .expect("clear first member results");
+        }
+        let responder_fan_out = RecordingResponderFanOut::default();
+        let owner = WorkflowRuntimeBranchBatchExecutionOwner::new(
+            &service.scheduler_task_orchestrator,
+            &responder_fan_out,
+        );
+
+        let failure = owner
+            .prepare_claimed_batch(&service, batch_claim_outcome(&members))
+            .expect_err("missing materialized input must fail closed");
+
+        assert_eq!(
+            failure.diagnostics[0].code,
+            WorkflowRuntimeBranchBatchExecutionDiagnosticCode::RuntimeHostBatchMemberInputMappingInvalid
+        );
+        assert_eq!(failure.member_outcomes.len(), 1);
+        assert_eq!(
+            failure.member_outcomes[0].assignment_id.as_str(),
+            "assignment.1"
+        );
+        assert!(
+            responder_fan_out.observed_assignment_ids().is_empty(),
+            "fan-out must not be consulted after input materialization fails"
         );
     }
 
@@ -1331,6 +1535,20 @@ mod tests {
         match &output.value {
             WorkflowSchedulerTaskResultValue::String(value) => value.clone(),
             other => panic!("unexpected prompt output value: {other:?}"),
+        }
+    }
+
+    fn prompt_text_from_runtime_host_member_request(
+        member: &RuntimeHostBatchExecutionMemberRequest,
+    ) -> String {
+        let input = member
+            .materialized_inputs
+            .iter()
+            .find(|input| input.port_id == "prompt")
+            .expect("prompt input");
+        match &input.value {
+            RuntimeHostExecutionInputValue::String(value) => value.clone(),
+            other => panic!("unexpected runtime-host prompt input value: {other:?}"),
         }
     }
 
