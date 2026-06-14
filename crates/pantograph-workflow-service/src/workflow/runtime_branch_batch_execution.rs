@@ -1,12 +1,17 @@
 use std::collections::BTreeSet;
 
 use crate::scheduler::WorkflowSchedulerTaskOrchestrator;
+use pantograph_scheduler::{
+    SchedulerDispatchCandidateId, SchedulerReservationLeaseId, SchedulerRuntimeHandoff,
+};
 
 use super::runtime_dispatch_assignment::{
     WorkflowRuntimeDispatchAssignmentBatchClaim,
     WorkflowRuntimeDispatchAssignmentBatchClaimOutcome, WorkflowRuntimeDispatchAssignmentId,
     WorkflowRuntimeDispatchAssignmentRecord, WorkflowRuntimeDispatchAssignmentState,
 };
+use super::runtime_dispatch_selection::WorkflowRuntimeDispatchCandidateFact;
+use super::runtime_task_attempt_fact::WorkflowRuntimeTaskAttemptFactRecord;
 
 #[must_use]
 pub(super) struct WorkflowRuntimeBranchBatchExecutionOwner<'a, R>
@@ -42,6 +47,14 @@ pub(super) struct WorkflowRuntimeBranchBatchExecutionMember {
     pub(super) workflow_run_id: String,
     pub(super) scheduler_task_id: String,
     pub(super) scheduler_task_attempt_id: String,
+    pub(super) scheduler_task_attempt_started_at_ms: u64,
+    pub(super) task_attempt_generation: u64,
+    pub(super) timeout_ms: Option<u64>,
+    pub(super) selected_runtime_handoff: SchedulerRuntimeHandoff,
+    pub(super) selected_candidate_fact: WorkflowRuntimeDispatchCandidateFact,
+    pub(super) reservation_lease_id: SchedulerReservationLeaseId,
+    pub(super) selected_candidate_id: Option<SchedulerDispatchCandidateId>,
+    pub(super) task_attempt_fact: WorkflowRuntimeTaskAttemptFactRecord,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -85,6 +98,7 @@ pub(super) enum WorkflowRuntimeBranchBatchExecutionDiagnosticCode {
     AssignmentBatchClaimMismatch,
     AssignmentNotRunning,
     MissingTaskAttemptFact,
+    TaskAttemptFactMismatch,
     ResponderFanOutUnavailable,
 }
 
@@ -192,16 +206,10 @@ fn validate_claimed_assignments(
         if record.assignment_id == claim_outcome.batch_claim.anchor_assignment_id {
             anchor_seen = true;
         }
-        validate_assignment_ready_for_batch_finalization(record, &claim_outcome.batch_claim)?;
-        members.push(WorkflowRuntimeBranchBatchExecutionMember {
-            assignment_id: record.assignment_id.clone(),
-            runtime_branch_event_id: record.runtime_branch_event_id.as_str().to_string(),
-            session_id: record.session_id.clone(),
-            workflow_id: record.workflow_id.clone(),
-            workflow_run_id: record.workflow_run_id.clone(),
-            scheduler_task_id: record.scheduler_task_id.clone(),
-            scheduler_task_attempt_id: record.scheduler_task_attempt_id.clone(),
-        });
+        members.push(batch_execution_member_from_assignment(
+            record,
+            &claim_outcome.batch_claim,
+        )?);
     }
 
     if !anchor_seen {
@@ -217,6 +225,35 @@ fn validate_claimed_assignments(
     }
 
     Ok(members)
+}
+
+fn batch_execution_member_from_assignment(
+    record: &WorkflowRuntimeDispatchAssignmentRecord,
+    batch_claim: &WorkflowRuntimeDispatchAssignmentBatchClaim,
+) -> Result<WorkflowRuntimeBranchBatchExecutionMember, WorkflowRuntimeBranchBatchExecutionFailure> {
+    validate_assignment_ready_for_batch_finalization(record, batch_claim)?;
+    let task_attempt_fact = record
+        .task_attempt_fact
+        .as_ref()
+        .expect("assignment task-attempt fact is validated before member projection");
+    validate_task_attempt_fact_matches_assignment(record, task_attempt_fact)?;
+    Ok(WorkflowRuntimeBranchBatchExecutionMember {
+        assignment_id: record.assignment_id.clone(),
+        runtime_branch_event_id: record.runtime_branch_event_id.as_str().to_string(),
+        session_id: record.session_id.clone(),
+        workflow_id: record.workflow_id.clone(),
+        workflow_run_id: record.workflow_run_id.clone(),
+        scheduler_task_id: record.scheduler_task_id.clone(),
+        scheduler_task_attempt_id: record.scheduler_task_attempt_id.clone(),
+        scheduler_task_attempt_started_at_ms: record.scheduler_task_attempt_started_at_ms,
+        task_attempt_generation: record.task_attempt_generation,
+        timeout_ms: record.timeout_ms,
+        selected_runtime_handoff: record.selected_runtime_handoff.clone(),
+        selected_candidate_fact: record.selected_candidate_fact.clone(),
+        reservation_lease_id: record.reservation_lease_id.clone(),
+        selected_candidate_id: record.selected_candidate_id.clone(),
+        task_attempt_fact: task_attempt_fact.clone(),
+    })
 }
 
 fn validate_assignment_ready_for_batch_finalization(
@@ -266,6 +303,65 @@ fn validate_assignment_ready_for_batch_finalization(
                 WorkflowRuntimeBranchBatchExecutionDiagnosticCode::MissingTaskAttemptFact,
                 format!(
                     "runtime branch batch assignment '{}' is missing task-attempt facts required for finalization",
+                    record.assignment_id.as_str()
+                ),
+            ),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_task_attempt_fact_matches_assignment(
+    record: &WorkflowRuntimeDispatchAssignmentRecord,
+    fact: &WorkflowRuntimeTaskAttemptFactRecord,
+) -> Result<(), WorkflowRuntimeBranchBatchExecutionFailure> {
+    let mismatch = if fact.workflow_id != record.workflow_id {
+        Some((
+            "workflow_id",
+            fact.workflow_id.as_str(),
+            record.workflow_id.as_str(),
+        ))
+    } else if fact.workflow_run_id != record.workflow_run_id {
+        Some((
+            "workflow_run_id",
+            fact.workflow_run_id.as_str(),
+            record.workflow_run_id.as_str(),
+        ))
+    } else if fact.scheduler_task_id != record.scheduler_task_id {
+        Some((
+            "scheduler_task_id",
+            fact.scheduler_task_id.as_str(),
+            record.scheduler_task_id.as_str(),
+        ))
+    } else if fact.scheduler_task_attempt_id != record.scheduler_task_attempt_id {
+        Some((
+            "scheduler_task_attempt_id",
+            fact.scheduler_task_attempt_id.as_str(),
+            record.scheduler_task_attempt_id.as_str(),
+        ))
+    } else if fact.task_attempt_generation != record.task_attempt_generation {
+        return Err(WorkflowRuntimeBranchBatchExecutionFailure::member(
+            record,
+            WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
+                WorkflowRuntimeBranchBatchExecutionDiagnosticCode::TaskAttemptFactMismatch,
+                format!(
+                    "runtime branch batch assignment '{}' has task-attempt generation {} but fact records {}",
+                    record.assignment_id.as_str(),
+                    record.task_attempt_generation,
+                    fact.task_attempt_generation
+                ),
+            ),
+        ));
+    } else {
+        None
+    };
+    if let Some((field, fact_value, assignment_value)) = mismatch {
+        return Err(WorkflowRuntimeBranchBatchExecutionFailure::member(
+            record,
+            WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
+                WorkflowRuntimeBranchBatchExecutionDiagnosticCode::TaskAttemptFactMismatch,
+                format!(
+                    "runtime branch batch assignment '{}' has mismatched task-attempt fact {field}: fact '{fact_value}' assignment '{assignment_value}'",
                     record.assignment_id.as_str()
                 ),
             ),
@@ -354,6 +450,33 @@ mod tests {
             vec!["run.2026-05-22.001", "run.2026-05-22.002"]
         );
         assert_eq!(
+            plan.members
+                .iter()
+                .map(|member| member.task_attempt_fact.workflow_run_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["run.2026-05-22.001", "run.2026-05-22.002"]
+        );
+        assert_eq!(
+            plan.members
+                .iter()
+                .map(|member| {
+                    member
+                        .selected_runtime_handoff
+                        .task_intent
+                        .workflow_run_id
+                        .as_str()
+                })
+                .collect::<Vec<_>>(),
+            vec!["run.2026-05-22.001", "run.2026-05-22.002"]
+        );
+        assert_eq!(
+            plan.members
+                .iter()
+                .map(|member| member.reservation_lease_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["reservation-lease.runtime.1", "reservation-lease.runtime.2"]
+        );
+        assert_eq!(
             responder_fan_out.observed_assignment_ids(),
             vec![vec!["assignment.1".to_string(), "assignment.2".to_string()]]
         );
@@ -386,6 +509,40 @@ mod tests {
         assert_eq!(
             failure.member_outcomes[0].state,
             WorkflowRuntimeBranchBatchMemberExecutionOutcomeState::Failed
+        );
+        assert!(
+            responder_fan_out.observed_assignment_ids().is_empty(),
+            "fan-out must not be consulted after durable fact validation fails"
+        );
+    }
+
+    #[test]
+    fn runtime_branch_batch_execution_owner_rejects_mismatched_task_attempt_fact_identity() {
+        let service = WorkflowService::new();
+        let responder_fan_out = RecordingResponderFanOut::default();
+        let owner = WorkflowRuntimeBranchBatchExecutionOwner::new(
+            &service.scheduler_task_orchestrator,
+            &responder_fan_out,
+        );
+        let mut claim_outcome = batch_claim_outcome();
+        claim_outcome.assignments[1]
+            .task_attempt_fact
+            .as_mut()
+            .expect("second assignment task-attempt fact")
+            .workflow_run_id = "run.unrelated".to_string();
+
+        let failure = owner
+            .prepare_claimed_batch(claim_outcome)
+            .expect_err("mismatched task-attempt fact must fail closed");
+
+        assert_eq!(
+            failure.diagnostics[0].code,
+            WorkflowRuntimeBranchBatchExecutionDiagnosticCode::TaskAttemptFactMismatch
+        );
+        assert_eq!(failure.member_outcomes.len(), 1);
+        assert_eq!(
+            failure.member_outcomes[0].assignment_id.as_str(),
+            "assignment.2"
         );
         assert!(
             responder_fan_out.observed_assignment_ids().is_empty(),

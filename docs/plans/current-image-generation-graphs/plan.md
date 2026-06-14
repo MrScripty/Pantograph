@@ -7292,6 +7292,39 @@ owner durable member rehydration using the reusable per-run finalization
 helpers. Grouped assignment claiming remains blocked until successful and
 failed batch-member finalization is covered by owner tests.
 
+2026-06-14 batch execution durable assignment-facts slice completed. Smallest
+useful vertical slice: expand `WorkflowRuntimeBranchBatchExecutionMember` so
+claimed batch members carry assignment-owned durable dispatch facts needed for
+later rehydration: selected runtime handoff, selected candidate fact,
+reservation lease, selected candidate id, timeout, task-attempt generation,
+task-attempt started timestamp, and the durable task-attempt fact record.
+Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/runtime_branch_batch_execution.rs`
+and this plan.
+
+No-fallback/no-legacy confirmation: this slice does not enable grouped
+assignment claiming, does not dispatch runtime-host batches, does not start
+single-member fallback dispatch, and does not read anchor-run workflow inputs
+or runtime/device state for other members. Each batch member keeps the durable
+facts recorded on its own dispatch assignment.
+
+Verification passed:
+`cargo fmt -p pantograph-workflow-service`,
+`cargo test -p pantograph-workflow-service runtime_branch_batch_execution --lib`,
+`cargo check -p pantograph-workflow-service`,
+`cargo fmt -p pantograph-workflow-service -- --check`, and
+`git diff --check`.
+
+Focused test update: the batch execution owner now asserts accepted members
+carry their own workflow-run ids in task-attempt facts and scheduler handoffs,
+retain their own reservation leases, and fail closed before responder fan-out
+when a task-attempt fact identity is inconsistent with the assignment.
+
+Remaining follow-up: continue option 1 step 3 by joining these durable
+assignment facts to active-run scheduler state so each member can be rehydrated
+with its own current task record and materialized inputs before any runtime-host
+batch request is built.
+
 ## Standards Rule
 
 The standards constraints in
