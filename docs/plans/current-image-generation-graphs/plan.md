@@ -6221,10 +6221,16 @@ Option 1 gateway-batch execution sequence:
    member's image count with multiple workflow/task members, did not change
    generated runtime-host contracts, and did not add any loop-based fallback
    execution path.
-2. Add a gateway operation that validates and plans every batch member before
-   backend execution, preserves member correlation, and returns typed
-   diagnostics when any member cannot be planned. The gateway must fail closed
-   when the active backend does not support the batch execution operation.
+2. Completed 2026-06-13: add a gateway operation that validates the planned
+   batch contract before backend execution, preserves member correlation
+   through the owned batch/member DTOs, and returns typed diagnostics when the
+   active backend does not support batch execution. The new
+   `InferenceGateway::generate_image_batch_from_execution_request` and
+   cancellation-aware variant reject invalid contracts before touching the
+   backend and reject cancelled batches before validation/dispatch. Because
+   backend batch execution does not exist yet, the gateway currently fails
+   closed with `unsupported_batch_execution` instead of looping through the
+   single planned-image method.
 3. Add backend trait support with a default unsupported implementation, then
    implement real backend batch execution only where the backend can execute a
    true multi-member batch without looping through the single planned-image
@@ -6249,18 +6255,34 @@ Step 1 files touched:
 `crates/inference/src/lib.rs`, `crates/inference/src/README.md`, and this
 plan.
 
-Next thin slice: start sequence step 2 in the inference crate by adding a
-gateway batch operation that accepts the new batch contract, validates every
-member, preserves batch/member correlation, and fails closed with typed
-diagnostics when planning or backend batch capability is unavailable. Allowed
-files should be limited to `crates/inference/src/gateway.rs`, focused gateway
-tests, the batch contract only if step-2 validation needs a small additive
-diagnostic/state fix, `crates/inference/src/README.md`, and this plan. Do not
-change backend trait execution, generated runtime-host contracts,
-workflow-service worker code, frontend/Tauri DTOs, lockfiles, saved workflow
-fixtures, physical-device tables, or runtime-residency tables in the gateway
-operation slice. Stop and re-plan if gateway operation support requires a
-backend trait method or worker envelope change in the same slice.
+Step 2 verification:
+`cargo test -p inference generate_image_batch --lib` passed,
+`cargo check -p inference` passed, and
+`cargo fmt -p inference -- --check` passed.
+
+Step 2 files touched:
+`crates/inference/src/gateway.rs`, `crates/inference/src/gateway_tests.rs`,
+`crates/inference/src/README.md`, and this plan.
+
+Step 2 deviation:
+the gateway entrypoint accepts planned batch members and validates
+request/plan correlation; it does not add a second gateway-local borrowed
+planning DTO. This keeps the contract owned and avoids carrying borrowed
+workflow inputs through the batch boundary. Per-member planning rejection will
+be represented by the caller that builds planned members until a future slice
+adds an explicit owned batch planning DTO.
+
+Next thin slice: start sequence step 3 by adding backend trait support with a
+default unsupported batch method and gateway dispatch to that trait method.
+Allowed files should be limited to `crates/inference/src/backend/mod.rs`,
+`crates/inference/src/gateway.rs`, focused backend/gateway tests,
+`crates/inference/src/README.md`, and this plan. Do not implement PyTorch or
+Python worker batch execution in the trait-support slice, do not loop through
+single planned-image execution, and do not change generated runtime-host
+contracts, workflow-service worker code, frontend/Tauri DTOs, lockfiles, saved
+workflow fixtures, physical-device tables, or runtime-residency tables. Stop
+and re-plan if trait support requires a Python worker envelope or backend
+state-management change in the same slice.
 
 ## Standards Rule
 

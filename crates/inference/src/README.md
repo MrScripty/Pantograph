@@ -418,6 +418,10 @@ async fn run_image_request(
   facts, and validation rejects correlation drift before any backend call. The
   contract is not a fallback loop over single-image generation; backends must
   explicitly support true batch execution before gateway dispatch can use it.
+- `InferenceGateway::generate_image_batch_from_execution_request` is the
+  fail-closed gateway entrypoint for planned batches. It validates the batch
+  contract and returns typed `unsupported_batch_execution` diagnostics until
+  backend-level batch execution exists.
 - Image-generation request and worker-envelope sampling intent uses
   `denoising_scheduler`. The older overloaded `scheduler` field name is not a
   request compatibility alias; source package facts may still use factual

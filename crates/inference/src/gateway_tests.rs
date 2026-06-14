@@ -15,6 +15,10 @@ use crate::device_contracts::{
     BackendExecutionDecision, BackendId, DeviceResolutionDecision, InferenceDevicePolicy,
     RuntimeVariantId,
 };
+use crate::image_generation_batch::{
+    ImageGenerationBatchContractError, ImageGenerationBatchDiagnosticCode,
+    ImageGenerationBatchExecutionMemberRequest, ImageGenerationBatchExecutionRequest,
+};
 use crate::image_generation_planner::{
     ImageGenerationExecutionPlan, ImageGenerationPlannerDiagnosticCode,
     ImageGenerationPlanningInput, PlannedImageGenerationLaunchHandoff,
@@ -252,6 +256,33 @@ fn sample_image_generation_plan() -> ImageGenerationExecutionPlan {
             InferenceResourceEstimateKind::OutputRgbaBytes,
             512_u64 * 512 * 4,
         )],
+    }
+}
+
+fn sample_image_generation_batch_request() -> ImageGenerationBatchExecutionRequest {
+    ImageGenerationBatchExecutionRequest {
+        batch_execution_id: "batch-001".to_string(),
+        anchor_member_id: "member-001".to_string(),
+        members: vec![ImageGenerationBatchExecutionMemberRequest {
+            member_id: "member-001".to_string(),
+            request: ImageGenerationRequest {
+                model: "mock-image-model".to_string(),
+                prompt: "paper lantern".to_string(),
+                negative_prompt: None,
+                width: Some(512),
+                height: Some(512),
+                num_inference_steps: Some(20),
+                guidance_scale: Some(4.0),
+                seed: Some(7),
+                denoising_scheduler: None,
+                num_images_per_prompt: Some(1),
+                init_image: None,
+                mask_image: None,
+                strength: None,
+                extra_options: serde_json::Value::Null,
+            },
+            plan: sample_image_generation_plan(),
+        }],
     }
 }
 
@@ -1355,6 +1386,77 @@ async fn test_generate_image_from_plan_forwards_to_active_backend() {
         result.metadata["planned_runtime_variant"],
         "pytorch.diffusers"
     );
+}
+
+#[tokio::test]
+async fn test_generate_image_batch_from_execution_request_fails_closed_without_backend_support() {
+    let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "mock");
+    let error = gateway
+        .generate_image_batch_from_execution_request(sample_image_generation_batch_request())
+        .await
+        .expect_err("batch image generation should fail closed until backend batch support exists");
+
+    let GatewayError::ImageGenerationBatchExecution { diagnostics, .. } = error else {
+        panic!("expected batch execution diagnostics");
+    };
+    assert_eq!(diagnostics.len(), 1);
+    assert_eq!(
+        diagnostics[0].code,
+        ImageGenerationBatchDiagnosticCode::UnsupportedBatchExecution
+    );
+    assert!(diagnostics[0]
+        .message
+        .contains("does not expose image-generation batch execution"));
+}
+
+#[tokio::test]
+async fn test_generate_image_batch_rejects_invalid_contract_before_backend_execution() {
+    let backend = RecordingCancellationImageBackend::default();
+    let calls = backend.calls.clone();
+    let gateway = InferenceGateway::with_backend(Box::new(backend), "mock");
+    let mut request = sample_image_generation_batch_request();
+    request.members.push(request.members[0].clone());
+
+    let error = gateway
+        .generate_image_batch_from_execution_request(request)
+        .await
+        .expect_err("duplicate member ids should fail before backend execution");
+
+    let GatewayError::ImageGenerationBatchExecution { diagnostics, .. } = error else {
+        panic!("expected batch contract diagnostics");
+    };
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+    assert_eq!(diagnostics.len(), 1);
+    assert_eq!(
+        diagnostics[0].code,
+        ImageGenerationBatchDiagnosticCode::ContractViolation
+    );
+    assert!(diagnostics[0].message.contains(
+        &ImageGenerationBatchContractError::DuplicateMemberId {
+            member_id: "member-001".to_string()
+        }
+        .to_string()
+    ));
+}
+
+#[tokio::test]
+async fn test_generate_image_batch_with_cancellation_rejects_before_backend() {
+    let backend = RecordingCancellationImageBackend::default();
+    let calls = backend.calls.clone();
+    let gateway = InferenceGateway::with_backend(Box::new(backend), "mock");
+
+    let error = gateway
+        .generate_image_batch_from_execution_request_with_cancellation(
+            sample_image_generation_batch_request(),
+            InferenceExecutionCancellationHandle::cancellation_requested("user cancelled batch"),
+        )
+        .await
+        .expect_err("cancelled batch execution should not reach backend");
+
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+    assert!(error
+        .to_string()
+        .contains("image generation batch execution cancelled"));
 }
 
 #[tokio::test]

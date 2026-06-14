@@ -22,6 +22,11 @@ use crate::backend::{
 };
 use crate::config::EmbeddingMemoryMode;
 use crate::device_contracts::{InferenceDeviceClass, InferenceDeviceId, InferenceDevicePolicy};
+use crate::image_generation_batch::{
+    ImageGenerationBatchContractError, ImageGenerationBatchDiagnostic,
+    ImageGenerationBatchDiagnosticCode, ImageGenerationBatchDiagnosticSeverity,
+    ImageGenerationBatchExecutionRequest, ImageGenerationBatchExecutionResponse,
+};
 use crate::image_generation_planner::{
     plan_image_generation_execution, ImageGenerationExecutionPlan,
     ImageGenerationPlannerDiagnostic, ImageGenerationPlanningInput, ImageGenerationPlanningOutcome,
@@ -81,6 +86,12 @@ pub enum GatewayError {
     ImageGenerationPlanning {
         diagnostic_count: usize,
         diagnostics: Vec<ImageGenerationPlannerDiagnostic>,
+    },
+
+    #[error("Image generation batch execution failed with {diagnostic_count} diagnostic(s)")]
+    ImageGenerationBatchExecution {
+        diagnostic_count: usize,
+        diagnostics: Vec<ImageGenerationBatchDiagnostic>,
     },
 }
 
@@ -1390,6 +1401,53 @@ impl InferenceGateway {
             .generate_image_from_plan(plan, context)
             .await
             .map_err(GatewayError::Backend)
+    }
+
+    /// Execute one planned image-generation batch through the active backend.
+    ///
+    /// This gateway boundary validates the canonical batch/member contract and
+    /// fails closed until backend-level batch execution is implemented.
+    pub async fn generate_image_batch_from_execution_request(
+        &self,
+        request: ImageGenerationBatchExecutionRequest,
+    ) -> Result<ImageGenerationBatchExecutionResponse, GatewayError> {
+        self.generate_image_batch_from_execution_request_with_cancellation(
+            request,
+            InferenceExecutionCancellationHandle::running(),
+        )
+        .await
+    }
+
+    /// Execute one planned image-generation batch with cooperative cancellation.
+    pub async fn generate_image_batch_from_execution_request_with_cancellation(
+        &self,
+        request: ImageGenerationBatchExecutionRequest,
+        cancellation: InferenceExecutionCancellationHandle,
+    ) -> Result<ImageGenerationBatchExecutionResponse, GatewayError> {
+        reject_cancelled_execution_handle("image generation batch execution", &cancellation)?;
+        if let Err(error) = request.validate() {
+            return Err(image_generation_batch_error(vec![
+                image_generation_batch_contract_diagnostic(error),
+            ]));
+        }
+
+        let guard = self.backend.read().await;
+        if !guard.is_ready() {
+            return Err(GatewayError::Backend(BackendError::NotReady));
+        }
+
+        Err(image_generation_batch_error(vec![
+            ImageGenerationBatchDiagnostic {
+                code: ImageGenerationBatchDiagnosticCode::UnsupportedBatchExecution,
+                severity: ImageGenerationBatchDiagnosticSeverity::Error,
+                member_id: None,
+                field_path: "backend".to_string(),
+                message: format!(
+                    "active backend '{}' does not expose image-generation batch execution",
+                    guard.name()
+                ),
+            },
+        ]))
     }
 
     /// Build and execute one image-generation plan from canonical planning facts.
@@ -3105,6 +3163,25 @@ fn reject_cancelled_execution_handle(
         .rejection_message(operation)
         .map(|message| Err(GatewayError::Backend(BackendError::Cancelled(message))))
         .unwrap_or(Ok(()))
+}
+
+fn image_generation_batch_error(diagnostics: Vec<ImageGenerationBatchDiagnostic>) -> GatewayError {
+    GatewayError::ImageGenerationBatchExecution {
+        diagnostic_count: diagnostics.len(),
+        diagnostics,
+    }
+}
+
+fn image_generation_batch_contract_diagnostic(
+    error: ImageGenerationBatchContractError,
+) -> ImageGenerationBatchDiagnostic {
+    ImageGenerationBatchDiagnostic {
+        code: ImageGenerationBatchDiagnosticCode::ContractViolation,
+        severity: ImageGenerationBatchDiagnosticSeverity::Error,
+        member_id: None,
+        field_path: "batch".to_string(),
+        message: error.to_string(),
+    }
 }
 
 fn start_execution_telemetry_for_process(
