@@ -7146,6 +7146,42 @@ success artifact diagnostics where canonical behavior requires them. Grouped
 assignment claiming remains blocked until every per-run finalization path is
 callable without private runner or request-scoped duplication.
 
+2026-06-14 runtime-branch worker workflow-run finalization helper slice
+completed. Smallest useful vertical slice: route the worker-owned
+runtime-branch completion wrapper through the generic workflow-run finalization
+helper so active-run finish, workflow terminal diagnostics, diagnostic-link
+attachment, and success IO artifact diagnostics are no longer duplicated in
+`WorkflowTaskExecutionOwner`. Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/task_execution_owner.rs`,
+`crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`,
+and this plan.
+
+No-fallback/no-legacy confirmation: this slice does not enable grouped
+assignment claiming, does not dispatch runtime-host batches, does not restore
+request-scoped runtime execution, and does not add a single-member fallback for
+future grouped dispatch. The runtime task still enters through the
+task-execution worker and selected dispatch path; only the backend-owned
+per-run terminal wrapper now uses the reusable helper.
+
+Verification passed:
+`cargo fmt -p pantograph-workflow-service`,
+`cargo test -p pantograph-workflow-service workflow_execution_session_dispatches_ready_runtime_task_through_scheduler_selection --lib`,
+`cargo test -p pantograph-workflow-service workflow_execution_session_resume_consumes_fresh_dependency_readiness_snapshot_and_dispatches_active_run --lib`,
+`cargo test -p pantograph-workflow-service workflow_execution_session_records_failed_runtime_host_result_as_terminal_task_failure --lib`,
+`cargo check -p pantograph-workflow-service`,
+`cargo fmt -p pantograph-workflow-service -- --check`, and
+`git diff --check`.
+
+Focused test update: the worker-owned runtime dispatch test now asserts that
+the session reports one completed run and no queued runs after the worker path
+returns, proving the shared finalization helper completes active-run state for
+runtime-branch worker execution.
+
+Remaining follow-up: route the direct runtime dependency-readiness resume
+completion wrapper through the same workflow-run finalization helper. Grouped
+assignment claiming remains blocked until that final per-run finalization path
+is callable without request-scoped duplication.
+
 ## Standards Rule
 
 The standards constraints in

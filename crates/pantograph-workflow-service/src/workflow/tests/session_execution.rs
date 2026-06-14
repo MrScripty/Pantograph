@@ -876,6 +876,14 @@ async fn workflow_execution_session_dispatches_ready_runtime_task_through_schedu
             "media_type": "image_png"
         })
     );
+    let status = service
+        .workflow_get_execution_session_status(WorkflowExecutionSessionStatusRequest {
+            session_id: session_id.clone(),
+        })
+        .await
+        .expect("session status after worker-owned runtime run finalization");
+    assert_eq!(status.session.run_count, 1);
+    assert_eq!(status.session.queued_runs, 0);
     let recorded = runtime_host_port.requests();
     assert_eq!(recorded.len(), 1);
     assert_eq!(recorded[0].materialized_inputs.len(), 1);

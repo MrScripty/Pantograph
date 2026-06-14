@@ -174,27 +174,19 @@ impl WorkflowTaskExecutionOwner {
         {
             return run_result;
         }
-        service.finish_failed_workflow_run_after_admission(
-            &command.session_id,
-            &command.workflow_run_id,
+        let finalization = finalize_admitted_workflow_run(
+            service,
+            WorkflowRunFinalizationRequest {
+                session: &rehydrated.session,
+                run_snapshot: run_snapshot.as_ref(),
+                session_id: &command.session_id,
+                workflow_run_id: &command.workflow_run_id,
+                workflow_semantic_version: &rehydrated.active_run.workflow_semantic_version,
+                io_artifact_inputs: Some(&rehydrated.active_run.inputs),
+                run_result,
+            },
         )?;
-        if let Err(record_error) = service.record_run_terminal_event_if_configured(
-            &rehydrated.session,
-            run_snapshot.as_ref(),
-            &command.workflow_run_id,
-            Some(&rehydrated.active_run.workflow_semantic_version),
-            &run_result,
-        ) {
-            if let Err(error) = run_result {
-                return Err(error.with_diagnostics(WorkflowErrorDiagnosticsLink {
-                    workflow_run_id: Some(command.workflow_run_id.clone()),
-                    diagnostic_event_id: None,
-                    diagnostics_unavailable: Some(record_error.message().to_string()),
-                }));
-            }
-            return Err(record_error);
-        }
-        run_result
+        finalization.run_result
     }
 
     pub(super) fn fail_unhandled_scheduler_classes_to_completion(
