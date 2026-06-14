@@ -8347,6 +8347,50 @@ Remaining follow-up: add the scheduler-owned expiry transition for wait windows
 whose `expires_at_ms` has passed, then surface the typed expired-wait outcome
 through the worker/session runtime boundary without runtime-host dispatch.
 
+2026-06-14 batch broker wait-window expiry decision slice completed. Smallest
+useful vertical slice: make expired broker wait windows explicit scheduler-owned
+decisions, prevent expired waiters from being claimed by late peer anchors, mark
+expired assignments terminal failed, and surface evaluated expiry through the
+worker/session runtime boundary as a typed runtime-branch deferred outcome.
+Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/runtime_dispatch_assignment.rs`,
+`crates/pantograph-workflow-service/src/workflow/task_execution_worker.rs`,
+`crates/pantograph-workflow-service/src/workflow/session_execution_api.rs`, and
+this plan.
+
+No-fallback/no-legacy confirmation: expired waits return the typed
+`WaitWindowExpired` broker decision and `BatchBrokerWaitWindowExpired` worker
+defer reason. Expiry does not call the runtime host, does not claim one-member
+batches, does not fabricate responses, and does not let late peers use an
+expired waiter as a compatible batch member. Wait-window expiry is capped before
+the runtime-branch claim lease expires so the canonical claimed-event defer
+path remains authoritative.
+
+Verification passed:
+`cargo fmt -p pantograph-workflow-service`,
+`cargo test -p pantograph-workflow-service runtime_dispatch_assignment --lib`,
+`cargo test -p pantograph-workflow-service task_execution_worker --lib`,
+`cargo check -p pantograph-workflow-service`,
+`cargo fmt -p pantograph-workflow-service -- --check`, and
+`git diff --check`.
+
+Focused test update: assignment repository tests now prove expired waits win
+over late compatible peers, late peer anchors skip expired waiters, unexpired
+waits cannot transition early, and expired waits mark the assignment failed
+while retaining wait-window diagnostics. Worker tests now prove an evaluated
+expired wait defers the runtime branch, completes the retained assignment
+responder with the typed expiry reason, clears the runtime-branch event
+dispatch-assignment link through deferral, and does not dispatch the runtime
+host.
+
+Discovered issue and remaining follow-up: expiry is now safe and typed when the
+broker evaluates an expired wait, but there is not yet an owned scheduler/worker
+expiry pump that wakes retained responders exactly at `expires_at_ms`. Do not
+add detached background tasks to solve this. The next slice must add an owned
+expiry scan/timer path with clear shutdown behavior, or re-plan if that
+lifecycle owner cannot fit inside the current task-execution worker/scheduler
+broker boundary.
+
 ## Standards Rule
 
 The standards constraints in
