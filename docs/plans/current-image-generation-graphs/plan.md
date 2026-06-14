@@ -7617,6 +7617,71 @@ run finalization after scheduler mutation and durable assignment terminal
 marking. Keep runtime-host batch dispatch disabled until per-member run
 finalization is covered by focused tests.
 
+2026-06-14 re-plan: host-aware async batch run finalization selected.
+Trigger: the remaining per-member workflow-run finalization milestone crossed
+from local scheduler/assignment mutation into canonical workflow run response
+assembly. Completed run finalization requires host output target resolution,
+async scheduler output projection, terminal run/event/artifact recording, and
+session lifecycle cleanup through `finalize_admitted_workflow_run`. The current
+runtime-branch batch response mutation owner is synchronous and hostless, so
+continuing without re-planning would either bypass the canonical finalization
+path or introduce a partial compatibility path.
+
+Decision: use a host-aware async batch finalization boundary as the target
+architecture. The boundary must consume the already validated batch execution
+plan and runtime-host batch response after scheduler mutation and durable
+assignment terminal-state marking. It must finalize each terminal member
+through existing canonical workflow run finalization helpers, including
+completed-output projection via `WorkflowHost`, failed/cancelled run response
+construction, terminal event recording, artifact IO recording, and active-run
+cleanup. The boundary must leave retryable/deferred members active/running and
+must not enable runtime-host batch dispatch until terminal per-member
+finalization is verified.
+
+Standards-aligned options reviewed:
+- Option 1 selected: add async host-aware batch finalization directly, using
+  existing canonical helpers. Choose this when implementation can remain a
+  thin vertical slice over existing finalization APIs without duplicating
+  projection or event-recording logic.
+- Option 2 fallback: first split completed-run response projection into a
+  reusable canonical helper, then add async host-aware batch finalization in a
+  second slice. Choose this if option 1 would require duplicating output
+  projection, terminal event handling, or artifact recording.
+- Option 3 deferred: finalize only failed/cancelled batch members first and
+  leave completed members blocked until the host-aware completed-output
+  boundary is available. Choose this only if failure/cancellation finalization
+  is independently useful and can be clearly recorded as partial terminal
+  coverage.
+- Rejected option: sync hostless completed finalization. This would bypass
+  host output target resolution, output validation, and canonical artifact or
+  terminal event recording, creating legacy behavior against the no-fallback
+  rule.
+
+Updated milestones:
+- Next slice: inspect existing `completed_scheduler_run_response`,
+  `finalize_admitted_workflow_run`, runtime-branch task execution owner, and
+  batch owner call sites; then either implement option 1 directly or record
+  that option 2 is required before production code edits.
+- Option 1 implementation slice, if viable: add an async host-aware batch run
+  finalization method that finalizes completed, failed, and cancelled terminal
+  members through canonical helpers while preserving retryable/deferred active
+  members. Focused tests must prove two batched active runs can finalize
+  independently without anchor-run input/runtime/device carry-forward.
+- Option 2 prerequisite slice, if required: extract only the reusable
+  completed-run response projection/finalization seam needed by both normal
+  runtime dispatch and batch finalization, with no behavior change and focused
+  tests proving existing single-run finalization remains unchanged.
+- Final dispatch enablement slice remains blocked until batch response
+  mutation, durable assignment terminal marking, and per-member workflow-run
+  finalization are all covered by focused tests.
+
+No-fallback/no-legacy confirmation: this re-plan does not permit preserving
+legacy request-scoped runtime execution, single-member fallback dispatch,
+hostless output projection, anchor-run input carry-forward, or runtime/device
+ownership coupling. If canonical planning cannot produce a valid per-member
+finalization decision, the implementation must return typed diagnostics and
+leave retryable/deferred members in explicit non-terminal states.
+
 ## Standards Rule
 
 The standards constraints in
