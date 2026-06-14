@@ -1478,6 +1478,12 @@ async fn workflow_execution_session_bootstrap_recovery_applies_dependency_readin
         .run_workflow_execution_session(run_request(first_session_id.clone(), "paint a red cube"))
         .await
         .expect_err("first runtime run should pause before readiness facts exist");
+    let first_workflow_run_id = {
+        let store = service.session_store_guard().expect("session store");
+        let active_run_ids = store.active_workflow_run_ids();
+        assert_eq!(active_run_ids.len(), 1);
+        active_run_ids[0].clone()
+    };
     runtime
         .run_workflow_execution_session(run_request(second_session_id.clone(), "paint a blue cube"))
         .await
@@ -1489,6 +1495,11 @@ async fn workflow_execution_session_bootstrap_recovery_applies_dependency_readin
         assert_eq!(active_run_ids.len(), 2);
         active_run_ids
     };
+    let second_workflow_run_id = workflow_run_ids
+        .iter()
+        .find(|workflow_run_id| *workflow_run_id != &first_workflow_run_id)
+        .expect("second workflow run id")
+        .clone();
     dependency_readiness_work_queue
         .pop_next()
         .expect("first dependency-readiness work item");
@@ -1514,19 +1525,20 @@ async fn workflow_execution_session_bootstrap_recovery_applies_dependency_readin
         .expect("bootstrap recovery should resume dependency readiness");
 
     assert_eq!(recovery_result.plan.blocking_decision_count, 0);
-    assert_eq!(
-        recovery_result.plan.resume_requests,
-        vec![
-            WorkflowExecutionSessionResumeRequest {
-                session_id: first_session_id.clone(),
-                workflow_run_id: workflow_run_ids[0].clone(),
-            },
-            WorkflowExecutionSessionResumeRequest {
-                session_id: second_session_id.clone(),
-                workflow_run_id: workflow_run_ids[1].clone(),
-            },
-        ]
-    );
+    let mut actual_resume_requests = recovery_result.plan.resume_requests.clone();
+    actual_resume_requests.sort_by(|left, right| left.session_id.cmp(&right.session_id));
+    let mut expected_resume_requests = vec![
+        WorkflowExecutionSessionResumeRequest {
+            session_id: first_session_id.clone(),
+            workflow_run_id: first_workflow_run_id,
+        },
+        WorkflowExecutionSessionResumeRequest {
+            session_id: second_session_id.clone(),
+            workflow_run_id: second_workflow_run_id,
+        },
+    ];
+    expected_resume_requests.sort_by(|left, right| left.session_id.cmp(&right.session_id));
+    assert_eq!(actual_resume_requests, expected_resume_requests);
     let mut resumed_run_ids = recovery_result
         .resumed_runs
         .iter()
@@ -1552,7 +1564,7 @@ async fn workflow_execution_session_bootstrap_recovery_applies_progress_loop_bef
     let dependency_readiness_provider = DependencyEnvironmentReadinessSnapshotProvider::new();
     let dependency_readiness_work_queue = std::sync::Arc::new(DependencyReadinessWorkQueue::new());
     let source_refresher = Arc::new(RecordingRuntimeDispatchSourceRefresher::default());
-    let runtime_host_port = Arc::new(CompletingRuntimeHostPort::default());
+    let runtime_host_batch_port = Arc::new(CompletingRuntimeHostBatchPort::default());
     let reservation_lifecycle_port = Arc::new(RecordingReservationLifecyclePort::default());
     let service = WorkflowService::with_ephemeral_attribution_store()
         .expect("service")
@@ -1564,7 +1576,7 @@ async fn workflow_execution_session_bootstrap_recovery_applies_progress_loop_bef
         .with_runtime_dispatch_candidate_provider(Arc::new(
             SingleCanonicalRuntimeDispatchCandidateProvider,
         ))
-        .with_runtime_host_execution_port(runtime_host_port.clone())
+        .with_runtime_host_batch_execution_port(runtime_host_batch_port.clone())
         .with_reservation_lifecycle_port(reservation_lifecycle_port);
     let runtime = WorkflowSessionExecutionRuntime::new(service, Arc::clone(&host));
     let service = runtime.service();
@@ -1582,7 +1594,7 @@ async fn workflow_execution_session_bootstrap_recovery_applies_progress_loop_bef
         .scheduler_inference_task_projections()
         .expect("scheduler inference task projections");
 
-    let created = service
+    let first_created = service
         .create_workflow_execution_session(
             host.as_ref(),
             WorkflowExecutionSessionCreateRequest {
@@ -1592,15 +1604,27 @@ async fn workflow_execution_session_bootstrap_recovery_applies_progress_loop_bef
             },
         )
         .await
-        .expect("create session");
-    let session_id = created.session_id.clone();
-    let request = WorkflowExecutionSessionRunRequest {
-        session_id: session_id.clone(),
+        .expect("create first session");
+    let second_created = service
+        .create_workflow_execution_session(
+            host.as_ref(),
+            WorkflowExecutionSessionCreateRequest {
+                workflow_id: workflow_id.to_string(),
+                usage_profile: None,
+                keep_alive: false,
+            },
+        )
+        .await
+        .expect("create second session");
+    let first_session_id = first_created.session_id.clone();
+    let second_session_id = second_created.session_id.clone();
+    let run_request = |session_id: String, prompt: &str| WorkflowExecutionSessionRunRequest {
+        session_id,
         workflow_semantic_version: workflow_semantic_version.to_string(),
         inputs: vec![WorkflowPortBinding {
             node_id: "prompt".to_string(),
             port_id: "text".to_string(),
-            value: serde_json::json!("paint a red cube"),
+            value: serde_json::json!(prompt),
         }],
         output_targets: Some(vec![WorkflowOutputTarget {
             node_id: "infer".to_string(),
@@ -1610,58 +1634,67 @@ async fn workflow_execution_session_bootstrap_recovery_applies_progress_loop_bef
         timeout_ms: None,
         priority: None,
     };
-    let workflow_run_id = {
-        let mut store = service.session_store_guard().expect("session store");
-        let workflow_run_id = store
-            .enqueue_run(&session_id, &request)
-            .expect("enqueue run");
-        store
-            .begin_queued_run(&session_id, &workflow_run_id)
-            .expect("begin run")
-            .expect("dequeued run");
-        workflow_run_id
-    };
-    let task_graph = workflow_scheduler_task_graph_with_inference_projections(
-        &pantograph_runtime_attribution::WorkflowId::try_from(workflow_id.to_string())
-            .expect("workflow id"),
-        &pantograph_runtime_attribution::WorkflowRunId::try_from(workflow_run_id.clone())
-            .expect("workflow run id"),
-        &graph,
-        &projections,
-    )
-    .expect("scheduler task graph");
-    let initial_records = service
-        .scheduler_task_orchestrator
-        .initial_task_state_records(&task_graph)
-        .expect("initial task state");
-    {
-        let mut store = service.session_store_guard().expect("session store");
-        store
-            .set_active_run_scheduler_task_state(
-                &session_id,
-                &workflow_run_id,
-                task_graph,
-                initial_records,
+    let first_request = run_request(first_session_id.clone(), "paint a red cube");
+    let second_request = run_request(second_session_id.clone(), "paint a blue cube");
+    let prepare_progress_recovery_run =
+        |session_id: &str, request: &WorkflowExecutionSessionRunRequest| {
+            let workflow_run_id = {
+                let mut store = service.session_store_guard().expect("session store");
+                let workflow_run_id = store.enqueue_run(session_id, request).expect("enqueue run");
+                store
+                    .begin_queued_run(session_id, &workflow_run_id)
+                    .expect("begin run")
+                    .expect("dequeued run");
+                workflow_run_id
+            };
+            let task_graph = workflow_scheduler_task_graph_with_inference_projections(
+                &pantograph_runtime_attribution::WorkflowId::try_from(workflow_id.to_string())
+                    .expect("workflow id"),
+                &pantograph_runtime_attribution::WorkflowRunId::try_from(workflow_run_id.clone())
+                    .expect("workflow run id"),
+                &graph,
+                &projections,
             )
-            .expect("store active task state");
-        service
-            .scheduler_task_orchestrator
-            .materialize_external_inputs_for_active_run(
-                &mut store,
-                &session_id,
-                &workflow_run_id,
-                &request.inputs,
-            )
-            .expect("materialize source input");
-    }
+            .expect("scheduler task graph");
+            let initial_records = service
+                .scheduler_task_orchestrator
+                .initial_task_state_records(&task_graph)
+                .expect("initial task state");
+
+            let mut store = service.session_store_guard().expect("session store");
+            store
+                .set_active_run_scheduler_task_state(
+                    session_id,
+                    &workflow_run_id,
+                    task_graph,
+                    initial_records,
+                )
+                .expect("store active task state");
+            service
+                .scheduler_task_orchestrator
+                .materialize_external_inputs_for_active_run(
+                    &mut store,
+                    session_id,
+                    &workflow_run_id,
+                    &request.inputs,
+                )
+                .expect("materialize source input");
+            workflow_run_id
+        };
+    let mut workflow_run_ids = vec![
+        prepare_progress_recovery_run(&first_session_id, &first_request),
+        prepare_progress_recovery_run(&second_session_id, &second_request),
+    ];
+    workflow_run_ids.sort();
     let recovery_plan = service
         .workflow_execution_session_bootstrap_recovery_plan()
         .expect("recovery plan before apply");
     assert_eq!(recovery_plan.blocking_decision_count, 0);
-    assert_eq!(
-        recovery_plan.decisions[0].decision_kind,
-        WorkflowExecutionSessionBootstrapRecoveryDecisionKind::ResumeProgressLoop
-    );
+    assert_eq!(recovery_plan.decisions.len(), 2);
+    assert!(recovery_plan.decisions.iter().all(|decision| {
+        decision.decision_kind
+            == WorkflowExecutionSessionBootstrapRecoveryDecisionKind::ResumeProgressLoop
+    }));
 
     let dependency_request = runtime_dependency_environment_request(&version);
     dependency_readiness_provider
@@ -1680,17 +1713,21 @@ async fn workflow_execution_session_bootstrap_recovery_applies_progress_loop_bef
         .await
         .expect("bootstrap recovery should run progress loop then resume readiness");
 
-    assert_eq!(
-        recovery_result.plan.decisions[0].decision_kind,
-        WorkflowExecutionSessionBootstrapRecoveryDecisionKind::ResumeProgressLoop
-    );
-    assert_eq!(recovery_result.resumed_runs.len(), 1);
-    assert_eq!(
-        recovery_result.resumed_runs[0].workflow_run_id,
-        workflow_run_id
-    );
+    assert!(recovery_result.plan.decisions.iter().all(|decision| {
+        decision.decision_kind
+            == WorkflowExecutionSessionBootstrapRecoveryDecisionKind::ResumeProgressLoop
+    }));
+    let mut resumed_run_ids = recovery_result
+        .resumed_runs
+        .iter()
+        .map(|run| run.workflow_run_id.clone())
+        .collect::<Vec<_>>();
+    resumed_run_ids.sort();
+    assert_eq!(resumed_run_ids, workflow_run_ids);
     assert!(recovery_result.final_plan.decisions.is_empty());
-    assert_eq!(runtime_host_port.requests().len(), 1);
+    let recorded_batches = runtime_host_batch_port.requests();
+    assert_eq!(recorded_batches.len(), 1);
+    assert_eq!(recorded_batches[0].members.len(), 2);
     assert!(service
         .workflow_execution_session_runtime_dependency_readiness_resume_candidates()
         .expect("resume candidates after bootstrap progress recovery")

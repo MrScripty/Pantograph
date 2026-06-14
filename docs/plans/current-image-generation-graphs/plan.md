@@ -8740,6 +8740,51 @@ compatible peer recovery after the progress loop resumes active task state;
 rewrite the shutdown test at the grouped batch owner/worker level if it must
 observe runtime-host cancellation.
 
+2026-06-14 bootstrap progress-loop grouped recovery slice completed. Smallest
+useful vertical slice: migrate
+`workflow_execution_session_bootstrap_recovery_applies_progress_loop_before_readiness_resume`
+to two compatible active runs that first require progress-loop recovery, then
+complete runtime readiness resume through one grouped runtime-host batch.
+Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`
+and this plan.
+
+No-fallback/no-legacy confirmation: the test now verifies the canonical
+progress-loop-to-grouped-runtime-resume path. It does not restore singleton
+runtime-host dispatch, bypass the runtime owner, reduce broker minimums, or
+complete a solo runtime branch through legacy request-scoped execution.
+
+Verification passed:
+`cargo fmt -p pantograph-workflow-service`,
+`cargo test -p pantograph-workflow-service workflow_execution_session_bootstrap_recovery_applies_progress_loop_before_readiness_resume --lib`,
+`cargo test -p pantograph-workflow-service workflow_execution_session_bootstrap_recovery_applies_dependency_readiness_resume_plan --lib`,
+`cargo test -p pantograph-workflow-service workflow_execution_session_bootstrap_recovery_redispatches_ready_runtime_task --lib`,
+`cargo check -p pantograph-workflow-service`,
+`cargo fmt -p pantograph-workflow-service -- --check`, and
+`git diff --check`.
+
+Broader verification:
+`timeout 180s cargo test -p pantograph-workflow-service session_execution --lib`
+now fails with 37 passed and 1 failed, improving from the prior 36 passed and
+2 failed. Remaining stale failure:
+`workflow_shutdown_aborts_blocked_runtime_dispatch_supervisor`.
+
+Focused test update: the progress-loop bootstrap recovery test now asserts two
+initial `ResumeProgressLoop` decisions, two resumed workflow run IDs, an empty
+final recovery plan, one grouped runtime-host batch with two members, and an
+empty dependency-readiness resume-candidate list after recovery.
+
+Discovered issue fixed in this slice: the preceding dependency-readiness
+bootstrap recovery test compared sorted workflow run IDs against unsorted
+session IDs, which made broad session runs order-sensitive. The test now
+preserves the first and second session/run mappings and compares resume
+requests after sorting by session ID.
+
+Remaining follow-up: rewrite the shutdown test at the grouped batch
+owner/worker level if it must observe runtime-host cancellation, or replace it
+with a typed broker-wait shutdown assertion if cancellation before host
+dispatch is the intended lifecycle boundary.
+
 ## Standards Rule
 
 The standards constraints in
