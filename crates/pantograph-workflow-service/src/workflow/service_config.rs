@@ -511,7 +511,12 @@ mod tests {
 
         let validated = service
             .scheduler_task_orchestrator
-            .dispatch_runtime_batch_request(request.clone())
+            .dispatch_runtime_batch_request_with_cancellation(
+                request.clone(),
+                RuntimeHostExecutionCancellationHandle::running(
+                    request.cancellation_context.clone(),
+                ),
+            )
             .await
             .expect("service-configured batch port should receive request");
 

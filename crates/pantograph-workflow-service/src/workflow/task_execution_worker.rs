@@ -353,6 +353,7 @@ pub(super) enum WorkflowTaskExecutionWorkerOutcome {
     TaskDeferred(WorkflowTaskExecutionWorkerDeferredOutcome),
     RuntimeBranchCompleted(WorkflowTaskExecutionWorkerRuntimeBranchCompletedOutcome),
     RuntimeBranchFailed(WorkflowTaskExecutionWorkerRuntimeBranchFailedOutcome),
+    RuntimeBranchCancelled(WorkflowTaskExecutionWorkerRuntimeBranchCancelledOutcome),
     RuntimeBranchDeferred(WorkflowTaskExecutionWorkerRuntimeBranchDeferredOutcome),
     WorkerUnavailable(WorkflowTaskExecutionWorkerDiagnostic),
     ShutdownAccepted,
@@ -409,6 +410,15 @@ pub(super) struct WorkflowTaskExecutionWorkerRuntimeBranchFailedOutcome {
     pub(super) session_id: String,
     pub(super) workflow_run_id: String,
     pub(super) error_message: String,
+    pub(super) diagnostics: Vec<WorkflowTaskExecutionWorkerDiagnostic>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[must_use]
+pub(super) struct WorkflowTaskExecutionWorkerRuntimeBranchCancelledOutcome {
+    pub(super) session_id: String,
+    pub(super) workflow_run_id: String,
+    pub(super) message: String,
     pub(super) diagnostics: Vec<WorkflowTaskExecutionWorkerDiagnostic>,
 }
 
@@ -897,6 +907,19 @@ impl WorkflowTaskExecutionWorkerOutcome {
             session_id: command.session_id.clone(),
             workflow_run_id: command.workflow_run_id.clone(),
             error_message: error_message.into(),
+            diagnostics,
+        })
+    }
+
+    pub(super) fn runtime_branch_cancelled(
+        command: &WorkflowTaskExecutionWorkerRuntimeBranchCommand,
+        message: impl Into<String>,
+        diagnostics: Vec<WorkflowTaskExecutionWorkerDiagnostic>,
+    ) -> Self {
+        Self::RuntimeBranchCancelled(WorkflowTaskExecutionWorkerRuntimeBranchCancelledOutcome {
+            session_id: command.session_id.clone(),
+            workflow_run_id: command.workflow_run_id.clone(),
+            message: message.into(),
             diagnostics,
         })
     }
@@ -1811,8 +1834,41 @@ fn runtime_branch_batch_member_completion(
                 }
             }
         }
-        WorkflowRuntimeBranchBatchMemberExecutionOutcomeState::Cancelled
-        | WorkflowRuntimeBranchBatchMemberExecutionOutcomeState::Failed => {
+        WorkflowRuntimeBranchBatchMemberExecutionOutcomeState::Cancelled => {
+            let message = diagnostics
+                .first()
+                .map(|diagnostic| diagnostic.message.clone())
+                .unwrap_or_else(|| "runtime branch batch member cancelled".to_string());
+            match fail_claimed_runtime_branch_task_event(
+                service,
+                &assignment.runtime_branch_event_id,
+                &assignment.runtime_branch_claim,
+                unix_timestamp_ms(),
+            ) {
+                Ok(_record) => WorkflowTaskExecutionWorkerOutcome::RuntimeBranchCancelled(
+                    WorkflowTaskExecutionWorkerRuntimeBranchCancelledOutcome {
+                        session_id: member_outcome.session_id.clone(),
+                        workflow_run_id: member_outcome.workflow_run_id.clone(),
+                        message,
+                        diagnostics,
+                    },
+                ),
+                Err(diagnostic) => {
+                    diagnostics.push(diagnostic);
+                    WorkflowTaskExecutionWorkerOutcome::RuntimeBranchFailed(
+                        WorkflowTaskExecutionWorkerRuntimeBranchFailedOutcome {
+                            session_id: member_outcome.session_id.clone(),
+                            workflow_run_id: member_outcome.workflow_run_id.clone(),
+                            error_message:
+                                "runtime branch task event cancellation persistence failed after batch"
+                                    .to_string(),
+                            diagnostics,
+                        },
+                    )
+                }
+            }
+        }
+        WorkflowRuntimeBranchBatchMemberExecutionOutcomeState::Failed => {
             match fail_claimed_runtime_branch_task_event(
                 service,
                 &assignment.runtime_branch_event_id,

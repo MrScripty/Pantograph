@@ -343,7 +343,10 @@ async fn orchestrator_fails_closed_when_runtime_host_batch_port_is_unconfigured(
     let request = runtime_host_batch_request_fixture();
 
     let error = orchestrator
-        .dispatch_runtime_batch_request(request)
+        .dispatch_runtime_batch_request_with_cancellation(
+            request.clone(),
+            RuntimeHostExecutionCancellationHandle::running(request.cancellation_context.clone()),
+        )
         .await
         .expect_err("default batch port should fail closed");
 
@@ -368,7 +371,10 @@ async fn orchestrator_dispatches_runtime_batch_through_injected_batch_port() {
         .with_runtime_host_batch_dispatcher(SchedulerRuntimeHostBatchDispatcher::new(port.clone()));
 
     let validated = orchestrator
-        .dispatch_runtime_batch_request(request.clone())
+        .dispatch_runtime_batch_request_with_cancellation(
+            request.clone(),
+            RuntimeHostExecutionCancellationHandle::running(request.cancellation_context.clone()),
+        )
         .await
         .expect("valid batch request should reach injected batch port");
 

@@ -8785,6 +8785,69 @@ owner/worker level if it must observe runtime-host cancellation, or replace it
 with a typed broker-wait shutdown assertion if cancellation before host
 dispatch is the intended lifecycle boundary.
 
+2026-06-14 grouped runtime batch shutdown cancellation slice completed.
+Smallest useful vertical slice: replace the stale single-request shutdown
+runtime-host cancellation fixture with grouped runtime-host batch
+cancellation, route grouped batch dispatch through a scheduler
+lifecycle-backed cancellation handle, and preserve cancelled batch member
+classification when the worker fans outcomes back to session waiters. Allowed
+files expanded after discovery:
+`crates/pantograph-workflow-service/src/scheduler/task_orchestrator.rs`,
+`crates/pantograph-workflow-service/src/scheduler/task_orchestrator_tests.rs`,
+`crates/pantograph-workflow-service/src/workflow/runtime_branch_batch_execution.rs`,
+`crates/pantograph-workflow-service/src/workflow/service_config.rs`,
+`crates/pantograph-workflow-service/src/workflow/task_execution_worker.rs`,
+`crates/pantograph-workflow-service/src/workflow/session_execution_api.rs`,
+`crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`,
+and this plan.
+
+No-fallback/no-legacy confirmation: this slice keeps shutdown cancellation on
+the canonical grouped runtime-host batch path owned by the task-execution
+runtime owner. It must not restore single-request runtime-host dispatch,
+request-scoped runtime execution, singleton broker fallback, or compatibility
+classification by test expectation.
+
+Implementation note: the old non-cancellable
+`dispatch_runtime_batch_request` orchestrator method was removed. Tests and
+service configuration coverage now call the cancellation-aware batch dispatch
+method explicitly, so production code no longer retains a static-running batch
+dispatch path.
+
+Discovered issue fixed: grouped batch finalization correctly marked
+cancelled runtime-host member responses as cancelled, but the task-execution
+worker collapsed cancelled and failed batch member outcomes into the same
+failed responder outcome. That converted shutdown cancellation into
+`InternalError` at the session API boundary. The fix is to preserve
+cancellation as a typed worker outcome through fan-out and session response
+mapping.
+
+Discovered issue deferred from this slice: grouped batch terminal scheduler
+attempt mutations do not yet emit the same diagnostics-ledger terminal attempt
+event as the single-request session scheduler runner path. This slice will not
+move diagnostics ownership into the batch owner ad hoc; a later diagnostics
+parity slice must decide whether terminal attempt event emission belongs in a
+shared scheduler diagnostic boundary or an explicit grouped-batch diagnostics
+adapter.
+
+Verification passed:
+`cargo fmt -p pantograph-workflow-service`,
+`cargo test -p pantograph-workflow-service workflow_shutdown_cancels_blocked_runtime_batch_dispatch --lib`,
+`cargo test -p pantograph-workflow-service runtime_host_batch --lib`,
+`cargo test -p pantograph-workflow-service workflow_service_injects_runtime_host_batch_execution_port --lib`,
+`cargo test -p pantograph-workflow-service runtime_branch_batch_execution --lib`,
+`cargo test -p pantograph-workflow-service task_execution_worker --lib`,
+`timeout 180s cargo test -p pantograph-workflow-service session_execution --lib`,
+`cargo check -p pantograph-workflow-service`,
+`cargo fmt -p pantograph-workflow-service -- --check`, and
+`git diff --check`.
+
+Broader verification: `session_execution --lib` now passes 38/38. This clears
+the final stale failure from the 2026-06-14 progress-loop recovery slice.
+
+Remaining follow-up: plan and implement grouped batch terminal
+diagnostics-ledger parity without moving diagnostics ownership into the batch
+owner ad hoc.
+
 ## Standards Rule
 
 The standards constraints in

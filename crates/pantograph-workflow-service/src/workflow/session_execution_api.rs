@@ -1528,6 +1528,12 @@ fn workflow_response_from_runtime_branch_worker_outcome(
                 &outcome.diagnostics,
             )))
         }
+        WorkflowTaskExecutionWorkerOutcome::RuntimeBranchCancelled(outcome) => {
+            Err(WorkflowServiceError::Cancelled(worker_diagnostic_message(
+                &outcome.message,
+                &outcome.diagnostics,
+            )))
+        }
         WorkflowTaskExecutionWorkerOutcome::WorkerUnavailable(diagnostic) => {
             Err(WorkflowServiceError::Internal(diagnostic.message))
         }

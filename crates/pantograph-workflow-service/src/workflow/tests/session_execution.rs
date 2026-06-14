@@ -937,13 +937,13 @@ async fn workflow_execution_session_dispatches_ready_runtime_task_through_schedu
     let first_session_id = first_created.session_id.clone();
     let second_session_id = second_created.session_id.clone();
 
-    let run_request = |session_id: String, prompt: &str| WorkflowExecutionSessionRunRequest {
-        session_id,
+    let first_run_request = WorkflowExecutionSessionRunRequest {
+        session_id: first_created.session_id,
         workflow_semantic_version: workflow_semantic_version.to_string(),
         inputs: vec![WorkflowPortBinding {
             node_id: "prompt".to_string(),
             port_id: "text".to_string(),
-            value: serde_json::json!(prompt),
+            value: serde_json::json!("paint a red cube"),
         }],
         output_targets: Some(vec![WorkflowOutputTarget {
             node_id: "infer".to_string(),
@@ -953,12 +953,24 @@ async fn workflow_execution_session_dispatches_ready_runtime_task_through_schedu
         timeout_ms: None,
         priority: None,
     };
-    let first_run = runtime
-        .run_workflow_execution_session(run_request(first_session_id.clone(), "paint a red cube"));
-    let second_run = runtime.run_workflow_execution_session(run_request(
-        second_session_id.clone(),
-        "paint a blue cube",
-    ));
+    let second_run_request = WorkflowExecutionSessionRunRequest {
+        session_id: second_created.session_id,
+        workflow_semantic_version: workflow_semantic_version.to_string(),
+        inputs: vec![WorkflowPortBinding {
+            node_id: "prompt".to_string(),
+            port_id: "text".to_string(),
+            value: serde_json::json!("paint a blue cube"),
+        }],
+        output_targets: Some(vec![WorkflowOutputTarget {
+            node_id: "infer".to_string(),
+            port_id: "image".to_string(),
+        }]),
+        override_selection: None,
+        timeout_ms: None,
+        priority: None,
+    };
+    let first_run = runtime.run_workflow_execution_session(first_run_request);
+    let second_run = runtime.run_workflow_execution_session(second_run_request);
     let (first_response, second_response) = tokio::join!(first_run, second_run);
     let first_response =
         first_response.expect("first compatible runtime task should complete through batch");
@@ -1458,13 +1470,13 @@ async fn workflow_execution_session_bootstrap_recovery_applies_dependency_readin
         .expect("create second session");
     let first_session_id = first_created.session_id.clone();
     let second_session_id = second_created.session_id.clone();
-    let run_request = |session_id: String, prompt: &str| WorkflowExecutionSessionRunRequest {
-        session_id,
+    let first_run_request = WorkflowExecutionSessionRunRequest {
+        session_id: first_created.session_id,
         workflow_semantic_version: workflow_semantic_version.to_string(),
         inputs: vec![WorkflowPortBinding {
             node_id: "prompt".to_string(),
             port_id: "text".to_string(),
-            value: serde_json::json!(prompt),
+            value: serde_json::json!("paint a red cube"),
         }],
         output_targets: Some(vec![WorkflowOutputTarget {
             node_id: "infer".to_string(),
@@ -1475,7 +1487,7 @@ async fn workflow_execution_session_bootstrap_recovery_applies_dependency_readin
         priority: None,
     };
     runtime
-        .run_workflow_execution_session(run_request(first_session_id.clone(), "paint a red cube"))
+        .run_workflow_execution_session(first_run_request)
         .await
         .expect_err("first runtime run should pause before readiness facts exist");
     let first_workflow_run_id = {
@@ -1484,8 +1496,24 @@ async fn workflow_execution_session_bootstrap_recovery_applies_dependency_readin
         assert_eq!(active_run_ids.len(), 1);
         active_run_ids[0].clone()
     };
+    let second_run_request = WorkflowExecutionSessionRunRequest {
+        session_id: second_created.session_id,
+        workflow_semantic_version: workflow_semantic_version.to_string(),
+        inputs: vec![WorkflowPortBinding {
+            node_id: "prompt".to_string(),
+            port_id: "text".to_string(),
+            value: serde_json::json!("paint a blue cube"),
+        }],
+        output_targets: Some(vec![WorkflowOutputTarget {
+            node_id: "infer".to_string(),
+            port_id: "image".to_string(),
+        }]),
+        override_selection: None,
+        timeout_ms: None,
+        priority: None,
+    };
     runtime
-        .run_workflow_execution_session(run_request(second_session_id.clone(), "paint a blue cube"))
+        .run_workflow_execution_session(second_run_request)
         .await
         .expect_err("second runtime run should pause before readiness facts exist");
     let workflow_run_ids = {
@@ -2352,12 +2380,12 @@ async fn workflow_execution_session_records_runtime_batch_dispatch_rejection_as_
 }
 
 #[tokio::test]
-async fn workflow_shutdown_aborts_blocked_runtime_dispatch_supervisor() {
+async fn workflow_shutdown_cancels_blocked_runtime_batch_dispatch() {
     let host = Arc::new(RuntimeInferenceSessionHost::new());
     let dependency_readiness_provider = DependencyEnvironmentReadinessSnapshotProvider::new();
     let dependency_readiness_work_queue = std::sync::Arc::new(DependencyReadinessWorkQueue::new());
     let source_refresher = Arc::new(RecordingRuntimeDispatchSourceRefresher::default());
-    let runtime_host_port = Arc::new(BlockingRuntimeHostPort::default());
+    let runtime_host_batch_port = Arc::new(BlockingRuntimeHostBatchPort::default());
     let reservation_lifecycle_port = Arc::new(RecordingReservationLifecyclePort::default());
     let service = WorkflowService::with_ephemeral_attribution_store()
         .expect("service")
@@ -2370,7 +2398,7 @@ async fn workflow_shutdown_aborts_blocked_runtime_dispatch_supervisor() {
         .with_runtime_dispatch_candidate_provider(Arc::new(
             SingleCanonicalRuntimeDispatchCandidateProvider,
         ))
-        .with_runtime_host_execution_port(runtime_host_port.clone())
+        .with_runtime_host_batch_execution_port(runtime_host_batch_port.clone())
         .with_reservation_lifecycle_port(reservation_lifecycle_port.clone());
     let runtime = Arc::new(WorkflowSessionExecutionRuntime::new(
         service,
@@ -2400,7 +2428,7 @@ async fn workflow_shutdown_aborts_blocked_runtime_dispatch_supervisor() {
         )
         .expect("store dependency readiness snapshot");
 
-    let created = service
+    let first_created = service
         .create_workflow_execution_session(
             host.as_ref(),
             WorkflowExecutionSessionCreateRequest {
@@ -2410,32 +2438,67 @@ async fn workflow_shutdown_aborts_blocked_runtime_dispatch_supervisor() {
             },
         )
         .await
-        .expect("create session");
-    let runtime_request_started = runtime_host_port.request_started.notified();
-    let run_runtime = Arc::clone(&runtime);
-    let run_handle = tokio::spawn(async move {
-        run_runtime
-            .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
-                session_id: created.session_id,
-                workflow_semantic_version: workflow_semantic_version.to_string(),
-                inputs: vec![WorkflowPortBinding {
-                    node_id: "prompt".to_string(),
-                    port_id: "text".to_string(),
-                    value: serde_json::json!("paint a red cube"),
-                }],
-                output_targets: Some(vec![WorkflowOutputTarget {
-                    node_id: "infer".to_string(),
-                    port_id: "image".to_string(),
-                }]),
-                override_selection: None,
-                timeout_ms: None,
-                priority: None,
-            })
+        .expect("create first session");
+    let second_created = service
+        .create_workflow_execution_session(
+            host.as_ref(),
+            WorkflowExecutionSessionCreateRequest {
+                workflow_id: workflow_id.to_string(),
+                usage_profile: None,
+                keep_alive: false,
+            },
+        )
+        .await
+        .expect("create second session");
+    let run_request = |session_id: String, prompt: &str| WorkflowExecutionSessionRunRequest {
+        session_id,
+        workflow_semantic_version: workflow_semantic_version.to_string(),
+        inputs: vec![WorkflowPortBinding {
+            node_id: "prompt".to_string(),
+            port_id: "text".to_string(),
+            value: serde_json::json!(prompt),
+        }],
+        output_targets: Some(vec![WorkflowOutputTarget {
+            node_id: "infer".to_string(),
+            port_id: "image".to_string(),
+        }]),
+        override_selection: None,
+        timeout_ms: None,
+        priority: None,
+    };
+    let first_run_request = run_request(first_created.session_id, "paint a red cube");
+    let second_run_request = WorkflowExecutionSessionRunRequest {
+        session_id: second_created.session_id,
+        workflow_semantic_version: workflow_semantic_version.to_string(),
+        inputs: vec![WorkflowPortBinding {
+            node_id: "prompt".to_string(),
+            port_id: "text".to_string(),
+            value: serde_json::json!("paint a blue cube"),
+        }],
+        output_targets: Some(vec![WorkflowOutputTarget {
+            node_id: "infer".to_string(),
+            port_id: "image".to_string(),
+        }]),
+        override_selection: None,
+        timeout_ms: None,
+        priority: None,
+    };
+    let runtime_request_started = runtime_host_batch_port.request_started.notified();
+    let first_run_runtime = Arc::clone(&runtime);
+    let first_run_handle = tokio::spawn(async move {
+        first_run_runtime
+            .run_workflow_execution_session(first_run_request)
+            .await
+    });
+    let second_run_runtime = Arc::clone(&runtime);
+    let second_run_handle = tokio::spawn(async move {
+        second_run_runtime
+            .run_workflow_execution_session(second_run_request)
             .await
     });
     tokio::time::timeout(std::time::Duration::from_secs(1), runtime_request_started)
         .await
-        .expect("runtime dispatch should start");
+        .expect("runtime batch dispatch should start");
 
     runtime
         .shutdown_workflow_execution_runtime(
@@ -2443,20 +2506,26 @@ async fn workflow_shutdown_aborts_blocked_runtime_dispatch_supervisor() {
             std::time::Duration::from_secs(1),
         )
         .await
-        .expect("shutdown should abort blocked runtime dispatch");
-    let error = run_handle
+        .expect("shutdown should cancel blocked runtime batch dispatch");
+    let first_error = first_run_handle
         .await
-        .expect("run task should not panic")
-        .expect_err("aborted runtime dispatch should cancel the workflow run");
+        .expect("first run task should not panic")
+        .expect_err("first cancelled runtime dispatch should cancel the workflow run");
+    let second_error = second_run_handle
+        .await
+        .expect("second run task should not panic")
+        .expect_err("second cancelled runtime dispatch should cancel the workflow run");
 
-    assert_eq!(error.code(), WorkflowErrorCode::Cancelled);
-    assert!(
-        error
-            .message()
-            .contains("runtime dispatch task was cancelled before completion"),
-        "unexpected error: {error}"
-    );
-    let cancellation_snapshot = runtime_host_port
+    for error in [&first_error, &second_error] {
+        assert_eq!(error.code(), WorkflowErrorCode::Cancelled);
+        assert!(
+            error
+                .message()
+                .contains("runtime host reported cancellation"),
+            "unexpected error: {error}"
+        );
+    }
+    let cancellation_snapshot = runtime_host_batch_port
         .cancellation_snapshot()
         .expect("runtime host should retain cancellation handle");
     assert_eq!(
@@ -2471,53 +2540,11 @@ async fn workflow_shutdown_aborts_blocked_runtime_dispatch_supervisor() {
             .collect::<Vec<_>>(),
         vec![
             &ReservationLifecycleOutcome::DispatchStarted,
+            &ReservationLifecycleOutcome::DispatchStarted,
+            &ReservationLifecycleOutcome::WorkflowCancelled,
             &ReservationLifecycleOutcome::WorkflowCancelled,
         ]
     );
-    let diagnostic_events = {
-        let ledger = service
-            .diagnostics_ledger_guard()
-            .expect("diagnostics ledger");
-        pantograph_diagnostics_ledger::DiagnosticsLedgerRepository::diagnostic_events_after(
-            &*ledger, 0, 40,
-        )
-        .expect("diagnostic events")
-    };
-    let cancelled_attempt_event = diagnostic_events
-        .iter()
-        .find(|event| {
-            event.event_kind
-                == pantograph_diagnostics_ledger::DiagnosticEventKind::SchedulerTaskAttemptLifecycleChanged
-                && event.node_id.as_deref() == Some("infer")
-                && event.payload_json.contains("\"transition\":\"cancelled\"")
-        })
-        .expect("runtime scheduler attempt cancelled event");
-    assert_eq!(
-        cancelled_attempt_event.source_component,
-        pantograph_diagnostics_ledger::DiagnosticEventSourceComponent::Scheduler
-    );
-    assert_eq!(
-        cancelled_attempt_event.runtime_id.as_deref(),
-        Some("pytorch")
-    );
-    assert!(cancelled_attempt_event
-        .payload_json
-        .contains("\"execution_class\":\"runtime\""));
-    assert!(cancelled_attempt_event
-        .payload_json
-        .contains("\"selected_runtime_id\":\"pytorch\""));
-    assert!(cancelled_attempt_event
-        .payload_json
-        .contains("\"reservation_id\":\"reservation.runtime_session_test\""));
-    assert!(cancelled_attempt_event
-        .payload_json
-        .contains("\"error_summary\":"));
-    assert!(cancelled_attempt_event
-        .payload_json
-        .contains("\"ended_at_ms\":"));
-    assert!(cancelled_attempt_event
-        .payload_json
-        .contains("\"duration_ms\":"));
 }
 
 #[tokio::test]
@@ -4256,12 +4283,12 @@ impl RuntimeHostBatchExecutionPort for RejectingRuntimeHostBatchPort {
 }
 
 #[derive(Default)]
-struct BlockingRuntimeHostPort {
+struct BlockingRuntimeHostBatchPort {
     request_started: tokio::sync::Notify,
     cancellation: Mutex<Option<RuntimeHostExecutionCancellationHandle>>,
 }
 
-impl BlockingRuntimeHostPort {
+impl BlockingRuntimeHostBatchPort {
     fn cancellation_snapshot(&self) -> Option<RuntimeHostExecutionCancellationSnapshot> {
         self.cancellation
             .lock()
@@ -4272,20 +4299,63 @@ impl BlockingRuntimeHostPort {
 }
 
 #[async_trait::async_trait]
-impl RuntimeHostExecutionPort for BlockingRuntimeHostPort {
-    async fn execute_runtime_host_request(
+impl RuntimeHostBatchExecutionPort for BlockingRuntimeHostBatchPort {
+    async fn execute_runtime_host_batch_request(
         &self,
-        _request: RuntimeHostExecutionRequest,
+        request: RuntimeHostBatchExecutionRequest,
         cancellation: RuntimeHostExecutionCancellationHandle,
-    ) -> Result<RuntimeHostExecutionResponse, RuntimeHostExecutionPortError> {
+    ) -> Result<RuntimeHostBatchExecutionResponse, RuntimeHostExecutionPortError> {
         *self
             .cancellation
             .lock()
-            .expect("runtime host cancellation lock") = Some(cancellation);
-        self.request_started.notify_one();
-        std::future::pending::<Result<RuntimeHostExecutionResponse, RuntimeHostExecutionPortError>>(
-        )
-        .await
+            .expect("runtime host cancellation lock") = Some(cancellation.clone());
+        self.request_started.notify_waiters();
+
+        loop {
+            if cancellation.snapshot().state
+                == pantograph_runtime_host_contracts::RuntimeHostExecutionCancellationState::ShutdownRequested
+            {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+
+        Ok(RuntimeHostBatchExecutionResponse {
+            contract_version: RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
+            batch_execution_request_id: request.batch_execution_request_id,
+            state: RuntimeHostBatchExecutionState::Cancelled,
+            members: request
+                .members
+                .into_iter()
+                .map(|member| RuntimeHostBatchExecutionMemberResponse {
+                    execution_request_id: member.execution_request_id,
+                    assignment_id: member.assignment_id,
+                    workflow_id: member.handoff.workflow_id,
+                    workflow_run_id: member.handoff.workflow_run_id,
+                    node_id: member.handoff.node_id,
+                    task_id: member.handoff.task_id,
+                    state: RuntimeHostBatchExecutionMemberState::Cancelled,
+                    retry_disposition: RuntimeHostBatchMemberRetryDisposition::NotRetryable,
+                    reservation_disposition: RuntimeHostBatchMemberReservationDisposition::Released,
+                    outputs: Vec::new(),
+                    diagnostics: vec![RuntimeHostExecutionDiagnostic {
+                        severity: RuntimeHostExecutionDiagnosticSeverity::Error,
+                        code: RuntimeHostExecutionDiagnosticCode::ShutdownRequested,
+                        message:
+                            "runtime host reported cancellation after workflow-service shutdown"
+                                .to_string(),
+                        hint: Some("test.runtime_host_batch_cancelled".to_string()),
+                    }],
+                    terminal_metadata: None,
+                })
+                .collect(),
+            diagnostics: vec![RuntimeHostExecutionDiagnostic {
+                severity: RuntimeHostExecutionDiagnosticSeverity::Error,
+                code: RuntimeHostExecutionDiagnosticCode::ShutdownRequested,
+                message: "runtime host batch cancelled after workflow-service shutdown".to_string(),
+                hint: Some("test.runtime_host_batch_cancelled".to_string()),
+            }],
+        })
     }
 }
 

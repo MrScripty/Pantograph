@@ -512,13 +512,28 @@ impl WorkflowSchedulerTaskOrchestrator {
             .map_err(WorkflowSchedulerTaskOrchestratorError::RuntimeHostTaskResultMapping)
     }
 
-    pub(crate) async fn dispatch_runtime_batch_request(
+    pub(crate) fn runtime_host_batch_cancellation(
+        &self,
+        batch_execution_request_id: &str,
+        member: &StartedRuntimeTaskBatchMember,
+    ) -> Result<RuntimeHostExecutionCancellationHandle, WorkflowSchedulerTaskOrchestratorError>
+    {
+        let (_cancellation_context, cancellation) = self.runtime_host_cancellation(
+            &member.started().task().task_id,
+            member.started().attempt_id(),
+            batch_execution_request_id,
+        )?;
+        Ok(cancellation)
+    }
+
+    pub(crate) async fn dispatch_runtime_batch_request_with_cancellation(
         &self,
         request: RuntimeHostBatchExecutionRequest,
+        cancellation: RuntimeHostExecutionCancellationHandle,
     ) -> Result<ValidatedRuntimeHostBatchExecutionResponse, WorkflowSchedulerTaskOrchestratorError>
     {
         self.runtime_host_batch_dispatcher
-            .dispatch_batch(request)
+            .dispatch_batch_with_cancellation(request, cancellation)
             .await
             .map_err(WorkflowSchedulerTaskOrchestratorError::RuntimeHostDispatch)
     }

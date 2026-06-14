@@ -13,7 +13,8 @@ use pantograph_runtime_host_contracts::{
     RuntimeHostBatchExecutionMemberState, RuntimeHostBatchExecutionRequest,
     RuntimeHostBatchExecutionResponse, RuntimeHostBatchMemberFailurePolicy,
     RuntimeHostBatchMemberReservationPolicy, RuntimeHostExecutionCancellationContext,
-    ValidatedRuntimeHostBatchExecutionRequest, RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
+    RuntimeHostExecutionCancellationHandle, ValidatedRuntimeHostBatchExecutionRequest,
+    RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
 };
 use pantograph_scheduler::{
     SchedulerDispatchCandidateId, SchedulerReservationLeaseId, SchedulerRuntimeHandoff,
@@ -167,7 +168,9 @@ pub(super) enum WorkflowRuntimeBranchBatchExecutionDiagnosticCode {
     RuntimeHostBatchMemberResponseMissing,
     RuntimeHostBatchMemberResponseUnknown,
     RuntimeHostBatchMemberMutationInvalid,
+    RuntimeHostBatchMemberCancelled,
     RuntimeBatchMemberLifecycleInvalid,
+    RuntimeHostBatchCancellationInvalid,
     RuntimeDispatchAssignmentTerminalStateInvalid,
     WorkflowRunFinalizationInvalid,
     ResponderFanOutUnavailable,
@@ -216,7 +219,7 @@ where
         })
     }
 
-    pub(super) fn apply_batch_response_mutations(
+    pub(super) async fn apply_batch_response_mutations(
         &self,
         service: &WorkflowService,
         plan: &WorkflowRuntimeBranchBatchExecutionPlan,
@@ -227,64 +230,93 @@ where
     > {
         validate_batch_response_matches_plan(plan, response)?;
         validate_service_assignments_are_running(service, plan)?;
-        let mut store = service.session_store_guard().map_err(|error| {
-            WorkflowRuntimeBranchBatchExecutionFailure::global(
-                WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
-                    WorkflowRuntimeBranchBatchExecutionDiagnosticCode::ActiveRunTaskStateUnavailable,
-                    format!("runtime branch batch execution could not write session store: {error}"),
-                ),
-            )
-        })?;
-        let mut outcomes = Vec::with_capacity(plan.active_run_members.len());
-        for active_member in &plan.active_run_members {
-            let member = plan
-                .members
-                .iter()
-                .find(|member| member.assignment_id == active_member.assignment_id)
-                .expect("active-run member is built from validated plan members");
-            let response_member =
-                response_member_for_assignment(response, active_member.assignment_id.as_str())
-                    .ok_or_else(|| {
+        let (outcomes, lifecycle_applications) = {
+            let mut store = service.session_store_guard().map_err(|error| {
+                WorkflowRuntimeBranchBatchExecutionFailure::global(
+                    WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
+                        WorkflowRuntimeBranchBatchExecutionDiagnosticCode::ActiveRunTaskStateUnavailable,
+                        format!("runtime branch batch execution could not write session store: {error}"),
+                    ),
+                )
+            })?;
+            let mut outcomes = Vec::with_capacity(plan.active_run_members.len());
+            let mut lifecycle_applications = Vec::with_capacity(plan.active_run_members.len());
+            for active_member in &plan.active_run_members {
+                let member = plan
+                    .members
+                    .iter()
+                    .find(|member| member.assignment_id == active_member.assignment_id)
+                    .expect("active-run member is built from validated plan members");
+                let response_member =
+                    response_member_for_assignment(response, active_member.assignment_id.as_str())
+                        .ok_or_else(|| {
+                            WorkflowRuntimeBranchBatchExecutionFailure::active_run_member(
+                                member,
+                                WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
+                                    WorkflowRuntimeBranchBatchExecutionDiagnosticCode::RuntimeHostBatchMemberResponseMissing,
+                                    format!(
+                                        "runtime branch batch response is missing member '{}'",
+                                        active_member.assignment_id.as_str()
+                                    ),
+                                ),
+                            )
+                        })?;
+                let mutation = self
+                    .scheduler_task_orchestrator
+                    .apply_runtime_batch_member_response_mutation(
+                        &mut store,
+                        &member.session_id,
+                        &member.workflow_run_id,
+                        &active_member.started_batch_member,
+                        response_member,
+                    )
+                    .map_err(|error| {
                         WorkflowRuntimeBranchBatchExecutionFailure::active_run_member(
                             member,
                             WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
-                                WorkflowRuntimeBranchBatchExecutionDiagnosticCode::RuntimeHostBatchMemberResponseMissing,
+                                WorkflowRuntimeBranchBatchExecutionDiagnosticCode::RuntimeHostBatchMemberMutationInvalid,
                                 format!(
-                                    "runtime branch batch response is missing member '{}'",
-                                    active_member.assignment_id.as_str()
+                                    "runtime branch batch member '{}' scheduler mutation failed: {error}",
+                                    member.assignment_id.as_str()
                                 ),
                             ),
                         )
                     })?;
-            let mutation = self
-                .scheduler_task_orchestrator
-                .apply_runtime_batch_member_response_mutation(
-                    &mut store,
-                    &member.session_id,
-                    &member.workflow_run_id,
-                    &active_member.started_batch_member,
+                outcomes.push(member_outcome_from_scheduler_mutation(
+                    member,
                     response_member,
+                    &mutation,
+                ));
+                lifecycle_applications.push((
+                    member.clone(),
+                    active_member.started_batch_member.clone(),
+                    response_member.clone(),
+                ));
+            }
+            (outcomes, lifecycle_applications)
+        };
+        mark_terminal_service_assignments(service, plan, response)?;
+        for (member, started_batch_member, response_member) in lifecycle_applications {
+            let _application = self
+                .scheduler_task_orchestrator
+                .apply_runtime_batch_member_reservation_lifecycle(
+                    &started_batch_member,
+                    &response_member,
                 )
+                .await
                 .map_err(|error| {
                     WorkflowRuntimeBranchBatchExecutionFailure::active_run_member(
-                        member,
+                        &member,
                         WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
-                            WorkflowRuntimeBranchBatchExecutionDiagnosticCode::RuntimeHostBatchMemberMutationInvalid,
+                            WorkflowRuntimeBranchBatchExecutionDiagnosticCode::RuntimeBatchMemberLifecycleInvalid,
                             format!(
-                                "runtime branch batch member '{}' scheduler mutation failed: {error}",
+                                "runtime branch batch member '{}' reservation lifecycle failed after response: {error}",
                                 member.assignment_id.as_str()
                             ),
                         ),
                     )
                 })?;
-            outcomes.push(member_outcome_from_scheduler_mutation(
-                member,
-                response_member,
-                &mutation,
-            ));
         }
-        drop(store);
-        mark_terminal_service_assignments(service, plan, response)?;
         Ok(WorkflowRuntimeBranchBatchResponseMutationOutcome {
             member_outcomes: outcomes,
         })
@@ -304,9 +336,13 @@ where
     {
         let plan = self.prepare_claimed_batch(service, claim_outcome)?;
         self.apply_batch_dispatch_started_lifecycle(&plan).await?;
+        let cancellation = self.runtime_host_batch_cancellation(&plan)?;
         let response = self
             .scheduler_task_orchestrator
-            .dispatch_runtime_batch_request(plan.runtime_host_request.clone())
+            .dispatch_runtime_batch_request_with_cancellation(
+                plan.runtime_host_request.clone(),
+                cancellation,
+            )
             .await
             .map_err(|error| {
                 WorkflowRuntimeBranchBatchExecutionFailure::global(
@@ -320,7 +356,9 @@ where
                 )
             })?
             .into_inner();
-        let _mutation = self.apply_batch_response_mutations(service, &plan, &response)?;
+        let _mutation = self
+            .apply_batch_response_mutations(service, &plan, &response)
+            .await?;
         self.finalize_batch_member_runs(service, host, &plan, &response)
             .await
     }
@@ -355,6 +393,43 @@ where
                 })?;
         }
         Ok(())
+    }
+
+    fn runtime_host_batch_cancellation(
+        &self,
+        plan: &WorkflowRuntimeBranchBatchExecutionPlan,
+    ) -> Result<RuntimeHostExecutionCancellationHandle, WorkflowRuntimeBranchBatchExecutionFailure>
+    {
+        let active_member = plan.active_run_members.first().ok_or_else(|| {
+            WorkflowRuntimeBranchBatchExecutionFailure::global(
+                WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
+                    WorkflowRuntimeBranchBatchExecutionDiagnosticCode::RuntimeHostBatchCancellationInvalid,
+                    "runtime branch batch execution cannot create cancellation without active members",
+                ),
+            )
+        })?;
+        let member = plan
+            .members
+            .iter()
+            .find(|member| member.assignment_id == active_member.assignment_id)
+            .expect("active-run member is built from validated plan members");
+        self.scheduler_task_orchestrator
+            .runtime_host_batch_cancellation(
+                &plan.runtime_host_request.batch_execution_request_id,
+                &active_member.started_batch_member,
+            )
+            .map_err(|error| {
+                WorkflowRuntimeBranchBatchExecutionFailure::active_run_member(
+                    member,
+                    WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
+                        WorkflowRuntimeBranchBatchExecutionDiagnosticCode::RuntimeHostBatchCancellationInvalid,
+                        format!(
+                            "runtime branch batch member '{}' cancellation handle failed: {error}",
+                            member.assignment_id.as_str()
+                        ),
+                    ),
+                )
+            })
     }
 
     pub(super) async fn finalize_batch_member_runs<H>(
@@ -1084,18 +1159,24 @@ fn member_outcome_from_run_result(
     member: &WorkflowRuntimeBranchBatchExecutionMember,
     run_result: Result<&WorkflowRunResponse, &WorkflowServiceError>,
 ) -> WorkflowRuntimeBranchBatchMemberExecutionOutcome {
-    let (state, completed_response) = match run_result {
+    let (state, completed_response, diagnostics) = match run_result {
         Ok(response) => (
             WorkflowRuntimeBranchBatchMemberExecutionOutcomeState::Completed,
             Some(response.clone()),
+            Vec::new(),
         ),
-        Err(WorkflowServiceError::Cancelled(_message)) => (
+        Err(WorkflowServiceError::Cancelled(message)) => (
             WorkflowRuntimeBranchBatchMemberExecutionOutcomeState::Cancelled,
             None,
+            vec![WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
+                WorkflowRuntimeBranchBatchExecutionDiagnosticCode::RuntimeHostBatchMemberCancelled,
+                message.clone(),
+            )],
         ),
         Err(_error) => (
             WorkflowRuntimeBranchBatchMemberExecutionOutcomeState::Failed,
             None,
+            Vec::new(),
         ),
     };
     WorkflowRuntimeBranchBatchMemberExecutionOutcome {
@@ -1105,7 +1186,7 @@ fn member_outcome_from_run_result(
         workflow_run_id: member.workflow_run_id.clone(),
         state,
         completed_response,
-        diagnostics: Vec::new(),
+        diagnostics,
     }
 }
 
@@ -1414,9 +1495,14 @@ mod tests {
         }
     }
 
+    fn workflow_service_with_recording_reservation_lifecycle() -> WorkflowService {
+        WorkflowService::new()
+            .with_reservation_lifecycle_port(Arc::new(RecordingReservationLifecyclePort::default()))
+    }
+
     #[test]
     fn runtime_branch_batch_execution_owner_accepts_claimed_running_members_with_facts() {
-        let service = WorkflowService::new();
+        let service = workflow_service_with_recording_reservation_lifecycle();
         let responder_fan_out = RecordingResponderFanOut::default();
         let owner = WorkflowRuntimeBranchBatchExecutionOwner::new(
             &service.scheduler_task_orchestrator,
@@ -1571,9 +1657,9 @@ mod tests {
         );
     }
 
-    #[test]
-    fn runtime_branch_batch_execution_owner_applies_completed_response_mutations() {
-        let service = WorkflowService::new();
+    #[tokio::test]
+    async fn runtime_branch_batch_execution_owner_applies_completed_response_mutations() {
+        let service = workflow_service_with_recording_reservation_lifecycle();
         let responder_fan_out = RecordingResponderFanOut::default();
         let owner = WorkflowRuntimeBranchBatchExecutionOwner::new(
             &service.scheduler_task_orchestrator,
@@ -1594,6 +1680,7 @@ mod tests {
 
         let outcome = owner
             .apply_batch_response_mutations(&service, &plan, &response)
+            .await
             .expect("apply batch response mutations");
 
         assert_eq!(
@@ -1634,9 +1721,9 @@ mod tests {
         }
     }
 
-    #[test]
-    fn runtime_branch_batch_execution_owner_leaves_retryable_response_assignment_running() {
-        let service = WorkflowService::new();
+    #[tokio::test]
+    async fn runtime_branch_batch_execution_owner_leaves_retryable_response_assignment_running() {
+        let service = workflow_service_with_recording_reservation_lifecycle();
         let responder_fan_out = RecordingResponderFanOut::default();
         let owner = WorkflowRuntimeBranchBatchExecutionOwner::new(
             &service.scheduler_task_orchestrator,
@@ -1655,6 +1742,7 @@ mod tests {
 
         let outcome = owner
             .apply_batch_response_mutations(&service, &plan, &response)
+            .await
             .expect("apply mixed response mutations");
 
         assert_eq!(
@@ -1680,7 +1768,7 @@ mod tests {
 
     #[tokio::test]
     async fn runtime_branch_batch_execution_owner_finalizes_completed_batch_member_runs() {
-        let service = WorkflowService::new();
+        let service = workflow_service_with_recording_reservation_lifecycle();
         let host = BatchFinalizationHost::default();
         let responder_fan_out = RecordingResponderFanOut::default();
         let owner = WorkflowRuntimeBranchBatchExecutionOwner::new(
@@ -1694,6 +1782,7 @@ mod tests {
         let response = runtime_host_batch_response_from_plan(&plan);
         let _mutation = owner
             .apply_batch_response_mutations(&service, &plan, &response)
+            .await
             .expect("apply batch response mutations");
 
         let outcome = owner
@@ -1736,7 +1825,7 @@ mod tests {
 
     #[tokio::test]
     async fn runtime_branch_batch_execution_owner_preserves_retryable_run_during_finalization() {
-        let service = WorkflowService::new();
+        let service = workflow_service_with_recording_reservation_lifecycle();
         let host = BatchFinalizationHost::default();
         let responder_fan_out = RecordingResponderFanOut::default();
         let owner = WorkflowRuntimeBranchBatchExecutionOwner::new(
@@ -1755,6 +1844,7 @@ mod tests {
         response.members[1].retry_disposition = RuntimeHostBatchMemberRetryDisposition::Retryable;
         let _mutation = owner
             .apply_batch_response_mutations(&service, &plan, &response)
+            .await
             .expect("apply mixed response mutations");
 
         let outcome = owner
@@ -1866,8 +1956,9 @@ mod tests {
         );
     }
 
-    #[test]
-    fn runtime_branch_batch_execution_owner_rejects_response_missing_member_before_mutation() {
+    #[tokio::test]
+    async fn runtime_branch_batch_execution_owner_rejects_response_missing_member_before_mutation()
+    {
         let service = WorkflowService::new();
         let responder_fan_out = RecordingResponderFanOut::default();
         let owner = WorkflowRuntimeBranchBatchExecutionOwner::new(
@@ -1883,6 +1974,7 @@ mod tests {
 
         let failure = owner
             .apply_batch_response_mutations(&service, &plan, &response)
+            .await
             .expect_err("missing response member must fail closed");
 
         assert_eq!(
