@@ -6721,6 +6721,82 @@ allowances. The next grouped-claim integration slice must connect
 outcomes to this boundary, remove those allowances, and keep fail-closed
 behavior when no real batch dispatcher is configured.
 
+2026-06-14 grouped runtime-branch worker re-plan trigger: stop before enabling
+grouped assignment claiming directly inside the current worker loop. Inspection
+found two ownership blockers. First, the task-execution worker currently awaits
+each runtime-branch command inside the receive loop, so simultaneous session
+runs cannot create multiple running dispatch assignments for the repository to
+coalesce. Second, the completion responder is scoped to one worker command;
+if an anchor command claimed another run's assignment, the anchor could mutate
+durable task state for that other run but could not notify that run's waiting
+command without a worker-owned fan-out boundary. Enabling grouped claims now
+would either serialize away the batch opportunity, strand non-anchor waiters,
+or force fallback behavior.
+
+Standards-aligned decision: use option 1, a worker-owned concurrent
+runtime-branch execution and notification path, before grouped claims are
+enabled. The worker loop remains the composition-root lifecycle owner, but it
+must hand runtime-branch command execution to owned child tasks so it can keep
+accepting commands and produce multiple running assignment facts. A later
+fan-out slice must register responders by durable assignment/run identity so a
+batch owner can complete every affected waiter from per-member durable
+mutation outcomes. This keeps backend facts authoritative, avoids frontend or
+Tauri scheduling policy, and preserves typed diagnostics instead of falling
+back to single-member execution.
+
+Option 1 sequence:
+1. Make runtime-branch command execution concurrent inside the task-execution
+   worker while preserving the existing completion responder contract,
+   lifecycle shutdown behavior, and fail-closed diagnostics. This slice must
+   not enable grouped assignment claiming or runtime-host batch execution.
+2. Add a worker-owned runtime-branch responder registry keyed by durable
+   assignment/run identity. Registration must happen after assignment creation
+   and before any group can claim it; stale, duplicate, or missing registrations
+   must be typed diagnostics.
+3. Wire grouped assignment claiming only after responder registration exists:
+   batch owner claims compatible running assignments, rebuilds each member from
+   that member's own active-run facts, dispatches through the batch dispatcher
+   once, applies per-member task/reservation mutations, and fans out
+   per-member responder outcomes.
+4. Remove the temporary batch mapping `dead_code` allowances once the grouped
+   production path calls the mapping boundary.
+
+Re-plan triggers: stop if runtime-branch child tasks cannot be supervised
+without losing shutdown/cancellation semantics, if responder fan-out requires
+request-scoped runtime state, if non-anchor members need workflow inputs from
+the anchor run, or if grouped claiming would need scheduler/runtime-registry/
+Pumas/generated/fixture contract changes in the same slice.
+
+2026-06-14 concurrent runtime-branch worker slice completed. Smallest useful
+vertical slice: make task-execution worker runtime-branch command bodies run as
+owned child tasks so the worker receive loop can continue accepting commands
+and future slices can produce multiple running assignment facts for grouping.
+Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/task_execution_worker.rs` and
+this plan.
+
+No-fallback/no-legacy confirmation: this slice does not enable grouped
+assignment claiming, does not call the runtime-host batch dispatcher, does not
+change runtime-host contracts, does not add request-scoped runtime execution,
+and does not reinterpret frontend/Tauri state. Runtime-branch child tasks
+still use the existing durable claim/rehydration/dispatch boundary and the
+existing per-command completion responder. Shutdown stops accepting new
+commands and drains owned child tasks before marking the worker shut down,
+preserving the current completion semantics.
+
+Verification passed:
+`cargo fmt -p pantograph-workflow-service`,
+`cargo test -p pantograph-workflow-service task_execution_worker_accepts_multiple_runtime_branch_commands_with_separate_responders --lib`,
+`cargo test -p pantograph-workflow-service task_execution_worker --lib`,
+`cargo check -p pantograph-workflow-service`,
+`cargo fmt -p pantograph-workflow-service -- --check`, and
+`git diff --check`.
+
+Remaining follow-up: implement Option 1 step 2, the worker-owned
+runtime-branch responder registry keyed by durable assignment/run identity.
+Do not enable grouped assignment claiming until responder registration and
+fan-out are tested.
+
 ## Standards Rule
 
 The standards constraints in

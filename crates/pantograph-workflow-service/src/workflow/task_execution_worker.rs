@@ -518,30 +518,43 @@ async fn task_execution_worker_loop(
     observed_task_attempt_commands: Arc<AtomicU64>,
     observed_runtime_branch_commands: Arc<AtomicU64>,
 ) {
+    let mut runtime_branch_tasks = tokio::task::JoinSet::new();
+    let mut accepting_commands = true;
+
     loop {
+        if !accepting_commands && runtime_branch_tasks.is_empty() {
+            break;
+        }
+
         tokio::select! {
-            changed = shutdown_rx.changed() => {
+            changed = shutdown_rx.changed(), if accepting_commands => {
                 if changed.is_err() || *shutdown_rx.borrow() {
-                    break;
+                    accepting_commands = false;
                 }
             }
-            maybe_command = command_rx.recv() => {
+            maybe_command = command_rx.recv(), if accepting_commands => {
                 match maybe_command {
                     Some(WorkflowTaskExecutionWorkerCommand::ExecuteTaskAttempt(_command)) => {
                         observed_task_attempt_commands.fetch_add(1, Ordering::SeqCst);
                     }
                     Some(WorkflowTaskExecutionWorkerCommand::ExecuteRuntimeBranch(request)) => {
                         observed_runtime_branch_commands.fetch_add(1, Ordering::SeqCst);
-                        let outcome = claim_and_execute_runtime_branch_event(
-                            &runtime_branch_environment,
-                            &request.command,
-                        ).await;
-                        let _ = request.completion_responder.complete(outcome);
+                        let runtime_branch_environment = runtime_branch_environment.clone();
+                        runtime_branch_tasks.spawn(async move {
+                            let outcome = claim_and_execute_runtime_branch_event(
+                                &runtime_branch_environment,
+                                &request.command,
+                            ).await;
+                            let _ = request.completion_responder.complete(outcome);
+                        });
                     }
                     Some(WorkflowTaskExecutionWorkerCommand::Shutdown(_)) | None => {
-                        break;
+                        accepting_commands = false;
                     }
                 }
+            }
+            Some(join_result) = runtime_branch_tasks.join_next(), if !runtime_branch_tasks.is_empty() => {
+                let _ = join_result;
             }
         }
     }
@@ -1517,6 +1530,58 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn task_execution_worker_accepts_multiple_runtime_branch_commands_with_separate_responders(
+    ) {
+        let scheduler_lifecycle = scheduler_lifecycle();
+        let worker = WorkflowTaskExecutionWorker::spawn(scheduler_lifecycle, runtime_environment())
+            .expect("spawn task execution worker");
+        let (first_responder, first_completion_rx) =
+            WorkflowTaskExecutionWorkerRuntimeBranchCompletionResponder::channel();
+        let (second_responder, second_completion_rx) =
+            WorkflowTaskExecutionWorkerRuntimeBranchCompletionResponder::channel();
+
+        worker
+            .try_enqueue(WorkflowTaskExecutionWorkerCommand::execute_runtime_branch(
+                runtime_branch_command_for_run("run-1"),
+                first_responder,
+            ))
+            .expect("enqueue first runtime branch command");
+        worker
+            .try_enqueue(WorkflowTaskExecutionWorkerCommand::execute_runtime_branch(
+                runtime_branch_command_for_run("run-2"),
+                second_responder,
+            ))
+            .expect("enqueue second runtime branch command");
+
+        let (first_outcome, second_outcome) = tokio::time::timeout(Duration::from_secs(1), async {
+            loop {
+                if worker.observed_runtime_branch_command_count() >= 2 {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+            (
+                first_completion_rx
+                    .await
+                    .expect("first runtime branch completion"),
+                second_completion_rx
+                    .await
+                    .expect("second runtime branch completion"),
+            )
+        })
+        .await
+        .expect("worker should complete both runtime branch commands");
+
+        assert_runtime_branch_event_unavailable(first_outcome, "run-1");
+        assert_runtime_branch_event_unavailable(second_outcome, "run-2");
+
+        worker
+            .shutdown()
+            .await
+            .expect("shutdown task execution worker");
+    }
+
+    #[tokio::test]
     async fn task_execution_worker_executes_runtime_branch_and_fails_invalid_dispatch_state_before_running(
     ) {
         let scheduler_lifecycle = scheduler_lifecycle();
@@ -2019,14 +2084,44 @@ mod tests {
     }
 
     fn runtime_branch_command() -> WorkflowTaskExecutionWorkerRuntimeBranchCommand {
+        runtime_branch_command_for_run("run-1")
+    }
+
+    fn runtime_branch_command_for_run(
+        workflow_run_id: &str,
+    ) -> WorkflowTaskExecutionWorkerRuntimeBranchCommand {
         WorkflowTaskExecutionWorkerRuntimeBranchCommand {
             session_id: "session-1".to_string(),
-            workflow_run_id: "run-1".to_string(),
+            workflow_run_id: workflow_run_id.to_string(),
             workflow_id: "workflow-1".to_string(),
             output_targets: None,
             timeout_ms: Some(500),
             start_reason: WorkflowTaskExecutionWorkerRuntimeBranchStartReason::Redispatched,
         }
+    }
+
+    fn assert_runtime_branch_event_unavailable(
+        outcome: WorkflowTaskExecutionWorkerOutcome,
+        workflow_run_id: &str,
+    ) {
+        let WorkflowTaskExecutionWorkerOutcome::RuntimeBranchFailed(outcome) = outcome else {
+            panic!("expected fail-closed runtime branch outcome");
+        };
+        assert_eq!(outcome.workflow_run_id, workflow_run_id);
+        assert_eq!(
+            outcome.diagnostics,
+            vec![WorkflowTaskExecutionWorkerDiagnostic::new(
+                WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchEventUnavailable,
+                "no due runtime branch task event is available for workflow run",
+            )]
+        );
+        assert!(
+            outcome
+                .error_message
+                .contains("not available for worker claim"),
+            "unexpected error message: {}",
+            outcome.error_message
+        );
     }
 
     fn runtime_source_context() -> crate::graph::WorkflowRuntimeSourceContext {
