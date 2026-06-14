@@ -109,6 +109,36 @@ pub(super) struct WorkflowRuntimeDispatchAssignmentBatchBrokerClaimRequest {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[must_use]
+pub(super) struct WorkflowRuntimeDispatchAssignmentBatchBrokerWaitRequest {
+    pub(super) decision: WorkflowRuntimeDispatchAssignmentBatchBrokerDecision,
+    pub(super) now_ms: u64,
+    pub(super) wait_window_duration_ms: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[must_use]
+pub(super) struct WorkflowRuntimeDispatchAssignmentBatchBrokerWaitWindow {
+    pub(super) waiting_since_ms: u64,
+    pub(super) expires_at_ms: u64,
+    pub(super) required_assignments: usize,
+    pub(super) expiry_diagnostic: WorkflowRuntimeDispatchAssignmentBatchBrokerWaitExpiryDiagnostic,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[must_use]
+pub(super) struct WorkflowRuntimeDispatchAssignmentBatchBrokerWaitExpiryDiagnostic {
+    pub(super) code: WorkflowRuntimeDispatchAssignmentBatchBrokerWaitExpiryDiagnosticCode,
+    pub(super) message: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[must_use]
+pub(super) enum WorkflowRuntimeDispatchAssignmentBatchBrokerWaitExpiryDiagnosticCode {
+    BatchWindowExpired,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[must_use]
 pub(super) struct WorkflowRuntimeDispatchAssignmentRecord {
     pub(super) schema_version: u16,
     pub(super) assignment_id: WorkflowRuntimeDispatchAssignmentId,
@@ -130,6 +160,8 @@ pub(super) struct WorkflowRuntimeDispatchAssignmentRecord {
     pub(super) selected_candidate_id: Option<SchedulerDispatchCandidateId>,
     pub(super) task_attempt_fact: Option<WorkflowRuntimeTaskAttemptFactRecord>,
     pub(super) batch_claim: Option<WorkflowRuntimeDispatchAssignmentBatchClaim>,
+    pub(super) batch_broker_wait_window:
+        Option<WorkflowRuntimeDispatchAssignmentBatchBrokerWaitWindow>,
     pub(super) state: WorkflowRuntimeDispatchAssignmentState,
     pub(super) created_at_ms: u64,
     pub(super) updated_at_ms: u64,
@@ -166,6 +198,7 @@ pub(super) enum WorkflowRuntimeDispatchAssignmentDiagnosticCode {
     AlreadyBatchClaimed,
     MissingTaskAttemptFact,
     BatchCompatibilityRejected,
+    InvalidBatchBrokerWaitWindow,
 }
 
 pub(super) trait WorkflowRuntimeDispatchAssignmentRepository {
@@ -225,6 +258,11 @@ pub(super) trait WorkflowRuntimeDispatchAssignmentRepository {
         WorkflowRuntimeDispatchAssignmentBatchClaimOutcome,
         WorkflowRuntimeDispatchAssignmentDiagnostic,
     >;
+
+    fn record_batch_broker_waiting_decision(
+        &mut self,
+        request: WorkflowRuntimeDispatchAssignmentBatchBrokerWaitRequest,
+    ) -> Result<WorkflowRuntimeDispatchAssignmentRecord, WorkflowRuntimeDispatchAssignmentDiagnostic>;
 
     fn get(
         &self,
@@ -345,6 +383,7 @@ impl WorkflowRuntimeDispatchAssignmentRepository
             selected_candidate_id: request.selected_candidate_id,
             task_attempt_fact: None,
             batch_claim: None,
+            batch_broker_wait_window: None,
             state: WorkflowRuntimeDispatchAssignmentState::Prepared,
             created_at_ms: request.created_at_ms,
             updated_at_ms: request.created_at_ms,
@@ -538,6 +577,45 @@ impl WorkflowRuntimeDispatchAssignmentRepository
             anchor_assignment_id,
         )
     }
+
+    fn record_batch_broker_waiting_decision(
+        &mut self,
+        request: WorkflowRuntimeDispatchAssignmentBatchBrokerWaitRequest,
+    ) -> Result<WorkflowRuntimeDispatchAssignmentRecord, WorkflowRuntimeDispatchAssignmentDiagnostic>
+    {
+        validate_batch_broker_wait_request(request.now_ms, request.wait_window_duration_ms)?;
+        let WorkflowRuntimeDispatchAssignmentBatchBrokerDecision::WaitingForPeers {
+            anchor_assignment,
+            required_assignments,
+            ..
+        } = request.decision
+        else {
+            return Err(WorkflowRuntimeDispatchAssignmentDiagnostic::new(
+                WorkflowRuntimeDispatchAssignmentDiagnosticCode::InvalidBatchBrokerWaitWindow,
+                "runtime dispatch assignment batch broker cannot record a wait window for a ready decision",
+            ));
+        };
+        let record = self
+            .records
+            .get_mut(&anchor_assignment.assignment_id)
+            .ok_or_else(|| {
+                WorkflowRuntimeDispatchAssignmentDiagnostic::new(
+                    WorkflowRuntimeDispatchAssignmentDiagnosticCode::AssignmentNotFound,
+                    "runtime dispatch assignment batch broker wait anchor was not found",
+                )
+            })?;
+        ensure_batch_claimable(record, request.now_ms)?;
+        if record.batch_broker_wait_window.is_none() {
+            record.batch_broker_wait_window =
+                Some(WorkflowRuntimeDispatchAssignmentBatchBrokerWaitWindow::new(
+                    request.now_ms,
+                    request.wait_window_duration_ms,
+                    required_assignments,
+                ));
+            record.updated_at_ms = request.now_ms;
+        }
+        Ok(record.clone())
+    }
 }
 
 impl InMemoryWorkflowRuntimeDispatchAssignmentRepository {
@@ -594,6 +672,7 @@ impl InMemoryWorkflowRuntimeDispatchAssignmentRepository {
                 )
             })?;
             record.batch_claim = Some(batch_claim.clone());
+            record.batch_broker_wait_window = None;
             record.updated_at_ms = now_ms;
             assignments.push(record.clone());
         }
@@ -690,6 +769,27 @@ impl InMemoryWorkflowRuntimeDispatchAssignmentRepository {
         record.state = next_state;
         record.updated_at_ms = now_ms;
         Ok(record.clone())
+    }
+}
+
+impl WorkflowRuntimeDispatchAssignmentBatchBrokerWaitWindow {
+    fn new(
+        waiting_since_ms: u64,
+        wait_window_duration_ms: u64,
+        required_assignments: usize,
+    ) -> Self {
+        Self {
+            waiting_since_ms,
+            expires_at_ms: waiting_since_ms.saturating_add(wait_window_duration_ms),
+            required_assignments,
+            expiry_diagnostic:
+                WorkflowRuntimeDispatchAssignmentBatchBrokerWaitExpiryDiagnostic {
+                    code: WorkflowRuntimeDispatchAssignmentBatchBrokerWaitExpiryDiagnosticCode::BatchWindowExpired,
+                    message: format!(
+                        "runtime dispatch assignment batch broker wait window expired before reaching {required_assignments} compatible assignments",
+                    ),
+                },
+        }
     }
 }
 
@@ -969,6 +1069,25 @@ fn validate_batch_broker_request(
         return Err(WorkflowRuntimeDispatchAssignmentDiagnostic::new(
             WorkflowRuntimeDispatchAssignmentDiagnosticCode::InvalidBatchClaim,
             "runtime dispatch assignment batch broker minimum size cannot exceed maximum size",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_batch_broker_wait_request(
+    now_ms: u64,
+    wait_window_duration_ms: u64,
+) -> Result<(), WorkflowRuntimeDispatchAssignmentDiagnostic> {
+    if now_ms == 0 {
+        return Err(WorkflowRuntimeDispatchAssignmentDiagnostic::new(
+            WorkflowRuntimeDispatchAssignmentDiagnosticCode::InvalidBatchBrokerWaitWindow,
+            "runtime dispatch assignment batch broker wait timestamp must be greater than zero",
+        ));
+    }
+    if wait_window_duration_ms == 0 {
+        return Err(WorkflowRuntimeDispatchAssignmentDiagnostic::new(
+            WorkflowRuntimeDispatchAssignmentDiagnosticCode::InvalidBatchBrokerWaitWindow,
+            "runtime dispatch assignment batch broker wait duration must be greater than zero",
         ));
     }
     Ok(())
@@ -1540,6 +1659,156 @@ mod tests {
     }
 
     #[test]
+    fn runtime_dispatch_assignment_batch_broker_records_wait_window_without_claiming_anchor() {
+        let mut repository = InMemoryWorkflowRuntimeDispatchAssignmentRepository::new();
+        let first = repository
+            .create(assignment_request("assignment.1"))
+            .expect("first assignment");
+        let first = repository
+            .mark_running(&first.assignment_id, 130)
+            .expect("first running");
+        let decision = repository
+            .evaluate_running_batch_broker_decision(batch_broker_request(
+                first.assignment_id.clone(),
+                140,
+                2,
+                8,
+            ))
+            .expect("broker decision");
+
+        let waiting = repository
+            .record_batch_broker_waiting_decision(batch_broker_wait_request(decision, 145, 500))
+            .expect("record wait window");
+
+        assert_eq!(waiting.assignment_id, first.assignment_id);
+        assert_eq!(
+            waiting.state,
+            WorkflowRuntimeDispatchAssignmentState::Running
+        );
+        assert!(waiting.batch_claim.is_none());
+        let wait_window = waiting
+            .batch_broker_wait_window
+            .as_ref()
+            .expect("wait window");
+        assert_eq!(wait_window.waiting_since_ms, 145);
+        assert_eq!(wait_window.expires_at_ms, 645);
+        assert_eq!(wait_window.required_assignments, 2);
+        assert_eq!(
+            wait_window.expiry_diagnostic.code,
+            WorkflowRuntimeDispatchAssignmentBatchBrokerWaitExpiryDiagnosticCode::BatchWindowExpired
+        );
+        assert_eq!(
+            wait_window.expiry_diagnostic.message,
+            "runtime dispatch assignment batch broker wait window expired before reaching 2 compatible assignments"
+        );
+        assert_eq!(
+            repository
+                .get(&first.assignment_id)
+                .expect("stored first")
+                .batch_broker_wait_window
+                .as_ref(),
+            Some(wait_window)
+        );
+    }
+
+    #[test]
+    fn runtime_dispatch_assignment_batch_broker_repeated_wait_does_not_reset_window() {
+        let mut repository = InMemoryWorkflowRuntimeDispatchAssignmentRepository::new();
+        let first = repository
+            .create(assignment_request("assignment.1"))
+            .expect("first assignment");
+        let first = repository
+            .mark_running(&first.assignment_id, 130)
+            .expect("first running");
+        let first_decision = repository
+            .evaluate_running_batch_broker_decision(batch_broker_request(
+                first.assignment_id.clone(),
+                140,
+                2,
+                8,
+            ))
+            .expect("first broker decision");
+        let _ = repository
+            .record_batch_broker_waiting_decision(batch_broker_wait_request(
+                first_decision,
+                145,
+                500,
+            ))
+            .expect("record initial wait window");
+        let second_decision = repository
+            .evaluate_running_batch_broker_decision(batch_broker_request(
+                first.assignment_id.clone(),
+                200,
+                2,
+                8,
+            ))
+            .expect("second broker decision");
+
+        let waiting = repository
+            .record_batch_broker_waiting_decision(batch_broker_wait_request(
+                second_decision,
+                205,
+                1_000,
+            ))
+            .expect("record repeated wait window");
+
+        let wait_window = waiting
+            .batch_broker_wait_window
+            .as_ref()
+            .expect("wait window");
+        assert_eq!(wait_window.waiting_since_ms, 145);
+        assert_eq!(wait_window.expires_at_ms, 645);
+        assert_eq!(
+            repository
+                .get(&first.assignment_id)
+                .expect("stored first")
+                .updated_at_ms,
+            145,
+            "repeated waiting decisions must not extend the durable wait window"
+        );
+    }
+
+    #[test]
+    fn runtime_dispatch_assignment_batch_broker_rejects_ready_wait_window_without_mutating() {
+        let mut repository = InMemoryWorkflowRuntimeDispatchAssignmentRepository::new();
+        let second_member = DispatchAssignmentFixtureMember::second();
+        let first = repository
+            .create(assignment_request("assignment.1"))
+            .expect("first assignment");
+        let second = repository
+            .create(assignment_request_for_member(&second_member))
+            .expect("second assignment");
+        let first = repository
+            .mark_running(&first.assignment_id, 130)
+            .expect("first running");
+        let _second = repository
+            .mark_running(&second.assignment_id, 131)
+            .expect("second running");
+        let decision = repository
+            .evaluate_running_batch_broker_decision(batch_broker_request(
+                first.assignment_id.clone(),
+                140,
+                2,
+                8,
+            ))
+            .expect("broker decision");
+
+        let error = repository
+            .record_batch_broker_waiting_decision(batch_broker_wait_request(decision, 145, 500))
+            .expect_err("ready decision must not record wait window");
+
+        assert_eq!(
+            error.code,
+            WorkflowRuntimeDispatchAssignmentDiagnosticCode::InvalidBatchBrokerWaitWindow
+        );
+        assert!(repository
+            .get(&first.assignment_id)
+            .expect("stored first")
+            .batch_broker_wait_window
+            .is_none());
+    }
+
+    #[test]
     fn runtime_dispatch_assignment_batch_broker_rejects_one_member_ready_claim_without_mutating() {
         let mut repository = InMemoryWorkflowRuntimeDispatchAssignmentRepository::new();
         let first = repository
@@ -1987,6 +2256,18 @@ mod tests {
             owner_id: batch_owner_id(),
             now_ms,
             lease_duration_ms,
+        }
+    }
+
+    fn batch_broker_wait_request(
+        decision: WorkflowRuntimeDispatchAssignmentBatchBrokerDecision,
+        now_ms: u64,
+        wait_window_duration_ms: u64,
+    ) -> WorkflowRuntimeDispatchAssignmentBatchBrokerWaitRequest {
+        WorkflowRuntimeDispatchAssignmentBatchBrokerWaitRequest {
+            decision,
+            now_ms,
+            wait_window_duration_ms,
         }
     }
 

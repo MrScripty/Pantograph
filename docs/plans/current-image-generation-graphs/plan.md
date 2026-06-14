@@ -8279,6 +8279,42 @@ Re-plan triggers for Option 3:
 - Any implementation path requires singleton runtime-host dispatch, implicit
   fallback execution, or compatibility shims for old runtime behavior.
 
+2026-06-14 batch broker wait-window contract slice completed. Smallest useful
+vertical slice: add the scheduler-owned runtime dispatch assignment
+wait-window contract and repository mutation for a `WaitingForPeers` broker
+decision. Allowed files touched:
+`crates/pantograph-workflow-service/src/workflow/runtime_dispatch_assignment.rs`,
+`crates/pantograph-workflow-service/src/workflow/task_execution_worker.rs`, and
+this plan. The worker change is limited to the existing exhaustive diagnostic
+translation for the new assignment diagnostic code.
+
+No-fallback/no-legacy confirmation: this slice records when the broker wait
+starts, when it expires, the required assignment count, and the typed
+`BatchWindowExpired` diagnostic to emit later. It does not wire the worker to
+record waits yet, does not expire assignments yet, does not call the runtime
+host, does not claim one-member batches, does not complete responders, and does
+not attach workflow input, anchor-run state, runtime ownership, or
+request-scoped execution facts to the wait record. Repeated waiting decisions
+keep the original deadline instead of extending the wait window indefinitely.
+
+Verification passed:
+`cargo fmt -p pantograph-workflow-service`,
+`cargo test -p pantograph-workflow-service runtime_dispatch_assignment --lib`,
+`cargo test -p pantograph-workflow-service task_execution_worker --lib`,
+`cargo check -p pantograph-workflow-service`,
+`cargo fmt -p pantograph-workflow-service -- --check`, and
+`git diff --check`.
+
+Focused test update: assignment repository tests now prove waiting decisions
+record a durable wait window without claiming the anchor, repeated waiting
+decisions do not reset the wait deadline, and ready-to-claim decisions cannot
+record a wait window.
+
+Remaining follow-up: wire the runtime-branch worker/broker path to record the
+wait window when it returns `WaitingForPeers`, then add the scheduler-owned
+expiry transition that resolves expired waits into typed diagnostics without
+runtime-host dispatch or singleton fallback.
+
 ## Standards Rule
 
 The standards constraints in

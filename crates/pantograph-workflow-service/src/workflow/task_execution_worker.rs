@@ -1929,7 +1929,8 @@ fn runtime_dispatch_assignment_diagnostic(
         | WorkflowRuntimeDispatchAssignmentDiagnosticCode::AssignmentNotRunning
         | WorkflowRuntimeDispatchAssignmentDiagnosticCode::AlreadyBatchClaimed
         | WorkflowRuntimeDispatchAssignmentDiagnosticCode::MissingTaskAttemptFact
-        | WorkflowRuntimeDispatchAssignmentDiagnosticCode::BatchCompatibilityRejected => {
+        | WorkflowRuntimeDispatchAssignmentDiagnosticCode::BatchCompatibilityRejected
+        | WorkflowRuntimeDispatchAssignmentDiagnosticCode::InvalidBatchBrokerWaitWindow => {
             WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchDispatchUnavailable
         }
     };
