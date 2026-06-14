@@ -8959,6 +8959,36 @@ Remaining follow-up: a first-class grouped-batch diagnostics-ledger event
 remains deferred unless consumers need batch-level observability beyond the
 canonical per-member terminal attempt parity now implemented.
 
+2026-06-14 active plan lane closure verification completed. The current image
+generation graph execution lane has completed the required no-fallback
+migration work through worker-owned runtime branch dispatch, scheduler-owned
+grouped batch claiming, batch wait-window expiry, grouped runtime-host
+execution, shutdown cancellation, and per-member terminal scheduler-attempt
+diagnostics parity. No active source implementation milestone remains in this
+plan after the grouped batch terminal diagnostics parity slice.
+
+Closure no-fallback/no-legacy confirmation: current successful runtime
+execution requires the canonical worker/runtime-owner and scheduler-owned
+grouped batch path. Solo runtime branches are bounded by typed broker
+wait-window expiry. The plan does not permit request-scoped runtime execution,
+direct singleton runtime-host dispatch, graph/backend/runtime/device
+fallbacks, legacy technical-fit execution, fabricated successful responses, or
+implicit workflow-input carry-forward from persistent runtimes.
+
+Final closure verification passed:
+`cargo test -p pantograph-workflow-service session_execution --lib`,
+`cargo test -p pantograph-workflow-service runtime_branch_batch_execution --lib`,
+`cargo test -p pantograph-workflow-service task_execution_worker --lib`,
+`cargo check -p pantograph-workflow-service`,
+`cargo fmt -p pantograph-workflow-service --check`, and
+`git diff --check`.
+
+Deferred future re-plan only: first-class grouped-batch diagnostics-ledger
+events remain out of scope unless consumers need batch-level observability
+beyond the canonical per-member terminal attempt events. That future work must
+start with a re-plan because it would introduce a new diagnostics contract,
+not complete a missing requirement from the current active lane.
+
 ## Standards Rule
 
 The standards constraints in
