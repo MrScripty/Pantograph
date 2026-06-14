@@ -8906,6 +8906,59 @@ per-member terminal attempt parity. Do not introduce that broader contract in
 the parity slice unless the shared helper cannot represent grouped member
 events without losing required facts.
 
+2026-06-14 grouped batch terminal diagnostics parity slice completed.
+Smallest useful vertical slice: wire grouped runtime batch terminal member
+mutations to the shared scheduler terminal-attempt diagnostic recorder and add
+focused completed, failed, and cancelled member diagnostics coverage. Allowed
+files:
+`crates/pantograph-workflow-service/src/workflow/runtime_branch_run_finalization.rs`,
+`crates/pantograph-workflow-service/src/workflow/runtime_branch_batch_execution.rs`,
+and this plan.
+
+No-fallback/no-legacy confirmation: this slice does not restore single-request
+runtime-host dispatch, request-scoped runtime execution, static-running batch
+cancellation, or a grouped-only ledger compatibility shim. Grouped batch
+execution now calls the same workflow-service scheduler terminal-attempt
+diagnostics recorder used by single-request runtime finalization. Deferred and
+retryable batch member mutations do not emit terminal attempt events. Future
+or non-terminal runtime-host member states reaching the terminal mapper fail
+closed with typed diagnostics instead of being coerced into a terminal
+transition.
+
+Implementation notes: the shared terminal-attempt recorder in
+`runtime_branch_run_finalization` is now visible to sibling workflow modules.
+`runtime_branch_batch_execution` collects terminal mutation facts while the
+session-store lock is held, releases the lock, marks assignment terminal state,
+then records diagnostics and applies reservation lifecycle per member. This
+keeps ledger/reservation work outside the session-store mutation scope while
+preserving the canonical payload policy in the shared helper.
+
+Focused tests added/updated:
+- Completed grouped batch members now assert one
+  `SchedulerTaskAttemptLifecycleChanged` terminal event per member, including
+  workflow run ID, scheduler attempt ID, transition, and reservation ID.
+- Failed and cancelled grouped batch members now assert terminal lifecycle
+  events with the correct transition and runtime-host diagnostic summary.
+
+Verification passed:
+`cargo test -p pantograph-workflow-service runtime_branch_batch_execution_owner_applies_completed_response_mutations --lib`,
+`cargo test -p pantograph-workflow-service runtime_branch_batch_execution_owner_ --lib`,
+`cargo test -p pantograph-workflow-service runtime_branch_batch_execution --lib`,
+`cargo test -p pantograph-workflow-service task_execution_worker --lib`,
+`cargo test -p pantograph-workflow-service session_execution --lib`,
+`cargo check -p pantograph-workflow-service`,
+`cargo fmt -p pantograph-workflow-service --check`, and
+`git diff --check`.
+
+Verification deviation: an attempted two-filter cargo invocation,
+`cargo test -p pantograph-workflow-service runtime_branch_batch_execution_owner_applies_completed_response_mutations runtime_branch_batch_execution_owner_records_failed_and_cancelled_terminal_diagnostics --lib`,
+failed because Cargo accepts only one positional test filter. The follow-up
+common-prefix batch-owner filter passed and covered both target tests.
+
+Remaining follow-up: a first-class grouped-batch diagnostics-ledger event
+remains deferred unless consumers need batch-level observability beyond the
+canonical per-member terminal attempt parity now implemented.
+
 ## Standards Rule
 
 The standards constraints in

@@ -356,7 +356,7 @@ fn scheduler_task_attempt_terminal_diagnostic_event_at(
     })
 }
 
-fn record_scheduler_task_attempt_terminal(
+pub(super) fn record_scheduler_task_attempt_terminal(
     service: &WorkflowService,
     task: &WorkflowSchedulerTask,
     attempt_id: &str,

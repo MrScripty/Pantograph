@@ -6,7 +6,8 @@ use crate::scheduler::task_orchestrator::{
     WorkflowSchedulerRuntimeBatchMemberMutation, WorkflowSchedulerTaskOrchestrator,
     WorkflowSchedulerTaskOrchestratorError,
 };
-use crate::scheduler::unix_timestamp_ms;
+use crate::scheduler::{unix_timestamp_ms, WorkflowSchedulerTaskTerminalMutation};
+use pantograph_diagnostics_ledger::SchedulerTaskAttemptLifecycleTransition;
 use pantograph_runtime_attribution::WorkflowRunId;
 use pantograph_runtime_host_contracts::{
     RuntimeHostBatchExecutionMemberRequest, RuntimeHostBatchExecutionMemberResponse,
@@ -21,7 +22,9 @@ use pantograph_scheduler::{
     SchedulerTaskStateRecord,
 };
 
-use super::runtime_branch_run_finalization::completed_scheduler_run_response;
+use super::runtime_branch_run_finalization::{
+    completed_scheduler_run_response, record_scheduler_task_attempt_terminal,
+};
 use super::runtime_dispatch_assignment::{
     WorkflowRuntimeDispatchAssignmentBatchClaim,
     WorkflowRuntimeDispatchAssignmentBatchClaimOutcome,
@@ -129,6 +132,13 @@ pub(super) struct WorkflowRuntimeBranchBatchResponseMutationOutcome {
 #[must_use]
 pub(super) struct WorkflowRuntimeBranchBatchRunFinalizationOutcome {
     pub(super) member_outcomes: Vec<WorkflowRuntimeBranchBatchMemberExecutionOutcome>,
+}
+
+struct WorkflowRuntimeBranchBatchMemberLifecycleApplication {
+    member: WorkflowRuntimeBranchBatchExecutionMember,
+    started_batch_member: StartedRuntimeTaskBatchMember,
+    response_member: RuntimeHostBatchExecutionMemberResponse,
+    terminal_mutation: Option<WorkflowSchedulerTaskTerminalMutation>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -287,31 +297,81 @@ where
                     response_member,
                     &mutation,
                 ));
-                lifecycle_applications.push((
-                    member.clone(),
-                    active_member.started_batch_member.clone(),
-                    response_member.clone(),
-                ));
+                lifecycle_applications.push(WorkflowRuntimeBranchBatchMemberLifecycleApplication {
+                    member: member.clone(),
+                    started_batch_member: active_member.started_batch_member.clone(),
+                    response_member: response_member.clone(),
+                    terminal_mutation: match &mutation {
+                        WorkflowSchedulerRuntimeBatchMemberMutation::Terminal(
+                            terminal_mutation,
+                        ) => Some(terminal_mutation.clone()),
+                        WorkflowSchedulerRuntimeBatchMemberMutation::Deferred(_record)
+                        | WorkflowSchedulerRuntimeBatchMemberMutation::Retryable(_record) => None,
+                    },
+                });
             }
             (outcomes, lifecycle_applications)
         };
         mark_terminal_service_assignments(service, plan, response)?;
-        for (member, started_batch_member, response_member) in lifecycle_applications {
+        for application in lifecycle_applications {
+            if let Some(terminal_mutation) = &application.terminal_mutation {
+                let (transition, reason, error_summary) =
+                    batch_member_terminal_diagnostic_transition(&application.response_member)
+                        .map_err(|error| {
+                            WorkflowRuntimeBranchBatchExecutionFailure::active_run_member(
+                                &application.member,
+                                WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
+                                    WorkflowRuntimeBranchBatchExecutionDiagnosticCode::RuntimeHostBatchMemberMutationInvalid,
+                                    format!(
+                                        "runtime branch batch member '{}' scheduler terminal diagnostic transition failed: {error}",
+                                        application.member.assignment_id.as_str()
+                                    ),
+                                ),
+                            )
+                        })?;
+                record_scheduler_task_attempt_terminal(
+                    service,
+                    application.started_batch_member.started().task(),
+                    application
+                        .started_batch_member
+                        .started()
+                        .attempt_id()
+                        .as_str(),
+                    application.started_batch_member.started().started_at_ms(),
+                    transition,
+                    reason,
+                    error_summary,
+                    Some(application.started_batch_member.selected_dispatch()),
+                    Some(terminal_mutation),
+                )
+                .map_err(|error| {
+                    WorkflowRuntimeBranchBatchExecutionFailure::active_run_member(
+                        &application.member,
+                        WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
+                            WorkflowRuntimeBranchBatchExecutionDiagnosticCode::RuntimeHostBatchMemberMutationInvalid,
+                            format!(
+                                "runtime branch batch member '{}' scheduler terminal diagnostic failed: {error}",
+                                application.member.assignment_id.as_str()
+                            ),
+                        ),
+                    )
+                })?;
+            }
             let _application = self
                 .scheduler_task_orchestrator
                 .apply_runtime_batch_member_reservation_lifecycle(
-                    &started_batch_member,
-                    &response_member,
+                    &application.started_batch_member,
+                    &application.response_member,
                 )
                 .await
                 .map_err(|error| {
                     WorkflowRuntimeBranchBatchExecutionFailure::active_run_member(
-                        &member,
+                        &application.member,
                         WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
                             WorkflowRuntimeBranchBatchExecutionDiagnosticCode::RuntimeBatchMemberLifecycleInvalid,
                             format!(
                                 "runtime branch batch member '{}' reservation lifecycle failed after response: {error}",
-                                member.assignment_id.as_str()
+                                application.member.assignment_id.as_str()
                             ),
                         ),
                     )
@@ -1155,6 +1215,53 @@ fn response_diagnostic_message(
         .unwrap_or_else(|| default_message.to_string())
 }
 
+fn batch_member_terminal_diagnostic_transition(
+    response: &RuntimeHostBatchExecutionMemberResponse,
+) -> Result<
+    (
+        SchedulerTaskAttemptLifecycleTransition,
+        &'static str,
+        Option<String>,
+    ),
+    WorkflowServiceError,
+> {
+    match response.state {
+        RuntimeHostBatchExecutionMemberState::Completed => Ok((
+            SchedulerTaskAttemptLifecycleTransition::Completed,
+            "scheduler runtime task attempt completed",
+            None,
+        )),
+        RuntimeHostBatchExecutionMemberState::Cancelled => Ok((
+            SchedulerTaskAttemptLifecycleTransition::Cancelled,
+            "scheduler runtime task cancellation observed",
+            Some(response_diagnostic_message(
+                response,
+                "runtime-host batch member cancelled",
+            )),
+        )),
+        RuntimeHostBatchExecutionMemberState::Failed
+        | RuntimeHostBatchExecutionMemberState::Rejected => Ok((
+            SchedulerTaskAttemptLifecycleTransition::Failed,
+            "scheduler runtime task result failed",
+            Some(response_diagnostic_message(
+                response,
+                "runtime-host batch member failed",
+            )),
+        )),
+        RuntimeHostBatchExecutionMemberState::Accepted
+        | RuntimeHostBatchExecutionMemberState::Deferred => Err(WorkflowServiceError::Internal(
+            format!(
+                "runtime-host batch member '{}' did not return a terminal scheduler result",
+                response.assignment_id
+            ),
+        )),
+        _ => Err(WorkflowServiceError::Internal(format!(
+            "runtime-host batch member '{}' returned an unsupported terminal scheduler result state",
+            response.assignment_id
+        ))),
+    }
+}
+
 fn member_outcome_from_run_result(
     member: &WorkflowRuntimeBranchBatchExecutionMember,
     run_result: Result<&WorkflowRunResponse, &WorkflowServiceError>,
@@ -1417,8 +1524,10 @@ mod tests {
         RuntimeHostBatchExecutionResponse, RuntimeHostBatchExecutionState,
         RuntimeHostBatchMemberFailurePolicy, RuntimeHostBatchMemberReservationDisposition,
         RuntimeHostBatchMemberReservationPolicy, RuntimeHostBatchMemberRetryDisposition,
-        RuntimeHostExecutionCancellationHandle, RuntimeHostExecutionInputValue,
-        RuntimeHostExecutionOutput, RuntimeHostExecutionOutputValue, RuntimeHostExecutionPortError,
+        RuntimeHostExecutionCancellationHandle, RuntimeHostExecutionDiagnostic,
+        RuntimeHostExecutionDiagnosticCode, RuntimeHostExecutionDiagnosticSeverity,
+        RuntimeHostExecutionInputValue, RuntimeHostExecutionOutput,
+        RuntimeHostExecutionOutputValue, RuntimeHostExecutionPortError,
         RESERVATION_LIFECYCLE_CONTRACT_VERSION,
     };
     use pantograph_scheduler::{
@@ -1659,7 +1768,11 @@ mod tests {
 
     #[tokio::test]
     async fn runtime_branch_batch_execution_owner_applies_completed_response_mutations() {
-        let service = workflow_service_with_recording_reservation_lifecycle();
+        let service = workflow_service_with_recording_reservation_lifecycle()
+            .with_diagnostics_ledger(
+                pantograph_diagnostics_ledger::SqliteDiagnosticsLedger::open_in_memory()
+                    .expect("diagnostics ledger"),
+            );
         let responder_fan_out = RecordingResponderFanOut::default();
         let owner = WorkflowRuntimeBranchBatchExecutionOwner::new(
             &service.scheduler_task_orchestrator,
@@ -1698,6 +1811,28 @@ mod tests {
             completed_response_run_ids(&outcome.member_outcomes),
             vec![None, None]
         );
+        let terminal_attempt_events = scheduler_task_attempt_terminal_events(&service, "completed");
+        assert_eq!(terminal_attempt_events.len(), 2);
+        for member in &plan.members {
+            assert!(
+                terminal_attempt_events.iter().any(|event| {
+                    event.workflow_run_id.as_ref().map(|id| id.as_str())
+                        == Some(member.workflow_run_id.as_str())
+                        && event.node_id.as_deref() == Some("node.llm_inference")
+                        && event.payload_json.contains("\"transition\":\"completed\"")
+                        && event.payload_json.contains(&format!(
+                            "\"scheduler_attempt_id\":\"{}\"",
+                            member.scheduler_task_attempt_id
+                        ))
+                        && event.payload_json.contains(&format!(
+                            "\"reservation_id\":\"{}\"",
+                            member.reservation_lease_id.as_str()
+                        ))
+                }),
+                "completed batch member '{}' should record a terminal scheduler attempt diagnostic",
+                member.assignment_id.as_str()
+            );
+        }
         assert_eq!(
             service
                 .scheduler_task_orchestrator
@@ -1719,6 +1854,79 @@ mod tests {
                 WorkflowRuntimeDispatchAssignmentState::Completed
             );
         }
+    }
+
+    #[tokio::test]
+    async fn runtime_branch_batch_execution_owner_records_failed_and_cancelled_terminal_diagnostics(
+    ) {
+        let service = workflow_service_with_recording_reservation_lifecycle()
+            .with_diagnostics_ledger(
+                pantograph_diagnostics_ledger::SqliteDiagnosticsLedger::open_in_memory()
+                    .expect("diagnostics ledger"),
+            );
+        let responder_fan_out = RecordingResponderFanOut::default();
+        let owner = WorkflowRuntimeBranchBatchExecutionOwner::new(
+            &service.scheduler_task_orchestrator,
+            &responder_fan_out,
+        );
+        let members = active_batch_members(&service);
+        let plan = owner
+            .prepare_claimed_batch(&service, batch_claim_outcome(&service, &members))
+            .expect("claimed batch execution plan");
+        let mut response = runtime_host_batch_response_from_plan(&plan);
+        response.members[0].state = RuntimeHostBatchExecutionMemberState::Failed;
+        response.members[0].retry_disposition =
+            RuntimeHostBatchMemberRetryDisposition::NotRetryable;
+        response.members[0].diagnostics = vec![runtime_host_member_diagnostic(
+            RuntimeHostExecutionDiagnosticCode::ExecutionFailed,
+            "runtime host rejected the generated image",
+        )];
+        response.members[1].state = RuntimeHostBatchExecutionMemberState::Cancelled;
+        response.members[1].diagnostics = vec![runtime_host_member_diagnostic(
+            RuntimeHostExecutionDiagnosticCode::CancellationRequested,
+            "runtime host cancelled the image request",
+        )];
+
+        let outcome = owner
+            .apply_batch_response_mutations(&service, &plan, &response)
+            .await
+            .expect("apply failed and cancelled response mutations");
+
+        assert_eq!(
+            outcome
+                .member_outcomes
+                .iter()
+                .map(|outcome| outcome.state)
+                .collect::<Vec<_>>(),
+            vec![
+                WorkflowRuntimeBranchBatchMemberExecutionOutcomeState::Failed,
+                WorkflowRuntimeBranchBatchMemberExecutionOutcomeState::Cancelled,
+            ]
+        );
+        let failed_events = scheduler_task_attempt_terminal_events(&service, "failed");
+        assert_eq!(failed_events.len(), 1);
+        assert_eq!(
+            failed_events[0]
+                .workflow_run_id
+                .as_ref()
+                .map(|id| id.as_str()),
+            Some(plan.members[0].workflow_run_id.as_str())
+        );
+        assert!(failed_events[0]
+            .payload_json
+            .contains("runtime host rejected the generated image"));
+        let cancelled_events = scheduler_task_attempt_terminal_events(&service, "cancelled");
+        assert_eq!(cancelled_events.len(), 1);
+        assert_eq!(
+            cancelled_events[0]
+                .workflow_run_id
+                .as_ref()
+                .map(|id| id.as_str()),
+            Some(plan.members[1].workflow_run_id.as_str())
+        );
+        assert!(cancelled_events[0]
+            .payload_json
+            .contains("runtime host cancelled the image request"));
     }
 
     #[tokio::test]
@@ -2769,6 +2977,40 @@ mod tests {
                 })
             })
             .collect()
+    }
+
+    fn scheduler_task_attempt_terminal_events(
+        service: &WorkflowService,
+        transition: &str,
+    ) -> Vec<pantograph_diagnostics_ledger::DiagnosticEventRecord> {
+        let ledger = service
+            .diagnostics_ledger_guard()
+            .expect("diagnostics ledger");
+        pantograph_diagnostics_ledger::DiagnosticsLedgerRepository::diagnostic_events_after(
+            &*ledger, 0, 20,
+        )
+        .expect("diagnostic events")
+        .into_iter()
+        .filter(|event| {
+            event.event_kind
+                == pantograph_diagnostics_ledger::DiagnosticEventKind::SchedulerTaskAttemptLifecycleChanged
+                && event
+                    .payload_json
+                    .contains(&format!("\"transition\":\"{transition}\""))
+        })
+        .collect()
+    }
+
+    fn runtime_host_member_diagnostic(
+        code: RuntimeHostExecutionDiagnosticCode,
+        message: &str,
+    ) -> RuntimeHostExecutionDiagnostic {
+        RuntimeHostExecutionDiagnostic {
+            severity: RuntimeHostExecutionDiagnosticSeverity::Error,
+            code,
+            message: message.to_string(),
+            hint: None,
+        }
     }
 
     fn runtime_host_batch_response_from_plan(
