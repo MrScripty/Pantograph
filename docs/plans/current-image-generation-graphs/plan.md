@@ -9017,6 +9017,59 @@ diagnostic expectations, and verification. Do not change source execution
 behavior, generated files, lockfiles, saved workflow fixtures, Pumas contracts,
 or runtime-registry contracts in this inventory slice.
 
+2026-06-18 workflow-editor image-generation readiness inventory slice:
+smallest useful vertical slice: document the real workflow editor/Tauri app
+path, the existing artifact preview surface, current real-model smoke
+limitations, and the next implementation gap before changing source execution
+behavior. Allowed files touched:
+`docs/plans/current-image-generation-graphs/milestones/09-workflow-editor-e2e-image-generation.md`
+and this plan. No-fallback/no-legacy confirmation: the documented target
+requires Pumas model id/artifact id selection, package/load-target facts,
+runtime-registry dispatch capability facts, scheduler admission, worker-owned
+runtime execution, and backend-owned artifact descriptors/bodies. It rejects
+direct model-path graph/script shortcuts, frontend-owned runtime/device/model
+state, script-only success claims, and hidden fallback execution.
+
+Inventory findings:
+- Editor run path:
+  `WorkflowToolbar.svelte` -> `WorkflowCommandService` ->
+  Tauri `workflow_create_execution_session` /
+  `workflow_run_execution_session` -> `headless_workflow_commands.rs` ->
+  `headless_runtime::build_runtime` ->
+  `EmbeddedRuntime::run_workflow_execution_session_with_event_sink`.
+- Artifact UI path:
+  `WorkflowProjectionService.queryIoArtifacts` and the I/O inspector consume
+  backend `io_artifact` projections, verify artifact descriptors, read
+  retained bodies/streams, and render image previews through transient object
+  URLs. Artifact display primitives exist; the missing proof is production of
+  a retained image artifact from the editor path.
+- Existing script status:
+  `check-current-image-workflow-smoke.mjs` is graph-shape only;
+  `diffusion_cli_smoketest.py` is worker-only/raw-model-path isolation;
+  `check-uniffi-csharp-diffusion-smoke.sh` is the closest real-model smoke but
+  uses the generated C#/native runtime path, not the workflow editor/Tauri
+  path; release redistributable smoke remains headless contract validation.
+- Required configured smoke knobs:
+  `PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_MODEL_ID`, optional
+  `PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_ARTIFACT_ID`, and a Python executable/env
+  selected through `PANTOGRAPH_PYTHON_ENV_MAP_JSON`,
+  `PANTOGRAPH_PYTHON_ENV_MAP_FILE`, `PANTOGRAPH_PYTHON_EXECUTABLE`,
+  `PYO3_PYTHON`, PATH, or project `.venv` fallback with `torch`,
+  `diffusers`, `transformers`, `accelerate`, and `Pillow` importable.
+
+Discovered issue:
+some documentation still shows retired
+`PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_MODEL_PATH` examples. Current smoke scripts
+reject that variable and require Pumas model id based selection. Record this
+as docs drift; do not restore the retired path variable.
+
+Next source slice:
+add the app-path fail-closed diagnostic check or smoke harness that exercises
+the same Tauri command path the workflow editor uses. The first useful check
+should run without a configured model/runtime fixture and assert typed
+diagnostics, not fallback execution. Only after that passes should the real
+Tiny Diffusers/Pumas fixture smoke be wired and run.
+
 ## Standards Rule
 
 The standards constraints in

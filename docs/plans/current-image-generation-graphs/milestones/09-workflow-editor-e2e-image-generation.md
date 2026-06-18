@@ -65,6 +65,80 @@ result projection.
      path, required environment variables/configuration, expected diagnostics,
      and dirty-worktree status.
 
+   **2026-06-18 inventory status:** In progress.
+   - Dirty-worktree inspection before this slice found unrelated proposal docs:
+     `PROPOSAL-pumas-artifact-load-target-resolution.md` and
+     `PROPOSAL-pumas-library-fast-model-snapshot.md`. No source, test,
+     config, lockfile, generated, build-output, SQLite WAL/SHM, or workflow
+     fixture file dirtiness was used for this inventory slice.
+   - Standards reviewed for this user-facing cross-layer lane:
+     `PLAN-STANDARDS.md`, `TESTING-STANDARDS.md`,
+     `FRONTEND-STANDARDS.md`, `ARCHITECTURE-PATTERNS.md`, and
+     `COMMIT-STANDARDS.md`.
+   - Workflow editor execution path identified:
+     `src/components/WorkflowToolbar.svelte` creates the execution session,
+     publishes the executable validation snapshot, and calls
+     `WorkflowCommandService.runWorkflowExecutionSession`.
+     `src/services/workflow/WorkflowCommandService.ts` invokes
+     `workflow_create_execution_session` and
+     `workflow_run_execution_session` over Tauri with a workflow event
+     channel. `src-tauri/src/workflow/headless_workflow_commands.rs` builds a
+     `TauriEventAdapter`, calls `build_runtime(...)`, then runs
+     `EmbeddedRuntime::run_workflow_execution_session_with_event_sink`.
+     `src-tauri/src/workflow/headless_runtime.rs` composes the embedded
+     runtime from app data dir, project root, host runtime mode info, shared
+     extensions, shared workflow service, runtime registry, gateway, and RAG
+     backend.
+   - Artifact retrieval path identified:
+     `WorkflowCommandService.artifactDescriptor`, `readArtifactBody`, and
+     `readArtifactStream` invoke Tauri artifact commands. The backend command
+     layer forwards those to the workflow service artifact store. The
+     I/O inspector uses `workflow_io_artifact_query` projections, verifies the
+     descriptor, reads retained bodies or streams, and renders image previews
+     from transient browser object URLs. This means the UI already has the
+     primitive needed to inspect an image artifact if a real run produces one.
+   - Existing smoke and validation scripts classified:
+     `scripts/check-current-image-workflow-smoke.mjs` validates canonical
+     saved workflow shape only; it does not run a model.
+     `scripts/diffusion_cli_smoketest.py` is worker-only and raw-model-path
+     oriented; it is useful for isolation but is not the app/editor path.
+     `scripts/check-uniffi-csharp-diffusion-smoke.sh` is the closest existing
+     real-model smoke: it requires
+     `PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_MODEL_ID`, optional
+     `PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_ARTIFACT_ID`, and a Python executable
+     able to import `torch`, `diffusers`, `transformers`, `accelerate`, and
+     `Pillow`. It rejects retired path env vars and still runs the generated
+     C#/native runtime path, not the workflow editor/Tauri path.
+     `scripts/check-runtime-redistributables-smoke.sh` is the release
+     headless contract smoke and explicitly does not prove a full desktop GUI
+     model execution session.
+   - Runtime and model provisioning facts identified:
+     Python selection is controlled by the documented environment mapping
+     path: `PANTOGRAPH_PYTHON_ENV_MAP_JSON`,
+     `PANTOGRAPH_PYTHON_ENV_MAP_FILE`, `PANTOGRAPH_PYTHON_EXECUTABLE`,
+     `PYO3_PYTHON`, PATH lookup, or the project `.venv` fallback. Pumas model
+     selection must use a model id and artifact id through the canonical
+     Puma-Lib node and package/load-target facts path, not a graph-visible or
+     script-only local model path. Runtime capability facts are sourced from
+     the shared runtime registry; if no runtime is registered or a runtime
+     lacks backend keys/dispatch identity, dispatch planning emits typed
+     diagnostics instead of fabricating a selection.
+   - Existing docs drift discovered:
+     `docs/python-runtime-separation.md`,
+     `docs/headless-embedding-implementation-notes.md`, and older completed
+     plan notes still show retired
+     `PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_MODEL_PATH` examples. Current script
+     behavior rejects that variable and requires Pumas model id based
+     selection. This is documentation drift, not a reason to add a path
+     fallback.
+   - Immediate implementation gap:
+     no current harness proves `WorkflowToolbar.svelte`/Tauri
+     `workflow_run_execution_session` can submit the canonical Tiny SD Turbo
+     workflow, reach PyTorch/Diffusers execution, and then display the retained
+     image via I/O inspector artifact commands. The next source slice must add
+     a fail-closed app-path diagnostic check or app-path smoke harness before
+     any real-model completion claim.
+
 2. **Fail-closed app path diagnostics**
    - Run the workflow editor command path without a configured model/runtime
      fixture and verify the UI/API receives typed diagnostics instead of
