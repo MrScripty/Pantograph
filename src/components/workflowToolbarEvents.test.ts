@@ -9,6 +9,7 @@ import {
   isWorkflowSemanticVersionConflictError,
   nextWorkflowPatchSemanticVersion,
   shouldRefreshValidationFromLifecycleEvent,
+  workflowSubmitSuccessWorkbenchPage,
   workflowSubmitDisabledReason,
   workflowValidationRefreshKey,
 } from './workflowToolbarEvents.ts';
@@ -287,6 +288,77 @@ test('isWorkflowSemanticVersionConflictError detects attribution conflicts', () 
       message: 'workflow semantic version is invalid',
     }),
     false,
+  );
+});
+
+test('workflowSubmitSuccessWorkbenchPage sends image artifact runs to I/O inspector', () => {
+  assert.equal(
+    workflowSubmitSuccessWorkbenchPage({
+      outputs: [
+        {
+          node_id: 'image-output',
+          port_id: 'image',
+          value: {
+            artifact_id: 'artifact-image',
+            media_type: 'image/png',
+          },
+        },
+      ],
+    }),
+    'io_inspector',
+  );
+  assert.equal(
+    workflowSubmitSuccessWorkbenchPage({
+      outputs: [
+        {
+          node_id: 'final-output',
+          port_id: 'result',
+          value: {
+            payload_artifact_id: 'artifact-image',
+            payload_kind: 'image',
+          },
+        },
+      ],
+    }),
+    'io_inspector',
+  );
+  assert.equal(
+    workflowSubmitSuccessWorkbenchPage({
+      outputs: [
+        {
+          node_id: 'final-output',
+          port_id: 'result',
+          value: {
+            artifact_id: 'artifact-image',
+            format: {
+              media_type: 'image/webp',
+            },
+          },
+        },
+      ],
+    }),
+    'io_inspector',
+  );
+});
+
+test('workflowSubmitSuccessWorkbenchPage keeps non-image runs on scheduler', () => {
+  assert.equal(
+    workflowSubmitSuccessWorkbenchPage({
+      outputs: [
+        {
+          node_id: 'text-output',
+          port_id: 'text',
+          value: 'hello',
+        },
+      ],
+    }),
+    'scheduler',
+  );
+  assert.equal(
+    workflowSubmitSuccessWorkbenchPage({
+      outputs: [],
+    }),
+    'scheduler',
   );
 });
 

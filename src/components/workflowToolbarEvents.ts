@@ -9,6 +9,8 @@ import type {
   WorkflowEvent,
   WorkflowGraphValidationLifecycleEvent,
   WorkflowGraphValidationSubmitGate,
+  WorkflowPortBinding,
+  WorkflowRunResponse,
 } from '../services/workflow/types.ts';
 
 interface WorkflowToolbarStoreActions {
@@ -63,6 +65,8 @@ export interface WorkflowValidationLifecycleRefreshInput extends WorkflowValidat
   event: WorkflowGraphValidationLifecycleEvent;
   currentValidationSummaryKey: string | null | undefined;
 }
+
+type WorkflowSubmitSuccessWorkbenchPage = 'scheduler' | 'io_inspector';
 
 export function isNumericWorkflowSemanticVersion(version: string): boolean {
   const parts = version.split('.');
@@ -164,6 +168,12 @@ export function isCurrentWorkflowSubmitFailure({
   );
 }
 
+export function workflowSubmitSuccessWorkbenchPage(
+  response: Pick<WorkflowRunResponse, 'outputs'>,
+): WorkflowSubmitSuccessWorkbenchPage {
+  return response.outputs.some(isImageArtifactOutputBinding) ? 'io_inspector' : 'scheduler';
+}
+
 export function applyWorkflowToolbarEvent({
   event,
   activeWorkflowRunId,
@@ -199,6 +209,51 @@ export function applyWorkflowToolbarEvent({
     ...result,
     handled: true,
   };
+}
+
+function isImageArtifactOutputBinding(binding: WorkflowPortBinding): boolean {
+  if (!binding.value) {
+    return false;
+  }
+
+  const portId = binding.port_id.toLowerCase();
+  if (portId === 'image' || portId.endsWith('_image') || portId.includes('image_')) {
+    return true;
+  }
+
+  if (typeof binding.value !== 'object' || Array.isArray(binding.value)) {
+    return false;
+  }
+
+  const record = binding.value as Record<string, unknown>;
+  const payloadKind = nonEmptyStringOrNull(record.payload_kind)?.toLowerCase();
+  if (payloadKind === 'image') {
+    return true;
+  }
+
+  const mediaType = artifactMediaType(record);
+  if (mediaType?.toLowerCase().startsWith('image/')) {
+    return true;
+  }
+
+  return (
+    (typeof record.artifact_id === 'string' || typeof record.payload_artifact_id === 'string') &&
+    portId.includes('image')
+  );
+}
+
+function artifactMediaType(record: Record<string, unknown>): string | null {
+  const direct = nonEmptyStringOrNull(record.media_type);
+  if (direct) {
+    return direct;
+  }
+
+  const format = record.format;
+  if (!format || typeof format !== 'object' || Array.isArray(format)) {
+    return null;
+  }
+
+  return nonEmptyStringOrNull((format as Record<string, unknown>).media_type);
 }
 
 function applyCompletedNodeRuntimeData(

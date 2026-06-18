@@ -44,6 +44,7 @@
     isWorkflowSemanticVersionConflictError,
     nextWorkflowPatchSemanticVersion,
     shouldRefreshValidationFromLifecycleEvent,
+    workflowSubmitSuccessWorkbenchPage,
     workflowSubmitDisabledReason,
     workflowValidationRefreshKey,
   } from './workflowToolbarEvents';
@@ -360,7 +361,7 @@
           workflow_semantic_version: submittedVersion,
           status: 'completed',
         });
-        setWorkbenchPage('scheduler');
+        setWorkbenchPage(workflowSubmitSuccessWorkbenchPage(response));
       } finally {
         await closeExecutionSession(executionSession.session_id);
       }

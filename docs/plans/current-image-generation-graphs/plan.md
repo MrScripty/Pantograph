@@ -9070,6 +9070,25 @@ should run without a configured model/runtime fixture and assert typed
 diagnostics, not fallback execution. Only after that passes should the real
 Tiny Diffusers/Pumas fixture smoke be wired and run.
 
+2026-06-18 workflow-editor image artifact navigation slice:
+smallest useful vertical slice: make successful workflow-editor submissions
+that return image/media artifact outputs land on the existing I/O Inspector,
+while preserving Scheduler navigation for non-image outputs. Allowed files
+touched: `src/components/WorkflowToolbar.svelte`,
+`src/components/workflowToolbarEvents.ts`,
+`src/components/workflowToolbarEvents.test.ts`,
+`docs/plans/current-image-generation-graphs/milestones/09-workflow-editor-e2e-image-generation.md`,
+and this plan. No-fallback/no-legacy confirmation: the frontend only chooses
+which backend-owned workbench projection to show after a successful run. It
+does not infer artifact paths, store image bodies, create fallback previews,
+or own model/runtime/device decisions. Image preview remains through
+I/O Inspector descriptor/body commands.
+
+Verification passed:
+`npm run test:frontend -- workflowToolbarEvents`,
+`npm run typecheck`, and
+`git diff --check -- src/components/WorkflowToolbar.svelte src/components/workflowToolbarEvents.ts src/components/workflowToolbarEvents.test.ts docs/plans/current-image-generation-graphs/milestones/09-workflow-editor-e2e-image-generation.md docs/plans/current-image-generation-graphs/plan.md`.
+
 ## Standards Rule
 
 The standards constraints in

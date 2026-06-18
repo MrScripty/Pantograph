@@ -169,6 +169,20 @@ result projection.
    - Verification: frontend interaction test or manual Playwright/app smoke,
      plus artifact retrieval check.
 
+   **2026-06-18 partial usability slice:** In progress.
+   - The workflow toolbar now selects the I/O Inspector after a successful run
+     whose backend `WorkflowRunResponse.outputs` contain image/media artifact
+     output facts. Non-image runs preserve the previous Scheduler-page
+     behavior.
+   - This is not a completion claim for real image generation. It only closes
+     a UI usability gap so a real editor-submitted image run lands on the
+     backend-owned artifact inspection surface instead of leaving the generated
+     image hidden behind a separate manual navigation step.
+   - No-fallback/no-legacy confirmation: the frontend does not store image
+     bodies, infer artifact paths, decide runtime/model/device, or bypass
+     backend artifact projections. The I/O Inspector remains responsible for
+     reading descriptors/bodies through backend commands.
+
 5. **Regression gate and closure**
    - Run focused backend, embedded-runtime, frontend, and release-smoke checks
      affected by the app end-to-end path.
