@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { WorkflowCommandService } from './WorkflowCommandService.ts';
 import { WorkflowService } from './WorkflowService.ts';
+import { WorkflowServiceError } from './workflowServiceErrors.ts';
 import { MOCK_NODE_DEFINITIONS } from './mocks.ts';
 import type {
   DiagnosticsRetentionPolicySettings,
@@ -641,6 +642,67 @@ test('execution session commands preserve scheduler-backed request boundaries', 
         },
       },
     ]);
+  } finally {
+    clearMocks();
+  }
+});
+
+test('execution session run preserves backend typed diagnostic envelopes', async () => {
+  installWindowMock();
+  const calls: Array<{ cmd: string; args: unknown }> = [];
+  mockIPC((cmd, args) => {
+    calls.push({ cmd, args });
+    throw JSON.stringify({
+      code: 'runtime_not_ready',
+      message: 'runtime registry has no registered runtimes for dispatch capability projection',
+      diagnostics: {
+        workflow_run_id: 'run-image-fail-closed',
+        diagnostic_event_id: 'diagnostic-runtime-missing',
+      },
+    });
+  });
+
+  try {
+    const service = new WorkflowCommandService();
+    const error = await service
+      .runWorkflowExecutionSession({
+        session_id: 'execution-session-a',
+        workflow_semantic_version: '0.1.0',
+        inputs: [],
+        output_targets: null,
+        override_selection: null,
+        timeout_ms: null,
+        priority: null,
+      })
+      .then(
+        () => null,
+        (caught: unknown) => caught,
+      );
+
+    assert.ok(error instanceof WorkflowServiceError);
+    assert.equal(error.code, 'runtime_not_ready');
+    assert.equal(
+      error.message,
+      'runtime registry has no registered runtimes for dispatch capability projection',
+    );
+    assert.deepEqual(error.diagnostics, {
+      workflow_run_id: 'run-image-fail-closed',
+      diagnostic_event_id: 'diagnostic-runtime-missing',
+      diagnostics_unavailable: null,
+    });
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].cmd, 'workflow_run_execution_session');
+    const runArgs = calls[0].args as { request?: unknown; channel?: unknown };
+    assert.deepEqual(runArgs.request, {
+      session_id: 'execution-session-a',
+      workflow_semantic_version: '0.1.0',
+      inputs: [],
+      output_targets: null,
+      override_selection: null,
+      timeout_ms: null,
+      priority: null,
+    });
+    assert.equal(typeof runArgs.channel, 'object');
   } finally {
     clearMocks();
   }

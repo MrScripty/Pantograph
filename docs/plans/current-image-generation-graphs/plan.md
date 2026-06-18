@@ -9089,6 +9089,33 @@ Verification passed:
 `npm run typecheck`, and
 `git diff --check -- src/components/WorkflowToolbar.svelte src/components/workflowToolbarEvents.ts src/components/workflowToolbarEvents.test.ts docs/plans/current-image-generation-graphs/milestones/09-workflow-editor-e2e-image-generation.md docs/plans/current-image-generation-graphs/plan.md`.
 
+2026-06-18 workflow-editor command-boundary diagnostics slice:
+smallest useful vertical slice: prove the workflow editor's
+`workflow_run_execution_session` command boundary preserves backend typed
+diagnostic envelopes for missing runtime/model readiness instead of collapsing
+them into untyped transport failures. Allowed files touched:
+`src/services/workflow/WorkflowService.commands.test.ts`,
+`docs/plans/current-image-generation-graphs/milestones/09-workflow-editor-e2e-image-generation.md`,
+and this plan. No-fallback/no-legacy confirmation: the test expects a typed
+`runtime_not_ready` backend envelope with diagnostics links and does not add
+fallback execution, direct model-path behavior, frontend runtime/model/device
+selection, or mock success.
+
+Verification passed:
+`npm run test:frontend -- WorkflowService.commands`,
+`npm run typecheck`, and
+`git diff --check -- src/services/workflow/WorkflowService.commands.test.ts docs/plans/current-image-generation-graphs/milestones/09-workflow-editor-e2e-image-generation.md docs/plans/current-image-generation-graphs/plan.md`.
+
+Remaining Milestone 9 gap:
+this completes only the frontend diagnostic preservation slice. The milestone
+is still open because the app has not yet run a real configured
+workflow-editor image-generation workflow through PyTorch/Diffusers and shown
+the retained image artifact in the UI. The next implementation slice should
+add the app-path real-model smoke harness or equivalent editor/Tauri command
+smoke that uses a Pumas model id/artifact id, canonical runtime readiness,
+scheduler admission, worker-owned execution, and backend-owned artifact
+inspection.
+
 ## Standards Rule
 
 The standards constraints in

@@ -148,6 +148,23 @@ result projection.
    - Verification: affected frontend/Tauri/backend tests plus focused
      diagnostic smoke.
 
+   **2026-06-18 command-boundary diagnostics slice:** Completed.
+   - Added frontend command-service coverage proving
+     `workflow_run_execution_session` failures preserve backend typed error
+     envelopes and diagnostics links at the same Tauri command boundary the
+     workflow editor uses.
+   - This does not replace the required real app/model smoke. It proves the
+     frontend command layer does not collapse missing runtime/model diagnostics
+     into an untyped transport error while the real fixture harness is still
+     pending.
+   - No-fallback/no-legacy confirmation: the test expects a typed
+     `runtime_not_ready` backend envelope and does not add fallback execution,
+     mock success, or direct model-path behavior.
+   - Verification passed:
+     `npm run test:frontend -- WorkflowService.commands`,
+     `npm run typecheck`, and
+     `git diff --check -- src/services/workflow/WorkflowService.commands.test.ts docs/plans/current-image-generation-graphs/milestones/09-workflow-editor-e2e-image-generation.md docs/plans/current-image-generation-graphs/plan.md`.
+
 3. **Provisioned Tiny Diffusers smoke**
    - Register or load the bounded Pumas text-to-image model fixture through the
      canonical package/load-target/runtime readiness path.
