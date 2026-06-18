@@ -15,6 +15,7 @@ main app entrypoint.
 | `check-scheduler-only-workflow-execution.sh` | Fails when public Rust, Tauri, binding, or frontend source reintroduces direct workflow execution APIs outside scheduler session execution. |
 | `check-rustler-beam-smoke.sh` | Builds `pantograph_rustler`, verifies the local BEAM toolchain exists, and runs the Mix smoke harness under `bindings/beam/pantograph_native_smoke/`. |
 | `check-packaged-csharp-quickstart.sh` | Compiles the artifact-staged C# quickstart against the generated binding with Roslyn and .NET reference assemblies, then runs the authoring path against the packaged native library; does not restore NuGet packages. |
+| `check-workflow-image-generation-real-smoke.sh` | Opt-in real image-generation lane smoke that requires a Pumas Diffusers model id, validates canonical workflow shape, runs the generated-C#/native-runtime Diffusers session smoke, and checks workflow-editor command projections. This is an intermediate real-backend gate, not the final desktop GUI proof. |
 | `check-uniffi-csharp-diffusion-smoke.sh` | Opt-in generated-C#/native-runtime session diffusion smoke; requires a local diffusers model directory and Python environment. |
 | `check-uniffi-csharp-smoke.sh` | Builds the Pantograph headless native library via `pantograph-uniffi`, generates C# into `target/`, compiles a small C# smoke harness, and runs a session-first harness against the direct embedded runtime. |
 | `check-uniffi-embedded-runtime-surface.sh` | Builds `pantograph-uniffi`, extracts UniFFI metadata, and verifies the direct embedded runtime object plus workflow/session methods are exported. |
@@ -109,6 +110,10 @@ PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_MODEL_ID=diffusion/cc-nms/tiny-sd-turbo \
   PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_ARTIFACT_ID=diffusers \
   PANTOGRAPH_PYTHON_EXECUTABLE=.venv/bin/python \
   ./scripts/check-uniffi-csharp-diffusion-smoke.sh
+PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_MODEL_ID=diffusion/cc-nms/tiny-sd-turbo \
+  PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_ARTIFACT_ID=diffusers \
+  PANTOGRAPH_PYTHON_EXECUTABLE=.venv/bin/python \
+  ./scripts/check-workflow-image-generation-real-smoke.sh
 ```
 
 ## API Consumer Contract

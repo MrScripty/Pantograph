@@ -177,6 +177,32 @@ result projection.
      output artifact metadata. If the model fixture is unavailable, record the
      missing external prerequisite and keep the milestone open.
 
+   **2026-06-18 real-backend smoke wrapper slice:** Completed.
+   - Added `scripts/check-workflow-image-generation-real-smoke.sh` as an
+     opt-in lane command for configured machines. It requires
+     `PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_MODEL_ID`, accepts optional
+     `PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_ARTIFACT_ID`, rejects retired direct
+     model-path variables, validates canonical image workflow shape, runs the
+     generated-C#/native-runtime real Diffusers session smoke, and runs focused
+     frontend command projection checks.
+   - This is an intermediate real-backend gate, not milestone completion. It
+     proves the configured real Diffusers session path and editor-adjacent
+     command projections under one command, but it still does not drive the
+     desktop workflow toolbar/Tauri event channel and I/O Inspector in one GUI
+     session.
+   - No-fallback/no-legacy confirmation: the wrapper requires Pumas model id
+     selection and refuses `PANTOGRAPH_DIFFUSION_SMOKE_MODEL_PATH` and
+     `PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_MODEL_PATH`; it does not introduce
+     direct model-path graph inputs or alternate worker execution logic.
+   - Verification passed:
+     `bash -n scripts/check-workflow-image-generation-real-smoke.sh`,
+     missing-env fail-closed wrapper run exited 2 with the expected
+     `PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_MODEL_ID` diagnostic,
+     `node scripts/check-current-image-workflow-smoke.mjs`, and
+     `npm run test:frontend -- workflowToolbarEvents WorkflowService.commands`.
+     Real Diffusers execution was not run in this slice because the required
+     Pumas model fixture environment was not configured in this shell.
+
 4. **Workflow editor usability acceptance**
    - Confirm the workflow editor can start the run, surface progress or
      diagnostics, and show or open the generated artifact without requiring

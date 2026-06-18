@@ -9116,6 +9116,33 @@ smoke that uses a Pumas model id/artifact id, canonical runtime readiness,
 scheduler admission, worker-owned execution, and backend-owned artifact
 inspection.
 
+2026-06-18 real image-generation smoke wrapper slice:
+smallest useful vertical slice: add a single opt-in real-image lane command
+that configured machines can run while the desktop GUI/Tauri harness remains
+pending. Allowed files touched:
+`scripts/check-workflow-image-generation-real-smoke.sh`, `scripts/README.md`,
+`docs/plans/current-image-generation-graphs/milestones/09-workflow-editor-e2e-image-generation.md`,
+and this plan. No-fallback/no-legacy confirmation: the wrapper requires
+`PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_MODEL_ID`, accepts optional
+`PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_ARTIFACT_ID`, rejects retired direct
+model-path variables, and delegates to existing canonical workflow-shape,
+generated-C#/native-runtime Diffusers session, and frontend command projection
+checks instead of creating another execution path.
+
+This is an intermediate real-backend gate, not Milestone 9 completion. It
+still does not prove a single desktop workflow editor session can submit the
+workflow, receive events, and show the generated artifact in I/O Inspector.
+That desktop command/UI harness remains the next source slice.
+
+Verification passed:
+`bash -n scripts/check-workflow-image-generation-real-smoke.sh`, the
+missing-env fail-closed wrapper run exited 2 with the expected
+`PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_MODEL_ID` diagnostic,
+`node scripts/check-current-image-workflow-smoke.mjs`, and
+`npm run test:frontend -- workflowToolbarEvents WorkflowService.commands`.
+The real Diffusers execution sub-step was not run in this slice because the
+required Pumas model fixture environment was not configured in this shell.
+
 ## Standards Rule
 
 The standards constraints in
