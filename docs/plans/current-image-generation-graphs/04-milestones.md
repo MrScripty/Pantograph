@@ -103,6 +103,12 @@ P-b. [Pumas Library Producer-Fact Completion](07-pumas-library-image-generation-
    - Run affected tests, build frontend/release binary, and record final
      standards/manual smoke checks.
 
+9. [Workflow Editor End-To-End Image Generation](milestones/09-workflow-editor-e2e-image-generation.md)
+   - Prove real user readiness by running canonical image generation through
+     the workflow editor path with a provisioned PyTorch/Diffusers model/runtime
+     and verifying a retained UI-visible image artifact plus typed diagnostics
+     for missing prerequisites.
+
 ## Execution Order
 
 Milestone 0 is mandatory before parallel or broad implementation. After
@@ -210,7 +216,11 @@ consume the Pumas image-generation facts defined in
 from a pinned Pumas release or commit. If those facts, summaries, selected
 artifact semantics, or cache migration/backfill are not available, stop with a
 re-plan note instead of implementing name-derived or fallback behavior.
-Milestone 8 is the final build and validation gate.
+Milestone 8 is the automated release build and headless validation gate.
+Milestone 9 is the real workflow-editor user-readiness gate. It must run after
+the headless contract path is closed and must not be marked complete until a
+configured app workflow can produce and expose a retained generated image
+artifact through the workflow editor path.
 
 Recommended high-level order:
 
@@ -225,6 +235,7 @@ Pantograph M5d
 Pantograph M5b
 Pantograph M6
 Pantograph M7-M8
+Pantograph M9
 ```
 
 Milestone 5a may start in contract/design slices before all runtime execution

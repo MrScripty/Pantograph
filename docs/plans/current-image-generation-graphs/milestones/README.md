@@ -20,6 +20,7 @@ current image-generation graph and device/runtime selection plan.
 | `06-pytorch-diffusers-image-generation-execution-slice.md` | Deterministic PyTorch/diffusers execution slice. |
 | `07-candle-future-capability-guardrail.md` | Candle non-selection guardrail for image generation. |
 | `08-release-build-and-user-validation.md` | Final verification, release build, and smoke-test gate. |
+| `09-workflow-editor-e2e-image-generation.md` | Real workflow-editor image generation acceptance path. |
 
 ## Problem
 The work crosses graph persistence, backend validation, inference execution,
@@ -43,6 +44,10 @@ of broad unverified horizontal changes.
   materialization, and pre-dispatch validation cannot disagree.
 - Runtime-host handoff must replace successful `model_path`/`ModelRefV2`
   execution before real PyTorch/diffusers image execution is implemented.
+- Workflow-editor end-to-end image generation must validate the usable app
+  path after the headless contract/release smoke. The plan is not user-ready
+  until the workflow editor can run a provisioned canonical image-generation
+  workflow and expose the retained generated artifact.
 - No fallback or legacy execution paths may remain reachable.
 - Each milestone must define verification before implementation is considered
   complete.
@@ -91,7 +96,9 @@ option 4 orchestration milestone, read
 `../10-task-level-scheduler-orchestration.md`. Before implementing Milestone
 5d, read `../11-inference-interface-resolution-and-validation.md`. Before
 implementing Milestone 5b, read
-`../09-runtime-host-handoff-legacy-removal.md`. Update
+`../09-runtime-host-handoff-legacy-removal.md`. Before implementing Milestone
+9, read `../00-objective-scope.md`, `../03-risks-and-definition-of-done.md`,
+and the current rolling execution notes in `../plan.md`. Update
 `../05-execution-management.md` with verification and standards notes after
 each slice passes.
 

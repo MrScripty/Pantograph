@@ -8989,6 +8989,34 @@ beyond the canonical per-member terminal attempt events. That future work must
 start with a re-plan because it would introduce a new diagnostics contract,
 not complete a missing requirement from the current active lane.
 
+2026-06-18 workflow-editor end-to-end image-generation re-plan decision: add
+Milestone 9 as the next user-readiness lane. The previous active lane closed
+the canonical worker/scheduler/runtime execution architecture and Milestone 8
+closed an automated headless contract smoke, but that is not enough for a
+usable app. Real image generation must work through the workflow editor or the
+same Tauri command path the workflow editor uses: prompt input, scheduler
+admission, runtime dispatch, PyTorch/Diffusers execution, retained image
+artifact, and UI-visible artifact projection.
+
+Standards alignment: this is a new written plan because the work is
+cross-layer, stateful, and user-facing. Backend remains the source of truth for
+workflow state, runtime/device/model decisions, diagnostics, and artifact data.
+Frontend may own only transient editor interaction state and must render
+backend-owned run/artifact facts declaratively. The real-model smoke must use
+canonical Pumas package facts, approved load-target readiness, runtime-registry
+dispatch identity, scheduler-owned device/runtime selection, and worker-owned
+runtime execution. Missing prerequisites must surface typed diagnostics instead
+of fallback execution.
+
+Next thin slice: execute Milestone 9 step 1, the readiness inventory and
+harness gate. Inspect the workflow editor command path, current Tauri/backend
+session execution commands, artifact retrieval commands, Python/Diffusers
+runtime provisioning knobs, Pumas model fixture requirements, and existing
+smoke scripts. Update Milestone 9 with exact prerequisites, command path,
+diagnostic expectations, and verification. Do not change source execution
+behavior, generated files, lockfiles, saved workflow fixtures, Pumas contracts,
+or runtime-registry contracts in this inventory slice.
+
 ## Standards Rule
 
 The standards constraints in
