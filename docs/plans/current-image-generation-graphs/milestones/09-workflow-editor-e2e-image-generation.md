@@ -276,5 +276,7 @@ result projection.
 - Verification commands, manual smoke notes, environment prerequisites, and
   deviations are recorded in the plan.
 
-**Status:** Planned. This is the next user-readiness milestone after the
-headless contract validation closure.
+**Status:** In progress. The diagnostic preservation, artifact-navigation, and
+real-image smoke wrapper slices are complete. The milestone remains open until
+a configured desktop workflow-editor run produces a retained image artifact
+that is visible or retrievable through the app UI.

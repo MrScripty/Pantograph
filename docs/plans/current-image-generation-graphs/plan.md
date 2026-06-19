@@ -9143,6 +9143,12 @@ missing-env fail-closed wrapper run exited 2 with the expected
 The real Diffusers execution sub-step was not run in this slice because the
 required Pumas model fixture environment was not configured in this shell.
 
+Milestone 9 status:
+in progress. Diagnostic preservation, image-artifact navigation, and the
+opt-in real-image smoke wrapper are complete. The milestone remains open until
+a configured desktop workflow-editor run produces a retained image artifact
+that is visible or retrievable through the app UI.
+
 ## Standards Rule
 
 The standards constraints in
