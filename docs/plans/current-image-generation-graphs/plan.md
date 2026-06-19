@@ -9149,6 +9149,35 @@ opt-in real-image smoke wrapper are complete. The milestone remains open until
 a configured desktop workflow-editor run produces a retained image artifact
 that is visible or retrievable through the app UI.
 
+2026-06-19 desktop PyTorch build-gate slice:
+smallest useful vertical slice: extend the existing opt-in real image smoke so
+configured runs must prove the desktop Tauri crate compiles with
+`backend-pytorch` before the smoke can claim real-runtime/editor-adjacent
+readiness. Allowed files touched:
+`scripts/check-workflow-image-generation-real-smoke.sh`, `scripts/README.md`,
+`docs/plans/current-image-generation-graphs/milestones/09-workflow-editor-e2e-image-generation.md`,
+and this plan. No-fallback/no-legacy confirmation: the smoke still requires
+Pumas model id based selection, rejects retired direct model path variables,
+and delegates execution to canonical workflow-shape/runtime/frontend checks;
+the added build gate validates the desktop backend surface instead of adding a
+parallel execution path.
+
+Verification passed:
+`cargo check --manifest-path src-tauri/Cargo.toml --features backend-pytorch`,
+`bash -n scripts/check-workflow-image-generation-real-smoke.sh`, and the
+missing-env fail-closed wrapper run exited 2 with the expected
+`PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_MODEL_ID` diagnostic,
+`node scripts/check-current-image-workflow-smoke.mjs`, and
+`npm run test:frontend -- workflowToolbarEvents WorkflowService.commands`.
+
+Remaining Milestone 9 gap:
+the configured desktop workflow editor GUI/Tauri event-channel run is still
+not proven. The next source slice should add or run an app-path harness that
+submits the canonical workflow through the toolbar/Tauri command path, uses a
+Pumas model id/artifact id, reaches scheduler admission and worker-owned
+PyTorch/Diffusers execution, and verifies the retained image artifact through
+I/O Inspector descriptor/body commands.
+
 ## Standards Rule
 
 The standards constraints in

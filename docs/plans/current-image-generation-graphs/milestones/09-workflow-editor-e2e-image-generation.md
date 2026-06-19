@@ -182,7 +182,8 @@ result projection.
      opt-in lane command for configured machines. It requires
      `PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_MODEL_ID`, accepts optional
      `PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_ARTIFACT_ID`, rejects retired direct
-     model-path variables, validates canonical image workflow shape, runs the
+     model-path variables, validates canonical image workflow shape, verifies
+     the desktop Tauri crate builds with `backend-pytorch`, runs the
      generated-C#/native-runtime real Diffusers session smoke, and runs focused
      frontend command projection checks.
    - This is an intermediate real-backend gate, not milestone completion. It
@@ -198,10 +199,29 @@ result projection.
      `bash -n scripts/check-workflow-image-generation-real-smoke.sh`,
      missing-env fail-closed wrapper run exited 2 with the expected
      `PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_MODEL_ID` diagnostic,
+     `cargo check --manifest-path src-tauri/Cargo.toml --features backend-pytorch`,
      `node scripts/check-current-image-workflow-smoke.mjs`, and
      `npm run test:frontend -- workflowToolbarEvents WorkflowService.commands`.
      Real Diffusers execution was not run in this slice because the required
      Pumas model fixture environment was not configured in this shell.
+
+   **2026-06-19 desktop PyTorch build-gate slice:** Completed.
+   - Extended the opt-in real image-generation smoke wrapper so configured
+     runs must compile the desktop Tauri crate with the `backend-pytorch`
+     feature before claiming real-runtime smoke success.
+   - No-fallback/no-legacy confirmation: the wrapper still requires Pumas
+     model id based selection and rejects retired direct model path variables;
+     the added gate only validates the canonical desktop backend surface.
+   - Verification passed:
+     `cargo check --manifest-path src-tauri/Cargo.toml --features backend-pytorch`,
+     `bash -n scripts/check-workflow-image-generation-real-smoke.sh`, and the
+     missing-env fail-closed wrapper run exited 2 with the expected
+     `PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_MODEL_ID` diagnostic,
+     `node scripts/check-current-image-workflow-smoke.mjs`, and
+     `npm run test:frontend -- workflowToolbarEvents WorkflowService.commands`.
+   - Remaining gap: this still does not prove a configured workflow editor GUI
+     session can submit the workflow, receive events, and show the retained
+     image artifact in I/O Inspector.
 
 4. **Workflow editor usability acceptance**
    - Confirm the workflow editor can start the run, surface progress or
