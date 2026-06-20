@@ -9369,6 +9369,84 @@ plus `package.json` and `package-lock.json` if dependencies are added. Do not
 change backend runtime/model/device/scheduler policy, generated contracts,
 saved workflow fixtures, or production frontend behavior in that tooling slice.
 
+2026-06-19 GUI tooling scaffold slice:
+smallest useful vertical slice: add the selected WebdriverIO/Tauri WebDriver
+harness shell and fail-closed smoke wrapper without changing production
+frontend behavior, backend runtime/model/device/scheduler policy, generated
+contracts, or saved workflow fixtures.
+
+Allowed files touched:
+`package.json`, `package-lock.json`,
+`scripts/check-workflow-editor-image-generation-gui-smoke.sh`,
+`scripts/README.md`,
+`tests/e2e/workflow-editor-image-generation/wdio.conf.mjs`,
+`tests/e2e/workflow-editor-image-generation/workflow-editor-image-generation.e2e.mjs`,
+`docs/plans/current-image-generation-graphs/milestones/09-workflow-editor-e2e-image-generation.md`,
+and this plan. The unrelated dirty proposal docs remain untouched.
+
+Implemented:
+- Added root-owned WebdriverIO dependencies and the
+  `test:workflow-editor-image-gui` npm script.
+- Added an opt-in Linux preflight script that rejects retired direct model path
+  variables, requires Pumas model/artifact ids, requires
+  `PANTOGRAPH_PYTHON_EXECUTABLE`, checks `tauri-driver`, `WebKitWebDriver`, GUI
+  display availability, and verifies local WebdriverIO installation before
+  launching the harness.
+- Added WebdriverIO config that builds the Tauri debug desktop app with
+  `backend-pytorch`, starts `tauri-driver`, and points WebDriver at the
+  canonical debug app binary.
+- Added the first desktop GUI shell spec that opens Pantograph, navigates to
+  the Graph page, verifies the Submit control, and verifies I/O Inspector
+  navigation. The next slice must extend this to submit the configured image
+  workflow and verify a retained artifact descriptor/body through the UI.
+
+No-fallback/no-legacy confirmation:
+the scaffold does not add mocks, direct script-only inference, direct model
+paths, retired graph nodes, request-scoped runtime execution, frontend artifact
+path inference, or scheduler/runtime/model/device/artifact policy outside the
+backend. Missing prerequisites fail before execution instead of silently
+switching paths.
+
+Discovered issues:
+`npm install --save-dev @wdio/cli @wdio/local-runner @wdio/mocha-framework
+@wdio/spec-reporter webdriverio` reported deprecated transitive packages and
+follow-up `npm audit --json` reported `17` audit findings (`10` moderate, `7`
+high). `npm audit --omit=dev` reported `4` production dependency findings (`3`
+moderate, `1` high), so the audit issue is not solely caused by the new GUI
+harness. The WebdriverIO dependency tree is large, but it is dev-only
+specialized desktop automation tooling owned by the root app command boundary;
+keep it opt-in until a dependency/audit follow-up decides whether to retain
+WebdriverIO, add targeted overrides, or replace the harness before CI
+promotion.
+
+Verification passed:
+- `./scripts/check-workflow-editor-image-generation-gui-smoke.sh` failed
+  closed on missing `PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_MODEL_ID`.
+- `npm run test:workflow-editor-image-gui` failed closed on the same missing
+  prerequisite.
+- `node --check tests/e2e/workflow-editor-image-generation/wdio.conf.mjs`.
+- `node --check tests/e2e/workflow-editor-image-generation/workflow-editor-image-generation.e2e.mjs`.
+- `npm run lint`.
+- `npm run typecheck`.
+- `git diff --check`.
+- `npm audit --json` and `npm audit --omit=dev` were run to record the
+  dependency/audit follow-up; both currently exit non-zero with the findings
+  above.
+
+Verification still blocked:
+the configured desktop GUI WebDriver session was not launched because this
+shell lacks `tauri-driver`, `WebKitWebDriver`, and the declared real model
+prerequisites. This is expected for the scaffold slice; the wrapper fails before
+execution rather than falling back.
+
+Next thin slice:
+add workflow-editor selectors and the configured GUI smoke interaction that
+loads/submits the canonical image workflow and verifies retained artifact
+descriptor/body through the I/O Inspector. Do not implement business logic in
+Tauri, Svelte/TypeScript, or the harness; any missing backend capability must
+surface as a typed backend diagnostic and trigger re-plan if the current
+contracts are insufficient.
+
 ## Standards Rule
 
 The standards constraints in

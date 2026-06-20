@@ -278,6 +278,64 @@ Failure modes to preserve:
 - Any need to put scheduler/runtime/model/device/artifact policy in Tauri,
   Svelte, or the test harness is a re-plan trigger.
 
+### 2026-06-19 Tooling Scaffold Slice
+
+Scaffolded the selected desktop GUI harness without adding product runtime
+behavior:
+
+- Added root-owned WebdriverIO dependencies because the root package owns the
+  desktop app E2E command boundary.
+- Added `npm run test:workflow-editor-image-gui`, which delegates to
+  `scripts/check-workflow-editor-image-generation-gui-smoke.sh`.
+- Added a fail-closed Linux preflight for
+  `PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_MODEL_ID`,
+  `PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_ARTIFACT_ID`,
+  `PANTOGRAPH_PYTHON_EXECUTABLE`, `tauri-driver`, `WebKitWebDriver`, a GUI
+  display, and the local WebdriverIO install.
+- Added `tests/e2e/workflow-editor-image-generation/wdio.conf.mjs`, which
+  builds the Tauri debug desktop app with `backend-pytorch`, starts
+  `tauri-driver`, and drives the app through WebDriver.
+- Added the first GUI spec that proves the desktop app opens, the Graph page is
+  navigable, the workflow submit control is visible, and the I/O Inspector
+  navigation exists. This is a scaffold acceptance shell only; it does not close
+  this milestone until the next slice submits a configured image workflow and
+  verifies a retained artifact descriptor/body through the UI.
+
+No-fallback/no-legacy confirmation:
+
+- The harness does not run direct script-only inference, direct model paths,
+  retired graph nodes, request-scoped runtime execution, mocks, or frontend
+  artifact path inference.
+- The preflight rejects retired direct model path environment variables and
+  requires canonical Pumas model/artifact identifiers.
+- Tauri remains an app/WebDriver/IPC bridge; workflow, scheduler,
+  runtime/model/device, diagnostics, and artifact policy remain backend-owned.
+
+Discovered issues and follow-ups:
+
+- `npm install` added the WebdriverIO dependency tree and reported deprecated
+  transitive packages. Follow-up `npm audit --json` reported `17` findings
+  (`10` moderate, `7` high), while `npm audit --omit=dev` reported `4`
+  production dependency findings (`3` moderate, `1` high). This does not block
+  the opt-in scaffold slice, but the next dependency review must decide whether
+  WebdriverIO remains acceptable, needs targeted overrides, or should be
+  replaced before promoting this smoke into CI.
+- The WebdriverIO tree is a large dev-only dependency addition. It is justified
+  here because desktop WebDriver automation is specialized system-test tooling
+  owned by the root app command boundary, but it must remain opt-in until the
+  dependency/audit follow-up is resolved.
+- This local shell still lacks `tauri-driver` and `WebKitWebDriver`, so the
+  configured GUI session was not launched here. The verified behavior for this
+  slice is the fail-closed preflight path plus static/tooling validation.
+- Verification passed:
+  `./scripts/check-workflow-editor-image-generation-gui-smoke.sh` failed
+  closed on missing `PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_MODEL_ID`,
+  `npm run test:workflow-editor-image-gui` failed closed on the same missing
+  prerequisite, `node --check
+  tests/e2e/workflow-editor-image-generation/wdio.conf.mjs`, `node --check
+  tests/e2e/workflow-editor-image-generation/workflow-editor-image-generation.e2e.mjs`,
+  `npm run lint`, `npm run typecheck`, and `git diff --check`.
+
 ## Tasks
 
 1. **Readiness inventory and harness gate**
