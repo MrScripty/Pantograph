@@ -389,6 +389,41 @@ real saved image workflow id are not available here. The next slice must either
 run it in a provisioned environment or record typed fail-closed diagnostics at
 the GUI/app boundary.
 
+### 2026-06-19 Saved Workflow Preflight Slice
+
+Tightened the configured GUI smoke preflight after discovering the documented
+example used the built-in template id while the workflow editor selector loads
+saved workflows from `.pantograph/workflows/${id}.json`.
+
+Implemented:
+
+- Corrected the GUI smoke README example to use the tracked saved workflow id
+  `tiny-sd-turbo-diffusion`.
+- Added a fail-closed shell preflight that rejects path/display-name workflow
+  ids and verifies the explicit
+  `PANTOGRAPH_WORKFLOW_EDITOR_IMAGE_SMOKE_WORKFLOW_ID` resolves to a saved
+  workflow file before checking GUI driver availability.
+
+No-fallback/no-legacy confirmation:
+
+- The script still requires an explicit saved workflow id. It does not select a
+  default workflow, search for alternatives, or fall back to a built-in template.
+- The check mirrors the current editor loading contract and does not move
+  workflow, scheduler, runtime/model/device, diagnostics, or artifact policy out
+  of the backend.
+
+Verification passed:
+
+- Missing `PANTOGRAPH_WORKFLOW_EDITOR_IMAGE_SMOKE_WORKFLOW_ID` still fails
+  closed.
+- `PANTOGRAPH_WORKFLOW_EDITOR_IMAGE_SMOKE_WORKFLOW_ID='Tiny SD Turbo Diffusion'`
+  fails closed as an invalid saved workflow id.
+- `PANTOGRAPH_WORKFLOW_EDITOR_IMAGE_SMOKE_WORKFLOW_ID=tiny-sd-turbo-text-to-image`
+  fails closed because no saved workflow file exists for that template id.
+- `PANTOGRAPH_WORKFLOW_EDITOR_IMAGE_SMOKE_WORKFLOW_ID=tiny-sd-turbo-diffusion`
+  passes the saved-workflow preflight and then fails closed on missing
+  `tauri-driver`, before app execution.
+
 ## Tasks
 
 1. **Readiness inventory and harness gate**

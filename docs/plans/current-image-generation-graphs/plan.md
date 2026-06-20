@@ -9506,6 +9506,39 @@ record the typed GUI/app-boundary diagnostic and fix the smallest backend/UI
 gap needed to make the workflow editor produce and display the retained image
 artifact. Do not accept a headless-only substitute as milestone completion.
 
+2026-06-19 saved workflow preflight slice:
+smallest useful vertical slice: fix the GUI smoke's saved-workflow prerequisite
+so the documented and validated workflow id matches the editor's saved-workflow
+loading contract.
+
+Allowed files touched:
+`scripts/check-workflow-editor-image-generation-gui-smoke.sh`,
+`scripts/README.md`,
+`docs/plans/current-image-generation-graphs/milestones/09-workflow-editor-e2e-image-generation.md`,
+and this plan. The unrelated dirty proposal docs remain untouched.
+
+Implemented:
+- Corrected the README example from the built-in template id
+  `tiny-sd-turbo-text-to-image` to the tracked saved workflow id
+  `tiny-sd-turbo-diffusion`.
+- Added a fail-closed preflight that rejects path/display-name workflow ids and
+  verifies `.pantograph/workflows/${PANTOGRAPH_WORKFLOW_EDITOR_IMAGE_SMOKE_WORKFLOW_ID}.json`
+  exists before the script checks GUI driver availability.
+
+No-fallback/no-legacy confirmation:
+the smoke still requires an explicit saved workflow id and does not select a
+default workflow, search for alternatives, fall back to a template, run direct
+script inference, or move backend-owned workflow/runtime/model/device/artifact
+policy into Tauri, Svelte, or the harness.
+
+Verification passed:
+- Missing workflow id fails closed.
+- Display-name workflow id fails closed.
+- Template id without a saved workflow file fails closed.
+- Tracked saved workflow id passes the saved workflow check and then fails
+  closed on missing `tauri-driver`.
+- `git diff --check`.
+
 ## Standards Rule
 
 The standards constraints in

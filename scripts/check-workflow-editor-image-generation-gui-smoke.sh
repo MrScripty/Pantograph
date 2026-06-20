@@ -39,6 +39,15 @@ require_env PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_ARTIFACT_ID
 require_env PANTOGRAPH_WORKFLOW_EDITOR_IMAGE_SMOKE_WORKFLOW_ID
 require_env PANTOGRAPH_PYTHON_EXECUTABLE
 
+if [[ ! "${PANTOGRAPH_WORKFLOW_EDITOR_IMAGE_SMOKE_WORKFLOW_ID}" =~ ^[A-Za-z0-9._-]+$ ]]; then
+  fail "PANTOGRAPH_WORKFLOW_EDITOR_IMAGE_SMOKE_WORKFLOW_ID must be a saved workflow id, not a display name or path"
+fi
+
+workflow_smoke_file=".pantograph/workflows/${PANTOGRAPH_WORKFLOW_EDITOR_IMAGE_SMOKE_WORKFLOW_ID}.json"
+if [[ ! -f "$workflow_smoke_file" ]]; then
+  fail "saved workflow file is missing for PANTOGRAPH_WORKFLOW_EDITOR_IMAGE_SMOKE_WORKFLOW_ID: ${workflow_smoke_file}"
+fi
+
 if [[ ! -x "${PANTOGRAPH_PYTHON_EXECUTABLE}" ]]; then
   fail "PANTOGRAPH_PYTHON_EXECUTABLE is not executable: ${PANTOGRAPH_PYTHON_EXECUTABLE}"
 fi
