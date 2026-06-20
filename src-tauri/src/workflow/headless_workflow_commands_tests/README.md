@@ -8,6 +8,7 @@ registration.
 ## Contents
 | File | Description |
 | ---- | ----------- |
+| `command_bridge.rs` | Covers workflow editor command-bridge event delivery and backend artifact descriptor/body forwarding without Tauri-owned policy. |
 | `diagnostics_helpers.rs` | Covers scheduler/runtime helper recording and trace identity joining. |
 | `diagnostics_projection.rs` | Covers diagnostics projection, stored runtime metadata, model target lookup, observed runtime ids, and clear-history behavior. |
 | `transport_responses.rs` | Covers diagnostics request DTOs, scheduler/trace response adapters, validation errors, and workflow error-envelope serialization. |
@@ -45,6 +46,9 @@ diagnostics projection macro.
   behavior under test before adding another root-level test file.
 - Behavior modules should not construct alternate fixtures when the root helper
   already expresses the backend-owned session or capability contract.
+- Command-bridge tests may build temporary backend artifact stores to verify
+  Tauri transport wiring, but must not decide scheduler, runtime, model, device,
+  or artifact-retention policy beyond test fixture limits.
 
 ## Revisit Triggers
 - Add a new module when a behavior area grows beyond a focused diagnostics,

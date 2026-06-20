@@ -67,7 +67,7 @@ fn workflow_trace_snapshot_response_reads_backend_owned_trace_snapshot() {
             workflow_run_id: Some("run-1".to_string()),
             session: running_session_summary(),
             items: vec![WorkflowExecutionSessionQueueItem {
-                workflow_run_id: "queue-1".to_string(),
+                workflow_run_id: "run-1".to_string(),
 
                 enqueued_at_ms: Some(100),
                 dequeued_at_ms: Some(110),
@@ -117,7 +117,7 @@ fn workflow_trace_snapshot_response_filters_by_backend_session_id() {
             workflow_run_id: Some("run-1".to_string()),
             session: running_session_summary(),
             items: vec![WorkflowExecutionSessionQueueItem {
-                workflow_run_id: "queue-1".to_string(),
+                workflow_run_id: "run-1".to_string(),
 
                 enqueued_at_ms: Some(100),
                 dequeued_at_ms: Some(110),

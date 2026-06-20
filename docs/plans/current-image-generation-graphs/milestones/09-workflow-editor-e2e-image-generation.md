@@ -92,6 +92,40 @@ The command bridge harness is not sufficient to close this milestone. Milestone
 UI-visible image artifact or records typed fail-closed diagnostics for missing
 external prerequisites.
 
+Bridge harness status:
+
+- 2026-06-19: Completed the first focused bridge sub-slice. Added an
+  in-process headless command bridge test proving that an image stream event
+  sent through `TauriEventAdapter` emits artifact references on the Tauri
+  channel, removes inline image payload ownership from the transport event,
+  preserves diagnostics-event delivery, and reads the retained artifact through
+  the command adapter's backend-owned artifact descriptor/body forwarding path.
+- Allowed files touched for the bridge sub-slice:
+  `src-tauri/src/workflow/headless_workflow_commands.rs`,
+  `src-tauri/src/workflow/headless_workflow_commands_tests.rs`,
+  `src-tauri/src/workflow/headless_workflow_commands_tests/README.md`,
+  `src-tauri/src/workflow/headless_workflow_commands_tests/command_bridge.rs`,
+  `src-tauri/src/workflow/headless_workflow_commands_tests/transport_responses.rs`,
+  this milestone, and the rolling plan.
+- No-fallback/no-legacy confirmation: the slice did not add runtime/model/
+  device/scheduler/artifact-retention policy to Tauri, did not add a direct
+  execution path, and did not preserve legacy graph/runtime behavior. The
+  production change only extracts private command-adapter forwarding helpers
+  that still call backend `WorkflowService` artifact APIs and preserve backend
+  error envelopes.
+- Discovered and fixed stale adjacent test coverage: two trace snapshot
+  fixtures used queue item id `queue-1` while the canonical trace key was
+  `run-1`, preventing scheduler queue timing from joining by backend
+  `workflow_run_id`. The fixture now uses the backend run id.
+- Verification passed:
+  `cargo fmt --manifest-path src-tauri/Cargo.toml -- --check`,
+  `cargo test --manifest-path src-tauri/Cargo.toml command_bridge_preserves_image_artifact_event_and_body_read`,
+  and `cargo test --manifest-path src-tauri/Cargo.toml headless_workflow_commands`.
+- Remaining bridge/app-path gap: create/run command fail-closed diagnostics
+  still need app-path coverage if existing tests are insufficient, and the
+  configured workflow-editor GUI smoke is still required before this milestone
+  can close.
+
 ## Tasks
 
 1. **Readiness inventory and harness gate**

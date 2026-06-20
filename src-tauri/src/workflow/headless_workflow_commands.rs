@@ -377,6 +377,13 @@ pub async fn workflow_artifact_descriptor(
     request: ArtifactDescriptorQueryRequest,
     workflow_service: State<'_, SharedWorkflowService>,
 ) -> Result<ArtifactDescriptorQueryResponse, String> {
+    workflow_artifact_descriptor_response(workflow_service.inner(), request)
+}
+
+fn workflow_artifact_descriptor_response(
+    workflow_service: &WorkflowService,
+    request: ArtifactDescriptorQueryRequest,
+) -> Result<ArtifactDescriptorQueryResponse, String> {
     workflow_service
         .artifact_descriptor(request)
         .map_err(workflow_error_json)
@@ -386,6 +393,13 @@ pub async fn workflow_read_artifact_body(
     request: ArtifactReadRequest,
     workflow_service: State<'_, SharedWorkflowService>,
 ) -> Result<ArtifactBodyRead, String> {
+    workflow_read_artifact_body_response(workflow_service.inner(), request)
+}
+
+fn workflow_read_artifact_body_response(
+    workflow_service: &WorkflowService,
+    request: ArtifactReadRequest,
+) -> Result<ArtifactBodyRead, String> {
     workflow_service
         .read_artifact_body(request)
         .map_err(workflow_error_json)
@@ -394,6 +408,13 @@ pub async fn workflow_read_artifact_body(
 pub async fn workflow_read_artifact_stream(
     request: ArtifactStreamReadRequest,
     workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<ArtifactStreamBodyRead, String> {
+    workflow_read_artifact_stream_response(workflow_service.inner(), request)
+}
+
+fn workflow_read_artifact_stream_response(
+    workflow_service: &WorkflowService,
+    request: ArtifactStreamReadRequest,
 ) -> Result<ArtifactStreamBodyRead, String> {
     workflow_service
         .read_artifact_stream_body(request)

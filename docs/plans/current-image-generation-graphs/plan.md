@@ -9199,12 +9199,11 @@ Ownership constraints for the remaining work:
   duplicate retained media bodies.
 
 Next thin slices:
-1. Add a focused in-process Tauri command bridge harness that exercises the
-   same create/run/event/artifact command surfaces the workflow editor uses.
-   The harness must assert backend typed diagnostics, event-channel delivery,
-   and artifact descriptor/body responses survive the IPC bridge unchanged.
-   It may use missing-fixture fail-closed cases and backend-owned fixtures, but
-   it must not implement business logic in Tauri.
+1. Complete any remaining focused Tauri command bridge coverage for create/run
+   command fail-closed diagnostics if existing tests do not already prove the
+   workflow editor command boundary. The completed bridge sub-slice already
+   proves event-channel delivery and artifact descriptor/body response
+   forwarding for generated image artifacts without Tauri-owned policy.
 2. Add or run a configured desktop workflow-editor GUI smoke that submits the
    canonical image-generation workflow through the editor, uses a Pumas model
    id/artifact id, reaches scheduler admission and worker-owned PyTorch/
@@ -9217,6 +9216,43 @@ runtime/device/model policy, scheduler decisions, artifact retention policy, or
 frontend projection semantics. Stop if the GUI smoke requires direct
 script-only execution, retired graph nodes, request-scoped runtime execution,
 graph-visible local model paths, or frontend-inferred artifact paths.
+
+2026-06-19 command bridge image-artifact sub-slice:
+smallest useful vertical slice: prove the workflow editor app path's Tauri
+event/artifact bridge for generated image outputs without putting workflow
+business policy in Tauri. Allowed files touched:
+`src-tauri/src/workflow/headless_workflow_commands.rs`,
+`src-tauri/src/workflow/headless_workflow_commands_tests.rs`,
+`src-tauri/src/workflow/headless_workflow_commands_tests/README.md`,
+`src-tauri/src/workflow/headless_workflow_commands_tests/command_bridge.rs`,
+`src-tauri/src/workflow/headless_workflow_commands_tests/transport_responses.rs`,
+`docs/plans/current-image-generation-graphs/milestones/09-workflow-editor-e2e-image-generation.md`,
+and this plan.
+
+No-fallback/no-legacy confirmation: the production change only extracts
+private command-adapter helpers that forward artifact descriptor/body/stream
+requests to backend `WorkflowService` APIs and preserve backend error
+envelopes. The harness uses a backend-owned temporary artifact store, verifies
+`TauriEventAdapter` channel delivery and retained image artifact reads, and
+does not add runtime/model/device/scheduler/artifact-retention decisions to
+Tauri or frontend code.
+
+Discovered issue fixed in-slice: an adjacent headless diagnostics fixture used
+queue item id `queue-1` while the trace snapshot was keyed by backend
+`workflow_run_id` `run-1`, so queue timing did not join. The fixture now uses
+the backend run id and the relevant headless command group passes.
+
+Verification passed:
+`cargo fmt --manifest-path src-tauri/Cargo.toml -- --check`,
+`cargo test --manifest-path src-tauri/Cargo.toml command_bridge_preserves_image_artifact_event_and_body_read`,
+and `cargo test --manifest-path src-tauri/Cargo.toml headless_workflow_commands`.
+
+Remaining Milestone 9 gap:
+create/run command fail-closed diagnostics still need app-path coverage if
+existing tests are insufficient, and the configured desktop workflow-editor GUI
+smoke still must submit the canonical workflow through the editor, reach
+scheduler admission and worker-owned PyTorch/Diffusers execution, and retrieve
+the retained image artifact through I/O Inspector descriptor/body commands.
 
 ## Standards Rule
 

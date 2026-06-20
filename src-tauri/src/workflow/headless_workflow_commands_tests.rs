@@ -105,6 +105,8 @@ fn capability_response() -> WorkflowCapabilitiesResponse {
     }
 }
 
+#[path = "headless_workflow_commands_tests/command_bridge.rs"]
+mod command_bridge;
 #[path = "headless_workflow_commands_tests/diagnostics_helpers.rs"]
 mod diagnostics_helpers;
 #[path = "headless_workflow_commands_tests/diagnostics_projection.rs"]
