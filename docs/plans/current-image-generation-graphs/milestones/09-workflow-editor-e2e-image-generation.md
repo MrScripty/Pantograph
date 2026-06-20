@@ -505,12 +505,53 @@ No-fallback/no-legacy confirmation:
 
 Current blocker:
 
-- Re-plan or implement an approved attribution-store startup path before the
-  GUI smoke can prove end-to-end image generation. Standards-aligned options
-  are an explicit schema `7` to `8` migration in
-  `pantograph-runtime-attribution`, or a deterministic GUI smoke project root
-  that starts from canonical saved workflow fixtures and creates a fresh schema
-  `8` attribution store without mutating developer-local `.pantograph` state.
+- Implement the selected deterministic GUI smoke project root path before the
+  GUI smoke can prove end-to-end image generation. The selected path is to
+  create a fresh schema `8` attribution store for the smoke instead of
+  preserving or migrating schema `7`.
+
+### 2026-06-20 Attribution Store Re-plan Decision
+
+Selected option: deterministic GUI smoke project root with fresh attribution
+schema `8`.
+
+Decision:
+
+- Do not preserve schema `7` for this image-generation GUI acceptance path.
+- Do not add a `7` to `8` compatibility migration as part of this milestone.
+- Keep production attribution startup fail-closed for unsupported schema
+  versions.
+- Do not delete, rewrite, or replace developer-local
+  `.pantograph/workflow-attribution.sqlite`.
+- Update the GUI smoke harness to create an isolated temporary project root
+  that satisfies `PANTOGRAPH_PROJECT_ROOT` resolution, seeds only the canonical
+  saved workflow fixture required by the test, and lets
+  `pantograph-runtime-attribution` create a new schema `8` SQLite store on app
+  startup.
+
+No-fallback/no-legacy confirmation:
+
+- The selected path does not preserve old attribution behavior.
+- It does not migrate legacy data for compatibility.
+- It does not bypass the backend attribution crate.
+- It keeps Tauri as a facilitator only: the backend owns attribution schema
+  creation and validation, while the GUI harness owns only test project-root
+  isolation.
+
+Next thin slice:
+
+- Allowed files: `scripts/check-workflow-editor-image-generation-gui-smoke.sh`,
+  `tests/e2e/workflow-editor-image-generation/wdio.conf.mjs`, focused tests or
+  harness fixtures if needed, this milestone file, and the main plan file.
+- Add preflight/setup that creates a temporary project root with required
+  project markers and `.pantograph/workflows/${PANTOGRAPH_WORKFLOW_EDITOR_IMAGE_SMOKE_WORKFLOW_ID}.json`
+  copied from the canonical saved workflow fixture.
+- Pass `PANTOGRAPH_PROJECT_ROOT` to the Tauri app launch environment if the
+  WebDriver/Tauri launch path supports it directly; otherwise stop and re-plan
+  rather than mutating the repo-local `.pantograph` store.
+- Rerun the configured GUI smoke. Expected next result is either app startup
+  with a fresh schema `8` attribution store, or a new typed blocker recorded in
+  the plan.
 
 ## Tasks
 
