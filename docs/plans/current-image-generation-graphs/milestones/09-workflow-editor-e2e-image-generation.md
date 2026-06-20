@@ -424,6 +424,38 @@ Verification passed:
   passes the saved-workflow preflight and then fails closed on missing
   `tauri-driver`, before app execution.
 
+### 2026-06-19 GUI Driver Environment Diagnostic Slice
+
+Attempted to continue from the configured GUI smoke slice by provisioning the
+desktop WebDriver prerequisites for this shell.
+
+Environment observations:
+
+- `DISPLAY=:0.0` is present.
+- `tauri-driver` was missing at slice start. Installed user-level
+  `tauri-driver v2.0.6` with `cargo install tauri-driver --locked`, matching
+  the official Tauri WebDriver setup.
+- `WebKitWebDriver` is still missing from `PATH`.
+- The system is Linux Mint 22.2 / Ubuntu Noble. `apt-cache policy
+  webkit2gtk-driver` reports no installed package and candidate
+  `2.52.3-0ubuntu0.24.04.1`.
+- `sudo apt-get update && sudo apt-get install -y webkit2gtk-driver` could not
+  run here because `sudo` requires an interactive password.
+
+No-fallback/no-legacy confirmation:
+
+- The configured desktop GUI smoke was not run without `WebKitWebDriver`.
+- No browser-only, headless-only, direct script, direct model path, retired
+  graph, request-scoped runtime, or frontend-inferred artifact substitute was
+  used.
+
+Current blocker:
+
+- Install `webkit2gtk-driver` (or otherwise place a compatible
+  `WebKitWebDriver` on `PATH`) in the host environment, then rerun
+  `npm run test:workflow-editor-image-gui` with the declared Pumas model id,
+  artifact id, saved workflow id, and Python executable.
+
 ## Tasks
 
 1. **Readiness inventory and harness gate**

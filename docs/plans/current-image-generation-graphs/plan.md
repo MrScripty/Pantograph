@@ -9539,6 +9539,50 @@ Verification passed:
   closed on missing `tauri-driver`.
 - `git diff --check`.
 
+2026-06-19 GUI driver environment diagnostic slice:
+smallest useful vertical slice: attempt to satisfy the configured desktop GUI
+smoke's missing WebDriver prerequisite, then record the exact remaining
+environment blocker without changing production code or weakening the GUI
+acceptance path.
+
+Allowed files touched:
+`docs/plans/current-image-generation-graphs/milestones/09-workflow-editor-e2e-image-generation.md`
+and this plan only. The unrelated dirty proposal docs remain untouched.
+
+Actions and observations:
+- Verified the worktree had only unrelated proposal-doc dirt before the slice.
+- Confirmed `DISPLAY=:0.0` is present.
+- Installed user-level `tauri-driver v2.0.6` with
+  `cargo install tauri-driver --locked`, matching the official Tauri WebDriver
+  prerequisite.
+- Re-ran the GUI smoke preflight with
+  `PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_MODEL_ID=diffusion/cc-nms/tiny-sd-turbo`,
+  `PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_ARTIFACT_ID=diffusers`,
+  `PANTOGRAPH_WORKFLOW_EDITOR_IMAGE_SMOKE_WORKFLOW_ID=tiny-sd-turbo-diffusion`,
+  and `PANTOGRAPH_PYTHON_EXECUTABLE=/usr/bin/python3`; it now fails closed on
+  missing `WebKitWebDriver`.
+- Confirmed this host is Linux Mint 22.2 / Ubuntu Noble and
+  `apt-cache policy webkit2gtk-driver` reports no installed package with
+  candidate `2.52.3-0ubuntu0.24.04.1`.
+- Attempted `sudo apt-get update && sudo apt-get install -y webkit2gtk-driver`,
+  but `sudo` requires an interactive password in this session.
+
+No-fallback/no-legacy confirmation:
+the configured desktop GUI smoke was not run without `WebKitWebDriver`; no
+browser-only, headless-only, direct script, direct model path, retired graph,
+request-scoped runtime, or frontend-inferred artifact substitute was used.
+
+Current blocker:
+install `webkit2gtk-driver` or otherwise make a compatible `WebKitWebDriver`
+available on `PATH`, then rerun the configured GUI smoke with real model,
+artifact, saved workflow, and Python prerequisites.
+
+Verification passed:
+- `git diff --check`.
+
+Verification pending:
+- Commit the environment diagnostic update.
+
 ## Standards Rule
 
 The standards constraints in
