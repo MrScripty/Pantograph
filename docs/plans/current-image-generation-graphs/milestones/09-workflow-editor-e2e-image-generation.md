@@ -51,6 +51,47 @@ result projection.
 - Solving generalized batch observability beyond per-run/per-member terminal
   diagnostics unless a separate re-plan selects that diagnostics contract.
 
+## 2026-06-19 Re-Plan Decision: Bridge First, GUI Smoke Next
+
+Selected option: **Option 4, command bridge harness first and workflow-editor
+GUI smoke second.**
+
+This re-plan keeps Tauri as an app/transport composition boundary only. Tauri
+must not own workflow business logic, runtime/device/model policy, scheduler
+admission rules, artifact retention policy, or UI projection semantics.
+
+Ownership boundaries for the remaining Milestone 9 work:
+
+- Backend Rust crates own workflow execution, scheduler admission,
+  worker/runtime lifecycle, runtime/device/model/load-target decisions,
+  diagnostics, artifact retention, artifact descriptors, and artifact bodies.
+- Tauri owns command registration, IPC serialization/deserialization, app
+  handles, event-channel bridging, app-directory composition, shared-state
+  wiring, and backend error-envelope transport.
+- Svelte/TypeScript owns editor interaction, transient UI state, declarative
+  rendering, workbench navigation, and presentation of backend-owned
+  projections. It must not infer runtime/model/device/artifact paths or
+  duplicate retained media bodies.
+
+Sequence:
+
+1. Add a focused in-process Tauri command bridge harness. It must exercise the
+   same command surfaces the editor uses and assert that canonical backend
+   diagnostics, event-channel delivery, and artifact descriptor/body responses
+   survive the IPC bridge unchanged. It may use missing-fixture fail-closed
+   cases and backend-owned test fixtures, but it must not decide runtime,
+   model, device, scheduler, or artifact policy in Tauri.
+2. Add or run a configured desktop workflow-editor GUI smoke. It must submit
+   the canonical image-generation workflow through the editor, use a Pumas
+   model id/artifact id, reach scheduler admission and worker-owned
+   PyTorch/Diffusers execution, and verify the retained image artifact through
+   I/O Inspector descriptor/body commands.
+
+The command bridge harness is not sufficient to close this milestone. Milestone
+9 closes only after the configured workflow-editor GUI path produces a retained
+UI-visible image artifact or records typed fail-closed diagnostics for missing
+external prerequisites.
+
 ## Tasks
 
 1. **Readiness inventory and harness gate**
@@ -224,13 +265,17 @@ result projection.
      image artifact in I/O Inspector.
 
 4. **Workflow editor usability acceptance**
-   - Confirm the workflow editor can start the run, surface progress or
-     diagnostics, and show or open the generated artifact without requiring
-     direct script use.
+   - First add the focused Tauri command bridge harness selected by the
+     2026-06-19 re-plan. It must prove bridge wiring only: create/run command
+     forwarding, backend typed diagnostics preservation, event-channel
+     delivery, and artifact descriptor/body command forwarding.
+   - Then confirm the workflow editor can start the configured real run,
+     surface progress or diagnostics, and show or open the generated artifact
+     without requiring direct script use.
    - Ensure frontend state remains declarative and backend-owned; no optimistic
      model/runtime/device/artifact state is introduced.
-   - Verification: frontend interaction test or manual Playwright/app smoke,
-     plus artifact retrieval check.
+   - Verification: focused Tauri bridge test plus frontend interaction test or
+     manual Playwright/app smoke, plus artifact retrieval check.
 
    **2026-06-18 partial usability slice:** In progress.
    - The workflow toolbar now selects the I/O Inspector after a successful run
@@ -274,6 +319,9 @@ result projection.
 
 - The workflow editor cannot invoke the canonical workflow execution session
   path without a frontend/Tauri contract change.
+- The Tauri bridge harness would need to own or duplicate workflow business
+  logic, runtime/device/model policy, scheduler decisions, artifact retention
+  policy, or frontend projection semantics.
 - The current runtime provisioning model cannot register a real
   PyTorch/Diffusers runtime without changing runtime-registry, Pumas, generated
   DTOs, lockfiles, or saved workflow fixtures.

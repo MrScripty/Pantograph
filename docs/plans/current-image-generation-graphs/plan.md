@@ -9178,6 +9178,46 @@ Pumas model id/artifact id, reaches scheduler admission and worker-owned
 PyTorch/Diffusers execution, and verifies the retained image artifact through
 I/O Inspector descriptor/body commands.
 
+2026-06-19 workflow-editor image-generation app-path re-plan decision:
+use Option 4, command bridge harness first and workflow-editor GUI smoke
+second. This resolves the current re-plan trigger without weakening the
+Milestone 9 completion criteria. The command bridge harness is a prerequisite
+for confidence in the app path, not a substitute for the real GUI/editor smoke.
+
+Ownership constraints for the remaining work:
+- Backend Rust crates own workflow execution, scheduler admission,
+  worker/runtime lifecycle, runtime/device/model/load-target decisions,
+  diagnostics, artifact retention, artifact descriptors, and artifact bodies.
+- Tauri owns only app/transport composition: command registration, IPC
+  serialization/deserialization, app handles, event-channel bridging,
+  app-directory composition, shared-state wiring, and backend error-envelope
+  transport. Tauri must not decide or duplicate runtime, model, device,
+  scheduler, artifact-retention, or projection policy.
+- Svelte/TypeScript owns editor interaction, transient UI state, declarative
+  rendering, workbench navigation, and presentation of backend-owned
+  projections. It must not infer runtime/model/device/artifact paths or
+  duplicate retained media bodies.
+
+Next thin slices:
+1. Add a focused in-process Tauri command bridge harness that exercises the
+   same create/run/event/artifact command surfaces the workflow editor uses.
+   The harness must assert backend typed diagnostics, event-channel delivery,
+   and artifact descriptor/body responses survive the IPC bridge unchanged.
+   It may use missing-fixture fail-closed cases and backend-owned fixtures, but
+   it must not implement business logic in Tauri.
+2. Add or run a configured desktop workflow-editor GUI smoke that submits the
+   canonical image-generation workflow through the editor, uses a Pumas model
+   id/artifact id, reaches scheduler admission and worker-owned PyTorch/
+   Diffusers execution, and verifies the retained image artifact through
+   I/O Inspector descriptor/body commands.
+
+Re-plan triggers added:
+stop if the Tauri harness would need to own workflow business logic,
+runtime/device/model policy, scheduler decisions, artifact retention policy, or
+frontend projection semantics. Stop if the GUI smoke requires direct
+script-only execution, retired graph nodes, request-scoped runtime execution,
+graph-visible local model paths, or frontend-inferred artifact paths.
+
 ## Standards Rule
 
 The standards constraints in
