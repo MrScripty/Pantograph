@@ -9447,6 +9447,65 @@ Tauri, Svelte/TypeScript, or the harness; any missing backend capability must
 surface as a typed backend diagnostic and trigger re-plan if the current
 contracts are insufficient.
 
+2026-06-19 GUI selector and artifact path slice:
+smallest useful vertical slice: add stable UI automation hooks and extend the
+desktop GUI spec to the real configured workflow-editor submit plus retained
+image artifact read path, without launching the full GUI session in this
+unprovisioned shell.
+
+Allowed files touched:
+`scripts/check-workflow-editor-image-generation-gui-smoke.sh`,
+`scripts/README.md`,
+`tests/e2e/workflow-editor-image-generation/workflow-editor-image-generation.e2e.mjs`,
+`src/components/workbench/WorkbenchShell.svelte`,
+`src/components/workbench/GraphPage.svelte`,
+`src/components/GraphSelector.svelte`,
+`src/components/WorkflowToolbar.svelte`,
+`src/components/workbench/IoInspectorPage.svelte`,
+`docs/plans/current-image-generation-graphs/milestones/09-workflow-editor-e2e-image-generation.md`,
+and this plan. The unrelated dirty proposal docs remain untouched.
+
+Implemented:
+- Added required
+  `PANTOGRAPH_WORKFLOW_EDITOR_IMAGE_SMOKE_WORKFLOW_ID` preflight input so the
+  smoke selects an explicitly declared saved workflow and fails closed when it
+  is missing.
+- Added stable `data-testid` selectors to visible workflow-editor and
+  I/O Inspector controls needed by the real GUI smoke. These attributes do not
+  change behavior and do not move backend-owned data into the frontend.
+- Updated the WebdriverIO spec to navigate through the real desktop app UI:
+  Graph page, graph selector workflow option, submit button readiness, submit,
+  I/O Inspector, image artifact card, artifact read button, and rendered image
+  preview.
+
+No-fallback/no-legacy confirmation:
+the slice does not add mocks, direct script execution, direct model paths,
+retired graph nodes, request-scoped runtime execution, frontend artifact path
+inference, or any scheduler/runtime/model/device/artifact policy in Tauri,
+Svelte, or test code. Missing workflow id and GUI driver prerequisites fail
+before execution.
+
+Verification passed:
+- `node --check tests/e2e/workflow-editor-image-generation/workflow-editor-image-generation.e2e.mjs`.
+- `npm run typecheck`.
+- `npm run lint`.
+- `npm run test:frontend -- workflowToolbarEvents`.
+- `env PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_MODEL_ID=dummy PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_ARTIFACT_ID=dummy PANTOGRAPH_PYTHON_EXECUTABLE=/usr/bin/python3 ./scripts/check-workflow-editor-image-generation-gui-smoke.sh` failed closed on missing `PANTOGRAPH_WORKFLOW_EDITOR_IMAGE_SMOKE_WORKFLOW_ID`.
+- The same preflight command with
+  `PANTOGRAPH_WORKFLOW_EDITOR_IMAGE_SMOKE_WORKFLOW_ID=dummy` failed closed on
+  missing `tauri-driver`.
+
+Verification still blocked:
+the desktop GUI smoke cannot be launched in this shell because it lacks
+`tauri-driver`, `WebKitWebDriver`, display/runtime prerequisites, and a real
+saved workflow id. This remains a milestone blocker, not a completed E2E proof.
+
+Next thin slice:
+run the configured GUI smoke in a provisioned environment, or if it fails,
+record the typed GUI/app-boundary diagnostic and fix the smallest backend/UI
+gap needed to make the workflow editor produce and display the retained image
+artifact. Do not accept a headless-only substitute as milestone completion.
+
 ## Standards Rule
 
 The standards constraints in

@@ -58,6 +58,7 @@
         {@const Icon = pageIcons[page.id]}
         <button
           type="button"
+          data-testid={`workbench-nav-${page.id}`}
           class="group flex h-11 w-11 items-center justify-center rounded border text-neutral-400 transition-colors hover:border-neutral-600 hover:bg-neutral-900 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
           class:border-cyan-700={$selectedWorkbenchPage === page.id}
           class:bg-cyan-950={$selectedWorkbenchPage === page.id}

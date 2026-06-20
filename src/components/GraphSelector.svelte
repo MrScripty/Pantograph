@@ -69,6 +69,7 @@
 
 <div class="graph-selector relative" bind:this={dropdownRef}>
   <button type="button"
+    data-testid="workflow-graph-selector-toggle"
     class="selector-button flex items-center gap-2 px-3 py-1.5 text-sm bg-neutral-800 hover:bg-neutral-700 border border-neutral-600 rounded text-neutral-200 transition-colors"
     onclick={handleToggle}
     title="Switch graph"
@@ -112,6 +113,8 @@
         {:else}
           {#each $availableWorkflows as workflow (workflow.id ?? workflow.name)}
             <button type="button"
+              data-testid="workflow-graph-selector-option"
+              data-workflow-id={workflow.id ?? workflow.name}
               class="w-full px-3 py-2 text-left text-sm hover:bg-neutral-700 transition-colors flex items-center gap-2"
               class:bg-neutral-700={$currentGraphId === workflow.id && $currentGraphType === 'workflow'}
               class:opacity-60={isSwitching}

@@ -336,6 +336,59 @@ Discovered issues and follow-ups:
   tests/e2e/workflow-editor-image-generation/workflow-editor-image-generation.e2e.mjs`,
   `npm run lint`, `npm run typecheck`, and `git diff --check`.
 
+### 2026-06-19 GUI Selector And Artifact Path Slice
+
+Extended the GUI harness from an editor shell check to the real configured
+workflow-editor image artifact path:
+
+- Added a required
+  `PANTOGRAPH_WORKFLOW_EDITOR_IMAGE_SMOKE_WORKFLOW_ID` preflight variable so the
+  smoke selects an explicitly provisioned saved workflow instead of relying on
+  whatever workflow happens to be last opened.
+- Added stable, non-behavioral `data-testid` hooks for workbench navigation,
+  the Graph page, graph selector workflow options, workflow submit/version/error
+  controls, I/O Inspector, artifact cards, artifact media family, artifact read
+  buttons, and image previews.
+- Updated the WebdriverIO spec to open the desktop app, navigate to Graph,
+  select the declared saved workflow, wait for submit readiness, submit through
+  the visible toolbar, wait for I/O Inspector, locate a retained image artifact
+  card, invoke the backend-owned artifact body read through the UI, and assert
+  that the image preview renders.
+
+No-fallback/no-legacy confirmation:
+
+- The harness still does not create workflow outcomes, infer artifact paths,
+  provide runtime/model/device policy, or call direct script-only inference.
+- The new workflow id is an explicit test input, not a fallback. Missing it
+  fails before WebDriver or app launch.
+- Tauri remains the desktop/IPC bridge, Svelte/TypeScript exposes stable UI
+  controls, and backend commands remain responsible for workflow submission,
+  scheduler admission, runtime execution, diagnostics, artifact descriptor, and
+  artifact body reads.
+
+Verification passed:
+
+- `node --check
+  tests/e2e/workflow-editor-image-generation/workflow-editor-image-generation.e2e.mjs`.
+- `npm run typecheck`.
+- `npm run lint`.
+- `npm run test:frontend -- workflowToolbarEvents`.
+- `env PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_MODEL_ID=dummy
+  PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_ARTIFACT_ID=dummy
+  PANTOGRAPH_PYTHON_EXECUTABLE=/usr/bin/python3
+  ./scripts/check-workflow-editor-image-generation-gui-smoke.sh` failed closed
+  on missing `PANTOGRAPH_WORKFLOW_EDITOR_IMAGE_SMOKE_WORKFLOW_ID`.
+- The same command with
+  `PANTOGRAPH_WORKFLOW_EDITOR_IMAGE_SMOKE_WORKFLOW_ID=dummy` failed closed on
+  missing `tauri-driver`, before app execution.
+
+Remaining blocker:
+the configured desktop GUI smoke still has not been launched in this shell
+because `tauri-driver`, `WebKitWebDriver`, display/runtime prerequisites, and a
+real saved image workflow id are not available here. The next slice must either
+run it in a provisioned environment or record typed fail-closed diagnostics at
+the GUI/app boundary.
+
 ## Tasks
 
 1. **Readiness inventory and harness gate**

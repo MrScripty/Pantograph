@@ -6,7 +6,7 @@
   import { activeWorkflowRun } from '../../stores/workbenchStore';
 </script>
 
-<section class="flex h-full min-h-0 flex-col bg-neutral-950">
+<section class="flex h-full min-h-0 flex-col bg-neutral-950" data-testid="workflow-editor-graph-page">
   <WorkflowToolbar />
   {#if $activeWorkflowRun}
     <div class="border-b border-neutral-800 bg-neutral-900/60 px-4 py-2 text-xs text-neutral-400">

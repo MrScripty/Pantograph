@@ -600,7 +600,7 @@
   });
 </script>
 
-<section class="flex h-full min-h-0 flex-col bg-neutral-950">
+<section class="flex h-full min-h-0 flex-col bg-neutral-950" data-testid="io-inspector-page">
   <div class="flex shrink-0 items-center justify-between gap-4 border-b border-neutral-800 px-4 py-3">
     <div class="min-w-0">
       <h1 class="text-base font-semibold text-neutral-100">I/O Inspector</h1>
@@ -792,7 +792,12 @@
                 {@const renderer = buildIoArtifactRendererSummary(artifact)}
                 {@const descriptorRows = buildIoArtifactDescriptorMetadataRows(artifact)}
                 {@const bodyPreview = artifactBodyPreviews[artifact.artifact_id]}
-                <article class="rounded border border-neutral-800 bg-neutral-900/60 p-4">
+                <article
+                  class="rounded border border-neutral-800 bg-neutral-900/60 p-4"
+                  data-testid="io-artifact-card"
+                  data-artifact-id={artifact.artifact_id}
+                  data-artifact-media-family={renderer.family}
+                >
                   <div class="flex items-start justify-between gap-3">
                     <div class="min-w-0">
                       <div class="truncate font-mono text-xs text-neutral-100" title={artifact.artifact_id}>
@@ -845,6 +850,7 @@
                             src={bodyPreview.objectUrl}
                             alt={`Preview of ${artifact.artifact_id}`}
                             class="max-h-64 w-full object-contain"
+                            data-testid="io-artifact-image-preview"
                           />
                         {:else if renderer.family === 'audio'}
                           <audio
@@ -883,6 +889,7 @@
                   <div class="mt-3 flex flex-wrap gap-2">
                     <button
                       type="button"
+                      data-testid="io-artifact-read-button"
                       class="inline-flex items-center gap-2 rounded border border-neutral-700 px-3 py-1.5 text-xs text-neutral-200 transition-colors hover:border-neutral-500 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
                       onclick={() => {
                         void readArtifactPreview(artifact);
