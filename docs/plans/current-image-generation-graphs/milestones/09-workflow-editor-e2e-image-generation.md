@@ -195,6 +195,89 @@ Completion rule: this milestone closes only after sequence step 3 passes with a
 real configured image workflow or records typed fail-closed diagnostics for
 missing external prerequisites at the GUI/app boundary.
 
+### 2026-06-19 GUI Harness Selection Slice
+
+Selected harness: **WebdriverIO running against Tauri's WebDriver support via
+`tauri-driver`.**
+
+Why this is the selected standards-aligned option:
+
+- It is the official Tauri desktop GUI automation path for Linux/Windows and
+  drives the native desktop WebView through WebDriver instead of replacing the
+  app with a browser-only harness.
+- It can start from the visible workflow editor action and end at the retained
+  image artifact in the app, which satisfies the Testing Standards
+  cross-layer acceptance requirement for this user-facing milestone.
+- It keeps architectural ownership intact: backend Rust owns workflow,
+  scheduler, runtime/model/device/load-target, diagnostics, artifact retention,
+  descriptor, and body decisions; Tauri owns command/event bridge mechanics;
+  Svelte/TypeScript owns interaction and presentation only.
+- It requires no workflow business logic in the harness. The harness should
+  click/inspect the UI and wait for backend-projected state, not synthesize
+  workflow outcomes or artifact bodies.
+
+References reviewed:
+
+- Tauri WebDriver documentation:
+  `https://tauri.app/develop/tests/webdriver/`
+- Tauri WebdriverIO example:
+  `https://tauri.app/develop/tests/webdriver/example/webdriverio/`
+
+Local repo/tooling observations:
+
+- `package.json` currently has no WebdriverIO, Selenium, or Playwright GUI E2E
+  dependencies.
+- `package-lock.json` exists, so any JavaScript dependency addition must update
+  `package.json` and `package-lock.json` together in the next dedicated tooling
+  scaffold slice.
+- `which tauri-driver` and `which WebKitWebDriver` returned no local binary in
+  this shell. The scaffolded smoke must fail closed with a clear prerequisite
+  diagnostic when either dependency is missing.
+- Existing frontend command tests already cover
+  `workflow_create_execution_session` / `workflow_run_execution_session`
+  request/channel/error-envelope preservation. Do not add duplicate bridge
+  tests unless GUI harness implementation exposes a concrete missing boundary
+  invariant.
+
+Chosen next tooling scaffold:
+
+- Add WebdriverIO dependencies/config in a dedicated slice.
+- Add an opt-in script such as
+  `scripts/check-workflow-editor-image-generation-gui-smoke.sh`.
+- The script must preflight:
+  `PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_MODEL_ID`,
+  `PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_ARTIFACT_ID`,
+  `PANTOGRAPH_PYTHON_EXECUTABLE`, `tauri-driver`, `WebKitWebDriver`, and a GUI
+  display (`DISPLAY` or an explicit documented headless display wrapper).
+- The first scaffolded test may stop after launching the app and verifying the
+  visible workflow editor shell if the real model prerequisites are missing;
+  it must not silently switch to mocks or direct script execution.
+
+Rejected alternatives:
+
+- **Browser-only Playwright/Vite harness.** Rejected because it would not run
+  the Tauri desktop command/event bridge and could pass while the app path is
+  broken.
+- **Selenium-only custom setup.** Rejected for this repo because Tauri documents
+  WebdriverIO as the smallest ready example for the Node/npm stack already used
+  here; Selenium can be revisited only if WebdriverIO cannot drive the needed
+  WebView controls.
+- **More in-process command bridge tests.** Rejected as the main next step
+  because the milestone now needs visible workflow editor acceptance, not more
+  headless confidence.
+- **Generated C#/native runtime smoke as completion.** Rejected because it
+  proves runtime execution but not workflow-editor usability.
+
+Failure modes to preserve:
+
+- Missing GUI driver/display/model/runtime prerequisites fail closed before
+  execution with explicit diagnostics.
+- Missing backend runtime/model/device decisions return backend typed
+  diagnostics; the harness must display or assert those diagnostics rather
+  than falling back to mocks.
+- Any need to put scheduler/runtime/model/device/artifact policy in Tauri,
+  Svelte, or the test harness is a re-plan trigger.
+
 ## Tasks
 
 1. **Readiness inventory and harness gate**

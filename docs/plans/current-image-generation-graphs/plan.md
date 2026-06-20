@@ -9315,6 +9315,60 @@ needs a stable local documentation home. Do not edit `package.json`,
 `package-lock.json`, source, generated files, saved workflow fixtures, or
 runtime/backend policy files until the tooling scaffold slice.
 
+2026-06-19 GUI harness selection slice:
+smallest useful vertical slice: select the desktop workflow-editor GUI E2E
+harness and record the standards-aligned next implementation sequence without
+adding dependencies or source code. Selected harness: WebdriverIO against
+Tauri's WebDriver support through `tauri-driver`.
+
+Allowed files touched:
+`docs/plans/current-image-generation-graphs/milestones/09-workflow-editor-e2e-image-generation.md`
+and this plan only. The unrelated dirty proposal docs remain untouched.
+
+Selection rationale:
+- Tauri documents WebDriver support via `tauri-driver` for desktop automation
+  on Linux/Windows, and WebdriverIO is the documented Node/npm example that
+  fits this repo's existing JavaScript test stack.
+- The harness can drive the actual desktop WebView/editor path instead of a
+  browser-only substitute, so it can satisfy the Milestone 9 cross-layer
+  acceptance requirement.
+- The harness keeps Tauri as transport/app composition and does not give Tauri,
+  Svelte/TypeScript, or test code ownership of workflow, scheduler, runtime,
+  model, device, diagnostics, or artifact-retention policy.
+
+Local observations recorded:
+`package.json` currently has no WebdriverIO/Selenium/Playwright E2E
+dependencies, `package-lock.json` exists and must be updated with dependency
+changes in the next dedicated tooling slice, and this shell has neither
+`tauri-driver` nor `WebKitWebDriver` on `PATH`.
+
+Rejected alternatives:
+browser-only Playwright/Vite is rejected because it bypasses the Tauri desktop
+command/event bridge; Selenium-only custom setup is deferred because
+WebdriverIO is the smaller documented Tauri/npm path; more in-process command
+bridge tests are not the main next step because they cannot prove visible
+workflow-editor usability; generated C#/native runtime smoke remains useful
+runtime coverage but cannot close this GUI milestone.
+
+No-fallback/no-legacy confirmation:
+the selected harness must fail closed on missing
+`PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_MODEL_ID`,
+`PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_ARTIFACT_ID`,
+`PANTOGRAPH_PYTHON_EXECUTABLE`, `tauri-driver`, `WebKitWebDriver`, or GUI
+display prerequisites. It must never switch to workflow mocks, direct model
+paths, retired graph nodes, direct script-only inference, request-scoped
+runtime execution, or frontend-inferred artifact paths.
+
+Verification passed:
+`git diff --check -- docs/plans/current-image-generation-graphs/milestones/09-workflow-editor-e2e-image-generation.md docs/plans/current-image-generation-graphs/plan.md`.
+
+Next thin slice:
+scaffold the selected WebdriverIO/Tauri WebDriver harness. Allowed files should
+include only the E2E config/spec/script documentation needed for the harness
+plus `package.json` and `package-lock.json` if dependencies are added. Do not
+change backend runtime/model/device/scheduler policy, generated contracts,
+saved workflow fixtures, or production frontend behavior in that tooling slice.
+
 ## Standards Rule
 
 The standards constraints in
