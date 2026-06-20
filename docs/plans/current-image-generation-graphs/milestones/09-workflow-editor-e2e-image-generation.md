@@ -126,6 +126,75 @@ Bridge harness status:
   configured workflow-editor GUI smoke is still required before this milestone
   can close.
 
+## 2026-06-19 Re-Plan Decision: Real Desktop GUI E2E Harness
+
+Selected option: **Option 1, add a real desktop GUI E2E harness for the
+workflow editor image-generation path.**
+
+Reason: Milestone 9 is a user-readiness milestone. The existing bridge and
+frontend command tests now provide useful boundary confidence, but they do not
+prove that a person can submit the canonical image workflow from the desktop
+workflow editor and retrieve the generated image artifact through the app UI.
+Testing Standards require a cross-layer acceptance path for this cross-layer
+feature, and the accepted path must include the visible editor interaction.
+
+Scope added to this milestone:
+
+- Choose and document a desktop GUI automation approach for Tauri/Pantograph.
+  The choice must be standards-aligned, deterministic enough for local/CI use,
+  and explicit about any Linux display/runtime prerequisites.
+- Add an opt-in workflow-editor E2E smoke harness that launches the desktop app
+  or an equivalent Tauri desktop test target, drives the workflow editor UI,
+  submits the canonical image-generation workflow through the toolbar, observes
+  backend events through the app, opens the I/O Inspector result path, and
+  verifies a retained image artifact descriptor/body.
+- If the harness needs new JavaScript tooling, update `package.json` and
+  `package-lock.json` in a dedicated serial tooling slice. Do not mix lockfile
+  changes with backend runtime/model/device policy changes.
+- Keep the real model requirement opt-in and fail closed. Missing
+  `PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_MODEL_ID`, artifact id, Python runtime, or
+  GUI display prerequisites must produce typed diagnostics or explicit smoke
+  preflight failures, not silent fallback to mock execution.
+
+Out of scope for the GUI harness:
+
+- Moving workflow, scheduler, runtime, model, device, artifact retention, or
+  diagnostics policy into Tauri.
+- Moving backend-owned projection facts into Svelte/TypeScript state.
+- Reusing the generated C#/native runtime smoke as a substitute for GUI
+  editor interaction.
+- Running direct script-only inference, retired graph nodes, direct model path
+  variables, or request-scoped runtime execution.
+
+Execution sequence:
+
+1. **GUI harness selection slice**
+   - Inspect feasible Tauri desktop GUI automation options in this repo.
+   - Select the smallest standards-aligned toolchain.
+   - Record prerequisites, write set, environment variables, and failure modes
+     before adding dependencies or scripts.
+   - Verification: documentation/plan update plus `git diff --check`.
+
+2. **Tooling scaffold slice**
+   - Add the selected GUI test harness, minimal config, and an opt-in smoke
+     script.
+   - If JavaScript dependencies are needed, include `package.json` and
+     `package-lock.json` only in this slice.
+   - Verification: harness preflight fails closed when GUI/model prerequisites
+     are missing; existing frontend command tests still pass.
+
+3. **Workflow-editor GUI smoke slice**
+   - Drive the desktop workflow editor through the real submit path.
+   - Use a Pumas model id/artifact id, reach scheduler admission and
+     worker-owned PyTorch/Diffusers execution, and verify retained image
+     artifact descriptor/body through I/O Inspector UI.
+   - Verification: configured smoke passes on a machine with the declared real
+     model/runtime/display prerequisites. Missing prerequisites fail closed.
+
+Completion rule: this milestone closes only after sequence step 3 passes with a
+real configured image workflow or records typed fail-closed diagnostics for
+missing external prerequisites at the GUI/app boundary.
+
 ## Tasks
 
 1. **Readiness inventory and harness gate**

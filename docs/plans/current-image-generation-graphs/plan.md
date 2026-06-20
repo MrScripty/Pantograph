@@ -9199,12 +9199,17 @@ Ownership constraints for the remaining work:
   duplicate retained media bodies.
 
 Next thin slices:
-1. Complete any remaining focused Tauri command bridge coverage for create/run
-   command fail-closed diagnostics if existing tests do not already prove the
-   workflow editor command boundary. The completed bridge sub-slice already
-   proves event-channel delivery and artifact descriptor/body response
-   forwarding for generated image artifacts without Tauri-owned policy.
-2. Add or run a configured desktop workflow-editor GUI smoke that submits the
+1. Select and document the real desktop GUI E2E harness for the workflow editor
+   image-generation path. The completed bridge sub-slice already proves
+   event-channel delivery and artifact descriptor/body response forwarding for
+   generated image artifacts without Tauri-owned policy; do not add duplicate
+   bridge coverage unless the GUI harness exposes a specific missing boundary
+   invariant.
+2. Scaffold the selected opt-in GUI harness and smoke script. If the harness
+   needs JavaScript dependencies, `package.json` and `package-lock.json` belong
+   in that dedicated tooling slice and must not be mixed with backend runtime,
+   model, device, scheduler, generated DTO, or saved workflow fixture changes.
+3. Run the configured desktop workflow-editor GUI smoke that submits the
    canonical image-generation workflow through the editor, uses a Pumas model
    id/artifact id, reaches scheduler admission and worker-owned PyTorch/
    Diffusers execution, and verifies the retained image artifact through
@@ -9253,6 +9258,62 @@ existing tests are insufficient, and the configured desktop workflow-editor GUI
 smoke still must submit the canonical workflow through the editor, reach
 scheduler admission and worker-owned PyTorch/Diffusers execution, and retrieve
 the retained image artifact through I/O Inspector descriptor/body commands.
+
+2026-06-19 desktop GUI E2E re-plan decision:
+selected Option 1, add a real desktop GUI E2E harness for the workflow editor
+image-generation path. This is now the Milestone 9 completion path because the
+milestone is about user-visible image generation, not only headless command or
+runtime smoke coverage. The current repo has bridge coverage and frontend
+command tests for `workflow_create_execution_session` /
+`workflow_run_execution_session` request/channel/error-envelope preservation,
+but no checked-in desktop GUI automation harness. Adding that harness is a
+cross-layer testing/tooling change and must be planned as its own vertical
+slice before implementation.
+
+Standards alignment:
+- Testing Standards: the remaining work is a cross-layer acceptance path that
+  must start at the visible workflow editor action and end at the retained image
+  artifact visible/retrievable through the app.
+- Architecture Standards: backend Rust remains the owner of workflow execution,
+  scheduler admission, runtime/model/device/load-target decisions, diagnostics,
+  artifact retention, descriptors, and bodies. Tauri remains the app/transport
+  facilitator. Svelte/TypeScript owns editor interaction and presentation of
+  backend projections only.
+- Plan Standards: dependency/tooling and lockfile changes are serial
+  integration-owner work. They must be committed as a dedicated slice and not
+  delegated to sub-agents or mixed with runtime/model/device/scheduler changes.
+
+Desktop GUI E2E sequence:
+1. Harness selection slice: inspect feasible Tauri GUI automation options,
+   choose the smallest standards-aligned toolchain, and record prerequisites,
+   write set, environment variables, and fail-closed behavior. Verification:
+   documentation update plus `git diff --check`.
+2. Tooling scaffold slice: add the selected harness/config/smoke script. If new
+   JavaScript dependencies are needed, update `package.json` and
+   `package-lock.json` in this slice only. Verification: harness preflight
+   fails closed when GUI/model prerequisites are missing, and existing focused
+   frontend command tests still pass.
+3. Configured workflow-editor smoke slice: drive the desktop workflow editor
+   through toolbar submit, use Pumas model id/artifact id, reach scheduler
+   admission and worker-owned PyTorch/Diffusers execution, then verify retained
+   image artifact descriptor/body through I/O Inspector UI. Verification:
+   configured smoke passes on a machine with the declared real model/runtime/
+   display prerequisites; missing prerequisites fail closed.
+
+Out of scope:
+do not move workflow, scheduler, runtime, model, device, artifact-retention, or
+diagnostics policy into Tauri or frontend code. Do not substitute generated
+C#/native runtime smoke, direct script-only inference, retired graph nodes,
+direct model path variables, request-scoped runtime execution, or frontend-
+inferred artifact paths for the GUI editor acceptance path.
+
+Next thin slice:
+implement the harness selection slice only. Allowed files should be limited to
+`docs/plans/current-image-generation-graphs/milestones/09-workflow-editor-e2e-image-generation.md`,
+this rolling plan, and optionally a scripts or test README if the selection
+needs a stable local documentation home. Do not edit `package.json`,
+`package-lock.json`, source, generated files, saved workflow fixtures, or
+runtime/backend policy files until the tooling scaffold slice.
 
 ## Standards Rule
 
