@@ -1,10 +1,11 @@
 import { spawn, spawnSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const configDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(configDir, '../../..');
-const appBinary = path.join(repoRoot, 'src-tauri', 'target', 'debug', 'pantograph');
+const appBinary = path.join(repoRoot, 'target', 'debug', 'pantograph');
 
 let tauriDriverProcess;
 let closing = false;
@@ -52,6 +53,10 @@ export const config = {
 
     if (build.status !== 0) {
       throw new Error(`Tauri debug build failed with status ${build.status ?? 'unknown'}`);
+    }
+
+    if (!existsSync(appBinary)) {
+      throw new Error(`Tauri debug build did not produce expected application binary: ${appBinary}`);
     }
   },
   beforeSession: () => {

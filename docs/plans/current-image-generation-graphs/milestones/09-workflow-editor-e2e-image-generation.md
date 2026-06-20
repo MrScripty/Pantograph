@@ -456,6 +456,62 @@ Current blocker:
   `npm run test:workflow-editor-image-gui` with the declared Pumas model id,
   artifact id, saved workflow id, and Python executable.
 
+### 2026-06-20 GUI Driver Install and Harness Path Slice
+
+Installed the remaining Linux WebDriver prerequisite and continued the
+configured desktop GUI smoke until it exposed the next real app-startup
+blocker.
+
+Environment and install results:
+
+- `tauri-driver v2.0.6` remains available from the user cargo bin directory.
+- `webkit2gtk-driver 2.52.3-0ubuntu0.24.04.1` is installed and
+  `/usr/bin/WebKitWebDriver` is on `PATH`.
+- The default apt HTTP mirror path was intercepted by a network-auth page,
+  causing signed metadata and package hash failures. The successful install
+  used a temporary HTTPS-only Ubuntu source list under `/tmp`, kept apt
+  signature/hash verification enabled, and did not alter the system apt source
+  configuration.
+
+Harness correction:
+
+- `tests/e2e/workflow-editor-image-generation/wdio.conf.mjs` now points the
+  Tauri WebDriver capability at the actual binary produced by the debug
+  desktop build: `target/debug/pantograph`.
+- The harness fails explicitly if the desktop build does not produce that
+  binary; it does not search for alternate binaries or fall back to a direct
+  command path.
+
+Verification results:
+
+- `node --check tests/e2e/workflow-editor-image-generation/wdio.conf.mjs`
+  passed.
+- The configured GUI smoke, run outside the sandbox so WebDriver could bind
+  and launch the local Tauri app, reached app startup. The previous missing
+  driver and wrong binary path blockers are resolved.
+- The smoke now fails closed during backend startup because the repo-local
+  `.pantograph/workflow-attribution.sqlite` store reports attribution schema
+  version `7` while `pantograph-runtime-attribution` expects schema version
+  `8`.
+
+No-fallback/no-legacy confirmation:
+
+- The stale attribution database was not deleted, rewritten, or replaced to
+  force the smoke forward.
+- No migration was invented in the GUI harness.
+- No browser-only, headless-only, direct script, direct model path, retired
+  graph, request-scoped runtime, or frontend-inferred artifact substitute was
+  used.
+
+Current blocker:
+
+- Re-plan or implement an approved attribution-store startup path before the
+  GUI smoke can prove end-to-end image generation. Standards-aligned options
+  are an explicit schema `7` to `8` migration in
+  `pantograph-runtime-attribution`, or a deterministic GUI smoke project root
+  that starts from canonical saved workflow fixtures and creates a fresh schema
+  `8` attribution store without mutating developer-local `.pantograph` state.
+
 ## Tasks
 
 1. **Readiness inventory and harness gate**

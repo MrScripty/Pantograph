@@ -9579,9 +9579,67 @@ artifact, saved workflow, and Python prerequisites.
 
 Verification passed:
 - `git diff --check`.
+- Commit `d8b3ee53 docs(plan): record gui driver environment blocker`.
 
-Verification pending:
-- Commit the environment diagnostic update.
+2026-06-20 GUI driver install and harness path slice:
+smallest useful vertical slice: install the missing Linux WebDriver package,
+fix the configured WebdriverIO harness to launch the binary actually produced
+by the canonical Tauri debug desktop build, and rerun the GUI smoke until the
+next real blocker appears.
+
+Allowed files touched:
+`tests/e2e/workflow-editor-image-generation/wdio.conf.mjs`,
+`docs/plans/current-image-generation-graphs/milestones/09-workflow-editor-e2e-image-generation.md`,
+and this plan only. The unrelated dirty proposal docs remain untouched. The
+host package install changed system packages, not repository files.
+
+Actions and observations:
+- Installed `webkit2gtk-driver 2.52.3-0ubuntu0.24.04.1`; `/usr/bin/WebKitWebDriver`
+  is now available on `PATH`.
+- The default apt HTTP mirror path was intercepted by a network-auth page,
+  causing invalid signed metadata and package hash mismatches. The successful
+  install used a temporary HTTPS-only Ubuntu source list under `/tmp`, kept apt
+  signature/hash verification enabled, and did not change the system apt source
+  configuration.
+- The configured GUI smoke moved past the driver gate. Inside the sandbox it
+  failed with `EPERM` when WebDriver attempted to create a local session, so
+  the same command was rerun outside the sandbox per execution policy.
+- Outside the sandbox, WebDriver started and exposed a harness path bug:
+  `tauri build --debug --no-bundle --features backend-pytorch` produces
+  `target/debug/pantograph`, while the harness pointed to
+  `src-tauri/target/debug/pantograph`.
+- Updated the harness to use `target/debug/pantograph` and fail explicitly if
+  the build does not produce that binary.
+- After the harness fix, WebDriver launched the Tauri app and backend startup
+  failed on the repo-local attribution store:
+  `.pantograph/workflow-attribution.sqlite` reports schema version `7`, while
+  `pantograph-runtime-attribution` expects schema version `8`.
+
+No-fallback/no-legacy confirmation:
+the stale attribution database was not deleted, rewritten, or replaced; no
+migration was invented in the GUI harness; no browser-only, headless-only,
+direct script, direct model path, retired graph, request-scoped runtime, or
+frontend-inferred artifact substitute was used.
+
+Verification passed:
+- `node --check tests/e2e/workflow-editor-image-generation/wdio.conf.mjs`.
+
+Verification failed, fail-closed:
+- `PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_MODEL_ID=diffusion/cc-nms/tiny-sd-turbo
+  PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_ARTIFACT_ID=diffusers
+  PANTOGRAPH_WORKFLOW_EDITOR_IMAGE_SMOKE_WORKFLOW_ID=tiny-sd-turbo-diffusion
+  PANTOGRAPH_PYTHON_EXECUTABLE=/usr/bin/python3
+  ./scripts/check-workflow-editor-image-generation-gui-smoke.sh`, rerun
+  outside the sandbox, now reaches Tauri app startup and fails on unsupported
+  attribution schema version `7`.
+
+Current blocker:
+re-plan or implement an approved attribution-store startup path before the GUI
+smoke can prove end-to-end image generation. Standards-aligned options are an
+explicit schema `7` to `8` migration in `pantograph-runtime-attribution`, or a
+deterministic GUI smoke project root that starts from canonical saved workflow
+fixtures and creates a fresh schema `8` attribution store without mutating
+developer-local `.pantograph` state.
 
 ## Standards Rule
 
