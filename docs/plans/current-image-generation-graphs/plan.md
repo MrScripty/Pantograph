@@ -9670,12 +9670,42 @@ Next thin slice:
 - Add preflight/setup that creates a temporary project root with required
   project markers and `.pantograph/workflows/${PANTOGRAPH_WORKFLOW_EDITOR_IMAGE_SMOKE_WORKFLOW_ID}.json`
   copied from the canonical saved workflow fixture.
-- Pass `PANTOGRAPH_PROJECT_ROOT` to the Tauri app launch environment if the
-  WebDriver/Tauri launch path supports it directly; otherwise stop and re-plan
-  rather than mutating the repo-local `.pantograph` store.
+- Use a generated temporary launcher executable as the `tauri:options.application`
+  value because `tauri-driver v2.0.6` on Linux maps only `application` and
+  `args` into `webkitgtk:browserOptions` and does not expose an app environment
+  map.
+- The launcher must set `PANTOGRAPH_PROJECT_ROOT` to the temporary project root
+  and then `exec` the canonical `target/debug/pantograph` binary. It must be
+  created under a temp directory, cleaned up by the harness, and never committed
+  as a generated workflow fixture.
 - Rerun the configured GUI smoke. Expected next result is either app startup
   with a fresh schema `8` attribution store, or a new typed blocker recorded in
   the plan.
+
+2026-06-22 launcher-script re-plan decision:
+selected option: generated temporary GUI smoke launcher.
+
+Reason:
+- Local inspection of `tauri-driver v2.0.6` showed the Linux capability mapper
+  accepts `tauri:options.application` and `tauri:options.args`, then projects
+  them into `webkitgtk:browserOptions`. It does not provide an environment map
+  for the launched Tauri application.
+- A temporary launcher keeps the GUI smoke on the real desktop/WebDriver path
+  while allowing the harness to provide `PANTOGRAPH_PROJECT_ROOT` without
+  mutating repo-local `.pantograph` state.
+
+Implementation boundary:
+- The launcher is harness-owned process setup only. It must not contain
+  business logic, attribution policy, workflow defaults, model/runtime/device
+  decisions, or artifact projection.
+- Backend Rust remains the owner of attribution schema creation and validation.
+- Svelte/TypeScript remains the UI projection layer.
+- Tauri remains the bridge/facilitator and does not own business logic.
+
+No-fallback/no-legacy confirmation:
+the launcher path does not preserve schema `7`, does not bypass the backend
+attribution crate, does not create a direct model/script execution path, and
+does not infer workflow or artifact state in the frontend.
 
 ## Standards Rule
 
