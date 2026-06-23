@@ -15,14 +15,6 @@ describe('workflow editor image-generation desktop path', () => {
       throw new Error('PANTOGRAPH_WORKFLOW_EDITOR_IMAGE_SMOKE_WORKFLOW_ID is required');
     }
 
-    await browser.waitUntil(
-      async () => (await browser.getTitle()).includes('Pantograph'),
-      {
-        timeout: 30000,
-        timeoutMsg: 'Pantograph desktop window title did not appear',
-      },
-    );
-
     const graphNavigation = await $(testIdSelector('workbench-nav-graph'));
     await graphNavigation.waitForDisplayed({ timeout: 30000 });
     await graphNavigation.click();
@@ -40,13 +32,33 @@ describe('workflow editor image-generation desktop path', () => {
 
     const submitButton = await $(testIdSelector('workflow-submit-button'));
     await submitButton.waitForDisplayed({ timeout: 30000 });
-    await browser.waitUntil(
-      async () => !(await submitButton.getAttribute('disabled')),
-      {
-        timeout: 120000,
-        timeoutMsg: 'Workflow submit button did not become enabled',
-      },
-    );
+    let lastSubmitDisabledReason = null;
+    try {
+      await browser.waitUntil(
+        async () => {
+          const disabledReason = await $(testIdSelector('workflow-submit-disabled-reason'));
+          lastSubmitDisabledReason = (await disabledReason.isExisting())
+            ? await disabledReason.getText()
+            : null;
+          const currentSubmitButton = await $(testIdSelector('workflow-submit-button'));
+          return (
+            (await currentSubmitButton.isExisting()) &&
+            !(await currentSubmitButton.getAttribute('disabled'))
+          );
+        },
+        {
+          timeout: 120000,
+          timeoutMsg: 'Workflow submit button did not become enabled',
+        },
+      );
+    } catch (error) {
+      throw new Error(
+        `Workflow submit button did not become enabled: ${
+          lastSubmitDisabledReason ?? 'no disabled reason was projected'
+        }`,
+        { cause: error },
+      );
+    }
     await submitButton.click();
 
     const ioInspectorPage = await $(testIdSelector('io-inspector-page'));

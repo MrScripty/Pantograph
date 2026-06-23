@@ -844,3 +844,71 @@ No-fallback/no-legacy confirmation:
 real-image smoke wrapper slices are complete. The milestone remains open until
 a configured desktop workflow-editor run produces a retained image artifact
 that is visible or retrievable through the app UI.
+
+## 2026-06-22 Isolated GUI Smoke Project Root Slice
+
+Smallest useful vertical slice: make the configured desktop GUI smoke launch
+the real Tauri debug binary against a temporary project root so the smoke gets
+a fresh backend-created attribution schema `8` store without mutating
+repo-local `.pantograph` state.
+
+Allowed files touched:
+
+- `scripts/check-workflow-editor-image-generation-gui-smoke.sh`
+- `tests/e2e/workflow-editor-image-generation/wdio.conf.mjs`
+- `tests/e2e/workflow-editor-image-generation/workflow-editor-image-generation.e2e.mjs`
+- `docs/plans/current-image-generation-graphs/plan.md`
+- this milestone
+
+Implementation:
+
+- The smoke script creates a temporary project root, copies only the canonical
+  saved workflow fixture selected by
+  `PANTOGRAPH_WORKFLOW_EDITOR_IMAGE_SMOKE_WORKFLOW_ID`, and exports
+  `PANTOGRAPH_GUI_SMOKE_PROJECT_ROOT`.
+- The WebdriverIO config writes a temporary launcher executable under that
+  root. The launcher sets `PANTOGRAPH_PROJECT_ROOT` and then `exec`s
+  `target/debug/pantograph`, which keeps `tauri-driver` on its supported
+  `application` capability path.
+- The desktop smoke waits on real workflow-editor selectors instead of the
+  stale desktop title string, and captures the backend-projected submit
+  disabled reason if validation does not open the submit gate.
+
+No-fallback/no-legacy confirmation:
+
+- No schema `7` migration or compatibility path was added.
+- The repo-local attribution SQLite store was not deleted, rewritten, or
+  replaced.
+- The harness did not add browser-only execution, direct script/model-path
+  execution, retired graph nodes, request-scoped runtime execution, or
+  frontend/Tauri-owned workflow/runtime/model/device/artifact policy.
+
+Verification passed:
+
+- `node --check tests/e2e/workflow-editor-image-generation/wdio.conf.mjs`
+- `node --check tests/e2e/workflow-editor-image-generation/workflow-editor-image-generation.e2e.mjs`
+- `bash -n scripts/check-workflow-editor-image-generation-gui-smoke.sh`
+
+Verification failed, fail-closed:
+
+- The configured GUI smoke with
+  `PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_MODEL_ID=diffusion/cc-nms/tiny-sd-turbo`,
+  `PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_ARTIFACT_ID=diffusers`,
+  `PANTOGRAPH_WORKFLOW_EDITOR_IMAGE_SMOKE_WORKFLOW_ID=tiny-sd-turbo-diffusion`,
+  and `PANTOGRAPH_PYTHON_EXECUTABLE=/usr/bin/python3` now launches the real
+  desktop app with an isolated project root, loads the saved workflow in the
+  editor, and fails at the submit gate with the backend-projected reason
+  `Submit unavailable: Inference validation has blocking diagnostics`.
+
+Discovered issues and follow-ups:
+
+- The next implementation slice must inspect the backend inference validation
+  diagnostics for the seeded saved workflow and fix the smallest canonical
+  blocker before scheduler admission. Do not bypass validation or make the
+  frontend/Tauri harness decide submit eligibility.
+- App startup still warns that user app-data managed runtime state is missing
+  `runtime_variant_id`; defer to the runtime-state ownership plan unless it
+  becomes the active blocker.
+- Pumas global persisted download/library state is still read during startup.
+  The GUI smoke project root is isolated, but Pumas durable state isolation is
+  a separate follow-up.

@@ -70,4 +70,17 @@ if [[ ! -x node_modules/.bin/wdio ]]; then
   fail "WebdriverIO is not installed; run npm ci before this smoke"
 fi
 
+smoke_project_root="$(mktemp -d "${TMPDIR:-/tmp}/pantograph-workflow-editor-image-smoke.XXXXXXXX")"
+cleanup_smoke_project_root() {
+  rm -rf "$smoke_project_root"
+}
+trap cleanup_smoke_project_root EXIT
+
+mkdir -p "$smoke_project_root/src-tauri" "$smoke_project_root/.pantograph/workflows"
+cp "$repo_root/Cargo.toml" "$smoke_project_root/Cargo.toml"
+cp "$repo_root/src-tauri/Cargo.toml" "$smoke_project_root/src-tauri/Cargo.toml"
+cp "$workflow_smoke_file" "$smoke_project_root/$workflow_smoke_file"
+
+export PANTOGRAPH_GUI_SMOKE_PROJECT_ROOT="$smoke_project_root"
+
 exec node_modules/.bin/wdio run tests/e2e/workflow-editor-image-generation/wdio.conf.mjs

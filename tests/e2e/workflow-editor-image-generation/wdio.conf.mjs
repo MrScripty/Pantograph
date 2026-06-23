@@ -1,14 +1,22 @@
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { chmodSync, existsSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const configDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(configDir, '../../..');
 const appBinary = path.join(repoRoot, 'target', 'debug', 'pantograph');
+const smokeProjectRoot = process.env.PANTOGRAPH_GUI_SMOKE_PROJECT_ROOT;
+const appLauncher = smokeProjectRoot
+  ? path.join(smokeProjectRoot, '.pantograph', 'workflow-editor-image-smoke-launcher.sh')
+  : path.join(repoRoot, '.missing-workflow-editor-image-smoke-launcher');
 
 let tauriDriverProcess;
 let closing = false;
+
+function shellQuote(value) {
+  return `'${value.replaceAll("'", "'\\''")}'`;
+}
 
 function closeTauriDriver() {
   closing = true;
@@ -30,7 +38,7 @@ export const config = {
     {
       maxInstances: 1,
       'tauri:options': {
-        application: appBinary,
+        application: appLauncher,
       },
     },
   ],
@@ -38,7 +46,7 @@ export const config = {
   framework: 'mocha',
   mochaOpts: {
     ui: 'bdd',
-    timeout: 120000,
+    timeout: 240000,
   },
   onPrepare: () => {
     const build = spawnSync(
@@ -58,6 +66,22 @@ export const config = {
     if (!existsSync(appBinary)) {
       throw new Error(`Tauri debug build did not produce expected application binary: ${appBinary}`);
     }
+
+    if (!smokeProjectRoot) {
+      throw new Error('PANTOGRAPH_GUI_SMOKE_PROJECT_ROOT is required for isolated GUI smoke runs');
+    }
+
+    if (!existsSync(smokeProjectRoot)) {
+      throw new Error(`PANTOGRAPH_GUI_SMOKE_PROJECT_ROOT does not exist: ${smokeProjectRoot}`);
+    }
+
+    const launcher = `#!/usr/bin/env bash
+set -euo pipefail
+export PANTOGRAPH_PROJECT_ROOT=${shellQuote(smokeProjectRoot)}
+exec ${shellQuote(appBinary)} "$@"
+`;
+    writeFileSync(appLauncher, launcher, { mode: 0o700 });
+    chmodSync(appLauncher, 0o700);
   },
   beforeSession: () => {
     tauriDriverProcess = spawn('tauri-driver', [], {

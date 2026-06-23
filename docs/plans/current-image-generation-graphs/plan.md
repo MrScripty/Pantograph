@@ -9707,6 +9707,76 @@ the launcher path does not preserve schema `7`, does not bypass the backend
 attribution crate, does not create a direct model/script execution path, and
 does not infer workflow or artifact state in the frontend.
 
+2026-06-22 isolated GUI smoke project-root slice:
+smallest useful vertical slice: make the configured desktop GUI smoke launch
+the real Tauri debug binary against a temporary project root so the smoke gets
+a fresh backend-created attribution schema `8` store without mutating
+repo-local `.pantograph` state.
+
+Allowed files touched:
+`scripts/check-workflow-editor-image-generation-gui-smoke.sh`,
+`tests/e2e/workflow-editor-image-generation/wdio.conf.mjs`,
+`tests/e2e/workflow-editor-image-generation/workflow-editor-image-generation.e2e.mjs`,
+`docs/plans/current-image-generation-graphs/milestones/09-workflow-editor-e2e-image-generation.md`,
+and this plan. The unrelated dirty proposal docs remain untouched.
+
+Implemented:
+- The opt-in GUI smoke now creates a temporary project root, seeds only the
+  required canonical saved workflow JSON, and exports
+  `PANTOGRAPH_GUI_SMOKE_PROJECT_ROOT` for the WebdriverIO harness.
+- The WebdriverIO harness generates a temporary launcher executable under that
+  project root, sets `PANTOGRAPH_PROJECT_ROOT`, and then `exec`s the canonical
+  `target/debug/pantograph` binary because this Linux `tauri-driver` only
+  maps `application`/`args`.
+- The E2E smoke no longer waits for the stale `Pantograph` window title; the
+  observed desktop title is `Zenith Draw`, so the test now anchors on the real
+  workflow editor navigation element instead.
+- The E2E smoke records the backend-projected submit disabled reason when the
+  submit gate never opens, without making the frontend or harness own submit
+  policy.
+
+No-fallback/no-legacy confirmation:
+the slice does not migrate or preserve schema `7`, does not delete or rewrite
+the developer-local attribution database, does not bypass the backend
+attribution crate, does not add direct script/model-path execution, and does
+not move workflow/runtime/model/device/artifact policy into Tauri, Svelte, or
+the harness.
+
+Verification passed:
+- `node --check tests/e2e/workflow-editor-image-generation/wdio.conf.mjs`
+- `node --check tests/e2e/workflow-editor-image-generation/workflow-editor-image-generation.e2e.mjs`
+- `bash -n scripts/check-workflow-editor-image-generation-gui-smoke.sh`
+
+Verification failed, fail-closed:
+- Configured GUI smoke with
+  `PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_MODEL_ID=diffusion/cc-nms/tiny-sd-turbo`,
+  `PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_ARTIFACT_ID=diffusers`,
+  `PANTOGRAPH_WORKFLOW_EDITOR_IMAGE_SMOKE_WORKFLOW_ID=tiny-sd-turbo-diffusion`,
+  and `PANTOGRAPH_PYTHON_EXECUTABLE=/usr/bin/python3`, rerun outside the
+  sandbox, now launches the desktop app with a fresh temporary project root,
+  loads the saved workflow in the editor, and fails at the workflow submit
+  gate. The backend-projected UI reason is
+  `Submit unavailable: Inference validation has blocking diagnostics`.
+
+Discovered issues:
+- The configured image workflow now reaches the real editor submit gate, but
+  inference validation has blocking diagnostics before scheduler admission.
+  This is the next re-plan trigger for the end-to-end image-generation path.
+- App startup still warns that the managed runtime state in the user app-data
+  directory is missing `runtime_variant_id`; it did not block this GUI smoke
+  slice but should be handled by the runtime-state ownership plan instead of
+  by the GUI harness.
+- Startup restores persisted Pumas downloads and global Pumas library state
+  from the user environment. The smoke project root is isolated, but Pumas
+  global state remains a separate durable-resource isolation concern.
+
+Current blocker:
+inspect the backend inference validation diagnostics for the seeded
+`tiny-sd-turbo-diffusion` saved workflow and choose the smallest standards-
+aligned fix that lets the workflow editor submit through canonical scheduler
+admission without adding a fallback path or moving validation/runtime policy
+into the frontend or Tauri.
+
 ## Standards Rule
 
 The standards constraints in
