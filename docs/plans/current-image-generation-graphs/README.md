@@ -10,6 +10,7 @@ dispatch.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `plan.md` | Entry point that links the split plan sections and states binding standards rules. |
+| `implementation-recovery-sequence.md` | Authoritative active recovery sequence for plan reconciliation, validation repair, canonical `1..N` scheduler dispatch, baseline restoration, and real workflow-editor image generation. |
 | `00-objective-scope.md` | Scope, exclusions, and no-fallback/no-legacy boundaries. |
 | `01-inputs-contracts.md` | Codebase findings, constraints, assumptions, and affected contracts. |
 | `02-image-generation-family-planner.md` | Family planner design, reference-repo guidance, and standards matrix. |
@@ -44,6 +45,13 @@ Use split plan files so each high-risk area has focused acceptance criteria
 while `plan.md` and `04-milestones.md` preserve execution order. Contract gates
 come before implementation, then thin vertical slices validate behavior before
 adjacent slices expand shared layers.
+
+The
+[Implementation Recovery Sequence](implementation-recovery-sequence.md) is the
+authoritative active execution overlay while stale milestone statuses and the
+older grouped-only dispatch decision are reconciled. Historical execution
+notes remain evidence, but they do not override the recovery sequence's
+canonical non-empty `1..N` scheduler dispatch decision.
 
 Dynamic scheduler-owned task dispatch is tracked as its own design section and
 inserted milestone because concurrent users and batching make whole-workflow
@@ -111,20 +119,22 @@ llama.cpp managed runtime artifacts, and reference guidance from Transformers,
 ComfyUI, and InvokeAI.
 
 ## Related ADRs
-- None identified as of 2026-05-10.
-- Reason: The implementation is still in planning and has not yet introduced a
-  committed architecture change requiring an ADR.
-- Revisit trigger: Implementation changes runtime backend ownership, scheduler
-  ownership, or persisted contract policy beyond this plan.
+- `docs/adr/ADR-002-runtime-registry-ownership-and-lifecycle.md`
+- `docs/adr/ADR-011-scheduler-only-workflow-execution.md`
+- `docs/adr/ADR-013-workflow-version-registry-and-run-snapshots.md`
+- `docs/adr/ADR-014-run-centric-workbench-projection-boundary.md`
 
 ## Usage Examples
-Start with `plan.md`, then execute milestones in `04-milestones.md` order.
-During implementation, update `05-execution-management.md` after each validated
-slice with verification results, deviations, and discovered issues.
+Start with `implementation-recovery-sequence.md`, then use `plan.md`,
+`04-milestones.md`, and the milestone files for historical detail and
+owner-specific checklists. During recovery implementation, update the recovery
+sequence after each validated slice with verification results, deviations,
+discovered issues, and follow-ups.
 
 ## API Consumer Contract
-- Supported inputs: plan readers should treat `plan.md` and `04-milestones.md`
-  as the execution entry points.
+- Supported inputs: plan readers should treat
+  `implementation-recovery-sequence.md` as the active execution entry point
+  until its reconciliation milestone is complete.
 - Outputs: implementation tasks, verification gates, re-plan triggers, and
   standards constraints.
 - Lifecycle: update the relevant milestone status and execution notes after
@@ -141,8 +151,9 @@ slice with verification results, deviations, and discovered issues.
   issues.
 - Default semantics: unchecked tasks are not started unless a status note says
   otherwise.
-- Ordering: milestone order in `04-milestones.md` is binding unless the plan is
-  updated.
+- Ordering: milestone order in `implementation-recovery-sequence.md` is
+  binding during recovery; Milestone 0 will reconcile it into the older plan
+  set.
 - Compatibility: old plan assumptions are replaced by explicit execution notes
   rather than kept as parallel interpretations.
 - Regeneration/migration: split files may be reorganized only with this README

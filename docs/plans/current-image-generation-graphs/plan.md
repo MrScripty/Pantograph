@@ -1,5 +1,10 @@
 # Plan: Current Image Generation Graphs And Stale Graph Diagnostics
 
+> **Active recovery sequence:** Use
+> [Current Image Generation Implementation Recovery Sequence](implementation-recovery-sequence.md)
+> as the authoritative next-step order while this historical plan's milestone
+> statuses and grouped-only dispatch decision are reconciled.
+
 2026-06-07 runtime-branch worker dispatch re-plan decision: use the
 backend-rehydration bridge as the immediate source path, then promote to the
 full durable task-attempt lifecycle after the complete inference path is
