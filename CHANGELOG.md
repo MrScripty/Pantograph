@@ -7,7 +7,6 @@ The format is based on Keep a Changelog.
 ## [Unreleased]
 
 ### Added
-- Source-directory documentation coverage with `README.md` files across all active source trees.
 - Tooling hooks and quality-gate scripts for linting, type checking, and tests.
 - Tauri path-boundary regression tests for workflow loading, sandbox validation, and agent file tools.
 - Canonical composed-node contracts, `tool-loop` composed authoring metadata,
@@ -16,6 +15,8 @@ The format is based on Keep a Changelog.
 
 ### Changed
 - Root project `README.md` reorganized around install, usage, development, and contribution workflows.
+- Documentation consolidated around current guides, accepted decisions, audits,
+  and active plans; superseded narration remains available in Git history.
 - Accessibility interaction semantics improved by replacing suppressed non-semantic handlers with button-based interactions.
 
 ### Fixed

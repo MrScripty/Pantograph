@@ -1,7 +1,11 @@
 # ADR-004: Verification Baseline Restoration
 
 ## Status
-Accepted
+Superseded by the 2026-09-03 verification/tooling remediation plan.
+
+This record explains the earlier baseline-restoration decision. It is not
+evidence that the current repository gates pass. Current authority lives in
+`docs/plans/current-standards-remediation/verification-and-tooling/plan.md`.
 
 ## Context
 Pantograph's standards-compliance refactor has been decomposing oversized files

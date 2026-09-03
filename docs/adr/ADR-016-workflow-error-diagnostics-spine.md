@@ -69,7 +69,7 @@ error strings.
 
 ## Implementation Notes
 - Implementation plan:
-  `docs/plans/workflow-error-diagnostics-spine/plan.md`.
+  `docs/plans/current-standards-remediation/architecture-lifecycle-and-bindings/plan.md`.
 - Related projection boundary:
   `docs/adr/ADR-014-run-centric-workbench-projection-boundary.md`.
 - Related scheduler execution boundary:

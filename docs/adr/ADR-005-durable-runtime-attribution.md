@@ -97,10 +97,8 @@ workflow execution semantics.
   `crates/pantograph-embedded-runtime`
 - Host adapter projections:
   `src-tauri`, `crates/pantograph-uniffi`, and `crates/pantograph-rustler`
-- Stage plan:
-  `docs/plans/pantograph-execution-platform/01-client-session-bucket-run-attribution.md`
-- Wave ledger:
-  `docs/plans/pantograph-execution-platform/implementation-waves/01-client-session-bucket-run-attribution/coordination-ledger.md`
+- Current remediation authority:
+  `docs/plans/current-standards-remediation/architecture-lifecycle-and-bindings/plan.md`
 
 ## Compliance Mapping
 - Backend ownership: attribution policy and persistence live outside host

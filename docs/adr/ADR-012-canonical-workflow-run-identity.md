@@ -90,7 +90,7 @@ compatibility lookup path.
 
 ## Implementation Notes
 - Implementation plan:
-  `docs/plans/workflow-run-identity-redesign/plan.md`
+  `docs/plans/current-standards-remediation/architecture-lifecycle-and-bindings/plan.md`
 - Related scheduler-only execution decision:
   `docs/adr/ADR-011-scheduler-only-workflow-execution.md`
 - Related attribution type owner:

@@ -30,5 +30,6 @@ become an implicit dependency of a package-local command.
 
 ## Source Reference
 
-Implementation-level contracts for `packages/svelte-graph/src/` are documented
-in `src/README.md`.
+Implementation lives under `packages/svelte-graph/src/`. Repository-level
+development and verification guidance is in
+[`docs/development.md`](../../docs/development.md).

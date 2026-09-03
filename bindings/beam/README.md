@@ -40,10 +40,13 @@ or the extensionless base path.
 
 ## Support Tier
 The BEAM lane is experimental until the host-side smoke harness covers every
-surface advertised by `crates/pantograph-rustler/README.md`. Current smoke
+surface in the binding contract. Current smoke
 coverage proves NIF loading, version reporting, workflow JSON graph helpers,
 validation error projection, parse errors, backend-owned node-definition
 discovery, and queryable-port discovery.
+
+See [`docs/headless-workflow.md`](../../docs/headless-workflow.md) for the
+shared headless ownership and lifecycle rules.
 
 ## Constraints
 - Keep this directory host-harness-only; do not move canonical workflow

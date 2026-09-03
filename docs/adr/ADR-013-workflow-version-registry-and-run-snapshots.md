@@ -92,7 +92,7 @@ fingerprint mappings disagree, the request is rejected.
 
 ## Implementation Notes
 - Implementation plan:
-  `docs/plans/pantograph-execution-platform/12-run-centric-workbench-consolidation.md`
+  `docs/plans/current-standards-remediation/architecture-lifecycle-and-bindings/plan.md`
 - Related identity decision:
   `docs/adr/ADR-012-canonical-workflow-run-identity.md`
 - Related attribution owner:

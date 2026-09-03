@@ -173,7 +173,7 @@ separate from the current editable graph.
 | `crates/pantograph-uniffi/` | Non-BEAM native binding adapter |
 | `crates/pantograph-rustler/` | Elixir/BEAM binding adapter |
 | `docs/adr/` | Accepted architectural decisions |
-| `docs/plans/` | Active and historical implementation plans |
+| `docs/plans/` | Active implementation plans and their execution records |
 
 ## Where To Find Current Status
 
@@ -182,20 +182,19 @@ Use these sources according to the question being asked:
 1. **Architecture overview:** this document.
 2. **Accepted decisions:** [`docs/adr/README.md`](docs/adr/README.md), especially
    ADR-006 and ADR-009 through ADR-016.
-3. **Execution-platform stage status:**
-   [`docs/plans/pantograph-execution-platform/README.md`](docs/plans/pantograph-execution-platform/README.md).
-4. **Authoritative active image-generation recovery sequence:**
-   [`docs/plans/current-image-generation-graphs/implementation-recovery-sequence.md`](docs/plans/current-image-generation-graphs/implementation-recovery-sequence.md).
-5. **Detailed target task execution model:**
-   [`docs/plans/current-image-generation-graphs/10-task-level-scheduler-orchestration.md`](docs/plans/current-image-generation-graphs/10-task-level-scheduler-orchestration.md).
-6. **Testing and release expectations:**
-   [`docs/testing-and-release-strategy.md`](docs/testing-and-release-strategy.md).
+3. **Current standards baseline:**
+   [`docs/audits/2026-09-03-current-standards/README.md`](docs/audits/2026-09-03-current-standards/README.md).
+4. **Cross-codebase remediation order:**
+   [`docs/plans/current-standards-remediation/plan.md`](docs/plans/current-standards-remediation/plan.md).
+5. **Image-generation workflow status:**
+   [`docs/plans/current-image-generation-graphs/plan.md`](docs/plans/current-image-generation-graphs/plan.md).
+6. **Development and release capability:**
+   [`docs/development.md`](docs/development.md) and
+   [`docs/release.md`](docs/release.md).
 
 Accepted ADRs are the durable decision record. Active plans own implementation
-sequence and changing status. The recovery sequence explicitly overrides
-conflicting active image-generation milestone text until that plan set is
-reconciled. Historical plans and the frontend architecture visualization are
-context, not authoritative current-status sources.
+sequence and changing status. Historical plans and detailed execution narration
+are available through Git history, not as competing current authorities.
 
 ## Maintenance
 

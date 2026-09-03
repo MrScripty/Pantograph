@@ -9,7 +9,7 @@ library.
 | ---- | ------- |
 | `bindings/csharp/pantograph_headless.cs` | Generated C# binding. Add it to your C# project. |
 | `examples/csharp/Pantograph.DirectRuntimeQuickstart/` | Minimal direct-runtime console example. |
-| `docs/headless-native-bindings.md` | Binding contract, runtime lifecycle, packaging notes, and loader guidance. |
+| `docs/headless-workflow.md` | Shared binding contract, runtime lifecycle, and integration guidance. |
 | `manifest.json` | Machine-readable package summary. |
 
 ## Required Native Library

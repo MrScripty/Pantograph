@@ -1,90 +1,44 @@
-# docs
+# Pantograph Documentation
 
-## Purpose
-This directory holds Pantograph's durable design and operator-facing
-documentation. It exists so architectural decisions, implementation references,
-and runtime-operation guidance stay reviewable in-repo instead of being spread
-across commit history or transient chat context.
+Start with the smallest document that owns your question. Git history, rather
+than an in-tree archive, preserves completed plans and superseded notes.
 
-## Contents
-| File/Folder | Description |
-| ----------- | ----------- |
-| `adr/` | Accepted architecture decision records and the ADR index used by plans and READMEs. |
-| `logs/` | Checked-in investigation logs and probe outputs that support selected runtime and dependency decisions. |
-| `headless-embedding-api-v1.md` | Reference contract for the headless embedding service surface. |
-| `headless-native-bindings.md` | Product-facing native/bindings packaging and usage guidance. |
-| `python-runtime-separation.md` | Design notes and rationale for keeping Python runtime execution out of process. |
-| `release-policy.md` | Release artifact naming, SBOM generation, release CI outline, and changelog automation decision. |
-| `runtime-registry-debug-and-recovery.md` | Operator/developer guide for runtime-registry inspection, reclaim, recovery, and Milestone 6 rollout posture. |
-| `testing-and-release-strategy.md` | Repository policy for hybrid test placement, cross-layer acceptance, and release smoke strategy. |
-| `toolchain-policy.md` | Pinned Rust, Node, npm, and Python versions plus update policy. |
+## Start Here
 
-## Problem
-Pantograph spans workflow orchestration, runtime management, bindings, and
-desktop-host integration. Without a documented home for accepted architecture
-decisions and operational references, source-of-truth planning drifts and
-boundary decisions become easy to lose.
+| Question | Current authority |
+| --- | --- |
+| What is Pantograph and how do I run it? | [Project README](../README.md) |
+| How is the system divided and what is it transitioning toward? | [Architecture](../ARCHITECTURE.md) |
+| How do I set up and verify a change? | [Development](development.md) |
+| How do I embed Pantograph? | [Headless workflow integration](headless-workflow.md) |
+| How do Python workers, runtime inspection, and recovery work? | [Runtime operations](runtime-operations.md) |
+| What can currently be released? | [Release](release.md) |
+| Which architecture decisions are accepted? | [ADR index](adr/README.md) |
+| What standards gaps are currently known? | [Current standards audit](audits/2026-09-03-current-standards/README.md) |
+| What work is currently authorized? | [Current remediation portfolio](plans/current-standards-remediation/plan.md) |
 
-## Constraints
-- Documentation must describe the real codebase, not speculative architecture.
-- ADR filenames and referenced docs must remain stable once plans and READMEs
-  depend on them.
-- Checked-in logs and historical notes must be clearly separated from accepted
-  design decisions.
+## Current Plans
 
-## Decision
-Keep `docs/` as Pantograph's durable documentation root. ADRs live under
-`docs/adr/`, historical or investigative log artifacts live under `docs/logs/`,
-and longer-form design/operator references live at the top level when they are
-stable enough to guide implementation or maintenance work.
+- [Standards remediation portfolio](plans/current-standards-remediation/plan.md)
+- [Image-generation workflow](plans/current-image-generation-graphs/plan.md)
+- [Documentation consolidation](plans/documentation-consolidation/plan.md)
 
-## Alternatives Rejected
-- Keep design context only in implementation plans.
-  Rejected because plans are milestone-scoped and do not replace durable
-  reference material.
-- Spread operator and architecture notes across source READMEs only.
-  Rejected because some cross-cutting guidance spans multiple source roots.
+Plans own current objective, order, scope, and acceptance. Their
+`execution-ledger.md` files own history; `issues.md` owns open dispositions.
+See the [plans index](plans/README.md) for the artifact rules.
 
-## Invariants
-- Accepted ADRs are indexed in `docs/adr/README.md`.
-- Historical logs do not silently become accepted architecture guidance.
-- Top-level docs in this directory should remain stable references rather than
-  scratch notes.
+## Documentation Rules
 
-## Revisit Triggers
-- Documentation volume or audience split grows enough to require sub-sections
-  beyond `adr/` and `logs/`.
-- A new class of persisted machine-consumed artifact is stored under `docs/`.
-- Operator guidance begins to diverge from architecture or source READMEs.
+- `README.md` and `ARCHITECTURE.md` are the repository entry points.
+- ADRs own durable decisions that outlive an implementation effort.
+- Guides describe current consumer or operator behavior and link exact schemas
+  to source rather than copying large type inventories.
+- Audits describe a dated baseline; plans own subsequent remediation.
+- A source-directory README exists only when that boundary has a real consumer
+  or operator. Directory inventories and fixed headings are not required.
+- Superseded plans, implementation narration, probe logs, and old compliance
+  reports belong in Git history, not a parallel archive tree.
 
-## Dependencies
-**Internal:** implementation plans, module READMEs, ADR references, and CI or
-packaging docs that point here.
-
-**External:** None.
-
-## Related ADRs
-- `None identified as of 2026-04-16.`
-- `Reason: This directory indexes documentation surfaces rather than defining a single architecture boundary.`
-- `Revisit trigger: docs ownership or ADR process changes materially.`
-
-## Usage Examples
-```markdown
-- Architecture decision: `docs/adr/ADR-002-runtime-registry-ownership-and-lifecycle.md`
-- Runtime investigation logs: `docs/logs/README.md`
-```
-
-## API Consumer Contract
-- Human readers use this directory as the durable entry point for Pantograph
-  architecture and operator/developer reference material.
-- File paths under `docs/` are stable references for plans, READMEs, and
-  reviews unless a superseding change updates those links in the same commit.
-- New persistent documentation that guides implementation should be placed
-  here or in a documented source-directory README, not in transient notes.
-
-## Structured Producer Contract
-- `docs/` is primarily human-consumed and does not itself define a machine API.
-- `Reason: the directory stores narrative docs and linked log artifacts rather
-  than a single schema-backed producer contract.`
-- `Revisit trigger: a generated manifest, schema, or other machine-consumed
-  docs artifact is added under this directory.`
+When a guide and executable behavior disagree, treat the claim as unavailable,
+inspect the owning source/contract, and update the canonical guide with the
+implementation change.

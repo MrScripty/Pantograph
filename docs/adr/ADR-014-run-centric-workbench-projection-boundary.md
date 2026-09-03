@@ -75,10 +75,10 @@ editable graph store.
   separate.
 
 ## Implementation Notes
-- Implementation plans:
-  `docs/plans/pantograph-execution-platform/12-run-centric-workbench-consolidation.md`
+- Current remediation plans:
+  `docs/plans/current-standards-remediation/architecture-lifecycle-and-bindings/plan.md`
   and
-  `docs/plans/pantograph-execution-platform/reviews/run-centric-workbench/`.
+  `docs/plans/current-standards-remediation/frontend-and-accessibility/plan.md`.
 - Related workflow versioning decision:
   `docs/adr/ADR-013-workflow-version-registry-and-run-snapshots.md`.
 - Related scheduler ownership decision:

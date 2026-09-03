@@ -15,6 +15,12 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the current module map, target
 scheduler-owned task execution model, ownership rules, active transition, and
 links to authoritative ADRs and implementation status.
 
+The [current standards audit](docs/audits/2026-09-03-current-standards/README.md)
+records the repository-wide compliance baseline and routes its findings into
+focused follow-up audits. Its
+[remediation portfolio](docs/plans/current-standards-remediation/plan.md)
+coordinates the resulting implementation plans.
+
 ## Quick Start
 
 1. Clone the repository.
@@ -106,88 +112,37 @@ npm run build:desktop
 - Python matching `.python-version` for Python-backed smoke paths
 - Tauri system dependencies (above)
 
-Pinned toolchain ownership and update policy are documented in
-`docs/toolchain-policy.md`.
+See [Development](docs/development.md) for toolchain ownership, setup caveats,
+and the current verification status.
 
 ### Useful Commands
 
 ```bash
-# Lint (configured scope)
-npm run lint
-
-# Full lint scan
-npm run lint:full
-
-# Critical anti-pattern gate (src/ + packages/)
-npm run lint:critical
-
-# Focused Svelte accessibility gate
-npm run lint:a11y
-
-# No-new-debt gate for critical anti-patterns and decision traceability
-npm run lint:no-new
-
-# Rust formatting audit
-npm run format:check
-
-# Type check
+# Frontend type and configured test checks
 npm run typecheck
+npm run test:frontend
 
-# Tests
-npm test
-
-# Runtime separation guard (no compile-time Python linkage)
-npm run test:runtime-separation
-
-# Opt-in BEAM / Rustler host smoke
-npm run test:rustler-beam-smoke
-
-# Configured quality gates
-npm run check
-
-# Canonical local quality gate
-./launcher.sh --test
+# Rust workspace checks
+cargo fmt --all -- --check
+cargo check --workspace --no-default-features
 ```
 
-Testing placement, cross-layer acceptance requirements, and release-smoke CI
-strategy are documented in `docs/testing-and-release-strategy.md`.
+These commands prove only their stated scopes. Pantograph does not currently
+have one green repository-wide compliance command; see the
+[verification audit](docs/audits/2026-09-03-current-standards/04-verification-and-tooling.md).
 
 ### Runtime Separation
 
-Python-backed model execution is intentionally out-of-process and externally provisioned.
-See `docs/python-runtime-separation.md` for configuration and migration details.
-For a local diffusion worker smoke path, run:
-
-```bash
-./.venv/bin/python scripts/diffusion_cli_smoketest.py --model-path /path/to/tiny-sd-turbo
-```
+Python-backed model execution is out-of-process and externally provisioned.
+See [Runtime Operations](docs/runtime-operations.md) for interpreter selection,
+runtime inspection, recovery, and current security/lifecycle limitations.
 
 ### Headless Workflow API
 
-Pantograph exposes a Rust-first headless workflow API for host integrations
-through `crates/pantograph-workflow-service`:
-
-- `workflow_get_capabilities`
-- `workflow_get_io`
-- `workflow_preflight`
-- `create_workflow_execution_session`
-- `run_workflow_execution_session`
-- `close_workflow_execution_session`
-- `workflow_get_execution_session_status`
-- `workflow_list_execution_session_queue`
-- `workflow_cancel_execution_session_queue_item`
-- `workflow_reprioritize_execution_session_queue_item`
-- `workflow_set_execution_session_keep_alive`
-
-Integration boundary:
-
-- Headless hosts should integrate with the core API/service crate directly.
-- `src-tauri` commands are desktop app transport adapters, not the headless API.
-- HTTP binding exports are opt-in frontend adapters for modular standalone GUI
-  hosting (`frontend-http` in UniFFI and Rustler).
-- Recommended headless flow: inspect I/O and preflight, create an execution
-  session, submit work through that session, inspect its scheduler-owned state,
-  and then close it or keep it alive.
+Pantograph exposes a Rust-first service with UniFFI, Rustler, and optional HTTP
+projections. See [Headless Workflow Integration](docs/headless-workflow.md) for
+the supported ownership model, session flow, exact contract sources, and known
+transition boundaries.
 
 ## Project Structure
 
@@ -199,15 +154,17 @@ Integration boundary:
 | `crates/` | Shared Rust crates (`inference`, `node-engine`, `workflow-nodes`, bindings) |
 | `packages/svelte-graph/src/` | Reusable graph editor package modules |
 | `scripts/` | Validation and tooling scripts |
-| `docs/` | Architecture and process documentation |
+| `docs/` | Current guides, decisions, audits, and implementation plans |
 
 ## Contributing
 
 1. Create a focused branch for one logical change.
 2. Follow coding, tooling, accessibility, and documentation standards.
-3. Run `./launcher.sh --test` and relevant targeted checks before opening a PR.
+3. Run the smallest checks that decide the affected behavior and contracts.
 4. Use Conventional Commits for all commits.
 
 ## License
 
-Workspace crates declare `MIT OR Apache-2.0` in Cargo metadata. Review individual package metadata for any exceptions.
+The repository currently contains Apache-2.0 license material while Cargo
+metadata declares `MIT OR Apache-2.0`. Resolve that mismatch before
+distribution; see [Release](docs/release.md).

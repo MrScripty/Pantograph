@@ -76,9 +76,9 @@ for workflow/session methods. Generated C# binding compilation and a
 model-free C# runtime round trip are smoke-tested; full-path image workflow
 acceptance remains a follow-up verification item.
 
-Follow-up plan:
+Current remediation authority:
 
-- `docs/embedded-runtime-extraction-plan.md`
+- `docs/plans/current-standards-remediation/architecture-lifecycle-and-bindings/plan.md`
 
 Delivered artifacts:
 
