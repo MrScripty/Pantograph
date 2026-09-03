@@ -3,7 +3,17 @@
 ![banner_3](https://github.com/user-attachments/assets/32b9a8c3-39b1-4fdf-ae55-c0ea9d850929)
 
 
-Pantograph is a local-first headless framework with an optional GUI desktop app that provides a unified local inference API, node based workflows, system resource aware runtime schedualing, real-time observability and diagnostic tracing of Ai pipelines. Functionality is provided via language bindings for Python, C#, Elixir, or the native Rust API surface. 
+Pantograph is a local-first, Rust-native framework with an optional desktop app.
+It provides unified local inference, node-based workflows, resource-aware
+runtime scheduling, real-time observability, and diagnostic tracing for AI
+pipelines. Host integrations consume the native Rust interface or projections
+through UniFFI, Rustler, and optional HTTP adapters.
+
+## Architecture
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the current module map, target
+scheduler-owned task execution model, ownership rules, active transition, and
+links to authoritative ADRs and implementation status.
 
 ## Quick Start
 
@@ -157,18 +167,17 @@ For a local diffusion worker smoke path, run:
 Pantograph exposes a Rust-first headless workflow API for host integrations
 through `crates/pantograph-workflow-service`:
 
-- `workflow_run`
 - `workflow_get_capabilities`
 - `workflow_get_io`
 - `workflow_preflight`
-- `create_workflow_session`
-- `run_workflow_session`
-- `close_workflow_session`
-- `workflow_get_session_status`
-- `workflow_list_session_queue`
-- `workflow_cancel_session_queue_item`
-- `workflow_reprioritize_session_queue_item`
-- `workflow_set_session_keep_alive`
+- `create_workflow_execution_session`
+- `run_workflow_execution_session`
+- `close_workflow_execution_session`
+- `workflow_get_execution_session_status`
+- `workflow_list_execution_session_queue`
+- `workflow_cancel_execution_session_queue_item`
+- `workflow_reprioritize_execution_session_queue_item`
+- `workflow_set_execution_session_keep_alive`
 
 Integration boundary:
 
@@ -176,12 +185,15 @@ Integration boundary:
 - `src-tauri` commands are desktop app transport adapters, not the headless API.
 - HTTP binding exports are opt-in frontend adapters for modular standalone GUI
   hosting (`frontend-http` in UniFFI and Rustler).
-- Recommended headless flow: `workflow_get_io` -> `workflow_preflight` -> `workflow_run`.
+- Recommended headless flow: inspect I/O and preflight, create an execution
+  session, submit work through that session, inspect its scheduler-owned state,
+  and then close it or keep it alive.
 
 ## Project Structure
 
 | Path | Description |
 | ---- | ----------- |
+| `ARCHITECTURE.md` | Current architecture, target execution model, ownership, and status entry points |
 | `src/` | Frontend Svelte app, UI components, stores, and services |
 | `src-tauri/src/` | Tauri backend commands and runtime wiring |
 | `crates/` | Shared Rust crates (`inference`, `node-engine`, `workflow-nodes`, bindings) |
