@@ -73,7 +73,7 @@ install_docs_and_examples() {
     "$destination/examples/csharp" \
     "$destination/README-assets"
 
-  cp docs/headless-native-bindings.md "$destination/docs/"
+  cp docs/headless-workflow.md "$destination/docs/"
   cp -R bindings/csharp/Pantograph.DirectRuntimeQuickstart \
     "$destination/examples/csharp/"
 }
@@ -88,7 +88,7 @@ write_csharp_manifest() {
   "platform": "$platform",
   "cargo_profile": "$profile",
   "generated_csharp": "bindings/csharp/pantograph_headless.cs",
-  "docs": "docs/headless-native-bindings.md",
+  "docs": "docs/headless-workflow.md",
   "example": "examples/csharp/Pantograph.DirectRuntimeQuickstart",
   "native_package": "pantograph-headless-native-$platform.zip"
 }
@@ -104,7 +104,7 @@ write_native_manifest() {
   "native_library": "$library_name",
   "platform": "$platform",
   "cargo_profile": "$profile",
-  "docs": "docs/headless-native-bindings.md",
+  "docs": "docs/headless-workflow.md",
   "example": "examples/csharp/Pantograph.DirectRuntimeQuickstart"
 }
 EOF
@@ -119,7 +119,7 @@ write_csharp_manifest "$csharp_package"
 mkdir -p "$native_package/native/$platform"
 install_docs_and_examples "$native_package"
 cp "$library_path" "$native_package/native/$platform/$library_name"
-cp docs/headless-native-bindings.md "$native_package/README.md"
+cp docs/headless-workflow.md "$native_package/README.md"
 write_native_manifest "$native_package"
 
 (
