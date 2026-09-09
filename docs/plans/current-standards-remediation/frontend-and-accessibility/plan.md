@@ -1,10 +1,14 @@
 # Plan: Frontend And Accessibility Remediation
 
-**Plan status:** `Planned`
+> Superseded on 2026-09-08 by the [domain architecture and multimodal plan](../../domain-architecture-and-multimodal/plan.md).
+> The remaining body is historical scope/evidence, not implementation authority.
+> Outstanding claims and findings transfer to the successor; none are accepted by supersession.
 
-**Current phase:** Milestone 0 — Contract and population inventory
+**Plan status:** `Superseded`
 
-**Next slice:** Record the five bounded populations and their owners, consumers, typed outcomes, and disposition in the execution ledger; do not change product code.
+**Current phase:** Superseded by the domain architecture and multimodal plan.
+
+**Next slice:** `none`
 
 **Acceptance status:** `pending`
 
@@ -385,6 +389,6 @@ The three `verify` claims are deciding evidence. Compiler, lint, build, and disc
 
 - Acceptance status: `pending`
 - Deferred follow-ups: `none`
-- Final status: `Planned`
+- Final status: `Superseded`
 
 The plan becomes `Accepted` only after FE-A01 through FE-A06 are satisfied on one recorded final revision, every bounded occurrence has a disposition, migration/compatibility effects are closed, and no permissive decoder, guessed connection validity, competing full graph owner, stale async application, unvalidated persisted record, or inaccessible selected interaction remains.

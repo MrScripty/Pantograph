@@ -1,10 +1,14 @@
 # Plan: Architecture, Lifecycle, And Bindings Remediation
 
-**Plan status:** `Planned`
+> Superseded on 2026-09-08 by the [domain architecture and multimodal plan](../../domain-architecture-and-multimodal/plan.md).
+> The remaining body is historical scope/evidence, not implementation authority.
+> Outstanding claims and findings transfer to the successor; none are accepted by supersession.
 
-**Current phase:** Milestone 1 — Canonical embedded execution cutover
+**Plan status:** `Superseded`
 
-**Next slice:** Confirm the shared-path handoff, inventory every embedded workflow entry point, and complete the M1 scheduler/runtime-host cutover within its allowed write set.
+**Current phase:** Superseded by the domain architecture and multimodal plan.
+
+**Next slice:** `none`
 
 **Acceptance status:** `pending`
 
@@ -433,6 +437,6 @@ cargo check --workspace --no-default-features
 
 - Acceptance status: `pending`
 - Deferred follow-ups: `none` within this plan; named out-of-scope standards findings remain with their cross-plan owners.
-- Final status: `Planned`
+- Final status: `Superseded`
 
 Set the plan to `Accepted` only when ALB-01 through ALB-06 are satisfied, all in-scope issue dispositions are closed or explicitly superseded, exact evidence is recorded for one final revision, and no direct-execution fallback or silently detached lifecycle owner remains. If an acceptance claim changes, update this plan before further implementation.

@@ -1,10 +1,14 @@
 # Plan: Editor-To-Artifact Image Generation
 
-**Plan status:** `Blocked`
+> Superseded on 2026-09-08 by the [domain architecture and multimodal plan](../domain-architecture-and-multimodal/plan.md).
+> The remaining body is historical scope/evidence, not implementation authority.
+> Outstanding claims and findings transfer to the successor; none are accepted by supersession.
 
-**Current phase:** Milestone 1 — Restore trustworthy validation and execution prerequisites
+**Plan status:** `Superseded`
 
-**Next slice:** After the security plan's model-code authorization milestone is accepted, capture the complete typed inference-validation diagnostics for the saved `tiny-sd-turbo-diffusion` workflow and fix only their canonical producers.
+**Current phase:** Superseded by the domain architecture and multimodal plan.
+
+**Next slice:** `none`
 
 **Acceptance status:** `blocked`
 
@@ -160,4 +164,4 @@ the retained artifact is visible in the I/O Inspector.
 
 - Acceptance status: `blocked`
 - Deferred follow-ups: broader performance, other image families, packaging, and generated UI execution.
-- Final status: `Blocked`
+- Final status: `Superseded`

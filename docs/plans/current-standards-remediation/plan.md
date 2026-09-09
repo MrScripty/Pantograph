@@ -1,10 +1,14 @@
 # Plan: Current-Standards Remediation Portfolio
 
-**Plan status:** `Planned`
+> Superseded on 2026-09-08 by the [domain architecture and multimodal plan](../domain-architecture-and-multimodal/plan.md).
+> The remaining body is historical scope/evidence, not implementation authority.
+> Outstanding claims and findings transfer to the successor; none are accepted by supersession.
 
-**Current phase:** Portfolio Milestone 0 — contain active model-code trust
+**Plan status:** `Superseded`
 
-**Next slice:** Execute only [security and dynamic code Milestone 0](security-and-dynamic-code/plan.md#milestone-0-apply-model-code-authorization), record SDC-A1/A2 evidence in its ledger, and then record the portfolio gate here. No other child milestone is admitted concurrently.
+**Current phase:** Superseded by the domain architecture and multimodal plan.
+
+**Next slice:** `none`
 
 **Acceptance status:** `pending`
 
@@ -231,4 +235,4 @@ Start with: **Implement `docs/plans/current-standards-remediation/security-and-d
 - Acceptance status: `pending`
 - Deferred: live generated-component execution and general desktop/network hardening under the explicit triggers in the security plan.
 - Publication: not authorized by this plan.
-- Final status: `Planned`
+- Final status: `Superseded`

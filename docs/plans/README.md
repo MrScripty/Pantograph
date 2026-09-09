@@ -4,8 +4,9 @@ Only current or recently accepted plan authorities live here:
 
 | Plan | Status and purpose |
 | --- | --- |
-| [Current-standards remediation](current-standards-remediation/plan.md) | Planned portfolio coordinating the 2026-09-03 audit findings. |
-| [Image-generation workflow](current-image-generation-graphs/plan.md) | Blocked product plan for a real editor-to-artifact image workflow. |
+| [Domain architecture and multimodal workflows](domain-architecture-and-multimodal/plan.md) | Active authority for current-standards review, domain ownership and real text/image workflows; milestone evidence and current model routing live in the plan. |
+| [Current-standards remediation](current-standards-remediation/plan.md) | Superseded; audit findings and unresolved claims transfer to the active plan. |
+| [Image-generation workflow](current-image-generation-graphs/plan.md) | Superseded; the real editor-to-artifact objective transfers to the active mixed-workflow plan. |
 | [Documentation consolidation](documentation-consolidation/plan.md) | Accepted cleanup and migration record. |
 
 Each planned effort uses:

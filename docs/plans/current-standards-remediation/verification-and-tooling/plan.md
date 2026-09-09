@@ -1,10 +1,14 @@
 # Plan: Verification And Tooling Remediation
 
-**Plan status:** `Planned`
+> Superseded on 2026-09-08 by the [domain architecture and multimodal plan](../../domain-architecture-and-multimodal/plan.md).
+> The remaining body is historical scope/evidence, not implementation authority.
+> Outstanding claims and findings transfer to the successor; none are accepted by supersession.
 
-**Current phase:** Milestone 0 — Claim authority and discovery
+**Plan status:** `Superseded`
 
-**Next slice:** Create the verification claim manifest and validator, then map
+**Current phase:** Superseded by the domain architecture and multimodal plan.
+
+**Next slice:** `none`
 all current frontend tests and Rust workspace targets without changing their
 schedules.
 
@@ -391,4 +395,4 @@ VT-A07 evidence and remaining dispositions are recorded.
 
 - Acceptance status: `pending`
 - Deferred follow-ups: `none`
-- Final status: `Planned`
+- Final status: `Superseded`

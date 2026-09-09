@@ -1,10 +1,14 @@
 # Plan: Close Dynamic-Code Trust Bypasses
 
-**Plan status:** `Planned`
+> Superseded on 2026-09-08 by the [domain architecture and multimodal plan](../../domain-architecture-and-multimodal/plan.md).
+> The remaining body is historical scope/evidence, not implementation authority.
+> Outstanding claims and findings transfer to the successor; none are accepted by supersession.
 
-**Current phase:** Milestone 0 — model-code authorization
+**Plan status:** `Superseded`
 
-**Next slice:** Milestone 0 — carry the Rust-owned trust decision through image planning and remove unconditional Diffusers trust
+**Current phase:** Superseded by the domain architecture and multimodal plan.
+
+**Next slice:** `none`
 
 **Acceptance status:** `pending`
 
@@ -359,4 +363,4 @@ integration. Add bounded delegation only through re-planning.
 - Deferred: general CSP/custom-command/localhost posture, owned by a future
   desktop/network security plan and triggered by new untrusted renderer content
   or changed listener exposure.
-- Final status: `Planned`
+- Final status: `Superseded`

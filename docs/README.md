@@ -15,12 +15,11 @@ than an in-tree archive, preserves completed plans and superseded notes.
 | What can currently be released? | [Release](release.md) |
 | Which architecture decisions are accepted? | [ADR index](adr/README.md) |
 | What standards gaps are currently known? | [Current standards audit](audits/2026-09-03-current-standards/README.md) |
-| What work is currently authorized? | [Current remediation portfolio](plans/current-standards-remediation/plan.md) |
+| What work is currently authorized? | [Domain architecture and multimodal workflows](plans/domain-architecture-and-multimodal/plan.md) |
 
 ## Current Plans
 
-- [Standards remediation portfolio](plans/current-standards-remediation/plan.md)
-- [Image-generation workflow](plans/current-image-generation-graphs/plan.md)
+- [Domain architecture and multimodal workflows](plans/domain-architecture-and-multimodal/plan.md)
 - [Documentation consolidation](plans/documentation-consolidation/plan.md)
 
 Plans own current objective, order, scope, and acceptance. Their

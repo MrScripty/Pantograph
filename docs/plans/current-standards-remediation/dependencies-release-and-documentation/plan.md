@@ -1,10 +1,14 @@
 # Plan: Dependency, Release, And Documentation Remediation
 
-**Plan status:** `Planned`
+> Superseded on 2026-09-08 by the [domain architecture and multimodal plan](../../domain-architecture-and-multimodal/plan.md).
+> The remaining body is historical scope/evidence, not implementation authority.
+> Outstanding claims and findings transfer to the successor; none are accepted by supersession.
 
-**Current phase:** Milestone 0 — Establish dependency and release authority
+**Plan status:** `Superseded`
 
-**Next slice:** Define Pantograph's dependency units, release units, artifact
+**Current phase:** Superseded by the domain architecture and multimodal plan.
+
+**Next slice:** `none`
 cohorts, supported-target decision, and satisfaction contracts in the canonical
 policy and artifact-plan files without mutating dependency resolution.
 
@@ -435,4 +439,4 @@ set; otherwise candidate readiness is recorded without publication.
 
 - Acceptance status: `pending`
 - Deferred follow-ups: `none`
-- Final status: `Planned`
+- Final status: `Superseded`

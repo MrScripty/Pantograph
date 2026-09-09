@@ -16,3 +16,9 @@ Issue log: [issues.md](issues.md)
 ## Entry format for execution
 
 Record only execution facts here: date/revision, milestone and operation, environment, exact command or observation, result/evidence location, decision/deviation, and next slice. Keep acceptance criteria and design authority in `plan.md`.
+
+## 2026-09-08 — Authority handoff
+
+- Superseded by the [domain architecture and multimodal plan](../../domain-architecture-and-multimodal/plan.md), M0.
+- Outstanding findings and acceptance claims transfer to its M1/M2/M3/M4/M5 review and remediation; historical evidence is preserved, not upgraded.
+- No product implementation or acceptance is implied by this handoff.
