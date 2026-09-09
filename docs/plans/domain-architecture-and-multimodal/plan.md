@@ -2,9 +2,9 @@
 
 **Plan status:** `Active`
 
-**Current phase:** M3 retained-image Inspector projection accepted under controlled real-WebKit integration; the first real-model qualification pass found no currently owner-qualified text/image pair. M1 full review and M4 complete-cost evaluation remain open.
+**Current phase:** M3 retained-image Inspector projection accepted under controlled real-WebKit integration; pinned Pumas owner qualification now proves both candidate load targets are non-executable for the canonical Pantograph path. M1 full review and M4 complete-cost evaluation remain open.
 
-**Next slice:** Obtain freshly hydrated Pumas package facts and owner-fresh typed load-target outcomes for one compatible text model and the built-in Tiny SD bundle, then qualify their selected runtimes/devices before changing the desktop harness. Existing cached text facts use retired contract version 1 and Tiny SD carries an invalid component diagnostic; neither is executable-target readiness. EX-04 proves controlled scheduler continuation and D-02 proves complete-image decoding in Inspector, but neither establishes required-real mixed-workflow acceptance.
+**Next slice:** Resolve the Pumas-owned executable-target defects for Tiny Aya and Tiny SD outside this Pantograph write set, then repeat owner qualification before runtime/device or desktop work. Tiny Aya returns a file path labeled as a directory target; Tiny SD returns `artifact_missing` from its freshly hydrated model reference. Pantograph must not repair either by guessing storage paths. EX-04 proves controlled scheduler continuation and D-02 proves complete-image decoding in Inspector, but neither establishes required-real mixed-workflow acceptance.
 
 **Acceptance status:** `blocked`
 
