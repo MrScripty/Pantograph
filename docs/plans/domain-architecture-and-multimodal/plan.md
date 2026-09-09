@@ -2,9 +2,9 @@
 
 **Plan status:** `Active`
 
-**Current phase:** M3 current-Pumas consumer qualification. The isolated failures describe Pantograph's old pinned Pumas revision, not current upstream behavior. Retained-image Inspector projection is accepted; full review and required-real acceptance remain open.
+**Current phase:** M3 Pumas owner/client integration design selected. Full review and required-real text→image acceptance remain open.
 
-**Next slice:** Compare Pantograph's Pumas integration at `f87c3da` with current Pumas contracts, then admit the necessary dependency/consumer migration and repeat canonical qualification. The local Pumas checkout is `b7eba4ce01a45cf540659fff7d04fc913d6a3d0e` (97 commits beyond the pin), with separate uncommitted work excluded from any dependency pin. Do not require external Pumas fixes solely from old-revision Tiny Aya/Tiny SD outcomes, and do not bypass owner contracts by guessing storage paths.
+**Next slice:** Expose Pumas's existing full package-facts operation through its authenticated typed local client, then migrate Pantograph's existing access facade and hosted execution to supported Owner/LocalClient roles. Use the configured launcher-root identity, preserve ReadOnly browsing without execution, and qualify real owner-produced identities/facts/load targets before model runs. The current reviewed Pumas committed baseline is `3b0d5ee4eda4d68ae33a158162883208e4608edb`; its active uncommitted lifecycle work is separate.
 
 **Acceptance status:** `blocked`
 
@@ -481,6 +481,68 @@ mixed workflow returns both outputs; denied trust and missing facts fail at
 their proper owner. This is intermediate evidence, not DA-03 desktop acceptance.
 
 **Status:** `Active`
+
+### Pumas owner/client integration — selected design
+
+**Decision:** Reuse the existing Pumas facts/target operations and Pantograph
+access facade. Pumas owns model identity, inspection, freshness, cache and path
+resolution. Pantograph owns scheduling, device/runtime choice, code permission,
+execution and output retention. The two applications share an existing library
+owner; an attached client never owns that process's shutdown.
+
+**Producer change:** Pumas already implements full package facts in its owning
+interface, HTTP RPC and an internal dispatch branch. Complete the typed local
+IPC operation/client exposure with connection-token validation, bounded model
+ID decoding and the existing public diagnostic conventions. Reuse the domain
+resolver and cache. Do not add an aggregate execution API, HTTP endpoint,
+independent cache, model-copy mechanism or general connection framework.
+
+**Consumer change:** Use the existing Owner/LocalClient/ReadOnly facade for
+facts and targets instead of concrete owner dependencies in dispatch and host
+composition. Execution accepts Owner or a client attached to the configured
+launcher root; ReadOnly remains explicitly non-executable. Match Pumas's
+advertised canonical launcher-root identity and try that owner before a
+read-only fallback. Never select another library merely because it connects.
+Retain lifecycle cleanup only for owners constructed by Pantograph.
+
+**Facts and ordering:** Keep model-list snapshots cheap and hydrate full facts
+only for selected execution candidates. `OwnerFresh` target resolution refreshes
+external validation but does not hydrate package facts. Validate selected
+artifact identity across facts/target and preserve typed stale, missing,
+invalid and unsupported outcomes. Schema-version equality is not evidence
+identity; the current target supplies no content fingerprint or file lease.
+The two operations do not promise atomic immutable contents. File-open failure
+remains an execution error; a future immutable-result requirement needs its own
+producer-owned contract. Keep executable paths out of scheduler projections.
+
+**Change locality and deletion:** Existing Pumas owner/client adapters contain
+transport differences. Completing them removes owner-specific rejection and
+branching from Pantograph's facts/target consumers. A Pumas storage/cache change
+stays in Pumas; a Pantograph scheduler-policy change stays in Pantograph.
+Keep existing internal resolver traits for host tests; no new permanent module
+is needed. Separate dispatch and host freshness checks remain until measured
+reuse can preserve their semantics; no speculative cache is admitted.
+
+**Bounded implementation candidates:** In Pumas, paths under
+`rust/crates/pumas-core/src/`: `ipc/protocol.rs`, `ipc/local_client.rs`,
+`api/state.rs` and their existing focused contract tests. In Pantograph:
+`crates/workflow-nodes/src/setup.rs`; embedded-runtime's
+`pumas_dispatch_package_facts.rs`, `runtime_dispatch_load_target_facts.rs`,
+`runtime_host_package_facts.rs`, `runtime_host_load_target.rs`,
+`workflow_service_composition.rs`, and affected existing tests; dependency
+pins/locks and actual independently pinned consumers must be enumerated before
+editing. This design selects scope, but does not authorize overwriting either
+repository's active work; freeze the concrete revision and exact test/pin
+write set when admitting implementation. The existing domain-architecture plan
+remains the sole Pantograph sequencing authority.
+
+**Gate:** Real owner/local-client contract equivalence, authentication/invalid
+request/owner-loss failures, correct-root selection, ReadOnly refusal, selected
+artifact changes and invalid/missing size/target shape rejection; actual
+producer facts through canonical dispatch/host, no scheduler path leakage,
+cheap snapshots and measured selected hydration. Target transport completion
+is separate from current-model identity/path qualification and real inference.
+Pumas path/identity repairs require reproduced current producer evidence.
 
 ### M3 — Prove the desktop mixed workflow
 
