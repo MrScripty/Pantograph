@@ -88,6 +88,71 @@ test('artifact previews use bounded byte range requests and expose partial state
   );
 });
 
+test('artifact preview requests read complete images and bound text using card media classification', () => {
+  assert.deepEqual(
+    buildIoArtifactPreviewReadRequest({
+      artifact_id: 'payload-image',
+      media_type: 'image/png',
+      payload_kind: 'image',
+    }),
+    { artifact_id: 'payload-image' },
+  );
+  assert.deepEqual(
+    buildIoArtifactPreviewReadRequest({
+      artifact_id: 'payload-image-by-kind',
+      media_type: null,
+      payload_kind: 'image',
+    }),
+    { artifact_id: 'payload-image-by-kind' },
+  );
+  assert.deepEqual(
+    buildIoArtifactPreviewReadRequest({
+      artifact_id: 'payload-image-by-format',
+      media_type: null,
+      payload_kind: null,
+      format: { format_id: 'png', media_type: 'image/png' },
+    }),
+    { artifact_id: 'payload-image-by-format' },
+  );
+  assert.deepEqual(
+    buildIoArtifactPreviewReadRequest({
+      artifact_id: 'payload-text',
+      media_type: 'text/plain',
+      payload_kind: 'text',
+    }),
+    {
+      artifact_id: 'payload-text',
+      byte_range_start: 0,
+      byte_range_end_exclusive: 64 * 1024,
+    },
+  );
+  assert.deepEqual(
+    buildIoArtifactPreviewReadRequest({
+      artifact_id: 'payload-text-by-kind',
+      media_type: null,
+      payload_kind: 'text',
+    }),
+    {
+      artifact_id: 'payload-text-by-kind',
+      byte_range_start: 0,
+      byte_range_end_exclusive: 64 * 1024,
+    },
+  );
+  assert.deepEqual(
+    buildIoArtifactPreviewReadRequest({
+      artifact_id: 'payload-text-by-format',
+      media_type: null,
+      payload_kind: null,
+      format: { format_id: 'txt', media_type: 'text/plain' },
+    }),
+    {
+      artifact_id: 'payload-text-by-format',
+      byte_range_start: 0,
+      byte_range_end_exclusive: 64 * 1024,
+    },
+  );
+});
+
 test('ioArtifactPayloadTargetId prefers retained payload identity over fact identity', () => {
   assert.equal(
     ioArtifactPayloadTargetId({

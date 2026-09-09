@@ -1,3 +1,5 @@
+import assert from 'node:assert/strict';
+
 describe('workflow editor image-generation desktop path', () => {
   const workflowId = process.env.PANTOGRAPH_WORKFLOW_EDITOR_IMAGE_SMOKE_WORKFLOW_ID;
 
@@ -75,5 +77,28 @@ describe('workflow editor image-generation desktop path', () => {
 
     const imagePreview = await imageArtifact.$(testIdSelector('io-artifact-image-preview'));
     await imagePreview.waitForDisplayed({ timeout: 120000 });
+
+    const imageSelector = `${testIdSelector('io-artifact-card')}[data-artifact-media-family="image"] ${testIdSelector('io-artifact-image-preview')}`;
+    const decodedImage = await browser.executeAsync((selector, done) => {
+      const image = document.querySelector(selector);
+      if (!(image instanceof HTMLImageElement)) {
+        done({ error: 'Rendered image preview is unavailable' });
+        return;
+      }
+      Promise.resolve()
+        .then(() => image.decode())
+        .then(() =>
+          done({
+            complete: image.complete,
+            naturalWidth: image.naturalWidth,
+            naturalHeight: image.naturalHeight,
+          }),
+        )
+        .catch((error) => done({ error: String(error) }));
+    }, imageSelector);
+    assert.equal(decodedImage.error, undefined, decodedImage.error);
+    assert.equal(decodedImage.complete, true);
+    assert.ok(decodedImage.naturalWidth > 0, 'Decoded image must have positive naturalWidth');
+    assert.ok(decodedImage.naturalHeight > 0, 'Decoded image must have positive naturalHeight');
   });
 });

@@ -41,6 +41,7 @@
     buildIoArtifactPreviewReadRequest,
     buildIoArtifactRendererSummary,
     buildResolvedNodeIoDisplayRows,
+    classifyIoArtifactMedia,
     canRenderIoArtifactTextPreview,
     canAcknowledgeIoArtifactConsumed,
     canReadIoArtifactBody,
@@ -59,6 +60,7 @@
     formatResolvedNodeIoResolutionLabel,
     ioArtifactPayloadTargetId,
     isNormalResolvedNodeIoDisplayRow,
+    resolveIoArtifactMediaType,
     type ResolvedNodeIoDisplayRow,
   } from './ioInspectorPresenters';
   import {
@@ -87,7 +89,16 @@
     textTruncated?: boolean;
   }
 
+  interface ArtifactAccessRequest {
+    artifactId: string;
+    payloadArtifactId: string;
+    requestSerial: number;
+    lifecycleGeneration: number;
+  }
+
   const DOWNLOAD_OBJECT_URL_REVOKE_DELAY_MS = 30_000;
+  const IMAGE_PREVIEW_DECODE_ERROR = 'Image preview could not be decoded.';
+  const IMAGE_PREVIEW_INCOMPLETE_ERROR = 'Image preview is incomplete; the complete image body is required.';
 
   let runGraph = $state<WorkflowRunGraphProjection | null>(null);
   let savedWorkflows = $state<WorkflowMetadata[]>([]);
@@ -110,8 +121,12 @@
   let artifactConsumeMessages = $state<Record<string, string>>({});
   let inspectorRequestSerial = 0;
   let savedGraphRequestSerial = 0;
+  let artifactAccessRequestSerial = 0;
+  let pageLifecycleGeneration = 0;
+  let pageLive = false;
   let inspectingSavedGraphs = false;
   let projectionUnsubscribe: (() => void) | null = null;
+  let artifactAccessRequests: Record<string, ArtifactAccessRequest> = {};
 
   let artifactSummaries = $derived(buildRunGraphNodeArtifactSummaries(artifacts));
   let nodeStatuses = $derived(buildRunGraphNodeStatusMap(runNodeStatuses));
@@ -151,6 +166,9 @@
   }
 
   function recordSubscriptionError(subscriptionError: unknown): void {
+    if (!pageLive) {
+      return;
+    }
     inspectorError = formatWorkflowCommandError(subscriptionError);
   }
 
@@ -163,6 +181,7 @@
     backendFilterValue = selectedBackendFilter.trim(),
   ): Promise<void> {
     const requestSerial = ++inspectorRequestSerial;
+    invalidatePendingArtifactAccess();
     inspectorError = null;
     loadingInspector = true;
 
@@ -174,6 +193,7 @@
       retentionSummary = [];
       projectionState = null;
       selectedNodeId = null;
+      revokeMissingArtifactObjectUrls([]);
       loadingInspector = false;
       return;
     }
@@ -221,6 +241,7 @@
       retentionSummary = [];
       projectionState = null;
       selectedNodeId = null;
+      revokeMissingArtifactObjectUrls([]);
     } finally {
       if (requestSerial === inspectorRequestSerial) {
         loadingInspector = false;
@@ -232,6 +253,7 @@
     requestedPath = selectedSavedWorkflowPath,
   ): Promise<void> {
     const requestSerial = ++savedGraphRequestSerial;
+    invalidatePendingArtifactAccess();
     inspectorError = null;
     loadingInspector = true;
 
@@ -284,6 +306,7 @@
     resolvedNodeIo = [];
     retentionSummary = [];
     projectionState = null;
+    revokeMissingArtifactObjectUrls([]);
   }
 
   function resolveSelectedNodeId(
@@ -333,37 +356,146 @@
     return Boolean(value && value.trim().length > 0);
   }
 
-  async function readArtifactPreview(artifact: IoArtifactProjectionRecord): Promise<void> {
-    const payloadArtifactId = ioArtifactPayloadTargetId(artifact);
+  function beginArtifactAccessRequest(
+    artifact: IoArtifactProjectionRecord,
+    payloadArtifactId: string,
+  ): ArtifactAccessRequest | null {
+    if (!pageLive || !isCurrentArtifactSelection(artifact)) {
+      return null;
+    }
+
+    const accessRequest: ArtifactAccessRequest = {
+      artifactId: artifact.artifact_id,
+      payloadArtifactId,
+      requestSerial: ++artifactAccessRequestSerial,
+      lifecycleGeneration: pageLifecycleGeneration,
+    };
+    artifactAccessRequests = {
+      ...artifactAccessRequests,
+      [artifact.artifact_id]: accessRequest,
+    };
     setArtifactLoading(artifact.artifact_id, true);
     setArtifactAccessError(artifact.artifact_id, null);
+    return accessRequest;
+  }
+
+  function isCurrentArtifactAccessRequest(
+    accessRequest: ArtifactAccessRequest,
+    artifact: IoArtifactProjectionRecord,
+  ): boolean {
+    return (
+      pageLive &&
+      accessRequest.lifecycleGeneration === pageLifecycleGeneration &&
+      artifactAccessRequests[accessRequest.artifactId]?.requestSerial === accessRequest.requestSerial &&
+      accessRequest.payloadArtifactId === ioArtifactPayloadTargetId(artifact) &&
+      isCurrentArtifactSelection(artifact)
+    );
+  }
+
+  function finishArtifactAccessRequest(
+    accessRequest: ArtifactAccessRequest,
+    artifact: IoArtifactProjectionRecord,
+  ): void {
+    if (!isCurrentArtifactAccessRequest(accessRequest, artifact)) {
+      return;
+    }
+    artifactAccessRequests = withoutArtifactKey(artifactAccessRequests, accessRequest.artifactId);
+    setArtifactLoading(accessRequest.artifactId, false);
+  }
+
+  function invalidatePendingArtifactAccess(clearPresentationState = true): void {
+    artifactAccessRequestSerial += 1;
+    artifactAccessRequests = {};
+    if (clearPresentationState) {
+      artifactAccessLoading = {};
+      artifactAccessErrors = {};
+    }
+  }
+
+  function isCurrentArtifactSelection(artifact: IoArtifactProjectionRecord): boolean {
+    const currentArtifact = artifacts.find((candidate) => candidate.artifact_id === artifact.artifact_id);
+    return Boolean(
+      currentArtifact &&
+        ioArtifactPayloadTargetId(currentArtifact) === ioArtifactPayloadTargetId(artifact) &&
+        selectedRows.some((row) => row.artifact?.artifact_id === artifact.artifact_id),
+    );
+  }
+
+  function assertCompleteImagePreview(
+    artifact: IoArtifactProjectionRecord,
+    read: WorkflowArtifactBodyRead | WorkflowArtifactStreamBodyRead,
+  ): void {
+    const artifactFamily = classifyIoArtifactMedia(resolveIoArtifactMediaType(artifact), artifact.payload_kind);
+    const responseFamily = classifyIoArtifactMedia(read.response.media_type);
+    if ((artifactFamily === 'image' || responseFamily === 'image') && !read.response.complete) {
+      throw new Error(IMAGE_PREVIEW_INCOMPLETE_ERROR);
+    }
+  }
+
+  async function readArtifactPreview(artifact: IoArtifactProjectionRecord): Promise<void> {
+    const payloadArtifactId = ioArtifactPayloadTargetId(artifact);
+    const accessRequest = beginArtifactAccessRequest(artifact, payloadArtifactId);
+    if (!accessRequest) {
+      return;
+    }
+
     try {
       await verifyArtifactReadable(artifact);
+      if (!isCurrentArtifactAccessRequest(accessRequest, artifact)) {
+        return;
+      }
       const read = await workflowService.readArtifactBody(
-        buildIoArtifactPreviewReadRequest(payloadArtifactId),
+        buildIoArtifactPreviewReadRequest({
+          artifact_id: payloadArtifactId,
+          media_type: artifact.media_type,
+          payload_kind: artifact.payload_kind,
+          format: artifact.format,
+        }),
       );
-      replaceArtifactBodyPreview(artifact.artifact_id, createArtifactBodyPreview(read));
+      if (!isCurrentArtifactAccessRequest(accessRequest, artifact)) {
+        return;
+      }
+      assertCompleteImagePreview(artifact, read);
+      const preview = createArtifactBodyPreview(read);
+      replaceArtifactBodyPreview(artifact.artifact_id, preview);
+      setArtifactAccessError(artifact.artifact_id, null);
     } catch (error) {
-      setArtifactAccessError(artifact.artifact_id, formatWorkflowCommandError(error));
+      if (isCurrentArtifactAccessRequest(accessRequest, artifact)) {
+        setArtifactAccessError(artifact.artifact_id, formatWorkflowCommandError(error));
+      }
     } finally {
-      setArtifactLoading(artifact.artifact_id, false);
+      finishArtifactAccessRequest(accessRequest, artifact);
     }
   }
 
   async function readArtifactStreamPreview(artifact: IoArtifactProjectionRecord): Promise<void> {
     const payloadArtifactId = ioArtifactPayloadTargetId(artifact);
-    setArtifactLoading(artifact.artifact_id, true);
-    setArtifactAccessError(artifact.artifact_id, null);
+    const accessRequest = beginArtifactAccessRequest(artifact, payloadArtifactId);
+    if (!accessRequest) {
+      return;
+    }
+
     try {
       await verifyArtifactStreamReadable(artifact);
+      if (!isCurrentArtifactAccessRequest(accessRequest, artifact)) {
+        return;
+      }
       const read = await workflowService.readArtifactStream(
         buildIoArtifactPreviewReadRequest(payloadArtifactId),
       );
-      replaceArtifactBodyPreview(artifact.artifact_id, createArtifactBodyPreview(read));
+      if (!isCurrentArtifactAccessRequest(accessRequest, artifact)) {
+        return;
+      }
+      assertCompleteImagePreview(artifact, read);
+      const preview = createArtifactBodyPreview(read);
+      replaceArtifactBodyPreview(artifact.artifact_id, preview);
+      setArtifactAccessError(artifact.artifact_id, null);
     } catch (error) {
-      setArtifactAccessError(artifact.artifact_id, formatWorkflowCommandError(error));
+      if (isCurrentArtifactAccessRequest(accessRequest, artifact)) {
+        setArtifactAccessError(artifact.artifact_id, formatWorkflowCommandError(error));
+      }
     } finally {
-      setArtifactLoading(artifact.artifact_id, false);
+      finishArtifactAccessRequest(accessRequest, artifact);
     }
   }
 
@@ -530,6 +662,23 @@
     URL.revokeObjectURL(objectUrl);
   }
 
+  function handleArtifactImageError(artifactId: string, failedObjectUrl: string): void {
+    if (!pageLive || !isCurrentArtifactSelectionById(artifactId)) {
+      return;
+    }
+    const currentPreview = artifactBodyPreviews[artifactId];
+    if (!currentPreview || currentPreview.objectUrl !== failedObjectUrl) {
+      return;
+    }
+    revokeObjectUrl(failedObjectUrl);
+    artifactBodyPreviews = withoutArtifactKey(artifactBodyPreviews, artifactId);
+    setArtifactAccessError(artifactId, IMAGE_PREVIEW_DECODE_ERROR);
+  }
+
+  function isCurrentArtifactSelectionById(artifactId: string): boolean {
+    return selectedRows.some((row) => row.artifact?.artifact_id === artifactId);
+  }
+
   function setArtifactLoading(artifactId: string, loading: boolean): void {
     artifactAccessLoading = setArtifactFlag(artifactAccessLoading, artifactId, loading);
   }
@@ -572,6 +721,8 @@
   });
 
   onMount(() => {
+    pageLive = true;
+    pageLifecycleGeneration += 1;
     let disposed = false;
     void subscribeDiagnosticsProjectionInvalidations({
       projections: ['run_detail', 'node_status', 'io_artifact'],
@@ -590,6 +741,11 @@
 
     return () => {
       disposed = true;
+      pageLive = false;
+      pageLifecycleGeneration += 1;
+      invalidatePendingArtifactAccess(false);
+      inspectorRequestSerial += 1;
+      savedGraphRequestSerial += 1;
       projectionUnsubscribe?.();
       projectionUnsubscribe = null;
     };
@@ -598,6 +754,14 @@
   onDestroy(() => {
     revokeAllArtifactObjectUrls();
   });
+
+  function selectNode(nodeId: string): void {
+    if (selectedNodeId === nodeId) {
+      return;
+    }
+    selectedNodeId = nodeId;
+    invalidatePendingArtifactAccess();
+  }
 </script>
 
 <section class="flex h-full min-h-0 flex-col bg-neutral-950" data-testid="io-inspector-page">
@@ -678,7 +842,7 @@
           model={savedGraphModel}
           {selectedNodeId}
           onSelectNode={(nodeId) => {
-            selectedNodeId = nodeId;
+            selectNode(nodeId);
           }}
         />
       {:else if savedWorkflows.length === 0}
@@ -708,7 +872,7 @@
             compact
             {selectedNodeId}
             onSelectNode={(nodeId) => {
-              selectedNodeId = nodeId;
+              selectNode(nodeId);
             }}
           />
         {/if}
@@ -846,12 +1010,19 @@
                     {#if bodyPreview}
                       <div class="mt-3 overflow-hidden rounded border border-neutral-800 bg-neutral-900/80">
                         {#if renderer.family === 'image'}
-                          <img
-                            src={bodyPreview.objectUrl}
-                            alt={`Preview of ${artifact.artifact_id}`}
-                            class="max-h-64 w-full object-contain"
-                            data-testid="io-artifact-image-preview"
-                          />
+                          {#key bodyPreview.objectUrl}
+                            <img
+                              src={bodyPreview.objectUrl}
+                              alt={`Preview of ${artifact.artifact_id}`}
+                              class="max-h-64 w-full object-contain"
+                              data-testid="io-artifact-image-preview"
+                              onerror={(event) =>
+                                handleArtifactImageError(
+                                  artifact.artifact_id,
+                                  (event.currentTarget as HTMLImageElement).src,
+                                )}
+                            />
+                          {/key}
                         {:else if renderer.family === 'audio'}
                           <audio
                             src={bodyPreview.objectUrl}
@@ -939,7 +1110,10 @@
                   </div>
 
                   {#if artifactAccessErrors[artifact.artifact_id]}
-                    <div class="mt-3 rounded border border-red-900 bg-red-950/50 px-3 py-2 text-xs text-red-200">
+                    <div
+                      class="mt-3 rounded border border-red-900 bg-red-950/50 px-3 py-2 text-xs text-red-200"
+                      data-testid="io-artifact-access-error"
+                    >
                       {artifactAccessErrors[artifact.artifact_id]}
                     </div>
                   {/if}

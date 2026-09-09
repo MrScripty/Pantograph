@@ -2,9 +2,9 @@
 
 **Plan status:** `Active`
 
-**Current phase:** M1 review remains open; M2 selected text and dependent runtime continuation accepted under controlled integration; M3 real-model/desktop qualification pending; M4 ongoing complete-cost model evaluation.
+**Current phase:** M3 retained-image Inspector projection accepted under controlled real-WebKit integration; real-model/desktop qualification pending. M1 full review and M4 complete-cost evaluation remain open.
 
-**Next slice:** D-02 complete retained-image retrieval in I/O Inspector, then qualify the real model/runtime/device and desktop fixture for the dependent text→image workflow. EX-04 now proves scheduler continuation, retained outputs and readiness recovery through controlled canonical integration. Full audit, baseline failures and required-real acceptance remain open.
+**Next slice:** Qualify the real Pumas model targets, runtime/device and desktop fixture for the dependent text→image workflow. EX-04 proves controlled scheduler continuation and D-02 proves complete-image decoding in Inspector; neither establishes required-real mixed-workflow acceptance.
 
 **Acceptance status:** `blocked`
 
@@ -29,7 +29,8 @@ Use **GPT-5.3 Codex Spark** for evaluation on real small, well-defined changes
 and bounded repairs; **GPT-5.6 Luna max** for larger enumerated changes with
 settled contracts; **GPT-6 Astra low** for complex implementation, integration
 and rescue; and **GPT-6 Astra medium** for consequential analysis/design and
-substantive independent review. These are the user's current routing choices,
+substantive independent review. GPT-5.6 Sol medium is additionally authorized for bounded implementation and
+verification where it can reduce complete accepted-change costs. These are the user's current routing choices,
 superseding the earlier two-model implementation preference. Preserve exact
 requested models and record availability or fallback explicitly. Select work by
 complete API dollars per accepted change, including checks, review, repairs,
@@ -134,7 +135,7 @@ are reviewed even though publication is excluded.
 | --- | --- | --- | --- | --- | --- | --- |
 | DA-01 | Every maintained area and reachable interface is reviewed against applicable current routes; each finding has evidence, owner, severity and disposition; no required violation remains open. | focused | not-applicable | either | pending | M1/M5 coverage and findings reconciliation |
 | DA-02 | Changed domain interfaces have one owner per invariant/state/lifecycle; representative changes demonstrate reduced unrelated caller knowledge; replaced authorities and unsupported paths are removed or have real migration obligations. | integration | representative | either | pending | M2/M4 composed-design reviews and interface tests |
-| DA-03 | One real desktop-submitted mixed graph runs real text and image models, passes generated text along its edge, and exposes both retained outputs with correct run/task identity. | user-workflow | required-real | automated | blocked | EX-04 controlled integration accepted; D-02 and real fixture/runtime prerequisites remain |
+| DA-03 | One real desktop-submitted mixed graph runs real text and image models, passes generated text along its edge, and exposes both retained outputs with correct run/task identity. | user-workflow | required-real | automated | blocked | EX-04 and D-02 controlled integration accepted; real fixture/runtime prerequisites remain |
 | DA-04 | Missing models/dependencies, denied model-code trust, invalid graphs, worker failure, cancellation and shutdown produce the declared terminal outcomes without false success, leaked processes/reservations, or cross-run input leakage. | system | representative | automated | pending | Focused lifecycle contracts and real worker process evidence |
 | DA-05 | Accepted saved graphs and retained outputs obey their declared compatibility/lifetime contract through cold reopen; affected bindings and generated/IPC contracts agree with their owners. | contract | representative | automated | pending | Consumer fixtures and cold-process persistence checks |
 | DA-06 | Model selection, submit-to-dispatch overhead and runtime reuse meet workload-specific budgets recorded before optimization; measurement separates model computation from orchestration and includes resource use. | system | required-real | automated | pending | M0 baseline and M4 comparison |
@@ -485,8 +486,28 @@ their proper owner. This is intermediate evidence, not DA-03 desktop acceptance.
 
 **Goal:** The user authors/submits the graph and receives text and image results.
 
-**Allowed write set:** plan reports/control files until M2 declares the exact
-desktop transport, graph, result-projection and existing GUI-fixture files.
+**Allowed write set (D-02):** `src/components/workbench/ioInspectorPresenters.ts`,
+`src/components/workbench/ioInspectorPresenters.test.ts`,
+`src/components/workbench/IoInspectorPage.svelte`, and the existing
+`tests/e2e/workflow-editor-image-generation/workflow-editor-image-generation.e2e.mjs`
+(decode/dimension assertions only). Luna max owns these settled repairs.
+Sol medium owns the disjoint controlled browser fixture
+`tests/e2e/io-inspector-image-preview/run.mjs` and `fixture.ts`.
+Root owns this plan, issues and ledger; Astra medium independently reviews.
+
+D-02 uses the existing full-body request for image Read while retaining bounded
+text previews. Both Read and Read Stream reject incomplete images before
+preview installation. Inspector owns image decode errors, matching-URL cleanup,
+and stale request disposal across selection changes and unmount. Download
+remains independent of display decoding. The new harness mounts the actual
+Inspector with controlled service responses and a valid PNG larger than 64 KiB
+in real WebKit; it supplies the decoder/lifecycle evidence absent from Node
+presenter checks without requiring models. Retain it while those browser
+contracts lack equivalent coverage in the canonical desktop harness. This
+repair preserves artifact storage and IPC contracts. D-02 is accepted after focused requests, browser success/failure/lifecycle
+checks, affected static checks and independent medium review; it does not
+satisfy DA-03. Further mixed-workflow source writes require
+separate concrete admission.
 
 **Tasks:** Integrate actual node ports and model selection, run progress/errors,
 artifact retrieval and I/O Inspector. Extend the existing Tauri/WebKit harness

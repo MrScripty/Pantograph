@@ -68,9 +68,14 @@ export const IO_ARTIFACT_PREVIEW_MAX_BYTES = 64 * 1024;
 
 export interface IoArtifactPreviewReadRequest {
   artifact_id: string;
-  byte_range_start: number;
-  byte_range_end_exclusive: number;
+  byte_range_start?: number;
+  byte_range_end_exclusive?: number;
 }
+
+export type IoArtifactPreviewReadTarget =
+  | string
+  | (Pick<IoArtifactProjectionRecord, 'artifact_id'> &
+      Partial<Pick<IoArtifactProjectionRecord, 'media_type' | 'payload_kind' | 'format'>>);
 
 export interface IoArtifactPreviewExtent {
   mediaType: string;
@@ -796,9 +801,16 @@ export function formatIoArtifactBytes(bytes: number | null | undefined): string 
 }
 
 export function buildIoArtifactPreviewReadRequest(
-  artifactId: string,
+  target: IoArtifactPreviewReadTarget,
   maxBytes = IO_ARTIFACT_PREVIEW_MAX_BYTES,
 ): IoArtifactPreviewReadRequest {
+  const artifactId = typeof target === 'string' ? target : target.artifact_id;
+  const mediaType = typeof target === 'string' ? undefined : target.media_type ?? target.format?.media_type;
+  const payloadKind = typeof target === 'string' ? undefined : target.payload_kind;
+  if (classifyIoArtifactMedia(mediaType, payloadKind) === 'image') {
+    return { artifact_id: artifactId };
+  }
+
   return {
     artifact_id: artifactId,
     byte_range_start: 0,
