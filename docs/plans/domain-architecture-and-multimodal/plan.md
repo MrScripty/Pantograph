@@ -2,9 +2,9 @@
 
 **Plan status:** `Active`
 
-**Current phase:** M3 retained-image Inspector projection accepted under controlled real-WebKit integration; pinned Pumas owner qualification now proves both candidate load targets are non-executable for the canonical Pantograph path. M1 full review and M4 complete-cost evaluation remain open.
+**Current phase:** M3 current-Pumas consumer qualification. The isolated failures describe Pantograph's old pinned Pumas revision, not current upstream behavior. Retained-image Inspector projection is accepted; full review and required-real acceptance remain open.
 
-**Next slice:** Resolve the Pumas-owned executable-target defects for Tiny Aya and Tiny SD outside this Pantograph write set, then repeat owner qualification before runtime/device or desktop work. Tiny Aya returns a file path labeled as a directory target; Tiny SD returns `artifact_missing` from its freshly hydrated model reference. Pantograph must not repair either by guessing storage paths. EX-04 proves controlled scheduler continuation and D-02 proves complete-image decoding in Inspector, but neither establishes required-real mixed-workflow acceptance.
+**Next slice:** Compare Pantograph's Pumas integration at `f87c3da` with current Pumas contracts, then admit the necessary dependency/consumer migration and repeat canonical qualification. The local Pumas checkout is `b7eba4ce01a45cf540659fff7d04fc913d6a3d0e` (97 commits beyond the pin), with separate uncommitted work excluded from any dependency pin. Do not require external Pumas fixes solely from old-revision Tiny Aya/Tiny SD outcomes, and do not bypass owner contracts by guessing storage paths.
 
 **Acceptance status:** `blocked`
 
