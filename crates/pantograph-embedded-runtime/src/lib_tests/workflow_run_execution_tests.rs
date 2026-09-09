@@ -5,7 +5,12 @@ use crate::runtime_host_media_artifact_sink::WorkflowServiceRuntimeHostMediaArti
 use crate::runtime_host_package_facts::RuntimeHostPumasPackageFactsResolver;
 use async_trait::async_trait;
 use inference::types::{EncodedImage, ImageGenerationResult};
-use inference::{BackendExecutionContext, ImageGenerationExecutionPlan};
+use inference::{
+    BackendExecutionContext, ImageGenerationBatchExecutionMemberResponse,
+    ImageGenerationBatchExecutionRequest, ImageGenerationBatchExecutionResponse,
+    ImageGenerationBatchExecutionState, ImageGenerationBatchMemberExecutionState,
+    ImageGenerationExecutionPlan,
+};
 use pantograph_dependency_environment_service::{
     DependencyEnvironmentReadinessSnapshot, DependencyEnvironmentReadinessSnapshotProvider,
     DependencyEnvironmentReadinessSnapshotStatus, DependencyReadinessWorkQueue,
@@ -57,7 +62,7 @@ use pantograph_workflow_service::{
 use pumas_library::models::{
     AssetValidationState, BundleFormat, ImportState, ModelMetadata, StorageKind,
 };
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Mutex;
 
 async fn run_workflow_through_scheduler(
@@ -310,6 +315,88 @@ fn image_runtime_inference_interface_snapshot_json() -> serde_json::Value {
     })
 }
 
+fn text_runtime_inference_interface_snapshot_json() -> serde_json::Value {
+    let mut interface = image_runtime_inference_interface_snapshot_json();
+    interface["task_kind"] = serde_json::json!("text_generation");
+    interface["outputs"][0]["port_id"] = serde_json::json!("text");
+    interface["outputs"][0]["value_type"] =
+        serde_json::json!({"category": "scalar", "kind": "string"});
+    interface
+}
+
+fn make_text_runtime_inference_node(node: &mut GraphNode) {
+    node.data["task_kind"] = serde_json::json!("text_generation");
+    node.data["device"] = serde_json::json!("cpu");
+    node.data["inference_interface_snapshot"] = text_runtime_inference_interface_snapshot_json();
+}
+
+fn dependent_text_image_session_graph(
+    text_model_id: &str,
+    text_selected_artifact_id: &str,
+    image_model_id: &str,
+    image_selected_artifact_id: &str,
+) -> WorkflowGraph {
+    WorkflowGraph {
+        nodes: vec![
+            GraphNode {
+                id: "prompt".to_string(),
+                node_type: "text-input".to_string(),
+                position: Position { x: 0.0, y: 0.0 },
+                data: serde_json::json!({}),
+            },
+            GraphNode {
+                id: "text-infer".to_string(),
+                node_type: "llm-inference".to_string(),
+                position: Position { x: 200.0, y: 0.0 },
+                data: serde_json::json!({
+                    "task_kind": "text_generation",
+                    "runtime": "pytorch",
+                    "device": "cpu",
+                    "inference_interface_snapshot": text_runtime_inference_interface_snapshot_json(),
+                    "pumas_model_ref": {
+                        "model_id": text_model_id,
+                        "revision": "main",
+                        "selected_artifact_id": text_selected_artifact_id
+                    }
+                }),
+            },
+            GraphNode {
+                id: "image-infer".to_string(),
+                node_type: "llm-inference".to_string(),
+                position: Position { x: 400.0, y: 0.0 },
+                data: serde_json::json!({
+                    "task_kind": "image_generation",
+                    "runtime": "pytorch",
+                    "device": "cuda:0",
+                    "inference_interface_snapshot": image_runtime_inference_interface_snapshot_json(),
+                    "pumas_model_ref": {
+                        "model_id": image_model_id,
+                        "revision": "main",
+                        "selected_artifact_id": image_selected_artifact_id
+                    }
+                }),
+            },
+        ],
+        edges: vec![
+            GraphEdge {
+                id: "prompt-to-text".to_string(),
+                source: "prompt".to_string(),
+                source_handle: "text".to_string(),
+                target: "text-infer".to_string(),
+                target_handle: "prompt".to_string(),
+            },
+            GraphEdge {
+                id: "generated-text-to-image".to_string(),
+                source: "text-infer".to_string(),
+                source_handle: "text".to_string(),
+                target: "image-infer".to_string(),
+                target_handle: "prompt".to_string(),
+            },
+        ],
+        derived_graph: None,
+    }
+}
+
 fn image_runtime_validation_snapshot(
     version: &WorkflowVersionRecord,
     graph: &WorkflowGraph,
@@ -535,6 +622,90 @@ fn ready_image_dependency_environment_result(
     }
 }
 
+fn runtime_dependency_environment_request(
+    version: &WorkflowVersionRecord,
+    node_id: &str,
+    task_type: &str,
+    model_ref: &PumasModelRef,
+    binding_id: &str,
+    device_id: &str,
+) -> ValidatedDependencyEnvironmentRequest {
+    let mut planning = image_runtime_dependency_planning_request(
+        version,
+        model_ref,
+        vec![DependencyBindingId::parse(binding_id).expect("valid dependency binding id")],
+    );
+    planning.task_id = DependencyTaskId::parse(task_type).expect("valid dependency task id");
+    planning.task_type = Some(planning.task_id.clone());
+    planning.scheduler_intent.requested_device_id =
+        Some(DeviceIntentId::parse(device_id).expect("valid dependency device id"));
+    planning.caller_context.node_id = Some(node_id.to_string());
+    let validated_planning = ValidatedDependencyPlanningRequest::try_from(planning.clone())
+        .expect("valid planning request");
+    let dependency_proof = produce_dependency_requirements_proof(&validated_planning, None)
+        .expect("dependency requirements proof");
+    ValidatedDependencyEnvironmentRequest::try_from(DependencyEnvironmentRequest {
+        contract_version: 1,
+        action: DependencyEnvironmentAction::Resolve,
+        identity_key: dependency_proof.identity_key,
+        planning_request: planning,
+        dependency_requirements_id: Some(dependency_proof.dependency_requirements_id),
+        environment_ref: None,
+    })
+    .expect("valid dependency environment request")
+}
+
+fn ready_dependency_environment_result(
+    request: &ValidatedDependencyEnvironmentRequest,
+    requirement_name: &str,
+) -> DependencyEnvironmentResult {
+    let mut result = ready_image_dependency_environment_result(request);
+    let requirement_name = DependencyRequirementName::parse(requirement_name)
+        .expect("valid dependency requirement name");
+    result.requirements[0].name = requirement_name.clone();
+    result.requirements[0].python.as_mut().unwrap().import_name =
+        Some(requirement_name.as_str().to_string());
+    for binding in &mut result.bindings {
+        binding.requirement_name = requirement_name.clone();
+    }
+    result
+}
+
+fn runtime_validation_snapshot_node(
+    template: &WorkflowExecutableValidationSnapshotNode,
+    version: &WorkflowVersionRecord,
+    node_id: &str,
+    task_type: &str,
+    model_ref: &PumasModelRef,
+    binding_id: &str,
+    device_id: &str,
+) -> (
+    WorkflowExecutableValidationSnapshotNode,
+    ValidatedDependencyEnvironmentRequest,
+) {
+    let dependency_request = runtime_dependency_environment_request(
+        version, node_id, task_type, model_ref, binding_id, device_id,
+    );
+    let planning = dependency_request.as_request().planning_request.clone();
+    let dependency_proof = produce_dependency_requirements_proof(
+        &ValidatedDependencyPlanningRequest::try_from(planning).expect("valid planning request"),
+        None,
+    )
+    .expect("dependency requirements proof");
+    let mut node = template.clone();
+    node.node_id = WorkflowNodeId::parse(node_id).expect("valid validation node id");
+    node.task_kind = InferenceTaskKind::parse(task_type).expect("valid validation task kind");
+    node.model_ref = model_ref.clone();
+    node.constraints.requested_runtime_id =
+        Some(RuntimeIntentId::parse("pytorch").expect("valid runtime id"));
+    node.constraints.requested_device_id =
+        Some(DeviceIntentId::parse(device_id).expect("valid device id"));
+    node.dependency_requirements_id = dependency_proof.dependency_requirements_id;
+    node.selected_binding_ids = dependency_proof.identity_key.selected_binding_ids;
+    node.dependency_override_fingerprint = dependency_proof.dependency_override_fingerprint;
+    (node, dependency_request)
+}
+
 #[derive(Default)]
 struct TestReservationLifecyclePort {
     events: Mutex<Vec<ReservationLifecycleEvent>>,
@@ -657,9 +828,10 @@ impl WorkflowRuntimeDispatchCandidateProvider for TestRuntimeDispatchCandidatePr
                 ),
             })?;
         let reservation = SchedulerResourceReservation {
-            reservation_lease_id: SchedulerReservationLeaseId::parse(
-                "reservation.embedded_runtime_session_test",
-            )
+            reservation_lease_id: SchedulerReservationLeaseId::parse(format!(
+                "reservation.embedded_runtime_session_test.{}",
+                intent.node_id.as_str()
+            ))
             .map_err(|error| {
                 WorkflowRuntimeDispatchCandidateProviderError::Failed {
                     message: error.to_string(),
@@ -672,9 +844,10 @@ impl WorkflowRuntimeDispatchCandidateProvider for TestRuntimeDispatchCandidatePr
             reserved_bytes: 1,
         };
         let fact = WorkflowRuntimeDispatchCandidateFact {
-            candidate_id: SchedulerDispatchCandidateId::parse(
-                "candidate.embedded_runtime_session_test",
-            )
+            candidate_id: SchedulerDispatchCandidateId::parse(format!(
+                "candidate.embedded_runtime_session_test.{}",
+                intent.node_id.as_str()
+            ))
             .map_err(|error| {
                 WorkflowRuntimeDispatchCandidateProviderError::Failed {
                     message: error.to_string(),
@@ -696,7 +869,10 @@ impl WorkflowRuntimeDispatchCandidateProvider for TestRuntimeDispatchCandidatePr
             runtime_residency_key: format!("test-runtime:{}", intent.model_ref.model_id),
             loaded_runtime_memory_estimate_bytes: 1,
             runtime_load_state: WorkflowRuntimeDispatchLoadState::Loaded,
-            runtime_instance_id: Some("runtime.embedded-session-test.001".to_string()),
+            runtime_instance_id: Some(format!(
+                "runtime.embedded-session-test.{}.001",
+                intent.node_id.as_str()
+            )),
             selected_device_ids: vec![selected_device_id],
             selected_model_ref: intent.model_ref.clone(),
             runtime_trait_settings: Vec::new(),
@@ -889,6 +1065,7 @@ impl InferenceBackend for TestImageBackend {
     fn capabilities(&self) -> BackendCapabilities {
         BackendCapabilities {
             image_generation: true,
+            image_generation_batch: true,
             ..BackendCapabilities::default()
         }
     }
@@ -959,6 +1136,38 @@ impl InferenceBackend for TestImageBackend {
             }],
             seed_used: plan.seed,
             metadata: serde_json::Value::Null,
+        })
+    }
+
+    async fn generate_image_batch_from_execution_request(
+        &self,
+        request: ImageGenerationBatchExecutionRequest,
+        _context: BackendExecutionContext,
+    ) -> Result<ImageGenerationBatchExecutionResponse, BackendError> {
+        let members = request
+            .members
+            .into_iter()
+            .map(|member| ImageGenerationBatchExecutionMemberResponse {
+                member_id: member.member_id,
+                state: ImageGenerationBatchMemberExecutionState::Completed,
+                result: Some(ImageGenerationResult {
+                    images: vec![EncodedImage {
+                        data_base64: "aGVsbG8=".to_string(),
+                        mime_type: "image/png".to_string(),
+                        width: member.plan.width,
+                        height: member.plan.height,
+                    }],
+                    seed_used: member.plan.seed,
+                    metadata: serde_json::Value::Null,
+                }),
+                diagnostics: Vec::new(),
+            })
+            .collect();
+        Ok(ImageGenerationBatchExecutionResponse {
+            batch_execution_id: request.batch_execution_id,
+            state: ImageGenerationBatchExecutionState::Completed,
+            members,
+            diagnostics: Vec::new(),
         })
     }
 }
@@ -1935,6 +2144,1102 @@ async fn selected_text_workflow_retains_completed_output_through_canonical_batch
     }
     assert_eq!(host.runtime_load_attempts.load(Ordering::SeqCst), 0);
     assert_eq!(host.run_attempts.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn selected_text_workflow_retains_outputs_and_materializes_dependent_edge() {
+    const MODEL_ID: &str = "llm/example/tiny-transformers";
+    const SELECTED_ARTIFACT_ID: &str = "text-bundle";
+
+    let temp = TempDir::new().expect("temp dir");
+    let artifact_writer = test_artifact_writer(&temp);
+    let workflow_service = WorkflowService::with_ephemeral_attribution_store()
+        .expect("service")
+        .with_artifact_writer(artifact_writer.clone())
+        .with_diagnostics_ledger(
+            pantograph_workflow_service::SqliteDiagnosticsLedger::open_in_memory().unwrap(),
+        );
+    let dependency_readiness_provider = DependencyEnvironmentReadinessSnapshotProvider::new();
+    let dependency_readiness_work_queue = Arc::new(DependencyReadinessWorkQueue::new());
+    let source_refresher = Arc::new(TestRuntimeDispatchSourceRefresher::default());
+    let reservation_lifecycle_port = Arc::new(TestReservationLifecyclePort::default());
+    let target_directory = temp.path().join("selected-model");
+    std::fs::create_dir_all(&target_directory).unwrap();
+    let resolver = Arc::new(SelectedTextResolver(target_directory));
+    let prompts = Arc::new(Mutex::new(Vec::new()));
+    let runtime_host_port = Arc::new(EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
+        resolver.clone(),
+        resolver,
+        Arc::new(WorkflowServiceRuntimeHostMediaArtifactSink::new(
+            artifact_writer,
+        )),
+        Arc::new(inference::InferenceGateway::with_backend(
+            Box::new(SelectedWorkflowTextBackend(prompts.clone())),
+            "PyTorch",
+        )),
+    ));
+    let service = Arc::new(
+        workflow_service
+            .with_dependency_environment_provider(Arc::new(dependency_readiness_provider.clone()))
+            .with_dependency_readiness_work_queue(dependency_readiness_work_queue.clone())
+            .with_runtime_dispatch_source_refresher(source_refresher.clone())
+            .with_runtime_dispatch_candidate_provider(Arc::new(
+                TestRuntimeDispatchCandidateProvider,
+            ))
+            .with_runtime_host_execution_port(runtime_host_port.clone())
+            .with_runtime_host_batch_execution_port(runtime_host_port)
+            .with_reservation_lifecycle_port(reservation_lifecycle_port.clone()),
+    );
+    let workflow_id = "wf-selected-text-dependent-runtime-host";
+    let workflow_semantic_version = "1.2.3";
+    let mut graph = image_runtime_session_graph(MODEL_ID, SELECTED_ARTIFACT_ID);
+    make_text_runtime_inference_node(&mut graph.nodes[1]);
+    let mut dependent = graph.nodes[1].clone();
+    dependent.id = "infer-next".into();
+    graph.nodes.push(dependent);
+    graph.edges.push(GraphEdge {
+        id: "generated-text-edge".into(),
+        source: "infer".into(),
+        source_handle: "text".into(),
+        target: "infer-next".into(),
+        target_handle: "prompt".into(),
+    });
+    let version = service
+        .resolve_workflow_graph_version(workflow_id, workflow_semantic_version, &graph)
+        .unwrap();
+    let template =
+        image_runtime_validation_snapshot(&version, &graph, MODEL_ID, SELECTED_ARTIFACT_ID).nodes
+            [0]
+        .clone();
+    let model_ref = template.model_ref.clone();
+    let mut snapshot =
+        image_runtime_validation_snapshot(&version, &graph, MODEL_ID, SELECTED_ARTIFACT_ID);
+    snapshot.nodes.clear();
+    for node_id in ["infer", "infer-next"] {
+        let (node, dependency_request) = runtime_validation_snapshot_node(
+            &template,
+            &version,
+            node_id,
+            "text_generation",
+            &model_ref,
+            "torch-transformers",
+            "cpu",
+        );
+        dependency_readiness_provider
+            .insert_snapshot(
+                DependencyEnvironmentReadinessSnapshot::for_request(
+                    &dependency_request,
+                    ready_dependency_environment_result(&dependency_request, "transformers"),
+                    DependencyEnvironmentReadinessSnapshotStatus::Fresh,
+                )
+                .unwrap(),
+            )
+            .unwrap();
+        snapshot.nodes.push(node);
+    }
+    service
+        .store_workflow_executable_validation_snapshot(snapshot)
+        .unwrap();
+
+    let host = Arc::new(ImageRuntimeSessionHost::new(graph));
+    let created = service
+        .create_workflow_execution_session(
+            host.as_ref(),
+            WorkflowExecutionSessionCreateRequest {
+                workflow_id: workflow_id.to_string(),
+                usage_profile: None,
+                keep_alive: false,
+            },
+        )
+        .await
+        .expect("create session");
+    let response = pantograph_workflow_service::workflow::WorkflowSessionExecutionRuntime::from_shared_service(
+        service.clone(),
+        host.clone(),
+    )
+    .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
+        session_id: created.session_id,
+        workflow_semantic_version: workflow_semantic_version.to_string(),
+        inputs: vec![WorkflowPortBinding {
+            node_id: "prompt".to_string(),
+            port_id: "text".to_string(),
+            value: serde_json::json!("  paint a red cube\n"),
+        }],
+        output_targets: Some(vec![WorkflowOutputTarget {
+            node_id: "infer-next".to_string(),
+            port_id: "text".to_string(),
+        }, WorkflowOutputTarget { node_id: "infer".to_string(), port_id: "text".to_string() }]),
+        override_selection: None,
+        timeout_ms: None,
+        priority: None,
+    })
+    .await
+    .expect("dependent text workflow should complete");
+
+    assert_eq!(
+        *prompts.lock().unwrap(),
+        vec![
+            "  paint a red cube\n".to_string(),
+            "expanded:  paint a red cube\n".to_string()
+        ]
+    );
+    assert_eq!(response.outputs.len(), 2);
+    assert_eq!(response.outputs[0].node_id, "infer-next");
+    assert_eq!(response.outputs[0].port_id, "text");
+    assert_eq!(
+        response.outputs[0].value,
+        serde_json::json!("expanded:expanded:  paint a red cube\n")
+    );
+
+    service
+        .workflow_diagnostics_projection_refresh(
+            pantograph_workflow_service::WorkflowDiagnosticsProjectionRefreshRequest {
+                projections: vec![
+                    pantograph_workflow_service::WorkflowDiagnosticsProjectionKind::RunDetail,
+                    pantograph_workflow_service::WorkflowDiagnosticsProjectionKind::NodeStatus,
+                    pantograph_workflow_service::WorkflowDiagnosticsProjectionKind::IoArtifact,
+                ],
+                workflow_run_id: Some(response.workflow_run_id.clone()),
+                workflow_id: Some(workflow_id.to_string()),
+                reason: pantograph_workflow_service::WorkflowDiagnosticsProjectionRefreshReason::ExplicitRefresh,
+                batch_size: 50,
+            },
+        )
+        .unwrap();
+    let detail = service
+        .workflow_run_detail_query(WorkflowRunDetailQueryRequest {
+            workflow_run_id: response.workflow_run_id.clone(),
+            projection_batch_size: Some(50),
+        })
+        .unwrap();
+    assert_eq!(
+        detail.run.unwrap().status,
+        pantograph_workflow_service::RunListProjectionStatus::Completed
+    );
+    let artifacts = service
+        .workflow_io_artifact_query(WorkflowIoArtifactQueryRequest {
+            workflow_run_id: Some(response.workflow_run_id.clone()),
+            node_id: None,
+            producer_node_id: None,
+            consumer_node_id: None,
+            artifact_role: None,
+            media_type: None,
+            retention_state: None,
+            retention_policy_id: None,
+            runtime_id: None,
+            selected_backend_key: None,
+            model_id: None,
+            after_event_seq: None,
+            limit: Some(50),
+            projection_batch_size: Some(50),
+        })
+        .unwrap()
+        .artifacts;
+    for (node, expected) in [
+        ("infer", "expanded:  paint a red cube\n"),
+        ("infer-next", "expanded:expanded:  paint a red cube\n"),
+    ] {
+        let artifact = artifacts
+            .iter()
+            .find(|artifact| {
+                artifact.producer_node_id.as_deref() == Some(node)
+                    && artifact.producer_port_id.as_deref() == Some("text")
+            })
+            .unwrap_or_else(|| panic!("retained generated node text for {node}"));
+        assert_eq!(
+            artifact.retention_state,
+            pantograph_workflow_service::IoArtifactRetentionState::Retained
+        );
+        assert_eq!(
+            service
+                .read_artifact_body(ArtifactReadRequest {
+                    artifact_id: artifact.artifact_id.clone(),
+                    byte_range_start: None,
+                    byte_range_end_exclusive: None,
+                })
+                .unwrap()
+                .body,
+            expected.as_bytes()
+        );
+    }
+    assert_eq!(host.runtime_load_attempts.load(Ordering::SeqCst), 0);
+    assert_eq!(host.run_attempts.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn dependent_text_to_image_workflow_forwards_exact_text_and_retains_outputs() {
+    let fixture = DependentTextImageFixture::new(false).await;
+    let prompt = "  paint a red cube\n";
+    let response = fixture
+        .run(prompt)
+        .await
+        .expect("dependent text-to-image workflow should complete");
+
+    assert_eq!(
+        fixture.text_prompts.lock().unwrap().as_slice(),
+        [prompt.to_string()]
+    );
+    assert_eq!(
+        fixture.image_prompts.lock().unwrap().as_slice(),
+        [format!("expanded:{prompt}")]
+    );
+    assert_eq!(response.outputs.len(), 2);
+    assert_eq!(response.outputs[0].node_id, "image-infer");
+    assert_eq!(response.outputs[0].port_id, "image");
+    let image_artifact_id = response.outputs[0]
+        .value
+        .get("artifact_id")
+        .and_then(serde_json::Value::as_str)
+        .expect("image output should be a path-free artifact reference");
+    assert!(!image_artifact_id.contains('/'));
+    let expected_image = valid_test_image_bytes();
+    let image_body = fixture
+        .service
+        .read_artifact_body(ArtifactReadRequest {
+            artifact_id: image_artifact_id.to_string(),
+            byte_range_start: None,
+            byte_range_end_exclusive: None,
+        })
+        .expect("retained image output");
+    assert_eq!(image_body.body, expected_image);
+    assert_eq!(image_body.response.media_type, "image/png");
+
+    fixture
+        .service
+        .workflow_diagnostics_projection_refresh(
+            pantograph_workflow_service::WorkflowDiagnosticsProjectionRefreshRequest {
+                projections: vec![
+                    pantograph_workflow_service::WorkflowDiagnosticsProjectionKind::RunDetail,
+                    pantograph_workflow_service::WorkflowDiagnosticsProjectionKind::SchedulerTimeline,
+                    pantograph_workflow_service::WorkflowDiagnosticsProjectionKind::IoArtifact,
+                ],
+                workflow_run_id: Some(response.workflow_run_id.clone()),
+                workflow_id: Some(fixture.workflow_id.clone()),
+                reason: pantograph_workflow_service::WorkflowDiagnosticsProjectionRefreshReason::ExplicitRefresh,
+                batch_size: 50,
+            },
+        )
+        .unwrap();
+    let detail = fixture
+        .service
+        .workflow_run_detail_query(WorkflowRunDetailQueryRequest {
+            workflow_run_id: response.workflow_run_id.clone(),
+            projection_batch_size: Some(50),
+        })
+        .unwrap();
+    assert_eq!(
+        detail.run.as_ref().unwrap().status,
+        pantograph_workflow_service::RunListProjectionStatus::Completed
+    );
+    let timeline = fixture
+        .service
+        .workflow_scheduler_timeline_query(
+            pantograph_workflow_service::WorkflowSchedulerTimelineQueryRequest {
+                workflow_run_id: Some(response.workflow_run_id.clone()),
+                limit: Some(50),
+                ..Default::default()
+            },
+        )
+        .expect("canonical scheduler attempt timeline");
+    let completed = timeline
+        .events
+        .iter()
+        .filter(|event| {
+            event.scheduler_attempt_transition ==
+        Some(pantograph_diagnostics_ledger::SchedulerTaskAttemptLifecycleTransition::Completed)
+        })
+        .collect::<Vec<_>>();
+    let text_status = completed
+        .iter()
+        .find(|event| event.scheduler_task_id.as_deref() == Some("text-infer"))
+        .expect("completed text producer attempt");
+    let image_status = completed
+        .iter()
+        .find(|event| event.scheduler_task_id.as_deref() == Some("image-infer"))
+        .expect("completed image consumer attempt");
+    assert_eq!(
+        text_status.workflow_run_id.as_str(),
+        response.workflow_run_id
+    );
+    assert_eq!(image_status.workflow_run_id, text_status.workflow_run_id);
+    assert_ne!(
+        text_status.scheduler_task_id,
+        image_status.scheduler_task_id
+    );
+    assert_ne!(
+        text_status.scheduler_attempt_id,
+        image_status.scheduler_attempt_id
+    );
+
+    let artifacts = fixture
+        .service
+        .workflow_io_artifact_query(WorkflowIoArtifactQueryRequest {
+            workflow_run_id: Some(response.workflow_run_id.clone()),
+            node_id: None,
+            producer_node_id: None,
+            consumer_node_id: None,
+            artifact_role: None,
+            media_type: None,
+            retention_state: None,
+            retention_policy_id: None,
+            runtime_id: None,
+            selected_backend_key: None,
+            model_id: None,
+            after_event_seq: None,
+            limit: Some(50),
+            projection_batch_size: Some(50),
+        })
+        .unwrap()
+        .artifacts;
+    let generated_text = format!("expanded:{prompt}");
+    let text_artifact = artifacts
+        .iter()
+        .find(|artifact| {
+            artifact.producer_node_id.as_deref() == Some("text-infer")
+                && artifact.producer_port_id.as_deref() == Some("text")
+        })
+        .unwrap_or_else(|| panic!("retained text producer artifact: {artifacts:?}"));
+    assert_eq!(
+        text_artifact.retention_state,
+        pantograph_workflow_service::IoArtifactRetentionState::Retained
+    );
+    assert_eq!(
+        fixture
+            .service
+            .read_artifact_body(ArtifactReadRequest {
+                artifact_id: text_artifact.artifact_id.clone(),
+                byte_range_start: None,
+                byte_range_end_exclusive: None,
+            })
+            .unwrap()
+            .body,
+        generated_text.as_bytes()
+    );
+    let retained_image_reference = artifacts
+        .iter()
+        .find(|artifact| {
+            artifact.producer_node_id.as_deref() == Some("image-infer")
+                && artifact.producer_port_id.as_deref() == Some("image")
+                && artifact.media_type.as_deref() == Some("application/json")
+        })
+        .unwrap_or_else(|| panic!("retained image output reference: {artifacts:?}"));
+    assert_eq!(
+        retained_image_reference.retention_state,
+        pantograph_workflow_service::IoArtifactRetentionState::Retained
+    );
+    let reference_body = fixture
+        .service
+        .read_artifact_body(ArtifactReadRequest {
+            artifact_id: retained_image_reference.artifact_id.clone(),
+            byte_range_start: None,
+            byte_range_end_exclusive: None,
+        })
+        .expect("retained image output reference body");
+    let reference: serde_json::Value =
+        serde_json::from_slice(&reference_body.body).expect("image artifact reference JSON");
+    assert_eq!(reference, response.outputs[0].value);
+    assert_eq!(reference["artifact_id"].as_str(), Some(image_artifact_id));
+}
+
+#[tokio::test]
+async fn dependent_text_to_image_workflow_does_not_run_downstream_after_producer_failure() {
+    let fixture = DependentTextImageFixture::new(true).await;
+    let error = fixture
+        .run("a producer failure must not reach image generation")
+        .await
+        .expect_err("producer failure should fail the composed workflow");
+
+    assert_eq!(
+        fixture.text_prompts.lock().unwrap().as_slice(),
+        ["a producer failure must not reach image generation".to_string()]
+    );
+    assert!(
+        fixture.image_prompts.lock().unwrap().is_empty(),
+        "downstream image generation must not run after producer failure"
+    );
+    assert_eq!(
+        error.code(),
+        pantograph_workflow_service::WorkflowErrorCode::RuntimeNotReady
+    );
+    assert_eq!(
+        fixture.text_failures.lock().unwrap().as_slice(),
+        ["controlled producer failure"]
+    );
+    let plan = fixture
+        .service
+        .workflow_execution_session_bootstrap_recovery_plan()
+        .expect("retryable run plan");
+    let producer = plan
+        .decisions
+        .iter()
+        .find(|decision| decision.task_id == "text-infer")
+        .expect("producer task state");
+    assert_eq!(
+        producer.state_kind,
+        Some(pantograph_scheduler::SchedulerTaskStateKind::RetryableFailed)
+    );
+    let downstream = plan
+        .decisions
+        .iter()
+        .find(|decision| decision.task_id == "image-infer")
+        .expect("downstream task state");
+    assert_eq!(
+        downstream.state_kind,
+        Some(pantograph_scheduler::SchedulerTaskStateKind::AwaitingInputs)
+    );
+    assert_eq!(producer.workflow_run_id, downstream.workflow_run_id);
+    assert!(!producer.workflow_run_id.is_empty());
+}
+
+#[tokio::test]
+async fn dependent_text_to_image_keeps_original_response_pending_until_downstream_finishes() {
+    let fixture = DependentTextImageFixture::new(false).await;
+    fixture.image_gate.enabled.store(true, Ordering::SeqCst);
+    let mut run = Box::pin(fixture.run("hold downstream completion"));
+    tokio::time::timeout(std::time::Duration::from_secs(2), async {
+        tokio::select! {
+            () = fixture.image_gate.entered.notified() => {},
+            result = &mut run => panic!("run completed before downstream gate: {result:?}"),
+        }
+    })
+    .await
+    .expect("downstream execution reaches gate");
+    assert_eq!(
+        fixture.text_prompts.lock().unwrap().as_slice(),
+        ["hold downstream completion"]
+    );
+    assert!(
+        tokio::time::timeout(std::time::Duration::from_millis(20), &mut run)
+            .await
+            .is_err(),
+        "the original caller must remain pending after producer success"
+    );
+    let plan = fixture
+        .service
+        .workflow_execution_session_bootstrap_recovery_plan()
+        .expect("in-flight run plan");
+    assert_eq!(
+        plan.decisions
+            .iter()
+            .find(|task| task.task_id == "text-infer")
+            .expect("producer")
+            .state_kind,
+        Some(pantograph_scheduler::SchedulerTaskStateKind::Completed)
+    );
+    assert_eq!(
+        plan.decisions
+            .iter()
+            .find(|task| task.task_id == "image-infer")
+            .expect("downstream")
+            .state_kind,
+        Some(pantograph_scheduler::SchedulerTaskStateKind::Running)
+    );
+    fixture.image_gate.release.notify_one();
+    let response = tokio::time::timeout(std::time::Duration::from_secs(2), run)
+        .await
+        .expect("downstream settles after release")
+        .expect("same run response completes");
+    assert_eq!(
+        fixture.image_prompts.lock().unwrap().as_slice(),
+        ["expanded:hold downstream completion"]
+    );
+    assert!(response
+        .outputs
+        .iter()
+        .any(|output| output.node_id == "image-infer" && output.port_id == "image"));
+}
+
+#[tokio::test]
+async fn dependent_text_to_image_resumes_only_downstream_after_readiness_proof_arrives() {
+    let fixture = DependentTextImageFixture::new(false).await;
+    let mut stale = fixture.image_readiness_snapshot.clone();
+    stale.status = DependencyEnvironmentReadinessSnapshotStatus::Stale;
+    fixture
+        .dependency_readiness_provider
+        .insert_snapshot(stale)
+        .expect("withhold downstream readiness proof");
+    let prompt = "resume this generated prompt exactly once";
+    let error = fixture
+        .run(prompt)
+        .await
+        .expect_err("downstream proof is pending");
+    assert!(
+        matches!(&error, WorkflowServiceError::RuntimeDependencyReadinessPending { task_ids, .. } if task_ids == &["image-infer".to_string()]),
+        "unexpected pending result: {error}"
+    );
+    assert!(error.message().contains("image-infer"));
+    assert_eq!(fixture.text_prompts.lock().unwrap().as_slice(), [prompt]);
+    assert!(fixture.image_prompts.lock().unwrap().is_empty());
+
+    let plan = fixture
+        .service
+        .workflow_execution_session_bootstrap_recovery_plan()
+        .expect("paused run plan");
+    assert_eq!(plan.blocking_decision_count, 0);
+    let upstream = plan
+        .decisions
+        .iter()
+        .find(|decision| decision.task_id == "text-infer")
+        .expect("completed producer remains part of paused run");
+    assert_eq!(upstream.decision_kind,
+        pantograph_workflow_service::WorkflowExecutionSessionBootstrapRecoveryDecisionKind::NoopCompleted);
+    let workflow_run_id = upstream.workflow_run_id.clone();
+    let downstream = plan
+        .decisions
+        .iter()
+        .find(|decision| decision.task_id == "image-infer")
+        .expect("paused downstream task");
+    assert_eq!(downstream.decision_kind,
+        pantograph_workflow_service::WorkflowExecutionSessionBootstrapRecoveryDecisionKind::ResumeRuntimeDependencyReadiness);
+
+    fixture
+        .dependency_readiness_provider
+        .insert_snapshot(fixture.image_readiness_snapshot.clone())
+        .expect("admit downstream readiness proof");
+    let recovered = fixture
+        .runtime
+        .recover_workflow_execution_session_bootstrap()
+        .await
+        .expect("composed recovery skips completed producer event and resumes downstream");
+    assert_eq!(recovered.resumed_runs.len(), 1);
+    let response = &recovered.resumed_runs[0];
+    assert_eq!(response.workflow_run_id, workflow_run_id);
+    assert_eq!(fixture.text_prompts.lock().unwrap().as_slice(), [prompt]);
+    assert_eq!(
+        fixture.image_prompts.lock().unwrap().as_slice(),
+        [format!("expanded:{prompt}")]
+    );
+    assert!(
+        recovered.final_plan.decisions.is_empty(),
+        "completed run must leave no active scheduler tasks"
+    );
+    let image = response
+        .outputs
+        .iter()
+        .find(|output| output.node_id == "image-infer" && output.port_id == "image")
+        .expect("recovered image output");
+    let artifact_id = image
+        .value
+        .get("artifact_id")
+        .and_then(serde_json::Value::as_str)
+        .expect("retained recovered artifact");
+    let retained = fixture
+        .service
+        .read_artifact_body(ArtifactReadRequest {
+            artifact_id: artifact_id.to_string(),
+            byte_range_start: None,
+            byte_range_end_exclusive: None,
+        })
+        .expect("read recovered image");
+    assert_eq!(retained.body, valid_test_image_bytes());
+    let again = fixture
+        .runtime
+        .recover_workflow_execution_session_bootstrap()
+        .await
+        .expect("completed recovery is idempotent");
+    assert!(again.resumed_runs.is_empty());
+    assert_eq!(fixture.text_prompts.lock().unwrap().len(), 1);
+    assert_eq!(fixture.image_prompts.lock().unwrap().len(), 1);
+}
+
+const VALID_TEST_IMAGE_BASE64: &str =
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+
+fn valid_test_image_bytes() -> Vec<u8> {
+    crate::media_base64::decode_base64(VALID_TEST_IMAGE_BASE64).expect("valid PNG fixture base64")
+}
+
+#[derive(Default)]
+struct DependentImageGate {
+    enabled: AtomicBool,
+    entered: tokio::sync::Notify,
+    release: tokio::sync::Notify,
+}
+
+struct DependentTextImageFixture {
+    dependency_readiness_provider: DependencyEnvironmentReadinessSnapshotProvider,
+    image_readiness_snapshot: DependencyEnvironmentReadinessSnapshot,
+    image_gate: Arc<DependentImageGate>,
+    text_failures: Arc<Mutex<Vec<String>>>,
+    _temp: TempDir,
+    service: Arc<WorkflowService>,
+    runtime: pantograph_workflow_service::workflow::WorkflowSessionExecutionRuntime,
+    workflow_id: String,
+    session_id: String,
+    text_prompts: Arc<Mutex<Vec<String>>>,
+    image_prompts: Arc<Mutex<Vec<String>>>,
+}
+
+impl DependentTextImageFixture {
+    async fn new(fail_text: bool) -> Self {
+        const TEXT_MODEL_ID: &str = "llm/example/tiny-transformers";
+        const TEXT_ARTIFACT_ID: &str = "text-bundle";
+        const IMAGE_MODEL_ID: &str = "image/example/tiny-diffusion";
+        const IMAGE_ARTIFACT_ID: &str = "image-bundle";
+
+        let temp = TempDir::new().expect("temp dir");
+        let artifact_writer = test_artifact_writer(&temp);
+        let workflow_service = WorkflowService::with_ephemeral_attribution_store()
+            .expect("service")
+            .with_artifact_writer(artifact_writer.clone())
+            .with_diagnostics_ledger(
+                pantograph_workflow_service::SqliteDiagnosticsLedger::open_in_memory().unwrap(),
+            );
+        let dependency_readiness_provider = DependencyEnvironmentReadinessSnapshotProvider::new();
+        let dependency_readiness_work_queue = Arc::new(DependencyReadinessWorkQueue::new());
+        let source_refresher = Arc::new(TestRuntimeDispatchSourceRefresher::default());
+        let reservation_lifecycle_port = Arc::new(TestReservationLifecyclePort::default());
+        let text_path = temp.path().join("selected-text-model");
+        let image_path = temp.path().join("selected-image-model");
+        std::fs::create_dir_all(&text_path).expect("text model fixture directory");
+        std::fs::create_dir_all(&image_path).expect("image model fixture directory");
+        let resolver = Arc::new(DependentTextImageResolver {
+            text_path,
+            image_path,
+        });
+        let text_prompts = Arc::new(Mutex::new(Vec::new()));
+        let image_prompts = Arc::new(Mutex::new(Vec::new()));
+        let fail_text_flag = Arc::new(AtomicBool::new(fail_text));
+        let image_gate = Arc::new(DependentImageGate::default());
+        let text_failures = Arc::new(Mutex::new(Vec::new()));
+        let runtime_host_port =
+            Arc::new(EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
+                resolver.clone(),
+                resolver,
+                Arc::new(WorkflowServiceRuntimeHostMediaArtifactSink::new(
+                    artifact_writer,
+                )),
+                Arc::new(inference::InferenceGateway::with_backend(
+                    Box::new(DependentTextImageBackend {
+                        text_prompts: text_prompts.clone(),
+                        image_prompts: image_prompts.clone(),
+                        fail_text: fail_text_flag,
+                        image_gate: image_gate.clone(),
+                        text_failures: text_failures.clone(),
+                    }),
+                    "PyTorch",
+                )),
+            ));
+        let service = Arc::new(
+            workflow_service
+                .with_dependency_environment_provider(Arc::new(
+                    dependency_readiness_provider.clone(),
+                ))
+                .with_dependency_readiness_work_queue(dependency_readiness_work_queue)
+                .with_runtime_dispatch_source_refresher(source_refresher)
+                .with_runtime_dispatch_candidate_provider(Arc::new(
+                    TestRuntimeDispatchCandidateProvider,
+                ))
+                .with_runtime_host_execution_port(runtime_host_port.clone())
+                .with_runtime_host_batch_execution_port(runtime_host_port)
+                .with_reservation_lifecycle_port(reservation_lifecycle_port),
+        );
+        let workflow_id = "wf-dependent-text-image-runtime-host".to_string();
+        let workflow_semantic_version = "1.2.3";
+        let graph = dependent_text_image_session_graph(
+            TEXT_MODEL_ID,
+            TEXT_ARTIFACT_ID,
+            IMAGE_MODEL_ID,
+            IMAGE_ARTIFACT_ID,
+        );
+        let version = service
+            .resolve_workflow_graph_version(&workflow_id, workflow_semantic_version, &graph)
+            .expect("resolve workflow version");
+        let mut snapshot =
+            image_runtime_validation_snapshot(&version, &graph, IMAGE_MODEL_ID, IMAGE_ARTIFACT_ID);
+        let template = snapshot.nodes[0].clone();
+        let text_model_ref = PumasModelRef {
+            model_id: TEXT_MODEL_ID.to_string(),
+            revision: Some("main".to_string()),
+            selected_artifact_id: Some(TEXT_ARTIFACT_ID.to_string()),
+            selected_artifact_path: None,
+            migration_diagnostics: Vec::new(),
+        };
+        let image_model_ref = PumasModelRef {
+            model_id: IMAGE_MODEL_ID.to_string(),
+            revision: Some("main".to_string()),
+            selected_artifact_id: Some(IMAGE_ARTIFACT_ID.to_string()),
+            selected_artifact_path: None,
+            migration_diagnostics: Vec::new(),
+        };
+        let (text_node, text_request) = runtime_validation_snapshot_node(
+            &template,
+            &version,
+            "text-infer",
+            "text_generation",
+            &text_model_ref,
+            "torch-transformers",
+            "cpu",
+        );
+        let (image_node, image_request) = runtime_validation_snapshot_node(
+            &template,
+            &version,
+            "image-infer",
+            "image_generation",
+            &image_model_ref,
+            "torch-diffusers",
+            "cuda:0",
+        );
+        snapshot.nodes = vec![text_node, image_node];
+        for (request, requirement_name) in [
+            (&text_request, "transformers"),
+            (&image_request, "diffusers"),
+        ] {
+            dependency_readiness_provider
+                .insert_snapshot(
+                    DependencyEnvironmentReadinessSnapshot::for_request(
+                        request,
+                        ready_dependency_environment_result(request, requirement_name),
+                        DependencyEnvironmentReadinessSnapshotStatus::Fresh,
+                    )
+                    .expect("valid dependency readiness snapshot"),
+                )
+                .expect("insert readiness snapshot");
+        }
+        let image_readiness_snapshot = DependencyEnvironmentReadinessSnapshot::for_request(
+            &image_request,
+            ready_dependency_environment_result(&image_request, "diffusers"),
+            DependencyEnvironmentReadinessSnapshotStatus::Fresh,
+        )
+        .expect("image readiness snapshot");
+        service
+            .store_workflow_executable_validation_snapshot(snapshot)
+            .expect("store validation snapshot");
+
+        let host = Arc::new(ImageRuntimeSessionHost::new(graph));
+        let created = service
+            .create_workflow_execution_session(
+                host.as_ref(),
+                WorkflowExecutionSessionCreateRequest {
+                    workflow_id: workflow_id.clone(),
+                    usage_profile: None,
+                    keep_alive: false,
+                },
+            )
+            .await
+            .expect("create dependent session");
+        let session_id = created.session_id;
+        let runtime = pantograph_workflow_service::workflow::WorkflowSessionExecutionRuntime::from_shared_service(
+            service.clone(),
+            host,
+        );
+        Self {
+            dependency_readiness_provider,
+            image_readiness_snapshot,
+            image_gate,
+            text_failures,
+            _temp: temp,
+            service,
+            runtime,
+            workflow_id,
+            session_id,
+            text_prompts,
+            image_prompts,
+        }
+    }
+
+    async fn run(&self, prompt: &str) -> Result<WorkflowRunResponse, WorkflowServiceError> {
+        self.runtime
+            .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
+                session_id: self.session_id.clone(),
+                workflow_semantic_version: "1.2.3".to_string(),
+                inputs: vec![WorkflowPortBinding {
+                    node_id: "prompt".to_string(),
+                    port_id: "text".to_string(),
+                    value: serde_json::json!(prompt),
+                }],
+                output_targets: Some(vec![
+                    WorkflowOutputTarget {
+                        node_id: "image-infer".to_string(),
+                        port_id: "image".to_string(),
+                    },
+                    WorkflowOutputTarget {
+                        node_id: "text-infer".to_string(),
+                        port_id: "text".to_string(),
+                    },
+                ]),
+                override_selection: None,
+                timeout_ms: None,
+                priority: None,
+            })
+            .await
+    }
+}
+
+struct DependentTextImageResolver {
+    text_path: std::path::PathBuf,
+    image_path: std::path::PathBuf,
+}
+
+#[async_trait]
+impl crate::runtime_host_package_facts::RuntimeHostPackageFactsResolver
+    for DependentTextImageResolver
+{
+    async fn resolve(
+        &self,
+        request: &pantograph_runtime_host_contracts::ValidatedRuntimeHostExecutionRequest,
+    ) -> Result<
+        inference::ResolvedModelPackageFacts,
+        crate::runtime_host_package_facts::RuntimeHostPumasPackageFactsError,
+    > {
+        let request = request.as_ref();
+        let task_type = request.handoff.task_intent.task_type.as_str();
+        let selected = &request
+            .handoff
+            .dispatch_decision
+            .as_ref()
+            .expect("controlled fixture dispatch decision")
+            .selected_model_ref;
+        let mut facts: inference::ResolvedModelPackageFacts = match task_type {
+            "text_generation" => serde_json::from_str(include_str!(
+                "../../../inference/tests/fixtures/inference_package_facts/hf_transformers_text_generation_package_facts.json"
+            ))
+            .expect("text package facts fixture"),
+            "image_generation" => serde_json::from_str(include_str!(
+                "../../../inference/tests/fixtures/inference_package_facts/diffusers_sd_text_to_image_package_facts.json"
+            ))
+            .expect("image package facts fixture"),
+            other => panic!("unsupported dependent fixture task type: {other}"),
+        };
+        facts.model_ref = inference::PumasModelRef {
+            model_id: selected.model_id.clone(),
+            revision: selected.revision.clone(),
+            selected_artifact_id: selected.selected_artifact_id.clone(),
+            selected_artifact_path: selected.selected_artifact_path.clone(),
+            migration_diagnostics: Vec::new(),
+        };
+        if task_type == "text_generation" {
+            facts.custom_code.requires_custom_code = false;
+            facts.custom_code.custom_code_sources.clear();
+            facts.custom_code.auto_map_sources.clear();
+        }
+        Ok(facts)
+    }
+}
+
+#[async_trait]
+impl crate::runtime_host_load_target::RuntimeHostLoadTargetResolver for DependentTextImageResolver {
+    async fn resolve(
+        &self,
+        request: &pantograph_runtime_host_contracts::ValidatedRuntimeHostExecutionRequest,
+    ) -> Result<
+        pumas_library::models::PumasArtifactLoadTarget,
+        crate::runtime_host_load_target::RuntimeHostPumasLoadTargetError,
+    > {
+        let request = request.as_ref();
+        let task_type = request.handoff.task_intent.task_type.as_str();
+        let selected = &request
+            .handoff
+            .dispatch_decision
+            .as_ref()
+            .expect("controlled fixture dispatch decision")
+            .selected_model_ref;
+        let (path, artifact_kind, library_root_id) = match task_type {
+            "text_generation" => (
+                &self.text_path,
+                pumas_library::models::PackageArtifactKind::HfCompatibleDirectory,
+                "dependent-text-fixture",
+            ),
+            "image_generation" => (
+                &self.image_path,
+                pumas_library::models::PackageArtifactKind::DiffusersBundle,
+                "dependent-image-fixture",
+            ),
+            other => panic!("unsupported dependent fixture task type: {other}"),
+        };
+        Ok(pumas_library::models::PumasArtifactLoadTarget {
+            model_ref: pumas_library::models::PumasModelRef {
+                model_id: selected.model_id.clone(),
+                revision: selected.revision.clone(),
+                selected_artifact_id: selected.selected_artifact_id.clone(),
+                selected_artifact_path: selected.selected_artifact_path.clone(),
+                ..Default::default()
+            },
+            artifact_kind,
+            local_load_path: path.to_str().expect("fixture path is UTF-8").to_string(),
+            load_path_kind: pumas_library::models::PumasArtifactLoadPathKind::Directory,
+            library_root_id: Some(library_root_id.to_string()),
+            storage_kind: StorageKind::LibraryOwned,
+            validation_state: AssetValidationState::Valid,
+            content_fingerprint: None,
+            package_facts_contract_version: Some(inference::MODEL_PACKAGE_FACTS_CONTRACT_VERSION),
+        })
+    }
+}
+
+struct DependentTextImageBackend {
+    image_gate: Arc<DependentImageGate>,
+    text_failures: Arc<Mutex<Vec<String>>>,
+    text_prompts: Arc<Mutex<Vec<String>>>,
+    image_prompts: Arc<Mutex<Vec<String>>>,
+    fail_text: Arc<AtomicBool>,
+}
+
+#[async_trait]
+impl InferenceBackend for DependentTextImageBackend {
+    fn name(&self) -> &'static str {
+        "PyTorch"
+    }
+
+    fn description(&self) -> &'static str {
+        "controlled dependent text-to-image backend"
+    }
+
+    fn capabilities(&self) -> BackendCapabilities {
+        BackendCapabilities {
+            image_generation: true,
+            image_generation_batch: true,
+            ..BackendCapabilities::default()
+        }
+    }
+
+    async fn start(
+        &mut self,
+        _: &BackendConfig,
+        _: Arc<dyn ProcessSpawner>,
+    ) -> Result<BackendStartOutcome, BackendError> {
+        Ok(BackendStartOutcome::default())
+    }
+
+    async fn stop(&mut self) -> Result<(), BackendError> {
+        Ok(())
+    }
+
+    fn is_ready(&self) -> bool {
+        true
+    }
+
+    async fn health_check(&self) -> bool {
+        true
+    }
+
+    fn base_url(&self) -> Option<String> {
+        None
+    }
+
+    async fn load_selected_text(
+        &mut self,
+        request: &inference::InferenceExecutionRequest,
+        target: &inference::PumasArtifactLoadTarget,
+        decision: &inference::BackendExecutionDecision,
+    ) -> Result<BackendStartOutcome, BackendError> {
+        assert_eq!(request.model_ref.as_ref(), Some(&target.model_ref));
+        assert_eq!(
+            decision.selected_device_id.as_ref().unwrap().as_str(),
+            "cpu"
+        );
+        Ok(BackendStartOutcome::default())
+    }
+
+    async fn finish_selected_text(&self, _: bool) -> Result<(), BackendError> {
+        Ok(())
+    }
+
+    async fn chat_completion_stream(
+        &self,
+        request_json: String,
+    ) -> Result<
+        Pin<Box<dyn futures_util::Stream<Item = Result<ChatChunk, BackendError>> + Send>>,
+        BackendError,
+    > {
+        let request: serde_json::Value = serde_json::from_str(&request_json).unwrap();
+        let prompt = request["messages"][0]["content"][0]["text"]
+            .as_str()
+            .expect("controlled text prompt")
+            .to_string();
+        self.text_prompts.lock().unwrap().push(prompt.clone());
+        if self.fail_text.load(Ordering::SeqCst) {
+            self.text_failures
+                .lock()
+                .unwrap()
+                .push("controlled producer failure".to_string());
+            return Err(BackendError::Inference(
+                "controlled producer failure".to_string(),
+            ));
+        }
+        Ok(Box::pin(stream::iter([Ok(ChatChunk {
+            content: Some(format!("expanded:{prompt}")),
+            done: true,
+            usage: None,
+            cache_handle_id: None,
+        })])))
+    }
+
+    async fn embeddings(
+        &self,
+        _: Vec<String>,
+        _: &str,
+    ) -> Result<Vec<EmbeddingResult>, BackendError> {
+        Err(BackendError::NotReady)
+    }
+
+    async fn rerank(&self, _: RerankRequest) -> Result<RerankResponse, BackendError> {
+        Err(BackendError::NotReady)
+    }
+
+    async fn generate_image_from_plan(
+        &self,
+        plan: ImageGenerationExecutionPlan,
+        _: BackendExecutionContext,
+    ) -> Result<ImageGenerationResult, BackendError> {
+        self.image_prompts.lock().unwrap().push(plan.prompt);
+        Ok(ImageGenerationResult {
+            images: vec![EncodedImage {
+                data_base64: VALID_TEST_IMAGE_BASE64.to_string(),
+                mime_type: "image/png".to_string(),
+                width: Some(1),
+                height: Some(1),
+            }],
+            seed_used: plan.seed,
+            metadata: serde_json::Value::Null,
+        })
+    }
+
+    async fn generate_image_batch_from_execution_request(
+        &self,
+        request: ImageGenerationBatchExecutionRequest,
+        context: BackendExecutionContext,
+    ) -> Result<ImageGenerationBatchExecutionResponse, BackendError> {
+        assert!(matches!(
+            context.cancellation_snapshot().state,
+            inference::InferenceExecutionCancellationState::Running
+        ));
+        if self.image_gate.enabled.load(Ordering::SeqCst) {
+            self.image_gate.entered.notify_one();
+            self.image_gate.release.notified().await;
+        }
+        let members = request
+            .members
+            .into_iter()
+            .map(|member| {
+                self.image_prompts
+                    .lock()
+                    .unwrap()
+                    .push(member.plan.prompt.clone());
+                ImageGenerationBatchExecutionMemberResponse {
+                    member_id: member.member_id,
+                    state: ImageGenerationBatchMemberExecutionState::Completed,
+                    result: Some(ImageGenerationResult {
+                        images: vec![EncodedImage {
+                            data_base64: VALID_TEST_IMAGE_BASE64.to_string(),
+                            mime_type: "image/png".to_string(),
+                            width: Some(1),
+                            height: Some(1),
+                        }],
+                        seed_used: member.plan.seed,
+                        metadata: serde_json::Value::Null,
+                    }),
+                    diagnostics: Vec::new(),
+                }
+            })
+            .collect();
+        Ok(ImageGenerationBatchExecutionResponse {
+            batch_execution_id: request.batch_execution_id,
+            state: ImageGenerationBatchExecutionState::Completed,
+            members,
+            diagnostics: Vec::new(),
+        })
+    }
 }
 
 struct SelectedTextResolver(std::path::PathBuf);

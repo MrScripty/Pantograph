@@ -283,6 +283,7 @@ pub(super) trait WorkflowRuntimeBranchTaskEventRepository {
         WorkflowRuntimeBranchTaskEventDiagnostic,
     >;
 
+    #[cfg(test)]
     fn claim_next_due_for_workflow_run(
         &mut self,
         workflow_run_id: &str,
@@ -392,6 +393,45 @@ impl InMemoryWorkflowRuntimeBranchTaskEventRepository {
     pub(super) fn new() -> Self {
         Self::default()
     }
+    pub(super) fn claim_owned_for_workflow_task(
+        &mut self,
+        workflow_run_id: &str,
+        task_id: &str,
+        owner_id: WorkflowRuntimeBranchTaskEventClaimOwnerId,
+        now_ms: u64,
+        lease_duration_ms: u64,
+    ) -> Result<
+        Option<(
+            WorkflowRuntimeBranchTaskEventClaimOutcome,
+            WorkflowRuntimeClaimOwnership,
+        )>,
+        WorkflowRuntimeBranchTaskEventDiagnostic,
+    > {
+        let event_id = self
+            .records
+            .values()
+            .filter(|record| {
+                record.workflow_run_id == workflow_run_id && record.scheduler_task_id == task_id
+            })
+            .filter(|record| record.is_due_for_claim(now_ms) && !self.is_owned_or_abandoned(record))
+            .min_by_key(|record| (record.ready_at_ms, record.event_id.as_str()))
+            .map(|record| record.event_id.clone());
+        let Some(event_id) = event_id else {
+            return Ok(None);
+        };
+        let outcome = self.claim_event(&event_id, owner_id, now_ms, lease_duration_ms)?;
+        let (liveness, proof) = WorkflowRuntimeClaimLiveness::new();
+        self.ownership.insert(
+            event_id.as_str().to_owned(),
+            WorkflowRuntimeBranchEventOwnership {
+                claim: outcome.claim.clone(),
+                liveness,
+            },
+        );
+        Ok(Some((outcome, proof)))
+    }
+
+    #[cfg(test)]
     pub(super) fn claim_owned_for_workflow_run(
         &mut self,
         workflow_run_id: &str,
@@ -526,6 +566,7 @@ impl WorkflowRuntimeBranchTaskEventRepository for InMemoryWorkflowRuntimeBranchT
             .map(Some)
     }
 
+    #[cfg(test)]
     fn claim_next_due_for_workflow_run(
         &mut self,
         workflow_run_id: &str,
@@ -876,6 +917,7 @@ impl InMemoryWorkflowRuntimeBranchTaskEventRepository {
             .map(|record| record.event_id.clone())
     }
 
+    #[cfg(test)]
     fn next_due_event_id_for_workflow_run(
         &self,
         workflow_run_id: &str,
@@ -893,6 +935,7 @@ impl InMemoryWorkflowRuntimeBranchTaskEventRepository {
             .map(|record| record.event_id.clone())
     }
 
+    #[cfg(test)]
     fn active_event_for_workflow_run(
         &self,
         workflow_run_id: &str,
@@ -2848,6 +2891,53 @@ mod tests {
                 .expect("other event")
                 .state,
             WorkflowRuntimeBranchTaskEventState::Ready
+        );
+    }
+
+    #[test]
+    fn runtime_branch_task_event_claims_selected_task_without_claiming_earlier_downstream_event() {
+        let mut repository = InMemoryWorkflowRuntimeBranchTaskEventRepository::new();
+        for (id, run, task, ready_at) in [
+            ("event.downstream", "run.target", "task.downstream", 1),
+            ("event.other", "run.other", "task.ready", 2),
+            ("event.ready", "run.target", "task.ready", 3),
+        ] {
+            let mut record = ready_record_with_id_and_run(id, run, ready_at);
+            record.scheduler_task_id = task.to_string();
+            repository.enqueue(record).expect("enqueue event");
+        }
+        let (claimed, proof) = repository
+            .claim_owned_for_workflow_task(
+                "run.target",
+                "task.ready",
+                owner_id("worker.alpha"),
+                10,
+                20,
+            )
+            .expect("selected task claim")
+            .expect("ready event");
+        assert_eq!(claimed.record.event_id.as_str(), "event.ready");
+        for id in ["event.downstream", "event.other"] {
+            let record = repository.get(&event_id(id)).expect("unselected event");
+            assert_eq!(record.state, WorkflowRuntimeBranchTaskEventState::Ready);
+            assert!(record.claim.is_none());
+        }
+        assert!(repository
+            .claim_owned_for_workflow_task(
+                "run.target",
+                "task.ready",
+                owner_id("worker.beta"),
+                31,
+                20,
+            )
+            .expect("live ownership excludes expired competitor")
+            .is_none());
+        let completed = repository
+            .complete(&claimed.record.event_id, &claimed.claim, 32, Some(&proof))
+            .expect("owner settles after lease expiry");
+        assert_eq!(
+            completed.state,
+            WorkflowRuntimeBranchTaskEventState::Completed
         );
     }
 

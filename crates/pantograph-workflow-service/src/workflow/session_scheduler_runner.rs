@@ -56,6 +56,8 @@ struct RuntimeDependencyReadinessAdmissionResult {
 }
 
 pub(super) struct WorkflowPreDispatchPreparationOutcome {
+    next_ready_task_id: Option<String>,
+    all_tasks_completed: bool,
     admitted_runtime_readiness: Vec<AdmittedRuntimeTaskReadiness>,
     deferred_task_ids: Vec<String>,
 }
@@ -107,10 +109,19 @@ impl<'a> WorkflowPreDispatchPreparationBoundary<'a> {
         runner.retry_deferred_runtime_dependency_readiness(session_id, workflow_run_id)?;
         let readiness_admission =
             runner.admit_runtime_dependency_readiness(session_id, workflow_run_id)?;
-        if readiness_admission.deferred_task_ids.is_empty() {
-            runner.ensure_runtime_tasks_ready_for_dispatch(session_id, workflow_run_id)?;
+        let (next_ready_task_id, all_tasks_completed) =
+            runner.runtime_dispatch_progress(session_id, workflow_run_id)?;
+        if next_ready_task_id.is_none()
+            && !all_tasks_completed
+            && readiness_admission.deferred_task_ids.is_empty()
+        {
+            return Err(WorkflowServiceError::CapabilityViolation(
+                "runtime scheduler graph has no ready task and is not complete".to_string(),
+            ));
         }
         Ok(WorkflowPreDispatchPreparationOutcome {
+            next_ready_task_id,
+            all_tasks_completed,
             admitted_runtime_readiness: readiness_admission.admitted,
             deferred_task_ids: readiness_admission.deferred_task_ids,
         })
@@ -198,6 +209,14 @@ impl<'a> WorkflowPreDispatchPreparationBoundary<'a> {
 }
 
 impl WorkflowPreDispatchPreparationOutcome {
+    pub(super) fn next_ready_task_id(&self) -> Option<&str> {
+        self.next_ready_task_id.as_deref()
+    }
+
+    pub(super) fn all_tasks_completed(&self) -> bool {
+        self.all_tasks_completed
+    }
+
     pub(super) fn admitted_runtime_readiness(&self) -> &[AdmittedRuntimeTaskReadiness] {
         &self.admitted_runtime_readiness
     }
@@ -734,45 +753,53 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
         Ok(())
     }
 
-    fn ensure_runtime_tasks_ready_for_dispatch(
+    fn runtime_dispatch_progress(
         &self,
         session_id: &str,
         workflow_run_id: &str,
-    ) -> Result<(), WorkflowServiceError> {
+    ) -> Result<(Option<String>, bool), WorkflowServiceError> {
         let (task_graph, records) =
             active_run_scheduler_task_state_required(self.service, session_id, workflow_run_id)?;
+        let mut next_ready_task_id = None;
+        let mut all_tasks_completed = true;
         for task in &task_graph.tasks {
             let record = records
                 .iter()
-                .find(|record| record.task_id.as_str() == task.task_id.as_str())
+                .find(|record| record.task_id == task.task_id)
                 .ok_or_else(|| {
                     WorkflowServiceError::InvalidRequest(format!(
                         "scheduler task '{}' has no active task-state record",
                         task.task_id.as_str()
                     ))
                 })?;
-            match task.execution_class {
-                WorkflowSchedulerTaskExecutionClass::RuntimeInference => {
-                    if record.state.kind() != SchedulerTaskStateKind::Ready {
-                        return Err(WorkflowServiceError::CapabilityViolation(format!(
-                            "runtime scheduler task '{}' was not admitted for dispatch; final state was {:?}",
-                            record.task_id.as_str(),
-                            record.state.kind()
-                        )));
-                    }
-                }
-                _ => {
-                    if record.state.kind() != SchedulerTaskStateKind::Completed {
-                        return Err(WorkflowServiceError::InvalidRequest(format!(
-                            "scheduler task '{}' did not complete before runtime dispatch boundary; final state was {:?}",
-                            record.task_id.as_str(),
-                            record.state.kind()
-                        )));
-                    }
-                }
+            if matches!(
+                record.state.kind(),
+                SchedulerTaskStateKind::TerminalFailed
+                    | SchedulerTaskStateKind::Invalid
+                    | SchedulerTaskStateKind::InputUnavailable
+            ) {
+                return Err(WorkflowServiceError::CapabilityViolation(format!(
+                    "runtime scheduler task '{}' cannot continue from {:?}",
+                    task.task_id.as_str(),
+                    record.state.kind()
+                )));
+            }
+            all_tasks_completed &= record.state.kind() == SchedulerTaskStateKind::Completed;
+            if next_ready_task_id.is_none()
+                && task.execution_class == WorkflowSchedulerTaskExecutionClass::RuntimeInference
+                && record.state.kind() == SchedulerTaskStateKind::Ready
+            {
+                runtime_dispatch_readiness_proof(
+                    self.service,
+                    session_id,
+                    workflow_run_id,
+                    task.task_id.as_str(),
+                    &[],
+                )?;
+                next_ready_task_id = Some(task.task_id.as_str().to_owned());
             }
         }
-        Ok(())
+        Ok((next_ready_task_id, all_tasks_completed))
     }
 
     async fn run_runtime_dispatch_ready_tasks(

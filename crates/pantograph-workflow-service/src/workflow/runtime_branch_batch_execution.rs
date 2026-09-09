@@ -204,6 +204,7 @@ pub(super) struct WorkflowRuntimeBranchBatchMemberExecutionOutcome {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[must_use]
 pub(super) enum WorkflowRuntimeBranchBatchMemberExecutionOutcomeState {
+    Continue,
     Completed,
     Cancelled,
     Deferred,
@@ -489,19 +490,15 @@ where
         })
     }
 
-    pub(super) async fn execute_claimed_batch<H>(
+    pub(super) async fn execute_claimed_batch(
         &self,
         service: &WorkflowService,
-        host: &H,
         claim_outcome: WorkflowRuntimeDispatchAssignmentBatchClaimOutcome,
         ownership: &mut WorkflowRuntimeBranchBatchClaimOwnership,
     ) -> Result<
         WorkflowRuntimeBranchBatchRunFinalizationOutcome,
         WorkflowRuntimeBranchBatchExecutionFailure,
-    >
-    where
-        H: WorkflowHost + ?Sized,
-    {
+    > {
         let plan = self.prepare_claimed_batch(service, claim_outcome)?;
         ownership.validate_execution(service, &plan)?;
         self.apply_batch_dispatch_started_lifecycle(&plan).await?;
@@ -529,8 +526,7 @@ where
         let _mutation = self
             .apply_batch_response_mutations(service, &plan, &response, ownership)
             .await?;
-        self.finalize_batch_member_runs(service, host, &plan, &response)
-            .await
+        self.finalize_batch_member_runs(service, &plan, &response)
     }
 
     async fn apply_batch_dispatch_started_lifecycle(
@@ -602,28 +598,22 @@ where
             })
     }
 
-    pub(super) async fn finalize_batch_member_runs<H>(
+    pub(super) fn finalize_batch_member_runs(
         &self,
         service: &WorkflowService,
-        host: &H,
         plan: &WorkflowRuntimeBranchBatchExecutionPlan,
         response: &RuntimeHostBatchExecutionResponse,
     ) -> Result<
         WorkflowRuntimeBranchBatchRunFinalizationOutcome,
         WorkflowRuntimeBranchBatchExecutionFailure,
-    >
-    where
-        H: WorkflowHost + ?Sized,
-    {
+    > {
         validate_batch_response_matches_plan(plan, response)?;
         let mut outcomes = Vec::with_capacity(plan.members.len());
         for member in &plan.members {
             let response_member =
                 response_member_for_assignment(response, member.assignment_id.as_str())
                     .expect("response membership was validated before finalization");
-            let Some(run_result) =
-                batch_member_run_result(service, host, member, response_member).await?
-            else {
+            let Some(run_result) = batch_member_run_result(member, response_member)? else {
                 outcomes.push(member_outcome_from_response(member, response_member));
                 continue;
             };
@@ -1205,32 +1195,56 @@ fn finalization_context_for_member(
     })
 }
 
-async fn batch_member_run_result<H>(
+pub(super) async fn finalize_continued_scheduler_run(
     service: &WorkflowService,
-    host: &H,
+    host: &(impl WorkflowHost + ?Sized),
+    session_id: &str,
+    workflow_run_id: &str,
+    workflow_id: &str,
+) -> Result<WorkflowRunResponse, WorkflowServiceError> {
+    let (session, active_run) = {
+        let store = service.session_store_guard()?;
+        (
+            store.session_summary(session_id)?,
+            store.active_run_context(session_id, workflow_run_id)?,
+        )
+    };
+    let run_id = WorkflowRunId::try_from(workflow_run_id.to_owned())?;
+    let snapshot = service.workflow_run_snapshot_for_execution_resume_if_configured(&run_id)?;
+    let run_result = completed_scheduler_run_response(
+        service,
+        host,
+        session_id,
+        workflow_run_id,
+        workflow_id,
+        active_run.output_targets.as_deref(),
+        Instant::now(),
+    )
+    .await;
+    finalize_admitted_workflow_run(
+        service,
+        WorkflowRunFinalizationRequest {
+            session: &session,
+            run_snapshot: snapshot.as_ref(),
+            session_id,
+            workflow_run_id,
+            workflow_semantic_version: &active_run.workflow_semantic_version,
+            io_artifact_inputs: Some(&active_run.inputs),
+            run_result,
+        },
+    )?
+    .run_result
+}
+
+fn batch_member_run_result(
     member: &WorkflowRuntimeBranchBatchExecutionMember,
     response: &RuntimeHostBatchExecutionMemberResponse,
 ) -> Result<
     Option<Result<WorkflowRunResponse, WorkflowServiceError>>,
     WorkflowRuntimeBranchBatchExecutionFailure,
->
-where
-    H: WorkflowHost + ?Sized,
-{
+> {
     let result = match response.state {
-        RuntimeHostBatchExecutionMemberState::Completed => {
-            let context = finalization_context_for_member(service, member)?;
-            completed_scheduler_run_response(
-                service,
-                host,
-                &member.session_id,
-                &member.workflow_run_id,
-                &member.workflow_id,
-                context.active_run.output_targets.as_deref(),
-                Instant::now(),
-            )
-            .await
-        }
+        RuntimeHostBatchExecutionMemberState::Completed => return Ok(None),
         RuntimeHostBatchExecutionMemberState::Cancelled => Err(WorkflowServiceError::Cancelled(
             response_diagnostic_message(response, "runtime-host batch member cancelled"),
         )),
@@ -1376,6 +1390,9 @@ fn member_outcome_from_response(
         workflow_id: member.workflow_id.clone(),
         workflow_run_id: member.workflow_run_id.clone(),
         state: match response.state {
+            RuntimeHostBatchExecutionMemberState::Completed => {
+                WorkflowRuntimeBranchBatchMemberExecutionOutcomeState::Continue
+            }
             RuntimeHostBatchExecutionMemberState::Deferred => {
                 WorkflowRuntimeBranchBatchMemberExecutionOutcomeState::Deferred
             }
@@ -1694,12 +1711,7 @@ mod tests {
         let (claimed, mut ownership) = batch_claim_outcome(&service, &members);
         let _missing_owner = ownership.events.pop().expect("second owner");
         let failure = owner
-            .execute_claimed_batch(
-                &service,
-                &BatchFinalizationHost::default(),
-                claimed,
-                &mut ownership,
-            )
+            .execute_claimed_batch(&service, claimed, &mut ownership)
             .await
             .expect_err("all members must be owned before dispatch effects");
         assert_eq!(
@@ -1812,12 +1824,7 @@ mod tests {
             .expect("completed upstream text result");
         let (claimed, mut ownership) = batch_claim_outcome(&service, &members[..1]);
         let _outcome = owner
-            .execute_claimed_batch(
-                &service,
-                &BatchFinalizationHost::default(),
-                claimed,
-                &mut ownership,
-            )
+            .execute_claimed_batch(&service, claimed, &mut ownership)
             .await
             .expect("singleton image execution");
         let requests = port.requests();
@@ -2203,7 +2210,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn runtime_branch_batch_execution_owner_finalizes_completed_batch_member_runs() {
+    async fn runtime_branch_batch_execution_owner_retains_completed_batch_member_runs_for_continuation(
+    ) {
         let service = workflow_service_with_recording_reservation_lifecycle();
         let host = BatchFinalizationHost::default();
         let responder_fan_out = RecordingResponderFanOut::default();
@@ -2223,8 +2231,7 @@ mod tests {
             .expect("apply batch response mutations");
 
         let outcome = owner
-            .finalize_batch_member_runs(&service, &host, &plan, &response)
-            .await
+            .finalize_batch_member_runs(&service, &plan, &response)
             .expect("finalize completed batch runs");
 
         assert_eq!(
@@ -2234,29 +2241,27 @@ mod tests {
                 .map(|outcome| outcome.state)
                 .collect::<Vec<_>>(),
             vec![
-                WorkflowRuntimeBranchBatchMemberExecutionOutcomeState::Completed,
-                WorkflowRuntimeBranchBatchMemberExecutionOutcomeState::Completed,
+                WorkflowRuntimeBranchBatchMemberExecutionOutcomeState::Continue,
+                WorkflowRuntimeBranchBatchMemberExecutionOutcomeState::Continue,
             ]
         );
         assert_eq!(
             completed_response_run_ids(&outcome.member_outcomes),
-            vec![Some("run.2026-05-22.001"), Some("run.2026-05-22.002")]
+            vec![None, None]
         );
         assert_eq!(
             completed_response_image_outputs(&outcome.member_outcomes),
-            vec![
-                Some("image for run.2026-05-22.001"),
-                Some("image for run.2026-05-22.002"),
-            ]
+            vec![None, None]
         );
-        assert_eq!(host.workflow_io_call_count(), 2);
-        assert!(
+        assert_eq!(host.workflow_io_call_count(), 0);
+        assert_eq!(
             service
                 .session_store_guard()
                 .expect("session store")
                 .active_workflow_run_ids()
-                .is_empty(),
-            "completed batch member finalization must finish both active runs"
+                .len(),
+            2,
+            "successful tasks retain runs until worker settles their events and continues"
         );
     }
 
@@ -2286,8 +2291,7 @@ mod tests {
             .expect("apply mixed response mutations");
 
         let outcome = owner
-            .finalize_batch_member_runs(&service, &host, &plan, &response)
-            .await
+            .finalize_batch_member_runs(&service, &plan, &response)
             .expect("finalize mixed batch runs");
 
         assert_eq!(
@@ -2317,7 +2321,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn runtime_branch_batch_execution_owner_dispatches_and_finalizes_claimed_batch() {
+    async fn runtime_branch_batch_execution_owner_dispatches_and_continues_claimed_batch() {
         let batch_port = Arc::new(RecordingBatchExecutionPort::default());
         let reservation_lifecycle_port = Arc::new(RecordingReservationLifecyclePort::default());
         let service = WorkflowService::new()
@@ -2333,7 +2337,7 @@ mod tests {
         let (claim_outcome, mut ownership) = batch_claim_outcome(&service, &members);
 
         let outcome = owner
-            .execute_claimed_batch(&service, &host, claim_outcome, &mut ownership)
+            .execute_claimed_batch(&service, claim_outcome, &mut ownership)
             .await
             .expect("execute claimed batch");
 
@@ -2344,20 +2348,17 @@ mod tests {
                 .map(|outcome| outcome.state)
                 .collect::<Vec<_>>(),
             vec![
-                WorkflowRuntimeBranchBatchMemberExecutionOutcomeState::Completed,
-                WorkflowRuntimeBranchBatchMemberExecutionOutcomeState::Completed,
+                WorkflowRuntimeBranchBatchMemberExecutionOutcomeState::Continue,
+                WorkflowRuntimeBranchBatchMemberExecutionOutcomeState::Continue,
             ]
         );
         assert_eq!(
             completed_response_run_ids(&outcome.member_outcomes),
-            vec![Some("run.2026-05-22.001"), Some("run.2026-05-22.002")]
+            vec![None, None]
         );
         assert_eq!(
             completed_response_image_outputs(&outcome.member_outcomes),
-            vec![
-                Some("image for run.2026-05-22.001"),
-                Some("image for run.2026-05-22.002"),
-            ]
+            vec![None, None]
         );
         let requests = batch_port.requests();
         assert_eq!(requests.len(), 1);
@@ -2370,7 +2371,7 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec!["assignment.1", "assignment.2"]
         );
-        assert_eq!(host.workflow_io_call_count(), 2);
+        assert_eq!(host.workflow_io_call_count(), 0);
         assert_eq!(
             reservation_lifecycle_port
                 .events()
@@ -2380,13 +2381,14 @@ mod tests {
             2,
             "successful grouped dispatch must mark each reservation as dispatch-started"
         );
-        assert!(
+        assert_eq!(
             service
                 .session_store_guard()
                 .expect("session store")
                 .active_workflow_run_ids()
-                .is_empty(),
-            "executed batch must finalize completed member runs"
+                .len(),
+            2,
+            "successful tasks retain runs until worker settles their events and continues"
         );
         assert_eq!(
             responder_fan_out.observed_assignment_ids(),
@@ -3058,7 +3060,10 @@ mod tests {
                 &session_id,
                 workflow_run_id,
                 active_runtime_task_graph(workflow_run_id),
-                vec![ready_runtime_task_record(workflow_run_id)],
+                vec![
+                    completed_source_task_record(workflow_run_id),
+                    ready_runtime_task_record(workflow_run_id),
+                ],
             )
             .expect("set scheduler task state");
         store
@@ -3156,6 +3161,28 @@ mod tests {
                 },
             ],
         }
+    }
+
+    fn completed_source_task_record(workflow_run_id: &str) -> SchedulerTaskStateRecord {
+        let mut record = ready_runtime_task_record(workflow_run_id);
+        record.node_id = SchedulerNodeId::parse("prompt.input").expect("source node");
+        record.task_id = SchedulerTaskId::parse("prompt.input").expect("source task");
+        record.state = SchedulerTaskState::Completed {
+            execution_intent: SchedulerTaskExecutionIntent::SourceInput {
+                task_intent: pantograph_scheduler::SchedulerSourceInputTaskIntent {
+                    contract_version: SCHEDULER_TASK_STATE_CONTRACT_VERSION,
+                    workflow_id: record.workflow_id.clone(),
+                    workflow_run_id: record.workflow_run_id.clone(),
+                    node_id: record.node_id.clone(),
+                    task_id: record.task_id.clone(),
+                    task_kind: pantograph_scheduler::SchedulerSourceInputTaskKind::parse(
+                        "text-input",
+                    )
+                    .expect("source kind"),
+                },
+            },
+        };
+        record
     }
 
     fn ready_runtime_task_record(workflow_run_id: &str) -> SchedulerTaskStateRecord {

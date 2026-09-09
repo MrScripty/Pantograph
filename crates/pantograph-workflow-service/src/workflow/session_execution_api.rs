@@ -2265,6 +2265,16 @@ impl WorkflowService {
         timeout_ms: Option<u64>,
         task_graph: &WorkflowSchedulerTaskGraph,
     ) -> Result<usize, WorkflowServiceError> {
+        let records = self
+            .session_store_guard()?
+            .active_run_scheduler_task_state(session_id, workflow_run_id)?
+            .ok_or_else(|| {
+                WorkflowServiceError::InvalidRequest(format!(
+                    "workflow run '{}' has no scheduler task state for recovery",
+                    workflow_run_id
+                ))
+            })?
+            .1;
         let mut repository = self
             .runtime_branch_task_event_repository
             .lock()
@@ -2284,6 +2294,31 @@ impl WorkflowService {
                 task.task_id.as_str()
             ))
             .map_err(runtime_branch_task_event_diagnostic_error)?;
+            let task_record = records
+                .iter()
+                .find(|record| record.task_id == task.task_id)
+                .ok_or_else(|| {
+                    WorkflowServiceError::InvalidRequest(format!(
+                        "scheduler task '{}' has no state for runtime event recovery",
+                        task.task_id.as_str()
+                    ))
+                })?;
+            if task_record.state.kind() == pantograph_scheduler::SchedulerTaskStateKind::Completed {
+                if let Some(event) = repository.get(&event_id) {
+                    if event.state != WorkflowRuntimeBranchTaskEventState::Completed
+                        || event.session_id != session_id
+                        || event.workflow_id != workflow_id
+                        || event.workflow_run_id != workflow_run_id
+                        || event.scheduler_task_id != task.task_id.as_str()
+                    {
+                        return Err(WorkflowServiceError::InvalidRequest(format!(
+                            "completed scheduler task '{}' has mismatched runtime branch event '{}'",
+                            task.task_id.as_str(), event_id.as_str()
+                        )));
+                    }
+                }
+                continue;
+            }
             if let Some(record) = repository.get(&event_id) {
                 match record.state {
                     WorkflowRuntimeBranchTaskEventState::Ready
@@ -2564,6 +2599,188 @@ mod tests {
                     diagnostics: Vec::new(),
                 },
             ],
+        }
+    }
+
+    #[test]
+    fn runtime_branch_recovery_preserves_completed_task_and_rejects_inconsistent_event() {
+        use pantograph_scheduler::{
+            SchedulerTaskExecutionIntent, SchedulerTaskState, SchedulerTaskStateRecord,
+        };
+        for (event_state, wrong_session, succeeds) in [
+            (None, false, true),
+            (
+                Some(WorkflowRuntimeBranchTaskEventState::Completed),
+                false,
+                true,
+            ),
+            (
+                Some(WorkflowRuntimeBranchTaskEventState::Ready),
+                false,
+                false,
+            ),
+            (
+                Some(WorkflowRuntimeBranchTaskEventState::Failed),
+                false,
+                false,
+            ),
+            (
+                Some(WorkflowRuntimeBranchTaskEventState::Completed),
+                true,
+                false,
+            ),
+        ] {
+            let service = WorkflowService::new();
+            let mut graph = runtime_task_graph();
+            graph.tasks.remove(0);
+            graph.tasks[0].dependency_task_ids.clear();
+            graph.tasks[0].input_bindings.clear();
+            let task = graph.tasks[0].clone();
+            let completed = SchedulerTaskStateRecord {
+                contract_version: pantograph_scheduler::SCHEDULER_TASK_STATE_CONTRACT_VERSION,
+                workflow_id: task.workflow_id.clone(),
+                workflow_run_id: task.workflow_run_id.clone(),
+                node_id: task.node_id.clone(),
+                task_id: task.task_id.clone(),
+                state: SchedulerTaskState::Completed {
+                    execution_intent: SchedulerTaskExecutionIntent::Runtime {
+                        task_intent: pantograph_scheduler::SchedulableTaskIntent {
+                            contract_version:
+                                pantograph_scheduler::SCHEDULABLE_TASK_INTENT_CONTRACT_VERSION,
+                            workflow_id: task.workflow_id.clone(),
+                            workflow_run_id: task.workflow_run_id.clone(),
+                            node_id: task.node_id.clone(),
+                            task_id: task.task_id.clone(),
+                            fairness_key: None,
+                            task_type: pantograph_dependency_planning::DependencyTaskId::parse(
+                                "image_generation",
+                            )
+                            .expect("task type"),
+                            model_ref: pantograph_dependency_planning::PumasModelRef {
+                                model_id: "pumas://models/test".to_string(),
+                                revision: None,
+                                selected_artifact_id: None,
+                                selected_artifact_path: None,
+                                migration_diagnostics: Vec::new(),
+                            },
+                            constraints: Default::default(),
+                            trait_settings: Vec::new(),
+                            dependency_override_patches: Vec::new(),
+                            estimate_hints: Vec::new(),
+                        },
+                    },
+                },
+                state_version: 1,
+                last_transition_id: "transition.completed".parse().expect("transition id"),
+            };
+            let mut downstream = task.clone();
+            downstream.node_id = "downstream".parse().expect("node id");
+            downstream.task_id = "downstream".parse().expect("task id");
+            downstream.dependency_task_ids = vec![task.task_id.clone()];
+            graph.tasks.push(downstream.clone());
+            let mut pending = completed.clone();
+            pending.node_id = downstream.node_id;
+            pending.task_id = downstream.task_id;
+            pending.state = SchedulerTaskState::AwaitingInputs {
+                diagnostics: Vec::new(),
+            };
+            let session_id = {
+                let mut store = service.session_store_guard().expect("store");
+                let session_id = store
+                    .create_session(
+                        "workflow.image".to_string(),
+                        None,
+                        None,
+                        Vec::new(),
+                        Vec::new(),
+                        true,
+                    )
+                    .expect("session");
+                let request = super::super::WorkflowExecutionSessionRunRequest {
+                    session_id: session_id.clone(),
+                    workflow_semantic_version: "0.1.0".to_string(),
+                    inputs: Vec::new(),
+                    output_targets: None,
+                    override_selection: None,
+                    timeout_ms: None,
+                    priority: None,
+                };
+                store
+                    .enqueue_run_with_id(&session_id, &request, "run.runtime".to_string())
+                    .expect("enqueue");
+                store
+                    .begin_queued_run(&session_id, "run.runtime")
+                    .expect("begin")
+                    .expect("active run");
+                store
+                    .set_active_run_scheduler_task_state(
+                        &session_id,
+                        "run.runtime",
+                        graph.clone(),
+                        vec![completed, pending],
+                    )
+                    .expect("scheduler state");
+                session_id
+            };
+            let event_id = WorkflowRuntimeBranchTaskEventId::parse(
+                "runtime-branch-task-event.run.runtime.image",
+            )
+            .expect("event id");
+            if let Some(state) = event_state {
+                let mut upstream_graph = graph.clone();
+                upstream_graph.tasks.truncate(1);
+                service
+                    .persist_runtime_branch_task_events_for_admission(
+                        if wrong_session {
+                            "session.wrong"
+                        } else {
+                            &session_id
+                        },
+                        "workflow.image",
+                        "run.runtime",
+                        None,
+                        None,
+                        &upstream_graph,
+                    )
+                    .expect("upstream event");
+                if state != WorkflowRuntimeBranchTaskEventState::Ready {
+                    let mut repository = service
+                        .runtime_branch_task_event_repository
+                        .lock()
+                        .expect("events");
+                    let claimed = repository.claim_event(&event_id,
+                        super::super::runtime_branch_task_event::WorkflowRuntimeBranchTaskEventClaimOwnerId::parse("worker.test").expect("owner"),
+                        unix_timestamp_ms(), 30_000).expect("claim");
+                    let _terminal = if state == WorkflowRuntimeBranchTaskEventState::Completed {
+                        repository.complete(&event_id, &claimed.claim, unix_timestamp_ms(), None)
+                    } else {
+                        repository.fail(&event_id, &claimed.claim, unix_timestamp_ms(), None)
+                    }
+                    .expect("terminal event");
+                }
+            }
+            let before = service.runtime_branch_task_event_for_test(&event_id);
+            let result = service.ensure_runtime_branch_task_events_for_recovery(
+                &session_id,
+                "workflow.image",
+                "run.runtime",
+                None,
+                None,
+                &graph,
+            );
+            if succeeds {
+                assert_eq!(result.expect("recover only unfinished downstream"), 1);
+            } else {
+                assert!(result
+                    .expect_err("reject inconsistent completed event")
+                    .message()
+                    .contains("mismatched runtime branch event"));
+            }
+            assert_eq!(
+                service.runtime_branch_task_event_for_test(&event_id),
+                before,
+                "recovery must never enqueue or mutate completed upstream work"
+            );
         }
     }
 

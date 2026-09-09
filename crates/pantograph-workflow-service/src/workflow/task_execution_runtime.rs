@@ -306,7 +306,7 @@ mod tests {
         assert!(
             outcome
                 .error_message
-                .contains("not available for worker claim"),
+                .contains("session_not_found: session 'session-1' not found"),
             "unexpected error message: {}",
             outcome.error_message
         );
