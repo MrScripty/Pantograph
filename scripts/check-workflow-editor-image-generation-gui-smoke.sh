@@ -83,4 +83,42 @@ cp "$workflow_smoke_file" "$smoke_project_root/$workflow_smoke_file"
 
 export PANTOGRAPH_GUI_SMOKE_PROJECT_ROOT="$smoke_project_root"
 
-exec node_modules/.bin/wdio run tests/e2e/workflow-editor-image-generation/wdio.conf.mjs
+wdio_pid=''
+forwarded_signal=''
+forward_signal() {
+  forwarded_signal="$1"
+  if [[ -n "$wdio_pid" ]] && kill -0 "$wdio_pid" 2>/dev/null; then
+    kill -s "$1" "$wdio_pid" 2>/dev/null || true
+  fi
+}
+trap 'forward_signal INT' INT
+trap 'forward_signal TERM' TERM
+
+# Monitor mode keeps the asynchronous child from inheriting ignored SIGINT.
+set -m
+node_modules/.bin/wdio run tests/e2e/workflow-editor-image-generation/wdio.conf.mjs &
+wdio_pid=$!
+set +m
+if [[ -n "$forwarded_signal" ]]; then
+  forward_signal "$forwarded_signal"
+fi
+
+set +e
+while true; do
+  wait "$wdio_pid"
+  wdio_status=$?
+  if [[ -n "$forwarded_signal" ]] && kill -0 "$wdio_pid" 2>/dev/null; then
+    continue
+  fi
+  break
+done
+set -e
+
+trap - INT TERM
+if [[ "$forwarded_signal" == 'INT' ]]; then
+  exit 130
+fi
+if [[ "$forwarded_signal" == 'TERM' ]]; then
+  exit 143
+fi
+exit "$wdio_status"
