@@ -14,7 +14,7 @@
     "artifact_kind": "hf_compatible_directory",
     "entry_path": "/models/tiny-causal",
     "model_source": {
-      "source_contract_version": 2,
+      "source_contract_version": 3,
       "source_kind": "pumas_resolved",
       "artifact_kind": "hf_compatible_directory",
       "entry_path": "/models/tiny-causal",
