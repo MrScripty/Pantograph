@@ -426,7 +426,9 @@ impl InferenceBackend for MockImageBackend {
         })
     }
 
-    fn stop(&mut self) {}
+    async fn stop(&mut self) -> Result<(), BackendError> {
+        Ok(())
+    }
 
     fn is_ready(&self) -> bool {
         true
@@ -572,7 +574,9 @@ impl InferenceBackend for MockImageBatchBackend {
         Ok(BackendStartOutcome::default())
     }
 
-    fn stop(&mut self) {}
+    async fn stop(&mut self) -> Result<(), BackendError> {
+        Ok(())
+    }
 
     fn is_ready(&self) -> bool {
         true
@@ -687,7 +691,9 @@ impl InferenceBackend for RecordingCancellationImageBackend {
         Ok(BackendStartOutcome::default())
     }
 
-    fn stop(&mut self) {}
+    async fn stop(&mut self) -> Result<(), BackendError> {
+        Ok(())
+    }
 
     fn is_ready(&self) -> bool {
         true
@@ -776,7 +782,9 @@ impl InferenceBackend for MockActiveLlamaBackend {
         })
     }
 
-    fn stop(&mut self) {}
+    async fn stop(&mut self) -> Result<(), BackendError> {
+        Ok(())
+    }
 
     fn is_ready(&self) -> bool {
         true
@@ -872,7 +880,9 @@ impl InferenceBackend for MockHttpBackend {
         })
     }
 
-    fn stop(&mut self) {}
+    async fn stop(&mut self) -> Result<(), BackendError> {
+        Ok(())
+    }
 
     fn is_ready(&self) -> bool {
         true
@@ -951,7 +961,9 @@ impl InferenceBackend for MockReusedBackend {
         })
     }
 
-    fn stop(&mut self) {}
+    async fn stop(&mut self) -> Result<(), BackendError> {
+        Ok(())
+    }
 
     fn is_ready(&self) -> bool {
         true
@@ -1014,7 +1026,9 @@ impl InferenceBackend for MockImplicitLifecycleBackend {
         })
     }
 
-    fn stop(&mut self) {}
+    async fn stop(&mut self) -> Result<(), BackendError> {
+        Ok(())
+    }
 
     fn is_ready(&self) -> bool {
         true
@@ -1076,7 +1090,9 @@ impl InferenceBackend for MockFailingBackend {
         ))
     }
 
-    fn stop(&mut self) {}
+    async fn stop(&mut self) -> Result<(), BackendError> {
+        Ok(())
+    }
 
     fn is_ready(&self) -> bool {
         false
@@ -1151,8 +1167,9 @@ impl InferenceBackend for MockFailAfterFirstStartBackend {
         ))
     }
 
-    fn stop(&mut self) {
+    async fn stop(&mut self) -> Result<(), BackendError> {
         self.ready = false;
+        Ok(())
     }
 
     fn is_ready(&self) -> bool {
@@ -1216,7 +1233,9 @@ impl InferenceBackend for MockLifecycleStreamBackend {
         Ok(BackendStartOutcome::default())
     }
 
-    fn stop(&mut self) {}
+    async fn stop(&mut self) -> Result<(), BackendError> {
+        Ok(())
+    }
 
     fn is_ready(&self) -> bool {
         true
@@ -1307,7 +1326,9 @@ impl InferenceBackend for MockKvBackend {
         Ok(BackendStartOutcome::default())
     }
 
-    fn stop(&mut self) {}
+    async fn stop(&mut self) -> Result<(), BackendError> {
+        Ok(())
+    }
 
     fn is_ready(&self) -> bool {
         true
@@ -1437,7 +1458,7 @@ async fn test_switch_backend_normalizes_llamacpp_alias() {
 #[cfg(feature = "backend-pytorch")]
 #[tokio::test]
 async fn test_switch_backend_normalizes_pytorch_alias() {
-    let gateway = InferenceGateway::new();
+    let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "Mock");
 
     gateway
         .switch_backend("pytorch")
@@ -4483,7 +4504,7 @@ async fn test_runtime_lifecycle_snapshot_tracks_start_and_stop() {
     assert!(started.active);
     assert!(started.last_error.is_none());
 
-    gateway.stop().await;
+    gateway.stop().await.unwrap();
 
     let stopped = gateway.runtime_lifecycle_snapshot().await;
     assert_eq!(stopped.runtime_id.as_deref(), Some("mock"));
@@ -4571,7 +4592,7 @@ async fn test_runtime_lifecycle_snapshot_normalizes_start_failure_reason() {
         Some("Startup failed: mock start failure")
     );
 
-    gateway.stop().await;
+    gateway.stop().await.unwrap();
 
     let stopped = gateway.runtime_lifecycle_snapshot().await;
     assert_eq!(
@@ -4691,7 +4712,7 @@ async fn test_mode_info_preserves_selected_backend_after_stop() {
         .start(&BackendConfig::default())
         .await
         .expect("gateway should start");
-    gateway.stop().await;
+    gateway.stop().await.unwrap();
 
     let mode = gateway.mode_info().await;
 
@@ -4793,4 +4814,260 @@ async fn test_mode_info_reports_active_model_target() {
         Some("/models/vision.gguf")
     );
     assert_eq!(mode.embedding_model_target, None);
+}
+
+#[tokio::test]
+async fn typed_text_rejects_premature_eof() {
+    let gateway = InferenceGateway::with_backend(Box::new(MockReusedBackend), "MockReused");
+    let request = InferenceExecutionRequest {
+        request_id: Some("premature-eof".into()),
+        task_id: InferenceTaskId::TextGeneration,
+        model_ref: None,
+        model_name: Some("mock-text".into()),
+        resolved_model_package_facts: None,
+        input: InferenceExecutionInput::TextGeneration {
+            prompt: Some("hello".into()),
+            system_prompt: None,
+            messages: vec![],
+            stream: false,
+        },
+        generation_options: None,
+        extra_options: serde_json::Value::Null,
+    };
+    let error = gateway.execute_typed(request).await.unwrap_err();
+    assert!(error.to_string().contains("before terminal completion"));
+}
+
+#[derive(Clone, Default)]
+struct SelectedTextBackend {
+    effects: Arc<Mutex<Vec<String>>>,
+    terminal: u8,
+}
+#[async_trait]
+impl InferenceBackend for SelectedTextBackend {
+    fn name(&self) -> &'static str {
+        "PyTorch"
+    }
+    fn description(&self) -> &'static str {
+        "selected text fixture"
+    }
+    fn capabilities(&self) -> BackendCapabilities {
+        BackendCapabilities::default()
+    }
+    fn is_ready(&self) -> bool {
+        true
+    }
+    fn base_url(&self) -> Option<String> {
+        None
+    }
+    async fn health_check(&self) -> bool {
+        true
+    }
+    async fn start(
+        &mut self,
+        _: &BackendConfig,
+        _: Arc<dyn ProcessSpawner>,
+    ) -> Result<BackendStartOutcome, BackendError> {
+        Ok(BackendStartOutcome::default())
+    }
+    async fn stop(&mut self) -> Result<(), BackendError> {
+        self.effects.lock().unwrap().push("stop".into());
+        Ok(())
+    }
+    async fn load_selected_text(
+        &mut self,
+        request: &InferenceExecutionRequest,
+        target: &PumasArtifactLoadTarget,
+        decision: &BackendExecutionDecision,
+    ) -> Result<BackendStartOutcome, BackendError> {
+        crate::selected_text_execution::SelectedTextLoad::validate(request, target, decision)
+            .await?;
+        self.effects.lock().unwrap().push(format!(
+            "load:{}:{}",
+            target.local_load_path,
+            decision.selected_device_id.as_ref().unwrap()
+        ));
+        Ok(BackendStartOutcome::default())
+    }
+    async fn finish_selected_text(&self, cancel: bool) -> Result<(), BackendError> {
+        self.effects
+            .lock()
+            .unwrap()
+            .push(format!("finish:{cancel}"));
+        Ok(())
+    }
+    async fn chat_completion_stream(
+        &self,
+        request: String,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, BackendError>> + Send>>, BackendError>
+    {
+        let request: serde_json::Value = serde_json::from_str(&request).unwrap();
+        assert_eq!(
+            request["messages"][0]["content"][0]["text"],
+            "  exact prompt\n"
+        );
+        self.effects.lock().unwrap().push("stream".into());
+        let mut chunks = vec![Ok(ChatChunk {
+            content: Some("exact text".into()),
+            done: false,
+            usage: None,
+            cache_handle_id: None,
+        })];
+        if self.terminal == 0 {
+            chunks.push(Ok(ChatChunk {
+                content: None,
+                done: true,
+                usage: None,
+                cache_handle_id: None,
+            }));
+        }
+        if self.terminal == 2 {
+            chunks.push(Err(BackendError::Inference(
+                "selected producer failure".into(),
+            )));
+        }
+        Ok(Box::pin(stream::iter(chunks)))
+    }
+    async fn embeddings(
+        &self,
+        _: Vec<String>,
+        _: &str,
+    ) -> Result<Vec<EmbeddingResult>, BackendError> {
+        Err(BackendError::NotReady)
+    }
+    async fn rerank(&self, _: RerankRequest) -> Result<RerankResponse, BackendError> {
+        Err(BackendError::NotReady)
+    }
+}
+struct SelectedTextFactory(SelectedTextBackend);
+impl crate::backend::BackendFactory for SelectedTextFactory {
+    fn create(&self) -> Result<Box<dyn InferenceBackend>, BackendError> {
+        Ok(Box::new(self.0.clone()))
+    }
+    fn info(&self) -> BackendInfo {
+        panic!("not used")
+    }
+}
+
+#[tokio::test]
+async fn selected_text_switches_to_requested_target_and_requires_terminal_output() {
+    for terminal in [0, 1, 2] {
+        let (_directory, request, target, decision) = crate::selected_text_execution::fixture();
+        let selected = SelectedTextBackend {
+            terminal,
+            ..Default::default()
+        };
+        let effects = selected.effects.clone();
+        let mut gateway =
+            InferenceGateway::with_backend(Box::new(MockImageBackend), "different-resident-model");
+        gateway
+            .registry
+            .register("PyTorch", Box::new(SelectedTextFactory(selected)));
+        let result = gateway
+            .execute_selected_text_with_cancellation(
+                request,
+                target.clone(),
+                decision,
+                InferenceExecutionCancellationHandle::running(),
+            )
+            .await;
+        if terminal == 0 {
+            assert!(
+                matches!(result.unwrap(), InferenceExecutionResult::TextGeneration { text, .. } if text == "exact text")
+            );
+        } else {
+            let error = result.unwrap_err().to_string();
+            assert!(
+                error.contains(if terminal == 1 {
+                    "before terminal completion"
+                } else {
+                    "selected producer failure"
+                }),
+                "{error}"
+            );
+        }
+        assert_eq!(gateway.current_backend_name().await, "PyTorch");
+        assert_eq!(
+            *effects.lock().unwrap(),
+            vec![
+                format!("load:{}:cpu", target.local_load_path),
+                "stream".into(),
+                format!("finish:{}", terminal != 0)
+            ]
+        );
+    }
+}
+
+#[tokio::test]
+async fn selected_text_invalid_handoffs_have_no_backend_effects() {
+    for invalid in 0..13 {
+        let (_directory, mut request, mut target, mut decision) =
+            crate::selected_text_execution::fixture();
+        match invalid {
+            0 => target.model_ref.selected_artifact_id = Some("wrong-artifact".into()),
+            1 => {
+                decision.selected_model_ref.as_mut().unwrap().revision =
+                    Some("wrong-revision".into())
+            }
+            2 => {
+                request
+                    .resolved_model_package_facts
+                    .as_mut()
+                    .unwrap()
+                    .custom_code
+                    .requires_custom_code = true
+            }
+            3 => target.load_path_kind = PumasArtifactLoadPathKind::File,
+            4 => target.validation_state = ModelValidationState::Unknown,
+            5 => {
+                decision.selected_runtime_variant_id =
+                    RuntimeVariantId::parse("pytorch.diffusers").unwrap()
+            }
+            6 => {
+                decision.device_decision.selected_device_id =
+                    Some(InferenceDeviceId::parse("cuda:0").unwrap())
+            }
+            7 => target.package_facts_contract_version = None,
+            8 => request.request_id = None,
+            9 => decision.selected_device_id = None,
+            10 => target.local_load_path = "org/remote-model".into(),
+            11 => {
+                let file =
+                    std::path::Path::new(&target.local_load_path).join("weights.safetensors");
+                std::fs::write(&file, []).unwrap();
+                target.local_load_path = file.to_str().unwrap().into();
+            }
+            _ => request.resolved_model_package_facts.as_mut().unwrap().task = Default::default(),
+        }
+        let backend = SelectedTextBackend::default();
+        let effects = backend.effects.clone();
+        let gateway = InferenceGateway::with_backend(Box::new(backend), "PyTorch");
+        assert!(
+            gateway
+                .execute_selected_text_with_cancellation(
+                    request,
+                    target,
+                    decision,
+                    InferenceExecutionCancellationHandle::running()
+                )
+                .await
+                .is_err(),
+            "case {invalid}"
+        );
+        assert!(effects.lock().unwrap().is_empty(), "case {invalid}");
+    }
+    let (_directory, request, target, decision) = crate::selected_text_execution::fixture();
+    let backend = SelectedTextBackend::default();
+    let effects = backend.effects.clone();
+    let gateway = InferenceGateway::with_backend(Box::new(backend), "PyTorch");
+    assert!(gateway
+        .execute_selected_text_with_cancellation(
+            request,
+            target,
+            decision,
+            InferenceExecutionCancellationHandle::cancellation_requested("test")
+        )
+        .await
+        .is_err());
+    assert!(effects.lock().unwrap().is_empty());
 }

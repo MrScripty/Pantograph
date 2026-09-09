@@ -34,7 +34,11 @@ impl crate::runtime_registry::HostRuntimeRegistryController for MockRuntimeRegis
         self.mode_info.clone()
     }
 
-    async fn stop_runtime_producer(&self, _producer: crate::runtime_registry::HostRuntimeProducer) {
+    async fn stop_runtime_producer(
+        &self,
+        _producer: crate::runtime_registry::HostRuntimeProducer,
+    ) -> Result<(), inference::GatewayError> {
+        Ok(())
     }
 
     async fn runtime_health_assessment_snapshot(&self) -> RuntimeHealthAssessmentSnapshot {

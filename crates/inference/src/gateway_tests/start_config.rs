@@ -402,6 +402,6 @@ async fn test_restart_runtime_config_reads_active_runtime_config_until_stop() {
         Some("/models/vision.gguf".to_string())
     );
 
-    gateway.stop().await;
+    gateway.stop().await.unwrap();
     assert!(gateway.restart_runtime_config().await.is_none());
 }

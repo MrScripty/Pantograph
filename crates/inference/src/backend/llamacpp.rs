@@ -323,8 +323,9 @@ impl InferenceBackend for LlamaCppBackend {
         }
     }
 
-    fn stop(&mut self) {
+    async fn stop(&mut self) -> Result<(), BackendError> {
         self.server.stop();
+        Ok(())
     }
 
     fn is_ready(&self) -> bool {

@@ -102,6 +102,7 @@ sys.modules["worker_transformers"] = worker_transformers
 
 worker_image_contract = types.ModuleType("worker_image_contract")
 worker_image_contract.generate_image_kwargs_from_envelope = lambda envelope: {}
+worker_image_contract.generate_image_batch_kwargs_from_envelope = lambda envelope: {}
 sys.modules["worker_image_contract"] = worker_image_contract
 
 worker_contract = types.ModuleType("worker_contract")
@@ -186,6 +187,22 @@ sys.modules["worker_contract"] = worker_contract
     .expect("stub setup source should not contain nul bytes");
     py.run(&setup, None, None)
         .expect("stubbed worker dependencies should load");
+
+    let diffusion_source = CString::new(include_str!("../../torch/worker_diffusion.py"))
+        .expect("diffusion helper source should not contain nul bytes");
+    let diffusion_module = pyo3::types::PyModule::from_code(
+        py,
+        &diffusion_source,
+        c"worker_diffusion.py",
+        c"worker_diffusion",
+    )
+    .expect("diffusion helper should load");
+    py.import("sys")
+        .expect("sys should import")
+        .getattr("modules")
+        .expect("sys.modules should exist")
+        .set_item("worker_diffusion", diffusion_module)
+        .expect("diffusion helper should register");
 
     let source = CString::new(include_str!("../../torch/worker.py"))
         .expect("worker source should not contain nul bytes");
@@ -318,12 +335,10 @@ fn test_no_loaded_model_initially() {
     assert!(backend.loaded_model.is_none());
 }
 
-#[test]
-fn test_stop_without_loaded_model_clears_ready_state() {
+#[tokio::test]
+async fn test_stop_without_loaded_model_clears_ready_state() {
     let mut backend = PyTorchBackend::new();
-    backend.ready = true;
-
-    backend.stop();
+    backend.stop().await.unwrap();
 
     assert!(!backend.ready);
     assert!(backend.loaded_model.is_none());
@@ -5602,4 +5617,784 @@ fn test_pytorch_generation_options_map_to_transformers_kwargs_and_diagnostics() 
             .difference(&diagnostic_paths)
             .collect::<Vec<_>>()
     );
+}
+
+#[tokio::test]
+async fn owned_text_job_waits_for_producer_and_rejects_overlap() {
+    use futures_util::{FutureExt, StreamExt};
+    let jobs = super::pytorch_text_job::TextJobs::default();
+    let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let mut stream = jobs
+        .spawn(move |producer| {
+            entered_tx.send(()).unwrap();
+            release_rx.recv().unwrap();
+            producer.check()
+        })
+        .unwrap();
+    entered_rx.await.unwrap();
+    assert!(
+        matches!(jobs.spawn(|_| Ok(())), Err(BackendError::Inference(message)) if message.contains("occupied"))
+    );
+    assert!(stream.next().now_or_never().is_none());
+    assert!(jobs.drain(false).now_or_never().is_none());
+    release_tx.send(()).unwrap();
+    assert!(stream.next().await.unwrap().unwrap().done);
+    jobs.drain(false).await.unwrap();
+    assert!(jobs.spawn(|_| Ok(())).is_ok());
+}
+
+#[tokio::test]
+async fn owned_text_job_cancel_waits_for_step_return() {
+    use futures_util::{FutureExt, StreamExt};
+    let jobs = super::pytorch_text_job::TextJobs::default();
+    let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let mut stream = jobs
+        .spawn(move |producer| {
+            entered_tx.send(()).unwrap();
+            release_rx.recv().unwrap();
+            producer.check()
+        })
+        .unwrap();
+    entered_rx.await.unwrap();
+    assert!(jobs.drain(true).now_or_never().is_none());
+    assert!(jobs.spawn(|_| Ok(())).is_err());
+    release_tx.send(()).unwrap();
+    jobs.drain(true).await.unwrap();
+    assert!(matches!(
+        stream.next().await.unwrap(),
+        Err(BackendError::Cancelled(_))
+    ));
+}
+
+#[tokio::test]
+async fn owned_text_job_full_buffer_and_receiver_drop_cancel() {
+    for drop_receiver in [false, true] {
+        let jobs = super::pytorch_text_job::TextJobs::default();
+        let (full_tx, full_rx) = tokio::sync::oneshot::channel();
+        let stream = jobs
+            .spawn(move |mut producer| {
+                for _ in 0..32 {
+                    producer.send(ChatChunk {
+                        content: Some("token".into()),
+                        done: false,
+                        usage: None,
+                        cache_handle_id: None,
+                    })?;
+                }
+                full_tx.send(()).unwrap();
+                producer.send(ChatChunk {
+                    content: None,
+                    done: false,
+                    usage: None,
+                    cache_handle_id: None,
+                })
+            })
+            .unwrap();
+        full_rx.await.unwrap();
+        if drop_receiver {
+            drop(stream);
+            jobs.drain(false).await.unwrap();
+        } else {
+            jobs.drain(true).await.unwrap();
+        }
+    }
+}
+
+#[tokio::test]
+async fn owned_text_job_error_and_panic_never_publish_success() {
+    use futures_util::StreamExt;
+    for panic in [false, true] {
+        let jobs = super::pytorch_text_job::TextJobs::default();
+        let mut stream = jobs
+            .spawn(move |_| {
+                if panic {
+                    panic!("controlled producer panic");
+                }
+                Err(BackendError::NotRunning("controlled worker failure".into()))
+            })
+            .unwrap();
+        let error = stream.next().await.unwrap().unwrap_err();
+        if panic {
+            assert!(matches!(error, BackendError::Inference(_)));
+        } else {
+            assert!(matches!(error, BackendError::NotRunning(_)));
+        }
+        assert!(stream.next().await.is_none());
+        assert!(jobs.drain(false).await.is_err());
+    }
+}
+
+struct ControlledTextBackend {
+    jobs: super::pytorch_text_job::TextJobs,
+    entered: std::sync::Mutex<Option<tokio::sync::oneshot::Sender<()>>>,
+    release: std::sync::Mutex<Option<std::sync::mpsc::Receiver<()>>>,
+    fail_stop: bool,
+}
+#[async_trait]
+impl InferenceBackend for ControlledTextBackend {
+    fn name(&self) -> &'static str {
+        "ControlledText"
+    }
+    fn description(&self) -> &'static str {
+        "Controlled text producer"
+    }
+    fn capabilities(&self) -> BackendCapabilities {
+        BackendCapabilities::default()
+    }
+    fn is_ready(&self) -> bool {
+        true
+    }
+    fn base_url(&self) -> Option<String> {
+        None
+    }
+    async fn health_check(&self) -> bool {
+        true
+    }
+    async fn start(
+        &mut self,
+        _: &BackendConfig,
+        _: Arc<dyn ProcessSpawner>,
+    ) -> Result<BackendStartOutcome, BackendError> {
+        Ok(BackendStartOutcome::default())
+    }
+    async fn stop(&mut self) -> Result<(), BackendError> {
+        self.jobs.drain(true).await?;
+        if self.fail_stop {
+            Err(BackendError::Inference(
+                "controlled shutdown failure".into(),
+            ))
+        } else {
+            Ok(())
+        }
+    }
+    async fn chat_completion_stream(
+        &self,
+        _: String,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, BackendError>> + Send>>, BackendError>
+    {
+        let entered = self.entered.lock().unwrap().take().unwrap();
+        let release = self.release.lock().unwrap().take().unwrap();
+        self.jobs.spawn(move |producer| {
+            entered.send(()).unwrap();
+            release.recv().unwrap();
+            producer.check()
+        })
+    }
+    async fn embeddings(
+        &self,
+        _: Vec<String>,
+        _: &str,
+    ) -> Result<Vec<EmbeddingResult>, BackendError> {
+        Ok(vec![])
+    }
+    async fn rerank(&self, _: RerankRequest) -> Result<RerankResponse, BackendError> {
+        Err(BackendError::NotReady)
+    }
+}
+
+#[tokio::test]
+async fn gateway_legacy_text_switch_waits_and_failed_stop_retains_backend() {
+    use futures_util::{FutureExt, StreamExt};
+    for fail_stop in [false, true] {
+        let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let backend = ControlledTextBackend {
+            jobs: Default::default(),
+            entered: std::sync::Mutex::new(Some(entered_tx)),
+            release: std::sync::Mutex::new(Some(release_rx)),
+            fail_stop,
+        };
+        let gateway =
+            crate::gateway::InferenceGateway::with_backend(Box::new(backend), "ControlledText");
+        let mut stream = gateway.chat_completion_stream("{}".into()).await.unwrap();
+        entered_rx.await.unwrap();
+        let switch = gateway.switch_backend("pytorch");
+        tokio::pin!(switch);
+        assert!(switch.as_mut().now_or_never().is_none());
+        assert_eq!(gateway.current_backend_name().await, "ControlledText");
+        release_tx.send(()).unwrap();
+        let result = switch.await;
+        if fail_stop {
+            assert!(result
+                .unwrap_err()
+                .to_string()
+                .contains("controlled shutdown failure"));
+            assert_eq!(gateway.current_backend_name().await, "ControlledText");
+            assert!(gateway.is_ready().await);
+        } else {
+            result.unwrap();
+            assert_eq!(gateway.current_backend_name().await, "PyTorch");
+        }
+        assert!(matches!(
+            stream.next().await.unwrap(),
+            Err(BackendError::Cancelled(_))
+        ));
+    }
+}
+
+#[tokio::test]
+async fn owned_text_load_and_unload_wait_without_cancelling() {
+    use futures_util::FutureExt;
+    for load in [false, true] {
+        let mut backend = PyTorchBackend::new();
+        let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let _stream = backend
+            .text_jobs
+            .spawn(move |producer| {
+                entered_tx.send(()).unwrap();
+                release_rx.recv().unwrap();
+                producer
+                    .check()
+                    .expect("ordinary model changes must not cancel accepted work");
+                Err(BackendError::Inference(
+                    "controlled terminal failure prevents Python mutation".into(),
+                ))
+            })
+            .unwrap();
+        entered_rx.await.unwrap();
+        let operation = async {
+            if load {
+                backend
+                    .load_model("controlled-model", None, None)
+                    .await
+                    .map(|_| ())
+            } else {
+                backend.unload_model().await
+            }
+        };
+        tokio::pin!(operation);
+        assert!(operation.as_mut().now_or_never().is_none());
+        release_tx.send(()).unwrap();
+        assert!(operation
+            .await
+            .unwrap_err()
+            .to_string()
+            .contains("controlled terminal failure"));
+    }
+}
+
+#[pyclass]
+struct TextIteratorBarrier {
+    entered: std::sync::Mutex<Option<tokio::sync::oneshot::Sender<()>>>,
+    release: std::sync::Mutex<std::sync::mpsc::Receiver<()>>,
+}
+#[pymethods]
+impl TextIteratorBarrier {
+    fn wait(&self, py: Python<'_>) {
+        self.entered
+            .lock()
+            .unwrap()
+            .take()
+            .unwrap()
+            .send(())
+            .unwrap();
+        py.allow_threads(|| self.release.lock().unwrap().recv().unwrap());
+    }
+}
+
+#[tokio::test]
+async fn production_text_iterator_drains_before_successful_load_and_unload() {
+    use futures_util::{FutureExt, StreamExt};
+    for action in ["load", "unload", "stop", "failed_restart", "failed_load"] {
+        let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let saved = Python::with_gil(|py| {
+            load_worker_module_with_stubbed_dependencies(py);
+            py.run(c"import sys, types
+sys.modules['torch'].no_grad = lambda: (lambda f: f)\nsys.modules['torch.nn'] = types.SimpleNamespace(functional=types.SimpleNamespace())
+sys.modules['transformers.cache_utils'] = types.SimpleNamespace(DynamicCache=type('DynamicCache', (), {}))", None, None).unwrap();
+            let worker = super::pytorch_worker::worker_module(py).unwrap();
+            let names = [
+                "generate_text_stream_setup_from_envelope",
+                "generate_text_stream_from_envelope",
+                "load_transformers_model_from_envelope",
+                "unload_model_from_envelope",
+                "shutdown_worker_from_envelope",
+            ];
+            let saved = names
+                .into_iter()
+                .map(|name| (name, worker.getattr(name).unwrap().unbind()))
+                .collect::<Vec<_>>();
+            worker
+                .setattr(
+                    "_rt03_barrier",
+                    Py::new(
+                        py,
+                        TextIteratorBarrier {
+                            entered: std::sync::Mutex::new(Some(entered_tx)),
+                            release: std::sync::Mutex::new(release_rx),
+                        },
+                    )
+                    .unwrap(),
+                )
+                .unwrap();
+            let source = CString::new(r#"
+_rt03_effects = []
+_rt03_fail_text = False
+_rt03_fail_load = False
+def _rt03_success(envelope, result):
+    request = json.loads(envelope)
+    return json.dumps({'status': 'ok', 'request_id': request['request_id'], 'result': result})
+def generate_text_stream_setup_from_envelope(envelope):
+    return _rt03_success(envelope, {})
+def generate_text_stream_from_envelope(envelope):
+    yield 'first'
+    _rt03_barrier.wait()
+    if _rt03_fail_text:
+        raise RuntimeError('controlled text producer failure')
+    yield 'second'
+def load_transformers_model_from_envelope(envelope):
+    _rt03_effects.append('load')
+    if _rt03_fail_load:
+        raise RuntimeError('controlled replacement load failure after unloading')
+    return _rt03_success(envelope, {'model_path': 'controlled-model', 'model_type': 'standard', 'device': 'cpu'})
+def unload_model_from_envelope(envelope):
+    _rt03_effects.append('unload')
+    return _rt03_success(envelope, {'unloaded': True})
+def shutdown_worker_from_envelope(envelope):
+    _rt03_effects.append('stop')
+    return _rt03_success(envelope, {'shutdown': True})
+"#).unwrap();
+            py.run(&source, Some(&worker.dict()), None).unwrap();
+            saved
+        });
+        let mut backend = PyTorchBackend::new();
+        backend.ready = true;
+        if action == "failed_restart" || action == "failed_load" {
+            if action == "failed_restart" {
+                assert_failed_text_restart_preserves_residency(backend, entered_rx, release_tx)
+                    .await;
+            } else {
+                assert_effectful_load_failure_clears_residency(backend).await;
+            }
+            Python::with_gil(|py| {
+                let worker = super::pytorch_worker::worker_module(py).unwrap();
+                for (name, value) in saved {
+                    worker.setattr(name, value).unwrap();
+                }
+                worker.delattr("_rt03_barrier").unwrap();
+            });
+            continue;
+        }
+        let mut stream = backend.generate_stream("hello".into(), None, 8, 0.7, 1.0, None);
+        entered_rx.await.unwrap();
+        assert_eq!(
+            stream.next().await.unwrap().unwrap().content.as_deref(),
+            Some("first")
+        );
+        let operation = async {
+            match action {
+                "load" => backend
+                    .load_model("controlled-model", None, None)
+                    .await
+                    .map(|_| ()),
+                "unload" => backend.unload_model().await,
+                _ => backend.stop().await,
+            }
+        };
+        tokio::pin!(operation);
+        assert!(operation.as_mut().now_or_never().is_none());
+        Python::with_gil(|py| {
+            let worker = super::pytorch_worker::worker_module(py).unwrap();
+            assert!(worker
+                .getattr("_rt03_effects")
+                .unwrap()
+                .extract::<Vec<String>>()
+                .unwrap()
+                .is_empty());
+        });
+        release_tx.send(()).unwrap();
+        operation.await.unwrap();
+        if action == "stop" {
+            assert!(matches!(
+                stream.next().await.unwrap(),
+                Err(BackendError::Cancelled(_))
+            ));
+        } else {
+            assert_eq!(
+                stream.next().await.unwrap().unwrap().content.as_deref(),
+                Some("second")
+            );
+            assert!(stream.next().await.unwrap().unwrap().done);
+        }
+        Python::with_gil(|py| {
+            let worker = super::pytorch_worker::worker_module(py).unwrap();
+            assert_eq!(
+                worker
+                    .getattr("_rt03_effects")
+                    .unwrap()
+                    .extract::<Vec<String>>()
+                    .unwrap(),
+                vec![action]
+            );
+            for (name, value) in saved {
+                worker.setattr(name, value).unwrap();
+            }
+            worker.delattr("_rt03_barrier").unwrap();
+        });
+    }
+}
+
+async fn assert_failed_text_restart_preserves_residency(
+    backend: PyTorchBackend,
+    entered: tokio::sync::oneshot::Receiver<()>,
+    release: std::sync::mpsc::Sender<()>,
+) {
+    use futures_util::StreamExt;
+    let gateway = crate::gateway::InferenceGateway::with_backend(Box::new(backend), "PyTorch");
+    gateway.set_spawner(Arc::new(TextTestSpawner)).await;
+    let original = BackendConfig {
+        model_path: Some("controlled-model".into()),
+        embedding_mode: true,
+        ..Default::default()
+    };
+    gateway.start(&original).await.unwrap();
+    let previous = gateway.runtime_lifecycle_snapshot().await;
+    Python::with_gil(|py| {
+        super::pytorch_worker::worker_module(py)
+            .unwrap()
+            .setattr("_rt03_fail_text", true)
+            .unwrap();
+    });
+    let mut stream = gateway
+        .chat_completion_stream(r#"{"messages":[{"role":"user","content":"hello"}]}"#.into())
+        .await
+        .unwrap();
+    entered.await.unwrap();
+    release.send(()).unwrap();
+    assert!(stream.next().await.unwrap().is_ok());
+    assert!(stream
+        .next()
+        .await
+        .unwrap()
+        .unwrap_err()
+        .to_string()
+        .contains("controlled text producer failure"));
+    let replacement = BackendConfig {
+        model_path: Some("replacement-model".into()),
+        reranking_mode: true,
+        external_url: Some("http://replacement.invalid".into()),
+        ..Default::default()
+    };
+    let error = gateway.start(&replacement).await.unwrap_err();
+    assert!(error
+        .to_string()
+        .contains("controlled text producer failure"));
+    assert!(gateway.is_ready().await);
+    assert!(gateway.is_embedding_mode().await);
+    assert!(!gateway.is_reranking_mode().await);
+    assert!(!gateway.is_external_mode().await);
+    let retained = gateway.restart_runtime_config().await.unwrap();
+    assert_eq!(retained.model_path, original.model_path);
+    assert!(retained.embedding_mode);
+    let current = gateway.runtime_lifecycle_snapshot().await;
+    assert!(current.active);
+    assert_eq!(current.runtime_instance_id, previous.runtime_instance_id);
+    assert_eq!(
+        current.warmup_timing_attempt_id,
+        previous.warmup_timing_attempt_id
+    );
+    assert!(current
+        .last_error
+        .unwrap()
+        .contains("controlled text producer failure"));
+    Python::with_gil(|py| {
+        let effects = super::pytorch_worker::worker_module(py)
+            .unwrap()
+            .getattr("_rt03_effects")
+            .unwrap()
+            .extract::<Vec<String>>()
+            .unwrap();
+        assert_eq!(effects, vec!["load"]);
+    });
+}
+
+struct TextTestSpawner;
+
+#[async_trait]
+impl ProcessSpawner for TextTestSpawner {
+    async fn spawn_sidecar(
+        &self,
+        _: &str,
+        _: &[&str],
+    ) -> Result<
+        (
+            tokio::sync::mpsc::Receiver<crate::process::ProcessEvent>,
+            Box<dyn crate::process::ProcessHandle>,
+        ),
+        String,
+    > {
+        Err("controlled PyTorch tests must not spawn a process".into())
+    }
+
+    fn app_data_dir(&self) -> Result<std::path::PathBuf, String> {
+        Ok("/tmp".into())
+    }
+
+    fn binaries_dir(&self) -> Result<std::path::PathBuf, String> {
+        Ok("/tmp".into())
+    }
+}
+
+async fn assert_effectful_load_failure_clears_residency(backend: PyTorchBackend) {
+    let gateway = crate::gateway::InferenceGateway::with_backend(Box::new(backend), "PyTorch");
+    gateway.set_spawner(Arc::new(TextTestSpawner)).await;
+    let original = BackendConfig {
+        model_path: Some("controlled-model".into()),
+        embedding_mode: true,
+        ..Default::default()
+    };
+    gateway.start(&original).await.unwrap();
+    assert!(gateway.runtime_lifecycle_snapshot().await.active);
+    Python::with_gil(|py| {
+        super::pytorch_worker::worker_module(py)
+            .unwrap()
+            .setattr("_rt03_fail_load", true)
+            .unwrap();
+    });
+    let replacement = BackendConfig {
+        model_path: Some("replacement-model".into()),
+        ..Default::default()
+    };
+    let error = gateway.start(&replacement).await.unwrap_err();
+    assert!(error
+        .to_string()
+        .contains("controlled replacement load failure"));
+    assert!(!gateway.is_ready().await);
+    assert!(!gateway.is_embedding_mode().await);
+    assert!(gateway.restart_runtime_config().await.is_none());
+    let current = gateway.runtime_lifecycle_snapshot().await;
+    assert!(!current.active);
+    assert!(current.runtime_instance_id.is_none());
+    assert!(current
+        .last_error
+        .unwrap()
+        .contains("controlled replacement load failure"));
+    Python::with_gil(|py| {
+        let effects = super::pytorch_worker::worker_module(py)
+            .unwrap()
+            .getattr("_rt03_effects")
+            .unwrap()
+            .extract::<Vec<String>>()
+            .unwrap();
+        assert_eq!(effects, vec!["load", "load"]);
+    });
+}
+
+struct SelectedTextCancellation {
+    cancelled: std::sync::atomic::AtomicBool,
+    observed: std::sync::Mutex<Option<tokio::sync::oneshot::Sender<()>>>,
+}
+impl crate::InferenceExecutionCancellationSignal for SelectedTextCancellation {
+    fn snapshot(&self) -> crate::InferenceExecutionCancellationSnapshot {
+        if self.cancelled.load(std::sync::atomic::Ordering::SeqCst) {
+            if let Some(observed) = self.observed.lock().unwrap().take() {
+                let _ = observed.send(());
+            }
+            crate::InferenceExecutionCancellationSnapshot::cancellation_requested(Some(
+                "selected test".into(),
+            ))
+        } else {
+            crate::InferenceExecutionCancellationSnapshot::running()
+        }
+    }
+}
+
+#[tokio::test]
+async fn selected_text_production_loader_and_worker_retain_selection_until_termination() {
+    use futures_util::FutureExt;
+    for mode in ["success", "error", "cancel"] {
+        let (_directory, request, target, mut decision) = crate::selected_text_execution::fixture();
+        if mode == "success" {
+            decision.selected_device_class = InferenceDeviceClass::Cuda;
+            decision.selected_device_id = Some(inference_device_id("cuda:3"));
+            decision.selected_runtime_variant_id =
+                crate::RuntimeVariantId::parse("pytorch.cuda").unwrap();
+            decision.device_decision.selected_device_class = decision.selected_device_class;
+            decision.device_decision.selected_device_id = decision.selected_device_id.clone();
+            decision.device_decision.runtime_variant_id =
+                decision.selected_runtime_variant_id.clone();
+        }
+        let selected_device = decision.selected_device_id.as_ref().unwrap().to_string();
+        let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let saved = Python::with_gil(|py| {
+            load_worker_module_with_stubbed_dependencies(py);
+            py.run(c"import sys, types
+sys.modules['torch'].no_grad = lambda: (lambda f: f)
+sys.modules['torch.nn'] = types.SimpleNamespace(functional=types.SimpleNamespace())
+sys.modules['transformers.cache_utils'] = types.SimpleNamespace(DynamicCache=type('DynamicCache', (), {}))", None, None).unwrap();
+            let worker = super::pytorch_worker::worker_module(py).unwrap();
+            let saved = [
+                "generate_text_stream_setup_from_envelope",
+                "generate_text_stream_from_envelope",
+                "load_transformers_model_from_envelope",
+                "shutdown_worker_from_envelope",
+            ]
+            .into_iter()
+            .map(|name| (name, worker.getattr(name).unwrap().unbind()))
+            .collect::<Vec<_>>();
+            worker.setattr("_rt02_mode", mode).unwrap();
+            worker
+                .setattr(
+                    "_rt02_barrier",
+                    Py::new(
+                        py,
+                        TextIteratorBarrier {
+                            entered: std::sync::Mutex::new(Some(entered_tx)),
+                            release: std::sync::Mutex::new(release_rx),
+                        },
+                    )
+                    .unwrap(),
+                )
+                .unwrap();
+            py.run(c"
+_rt02_effects = []
+def _rt02_success(envelope, result):
+    request = json.loads(envelope)
+    return json.dumps({'status': 'ok', 'request_id': request['request_id'], 'result': result})
+def load_transformers_model_from_envelope(envelope):
+    global _rt02_load
+    _rt02_load = json.loads(envelope)
+    _rt02_effects.append('load')
+    return _rt02_success(envelope, {'model_path': _rt02_load['payload']['entry_path'], 'model_type': 'standard', 'device': _rt02_load['payload']['device']})
+def generate_text_stream_setup_from_envelope(envelope):
+    return _rt02_success(envelope, {})
+def generate_text_stream_from_envelope(envelope):
+    global _rt02_generate
+    _rt02_generate = json.loads(envelope)
+    yield 'first'
+    _rt02_barrier.wait()
+    if _rt02_mode == 'error':
+        raise RuntimeError('selected producer failure')
+    yield 'second'
+def shutdown_worker_from_envelope(envelope):
+    _rt02_effects.append('stop')
+    return _rt02_success(envelope, {'shutdown': True})
+", Some(&worker.dict()), None).unwrap();
+            saved
+        });
+        let initial = ControlledTextBackend {
+            jobs: Default::default(),
+            entered: Default::default(),
+            release: Default::default(),
+            fail_stop: false,
+        };
+        let gateway = crate::InferenceGateway::with_backend(Box::new(initial), "ControlledText");
+        let (observed_tx, observed_rx) = tokio::sync::oneshot::channel();
+        let cancellation = Arc::new(SelectedTextCancellation {
+            cancelled: Default::default(),
+            observed: std::sync::Mutex::new(Some(observed_tx)),
+        });
+        let operation = gateway.execute_selected_text_with_cancellation(
+            request.clone(),
+            target.clone(),
+            decision,
+            crate::InferenceExecutionCancellationHandle::with_signal(cancellation.clone()),
+        );
+        tokio::pin!(operation);
+        tokio::select! {
+            result = &mut operation => panic!("completed before worker barrier: {result:?}"),
+            entered = entered_rx => entered.unwrap(),
+        }
+        Python::with_gil(|py| {
+            let worker = super::pytorch_worker::worker_module(py).unwrap();
+            let load_json: String = worker
+                .getattr("json")
+                .unwrap()
+                .call_method1("dumps", (worker.getattr("_rt02_load").unwrap(),))
+                .unwrap()
+                .extract()
+                .unwrap();
+            let load: serde_json::Value = serde_json::from_str(&load_json).unwrap();
+            assert_eq!(load["payload"]["entry_path"], target.local_load_path);
+            assert_eq!(load["payload"]["device"], selected_device);
+            assert_eq!(
+                load["payload"]["model_ref"]["model_id"],
+                target.model_ref.model_id
+            );
+            assert_eq!(load["payload"]["trust_policy"]["allow_remote_code"], false);
+            assert_eq!(load["payload"]["trust_policy"]["local_files_only"], true);
+            assert_ne!(
+                load["payload"]["entry_path"],
+                request
+                    .resolved_model_package_facts
+                    .as_ref()
+                    .unwrap()
+                    .artifact
+                    .entry_path
+            );
+            let prompt: String = worker
+                .getattr("_rt02_generate")
+                .unwrap()
+                .get_item("payload")
+                .unwrap()
+                .get_item("prompt")
+                .unwrap()
+                .extract()
+                .unwrap();
+            assert_eq!(prompt, "  exact prompt\n");
+        });
+        if mode == "cancel" {
+            cancellation
+                .cancelled
+                .store(true, std::sync::atomic::Ordering::SeqCst);
+            tokio::select! {
+                result = &mut operation => panic!("cancelled before producer termination: {result:?}"),
+                observed = observed_rx => observed.unwrap(),
+            }
+            assert!(operation.as_mut().now_or_never().is_none());
+        }
+        let replacement = gateway.switch_backend("pytorch");
+        tokio::pin!(replacement);
+        assert!(replacement.as_mut().now_or_never().is_none());
+        release_tx.send(()).unwrap();
+        let result = operation.await;
+        if mode == "success" {
+            assert!(
+                matches!(result.unwrap(), crate::InferenceExecutionResult::TextGeneration { text, .. } if text == "firstsecond")
+            );
+        } else {
+            let message = result.unwrap_err().to_string();
+            assert!(
+                message.contains(if mode == "error" {
+                    "selected producer failure"
+                } else {
+                    "cancelled"
+                }),
+                "{message}"
+            );
+        }
+        let replaced = replacement.await;
+        if mode == "error" {
+            assert!(replaced.is_err());
+        } else {
+            replaced.unwrap();
+        }
+        Python::with_gil(|py| {
+            let worker = super::pytorch_worker::worker_module(py).unwrap();
+            for (name, value) in saved {
+                worker.setattr(name, value).unwrap();
+            }
+            worker.delattr("_rt02_barrier").unwrap();
+        });
+    }
+}
+
+#[test]
+fn selected_text_adapter_preserves_text_parts_and_rejects_nontext_parts() {
+    let request = serde_json::json!({"messages": [{"role": "user", "content": [
+        {"type": "text", "text": "  first\n"}, {"type": "text", "text": "第二"}
+    ]}]});
+    assert_eq!(
+        extract_prompt_from_messages(&request).unwrap(),
+        "  first\n第二"
+    );
+    let request = serde_json::json!({"messages": [{"role": "user", "content": [
+        {"type": "text", "text": "partial"}, {"type": "image_url", "image_url": {"url": "file:///image"}}
+    ]}]});
+    assert!(extract_prompt_from_messages(&request).is_err());
 }

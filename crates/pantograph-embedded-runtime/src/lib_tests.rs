@@ -240,8 +240,9 @@ impl InferenceBackend for MockReadyBackend {
         })
     }
 
-    fn stop(&mut self) {
+    async fn stop(&mut self) -> Result<(), BackendError> {
         self.ready = false;
+        Ok(())
     }
 
     fn is_ready(&self) -> bool {
@@ -325,8 +326,9 @@ impl InferenceBackend for MockRestoreFailureBackend {
         })
     }
 
-    fn stop(&mut self) {
+    async fn stop(&mut self) -> Result<(), BackendError> {
         self.ready = false;
+        Ok(())
     }
 
     fn is_ready(&self) -> bool {

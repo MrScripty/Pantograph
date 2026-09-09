@@ -314,12 +314,12 @@ impl EmbeddedRuntime {
             ))
         })?;
         if proof.workflow_id != workflow_id {
-            return Err(pantograph_workflow_service::WorkflowServiceError::InvalidRequest(
-                format!(
+            return Err(
+                pantograph_workflow_service::WorkflowServiceError::InvalidRequest(format!(
                     "runtime load proof workflow_id '{}' does not match requested workflow '{workflow_id}'",
                     proof.workflow_id
-                ),
-            ));
+                )),
+            );
         }
         let mut proofs = self.session_runtime_load_proofs.lock().map_err(|_| {
             pantograph_workflow_service::WorkflowServiceError::Internal(
@@ -351,31 +351,41 @@ impl EmbeddedRuntime {
             .await;
     }
 
-    pub async fn shutdown(&self) {
+    pub async fn shutdown(
+        &self,
+    ) -> Result<(), runtime_registry::RuntimeLifecycleCoordinationError> {
         if let Some(auto_resume) = self.dependency_readiness_auto_resume.as_ref() {
             auto_resume.shutdown().await;
         }
         self.workflow_service
             .workflow_graph_shutdown_validation_tasks()
             .await;
-        if let Err(error) = self.workflow_service.invalidate_all_session_runtimes() {
-            log::warn!(
-                "failed to invalidate workflow execution session runtimes before shutdown: {}",
-                error
-            );
-        }
-        if let Some(runtime_registry) = self.runtime_registry.as_ref() {
+        let stop_result = if let Some(runtime_registry) = self.runtime_registry.as_ref() {
             runtime_registry::stop_all_runtime_producers_and_reconcile_runtime_registry(
                 self.gateway.as_ref(),
                 runtime_registry.as_ref(),
             )
-            .await;
+            .await
         } else {
-            self.gateway.stop().await;
+            self.gateway
+                .stop()
+                .await
+                .map_err(runtime_registry::RuntimeLifecycleCoordinationError::Gateway)
+        };
+
+        if stop_result.is_ok() {
+            if let Err(error) = self.workflow_service.invalidate_all_session_runtimes() {
+                log::warn!(
+                    "failed to invalidate workflow execution session runtimes after shutdown: {}",
+                    error
+                );
+            }
         }
         if let Some(producer) = self.dependency_readiness_snapshot_producer.as_ref() {
             producer.shutdown().await;
         }
+
+        stop_result
     }
 
     pub(crate) fn host(&self) -> EmbeddedWorkflowHost {

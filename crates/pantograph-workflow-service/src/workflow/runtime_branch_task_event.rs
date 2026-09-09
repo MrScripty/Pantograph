@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::sync::{Arc, Weak};
 
 use uuid::Uuid;
 
@@ -15,6 +16,66 @@ use super::WorkflowOutputTarget;
 use crate::graph::WorkflowRuntimeSourceContext;
 
 pub(super) const WORKFLOW_RUNTIME_BRANCH_TASK_EVENT_SCHEMA_VERSION: u16 = 3;
+
+#[derive(Debug)]
+pub(super) struct WorkflowRuntimeBranchOwnedEventClaim {
+    pub(super) event_id: WorkflowRuntimeBranchTaskEventId,
+    pub(super) claim: WorkflowRuntimeBranchTaskEventClaim,
+    pub(super) proof: WorkflowRuntimeClaimOwnership,
+}
+
+/// The sole strong handle belongs to execution, never to a record snapshot.
+#[derive(Debug)]
+pub(super) struct WorkflowRuntimeClaimOwnership(Arc<()>);
+
+#[derive(Debug)]
+pub(super) struct WorkflowRuntimeClaimLiveness {
+    owner: Weak<()>,
+    dispatched: bool,
+}
+
+impl WorkflowRuntimeClaimLiveness {
+    pub(super) fn new() -> (Self, WorkflowRuntimeClaimOwnership) {
+        let owner = Arc::new(());
+        (
+            Self {
+                owner: Arc::downgrade(&owner),
+                dispatched: false,
+            },
+            WorkflowRuntimeClaimOwnership(owner),
+        )
+    }
+
+    pub(super) fn is_live(&self) -> bool {
+        self.owner.strong_count() != 0
+    }
+
+    pub(super) fn is_abandoned(&self) -> bool {
+        self.dispatched && !self.is_live()
+    }
+
+    pub(super) fn owns(&self, proof: &WorkflowRuntimeClaimOwnership) -> bool {
+        self.owner.ptr_eq(&Arc::downgrade(&proof.0))
+    }
+
+    pub(super) fn has_dispatched(&self) -> bool {
+        self.dispatched
+    }
+
+    pub(super) fn mark_dispatched(&mut self, proof: &WorkflowRuntimeClaimOwnership) -> bool {
+        if !self.owns(proof) || self.dispatched {
+            return false;
+        }
+        self.dispatched = true;
+        true
+    }
+}
+
+#[derive(Debug)]
+struct WorkflowRuntimeBranchEventOwnership {
+    claim: WorkflowRuntimeBranchTaskEventClaim,
+    liveness: WorkflowRuntimeClaimLiveness,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[must_use]
@@ -238,6 +299,7 @@ pub(super) trait WorkflowRuntimeBranchTaskEventRepository {
         event_id: &WorkflowRuntimeBranchTaskEventId,
         claim: &WorkflowRuntimeBranchTaskEventClaim,
         completed_at_ms: u64,
+        proof: Option<&WorkflowRuntimeClaimOwnership>,
     ) -> Result<WorkflowRuntimeBranchTaskEventRecord, WorkflowRuntimeBranchTaskEventDiagnostic>;
 
     fn mark_dispatching(
@@ -245,6 +307,7 @@ pub(super) trait WorkflowRuntimeBranchTaskEventRepository {
         event_id: &WorkflowRuntimeBranchTaskEventId,
         claim: &WorkflowRuntimeBranchTaskEventClaim,
         dispatching_at_ms: u64,
+        proof: Option<&WorkflowRuntimeClaimOwnership>,
     ) -> Result<WorkflowRuntimeBranchTaskEventRecord, WorkflowRuntimeBranchTaskEventDiagnostic>;
 
     fn record_selected_candidate_fact(
@@ -252,6 +315,7 @@ pub(super) trait WorkflowRuntimeBranchTaskEventRepository {
         event_id: &WorkflowRuntimeBranchTaskEventId,
         claim: &WorkflowRuntimeBranchTaskEventClaim,
         selected_candidate_fact: WorkflowRuntimeDispatchCandidateFact,
+        proof: Option<&WorkflowRuntimeClaimOwnership>,
     ) -> Result<WorkflowRuntimeBranchTaskEventRecord, WorkflowRuntimeBranchTaskEventDiagnostic>;
 
     fn link_dispatch_assignment(
@@ -261,6 +325,7 @@ pub(super) trait WorkflowRuntimeBranchTaskEventRepository {
         assignment_id: WorkflowRuntimeDispatchAssignmentId,
         scheduler_task_attempt_id: String,
         linked_at_ms: u64,
+        proof: Option<&WorkflowRuntimeClaimOwnership>,
     ) -> Result<WorkflowRuntimeBranchTaskEventRecord, WorkflowRuntimeBranchTaskEventDiagnostic>;
 
     fn mark_running(
@@ -268,6 +333,7 @@ pub(super) trait WorkflowRuntimeBranchTaskEventRepository {
         event_id: &WorkflowRuntimeBranchTaskEventId,
         claim: &WorkflowRuntimeBranchTaskEventClaim,
         running_at_ms: u64,
+        proof: Option<&WorkflowRuntimeClaimOwnership>,
     ) -> Result<WorkflowRuntimeBranchTaskEventRecord, WorkflowRuntimeBranchTaskEventDiagnostic>;
 
     fn defer(
@@ -275,6 +341,7 @@ pub(super) trait WorkflowRuntimeBranchTaskEventRepository {
         event_id: &WorkflowRuntimeBranchTaskEventId,
         claim: &WorkflowRuntimeBranchTaskEventClaim,
         deferred_at_ms: u64,
+        proof: Option<&WorkflowRuntimeClaimOwnership>,
     ) -> Result<WorkflowRuntimeBranchTaskEventRecord, WorkflowRuntimeBranchTaskEventDiagnostic>;
 
     fn defer_until(
@@ -283,6 +350,7 @@ pub(super) trait WorkflowRuntimeBranchTaskEventRepository {
         claim: &WorkflowRuntimeBranchTaskEventClaim,
         deferred_at_ms: u64,
         ready_at_ms: u64,
+        proof: Option<&WorkflowRuntimeClaimOwnership>,
     ) -> Result<WorkflowRuntimeBranchTaskEventRecord, WorkflowRuntimeBranchTaskEventDiagnostic>;
 
     fn mark_deferred_ready(
@@ -296,6 +364,7 @@ pub(super) trait WorkflowRuntimeBranchTaskEventRepository {
         event_id: &WorkflowRuntimeBranchTaskEventId,
         claim: &WorkflowRuntimeBranchTaskEventClaim,
         ready_at_ms: u64,
+        proof: Option<&WorkflowRuntimeClaimOwnership>,
     ) -> Result<WorkflowRuntimeBranchTaskEventRecord, WorkflowRuntimeBranchTaskEventDiagnostic>;
 
     fn fail(
@@ -303,6 +372,7 @@ pub(super) trait WorkflowRuntimeBranchTaskEventRepository {
         event_id: &WorkflowRuntimeBranchTaskEventId,
         claim: &WorkflowRuntimeBranchTaskEventClaim,
         failed_at_ms: u64,
+        proof: Option<&WorkflowRuntimeClaimOwnership>,
     ) -> Result<WorkflowRuntimeBranchTaskEventRecord, WorkflowRuntimeBranchTaskEventDiagnostic>;
 
     fn get(
@@ -315,11 +385,44 @@ pub(super) trait WorkflowRuntimeBranchTaskEventRepository {
 #[must_use]
 pub(super) struct InMemoryWorkflowRuntimeBranchTaskEventRepository {
     records: BTreeMap<String, WorkflowRuntimeBranchTaskEventRecord>,
+    ownership: BTreeMap<String, WorkflowRuntimeBranchEventOwnership>,
 }
 
 impl InMemoryWorkflowRuntimeBranchTaskEventRepository {
     pub(super) fn new() -> Self {
         Self::default()
+    }
+    pub(super) fn claim_owned_for_workflow_run(
+        &mut self,
+        workflow_run_id: &str,
+        owner_id: WorkflowRuntimeBranchTaskEventClaimOwnerId,
+        now_ms: u64,
+        lease_duration_ms: u64,
+    ) -> Result<
+        Option<(
+            WorkflowRuntimeBranchTaskEventClaimOutcome,
+            WorkflowRuntimeClaimOwnership,
+        )>,
+        WorkflowRuntimeBranchTaskEventDiagnostic,
+    > {
+        let Some(outcome) = self.claim_next_due_for_workflow_run(
+            workflow_run_id,
+            owner_id,
+            now_ms,
+            lease_duration_ms,
+        )?
+        else {
+            return Ok(None);
+        };
+        let (liveness, proof) = WorkflowRuntimeClaimLiveness::new();
+        self.ownership.insert(
+            outcome.record.event_id.as_str().to_owned(),
+            WorkflowRuntimeBranchEventOwnership {
+                claim: outcome.claim.clone(),
+                liveness,
+            },
+        );
+        Ok(Some((outcome, proof)))
     }
 }
 
@@ -395,6 +498,12 @@ impl WorkflowRuntimeBranchTaskEventRepository for InMemoryWorkflowRuntimeBranchT
     ) -> Result<WorkflowRuntimeBranchTaskEventClaimOutcome, WorkflowRuntimeBranchTaskEventDiagnostic>
     {
         let record = self.record(event_id)?;
+        if self.has_live_ownership(&record) {
+            return Err(WorkflowRuntimeBranchTaskEventDiagnostic::new(
+                WorkflowRuntimeBranchTaskEventDiagnosticCode::AlreadyClaimed,
+                "runtime branch task event has a live execution owner",
+            ));
+        }
         let outcome = record.claim(owner_id, now_ms, lease_duration_ms)?;
         self.records
             .insert(event_id.as_str().to_string(), outcome.record.clone());
@@ -450,10 +559,12 @@ impl WorkflowRuntimeBranchTaskEventRepository for InMemoryWorkflowRuntimeBranchT
         event_id: &WorkflowRuntimeBranchTaskEventId,
         claim: &WorkflowRuntimeBranchTaskEventClaim,
         completed_at_ms: u64,
+        proof: Option<&WorkflowRuntimeClaimOwnership>,
     ) -> Result<WorkflowRuntimeBranchTaskEventRecord, WorkflowRuntimeBranchTaskEventDiagnostic>
     {
         let record = self.record(event_id)?;
-        let updated = record.complete(claim, completed_at_ms)?;
+        let live_owned = self.validate_transition_ownership(&record, proof)?;
+        let updated = record.complete(claim, completed_at_ms, live_owned)?;
         self.records
             .insert(event_id.as_str().to_string(), updated.clone());
         Ok(updated)
@@ -464,10 +575,12 @@ impl WorkflowRuntimeBranchTaskEventRepository for InMemoryWorkflowRuntimeBranchT
         event_id: &WorkflowRuntimeBranchTaskEventId,
         claim: &WorkflowRuntimeBranchTaskEventClaim,
         dispatching_at_ms: u64,
+        proof: Option<&WorkflowRuntimeClaimOwnership>,
     ) -> Result<WorkflowRuntimeBranchTaskEventRecord, WorkflowRuntimeBranchTaskEventDiagnostic>
     {
         let record = self.record(event_id)?;
-        let updated = record.mark_dispatching(claim, dispatching_at_ms)?;
+        let live_owned = self.validate_transition_ownership(&record, proof)?;
+        let updated = record.mark_dispatching(claim, dispatching_at_ms, live_owned)?;
         self.records
             .insert(event_id.as_str().to_string(), updated.clone());
         Ok(updated)
@@ -478,9 +591,11 @@ impl WorkflowRuntimeBranchTaskEventRepository for InMemoryWorkflowRuntimeBranchT
         event_id: &WorkflowRuntimeBranchTaskEventId,
         claim: &WorkflowRuntimeBranchTaskEventClaim,
         selected_candidate_fact: WorkflowRuntimeDispatchCandidateFact,
+        proof: Option<&WorkflowRuntimeClaimOwnership>,
     ) -> Result<WorkflowRuntimeBranchTaskEventRecord, WorkflowRuntimeBranchTaskEventDiagnostic>
     {
         let record = self.record(event_id)?;
+        self.validate_transition_ownership(&record, proof)?;
         let updated = record.record_selected_candidate_fact(claim, selected_candidate_fact)?;
         self.records
             .insert(event_id.as_str().to_string(), updated.clone());
@@ -494,14 +609,17 @@ impl WorkflowRuntimeBranchTaskEventRepository for InMemoryWorkflowRuntimeBranchT
         assignment_id: WorkflowRuntimeDispatchAssignmentId,
         scheduler_task_attempt_id: String,
         linked_at_ms: u64,
+        proof: Option<&WorkflowRuntimeClaimOwnership>,
     ) -> Result<WorkflowRuntimeBranchTaskEventRecord, WorkflowRuntimeBranchTaskEventDiagnostic>
     {
         let record = self.record(event_id)?;
+        let live_owned = self.validate_transition_ownership(&record, proof)?;
         let updated = record.link_dispatch_assignment(
             claim,
             assignment_id,
             scheduler_task_attempt_id,
             linked_at_ms,
+            live_owned,
         )?;
         self.records
             .insert(event_id.as_str().to_string(), updated.clone());
@@ -513,10 +631,12 @@ impl WorkflowRuntimeBranchTaskEventRepository for InMemoryWorkflowRuntimeBranchT
         event_id: &WorkflowRuntimeBranchTaskEventId,
         claim: &WorkflowRuntimeBranchTaskEventClaim,
         running_at_ms: u64,
+        proof: Option<&WorkflowRuntimeClaimOwnership>,
     ) -> Result<WorkflowRuntimeBranchTaskEventRecord, WorkflowRuntimeBranchTaskEventDiagnostic>
     {
         let record = self.record(event_id)?;
-        let updated = record.mark_running(claim, running_at_ms)?;
+        let live_owned = self.validate_transition_ownership(&record, proof)?;
+        let updated = record.mark_running(claim, running_at_ms, live_owned)?;
         self.records
             .insert(event_id.as_str().to_string(), updated.clone());
         Ok(updated)
@@ -527,10 +647,12 @@ impl WorkflowRuntimeBranchTaskEventRepository for InMemoryWorkflowRuntimeBranchT
         event_id: &WorkflowRuntimeBranchTaskEventId,
         claim: &WorkflowRuntimeBranchTaskEventClaim,
         deferred_at_ms: u64,
+        proof: Option<&WorkflowRuntimeClaimOwnership>,
     ) -> Result<WorkflowRuntimeBranchTaskEventRecord, WorkflowRuntimeBranchTaskEventDiagnostic>
     {
         let record = self.record(event_id)?;
-        let updated = record.defer(claim, deferred_at_ms)?;
+        let live_owned = self.validate_transition_ownership(&record, proof)?;
+        let updated = record.defer(claim, deferred_at_ms, live_owned)?;
         self.records
             .insert(event_id.as_str().to_string(), updated.clone());
         Ok(updated)
@@ -542,10 +664,12 @@ impl WorkflowRuntimeBranchTaskEventRepository for InMemoryWorkflowRuntimeBranchT
         claim: &WorkflowRuntimeBranchTaskEventClaim,
         deferred_at_ms: u64,
         ready_at_ms: u64,
+        proof: Option<&WorkflowRuntimeClaimOwnership>,
     ) -> Result<WorkflowRuntimeBranchTaskEventRecord, WorkflowRuntimeBranchTaskEventDiagnostic>
     {
         let record = self.record(event_id)?;
-        let updated = record.defer_until(claim, deferred_at_ms, ready_at_ms)?;
+        let live_owned = self.validate_transition_ownership(&record, proof)?;
+        let updated = record.defer_until(claim, deferred_at_ms, ready_at_ms, live_owned)?;
         self.records
             .insert(event_id.as_str().to_string(), updated.clone());
         Ok(updated)
@@ -569,10 +693,12 @@ impl WorkflowRuntimeBranchTaskEventRepository for InMemoryWorkflowRuntimeBranchT
         event_id: &WorkflowRuntimeBranchTaskEventId,
         claim: &WorkflowRuntimeBranchTaskEventClaim,
         failed_at_ms: u64,
+        proof: Option<&WorkflowRuntimeClaimOwnership>,
     ) -> Result<WorkflowRuntimeBranchTaskEventRecord, WorkflowRuntimeBranchTaskEventDiagnostic>
     {
         let record = self.record(event_id)?;
-        let updated = record.fail(claim, failed_at_ms)?;
+        let live_owned = self.validate_transition_ownership(&record, proof)?;
+        let updated = record.fail(claim, failed_at_ms, live_owned)?;
         self.records
             .insert(event_id.as_str().to_string(), updated.clone());
         Ok(updated)
@@ -583,10 +709,12 @@ impl WorkflowRuntimeBranchTaskEventRepository for InMemoryWorkflowRuntimeBranchT
         event_id: &WorkflowRuntimeBranchTaskEventId,
         claim: &WorkflowRuntimeBranchTaskEventClaim,
         ready_at_ms: u64,
+        proof: Option<&WorkflowRuntimeClaimOwnership>,
     ) -> Result<WorkflowRuntimeBranchTaskEventRecord, WorkflowRuntimeBranchTaskEventDiagnostic>
     {
         let record = self.record(event_id)?;
-        let updated = record.release_claim(claim, ready_at_ms)?;
+        let live_owned = self.validate_transition_ownership(&record, proof)?;
+        let updated = record.release_claim(claim, ready_at_ms, live_owned)?;
         self.records
             .insert(event_id.as_str().to_string(), updated.clone());
         Ok(updated)
@@ -601,11 +729,133 @@ impl WorkflowRuntimeBranchTaskEventRepository for InMemoryWorkflowRuntimeBranchT
 }
 
 impl InMemoryWorkflowRuntimeBranchTaskEventRepository {
+    fn current_ownership(
+        &self,
+        record: &WorkflowRuntimeBranchTaskEventRecord,
+    ) -> Option<&WorkflowRuntimeBranchEventOwnership> {
+        self.ownership
+            .get(record.event_id.as_str())
+            .filter(|owned| record.claim.as_ref() == Some(&owned.claim))
+    }
+
+    fn validate_transition_ownership(
+        &self,
+        record: &WorkflowRuntimeBranchTaskEventRecord,
+        proof: Option<&WorkflowRuntimeClaimOwnership>,
+    ) -> Result<bool, WorkflowRuntimeBranchTaskEventDiagnostic> {
+        match (self.current_ownership(record), proof) {
+            (Some(owned), Some(proof)) if owned.liveness.owns(proof) => Ok(true),
+            (None, None) => Ok(false),
+            _ => Err(WorkflowRuntimeBranchTaskEventDiagnostic::new(
+                WorkflowRuntimeBranchTaskEventDiagnosticCode::StaleClaim,
+                "runtime branch transition requires the current scoped ownership proof",
+            )),
+        }
+    }
+
+    fn has_live_ownership(&self, record: &WorkflowRuntimeBranchTaskEventRecord) -> bool {
+        self.current_ownership(record)
+            .is_some_and(|owned| owned.liveness.is_live())
+    }
+
+    fn is_owned_or_abandoned(&self, record: &WorkflowRuntimeBranchTaskEventRecord) -> bool {
+        self.current_ownership(record)
+            .is_some_and(|owned| owned.liveness.is_live() || owned.liveness.is_abandoned())
+    }
+
+    pub(super) fn fail_abandoned(
+        &mut self,
+        event_id: &WorkflowRuntimeBranchTaskEventId,
+        claim: &WorkflowRuntimeBranchTaskEventClaim,
+        failed_at_ms: u64,
+    ) -> Result<(), WorkflowRuntimeBranchTaskEventDiagnostic> {
+        let abandoned = self
+            .records
+            .get(event_id.as_str())
+            .and_then(|record| self.current_ownership(record))
+            .is_some_and(|owned| &owned.claim == claim && !owned.liveness.is_live());
+        if !abandoned {
+            return Err(WorkflowRuntimeBranchTaskEventDiagnostic::new(
+                WorkflowRuntimeBranchTaskEventDiagnosticCode::InvalidTransition,
+                "runtime branch claim has not been abandoned after dispatch",
+            ));
+        }
+        let record = self
+            .records
+            .get_mut(event_id.as_str())
+            .expect("abandoned record exists");
+        if matches!(
+            record.state,
+            WorkflowRuntimeBranchTaskEventState::Claimed
+                | WorkflowRuntimeBranchTaskEventState::Dispatching
+                | WorkflowRuntimeBranchTaskEventState::Running
+        ) {
+            record.state = WorkflowRuntimeBranchTaskEventState::Failed;
+            record.failed_at_ms = Some(failed_at_ms);
+        }
+        Ok(())
+    }
+
+    pub(super) fn validate_owned_running(
+        &self,
+        event_id: &WorkflowRuntimeBranchTaskEventId,
+        claim: &WorkflowRuntimeBranchTaskEventClaim,
+        proof: &WorkflowRuntimeClaimOwnership,
+    ) -> Result<(), WorkflowRuntimeBranchTaskEventDiagnostic> {
+        let record = self.record(event_id)?;
+        record.validate_current_claim_for_state(
+            claim,
+            &[WorkflowRuntimeBranchTaskEventState::Running],
+            "owned event must be running",
+        )?;
+        self.validate_transition_ownership(&record, Some(proof))?;
+        Ok(())
+    }
+
+    pub(super) fn mark_owned_dispatch(
+        &mut self,
+        event_id: &WorkflowRuntimeBranchTaskEventId,
+        claim: &WorkflowRuntimeBranchTaskEventClaim,
+        proof: &WorkflowRuntimeClaimOwnership,
+    ) -> Result<(), WorkflowRuntimeBranchTaskEventDiagnostic> {
+        let record = self.record(event_id)?;
+        record.validate_current_claim_for_state(
+            claim,
+            &[WorkflowRuntimeBranchTaskEventState::Running],
+            "owned runtime branch must be running before host dispatch",
+        )?;
+        let owned = self
+            .ownership
+            .get_mut(event_id.as_str())
+            .filter(|owned| &owned.claim == claim && owned.liveness.owns(proof))
+            .ok_or_else(|| {
+                WorkflowRuntimeBranchTaskEventDiagnostic::new(
+                    WorkflowRuntimeBranchTaskEventDiagnosticCode::StaleClaim,
+                    "runtime branch dispatch does not own the current claim",
+                )
+            })?;
+        if !owned.liveness.mark_dispatched(proof) {
+            return Err(WorkflowRuntimeBranchTaskEventDiagnostic::new(
+                WorkflowRuntimeBranchTaskEventDiagnosticCode::InvalidTransition,
+                "owned event has already crossed host dispatch",
+            ));
+        }
+        Ok(())
+    }
+
     fn record(
         &self,
         event_id: &WorkflowRuntimeBranchTaskEventId,
     ) -> Result<WorkflowRuntimeBranchTaskEventRecord, WorkflowRuntimeBranchTaskEventDiagnostic>
     {
+        if self
+            .records
+            .get(event_id.as_str())
+            .and_then(|record| self.current_ownership(record))
+            .is_some_and(|owned| owned.liveness.is_abandoned())
+        {
+            return Err(WorkflowRuntimeBranchTaskEventDiagnostic::new(WorkflowRuntimeBranchTaskEventDiagnosticCode::TerminalEvent, "runtime branch host dispatch ownership was abandoned; replay and old results are fenced"));
+        }
         self.records.get(event_id.as_str()).cloned().ok_or_else(|| {
             WorkflowRuntimeBranchTaskEventDiagnostic::new(
                 WorkflowRuntimeBranchTaskEventDiagnosticCode::EventNotFound,
@@ -617,7 +867,7 @@ impl InMemoryWorkflowRuntimeBranchTaskEventRepository {
     fn next_due_event_id(&self, now_ms: u64) -> Option<WorkflowRuntimeBranchTaskEventId> {
         self.records
             .values()
-            .filter(|record| record.is_due_for_claim(now_ms))
+            .filter(|record| record.is_due_for_claim(now_ms) && !self.is_owned_or_abandoned(record))
             .min_by(|left, right| {
                 left.ready_at_ms
                     .cmp(&right.ready_at_ms)
@@ -634,7 +884,7 @@ impl InMemoryWorkflowRuntimeBranchTaskEventRepository {
         self.records
             .values()
             .filter(|record| record.workflow_run_id == workflow_run_id)
-            .filter(|record| record.is_due_for_claim(now_ms))
+            .filter(|record| record.is_due_for_claim(now_ms) && !self.is_owned_or_abandoned(record))
             .min_by(|left, right| {
                 left.ready_at_ms
                     .cmp(&right.ready_at_ms)
@@ -651,7 +901,9 @@ impl InMemoryWorkflowRuntimeBranchTaskEventRepository {
         self.records
             .values()
             .filter(|record| record.workflow_run_id == workflow_run_id)
-            .filter(|record| record.has_active_unexpired_claim(now_ms))
+            .filter(|record| {
+                record.has_active_unexpired_claim(now_ms) || self.has_live_ownership(record)
+            })
             .min_by(|left, right| {
                 left.claim
                     .as_ref()
@@ -785,12 +1037,14 @@ impl WorkflowRuntimeBranchTaskEventRecord {
         mut self,
         claim: &WorkflowRuntimeBranchTaskEventClaim,
         dispatching_at_ms: u64,
+        live_owned: bool,
     ) -> Result<Self, WorkflowRuntimeBranchTaskEventDiagnostic> {
         self.validate_active_claim_for_state(
             claim,
             dispatching_at_ms,
             &[WorkflowRuntimeBranchTaskEventState::Claimed],
             "runtime branch task event must be claimed before dispatching",
+            live_owned,
         )?;
         self.state = WorkflowRuntimeBranchTaskEventState::Dispatching;
         self.dispatching_at_ms = Some(dispatching_at_ms);
@@ -837,6 +1091,7 @@ impl WorkflowRuntimeBranchTaskEventRecord {
         assignment_id: WorkflowRuntimeDispatchAssignmentId,
         scheduler_task_attempt_id: String,
         linked_at_ms: u64,
+        live_owned: bool,
     ) -> Result<Self, WorkflowRuntimeBranchTaskEventDiagnostic> {
         self.validate_active_claim_for_state(
             claim,
@@ -845,8 +1100,7 @@ impl WorkflowRuntimeBranchTaskEventRecord {
                 WorkflowRuntimeBranchTaskEventState::Claimed,
                 WorkflowRuntimeBranchTaskEventState::Dispatching,
             ],
-            "runtime branch task event must be claimed or dispatching before linking dispatch assignment",
-        )?;
+            "runtime branch task event must be claimed or dispatching before linking dispatch assignment", live_owned)?;
         validate_non_blank("scheduler task attempt id", &scheduler_task_attempt_id)?;
         if linked_at_ms < claim.claimed_at_ms {
             return Err(WorkflowRuntimeBranchTaskEventDiagnostic::new(
@@ -888,12 +1142,14 @@ impl WorkflowRuntimeBranchTaskEventRecord {
         mut self,
         claim: &WorkflowRuntimeBranchTaskEventClaim,
         running_at_ms: u64,
+        live_owned: bool,
     ) -> Result<Self, WorkflowRuntimeBranchTaskEventDiagnostic> {
         self.validate_active_claim_for_state(
             claim,
             running_at_ms,
             &[WorkflowRuntimeBranchTaskEventState::Dispatching],
             "runtime branch task event must be dispatching before running",
+            live_owned,
         )?;
         self.state = WorkflowRuntimeBranchTaskEventState::Running;
         self.running_at_ms = Some(running_at_ms);
@@ -904,8 +1160,9 @@ impl WorkflowRuntimeBranchTaskEventRecord {
         mut self,
         claim: &WorkflowRuntimeBranchTaskEventClaim,
         completed_at_ms: u64,
+        live_owned: bool,
     ) -> Result<Self, WorkflowRuntimeBranchTaskEventDiagnostic> {
-        self.validate_active_claim(claim, completed_at_ms)?;
+        self.validate_active_claim(claim, completed_at_ms, live_owned)?;
         self.state = WorkflowRuntimeBranchTaskEventState::Completed;
         self.completed_at_ms = Some(completed_at_ms);
         Ok(self)
@@ -915,8 +1172,9 @@ impl WorkflowRuntimeBranchTaskEventRecord {
         self,
         claim: &WorkflowRuntimeBranchTaskEventClaim,
         deferred_at_ms: u64,
+        live_owned: bool,
     ) -> Result<Self, WorkflowRuntimeBranchTaskEventDiagnostic> {
-        self.defer_until(claim, deferred_at_ms, deferred_at_ms)
+        self.defer_until(claim, deferred_at_ms, deferred_at_ms, live_owned)
     }
 
     pub(super) fn defer_until(
@@ -924,8 +1182,9 @@ impl WorkflowRuntimeBranchTaskEventRecord {
         claim: &WorkflowRuntimeBranchTaskEventClaim,
         deferred_at_ms: u64,
         ready_at_ms: u64,
+        live_owned: bool,
     ) -> Result<Self, WorkflowRuntimeBranchTaskEventDiagnostic> {
-        self.validate_active_claim(claim, deferred_at_ms)?;
+        self.validate_active_claim(claim, deferred_at_ms, live_owned)?;
         if ready_at_ms < deferred_at_ms {
             return Err(WorkflowRuntimeBranchTaskEventDiagnostic::new(
                 WorkflowRuntimeBranchTaskEventDiagnosticCode::InvalidTransition,
@@ -960,8 +1219,9 @@ impl WorkflowRuntimeBranchTaskEventRecord {
         mut self,
         claim: &WorkflowRuntimeBranchTaskEventClaim,
         failed_at_ms: u64,
+        live_owned: bool,
     ) -> Result<Self, WorkflowRuntimeBranchTaskEventDiagnostic> {
-        self.validate_active_claim(claim, failed_at_ms)?;
+        self.validate_active_claim(claim, failed_at_ms, live_owned)?;
         self.state = WorkflowRuntimeBranchTaskEventState::Failed;
         self.failed_at_ms = Some(failed_at_ms);
         Ok(self)
@@ -971,8 +1231,9 @@ impl WorkflowRuntimeBranchTaskEventRecord {
         mut self,
         claim: &WorkflowRuntimeBranchTaskEventClaim,
         ready_at_ms: u64,
+        live_owned: bool,
     ) -> Result<Self, WorkflowRuntimeBranchTaskEventDiagnostic> {
-        self.validate_active_claim(claim, ready_at_ms)?;
+        self.validate_active_claim(claim, ready_at_ms, live_owned)?;
         self.state = WorkflowRuntimeBranchTaskEventState::Ready;
         self.claim = None;
         self.scheduler_task_attempt_id = None;
@@ -988,6 +1249,7 @@ impl WorkflowRuntimeBranchTaskEventRecord {
         &self,
         claim: &WorkflowRuntimeBranchTaskEventClaim,
         now_ms: u64,
+        live_owned: bool,
     ) -> Result<(), WorkflowRuntimeBranchTaskEventDiagnostic> {
         self.validate_active_claim_for_state(
             claim,
@@ -998,6 +1260,7 @@ impl WorkflowRuntimeBranchTaskEventRecord {
                 WorkflowRuntimeBranchTaskEventState::Running,
             ],
             "runtime branch task event must be active before terminal transition",
+            live_owned,
         )
     }
 
@@ -1034,6 +1297,7 @@ impl WorkflowRuntimeBranchTaskEventRecord {
         now_ms: u64,
         allowed_states: &[WorkflowRuntimeBranchTaskEventState],
         invalid_message: &'static str,
+        live_owned: bool,
     ) -> Result<(), WorkflowRuntimeBranchTaskEventDiagnostic> {
         if !allowed_states.contains(&self.state) {
             return Err(WorkflowRuntimeBranchTaskEventDiagnostic::new(
@@ -1053,7 +1317,7 @@ impl WorkflowRuntimeBranchTaskEventRecord {
                 "runtime branch task event claim does not match the current lease",
             ));
         }
-        if now_ms >= current.lease_expires_at_ms {
+        if !live_owned && now_ms >= current.lease_expires_at_ms {
             return Err(WorkflowRuntimeBranchTaskEventDiagnostic::new(
                 WorkflowRuntimeBranchTaskEventDiagnosticCode::LeaseExpired,
                 "runtime branch task event claim lease expired before terminal transition",
@@ -1477,6 +1741,138 @@ mod tests {
         WorkflowRuntimeTaskAttemptResourceFitFacts, WorkflowRuntimeTaskAttemptResourceFitState,
     };
     use super::*;
+
+    #[test]
+    fn runtime_branch_task_event_copied_claim_and_wrong_proof_cannot_mutate_owned_event() {
+        let mut repository = InMemoryWorkflowRuntimeBranchTaskEventRepository::new();
+        repository.enqueue(ready_record()).expect("enqueue");
+        let (claimed, ownership) = repository
+            .claim_owned_for_workflow_run("run.test", owner_id("worker.alpha"), 100, 30_000)
+            .expect("claim")
+            .expect("event");
+        let id = &claimed.record.event_id;
+        let (_, wrong_proof) = WorkflowRuntimeClaimLiveness::new();
+        for proof in [None, Some(&wrong_proof)] {
+            assert_eq!(
+                repository
+                    .release_claim(id, &claimed.claim, 30_101, proof)
+                    .expect_err("copied identity cannot release")
+                    .code,
+                WorkflowRuntimeBranchTaskEventDiagnosticCode::StaleClaim
+            );
+            assert!(repository.defer(id, &claimed.claim, 30_101, proof).is_err());
+            assert!(repository
+                .complete(id, &claimed.claim, 30_101, proof)
+                .is_err());
+            assert!(repository.fail(id, &claimed.claim, 30_101, proof).is_err());
+        }
+        assert_eq!(repository.get(id).expect("unchanged event"), claimed.record);
+        let _completed = repository
+            .complete(id, &claimed.claim, 30_102, Some(&ownership))
+            .expect("real owner completes");
+    }
+
+    #[test]
+    fn runtime_branch_task_event_snapshot_does_not_retain_pre_dispatch_ownership() {
+        let mut repository = InMemoryWorkflowRuntimeBranchTaskEventRepository::new();
+        repository.enqueue(ready_record()).expect("enqueue");
+        let (claimed, ownership) = repository
+            .claim_owned_for_workflow_run("run.test", owner_id("worker.alpha"), 100, 30_000)
+            .expect("claim")
+            .expect("due event");
+        let snapshot = claimed.record.clone();
+        drop(ownership);
+        let replacement = repository
+            .claim_event(&snapshot.event_id, owner_id("worker.beta"), 30_101, 30_000)
+            .expect("pre-dispatch abandoned claim expires");
+        assert_eq!(
+            replacement.claim.attempt_generation,
+            claimed.claim.attempt_generation + 1
+        );
+        assert_eq!(
+            repository
+                .complete(&snapshot.event_id, &claimed.claim, 30_102, None)
+                .expect_err("old fence rejected")
+                .code,
+            WorkflowRuntimeBranchTaskEventDiagnosticCode::StaleClaim
+        );
+    }
+
+    #[test]
+    fn runtime_branch_task_event_abandoned_host_dispatch_is_failed_and_not_replayed() {
+        let mut repository = InMemoryWorkflowRuntimeBranchTaskEventRepository::new();
+        repository.enqueue(ready_record()).expect("enqueue");
+        let (claimed, ownership) = repository
+            .claim_owned_for_workflow_run("run.test", owner_id("worker.alpha"), 100, 30_000)
+            .expect("claim")
+            .expect("due event");
+        let id = &claimed.record.event_id;
+        let _record = repository
+            .mark_dispatching(id, &claimed.claim, 101, Some(&ownership))
+            .expect("dispatching");
+        let _record = repository
+            .mark_running(id, &claimed.claim, 102, Some(&ownership))
+            .expect("running");
+        repository
+            .mark_owned_dispatch(id, &claimed.claim, &ownership)
+            .expect("host dispatch owned");
+        drop(ownership);
+        assert_eq!(
+            repository.get(id).expect("event").state,
+            WorkflowRuntimeBranchTaskEventState::Running
+        );
+        assert_eq!(
+            repository
+                .claim_event(id, owner_id("worker.beta"), 30_101, 30_000)
+                .expect_err("abandoned host work cannot replay")
+                .code,
+            WorkflowRuntimeBranchTaskEventDiagnosticCode::TerminalEvent
+        );
+        assert!(
+            repository.complete(id, &claimed.claim, 103, None).is_err(),
+            "old success cannot publish even before expiry"
+        );
+        repository
+            .fail_abandoned(id, &claimed.claim, 30_102)
+            .expect("supervised failure observed");
+        let failed = repository.get(id).expect("failed event");
+        assert_eq!(failed.state, WorkflowRuntimeBranchTaskEventState::Failed);
+        assert_eq!(failed.failed_at_ms, Some(30_102));
+    }
+
+    #[test]
+    fn runtime_branch_task_event_live_owner_excludes_expired_reclaim_and_completes_once() {
+        let mut repository = InMemoryWorkflowRuntimeBranchTaskEventRepository::new();
+        repository.enqueue(ready_record()).expect("enqueue");
+        let (claimed, _ownership) = repository
+            .claim_owned_for_workflow_run("run.test", owner_id("worker.alpha"), 100, 30_000)
+            .expect("claim")
+            .expect("due event");
+        let snapshot = claimed.record.clone();
+        let error = repository
+            .claim_event(&snapshot.event_id, owner_id("worker.beta"), 30_101, 30_000)
+            .expect_err("live execution excludes reclaim beyond deadline");
+        assert_eq!(
+            error.code,
+            WorkflowRuntimeBranchTaskEventDiagnosticCode::AlreadyClaimed
+        );
+        let _record = repository
+            .complete(
+                &snapshot.event_id,
+                &claimed.claim,
+                30_102,
+                Some(&_ownership),
+            )
+            .expect("live completion beyond deadline");
+        assert!(repository
+            .complete(
+                &snapshot.event_id,
+                &claimed.claim,
+                30_103,
+                Some(&_ownership)
+            )
+            .is_err());
+    }
 
     #[test]
     fn runtime_branch_task_event_starts_ready_with_stable_contract_fields() {
@@ -1928,6 +2324,7 @@ mod tests {
                 assignment_id.clone(),
                 "scheduler-task-attempt.1".to_string(),
                 110,
+                false,
             )
             .expect("dispatch assignment links");
 
@@ -1953,6 +2350,7 @@ mod tests {
                 dispatch_assignment_id("runtime-dispatch-assignment.1"),
                 "scheduler-task-attempt.1".to_string(),
                 110,
+                false,
             )
             .expect("identical dispatch assignment link is idempotent");
         assert_eq!(linked_again.dispatch_assignment_link, Some(link));
@@ -1975,6 +2373,7 @@ mod tests {
                 dispatch_assignment_id("runtime-dispatch-assignment.1"),
                 "scheduler-task-attempt.1".to_string(),
                 160,
+                false,
             )
             .expect_err("stale claim cannot link dispatch assignment");
 
@@ -1996,6 +2395,7 @@ mod tests {
                 dispatch_assignment_id("runtime-dispatch-assignment.1"),
                 "scheduler-task-attempt.1".to_string(),
                 110,
+                false,
             )
             .expect("dispatch assignment links");
 
@@ -2005,6 +2405,7 @@ mod tests {
                 dispatch_assignment_id("runtime-dispatch-assignment.2"),
                 "scheduler-task-attempt.1".to_string(),
                 110,
+                false,
             )
             .expect_err("different assignment link must fail");
 
@@ -2027,6 +2428,7 @@ mod tests {
                 dispatch_assignment_id("runtime-dispatch-assignment.1"),
                 "scheduler-task-attempt.1".to_string(),
                 110,
+                false,
             )
             .expect("dispatch assignment links");
 
@@ -2105,7 +2507,7 @@ mod tests {
 
         let completed = claimed
             .record
-            .complete(&claimed.claim, 120)
+            .complete(&claimed.claim, 120, false)
             .expect("current claim completes");
 
         assert_eq!(
@@ -2122,7 +2524,7 @@ mod tests {
             .expect("ready event claims");
         let dispatching = claimed
             .record
-            .mark_dispatching(&claimed.claim, 110)
+            .mark_dispatching(&claimed.claim, 110, false)
             .expect("current claim marks dispatching");
         assert_eq!(
             dispatching.state,
@@ -2132,14 +2534,14 @@ mod tests {
         assert_eq!(dispatching.running_at_ms, None);
 
         let running = dispatching
-            .mark_running(&claimed.claim, 120)
+            .mark_running(&claimed.claim, 120, false)
             .expect("current claim marks running");
         assert_eq!(running.state, WorkflowRuntimeBranchTaskEventState::Running);
         assert_eq!(running.dispatching_at_ms, Some(110));
         assert_eq!(running.running_at_ms, Some(120));
 
         let completed = running
-            .complete(&claimed.claim, 130)
+            .complete(&claimed.claim, 130, false)
             .expect("running event completes");
         assert_eq!(
             completed.state,
@@ -2158,7 +2560,7 @@ mod tests {
 
         let error = claimed
             .record
-            .mark_running(&claimed.claim, 110)
+            .mark_running(&claimed.claim, 110, false)
             .expect_err("claimed event cannot skip dispatching");
 
         assert_eq!(
@@ -2180,7 +2582,7 @@ mod tests {
 
         let error = second
             .record
-            .complete(&first.claim, 160)
+            .complete(&first.claim, 160, false)
             .expect_err("stale claim cannot complete");
 
         assert_eq!(
@@ -2197,7 +2599,7 @@ mod tests {
 
         let error = claimed
             .record
-            .complete(&claimed.claim, 150)
+            .complete(&claimed.claim, 150, false)
             .expect_err("expired claim cannot complete");
 
         assert_eq!(
@@ -2213,7 +2615,7 @@ mod tests {
             .expect("ready event claims");
         let deferred = deferred_claim
             .record
-            .defer(&deferred_claim.claim, 120)
+            .defer(&deferred_claim.claim, 120, false)
             .expect("current claim defers");
         assert_eq!(
             deferred.state,
@@ -2245,7 +2647,7 @@ mod tests {
             .expect("ready event claims");
         let failed = failed_claim
             .record
-            .fail(&failed_claim.claim, 220)
+            .fail(&failed_claim.claim, 220, false)
             .expect("current claim fails");
         assert_eq!(failed.state, WorkflowRuntimeBranchTaskEventState::Failed);
         assert_eq!(failed.failed_at_ms, Some(220));
@@ -2258,7 +2660,7 @@ mod tests {
             .expect("ready event claims");
         let deferred = deferred_claim
             .record
-            .defer_until(&deferred_claim.claim, 120, 180)
+            .defer_until(&deferred_claim.claim, 120, 180, false)
             .expect("current claim defers until retry time");
 
         assert_eq!(
@@ -2274,7 +2676,7 @@ mod tests {
             .expect("ready event claims");
         let error = invalid_claimed
             .record
-            .defer_until(&invalid_claimed.claim, 220, 219)
+            .defer_until(&invalid_claimed.claim, 220, 219, false)
             .expect_err("retry ready time cannot precede deferred time");
         assert_eq!(
             error.code,
@@ -2289,7 +2691,7 @@ mod tests {
             .expect("ready event claims");
         let deferred = deferred_claim
             .record
-            .defer_until(&deferred_claim.claim, 120, 180)
+            .defer_until(&deferred_claim.claim, 120, 180, false)
             .expect("current claim defers until retry time");
 
         let ready = deferred
@@ -2321,9 +2723,9 @@ mod tests {
 
         let released = claimed
             .record
-            .mark_dispatching(&claimed.claim, 110)
+            .mark_dispatching(&claimed.claim, 110, false)
             .expect("event marks dispatching")
-            .release_claim(&claimed.claim, 120)
+            .release_claim(&claimed.claim, 120, false)
             .expect("current claim releases");
 
         assert_eq!(released.state, WorkflowRuntimeBranchTaskEventState::Ready);
@@ -2343,7 +2745,7 @@ mod tests {
             .expect("ready event claims");
         let completed = claimed
             .record
-            .complete(&claimed.claim, 120)
+            .complete(&claimed.claim, 120, false)
             .expect("current claim completes");
 
         let error = completed
@@ -2477,7 +2879,7 @@ mod tests {
             .claim_event(&event_id, owner_id("worker.alpha"), 100, 80)
             .expect("event claims");
         let dispatching = repository
-            .mark_dispatching(&event_id, &claimed.claim, 110)
+            .mark_dispatching(&event_id, &claimed.claim, 110, None)
             .expect("event marks dispatching");
         assert_eq!(
             dispatching.state,
@@ -2508,14 +2910,14 @@ mod tests {
             .claim_event(&event_id, owner_id("worker.alpha"), 100, 80)
             .expect("event claims");
         let dispatching = repository
-            .mark_dispatching(&event_id, &first.claim, 110)
+            .mark_dispatching(&event_id, &first.claim, 110, None)
             .expect("event marks dispatching");
         assert_eq!(
             dispatching.state,
             WorkflowRuntimeBranchTaskEventState::Dispatching
         );
         let running = repository
-            .mark_running(&event_id, &first.claim, 120)
+            .mark_running(&event_id, &first.claim, 120, None)
             .expect("event marks running");
         assert_eq!(running.state, WorkflowRuntimeBranchTaskEventState::Running);
 
@@ -2547,7 +2949,7 @@ mod tests {
             .expect("event claims");
 
         let completed = repository
-            .complete(&event_id, &claimed.claim, 120)
+            .complete(&event_id, &claimed.claim, 120, None)
             .expect("event completes");
 
         assert_eq!(
@@ -2571,7 +2973,7 @@ mod tests {
             .expect("event claims");
 
         let dispatching = repository
-            .mark_dispatching(&event_id, &claimed.claim, 110)
+            .mark_dispatching(&event_id, &claimed.claim, 110, None)
             .expect("event marks dispatching");
         assert_eq!(
             dispatching.state,
@@ -2580,7 +2982,7 @@ mod tests {
         assert_eq!(dispatching.dispatching_at_ms, Some(110));
 
         let running = repository
-            .mark_running(&event_id, &claimed.claim, 120)
+            .mark_running(&event_id, &claimed.claim, 120, None)
             .expect("event marks running");
         assert_eq!(running.state, WorkflowRuntimeBranchTaskEventState::Running);
         assert_eq!(running.running_at_ms, Some(120));
@@ -2607,6 +3009,7 @@ mod tests {
                 &event_id,
                 &claimed.claim,
                 selected_candidate_fact.clone(),
+                None,
             )
             .expect("repository records selected candidate fact");
 
@@ -2641,6 +3044,7 @@ mod tests {
                 assignment_id.clone(),
                 "scheduler-task-attempt.1".to_string(),
                 110,
+                None,
             )
             .expect("repository links dispatch assignment");
 
@@ -2673,7 +3077,7 @@ mod tests {
             .expect("expired event reclaims");
 
         let error = repository
-            .complete(&event_id, &first.claim, 160)
+            .complete(&event_id, &first.claim, 160, None)
             .expect_err("stale claim cannot complete");
 
         assert_eq!(
@@ -2696,7 +3100,7 @@ mod tests {
             .claim_event(&deferred_id, owner_id("worker.alpha"), 100, 50)
             .expect("event claims");
         let deferred = repository
-            .defer(&deferred_id, &deferred_claim.claim, 120)
+            .defer(&deferred_id, &deferred_claim.claim, 120, None)
             .expect("event defers");
         assert_eq!(
             deferred.state,
@@ -2724,7 +3128,7 @@ mod tests {
             .claim_event(&failed_id, owner_id("worker.beta"), 200, 50)
             .expect("event claims");
         let failed = repository
-            .fail(&failed_id, &failed_claim.claim, 220)
+            .fail(&failed_id, &failed_claim.claim, 220, None)
             .expect("event fails");
         assert_eq!(failed.state, WorkflowRuntimeBranchTaskEventState::Failed);
     }
@@ -2739,7 +3143,7 @@ mod tests {
             .expect("event claims");
 
         let released = repository
-            .release_claim(&event_id, &claimed.claim, 120)
+            .release_claim(&event_id, &claimed.claim, 120, None)
             .expect("event claim releases");
 
         assert_eq!(released.state, WorkflowRuntimeBranchTaskEventState::Ready);

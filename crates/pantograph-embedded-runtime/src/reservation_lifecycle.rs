@@ -9,10 +9,11 @@ use pantograph_runtime_host_contracts::{
     ReservationLifecyclePortError, ValidatedReservationLifecycleEvent,
     RESERVATION_LIFECYCLE_CONTRACT_VERSION,
 };
-use pantograph_runtime_registry::{RuntimeRegistryError, SharedRuntimeRegistry};
+use pantograph_runtime_registry::SharedRuntimeRegistry;
 
 use crate::runtime_registry::{
     release_reservation_and_reconcile_runtime_registry, HostRuntimeRegistryController,
+    RuntimeLifecycleCoordinationError,
 };
 
 const RUNTIME_REGISTRY_LEASE_PREFIX: &str = "runtime-registry.";
@@ -184,7 +185,7 @@ fn port_error_from_contract(
 
 fn registry_error_message(
     event: &ReservationLifecycleEvent,
-    error: RuntimeRegistryError,
+    error: RuntimeLifecycleCoordinationError,
 ) -> String {
     format!(
         "runtime-registry reservation lifecycle failed for lease '{}' and task '{}': {error}",

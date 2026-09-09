@@ -301,7 +301,7 @@ impl EmbeddedWorkflowHost {
                     lease.reservation_id,
                 )
                 .await
-                .map_err(runtime_registry_errors::workflow_service_error_from_runtime_registry)?;
+                .map_err(|error| WorkflowServiceError::Internal(error.to_string()))?;
             }
             return Err(error);
         }
@@ -333,7 +333,7 @@ impl EmbeddedWorkflowHost {
                 reservation_id,
             )
             .await
-            .map_err(runtime_registry_errors::workflow_service_error_from_runtime_registry)?;
+            .map_err(|error| WorkflowServiceError::Internal(error.to_string()))?;
         }
 
         Ok(())

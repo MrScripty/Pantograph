@@ -221,10 +221,14 @@ impl HostRuntimeRegistryController for FakeLifecycleController {
         }
     }
 
-    async fn stop_runtime_producer(&self, producer: HostRuntimeProducer) {
+    async fn stop_runtime_producer(
+        &self,
+        producer: HostRuntimeProducer,
+    ) -> Result<(), inference::GatewayError> {
         assert_eq!(producer, HostRuntimeProducer::Active);
         self.active.store(false, Ordering::SeqCst);
         self.stop_count.fetch_add(1, Ordering::SeqCst);
+        Ok(())
     }
 }
 

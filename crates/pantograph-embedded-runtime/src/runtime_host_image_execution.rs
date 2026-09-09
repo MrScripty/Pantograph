@@ -367,7 +367,7 @@ fn validate_supported_inputs(
     Ok(())
 }
 
-fn project_pumas_artifact_load_target(
+pub(crate) fn project_pumas_artifact_load_target(
     target: pumas_library::models::PumasArtifactLoadTarget,
 ) -> PumasArtifactLoadTarget {
     PumasArtifactLoadTarget {

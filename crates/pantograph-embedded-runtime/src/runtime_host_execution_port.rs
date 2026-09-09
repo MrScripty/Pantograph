@@ -37,6 +37,11 @@ use crate::runtime_host_media_artifact_sink::{
 use crate::runtime_host_package_facts::{
     RuntimeHostPackageFactsResolver, RuntimeHostPumasPackageFactsError,
 };
+use crate::runtime_host_text_execution::{
+    project_runtime_host_text_generation, text_from_inference_result,
+    validate_runtime_host_text_generation_request, RuntimeHostTextGenerationProjectionError,
+    TEXT_GENERATION_TASK,
+};
 
 const MISSING_LOAD_TARGET_RESOLVER_HINT: &str =
     "embedded_runtime_host_execution_port.missing_load_target_resolver";
@@ -52,8 +57,12 @@ const PACKAGE_FACTS_UNAVAILABLE_HINT: &str =
     "embedded_runtime_host_execution_port.pumas_package_facts_unavailable";
 const IMAGE_PROJECTION_FAILED_HINT: &str =
     "embedded_runtime_host_execution_port.image_projection_failed";
+const TEXT_PROJECTION_FAILED_HINT: &str =
+    "embedded_runtime_host_execution_port.text_projection_failed";
 const GATEWAY_EXECUTION_FAILED_HINT: &str =
     "embedded_runtime_host_execution_port.gateway_execution_failed";
+const TEXT_GATEWAY_EXECUTION_FAILED_HINT: &str =
+    "embedded_runtime_host_execution_port.text_gateway_execution_failed";
 const BATCH_COMPATIBILITY_FAILED_HINT: &str =
     "embedded_runtime_host_execution_port.batch_compatibility_failed";
 const BATCH_PLANNING_FAILED_HINT: &str =
@@ -146,6 +155,19 @@ impl RuntimeHostExecutionPort for EmbeddedRuntimeHostExecutionPort {
             cancellation_rejection_response(validated_request.as_ref(), &cancellation)?
         {
             return Ok(response);
+        }
+
+        if validated_request
+            .as_ref()
+            .handoff
+            .task_intent
+            .task_type
+            .as_str()
+            == TEXT_GENERATION_TASK
+        {
+            return self
+                .execute_runtime_host_text_request(&validated_request, cancellation)
+                .await;
         }
 
         let Some(load_target_resolver) = self.load_target_resolver.as_ref() else {
@@ -276,6 +298,220 @@ impl RuntimeHostExecutionPort for EmbeddedRuntimeHostExecutionPort {
     }
 }
 
+impl EmbeddedRuntimeHostExecutionPort {
+    async fn execute_runtime_host_text_request(
+        &self,
+        request: &ValidatedRuntimeHostExecutionRequest,
+        cancellation: RuntimeHostExecutionCancellationHandle,
+    ) -> Result<RuntimeHostExecutionResponse, RuntimeHostExecutionPortError> {
+        let request_ref = request.as_ref();
+        if let Err(error) = validate_runtime_host_text_generation_request(request_ref) {
+            return Ok(rejected_response(
+                request_ref,
+                RuntimeHostExecutionDiagnosticCode::ExecutionFailed,
+                &text_projection_error_message(error),
+                TEXT_PROJECTION_FAILED_HINT,
+            ));
+        }
+
+        let Some(load_target_resolver) = self.load_target_resolver.as_ref() else {
+            return Ok(rejected_response(
+                request_ref,
+                RuntimeHostExecutionDiagnosticCode::PumasLoadTargetRequired,
+                "embedded runtime-host text execution requires a Pumas load-target resolver",
+                MISSING_LOAD_TARGET_RESOLVER_HINT,
+            ));
+        };
+        let Some(package_facts_resolver) = self.package_facts_resolver.as_ref() else {
+            return Ok(rejected_response(
+                request_ref,
+                RuntimeHostExecutionDiagnosticCode::RuntimeUnavailable,
+                "embedded runtime-host text execution requires a Pumas package-facts resolver",
+                MISSING_PACKAGE_FACTS_RESOLVER_HINT,
+            ));
+        };
+        let Some(gateway) = self.gateway.as_ref() else {
+            return Ok(rejected_response(
+                request_ref,
+                RuntimeHostExecutionDiagnosticCode::RuntimeUnavailable,
+                "embedded runtime-host text execution requires an inference gateway",
+                MISSING_INFERENCE_GATEWAY_HINT,
+            ));
+        };
+
+        let load_target = match load_target_resolver.resolve(request).await {
+            Ok(load_target) => load_target,
+            Err(error) => {
+                return Ok(rejected_response(
+                    request_ref,
+                    RuntimeHostExecutionDiagnosticCode::PumasLoadTargetUnavailable,
+                    &load_target_error_message(error),
+                    LOAD_TARGET_UNAVAILABLE_HINT,
+                ));
+            }
+        };
+        if let Some(response) = cancellation_rejection_response(request_ref, &cancellation)? {
+            return Ok(response);
+        }
+
+        let package_facts = match package_facts_resolver.resolve(request).await {
+            Ok(package_facts) => package_facts,
+            Err(error) => {
+                return Ok(rejected_response(
+                    request_ref,
+                    RuntimeHostExecutionDiagnosticCode::PumasLoadTargetUnavailable,
+                    &package_facts_error_message(error),
+                    PACKAGE_FACTS_UNAVAILABLE_HINT,
+                ));
+            }
+        };
+        if let Some(response) = cancellation_rejection_response(request_ref, &cancellation)? {
+            return Ok(response);
+        }
+
+        let projection =
+            match project_runtime_host_text_generation(request, package_facts, load_target) {
+                Ok(projection) => projection,
+                Err(error) => {
+                    return Ok(rejected_response(
+                        request_ref,
+                        RuntimeHostExecutionDiagnosticCode::ExecutionFailed,
+                        &text_projection_error_message(error),
+                        TEXT_PROJECTION_FAILED_HINT,
+                    ));
+                }
+            };
+        if let Some(response) = cancellation_rejection_response(request_ref, &cancellation)? {
+            return Ok(response);
+        }
+
+        let inference_cancellation =
+            inference_cancellation_handle_from_runtime_host(cancellation.clone());
+        let result = match gateway
+            .execute_selected_text_with_cancellation(
+                projection.request().clone(),
+                projection.artifact_load_target().clone(),
+                projection.backend_decision().clone(),
+                inference_cancellation,
+            )
+            .await
+        {
+            Ok(result) => result,
+            Err(error) => {
+                if matches!(
+                    error,
+                    inference::GatewayError::Backend(inference::BackendError::Cancelled(_))
+                ) {
+                    if let Some(response) =
+                        cancellation_rejection_response(request_ref, &cancellation)?
+                    {
+                        return Ok(response);
+                    }
+                }
+                return Ok(failed_response(
+                    request_ref,
+                    &text_gateway_error_message(error),
+                    TEXT_GATEWAY_EXECUTION_FAILED_HINT,
+                ));
+            }
+        };
+
+        let text = match text_from_inference_result(result) {
+            Ok(text) => text,
+            Err(error) => {
+                return Ok(failed_response(
+                    request_ref,
+                    &text_projection_error_message(error),
+                    TEXT_PROJECTION_FAILED_HINT,
+                ));
+            }
+        };
+
+        Ok(completed_text_response(request_ref, text))
+    }
+}
+
+impl EmbeddedRuntimeHostExecutionPort {
+    async fn execute_runtime_host_text_batch_request(
+        &self,
+        request: &RuntimeHostBatchExecutionRequest,
+        member_requests: Vec<ValidatedRuntimeHostExecutionRequest>,
+        cancellation: RuntimeHostExecutionCancellationHandle,
+    ) -> Result<RuntimeHostBatchExecutionResponse, RuntimeHostExecutionPortError> {
+        let validation_errors = member_requests
+            .iter()
+            .map(|member| {
+                validate_runtime_host_text_generation_request(member.as_ref())
+                    .err()
+                    .map(|error| error.to_string())
+            })
+            .collect::<Vec<_>>();
+        let mut members = Vec::with_capacity(member_requests.len());
+
+        for (member_request, validation_error) in member_requests.into_iter().zip(validation_errors)
+        {
+            let member = request
+                .members
+                .iter()
+                .find(|candidate| {
+                    candidate.execution_request_id == member_request.as_ref().execution_request_id
+                })
+                .expect("validated batch member must match its source request");
+            if let Some(error) = validation_error {
+                members.push(batch_member_response(
+                    member,
+                    RuntimeHostBatchExecutionMemberState::Rejected,
+                    Vec::new(),
+                    vec![runtime_host_diagnostic(
+                        RuntimeHostExecutionDiagnosticCode::ExecutionFailed,
+                        &format!("embedded runtime-host text projection failed: {error}"),
+                        TEXT_PROJECTION_FAILED_HINT,
+                    )],
+                ));
+                continue;
+            }
+
+            if let Some(response) =
+                text_batch_member_cancellation_response(member, request, &cancellation)?
+            {
+                members.push(response);
+                continue;
+            }
+
+            let response = self
+                .execute_runtime_host_text_request(&member_request, cancellation.clone())
+                .await?;
+            members.push(text_batch_member_response(member, response));
+        }
+
+        let state = runtime_host_batch_state_from_members(&members);
+        let mut diagnostics = members
+            .iter()
+            .filter_map(|member| member.diagnostics.first().cloned())
+            .collect::<Vec<_>>();
+        if diagnostics.is_empty()
+            && matches!(
+                state,
+                RuntimeHostBatchExecutionState::Rejected | RuntimeHostBatchExecutionState::Failed
+            )
+        {
+            diagnostics.push(runtime_host_diagnostic(
+                RuntimeHostExecutionDiagnosticCode::ExecutionFailed,
+                "embedded runtime-host text batch execution ended without a completed member",
+                TEXT_GATEWAY_EXECUTION_FAILED_HINT,
+            ));
+        }
+
+        Ok(RuntimeHostBatchExecutionResponse {
+            contract_version: RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
+            batch_execution_request_id: request.batch_execution_request_id.clone(),
+            state,
+            members,
+            diagnostics,
+        })
+    }
+}
+
 #[async_trait]
 impl RuntimeHostBatchExecutionPort for EmbeddedRuntimeHostExecutionPort {
     async fn execute_runtime_host_batch_request(
@@ -291,6 +527,23 @@ impl RuntimeHostBatchExecutionPort for EmbeddedRuntimeHostExecutionPort {
 
         if let Some(response) = batch_cancellation_rejection_response(request, &cancellation)? {
             return Ok(response);
+        }
+
+        let member_requests = validated_member_requests_from_batch(request)?;
+        if let Some(message) = shared_batch_runtime_context_error(&member_requests) {
+            return Ok(rejected_batch_response(
+                request,
+                RuntimeHostExecutionDiagnosticCode::ExecutionFailed,
+                &message,
+                BATCH_COMPATIBILITY_FAILED_HINT,
+            ));
+        }
+        if member_requests.iter().all(|member| {
+            member.as_ref().handoff.task_intent.task_type.as_str() == TEXT_GENERATION_TASK
+        }) {
+            return self
+                .execute_runtime_host_text_batch_request(request, member_requests, cancellation)
+                .await;
         }
 
         let Some(load_target_resolver) = self.load_target_resolver.as_ref() else {
@@ -326,15 +579,6 @@ impl RuntimeHostBatchExecutionPort for EmbeddedRuntimeHostExecutionPort {
             ));
         };
 
-        let member_requests = validated_member_requests_from_batch(request)?;
-        if let Some(message) = shared_batch_runtime_context_error(&member_requests) {
-            return Ok(rejected_batch_response(
-                request,
-                RuntimeHostExecutionDiagnosticCode::ExecutionFailed,
-                &message,
-                BATCH_COMPATIBILITY_FAILED_HINT,
-            ));
-        }
         let anchor_member_request = anchor_member_request(request, &member_requests)?;
 
         let load_target = match load_target_resolver.resolve(anchor_member_request).await {
@@ -521,6 +765,15 @@ fn shared_batch_runtime_context_error(
             ));
         }
     };
+    if !matches!(
+        first_decision.task_intent.task_type.as_str(),
+        "image_generation" | TEXT_GENERATION_TASK
+    ) {
+        return Some(format!(
+            "embedded runtime-host batch task type '{}' is unsupported",
+            first_decision.task_intent.task_type
+        ));
+    }
 
     for member_request in &member_requests[1..] {
         let member = member_request.as_ref();
@@ -971,6 +1224,119 @@ fn batch_member_response(
     }
 }
 
+fn text_batch_member_response(
+    member: &RuntimeHostBatchExecutionMemberRequest,
+    response: RuntimeHostExecutionResponse,
+) -> RuntimeHostBatchExecutionMemberResponse {
+    let (state, outputs, mut diagnostics) = match response.state {
+        RuntimeHostExecutionState::Completed => (
+            RuntimeHostBatchExecutionMemberState::Completed,
+            response.outputs,
+            response.diagnostics,
+        ),
+        RuntimeHostExecutionState::Rejected
+            if response.diagnostics.iter().any(|diagnostic| {
+                matches!(
+                    diagnostic.code,
+                    RuntimeHostExecutionDiagnosticCode::CancellationRequested
+                        | RuntimeHostExecutionDiagnosticCode::ShutdownRequested
+                )
+            }) =>
+        {
+            (
+                RuntimeHostBatchExecutionMemberState::Cancelled,
+                Vec::new(),
+                response.diagnostics,
+            )
+        }
+        RuntimeHostExecutionState::Rejected => (
+            RuntimeHostBatchExecutionMemberState::Rejected,
+            Vec::new(),
+            response.diagnostics,
+        ),
+        RuntimeHostExecutionState::Failed => (
+            RuntimeHostBatchExecutionMemberState::Failed,
+            Vec::new(),
+            response.diagnostics,
+        ),
+        RuntimeHostExecutionState::Accepted => (
+            RuntimeHostBatchExecutionMemberState::Failed,
+            Vec::new(),
+            response.diagnostics,
+        ),
+        _ => (
+            RuntimeHostBatchExecutionMemberState::Failed,
+            Vec::new(),
+            response.diagnostics,
+        ),
+    };
+    if diagnostics.is_empty() {
+        diagnostics.push(runtime_host_diagnostic(
+            RuntimeHostExecutionDiagnosticCode::ExecutionFailed,
+            "embedded runtime-host text batch member returned no terminal diagnostic",
+            TEXT_GATEWAY_EXECUTION_FAILED_HINT,
+        ));
+    }
+    batch_member_response(member, state, outputs, diagnostics)
+}
+
+fn text_batch_member_cancellation_response(
+    member: &RuntimeHostBatchExecutionMemberRequest,
+    request: &RuntimeHostBatchExecutionRequest,
+    cancellation: &RuntimeHostExecutionCancellationHandle,
+) -> Result<Option<RuntimeHostBatchExecutionMemberResponse>, RuntimeHostExecutionPortError> {
+    let snapshot = cancellation.snapshot();
+    snapshot
+        .validate()
+        .map_err(|error| RuntimeHostExecutionPortError::ExecutionFailed {
+            message: format!(
+                "embedded runtime-host batch cancellation snapshot failed validation: {error}"
+            ),
+        })?;
+    if snapshot.cancellation_context_id != request.cancellation_context.cancellation_context_id {
+        return Err(RuntimeHostExecutionPortError::ExecutionFailed {
+            message: format!(
+                "embedded runtime-host batch cancellation context mismatch: request '{}' but signal '{}'",
+                request.cancellation_context.cancellation_context_id,
+                snapshot.cancellation_context_id
+            ),
+        });
+    }
+    let reason = snapshot.reason.as_deref().unwrap_or("no reason provided");
+    let (state, diagnostic_code, message, hint) = match snapshot.state {
+        RuntimeHostExecutionCancellationState::Running => return Ok(None),
+        RuntimeHostExecutionCancellationState::CancellationRequested => (
+            RuntimeHostBatchExecutionMemberState::Cancelled,
+            RuntimeHostExecutionDiagnosticCode::CancellationRequested,
+            format!(
+                "embedded runtime-host text batch member cancelled before completion: {reason}"
+            ),
+            CANCELLATION_REQUESTED_HINT,
+        ),
+        RuntimeHostExecutionCancellationState::ShutdownRequested => (
+            RuntimeHostBatchExecutionMemberState::Cancelled,
+            RuntimeHostExecutionDiagnosticCode::ShutdownRequested,
+            format!(
+                "embedded runtime-host text batch member stopped for workflow-service shutdown: {reason}"
+            ),
+            SHUTDOWN_REQUESTED_HINT,
+        ),
+        _ => (
+            RuntimeHostBatchExecutionMemberState::Failed,
+            RuntimeHostExecutionDiagnosticCode::ExecutionFailed,
+            "embedded runtime-host text batch member observed an unknown cancellation state"
+                .to_string(),
+            UNKNOWN_CANCELLATION_STATE_HINT,
+        ),
+    };
+    Ok(Some(batch_member_response(
+        member,
+        state,
+        Vec::new(),
+        vec![runtime_host_diagnostic(diagnostic_code, &message, hint)],
+    )))
+}
+
 fn retry_disposition_for_member(
     member: &RuntimeHostBatchExecutionMemberRequest,
     state: &RuntimeHostBatchExecutionMemberState,
@@ -1209,6 +1575,32 @@ fn failed_response(
     }
 }
 
+fn completed_text_response(
+    request: &RuntimeHostExecutionRequest,
+    text: String,
+) -> RuntimeHostExecutionResponse {
+    RuntimeHostExecutionResponse {
+        contract_version: RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
+        execution_request_id: request.execution_request_id.clone(),
+        workflow_id: request.handoff.workflow_id.clone(),
+        workflow_run_id: request.handoff.workflow_run_id.clone(),
+        node_id: request.handoff.node_id.clone(),
+        task_id: request.handoff.task_id.clone(),
+        state: RuntimeHostExecutionState::Completed,
+        outputs: vec![RuntimeHostExecutionOutput {
+            port_id: "text".to_string(),
+            value: RuntimeHostExecutionOutputValue::String(text),
+        }],
+        diagnostics: vec![RuntimeHostExecutionDiagnostic {
+            severity: RuntimeHostExecutionDiagnosticSeverity::Info,
+            code: RuntimeHostExecutionDiagnosticCode::ExecutionCompleted,
+            message: "embedded runtime-host text execution completed".to_string(),
+            hint: None,
+        }],
+        terminal_metadata: None,
+    }
+}
+
 fn completed_image_response(
     request: &RuntimeHostExecutionRequest,
     result: inference::ImageGenerationResult,
@@ -1266,6 +1658,14 @@ fn package_facts_error_message(error: RuntimeHostPumasPackageFactsError) -> Stri
 
 fn image_projection_error_message(error: RuntimeHostImageGenerationProjectionError) -> String {
     format!("embedded runtime-host image projection failed: {error}")
+}
+
+fn text_projection_error_message(error: RuntimeHostTextGenerationProjectionError) -> String {
+    format!("embedded runtime-host text projection failed: {error}")
+}
+
+fn text_gateway_error_message(error: inference::GatewayError) -> String {
+    format!("embedded runtime-host text gateway execution failed: {error}")
 }
 
 fn gateway_error_message(error: inference::GatewayError) -> String {
@@ -2206,7 +2606,9 @@ mod tests {
             })
         }
 
-        fn stop(&mut self) {}
+        async fn stop(&mut self) -> Result<(), BackendError> {
+            Ok(())
+        }
 
         fn is_ready(&self) -> bool {
             true
@@ -2327,7 +2729,9 @@ mod tests {
             })
         }
 
-        fn stop(&mut self) {}
+        async fn stop(&mut self) -> Result<(), BackendError> {
+            Ok(())
+        }
 
         fn is_ready(&self) -> bool {
             true

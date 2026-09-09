@@ -22,7 +22,10 @@ use pantograph_runtime_registry::{
 #[async_trait]
 pub trait HostRuntimeRegistryController {
     async fn mode_info_snapshot(&self) -> HostRuntimeModeSnapshot;
-    async fn stop_runtime_producer(&self, producer: HostRuntimeProducer);
+    async fn stop_runtime_producer(
+        &self,
+        producer: HostRuntimeProducer,
+    ) -> Result<(), inference::GatewayError>;
     async fn runtime_health_assessment_snapshot(&self) -> RuntimeHealthAssessmentSnapshot {
         RuntimeHealthAssessmentSnapshot::default()
     }
@@ -30,7 +33,7 @@ pub trait HostRuntimeRegistryController {
 
 #[async_trait]
 pub trait HostRuntimeRegistryLifecycleController: HostRuntimeRegistryController {
-    async fn stop_all_runtime_producers(&self);
+    async fn stop_all_runtime_producers(&self) -> Result<(), inference::GatewayError>;
     async fn restore_runtime(
         &self,
         restore_config: Option<inference::BackendConfig>,
@@ -45,6 +48,14 @@ pub enum RuntimeWarmupCoordinationError {
         "timed out waiting for runtime '{runtime_id}' to finish warmup or shutdown transition"
     )]
     Timeout { runtime_id: String },
+}
+
+#[derive(Debug, Error)]
+pub enum RuntimeLifecycleCoordinationError {
+    #[error(transparent)]
+    Registry(#[from] RuntimeRegistryError),
+    #[error(transparent)]
+    Gateway(#[from] inference::GatewayError),
 }
 
 pub async fn sync_runtime_registry<C: HostRuntimeRegistryController + Sync>(
@@ -215,9 +226,10 @@ pub async fn stop_all_runtime_producers_and_reconcile_runtime_registry<
 >(
     controller: &C,
     registry: &RuntimeRegistry,
-) {
-    controller.stop_all_runtime_producers().await;
+) -> Result<(), RuntimeLifecycleCoordinationError> {
+    let result = controller.stop_all_runtime_producers().await;
     sync_runtime_registry(controller, registry).await;
+    result.map_err(Into::into)
 }
 
 pub async fn restore_runtime_and_reconcile_runtime_registry<
@@ -238,20 +250,28 @@ pub async fn reclaim_runtime_and_reconcile_runtime_registry<
     controller: &C,
     registry: &RuntimeRegistry,
     runtime_id: &str,
-) -> Result<RuntimeReclaimDisposition, RuntimeRegistryError> {
+) -> Result<RuntimeReclaimDisposition, RuntimeLifecycleCoordinationError> {
     let mode_info = controller.mode_info_snapshot().await;
     crate::runtime_registry::reconcile_runtime_registry_mode_info(registry, &mode_info);
     let live_producer = crate::runtime_registry::live_host_runtime_producer(&mode_info, runtime_id);
     let reclaim = registry.reclaim_runtime(runtime_id, live_producer.is_some())?;
 
-    if reclaim.action == pantograph_runtime_registry::RuntimeReclaimAction::StopProducer {
-        if let Some(producer) = live_producer {
-            controller.stop_runtime_producer(producer).await;
-        }
-    }
+    let stop_result =
+        if reclaim.action == pantograph_runtime_registry::RuntimeReclaimAction::StopProducer {
+            if let Some(producer) = live_producer {
+                Some(controller.stop_runtime_producer(producer).await)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
 
     let mode_info = controller.mode_info_snapshot().await;
     crate::runtime_registry::reconcile_runtime_registry_mode_info(registry, &mode_info);
+    if let Some(stop_result) = stop_result {
+        stop_result.map_err(RuntimeLifecycleCoordinationError::Gateway)?;
+    }
     Ok(reclaim)
 }
 
@@ -261,7 +281,7 @@ pub async fn release_reservation_and_reconcile_runtime_registry<
     controller: &C,
     registry: &RuntimeRegistry,
     reservation_id: u64,
-) -> Result<Option<RuntimeRetentionDisposition>, RuntimeRegistryError> {
+) -> Result<Option<RuntimeRetentionDisposition>, RuntimeLifecycleCoordinationError> {
     let disposition = registry.release_reservation_if_present(reservation_id)?;
 
     if let Some(disposition) = disposition.as_ref() {

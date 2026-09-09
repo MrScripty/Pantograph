@@ -44,6 +44,95 @@ use super::{
 };
 use crate::scheduler::WorkflowExecutionSessionActiveRunContext;
 
+use super::runtime_branch_task_event::{
+    WorkflowRuntimeBranchOwnedEventClaim, WorkflowRuntimeClaimOwnership,
+};
+
+#[derive(Debug)]
+pub(super) struct WorkflowRuntimeBranchBatchClaimOwnership {
+    pub(super) batch: WorkflowRuntimeClaimOwnership,
+    pub(super) events: Vec<WorkflowRuntimeBranchOwnedEventClaim>,
+}
+
+impl WorkflowRuntimeBranchBatchClaimOwnership {
+    fn validate_events(
+        &self,
+        service: &WorkflowService,
+        plan: &WorkflowRuntimeBranchBatchExecutionPlan,
+    ) -> Result<(), WorkflowRuntimeBranchBatchExecutionFailure> {
+        if self.events.len() != plan.members.len()
+            || plan.members.iter().any(|member| {
+                self.events
+                    .iter()
+                    .filter(|event| event.event_id.as_str() == member.runtime_branch_event_id)
+                    .count()
+                    != 1
+            })
+        {
+            return Err(ownership_failure(
+                "runtime branch batch is missing all-member event ownership",
+            ));
+        }
+        let repository = service
+            .runtime_branch_task_event_repository
+            .lock()
+            .map_err(|_| ownership_failure("task-event repository lock poisoned"))?;
+        for event in &self.events {
+            repository
+                .validate_owned_running(&event.event_id, &event.claim, &event.proof)
+                .map_err(|diagnostic| ownership_failure(&diagnostic.message))?;
+        }
+        Ok(())
+    }
+
+    fn validate_execution(
+        &self,
+        service: &WorkflowService,
+        plan: &WorkflowRuntimeBranchBatchExecutionPlan,
+    ) -> Result<(), WorkflowRuntimeBranchBatchExecutionFailure> {
+        self.validate_events(service, plan)?;
+        service
+            .runtime_dispatch_assignment_repository
+            .lock()
+            .map_err(|_| ownership_failure("assignment repository lock poisoned"))?
+            .validate_owned_execution(&plan.batch_claim, &self.batch)
+            .map_err(|diagnostic| ownership_failure(&diagnostic.message))
+    }
+
+    fn mark_dispatch(
+        &self,
+        service: &WorkflowService,
+        plan: &WorkflowRuntimeBranchBatchExecutionPlan,
+    ) -> Result<(), WorkflowRuntimeBranchBatchExecutionFailure> {
+        {
+            let mut repository = service
+                .runtime_branch_task_event_repository
+                .lock()
+                .map_err(|_| ownership_failure("task-event repository lock poisoned"))?;
+            for event in &self.events {
+                repository
+                    .mark_owned_dispatch(&event.event_id, &event.claim, &event.proof)
+                    .map_err(|diagnostic| ownership_failure(&diagnostic.message))?;
+            }
+        }
+        service
+            .runtime_dispatch_assignment_repository
+            .lock()
+            .map_err(|_| ownership_failure("assignment repository lock poisoned"))?
+            .mark_owned_dispatch(&plan.batch_claim, &self.batch)
+            .map_err(|diagnostic| ownership_failure(&diagnostic.message))
+    }
+}
+
+fn ownership_failure(message: &str) -> WorkflowRuntimeBranchBatchExecutionFailure {
+    WorkflowRuntimeBranchBatchExecutionFailure::global(
+        WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
+            WorkflowRuntimeBranchBatchExecutionDiagnosticCode::AssignmentBatchClaimMismatch,
+            message,
+        ),
+    )
+}
+
 #[must_use]
 pub(super) struct WorkflowRuntimeBranchBatchExecutionOwner<'a, R>
 where
@@ -234,12 +323,30 @@ where
         service: &WorkflowService,
         plan: &WorkflowRuntimeBranchBatchExecutionPlan,
         response: &RuntimeHostBatchExecutionResponse,
+        ownership: &mut WorkflowRuntimeBranchBatchClaimOwnership,
     ) -> Result<
         WorkflowRuntimeBranchBatchResponseMutationOutcome,
         WorkflowRuntimeBranchBatchExecutionFailure,
     > {
         validate_batch_response_matches_plan(plan, response)?;
+        let terminal_states = plan
+            .members
+            .iter()
+            .map(|member| {
+                let response_member =
+                    response_member_for_assignment(response, member.assignment_id.as_str())
+                        .expect("validated response membership");
+                assignment_terminal_transition(member, response_member)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
         validate_service_assignments_are_running(service, plan)?;
+        ownership.validate_events(service, plan)?;
+        service
+            .runtime_dispatch_assignment_repository
+            .lock()
+            .map_err(|_| ownership_failure("assignment repository lock poisoned"))?
+            .begin_owned_publication(&plan.batch_claim, &ownership.batch)
+            .map_err(|diagnostic| ownership_failure(&diagnostic.message))?;
         let (outcomes, lifecycle_applications) = {
             let mut store = service.session_store_guard().map_err(|error| {
                 WorkflowRuntimeBranchBatchExecutionFailure::global(
@@ -312,7 +419,7 @@ where
             }
             (outcomes, lifecycle_applications)
         };
-        mark_terminal_service_assignments(service, plan, response)?;
+        mark_terminal_service_assignments(service, plan, &terminal_states, ownership)?;
         for application in lifecycle_applications {
             if let Some(terminal_mutation) = &application.terminal_mutation {
                 let (transition, reason, error_summary) =
@@ -387,6 +494,7 @@ where
         service: &WorkflowService,
         host: &H,
         claim_outcome: WorkflowRuntimeDispatchAssignmentBatchClaimOutcome,
+        ownership: &mut WorkflowRuntimeBranchBatchClaimOwnership,
     ) -> Result<
         WorkflowRuntimeBranchBatchRunFinalizationOutcome,
         WorkflowRuntimeBranchBatchExecutionFailure,
@@ -395,8 +503,10 @@ where
         H: WorkflowHost + ?Sized,
     {
         let plan = self.prepare_claimed_batch(service, claim_outcome)?;
+        ownership.validate_execution(service, &plan)?;
         self.apply_batch_dispatch_started_lifecycle(&plan).await?;
         let cancellation = self.runtime_host_batch_cancellation(&plan)?;
+        ownership.mark_dispatch(service, &plan)?;
         let response = self
             .scheduler_task_orchestrator
             .dispatch_runtime_batch_request_with_cancellation(
@@ -417,7 +527,7 @@ where
             })?
             .into_inner();
         let _mutation = self
-            .apply_batch_response_mutations(service, &plan, &response)
+            .apply_batch_response_mutations(service, &plan, &response, ownership)
             .await?;
         self.finalize_batch_member_runs(service, host, &plan, &response)
             .await
@@ -559,7 +669,7 @@ where
 }
 
 impl WorkflowRuntimeBranchBatchExecutionFailure {
-    fn global(diagnostic: WorkflowRuntimeBranchBatchExecutionDiagnostic) -> Self {
+    pub(super) fn global(diagnostic: WorkflowRuntimeBranchBatchExecutionDiagnostic) -> Self {
         Self {
             diagnostics: vec![diagnostic],
             member_outcomes: Vec::new(),
@@ -972,14 +1082,17 @@ fn validate_service_assignments_are_running(
                 ),
             );
         };
-        if record.state != WorkflowRuntimeDispatchAssignmentState::Running {
+        if record.state != WorkflowRuntimeDispatchAssignmentState::Running
+            || record.batch_claim.as_ref() != Some(&plan.batch_claim)
+            || record.runtime_branch_event_id.as_str() != member.runtime_branch_event_id
+        {
             return Err(
                 WorkflowRuntimeBranchBatchExecutionFailure::active_run_member(
                     member,
                     WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
                         WorkflowRuntimeBranchBatchExecutionDiagnosticCode::RuntimeDispatchAssignmentTerminalStateInvalid,
                         format!(
-                            "runtime branch batch assignment '{}' must be running before response mutation",
+                            "runtime branch batch assignment '{}' must be running under the current batch fence before response mutation",
                             member.assignment_id.as_str()
                         ),
                     ),
@@ -993,82 +1106,38 @@ fn validate_service_assignments_are_running(
 fn mark_terminal_service_assignments(
     service: &WorkflowService,
     plan: &WorkflowRuntimeBranchBatchExecutionPlan,
-    response: &RuntimeHostBatchExecutionResponse,
+    terminal_states: &[WorkflowRuntimeDispatchAssignmentState],
+    ownership: &WorkflowRuntimeBranchBatchClaimOwnership,
 ) -> Result<(), WorkflowRuntimeBranchBatchExecutionFailure> {
     let now_ms = unix_timestamp_ms();
     let mut repository = service
         .runtime_dispatch_assignment_repository
         .lock()
-        .map_err(|error| {
-            WorkflowRuntimeBranchBatchExecutionFailure::global(
-                WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
-                    WorkflowRuntimeBranchBatchExecutionDiagnosticCode::RuntimeDispatchAssignmentTerminalStateInvalid,
-                    format!("runtime branch batch execution could not write dispatch assignments: {error}"),
-                ),
+        .map_err(|_| ownership_failure("assignment repository lock poisoned"))?;
+    for (member, state) in plan.members.iter().zip(terminal_states) {
+        let _record = repository
+            .finish_owned_assignment(
+                &member.assignment_id,
+                &plan.batch_claim,
+                &ownership.batch,
+                *state,
+                now_ms,
             )
-        })?;
-    for member in &plan.members {
-        let response_member =
-            response_member_for_assignment(response, member.assignment_id.as_str())
-                .expect("response membership was validated before mutation");
-        match assignment_terminal_transition(member, response_member)? {
-            Some(AssignmentTerminalTransition::Completed) => {
-                let _record = repository
-                    .mark_completed(&member.assignment_id, now_ms)
-                    .map_err(|diagnostic| assignment_terminal_failure(member, diagnostic))?;
-            }
-            Some(AssignmentTerminalTransition::Cancelled) => {
-                let _record = repository
-                    .mark_cancelled(&member.assignment_id, now_ms)
-                    .map_err(|diagnostic| assignment_terminal_failure(member, diagnostic))?;
-            }
-            Some(AssignmentTerminalTransition::Failed) => {
-                let _record = repository
-                    .mark_failed(&member.assignment_id, now_ms)
-                    .map_err(|diagnostic| assignment_terminal_failure(member, diagnostic))?;
-            }
-            None => {}
-        }
+            .map_err(|diagnostic| assignment_terminal_failure(member, diagnostic))?;
     }
     Ok(())
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum AssignmentTerminalTransition {
-    Completed,
-    Cancelled,
-    Failed,
 }
 
 fn assignment_terminal_transition(
     member: &WorkflowRuntimeBranchBatchExecutionMember,
     response: &RuntimeHostBatchExecutionMemberResponse,
-) -> Result<Option<AssignmentTerminalTransition>, WorkflowRuntimeBranchBatchExecutionFailure> {
+) -> Result<WorkflowRuntimeDispatchAssignmentState, WorkflowRuntimeBranchBatchExecutionFailure> {
     match response.state {
-        RuntimeHostBatchExecutionMemberState::Completed => {
-            Ok(Some(AssignmentTerminalTransition::Completed))
-        }
-        RuntimeHostBatchExecutionMemberState::Cancelled => {
-            Ok(Some(AssignmentTerminalTransition::Cancelled))
-        }
-        RuntimeHostBatchExecutionMemberState::Failed
-        | RuntimeHostBatchExecutionMemberState::Rejected => match response.retry_disposition {
-            pantograph_runtime_host_contracts::RuntimeHostBatchMemberRetryDisposition::Retryable
-            | pantograph_runtime_host_contracts::RuntimeHostBatchMemberRetryDisposition::Deferred => Ok(None),
-            _ => Ok(Some(AssignmentTerminalTransition::Failed)),
-        },
-        RuntimeHostBatchExecutionMemberState::Accepted
-        | RuntimeHostBatchExecutionMemberState::Deferred => Ok(None),
-        _ => Err(WorkflowRuntimeBranchBatchExecutionFailure::active_run_member(
-            member,
-            WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
-                WorkflowRuntimeBranchBatchExecutionDiagnosticCode::RuntimeDispatchAssignmentTerminalStateInvalid,
-                format!(
-                    "runtime branch batch assignment '{}' received unsupported runtime-host member state",
-                    member.assignment_id.as_str()
-                ),
-            ),
-        )),
+        RuntimeHostBatchExecutionMemberState::Completed => Ok(WorkflowRuntimeDispatchAssignmentState::Completed),
+        RuntimeHostBatchExecutionMemberState::Cancelled => Ok(WorkflowRuntimeDispatchAssignmentState::Cancelled),
+        RuntimeHostBatchExecutionMemberState::Failed | RuntimeHostBatchExecutionMemberState::Rejected => Ok(WorkflowRuntimeDispatchAssignmentState::Failed),
+        RuntimeHostBatchExecutionMemberState::Deferred => Ok(WorkflowRuntimeDispatchAssignmentState::Deferred),
+        _ => Err(WorkflowRuntimeBranchBatchExecutionFailure::active_run_member(member, WorkflowRuntimeBranchBatchExecutionDiagnostic::new(WorkflowRuntimeBranchBatchExecutionDiagnosticCode::RuntimeDispatchAssignmentTerminalStateInvalid, "runtime host has not returned a settled member outcome; replay and reservation release are not authorized"))),
     }
 }
 
@@ -1609,6 +1678,161 @@ mod tests {
             .with_reservation_lifecycle_port(Arc::new(RecordingReservationLifecyclePort::default()))
     }
 
+    #[tokio::test]
+    async fn runtime_branch_batch_execution_rejects_missing_event_owner_before_dispatch_effects() {
+        let port = Arc::new(RecordingBatchExecutionPort::default());
+        let lifecycle = Arc::new(RecordingReservationLifecyclePort::default());
+        let service = WorkflowService::new()
+            .with_runtime_host_batch_execution_port(port.clone())
+            .with_reservation_lifecycle_port(lifecycle.clone());
+        let responders = RecordingResponderFanOut::default();
+        let owner = WorkflowRuntimeBranchBatchExecutionOwner::new(
+            &service.scheduler_task_orchestrator,
+            &responders,
+        );
+        let members = active_batch_members(&service);
+        let (claimed, mut ownership) = batch_claim_outcome(&service, &members);
+        let _missing_owner = ownership.events.pop().expect("second owner");
+        let failure = owner
+            .execute_claimed_batch(
+                &service,
+                &BatchFinalizationHost::default(),
+                claimed,
+                &mut ownership,
+            )
+            .await
+            .expect_err("all members must be owned before dispatch effects");
+        assert_eq!(
+            failure.diagnostics[0].code,
+            WorkflowRuntimeBranchBatchExecutionDiagnosticCode::AssignmentBatchClaimMismatch
+        );
+        assert!(port.requests().is_empty());
+        assert!(
+            lifecycle.events().is_empty(),
+            "missing ownership precedes reservation dispatch-started effects"
+        );
+    }
+
+    #[tokio::test]
+    async fn runtime_branch_batch_execution_rejects_accepted_peer_before_any_member_publication() {
+        let lifecycle = Arc::new(RecordingReservationLifecyclePort::default());
+        let service = WorkflowService::new().with_reservation_lifecycle_port(lifecycle.clone());
+        let responders = RecordingResponderFanOut::default();
+        let owner = WorkflowRuntimeBranchBatchExecutionOwner::new(
+            &service.scheduler_task_orchestrator,
+            &responders,
+        );
+        let members = active_batch_members(&service);
+        let (claimed, mut ownership) = batch_claim_outcome(&service, &members);
+        let plan = owner
+            .prepare_claimed_batch(&service, claimed)
+            .expect("plan");
+        let mut response = runtime_host_batch_response_from_plan(&plan);
+        response.members[1].state = RuntimeHostBatchExecutionMemberState::Accepted;
+        response.members[1].outputs.clear();
+        response
+            .validate()
+            .expect("valid indeterminate response fixture");
+        let failure = owner
+            .apply_batch_response_mutations(&service, &plan, &response, &mut ownership)
+            .await
+            .expect_err("Accepted is not a settled host result");
+        assert_eq!(failure.diagnostics[0].code, WorkflowRuntimeBranchBatchExecutionDiagnosticCode::RuntimeDispatchAssignmentTerminalStateInvalid);
+        assert!(lifecycle.events().is_empty());
+        for member in &plan.members {
+            assert_eq!(
+                persisted_assignment_state(&service, &member.assignment_id),
+                WorkflowRuntimeDispatchAssignmentState::Running
+            );
+            let results = service
+                .session_store_guard()
+                .expect("store")
+                .active_run_scheduler_task_results(&member.session_id, &member.workflow_run_id)
+                .expect("results");
+            assert!(results.iter().all(|result| result.task_id != member.scheduler_task_id), "no earlier member result may publish before later indeterminate member is rejected");
+        }
+    }
+
+    #[tokio::test]
+    async fn runtime_branch_batch_execution_copied_plan_cannot_publish_twice() {
+        let lifecycle = Arc::new(RecordingReservationLifecyclePort::default());
+        let service = WorkflowService::new().with_reservation_lifecycle_port(lifecycle.clone());
+        let responders = RecordingResponderFanOut::default();
+        let owner = WorkflowRuntimeBranchBatchExecutionOwner::new(
+            &service.scheduler_task_orchestrator,
+            &responders,
+        );
+        let members = active_batch_members(&service);
+        let (claimed, mut ownership) = batch_claim_outcome(&service, &members);
+        let plan = owner
+            .prepare_claimed_batch(&service, claimed)
+            .expect("plan");
+        let copied = plan.clone();
+        let response = runtime_host_batch_response_from_plan(&plan);
+        let _outcome = owner
+            .apply_batch_response_mutations(&service, &plan, &response, &mut ownership)
+            .await
+            .expect("first publication");
+        let events = lifecycle.events();
+        let _outcome = owner
+            .apply_batch_response_mutations(&service, &copied, &response, &mut ownership)
+            .await
+            .expect_err("copied plan cannot repeat publication");
+        assert_eq!(
+            lifecycle.events(),
+            events,
+            "duplicate publication adds no reservation effects"
+        );
+    }
+
+    #[tokio::test]
+    async fn runtime_branch_batch_execution_single_image_member_consumes_completed_text_result() {
+        let port = Arc::new(RecordingBatchExecutionPort::default());
+        let service = WorkflowService::new()
+            .with_runtime_host_batch_execution_port(port.clone())
+            .with_reservation_lifecycle_port(
+                Arc::new(RecordingReservationLifecyclePort::default()),
+            );
+        let responders = RecordingResponderFanOut::default();
+        let owner = WorkflowRuntimeBranchBatchExecutionOwner::new(
+            &service.scheduler_task_orchestrator,
+            &responders,
+        );
+        let members = active_batch_members(&service);
+        let member = &members[0];
+        let generated_text = "generated text: a copper fox beneath a violet moon";
+        service
+            .session_store_guard()
+            .expect("store")
+            .set_active_run_scheduler_task_results(
+                &member.session_id,
+                &member.workflow_run_id,
+                vec![prompt_task_result(&member.workflow_run_id, generated_text)],
+            )
+            .expect("completed upstream text result");
+        let (claimed, mut ownership) = batch_claim_outcome(&service, &members[..1]);
+        let _outcome = owner
+            .execute_claimed_batch(
+                &service,
+                &BatchFinalizationHost::default(),
+                claimed,
+                &mut ownership,
+            )
+            .await
+            .expect("singleton image execution");
+        let requests = port.requests();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0].members.len(), 1);
+        assert_eq!(
+            prompt_text_from_runtime_host_member_request(&requests[0].members[0]),
+            generated_text
+        );
+        assert_eq!(
+            requests[0].members[0].handoff.workflow_run_id.as_str(),
+            member.workflow_run_id
+        );
+    }
+
     #[test]
     fn runtime_branch_batch_execution_owner_accepts_claimed_running_members_with_facts() {
         let service = workflow_service_with_recording_reservation_lifecycle();
@@ -1618,7 +1842,7 @@ mod tests {
             &responder_fan_out,
         );
         let members = active_batch_members(&service);
-        let claim_outcome = batch_claim_outcome(&service, &members);
+        let (claim_outcome, _ownership) = batch_claim_outcome(&service, &members);
 
         let plan = owner
             .prepare_claimed_batch(&service, claim_outcome.clone())
@@ -1779,8 +2003,9 @@ mod tests {
             &responder_fan_out,
         );
         let members = active_batch_members(&service);
+        let (claim_outcome, mut ownership) = batch_claim_outcome(&service, &members);
         let plan = owner
-            .prepare_claimed_batch(&service, batch_claim_outcome(&service, &members))
+            .prepare_claimed_batch(&service, claim_outcome)
             .expect("claimed batch execution plan");
         assert_eq!(
             service
@@ -1792,7 +2017,7 @@ mod tests {
         let response = runtime_host_batch_response_from_plan(&plan);
 
         let outcome = owner
-            .apply_batch_response_mutations(&service, &plan, &response)
+            .apply_batch_response_mutations(&service, &plan, &response, &mut ownership)
             .await
             .expect("apply batch response mutations");
 
@@ -1870,8 +2095,9 @@ mod tests {
             &responder_fan_out,
         );
         let members = active_batch_members(&service);
+        let (claim_outcome, mut ownership) = batch_claim_outcome(&service, &members);
         let plan = owner
-            .prepare_claimed_batch(&service, batch_claim_outcome(&service, &members))
+            .prepare_claimed_batch(&service, claim_outcome)
             .expect("claimed batch execution plan");
         let mut response = runtime_host_batch_response_from_plan(&plan);
         response.members[0].state = RuntimeHostBatchExecutionMemberState::Failed;
@@ -1888,7 +2114,7 @@ mod tests {
         )];
 
         let outcome = owner
-            .apply_batch_response_mutations(&service, &plan, &response)
+            .apply_batch_response_mutations(&service, &plan, &response, &mut ownership)
             .await
             .expect("apply failed and cancelled response mutations");
 
@@ -1930,7 +2156,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn runtime_branch_batch_execution_owner_leaves_retryable_response_assignment_running() {
+    async fn runtime_branch_batch_execution_owner_settles_retryable_response_assignment_as_failed()
+    {
         let service = workflow_service_with_recording_reservation_lifecycle();
         let responder_fan_out = RecordingResponderFanOut::default();
         let owner = WorkflowRuntimeBranchBatchExecutionOwner::new(
@@ -1938,8 +2165,9 @@ mod tests {
             &responder_fan_out,
         );
         let members = active_batch_members(&service);
+        let (claim_outcome, mut ownership) = batch_claim_outcome(&service, &members);
         let plan = owner
-            .prepare_claimed_batch(&service, batch_claim_outcome(&service, &members))
+            .prepare_claimed_batch(&service, claim_outcome)
             .expect("claimed batch execution plan");
         let mut response = runtime_host_batch_response_from_plan(&plan);
         response.members[0].state = RuntimeHostBatchExecutionMemberState::Failed;
@@ -1949,7 +2177,7 @@ mod tests {
         response.members[1].retry_disposition = RuntimeHostBatchMemberRetryDisposition::Retryable;
 
         let outcome = owner
-            .apply_batch_response_mutations(&service, &plan, &response)
+            .apply_batch_response_mutations(&service, &plan, &response, &mut ownership)
             .await
             .expect("apply mixed response mutations");
 
@@ -1970,7 +2198,7 @@ mod tests {
         );
         assert_eq!(
             persisted_assignment_state(&service, &plan.members[1].assignment_id),
-            WorkflowRuntimeDispatchAssignmentState::Running
+            WorkflowRuntimeDispatchAssignmentState::Failed
         );
     }
 
@@ -1984,12 +2212,13 @@ mod tests {
             &responder_fan_out,
         );
         let members = active_batch_members(&service);
+        let (claim_outcome, mut ownership) = batch_claim_outcome(&service, &members);
         let plan = owner
-            .prepare_claimed_batch(&service, batch_claim_outcome(&service, &members))
+            .prepare_claimed_batch(&service, claim_outcome)
             .expect("claimed batch execution plan");
         let response = runtime_host_batch_response_from_plan(&plan);
         let _mutation = owner
-            .apply_batch_response_mutations(&service, &plan, &response)
+            .apply_batch_response_mutations(&service, &plan, &response, &mut ownership)
             .await
             .expect("apply batch response mutations");
 
@@ -2041,8 +2270,9 @@ mod tests {
             &responder_fan_out,
         );
         let members = active_batch_members(&service);
+        let (claim_outcome, mut ownership) = batch_claim_outcome(&service, &members);
         let plan = owner
-            .prepare_claimed_batch(&service, batch_claim_outcome(&service, &members))
+            .prepare_claimed_batch(&service, claim_outcome)
             .expect("claimed batch execution plan");
         let mut response = runtime_host_batch_response_from_plan(&plan);
         response.members[0].state = RuntimeHostBatchExecutionMemberState::Failed;
@@ -2051,7 +2281,7 @@ mod tests {
         response.members[1].state = RuntimeHostBatchExecutionMemberState::Failed;
         response.members[1].retry_disposition = RuntimeHostBatchMemberRetryDisposition::Retryable;
         let _mutation = owner
-            .apply_batch_response_mutations(&service, &plan, &response)
+            .apply_batch_response_mutations(&service, &plan, &response, &mut ownership)
             .await
             .expect("apply mixed response mutations");
 
@@ -2100,10 +2330,10 @@ mod tests {
             &responder_fan_out,
         );
         let members = active_batch_members(&service);
-        let claim_outcome = batch_claim_outcome(&service, &members);
+        let (claim_outcome, mut ownership) = batch_claim_outcome(&service, &members);
 
         let outcome = owner
-            .execute_claimed_batch(&service, &host, claim_outcome)
+            .execute_claimed_batch(&service, &host, claim_outcome, &mut ownership)
             .await
             .expect("execute claimed batch");
 
@@ -2174,14 +2404,15 @@ mod tests {
             &responder_fan_out,
         );
         let members = active_batch_members(&service);
+        let (claim_outcome, mut ownership) = batch_claim_outcome(&service, &members);
         let plan = owner
-            .prepare_claimed_batch(&service, batch_claim_outcome(&service, &members))
+            .prepare_claimed_batch(&service, claim_outcome)
             .expect("claimed batch execution plan");
         let mut response = runtime_host_batch_response_from_plan(&plan);
         response.members.pop();
 
         let failure = owner
-            .apply_batch_response_mutations(&service, &plan, &response)
+            .apply_batch_response_mutations(&service, &plan, &response, &mut ownership)
             .await
             .expect_err("missing response member must fail closed");
 
@@ -2215,7 +2446,8 @@ mod tests {
             &service.scheduler_task_orchestrator,
             &responder_fan_out,
         );
-        let mut claim_outcome = batch_claim_outcome(&service, &static_batch_members());
+        let (mut claim_outcome, _ownership) =
+            batch_claim_outcome(&service, &static_batch_members());
         claim_outcome.assignments[1].task_attempt_fact = None;
 
         let failure = owner
@@ -2249,7 +2481,8 @@ mod tests {
             &service.scheduler_task_orchestrator,
             &responder_fan_out,
         );
-        let mut claim_outcome = batch_claim_outcome(&service, &static_batch_members());
+        let (mut claim_outcome, _ownership) =
+            batch_claim_outcome(&service, &static_batch_members());
         claim_outcome.assignments[1]
             .task_attempt_fact
             .as_mut()
@@ -2284,11 +2517,9 @@ mod tests {
             &responder_fan_out,
         );
 
+        let (claim_outcome, _ownership) = batch_claim_outcome(&service, &static_batch_members());
         let failure = owner
-            .prepare_claimed_batch(
-                &service,
-                batch_claim_outcome(&service, &static_batch_members()),
-            )
+            .prepare_claimed_batch(&service, claim_outcome)
             .expect_err("missing active run state must fail closed");
 
         assert_eq!(
@@ -2315,7 +2546,7 @@ mod tests {
             &service.scheduler_task_orchestrator,
             &responder_fan_out,
         );
-        let mut claim_outcome = batch_claim_outcome(&service, &members);
+        let (mut claim_outcome, _ownership) = batch_claim_outcome(&service, &members);
         claim_outcome.assignments[0].scheduler_task_attempt_id =
             "scheduler-task-attempt.stale".to_string();
         claim_outcome.assignments[0]
@@ -2363,8 +2594,9 @@ mod tests {
             &responder_fan_out,
         );
 
+        let (claim_outcome, _ownership) = batch_claim_outcome(&service, &members);
         let failure = owner
-            .prepare_claimed_batch(&service, batch_claim_outcome(&service, &members))
+            .prepare_claimed_batch(&service, claim_outcome)
             .expect_err("missing materialized input must fail closed");
 
         assert_eq!(
@@ -2397,8 +2629,9 @@ mod tests {
         );
         let members = active_batch_members(&service);
 
+        let (claim_outcome, _ownership) = batch_claim_outcome(&service, &members);
         let failure = owner
-            .prepare_claimed_batch(&service, batch_claim_outcome(&service, &members))
+            .prepare_claimed_batch(&service, claim_outcome)
             .expect_err("missing responder must fail closed");
 
         assert_eq!(
@@ -2649,26 +2882,96 @@ mod tests {
     fn batch_claim_outcome(
         service: &WorkflowService,
         members: &[DispatchAssignmentFixtureMember],
-    ) -> WorkflowRuntimeDispatchAssignmentBatchClaimOutcome {
-        let mut repository = service
+    ) -> (
+        WorkflowRuntimeDispatchAssignmentBatchClaimOutcome,
+        WorkflowRuntimeBranchBatchClaimOwnership,
+    ) {
+        use super::super::runtime_branch_task_event::{
+            WorkflowRuntimeBranchTaskEventRecord, WorkflowRuntimeBranchTaskEventRepository,
+            WorkflowRuntimeBranchTaskEventRequest,
+        };
+        let mut events = Vec::new();
+        let mut assignments = service
             .runtime_dispatch_assignment_repository
             .lock()
-            .expect("runtime dispatch assignment repository");
-        let first = repository
-            .create(assignment_request_for_member(&members[0]))
-            .expect("first assignment");
-        let second = repository
-            .create(assignment_request_for_member(&members[1]))
-            .expect("second assignment");
-        let first = repository
-            .mark_running(&first.assignment_id, 130)
-            .expect("first running assignment");
-        let _second = repository
-            .mark_running(&second.assignment_id, 131)
-            .expect("second running assignment");
-        repository
-            .claim_compatible_running_batch(&first.assignment_id, batch_owner_id(), 140, 1_000, 8)
-            .expect("compatible batch claim")
+            .expect("assignment repository");
+        for (index, member) in members.iter().enumerate() {
+            let mut request = assignment_request_for_member(member);
+            let mut repository = service
+                .runtime_branch_task_event_repository
+                .lock()
+                .expect("event repository");
+            repository
+                .enqueue(
+                    WorkflowRuntimeBranchTaskEventRecord::ready(
+                        WorkflowRuntimeBranchTaskEventRequest {
+                            event_id: request.runtime_branch_event_id.clone(),
+                            session_id: request.session_id.clone(),
+                            workflow_id: request.workflow_id.clone(),
+                            workflow_run_id: request.workflow_run_id.clone(),
+                            scheduler_task_id: request.scheduler_task_id.clone(),
+                            scheduler_task_attempt_id: None,
+                            attempt_generation: request.task_attempt_generation,
+                            queued_input_keys: Vec::new(),
+                            output_targets: None,
+                            timeout_ms: request.timeout_ms,
+                            batching_key: None,
+                            runtime_source_context: request.runtime_source_context.clone(),
+                            batch_eligibility: None,
+                            ready_at_ms: 90,
+                        },
+                    )
+                    .expect("ready event"),
+                )
+                .expect("enqueue event");
+            let (claimed, proof) = repository
+                .claim_owned_for_workflow_run(
+                    &request.workflow_run_id,
+                    request.runtime_branch_claim.owner_id.clone(),
+                    90,
+                    30_000,
+                )
+                .expect("owned claim")
+                .expect("due event");
+            request.runtime_branch_claim = claimed.claim.clone();
+            let _record = repository
+                .mark_dispatching(&claimed.record.event_id, &claimed.claim, 100, Some(&proof))
+                .expect("event dispatching");
+            let _record = repository
+                .link_dispatch_assignment(
+                    &claimed.record.event_id,
+                    &claimed.claim,
+                    request.assignment_id.clone(),
+                    request.scheduler_task_attempt_id.clone(),
+                    110,
+                    Some(&proof),
+                )
+                .expect("assignment link");
+            let _record = repository
+                .mark_running(&claimed.record.event_id, &claimed.claim, 120, Some(&proof))
+                .expect("event running");
+            events.push(WorkflowRuntimeBranchOwnedEventClaim {
+                event_id: claimed.record.event_id,
+                claim: claimed.claim,
+                proof,
+            });
+            let assignment = assignments.create(request).expect("assignment");
+            let _record = assignments
+                .mark_running(&assignment.assignment_id, 130 + index as u64)
+                .expect("assignment running");
+        }
+        let anchor = WorkflowRuntimeDispatchAssignmentId::parse(&members[0].assignment_id)
+            .expect("anchor id");
+        let outcome = assignments
+            .claim_compatible_running_batch(&anchor, batch_owner_id(), 140, 1_000, 8)
+            .expect("compatible batch claim");
+        let batch = assignments
+            .own_batch_claim(&outcome, 140)
+            .expect("owned batch");
+        (
+            outcome,
+            WorkflowRuntimeBranchBatchClaimOwnership { batch, events },
+        )
     }
 
     fn persisted_assignment_state(

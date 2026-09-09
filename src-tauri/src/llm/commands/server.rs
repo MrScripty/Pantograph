@@ -74,9 +74,11 @@ pub async fn stop_llm(
     runtime_registry: State<'_, SharedRuntimeRegistry>,
     rag_manager: State<'_, SharedRagManager>,
 ) -> Result<ServerModeInfo, String> {
-    gateway.stop().await;
+    let stop_result = gateway.stop().await.map_err(|error| error.to_string());
     sync_rag_embedding_url_from_gateway(gateway.inner(), rag_manager.inner()).await;
-    Ok(synced_server_mode_info(gateway.inner(), runtime_registry.inner()).await)
+    let mode_info = synced_server_mode_info(gateway.inner(), runtime_registry.inner()).await;
+    stop_result?;
+    Ok(mode_info)
 }
 
 #[command]
@@ -260,8 +262,9 @@ mod tests {
             })
         }
 
-        fn stop(&mut self) {
+        async fn stop(&mut self) -> Result<(), BackendError> {
             *self.ready.lock().expect("mock backend ready lock poisoned") = false;
+            Ok(())
         }
 
         fn is_ready(&self) -> bool {

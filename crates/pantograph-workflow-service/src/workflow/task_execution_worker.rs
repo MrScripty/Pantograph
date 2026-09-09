@@ -2,7 +2,6 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
 
 use crate::scheduler::{
     unix_timestamp_ms, WorkflowSchedulerLifecycleComponentKind,
@@ -10,7 +9,7 @@ use crate::scheduler::{
 };
 
 use super::runtime_branch_batch_execution::{
-    WorkflowRuntimeBranchBatchExecutionDiagnostic,
+    WorkflowRuntimeBranchBatchClaimOwnership, WorkflowRuntimeBranchBatchExecutionDiagnostic,
     WorkflowRuntimeBranchBatchExecutionDiagnosticCode, WorkflowRuntimeBranchBatchExecutionFailure,
     WorkflowRuntimeBranchBatchExecutionMember, WorkflowRuntimeBranchBatchExecutionOwner,
     WorkflowRuntimeBranchBatchMemberExecutionOutcome,
@@ -18,23 +17,24 @@ use super::runtime_branch_batch_execution::{
     WorkflowRuntimeBranchBatchResponderFanOut,
 };
 use super::runtime_branch_task_event::{
-    WorkflowRuntimeBranchTaskEventClaim, WorkflowRuntimeBranchTaskEventClaimOutcome,
-    WorkflowRuntimeBranchTaskEventClaimOwnerId, WorkflowRuntimeBranchTaskEventDiagnostic,
-    WorkflowRuntimeBranchTaskEventDiagnosticCode, WorkflowRuntimeBranchTaskEventId,
-    WorkflowRuntimeBranchTaskEventRecord, WorkflowRuntimeBranchTaskEventRepository,
+    WorkflowRuntimeBranchOwnedEventClaim, WorkflowRuntimeBranchTaskEventClaim,
+    WorkflowRuntimeBranchTaskEventClaimOutcome, WorkflowRuntimeBranchTaskEventClaimOwnerId,
+    WorkflowRuntimeBranchTaskEventDiagnostic, WorkflowRuntimeBranchTaskEventDiagnosticCode,
+    WorkflowRuntimeBranchTaskEventId, WorkflowRuntimeBranchTaskEventRecord,
+    WorkflowRuntimeBranchTaskEventRepository, WorkflowRuntimeBranchTaskEventState,
+    WorkflowRuntimeClaimOwnership,
 };
 use super::runtime_dispatch_assignment::{
     WorkflowRuntimeDispatchAssignmentBatchBrokerClaimRequest,
-    WorkflowRuntimeDispatchAssignmentBatchBrokerDecision,
     WorkflowRuntimeDispatchAssignmentBatchBrokerRequest,
-    WorkflowRuntimeDispatchAssignmentBatchBrokerWaitExpiryDiagnostic,
-    WorkflowRuntimeDispatchAssignmentBatchBrokerWaitRequest,
+    WorkflowRuntimeDispatchAssignmentBatchClaim,
     WorkflowRuntimeDispatchAssignmentBatchClaimOutcome,
     WorkflowRuntimeDispatchAssignmentBatchClaimOwnerId,
+    WorkflowRuntimeDispatchAssignmentBatchReadyDecision,
     WorkflowRuntimeDispatchAssignmentDiagnostic, WorkflowRuntimeDispatchAssignmentDiagnosticCode,
     WorkflowRuntimeDispatchAssignmentId, WorkflowRuntimeDispatchAssignmentRecord,
     WorkflowRuntimeDispatchAssignmentRepository, WorkflowRuntimeDispatchAssignmentRequest,
-    WORKFLOW_RUNTIME_DISPATCH_ASSIGNMENT_BATCH_BROKER_WAIT_WINDOW_MS,
+    WorkflowRuntimeDispatchAssignmentState,
 };
 use super::runtime_dispatch_selection::WorkflowRuntimeDispatchCandidateFact;
 use super::session_scheduler_runner::WorkflowPreDispatchPreparationBoundary;
@@ -47,10 +47,8 @@ const TASK_EXECUTION_WORKER_COMMAND_CAPACITY: usize = 64;
 const RUNTIME_BRANCH_TASK_EVENT_CLAIM_LEASE_MS: u64 = 30_000;
 const RUNTIME_BRANCH_DEPENDENCY_READINESS_RETRY_DELAY_MS: u64 = 1_000;
 const TASK_EXECUTION_WORKER_CLAIM_OWNER_ID: &str = "workflow-service.task-execution-worker";
-const RUNTIME_BRANCH_BATCH_BROKER_MIN_ASSIGNMENTS: usize = 2;
 const RUNTIME_BRANCH_BATCH_BROKER_MAX_ASSIGNMENTS: usize = 8;
 const RUNTIME_BRANCH_BATCH_CLAIM_LEASE_MS: u64 = 1_000;
-const RUNTIME_BRANCH_BATCH_WAIT_EXPIRY_SCAN_INTERVAL_MS: u64 = 250;
 const RUNTIME_BRANCH_BATCH_CLAIM_OWNER_ID: &str =
     "workflow-service.task-execution-worker.batch-broker";
 
@@ -123,6 +121,11 @@ impl WorkflowTaskExecutionWorker {
         &self,
         command: WorkflowTaskExecutionWorkerCommand,
     ) -> Result<(), WorkflowTaskExecutionWorkerOutcome> {
+        if *self.shutdown_tx.borrow() {
+            return Err(WorkflowTaskExecutionWorkerOutcome::worker_unavailable(
+                "task execution worker is shutting down",
+            ));
+        }
         self.command_tx.try_send(command).map_err(|error| {
             WorkflowTaskExecutionWorkerOutcome::worker_unavailable(format!(
                 "task execution worker command queue unavailable: {error}"
@@ -282,6 +285,13 @@ struct WorkflowTaskExecutionWorkerRuntimeBranchRegisteredResponder {
     workflow_id: String,
     runtime_dispatch_assignment_id: Option<WorkflowRuntimeDispatchAssignmentId>,
     completion_responder: WorkflowTaskExecutionWorkerRuntimeBranchCompletionResponder,
+    event_ownership: Option<WorkflowRuntimeBranchOwnedEventClaim>,
+    execution_task_id: Option<tokio::task::Id>,
+    event_claim: Option<(
+        WorkflowRuntimeBranchTaskEventId,
+        WorkflowRuntimeBranchTaskEventClaim,
+    )>,
+    batch_claim: Option<WorkflowRuntimeDispatchAssignmentBatchClaim>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -437,7 +447,6 @@ pub(super) struct WorkflowTaskExecutionWorkerRuntimeBranchDeferredOutcome {
 pub(super) enum WorkflowTaskExecutionWorkerRuntimeBranchDeferredReason {
     DependencyReadinessPending,
     RuntimeDispatchUnavailable,
-    BatchBrokerWaitWindowExpired,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -537,6 +546,10 @@ impl WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistry {
             workflow_id: command.workflow_id.clone(),
             runtime_dispatch_assignment_id: None,
             completion_responder,
+            event_ownership: None,
+            execution_task_id: tokio::task::try_id(),
+            event_claim: None,
+            batch_claim: None,
         };
         let mut responders = match self.responders.lock() {
             Ok(responders) => responders,
@@ -632,6 +645,7 @@ impl WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistry {
         &self,
         registration: &WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistration,
         assignment_id: &WorkflowRuntimeDispatchAssignmentId,
+        event_ownership: Option<WorkflowRuntimeBranchOwnedEventClaim>,
     ) -> Result<
         WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistration,
         WorkflowTaskExecutionWorkerOutcome,
@@ -674,6 +688,7 @@ impl WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistry {
             )
         })?;
         registered.runtime_dispatch_assignment_id = Some(assignment_id.clone());
+        registered.event_ownership = event_ownership;
         responders.insert(assignment_key.clone(), registered);
         Ok(
             WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistration {
@@ -684,6 +699,70 @@ impl WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistry {
                 runtime_dispatch_assignment_id: Some(assignment_id.clone()),
             },
         )
+    }
+
+    fn record_claim_identity(
+        &self,
+        registration: &WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistration,
+        event: &WorkflowRuntimeBranchOwnedEventClaim,
+    ) {
+        if let Ok(mut responders) = self.responders.lock() {
+            if let Some(registered) = responders.get_mut(&registration.key) {
+                registered.event_claim = Some((event.event_id.clone(), event.claim.clone()));
+            }
+        }
+    }
+
+    fn fail_registered_event(
+        &self,
+        service: &WorkflowService,
+        registration: &WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistration,
+    ) -> Vec<WorkflowTaskExecutionWorkerDiagnostic> {
+        match self.responders.lock() {
+            Ok(responders) => responders
+                .get(&registration.key)
+                .map(|registered| settle_failed_registration(service, registered))
+                .unwrap_or_default(),
+            Err(_) => vec![settlement_diagnostic(
+                "responder registry lock poisoned during failure settlement",
+            )],
+        }
+    }
+
+    fn supervise_task_exit(
+        &self,
+        service: &WorkflowService,
+        task_id: tokio::task::Id,
+        message: &str,
+    ) {
+        let pending = {
+            let mut responders = self
+                .responders
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            let keys = responders
+                .iter()
+                .filter(|(_, registered)| registered.execution_task_id == Some(task_id))
+                .map(|(key, _)| key.clone())
+                .collect::<Vec<_>>();
+            keys.into_iter()
+                .filter_map(|key| responders.remove(&key))
+                .collect::<Vec<_>>()
+        };
+        for registered in pending {
+            let diagnostics = settle_failed_registration(service, &registered);
+            let mut outcome = runtime_branch_responder_failure_outcome(
+                &registered.session_id,
+                &registered.workflow_run_id,
+                &registered.workflow_id,
+                WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchFailed,
+                message,
+            );
+            if let WorkflowTaskExecutionWorkerOutcome::RuntimeBranchFailed(failed) = &mut outcome {
+                failed.diagnostics.extend(diagnostics);
+            }
+            let _ = registered.completion_responder.complete(outcome);
+        }
     }
 
     fn complete_runtime_dispatch_assignments(
@@ -837,6 +916,108 @@ impl WorkflowTaskExecutionWorkerRuntimeBranchResponderKey {
     }
 }
 
+fn settlement_diagnostic(message: impl Into<String>) -> WorkflowTaskExecutionWorkerDiagnostic {
+    WorkflowTaskExecutionWorkerDiagnostic::new(
+        WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchDispatchUnavailable,
+        message,
+    )
+}
+
+fn settle_failed_registration(
+    service: &WorkflowService,
+    registered: &WorkflowTaskExecutionWorkerRuntimeBranchRegisteredResponder,
+) -> Vec<WorkflowTaskExecutionWorkerDiagnostic> {
+    let now_ms = unix_timestamp_ms();
+    let mut diagnostics = Vec::new();
+    if let Some((event_id, claim)) = &registered.event_claim {
+        match service.runtime_branch_task_event_repository.lock() {
+            Ok(mut repository) => {
+                let active = repository.get(event_id).is_some_and(|record| {
+                    matches!(
+                        record.state,
+                        WorkflowRuntimeBranchTaskEventState::Claimed
+                            | WorkflowRuntimeBranchTaskEventState::Dispatching
+                            | WorkflowRuntimeBranchTaskEventState::Running
+                    )
+                });
+                if active {
+                    let result = if let Some(owned) = &registered.event_ownership {
+                        repository
+                            .fail(event_id, claim, now_ms, Some(&owned.proof))
+                            .map(|_| ())
+                    } else {
+                        repository.fail_abandoned(event_id, claim, now_ms)
+                    };
+                    if let Err(error) = result {
+                        diagnostics.push(runtime_branch_event_diagnostic(error));
+                    }
+                }
+            }
+            Err(_) => diagnostics.push(settlement_diagnostic(
+                "task-event repository lock poisoned during failure settlement",
+            )),
+        }
+    }
+    match service.runtime_dispatch_assignment_repository.lock() {
+        Ok(mut repository) => {
+            if let Some(claim) = &registered.batch_claim {
+                if let Err(error) = repository.fail_abandoned_batch(claim, now_ms) {
+                    diagnostics.push(runtime_dispatch_assignment_diagnostic(error));
+                }
+            } else if let Some(assignment_id) = &registered.runtime_dispatch_assignment_id {
+                if repository
+                    .get(assignment_id)
+                    .is_some_and(|record| !record.state.is_terminal())
+                {
+                    if let Err(error) = repository.mark_failed(assignment_id, now_ms) {
+                        diagnostics.push(runtime_dispatch_assignment_diagnostic(error));
+                    }
+                }
+            }
+        }
+        Err(_) => diagnostics.push(settlement_diagnostic(
+            "assignment repository lock poisoned during failure settlement",
+        )),
+    }
+    diagnostics
+}
+
+fn settle_failed_owned_assignment(
+    service: &WorkflowService,
+    assignment: &WorkflowRuntimeDispatchAssignmentRecord,
+    ownership: &WorkflowRuntimeBranchBatchClaimOwnership,
+) -> Result<(), WorkflowTaskExecutionWorkerDiagnostic> {
+    let mut repository = service
+        .runtime_dispatch_assignment_repository
+        .lock()
+        .map_err(|_| {
+            settlement_diagnostic(
+                "assignment repository lock poisoned during owned failure settlement",
+            )
+        })?;
+    let claim = assignment
+        .batch_claim
+        .as_ref()
+        .ok_or_else(|| settlement_diagnostic("failed batch member has no batch fence"))?;
+    let already_settled = repository
+        .get(&assignment.assignment_id)
+        .is_some_and(|record| {
+            record.batch_claim.as_ref() == Some(claim) && record.state.is_terminal()
+        });
+    if !already_settled {
+        let _record = repository
+            .finish_owned_assignment(
+                &assignment.assignment_id,
+                claim,
+                &ownership.batch,
+                WorkflowRuntimeDispatchAssignmentState::Failed,
+                unix_timestamp_ms(),
+            )
+            .map_err(runtime_dispatch_assignment_diagnostic)?;
+    }
+    Ok(())
+}
+
 fn runtime_branch_responder_failure_outcome(
     session_id: &str,
     workflow_run_id: &str,
@@ -972,10 +1153,6 @@ async fn task_execution_worker_loop(
     let mut runtime_branch_tasks = tokio::task::JoinSet::new();
     let runtime_branch_responder_registry =
         WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistry::new();
-    let mut wait_expiry_interval = tokio::time::interval(Duration::from_millis(
-        RUNTIME_BRANCH_BATCH_WAIT_EXPIRY_SCAN_INTERVAL_MS,
-    ));
-    wait_expiry_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     let mut accepting_commands = true;
 
     loop {
@@ -988,13 +1165,6 @@ async fn task_execution_worker_loop(
                 if changed.is_err() || *shutdown_rx.borrow() {
                     accepting_commands = false;
                 }
-            }
-            _ = wait_expiry_interval.tick(), if accepting_commands => {
-                expire_due_runtime_branch_batch_wait_windows_once(
-                    &runtime_branch_environment,
-                    &runtime_branch_responder_registry,
-                    unix_timestamp_ms(),
-                );
             }
             maybe_command = command_rx.recv(), if accepting_commands => {
                 match maybe_command {
@@ -1028,7 +1198,10 @@ async fn task_execution_worker_loop(
                                 &runtime_branch_responder_registry,
                                 &mut registration,
                             ).await;
-                            if let WorkflowTaskExecutionWorkerRuntimeBranchExecutionResult::CompleteResponder(outcome) = outcome {
+                            if let WorkflowTaskExecutionWorkerRuntimeBranchExecutionResult::CompleteResponder(mut outcome) = outcome {
+                                if let WorkflowTaskExecutionWorkerOutcome::RuntimeBranchFailed(failed) = &mut outcome {
+                                    failed.diagnostics.extend(runtime_branch_responder_registry.fail_registered_event(runtime_branch_environment.service().as_ref(), &registration));
+                                }
                                 if let Some(assignment_id) =
                                     registration.runtime_dispatch_assignment_id.clone()
                                 {
@@ -1054,8 +1227,11 @@ async fn task_execution_worker_loop(
                     }
                 }
             }
-            Some(join_result) = runtime_branch_tasks.join_next(), if !runtime_branch_tasks.is_empty() => {
-                let _ = join_result;
+            Some(join_result) = runtime_branch_tasks.join_next_with_id(), if !runtime_branch_tasks.is_empty() => {
+                match join_result {
+                    Ok((task_id, ())) => runtime_branch_responder_registry.supervise_task_exit(runtime_branch_environment.service().as_ref(), task_id, "runtime branch execution returned without settling its registered response"),
+                    Err(error) => runtime_branch_responder_registry.supervise_task_exit(runtime_branch_environment.service().as_ref(), error.id(), &format!("runtime branch execution task failed: {error}")),
+                }
             }
         }
     }
@@ -1066,53 +1242,6 @@ async fn task_execution_worker_loop(
     );
 }
 
-fn expire_due_runtime_branch_batch_wait_windows_once(
-    environment: &WorkflowTaskExecutionWorkerRuntimeBranchEnvironment,
-    runtime_branch_responder_registry: &WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistry,
-    now_ms: u64,
-) {
-    let service = environment.service();
-    for registration in
-        runtime_branch_responder_registry.runtime_dispatch_assignment_registrations()
-    {
-        let decision = match evaluate_runtime_branch_batch_broker(
-            service.as_ref(),
-            &registration.assignment_id,
-            now_ms,
-        ) {
-            Ok(decision) => decision,
-            Err(_diagnostic) => continue,
-        };
-        let WorkflowRuntimeDispatchAssignmentBatchBrokerDecision::WaitWindowExpired {
-            anchor_assignment,
-            expiry_diagnostic,
-        } = decision
-        else {
-            continue;
-        };
-        let outcome = expire_runtime_branch_batch_broker_wait_window_for_assignment(
-            service.as_ref(),
-            &registration.session_id,
-            &registration.workflow_run_id,
-            &registration.workflow_id,
-            &anchor_assignment.runtime_branch_event_id,
-            &anchor_assignment.runtime_branch_claim,
-            &anchor_assignment.assignment_id,
-            expiry_diagnostic,
-            now_ms,
-        );
-        let _ = runtime_branch_responder_registry.complete_runtime_dispatch_assignments(vec![
-            WorkflowTaskExecutionWorkerRuntimeBranchResponderAssignmentCompletion {
-                assignment_id: anchor_assignment.assignment_id,
-                session_id: registration.session_id,
-                workflow_run_id: registration.workflow_run_id,
-                workflow_id: registration.workflow_id,
-                outcome,
-            },
-        ]);
-    }
-}
-
 async fn claim_and_execute_runtime_branch_event(
     environment: &WorkflowTaskExecutionWorkerRuntimeBranchEnvironment,
     command: &WorkflowTaskExecutionWorkerRuntimeBranchCommand,
@@ -1121,7 +1250,7 @@ async fn claim_and_execute_runtime_branch_event(
 ) -> WorkflowTaskExecutionWorkerRuntimeBranchExecutionResult {
     let service = environment.service();
     let now_ms = unix_timestamp_ms();
-    let claimed =
+    let (claimed, proof) =
         match claim_runtime_branch_task_event_for_worker(service.as_ref(), command, now_ms) {
             Ok(Some(claimed)) => claimed,
             Ok(None) => {
@@ -1148,12 +1277,21 @@ async fn claim_and_execute_runtime_branch_event(
             }
         };
 
+    let mut event_ownership = Some(WorkflowRuntimeBranchOwnedEventClaim {
+        event_id: claimed.record.event_id.clone(),
+        claim: claimed.claim.clone(),
+        proof,
+    });
+    runtime_branch_responder_registry.record_claim_identity(
+        runtime_branch_responder_registration,
+        event_ownership.as_ref().expect("local event ownership"),
+    );
+    let result = async {
     let dispatching_record = match mark_claimed_runtime_branch_task_event_dispatching(
         service.as_ref(),
         &claimed.record.event_id,
         &claimed.claim,
-        now_ms,
-    ) {
+        now_ms, event_ownership.as_ref().map(|owned| &owned.proof)) {
         Ok(record) => record,
         Err(diagnostic) => {
             return WorkflowTaskExecutionWorkerRuntimeBranchExecutionResult::complete(
@@ -1175,8 +1313,7 @@ async fn claim_and_execute_runtime_branch_event(
                     service.as_ref(),
                     &dispatching_record.event_id,
                     &claimed.claim,
-                    error,
-                ),
+                    error, event_ownership.as_ref().map(|owned| &owned.proof)),
             );
         }
     };
@@ -1192,8 +1329,7 @@ async fn claim_and_execute_runtime_branch_event(
                 service.as_ref(),
                 &dispatching_record.event_id,
                 &claimed.claim,
-                error,
-            ),
+                error, event_ownership.as_ref().map(|owned| &owned.proof)),
         );
     }
     let preparation = match preparation_boundary
@@ -1209,8 +1345,7 @@ async fn claim_and_execute_runtime_branch_event(
                     &dispatching_record.event_id,
                     &claimed.claim,
                     runtime_dependency_pending_task_ids(&error).unwrap_or_default(),
-                    error.to_string(),
-                ),
+                    error.to_string(), event_ownership.as_ref().map(|owned| &owned.proof)),
             );
         }
         Err(error) => {
@@ -1220,8 +1355,7 @@ async fn claim_and_execute_runtime_branch_event(
                     service.as_ref(),
                     &dispatching_record.event_id,
                     &claimed.claim,
-                    error,
-                ),
+                    error, event_ownership.as_ref().map(|owned| &owned.proof)),
             );
         }
     };
@@ -1236,8 +1370,7 @@ async fn claim_and_execute_runtime_branch_event(
                 format!(
                     "runtime dependency readiness is pending for scheduler task(s): {}",
                     preparation.deferred_task_ids().join(", ")
-                ),
-            ),
+                ), event_ownership.as_ref().map(|owned| &owned.proof)),
         );
     }
     let started_dispatch = match preparation_boundary
@@ -1258,8 +1391,7 @@ async fn claim_and_execute_runtime_branch_event(
                     service.as_ref(),
                     &dispatching_record.event_id,
                     &claimed.claim,
-                    error,
-                ),
+                    error, event_ownership.as_ref().map(|owned| &owned.proof)),
             );
         }
     };
@@ -1267,8 +1399,7 @@ async fn claim_and_execute_runtime_branch_event(
         service.as_ref(),
         &dispatching_record.event_id,
         &claimed.claim,
-        started_dispatch.selected_candidate_fact.clone(),
-    ) {
+        started_dispatch.selected_candidate_fact.clone(), event_ownership.as_ref().map(|owned| &owned.proof)) {
         Ok(record) => record,
         Err(diagnostic) => {
             return WorkflowTaskExecutionWorkerRuntimeBranchExecutionResult::complete(
@@ -1298,17 +1429,6 @@ async fn claim_and_execute_runtime_branch_event(
             );
         }
     };
-    match runtime_branch_responder_registry.attach_runtime_dispatch_assignment(
-        runtime_branch_responder_registration,
-        &dispatch_assignment.assignment_id,
-    ) {
-        Ok(registration) => {
-            *runtime_branch_responder_registration = registration;
-        }
-        Err(outcome) => {
-            return WorkflowTaskExecutionWorkerRuntimeBranchExecutionResult::complete(outcome);
-        }
-    }
     let _linked_record = match link_runtime_branch_dispatch_assignment(
         service.as_ref(),
         &evidence_record.event_id,
@@ -1319,8 +1439,7 @@ async fn claim_and_execute_runtime_branch_event(
             .attempt_id()
             .as_str()
             .to_string(),
-        unix_timestamp_ms(),
-    ) {
+        unix_timestamp_ms(), event_ownership.as_ref().map(|owned| &owned.proof)) {
         Ok(record) => record,
         Err(diagnostic) => {
             return WorkflowTaskExecutionWorkerRuntimeBranchExecutionResult::complete(
@@ -1333,6 +1452,31 @@ async fn claim_and_execute_runtime_branch_event(
         }
     };
 
+    if let Err(diagnostic) = mark_claimed_runtime_branch_task_event_running(
+        service.as_ref(),
+        &claimed.record.event_id,
+        &claimed.claim,
+        unix_timestamp_ms(), event_ownership.as_ref().map(|owned| &owned.proof)) {
+        return WorkflowTaskExecutionWorkerRuntimeBranchExecutionResult::complete(
+            WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
+                command,
+                "runtime branch task event running persistence failed",
+                vec![diagnostic],
+            ),
+        );
+    }
+
+    match runtime_branch_responder_registry.attach_runtime_dispatch_assignment(
+        runtime_branch_responder_registration,
+        &dispatch_assignment.assignment_id,
+        event_ownership.take()) {
+        Ok(registration) => {
+            *runtime_branch_responder_registration = registration;
+        }
+        Err(outcome) => {
+            return WorkflowTaskExecutionWorkerRuntimeBranchExecutionResult::complete(outcome);
+        }
+    }
     if let Err(diagnostic) = mark_runtime_branch_dispatch_assignment_running(
         service.as_ref(),
         &dispatch_assignment.assignment_id,
@@ -1347,91 +1491,17 @@ async fn claim_and_execute_runtime_branch_event(
         );
     }
 
-    if let Err(diagnostic) = mark_claimed_runtime_branch_task_event_running(
-        service.as_ref(),
-        &claimed.record.event_id,
-        &claimed.claim,
-        unix_timestamp_ms(),
-    ) {
-        return WorkflowTaskExecutionWorkerRuntimeBranchExecutionResult::complete(
-            WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
-                command,
-                "runtime branch task event running persistence failed",
-                vec![diagnostic],
-            ),
-        );
-    }
-
-    let broker_decision = match evaluate_runtime_branch_batch_broker(
-        service.as_ref(),
-        &dispatch_assignment.assignment_id,
-        unix_timestamp_ms(),
-    ) {
-        Ok(decision) => decision,
-        Err(diagnostic) => {
-            return WorkflowTaskExecutionWorkerRuntimeBranchExecutionResult::complete(
-                fail_runtime_branch_dispatch_diagnostic(
-                    command,
-                    service.as_ref(),
-                    &claimed.record.event_id,
-                    &claimed.claim,
-                    "runtime branch batch broker decision failed",
-                    diagnostic,
-                ),
-            );
-        }
-    };
-
-    match broker_decision {
-        WorkflowRuntimeDispatchAssignmentBatchBrokerDecision::WaitingForPeers { .. } => {
-            if let Err(diagnostic) = record_runtime_branch_batch_broker_wait_window(
-                service.as_ref(),
-                broker_decision,
-                unix_timestamp_ms(),
-            ) {
-                return WorkflowTaskExecutionWorkerRuntimeBranchExecutionResult::complete(
-                    fail_runtime_branch_dispatch_diagnostic(
-                        command,
-                        service.as_ref(),
-                        &claimed.record.event_id,
-                        &claimed.claim,
-                        "runtime branch batch broker wait-window persistence failed",
-                        diagnostic,
-                    ),
-                );
-            }
-            WorkflowTaskExecutionWorkerRuntimeBranchExecutionResult::ResponderRetainedForBatch
-        }
-        WorkflowRuntimeDispatchAssignmentBatchBrokerDecision::WaitWindowExpired {
-            anchor_assignment,
-            expiry_diagnostic,
-        } => WorkflowTaskExecutionWorkerRuntimeBranchExecutionResult::complete(
-            expire_runtime_branch_batch_broker_wait_window(
-                command,
-                service.as_ref(),
-                &claimed.record.event_id,
-                &claimed.claim,
-                &anchor_assignment.assignment_id,
-                expiry_diagnostic,
-            ),
-        ),
-        WorkflowRuntimeDispatchAssignmentBatchBrokerDecision::ReadyToClaim { .. } => {
             let claim_outcome = match claim_runtime_branch_batch_broker_decision(
                 service.as_ref(),
-                broker_decision,
+                runtime_branch_responder_registry,
+                &dispatch_assignment.assignment_id,
                 unix_timestamp_ms(),
             ) {
                 Ok(claim_outcome) => claim_outcome,
                 Err(diagnostic) => {
+                    if assignment_has_batch_owner(service.as_ref(), &dispatch_assignment.assignment_id) { return WorkflowTaskExecutionWorkerRuntimeBranchExecutionResult::ResponderRetainedForBatch; }
                     return WorkflowTaskExecutionWorkerRuntimeBranchExecutionResult::complete(
-                        fail_runtime_branch_dispatch_diagnostic(
-                            command,
-                            service.as_ref(),
-                            &claimed.record.event_id,
-                            &claimed.claim,
-                            "runtime branch batch broker claim failed",
-                            diagnostic,
-                        ),
+                        WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(command, "runtime branch batch broker claim failed", vec![diagnostic]),
                     );
                 }
             };
@@ -1449,151 +1519,32 @@ async fn claim_and_execute_runtime_branch_event(
                     WorkflowTaskExecutionWorkerRuntimeBranchExecutionResult::complete(outcome)
                 }
             }
-        }
+    }.await;
+    if let Some(owned) = event_ownership {
+        let _ = service
+            .runtime_branch_task_event_repository
+            .lock()
+            .map(|mut repository| {
+                repository.fail(
+                    &owned.event_id,
+                    &owned.claim,
+                    unix_timestamp_ms(),
+                    Some(&owned.proof),
+                )
+            });
     }
-}
-
-fn fail_runtime_branch_dispatch_diagnostic(
-    command: &WorkflowTaskExecutionWorkerRuntimeBranchCommand,
-    service: &WorkflowService,
-    event_id: &WorkflowRuntimeBranchTaskEventId,
-    claim: &WorkflowRuntimeBranchTaskEventClaim,
-    error_message: impl Into<String>,
-    diagnostic: WorkflowTaskExecutionWorkerDiagnostic,
-) -> WorkflowTaskExecutionWorkerOutcome {
-    match fail_claimed_runtime_branch_task_event(service, event_id, claim, unix_timestamp_ms()) {
-        Ok(_record) => WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
-            command,
-            error_message,
-            vec![diagnostic],
-        ),
-        Err(failure_diagnostic) => WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
-            command,
-            "runtime branch task event failure persistence failed",
-            vec![diagnostic, failure_diagnostic],
-        ),
-    }
-}
-
-fn expire_runtime_branch_batch_broker_wait_window(
-    command: &WorkflowTaskExecutionWorkerRuntimeBranchCommand,
-    service: &WorkflowService,
-    event_id: &WorkflowRuntimeBranchTaskEventId,
-    claim: &WorkflowRuntimeBranchTaskEventClaim,
-    assignment_id: &WorkflowRuntimeDispatchAssignmentId,
-    expiry_diagnostic: WorkflowRuntimeDispatchAssignmentBatchBrokerWaitExpiryDiagnostic,
-) -> WorkflowTaskExecutionWorkerOutcome {
-    expire_runtime_branch_batch_broker_wait_window_at(
-        command,
-        service,
-        event_id,
-        claim,
-        assignment_id,
-        expiry_diagnostic,
-        unix_timestamp_ms(),
-    )
-}
-
-fn expire_runtime_branch_batch_broker_wait_window_at(
-    command: &WorkflowTaskExecutionWorkerRuntimeBranchCommand,
-    service: &WorkflowService,
-    event_id: &WorkflowRuntimeBranchTaskEventId,
-    claim: &WorkflowRuntimeBranchTaskEventClaim,
-    assignment_id: &WorkflowRuntimeDispatchAssignmentId,
-    expiry_diagnostic: WorkflowRuntimeDispatchAssignmentBatchBrokerWaitExpiryDiagnostic,
-    deferred_at_ms: u64,
-) -> WorkflowTaskExecutionWorkerOutcome {
-    expire_runtime_branch_batch_broker_wait_window_for_assignment(
-        service,
-        &command.session_id,
-        &command.workflow_run_id,
-        &command.workflow_id,
-        event_id,
-        claim,
-        assignment_id,
-        expiry_diagnostic,
-        deferred_at_ms,
-    )
-}
-
-fn expire_runtime_branch_batch_broker_wait_window_for_assignment(
-    service: &WorkflowService,
-    session_id: &str,
-    workflow_run_id: &str,
-    _workflow_id: &str,
-    event_id: &WorkflowRuntimeBranchTaskEventId,
-    claim: &WorkflowRuntimeBranchTaskEventClaim,
-    assignment_id: &WorkflowRuntimeDispatchAssignmentId,
-    expiry_diagnostic: WorkflowRuntimeDispatchAssignmentBatchBrokerWaitExpiryDiagnostic,
-    deferred_at_ms: u64,
-) -> WorkflowTaskExecutionWorkerOutcome {
-    let mut diagnostics = vec![runtime_branch_batch_broker_wait_expiry_diagnostic(
-        expiry_diagnostic,
-    )];
-    if let Err(diagnostic) =
-        mark_runtime_branch_batch_broker_wait_window_expired(service, assignment_id, deferred_at_ms)
-    {
-        diagnostics.push(diagnostic);
-        return WorkflowTaskExecutionWorkerOutcome::RuntimeBranchFailed(
-            WorkflowTaskExecutionWorkerRuntimeBranchFailedOutcome {
-                session_id: session_id.to_string(),
-                workflow_run_id: workflow_run_id.to_string(),
-                error_message: "runtime branch batch broker wait-window expiry persistence failed"
-                    .to_string(),
-                diagnostics,
-            },
-        );
-    }
-    match defer_claimed_runtime_branch_task_event(
-        service,
-        event_id,
-        claim,
-        deferred_at_ms,
-        deferred_at_ms.saturating_add(RUNTIME_BRANCH_DEPENDENCY_READINESS_RETRY_DELAY_MS),
-    ) {
-        Ok(_record) => WorkflowTaskExecutionWorkerOutcome::RuntimeBranchDeferred(
-            WorkflowTaskExecutionWorkerRuntimeBranchDeferredOutcome {
-                session_id: session_id.to_string(),
-                workflow_run_id: workflow_run_id.to_string(),
-                reason:
-                    WorkflowTaskExecutionWorkerRuntimeBranchDeferredReason::BatchBrokerWaitWindowExpired,
-                deferred_task_ids: Vec::new(),
-                diagnostics,
-            },
-        ),
-        Err(diagnostic) => {
-            diagnostics.push(diagnostic);
-            WorkflowTaskExecutionWorkerOutcome::RuntimeBranchFailed(
-                WorkflowTaskExecutionWorkerRuntimeBranchFailedOutcome {
-                    session_id: session_id.to_string(),
-                    workflow_run_id: workflow_run_id.to_string(),
-                    error_message:
-                        "runtime branch task event defer persistence failed after batch broker wait expiry"
-                            .to_string(),
-                    diagnostics,
-                },
-            )
-        }
-    }
-}
-
-fn runtime_branch_batch_broker_wait_expiry_diagnostic(
-    diagnostic: WorkflowRuntimeDispatchAssignmentBatchBrokerWaitExpiryDiagnostic,
-) -> WorkflowTaskExecutionWorkerDiagnostic {
-    WorkflowTaskExecutionWorkerDiagnostic::new(
-        WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchDispatchUnavailable,
-        format!(
-            "runtime dispatch-assignment batch broker wait expiry ({:?}): {}",
-            diagnostic.code, diagnostic.message
-        ),
-    )
+    result
 }
 
 async fn execute_runtime_branch_batch_claim(
     environment: &WorkflowTaskExecutionWorkerRuntimeBranchEnvironment,
     runtime_branch_responder_registry: &WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistry,
-    claim_outcome: WorkflowRuntimeDispatchAssignmentBatchClaimOutcome,
+    claimed: (
+        WorkflowRuntimeDispatchAssignmentBatchClaimOutcome,
+        WorkflowRuntimeBranchBatchClaimOwnership,
+    ),
 ) -> Result<(), WorkflowTaskExecutionWorkerOutcome> {
+    let (claim_outcome, mut ownership) = claimed;
     let service = environment.service();
     let host = environment.host();
     let assignments = claim_outcome.assignments.clone();
@@ -1602,52 +1553,58 @@ async fn execute_runtime_branch_batch_claim(
         runtime_branch_responder_registry,
     );
     let member_outcomes = match owner
-        .execute_claimed_batch(service.as_ref(), host.as_ref(), claim_outcome)
+        .execute_claimed_batch(
+            service.as_ref(),
+            host.as_ref(),
+            claim_outcome,
+            &mut ownership,
+        )
         .await
     {
         Ok(outcome) => outcome.member_outcomes,
         Err(failure) => batch_failure_member_outcomes(&assignments, failure),
     };
-    let completions =
-        runtime_branch_batch_member_completions(service.as_ref(), &assignments, member_outcomes);
+    let completions = runtime_branch_batch_member_completions(
+        service.as_ref(),
+        &assignments,
+        member_outcomes,
+        &ownership,
+    );
     runtime_branch_responder_registry.complete_runtime_dispatch_assignments(completions)
 }
 
-fn evaluate_runtime_branch_batch_broker(
+fn assignment_has_batch_owner(
     service: &WorkflowService,
     assignment_id: &WorkflowRuntimeDispatchAssignmentId,
-    now_ms: u64,
-) -> Result<
-    WorkflowRuntimeDispatchAssignmentBatchBrokerDecision,
-    WorkflowTaskExecutionWorkerDiagnostic,
-> {
-    let repository = service
+) -> bool {
+    service
         .runtime_dispatch_assignment_repository
         .lock()
-        .map_err(|_| {
-            WorkflowTaskExecutionWorkerDiagnostic::new(
-                WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchDispatchUnavailable,
-                "runtime dispatch-assignment repository lock poisoned",
-            )
-        })?;
-    repository
-        .evaluate_running_batch_broker_decision(
-            WorkflowRuntimeDispatchAssignmentBatchBrokerRequest {
-                anchor_assignment_id: assignment_id.clone(),
-                now_ms,
-                min_assignments: RUNTIME_BRANCH_BATCH_BROKER_MIN_ASSIGNMENTS,
-                max_assignments: RUNTIME_BRANCH_BATCH_BROKER_MAX_ASSIGNMENTS,
-            },
-        )
-        .map_err(runtime_dispatch_assignment_diagnostic)
+        .is_ok_and(|repository| {
+            repository
+                .get(assignment_id)
+                .is_some_and(|assignment| assignment.batch_claim.is_some())
+        })
 }
 
 fn claim_runtime_branch_batch_broker_decision(
     service: &WorkflowService,
-    decision: WorkflowRuntimeDispatchAssignmentBatchBrokerDecision,
+    registry: &WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistry,
+    assignment_id: &WorkflowRuntimeDispatchAssignmentId,
     now_ms: u64,
-) -> Result<WorkflowRuntimeDispatchAssignmentBatchClaimOutcome, WorkflowTaskExecutionWorkerDiagnostic>
-{
+) -> Result<
+    (
+        WorkflowRuntimeDispatchAssignmentBatchClaimOutcome,
+        WorkflowRuntimeBranchBatchClaimOwnership,
+    ),
+    WorkflowTaskExecutionWorkerDiagnostic,
+> {
+    let mut responders = registry.responders.lock().map_err(|_| {
+        WorkflowTaskExecutionWorkerDiagnostic::new(
+            WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchResponderUnavailable,
+            "runtime branch responder registry lock poisoned",
+        )
+    })?;
     let owner_id = WorkflowRuntimeDispatchAssignmentBatchClaimOwnerId::parse(
         RUNTIME_BRANCH_BATCH_CLAIM_OWNER_ID,
     )
@@ -1661,40 +1618,70 @@ fn claim_runtime_branch_batch_broker_decision(
                 "runtime dispatch-assignment repository lock poisoned",
             )
         })?;
-    repository
+    let decision = repository
+        .evaluate_running_batch_broker_decision(
+            WorkflowRuntimeDispatchAssignmentBatchBrokerRequest {
+                anchor_assignment_id: assignment_id.clone(),
+                now_ms,
+                max_assignments: RUNTIME_BRANCH_BATCH_BROKER_MAX_ASSIGNMENTS,
+            },
+        )
+        .map_err(runtime_dispatch_assignment_diagnostic)?;
+    let WorkflowRuntimeDispatchAssignmentBatchReadyDecision { assignments } = &decision;
+    for assignment in assignments {
+        let key = WorkflowTaskExecutionWorkerRuntimeBranchResponderKey::runtime_dispatch_assignment(
+            &assignment.assignment_id,
+        );
+        let valid = responders.get(&key).is_some_and(|registered| {
+            registered.session_id == assignment.session_id
+                && registered.workflow_run_id == assignment.workflow_run_id
+                && registered.event_ownership.as_ref().is_some_and(|owned| {
+                    owned.event_id == assignment.runtime_branch_event_id
+                        && owned.claim == assignment.runtime_branch_claim
+                })
+        });
+        if !valid {
+            return Err(WorkflowTaskExecutionWorkerDiagnostic::new(
+                WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchResponderUnavailable,
+                "batch requires every current assignment responder and event proof",
+            ));
+        }
+    }
+    let outcome = repository
         .claim_batch_broker_decision(WorkflowRuntimeDispatchAssignmentBatchBrokerClaimRequest {
             decision,
             owner_id,
             now_ms,
             lease_duration_ms: RUNTIME_BRANCH_BATCH_CLAIM_LEASE_MS,
         })
-        .map_err(runtime_dispatch_assignment_diagnostic)
-}
-
-fn record_runtime_branch_batch_broker_wait_window(
-    service: &WorkflowService,
-    decision: WorkflowRuntimeDispatchAssignmentBatchBrokerDecision,
-    now_ms: u64,
-) -> Result<WorkflowRuntimeDispatchAssignmentRecord, WorkflowTaskExecutionWorkerDiagnostic> {
-    let mut repository = service
-        .runtime_dispatch_assignment_repository
-        .lock()
-        .map_err(|_| {
-            WorkflowTaskExecutionWorkerDiagnostic::new(
-                WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchDispatchUnavailable,
-                "runtime dispatch-assignment repository lock poisoned",
-            )
-        })?;
-    repository
-        .record_batch_broker_waiting_decision(
-            WorkflowRuntimeDispatchAssignmentBatchBrokerWaitRequest {
-                decision,
-                now_ms,
-                wait_window_duration_ms:
-                    WORKFLOW_RUNTIME_DISPATCH_ASSIGNMENT_BATCH_BROKER_WAIT_WINDOW_MS,
-            },
-        )
-        .map_err(runtime_dispatch_assignment_diagnostic)
+        .map_err(runtime_dispatch_assignment_diagnostic)?;
+    let proof = repository
+        .own_batch_claim(&outcome, now_ms)
+        .map_err(runtime_dispatch_assignment_diagnostic)?;
+    let events = outcome
+        .assignments
+        .iter()
+        .map(|assignment| {
+            let key =
+                WorkflowTaskExecutionWorkerRuntimeBranchResponderKey::runtime_dispatch_assignment(
+                    &assignment.assignment_id,
+                );
+            let registered = responders.get_mut(&key).expect("validated batch responder");
+            registered.execution_task_id = tokio::task::try_id();
+            registered.batch_claim = Some(outcome.batch_claim.clone());
+            registered
+                .event_ownership
+                .take()
+                .expect("validated batch event ownership")
+        })
+        .collect();
+    Ok((
+        outcome,
+        WorkflowRuntimeBranchBatchClaimOwnership {
+            batch: proof,
+            events,
+        },
+    ))
 }
 
 fn batch_failure_member_outcomes(
@@ -1726,6 +1713,7 @@ fn runtime_branch_batch_member_completions(
     service: &WorkflowService,
     assignments: &[WorkflowRuntimeDispatchAssignmentRecord],
     member_outcomes: Vec<WorkflowRuntimeBranchBatchMemberExecutionOutcome>,
+    ownership: &WorkflowRuntimeBranchBatchClaimOwnership,
 ) -> Vec<WorkflowTaskExecutionWorkerRuntimeBranchResponderAssignmentCompletion> {
     member_outcomes
         .into_iter()
@@ -1737,6 +1725,7 @@ fn runtime_branch_batch_member_completions(
                 service,
                 assignment,
                 member_outcome,
+                ownership,
             ))
         })
         .collect()
@@ -1746,21 +1735,31 @@ fn runtime_branch_batch_member_completion(
     service: &WorkflowService,
     assignment: &WorkflowRuntimeDispatchAssignmentRecord,
     member_outcome: WorkflowRuntimeBranchBatchMemberExecutionOutcome,
+    ownership: &WorkflowRuntimeBranchBatchClaimOwnership,
 ) -> WorkflowTaskExecutionWorkerRuntimeBranchResponderAssignmentCompletion {
+    let proof = ownership
+        .events
+        .iter()
+        .find(|owned| owned.event_id == assignment.runtime_branch_event_id)
+        .map(|owned| &owned.proof);
     let mut diagnostics = member_outcome
         .diagnostics
         .iter()
         .cloned()
         .map(runtime_branch_batch_execution_diagnostic)
         .collect::<Vec<_>>();
+    if member_outcome.state == WorkflowRuntimeBranchBatchMemberExecutionOutcomeState::Failed {
+        if let Err(diagnostic) = settle_failed_owned_assignment(service, assignment, ownership) {
+            diagnostics.push(diagnostic);
+        }
+    }
     let outcome = match member_outcome.state {
         WorkflowRuntimeBranchBatchMemberExecutionOutcomeState::Completed => {
             match complete_claimed_runtime_branch_task_event(
                 service,
                 &assignment.runtime_branch_event_id,
                 &assignment.runtime_branch_claim,
-                unix_timestamp_ms(),
-            ) {
+                unix_timestamp_ms(), proof) {
                 Ok(_record) => match member_outcome.completed_response {
                     Some(response) => WorkflowTaskExecutionWorkerOutcome::RuntimeBranchCompleted(
                         WorkflowTaskExecutionWorkerRuntimeBranchCompletedOutcome {
@@ -1808,8 +1807,7 @@ fn runtime_branch_batch_member_completion(
                 &assignment.runtime_branch_claim,
                 deferred_at_ms,
                 deferred_at_ms
-                    .saturating_add(RUNTIME_BRANCH_DEPENDENCY_READINESS_RETRY_DELAY_MS),
-            ) {
+                    .saturating_add(RUNTIME_BRANCH_DEPENDENCY_READINESS_RETRY_DELAY_MS), proof) {
                 Ok(_record) => WorkflowTaskExecutionWorkerOutcome::RuntimeBranchDeferred(
                     WorkflowTaskExecutionWorkerRuntimeBranchDeferredOutcome {
                         session_id: member_outcome.session_id.clone(),
@@ -1843,8 +1841,7 @@ fn runtime_branch_batch_member_completion(
                 service,
                 &assignment.runtime_branch_event_id,
                 &assignment.runtime_branch_claim,
-                unix_timestamp_ms(),
-            ) {
+                unix_timestamp_ms(), proof) {
                 Ok(_record) => WorkflowTaskExecutionWorkerOutcome::RuntimeBranchCancelled(
                     WorkflowTaskExecutionWorkerRuntimeBranchCancelledOutcome {
                         session_id: member_outcome.session_id.clone(),
@@ -1873,8 +1870,7 @@ fn runtime_branch_batch_member_completion(
                 service,
                 &assignment.runtime_branch_event_id,
                 &assignment.runtime_branch_claim,
-                unix_timestamp_ms(),
-            ) {
+                unix_timestamp_ms(), proof) {
                 Ok(_record) => WorkflowTaskExecutionWorkerOutcome::RuntimeBranchFailed(
                     WorkflowTaskExecutionWorkerRuntimeBranchFailedOutcome {
                         session_id: member_outcome.session_id.clone(),
@@ -1993,8 +1989,15 @@ fn fail_runtime_branch_preparation_error(
     event_id: &WorkflowRuntimeBranchTaskEventId,
     claim: &WorkflowRuntimeBranchTaskEventClaim,
     error: WorkflowServiceError,
+    proof: Option<&WorkflowRuntimeClaimOwnership>,
 ) -> WorkflowTaskExecutionWorkerOutcome {
-    match fail_claimed_runtime_branch_task_event(service, event_id, claim, unix_timestamp_ms()) {
+    match fail_claimed_runtime_branch_task_event(
+        service,
+        event_id,
+        claim,
+        unix_timestamp_ms(),
+        proof,
+    ) {
         Ok(_record) => WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
             command,
             error.to_string(),
@@ -2018,6 +2021,7 @@ fn defer_runtime_branch_dependency_readiness(
     claim: &WorkflowRuntimeBranchTaskEventClaim,
     deferred_task_ids: Vec<String>,
     message: String,
+    proof: Option<&WorkflowRuntimeClaimOwnership>,
 ) -> WorkflowTaskExecutionWorkerOutcome {
     let mut diagnostics = vec![WorkflowTaskExecutionWorkerDiagnostic::new(
         WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchDispatchUnavailable,
@@ -2032,6 +2036,7 @@ fn defer_runtime_branch_dependency_readiness(
         claim,
         deferred_at_ms,
         retry_ready_at_ms,
+        proof,
     ) {
         Ok(_record) => WorkflowTaskExecutionWorkerOutcome::runtime_branch_deferred(
             command,
@@ -2054,8 +2059,13 @@ fn claim_runtime_branch_task_event_for_worker(
     service: &WorkflowService,
     command: &WorkflowTaskExecutionWorkerRuntimeBranchCommand,
     now_ms: u64,
-) -> Result<Option<WorkflowRuntimeBranchTaskEventClaimOutcome>, WorkflowTaskExecutionWorkerDiagnostic>
-{
+) -> Result<
+    Option<(
+        WorkflowRuntimeBranchTaskEventClaimOutcome,
+        WorkflowRuntimeClaimOwnership,
+    )>,
+    WorkflowTaskExecutionWorkerDiagnostic,
+> {
     let owner_id =
         WorkflowRuntimeBranchTaskEventClaimOwnerId::parse(TASK_EXECUTION_WORKER_CLAIM_OWNER_ID)
             .map_err(runtime_branch_event_diagnostic)?;
@@ -2069,7 +2079,7 @@ fn claim_runtime_branch_task_event_for_worker(
             )
         })?;
     repository
-        .claim_next_due_for_workflow_run(
+        .claim_owned_for_workflow_run(
             &command.workflow_run_id,
             owner_id,
             now_ms,
@@ -2083,6 +2093,7 @@ fn release_claimed_runtime_branch_task_event(
     event_id: &WorkflowRuntimeBranchTaskEventId,
     claim: &WorkflowRuntimeBranchTaskEventClaim,
     now_ms: u64,
+    proof: Option<&WorkflowRuntimeClaimOwnership>,
 ) -> Result<WorkflowRuntimeBranchTaskEventRecord, WorkflowTaskExecutionWorkerDiagnostic> {
     let mut repository = service
         .runtime_branch_task_event_repository
@@ -2094,7 +2105,7 @@ fn release_claimed_runtime_branch_task_event(
             )
         })?;
     repository
-        .release_claim(event_id, claim, now_ms)
+        .release_claim(event_id, claim, now_ms, proof)
         .map_err(runtime_branch_event_diagnostic)
 }
 
@@ -2104,6 +2115,7 @@ fn defer_claimed_runtime_branch_task_event(
     claim: &WorkflowRuntimeBranchTaskEventClaim,
     deferred_at_ms: u64,
     ready_at_ms: u64,
+    proof: Option<&WorkflowRuntimeClaimOwnership>,
 ) -> Result<WorkflowRuntimeBranchTaskEventRecord, WorkflowTaskExecutionWorkerDiagnostic> {
     let mut repository = service
         .runtime_branch_task_event_repository
@@ -2115,7 +2127,7 @@ fn defer_claimed_runtime_branch_task_event(
             )
         })?;
     repository
-        .defer_until(event_id, claim, deferred_at_ms, ready_at_ms)
+        .defer_until(event_id, claim, deferred_at_ms, ready_at_ms, proof)
         .map_err(runtime_branch_event_diagnostic)
 }
 
@@ -2124,6 +2136,7 @@ fn mark_claimed_runtime_branch_task_event_dispatching(
     event_id: &WorkflowRuntimeBranchTaskEventId,
     claim: &WorkflowRuntimeBranchTaskEventClaim,
     now_ms: u64,
+    proof: Option<&WorkflowRuntimeClaimOwnership>,
 ) -> Result<WorkflowRuntimeBranchTaskEventRecord, WorkflowTaskExecutionWorkerDiagnostic> {
     let mut repository = service
         .runtime_branch_task_event_repository
@@ -2135,7 +2148,7 @@ fn mark_claimed_runtime_branch_task_event_dispatching(
             )
         })?;
     repository
-        .mark_dispatching(event_id, claim, now_ms)
+        .mark_dispatching(event_id, claim, now_ms, proof)
         .map_err(runtime_branch_event_diagnostic)
 }
 
@@ -2144,6 +2157,7 @@ fn record_runtime_branch_selected_candidate_fact(
     event_id: &WorkflowRuntimeBranchTaskEventId,
     claim: &WorkflowRuntimeBranchTaskEventClaim,
     selected_candidate_fact: WorkflowRuntimeDispatchCandidateFact,
+    proof: Option<&WorkflowRuntimeClaimOwnership>,
 ) -> Result<WorkflowRuntimeBranchTaskEventRecord, WorkflowTaskExecutionWorkerDiagnostic> {
     let mut repository = service
         .runtime_branch_task_event_repository
@@ -2155,7 +2169,7 @@ fn record_runtime_branch_selected_candidate_fact(
             )
         })?;
     repository
-        .record_selected_candidate_fact(event_id, claim, selected_candidate_fact)
+        .record_selected_candidate_fact(event_id, claim, selected_candidate_fact, proof)
         .map_err(runtime_branch_event_diagnostic)
 }
 
@@ -2218,6 +2232,7 @@ fn link_runtime_branch_dispatch_assignment(
     assignment_id: WorkflowRuntimeDispatchAssignmentId,
     scheduler_task_attempt_id: String,
     linked_at_ms: u64,
+    proof: Option<&WorkflowRuntimeClaimOwnership>,
 ) -> Result<WorkflowRuntimeBranchTaskEventRecord, WorkflowTaskExecutionWorkerDiagnostic> {
     let mut repository = service
         .runtime_branch_task_event_repository
@@ -2235,6 +2250,7 @@ fn link_runtime_branch_dispatch_assignment(
             assignment_id,
             scheduler_task_attempt_id,
             linked_at_ms,
+            proof,
         )
         .map_err(runtime_branch_event_diagnostic)
 }
@@ -2253,8 +2269,7 @@ fn runtime_dispatch_assignment_diagnostic(
         | WorkflowRuntimeDispatchAssignmentDiagnosticCode::AssignmentNotRunning
         | WorkflowRuntimeDispatchAssignmentDiagnosticCode::AlreadyBatchClaimed
         | WorkflowRuntimeDispatchAssignmentDiagnosticCode::MissingTaskAttemptFact
-        | WorkflowRuntimeDispatchAssignmentDiagnosticCode::BatchCompatibilityRejected
-        | WorkflowRuntimeDispatchAssignmentDiagnosticCode::InvalidBatchBrokerWaitWindow => {
+        | WorkflowRuntimeDispatchAssignmentDiagnosticCode::BatchCompatibilityRejected => {
             WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchDispatchUnavailable
         }
     };
@@ -2286,30 +2301,12 @@ fn mark_runtime_branch_dispatch_assignment_running(
         .map_err(runtime_dispatch_assignment_diagnostic)
 }
 
-fn mark_runtime_branch_batch_broker_wait_window_expired(
-    service: &WorkflowService,
-    assignment_id: &WorkflowRuntimeDispatchAssignmentId,
-    now_ms: u64,
-) -> Result<WorkflowRuntimeDispatchAssignmentRecord, WorkflowTaskExecutionWorkerDiagnostic> {
-    let mut repository = service
-        .runtime_dispatch_assignment_repository
-        .lock()
-        .map_err(|_| {
-            WorkflowTaskExecutionWorkerDiagnostic::new(
-                WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchDispatchUnavailable,
-                "runtime dispatch-assignment repository lock poisoned",
-            )
-        })?;
-    repository
-        .mark_batch_broker_wait_window_expired(assignment_id, now_ms)
-        .map_err(runtime_dispatch_assignment_diagnostic)
-}
-
 fn mark_claimed_runtime_branch_task_event_running(
     service: &WorkflowService,
     event_id: &WorkflowRuntimeBranchTaskEventId,
     claim: &WorkflowRuntimeBranchTaskEventClaim,
     now_ms: u64,
+    proof: Option<&WorkflowRuntimeClaimOwnership>,
 ) -> Result<WorkflowRuntimeBranchTaskEventRecord, WorkflowTaskExecutionWorkerDiagnostic> {
     let mut repository = service
         .runtime_branch_task_event_repository
@@ -2321,7 +2318,7 @@ fn mark_claimed_runtime_branch_task_event_running(
             )
         })?;
     repository
-        .mark_running(event_id, claim, now_ms)
+        .mark_running(event_id, claim, now_ms, proof)
         .map_err(runtime_branch_event_diagnostic)
 }
 
@@ -2330,6 +2327,7 @@ fn complete_claimed_runtime_branch_task_event(
     event_id: &WorkflowRuntimeBranchTaskEventId,
     claim: &WorkflowRuntimeBranchTaskEventClaim,
     now_ms: u64,
+    proof: Option<&WorkflowRuntimeClaimOwnership>,
 ) -> Result<WorkflowRuntimeBranchTaskEventRecord, WorkflowTaskExecutionWorkerDiagnostic> {
     let mut repository = service
         .runtime_branch_task_event_repository
@@ -2341,7 +2339,7 @@ fn complete_claimed_runtime_branch_task_event(
             )
         })?;
     repository
-        .complete(event_id, claim, now_ms)
+        .complete(event_id, claim, now_ms, proof)
         .map_err(runtime_branch_event_diagnostic)
 }
 
@@ -2350,6 +2348,7 @@ fn fail_claimed_runtime_branch_task_event(
     event_id: &WorkflowRuntimeBranchTaskEventId,
     claim: &WorkflowRuntimeBranchTaskEventClaim,
     now_ms: u64,
+    proof: Option<&WorkflowRuntimeClaimOwnership>,
 ) -> Result<WorkflowRuntimeBranchTaskEventRecord, WorkflowTaskExecutionWorkerDiagnostic> {
     let mut repository = service
         .runtime_branch_task_event_repository
@@ -2361,7 +2360,7 @@ fn fail_claimed_runtime_branch_task_event(
             )
         })?;
     repository
-        .fail(event_id, claim, now_ms)
+        .fail(event_id, claim, now_ms, proof)
         .map_err(runtime_branch_event_diagnostic)
 }
 
@@ -2415,10 +2414,7 @@ mod tests {
     use crate::workflow::runtime_branch_task_event::{
         WorkflowRuntimeBranchTaskEventRequest, WorkflowRuntimeBranchTaskEventState,
     };
-    use crate::workflow::runtime_dispatch_assignment::{
-        WorkflowRuntimeDispatchAssignmentBatchBrokerWaitExpiryDiagnosticCode,
-        WorkflowRuntimeDispatchAssignmentState,
-    };
+    use crate::workflow::runtime_dispatch_assignment::WorkflowRuntimeDispatchAssignmentState;
     use crate::workflow::runtime_dispatch_selection::{
         ValidatedWorkflowRuntimeDispatchCandidateFactBundle, WorkflowRuntimeDispatchCandidateFact,
         WorkflowRuntimeDispatchCandidateFactBundle, WorkflowRuntimeDispatchCandidateProvider,
@@ -2765,7 +2761,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn task_execution_worker_batches_runtime_branch_peers_and_fans_out_responses() {
+    async fn task_execution_worker_dispatches_later_peers_independently_and_completes_each() {
         let batch_port = Arc::new(RecordingWorkerBatchExecutionPort::default());
         let reservation_lifecycle_port = Arc::new(RecordingReservationLifecyclePort::default());
         let service = Arc::new(
@@ -2822,44 +2818,14 @@ mod tests {
             first_result,
             WorkflowTaskExecutionWorkerRuntimeBranchExecutionResult::ResponderRetainedForBatch
         ));
-        assert!(
-            tokio::time::timeout(Duration::from_millis(25), &mut first_completion_rx)
-                .await
-                .is_err(),
-            "first branch responder must wait for a compatible batch peer"
-        );
-        assert!(
-            batch_port.requests().is_empty(),
-            "waiting for peers must not dispatch a one-member runtime-host batch"
+        assert_eq!(
+            batch_port.requests().len(),
+            1,
+            "first ready branch dispatches immediately"
         );
         assert_eq!(
             runtime_branch_event_state(service.as_ref(), &first_event_id),
-            WorkflowRuntimeBranchTaskEventState::Running
-        );
-        let first_waiting_assignment =
-            runtime_dispatch_assignment_for_event(service.as_ref(), &first_event_id);
-        let first_wait_window = first_waiting_assignment
-            .batch_broker_wait_window
-            .as_ref()
-            .expect("first branch wait window");
-        assert_eq!(
-            first_wait_window.required_assignments,
-            RUNTIME_BRANCH_BATCH_BROKER_MIN_ASSIGNMENTS
-        );
-        assert_eq!(
-            first_wait_window.expiry_diagnostic.code,
-            WorkflowRuntimeDispatchAssignmentBatchBrokerWaitExpiryDiagnosticCode::BatchWindowExpired
-        );
-        assert!(
-            first_wait_window.expires_at_ms > first_wait_window.waiting_since_ms,
-            "wait window must leave time to defer before the claim lease expires"
-        );
-        assert!(
-            first_wait_window.expires_at_ms
-                <= first_wait_window.waiting_since_ms.saturating_add(
-                    WORKFLOW_RUNTIME_DISPATCH_ASSIGNMENT_BATCH_BROKER_WAIT_WINDOW_MS
-                ),
-            "wait window must not exceed the broker policy duration"
+            WorkflowRuntimeBranchTaskEventState::Completed
         );
 
         let second_result = claim_and_execute_runtime_branch_event(
@@ -2895,8 +2861,9 @@ mod tests {
             "image for run.2026-05-22.102",
         );
         let requests = batch_port.requests();
-        assert_eq!(requests.len(), 1);
-        assert_eq!(requests[0].members.len(), 2);
+        assert_eq!(requests.len(), 2);
+        assert_eq!(requests[0].members.len(), 1);
+        assert_eq!(requests[1].members.len(), 1);
         assert_eq!(
             runtime_branch_event_state(service.as_ref(), &first_event_id),
             WorkflowRuntimeBranchTaskEventState::Completed
@@ -2914,25 +2881,21 @@ mod tests {
             2,
             "worker grouped dispatch must mark each reservation as dispatch-started"
         );
-        assert!(
-            runtime_dispatch_assignment_for_event(service.as_ref(), &first_event_id)
-                .batch_broker_wait_window
-                .is_none(),
-            "claiming the batch must clear the prior wait window"
-        );
         assert_eq!(registry.active_responder_count(), 0);
     }
 
     #[tokio::test]
-    async fn task_execution_worker_defers_expired_batch_broker_wait_without_runtime_host_dispatch()
-    {
+    async fn task_execution_worker_dispatches_singleton_without_peer_or_timer() {
         let batch_port = Arc::new(RecordingWorkerBatchExecutionPort::default());
         let service = Arc::new(
             WorkflowService::new()
                 .with_runtime_dispatch_candidate_provider(Arc::new(
                     SingleCanonicalRuntimeDispatchCandidateProvider,
                 ))
-                .with_runtime_host_batch_execution_port(batch_port.clone()),
+                .with_runtime_host_batch_execution_port(batch_port.clone())
+                .with_reservation_lifecycle_port(Arc::new(
+                    RecordingReservationLifecyclePort::default(),
+                )),
         );
         let session_id = prepare_ready_runtime_branch_run(service.as_ref(), "run.2026-05-22.103");
         let event_id =
@@ -2961,44 +2924,25 @@ mod tests {
             first_result,
             WorkflowTaskExecutionWorkerRuntimeBranchExecutionResult::ResponderRetainedForBatch
         ));
-        assert!(
-            batch_port.requests().is_empty(),
-            "waiting branch must not dispatch a singleton runtime-host batch"
-        );
-        let waiting_assignment = runtime_dispatch_assignment_for_event(service.as_ref(), &event_id);
-        let wait_window = waiting_assignment
-            .batch_broker_wait_window
-            .as_ref()
-            .expect("wait window")
-            .clone();
-        expire_due_runtime_branch_batch_wait_windows_once(
-            &environment,
-            &registry,
-            wait_window.expires_at_ms,
-        );
         let completed = tokio::time::timeout(Duration::from_secs(1), &mut completion_rx)
             .await
-            .expect("expired wait completion")
-            .expect("expired wait responder");
-        let WorkflowTaskExecutionWorkerOutcome::RuntimeBranchDeferred(completed) = completed else {
-            panic!("expected deferred responder completion");
-        };
-        assert_eq!(
-            completed.reason,
-            WorkflowTaskExecutionWorkerRuntimeBranchDeferredReason::BatchBrokerWaitWindowExpired
+            .expect("singleton completion")
+            .expect("singleton responder");
+        assert_runtime_branch_completed_response(
+            completed,
+            "run.2026-05-22.103",
+            "image for run.2026-05-22.103",
         );
+        let requests = batch_port.requests();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0].members.len(), 1);
         assert_eq!(
             runtime_branch_event_state(service.as_ref(), &event_id),
-            WorkflowRuntimeBranchTaskEventState::Deferred
+            WorkflowRuntimeBranchTaskEventState::Completed
         );
         assert_eq!(
-            runtime_dispatch_assignment_by_id(service.as_ref(), &waiting_assignment.assignment_id)
-                .state,
-            WorkflowRuntimeDispatchAssignmentState::Failed
-        );
-        assert!(
-            batch_port.requests().is_empty(),
-            "expired wait must not dispatch the runtime host"
+            runtime_dispatch_assignment_for_event(service.as_ref(), &event_id).state,
+            WorkflowRuntimeDispatchAssignmentState::Completed
         );
         assert_eq!(registry.active_responder_count(), 0);
     }
@@ -3156,7 +3100,7 @@ mod tests {
             .runtime_branch_task_event_repository
             .lock()
             .expect("runtime branch task event repository")
-            .mark_dispatching(&event_id, &claimed.claim, 120)
+            .mark_dispatching(&event_id, &claimed.claim, 120, None)
             .expect("event marks dispatching");
 
         let deferred = defer_claimed_runtime_branch_task_event(
@@ -3165,6 +3109,7 @@ mod tests {
             &claimed.claim,
             130,
             130_u64.saturating_add(RUNTIME_BRANCH_DEPENDENCY_READINESS_RETRY_DELAY_MS),
+            None,
         )
         .expect("event defers");
 
@@ -3183,6 +3128,473 @@ mod tests {
     const WORKER_BATCH_WORKFLOW_ID: &str = "workflow.image_generation";
     const WORKER_BATCH_NODE_ID: &str = "node.llm_inference";
     const WORKER_BATCH_TASK_ID: &str = "task.image_generation.001";
+
+    #[derive(Clone, Copy)]
+    enum ControlledHostOutcome {
+        Cancelled,
+        Panic,
+        Retryable,
+        Deferred,
+        RejectedDeferred,
+        Accepted,
+    }
+
+    struct ControlledWorkerBatchPort {
+        entered: Mutex<
+            Option<
+                tokio::sync::oneshot::Sender<(
+                    RuntimeHostBatchExecutionRequest,
+                    RuntimeHostExecutionCancellationHandle,
+                )>,
+            >,
+        >,
+        settle: tokio::sync::Mutex<Option<tokio::sync::oneshot::Receiver<ControlledHostOutcome>>>,
+    }
+
+    #[async_trait::async_trait]
+    impl RuntimeHostBatchExecutionPort for ControlledWorkerBatchPort {
+        async fn execute_runtime_host_batch_request(
+            &self,
+            request: RuntimeHostBatchExecutionRequest,
+            cancellation: RuntimeHostExecutionCancellationHandle,
+        ) -> Result<RuntimeHostBatchExecutionResponse, RuntimeHostExecutionPortError> {
+            self.entered
+                .lock()
+                .expect("entered channel")
+                .take()
+                .expect("exactly one dispatch")
+                .send((request.clone(), cancellation))
+                .unwrap_or_else(|_| panic!("test observes dispatch"));
+            let settle = self.settle.lock().await.take().expect("one host execution");
+            match settle.await.expect("controlled host outcome") {
+                ControlledHostOutcome::Panic => panic!("injected owned host failure"),
+                outcome @ (ControlledHostOutcome::Retryable
+                | ControlledHostOutcome::Deferred
+                | ControlledHostOutcome::RejectedDeferred
+                | ControlledHostOutcome::Accepted) => {
+                    let mut response = runtime_host_batch_response_from_request(&request);
+                    let (batch_state, member_state, retry) = match outcome {
+                        ControlledHostOutcome::Retryable => (
+                            RuntimeHostBatchExecutionState::Failed,
+                            RuntimeHostBatchExecutionMemberState::Failed,
+                            RuntimeHostBatchMemberRetryDisposition::Retryable,
+                        ),
+                        ControlledHostOutcome::Deferred => (
+                            RuntimeHostBatchExecutionState::Deferred,
+                            RuntimeHostBatchExecutionMemberState::Deferred,
+                            RuntimeHostBatchMemberRetryDisposition::Deferred,
+                        ),
+                        ControlledHostOutcome::RejectedDeferred => (
+                            RuntimeHostBatchExecutionState::Rejected,
+                            RuntimeHostBatchExecutionMemberState::Rejected,
+                            RuntimeHostBatchMemberRetryDisposition::Deferred,
+                        ),
+                        ControlledHostOutcome::Accepted => (
+                            RuntimeHostBatchExecutionState::Accepted,
+                            RuntimeHostBatchExecutionMemberState::Accepted,
+                            RuntimeHostBatchMemberRetryDisposition::NotRetryable,
+                        ),
+                        _ => unreachable!("controlled handback variants"),
+                    };
+                    response.state = batch_state;
+                    response.diagnostics = vec![pantograph_runtime_host_contracts::RuntimeHostExecutionDiagnostic {
+                        severity: pantograph_runtime_host_contracts::RuntimeHostExecutionDiagnosticSeverity::Info,
+                        code: pantograph_runtime_host_contracts::RuntimeHostExecutionDiagnosticCode::HandoffRejected,
+                        message: "controlled host handback".to_string(), hint: None,
+                    }];
+                    for member in &mut response.members {
+                        member.state = member_state.clone();
+                        member.retry_disposition = retry.clone();
+                        member.reservation_disposition =
+                            RuntimeHostBatchMemberReservationDisposition::DeferredToScheduler;
+                        member.outputs.clear();
+                        member.diagnostics = response.diagnostics.clone();
+                    }
+                    response.validate().expect("valid controlled host response");
+                    Ok(response)
+                }
+                ControlledHostOutcome::Cancelled => {
+                    let mut response = runtime_host_batch_response_from_request(&request);
+                    response.state = RuntimeHostBatchExecutionState::Cancelled;
+                    for member in &mut response.members {
+                        member.state = RuntimeHostBatchExecutionMemberState::Cancelled;
+                        member.outputs.clear();
+                        member.reservation_disposition =
+                            RuntimeHostBatchMemberReservationDisposition::Released;
+                        member.diagnostics = vec![pantograph_runtime_host_contracts::RuntimeHostExecutionDiagnostic {
+                            severity: pantograph_runtime_host_contracts::RuntimeHostExecutionDiagnosticSeverity::Info,
+                            code: pantograph_runtime_host_contracts::RuntimeHostExecutionDiagnosticCode::CancellationRequested,
+                            message: "controlled host stopped after cancellation".to_string(), hint: None,
+                        }];
+                    }
+                    Ok(response)
+                }
+            }
+        }
+    }
+
+    struct ControlledWorkerRun {
+        service: Arc<WorkflowService>,
+        worker: WorkflowTaskExecutionWorker,
+        lifecycle: Arc<RecordingReservationLifecyclePort>,
+        event_id: WorkflowRuntimeBranchTaskEventId,
+        session_id: String,
+        completion: tokio::sync::oneshot::Receiver<WorkflowTaskExecutionWorkerOutcome>,
+        entered: tokio::sync::oneshot::Receiver<(
+            RuntimeHostBatchExecutionRequest,
+            RuntimeHostExecutionCancellationHandle,
+        )>,
+        settle: tokio::sync::oneshot::Sender<ControlledHostOutcome>,
+    }
+
+    fn controlled_worker_run(run_id: &str) -> ControlledWorkerRun {
+        let (entered_tx, entered) = tokio::sync::oneshot::channel();
+        let (settle, settle_rx) = tokio::sync::oneshot::channel();
+        let port = Arc::new(ControlledWorkerBatchPort {
+            entered: Mutex::new(Some(entered_tx)),
+            settle: tokio::sync::Mutex::new(Some(settle_rx)),
+        });
+        let lifecycle = Arc::new(RecordingReservationLifecyclePort::default());
+        let service = Arc::new(
+            WorkflowService::new()
+                .with_runtime_dispatch_candidate_provider(Arc::new(
+                    SingleCanonicalRuntimeDispatchCandidateProvider,
+                ))
+                .with_runtime_host_batch_execution_port(port)
+                .with_reservation_lifecycle_port(lifecycle.clone()),
+        );
+        let session_id = prepare_ready_runtime_branch_run(service.as_ref(), run_id);
+        let event_id = enqueue_ready_runtime_branch_event(service.as_ref(), &session_id, run_id);
+        let worker = WorkflowTaskExecutionWorker::spawn(
+            scheduler_lifecycle(),
+            WorkflowTaskExecutionWorkerRuntimeBranchEnvironment::new(service.clone(), test_host()),
+        )
+        .expect("worker");
+        let (responder, completion) =
+            WorkflowTaskExecutionWorkerRuntimeBranchCompletionResponder::channel();
+        worker
+            .try_enqueue(WorkflowTaskExecutionWorkerCommand::execute_runtime_branch(
+                runtime_branch_command_for_session_run(&session_id, run_id),
+                responder,
+            ))
+            .expect("enqueue");
+        ControlledWorkerRun {
+            service,
+            worker,
+            lifecycle,
+            event_id,
+            session_id,
+            completion,
+            entered,
+            settle,
+        }
+    }
+
+    fn assert_live_claims_exclude_expired_competitors(
+        service: &WorkflowService,
+        event_id: &WorkflowRuntimeBranchTaskEventId,
+    ) {
+        let assignment = runtime_dispatch_assignment_for_event(service, event_id);
+        let now_ms = assignment.runtime_branch_claim.lease_expires_at_ms + 1;
+        let event_error = service
+            .runtime_branch_task_event_repository
+            .lock()
+            .expect("events")
+            .claim_event(
+                event_id,
+                WorkflowRuntimeBranchTaskEventClaimOwnerId::parse("competing.worker")
+                    .expect("owner"),
+                now_ms,
+                30_000,
+            )
+            .expect_err("live event excludes expired reclaim");
+        assert_eq!(
+            event_error.code,
+            WorkflowRuntimeBranchTaskEventDiagnosticCode::AlreadyClaimed
+        );
+        let batch_error = service
+            .runtime_dispatch_assignment_repository
+            .lock()
+            .expect("assignments")
+            .claim_compatible_running_batch(
+                &assignment.assignment_id,
+                WorkflowRuntimeDispatchAssignmentBatchClaimOwnerId::parse("competing.batch")
+                    .expect("owner"),
+                now_ms,
+                1_000,
+                8,
+            )
+            .expect_err("live batch excludes expired reclaim");
+        assert_eq!(
+            batch_error.code,
+            WorkflowRuntimeDispatchAssignmentDiagnosticCode::AlreadyBatchClaimed
+        );
+    }
+
+    #[tokio::test]
+    async fn task_execution_worker_settles_old_assignment_before_retry_or_defer() {
+        for (index, action, expected_assignment) in [
+            (
+                0,
+                ControlledHostOutcome::Retryable,
+                WorkflowRuntimeDispatchAssignmentState::Failed,
+            ),
+            (
+                1,
+                ControlledHostOutcome::RejectedDeferred,
+                WorkflowRuntimeDispatchAssignmentState::Failed,
+            ),
+            (
+                2,
+                ControlledHostOutcome::Deferred,
+                WorkflowRuntimeDispatchAssignmentState::Deferred,
+            ),
+        ] {
+            let run_id = format!("run.2026-05-22.{}", 210 + index);
+            let run = controlled_worker_run(&run_id);
+            let _entered = run.entered.await.expect("host entry");
+            let old = runtime_dispatch_assignment_for_event(&run.service, &run.event_id);
+            run.settle
+                .send(action)
+                .unwrap_or_else(|_| panic!("live host"));
+            let outcome = tokio::time::timeout(Duration::from_secs(1), run.completion)
+                .await
+                .expect("handback completion")
+                .expect("responder");
+            assert!(
+                matches!(
+                    outcome,
+                    WorkflowTaskExecutionWorkerOutcome::RuntimeBranchDeferred(_)
+                ),
+                "{outcome:?}"
+            );
+            run.worker.shutdown().await.expect("drain handback");
+            assert_eq!(
+                runtime_dispatch_assignment_by_id(&run.service, &old.assignment_id).state,
+                expected_assignment
+            );
+            let mut events = run
+                .service
+                .runtime_branch_task_event_repository
+                .lock()
+                .expect("events");
+            let deferred = events.get(&run.event_id).expect("event");
+            assert_eq!(
+                deferred.state,
+                WorkflowRuntimeBranchTaskEventState::Deferred
+            );
+            let retry = events
+                .claim_event(
+                    &run.event_id,
+                    WorkflowRuntimeBranchTaskEventClaimOwnerId::parse("next.attempt")
+                        .expect("owner"),
+                    deferred.ready_at_ms,
+                    30_000,
+                )
+                .expect("new attempt is admitted");
+            assert!(retry.claim.attempt_generation > old.runtime_branch_claim.attempt_generation);
+            assert!(
+                events
+                    .complete(
+                        &run.event_id,
+                        &old.runtime_branch_claim,
+                        deferred.ready_at_ms,
+                        None
+                    )
+                    .is_err(),
+                "old attempt cannot publish after handback"
+            );
+            assert_eq!(
+                run.lifecycle.events().len(),
+                2,
+                "host handback preserves its scheduler reservation disposition"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn task_execution_worker_fences_accepted_host_response_without_retry_or_release() {
+        let run = controlled_worker_run("run.2026-05-22.213");
+        let _entered = run.entered.await.expect("host entry");
+        run.settle
+            .send(ControlledHostOutcome::Accepted)
+            .unwrap_or_else(|_| panic!("live host"));
+        let outcome = tokio::time::timeout(Duration::from_secs(1), run.completion)
+            .await
+            .expect("indeterminate failure")
+            .expect("responder");
+        assert!(
+            matches!(
+                outcome,
+                WorkflowTaskExecutionWorkerOutcome::RuntimeBranchFailed(_)
+            ),
+            "{outcome:?}"
+        );
+        run.worker
+            .shutdown()
+            .await
+            .expect("drain indeterminate branch");
+        assert_eq!(
+            runtime_branch_event_state(&run.service, &run.event_id),
+            WorkflowRuntimeBranchTaskEventState::Failed
+        );
+        assert_eq!(
+            runtime_dispatch_assignment_for_event(&run.service, &run.event_id).state,
+            WorkflowRuntimeDispatchAssignmentState::Failed
+        );
+        assert_eq!(
+            run.lifecycle.events().len(),
+            1,
+            "Accepted does not establish host stop or authorize reservation release"
+        );
+        assert!(run
+            .service
+            .session_store_guard()
+            .expect("store")
+            .active_run_scheduler_task_results(&run.session_id, "run.2026-05-22.213")
+            .expect("results")
+            .is_empty());
+    }
+
+    #[tokio::test]
+    async fn task_execution_worker_cancellation_and_shutdown_retain_claims_until_host_settles() {
+        let run = controlled_worker_run("run.2026-05-22.201");
+        let (request, cancellation) = tokio::time::timeout(Duration::from_secs(1), run.entered)
+            .await
+            .expect("host entry")
+            .expect("entered request");
+        assert_eq!(request.members.len(), 1);
+        let assignment = runtime_dispatch_assignment_for_event(&run.service, &run.event_id);
+        assert_live_claims_exclude_expired_competitors(&run.service, &run.event_id);
+        run.service
+            .scheduler_task_orchestrator
+            .request_started_runtime_task_cancellation(
+                &request.members[0].handoff.task_id,
+                &crate::scheduler::WorkflowSchedulerTaskAttemptId::parse(
+                    &assignment.scheduler_task_attempt_id,
+                )
+                .expect("attempt"),
+                "test cancellation",
+            )
+            .expect("cancel request");
+        assert_eq!(cancellation.snapshot().state, pantograph_runtime_host_contracts::RuntimeHostExecutionCancellationState::CancellationRequested);
+        let mut shutdown = Box::pin(run.worker.shutdown());
+        tokio::select! { biased;
+            result = &mut shutdown => panic!("shutdown released live host ownership early: {result:?}"),
+            _ = tokio::task::yield_now() => {}
+        }
+        assert_live_claims_exclude_expired_competitors(&run.service, &run.event_id);
+        assert_eq!(
+            run.lifecycle.events().len(),
+            1,
+            "only dispatch-started exists while host is still running"
+        );
+        assert_eq!(
+            run.lifecycle.events()[0].outcome,
+            ReservationLifecycleOutcome::DispatchStarted
+        );
+        run.settle
+            .send(ControlledHostOutcome::Cancelled)
+            .unwrap_or_else(|_| panic!("host still awaits settlement"));
+        let outcome = tokio::time::timeout(Duration::from_secs(1), run.completion)
+            .await
+            .expect("cancel completion")
+            .expect("responder outcome");
+        assert!(
+            matches!(
+                outcome,
+                WorkflowTaskExecutionWorkerOutcome::RuntimeBranchCancelled(_)
+            ),
+            "{outcome:?}"
+        );
+        shutdown.await.expect("shutdown after host completion");
+        assert_eq!(
+            runtime_branch_event_state(&run.service, &run.event_id),
+            WorkflowRuntimeBranchTaskEventState::Failed
+        );
+        assert_eq!(
+            runtime_dispatch_assignment_for_event(&run.service, &run.event_id).state,
+            WorkflowRuntimeDispatchAssignmentState::Cancelled
+        );
+        assert_eq!(
+            run.service
+                .scheduler_task_orchestrator
+                .active_task_lifecycle_handle_count()
+                .expect("active handles"),
+            0
+        );
+        assert_eq!(
+            run.lifecycle.events().len(),
+            2,
+            "reservation terminal handling follows actual host settlement"
+        );
+    }
+
+    #[tokio::test]
+    async fn task_execution_worker_supervises_host_panic_and_fences_replay_without_release() {
+        let run = controlled_worker_run("run.2026-05-22.202");
+        let _entered = tokio::time::timeout(Duration::from_secs(1), run.entered)
+            .await
+            .expect("host entry")
+            .expect("entered request");
+        let assignment = runtime_dispatch_assignment_for_event(&run.service, &run.event_id);
+        run.settle
+            .send(ControlledHostOutcome::Panic)
+            .unwrap_or_else(|_| panic!("host still live"));
+        let outcome = tokio::time::timeout(Duration::from_secs(1), run.completion)
+            .await
+            .expect("supervised failure")
+            .expect("failure responder");
+        let WorkflowTaskExecutionWorkerOutcome::RuntimeBranchFailed(failure) = outcome else {
+            panic!("expected supervised failure");
+        };
+        assert!(failure
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.message.contains("injected owned host failure")));
+        run.worker
+            .shutdown()
+            .await
+            .expect("supervised task drained");
+        assert_eq!(
+            runtime_branch_event_state(&run.service, &run.event_id),
+            WorkflowRuntimeBranchTaskEventState::Failed
+        );
+        assert_eq!(
+            runtime_dispatch_assignment_for_event(&run.service, &run.event_id).state,
+            WorkflowRuntimeDispatchAssignmentState::Failed
+        );
+        let error = run
+            .service
+            .runtime_branch_task_event_repository
+            .lock()
+            .expect("events")
+            .claim_event(
+                &run.event_id,
+                WorkflowRuntimeBranchTaskEventClaimOwnerId::parse("retry.worker").expect("owner"),
+                assignment.runtime_branch_claim.lease_expires_at_ms + 1,
+                30_000,
+            )
+            .expect_err("failed host ownership cannot replay");
+        assert_eq!(
+            error.code,
+            WorkflowRuntimeBranchTaskEventDiagnosticCode::TerminalEvent
+        );
+        assert_eq!(
+            run.lifecycle.events().len(),
+            1,
+            "a panic is not evidence that external work stopped or its reservation can be released"
+        );
+        assert!(
+            run.service
+                .session_store_guard()
+                .expect("store")
+                .active_run_scheduler_task_results(&run.session_id, "run.2026-05-22.202")
+                .expect("results")
+                .is_empty(),
+            "no old success is published after panic"
+        );
+    }
 
     #[derive(Default)]
     struct RecordingWorkerBatchExecutionPort {
@@ -3984,7 +4396,7 @@ mod tests {
         );
 
         let assignment_registration = registry
-            .attach_runtime_dispatch_assignment(&registration, &assignment_id)
+            .attach_runtime_dispatch_assignment(&registration, &assignment_id, None)
             .expect("attach assignment responder");
 
         assert_eq!(registry.active_responder_count(), 1);
@@ -4031,10 +4443,10 @@ mod tests {
             .register_workflow_run(&second_command, second_responder)
             .expect("register second workflow run responder");
         let _first_assignment_registration = registry
-            .attach_runtime_dispatch_assignment(&first_registration, &first_assignment_id)
+            .attach_runtime_dispatch_assignment(&first_registration, &first_assignment_id, None)
             .expect("attach first assignment responder");
         let _second_assignment_registration = registry
-            .attach_runtime_dispatch_assignment(&second_registration, &second_assignment_id)
+            .attach_runtime_dispatch_assignment(&second_registration, &second_assignment_id, None)
             .expect("attach second assignment responder");
         let first_expected = WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
             &first_command,
@@ -4130,11 +4542,11 @@ mod tests {
             .register_workflow_run(&second_command, second_responder)
             .expect("register second responder");
         let _attached = registry
-            .attach_runtime_dispatch_assignment(&first_registration, &assignment_id)
+            .attach_runtime_dispatch_assignment(&first_registration, &assignment_id, None)
             .expect("attach first responder");
 
         let failure = registry
-            .attach_runtime_dispatch_assignment(&second_registration, &assignment_id)
+            .attach_runtime_dispatch_assignment(&second_registration, &assignment_id, None)
             .expect_err("duplicate assignment responder must fail closed");
 
         let WorkflowTaskExecutionWorkerOutcome::RuntimeBranchFailed(outcome) = failure else {

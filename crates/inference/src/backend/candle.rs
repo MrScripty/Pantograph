@@ -553,9 +553,10 @@ impl InferenceBackend for CandleBackend {
         ))
     }
 
-    fn stop(&mut self) {
+    async fn stop(&mut self) -> Result<(), BackendError> {
         self.base_url = None;
         self.ready = false;
+        Ok(())
     }
 
     fn is_ready(&self) -> bool {

@@ -93,6 +93,8 @@ mod runtime_host_load_target;
 mod runtime_host_media_artifact_sink;
 #[allow(dead_code)]
 mod runtime_host_package_facts;
+#[allow(dead_code)]
+mod runtime_host_text_execution;
 pub mod runtime_recovery;
 pub mod runtime_registry;
 mod runtime_registry_controller;

@@ -8,7 +8,10 @@ impl runtime_registry::HostRuntimeRegistryController for inference::InferenceGat
         HostRuntimeModeSnapshot::from_mode_info(&self.mode_info().await)
     }
 
-    async fn stop_runtime_producer(&self, producer: runtime_registry::HostRuntimeProducer) {
+    async fn stop_runtime_producer(
+        &self,
+        producer: runtime_registry::HostRuntimeProducer,
+    ) -> Result<(), inference::GatewayError> {
         match producer {
             runtime_registry::HostRuntimeProducer::Active => self.stop().await,
             runtime_registry::HostRuntimeProducer::Embedding => {
@@ -16,6 +19,10 @@ impl runtime_registry::HostRuntimeRegistryController for inference::InferenceGat
                     false,
                     "embedded inference gateway cannot stop a dedicated embedding producer"
                 );
+                Err(inference::GatewayError::SwitchFailed(
+                    "embedded inference gateway cannot stop a dedicated embedding producer"
+                        .to_string(),
+                ))
             }
         }
     }
@@ -23,8 +30,8 @@ impl runtime_registry::HostRuntimeRegistryController for inference::InferenceGat
 
 #[async_trait]
 impl runtime_registry::HostRuntimeRegistryLifecycleController for inference::InferenceGateway {
-    async fn stop_all_runtime_producers(&self) {
-        self.stop().await;
+    async fn stop_all_runtime_producers(&self) -> Result<(), inference::GatewayError> {
+        self.stop().await
     }
 
     async fn restore_runtime(

@@ -79,14 +79,23 @@ fn shutdown_window_runtime(window: &Window) {
         }
 
         if let Some(gateway) = gateway {
-            invalidate_loaded_session_runtimes(app);
-            if let Some(runtime_registry) = runtime_registry {
+            let stop_result = if let Some(runtime_registry) = runtime_registry {
                 stop_all_and_sync_runtime_registry(gateway.as_ref(), runtime_registry.as_ref())
-                    .await;
+                    .await
+                    .map_err(|error| error.to_string())
             } else {
-                gateway.stop_all().await;
+                gateway.stop_all().await.map_err(|error| error.to_string())
+            };
+
+            match stop_result {
+                Ok(()) => {
+                    invalidate_loaded_session_runtimes(app);
+                    log::info!("Stopped inference gateway and embedding server on window close");
+                }
+                Err(error) => {
+                    log::error!("Failed to stop inference gateway on window close: {error}");
+                }
             }
-            log::info!("Stopped inference gateway and embedding server on window close");
         }
     });
 }

@@ -14,11 +14,12 @@ pub use pantograph_embedded_runtime::runtime_registry::{
     run_runtime_transition_and_reconcile_runtime_registry, runtime_registry_snapshot,
     stop_all_runtime_producers_and_reconcile_runtime_registry, sync_runtime_registry,
     HostRuntimeProducer, HostRuntimeRegistryController, HostRuntimeRegistryLifecycleController,
+    RuntimeLifecycleCoordinationError,
 };
 use pantograph_embedded_runtime::workflow_runtime::WorkflowExecutionDiagnosticsController;
 use pantograph_embedded_runtime::HostRuntimeModeSnapshot;
 pub use pantograph_runtime_registry::{
-    RuntimeReclaimDisposition, RuntimeRegistry, RuntimeRegistryError, SharedRuntimeRegistry,
+    RuntimeReclaimDisposition, RuntimeRegistry, SharedRuntimeRegistry,
 };
 
 #[async_trait]
@@ -27,11 +28,18 @@ impl HostRuntimeRegistryController for crate::llm::gateway::InferenceGateway {
         HostRuntimeModeSnapshot::from_mode_info(&self.mode_info().await)
     }
 
-    async fn stop_runtime_producer(&self, producer: HostRuntimeProducer) {
-        match producer {
+    async fn stop_runtime_producer(
+        &self,
+        producer: HostRuntimeProducer,
+    ) -> Result<(), inference::GatewayError> {
+        let result = match producer {
             HostRuntimeProducer::Active => self.stop().await,
-            HostRuntimeProducer::Embedding => self.stop_embedding_server().await,
-        }
+            HostRuntimeProducer::Embedding => {
+                self.stop_embedding_server().await;
+                Ok(())
+            }
+        };
+        result.map_err(inference_gateway_error)
     }
 
     async fn runtime_health_assessment_snapshot(&self) -> RuntimeHealthAssessmentSnapshot {
@@ -41,8 +49,8 @@ impl HostRuntimeRegistryController for crate::llm::gateway::InferenceGateway {
 
 #[async_trait]
 impl HostRuntimeRegistryLifecycleController for crate::llm::gateway::InferenceGateway {
-    async fn stop_all_runtime_producers(&self) {
-        self.stop_all().await;
+    async fn stop_all_runtime_producers(&self) -> Result<(), inference::GatewayError> {
+        self.stop_all().await.map_err(inference_gateway_error)
     }
 
     async fn restore_runtime(
@@ -92,8 +100,8 @@ pub async fn sync_runtime_registry_from_gateway_health_assessments(
 pub async fn stop_all_and_sync_runtime_registry(
     gateway: &crate::llm::gateway::InferenceGateway,
     registry: &RuntimeRegistry,
-) {
-    stop_all_runtime_producers_and_reconcile_runtime_registry(gateway, registry).await;
+) -> Result<(), RuntimeLifecycleCoordinationError> {
+    stop_all_runtime_producers_and_reconcile_runtime_registry(gateway, registry).await
 }
 
 pub async fn restore_runtime_and_sync_runtime_registry(
@@ -108,8 +116,17 @@ pub async fn reclaim_runtime_and_sync_runtime_registry(
     gateway: &crate::llm::gateway::InferenceGateway,
     registry: &RuntimeRegistry,
     runtime_id: &str,
-) -> Result<RuntimeReclaimDisposition, RuntimeRegistryError> {
+) -> Result<RuntimeReclaimDisposition, RuntimeLifecycleCoordinationError> {
     reclaim_runtime_and_reconcile_runtime_registry(gateway, registry, runtime_id).await
+}
+
+fn inference_gateway_error(error: crate::llm::gateway::GatewayError) -> inference::GatewayError {
+    match error {
+        crate::llm::gateway::GatewayError::Inner(error) => error,
+        crate::llm::gateway::GatewayError::EmbeddingRuntime(message) => {
+            inference::GatewayError::Backend(inference::BackendError::Inference(message))
+        }
+    }
 }
 
 pub async fn run_runtime_transition_and_sync_runtime_registry<F, Fut, T, E>(
@@ -145,7 +162,7 @@ mod tests {
     };
     use pantograph_embedded_runtime::runtime_registry::live_host_runtime_producer;
     use pantograph_runtime_registry::{
-        RuntimeRegistration, RuntimeRetentionReason, RuntimeTransition,
+        RuntimeRegistration, RuntimeRegistryStatus, RuntimeRetentionReason, RuntimeTransition,
     };
     use tokio::sync::mpsc;
 
@@ -186,12 +203,21 @@ mod tests {
 
     struct MockInferenceBackend {
         ready: Arc<Mutex<bool>>,
+        fail_stop: bool,
     }
 
     impl MockInferenceBackend {
         fn new() -> Self {
             Self {
                 ready: Arc::new(Mutex::new(false)),
+                fail_stop: false,
+            }
+        }
+
+        fn failing_stop() -> Self {
+            Self {
+                ready: Arc::new(Mutex::new(false)),
+                fail_stop: true,
             }
         }
     }
@@ -222,8 +248,12 @@ mod tests {
             })
         }
 
-        fn stop(&mut self) {
+        async fn stop(&mut self) -> Result<(), BackendError> {
+            if self.fail_stop {
+                return Err(BackendError::Inference("mock stop failure".to_string()));
+            }
             *self.ready.lock().expect("mock backend ready lock poisoned") = false;
+            Ok(())
         }
 
         fn is_ready(&self) -> bool {
@@ -325,7 +355,9 @@ mod tests {
         let registry = RuntimeRegistry::new();
         sync_runtime_registry_from_gateway(&gateway, &registry).await;
 
-        stop_all_and_sync_runtime_registry(&gateway, &registry).await;
+        stop_all_and_sync_runtime_registry(&gateway, &registry)
+            .await
+            .expect("stop-all should succeed");
 
         let snapshot = registry.snapshot();
         let embedding_runtime = snapshot
@@ -549,6 +581,46 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn reclaim_runtime_and_sync_runtime_registry_propagates_stop_failure() {
+        let gateway = crate::llm::gateway::InferenceGateway::with_test_backend(
+            Box::new(MockInferenceBackend::failing_stop()),
+            "PyTorch",
+            Arc::new(MockProcessSpawner),
+        );
+        gateway.init().await;
+        gateway
+            .start(&BackendConfig::default())
+            .await
+            .expect("gateway should start");
+
+        let registry = RuntimeRegistry::new();
+        sync_runtime_registry_from_gateway(&gateway, &registry).await;
+
+        let error = reclaim_runtime_and_sync_runtime_registry(&gateway, &registry, "pytorch")
+            .await
+            .expect_err("failed stop must fail reclaim");
+        assert!(matches!(
+            error,
+            RuntimeLifecycleCoordinationError::Gateway(
+                inference::GatewayError::Backend(inference::BackendError::Inference(message))
+            ) if message == "mock stop failure"
+        ));
+
+        let runtime = registry
+            .snapshot()
+            .runtimes
+            .into_iter()
+            .find(|runtime| runtime.runtime_id == "pytorch")
+            .expect("runtime should remain registered after failed stop");
+        assert_eq!(runtime.status, RuntimeRegistryStatus::Ready);
+        assert!(runtime.runtime_instance_id.is_some());
+        assert_eq!(
+            runtime.last_error.as_deref(),
+            Some("Inference error: mock stop failure")
+        );
+    }
+
+    #[tokio::test]
     async fn reclaim_runtime_and_sync_runtime_registry_stops_embedding_runtime_producer() {
         let gateway = crate::llm::gateway::InferenceGateway::new(Arc::new(MockProcessSpawner));
         gateway.init().await;
@@ -614,7 +686,9 @@ mod tests {
 
         let registry = RuntimeRegistry::new();
         sync_runtime_registry_from_gateway(&gateway, &registry).await;
-        stop_all_and_sync_runtime_registry(&gateway, &registry).await;
+        stop_all_and_sync_runtime_registry(&gateway, &registry)
+            .await
+            .expect("stop-all should succeed");
 
         let stopped_runtime = registry
             .snapshot()
@@ -701,7 +775,10 @@ mod tests {
         let gateway_ref = &gateway;
         let error =
             run_runtime_transition_and_sync_runtime_registry(&gateway, &registry, |_| async move {
-                gateway_ref.stop().await;
+                gateway_ref
+                    .stop()
+                    .await
+                    .expect("gateway stop should succeed");
                 Err::<(), _>("transition failed")
             })
             .await

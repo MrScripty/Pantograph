@@ -13,7 +13,8 @@ pub use crate::runtime_registry_lifecycle::{
     stop_all_runtime_producers_and_reconcile_runtime_registry, sync_runtime_registry,
     sync_runtime_registry_with_active_health_assessment,
     sync_runtime_registry_with_health_assessments, HostRuntimeRegistryController,
-    HostRuntimeRegistryLifecycleController, RuntimeWarmupCoordinationError,
+    HostRuntimeRegistryLifecycleController, RuntimeLifecycleCoordinationError,
+    RuntimeWarmupCoordinationError,
 };
 pub use crate::runtime_registry_observations::{
     active_runtime_descriptor, active_runtime_id, active_runtime_observation,

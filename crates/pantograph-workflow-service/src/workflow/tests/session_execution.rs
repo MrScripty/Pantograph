@@ -57,6 +57,79 @@ use crate::workflow::runtime_dispatch_selection::{
 };
 use crate::{GraphNode, Position, WorkflowTechnicalFitDeviceClass};
 
+fn assert_immediate_runtime_members<'a>(
+    service: &WorkflowService,
+    requests: &'a [RuntimeHostBatchExecutionRequest],
+) -> Vec<&'a pantograph_runtime_host_contracts::RuntimeHostBatchExecutionMemberRequest> {
+    assert!(requests
+        .iter()
+        .all(|request| (1..=8).contains(&request.members.len())));
+    let members = requests
+        .iter()
+        .flat_map(|request| &request.members)
+        .collect::<Vec<_>>();
+    assert_eq!(members.len(), 2);
+    assert_ne!(
+        members[0].execution_request_id,
+        members[1].execution_request_id
+    );
+    assert_ne!(members[0].assignment_id, members[1].assignment_id);
+    assert_ne!(
+        members[0].handoff.workflow_run_id,
+        members[1].handoff.workflow_run_id
+    );
+    let mut attempts = std::collections::BTreeSet::new();
+    for member in &members {
+        let assignment_id =
+            super::super::runtime_dispatch_assignment::WorkflowRuntimeDispatchAssignmentId::parse(
+                member.assignment_id.clone(),
+            )
+            .expect("assignment id");
+        let assignment = service
+            .runtime_dispatch_assignment_for_test(&assignment_id)
+            .expect("persisted assignment");
+        assert_eq!(
+            assignment.workflow_run_id,
+            member.handoff.workflow_run_id.as_str()
+        );
+        assert!(attempts.insert(assignment.scheduler_task_attempt_id));
+    }
+    members
+}
+
+fn assert_runtime_member_sessions(
+    service: &WorkflowService,
+    members: &[&pantograph_runtime_host_contracts::RuntimeHostBatchExecutionMemberRequest],
+    expected: &[String],
+) {
+    let mut sessions = members.iter().map(|member| {
+        let assignment_id = super::super::runtime_dispatch_assignment::WorkflowRuntimeDispatchAssignmentId::parse(member.assignment_id.clone()).expect("assignment id");
+        let assignment = service.runtime_dispatch_assignment_for_test(&assignment_id).expect("persisted assignment");
+        let event = service.runtime_branch_task_event_for_test(&assignment.runtime_branch_event_id).expect("persisted event");
+        assert_eq!(event.workflow_run_id, member.handoff.workflow_run_id.as_str());
+        assert_eq!(event.session_id, assignment.session_id);
+        event.session_id
+    }).collect::<Vec<_>>();
+    let mut expected = expected.to_vec();
+    sessions.sort();
+    expected.sort();
+    assert_eq!(sessions, expected);
+}
+
+fn assert_runtime_member_run_ids(
+    members: &[&pantograph_runtime_host_contracts::RuntimeHostBatchExecutionMemberRequest],
+    expected: &[String],
+) {
+    let mut actual = members
+        .iter()
+        .map(|member| member.handoff.workflow_run_id.as_str().to_string())
+        .collect::<Vec<_>>();
+    let mut expected = expected.to_vec();
+    actual.sort();
+    expected.sort();
+    assert_eq!(actual, expected);
+}
+
 #[tokio::test]
 async fn workflow_execution_session_lifecycle_create_run_close() {
     let host = MockWorkflowHost::new(8, 1024);
@@ -1000,10 +1073,15 @@ async fn workflow_execution_session_dispatches_ready_runtime_task_through_schedu
         assert_eq!(status.session.queued_runs, 0);
     }
     let recorded = runtime_host_batch_port.requests();
-    assert_eq!(recorded.len(), 1);
-    assert_eq!(recorded[0].members.len(), 2);
-    let mut recorded_prompts = recorded[0]
-        .members
+    let members = assert_immediate_runtime_members(&service, &recorded);
+    assert_runtime_member_run_ids(
+        &members,
+        &[
+            first_response.workflow_run_id.clone(),
+            second_response.workflow_run_id.clone(),
+        ],
+    );
+    let mut recorded_prompts = members
         .iter()
         .map(|member| {
             assert_eq!(member.materialized_inputs.len(), 1);
@@ -1575,8 +1653,8 @@ async fn workflow_execution_session_bootstrap_recovery_applies_dependency_readin
     resumed_run_ids.sort();
     assert_eq!(resumed_run_ids, workflow_run_ids);
     let recorded_batches = runtime_host_batch_port.requests();
-    assert_eq!(recorded_batches.len(), 1);
-    assert_eq!(recorded_batches[0].members.len(), 2);
+    let members = assert_immediate_runtime_members(&service, &recorded_batches);
+    assert_runtime_member_run_ids(&members, &workflow_run_ids);
     assert!(service
         .workflow_execution_session_runtime_dependency_readiness_resume_candidates()
         .expect("resume candidates after bootstrap recovery")
@@ -1754,8 +1832,8 @@ async fn workflow_execution_session_bootstrap_recovery_applies_progress_loop_bef
     assert_eq!(resumed_run_ids, workflow_run_ids);
     assert!(recovery_result.final_plan.decisions.is_empty());
     let recorded_batches = runtime_host_batch_port.requests();
-    assert_eq!(recorded_batches.len(), 1);
-    assert_eq!(recorded_batches[0].members.len(), 2);
+    let members = assert_immediate_runtime_members(&service, &recorded_batches);
+    assert_runtime_member_run_ids(&members, &workflow_run_ids);
     assert!(service
         .workflow_execution_session_runtime_dependency_readiness_resume_candidates()
         .expect("resume candidates after bootstrap progress recovery")
@@ -1976,8 +2054,8 @@ async fn workflow_execution_session_bootstrap_recovery_redispatches_ready_runtim
     assert_eq!(resumed_run_ids, expected_run_ids);
     assert!(recovery_result.final_plan.decisions.is_empty());
     let recorded_batches = runtime_host_batch_port.requests();
-    assert_eq!(recorded_batches.len(), 1);
-    assert_eq!(recorded_batches[0].members.len(), 2);
+    let members = assert_immediate_runtime_members(&service, &recorded_batches);
+    assert_runtime_member_run_ids(&members, &expected_run_ids);
     let diagnostic_events = {
         let ledger = service
             .diagnostics_ledger_guard()
@@ -2250,8 +2328,12 @@ async fn workflow_execution_session_records_failed_runtime_host_result_as_termin
         );
     }
     let recorded = runtime_host_batch_port.requests();
-    assert_eq!(recorded.len(), 1);
-    assert_eq!(recorded[0].members.len(), 2);
+    let members = assert_immediate_runtime_members(&service, &recorded);
+    assert_runtime_member_sessions(
+        &service,
+        &members,
+        &[first_session_id.clone(), second_session_id.clone()],
+    );
     for session_id in [&first_session_id, &second_session_id] {
         let status = service
             .workflow_get_execution_session_status(WorkflowExecutionSessionStatusRequest {
@@ -2375,8 +2457,12 @@ async fn workflow_execution_session_records_runtime_batch_dispatch_rejection_as_
         );
     }
     let recorded = runtime_host_batch_port.requests();
-    assert_eq!(recorded.len(), 1);
-    assert_eq!(recorded[0].members.len(), 2);
+    let members = assert_immediate_runtime_members(&service, &recorded);
+    assert_runtime_member_sessions(
+        &service,
+        &members,
+        &[first_session_id.clone(), second_session_id.clone()],
+    );
 }
 
 #[tokio::test]

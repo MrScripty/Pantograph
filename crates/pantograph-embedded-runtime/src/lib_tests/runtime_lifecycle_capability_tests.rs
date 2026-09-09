@@ -127,7 +127,10 @@ async fn hosted_composition_constructor_preserves_preconfigured_service_capacity
         .expect("local network status");
     assert_eq!(status.local_node.scheduler_load.max_loaded_sessions, 1);
 
-    runtime.shutdown().await;
+    runtime
+        .shutdown()
+        .await
+        .expect("runtime shutdown should succeed");
 }
 
 #[tokio::test]
@@ -191,7 +194,10 @@ async fn embedded_runtime_shutdown_reconciles_registry_to_stopped() {
         .expect("active runtime should be registered before shutdown");
     assert_eq!(ready_runtime.status, RuntimeRegistryStatus::Ready);
 
-    runtime.shutdown().await;
+    runtime
+        .shutdown()
+        .await
+        .expect("runtime shutdown should succeed");
 
     let stopped_snapshot = runtime_registry.snapshot();
     let stopped_runtime = stopped_snapshot
@@ -248,7 +254,10 @@ async fn embedded_runtime_shutdown_marks_loaded_sessions_unloaded() {
         WorkflowExecutionSessionState::IdleLoaded
     );
 
-    runtime.shutdown().await;
+    runtime
+        .shutdown()
+        .await
+        .expect("runtime shutdown should succeed");
 
     let status = runtime
         .workflow_get_execution_session_status(WorkflowExecutionSessionStatusRequest {
@@ -292,7 +301,10 @@ async fn embedded_runtime_shutdown_stops_workflow_graph_validation_tasks() {
         .await
         .expect("create graph edit session");
 
-    runtime.shutdown().await;
+    runtime
+        .shutdown()
+        .await
+        .expect("runtime shutdown should succeed");
 
     let error = runtime
         .workflow_service()

@@ -97,7 +97,9 @@ async fn stop_all_runtime_producers_and_reconcile_runtime_registry_syncs_after_s
     let registry = RuntimeRegistry::new();
     reconcile_runtime_registry_mode_info(&registry, &controller.mode_info_snapshot().await);
 
-    stop_all_runtime_producers_and_reconcile_runtime_registry(&controller, &registry).await;
+    stop_all_runtime_producers_and_reconcile_runtime_registry(&controller, &registry)
+        .await
+        .expect("stop-all should succeed");
 
     assert_eq!(
         *controller

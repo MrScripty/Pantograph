@@ -37,7 +37,10 @@ impl HostRuntimeRegistryController for MockHostRuntimeController {
             .clone()
     }
 
-    async fn stop_runtime_producer(&self, producer: HostRuntimeProducer) {
+    async fn stop_runtime_producer(
+        &self,
+        producer: HostRuntimeProducer,
+    ) -> Result<(), inference::GatewayError> {
         self.stopped_producers
             .lock()
             .expect("stopped producers lock poisoned")
@@ -51,12 +54,13 @@ impl HostRuntimeRegistryController for MockHostRuntimeController {
                 mode_info.embedding_runtime = Some(inference::RuntimeLifecycleSnapshot::default());
             }
         }
+        Ok(())
     }
 }
 
 #[async_trait]
 impl HostRuntimeRegistryLifecycleController for MockHostRuntimeController {
-    async fn stop_all_runtime_producers(&self) {
+    async fn stop_all_runtime_producers(&self) -> Result<(), inference::GatewayError> {
         *self
             .stop_all_calls
             .lock()
@@ -64,6 +68,7 @@ impl HostRuntimeRegistryLifecycleController for MockHostRuntimeController {
         let mut mode_info = self.mode_info.lock().expect("mode info lock poisoned");
         mode_info.active_runtime = Some(inference::RuntimeLifecycleSnapshot::default());
         mode_info.embedding_runtime = Some(inference::RuntimeLifecycleSnapshot::default());
+        Ok(())
     }
 
     async fn restore_runtime(
@@ -117,7 +122,12 @@ impl HostRuntimeRegistryController for HealthAwareHostRuntimeController {
         self.mode_info.clone()
     }
 
-    async fn stop_runtime_producer(&self, _producer: HostRuntimeProducer) {}
+    async fn stop_runtime_producer(
+        &self,
+        _producer: HostRuntimeProducer,
+    ) -> Result<(), inference::GatewayError> {
+        Ok(())
+    }
 
     async fn runtime_health_assessment_snapshot(&self) -> RuntimeHealthAssessmentSnapshot {
         self.health_assessments.clone()
@@ -130,7 +140,12 @@ impl HostRuntimeRegistryController for HealthAwareLifecycleController {
         self.mode_info.clone()
     }
 
-    async fn stop_runtime_producer(&self, _producer: HostRuntimeProducer) {}
+    async fn stop_runtime_producer(
+        &self,
+        _producer: HostRuntimeProducer,
+    ) -> Result<(), inference::GatewayError> {
+        Ok(())
+    }
 
     async fn runtime_health_assessment_snapshot(&self) -> RuntimeHealthAssessmentSnapshot {
         self.health_assessments.clone()
@@ -139,7 +154,9 @@ impl HostRuntimeRegistryController for HealthAwareLifecycleController {
 
 #[async_trait]
 impl HostRuntimeRegistryLifecycleController for HealthAwareLifecycleController {
-    async fn stop_all_runtime_producers(&self) {}
+    async fn stop_all_runtime_producers(&self) -> Result<(), inference::GatewayError> {
+        Ok(())
+    }
 
     async fn restore_runtime(
         &self,
@@ -150,6 +167,26 @@ impl HostRuntimeRegistryLifecycleController for HealthAwareLifecycleController {
             .expect("restore calls lock poisoned")
             .push(restore_config);
         Ok(())
+    }
+}
+
+struct FailingStopHostRuntimeController {
+    mode_info: HostRuntimeModeSnapshot,
+}
+
+#[async_trait]
+impl HostRuntimeRegistryController for FailingStopHostRuntimeController {
+    async fn mode_info_snapshot(&self) -> HostRuntimeModeSnapshot {
+        self.mode_info.clone()
+    }
+
+    async fn stop_runtime_producer(
+        &self,
+        _producer: HostRuntimeProducer,
+    ) -> Result<(), inference::GatewayError> {
+        Err(inference::GatewayError::Backend(
+            inference::BackendError::Inference("mock stop failure".to_string()),
+        ))
     }
 }
 
@@ -209,6 +246,56 @@ fn live_host_runtime_producer_matches_embedding_runtime_aliases() {
     );
 
     assert_eq!(producer, Some(HostRuntimeProducer::Embedding));
+}
+
+#[tokio::test]
+async fn reclaim_runtime_and_reconcile_runtime_registry_preserves_residency_on_stop_failure() {
+    let controller = FailingStopHostRuntimeController {
+        mode_info: HostRuntimeModeSnapshot {
+            backend_name: Some("PyTorch".to_string()),
+            backend_key: Some("pytorch".to_string()),
+            active_model_target: None,
+            embedding_model_target: None,
+            active_runtime: Some(inference::RuntimeLifecycleSnapshot {
+                runtime_id: Some("pytorch".to_string()),
+                runtime_instance_id: Some("pytorch-occupied".to_string()),
+                warmup_timing_attempt_id: None,
+                warmup_started_at_ms: Some(10),
+                warmup_completed_at_ms: Some(20),
+                warmup_duration_ms: Some(10),
+                timing_diagnostics: Vec::new(),
+                runtime_reused: Some(false),
+                lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                active: true,
+                last_error: None,
+            }),
+            embedding_runtime: None,
+        },
+    };
+    let registry = RuntimeRegistry::new();
+    reconcile_runtime_registry_mode_info(&registry, &controller.mode_info_snapshot().await);
+
+    let error = reclaim_runtime_and_reconcile_runtime_registry(&controller, &registry, "pytorch")
+        .await
+        .expect_err("failed stop must fail reclaim");
+    assert!(matches!(
+        error,
+        RuntimeLifecycleCoordinationError::Gateway(
+            inference::GatewayError::Backend(inference::BackendError::Inference(message))
+        ) if message == "mock stop failure"
+    ));
+
+    let runtime = registry
+        .snapshot()
+        .runtimes
+        .into_iter()
+        .find(|runtime| runtime.runtime_id == "pytorch")
+        .expect("runtime should remain registered after failed stop");
+    assert_eq!(
+        runtime.runtime_instance_id.as_deref(),
+        Some("pytorch-occupied")
+    );
+    assert!(runtime.models.is_empty());
 }
 
 #[tokio::test]

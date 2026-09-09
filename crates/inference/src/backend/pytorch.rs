@@ -71,6 +71,9 @@ mod pytorch_worker_contract;
 #[path = "pytorch_worker_image_contract.rs"]
 mod pytorch_worker_image_contract;
 
+#[path = "pytorch_text_job.rs"]
+mod pytorch_text_job;
+
 const ALLOWED_TRANSFORMERS_GENERATE_KWARGS: &[&str] = &["top_k"];
 
 /// Host-observed PyTorch device probe facts.
@@ -104,6 +107,7 @@ impl PyTorchDeviceProbeSnapshot {
 pub struct PyTorchBackend {
     /// Whether the backend has been initialised and is ready
     ready: bool,
+    text_jobs: pytorch_text_job::TextJobs,
     /// Currently loaded model metadata
     loaded_model: Option<LoadedModelInfo>,
 }
@@ -867,16 +871,6 @@ pub async fn active_loaded_model_info() -> Result<LoadedModelInfo, BackendError>
     .map_err(|e| BackendError::Inference(task_join_error_message(e)))?
 }
 
-pub async fn unload_embedded_pytorch_model() -> Result<(), BackendError> {
-    let request_id = format!("pytorch-unload-{}", Uuid::new_v4().simple());
-    let envelope_json = PyTorchBackend::unload_model_envelope_json(&request_id)?;
-    tokio::task::spawn_blocking(move || {
-        PyTorchBackend::unload_model_from_envelope_blocking(&request_id, envelope_json)
-    })
-    .await
-    .map_err(|e| BackendError::Inference(task_join_error_message(e)))?
-}
-
 pub async fn save_live_kv_snapshot(path: &Path) -> Result<PyTorchLiveKvInfo, BackendError> {
     let path = path.to_path_buf();
     let request_id = format!("pytorch-kv-save-{}", Uuid::new_v4().simple());
@@ -1010,6 +1004,7 @@ impl PyTorchBackend {
     pub fn new() -> Self {
         Self {
             ready: false,
+            text_jobs: Default::default(),
             loaded_model: None,
         }
     }
@@ -1235,6 +1230,31 @@ impl PyTorchBackend {
         self.load_transformers_envelope(envelope).await
     }
 
+    async fn selected_text_load_envelope(
+        request: &crate::InferenceExecutionRequest,
+        target: &crate::PumasArtifactLoadTarget,
+        decision: &crate::BackendExecutionDecision,
+    ) -> Result<PyTorchWorkerEnvelope<PyTorchTransformersLoadRequest>, BackendError> {
+        let selected =
+            crate::selected_text_execution::SelectedTextLoad::validate(request, target, decision)
+                .await?;
+        let mut envelope = Self::transformers_load_envelope_from_package(
+            request.request_id.clone().ok_or_else(|| {
+                BackendError::Config("selected text request id is required".into())
+            })?,
+            selected.package,
+            Some(selected.device),
+            Self::default_transformers_trust_policy(),
+        )?;
+        // Package paths remain logical facts; only the separate Pumas target is executable.
+        envelope.payload.entry_path = selected.target.local_load_path.clone();
+        if let Some(source) = envelope.payload.model_source.as_mut() {
+            source.entry_path = selected.target.local_load_path.clone();
+        }
+        Self::validate_transformers_load_envelope(&envelope)?;
+        Ok(envelope)
+    }
+
     fn default_transformers_trust_policy() -> PyTorchTransformersTrustPolicy {
         PyTorchTransformersTrustPolicy::default()
     }
@@ -1341,6 +1361,7 @@ impl PyTorchBackend {
         &mut self,
         envelope: PyTorchWorkerEnvelope<PyTorchTransformersLoadRequest>,
     ) -> Result<LoadedModelInfo, BackendError> {
+        self.text_jobs.drain(false).await?;
         Self::validate_transformers_load_envelope(&envelope)?;
         let request_id = envelope.request_id.clone();
         let envelope_json = serde_json::to_string(&envelope).map_err(|error| {
@@ -1348,6 +1369,12 @@ impl PyTorchBackend {
                 "Failed to encode PyTorch worker load envelope: {error}"
             ))
         })?;
+
+        // The worker can unload the resident model before replacement fails.
+        // Once effectful loading begins, old metadata no longer proves residency.
+        // Drain and envelope validation above leave the prior residency intact.
+        self.ready = false;
+        self.loaded_model = None;
 
         let info = tokio::task::spawn_blocking(move || {
             Python::with_gil(|py| -> Result<LoadedModelInfo, BackendError> {
@@ -2439,6 +2466,7 @@ impl PyTorchBackend {
 
     /// Unload the current model and free GPU memory.
     pub async fn unload_model(&mut self) -> Result<(), BackendError> {
+        self.text_jobs.drain(false).await?;
         let request_id = format!("pytorch-unload-{}", Uuid::new_v4().simple());
         let envelope_json = Self::unload_model_envelope_json(&request_id)?;
         tokio::task::spawn_blocking(move || {
@@ -2505,8 +2533,9 @@ impl PyTorchBackend {
             ))
         })?;
 
-        tokio::task::spawn_blocking(move || {
-            Python::with_gil(|py| -> Result<String, BackendError> {
+        let mut stream = self.text_jobs.spawn(move |mut producer| {
+            producer.check()?;
+            let text = Python::with_gil(|py| -> Result<String, BackendError> {
                 let worker = pytorch_worker::worker_module(py).map_err(|e| {
                     Self::generate_text_worker_failure_from_message(
                         &request_id,
@@ -2533,10 +2562,29 @@ impl PyTorchBackend {
                     )
                 })?;
                 Self::generate_text_from_worker_response(&request_id, &response_json)
+            })?;
+            producer.check()?;
+            producer.send(ChatChunk {
+                content: Some(text),
+                done: false,
+                usage: None,
+                cache_handle_id: None,
             })
-        })
-        .await
-        .map_err(|e| BackendError::Inference(task_join_error_message(e)))?
+        })?;
+        use futures_util::StreamExt;
+        let mut text = String::new();
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk?;
+            if let Some(content) = chunk.content {
+                text.push_str(&content);
+            }
+            if chunk.done {
+                return Ok(text);
+            }
+        }
+        Err(BackendError::Inference(
+            "PyTorch text stream ended before completion".into(),
+        ))
     }
 
     /// Generate tokens as a stream via an mpsc channel.
@@ -2603,105 +2651,46 @@ impl PyTorchBackend {
             }
         };
 
-        tokio::task::spawn_blocking(move || {
-            Python::with_gil(|py| {
-                let worker = match pytorch_worker::worker_module(py) {
-                    Ok(w) => w,
-                    Err(e) => {
-                        let _ = tx.blocking_send(Err(Self::stream_worker_failure_from_message(
-                            &request_id,
-                            format!("Failed to get worker module: {}", e),
-                        )));
-                        return;
-                    }
+        let stream = self.text_jobs.spawn(move |mut producer| {
+            producer.check()?;
+            Python::with_gil(|py| -> Result<(), BackendError> {
+                let failure = |error: PyErr| {
+                    Self::stream_worker_failure_from_message(&request_id, error.to_string())
                 };
-
-                let setup_response_json = match worker
+                let worker = pytorch_worker::worker_module(py).map_err(failure)?;
+                let setup = worker
                     .call_method1(
                         "generate_text_stream_setup_from_envelope",
                         (&envelope_json,),
                     )
                     .and_then(|result| result.extract::<String>())
-                {
-                    Ok(response_json) => response_json,
-                    Err(e) => {
-                        let _ = tx.blocking_send(Err(Self::stream_worker_failure_from_message(
-                            &request_id,
-                            format!("PyTorch worker generate_text_stream setup failed: {}", e),
-                        )));
-                        return;
-                    }
-                };
-                if let Err(error) =
-                    Self::stream_setup_from_worker_response(&request_id, &setup_response_json)
-                {
-                    let _ = tx.blocking_send(Err(error));
-                    return;
-                }
-
-                let generator = match worker
+                    .map_err(failure)?;
+                Self::stream_setup_from_worker_response(&request_id, &setup)?;
+                producer.check()?;
+                let generator = worker
                     .call_method1("generate_text_stream_from_envelope", (envelope_json,))
-                {
-                    Ok(g) => g,
-                    Err(e) => {
-                        let _ = tx.blocking_send(Err(Self::stream_worker_failure_from_message(
-                            &request_id,
-                            format!("PyTorch worker generate_text_stream envelope failed: {}", e),
-                        )));
-                        return;
-                    }
-                };
-
-                // Iterate the Python generator
-                let iter = match generator.try_iter() {
-                    Ok(it) => it,
-                    Err(e) => {
-                        let _ = tx.blocking_send(Err(Self::stream_worker_failure_from_message(
-                            &request_id,
-                            format!("Generator is not iterable: {}", e),
-                        )));
-                        return;
-                    }
-                };
-
-                for item in iter {
-                    match item {
-                        Ok(token_obj) => {
-                            let chunk =
-                                match Self::stream_chunk_from_python_token(&request_id, &token_obj)
-                                {
-                                    Ok(chunk) => chunk,
-                                    Err(error) => {
-                                        let _ = tx.blocking_send(Err(error));
-                                        return;
-                                    }
-                                };
-                            if tx.blocking_send(Ok(chunk)).is_err() {
-                                return;
-                            }
-                        }
-                        Err(e) => {
-                            let _ =
-                                tx.blocking_send(Err(Self::stream_worker_failure_from_message(
-                                    &request_id,
-                                    format!("Generator error: {}", e),
-                                )));
-                            return;
-                        }
-                    }
+                    .map_err(failure)?;
+                let mut iter = generator.try_iter().map_err(failure)?;
+                loop {
+                    producer.check()?;
+                    let item = iter.next();
+                    producer.check()?;
+                    let Some(item) = item else {
+                        break;
+                    };
+                    let token = item.map_err(failure)?;
+                    let mut chunk = Self::stream_chunk_from_python_token(&request_id, &token)?;
+                    // Only the joined producer completion can publish terminal success.
+                    chunk.done = false;
+                    producer.send(chunk)?;
                 }
-
-                // Signal completion
-                let _ = tx.blocking_send(Ok(ChatChunk {
-                    content: None,
-                    done: true,
-                    usage: None,
-                    cache_handle_id: None,
-                }));
-            });
+                Ok(())
+            })
         });
-
-        Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx))
+        match stream {
+            Ok(stream) => stream,
+            Err(error) => Box::pin(futures_util::stream::once(async move { Err(error) })),
+        }
     }
 }
 
@@ -2746,6 +2735,7 @@ impl InferenceBackend for PyTorchBackend {
         config: &BackendConfig,
         _spawner: Arc<dyn ProcessSpawner>,
     ) -> Result<BackendStartOutcome, BackendError> {
+        self.text_jobs.drain(false).await?;
         let was_ready = self.ready;
 
         // Initialise the Python worker module
@@ -2808,29 +2798,38 @@ impl InferenceBackend for PyTorchBackend {
         })
     }
 
-    fn stop(&mut self) {
-        // Best-effort unload — can't await in a sync fn, so use blocking
-        let had_model = self.loaded_model.is_some();
+    async fn load_selected_text(
+        &mut self,
+        request: &crate::InferenceExecutionRequest,
+        target: &crate::PumasArtifactLoadTarget,
+        decision: &crate::BackendExecutionDecision,
+    ) -> Result<BackendStartOutcome, BackendError> {
+        let envelope = Self::selected_text_load_envelope(request, target, decision).await?;
+        self.load_transformers_envelope(envelope).await?;
+        Ok(BackendStartOutcome {
+            runtime_reused: Some(false),
+            lifecycle_decision_reason: Some("scheduler_selected_text_package_loaded".into()),
+        })
+    }
+
+    async fn finish_selected_text(&self, cancel: bool) -> Result<(), BackendError> {
+        self.text_jobs.drain(cancel).await
+    }
+
+    async fn stop(&mut self) -> Result<(), BackendError> {
+        self.text_jobs.drain(true).await?;
+        if self.ready || self.loaded_model.is_some() {
+            let request_id = format!("pytorch-stop-shutdown-{}", Uuid::new_v4().simple());
+            let envelope_json = shutdown_worker_envelope_json(&request_id)?;
+            tokio::task::spawn_blocking(move || {
+                shutdown_worker_from_envelope_blocking(&request_id, envelope_json)
+            })
+            .await
+            .map_err(|e| BackendError::Inference(task_join_error_message(e)))??;
+        }
         self.loaded_model = None;
         self.ready = false;
-
-        if had_model {
-            let request_id = format!("pytorch-stop-shutdown-{}", Uuid::new_v4().simple());
-            match shutdown_worker_envelope_json(&request_id) {
-                Ok(envelope_json) => {
-                    std::thread::spawn(move || {
-                        if let Err(error) =
-                            shutdown_worker_from_envelope_blocking(&request_id, envelope_json)
-                        {
-                            log::debug!("PyTorch stop best-effort shutdown failed: {error}");
-                        }
-                    });
-                }
-                Err(error) => {
-                    log::debug!("PyTorch stop best-effort shutdown envelope build failed: {error}");
-                }
-            }
-        }
+        Ok(())
     }
 
     fn is_ready(&self) -> bool {
@@ -3090,9 +3089,20 @@ fn extract_prompt_from_messages(request: &serde_json::Value) -> Result<String, B
         .iter()
         .rev()
         .find(|m| m.get("role").and_then(|r| r.as_str()) == Some("user"))
-        .and_then(|m| m.get("content").and_then(|c| c.as_str()))
-        .map(|s| s.to_string())
+        .and_then(message_text_content)
         .ok_or_else(|| BackendError::Inference("No user message found".to_string()))
+}
+
+fn message_text_content(message: &serde_json::Value) -> Option<String> {
+    let content = message.get("content")?;
+    if let Some(text) = content.as_str() {
+        return Some(text.to_owned());
+    }
+    content
+        .as_array()?
+        .iter()
+        .map(|part| (part.get("type")?.as_str()? == "text").then(|| part.get("text")?.as_str())?)
+        .collect::<Option<String>>()
 }
 
 /// Extract the system prompt from OpenAI-format messages array, if present.
@@ -3103,8 +3113,7 @@ fn extract_system_prompt(request: &serde_json::Value) -> Option<String> {
         .and_then(|msgs| {
             msgs.iter()
                 .find(|m| m.get("role").and_then(|r| r.as_str()) == Some("system"))
-                .and_then(|m| m.get("content").and_then(|c| c.as_str()))
-                .map(|s| s.to_string())
+                .and_then(message_text_content)
         })
 }
 

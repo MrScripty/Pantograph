@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Smoke test the Pantograph diffusion worker against a local model bundle.
+"""Smoke test a built-in StableDiffusionPipeline local safetensors bundle.
+
+Custom code and other pipeline families are unsupported. Safetensors are required;
+any index-referenced non-safetensors shards use restricted weights-only loading.
+The adapter requires qualified Diffusers 0.37.0 and Torch 2.6 or newer.
 
 This script loads the same worker module Pantograph uses for process-backed
 diffusion inference and runs one image-generation request against a local

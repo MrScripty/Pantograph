@@ -1506,12 +1506,7 @@ fn workflow_response_from_runtime_branch_worker_outcome(
                     &outcome.diagnostics,
                 )))
             }
-            WorkflowTaskExecutionWorkerRuntimeBranchDeferredReason::BatchBrokerWaitWindowExpired => {
-                Err(WorkflowServiceError::RuntimeNotReady(worker_diagnostic_message(
-                    "runtime branch batch broker wait window expired in the task execution worker",
-                    &outcome.diagnostics,
-                )))
-            }
+
         },
         WorkflowTaskExecutionWorkerOutcome::RuntimeBranchFailed(outcome) => {
             if outcome

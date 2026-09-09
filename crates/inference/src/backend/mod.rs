@@ -535,7 +535,9 @@ mod capability_tests {
             Ok(BackendStartOutcome::default())
         }
 
-        fn stop(&mut self) {}
+        async fn stop(&mut self) -> Result<(), BackendError> {
+            Ok(())
+        }
 
         fn is_ready(&self) -> bool {
             true
@@ -1085,8 +1087,32 @@ pub trait InferenceBackend: Send + Sync {
         spawner: Arc<dyn ProcessSpawner>,
     ) -> Result<BackendStartOutcome, BackendError>;
 
+    /// Load exactly the scheduler-selected text package and executable target.
+    /// Unsupported backends reject without changing residency.
+    async fn load_selected_text(
+        &mut self,
+        _request: &crate::InferenceExecutionRequest,
+        _target: &crate::PumasArtifactLoadTarget,
+        _decision: &crate::BackendExecutionDecision,
+    ) -> Result<BackendStartOutcome, BackendError> {
+        Err(BackendError::Config(
+            "selected text loading is unsupported by this backend".into(),
+        ))
+    }
+
+    /// Observe the selected text worker's termination before releasing residency.
+    /// Implementations supporting selected loading must also own this completion.
+    async fn finish_selected_text(&self, _cancel: bool) -> Result<(), BackendError> {
+        Err(BackendError::Config(
+            "selected text completion is unsupported by this backend".into(),
+        ))
+    }
+
     /// Stop the backend and cleanup resources
-    fn stop(&mut self);
+    /// Await owned work termination and shutdown before releasing residency.
+    /// Failure preserves the backend for inspection or retry; non-returning work
+    /// keeps this operation pending.
+    async fn stop(&mut self) -> Result<(), BackendError>;
 
     /// Is the backend ready to accept requests?
     fn is_ready(&self) -> bool;

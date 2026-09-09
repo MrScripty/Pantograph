@@ -6,6 +6,7 @@ use pyo3::types::PyModule;
 const WORKER_PY: &str = include_str!("../../torch/worker.py");
 const BLOCK_DIFFUSION_PY: &str = include_str!("../../torch/block_diffusion.py");
 const AUTOREGRESSIVE_PY: &str = include_str!("../../torch/autoregressive.py");
+const WORKER_DIFFUSION_PY: &str = include_str!("../../torch/worker_diffusion.py");
 const WORKER_RUNTIME_PY: &str = include_str!("../../torch/worker_runtime.py");
 const WORKER_TRANSFORMERS_PY: &str = include_str!("../../torch/worker_transformers.py");
 const WORKER_CONTRACT_PY: &str = include_str!("../../torch/worker_contract.py");
@@ -22,6 +23,12 @@ pub(super) fn ensure_worker_initialised(py: Python<'_>) -> PyResult<()> {
     let modules = sys.getattr("modules")?;
 
     for (name, source, file_name, module_name) in [
+        (
+            "worker_diffusion",
+            WORKER_DIFFUSION_PY,
+            c"worker_diffusion.py",
+            c"worker_diffusion",
+        ),
         (
             "block_diffusion",
             BLOCK_DIFFUSION_PY,

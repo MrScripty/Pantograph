@@ -3106,7 +3106,9 @@ impl InferenceBackend for MockTypedTextBackend {
         Ok(BackendStartOutcome::default())
     }
 
-    fn stop(&mut self) {}
+    async fn stop(&mut self) -> std::result::Result<(), BackendError> {
+        Ok(())
+    }
 
     fn is_ready(&self) -> bool {
         true
@@ -3206,7 +3208,9 @@ impl InferenceBackend for MockTypedEmbeddingBackend {
         Ok(BackendStartOutcome::default())
     }
 
-    fn stop(&mut self) {}
+    async fn stop(&mut self) -> std::result::Result<(), BackendError> {
+        Ok(())
+    }
 
     fn is_ready(&self) -> bool {
         true
@@ -3293,7 +3297,9 @@ impl InferenceBackend for MockTypedRerankBackend {
         Ok(BackendStartOutcome::default())
     }
 
-    fn stop(&mut self) {}
+    async fn stop(&mut self) -> std::result::Result<(), BackendError> {
+        Ok(())
+    }
 
     fn is_ready(&self) -> bool {
         true
@@ -3385,7 +3391,9 @@ impl InferenceBackend for MockTypedAudioTranscriptionBackend {
         Ok(BackendStartOutcome::default())
     }
 
-    fn stop(&mut self) {}
+    async fn stop(&mut self) -> std::result::Result<(), BackendError> {
+        Ok(())
+    }
 
     fn is_ready(&self) -> bool {
         true

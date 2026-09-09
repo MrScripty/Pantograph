@@ -98,6 +98,7 @@ async fn test_runtime_unload_candidate_selection_uses_registry_eviction_order() 
     assert_eq!(selected.session_id, "session-b");
 }
 
+#[cfg(feature = "backend-candle")]
 #[tokio::test]
 async fn workflow_preflight_reports_selected_candle_without_requiring_it() {
     let temp = TempDir::new().expect("temp dir");

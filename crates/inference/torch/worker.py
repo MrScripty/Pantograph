@@ -73,6 +73,9 @@ from worker_contract import (
     worker_error_response_json,
     worker_success_response_json,
 )
+from worker_diffusion import (
+    DiffusionLoadError, admit_diffusion_bundle, construct_diffusion_pipeline,
+)
 from worker_image_contract import generate_image_kwargs_from_envelope
 from worker_image_contract import generate_image_batch_kwargs_from_envelope
 
@@ -91,6 +94,7 @@ _diffusion_pipeline = None
 _diffusion_device = None
 _diffusion_model_path = None
 _diffusion_dtype = None
+_diffusion_admission = None
 
 _asr_pipeline = None
 _asr_device = None
@@ -1001,6 +1005,9 @@ def unload_diffusion_model():
     """Unload the current diffusion pipeline and free GPU memory."""
     global _diffusion_pipeline, _diffusion_device, _diffusion_model_path, _diffusion_dtype
 
+    global _diffusion_admission
+    _diffusion_admission = None
+
     if _diffusion_pipeline is not None:
         name = _diffusion_model_path.name if _diffusion_model_path else "unknown"
         del _diffusion_pipeline
@@ -1038,6 +1045,15 @@ def unload_asr_model():
         logger.info("ASR pipeline unloaded: %s", name)
 
 
+def _admit_diffusion_request(model_path):
+    try:
+        return admit_diffusion_bundle(model_path)
+    except DiffusionLoadError:
+        # A failed fresh decision revokes the resident, including direct generation.
+        unload_diffusion_model()
+        raise
+
+
 def load_diffusion_model(
     model_path,
     device="auto",
@@ -1051,65 +1067,58 @@ def load_diffusion_model(
     """Load a diffusion pipeline into module globals for process-backed use."""
     global _diffusion_pipeline, _diffusion_device, _diffusion_model_path, _diffusion_dtype
 
-    path = Path(model_path)
-    if not path.exists():
-        raise FileNotFoundError(f"Model path does not exist: {model_path}")
-
-    if _diffusion_pipeline is not None and _diffusion_model_path == path:
-        return get_loaded_diffusion_info()
-
-    if _diffusion_pipeline is not None:
-        unload_diffusion_model()
-
+    global _diffusion_admission
+    admission = _admit_diffusion_request(model_path)
+    path = admission.root
     try:
-        from diffusers import DiffusionPipeline
+        resolved_device = _resolve_device(device)
+        resolved_dtype = _resolve_torch_dtype(resolved_device, torch_dtype)
+        load_overrides = _detect_diffusion_load_overrides(path)
     except Exception as exc:
-        raise RuntimeError(
-            "Failed to import diffusers runtime. Ensure the selected dependency environment "
-            "includes `diffusers`, `transformers`, `accelerate`, `torch`, and Pillow."
+        unload_diffusion_model()
+        raise DiffusionLoadError(
+            "model_load_failed", "Failed to resolve diffusion execution configuration"
+        ) from exc
+    identity = (admission, load_overrides.get("variant"), str(resolved_device), _dtype_name(resolved_dtype),
+                enable_attention_slicing, enable_vae_slicing, enable_vae_tiling,
+                model_cpu_offload, sequential_cpu_offload)
+    if _diffusion_pipeline is not None and _diffusion_admission == identity:
+        return get_loaded_diffusion_info()
+    unload_diffusion_model()
+    pipeline = construct_diffusion_pipeline(
+        admission, resolved_dtype, variant=load_overrides.get("variant")
+    )
+    try:
+        pipeline.set_progress_bar_config(disable=True)
+
+        if enable_attention_slicing and hasattr(pipeline, "enable_attention_slicing"):
+            pipeline.enable_attention_slicing()
+        if enable_vae_slicing and hasattr(pipeline, "enable_vae_slicing"):
+            pipeline.enable_vae_slicing()
+        if enable_vae_tiling and hasattr(pipeline, "enable_vae_tiling"):
+            pipeline.enable_vae_tiling()
+
+        offload_active = bool(model_cpu_offload or sequential_cpu_offload)
+        if offload_active:
+            if not torch.cuda.is_available():
+                raise RuntimeError("CPU offload options require CUDA to be available")
+            if sequential_cpu_offload and hasattr(pipeline, "enable_sequential_cpu_offload"):
+                pipeline.enable_sequential_cpu_offload()
+            elif hasattr(pipeline, "enable_model_cpu_offload"):
+                pipeline.enable_model_cpu_offload()
+            else:
+                raise RuntimeError("Selected diffusion pipeline does not support CPU offload")
+            runtime_device = "cuda-offload"
+        else:
+            pipeline.to(resolved_device)
+            runtime_device = str(resolved_device)
+
+    except Exception as exc:
+        raise DiffusionLoadError(
+            "model_load_failed", "Failed to configure diffusion pipeline execution"
         ) from exc
 
-    resolved_device = _resolve_device(device)
-    resolved_dtype = _resolve_torch_dtype(resolved_device, torch_dtype)
-
-    logger.info(
-        "Loading diffusion pipeline from %s onto %s (dtype=%s)",
-        model_path,
-        resolved_device,
-        _dtype_name(resolved_dtype),
-    )
-
-    load_overrides = _detect_diffusion_load_overrides(path)
-    pipeline = DiffusionPipeline.from_pretrained(
-        str(path),
-        torch_dtype=resolved_dtype,
-        trust_remote_code=True,
-        **load_overrides,
-    )
-    pipeline.set_progress_bar_config(disable=True)
-
-    if enable_attention_slicing and hasattr(pipeline, "enable_attention_slicing"):
-        pipeline.enable_attention_slicing()
-    if enable_vae_slicing and hasattr(pipeline, "enable_vae_slicing"):
-        pipeline.enable_vae_slicing()
-    if enable_vae_tiling and hasattr(pipeline, "enable_vae_tiling"):
-        pipeline.enable_vae_tiling()
-
-    offload_active = bool(model_cpu_offload or sequential_cpu_offload)
-    if offload_active:
-        if not torch.cuda.is_available():
-            raise RuntimeError("CPU offload options require CUDA to be available")
-        if sequential_cpu_offload and hasattr(pipeline, "enable_sequential_cpu_offload"):
-            pipeline.enable_sequential_cpu_offload()
-        elif hasattr(pipeline, "enable_model_cpu_offload"):
-            pipeline.enable_model_cpu_offload()
-        else:
-            raise RuntimeError("Selected diffusion pipeline does not support CPU offload")
-        runtime_device = "cuda-offload"
-    else:
-        pipeline.to(resolved_device)
-        runtime_device = str(resolved_device)
-
+    _diffusion_admission = identity
     _diffusion_pipeline = pipeline
     _diffusion_device = runtime_device
     _diffusion_model_path = path
@@ -1637,6 +1646,8 @@ def generate_image_batch_from_envelope(envelope):
         decoded, request_id = decode_worker_envelope(envelope)
         planned_batch = generate_image_batch_kwargs_from_envelope(decoded)
         planned_members = planned_batch["members"]
+        for member in planned_members:
+            _admit_diffusion_request(member["planned"]["local_load_path"])
         _batch_shared_planned_value(planned_members, "local_load_path")
         _batch_shared_planned_value(planned_members, "family")
         _batch_shared_planned_value(planned_members, "pipeline_class")
@@ -1677,6 +1688,14 @@ def generate_image_batch_from_envelope(envelope):
                 ],
             },
             resource_observation=resource_observation,
+        )
+    except DiffusionLoadError as exc:
+        return worker_success_response_json(
+            request_id,
+            {"batch_execution_id": planned_batch["batch_execution_id"],
+             "members": _failed_batch_members(
+                 planned_batch["members"], exc.kind, exc,
+                 "pytorch_worker_diffusion_load_failed")},
         )
     except ValueError as exc:
         return worker_error_response_json(
@@ -1757,6 +1776,10 @@ def generate_image_from_envelope(envelope):
                 },
             },
             resource_observation=resource_observation,
+        )
+    except DiffusionLoadError as exc:
+        return worker_error_response_json(
+            request_id, exc.kind, exc, "pytorch_worker_diffusion_load_failed"
         )
     except ValueError as exc:
         return worker_error_response_json(

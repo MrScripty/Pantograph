@@ -80,8 +80,9 @@ impl InferenceBackend for RecordingLlamaBackend {
         })
     }
 
-    fn stop(&mut self) {
+    async fn stop(&mut self) -> Result<(), BackendError> {
         self.ready = false;
+        Ok(())
     }
 
     fn is_ready(&self) -> bool {

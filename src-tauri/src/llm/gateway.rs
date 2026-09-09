@@ -128,21 +128,23 @@ impl InferenceGateway {
     }
 
     /// Stop the current backend.
-    pub async fn stop(&self) {
+    pub async fn stop(&self) -> Result<(), GatewayError> {
+        self.inner.stop().await.map_err(GatewayError::Inner)?;
         self.clear_runtime_health_assessments().await;
-        self.inner.stop().await;
+        Ok(())
     }
 
     /// Stop the dedicated embedding runtime (if running).
     pub async fn stop_embedding_server(&self) {
-        self.clear_runtime_health_assessments().await;
         self.embedding_runtime.write().await.stop();
+        self.clear_runtime_health_assessments().await;
     }
 
     /// Stop both the main backend and embedding runtime.
-    pub async fn stop_all(&self) {
-        self.stop().await;
+    pub async fn stop_all(&self) -> Result<(), GatewayError> {
+        let active_result = self.stop().await;
         self.stop_embedding_server().await;
+        active_result
     }
 
     // ─── EMBEDDING RUNTIME MANAGEMENT ──────────────────────────────────

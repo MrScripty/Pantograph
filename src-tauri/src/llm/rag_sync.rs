@@ -109,8 +109,9 @@ mod tests {
             })
         }
 
-        fn stop(&mut self) {
+        async fn stop(&mut self) -> Result<(), BackendError> {
             *self.ready.lock().expect("mock backend ready lock poisoned") = false;
+            Ok(())
         }
 
         fn is_ready(&self) -> bool {

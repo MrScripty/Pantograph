@@ -500,19 +500,22 @@ impl InferenceGateway {
     /// of the specified backend. The backend is not started - call
     /// `start()` after switching to initialize it.
     pub async fn switch_backend(&self, name: &str) -> Result<(), GatewayError> {
-        // Create new backend first to validate the name
+        if !self.registry.is_available(name) {
+            return Err(GatewayError::SwitchFailed(format!(
+                "Unknown backend: {name}"
+            )));
+        }
+        let mut guard = self.backend.write().await;
+        if let Err(error) = guard.stop().await {
+            self.runtime_lifecycle.write().await.last_error = Some(error.to_string());
+            return Err(GatewayError::Backend(error));
+        }
         let new_backend = self
             .registry
             .create(name)
             .map_err(|e| GatewayError::SwitchFailed(e.to_string()))?;
         let canonical_backend_name = new_backend.name().to_string();
-
-        // Stop current backend
-        {
-            let mut guard = self.backend.write().await;
-            guard.stop();
-            *guard = new_backend;
-        }
+        *guard = new_backend;
 
         // Update current backend name
         {
@@ -581,7 +584,16 @@ impl InferenceGateway {
             let guard = self.spawner.read().await;
             guard.clone().ok_or(GatewayError::NoSpawner)?
         };
+        let mut guard = self.backend.write().await;
         let previous_last_inference_config = self.last_inference_config.read().await.clone();
+        let previous_ready = guard.is_ready();
+        let previous_runtime_config = self.current_runtime_config.read().await.clone();
+        let previous_lifecycle = self.runtime_lifecycle.read().await.clone();
+        let previous_modes = (
+            *self.embedding_mode.read().await,
+            *self.reranking_mode.read().await,
+            *self.external_mode.read().await,
+        );
 
         // Track embedding mode
         {
@@ -625,10 +637,24 @@ impl InferenceGateway {
             lifecycle.last_error = None;
             warmup_timing_attempt_id
         };
-        let start_result = {
-            let mut guard = self.backend.write().await;
-            guard.start(config, spawner).await
-        };
+        let start_result = guard.start(config, spawner).await;
+        // A rejected replacement can leave the existing residency intact (for
+        // example, a PyTorch text producer failed before model mutation).
+        // Preserve that residency's identity and configuration when the backend
+        // still reports ready, while exposing the failed replacement attempt.
+        if previous_ready && guard.is_ready() {
+            if let Err(error) = start_result {
+                *self.current_runtime_config.write().await = previous_runtime_config;
+                *self.last_inference_config.write().await = previous_last_inference_config;
+                *self.embedding_mode.write().await = previous_modes.0;
+                *self.reranking_mode.write().await = previous_modes.1;
+                *self.external_mode.write().await = previous_modes.2;
+                let mut lifecycle = self.runtime_lifecycle.write().await;
+                *lifecycle = previous_lifecycle;
+                lifecycle.last_error = Some(error.to_string());
+                return Err(GatewayError::Backend(error));
+            }
+        }
 
         self.record_start_result(
             config,
@@ -740,9 +766,14 @@ impl InferenceGateway {
     }
 
     /// Stop the current backend
-    pub async fn stop(&self) {
+    /// Await backend termination before publishing stopped state. Failure keeps
+    /// the current backend and residency metadata and records the error.
+    pub async fn stop(&self) -> Result<(), GatewayError> {
         let mut guard = self.backend.write().await;
-        guard.stop();
+        if let Err(error) = guard.stop().await {
+            self.runtime_lifecycle.write().await.last_error = Some(error.to_string());
+            return Err(GatewayError::Backend(error));
+        }
         // Reset embedding mode
         let mut mode = self.embedding_mode.write().await;
         *mode = false;
@@ -757,6 +788,7 @@ impl InferenceGateway {
         if lifecycle.last_error.is_none() {
             lifecycle.lifecycle_decision_reason = Some("runtime_stopped".to_string());
         }
+        Ok(())
     }
 
     /// Check if currently in embedding mode
@@ -1047,6 +1079,98 @@ impl InferenceGateway {
                 Err(error)
             }
         }
+    }
+
+    /// Execute text against the scheduler selection while owning residency through
+    /// observed worker termination. Executable paths come only from the Pumas target.
+    pub async fn execute_selected_text_with_cancellation(
+        &self,
+        request: InferenceExecutionRequest,
+        artifact_load_target: crate::PumasArtifactLoadTarget,
+        backend_decision: crate::BackendExecutionDecision,
+        cancellation: InferenceExecutionCancellationHandle,
+    ) -> Result<InferenceExecutionResult, GatewayError> {
+        crate::selected_text_execution::SelectedTextLoad::validate(
+            &request,
+            &artifact_load_target,
+            &backend_decision,
+        )
+        .await?;
+        let option_diagnostics = typed_request_option_diagnostics(&request, Some("pytorch"));
+        let request_json = typed_text_generation_stream_request_json(request.clone())?;
+        reject_cancelled_execution_handle("selected text", &cancellation)?;
+        let mut backend = self.backend.write().await;
+        reject_cancelled_execution_handle("selected text", &cancellation)?;
+        if canonical_backend_key(backend.name()) != "pytorch" {
+            let replacement = self.registry.create("pytorch")?;
+            if let Err(error) = backend.stop().await {
+                self.runtime_lifecycle.write().await.last_error = Some(error.to_string());
+                return Err(error.into());
+            }
+            *backend = replacement;
+            *self.current_backend_name.write().await = backend.name().to_owned();
+            *self.runtime_lifecycle.write().await = RuntimeLifecycleSnapshot {
+                runtime_id: Some("pytorch".into()),
+                ..Default::default()
+            };
+            *self.current_runtime_config.write().await = None;
+        }
+        let outcome = backend
+            .load_selected_text(&request, &artifact_load_target, &backend_decision)
+            .await;
+        if let Err(error) = outcome {
+            let ready = backend.is_ready();
+            if !ready {
+                *self.current_runtime_config.write().await = None;
+            }
+            let mut lifecycle = self.runtime_lifecycle.write().await;
+            lifecycle.active = ready;
+            lifecycle.last_error = Some(error.to_string());
+            if !lifecycle.active {
+                lifecycle.runtime_instance_id = None;
+            }
+            return Err(error.into());
+        }
+        let config = BackendConfig {
+            model_path: Some(PathBuf::from(&artifact_load_target.local_load_path)),
+            model_name: Some(artifact_load_target.model_ref.model_id.clone()),
+            device: backend_decision
+                .selected_device_id
+                .clone()
+                .map(BackendStartupDeviceIntent::CanonicalDevice),
+            ..Default::default()
+        };
+        *self.current_runtime_config.write().await = Some(config.clone());
+        *self.last_inference_config.write().await = Some(config);
+        *self.embedding_mode.write().await = false;
+        *self.reranking_mode.write().await = false;
+        *self.external_mode.write().await = false;
+        *self.runtime_lifecycle.write().await = RuntimeLifecycleSnapshot {
+            runtime_id: Some("pytorch".into()),
+            runtime_instance_id: Some(format!(
+                "pytorch-{}",
+                self.runtime_instance_sequence
+                    .fetch_add(1, Ordering::Relaxed)
+            )),
+            runtime_reused: Some(false),
+            lifecycle_decision_reason: Some("scheduler_selected_text_package_loaded".into()),
+            active: backend.is_ready(),
+            ..Default::default()
+        };
+        reject_cancelled_execution_handle("selected text", &cancellation)?;
+        let result = collect_selected_text(
+            backend.as_ref(),
+            request_json,
+            &cancellation,
+            option_diagnostics,
+        )
+        .await;
+        // Collector drop requests cooperative cancellation; the backend retains
+        // the producer join until this drain observes its actual termination.
+        let cleanup = backend.finish_selected_text(result.is_err()).await;
+        cleanup?;
+        reject_cancelled_execution_handle("selected text", &cancellation)?;
+        result
     }
 
     /// Stream a typed text/chat generation request.
@@ -1919,6 +2043,7 @@ impl InferenceGateway {
                 })?;
                 let mut stream = self.chat_completion_stream(request_json).await?;
                 let mut text = String::new();
+                let mut completed = false;
                 let mut usage = None;
                 let mut cache_handle_id = None;
                 while let Some(chunk) = stream.next().await {
@@ -1933,8 +2058,14 @@ impl InferenceGateway {
                         text.push_str(&content);
                     }
                     if chunk.done {
+                        completed = true;
                         break;
                     }
+                }
+                if !completed {
+                    return Err(GatewayError::Backend(BackendError::Inference(
+                        "Text stream ended before terminal completion".into(),
+                    )));
                 }
                 Ok(InferenceExecutionResult::TextGeneration {
                     text,
@@ -2906,6 +3037,49 @@ fn push_chat_option_diagnostic(
         backend_key: backend_key.map(ToOwned::to_owned),
         message: Some(message.to_string()),
     });
+}
+
+async fn collect_selected_text(
+    backend: &dyn InferenceBackend,
+    request_json: String,
+    cancellation: &InferenceExecutionCancellationHandle,
+    option_diagnostics: Vec<OptionCompatibilityDiagnostic>,
+) -> Result<InferenceExecutionResult, GatewayError> {
+    let mut stream = backend.chat_completion_stream(request_json).await?;
+    let mut text = String::new();
+    let mut usage = None;
+    let mut cache_handle_id = None;
+    // The public cancellation signal is snapshot-only, so observe it even while
+    // a Python iterator step has not yielded a chunk. Cleanup remains unbounded.
+    let mut cancellation_checks = tokio::time::interval(std::time::Duration::from_millis(10));
+    loop {
+        reject_cancelled_execution_handle("selected text", cancellation)?;
+        let chunk = tokio::select! {
+            biased;
+            _ = cancellation_checks.tick() => continue,
+            chunk = stream.next() => chunk,
+        };
+        let chunk = chunk.ok_or_else(|| {
+            BackendError::Inference("Text stream ended before terminal completion".into())
+        })??;
+        if let Some(value) = chunk.usage {
+            usage = Some(value);
+        }
+        if let Some(value) = chunk.cache_handle_id {
+            cache_handle_id = bounded_inference_artifact_ref(&value);
+        }
+        if let Some(content) = chunk.content {
+            text.push_str(&content);
+        }
+        if chunk.done {
+            return Ok(InferenceExecutionResult::TextGeneration {
+                text,
+                usage,
+                cache_handle_id,
+                option_diagnostics,
+            });
+        }
+    }
 }
 
 fn typed_text_generation_stream_request_json(

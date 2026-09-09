@@ -312,7 +312,7 @@ impl RecoveryManager {
                     .await
             }
             RecoveryStrategy::CleanRestart => {
-                stop_gateway_for_recovery(app, gateway).await;
+                stop_gateway_for_recovery(app, gateway).await?;
                 if !attempt_plan.settle_delay.is_zero() {
                     tokio::time::sleep(attempt_plan.settle_delay).await;
                 }
@@ -342,8 +342,10 @@ impl RecoveryManager {
         )
         .map_err(|error| error.to_string())?;
 
-        // Stop existing
-        stop_gateway_for_recovery(app, gateway).await;
+        // Stop existing before starting a replacement. A failed stop leaves
+        // the current runtime owned and prevents recovery from claiming a
+        // replacement was started.
+        stop_gateway_for_recovery(app, gateway).await?;
 
         if let Some(runtime_registry) = app.try_state::<SharedRuntimeRegistry>() {
             run_runtime_transition_and_sync_runtime_registry(
@@ -392,15 +394,26 @@ impl RecoveryManager {
     }
 }
 
-async fn stop_gateway_for_recovery(app: &AppHandle, gateway: &SharedGateway) {
+async fn stop_gateway_for_recovery(app: &AppHandle, gateway: &SharedGateway) -> Result<(), String> {
+    let runtime_registry = app
+        .try_state::<SharedRuntimeRegistry>()
+        .map(|state| state.inner().as_ref());
+    stop_gateway_and_sync_runtime_registry(gateway, runtime_registry).await?;
     invalidate_loaded_session_runtimes(app);
+    Ok(())
+}
 
-    let Some(runtime_registry) = app.try_state::<SharedRuntimeRegistry>() else {
-        gateway.stop_all().await;
-        return;
-    };
-
-    stop_all_and_sync_runtime_registry(gateway.as_ref(), runtime_registry.as_ref()).await;
+async fn stop_gateway_and_sync_runtime_registry(
+    gateway: &SharedGateway,
+    runtime_registry: Option<&pantograph_runtime_registry::RuntimeRegistry>,
+) -> Result<(), String> {
+    if let Some(runtime_registry) = runtime_registry {
+        stop_all_and_sync_runtime_registry(gateway.as_ref(), runtime_registry)
+            .await
+            .map_err(|error| error.to_string())
+    } else {
+        gateway.stop_all().await.map_err(|error| error.to_string())
+    }
 }
 
 async fn restart_dedicated_embedding_runtime(
@@ -464,13 +477,146 @@ pub type SharedRecoveryManager = Arc<RecoveryManager>;
 
 #[cfg(test)]
 mod tests {
-    use super::port_from_base_url;
+    use std::path::PathBuf;
+    use std::pin::Pin;
+    use std::sync::Arc;
+
+    use async_trait::async_trait;
+    use futures_util::{stream, Stream};
+    use inference::backend::{
+        BackendCapabilities, BackendConfig, BackendError, BackendStartOutcome, ChatChunk,
+        InferenceBackend,
+    };
+    use inference::process::{ProcessEvent, ProcessHandle, ProcessSpawner};
+    use inference::{ImageGenerationRequest, ImageGenerationResult, RerankRequest, RerankResponse};
+    use tokio::sync::mpsc;
+
+    use super::{port_from_base_url, stop_gateway_and_sync_runtime_registry};
     use crate::constants::ports;
+
+    struct MockProcessSpawner;
+
+    #[async_trait]
+    impl ProcessSpawner for MockProcessSpawner {
+        async fn spawn_sidecar(
+            &self,
+            _sidecar_name: &str,
+            _args: &[&str],
+        ) -> Result<(mpsc::Receiver<ProcessEvent>, Box<dyn ProcessHandle>), String> {
+            Err("spawn should not be called in recovery stop tests".to_string())
+        }
+
+        fn app_data_dir(&self) -> Result<PathBuf, String> {
+            Ok(PathBuf::from("/tmp"))
+        }
+
+        fn binaries_dir(&self) -> Result<PathBuf, String> {
+            Ok(PathBuf::from("/tmp"))
+        }
+    }
+
+    struct FailingStopBackend {
+        ready: bool,
+    }
+
+    #[async_trait]
+    impl InferenceBackend for FailingStopBackend {
+        fn name(&self) -> &'static str {
+            "mock"
+        }
+
+        fn description(&self) -> &'static str {
+            "Backend that refuses to stop"
+        }
+
+        fn capabilities(&self) -> BackendCapabilities {
+            BackendCapabilities::default()
+        }
+
+        async fn start(
+            &mut self,
+            _config: &BackendConfig,
+            _spawner: Arc<dyn ProcessSpawner>,
+        ) -> Result<BackendStartOutcome, BackendError> {
+            self.ready = true;
+            Ok(BackendStartOutcome::default())
+        }
+
+        async fn stop(&mut self) -> Result<(), BackendError> {
+            Err(BackendError::Inference("mock stop failure".to_string()))
+        }
+
+        fn is_ready(&self) -> bool {
+            self.ready
+        }
+
+        async fn health_check(&self) -> bool {
+            self.ready
+        }
+
+        fn base_url(&self) -> Option<String> {
+            Some("http://127.0.0.1:11434".to_string())
+        }
+
+        async fn chat_completion_stream(
+            &self,
+            _request_json: String,
+        ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, BackendError>> + Send>>, BackendError>
+        {
+            Ok(Box::pin(stream::empty()))
+        }
+
+        async fn embeddings(
+            &self,
+            _texts: Vec<String>,
+            _model: &str,
+        ) -> Result<Vec<inference::EmbeddingResult>, BackendError> {
+            Ok(Vec::new())
+        }
+
+        async fn rerank(&self, _request: RerankRequest) -> Result<RerankResponse, BackendError> {
+            Ok(RerankResponse {
+                results: Vec::new(),
+                metadata: serde_json::Value::Null,
+            })
+        }
+
+        async fn generate_image(
+            &self,
+            _request: ImageGenerationRequest,
+        ) -> Result<ImageGenerationResult, BackendError> {
+            Err(BackendError::Inference(
+                "image generation not supported in recovery stop tests".to_string(),
+            ))
+        }
+    }
 
     #[test]
     fn port_from_base_url_uses_known_default_when_port_missing() {
         assert_eq!(port_from_base_url("http://127.0.0.1:8080"), 8080);
         assert_eq!(port_from_base_url("https://example.test"), 443);
         assert_eq!(port_from_base_url("not-a-url"), ports::SERVER);
+    }
+
+    #[tokio::test]
+    async fn recovery_stop_gate_propagates_failure_without_releasing_no_model_runtime() {
+        let gateway = Arc::new(crate::llm::gateway::InferenceGateway::with_test_backend(
+            Box::new(FailingStopBackend { ready: false }),
+            "PyTorch",
+            Arc::new(MockProcessSpawner),
+        ));
+        gateway.init().await;
+        gateway
+            .start(&BackendConfig::default())
+            .await
+            .expect("gateway should start");
+
+        let error = stop_gateway_and_sync_runtime_registry(&gateway, None)
+            .await
+            .expect_err("recovery must stop before attempting a restart");
+        assert!(error.contains("mock stop failure"));
+        assert!(gateway.is_ready().await);
+        assert!(gateway.runtime_lifecycle_snapshot().await.active);
+        assert_eq!(gateway.current_backend_name().await, "PyTorch");
     }
 }
