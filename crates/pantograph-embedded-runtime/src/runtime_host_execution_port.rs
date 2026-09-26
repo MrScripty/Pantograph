@@ -2915,6 +2915,118 @@ mod tests {
     }
 
     #[tokio::test]
+    #[cfg(feature = "backend-pytorch")]
+    #[ignore = "requires a pinned library-only Pumas RPC server and the producer-declared Tiny SD runtime environment"]
+    async fn real_rpc_selected_tiny_sd_image_executes_through_runtime_host_port() {
+        const MODEL_ID: &str = "diffusion/cc-nms/tiny-sd-turbo";
+        const SELECTED_ARTIFACT_ID: &str = "cc-nms--tiny-sd-turbo__bundle_qualified";
+
+        let endpoint = std::env::var("PANTOGRAPH_ACCEPTANCE_PUMAS_RPC_ENDPOINT")
+            .expect("set PANTOGRAPH_ACCEPTANCE_PUMAS_RPC_ENDPOINT");
+        let mut request = runtime_host_request_fixture();
+        set_request_model_ref(&mut request, MODEL_ID, SELECTED_ARTIFACT_ID);
+        request.handoff.task_intent.constraints.requested_runtime_id =
+            Some("pytorch".parse().expect("runtime id"));
+        request.handoff.task_intent.constraints.requested_device_id =
+            Some("cpu".parse().expect("device id"));
+        request
+            .handoff
+            .readiness_proof
+            .preflight_result
+            .identity_key
+            .scheduler_intent
+            .requested_runtime_id = Some("pytorch".parse().expect("runtime id"));
+        request
+            .handoff
+            .readiness_proof
+            .preflight_result
+            .identity_key
+            .scheduler_intent
+            .requested_device_id = Some("cpu".parse().expect("device id"));
+        let task_intent = request.handoff.task_intent.clone();
+        let readiness_proof = request.handoff.readiness_proof.clone();
+        let dispatch = request
+            .handoff
+            .dispatch_decision
+            .as_mut()
+            .expect("fixture has dispatch decision");
+        dispatch.task_intent = task_intent;
+        dispatch.selected_runtime_id = "pytorch".parse().expect("runtime id");
+        dispatch.selected_runtime_variant_id =
+            Some("pytorch.diffusers".parse().expect("variant id"));
+        dispatch.selected_device_ids = vec!["cpu".parse().expect("device id")];
+        for reservation in &mut dispatch.reservations {
+            reservation.device_id = "cpu".parse().expect("device id");
+        }
+        dispatch.readiness_proof = readiness_proof;
+        dispatch.runtime_trait_settings = dispatch.task_intent.trait_settings.clone();
+
+        let selector_access = Arc::new(PumasSelectorAccess::Rpc(Arc::new(
+            PumasRpcClient::new(&endpoint).expect("Pumas RPC endpoint should parse"),
+        )));
+        let temp = tempfile::TempDir::new().expect("temp artifact dir");
+        let artifact_writer = artifact_writer(&temp);
+        let workflow_service = WorkflowService::new().with_artifact_writer(artifact_writer.clone());
+        let gateway = Arc::new(inference::InferenceGateway::new());
+        gateway
+            .switch_backend("pytorch")
+            .await
+            .expect("PyTorch backend should be registered");
+        gateway.set_spawner(Arc::new(NoopProcessSpawner)).await;
+        gateway
+            .start(&BackendConfig::default())
+            .await
+            .expect("Pantograph PyTorch backend should start");
+        let port = EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
+            Arc::new(RuntimeHostPumasLoadTargetResolver::new(
+                selector_access.clone(),
+            )),
+            Arc::new(RuntimeHostPumasPackageFactsResolver::new(selector_access)),
+            Arc::new(WorkflowServiceRuntimeHostMediaArtifactSink::new(
+                artifact_writer,
+            )),
+            gateway.clone(),
+        );
+        let cancellation = runtime_host_cancellation(&request);
+
+        let response = port
+            .execute_runtime_host_request(request, cancellation)
+            .await
+            .expect("runtime-host image execution should return a typed response");
+
+        assert_eq!(
+            response.state,
+            RuntimeHostExecutionState::Completed,
+            "{response:#?}"
+        );
+        let RuntimeHostExecutionOutputValue::MediaArtifactRef(artifact_ref) =
+            &response.outputs[0].value
+        else {
+            panic!("image output should be a media artifact ref: {response:#?}");
+        };
+        let body = workflow_service
+            .read_artifact_body(ArtifactReadRequest {
+                artifact_id: artifact_ref.artifact_id.clone(),
+                byte_range_start: None,
+                byte_range_end_exclusive: None,
+            })
+            .expect("generated image artifact should be retained");
+        assert!(body.body.starts_with(b"\x89PNG\r\n\x1a\n"));
+        assert!(body.body.len() > 32, "generated image should be complete");
+        assert_eq!(body.response.media_type, "image/png");
+
+        gateway
+            .stop()
+            .await
+            .expect("Pantograph image backend should stop cleanly");
+        println!(
+            "runtime_host_model_id={MODEL_ID:?} selected_artifact_id={SELECTED_ARTIFACT_ID:?} artifact_id={:?} bytes={}",
+            artifact_ref.artifact_id,
+            body.body.len()
+        );
+    }
+
+    #[tokio::test]
     #[cfg(feature = "standalone")]
     #[ignore = "requires a pinned library-only Pumas RPC server and local Qwen embedding assets"]
     async fn real_rpc_selected_qwen_embedding_executes_through_runtime_host_port() {
