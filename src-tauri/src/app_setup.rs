@@ -225,32 +225,31 @@ pub fn run_app() -> AppStartupResult<()> {
                     }
                 });
                 let max_loaded_sessions = config.workflow.max_loaded_sessions;
+                let pumas_rpc_endpoint = config
+                    .workflow
+                    .pumas_rpc_endpoint
+                    .clone()
+                    .or_else(|| std::env::var("PANTOGRAPH_PUMAS_RPC_ENDPOINT").ok());
                 let shared_config: SharedAppConfig = Arc::new(RwLock::new(config));
                 app.manage(shared_config);
 
-                // Prefer the sibling Pumas release build dir when available, then fall back to the launcher root.
-                let pumas_launcher_root = project_root
-                    .parent()
-                    .map(|parent| parent.join("Pumas-Library"))
-                    .filter(|p| p.exists());
-                let pumas_release_dir = pumas_launcher_root
-                    .as_ref()
-                    .map(|root| root.join("rust").join("target").join("release"))
-                    .filter(|p| p.exists());
-                if let Some(ref p) = pumas_release_dir {
-                    log::info!("Detected sibling Pumas release dir at {:?}", p);
-                } else if let Some(ref p) = pumas_launcher_root {
-                    log::info!("Detected sibling Pumas-Library at {:?}", p);
-                }
-                let pumas_library_path = pumas_release_dir.or(pumas_launcher_root);
+                let pumas_selector_source = pumas_rpc_endpoint.map_or_else(
+                    || {
+                        Err(startup_error(
+                            "desktop startup requires an explicit Pumas RPC endpoint; set workflow.pumas_rpc_endpoint or PANTOGRAPH_PUMAS_RPC_ENDPOINT",
+                        ))
+                    },
+                    |endpoint| {
+                        log::info!("Using explicitly configured Pumas RPC endpoint");
+                        Ok(EmbeddedHostedStartupPumasSelectorSource::RpcEndpoint(endpoint))
+                    },
+                )?;
 
                 let startup_input = EmbeddedHostedStartupCompositionInput::new(
                     runtime_registry.clone(),
                     gateway.clone(),
                     gateway.inner_arc(),
-                    Some(EmbeddedHostedStartupPumasSelectorSource::SetupPath(
-                        pumas_library_path,
-                    )),
+                    Some(pumas_selector_source),
                     project_root.clone(),
                     kv_cache_dir,
                     runtime_handle.clone(),

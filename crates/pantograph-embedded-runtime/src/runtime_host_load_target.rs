@@ -1,15 +1,22 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use inference::PumasArtifactLoadTarget;
 use pantograph_runtime_host_contracts::ValidatedRuntimeHostExecutionRequest;
+use pumas_library::intent::{
+    AcquisitionPolicy, ModelRequirement, ModelSelector, ObservedModelState,
+};
 use pumas_library::models::{
-    PumasArtifactConsumer, PumasArtifactLoadTarget, PumasArtifactLoadTargetDiagnostic,
+    PumasArtifactConsumer, PumasArtifactLoadTargetDiagnostic,
     PumasArtifactLoadTargetResolutionMode, ResolveModelArtifactLoadTargetRequest,
     ResolveModelArtifactLoadTargetResponse,
 };
 use pumas_library::PumasError;
 use thiserror::Error;
-use workflow_nodes::setup::PumasSelectorAccess;
+use workflow_nodes::setup::{
+    intent_handle_to_load_target, pumas_load_target_to_inference, summarize_intent_observation,
+    IntentAvailabilityState, PumasSelectorAccess,
+};
 
 use crate::runtime_host_package_facts::pumas_library_model_id;
 
@@ -40,11 +47,6 @@ impl RuntimeHostLoadTargetResolver for RuntimeHostPumasLoadTargetResolver {
         &self,
         request: &ValidatedRuntimeHostExecutionRequest,
     ) -> Result<PumasArtifactLoadTarget, RuntimeHostPumasLoadTargetError> {
-        let pumas_request = build_runtime_host_artifact_load_target_request(request)?;
-        let response = self
-            .selector_access
-            .resolve_model_artifact_load_target(pumas_request)
-            .await?;
         let selected_model_ref = request
             .as_ref()
             .handoff
@@ -53,14 +55,46 @@ impl RuntimeHostLoadTargetResolver for RuntimeHostPumasLoadTargetResolver {
             .ok_or(RuntimeHostPumasLoadTargetError::MissingDispatchDecision)?
             .selected_model_ref
             .clone();
-        let mut target = ready_runtime_host_artifact_load_target(response)?;
+        let target = if matches!(
+            self.selector_access.as_ref(),
+            PumasSelectorAccess::ReadOnly(_)
+        ) {
+            let pumas_request = build_runtime_host_artifact_load_target_request(request)?;
+            let response = self
+                .selector_access
+                .resolve_model_artifact_load_target(pumas_request)
+                .await?;
+            ready_runtime_host_artifact_load_target(response)?
+        } else {
+            let requirement = build_runtime_host_model_requirement(&selected_model_ref)?;
+            let observation = self
+                .selector_access
+                .intent_get_model_with_targeted_hydration(requirement)
+                .await?;
+            match observation.state {
+                ObservedModelState::Available { handle } => intent_handle_to_load_target(handle)?,
+                state => {
+                    let summary = summarize_intent_observation(
+                        &workflow_nodes::setup::IntentAvailabilityObservation {
+                            state,
+                            hydration_error: observation.hydration_error,
+                        },
+                    );
+                    return Err(RuntimeHostPumasLoadTargetError::IntentUnavailable {
+                        state: summary.state,
+                        candidate_count: summary.candidate_count,
+                        diagnostics: summary.diagnostics,
+                        hydration_error: summary.hydration_error,
+                    });
+                }
+            }
+        };
         validate_runtime_host_producer_target_identity(&selected_model_ref, &target)?;
         let selected_artifact_id = selected_model_ref
             .selected_artifact_id
             .as_deref()
             .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .ok_or(RuntimeHostPumasLoadTargetError::MissingSelectedArtifactIdentity)?;
+            .filter(|value| !value.is_empty());
         let target_artifact_id = target
             .model_ref
             .selected_artifact_id
@@ -68,18 +102,46 @@ impl RuntimeHostLoadTargetResolver for RuntimeHostPumasLoadTargetResolver {
             .map(str::trim)
             .filter(|value| !value.is_empty())
             .ok_or(RuntimeHostPumasLoadTargetError::MissingSelectedArtifactIdentity)?;
-        if selected_artifact_id != target_artifact_id {
+        if selected_artifact_id.is_some_and(|selected| selected != target_artifact_id) {
             return Err(
                 RuntimeHostPumasLoadTargetError::SelectedArtifactIdentityMismatch {
-                    selected_artifact_id: selected_artifact_id.to_string(),
+                    selected_artifact_id: selected_artifact_id
+                        .expect("selected artifact id was checked")
+                        .to_string(),
                     target_artifact_id: target_artifact_id.to_string(),
                 },
             );
         }
-        target.model_ref.model_id = selected_model_ref.model_id;
-        target.model_ref.revision = selected_model_ref.revision;
         Ok(target)
     }
+}
+
+fn build_runtime_host_model_requirement(
+    selected_model_ref: &pantograph_dependency_planning::PumasModelRef,
+) -> Result<ModelRequirement, RuntimeHostPumasLoadTargetError> {
+    let model_ref = pumas_library::models::PumasModelRef {
+        model_id: pumas_library_model_id(&selected_model_ref.model_id),
+        revision: selected_model_ref.revision.clone(),
+        selected_artifact_id: selected_model_ref.selected_artifact_id.clone(),
+        selected_artifact_path: selected_model_ref.selected_artifact_path.clone(),
+        migration_diagnostics: selected_model_ref
+            .migration_diagnostics
+            .iter()
+            .map(
+                |diagnostic| pumas_library::models::ModelRefMigrationDiagnostic {
+                    code: diagnostic.code.clone(),
+                    message: diagnostic.message.clone(),
+                    input: diagnostic.input.clone(),
+                },
+            )
+            .collect(),
+        ..Default::default()
+    };
+    Ok(ModelRequirement {
+        selector: ModelSelector::LocalModel { model_ref },
+        artifact: Default::default(),
+        acquisition_policy: AcquisitionPolicy::LocalOnly,
+    })
 }
 
 fn validate_runtime_host_producer_target_identity(
@@ -149,7 +211,7 @@ fn build_runtime_host_artifact_load_target_request(
             .selected_artifact_path
             .clone(),
         caller_observed_package_facts_contract_version: None,
-        resolution_mode: PumasArtifactLoadTargetResolutionMode::OwnerFresh,
+        resolution_mode: PumasArtifactLoadTargetResolutionMode::ReadOnlyIndexed,
         consumer: PumasArtifactConsumer {
             consumer_name: PANTOGRAPH_RUNTIME_HOST_CONSUMER.to_string(),
             task_kind: Some(handoff.task_intent.task_type.to_string()),
@@ -171,6 +233,7 @@ fn ready_runtime_host_artifact_load_target(
     if response.is_ready() {
         return response
             .target
+            .map(pumas_load_target_to_inference)
             .ok_or(RuntimeHostPumasLoadTargetError::ReadyResponseMissingTarget);
     }
     Err(RuntimeHostPumasLoadTargetError::Unavailable {
@@ -219,6 +282,15 @@ pub(crate) enum RuntimeHostPumasLoadTargetError {
     },
     #[error("ready Pumas artifact load-target response did not include a target")]
     ReadyResponseMissingTarget,
+    #[error(
+        "Pumas intent did not return an available model handle: state={state:?}, candidates={candidate_count}, diagnostics={diagnostics:?}, hydration_error={hydration_error:?}"
+    )]
+    IntentUnavailable {
+        state: IntentAvailabilityState,
+        candidate_count: usize,
+        diagnostics: Vec<String>,
+        hydration_error: Option<String>,
+    },
     #[error(
         "Pumas artifact load target unavailable: artifact_state={artifact_state}, entry_path_state={entry_path_state}, diagnostics={diagnostic_count}"
     )]

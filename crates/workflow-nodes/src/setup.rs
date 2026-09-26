@@ -10,7 +10,7 @@ use node_engine::ExecutorExtensions;
 #[cfg(feature = "model-library")]
 use crate::pumas_rpc::{PumasRpcClient, PumasRpcError, PumasRpcOperation};
 #[cfg(feature = "model-library")]
-use serde::de::DeserializeOwned;
+use serde::{de::DeserializeOwned, Deserialize};
 #[cfg(feature = "model-library")]
 use std::path::{Path, PathBuf};
 #[cfg(feature = "model-library")]
@@ -172,6 +172,210 @@ impl PumasSelectorAccess {
         }
     }
 
+    pub async fn delete_model_with_cascade(
+        &self,
+        model_id: &str,
+    ) -> pumas_library::Result<pumas_library::models::DeleteModelResponse> {
+        match self {
+            Self::Owner(api) => api.delete_model_with_cascade(model_id).await,
+            Self::Rpc(client) => decode_rpc_value(
+                client
+                    .call(PumasRpcOperation::DeleteModelWithCascade {
+                        model_id: model_id.to_string(),
+                    })
+                    .await
+                    .map_err(map_rpc_error)?,
+            ),
+            Self::LocalClient(_) | Self::ReadOnly(_) => {
+                Err(selector_operation_unavailable(self, "model deletion"))
+            }
+        }
+    }
+
+    pub async fn search_hf_models_with_hydration(
+        &self,
+        query: &str,
+        kind: Option<&str>,
+        limit: usize,
+        hydrate_limit: usize,
+    ) -> pumas_library::Result<Vec<pumas_library::models::HuggingFaceModel>> {
+        match self {
+            Self::Owner(api) => {
+                api.search_hf_models_with_hydration(query, kind, limit, hydrate_limit)
+                    .await
+            }
+            Self::Rpc(client) => {
+                let response: RpcModelsResponse<pumas_library::models::HuggingFaceModel> =
+                    decode_rpc_value(
+                        client
+                            .call(PumasRpcOperation::SearchHfModels {
+                                query: query.to_string(),
+                                kind: kind.map(str::to_string),
+                                limit,
+                                hydrate_limit,
+                            })
+                            .await
+                            .map_err(map_rpc_error)?,
+                    )?;
+                response.into_models("HuggingFace model search")
+            }
+            Self::LocalClient(_) | Self::ReadOnly(_) => Err(selector_operation_unavailable(
+                self,
+                "HuggingFace model search",
+            )),
+        }
+    }
+
+    pub async fn start_hf_download(
+        &self,
+        request: &pumas_library::model_library::DownloadRequest,
+    ) -> pumas_library::Result<String> {
+        match self {
+            Self::Owner(api) => api.start_hf_download(request).await,
+            Self::Rpc(client) => {
+                let value = client
+                    .call(PumasRpcOperation::StartModelDownloadFromHf {
+                        request: request.clone(),
+                    })
+                    .await
+                    .map_err(map_rpc_error)?;
+                let response: RpcDownloadStartedResponse = decode_rpc_value(value)?;
+                if !response.success {
+                    return Err(pumas_library::PumasError::Other(
+                        response
+                            .error
+                            .unwrap_or_else(|| "Pumas download request failed".to_string()),
+                    ));
+                }
+                response
+                    .download_id
+                    .ok_or_else(|| pumas_library::PumasError::Json {
+                        message: "Pumas download response omitted download_id".to_string(),
+                        source: None,
+                    })
+            }
+            Self::LocalClient(_) | Self::ReadOnly(_) => Err(selector_operation_unavailable(
+                self,
+                "HuggingFace model download",
+            )),
+        }
+    }
+
+    pub async fn list_models_needing_review(
+        &self,
+        filter: Option<pumas_library::model_library::ModelReviewFilter>,
+    ) -> pumas_library::Result<Vec<pumas_library::model_library::ModelReviewItem>> {
+        match self {
+            Self::Owner(api) => api.list_models_needing_review(filter).await,
+            Self::Rpc(client) => {
+                let response: RpcModelsResponse<pumas_library::model_library::ModelReviewItem> =
+                    decode_rpc_value(
+                        client
+                            .call(PumasRpcOperation::ListModelsNeedingReview { filter })
+                            .await
+                            .map_err(map_rpc_error)?,
+                    )?;
+                response.into_models("model review listing")
+            }
+            Self::LocalClient(_) | Self::ReadOnly(_) => {
+                Err(selector_operation_unavailable(self, "model review listing"))
+            }
+        }
+    }
+
+    pub async fn submit_model_review(
+        &self,
+        model_id: &str,
+        patch: serde_json::Value,
+        reviewer: &str,
+        reason: Option<&str>,
+    ) -> pumas_library::Result<pumas_library::model_library::SubmitModelReviewResult> {
+        match self {
+            Self::Owner(api) => {
+                api.submit_model_review(model_id, patch, reviewer, reason)
+                    .await
+            }
+            Self::Rpc(client) => {
+                let response: RpcWrappedResponse<
+                    pumas_library::model_library::SubmitModelReviewResult,
+                > = decode_rpc_value(
+                    client
+                        .call(PumasRpcOperation::SubmitModelReview {
+                            model_id: model_id.to_string(),
+                            patch,
+                            reviewer: reviewer.to_string(),
+                            reason: reason.map(str::to_string),
+                        })
+                        .await
+                        .map_err(map_rpc_error)?,
+                )?;
+                Ok(response.result)
+            }
+            Self::LocalClient(_) | Self::ReadOnly(_) => Err(selector_operation_unavailable(
+                self,
+                "model review submission",
+            )),
+        }
+    }
+
+    pub async fn reset_model_review(
+        &self,
+        model_id: &str,
+        reviewer: &str,
+        reason: Option<&str>,
+    ) -> pumas_library::Result<bool> {
+        match self {
+            Self::Owner(api) => api.reset_model_review(model_id, reviewer, reason).await,
+            Self::Rpc(client) => {
+                let response: RpcResetReviewResponse = decode_rpc_value(
+                    client
+                        .call(PumasRpcOperation::ResetModelReview {
+                            model_id: model_id.to_string(),
+                            reviewer: reviewer.to_string(),
+                            reason: reason.map(str::to_string),
+                        })
+                        .await
+                        .map_err(map_rpc_error)?,
+                )?;
+                Ok(response.reset)
+            }
+            Self::LocalClient(_) | Self::ReadOnly(_) => {
+                Err(selector_operation_unavailable(self, "model review reset"))
+            }
+        }
+    }
+
+    pub async fn effective_model_metadata(
+        &self,
+        model_id: &str,
+    ) -> pumas_library::Result<Option<pumas_library::models::ModelMetadata>> {
+        match self {
+            Self::Owner(api) => api.get_effective_model_metadata(model_id).await,
+            Self::Rpc(client) => {
+                let response: RpcEffectiveMetadataResponse = decode_rpc_value(
+                    client
+                        .call(PumasRpcOperation::GetLibraryModelMetadata {
+                            model_id: model_id.to_string(),
+                        })
+                        .await
+                        .map_err(map_rpc_error)?,
+                )?;
+                response
+                    .effective_metadata
+                    .map(serde_json::from_value)
+                    .transpose()
+                    .map_err(|error| pumas_library::PumasError::Json {
+                        message: error.to_string(),
+                        source: Some(error),
+                    })
+            }
+            Self::LocalClient(_) | Self::ReadOnly(_) => Err(selector_operation_unavailable(
+                self,
+                "effective model metadata",
+            )),
+        }
+    }
+
     pub async fn model_package_facts_summary_snapshot(
         &self,
         limit: usize,
@@ -290,6 +494,513 @@ impl PumasSelectorAccess {
             ),
         }
     }
+
+    /// Query candidates for one explicit Pumas model requirement.
+    ///
+    /// Catalog listing/search remains the browsing surface. Callers should use
+    /// this method only after converting a selected item or explicit upstream
+    /// reference into a `ModelRequirement`.
+    pub async fn intent_query_models(
+        &self,
+        requirement: pumas_library::intent::ModelRequirement,
+    ) -> pumas_library::Result<pumas_library::intent::QueryModelsOutcome> {
+        match self {
+            Self::Owner(api) => api.intent().query_models(&requirement).await,
+            Self::LocalClient(client) => client.intent().query_models(&requirement).await,
+            Self::ReadOnly(_) => Err(pumas_library::PumasError::InvalidParams {
+                message: "read-only Pumas selector access does not provide intent resolution"
+                    .to_string(),
+            }),
+            Self::Rpc(client) => decode_rpc_value(
+                client
+                    .call(PumasRpcOperation::IntentQueryModels { requirement })
+                    .await
+                    .map_err(map_rpc_error)?,
+            ),
+        }
+    }
+
+    /// Resolve current availability for one explicit model requirement.
+    ///
+    /// The returned handle is an availability observation, not an inference
+    /// lease. Runtime callers must adapt it at their load-target boundary.
+    pub async fn intent_get_model(
+        &self,
+        requirement: pumas_library::intent::ModelRequirement,
+    ) -> pumas_library::Result<pumas_library::intent::GetModelOutcome> {
+        match self {
+            Self::Owner(api) => api.intent().get_model(&requirement).await,
+            Self::LocalClient(client) => client.intent().get_model(&requirement).await,
+            Self::ReadOnly(_) => Err(pumas_library::PumasError::InvalidParams {
+                message: "read-only Pumas selector access does not provide intent resolution"
+                    .to_string(),
+            }),
+            Self::Rpc(client) => decode_rpc_value(
+                client
+                    .call(PumasRpcOperation::IntentGetModel { requirement })
+                    .await
+                    .map_err(map_rpc_error)?,
+            ),
+        }
+    }
+
+    /// Re-observe availability for a requirement whose identity is already
+    /// resolved. This does not hydrate package facts or acquire artifacts.
+    pub async fn intent_get_model_status(
+        &self,
+        requirement: pumas_library::intent::ModelRequirement,
+    ) -> pumas_library::Result<pumas_library::intent::ObservedModelState> {
+        match self {
+            Self::Owner(api) => api.intent().get_model_status(&requirement).await,
+            Self::LocalClient(client) => client.intent().get_model_status(&requirement).await,
+            Self::ReadOnly(_) => Err(pumas_library::PumasError::InvalidParams {
+                message: "read-only Pumas selector access does not provide intent resolution"
+                    .to_string(),
+            }),
+            Self::Rpc(client) => decode_rpc_value(
+                client
+                    .call(PumasRpcOperation::IntentGetModelStatus { requirement })
+                    .await
+                    .map_err(map_rpc_error)?,
+            ),
+        }
+    }
+
+    /// Observe intent availability and perform at most one targeted package-facts
+    /// hydration when the producer explicitly reports missing or stale facts.
+    /// The follow-up intent observation is bounded and never treats observation
+    /// itself as a provisioning operation.
+    pub async fn intent_get_model_with_targeted_hydration(
+        &self,
+        requirement: pumas_library::intent::ModelRequirement,
+    ) -> pumas_library::Result<IntentAvailabilityObservation> {
+        let state = self.intent_get_model(requirement.clone()).await?;
+        if !intent_state_needs_package_facts(&state) {
+            return Ok(IntentAvailabilityObservation {
+                state,
+                hydration_error: None,
+            });
+        }
+        let pumas_library::intent::ModelSelector::LocalModel { model_ref } = &requirement.selector
+        else {
+            return Ok(IntentAvailabilityObservation {
+                state,
+                hydration_error: None,
+            });
+        };
+        let hydration_error = match self
+            .resolve_model_package_facts(model_ref.model_id.as_str())
+            .await
+        {
+            Ok(_) => None,
+            Err(error) => Some(bounded_pumas_error_message(error)),
+        };
+        if let Some(hydration_error) = hydration_error {
+            return Ok(IntentAvailabilityObservation {
+                state,
+                hydration_error: Some(hydration_error),
+            });
+        }
+        Ok(IntentAvailabilityObservation {
+            state: self.intent_get_model_status(requirement).await?,
+            hydration_error: None,
+        })
+    }
+}
+
+#[cfg(feature = "model-library")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IntentAvailabilityObservation {
+    pub state: pumas_library::intent::ObservedModelState,
+    pub hydration_error: Option<String>,
+}
+
+#[cfg(feature = "model-library")]
+#[derive(Debug, Deserialize)]
+struct RpcModelsResponse<T> {
+    #[serde(default)]
+    success: Option<bool>,
+    #[serde(default)]
+    error: Option<String>,
+    models: Vec<T>,
+}
+
+#[cfg(feature = "model-library")]
+impl<T> RpcModelsResponse<T> {
+    fn into_models(self, operation: &str) -> pumas_library::Result<Vec<T>> {
+        if self.success == Some(false) {
+            return Err(pumas_library::PumasError::Other(
+                self.error
+                    .as_deref()
+                    .map(bounded_pumas_error_message)
+                    .unwrap_or_else(|| format!("Pumas {operation} failed")),
+            ));
+        }
+        Ok(self.models)
+    }
+}
+
+#[cfg(feature = "model-library")]
+#[derive(Debug, Deserialize)]
+struct RpcWrappedResponse<T> {
+    result: T,
+}
+
+#[cfg(feature = "model-library")]
+#[derive(Debug, Deserialize)]
+struct RpcDownloadStartedResponse {
+    success: bool,
+    download_id: Option<String>,
+    error: Option<String>,
+}
+
+#[cfg(feature = "model-library")]
+#[derive(Debug, Deserialize)]
+struct RpcResetReviewResponse {
+    reset: bool,
+}
+
+#[cfg(feature = "model-library")]
+#[derive(Debug, Deserialize)]
+struct RpcEffectiveMetadataResponse {
+    effective_metadata: Option<serde_json::Value>,
+}
+
+#[cfg(feature = "model-library")]
+fn selector_operation_unavailable(
+    access: &PumasSelectorAccess,
+    operation: &str,
+) -> pumas_library::PumasError {
+    pumas_library::PumasError::InvalidParams {
+        message: format!(
+            "Pumas {} selector access does not provide {operation}",
+            access.role_name()
+        ),
+    }
+}
+
+#[cfg(feature = "model-library")]
+fn bounded_pumas_error_message(error: impl std::fmt::Display) -> String {
+    const MAX_ERROR_BYTES: usize = 512;
+    let message = error.to_string();
+    let mut bounded = message.chars().take(MAX_ERROR_BYTES).collect::<String>();
+    if message.chars().count() > MAX_ERROR_BYTES {
+        bounded.push_str("…");
+    }
+    bounded
+}
+
+#[cfg(feature = "model-library")]
+fn intent_state_needs_package_facts(state: &pumas_library::intent::ObservedModelState) -> bool {
+    use pumas_library::intent::{IntentDiagnostic, ObservedModelState};
+
+    fn diagnostics_need_package_facts(diagnostics: &[IntentDiagnostic]) -> bool {
+        diagnostics.iter().any(|diagnostic| {
+            matches!(
+                diagnostic.code,
+                pumas_library::intent::IntentDiagnosticCode::PackageFactsMissing
+                    | pumas_library::intent::IntentDiagnosticCode::PackageFactsInvalid
+                    | pumas_library::intent::IntentDiagnosticCode::PackageFactsStale
+            )
+        })
+    }
+
+    match state {
+        ObservedModelState::Incomplete { diagnostics, .. }
+        | ObservedModelState::Unsatisfied { diagnostics, .. }
+        | ObservedModelState::UpstreamAmbiguous { diagnostics, .. }
+        | ObservedModelState::Missing { diagnostics }
+        | ObservedModelState::Blocked { diagnostics, .. }
+        | ObservedModelState::Failed { diagnostics, .. }
+        | ObservedModelState::InvalidRequirement { diagnostics }
+        | ObservedModelState::Unsupported { diagnostics }
+        | ObservedModelState::Unavailable { diagnostics } => {
+            diagnostics_need_package_facts(diagnostics)
+        }
+        ObservedModelState::Available { .. }
+        | ObservedModelState::Ambiguous { .. }
+        | ObservedModelState::Acquiring { .. } => false,
+        _ => false,
+    }
+}
+
+#[cfg(feature = "model-library")]
+/// Adapt a Pumas intent availability handle to Pantograph's existing runtime
+/// load-target boundary. Paths remain runtime data and are never used as
+/// scheduler identity.
+pub fn intent_handle_to_load_target(
+    handle: pumas_library::intent::ModelHandle,
+) -> pumas_library::Result<inference::PumasArtifactLoadTarget> {
+    let model_ref_contract_version = handle.identity.model_ref.model_ref_contract_version;
+    if model_ref_contract_version != pumas_library::models::PUMAS_MODEL_REF_CONTRACT_VERSION {
+        return Err(pumas_library::PumasError::InvalidParams {
+            message: format!(
+                "unsupported Pumas model-ref contract version {model_ref_contract_version}; expected {}",
+                pumas_library::models::PUMAS_MODEL_REF_CONTRACT_VERSION
+            ),
+        });
+    }
+    Ok(inference::PumasArtifactLoadTarget {
+        model_ref: pumas_model_ref_to_inference(handle.identity.model_ref),
+        artifact_kind: artifact_kind_to_inference(handle.artifact_kind),
+        local_load_path: handle.local_load_path,
+        load_path_kind: match handle.load_path_kind {
+            pumas_library::models::PumasArtifactLoadPathKind::Directory => {
+                inference::PumasArtifactLoadPathKind::Directory
+            }
+            pumas_library::models::PumasArtifactLoadPathKind::File => {
+                inference::PumasArtifactLoadPathKind::File
+            }
+        },
+        library_root_id: None,
+        storage_kind: storage_kind_to_inference(handle.storage_kind),
+        validation_state: validation_state_to_inference(handle.verification.validation_state),
+        verification_source_fingerprint: Some(handle.verification.source_fingerprint),
+        verification_observed_from_cache_at: Some(handle.verification.observed_from_cache_at),
+        content_fingerprint: None,
+        package_facts_contract_version: Some(handle.verification.package_facts_contract_version),
+    })
+}
+
+#[cfg(feature = "model-library")]
+/// Convert a legacy Pumas load-target response into Pantograph's owned runtime
+/// target shape. Legacy responses do not carry intent verification evidence.
+pub fn pumas_load_target_to_inference(
+    target: pumas_library::models::PumasArtifactLoadTarget,
+) -> inference::PumasArtifactLoadTarget {
+    inference::PumasArtifactLoadTarget {
+        model_ref: pumas_model_ref_to_inference(target.model_ref),
+        artifact_kind: artifact_kind_to_inference(target.artifact_kind),
+        local_load_path: target.local_load_path,
+        load_path_kind: match target.load_path_kind {
+            pumas_library::models::PumasArtifactLoadPathKind::Directory => {
+                inference::PumasArtifactLoadPathKind::Directory
+            }
+            pumas_library::models::PumasArtifactLoadPathKind::File => {
+                inference::PumasArtifactLoadPathKind::File
+            }
+        },
+        library_root_id: target.library_root_id,
+        storage_kind: storage_kind_to_inference(target.storage_kind),
+        validation_state: validation_state_to_inference(target.validation_state),
+        verification_source_fingerprint: None,
+        verification_observed_from_cache_at: None,
+        content_fingerprint: target.content_fingerprint,
+        package_facts_contract_version: target.package_facts_contract_version,
+    }
+}
+
+#[cfg(feature = "model-library")]
+fn pumas_model_ref_to_inference(
+    model_ref: pumas_library::models::PumasModelRef,
+) -> inference::PumasModelRef {
+    inference::PumasModelRef {
+        model_id: model_ref.model_id,
+        revision: model_ref.revision,
+        selected_artifact_id: model_ref.selected_artifact_id,
+        selected_artifact_path: model_ref.selected_artifact_path,
+        migration_diagnostics: model_ref
+            .migration_diagnostics
+            .into_iter()
+            .map(|diagnostic| inference::ModelRefMigrationDiagnostic {
+                code: diagnostic.code,
+                message: diagnostic.message,
+                input: diagnostic.input,
+            })
+            .collect(),
+    }
+}
+
+#[cfg(feature = "model-library")]
+fn artifact_kind_to_inference(
+    kind: pumas_library::models::PackageArtifactKind,
+) -> inference::ModelArtifactKind {
+    match kind {
+        pumas_library::models::PackageArtifactKind::Gguf => inference::ModelArtifactKind::Gguf,
+        pumas_library::models::PackageArtifactKind::HfCompatibleDirectory => {
+            inference::ModelArtifactKind::HfCompatibleDirectory
+        }
+        pumas_library::models::PackageArtifactKind::Safetensors => {
+            inference::ModelArtifactKind::Safetensors
+        }
+        pumas_library::models::PackageArtifactKind::DiffusersBundle => {
+            inference::ModelArtifactKind::DiffusersBundle
+        }
+        pumas_library::models::PackageArtifactKind::Onnx => inference::ModelArtifactKind::Onnx,
+        pumas_library::models::PackageArtifactKind::Adapter => {
+            inference::ModelArtifactKind::Adapter
+        }
+        pumas_library::models::PackageArtifactKind::Shard => inference::ModelArtifactKind::Shard,
+        pumas_library::models::PackageArtifactKind::Unknown => {
+            inference::ModelArtifactKind::Unknown
+        }
+    }
+}
+
+#[cfg(feature = "model-library")]
+fn storage_kind_to_inference(
+    kind: pumas_library::models::StorageKind,
+) -> inference::ModelStorageKind {
+    match kind {
+        pumas_library::models::StorageKind::LibraryOwned => {
+            inference::ModelStorageKind::LibraryOwned
+        }
+        pumas_library::models::StorageKind::ExternalReference => {
+            inference::ModelStorageKind::ExternalReference
+        }
+    }
+}
+
+#[cfg(feature = "model-library")]
+fn validation_state_to_inference(
+    state: pumas_library::models::AssetValidationState,
+) -> inference::ModelValidationState {
+    match state {
+        pumas_library::models::AssetValidationState::Valid => {
+            inference::ModelValidationState::Valid
+        }
+        pumas_library::models::AssetValidationState::Degraded => {
+            inference::ModelValidationState::Degraded
+        }
+        pumas_library::models::AssetValidationState::Invalid => {
+            inference::ModelValidationState::Invalid
+        }
+    }
+}
+
+#[cfg(feature = "model-library")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IntentAvailabilityState {
+    Missing,
+    Ambiguous,
+    UpstreamAmbiguous,
+    Incomplete,
+    Unsatisfied,
+    Acquiring,
+    Blocked,
+    Failed,
+    InvalidRequirement,
+    Unsupported,
+    Unavailable,
+    Unknown,
+}
+
+#[cfg(feature = "model-library")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IntentAvailabilitySummary {
+    pub state: IntentAvailabilityState,
+    pub candidate_count: usize,
+    pub diagnostics: Vec<String>,
+    pub hydration_error: Option<String>,
+}
+
+#[cfg(feature = "model-library")]
+pub fn summarize_intent_availability(
+    state: &pumas_library::intent::ObservedModelState,
+) -> IntentAvailabilitySummary {
+    summarize_intent_observation(&IntentAvailabilityObservation {
+        state: state.clone(),
+        hydration_error: None,
+    })
+}
+
+#[cfg(feature = "model-library")]
+pub fn summarize_intent_observation(
+    observation: &IntentAvailabilityObservation,
+) -> IntentAvailabilitySummary {
+    use pumas_library::intent::ObservedModelState;
+
+    let (state_kind, candidate_count, diagnostics) = match &observation.state {
+        ObservedModelState::Available { .. } => (IntentAvailabilityState::Unknown, 0, vec![]),
+        ObservedModelState::Missing { diagnostics } => (
+            IntentAvailabilityState::Missing,
+            0,
+            compact_intent_diagnostics(diagnostics),
+        ),
+        ObservedModelState::Ambiguous { candidates } => {
+            (IntentAvailabilityState::Ambiguous, candidates.len(), vec![])
+        }
+        ObservedModelState::UpstreamAmbiguous {
+            candidates,
+            diagnostics,
+        } => (
+            IntentAvailabilityState::UpstreamAmbiguous,
+            candidates.len(),
+            compact_intent_diagnostics(diagnostics),
+        ),
+        ObservedModelState::Incomplete {
+            candidates,
+            diagnostics,
+        } => (
+            IntentAvailabilityState::Incomplete,
+            candidates.len(),
+            compact_intent_diagnostics(diagnostics),
+        ),
+        ObservedModelState::Unsatisfied {
+            candidates,
+            diagnostics,
+        } => (
+            IntentAvailabilityState::Unsatisfied,
+            candidates.len(),
+            compact_intent_diagnostics(diagnostics),
+        ),
+        ObservedModelState::Acquiring { .. } => (IntentAvailabilityState::Acquiring, 0, vec![]),
+        ObservedModelState::Blocked { diagnostics, .. } => (
+            IntentAvailabilityState::Blocked,
+            0,
+            compact_intent_diagnostics(diagnostics),
+        ),
+        ObservedModelState::Failed { diagnostics, .. } => (
+            IntentAvailabilityState::Failed,
+            0,
+            compact_intent_diagnostics(diagnostics),
+        ),
+        ObservedModelState::InvalidRequirement { diagnostics } => (
+            IntentAvailabilityState::InvalidRequirement,
+            0,
+            compact_intent_diagnostics(diagnostics),
+        ),
+        ObservedModelState::Unsupported { diagnostics } => (
+            IntentAvailabilityState::Unsupported,
+            0,
+            compact_intent_diagnostics(diagnostics),
+        ),
+        ObservedModelState::Unavailable { diagnostics } => (
+            IntentAvailabilityState::Unavailable,
+            0,
+            compact_intent_diagnostics(diagnostics),
+        ),
+        _ => (IntentAvailabilityState::Unknown, 0, vec![]),
+    };
+    IntentAvailabilitySummary {
+        state: state_kind,
+        candidate_count,
+        diagnostics,
+        hydration_error: observation.hydration_error.clone(),
+    }
+}
+
+#[cfg(feature = "model-library")]
+fn compact_intent_diagnostics(
+    diagnostics: &[pumas_library::intent::IntentDiagnostic],
+) -> Vec<String> {
+    const MAX_DIAGNOSTICS: usize = 4;
+    const MAX_MESSAGE_BYTES: usize = 256;
+    diagnostics
+        .iter()
+        .take(MAX_DIAGNOSTICS)
+        .map(|diagnostic| {
+            let mut message = diagnostic
+                .message
+                .chars()
+                .take(MAX_MESSAGE_BYTES)
+                .collect::<String>();
+            if diagnostic.message.chars().count() > MAX_MESSAGE_BYTES {
+                message.push_str("…");
+            }
+            format!("{:?}: {message}", diagnostic.code)
+        })
+        .collect()
 }
 
 #[cfg(feature = "model-library")]
@@ -355,7 +1066,10 @@ async fn rpc_selector_snapshot(
     Ok(pumas_library::models::ModelLibrarySelectorSnapshot {
         selector_snapshot_contract_version:
             pumas_library::models::MODEL_LIBRARY_SELECTOR_SNAPSHOT_CONTRACT_VERSION,
-        cursor: format!("rpc:get_models:{}", client.endpoint()),
+        // `get_models` is a catalog response, not a producer selector
+        // snapshot. Leave the required DTO cursor empty so consumers cannot
+        // mistake this view for a resumable update position.
+        cursor: String::new(),
         rows,
         total_count: Some(total_count),
     })
@@ -776,138 +1490,12 @@ pub fn resolve_pumas_model_library_root(path: &Path) -> Option<PathBuf> {
 #[cfg(all(test, feature = "model-library"))]
 mod tests {
     use super::*;
-    use async_trait::async_trait;
     use node_engine::extension_keys;
-    use pumas_library::ipc::{IpcDispatch, IpcServer};
-    use pumas_library::model_library::ModelLibrary;
-    use pumas_library::registry::{InstanceEntry, InstanceStatus, LocalInstanceTransportKind};
     use pumas_library::ModelIndex;
     use std::io::{Read, Write};
     use std::net::TcpListener;
     use std::thread;
     use tempfile::TempDir;
-
-    struct UpdateStreamDispatch {
-        library: ModelLibrary,
-    }
-
-    struct SelectedDetailDispatch;
-
-    #[async_trait]
-    impl IpcDispatch for UpdateStreamDispatch {
-        async fn dispatch(
-            &self,
-            method: &str,
-            _params: serde_json::Value,
-        ) -> pumas_library::Result<serde_json::Value> {
-            Err(pumas_library::PumasError::Other(format!(
-                "unexpected IPC method: {method}"
-            )))
-        }
-
-        async fn subscribe_model_library_update_stream_since(
-            &self,
-            cursor: &str,
-            _connection_token: Option<&str>,
-        ) -> pumas_library::Result<Option<pumas_library::model_library::ModelLibraryUpdateSubscriber>>
-        {
-            Ok(Some(
-                self.library
-                    .subscribe_model_library_update_stream_since(cursor)
-                    .await?,
-            ))
-        }
-    }
-
-    #[async_trait]
-    impl IpcDispatch for SelectedDetailDispatch {
-        async fn dispatch(
-            &self,
-            method: &str,
-            _params: serde_json::Value,
-        ) -> pumas_library::Result<serde_json::Value> {
-            let model_id = "llm/imported/local-client-test";
-            match method {
-                "model_library_selector_snapshot" => {
-                    serde_json::to_value(pumas_library::models::ModelLibrarySelectorSnapshot {
-                        selector_snapshot_contract_version:
-                            pumas_library::models::MODEL_LIBRARY_SELECTOR_SNAPSHOT_CONTRACT_VERSION,
-                        cursor: "model-library-updates:7".to_string(),
-                        rows: vec![pumas_library::models::ModelLibrarySelectorSnapshotRow {
-                            model_id: model_id.to_string(),
-                            model_ref: pumas_library::models::PumasModelRef {
-                                model_id: model_id.to_string(),
-                                selected_artifact_id: Some("model.gguf".to_string()),
-                                selected_artifact_path: Some(format!("{model_id}/model.gguf")),
-                                ..Default::default()
-                            },
-                            repo_id: None,
-                            selected_artifact_id: Some("model.gguf".to_string()),
-                            selected_artifact_path: Some(format!("{model_id}/model.gguf")),
-                            entry_path: Some("/tmp/pumas/model.gguf".to_string()),
-                            entry_path_state: pumas_library::models::ModelEntryPathState::Ready,
-                            artifact_state: pumas_library::models::ModelArtifactState::Ready,
-                            display_name: "Local Client Test".to_string(),
-                            model_type: Some("llm".to_string()),
-                            tags: vec!["gguf".to_string()],
-                            indexed_path: Some(model_id.to_string()),
-                            task_type_primary: Some("text-generation".to_string()),
-                            pipeline_tag: Some("text-generation".to_string()),
-                            recommended_backend: Some("llamacpp".to_string()),
-                            runtime_engine_hints: vec!["llamacpp".to_string()],
-                            storage_kind: Some(pumas_library::models::StorageKind::LibraryOwned),
-                            validation_state: Some(
-                                pumas_library::models::AssetValidationState::Valid,
-                            ),
-                            package_facts_summary_status:
-                                pumas_library::models::ModelPackageFactsSummaryStatus::Cached,
-                            package_facts_summary: None,
-                            detail_state:
-                                pumas_library::models::ModelLibrarySelectorDetailState::Complete,
-                            updated_at: Some("2026-05-08T00:00:00Z".to_string()),
-                        }],
-                        total_count: Some(1),
-                    })
-                    .map_err(|error| pumas_library::PumasError::Other(error.to_string()))
-                }
-                "resolve_model_execution_descriptors_batch" => serde_json::to_value(vec![
-                    pumas_library::models::ModelExecutionDescriptorBatchItem {
-                        model_id: model_id.to_string(),
-                        descriptor: Some(pumas_library::models::ModelExecutionDescriptor {
-                            execution_contract_version: 1,
-                            model_id: model_id.to_string(),
-                            entry_path: "/tmp/pumas/model.gguf".to_string(),
-                            model_type: "llm".to_string(),
-                            task_type_primary: "text-generation".to_string(),
-                            recommended_backend: Some("llamacpp".to_string()),
-                            runtime_engine_hints: vec!["llamacpp".to_string()],
-                            storage_kind: pumas_library::models::StorageKind::LibraryOwned,
-                            validation_state: pumas_library::models::AssetValidationState::Valid,
-                            dependency_resolution: Some(serde_json::json!({
-                                "bindings": [{
-                                    "binding_id": "binding-a",
-                                    "backend_key": "llamacpp"
-                                }]
-                            })),
-                        }),
-                        error: None,
-                    },
-                ])
-                .map_err(|error| pumas_library::PumasError::Other(error.to_string())),
-                "resolve_model_package_facts_summaries" => serde_json::to_value(vec![
-                    pumas_library::models::ModelPackageFactsSummaryBatchItem {
-                        model_id: model_id.to_string(),
-                        result: None,
-                        error: None,
-                    },
-                ])
-                .map_err(|error| pumas_library::PumasError::Other(error.to_string())),
-                _ => Err(pumas_library::PumasError::Other(format!(
-                    "unexpected IPC method: {method}"
-                ))),
-            }
-        }
-    }
 
     fn create_models_db(model_root: &Path) {
         std::fs::create_dir_all(model_root).unwrap();
@@ -924,20 +1512,6 @@ mod tests {
         std::fs::create_dir_all(temp.path().join("launcher-data")).unwrap();
         std::fs::create_dir_all(temp.path().join("shared-resources/models")).unwrap();
         temp
-    }
-
-    fn ready_instance(port: u16) -> InstanceEntry {
-        InstanceEntry {
-            library_path: PathBuf::from("/tmp/pantograph-pumas-test-library"),
-            pid: std::process::id(),
-            port,
-            transport_kind: LocalInstanceTransportKind::LoopbackTcp,
-            endpoint: format!("127.0.0.1:{port}"),
-            connection_token: Some("token".to_string()),
-            started_at: "2026-05-06T00:00:00Z".to_string(),
-            version: None,
-            status: InstanceStatus::Ready,
-        }
     }
 
     fn rpc_test_server(response: &'static str) -> String {
@@ -1062,9 +1636,131 @@ mod tests {
         assert_eq!(row.display_name, "Tiny Test");
         assert!(row.entry_path.is_none());
         assert!(row.selected_artifact_id.is_none());
+        assert!(snapshot.cursor.is_empty());
         assert_eq!(
             row.detail_state,
             pumas_library::models::ModelLibrarySelectorDetailState::NeedsPackageFacts
+        );
+    }
+
+    #[tokio::test]
+    async fn rpc_hf_search_preserves_producer_failure_envelope() {
+        let endpoint = rpc_test_server(
+            r#"{"jsonrpc":"2.0","result":{"success":false,"models":[],"error":"HF service unavailable"},"id":1}"#,
+        );
+        let access = PumasSelectorAccess::Rpc(Arc::new(
+            PumasRpcClient::new(&endpoint).expect("RPC client"),
+        ));
+
+        let error = access
+            .search_hf_models_with_hydration("tiny", None, 10, 2)
+            .await
+            .expect_err("producer failure must not become an empty successful result");
+
+        assert!(error.to_string().contains("HF service unavailable"));
+    }
+
+    #[tokio::test]
+    async fn rpc_selector_access_decodes_intent_availability() {
+        let endpoint = rpc_test_server(
+            r#"{"jsonrpc":"2.0","result":{"state":"missing","diagnostics":[]},"id":1}"#,
+        );
+        let access = PumasSelectorAccess::Rpc(Arc::new(
+            PumasRpcClient::new(&endpoint).expect("RPC client"),
+        ));
+        let requirement = pumas_library::intent::ModelRequirement {
+            selector: pumas_library::intent::ModelSelector::LocalModel {
+                model_ref: pumas_library::models::PumasModelRef {
+                    model_id: "llm/example".to_string(),
+                    ..Default::default()
+                },
+            },
+            artifact: Default::default(),
+            acquisition_policy: pumas_library::intent::AcquisitionPolicy::LocalOnly,
+        };
+
+        let state = access
+            .intent_get_model(requirement)
+            .await
+            .expect("intent response should decode through the RPC seam");
+
+        assert!(matches!(
+            state,
+            pumas_library::intent::ObservedModelState::Missing { diagnostics } if diagnostics.is_empty()
+        ));
+    }
+
+    #[test]
+    fn intent_handle_adapter_preserves_verification_evidence() {
+        let target = intent_handle_to_load_target(pumas_library::intent::ModelHandle {
+            identity: pumas_library::intent::ArtifactIdentity {
+                model_ref: pumas_library::models::PumasModelRef {
+                    model_id: "llm/example".to_string(),
+                    selected_artifact_id: Some("artifact-1".to_string()),
+                    ..Default::default()
+                },
+            },
+            artifact_kind: pumas_library::models::PackageArtifactKind::HfCompatibleDirectory,
+            local_load_path: "/pumas/models/example".to_string(),
+            load_path_kind: pumas_library::models::PumasArtifactLoadPathKind::Directory,
+            storage_kind: pumas_library::models::StorageKind::LibraryOwned,
+            verification: pumas_library::intent::ArtifactVerificationEvidence {
+                validation_state: pumas_library::models::AssetValidationState::Valid,
+                package_facts_contract_version: 7,
+                source_fingerprint: "sha256:source".to_string(),
+                observed_from_cache_at: "2026-09-26T12:00:00Z".to_string(),
+            },
+        })
+        .expect("supported model-ref contract should adapt");
+
+        assert_eq!(
+            target.verification_source_fingerprint.as_deref(),
+            Some("sha256:source")
+        );
+        assert_eq!(
+            target.verification_observed_from_cache_at.as_deref(),
+            Some("2026-09-26T12:00:00Z")
+        );
+        assert_eq!(target.package_facts_contract_version, Some(7));
+        assert_eq!(target.content_fingerprint, None);
+    }
+
+    #[test]
+    fn intent_summary_preserves_typed_package_facts_state_with_bounded_diagnostics() {
+        let state = pumas_library::intent::ObservedModelState::Incomplete {
+            candidates: Vec::new(),
+            diagnostics: vec![pumas_library::intent::IntentDiagnostic {
+                code: pumas_library::intent::IntentDiagnosticCode::PackageFactsStale,
+                field_path: None,
+                message: "stale package facts".to_string(),
+            }],
+        };
+
+        let summary = summarize_intent_availability(&state);
+
+        assert_eq!(summary.state, IntentAvailabilityState::Incomplete);
+        assert_eq!(summary.candidate_count, 0);
+        assert_eq!(
+            summary.diagnostics,
+            vec!["PackageFactsStale: stale package facts"]
+        );
+        assert!(intent_state_needs_package_facts(&state));
+    }
+
+    #[test]
+    fn intent_summary_preserves_bounded_hydration_failure() {
+        let summary = summarize_intent_observation(&IntentAvailabilityObservation {
+            state: pumas_library::intent::ObservedModelState::Incomplete {
+                candidates: Vec::new(),
+                diagnostics: Vec::new(),
+            },
+            hydration_error: Some("package-facts service disconnected".to_string()),
+        });
+
+        assert_eq!(summary.state, IntentAvailabilityState::Incomplete);
+        assert_eq!(
+            summary.hydration_error.as_deref(),
+            Some("package-facts service disconnected")
         );
     }
 
@@ -1085,75 +1781,6 @@ mod tests {
                 "task": "text_generation"
             })
         );
-    }
-
-    #[tokio::test]
-    async fn local_client_update_feed_recovers_events_from_selector_cursor() {
-        let temp = TempDir::new().unwrap();
-        let library_root = temp.path().join("models");
-        std::fs::create_dir_all(&library_root).unwrap();
-        let library = ModelLibrary::new(&library_root).await.unwrap();
-        let cursor = library
-            .list_model_library_updates_since(None, 100)
-            .await
-            .unwrap()
-            .cursor;
-        library
-            .notify_model_library_refresh("local-client-handoff-test")
-            .unwrap();
-        let Some(server) = IpcServer::start(Arc::new(UpdateStreamDispatch {
-            library: library.clone(),
-        }))
-        .await
-        .ok() else {
-            eprintln!("Skipping local_client_update_feed_recovers_events_from_selector_cursor");
-            return;
-        };
-        let client = pumas_library::PumasLocalClient::connect(ready_instance(server.port))
-            .await
-            .unwrap();
-        let access = PumasSelectorAccess::LocalClient(Arc::new(client));
-
-        let feed = access
-            .list_model_library_updates_since(Some(&cursor), 100)
-            .await
-            .expect("local client update feed should recover durable updates");
-
-        assert!(!feed.stale_cursor);
-        assert!(!feed.snapshot_required);
-        assert!(feed.cursor.starts_with("model-library-updates:"));
-        assert_eq!(feed.events.len(), 1);
-        assert_eq!(feed.events[0].model_id, "__library__/model-library-refresh");
-    }
-
-    #[tokio::test]
-    async fn local_client_selected_model_detail_uses_batch_detail_methods() {
-        let Some(server) = IpcServer::start(Arc::new(SelectedDetailDispatch))
-            .await
-            .ok()
-        else {
-            eprintln!("Skipping local_client_selected_model_detail_uses_batch_detail_methods");
-            return;
-        };
-        let client = pumas_library::PumasLocalClient::connect(ready_instance(server.port))
-            .await
-            .unwrap();
-        let access = PumasSelectorAccess::LocalClient(Arc::new(client));
-
-        let detail = access
-            .selected_model_detail("llm/imported/local-client-test")
-            .await
-            .expect("local client selected detail should load from batch APIs");
-
-        assert_eq!(
-            detail
-                .selector_row
-                .as_ref()
-                .map(|row| row.display_name.as_str()),
-            Some("Local Client Test")
-        );
-        let descriptor = detail.descriptor.expect("descriptor should hydrate");
-        assert_eq!(descriptor.recommended_backend.as_deref(), Some("llamacpp"));
     }
 
     #[tokio::test]

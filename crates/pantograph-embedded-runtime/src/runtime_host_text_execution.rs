@@ -1,21 +1,19 @@
 use inference::{
     BackendExecutionDecision, BackendId, DeviceResolutionDecision, InferenceDeviceClass,
     InferenceDeviceId, InferenceDevicePolicy, InferenceExecutionInput, InferenceExecutionRequest,
-    InferenceExecutionResult, InferenceTaskId, LengthGenerationOptions,
-    ModelRefMigrationDiagnostic, PumasArtifactLoadTarget, PumasModelRef, ResolvedModelPackageFacts,
-    RuntimeVariantId,
+    InferenceExecutionResult, InferenceTaskId, PumasArtifactLoadTarget, PumasModelRef,
+    ResolvedModelPackageFacts, RuntimeVariantId,
 };
 use pantograph_runtime_host_contracts::{
     RuntimeHostExecutionInputValue, RuntimeHostExecutionRequest,
     ValidatedRuntimeHostExecutionRequest,
 };
-use pantograph_scheduler::SchedulerDispatchDecision;
+use pantograph_scheduler::{SchedulerDispatchDecision, SchedulerTraitValue};
 use thiserror::Error;
 
 pub(crate) const TEXT_GENERATION_TASK: &str = "text_generation";
 pub(crate) const PROMPT_PORT: &str = "prompt";
 pub(crate) const MAX_TEXT_BYTES: usize = 1024;
-const DEFAULT_MAX_NEW_TOKENS: u32 = 8;
 
 /// Owned inputs for the canonical selected-text inference call.
 #[derive(Debug)]
@@ -72,7 +70,7 @@ pub(crate) fn validate_runtime_host_text_generation_request(
 pub(crate) fn project_runtime_host_text_generation(
     request: &ValidatedRuntimeHostExecutionRequest,
     package_facts: ResolvedModelPackageFacts,
-    load_target: pumas_library::models::PumasArtifactLoadTarget,
+    load_target: PumasArtifactLoadTarget,
 ) -> Result<RuntimeHostTextGenerationProjection, RuntimeHostTextGenerationProjectionError> {
     let request = request.as_ref();
     validate_runtime_host_text_generation_request(request)?;
@@ -82,14 +80,15 @@ pub(crate) fn project_runtime_host_text_generation(
         .as_ref()
         .ok_or(RuntimeHostTextGenerationProjectionError::MissingDispatchDecision)?;
     let prompt = required_prompt(request)?.to_string();
-    let backend_decision = text_backend_decision(dispatch_decision)?;
+    let runtime_model_ref = load_target.model_ref.clone();
+    let backend_decision = text_backend_decision(dispatch_decision, &runtime_model_ref)?;
     let artifact_load_target =
         crate::runtime_host_image_execution::project_pumas_artifact_load_target(load_target);
     let inference_request = InferenceExecutionRequest {
         request_id: Some(request.execution_request_id.clone()),
         task_id: InferenceTaskId::TextGeneration,
-        model_ref: Some(project_model_ref(&dispatch_decision.selected_model_ref)),
-        model_name: Some(dispatch_decision.selected_model_ref.model_id.clone()),
+        model_ref: Some(runtime_model_ref.clone()),
+        model_name: Some(runtime_model_ref.model_id.clone()),
         resolved_model_package_facts: Some(package_facts),
         input: InferenceExecutionInput::TextGeneration {
             prompt: Some(prompt),
@@ -97,13 +96,7 @@ pub(crate) fn project_runtime_host_text_generation(
             messages: Vec::new(),
             stream: false,
         },
-        generation_options: Some(inference::GenerationOptions {
-            length: LengthGenerationOptions {
-                max_new_tokens: Some(DEFAULT_MAX_NEW_TOKENS),
-                ..Default::default()
-            },
-            ..Default::default()
-        }),
+        generation_options: text_generation_options(dispatch_decision)?,
         extra_options: serde_json::Value::Null,
     };
 
@@ -112,6 +105,95 @@ pub(crate) fn project_runtime_host_text_generation(
         artifact_load_target,
         backend_decision,
     })
+}
+
+fn text_generation_options(
+    decision: &SchedulerDispatchDecision,
+) -> Result<Option<inference::GenerationOptions>, RuntimeHostTextGenerationProjectionError> {
+    let mut options = inference::GenerationOptions::default();
+    let mut has_authored_options = false;
+
+    for setting in &decision.runtime_trait_settings {
+        match setting.trait_id.as_str() {
+            "max_new_tokens" | "text.max_new_tokens" | "text_generation.max_new_tokens" => {
+                options.length.max_new_tokens = Some(trait_u32(setting, "max_new_tokens")?);
+                has_authored_options = true;
+            }
+            "temperature" | "text.temperature" | "text_generation.temperature" => {
+                options.sampling.temperature = Some(trait_f32(setting, "temperature")?);
+                has_authored_options = true;
+            }
+            "top_p" | "text.top_p" | "text_generation.top_p" => {
+                options.sampling.top_p = Some(trait_f32(setting, "top_p")?);
+                has_authored_options = true;
+            }
+            "top_k" | "text.top_k" | "text_generation.top_k" => {
+                options.sampling.top_k = Some(trait_u32(setting, "top_k")?);
+                has_authored_options = true;
+            }
+            "seed" | "text.seed" | "text_generation.seed" => {
+                options.sampling.seed = Some(trait_u64(setting, "seed")?);
+                has_authored_options = true;
+            }
+            _ => {}
+        }
+    }
+
+    Ok(has_authored_options.then_some(options))
+}
+
+fn trait_u32(
+    setting: &pantograph_scheduler::SchedulerTraitSetting,
+    field: &'static str,
+) -> Result<u32, RuntimeHostTextGenerationProjectionError> {
+    let value = match &setting.value {
+        SchedulerTraitValue::U64(value) => u32::try_from(*value).ok(),
+        SchedulerTraitValue::I64(value) if *value >= 0 => u32::try_from(*value as u64).ok(),
+        _ => None,
+    };
+    value.ok_or_else(
+        || RuntimeHostTextGenerationProjectionError::InvalidGenerationSetting {
+            trait_id: setting.trait_id.as_str().to_string(),
+            reason: format!("{field} must be a non-negative 32-bit integer"),
+        },
+    )
+}
+
+fn trait_u64(
+    setting: &pantograph_scheduler::SchedulerTraitSetting,
+    field: &'static str,
+) -> Result<u64, RuntimeHostTextGenerationProjectionError> {
+    let value = match &setting.value {
+        SchedulerTraitValue::U64(value) => Some(*value),
+        SchedulerTraitValue::I64(value) if *value >= 0 => Some(*value as u64),
+        _ => None,
+    };
+    value.ok_or_else(
+        || RuntimeHostTextGenerationProjectionError::InvalidGenerationSetting {
+            trait_id: setting.trait_id.as_str().to_string(),
+            reason: format!("{field} must be a non-negative integer"),
+        },
+    )
+}
+
+fn trait_f32(
+    setting: &pantograph_scheduler::SchedulerTraitSetting,
+    field: &'static str,
+) -> Result<f32, RuntimeHostTextGenerationProjectionError> {
+    let value = match &setting.value {
+        SchedulerTraitValue::String(value) => value.parse::<f32>().ok(),
+        SchedulerTraitValue::U64(value) => Some(*value as f32),
+        SchedulerTraitValue::I64(value) => Some(*value as f32),
+        SchedulerTraitValue::Bool(_) => None,
+    };
+    value
+        .filter(|value| value.is_finite() && *value >= 0.0)
+        .ok_or_else(
+            || RuntimeHostTextGenerationProjectionError::InvalidGenerationSetting {
+                trait_id: setting.trait_id.as_str().to_string(),
+                reason: format!("{field} must be a finite non-negative number"),
+            },
+        )
 }
 
 pub(crate) fn text_from_inference_result(
@@ -130,26 +212,9 @@ pub(crate) fn text_from_inference_result(
     Ok(text)
 }
 
-fn project_model_ref(model_ref: &pantograph_dependency_planning::PumasModelRef) -> PumasModelRef {
-    PumasModelRef {
-        model_id: model_ref.model_id.clone(),
-        revision: model_ref.revision.clone(),
-        selected_artifact_id: model_ref.selected_artifact_id.clone(),
-        selected_artifact_path: model_ref.selected_artifact_path.clone(),
-        migration_diagnostics: model_ref
-            .migration_diagnostics
-            .iter()
-            .map(|diagnostic| ModelRefMigrationDiagnostic {
-                code: diagnostic.code.clone(),
-                message: diagnostic.message.clone(),
-                input: diagnostic.input.clone(),
-            })
-            .collect(),
-    }
-}
-
 fn text_backend_decision(
     decision: &SchedulerDispatchDecision,
+    runtime_model_ref: &PumasModelRef,
 ) -> Result<BackendExecutionDecision, RuntimeHostTextGenerationProjectionError> {
     validate_selected_runtime_and_device(decision)?;
     let selected_runtime_variant_id = selected_runtime_variant_id(decision)?;
@@ -174,7 +239,7 @@ fn text_backend_decision(
         selected_device_id: Some(selected_device_id),
         device_decision,
         selected_task_id: Some(InferenceTaskId::TextGeneration),
-        selected_model_ref: Some(project_model_ref(&decision.selected_model_ref)),
+        selected_model_ref: Some(runtime_model_ref.clone()),
         diagnostics: Vec::new(),
         dependency_readiness: Vec::new(),
         selection_policy_trace: None,
@@ -323,6 +388,8 @@ pub(crate) enum RuntimeHostTextGenerationProjectionError {
     UnsupportedInputPort { port_id: String },
     #[error("runtime-host text input is {bytes} bytes; max is 1024")]
     InputTooLong { bytes: usize },
+    #[error("runtime-host text generation setting '{trait_id}' is invalid: {reason}")]
+    InvalidGenerationSetting { trait_id: String, reason: String },
     #[error("runtime-host text execution requires a selected PyTorch runtime; got {runtime_id}")]
     UnsupportedRuntime { runtime_id: String },
     #[error("runtime-host text execution requires a selected runtime variant")]
@@ -436,6 +503,45 @@ mod tests {
             projection.artifact_load_target().local_load_path,
             target_path
         );
+        assert!(
+            projection.request().generation_options.is_none(),
+            "runtime-host text must not impose the acceptance fixture's token budget"
+        );
+    }
+
+    #[test]
+    fn projects_authored_text_generation_trait_settings() {
+        let mut request = text_request_fixture();
+        request
+            .handoff
+            .dispatch_decision
+            .as_mut()
+            .expect("dispatch decision")
+            .runtime_trait_settings = vec![
+            pantograph_scheduler::SchedulerTraitSetting {
+                trait_id: "max_new_tokens".parse().expect("trait id"),
+                value: pantograph_scheduler::SchedulerTraitValue::U64(32),
+            },
+            pantograph_scheduler::SchedulerTraitSetting {
+                trait_id: "temperature".parse().expect("trait id"),
+                value: pantograph_scheduler::SchedulerTraitValue::String("0.2".to_string()),
+            },
+        ];
+        let request = ValidatedRuntimeHostExecutionRequest::try_from(request)
+            .expect("text request fixture should validate");
+        let package_facts = text_package_facts(&request);
+        let target_directory = tempfile::tempdir().expect("target directory");
+        let target = text_load_target(&package_facts, &target_directory);
+        let projection = project_runtime_host_text_generation(&request, package_facts, target)
+            .expect("authored text settings should project");
+        let options = projection
+            .request()
+            .generation_options
+            .as_ref()
+            .expect("authored settings should produce generation options");
+
+        assert_eq!(options.length.max_new_tokens, Some(32));
+        assert_eq!(options.sampling.temperature, Some(0.2));
     }
 
     #[test]
@@ -619,32 +725,34 @@ mod tests {
     fn text_load_target(
         package_facts: &ResolvedModelPackageFacts,
         target_directory: &tempfile::TempDir,
-    ) -> pumas_library::models::PumasArtifactLoadTarget {
-        pumas_library::models::PumasArtifactLoadTarget {
-            model_ref: pumas_library::models::PumasModelRef {
+    ) -> PumasArtifactLoadTarget {
+        PumasArtifactLoadTarget {
+            model_ref: PumasModelRef {
                 model_id: package_facts.model_ref.model_id.clone(),
                 revision: package_facts.model_ref.revision.clone(),
                 selected_artifact_id: package_facts.model_ref.selected_artifact_id.clone(),
                 selected_artifact_path: package_facts.model_ref.selected_artifact_path.clone(),
-                ..Default::default()
+                migration_diagnostics: Vec::new(),
             },
-            artifact_kind: pumas_library::models::PackageArtifactKind::HfCompatibleDirectory,
+            artifact_kind: inference::ModelArtifactKind::HfCompatibleDirectory,
             local_load_path: target_directory
                 .path()
                 .to_str()
                 .expect("target path")
                 .to_string(),
-            load_path_kind: pumas_library::models::PumasArtifactLoadPathKind::Directory,
+            load_path_kind: inference::PumasArtifactLoadPathKind::Directory,
             library_root_id: Some("text-test-root".to_string()),
-            storage_kind: pumas_library::models::StorageKind::LibraryOwned,
-            validation_state: pumas_library::models::AssetValidationState::Valid,
+            storage_kind: inference::ModelStorageKind::LibraryOwned,
+            validation_state: inference::ModelValidationState::Valid,
+            verification_source_fingerprint: None,
+            verification_observed_from_cache_at: None,
             content_fingerprint: None,
             package_facts_contract_version: Some(package_facts.package_facts_contract_version),
         }
     }
 
     struct TextLoadTargetResolver {
-        target: pumas_library::models::PumasArtifactLoadTarget,
+        target: PumasArtifactLoadTarget,
     }
 
     #[async_trait]
@@ -653,7 +761,7 @@ mod tests {
             &self,
             _request: &ValidatedRuntimeHostExecutionRequest,
         ) -> Result<
-            pumas_library::models::PumasArtifactLoadTarget,
+            PumasArtifactLoadTarget,
             crate::runtime_host_load_target::RuntimeHostPumasLoadTargetError,
         > {
             Ok(self.target.clone())

@@ -577,11 +577,38 @@ fn load_target_diagnostics(
 fn load_target_source_diagnostic(
     diagnostic: &RuntimeDispatchLoadTargetFactsDiagnostic,
 ) -> SchedulerDispatchSelectionDiagnostic {
+    let message = load_target_source_diagnostic_message(diagnostic);
     provider_diagnostic(
         load_target_diagnostic_code(diagnostic.code),
-        &diagnostic.message,
+        &message,
         load_target_diagnostic_hint(diagnostic.code),
     )
+}
+
+fn load_target_source_diagnostic_message(
+    diagnostic: &RuntimeDispatchLoadTargetFactsDiagnostic,
+) -> String {
+    let mut details = Vec::new();
+    if let Some(state) = diagnostic.intent_state {
+        details.push(format!("intent_state={state:?}"));
+    }
+    if let Some(candidate_count) = diagnostic.intent_candidate_count {
+        details.push(format!("intent_candidates={candidate_count}"));
+    }
+    if !diagnostic.intent_diagnostics.is_empty() {
+        details.push(format!(
+            "intent_diagnostics={}",
+            diagnostic.intent_diagnostics.join(" | ")
+        ));
+    }
+    if let Some(error) = diagnostic.intent_hydration_error.as_deref() {
+        details.push(format!("intent_hydration_error={error}"));
+    }
+    if details.is_empty() {
+        diagnostic.message.clone()
+    } else {
+        format!("{} ({})", diagnostic.message, details.join(", "))
+    }
 }
 
 fn load_target_diagnostic_code(
@@ -595,6 +622,8 @@ fn load_target_diagnostic_code(
         RuntimeDispatchLoadTargetFactsDiagnosticCode::MissingSelectorAccess
         | RuntimeDispatchLoadTargetFactsDiagnosticCode::UnsupportedSelectorAccessRole
         | RuntimeDispatchLoadTargetFactsDiagnosticCode::MissingRuntimeFamily
+        | RuntimeDispatchLoadTargetFactsDiagnosticCode::IntentLookupFailed
+        | RuntimeDispatchLoadTargetFactsDiagnosticCode::IntentUnavailable
         | RuntimeDispatchLoadTargetFactsDiagnosticCode::LoadTargetLookupFailed
         | RuntimeDispatchLoadTargetFactsDiagnosticCode::LoadTargetUnavailable
         | RuntimeDispatchLoadTargetFactsDiagnosticCode::PathFactsStripped => {
@@ -613,6 +642,12 @@ fn load_target_diagnostic_hint(code: RuntimeDispatchLoadTargetFactsDiagnosticCod
         }
         RuntimeDispatchLoadTargetFactsDiagnosticCode::MissingRuntimeFamily => {
             "embedded_runtime_dispatch_candidate_provider.load_target.missing_runtime_family"
+        }
+        RuntimeDispatchLoadTargetFactsDiagnosticCode::IntentLookupFailed => {
+            "embedded_runtime_dispatch_candidate_provider.intent.lookup_failed"
+        }
+        RuntimeDispatchLoadTargetFactsDiagnosticCode::IntentUnavailable => {
+            "embedded_runtime_dispatch_candidate_provider.intent.unavailable"
         }
         RuntimeDispatchLoadTargetFactsDiagnosticCode::LoadTargetLookupFailed => {
             "embedded_runtime_dispatch_candidate_provider.load_target.lookup_failed"
@@ -704,6 +739,15 @@ fn candidate_drafts_from_projected_facts(
             ));
             continue;
         };
+        if let Err(message) = validate_package_and_load_target_coherence(package_facts, load_target)
+        {
+            diagnostics.push(provider_diagnostic(
+                SchedulerDispatchSelectionDiagnosticCode::InvalidCandidateEvidence,
+                &message,
+                "embedded_runtime_dispatch_candidate_provider.load_target.incoherent_evidence",
+            ));
+            continue;
+        }
         drafts.extend(matching_backend_keys.into_iter().map(|backend_key| {
             runtime_candidate_draft(package_facts, runtime, load_target, backend_key)
         }));
@@ -725,6 +769,71 @@ fn candidate_drafts_from_projected_facts(
     }
 
     (drafts, diagnostics)
+}
+
+fn validate_package_and_load_target_coherence(
+    package_facts: &PumasDispatchPackageFactsProjection,
+    load_target: &RuntimeDispatchLoadTargetFact,
+) -> Result<(), String> {
+    let package_model_ref = &package_facts.model_ref;
+    let target_model_ref = &load_target.model_ref;
+    if canonical_pumas_model_id(&package_model_ref.model_id)
+        != canonical_pumas_model_id(&target_model_ref.model_id)
+    {
+        return Err(format!(
+            "Pumas package facts model '{}' do not match intent load-target model '{}'",
+            package_model_ref.model_id, target_model_ref.model_id
+        ));
+    }
+    if let (Some(package_revision), Some(target_revision)) = (
+        package_model_ref.revision.as_deref(),
+        target_model_ref.revision.as_deref(),
+    ) {
+        if package_revision != target_revision {
+            return Err(format!(
+                "Pumas package facts revision {:?} does not match intent load-target revision {:?}",
+                package_model_ref.revision, target_model_ref.revision
+            ));
+        }
+    }
+    if package_model_ref.selected_artifact_id != target_model_ref.selected_artifact_id {
+        return Err(format!(
+            "Pumas package facts artifact {:?} does not match intent load-target artifact {:?}",
+            package_model_ref.selected_artifact_id, target_model_ref.selected_artifact_id
+        ));
+    }
+    if load_target.artifact_kind != format!("{:?}", package_facts.artifact_kind) {
+        return Err(format!(
+            "Pumas package facts artifact kind {:?} does not match intent load-target kind {}",
+            package_facts.artifact_kind, load_target.artifact_kind
+        ));
+    }
+    if load_target.storage_kind != format!("{:?}", package_facts.storage_kind) {
+        return Err(format!(
+            "Pumas package facts storage kind {:?} does not match intent load-target storage {}",
+            package_facts.storage_kind, load_target.storage_kind
+        ));
+    }
+    if load_target.validation_state != format!("{:?}", package_facts.validation_state) {
+        return Err(format!(
+            "Pumas package facts validation state {:?} does not match intent load-target validation {}",
+            package_facts.validation_state, load_target.validation_state
+        ));
+    }
+    if load_target.package_facts_contract_version
+        != Some(package_facts.package_facts_contract_version)
+    {
+        return Err(format!(
+            "Pumas package-facts contract {:?} does not match intent load-target contract {:?}",
+            package_facts.package_facts_contract_version,
+            load_target.package_facts_contract_version
+        ));
+    }
+    Ok(())
+}
+
+fn canonical_pumas_model_id(model_id: &str) -> &str {
+    model_id.trim_start_matches("pumas://models/")
 }
 
 fn load_target_for_runtime<'a>(
@@ -1214,6 +1323,25 @@ mod tests {
     }
 
     #[test]
+    fn candidate_drafts_accept_missing_package_revision_when_intent_supplies_it() {
+        let mut package_facts = pumas_package_facts(vec![inference::BackendHintLabel::Diffusers]);
+        package_facts.model_ref.revision = None;
+
+        let (drafts, diagnostics) = candidate_drafts_from_projected_facts(
+            &package_facts,
+            &runtime_capability_facts(vec![runtime_capability("pytorch", vec!["diffusers"])]),
+            &load_target_facts(vec![load_target("diffusers")]),
+        );
+
+        assert!(diagnostics.is_empty());
+        assert_eq!(drafts.len(), 1);
+        assert_eq!(
+            drafts[0].selected_model_ref.revision.as_deref(),
+            Some("main")
+        );
+    }
+
+    #[test]
     fn provider_fails_closed_when_load_target_evidence_is_missing() {
         let registry = Arc::new(RuntimeRegistry::new());
         registry.register_runtime(
@@ -1453,7 +1581,9 @@ mod tests {
     ) -> PumasDispatchPackageFactsProjection {
         PumasDispatchPackageFactsProjection {
             model_ref: path_free_model_ref(),
+            package_facts_contract_version: inference::MODEL_PACKAGE_FACTS_CONTRACT_VERSION,
             artifact_kind: inference::ModelArtifactKind::DiffusersBundle,
+            storage_kind: inference::ModelStorageKind::LibraryOwned,
             validation_state: inference::ModelValidationState::Valid,
             task: inference::TaskEvidence {
                 pipeline_tag: Some("text-to-image".to_string()),
@@ -1519,8 +1649,10 @@ mod tests {
             library_root_id: Some("default".to_string()),
             storage_kind: "LibraryOwned".to_string(),
             validation_state: "Valid".to_string(),
+            verification_source_fingerprint: None,
+            verification_observed_from_cache_at: None,
             content_fingerprint: Some("sha256:abc".to_string()),
-            package_facts_contract_version: Some(1),
+            package_facts_contract_version: Some(inference::MODEL_PACKAGE_FACTS_CONTRACT_VERSION),
         }
     }
 

@@ -15,8 +15,8 @@ use crate::image_generation_family_adapters::{
 };
 use crate::model_contracts::{
     DiffusersComponentRole, ImageGenerationFamilyLabel, InferenceTaskId, ModelArtifactKind,
-    ModelValidationState, PackageFactStatus, PumasArtifactEntryPath, PumasArtifactLoadPathKind,
-    PumasArtifactLoadTarget, PumasModelRef, ResolvedModelPackageFacts,
+    ModelValidationState, PackageFactStatus, PumasArtifactLoadPathKind, PumasArtifactLoadTarget,
+    PumasModelRef, ResolvedModelPackageFacts,
 };
 use crate::resource_estimates::{
     InferenceResourceEstimate, InferenceResourceEstimateDiagnostic,
@@ -384,7 +384,9 @@ impl<'de> Deserialize<'de> for DenoisingSchedulerOptionId {
 #[serde(rename_all = "snake_case")]
 pub struct ImageGenerationExecutionPlan {
     pub model_ref: PumasModelRef,
-    pub artifact_entry_path: PumasArtifactEntryPath,
+    /// Producer-owned artifact entry path. Pumas package facts use the local
+    /// executable path here; it remains runtime metadata and is not scheduler identity.
+    pub artifact_entry_path: String,
     pub artifact_load_target: PumasArtifactLoadTarget,
     pub backend_id: BackendId,
     pub runtime_variant_id: RuntimeVariantId,
@@ -634,6 +636,25 @@ fn validate_artifact_load_target(
             "Pumas artifact load target must include a non-empty local load path",
         ));
     }
+    let package_entry_path = input.package_facts.artifact.entry_path.trim();
+    if is_absolute_local_path(package_entry_path)
+        && is_absolute_local_path(local_load_path)
+        && package_entry_path != local_load_path
+    {
+        diagnostics.push(diagnostic(
+            ImageGenerationPlannerDiagnosticCode::InvalidArtifactLoadTarget,
+            "artifact_load_target.local_load_path",
+            "Pumas package facts and artifact load target must refer to the same executable artifact path",
+        ));
+    }
+}
+
+fn is_absolute_local_path(path: &str) -> bool {
+    std::path::Path::new(path).is_absolute()
+        || (path.len() >= 3
+            && path.as_bytes()[0].is_ascii_alphabetic()
+            && path.as_bytes()[1] == b':'
+            && matches!(path.as_bytes()[2], b'/' | b'\\'))
 }
 
 fn validate_selected_artifact_identity(
@@ -709,21 +730,16 @@ fn non_blank_selected_artifact_id(model_ref: &PumasModelRef) -> Option<&str> {
 fn validate_artifact_entry_path(
     package_facts: &ResolvedModelPackageFacts,
     diagnostics: &mut Vec<ImageGenerationPlannerDiagnostic>,
-) -> PumasArtifactEntryPath {
-    match PumasArtifactEntryPath::parse(&package_facts.artifact.entry_path) {
-        Ok(path) => path,
-        Err(error) => {
-            diagnostics.push(diagnostic(
-                ImageGenerationPlannerDiagnosticCode::InvalidArtifactEntryPath,
-                "package_facts.artifact.entry_path",
-                format!(
-                    "image-generation planning requires a validated root-relative Pumas artifact entry path: {error}"
-                ),
-            ));
-            PumasArtifactEntryPath::parse("__invalid_artifact_entry_path__")
-                .expect("static sentinel artifact path is valid")
-        }
+) -> String {
+    let entry_path = package_facts.artifact.entry_path.trim();
+    if entry_path.is_empty() || entry_path.chars().any(char::is_control) {
+        diagnostics.push(diagnostic(
+            ImageGenerationPlannerDiagnosticCode::InvalidArtifactEntryPath,
+            "package_facts.artifact.entry_path",
+            "image-generation planning requires a non-empty producer artifact entry path without control characters",
+        ));
     }
+    entry_path.to_string()
 }
 
 fn validate_backend_decision(

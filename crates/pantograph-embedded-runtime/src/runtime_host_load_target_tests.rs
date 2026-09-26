@@ -1,16 +1,21 @@
+use inference::{
+    ModelArtifactKind, ModelStorageKind, PumasArtifactLoadPathKind as InferenceLoadPathKind,
+    PumasArtifactLoadTarget,
+};
 use pantograph_runtime_host_contracts::{
     RuntimeHostExecutionRequest, ValidatedRuntimeHostExecutionRequest,
 };
 use pumas_library::models::{
     AssetValidationState, ModelArtifactState, ModelEntryPathState, PackageArtifactKind,
-    PumasArtifactLoadPathKind, PumasArtifactLoadTarget, PumasArtifactLoadTargetDiagnostic,
-    PumasArtifactLoadTargetDiagnosticCode, ResolveModelArtifactLoadTargetResponse, StorageKind,
-    PACKAGE_FACTS_CONTRACT_VERSION,
+    PumasArtifactLoadPathKind, PumasArtifactLoadTarget as PumasLibraryArtifactLoadTarget,
+    PumasArtifactLoadTargetDiagnostic, PumasArtifactLoadTargetDiagnosticCode,
+    ResolveModelArtifactLoadTargetResponse, StorageKind, PACKAGE_FACTS_CONTRACT_VERSION,
 };
 
 use super::{
-    build_runtime_host_artifact_load_target_request, ready_runtime_host_artifact_load_target,
-    validate_runtime_host_producer_target_identity, RuntimeHostPumasLoadTargetError,
+    build_runtime_host_artifact_load_target_request, build_runtime_host_model_requirement,
+    ready_runtime_host_artifact_load_target, validate_runtime_host_producer_target_identity,
+    RuntimeHostPumasLoadTargetError,
 };
 
 #[test]
@@ -38,11 +43,40 @@ fn load_target_request_uses_scheduler_selected_model_ref() {
 }
 
 #[test]
+fn intent_requirement_is_local_only_and_preserves_selected_identity() {
+    let request = validated_runtime_host_request();
+    let selected_model_ref = request
+        .as_ref()
+        .handoff
+        .dispatch_decision
+        .as_ref()
+        .expect("fixture has dispatch decision")
+        .selected_model_ref
+        .clone();
+    let requirement = build_runtime_host_model_requirement(&selected_model_ref)
+        .expect("selected model should form a valid intent requirement");
+
+    assert_eq!(
+        requirement.acquisition_policy,
+        pumas_library::intent::AcquisitionPolicy::LocalOnly
+    );
+    let pumas_library::intent::ModelSelector::LocalModel { model_ref } = requirement.selector
+    else {
+        panic!("runtime host must build a local-model requirement");
+    };
+    assert_eq!(model_ref.model_id, "juggernaut-xl-v10");
+    assert_eq!(
+        model_ref.selected_artifact_id.as_deref(),
+        Some("diffusers-bundle")
+    );
+}
+
+#[test]
 fn ready_load_target_response_returns_host_only_target() {
     let response = ResolveModelArtifactLoadTargetResponse {
         artifact_state: ModelArtifactState::Ready,
         entry_path_state: ModelEntryPathState::Ready,
-        target: Some(PumasArtifactLoadTarget {
+        target: Some(PumasLibraryArtifactLoadTarget {
             model_ref: pumas_library::models::PumasModelRef {
                 model_id: "pumas://models/juggernaut-xl-v10".to_string(),
                 selected_artifact_id: Some("diffusers-bundle".to_string()),
@@ -64,8 +98,8 @@ fn ready_load_target_response_returns_host_only_target() {
     let target = ready_runtime_host_artifact_load_target(response)
         .expect("ready Pumas response must return host-only load target");
 
-    assert_eq!(target.artifact_kind, PackageArtifactKind::DiffusersBundle);
-    assert_eq!(target.storage_kind, StorageKind::LibraryOwned);
+    assert_eq!(target.artifact_kind, ModelArtifactKind::DiffusersBundle);
+    assert_eq!(target.storage_kind, ModelStorageKind::LibraryOwned);
 }
 
 #[test]
@@ -144,18 +178,21 @@ fn producer_target_revision_mismatch_fails_before_identity_normalization() {
 
 fn ready_target() -> PumasArtifactLoadTarget {
     PumasArtifactLoadTarget {
-        model_ref: pumas_library::models::PumasModelRef {
+        model_ref: inference::PumasModelRef {
             model_id: "pumas://models/juggernaut-xl-v10".to_string(),
+            revision: None,
             selected_artifact_id: Some("diffusers-bundle".to_string()),
             selected_artifact_path: Some("juggernaut-xl-v10/diffusers".to_string()),
-            ..Default::default()
+            migration_diagnostics: Vec::new(),
         },
-        artifact_kind: PackageArtifactKind::DiffusersBundle,
+        artifact_kind: ModelArtifactKind::DiffusersBundle,
         local_load_path: "/host-only/pumas/juggernaut-xl-v10".to_string(),
-        load_path_kind: PumasArtifactLoadPathKind::Directory,
+        load_path_kind: InferenceLoadPathKind::Directory,
         library_root_id: Some("default".to_string()),
-        storage_kind: StorageKind::LibraryOwned,
-        validation_state: AssetValidationState::Valid,
+        storage_kind: ModelStorageKind::LibraryOwned,
+        validation_state: inference::ModelValidationState::Valid,
+        verification_source_fingerprint: None,
+        verification_observed_from_cache_at: None,
         content_fingerprint: Some("sha256:abc".to_string()),
         package_facts_contract_version: Some(PACKAGE_FACTS_CONTRACT_VERSION),
     }

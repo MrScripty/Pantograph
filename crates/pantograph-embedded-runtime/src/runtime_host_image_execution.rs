@@ -2,8 +2,8 @@ use inference::{
     BackendExecutionDecision, BackendId, CapabilityAvailabilityState, DependencyReadinessFact,
     DependencyReadinessResolverOwner, DeviceResolutionDecision, ImageGenerationPlanningInput,
     ImageGenerationRequest, InferenceDeviceClass, InferenceDeviceId, InferenceDevicePolicy,
-    InferenceTaskId, PlannedImageGenerationLaunchHandoff, PumasArtifactLoadPathKind,
-    PumasArtifactLoadTarget, ResolvedModelPackageFacts, RuntimeVariantId,
+    InferenceTaskId, PlannedImageGenerationLaunchHandoff, PumasArtifactLoadTarget,
+    ResolvedModelPackageFacts, RuntimeVariantId,
 };
 use pantograph_runtime_host_contracts::{
     RuntimeHostExecutionInputValue, ValidatedRuntimeHostExecutionRequest,
@@ -54,7 +54,7 @@ impl RuntimeHostImageGenerationProjection {
 pub(crate) fn project_runtime_host_image_generation(
     request: &ValidatedRuntimeHostExecutionRequest,
     package_facts: ResolvedModelPackageFacts,
-    load_target: pumas_library::models::PumasArtifactLoadTarget,
+    load_target: PumasArtifactLoadTarget,
 ) -> Result<RuntimeHostImageGenerationProjection, RuntimeHostImageGenerationProjectionError> {
     let request = request.as_ref();
     if request.handoff.task_intent.task_type.as_str() != IMAGE_GENERATION_TASK {
@@ -68,7 +68,8 @@ pub(crate) fn project_runtime_host_image_generation(
         .as_ref()
         .ok_or(RuntimeHostImageGenerationProjectionError::MissingDispatchDecision)?;
     let image_request = image_generation_request(request, dispatch_decision)?;
-    let backend_decision = image_backend_decision(dispatch_decision)?;
+    let runtime_model_ref = load_target.model_ref.clone();
+    let backend_decision = image_backend_decision(dispatch_decision, &runtime_model_ref)?;
     let load_target = project_pumas_artifact_load_target(load_target);
     let launch_handoff =
         PlannedImageGenerationLaunchHandoff::new(package_facts, load_target, backend_decision)
@@ -109,6 +110,7 @@ fn image_generation_request(
 
 fn image_backend_decision(
     decision: &SchedulerDispatchDecision,
+    runtime_model_ref: &inference::PumasModelRef,
 ) -> Result<BackendExecutionDecision, RuntimeHostImageGenerationProjectionError> {
     let selected_backend_id = image_backend_id(decision)?;
     let selected_runtime_variant_id = selected_runtime_variant_id(decision)?;
@@ -128,22 +130,7 @@ fn image_backend_decision(
         selected_device_id: Some(selected_device_id),
         device_decision,
         selected_task_id: Some(InferenceTaskId::ImageGeneration),
-        selected_model_ref: Some(inference::PumasModelRef {
-            model_id: decision.selected_model_ref.model_id.clone(),
-            revision: decision.selected_model_ref.revision.clone(),
-            selected_artifact_id: decision.selected_model_ref.selected_artifact_id.clone(),
-            selected_artifact_path: None,
-            migration_diagnostics: decision
-                .selected_model_ref
-                .migration_diagnostics
-                .iter()
-                .map(|diagnostic| inference::ModelRefMigrationDiagnostic {
-                    code: diagnostic.code.clone(),
-                    message: diagnostic.message.clone(),
-                    input: diagnostic.input.clone(),
-                })
-                .collect(),
-        }),
+        selected_model_ref: Some(runtime_model_ref.clone()),
         diagnostics: Vec::new(),
         dependency_readiness: image_dependency_readiness_facts(),
         selection_policy_trace: None,
@@ -370,7 +357,7 @@ fn validate_supported_inputs(
 }
 
 pub(crate) fn project_pumas_artifact_load_target(
-    target: pumas_library::models::PumasArtifactLoadTarget,
+    target: PumasArtifactLoadTarget,
 ) -> PumasArtifactLoadTarget {
     let selected_artifact_path = target
         .model_ref
@@ -382,74 +369,18 @@ pub(crate) fn project_pumas_artifact_load_target(
             revision: target.model_ref.revision,
             selected_artifact_id: target.model_ref.selected_artifact_id,
             selected_artifact_path,
-            migration_diagnostics: target
-                .model_ref
-                .migration_diagnostics
-                .into_iter()
-                .map(|diagnostic| inference::ModelRefMigrationDiagnostic {
-                    code: diagnostic.code,
-                    message: diagnostic.message,
-                    input: diagnostic.input,
-                })
-                .collect(),
+            migration_diagnostics: target.model_ref.migration_diagnostics,
         },
-        artifact_kind: project_artifact_kind(target.artifact_kind),
+        artifact_kind: target.artifact_kind,
         local_load_path: target.local_load_path,
-        load_path_kind: match target.load_path_kind {
-            pumas_library::models::PumasArtifactLoadPathKind::Directory => {
-                PumasArtifactLoadPathKind::Directory
-            }
-            pumas_library::models::PumasArtifactLoadPathKind::File => {
-                PumasArtifactLoadPathKind::File
-            }
-        },
+        load_path_kind: target.load_path_kind,
         library_root_id: target.library_root_id,
-        storage_kind: match target.storage_kind {
-            pumas_library::models::StorageKind::LibraryOwned => {
-                inference::ModelStorageKind::LibraryOwned
-            }
-            pumas_library::models::StorageKind::ExternalReference => {
-                inference::ModelStorageKind::ExternalReference
-            }
-        },
-        validation_state: match target.validation_state {
-            pumas_library::models::AssetValidationState::Valid => {
-                inference::ModelValidationState::Valid
-            }
-            pumas_library::models::AssetValidationState::Degraded => {
-                inference::ModelValidationState::Degraded
-            }
-            pumas_library::models::AssetValidationState::Invalid => {
-                inference::ModelValidationState::Invalid
-            }
-        },
+        storage_kind: target.storage_kind,
+        validation_state: target.validation_state,
+        verification_source_fingerprint: target.verification_source_fingerprint,
+        verification_observed_from_cache_at: target.verification_observed_from_cache_at,
         content_fingerprint: target.content_fingerprint,
         package_facts_contract_version: target.package_facts_contract_version,
-    }
-}
-
-fn project_artifact_kind(
-    kind: pumas_library::models::PackageArtifactKind,
-) -> inference::ModelArtifactKind {
-    match kind {
-        pumas_library::models::PackageArtifactKind::Gguf => inference::ModelArtifactKind::Gguf,
-        pumas_library::models::PackageArtifactKind::HfCompatibleDirectory => {
-            inference::ModelArtifactKind::HfCompatibleDirectory
-        }
-        pumas_library::models::PackageArtifactKind::Safetensors => {
-            inference::ModelArtifactKind::Safetensors
-        }
-        pumas_library::models::PackageArtifactKind::DiffusersBundle => {
-            inference::ModelArtifactKind::DiffusersBundle
-        }
-        pumas_library::models::PackageArtifactKind::Onnx => inference::ModelArtifactKind::Onnx,
-        pumas_library::models::PackageArtifactKind::Adapter => {
-            inference::ModelArtifactKind::Adapter
-        }
-        pumas_library::models::PackageArtifactKind::Shard => inference::ModelArtifactKind::Shard,
-        pumas_library::models::PackageArtifactKind::Unknown => {
-            inference::ModelArtifactKind::Unknown
-        }
     }
 }
 
@@ -757,24 +688,23 @@ mod tests {
         package_facts
     }
 
-    fn image_load_target(
-        package_facts: &ResolvedModelPackageFacts,
-    ) -> pumas_library::models::PumasArtifactLoadTarget {
-        pumas_library::models::PumasArtifactLoadTarget {
-            model_ref: pumas_library::models::PumasModelRef {
+    fn image_load_target(package_facts: &ResolvedModelPackageFacts) -> PumasArtifactLoadTarget {
+        PumasArtifactLoadTarget {
+            model_ref: inference::PumasModelRef {
                 model_id: package_facts.model_ref.model_id.clone(),
                 revision: package_facts.model_ref.revision.clone(),
                 selected_artifact_id: package_facts.model_ref.selected_artifact_id.clone(),
                 selected_artifact_path: None,
                 migration_diagnostics: Vec::new(),
-                ..Default::default()
             },
-            artifact_kind: pumas_library::models::PackageArtifactKind::DiffusersBundle,
+            artifact_kind: inference::ModelArtifactKind::DiffusersBundle,
             local_load_path: "/pumas/models/image/stable-diffusion/tiny-sd".to_string(),
-            load_path_kind: pumas_library::models::PumasArtifactLoadPathKind::Directory,
+            load_path_kind: inference::PumasArtifactLoadPathKind::Directory,
             library_root_id: Some("test-root".to_string()),
-            storage_kind: pumas_library::models::StorageKind::LibraryOwned,
-            validation_state: pumas_library::models::AssetValidationState::Valid,
+            storage_kind: inference::ModelStorageKind::LibraryOwned,
+            validation_state: inference::ModelValidationState::Valid,
+            verification_source_fingerprint: None,
+            verification_observed_from_cache_at: None,
             content_fingerprint: None,
             package_facts_contract_version: Some(package_facts.package_facts_contract_version),
         }

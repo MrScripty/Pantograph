@@ -201,7 +201,21 @@ impl RuntimeHostExecutionPort for EmbeddedRuntimeHostExecutionPort {
             ));
         };
 
-        match load_target_resolver.resolve(&validated_request).await {
+        let load_target_resolution = load_target_resolver.resolve(&validated_request);
+        tokio::pin!(load_target_resolution);
+        let mut load_target_cancellation_poll =
+            tokio::time::interval(std::time::Duration::from_millis(25));
+        let load_target_result = loop {
+            tokio::select! {
+                result = &mut load_target_resolution => break result,
+                _ = load_target_cancellation_poll.tick() => {
+                    if let Some(response) = cancellation_rejection_response(validated_request.as_ref(), &cancellation)? {
+                        return Ok(response);
+                    }
+                }
+            }
+        };
+        match load_target_result {
             Ok(load_target) => {
                 if let Some(response) =
                     cancellation_rejection_response(validated_request.as_ref(), &cancellation)?
@@ -232,9 +246,29 @@ impl RuntimeHostExecutionPort for EmbeddedRuntimeHostExecutionPort {
                         MISSING_INFERENCE_GATEWAY_HINT,
                     ));
                 };
-                let package_facts = match package_facts_resolver.resolve(&validated_request).await {
+                let package_facts_resolution = package_facts_resolver.resolve(&validated_request);
+                tokio::pin!(package_facts_resolution);
+                let mut package_facts_cancellation_poll =
+                    tokio::time::interval(std::time::Duration::from_millis(25));
+                let package_facts_result = loop {
+                    tokio::select! {
+                        result = &mut package_facts_resolution => break result,
+                        _ = package_facts_cancellation_poll.tick() => {
+                            if let Some(response) = cancellation_rejection_response(validated_request.as_ref(), &cancellation)? {
+                                return Ok(response);
+                            }
+                        }
+                    }
+                };
+                let package_facts = match package_facts_result {
                     Ok(package_facts) => package_facts,
                     Err(error) => {
+                        if let Some(response) = cancellation_rejection_response(
+                            validated_request.as_ref(),
+                            &cancellation,
+                        )? {
+                            return Ok(response);
+                        }
                         return Ok(rejected_response(
                             validated_request.as_ref(),
                             RuntimeHostExecutionDiagnosticCode::PumasLoadTargetUnavailable,
@@ -297,6 +331,11 @@ impl RuntimeHostExecutionPort for EmbeddedRuntimeHostExecutionPort {
                         ));
                     }
                 };
+                if let Some(response) =
+                    cancellation_rejection_response(validated_request.as_ref(), &cancellation)?
+                {
+                    return Ok(response);
+                }
                 match completed_image_response(
                     validated_request.as_ref(),
                     result,
@@ -310,12 +349,19 @@ impl RuntimeHostExecutionPort for EmbeddedRuntimeHostExecutionPort {
                     )),
                 }
             }
-            Err(error) => Ok(rejected_response(
-                validated_request.as_ref(),
-                RuntimeHostExecutionDiagnosticCode::PumasLoadTargetUnavailable,
-                &load_target_error_message(error),
-                LOAD_TARGET_UNAVAILABLE_HINT,
-            )),
+            Err(error) => {
+                if let Some(response) =
+                    cancellation_rejection_response(validated_request.as_ref(), &cancellation)?
+                {
+                    return Ok(response);
+                }
+                Ok(rejected_response(
+                    validated_request.as_ref(),
+                    RuntimeHostExecutionDiagnosticCode::PumasLoadTargetUnavailable,
+                    &load_target_error_message(error),
+                    LOAD_TARGET_UNAVAILABLE_HINT,
+                ))
+            }
         }
     }
 }
@@ -392,6 +438,9 @@ impl EmbeddedRuntimeHostExecutionPort {
                 ));
             }
         };
+        if let Some(response) = cancellation_rejection_response(request_ref, &cancellation)? {
+            return Ok(response);
+        }
         if let Some(response) = cancellation_rejection_response(request_ref, &cancellation)? {
             return Ok(response);
         }
@@ -559,6 +608,9 @@ impl EmbeddedRuntimeHostExecutionPort {
         if let Some(response) = cancellation_rejection_response(request_ref, &cancellation)? {
             return Ok(response);
         }
+        if let Some(response) = cancellation_rejection_response(request_ref, &cancellation)? {
+            return Ok(response);
+        }
 
         let package_facts_resolution = package_facts_resolver.resolve(request);
         tokio::pin!(package_facts_resolution);
@@ -592,7 +644,6 @@ impl EmbeddedRuntimeHostExecutionPort {
         if let Some(response) = cancellation_rejection_response(request_ref, &cancellation)? {
             return Ok(response);
         }
-
         let projection =
             match project_runtime_host_text_generation(request, package_facts, load_target) {
                 Ok(projection) => projection,
@@ -892,11 +943,30 @@ impl RuntimeHostBatchExecutionPort for EmbeddedRuntimeHostExecutionPort {
             ));
         };
 
-        let anchor_member_request = anchor_member_request(request, &member_requests)?;
+        let anchor_request = anchor_member_request(request, &member_requests)?;
 
-        let load_target = match load_target_resolver.resolve(anchor_member_request).await {
+        let load_target_resolution = load_target_resolver.resolve(anchor_request);
+        tokio::pin!(load_target_resolution);
+        let mut load_target_cancellation_poll =
+            tokio::time::interval(std::time::Duration::from_millis(25));
+        let load_target_result = loop {
+            tokio::select! {
+                result = &mut load_target_resolution => break result,
+                _ = load_target_cancellation_poll.tick() => {
+                    if let Some(response) = batch_cancellation_rejection_response(request, &cancellation)? {
+                        return Ok(response);
+                    }
+                }
+            }
+        };
+        let load_target = match load_target_result {
             Ok(load_target) => load_target,
             Err(error) => {
+                if let Some(response) =
+                    batch_cancellation_rejection_response(request, &cancellation)?
+                {
+                    return Ok(response);
+                }
                 return Ok(rejected_batch_response(
                     request,
                     RuntimeHostExecutionDiagnosticCode::PumasLoadTargetUnavailable,
@@ -909,9 +979,28 @@ impl RuntimeHostBatchExecutionPort for EmbeddedRuntimeHostExecutionPort {
             return Ok(response);
         }
 
-        let package_facts = match package_facts_resolver.resolve(anchor_member_request).await {
+        let package_facts_resolution = package_facts_resolver.resolve(anchor_request);
+        tokio::pin!(package_facts_resolution);
+        let mut package_facts_cancellation_poll =
+            tokio::time::interval(std::time::Duration::from_millis(25));
+        let package_facts_result = loop {
+            tokio::select! {
+                result = &mut package_facts_resolution => break result,
+                _ = package_facts_cancellation_poll.tick() => {
+                    if let Some(response) = batch_cancellation_rejection_response(request, &cancellation)? {
+                        return Ok(response);
+                    }
+                }
+            }
+        };
+        let package_facts = match package_facts_result {
             Ok(package_facts) => package_facts,
             Err(error) => {
+                if let Some(response) =
+                    batch_cancellation_rejection_response(request, &cancellation)?
+                {
+                    return Ok(response);
+                }
                 return Ok(rejected_batch_response(
                     request,
                     RuntimeHostExecutionDiagnosticCode::PumasLoadTargetUnavailable,
@@ -999,11 +1088,12 @@ impl RuntimeHostBatchExecutionPort for EmbeddedRuntimeHostExecutionPort {
             }
         };
 
-        Ok(runtime_host_batch_response_from_inference(
+        runtime_host_batch_response_from_inference(
             request,
             inference_response,
             media_artifact_sink.as_ref(),
-        ))
+            &cancellation,
+        )
     }
 }
 
@@ -1207,6 +1297,29 @@ fn batch_cancellation_rejection_from_snapshot(
     }
 }
 
+fn append_remaining_batch_cancellation_members(
+    request: &RuntimeHostBatchExecutionRequest,
+    members: &mut Vec<RuntimeHostBatchExecutionMemberResponse>,
+    cancellation: &RuntimeHostExecutionCancellationHandle,
+) -> Result<Vec<RuntimeHostExecutionDiagnostic>, RuntimeHostExecutionPortError> {
+    let mut diagnostics = Vec::new();
+    for member_request in &request.members {
+        if members
+            .iter()
+            .any(|member| member.execution_request_id == member_request.execution_request_id)
+        {
+            continue;
+        }
+        if let Some(member) =
+            batch_member_cancellation_response(member_request, request, cancellation)?
+        {
+            diagnostics.extend(member.diagnostics.clone());
+            members.push(member);
+        }
+    }
+    Ok(diagnostics)
+}
+
 fn rejected_batch_response(
     request: &RuntimeHostBatchExecutionRequest,
     diagnostic_code: RuntimeHostExecutionDiagnosticCode,
@@ -1329,11 +1442,23 @@ fn runtime_host_batch_response_from_inference(
     request: &RuntimeHostBatchExecutionRequest,
     response: ImageGenerationBatchExecutionResponse,
     media_artifact_sink: &dyn RuntimeHostMediaArtifactSink,
-) -> RuntimeHostBatchExecutionResponse {
+    cancellation: &RuntimeHostExecutionCancellationHandle,
+) -> Result<RuntimeHostBatchExecutionResponse, RuntimeHostExecutionPortError> {
+    if let Some(response) = batch_cancellation_rejection_response(request, cancellation)? {
+        return Ok(response);
+    }
     let mut members = Vec::with_capacity(request.members.len());
     let mut diagnostics = runtime_host_diagnostics_from_image_batch(&response.diagnostics);
 
     for member_request in &request.members {
+        if batch_cancellation_rejection_response(request, cancellation)?.is_some() {
+            diagnostics.extend(append_remaining_batch_cancellation_members(
+                request,
+                &mut members,
+                cancellation,
+            )?);
+            break;
+        }
         let Some(member_response) = response
             .members
             .iter()
@@ -1465,13 +1590,13 @@ fn runtime_host_batch_response_from_inference(
         ));
     }
 
-    RuntimeHostBatchExecutionResponse {
+    Ok(RuntimeHostBatchExecutionResponse {
         contract_version: RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
         batch_execution_request_id: request.batch_execution_request_id.clone(),
         state,
         members,
         diagnostics,
-    }
+    })
 }
 
 fn completed_image_batch_member_response(
@@ -2107,7 +2232,8 @@ mod tests {
     use inference::{
         BackendExecutionContext, ImageGenerationBatchExecutionResponse,
         ImageGenerationBatchExecutionState, ImageGenerationBatchMemberExecutionState,
-        ImageGenerationExecutionPlan, ImageGenerationResult, RerankRequest, RerankResponse,
+        ImageGenerationExecutionPlan, ImageGenerationResult, PumasArtifactLoadPathKind,
+        PumasArtifactLoadTarget, RerankRequest, RerankResponse,
     };
     use pantograph_runtime_host_contracts::{
         RuntimeHostExecutionCancellationSignal, RuntimeHostExecutionContractError,
@@ -2117,8 +2243,7 @@ mod tests {
         ArtifactPolicy, ArtifactReadRequest, ArtifactStore, WorkflowArtifactWriter, WorkflowService,
     };
     use pumas_library::models::{
-        AssetValidationState, BundleFormat, ImportState, ModelMetadata, PackageArtifactKind,
-        PumasArtifactLoadPathKind, PumasArtifactLoadTarget, StorageKind,
+        AssetValidationState, BundleFormat, ImportState, ModelMetadata, StorageKind,
     };
     use std::path::PathBuf;
     use std::pin::Pin;
@@ -2299,6 +2424,114 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn image_port_cancels_while_waiting_for_load_target_resolution() {
+        let request = runtime_host_request_fixture();
+        let cancellation_requested = Arc::new(AtomicBool::new(false));
+        let cancellation_signal = Arc::new(FlippingCancellationSignal {
+            cancellation_context_id: request.cancellation_context.cancellation_context_id.clone(),
+            cancellation_requested: cancellation_requested.clone(),
+        });
+        let cancellation = RuntimeHostExecutionCancellationHandle::with_signal(cancellation_signal);
+        let cancellation_task = tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(40)).await;
+            cancellation_requested.store(true, Ordering::SeqCst);
+        });
+        let port = EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
+            Arc::new(PendingLoadTargetResolver),
+            Arc::new(FixturePackageFactsResolver),
+            Arc::new(UnusedMediaArtifactSink),
+            Arc::new(inference::InferenceGateway::new()),
+        );
+
+        let response = port
+            .execute_runtime_host_request(request, cancellation)
+            .await
+            .expect("cancellation should produce a typed response");
+        cancellation_task
+            .await
+            .expect("cancellation task should finish");
+
+        assert_eq!(response.state, RuntimeHostExecutionState::Rejected);
+        assert_eq!(
+            response.diagnostics[0].code,
+            RuntimeHostExecutionDiagnosticCode::CancellationRequested,
+            "{response:#?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn image_port_cancellation_wins_over_in_flight_load_target_failure() {
+        let request = runtime_host_request_fixture();
+        let cancellation_requested = Arc::new(AtomicBool::new(false));
+        let cancellation_signal = Arc::new(FlippingCancellationSignal {
+            cancellation_context_id: request.cancellation_context.cancellation_context_id.clone(),
+            cancellation_requested: cancellation_requested.clone(),
+        });
+        let cancellation = RuntimeHostExecutionCancellationHandle::with_signal(cancellation_signal);
+        let cancellation_task = tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(40)).await;
+            cancellation_requested.store(true, Ordering::SeqCst);
+        });
+        let port = EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
+            Arc::new(DelayedFailingLoadTargetResolver),
+            Arc::new(FixturePackageFactsResolver),
+            Arc::new(UnusedMediaArtifactSink),
+            Arc::new(inference::InferenceGateway::new()),
+        );
+
+        let response = port
+            .execute_runtime_host_request(request, cancellation)
+            .await
+            .expect("cancellation should win over the delayed image resolver failure");
+        cancellation_task
+            .await
+            .expect("cancellation task should finish");
+
+        assert_eq!(response.state, RuntimeHostExecutionState::Rejected);
+        assert_eq!(
+            response.diagnostics[0].code,
+            RuntimeHostExecutionDiagnosticCode::CancellationRequested,
+            "{response:#?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn image_port_cancellation_wins_over_in_flight_package_facts_failure() {
+        let request = runtime_host_request_fixture();
+        let cancellation_requested = Arc::new(AtomicBool::new(false));
+        let cancellation_signal = Arc::new(FlippingCancellationSignal {
+            cancellation_context_id: request.cancellation_context.cancellation_context_id.clone(),
+            cancellation_requested: cancellation_requested.clone(),
+        });
+        let cancellation = RuntimeHostExecutionCancellationHandle::with_signal(cancellation_signal);
+        let cancellation_task = tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(40)).await;
+            cancellation_requested.store(true, Ordering::SeqCst);
+        });
+        let port = EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
+            Arc::new(ReadyLoadTargetResolver),
+            Arc::new(DelayedFailingPackageFactsResolver),
+            Arc::new(UnusedMediaArtifactSink),
+            Arc::new(inference::InferenceGateway::new()),
+        );
+
+        let response = port
+            .execute_runtime_host_request(request, cancellation)
+            .await
+            .expect("cancellation should win over the delayed image facts failure");
+        cancellation_task
+            .await
+            .expect("cancellation task should finish");
+
+        assert_eq!(response.state, RuntimeHostExecutionState::Rejected);
+        assert_eq!(
+            response.diagnostics[0].code,
+            RuntimeHostExecutionDiagnosticCode::CancellationRequested,
+            "{response:#?}"
+        );
+    }
+
+    #[tokio::test]
     async fn text_port_cancellation_wins_over_in_flight_load_target_failure() {
         let request = text_runtime_host_request_fixture();
         let cancellation_requested = Arc::new(AtomicBool::new(false));
@@ -2363,6 +2596,114 @@ mod tests {
             .expect("cancellation task should finish");
 
         assert_eq!(response.state, RuntimeHostExecutionState::Rejected);
+        assert_eq!(
+            response.diagnostics[0].code,
+            RuntimeHostExecutionDiagnosticCode::CancellationRequested,
+            "{response:#?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn image_batch_cancels_while_waiting_for_anchor_load_target_resolution() {
+        let request = runtime_host_batch_request_fixture();
+        let cancellation_requested = Arc::new(AtomicBool::new(false));
+        let cancellation_signal = Arc::new(FlippingCancellationSignal {
+            cancellation_context_id: request.cancellation_context.cancellation_context_id.clone(),
+            cancellation_requested: cancellation_requested.clone(),
+        });
+        let cancellation = RuntimeHostExecutionCancellationHandle::with_signal(cancellation_signal);
+        let cancellation_task = tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(40)).await;
+            cancellation_requested.store(true, Ordering::SeqCst);
+        });
+        let port = EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
+            Arc::new(PendingLoadTargetResolver),
+            Arc::new(FixturePackageFactsResolver),
+            Arc::new(UnusedMediaArtifactSink),
+            Arc::new(inference::InferenceGateway::new()),
+        );
+
+        let response = port
+            .execute_runtime_host_batch_request(request, cancellation)
+            .await
+            .expect("batch cancellation should produce a typed response");
+        cancellation_task
+            .await
+            .expect("cancellation task should finish");
+
+        assert_eq!(response.state, RuntimeHostBatchExecutionState::Cancelled);
+        assert_eq!(
+            response.diagnostics[0].code,
+            RuntimeHostExecutionDiagnosticCode::CancellationRequested,
+            "{response:#?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn image_batch_cancellation_wins_over_in_flight_anchor_load_target_failure() {
+        let request = runtime_host_batch_request_fixture();
+        let cancellation_requested = Arc::new(AtomicBool::new(false));
+        let cancellation_signal = Arc::new(FlippingCancellationSignal {
+            cancellation_context_id: request.cancellation_context.cancellation_context_id.clone(),
+            cancellation_requested: cancellation_requested.clone(),
+        });
+        let cancellation = RuntimeHostExecutionCancellationHandle::with_signal(cancellation_signal);
+        let cancellation_task = tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(40)).await;
+            cancellation_requested.store(true, Ordering::SeqCst);
+        });
+        let port = EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
+            Arc::new(DelayedFailingLoadTargetResolver),
+            Arc::new(FixturePackageFactsResolver),
+            Arc::new(UnusedMediaArtifactSink),
+            Arc::new(inference::InferenceGateway::new()),
+        );
+
+        let response = port
+            .execute_runtime_host_batch_request(request, cancellation)
+            .await
+            .expect("batch cancellation should win over the delayed resolver failure");
+        cancellation_task
+            .await
+            .expect("cancellation task should finish");
+
+        assert_eq!(response.state, RuntimeHostBatchExecutionState::Cancelled);
+        assert_eq!(
+            response.diagnostics[0].code,
+            RuntimeHostExecutionDiagnosticCode::CancellationRequested,
+            "{response:#?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn image_batch_cancellation_wins_over_in_flight_package_facts_failure() {
+        let request = runtime_host_batch_request_fixture();
+        let cancellation_requested = Arc::new(AtomicBool::new(false));
+        let cancellation_signal = Arc::new(FlippingCancellationSignal {
+            cancellation_context_id: request.cancellation_context.cancellation_context_id.clone(),
+            cancellation_requested: cancellation_requested.clone(),
+        });
+        let cancellation = RuntimeHostExecutionCancellationHandle::with_signal(cancellation_signal);
+        let cancellation_task = tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(40)).await;
+            cancellation_requested.store(true, Ordering::SeqCst);
+        });
+        let port = EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
+            Arc::new(ReadyLoadTargetResolver),
+            Arc::new(DelayedFailingPackageFactsResolver),
+            Arc::new(UnusedMediaArtifactSink),
+            Arc::new(inference::InferenceGateway::new()),
+        );
+
+        let response = port
+            .execute_runtime_host_batch_request(request, cancellation)
+            .await
+            .expect("batch cancellation should win over the delayed facts failure");
+        cancellation_task
+            .await
+            .expect("cancellation task should finish");
+
+        assert_eq!(response.state, RuntimeHostBatchExecutionState::Cancelled);
         assert_eq!(
             response.diagnostics[0].code,
             RuntimeHostExecutionDiagnosticCode::CancellationRequested,
@@ -2493,6 +2834,11 @@ mod tests {
             ),
         }];
         request.handoff.task_intent.task_type = "text_generation".parse().expect("task type");
+        request.handoff.task_intent.trait_settings =
+            vec![pantograph_scheduler::SchedulerTraitSetting {
+                trait_id: "max_new_tokens".parse().expect("trait id"),
+                value: pantograph_scheduler::SchedulerTraitValue::U64(8),
+            }];
         request.handoff.task_intent.constraints.requested_runtime_id =
             Some("pytorch".parse().expect("runtime id"));
         request.handoff.task_intent.constraints.requested_device_id =
@@ -2661,7 +3007,9 @@ mod tests {
                 artifact_writer,
             )),
             Arc::new(inference::InferenceGateway::with_backend(
-                Box::new(MockImageBackend),
+                Box::new(MockImageBackend {
+                    cancellation_requested: None,
+                }),
                 "PyTorch",
             )),
         );
@@ -2701,6 +3049,100 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn image_port_cancellation_after_gateway_return_wins_before_artifact_retention() {
+        let mut request = runtime_host_request_fixture();
+        request
+            .handoff
+            .dispatch_decision
+            .as_mut()
+            .expect("fixture has dispatch decision")
+            .runtime_trait_settings
+            .clear();
+        let cancellation_requested = Arc::new(AtomicBool::new(false));
+        let cancellation_signal = Arc::new(FlippingCancellationSignal {
+            cancellation_context_id: request.cancellation_context.cancellation_context_id.clone(),
+            cancellation_requested: cancellation_requested.clone(),
+        });
+        let cancellation = RuntimeHostExecutionCancellationHandle::with_signal(cancellation_signal);
+        let port = EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
+            Arc::new(ReadyLoadTargetResolver),
+            Arc::new(FixturePackageFactsResolver),
+            Arc::new(UnusedMediaArtifactSink),
+            Arc::new(inference::InferenceGateway::with_backend(
+                Box::new(MockImageBackend {
+                    cancellation_requested: Some(cancellation_requested),
+                }),
+                "PyTorch",
+            )),
+        );
+
+        let response = port
+            .execute_runtime_host_request(request, cancellation)
+            .await
+            .expect("terminal cancellation should be a typed response");
+
+        assert_eq!(
+            response.state,
+            RuntimeHostExecutionState::Rejected,
+            "{response:#?}"
+        );
+        assert_eq!(
+            response.diagnostics[0].code,
+            RuntimeHostExecutionDiagnosticCode::CancellationRequested
+        );
+        assert!(response.outputs.is_empty());
+    }
+
+    #[tokio::test]
+    async fn image_port_completion_wins_when_cancellation_arrives_during_artifact_write() {
+        let mut request = runtime_host_request_fixture();
+        request
+            .handoff
+            .dispatch_decision
+            .as_mut()
+            .expect("fixture has dispatch decision")
+            .runtime_trait_settings
+            .clear();
+        let cancellation_requested = Arc::new(AtomicBool::new(false));
+        let cancellation_signal = Arc::new(FlippingCancellationSignal {
+            cancellation_context_id: request.cancellation_context.cancellation_context_id.clone(),
+            cancellation_requested: cancellation_requested.clone(),
+        });
+        let cancellation = RuntimeHostExecutionCancellationHandle::with_signal(cancellation_signal);
+        let media_sink = Arc::new(RecordingMediaArtifactSink {
+            cancellation_requested: Some(cancellation_requested),
+            ..RecordingMediaArtifactSink::default()
+        });
+        let port = EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
+            Arc::new(ReadyLoadTargetResolver),
+            Arc::new(FixturePackageFactsResolver),
+            media_sink.clone(),
+            Arc::new(inference::InferenceGateway::with_backend(
+                Box::new(MockImageBackend {
+                    cancellation_requested: None,
+                }),
+                "PyTorch",
+            )),
+        );
+
+        let response = port
+            .execute_runtime_host_request(request, cancellation)
+            .await
+            .expect("artifact retention should complete the image member");
+
+        assert_eq!(response.state, RuntimeHostExecutionState::Completed);
+        assert_eq!(response.outputs.len(), 1);
+        assert_eq!(
+            media_sink
+                .writes
+                .lock()
+                .expect("recorded image writes")
+                .len(),
+            1
+        );
+    }
+
+    #[tokio::test]
     async fn port_executes_embedding_through_selected_pantograph_gateway() {
         let target_directory = tempfile::TempDir::new().expect("embedding target directory");
         let target_path = target_directory.path().join("embedding.gguf");
@@ -2728,20 +3170,22 @@ mod tests {
             selected_artifact_path: None,
             migration_diagnostics: Vec::new(),
         };
-        let target = pumas_library::models::PumasArtifactLoadTarget {
-            model_ref: pumas_library::models::PumasModelRef {
+        let target = PumasArtifactLoadTarget {
+            model_ref: inference::PumasModelRef {
                 model_id: dispatch.selected_model_ref.model_id.clone(),
                 revision: dispatch.selected_model_ref.revision.clone(),
                 selected_artifact_id: dispatch.selected_model_ref.selected_artifact_id.clone(),
                 selected_artifact_path: None,
-                ..Default::default()
+                migration_diagnostics: Vec::new(),
             },
-            artifact_kind: PackageArtifactKind::Gguf,
+            artifact_kind: inference::ModelArtifactKind::Gguf,
             local_load_path: target_path.to_string_lossy().into_owned(),
             load_path_kind: PumasArtifactLoadPathKind::File,
             library_root_id: Some("embedding-test-root".to_string()),
-            storage_kind: StorageKind::LibraryOwned,
-            validation_state: AssetValidationState::Valid,
+            storage_kind: inference::ModelStorageKind::LibraryOwned,
+            validation_state: inference::ModelValidationState::Valid,
+            verification_source_fingerprint: None,
+            verification_observed_from_cache_at: None,
             content_fingerprint: Some("sha256:embedding-test".to_string()),
             package_facts_contract_version: Some(
                 pumas_library::models::PACKAGE_FACTS_CONTRACT_VERSION,
@@ -2823,7 +3267,9 @@ mod tests {
                 artifact_writer,
             )),
             Arc::new(inference::InferenceGateway::with_backend(
-                Box::new(MockImageBackend),
+                Box::new(MockImageBackend {
+                    cancellation_requested: None,
+                }),
                 "PyTorch",
             )),
         );
@@ -2942,6 +3388,96 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn image_batch_cancellation_after_gateway_return_wins_before_artifact_retention() {
+        let request = runtime_host_batch_request_fixture();
+        let cancellation_requested = Arc::new(AtomicBool::new(false));
+        let cancellation_signal = Arc::new(FlippingCancellationSignal {
+            cancellation_context_id: request.cancellation_context.cancellation_context_id.clone(),
+            cancellation_requested: cancellation_requested.clone(),
+        });
+        let cancellation = RuntimeHostExecutionCancellationHandle::with_signal(cancellation_signal);
+        let backend = RecordingBatchImageBackend {
+            cancellation_requested: Some(cancellation_requested),
+            ..RecordingBatchImageBackend::default()
+        };
+        let port = EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
+            Arc::new(ReadyLoadTargetResolver),
+            Arc::new(FixturePackageFactsResolver),
+            Arc::new(UnusedMediaArtifactSink),
+            Arc::new(inference::InferenceGateway::with_backend(
+                Box::new(backend),
+                "PyTorch",
+            )),
+        );
+
+        let response = port
+            .execute_runtime_host_batch_request(request, cancellation)
+            .await
+            .expect("terminal cancellation should be a typed batch response");
+
+        assert_eq!(
+            response.state,
+            RuntimeHostBatchExecutionState::Cancelled,
+            "{response:#?}"
+        );
+        assert!(response.members.iter().all(|member| {
+            member.state == RuntimeHostBatchExecutionMemberState::Cancelled
+                && member.outputs.is_empty()
+        }));
+    }
+
+    #[tokio::test]
+    async fn image_batch_preserves_completed_members_when_cancellation_arrives_during_write() {
+        let request = runtime_host_batch_request_fixture();
+        let cancellation_requested = Arc::new(AtomicBool::new(false));
+        let cancellation_signal = Arc::new(FlippingCancellationSignal {
+            cancellation_context_id: request.cancellation_context.cancellation_context_id.clone(),
+            cancellation_requested: cancellation_requested.clone(),
+        });
+        let cancellation = RuntimeHostExecutionCancellationHandle::with_signal(cancellation_signal);
+        let media_sink = Arc::new(RecordingMediaArtifactSink {
+            cancellation_requested: Some(cancellation_requested),
+            ..RecordingMediaArtifactSink::default()
+        });
+        let port = EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
+            Arc::new(ReadyLoadTargetResolver),
+            Arc::new(FixturePackageFactsResolver),
+            media_sink.clone(),
+            Arc::new(inference::InferenceGateway::with_backend(
+                Box::new(RecordingBatchImageBackend::default()),
+                "PyTorch",
+            )),
+        );
+
+        let response = port
+            .execute_runtime_host_batch_request(request, cancellation)
+            .await
+            .expect("terminal cancellation should preserve completed batch members");
+
+        assert_eq!(
+            response.state,
+            RuntimeHostBatchExecutionState::PartiallyCompleted
+        );
+        assert_eq!(response.members.len(), 2);
+        assert_eq!(
+            response.members[0].state,
+            RuntimeHostBatchExecutionMemberState::Completed
+        );
+        assert_eq!(
+            response.members[1].state,
+            RuntimeHostBatchExecutionMemberState::Cancelled
+        );
+        assert_eq!(
+            media_sink
+                .writes
+                .lock()
+                .expect("recorded image writes")
+                .len(),
+            1
+        );
+    }
+
+    #[tokio::test]
     async fn batch_port_rejects_incompatible_members_before_gateway_dispatch() {
         let mut request = runtime_host_batch_request_fixture();
         let incompatible_variant = "diffusers-pytorch.other"
@@ -3042,7 +3578,7 @@ mod tests {
                 reservation.device_id = "cpu".parse().expect("device id");
             }
             dispatch.readiness_proof = readiness_proof;
-            dispatch.runtime_trait_settings.clear();
+            dispatch.runtime_trait_settings = dispatch.task_intent.trait_settings.clone();
         }
         request
     }
@@ -3218,6 +3754,7 @@ mod tests {
             recommended_backend: Some("diffusers".to_string()),
             runtime_engine_hints: Some(vec!["diffusers".to_string(), "pytorch".to_string()]),
             selected_artifact_id: Some(selected_artifact_id.to_string()),
+            upstream_revision: Some("main".to_string()),
             ..Default::default()
         };
         library
@@ -3376,7 +3913,7 @@ mod tests {
     }
 
     struct EmbeddingLoadTargetResolver {
-        target: pumas_library::models::PumasArtifactLoadTarget,
+        target: PumasArtifactLoadTarget,
     }
 
     #[async_trait]
@@ -3427,18 +3964,21 @@ mod tests {
             _request: &ValidatedRuntimeHostExecutionRequest,
         ) -> Result<PumasArtifactLoadTarget, RuntimeHostPumasLoadTargetError> {
             Ok(PumasArtifactLoadTarget {
-                model_ref: pumas_library::models::PumasModelRef {
+                model_ref: inference::PumasModelRef {
                     model_id: "pumas://models/juggernaut-xl-v10".to_string(),
+                    revision: None,
                     selected_artifact_id: Some("diffusers-bundle".to_string()),
                     selected_artifact_path: Some("juggernaut-xl-v10/diffusers".to_string()),
-                    ..Default::default()
+                    migration_diagnostics: Vec::new(),
                 },
-                artifact_kind: PackageArtifactKind::DiffusersBundle,
+                artifact_kind: inference::ModelArtifactKind::DiffusersBundle,
                 local_load_path: "/host-only/pumas/juggernaut-xl-v10".to_string(),
                 load_path_kind: PumasArtifactLoadPathKind::Directory,
                 library_root_id: Some("default".to_string()),
-                storage_kind: StorageKind::LibraryOwned,
-                validation_state: AssetValidationState::Valid,
+                storage_kind: inference::ModelStorageKind::LibraryOwned,
+                validation_state: inference::ModelValidationState::Valid,
+                verification_source_fingerprint: None,
+                verification_observed_from_cache_at: None,
                 content_fingerprint: Some("sha256:abc".to_string()),
                 package_facts_contract_version: Some(
                     pumas_library::models::PACKAGE_FACTS_CONTRACT_VERSION,
@@ -3497,6 +4037,7 @@ mod tests {
     #[derive(Default)]
     struct RecordingMediaArtifactSink {
         writes: Mutex<Vec<RecordedImageWrite>>,
+        cancellation_requested: Option<Arc<AtomicBool>>,
     }
 
     struct RecordedImageWrite {
@@ -3516,6 +4057,9 @@ mod tests {
             writes.push(RecordedImageWrite {
                 image_data_base64: request.image.data_base64.clone(),
             });
+            if let Some(cancellation_requested) = &self.cancellation_requested {
+                cancellation_requested.store(true, Ordering::SeqCst);
+            }
             Ok(
                 pantograph_runtime_host_contracts::RuntimeHostExecutionMediaArtifactRef {
                     artifact_id: format!("runtime-host-batch-artifact.{index}"),
@@ -3528,6 +4072,7 @@ mod tests {
     #[derive(Default)]
     struct RecordingBatchImageBackend {
         recorded_batches: Arc<Mutex<Vec<inference::ImageGenerationBatchExecutionRequest>>>,
+        cancellation_requested: Option<Arc<AtomicBool>>,
     }
 
     struct MockEmbeddingBackend;
@@ -3691,6 +4236,9 @@ mod tests {
             request: inference::ImageGenerationBatchExecutionRequest,
             _context: BackendExecutionContext,
         ) -> Result<ImageGenerationBatchExecutionResponse, BackendError> {
+            if let Some(cancellation_requested) = &self.cancellation_requested {
+                cancellation_requested.store(true, Ordering::SeqCst);
+            }
             self.recorded_batches
                 .lock()
                 .expect("record batch request")
@@ -3730,7 +4278,9 @@ mod tests {
         }
     }
 
-    struct MockImageBackend;
+    struct MockImageBackend {
+        cancellation_requested: Option<Arc<AtomicBool>>,
+    }
 
     #[async_trait]
     impl InferenceBackend for MockImageBackend {
@@ -3806,6 +4356,9 @@ mod tests {
             plan: ImageGenerationExecutionPlan,
             _context: BackendExecutionContext,
         ) -> Result<ImageGenerationResult, BackendError> {
+            if let Some(cancellation_requested) = &self.cancellation_requested {
+                cancellation_requested.store(true, Ordering::SeqCst);
+            }
             Ok(ImageGenerationResult {
                 images: vec![inference::EncodedImage {
                     data_base64: "aGVsbG8=".to_string(),

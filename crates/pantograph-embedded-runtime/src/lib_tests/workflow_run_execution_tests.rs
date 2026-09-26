@@ -3777,7 +3777,7 @@ impl crate::runtime_host_load_target::RuntimeHostLoadTargetResolver for Dependen
         &self,
         request: &pantograph_runtime_host_contracts::ValidatedRuntimeHostExecutionRequest,
     ) -> Result<
-        pumas_library::models::PumasArtifactLoadTarget,
+        inference::PumasArtifactLoadTarget,
         crate::runtime_host_load_target::RuntimeHostPumasLoadTargetError,
     > {
         let request = request.as_ref();
@@ -3791,30 +3791,32 @@ impl crate::runtime_host_load_target::RuntimeHostLoadTargetResolver for Dependen
         let (path, artifact_kind, library_root_id) = match task_type {
             "text_generation" => (
                 &self.text_path,
-                pumas_library::models::PackageArtifactKind::HfCompatibleDirectory,
+                inference::ModelArtifactKind::HfCompatibleDirectory,
                 "dependent-text-fixture",
             ),
             "image_generation" => (
                 &self.image_path,
-                pumas_library::models::PackageArtifactKind::DiffusersBundle,
+                inference::ModelArtifactKind::DiffusersBundle,
                 "dependent-image-fixture",
             ),
             other => panic!("unsupported dependent fixture task type: {other}"),
         };
-        Ok(pumas_library::models::PumasArtifactLoadTarget {
-            model_ref: pumas_library::models::PumasModelRef {
+        Ok(inference::PumasArtifactLoadTarget {
+            model_ref: inference::PumasModelRef {
                 model_id: selected.model_id.clone(),
                 revision: selected.revision.clone(),
                 selected_artifact_id: selected.selected_artifact_id.clone(),
                 selected_artifact_path: selected.selected_artifact_path.clone(),
-                ..Default::default()
+                migration_diagnostics: Vec::new(),
             },
             artifact_kind,
             local_load_path: path.to_str().expect("fixture path is UTF-8").to_string(),
-            load_path_kind: pumas_library::models::PumasArtifactLoadPathKind::Directory,
+            load_path_kind: inference::PumasArtifactLoadPathKind::Directory,
             library_root_id: Some(library_root_id.to_string()),
-            storage_kind: StorageKind::LibraryOwned,
-            validation_state: AssetValidationState::Valid,
+            storage_kind: inference::ModelStorageKind::LibraryOwned,
+            validation_state: inference::ModelValidationState::Valid,
+            verification_source_fingerprint: None,
+            verification_observed_from_cache_at: None,
             content_fingerprint: None,
             package_facts_contract_version: Some(inference::MODEL_PACKAGE_FACTS_CONTRACT_VERSION),
         })
@@ -4033,7 +4035,7 @@ impl crate::runtime_host_load_target::RuntimeHostLoadTargetResolver for Selected
         &self,
         request: &pantograph_runtime_host_contracts::ValidatedRuntimeHostExecutionRequest,
     ) -> Result<
-        pumas_library::models::PumasArtifactLoadTarget,
+        inference::PumasArtifactLoadTarget,
         crate::runtime_host_load_target::RuntimeHostPumasLoadTargetError,
     > {
         let selected = &request
@@ -4043,20 +4045,22 @@ impl crate::runtime_host_load_target::RuntimeHostLoadTargetResolver for Selected
             .as_ref()
             .unwrap()
             .selected_model_ref;
-        Ok(pumas_library::models::PumasArtifactLoadTarget {
-            model_ref: pumas_library::models::PumasModelRef {
+        Ok(inference::PumasArtifactLoadTarget {
+            model_ref: inference::PumasModelRef {
                 model_id: selected.model_id.clone(),
                 revision: selected.revision.clone(),
                 selected_artifact_id: selected.selected_artifact_id.clone(),
                 selected_artifact_path: selected.selected_artifact_path.clone(),
-                ..Default::default()
+                migration_diagnostics: Vec::new(),
             },
-            artifact_kind: pumas_library::models::PackageArtifactKind::HfCompatibleDirectory,
+            artifact_kind: inference::ModelArtifactKind::HfCompatibleDirectory,
             local_load_path: self.0.to_str().unwrap().into(),
-            load_path_kind: pumas_library::models::PumasArtifactLoadPathKind::Directory,
+            load_path_kind: inference::PumasArtifactLoadPathKind::Directory,
             library_root_id: Some("selected-text-test".into()),
-            storage_kind: StorageKind::LibraryOwned,
-            validation_state: AssetValidationState::Valid,
+            storage_kind: inference::ModelStorageKind::LibraryOwned,
+            validation_state: inference::ModelValidationState::Valid,
+            verification_source_fingerprint: None,
+            verification_observed_from_cache_at: None,
             content_fingerprint: None,
             package_facts_contract_version: Some(inference::MODEL_PACKAGE_FACTS_CONTRACT_VERSION),
         })

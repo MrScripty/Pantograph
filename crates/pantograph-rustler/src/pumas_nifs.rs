@@ -257,7 +257,8 @@ pub(crate) fn get_download_progress(
 ) -> NifResult<Option<String>> {
     let progress = resource
         .runtime
-        .block_on(async { resource.api.get_hf_download_progress(&download_id).await });
+        .block_on(async { resource.api.get_hf_download_progress(&download_id).await })
+        .map_err(|e| rustler::Error::Term(Box::new(format!("progress error: {}", e))))?;
 
     match progress {
         Some(p) => {

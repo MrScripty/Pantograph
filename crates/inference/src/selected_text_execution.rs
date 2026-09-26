@@ -5,8 +5,8 @@ use crate::backend::BackendError;
 use crate::{
     BackendExecutionDecision, InferenceDeviceClass, InferenceDeviceId, InferenceDevicePolicy,
     InferenceExecutionInput, InferenceExecutionRequest, InferenceTaskId, ModelArtifactKind,
-    ModelStorageKind, ModelValidationState, PumasArtifactEntryPath, PumasArtifactLoadPathKind,
-    PumasArtifactLoadTarget, PumasModelRef, ResolvedModelPackageFacts,
+    ModelStorageKind, ModelValidationState, PumasArtifactLoadPathKind, PumasArtifactLoadTarget,
+    PumasModelRef, ResolvedModelPackageFacts,
 };
 
 pub(crate) struct SelectedTextLoad<'a> {
@@ -22,9 +22,65 @@ fn invalid(message: impl Into<String>) -> BackendError {
 fn same_model(left: &PumasModelRef, right: &PumasModelRef) -> bool {
     left.model_id.trim_start_matches("pumas://models/")
         == right.model_id.trim_start_matches("pumas://models/")
-        && left.revision == right.revision
+        && revisions_compatible(left.revision.as_deref(), right.revision.as_deref())
         && left.selected_artifact_id == right.selected_artifact_id
-        && left.selected_artifact_path == right.selected_artifact_path
+        && artifact_paths_compatible(
+            left.selected_artifact_path.as_deref(),
+            right.selected_artifact_path.as_deref(),
+        )
+}
+
+fn revisions_compatible(left: Option<&str>, right: Option<&str>) -> bool {
+    left.is_none() || right.is_none() || left == right
+}
+
+fn revisions_agree(references: &[&PumasModelRef]) -> bool {
+    let mut observed = None;
+    for reference in references {
+        if let Some(revision) = reference.revision.as_deref() {
+            if observed.is_some_and(|previous| previous != revision) {
+                return false;
+            }
+            observed = Some(revision);
+        }
+    }
+    true
+}
+
+fn artifact_paths_agree(references: &[&PumasModelRef]) -> bool {
+    let mut observed = None;
+    for reference in references {
+        if let Some(path) = reference.selected_artifact_path.as_deref() {
+            if observed.is_some_and(|previous| previous != path) {
+                return false;
+            }
+            observed = Some(path);
+        }
+    }
+    true
+}
+
+fn artifact_paths_compatible(left: Option<&str>, right: Option<&str>) -> bool {
+    left.is_none() || right.is_none() || left == right
+}
+
+fn producer_and_target_paths_agree(
+    package: &ResolvedModelPackageFacts,
+    target: &PumasArtifactLoadTarget,
+) -> bool {
+    let package_path = package.artifact.entry_path.trim();
+    let target_path = target.local_load_path.trim();
+    !is_absolute_local_path(package_path)
+        || !is_absolute_local_path(target_path)
+        || package_path == target_path
+}
+
+fn is_absolute_local_path(path: &str) -> bool {
+    Path::new(path).is_absolute()
+        || (path.len() >= 3
+            && path.as_bytes()[0].is_ascii_alphabetic()
+            && path.as_bytes()[1] == b':'
+            && matches!(path.as_bytes()[2], b'/' | b'\\'))
 }
 
 impl<'a> SelectedTextLoad<'a> {
@@ -58,7 +114,14 @@ impl<'a> SelectedTextLoad<'a> {
             .selected_model_ref
             .as_ref()
             .ok_or_else(|| invalid("scheduler model identity is required"))?;
-        for reference in [model, selected, &package.model_ref] {
+        let references = [model, selected, &package.model_ref];
+        if !revisions_agree(&references) {
+            return Err(invalid("request/package/scheduler revisions disagree"));
+        }
+        if !artifact_paths_agree(&references) {
+            return Err(invalid("request/package/scheduler artifact paths disagree"));
+        }
+        for reference in references {
             reference
                 .validate()
                 .map_err(|error| invalid(error.to_string()))?;
@@ -96,8 +159,11 @@ impl<'a> SelectedTextLoad<'a> {
                 "current package and target contract versions are required",
             ));
         }
-        let _entry_path = PumasArtifactEntryPath::parse(&package.artifact.entry_path)
-            .map_err(|error| invalid(error.to_string()))?;
+        if !producer_and_target_paths_agree(package, target) {
+            return Err(invalid(
+                "Pumas package facts and artifact load target must refer to the same executable artifact path",
+            ));
+        }
         if package.artifact.validation_state != ModelValidationState::Valid
             || target.validation_state != ModelValidationState::Valid
             || !package.artifact.validation_errors.is_empty()
@@ -196,6 +262,8 @@ pub(crate) fn fixture() -> (
         library_root_id: Some("test-root".into()),
         storage_kind: package.artifact.storage_kind.clone(),
         validation_state: ModelValidationState::Valid,
+        verification_source_fingerprint: None,
+        verification_observed_from_cache_at: None,
         content_fingerprint: None,
         package_facts_contract_version: Some(package.package_facts_contract_version),
     };
@@ -241,6 +309,37 @@ pub(crate) fn fixture() -> (
 mod tests {
     use super::*;
 
+    #[test]
+    fn allows_missing_package_revision_when_target_observes_one() {
+        assert!(revisions_compatible(None, Some("main")));
+        assert!(!revisions_compatible(Some("main"), Some("other")));
+    }
+
+    #[tokio::test]
+    async fn rejects_conflicting_supplied_revisions_when_target_omits_one() {
+        let (_directory, mut request, mut target, mut decision) = fixture();
+        request.model_ref.as_mut().expect("request model").revision = Some("main".into());
+        request
+            .resolved_model_package_facts
+            .as_mut()
+            .expect("package facts")
+            .model_ref
+            .revision = Some("other".into());
+        decision
+            .selected_model_ref
+            .as_mut()
+            .expect("scheduler model")
+            .revision = Some("main".into());
+        target.model_ref.revision = None;
+
+        let result = SelectedTextLoad::validate(&request, &target, &decision).await;
+        assert!(matches!(
+            result,
+            Err(BackendError::Config(message))
+                if message.contains("request/package/scheduler revisions disagree")
+        ));
+    }
+
     #[tokio::test]
     async fn rejects_execution_without_producer_selected_artifact_identity() {
         let (_directory, request, mut target, mut decision) = fixture();
@@ -271,5 +370,22 @@ mod tests {
         assert!(error
             .to_string()
             .contains("producer-selected artifact identity is required"));
+    }
+
+    #[test]
+    fn supplied_artifact_paths_must_agree_without_a_target_path() {
+        let request = PumasModelRef {
+            model_id: "image/model".to_string(),
+            revision: None,
+            selected_artifact_id: None,
+            selected_artifact_path: Some("image/a".to_string()),
+            migration_diagnostics: Vec::new(),
+        };
+        let package = PumasModelRef {
+            selected_artifact_path: Some("image/b".to_string()),
+            ..request.clone()
+        };
+
+        assert!(!artifact_paths_agree(&[&request, &package]));
     }
 }

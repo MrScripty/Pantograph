@@ -7,9 +7,10 @@ use crate::error::{DependencyPlanningContractError, PumasArtifactEntryPathError}
 
 const MAX_PUMAS_MODEL_ID_LEN: usize = 512;
 const MAX_PUMAS_ARTIFACT_ENTRY_PATH_LEN: usize = 1024;
+const SUPPORTED_PUMAS_MODEL_REF_CONTRACT_VERSION: u32 = 1;
 
 /// Stable model reference resolved from the model library.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub struct PumasModelRef {
     /// Canonical model id assigned by Pumas or an equivalent model library.
@@ -30,6 +31,49 @@ pub struct PumasModelRef {
     /// Bounded diagnostics emitted while migrating legacy references to Pumas refs.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub migration_diagnostics: Vec<ModelRefMigrationDiagnostic>,
+}
+
+impl<'de> Deserialize<'de> for PumasModelRef {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(rename_all = "snake_case", deny_unknown_fields)]
+        struct PumasModelRefWire {
+            #[serde(default)]
+            model_ref_contract_version: Option<u32>,
+            model_id: String,
+            #[serde(default)]
+            revision: Option<String>,
+            #[serde(
+                default,
+                alias = "artifact_id",
+                skip_serializing_if = "Option::is_none"
+            )]
+            selected_artifact_id: Option<String>,
+            #[serde(default)]
+            selected_artifact_path: Option<String>,
+            #[serde(default)]
+            migration_diagnostics: Vec<ModelRefMigrationDiagnostic>,
+        }
+
+        let wire = PumasModelRefWire::deserialize(deserializer)?;
+        if let Some(version) = wire.model_ref_contract_version {
+            if version != SUPPORTED_PUMAS_MODEL_REF_CONTRACT_VERSION {
+                return Err(serde::de::Error::custom(format!(
+                    "unsupported Pumas model-ref contract version {version}; expected {SUPPORTED_PUMAS_MODEL_REF_CONTRACT_VERSION}"
+                )));
+            }
+        }
+        Ok(Self {
+            model_id: wire.model_id,
+            revision: wire.revision,
+            selected_artifact_id: wire.selected_artifact_id,
+            selected_artifact_path: wire.selected_artifact_path,
+            migration_diagnostics: wire.migration_diagnostics,
+        })
+    }
 }
 
 impl PumasModelRef {
@@ -227,6 +271,12 @@ pub struct PumasArtifactLoadTarget {
     pub library_root_id: Option<String>,
     pub storage_kind: ModelStorageKind,
     pub validation_state: ModelValidationState,
+    /// Source fingerprint reported by Pumas intent verification.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub verification_source_fingerprint: Option<String>,
+    /// Cache observation timestamp reported by Pumas intent verification.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub verification_observed_from_cache_at: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub content_fingerprint: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -269,4 +319,38 @@ fn validate_text_field(
         return Err(DependencyPlanningContractError::InvalidText { field });
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::PumasModelRef;
+
+    #[test]
+    fn model_ref_deserialization_accepts_supported_and_unversioned_wire_shapes() {
+        for value in [
+            serde_json::json!({
+                "model_id": "image/example/tiny-diffusion"
+            }),
+            serde_json::json!({
+                "model_ref_contract_version": 1,
+                "model_id": "image/example/tiny-diffusion"
+            }),
+        ] {
+            serde_json::from_value::<PumasModelRef>(value)
+                .expect("supported Pumas model-ref shape should decode");
+        }
+    }
+
+    #[test]
+    fn model_ref_deserialization_rejects_unsupported_wire_versions() {
+        let error = serde_json::from_value::<PumasModelRef>(serde_json::json!({
+            "model_ref_contract_version": 999,
+            "model_id": "image/example/tiny-diffusion"
+        }))
+        .expect_err("unsupported Pumas model-ref version must fail closed");
+
+        assert!(error
+            .to_string()
+            .contains("unsupported Pumas model-ref contract version 999"));
+    }
 }

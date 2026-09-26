@@ -288,6 +288,44 @@ pub enum PumasRpcOperation {
         limit: usize,
         offset: usize,
     },
+    SearchHfModels {
+        query: String,
+        kind: Option<String>,
+        limit: usize,
+        hydrate_limit: usize,
+    },
+    StartModelDownloadFromHf {
+        request: pumas_library::model_library::DownloadRequest,
+    },
+    DeleteModelWithCascade {
+        model_id: String,
+    },
+    ListModelsNeedingReview {
+        filter: Option<pumas_library::model_library::ModelReviewFilter>,
+    },
+    SubmitModelReview {
+        model_id: String,
+        patch: Value,
+        reviewer: String,
+        reason: Option<String>,
+    },
+    ResetModelReview {
+        model_id: String,
+        reviewer: String,
+        reason: Option<String>,
+    },
+    GetLibraryModelMetadata {
+        model_id: String,
+    },
+    IntentQueryModels {
+        requirement: pumas_library::intent::ModelRequirement,
+    },
+    IntentGetModel {
+        requirement: pumas_library::intent::ModelRequirement,
+    },
+    IntentGetModelStatus {
+        requirement: pumas_library::intent::ModelRequirement,
+    },
     ResolveModelExecutionDescriptor {
         model_id: String,
     },
@@ -315,13 +353,79 @@ impl PumasRpcOperation {
         let oversized = match self {
             Self::GetModels => false,
             Self::SearchModelsFts { query, .. }
+            | Self::SearchHfModels { query, .. }
             | Self::ResolveModelExecutionDescriptor { model_id: query }
             | Self::ResolveModelPackageFacts { model_id: query }
             | Self::ResolveModelPackageFactsSummary { model_id: query } => {
                 estimated_json_string_size(query) > MAX_REQUEST_BYTES
             }
+            Self::StartModelDownloadFromHf { request } => {
+                serde_json::to_vec(request)
+                    .map_err(|source| PumasRpcError::InvalidRequest {
+                        operation: self.method_name().to_string(),
+                        reason: source.to_string(),
+                    })?
+                    .len()
+                    > MAX_REQUEST_BYTES
+            }
+            Self::DeleteModelWithCascade { model_id }
+            | Self::GetLibraryModelMetadata { model_id } => {
+                estimated_json_string_size(model_id) > MAX_REQUEST_BYTES
+            }
+            Self::ListModelsNeedingReview { filter } => {
+                serde_json::to_vec(filter)
+                    .map_err(|source| PumasRpcError::InvalidRequest {
+                        operation: self.method_name().to_string(),
+                        reason: source.to_string(),
+                    })?
+                    .len()
+                    > MAX_REQUEST_BYTES
+            }
+            Self::SubmitModelReview {
+                model_id,
+                patch,
+                reviewer,
+                reason,
+            } => {
+                estimated_json_string_size(model_id)
+                    .saturating_add(estimated_json_string_size(reviewer))
+                    .saturating_add(
+                        reason
+                            .as_deref()
+                            .map(estimated_json_string_size)
+                            .unwrap_or(0),
+                    )
+                    .saturating_add(serde_json::to_vec(patch).unwrap_or_default().len())
+                    > MAX_REQUEST_BYTES
+            }
+            Self::ResetModelReview {
+                model_id,
+                reviewer,
+                reason,
+            } => {
+                estimated_json_string_size(model_id)
+                    .saturating_add(estimated_json_string_size(reviewer))
+                    .saturating_add(
+                        reason
+                            .as_deref()
+                            .map(estimated_json_string_size)
+                            .unwrap_or(0),
+                    )
+                    > MAX_REQUEST_BYTES
+            }
             Self::ResolveModelArtifactLoadTarget { request } => {
                 serde_json::to_vec(request)
+                    .map_err(|source| PumasRpcError::InvalidRequest {
+                        operation: self.method_name().to_string(),
+                        reason: source.to_string(),
+                    })?
+                    .len()
+                    > MAX_REQUEST_BYTES
+            }
+            Self::IntentQueryModels { requirement }
+            | Self::IntentGetModel { requirement }
+            | Self::IntentGetModelStatus { requirement } => {
+                serde_json::to_vec(requirement)
                     .map_err(|source| PumasRpcError::InvalidRequest {
                         operation: self.method_name().to_string(),
                         reason: source.to_string(),
@@ -349,6 +453,16 @@ impl PumasRpcOperation {
         match self {
             Self::GetModels => "get_models",
             Self::SearchModelsFts { .. } => "search_models_fts",
+            Self::SearchHfModels { .. } => "search_hf_models",
+            Self::StartModelDownloadFromHf { .. } => "start_model_download_from_hf",
+            Self::DeleteModelWithCascade { .. } => "delete_model_with_cascade",
+            Self::ListModelsNeedingReview { .. } => "list_models_needing_review",
+            Self::SubmitModelReview { .. } => "submit_model_review",
+            Self::ResetModelReview { .. } => "reset_model_review",
+            Self::GetLibraryModelMetadata { .. } => "get_library_model_metadata",
+            Self::IntentQueryModels { .. } => "intent_query_models",
+            Self::IntentGetModel { .. } => "intent_get_model",
+            Self::IntentGetModelStatus { .. } => "intent_get_model_status",
             Self::ResolveModelExecutionDescriptor { .. } => "resolve_model_execution_descriptor",
             Self::ResolveModelArtifactLoadTarget { .. } => "resolve_model_artifact_load_target",
             Self::ResolveModelPackageFacts { .. } => "resolve_model_package_facts",
@@ -366,6 +480,67 @@ impl PumasRpcOperation {
                 limit,
                 offset,
             } => json!({ "query": query, "limit": limit, "offset": offset }),
+            Self::SearchHfModels {
+                query,
+                kind,
+                limit,
+                hydrate_limit,
+            } => json!({
+                "query": query,
+                "kind": kind,
+                "limit": limit,
+                "hydrate_limit": hydrate_limit
+            }),
+            Self::StartModelDownloadFromHf { request } => {
+                let mut params = json!({
+                    "repo_id": request.repo_id,
+                    "family": request.family,
+                    "official_name": request.official_name,
+                    "model_type": request.model_type,
+                    "quant": request.quant,
+                    "filename": request.filename,
+                    "filenames": request.filenames,
+                    "pipeline_tag": request.pipeline_tag,
+                    "release_date": request.release_date,
+                    "download_url": request.download_url,
+                    "model_card_json": request.model_card_json,
+                    "license_status": request.license_status,
+                });
+                if let Some(object) = params.as_object_mut() {
+                    object.retain(|_, value| !value.is_null());
+                }
+                params
+            }
+            Self::DeleteModelWithCascade { model_id }
+            | Self::GetLibraryModelMetadata { model_id } => json!({ "model_id": model_id }),
+            Self::ListModelsNeedingReview { filter } => filter
+                .as_ref()
+                .map_or_else(|| json!({}), |filter| json!({ "filter": filter })),
+            Self::SubmitModelReview {
+                model_id,
+                patch,
+                reviewer,
+                reason,
+            } => json!({
+                "model_id": model_id,
+                "patch": patch,
+                "reviewer": reviewer,
+                "reason": reason
+            }),
+            Self::ResetModelReview {
+                model_id,
+                reviewer,
+                reason,
+            } => json!({
+                "model_id": model_id,
+                "reviewer": reviewer,
+                "reason": reason
+            }),
+            Self::IntentQueryModels { requirement }
+            | Self::IntentGetModel { requirement }
+            | Self::IntentGetModelStatus { requirement } => {
+                json!({ "requirement": requirement })
+            }
             Self::ResolveModelExecutionDescriptor { model_id }
             | Self::ResolveModelPackageFacts { model_id }
             | Self::ResolveModelPackageFactsSummary { model_id } => {
@@ -486,6 +661,61 @@ mod tests {
             operation.params(),
             json!({ "query": "tiny", "limit": 3, "offset": 1 })
         );
+    }
+
+    #[test]
+    fn encodes_released_download_and_review_parameter_shapes() {
+        let download = PumasRpcOperation::StartModelDownloadFromHf {
+            request: pumas_library::model_library::DownloadRequest {
+                repo_id: "example/model".to_string(),
+                family: "example".to_string(),
+                official_name: "Example Model".to_string(),
+                model_type: None,
+                quant: None,
+                filename: None,
+                filenames: Some(vec!["model.gguf".to_string()]),
+                pipeline_tag: None,
+                bundle_format: None,
+                pipeline_class: None,
+                release_date: None,
+                download_url: None,
+                model_card_json: None,
+                license_status: None,
+            },
+        };
+        assert_eq!(
+            download.params(),
+            json!({
+                "repo_id": "example/model",
+                "family": "example",
+                "official_name": "Example Model",
+                "filenames": ["model.gguf"]
+            })
+        );
+
+        let review = PumasRpcOperation::ListModelsNeedingReview { filter: None };
+        assert_eq!(review.params(), json!({}));
+    }
+
+    #[test]
+    fn encodes_intent_requirements_without_legacy_consumer_fields() {
+        let requirement = pumas_library::intent::ModelRequirement {
+            selector: pumas_library::intent::ModelSelector::LocalModel {
+                model_ref: pumas_library::models::PumasModelRef {
+                    model_id: "llm/example".to_string(),
+                    selected_artifact_id: Some("model.gguf".to_string()),
+                    ..Default::default()
+                },
+            },
+            artifact: pumas_library::intent::ArtifactRequirement::default(),
+            acquisition_policy: pumas_library::intent::AcquisitionPolicy::LocalOnly,
+        };
+        let operation = PumasRpcOperation::IntentGetModel {
+            requirement: requirement.clone(),
+        };
+
+        assert_eq!(operation.method_name(), "intent_get_model");
+        assert_eq!(operation.params(), json!({ "requirement": requirement }));
     }
 
     #[tokio::test]

@@ -405,7 +405,7 @@ impl CurrentInferenceValidationStateStore {
             task_kind: node.task_kind.clone(),
             runtime_constraint: node.runtime_constraint.clone(),
             device_constraint: node.device_constraint.clone(),
-            trait_constraints: Vec::new(),
+            trait_constraints: node.trait_settings.clone(),
             dependency_requirements_id: request.dependency_requirements_id,
             selected_binding_ids: request.selected_binding_ids,
             dependency_override_fingerprint: request.dependency_override_fingerprint,
@@ -1279,6 +1279,7 @@ pub(crate) struct CurrentInferenceValidationNodeRecord {
     pub runtime_source_context: crate::graph::WorkflowRuntimeSourceContext,
     pub runtime_constraint: Option<RuntimeIntentId>,
     pub device_constraint: Option<DeviceIntentId>,
+    pub trait_settings: Vec<SchedulerTraitSetting>,
     pub estimate_hints: Vec<SchedulerEstimateHint>,
     pub projection: InferenceInterfaceNodeProjectionRecord,
     pub dependency_requirements_proof: Option<CurrentDependencyRequirementsProof>,
@@ -1295,6 +1296,7 @@ impl From<InferenceInterfaceNodeProjectionRecord> for CurrentInferenceValidation
         let runtime_source_context = record.runtime_source_context.clone();
         let runtime_constraint = record.runtime_constraint.clone();
         let device_constraint = record.device_constraint.clone();
+        let trait_settings = record.trait_settings.clone();
         let estimate_hints = record.estimate_hints.clone();
         Self {
             node_id,
@@ -1306,6 +1308,7 @@ impl From<InferenceInterfaceNodeProjectionRecord> for CurrentInferenceValidation
             runtime_source_context,
             runtime_constraint,
             device_constraint,
+            trait_settings,
             estimate_hints,
             projection: record,
             dependency_requirements_proof: None,
@@ -1489,7 +1492,7 @@ impl CurrentInferenceValidationNodeRecord {
                         requested_runtime_id: self.runtime_constraint.clone(),
                         requested_device_id: self.device_constraint.clone(),
                     },
-                    trait_settings: Vec::new(),
+                    trait_settings: self.trait_settings.clone(),
                     estimate_hints: self.estimate_hints.clone(),
                     dependency_readiness_source: WorkflowSchedulerDependencyReadinessSource {
                         graph_revision: DependencyReadinessGraphRevision::parse(
@@ -1570,7 +1573,7 @@ impl CurrentInferenceValidationNodeRecord {
             task_kind: self.task_kind.clone(),
             runtime_constraint: self.runtime_constraint.clone(),
             device_constraint: self.device_constraint.clone(),
-            trait_constraints: Vec::new(),
+            trait_constraints: self.trait_settings.clone(),
             dependency_requirements_id: producer_proof.dependency_requirements_id,
             selected_binding_ids: producer_proof.identity_key.selected_binding_ids,
             dependency_override_fingerprint: producer_proof.dependency_override_fingerprint,
@@ -3027,6 +3030,7 @@ mod tests {
             update_proposal: None,
             runtime_constraint: Some("pytorch".parse().expect("runtime id")),
             device_constraint: Some("cuda.0".parse().expect("device id")),
+            trait_settings: Vec::new(),
             estimate_hints: scheduler_estimate_hints(),
         }
     }

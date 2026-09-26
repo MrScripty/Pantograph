@@ -28,9 +28,9 @@ use crate::image_generation_planner::{
 use crate::model_contracts::{
     CacheGenerationOptions, DiffusersComponentRole, GenerationOptions, ImageGenerationFamilyLabel,
     InferenceLifecyclePhase, InferenceTaskId, LengthGenerationOptions, ModelArtifactKind,
-    ModelStorageKind, ModelValidationState, OptionSupportState, PumasArtifactEntryPath,
-    PumasArtifactLoadPathKind, PumasArtifactLoadTarget, PumasModelRef, ResolvedModelPackageFacts,
-    SamplingGenerationOptions, StoppingGenerationOptions, MODEL_PACKAGE_FACTS_CONTRACT_VERSION,
+    ModelStorageKind, ModelValidationState, OptionSupportState, PumasArtifactLoadPathKind,
+    PumasArtifactLoadTarget, PumasModelRef, ResolvedModelPackageFacts, SamplingGenerationOptions,
+    StoppingGenerationOptions, MODEL_PACKAGE_FACTS_CONTRACT_VERSION,
 };
 use crate::resource_estimates::{InferenceResourceEstimate, InferenceResourceEstimateKind};
 use crate::resource_observation::{
@@ -208,8 +208,7 @@ fn sample_image_generation_plan() -> ImageGenerationExecutionPlan {
             selected_artifact_path: Some("image/mock-image-model".to_string()),
             migration_diagnostics: Vec::new(),
         },
-        artifact_entry_path: PumasArtifactEntryPath::parse("image/mock-image-model")
-            .expect("valid artifact path"),
+        artifact_entry_path: "image/mock-image-model".to_string(),
         artifact_load_target: PumasArtifactLoadTarget {
             model_ref: PumasModelRef {
                 model_id: "mock-image-model".to_string(),
@@ -224,6 +223,8 @@ fn sample_image_generation_plan() -> ImageGenerationExecutionPlan {
             library_root_id: Some("test-root".to_string()),
             storage_kind: ModelStorageKind::LibraryOwned,
             validation_state: ModelValidationState::Valid,
+            verification_source_fingerprint: None,
+            verification_observed_from_cache_at: None,
             content_fingerprint: None,
             package_facts_contract_version: Some(MODEL_PACKAGE_FACTS_CONTRACT_VERSION),
         },
@@ -321,6 +322,8 @@ fn sample_artifact_load_target(facts: &ResolvedModelPackageFacts) -> PumasArtifa
         library_root_id: Some("test-root".to_string()),
         storage_kind: ModelStorageKind::LibraryOwned,
         validation_state: ModelValidationState::Valid,
+        verification_source_fingerprint: None,
+        verification_observed_from_cache_at: None,
         content_fingerprint: None,
         package_facts_contract_version: Some(facts.package_facts_contract_version),
     }

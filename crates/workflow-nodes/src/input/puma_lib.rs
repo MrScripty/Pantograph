@@ -411,9 +411,6 @@ mod options_provider {
             (ModelEntryPathState::Missing, _) | (_, ModelArtifactState::Missing) => {
                 Some(PortOptionAvailabilityState::MissingModelFacts)
             }
-            (ModelEntryPathState::NeedsDetail, _) | (_, ModelArtifactState::NeedsDetail) => {
-                Some(PortOptionAvailabilityState::MissingModelFacts)
-            }
             (ModelEntryPathState::Partial, _) | (_, ModelArtifactState::Partial) => {
                 Some(PortOptionAvailabilityState::MissingDependency)
             }
@@ -426,6 +423,13 @@ mod options_provider {
             (ModelEntryPathState::Stale, _) | (_, ModelArtifactState::Stale) => {
                 Some(PortOptionAvailabilityState::MissingModelFacts)
             }
+            // A fast catalog row may intentionally omit package facts. It is
+            // still a valid model identity for the intent resolver, which is
+            // the authority for availability and permitted acquisition.
+            // Keep known failure states above disabled, but let a `NeedsDetail`
+            // row be selected so the normal intent path can resolve it instead
+            // of making catalog browsing unusable.
+            (ModelEntryPathState::NeedsDetail, _) | (_, ModelArtifactState::NeedsDetail) => None,
             (ModelEntryPathState::Ready, ModelArtifactState::Ready) => None,
         }
     }
@@ -488,7 +492,7 @@ mod options_provider {
         let model_ref = serde_json::to_value(&row.model_ref).unwrap_or(serde_json::Value::Null);
         let task_type_primary = canonical_graph_task_type_primary_value(&row.task_type_primary);
 
-        serde_json::json!({
+        let mut metadata = serde_json::json!({
             "id": row.model_ref.model_id,
             "pumas_model_ref": model_ref,
             "repo_id": row.repo_id,
@@ -526,7 +530,14 @@ mod options_provider {
             "package_facts_summary": package_facts_summary,
             "selector_snapshot_contract_version": 1,
             "selector_row_executable": row.is_executable_reference_ready(),
-        })
+        });
+        if cursor.is_empty() {
+            metadata
+                .as_object_mut()
+                .expect("selector option metadata is an object")
+                .remove("package_facts_summary_cursor");
+        }
+        metadata
     }
 
     pub(crate) fn port_option_from_selector_row(
@@ -577,14 +588,22 @@ mod options_provider {
                 .map(|row| port_option_from_selector_row(row, &cursor))
                 .collect();
 
+            let metadata = if cursor.is_empty() {
+                serde_json::json!({
+                    "selector_snapshot_contract_version": 1,
+                })
+            } else {
+                serde_json::json!({
+                    "package_facts_summary_cursor": cursor,
+                    "selector_snapshot_contract_version": 1,
+                })
+            };
+
             Ok(PortOptionsResult {
                 options,
                 total_count: total,
                 searchable: true,
-                metadata: Some(serde_json::json!({
-                    "package_facts_summary_cursor": cursor,
-                    "selector_snapshot_contract_version": 1,
-                })),
+                metadata: Some(metadata),
             })
         }
     }
@@ -1344,6 +1363,26 @@ mod model_library_tests {
     }
 
     #[test]
+    fn test_selector_row_needs_detail_state_remains_selectable_for_intent_resolution() {
+        let row = selector_snapshot_row(
+            "llm/imported/needs-detail",
+            ModelEntryPathState::NeedsDetail,
+            ModelArtifactState::Ready,
+        );
+        let option = port_option_from_selector_row(&row, "");
+
+        assert!(!option.disabled);
+        assert!(option.unavailable_state.is_none());
+        assert_eq!(
+            option
+                .metadata
+                .as_ref()
+                .and_then(|metadata| metadata.get("selector_row_executable")),
+            Some(&serde_json::json!(false))
+        );
+    }
+
+    #[test]
     fn test_selector_row_unavailable_states_are_typed_disabled_options() {
         let cases = [
             (
@@ -1365,16 +1404,16 @@ mod model_library_tests {
                 "pumas_selector_stale_ready",
             ),
             (
-                ModelEntryPathState::NeedsDetail,
-                ModelArtifactState::Ready,
-                node_engine::PortOptionAvailabilityState::MissingModelFacts,
-                "pumas_selector_needs_detail_ready",
-            ),
-            (
                 ModelEntryPathState::Ambiguous,
                 ModelArtifactState::Ready,
                 node_engine::PortOptionAvailabilityState::RequiresModelCapability,
                 "pumas_selector_ambiguous_ready",
+            ),
+            (
+                ModelEntryPathState::NeedsDetail,
+                ModelArtifactState::Invalid,
+                node_engine::PortOptionAvailabilityState::RequiresModelCapability,
+                "pumas_selector_needs_detail_invalid",
             ),
         ];
 

@@ -15,8 +15,8 @@ use crate::image_generation_batch::{
 use crate::image_generation_planner::{DenoisingSchedulerOptionId, ImageGenerationExecutionPlan};
 use crate::model_contracts::{
     DiffusersComponentRole, ImageGenerationFamilyLabel, ModelArtifactKind, ModelStorageKind,
-    ModelValidationState, PumasArtifactEntryPath, PumasArtifactLoadPathKind,
-    PumasArtifactLoadTarget, PumasModelRef, MODEL_PACKAGE_FACTS_CONTRACT_VERSION,
+    ModelValidationState, PumasArtifactLoadPathKind, PumasArtifactLoadTarget, PumasModelRef,
+    MODEL_PACKAGE_FACTS_CONTRACT_VERSION,
 };
 use crate::resource_estimates::{InferenceResourceEstimate, InferenceResourceEstimateKind};
 use crate::{ImageGenerationRequest, InferenceExecutionTelemetryScope};
@@ -194,8 +194,7 @@ fn image_plan() -> ImageGenerationExecutionPlan {
             selected_artifact_path: None,
             migration_diagnostics: Vec::new(),
         },
-        artifact_entry_path: PumasArtifactEntryPath::parse("image/example/tiny-sd")
-            .expect("valid artifact path"),
+        artifact_entry_path: "image/example/tiny-sd".to_string(),
         artifact_load_target: PumasArtifactLoadTarget {
             model_ref: PumasModelRef {
                 model_id: "image/example/tiny-sd".to_string(),

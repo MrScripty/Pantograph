@@ -700,7 +700,13 @@ impl FfiPumasApi {
         &self,
         download_id: String,
     ) -> Result<Option<String>, FfiError> {
-        let progress = self.api.get_hf_download_progress(&download_id).await;
+        let progress = self
+            .api
+            .get_hf_download_progress(&download_id)
+            .await
+            .map_err(|e| FfiError::Other {
+                message: e.to_string(),
+            })?;
         match progress {
             Some(p) => {
                 let json = serde_json::to_string(&p).map_err(|e| FfiError::Serialization {

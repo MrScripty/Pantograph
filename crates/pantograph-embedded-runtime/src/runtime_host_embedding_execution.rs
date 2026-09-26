@@ -1,8 +1,8 @@
 use inference::{
     BackendExecutionDecision, BackendId, DeviceResolutionDecision, InferenceDeviceClass,
     InferenceDeviceId, InferenceDevicePolicy, InferenceExecutionInput, InferenceExecutionRequest,
-    InferenceExecutionResult, InferenceTaskId, ModelRefMigrationDiagnostic,
-    PumasArtifactLoadTarget, PumasModelRef, ResolvedModelPackageFacts, RuntimeVariantId,
+    InferenceExecutionResult, InferenceTaskId, PumasArtifactLoadTarget, PumasModelRef,
+    ResolvedModelPackageFacts, RuntimeVariantId,
 };
 use pantograph_runtime_host_contracts::{
     RuntimeHostExecutionInputValue, RuntimeHostExecutionRequest,
@@ -68,7 +68,7 @@ pub(crate) fn validate_runtime_host_embedding_generation_request(
 pub(crate) fn project_runtime_host_embedding_generation(
     request: &ValidatedRuntimeHostExecutionRequest,
     package_facts: ResolvedModelPackageFacts,
-    load_target: pumas_library::models::PumasArtifactLoadTarget,
+    load_target: PumasArtifactLoadTarget,
 ) -> Result<RuntimeHostEmbeddingGenerationProjection, RuntimeHostEmbeddingGenerationProjectionError>
 {
     let request_ref = request.as_ref();
@@ -79,15 +79,15 @@ pub(crate) fn project_runtime_host_embedding_generation(
         .as_ref()
         .ok_or(RuntimeHostEmbeddingGenerationProjectionError::MissingDispatchDecision)?;
     let text = required_embedding_text(request_ref)?.to_string();
-    let backend_decision = embedding_backend_decision(dispatch_decision)?;
+    let runtime_model_ref = load_target.model_ref.clone();
+    let backend_decision = embedding_backend_decision(dispatch_decision, &runtime_model_ref)?;
     let artifact_load_target =
         crate::runtime_host_image_execution::project_pumas_artifact_load_target(load_target);
-    let model_ref = project_model_ref(&dispatch_decision.selected_model_ref);
     let inference_request = InferenceExecutionRequest {
         request_id: Some(request_ref.execution_request_id.clone()),
         task_id: InferenceTaskId::Embedding,
-        model_ref: Some(model_ref.clone()),
-        model_name: Some(model_ref.model_id.clone()),
+        model_ref: Some(runtime_model_ref.clone()),
+        model_name: Some(runtime_model_ref.model_id.clone()),
         resolved_model_package_facts: Some(package_facts),
         input: InferenceExecutionInput::Embedding { texts: vec![text] },
         generation_options: None,
@@ -145,26 +145,9 @@ fn required_embedding_text(
     }
 }
 
-fn project_model_ref(model_ref: &pantograph_dependency_planning::PumasModelRef) -> PumasModelRef {
-    PumasModelRef {
-        model_id: model_ref.model_id.clone(),
-        revision: model_ref.revision.clone(),
-        selected_artifact_id: model_ref.selected_artifact_id.clone(),
-        selected_artifact_path: model_ref.selected_artifact_path.clone(),
-        migration_diagnostics: model_ref
-            .migration_diagnostics
-            .iter()
-            .map(|diagnostic| ModelRefMigrationDiagnostic {
-                code: diagnostic.code.clone(),
-                message: diagnostic.message.clone(),
-                input: diagnostic.input.clone(),
-            })
-            .collect(),
-    }
-}
-
 fn embedding_backend_decision(
     decision: &SchedulerDispatchDecision,
+    runtime_model_ref: &PumasModelRef,
 ) -> Result<BackendExecutionDecision, RuntimeHostEmbeddingGenerationProjectionError> {
     validate_selected_runtime_and_device(decision)?;
     let selected_runtime_variant_id = selected_runtime_variant_id(decision)?;
@@ -189,7 +172,7 @@ fn embedding_backend_decision(
         selected_device_id: Some(selected_device_id),
         device_decision,
         selected_task_id: Some(InferenceTaskId::Embedding),
-        selected_model_ref: Some(project_model_ref(&decision.selected_model_ref)),
+        selected_model_ref: Some(runtime_model_ref.clone()),
         diagnostics: Vec::new(),
         dependency_readiness: Vec::new(),
         selection_policy_trace: None,

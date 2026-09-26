@@ -1237,28 +1237,7 @@ async fn resolve_required_model_package_facts_from_selector_access(
 fn decode_inference_package_facts<T: serde::Serialize>(
     facts: &T,
 ) -> Result<inference::ResolvedModelPackageFacts, serde_json::Error> {
-    let mut value = serde_json::to_value(facts)?;
-    strip_pumas_model_ref_contract_versions(&mut value);
-    serde_json::from_value(value)
-}
-
-fn strip_pumas_model_ref_contract_versions(value: &mut serde_json::Value) {
-    match value {
-        serde_json::Value::Object(map) => {
-            if map.contains_key("model_id") {
-                map.remove("model_ref_contract_version");
-            }
-            for child in map.values_mut() {
-                strip_pumas_model_ref_contract_versions(child);
-            }
-        }
-        serde_json::Value::Array(items) => {
-            for item in items {
-                strip_pumas_model_ref_contract_versions(item);
-            }
-        }
-        _ => {}
-    }
+    serde_json::from_value(serde_json::to_value(facts)?)
 }
 
 fn project_override(

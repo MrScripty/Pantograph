@@ -1,13 +1,20 @@
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
+use inference::PumasArtifactLoadTarget;
 use pantograph_dependency_planning::PumasModelRef;
+use pumas_library::intent::{
+    AcquisitionPolicy, ModelRequirement, ModelSelector, ObservedModelState,
+};
 use pumas_library::models::{
-    PumasArtifactConsumer, PumasArtifactLoadTarget, PumasArtifactLoadTargetDiagnostic,
+    PumasArtifactConsumer, PumasArtifactLoadTargetDiagnostic,
     PumasArtifactLoadTargetResolutionMode, ResolveModelArtifactLoadTargetRequest,
     ResolveModelArtifactLoadTargetResponse,
 };
-use workflow_nodes::setup::PumasSelectorAccess;
+use workflow_nodes::setup::{
+    intent_handle_to_load_target, summarize_intent_observation, IntentAvailabilityState,
+    PumasSelectorAccess,
+};
 
 use crate::runtime_host_package_facts::pumas_library_model_id;
 
@@ -55,6 +62,8 @@ pub(crate) struct RuntimeDispatchLoadTargetFact {
     pub library_root_id: Option<String>,
     pub storage_kind: String,
     pub validation_state: String,
+    pub verification_source_fingerprint: Option<String>,
+    pub verification_observed_from_cache_at: Option<String>,
     pub content_fingerprint: Option<String>,
     pub package_facts_contract_version: Option<u32>,
 }
@@ -64,6 +73,10 @@ pub(crate) struct RuntimeDispatchLoadTargetFactsDiagnostic {
     pub code: RuntimeDispatchLoadTargetFactsDiagnosticCode,
     pub runtime_family: Option<String>,
     pub message: String,
+    pub intent_state: Option<IntentAvailabilityState>,
+    pub intent_candidate_count: Option<usize>,
+    pub intent_diagnostics: Vec<String>,
+    pub intent_hydration_error: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -71,6 +84,8 @@ pub(crate) enum RuntimeDispatchLoadTargetFactsDiagnosticCode {
     MissingSelectorAccess,
     UnsupportedSelectorAccessRole,
     MissingRuntimeFamily,
+    IntentLookupFailed,
+    IntentUnavailable,
     LoadTargetLookupFailed,
     LoadTargetUnavailable,
     ReadyResponseMissingTarget,
@@ -119,10 +134,7 @@ async fn resolve_runtime_dispatch_load_target_facts(
             "Pumas owner API access is required to resolve runtime dispatch load-target facts",
         )]);
     };
-    if matches!(
-        selector_access,
-        PumasSelectorAccess::LocalClient(_) | PumasSelectorAccess::ReadOnly(_)
-    ) {
+    if matches!(selector_access, PumasSelectorAccess::ReadOnly(_)) {
         return unavailable(vec![diagnostic(
             RuntimeDispatchLoadTargetFactsDiagnosticCode::UnsupportedSelectorAccessRole,
             None,
@@ -132,30 +144,72 @@ async fn resolve_runtime_dispatch_load_target_facts(
             ),
         )]);
     }
+    let _task_kind = task_kind;
+    let requirement = ModelRequirement {
+        selector: ModelSelector::LocalModel {
+            model_ref: pumas_model_ref(model_ref),
+        },
+        artifact: Default::default(),
+        acquisition_policy: AcquisitionPolicy::LocalOnly,
+    };
+    let target = match selector_access
+        .intent_get_model_with_targeted_hydration(requirement)
+        .await
+    {
+        Ok(observation) => match observation.state {
+            ObservedModelState::Available { handle } => {
+                match intent_handle_to_load_target(handle) {
+                    Ok(target) => target,
+                    Err(error) => {
+                        return unavailable(vec![diagnostic(
+                        RuntimeDispatchLoadTargetFactsDiagnosticCode::IntentLookupFailed,
+                        None,
+                        format!(
+                            "Pumas intent handle could not cross the Pantograph runtime boundary: {error}"
+                        ),
+                    )]);
+                    }
+                }
+            }
+            state => {
+                let summary = summarize_intent_observation(
+                    &workflow_nodes::setup::IntentAvailabilityObservation {
+                        state,
+                        hydration_error: observation.hydration_error,
+                    },
+                );
+                return unavailable(vec![diagnostic_with_intent_summary(
+                    RuntimeDispatchLoadTargetFactsDiagnosticCode::IntentUnavailable,
+                    None,
+                    format!(
+                        "Pumas intent availability is not ready for runtime dispatch: state={:?}, candidates={}",
+                        summary.state, summary.candidate_count
+                    ),
+                    Some(summary),
+                )]);
+            }
+        },
+        Err(error) => {
+            return unavailable(vec![diagnostic(
+                RuntimeDispatchLoadTargetFactsDiagnosticCode::IntentLookupFailed,
+                None,
+                format!(
+                    "Pumas intent availability lookup failed for runtime dispatch: {}",
+                    bounded_error_message(error)
+                ),
+            )]);
+        }
+    };
+
     let mut facts = Vec::new();
     let mut diagnostics = Vec::new();
     for runtime_family in runtime_families {
-        let request = build_runtime_dispatch_load_target_request(
-            model_ref,
-            &runtime_family,
-            task_kind.clone(),
-        );
-        match selector_access
-            .resolve_model_artifact_load_target(request)
-            .await
-        {
-            Ok(response) => match project_ready_load_target(response, &runtime_family) {
-                Ok((fact, mut fact_diagnostics)) => {
-                    facts.push(fact);
-                    diagnostics.append(&mut fact_diagnostics);
-                }
-                Err(diagnostic) => diagnostics.push(diagnostic),
-            },
-            Err(error) => diagnostics.push(diagnostic(
-                RuntimeDispatchLoadTargetFactsDiagnosticCode::LoadTargetLookupFailed,
-                Some(runtime_family),
-                format!("Pumas load-target lookup failed for runtime dispatch: {error}"),
-            )),
+        match project_load_target(target.clone(), &runtime_family) {
+            Ok((fact, mut fact_diagnostics)) => {
+                facts.push(fact);
+                diagnostics.append(&mut fact_diagnostics);
+            }
+            Err(diagnostic) => diagnostics.push(diagnostic),
         }
     }
 
@@ -251,6 +305,7 @@ fn project_ready_load_target(
             "ready Pumas load-target response did not include a target",
         )
     })?;
+    let target = workflow_nodes::setup::pumas_load_target_to_inference(target);
     project_load_target(target, runtime_family)
 }
 
@@ -273,7 +328,7 @@ fn project_load_target(
     }
 
     let mut diagnostics = Vec::new();
-    let mut model_ref = pantograph_model_ref(target.model_ref);
+    let mut model_ref = target.model_ref;
     if model_ref.selected_artifact_path.take().is_some() {
         diagnostics.push(diagnostic(
             RuntimeDispatchLoadTargetFactsDiagnosticCode::PathFactsStripped,
@@ -290,6 +345,7 @@ fn project_load_target(
         &artifact_kind,
         &load_path_kind,
         &storage_kind,
+        target.verification_source_fingerprint.as_deref(),
         target.content_fingerprint.as_deref(),
     );
     Ok((
@@ -302,6 +358,8 @@ fn project_load_target(
             library_root_id: target.library_root_id,
             storage_kind,
             validation_state,
+            verification_source_fingerprint: target.verification_source_fingerprint,
+            verification_observed_from_cache_at: target.verification_observed_from_cache_at,
             content_fingerprint: target.content_fingerprint,
             package_facts_contract_version: target.package_facts_contract_version,
         },
@@ -309,31 +367,12 @@ fn project_load_target(
     ))
 }
 
-fn pantograph_model_ref(model_ref: pumas_library::models::PumasModelRef) -> PumasModelRef {
-    PumasModelRef {
-        model_id: model_ref.model_id,
-        revision: model_ref.revision,
-        selected_artifact_id: model_ref.selected_artifact_id,
-        selected_artifact_path: model_ref.selected_artifact_path,
-        migration_diagnostics: model_ref
-            .migration_diagnostics
-            .into_iter()
-            .map(
-                |diagnostic| pantograph_dependency_planning::ModelRefMigrationDiagnostic {
-                    code: diagnostic.code,
-                    message: diagnostic.message,
-                    input: diagnostic.input,
-                },
-            )
-            .collect(),
-    }
-}
-
 fn dispatch_safe_load_target_id(
     model_ref: &PumasModelRef,
     artifact_kind: &str,
     load_path_kind: &str,
     storage_kind: &str,
+    verification_source_fingerprint: Option<&str>,
     content_fingerprint: Option<&str>,
 ) -> String {
     format!(
@@ -345,7 +384,9 @@ fn dispatch_safe_load_target_id(
             .unwrap_or("selected-artifact"),
         artifact_kind,
         load_path_kind,
-        content_fingerprint.unwrap_or(storage_kind)
+        verification_source_fingerprint
+            .or(content_fingerprint)
+            .unwrap_or(storage_kind)
     )
 }
 
@@ -368,11 +409,43 @@ fn diagnostic(
     runtime_family: Option<String>,
     message: impl Into<String>,
 ) -> RuntimeDispatchLoadTargetFactsDiagnostic {
+    diagnostic_with_intent_summary(code, runtime_family, message, None)
+}
+
+fn diagnostic_with_intent_summary(
+    code: RuntimeDispatchLoadTargetFactsDiagnosticCode,
+    runtime_family: Option<String>,
+    message: impl Into<String>,
+    intent_summary: Option<workflow_nodes::setup::IntentAvailabilitySummary>,
+) -> RuntimeDispatchLoadTargetFactsDiagnostic {
+    let (intent_state, intent_candidate_count, intent_diagnostics, intent_hydration_error) =
+        intent_summary.map_or((None, None, Vec::new(), None), |summary| {
+            (
+                Some(summary.state),
+                Some(summary.candidate_count),
+                summary.diagnostics,
+                summary.hydration_error,
+            )
+        });
     RuntimeDispatchLoadTargetFactsDiagnostic {
         code,
         runtime_family,
         message: message.into(),
+        intent_state,
+        intent_candidate_count,
+        intent_diagnostics,
+        intent_hydration_error,
     }
+}
+
+fn bounded_error_message(error: impl std::fmt::Display) -> String {
+    const MAX_ERROR_BYTES: usize = 512;
+    let message = error.to_string();
+    let mut bounded = message.chars().take(MAX_ERROR_BYTES).collect::<String>();
+    if message.chars().count() > MAX_ERROR_BYTES {
+        bounded.push_str("…");
+    }
+    bounded
 }
 
 #[cfg(test)]
@@ -484,8 +557,8 @@ mod tests {
         }
     }
 
-    fn load_target() -> PumasArtifactLoadTarget {
-        PumasArtifactLoadTarget {
+    fn load_target() -> pumas_library::models::PumasArtifactLoadTarget {
+        pumas_library::models::PumasArtifactLoadTarget {
             model_ref: pumas_library::models::PumasModelRef {
                 model_id: "pumas.model.sdxl".to_string(),
                 revision: Some("main".to_string()),

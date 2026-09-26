@@ -5,6 +5,7 @@ use pantograph_inference_interface_contracts::{
     AuthoredInferenceInterfaceSnapshot, InferenceTaskKind, ResolveInferenceInterfaceRequest,
     INFERENCE_INTERFACE_CONTRACT_VERSION,
 };
+use pantograph_scheduler::{SchedulerTraitId, SchedulerTraitSetting, SchedulerTraitValue};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -18,6 +19,8 @@ const PORT_DEVICE: &str = "device";
 const PORT_RUNTIME_SOURCE_CONTEXT: &str = "runtime_source_context";
 const NODE_TYPE_PUMA_LIB: &str = "puma-lib";
 const INFERENCE_INTERFACE_SNAPSHOT_FIELD: &str = "inference_interface_snapshot";
+const TRAIT_SETTINGS_FIELD: &str = "trait_settings";
+const GENERATION_OPTIONS_FIELD: &str = "generation_options";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
@@ -25,6 +28,8 @@ pub struct InferenceInterfaceGraphResolutionInput {
     pub node_id: String,
     pub request: ResolveInferenceInterfaceRequest,
     pub runtime_source_context: WorkflowRuntimeSourceContext,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub trait_settings: Vec<SchedulerTraitSetting>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub authored_snapshot: Option<AuthoredInferenceInterfaceSnapshot>,
 }
@@ -68,6 +73,7 @@ pub enum InferenceInterfaceGraphResolutionDiagnosticCode {
     InvalidTaskKind,
     InvalidRuntimeConstraint,
     InvalidDeviceConstraint,
+    InvalidTraitSettings,
     InvalidAuthoredSnapshot,
     MissingRuntimeSourceContext,
     InvalidRuntimeSourceContext,
@@ -122,6 +128,10 @@ pub fn inference_interface_resolution_inputs_from_graph(
         else {
             continue;
         };
+        let Some(trait_settings) = authored_trait_settings(&node.id, &node.data, &mut diagnostics)
+        else {
+            continue;
+        };
         let request = ResolveInferenceInterfaceRequest {
             contract_version: INFERENCE_INTERFACE_CONTRACT_VERSION,
             model_ref,
@@ -142,6 +152,7 @@ pub fn inference_interface_resolution_inputs_from_graph(
             node_id: node.id.clone(),
             request,
             runtime_source_context,
+            trait_settings,
             authored_snapshot,
         });
     }
@@ -149,6 +160,115 @@ pub fn inference_interface_resolution_inputs_from_graph(
     InferenceInterfaceGraphResolutionInputs {
         requests,
         diagnostics,
+    }
+}
+
+fn authored_trait_settings(
+    node_id: &str,
+    data: &Value,
+    diagnostics: &mut Vec<InferenceInterfaceGraphResolutionDiagnostic>,
+) -> Option<Vec<SchedulerTraitSetting>> {
+    let mut settings = Vec::new();
+    if let Some(value) = data.get(TRAIT_SETTINGS_FIELD) {
+        match serde_json::from_value::<Vec<SchedulerTraitSetting>>(value.clone()) {
+            Ok(mut authored) => settings.append(&mut authored),
+            Err(error) => {
+                diagnostics.push(diagnostic(
+                    node_id,
+                    None,
+                    InferenceInterfaceGraphResolutionDiagnosticCode::InvalidTraitSettings,
+                    format!("trait_settings must match the scheduler contract: {error}"),
+                ));
+                return None;
+            }
+        }
+    }
+
+    let Some(options) = data.get(GENERATION_OPTIONS_FIELD) else {
+        return Some(settings);
+    };
+    let Some(options) = options.as_object() else {
+        diagnostics.push(diagnostic(
+            node_id,
+            None,
+            InferenceInterfaceGraphResolutionDiagnosticCode::InvalidTraitSettings,
+            "generation_options must be an object",
+        ));
+        return None;
+    };
+
+    for key in ["length", "sampling"] {
+        if let Some(value) = options.get(key) {
+            if !value.is_object() {
+                diagnostics.push(diagnostic(
+                    node_id,
+                    None,
+                    InferenceInterfaceGraphResolutionDiagnosticCode::InvalidTraitSettings,
+                    format!("generation_options.{key} must be an object"),
+                ));
+                return None;
+            }
+        }
+    }
+
+    for (trait_id, value) in generation_option_values(options) {
+        let Ok(trait_id) = SchedulerTraitId::parse(trait_id) else {
+            diagnostics.push(diagnostic(
+                node_id,
+                None,
+                InferenceInterfaceGraphResolutionDiagnosticCode::InvalidTraitSettings,
+                format!("generation option trait id '{trait_id}' is invalid"),
+            ));
+            return None;
+        };
+        let Some(value) = scheduler_trait_value(value) else {
+            diagnostics.push(diagnostic(
+                node_id,
+                None,
+                InferenceInterfaceGraphResolutionDiagnosticCode::InvalidTraitSettings,
+                format!("generation option '{trait_id}' has an unsupported value"),
+            ));
+            return None;
+        };
+        settings.push(SchedulerTraitSetting { trait_id, value });
+    }
+
+    Some(settings)
+}
+
+fn generation_option_values<'a>(
+    options: &'a serde_json::Map<String, Value>,
+) -> Vec<(&'a str, &'a Value)> {
+    let mut values = Vec::new();
+    for key in ["max_new_tokens", "temperature", "top_p", "top_k", "seed"] {
+        if let Some(value) = options.get(key) {
+            values.push((key, value));
+        }
+    }
+    if let Some(Value::Object(nested)) = options.get("length") {
+        if let Some(value) = nested.get("max_new_tokens") {
+            values.push(("max_new_tokens", value));
+        }
+    }
+    if let Some(Value::Object(nested)) = options.get("sampling") {
+        for key in ["temperature", "top_p", "top_k", "seed"] {
+            if let Some(value) = nested.get(key) {
+                values.push((key, value));
+            }
+        }
+    }
+    values
+}
+
+fn scheduler_trait_value(value: &Value) -> Option<SchedulerTraitValue> {
+    match value {
+        Value::String(value) => Some(SchedulerTraitValue::String(value.clone())),
+        Value::Bool(value) => Some(SchedulerTraitValue::Bool(*value)),
+        Value::Number(value) if value.as_u64().is_some() => {
+            Some(SchedulerTraitValue::U64(value.as_u64()?))
+        }
+        Value::Number(value) => Some(SchedulerTraitValue::String(value.to_string())),
+        Value::Null | Value::Array(_) | Value::Object(_) => None,
     }
 }
 
@@ -785,6 +905,55 @@ mod tests {
             "image.1024.square"
         );
         assert_eq!(source_context.cancellation_mode.as_str(), "run_scoped");
+    }
+
+    #[test]
+    fn graph_resolution_inputs_project_authored_generation_options_to_scheduler_settings() {
+        let mut graph = graph_with_connected_model();
+        graph.nodes[1].data[GENERATION_OPTIONS_FIELD] = json!({
+            "length": {"max_new_tokens": 32},
+            "sampling": {"temperature": 0.2, "top_p": 0.9, "seed": 7}
+        });
+
+        let result = inference_interface_resolution_inputs_from_graph(&graph);
+
+        assert!(result.diagnostics.is_empty());
+        let settings = &result.requests[0].trait_settings;
+        assert_eq!(settings.len(), 4);
+        assert!(settings.iter().any(|setting| {
+            setting.trait_id.as_str() == "max_new_tokens"
+                && setting.value == SchedulerTraitValue::U64(32)
+        }));
+        assert!(settings.iter().any(|setting| {
+            setting.trait_id.as_str() == "temperature"
+                && setting.value == SchedulerTraitValue::String("0.2".to_string())
+        }));
+        assert!(settings.iter().any(|setting| {
+            setting.trait_id.as_str() == "top_p"
+                && setting.value == SchedulerTraitValue::String("0.9".to_string())
+        }));
+        assert!(settings.iter().any(|setting| {
+            setting.trait_id.as_str() == "seed" && setting.value == SchedulerTraitValue::U64(7)
+        }));
+    }
+
+    #[test]
+    fn graph_resolution_inputs_reject_malformed_generation_option_containers() {
+        for key in ["length", "sampling"] {
+            let mut graph = graph_with_connected_model();
+            graph.nodes[1].data[GENERATION_OPTIONS_FIELD] = json!({ key: 32 });
+
+            let result = inference_interface_resolution_inputs_from_graph(&graph);
+
+            assert!(result.requests.is_empty());
+            assert!(result.diagnostics.iter().any(|diagnostic| {
+                diagnostic.code
+                    == InferenceInterfaceGraphResolutionDiagnosticCode::InvalidTraitSettings
+                    && diagnostic
+                        .message
+                        .contains(&format!("generation_options.{key}"))
+            }));
+        }
     }
 
     #[test]

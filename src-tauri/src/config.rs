@@ -153,6 +153,13 @@ pub struct WorkflowConfig {
     /// workflow execution session capacity.
     #[serde(default)]
     pub max_loaded_sessions: Option<usize>,
+    /// Explicit loopback Pumas Library RPC endpoint used by desktop startup.
+    ///
+    /// Desktop startup does not discover a sibling checkout or open a Pumas
+    /// database. Older configs deserialize with no endpoint and must supply
+    /// `PANTOGRAPH_PUMAS_RPC_ENDPOINT` for the isolated host.
+    #[serde(default)]
+    pub pumas_rpc_endpoint: Option<String>,
 }
 
 /// Full application configuration

@@ -436,7 +436,9 @@ mod tests {
                 selected_artifact_path: None,
                 migration_diagnostics: Vec::new(),
             },
+            package_facts_contract_version: inference::MODEL_PACKAGE_FACTS_CONTRACT_VERSION,
             artifact_kind: inference::ModelArtifactKind::DiffusersBundle,
+            storage_kind: inference::ModelStorageKind::LibraryOwned,
             validation_state: ModelValidationState::Valid,
             task: TaskEvidence {
                 pipeline_tag: Some("text-to-image".to_string()),

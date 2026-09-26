@@ -43,6 +43,15 @@ This section governs the current disposition of the listed additions. Preserve e
 | PSTD-01 | Current MCP/interface and role policy need local verification. | Orchestrator | Interface 37 is the inspected source, not installed proof; use actual task routing for planning, implementation and commits. |
 | PSTD-02 | Inherited whole-repository and environment obligations remain open. | Existing DA/COV/SDC/ALB/FE/VT/DRD owners | Retain mapping and discriminating evidence; no closure by supersession. |
 
+### September 26, 2026 — intent-first migration dispositions
+
+| ID | Severity / relationship to objective | Owner and boundary | Current disposition / deciding evidence |
+| --- | --- | --- | --- |
+| PRPC-06 | High: selected-model consumers did not use the released intent contract. | Pantograph library client/runtime | In progress: query/get/status are typed through owner, authenticated local-client and explicit RPC roles; owner/RPC runtime and dispatch now consume `Available` handles. Next evidence is a nonempty released-producer handle through the real runtime-host acceptance. |
+| PRPC-07 | Medium: desktop startup could discover a sibling Pumas checkout or local instance instead of using the configured isolated service. | Desktop composition | Repaired in the current slice: `workflow.pumas_rpc_endpoint` or `PANTOGRAPH_PUMAS_RPC_ENDPOINT` selects `RpcEndpoint`; no sibling path/database/registry discovery occurs. Admin/download commands that require raw owner API remain separately bounded. |
+| PRPC-08 | Medium: old Pantograph tests imported private Pumas IPC server hooks removed by release 0.7.0. | Test/dependency boundary | Repaired by removing only the unsupported fake-server fixtures; production local-client behavior is unchanged and supported release IPC intent coverage remains in the producer qualification. Do not restore private coupling. |
+| PRPC-09 | Medium: release intent availability does not provide backend task/pipeline suitability or repair incomplete metadata. | Pumas metadata + Pantograph compatibility | Open and correctly separated. Package facts/settings remain complementary; Tiny SD selected identity and Qwen embedding task evidence remain producer/provisioning blockers. No local ID guessing or task inference is allowed. |
+
 ### MOD-01 source progress — 2026-09-25
 
 `PGEN-01` is partially advanced at the source-contract level. The canonical scheduler-selected runtime-host path now admits an embedding task, projects its selected package/load-target/backend facts into the existing Pantograph gateway, executes through the gateway-owned llama.cpp embedding backend, and returns a bounded typed numeric vector through runtime-host, scheduler, and workflow-output contracts. The runtime-host batch route preserves per-member correlation and terminal outcomes, but currently executes members sequentially; native multi-input backend batching remains a follow-up optimization/qualification.
@@ -111,7 +120,7 @@ Pantograph's ignored repository acceptance now exercises the real `EmbeddedRunti
 
 ### Runtime-host acceptance repair evidence — 2026-09-26
 
-The first runtime-host attempt exposed two contract defects before execution: the Pumas adapter forwarded the Pantograph URI instead of the library model ID, and the runtime-host projection left text generation unbounded. The repaired path now sends the raw library ID only to Pumas, keeps the URI in Pantograph-owned identity, overlays the selected revision on producer responses that omit it, and supplies `max_new_tokens=8` for the bounded runtime-host text contract. A second run passed through the actual port and returned `"Amber Bridge "` in 46.47 seconds. The canonical path parser plus Windows-drive guard rejects owner-local identity forms, and selected text/embedding reject missing producer-issued artifact IDs.
+The first runtime-host attempt exposed two contract defects before execution: the Pumas adapter forwarded the Pantograph URI instead of the library model ID, and the runtime-host projection left text generation unbounded. The repaired path now sends the raw library ID only to Pumas, keeps the URI in Pantograph-owned identity, overlays the selected revision on producer responses that omit it, and the acceptance fixture authors `max_new_tokens=8` while ordinary authored requests remain controlled by their own scheduler settings. A second run passed through the actual port and returned `"Amber Bridge "` in 46.47 seconds. The canonical path parser plus Windows-drive guard rejects owner-local identity forms, and selected text/embedding reject missing producer-issued artifact IDs.
 
 ### Producer-selected Qwen embedding remains facts-gated — 2026-09-26
 
@@ -120,3 +129,61 @@ The isolated pinned producer returned a selected Qwen3 Q4_K_M GGUF artifact (`qw
 ### Runtime-host identity and cancellation hardening — 2026-09-26
 
 Image planning and the runtime-host load-target/package-facts resolvers now reject missing or divergent producer-selected artifact IDs, producer model IDs and conflicting nonempty revisions across scheduler selection, package facts and the ready Pumas target before identity normalization. The focused planner/handoff/resolver tests cover these failure shapes. Text runtime-host resolution now observes cancellation during both pending Pumas RPC waits and gives cancellation precedence over a delayed resolver failure. These repairs preserve the complete Tiny SD producer-identity gate and do not change the open image/embedding/desktop acceptance rows.
+
+### Intent outcome/evidence review repair — 2026-09-26
+
+The first intent-first consumer slice was incomplete where it flattened typed non-available outcomes and dropped the cache-observation part of handle verification. Pantograph now carries bounded typed intent state/candidate/diagnostic projections, exact source-fingerprint/cache-observation evidence, and a single facts-hydration/re-observation step for producer-reported facts gaps. The released read-only fallback is explicitly `ReadOnlyIndexed`, and optional scheduler artifact identity is accepted only when Pumas resolves a unique handle or confirms a supplied ID. This remains a Pantograph migration repair; no Pumas source change is proposed.
+
+### Intent-first handoff and desktop operation repair — 2026-09-26
+
+The remaining implementation findings were reclassified before repair:
+
+- Pantograph migration: the released 0.7.0 intent query/get/status operations are typed in the closed client, used for owner/local-client/RPC availability, and adapted into Pantograph's runtime boundary. Read-only remains on the supported `ReadOnlyIndexed` legacy operation because that facade has no intent API.
+- Incorrect consumer use: the old handoff overwrote producer identity/revision and treated every target as if the scheduler had already supplied all optional identity fields. Pantograph now fills only missing revision/artifact identity from the validated handle, rejects supplied disagreement, retains executable paths/evidence at the runtime boundary, and checks package-facts/load-target coherence before dispatch.
+- Metadata/provisioning: the official release probe still has no nonempty candidate; Tiny SD remains complete but lacks a producer-issued selected-artifact identity, and Qwen remains selected/ready but reports `task_type_primary=unknown`. Existing producer provisioning/import routes were assessed; no local identity or task support is synthesized.
+- Actual unsupported/remaining behavior: HTTP selector snapshots remain unsupported by the release/current producer surface, and the release intent probe returned only `matches=[]` plus typed `missing/artifact_missing`. This is not a reason to add a fabricated cursor, HTTP selector snapshot contract, Pumas inference fallback or producer source change.
+- Integration/environment evidence: the real producer-selected Tiny Aya text/runtime-host path remains qualified; image/embedding producer-backed execution, scheduler fan-out, desktop inspection and cold reopen remain open. Coding-Standards runtime state remains `restart-required`; the supported host action is `restart-and-reconnect`, unavailable in this session.
+
+Current verification after repair: `cargo fmt --all -- --check`; `cargo check --workspace --locked --offline`; workflow-nodes 219/219; runtime-host load-target 6/6; dispatch facts 4/4; candidate provider 14/14; execution-port 19 executable/2 ignored; image 8/8; text 7/7; embedding 2/2. The single next action is a nonempty frozen-release intent handle qualification; dependent acceptance gates remain scoped to their evidence.
+
+### Final review repair classification — 2026-09-26
+
+- **Pantograph migration:** exact released download/review parameter shapes, model-reference contract validation, LocalClient load-target intent handoff, and cancellation polling are now implemented and tested.
+- **Incorrect consumer use:** scheduler readiness proofs are no longer rewritten during handoff. Runtime projections use the validated producer target identity, while supplied scheduler identity disagreement fails closed.
+- **Model metadata/provisioning:** producer package-facts revision is preserved when Pantograph's scheduler request omits a revision; no local artifact identity or metadata is manufactured.
+- **Unsupported producer behavior:** the released LocalClient facade does not expose full package-facts dispatch, so that operation remains explicitly unavailable for that role. This is not treated as permission for a Pumas source change.
+- **Integration/environment evidence:** the real nonempty released-intent `Available` run, producer-selected image/embedding execution, generated-text scheduler fan-out, desktop inspection, cold reopen, and standards reconnect remain open.
+
+The final review also confirmed that the image and image-batch paths observe cancellation while waiting for intent-derived load targets. The repaired focused suites pass; no upstream Pumas edit is justified.
+
+### Second final review repair classification — 2026-09-26
+
+- **Pantograph migration:** the explicit RPC catalog now permits summary-only 'NeedsDetail' identities to reach intent resolution, while preserving disabled states for known unusable rows. HF search and review-list response wrappers retain producer success/error semantics.
+- **Incorrect consumer use:** dispatch coherence no longer treats an absent package revision as a mismatch against an intent-supplied revision.
+- **Integration/lifecycle:** single-image and image-batch load-target and package-facts failures re-check cancellation, with regression coverage for cancellation winning the delayed failure race.
+- **Remaining evidence:** the nonempty released-intent 'Available' run, producer-selected image/embedding execution, actual scheduler fan-out, desktop inspection, cold reopen, and standards reconnect remain open. No Pumas source change is justified.
+
+### Third review repair and producer path-contract reclassification — 2026-09-26
+
+- **Pantograph migration:** authored `generation_options`/`trait_settings` now reach the existing scheduler trait-settings field through graph resolution, publication, validation snapshots and runtime text projection. Image single/batch output publication re-checks cancellation before retaining media.
+- **Incorrect consumer use:** all supplied request, scheduler, package-facts and target revisions are checked for agreement. The consumer no longer applies the root-relative model-identity path validator to Pumas package-facts `artifact.entry_path`; Pumas 0.7.0 defines that field as an executable local path. The path is retained at the runtime boundary, while scheduler identity remains separate and no local path or artifact ID is invented.
+- **Model metadata/provisioning:** producer-selected image identity and embedding task facts remain unresolved producer evidence. Tiny SD remains identity-gated; Qwen remains task-facts-gated; no metadata is fabricated.
+- **Integration/lifecycle:** focused graph, inference, package-facts, image planner and runtime-host cancellation regressions pass. The existing 1,024-byte text boundary remains deliberate; the removed eight-token value is now explicit only in the acceptance fixture.
+- **Remaining evidence:** the frozen release's nonempty `Available` handle, producer-selected image/embedding execution, actual scheduler fan-out, desktop inspection, complete retained outputs/cold reopen, and standards reconnect remain open. No Pumas source change is justified.
+
+### Text settings and optional revision repair classification — 2026-09-26
+
+- **Pantograph migration:** authored text-generation trait settings now project through the existing scheduler-to-inference boundary, while unknown traits remain ignored and malformed supported values fail closed.
+- **Incorrect consumer use:** selected text and embedding validation accepts an omitted package revision only when the other authoritative observation supplies one; conflicting supplied revisions remain rejected.
+- **Integration/evidence:** the acceptance fixture explicitly authors its deliberately tiny eight-token limit. The runtime-host projection no longer applies that limit to ordinary authored requests, and the 1,024-byte text bound remains enforced.
+- **Remaining evidence:** real released-intent availability, producer-selected image/embedding execution, actual scheduler fan-out, desktop inspection, cold reopen and standards reconnect remain open. No Pumas source change is justified.
+
+## 2026-09-26 — independent review repair: consumer coherence and terminal retention
+
+- **Repaired Pantograph migration/contract use:** the shared Pumas model-reference decoder now accepts only supported version `1` or an explicitly unversioned input. Package-facts and dispatch conversion no longer erase the version before the consumer validates it. Malformed present `generation_options.length`/`sampling` containers fail closed, and supplied identity artifact paths must agree even when the intent target omits the optional legacy path.
+- **Repaired observation coherence:** when Pumas package facts and the intent load target both expose absolute executable paths, image, text and embedding execution require exact equality. Relative legacy fixture paths remain non-comparable observations; no parent-directory repair or local identity manufacture is introduced.
+- **Repaired lifecycle ownership:** cancellation before media retention rejects without output; cancellation during a sink write lets the completed member retain its output, and batch responses cancel only unprocessed members. This preserves inspectability and prevents an all-cancelled response from hiding retained media.
+- **Not admitted by canonical scope:** widening the deliberate 1,024-byte text contract remains unjustified; the existing scheduler trait-settings path is the supported authored-settings contract. The frontend `mocks.ts` `generation_options` port is stale against the canonical runtime contract's retired static ports and does not authorize adding a new runtime port.
+- **Evidence:** focused repair suites pass, including model-ref/version, graph settings (16), image planning (29), selected text/embedding, package facts (11), and runtime-host execution port (27 executable/2 ignored). The full embedded-runtime package has 472 passed and 3 known baseline fixture/composition failures; no new Pumas operation or inference route was introduced.
+- **Standards:** the root session remains interface 37/implementation 0.2.0/restart-required with supported action `restart-and-reconnect` unavailable, while the independent reviewer observed interface 38/current/authoring. This cross-session identity/state mismatch remains an explicit reconnect gate.
+- **Next slice:** qualify a nonempty `Available` handle from the frozen release through real Pantograph runtime-host execution; image/embedding, scheduler fan-out, desktop/cold-reopen and final standards evidence remain dependent gates.

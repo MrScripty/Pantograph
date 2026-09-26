@@ -108,4 +108,4 @@ parking_lot = "0.12"
 rusqlite = { version = "0.32.1", features = ["bundled"] }
 
 # Model management
-pumas-library = { git = "https://github.com/MrScripty/Pumas-Library.git", rev = "f87c3da8276a914a54c6f4f36d617bef9d9f424e" }
+pumas-library = { git = "https://github.com/MrScripty/Pumas-Library.git", rev = "29242fce4ec9043becaeb061587f364ecc4e7177" }
