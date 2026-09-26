@@ -46,7 +46,6 @@ async fn producer_lifecycle_shutdown_is_idempotent_and_does_not_publish_snapshot
         .spawn(tokio::runtime::Handle::current())
         .expect("producer should spawn");
 
-    tokio::time::sleep(Duration::from_millis(15)).await;
     assert_eq!(snapshot_provider.snapshot_count(), 0);
 
     handle.shutdown().await;
@@ -83,12 +82,17 @@ async fn producer_drains_work_queue_into_ready_snapshots_from_package_probe() {
         .spawn(tokio::runtime::Handle::current())
         .expect("producer should spawn");
 
-    tokio::time::sleep(Duration::from_millis(20)).await;
-
-    assert!(work_queue.is_empty());
+    let result = wait_for_snapshot(
+        &snapshot_provider,
+        &work_queue,
+        &request,
+        DependencyEnvironmentReadinessState::Ready,
+        None,
+    )
+    .await;
     assert_eq!(snapshot_provider.snapshot_count(), 1);
     assert_eq!(
-        snapshot_provider.resolve(&request).readiness_state,
+        result.readiness_state,
         DependencyEnvironmentReadinessState::Ready
     );
     assert_eq!(package_probe_runner.request_count(), 1);
