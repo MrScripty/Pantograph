@@ -207,16 +207,7 @@ fn payload_extraction_accepts_valid_resolved_result_state() {
 
 #[test]
 fn payload_extraction_accepts_resolved_result_with_no_additional_requirements() {
-    let mut result: DependencyEnvironmentResult =
-        serde_json::from_str(READY_RESULT).expect("ready fixture should decode");
-    result.readiness_state = DependencyEnvironmentReadinessState::Resolved;
-    result.install_state = DependencyEnvironmentInstallState::NotRequested;
-    result.environment_ref = None;
-    result.requirements.clear();
-    result.bindings.clear();
-    result.selected_binding_ids.clear();
-    result.binding_statuses.clear();
-    result.operation = None;
+    let result = resolved_empty_result();
     let result = ValidatedDependencyEnvironmentResult::try_from(result)
         .expect("resolved empty result should validate");
 
@@ -226,6 +217,25 @@ fn payload_extraction_accepts_resolved_result_with_no_additional_requirements() 
     assert!(payload.requirements.is_empty());
     assert!(payload.bindings.is_empty());
     assert!(payload.selected_binding_ids.is_empty());
+}
+
+#[test]
+fn payload_extraction_rejects_contradictory_empty_result_identity() {
+    let mut result = resolved_empty_result();
+    result.identity_key.selected_binding_ids.push(
+        pantograph_dependency_planning::DependencyBindingId::parse("diffusers.scheduler")
+            .expect("binding id"),
+    );
+    let result = ValidatedDependencyEnvironmentResult::try_from(result)
+        .expect("result contract validation does not own payload coherence");
+
+    assert_eq!(
+        DependencyRequirementsPayload::from_result(&result),
+        Err(DependencyRequirementsRegistryError::InvalidPayload {
+            field: "dependency_requirements_payload.identity_key.selected_binding_ids",
+            reason: "identity and payload selected binding ids must agree",
+        })
+    );
 }
 
 fn payload_from_ready_result() -> DependencyRequirementsPayload {
@@ -253,4 +263,34 @@ fn validated_request_without_requirements() -> ValidatedDependencyEnvironmentReq
     let request: DependencyEnvironmentRequest =
         serde_json::from_str(RESOLVE_REQUEST).expect("request fixture should decode");
     ValidatedDependencyEnvironmentRequest::try_from(request).expect("request should validate")
+}
+
+fn resolved_empty_result() -> DependencyEnvironmentResult {
+    let mut request: DependencyEnvironmentRequest =
+        serde_json::from_str(RESOLVE_REQUEST).expect("request fixture should decode");
+    request.planning_request.selected_binding_ids.clear();
+    request.planning_request.dependency_override_patches.clear();
+    request.identity_key =
+        pantograph_dependency_planning::DependencyPlanningIdentityKey::from_planning_request(
+            &request.planning_request,
+        )
+        .expect("empty-binding identity key");
+
+    let mut result: DependencyEnvironmentResult =
+        serde_json::from_str(READY_RESULT).expect("ready fixture should decode");
+    result.readiness_state = DependencyEnvironmentReadinessState::Resolved;
+    result.install_state = DependencyEnvironmentInstallState::NotRequested;
+    result.validation_state = DependencyEnvironmentValidationState::Valid;
+    result.identity_key = request.identity_key;
+    result.dependency_requirements_id = Some(
+        DependencyRequirementsId::parse("tiny-sd:pytorch:linux-x86_64:empty")
+            .expect("empty requirements id"),
+    );
+    result.environment_ref = None;
+    result.requirements.clear();
+    result.bindings.clear();
+    result.selected_binding_ids.clear();
+    result.binding_statuses.clear();
+    result.operation = None;
+    result
 }

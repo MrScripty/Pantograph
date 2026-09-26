@@ -13,9 +13,9 @@ use pantograph_dependency_environment_service::{
 };
 use pantograph_dependency_planning::{
     DependencyBindingStatusState, DependencyEnvironmentReadinessState,
-    DependencyEnvironmentRequest, DependencyEnvironmentValidationState,
-    DependencyPlanningDiagnosticCode, DependencyRequirementsId,
-    ValidatedDependencyEnvironmentRequest,
+    DependencyEnvironmentRequest, DependencyEnvironmentResult,
+    DependencyEnvironmentValidationState, DependencyPlanningDiagnosticCode,
+    DependencyRequirementsId, ValidatedDependencyEnvironmentRequest,
 };
 
 use crate::dependency_inventory::DependencyInventoryService;
@@ -142,9 +142,14 @@ async fn producer_drains_resolved_empty_requirements_without_package_probe() {
         .spawn(tokio::runtime::Handle::current())
         .expect("producer should spawn");
 
-    tokio::time::sleep(Duration::from_millis(20)).await;
-
-    let result = snapshot_provider.resolve(&request);
+    let result = wait_for_snapshot(
+        &snapshot_provider,
+        &work_queue,
+        &request,
+        DependencyEnvironmentReadinessState::Ready,
+        None,
+    )
+    .await;
     assert!(work_queue.is_empty());
     assert_eq!(
         result.readiness_state,
@@ -183,9 +188,14 @@ async fn producer_reports_missing_snapshot_when_selected_package_is_absent() {
         .spawn(tokio::runtime::Handle::current())
         .expect("producer should spawn");
 
-    tokio::time::sleep(Duration::from_millis(20)).await;
-
-    let result = snapshot_provider.resolve(&request);
+    let result = wait_for_snapshot(
+        &snapshot_provider,
+        &work_queue,
+        &request,
+        DependencyEnvironmentReadinessState::Missing,
+        None,
+    )
+    .await;
     assert!(work_queue.is_empty());
     assert_eq!(
         result.readiness_state,
@@ -231,9 +241,14 @@ async fn producer_preserves_explicit_python_environment_and_fails_closed_on_prob
         .spawn(tokio::runtime::Handle::current())
         .expect("producer should spawn");
 
-    tokio::time::sleep(Duration::from_millis(20)).await;
-
-    let result = snapshot_provider.resolve(&request);
+    let result = wait_for_snapshot(
+        &snapshot_provider,
+        &work_queue,
+        &request,
+        DependencyEnvironmentReadinessState::NotImplemented,
+        Some(DependencyPlanningDiagnosticCode::NotImplemented),
+    )
+    .await;
     assert!(work_queue.is_empty());
     assert_eq!(
         result.readiness_state,
@@ -287,9 +302,14 @@ async fn producer_reports_unavailable_snapshot_when_probe_fails() {
         .spawn(tokio::runtime::Handle::current())
         .expect("producer should spawn");
 
-    tokio::time::sleep(Duration::from_millis(20)).await;
-
-    let result = snapshot_provider.resolve(&request);
+    let result = wait_for_snapshot(
+        &snapshot_provider,
+        &work_queue,
+        &request,
+        DependencyEnvironmentReadinessState::Unavailable,
+        Some(DependencyPlanningDiagnosticCode::RuntimeUnavailable),
+    )
+    .await;
     assert!(work_queue.is_empty());
     assert_eq!(
         result.readiness_state,
@@ -324,9 +344,14 @@ async fn producer_publishes_typed_unavailable_snapshot_when_registry_payload_is_
         .spawn(tokio::runtime::Handle::current())
         .expect("producer should spawn");
 
-    tokio::time::sleep(Duration::from_millis(20)).await;
-
-    let result = snapshot_provider.resolve(&request);
+    let result = wait_for_snapshot(
+        &snapshot_provider,
+        &work_queue,
+        &request,
+        DependencyEnvironmentReadinessState::Unavailable,
+        Some(DependencyPlanningDiagnosticCode::InternalError),
+    )
+    .await;
     assert!(work_queue.is_empty());
     assert_eq!(
         result.readiness_state,
@@ -384,6 +409,35 @@ fn work_item(request: ValidatedDependencyEnvironmentRequest) -> DependencyReadin
         ),
         request,
     )
+}
+
+async fn wait_for_snapshot(
+    snapshot_provider: &DependencyEnvironmentReadinessSnapshotProvider,
+    work_queue: &DependencyReadinessWorkQueue,
+    request: &ValidatedDependencyEnvironmentRequest,
+    expected_state: DependencyEnvironmentReadinessState,
+    expected_diagnostic_code: Option<DependencyPlanningDiagnosticCode>,
+) -> DependencyEnvironmentResult {
+    tokio::time::timeout(Duration::from_secs(1), async {
+        loop {
+            let result = snapshot_provider.resolve(request);
+            let diagnostic_matches = expected_diagnostic_code.as_ref().map_or(true, |expected| {
+                result
+                    .diagnostics
+                    .iter()
+                    .any(|diagnostic| &diagnostic.code == expected)
+            });
+            if work_queue.is_empty()
+                && result.readiness_state == expected_state
+                && diagnostic_matches
+            {
+                return result;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("dependency readiness producer should publish its observable snapshot")
 }
 
 fn validated_request() -> ValidatedDependencyEnvironmentRequest {
