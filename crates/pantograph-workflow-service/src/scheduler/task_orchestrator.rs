@@ -13,14 +13,14 @@ use pantograph_runtime_host_contracts::{
     RuntimeHostBatchExecutionMemberRequest, RuntimeHostBatchExecutionMemberResponse,
     RuntimeHostBatchExecutionMemberState, RuntimeHostBatchExecutionPort,
     RuntimeHostBatchExecutionRequest, RuntimeHostBatchMemberFailurePolicy,
-    RuntimeHostBatchMemberReservationDisposition, RuntimeHostBatchMemberReservationPolicy,
-    RuntimeHostBatchMemberRetryDisposition, RuntimeHostDispatchError,
-    RuntimeHostExecutionCancellationContext, RuntimeHostExecutionCancellationHandle,
-    RuntimeHostExecutionDiagnosticSeverity, RuntimeHostExecutionPortError,
-    SchedulerRuntimeHostBatchDispatcher, SchedulerRuntimeHostDispatcher,
-    ValidatedReservationLifecycleApplication, ValidatedReservationLifecycleEvent,
-    ValidatedRuntimeHostBatchExecutionRequest, ValidatedRuntimeHostBatchExecutionResponse,
-    RESERVATION_LIFECYCLE_CONTRACT_VERSION, RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
+    RuntimeHostBatchMemberReservationPolicy, RuntimeHostBatchMemberRetryDisposition,
+    RuntimeHostDispatchError, RuntimeHostExecutionCancellationContext,
+    RuntimeHostExecutionCancellationHandle, RuntimeHostExecutionDiagnosticSeverity,
+    RuntimeHostExecutionPortError, SchedulerRuntimeHostBatchDispatcher,
+    SchedulerRuntimeHostDispatcher, ValidatedReservationLifecycleApplication,
+    ValidatedReservationLifecycleEvent, ValidatedRuntimeHostBatchExecutionRequest,
+    ValidatedRuntimeHostBatchExecutionResponse, RESERVATION_LIFECYCLE_CONTRACT_VERSION,
+    RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
 };
 use pantograph_scheduler::{
     plan_scheduler_readiness_admission, select_scheduler_dispatch, SchedulerContractError,
@@ -2432,11 +2432,6 @@ fn runtime_host_batch_member_lifecycle_event(
 fn runtime_host_batch_member_reservation_outcome(
     response: &RuntimeHostBatchExecutionMemberResponse,
 ) -> Result<ReservationLifecycleOutcome, WorkflowSchedulerTaskOrchestratorError> {
-    if response.reservation_disposition
-        == RuntimeHostBatchMemberReservationDisposition::DeferredToScheduler
-    {
-        return Ok(ReservationLifecycleOutcome::RetryDeferred);
-    }
     match response.state {
         RuntimeHostBatchExecutionMemberState::Completed => {
             Ok(ReservationLifecycleOutcome::RuntimeHostCompleted)

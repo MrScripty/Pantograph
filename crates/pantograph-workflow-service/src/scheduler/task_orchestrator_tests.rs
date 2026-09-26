@@ -563,7 +563,7 @@ async fn orchestrator_applies_batch_member_completed_response_as_terminal_result
         &member,
         RuntimeHostBatchExecutionMemberState::Completed,
         RuntimeHostBatchMemberRetryDisposition::NotRetryable,
-        RuntimeHostBatchMemberReservationDisposition::Released,
+        RuntimeHostBatchMemberReservationDisposition::DeferredToScheduler,
     );
 
     let mutation = orchestrator
