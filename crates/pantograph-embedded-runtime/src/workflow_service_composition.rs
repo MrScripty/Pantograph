@@ -1449,7 +1449,12 @@ mod tests {
                     position: Position { x: 200.0, y: 0.0 },
                     data: serde_json::json!({
                         "task_kind": "image_generation",
-                        "runtime": "pytorch"
+                        "runtime": "pytorch",
+                        "runtime_source_context": {
+                            "operation_type": "image-generation.txt2img",
+                            "context_shape_key": "txt2img.1024x1024.steps30",
+                            "cancellation_mode": "per-run-fanout"
+                        }
                     }),
                 },
             ],

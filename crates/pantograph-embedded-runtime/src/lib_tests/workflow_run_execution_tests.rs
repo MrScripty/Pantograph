@@ -278,7 +278,6 @@ fn image_runtime_session_graph(model_id: &str, selected_artifact_id: &str) -> Wo
                     "inference_interface_snapshot": image_runtime_inference_interface_snapshot_json(),
                     "pumas_model_ref": {
                         "model_id": model_id,
-                        "revision": "main",
                         "selected_artifact_id": selected_artifact_id
                     }
                 }),
@@ -473,7 +472,7 @@ fn image_runtime_validation_snapshot(
 ) -> WorkflowExecutableValidationSnapshotRecord {
     let model_ref = PumasModelRef {
         model_id: model_id.to_string(),
-        revision: Some("main".to_string()),
+        revision: None,
         selected_artifact_id: Some(selected_artifact_id.to_string()),
         selected_artifact_path: None,
         migration_diagnostics: Vec::new(),
@@ -572,7 +571,7 @@ fn image_runtime_dependency_environment_request(
 ) -> ValidatedDependencyEnvironmentRequest {
     let model_ref = PumasModelRef {
         model_id: model_id.to_string(),
-        revision: Some("main".to_string()),
+        revision: None,
         selected_artifact_id: Some(selected_artifact_id.to_string()),
         selected_artifact_path: None,
         migration_diagnostics: Vec::new(),
