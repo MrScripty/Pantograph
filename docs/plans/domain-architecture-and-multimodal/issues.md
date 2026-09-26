@@ -202,3 +202,9 @@ The final review also confirmed that the image and image-batch paths observe can
 - **Classification:** Pantograph consumer migration defect. The runtime-host requirement builder forwarded `selected_artifact_path` from legacy/scheduler state even though released Pumas intent treats it as a supplied path constraint, not identity.
 - **Repair:** preserve model ID, revision and selected artifact ID; omit the path from `ModelRequirement`. The producer-issued executable path remains available only in the `Available` handle/runtime target. No producer identity or path is synthesized.
 - **Evidence:** regression coverage passes for a legacy absolute path (`runtime_host_load_target` 7/7); the affected execution-port suite passes 27 with 2 ignored. Astra's read-only review found no concrete defect. The released producer identity gap remains unchanged and is still owned by Pumas import/metadata operations.
+
+### D-02 incomplete image response handling — 2026-09-26
+
+- **Classification:** Pantograph desktop presentation/integration defect. The Inspector previously guarded image preview through page-local media classification, while download had no shared completeness assertion and response media could be opaque.
+- **Repair:** a shared presenter guard now rejects incomplete image responses before preview decoding or download-object creation when either artifact or response media identifies an image. The image smoke assertion also verifies complete retained-body metadata, nonzero bytes, successful decode and no access error. Text preview limits are unchanged.
+- **Evidence and limit:** the presenter test file, typecheck, targeted lint, E2E syntax and diff checks pass; the implementation agent also reports Svelte compilation success. The WebKit fixture session ended before readiness, so no real desktop acceptance is claimed. This does not change the Pumas identity blocker or justify a producer source change.

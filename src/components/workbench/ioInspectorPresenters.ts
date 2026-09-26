@@ -83,6 +83,19 @@ export interface IoArtifactPreviewExtent {
   complete: boolean;
 }
 
+export function assertCompleteIoArtifactImageRead(
+  artifact: Pick<IoArtifactProjectionRecord, 'media_type' | 'payload_kind'> &
+    Partial<Pick<IoArtifactProjectionRecord, 'format'>>,
+  response: { media_type: string; complete: boolean },
+): void {
+  const artifactFamily = classifyIoArtifactMedia(resolveIoArtifactMediaType(artifact), artifact.payload_kind);
+  const responseFamily = classifyIoArtifactMedia(response.media_type);
+  const artifactIsExplicitImage = artifact.payload_kind === 'image';
+  if ((artifactIsExplicitImage || artifactFamily === 'image' || responseFamily === 'image') && !response.complete) {
+    throw new Error('Image preview is incomplete; the complete image body is required.');
+  }
+}
+
 export interface IoArtifactTextPreview {
   text: string;
   truncated: boolean;

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  assertCompleteIoArtifactImageRead,
   buildIoArtifactDescriptorMetadataRows,
   buildIoArtifactDownloadFilename,
   buildIoArtifactNodeGroups,
@@ -150,6 +151,37 @@ test('artifact preview requests read complete images and bound text using card m
       byte_range_start: 0,
       byte_range_end_exclusive: 64 * 1024,
     },
+  );
+});
+
+test('complete image reads are accepted, including an opaque response media type', () => {
+  assert.doesNotThrow(() => assertCompleteIoArtifactImageRead(
+    { media_type: 'image/png', payload_kind: 'image' },
+    { media_type: 'application/octet-stream', complete: true },
+  ));
+});
+
+test('incomplete image reads are rejected before decoding, even with an opaque response media type', () => {
+  assert.throws(
+    () => assertCompleteIoArtifactImageRead(
+      { media_type: 'image/png', payload_kind: 'image' },
+      { media_type: 'application/octet-stream', complete: false },
+    ),
+    /complete image body is required/,
+  );
+  assert.throws(
+    () => assertCompleteIoArtifactImageRead(
+      { media_type: 'application/octet-stream', payload_kind: null },
+      { media_type: 'image/png', complete: false },
+    ),
+    /complete image body is required/,
+  );
+  assert.throws(
+    () => assertCompleteIoArtifactImageRead(
+      { media_type: 'application/octet-stream', payload_kind: 'image' },
+      { media_type: 'application/octet-stream', complete: false },
+    ),
+    /complete image body is required/,
   );
 });
 

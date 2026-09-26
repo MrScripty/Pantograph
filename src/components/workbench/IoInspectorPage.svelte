@@ -36,12 +36,12 @@
     focusSettingsSection,
   } from '../../stores/workbenchStore';
   import {
+    assertCompleteIoArtifactImageRead,
     buildIoArtifactDescriptorMetadataRows,
     buildIoArtifactDownloadFilename,
     buildIoArtifactPreviewReadRequest,
     buildIoArtifactRendererSummary,
     buildResolvedNodeIoDisplayRows,
-    classifyIoArtifactMedia,
     canRenderIoArtifactTextPreview,
     canAcknowledgeIoArtifactConsumed,
     canReadIoArtifactBody,
@@ -60,7 +60,6 @@
     formatResolvedNodeIoResolutionLabel,
     ioArtifactPayloadTargetId,
     isNormalResolvedNodeIoDisplayRow,
-    resolveIoArtifactMediaType,
     type ResolvedNodeIoDisplayRow,
   } from './ioInspectorPresenters';
   import {
@@ -98,7 +97,6 @@
 
   const DOWNLOAD_OBJECT_URL_REVOKE_DELAY_MS = 30_000;
   const IMAGE_PREVIEW_DECODE_ERROR = 'Image preview could not be decoded.';
-  const IMAGE_PREVIEW_INCOMPLETE_ERROR = 'Image preview is incomplete; the complete image body is required.';
 
   let runGraph = $state<WorkflowRunGraphProjection | null>(null);
   let savedWorkflows = $state<WorkflowMetadata[]>([]);
@@ -421,17 +419,6 @@
     );
   }
 
-  function assertCompleteImagePreview(
-    artifact: IoArtifactProjectionRecord,
-    read: WorkflowArtifactBodyRead | WorkflowArtifactStreamBodyRead,
-  ): void {
-    const artifactFamily = classifyIoArtifactMedia(resolveIoArtifactMediaType(artifact), artifact.payload_kind);
-    const responseFamily = classifyIoArtifactMedia(read.response.media_type);
-    if ((artifactFamily === 'image' || responseFamily === 'image') && !read.response.complete) {
-      throw new Error(IMAGE_PREVIEW_INCOMPLETE_ERROR);
-    }
-  }
-
   async function readArtifactPreview(artifact: IoArtifactProjectionRecord): Promise<void> {
     const payloadArtifactId = ioArtifactPayloadTargetId(artifact);
     const accessRequest = beginArtifactAccessRequest(artifact, payloadArtifactId);
@@ -455,7 +442,7 @@
       if (!isCurrentArtifactAccessRequest(accessRequest, artifact)) {
         return;
       }
-      assertCompleteImagePreview(artifact, read);
+      assertCompleteIoArtifactImageRead(artifact, read.response);
       const preview = createArtifactBodyPreview(read);
       replaceArtifactBodyPreview(artifact.artifact_id, preview);
       setArtifactAccessError(artifact.artifact_id, null);
@@ -486,7 +473,7 @@
       if (!isCurrentArtifactAccessRequest(accessRequest, artifact)) {
         return;
       }
-      assertCompleteImagePreview(artifact, read);
+      assertCompleteIoArtifactImageRead(artifact, read.response);
       const preview = createArtifactBodyPreview(read);
       replaceArtifactBodyPreview(artifact.artifact_id, preview);
       setArtifactAccessError(artifact.artifact_id, null);
@@ -506,6 +493,7 @@
     try {
       await verifyArtifactReadable(artifact);
       const read = await workflowService.readArtifactBody({ artifact_id: payloadArtifactId });
+      assertCompleteIoArtifactImageRead(artifact, read.response);
       const preview = createArtifactBodyPreview(read);
       const anchor = document.createElement('a');
       anchor.href = preview.objectUrl;
@@ -1016,6 +1004,8 @@
                               alt={`Preview of ${artifact.artifact_id}`}
                               class="max-h-64 w-full object-contain"
                               data-testid="io-artifact-image-preview"
+                              data-preview-complete={bodyPreview.complete}
+                              data-preview-byte-length={bodyPreview.byteLength}
                               onerror={(event) =>
                                 handleArtifactImageError(
                                   artifact.artifact_id,
