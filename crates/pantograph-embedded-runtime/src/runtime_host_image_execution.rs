@@ -11,6 +11,8 @@ use pantograph_runtime_host_contracts::{
 use pantograph_scheduler::SchedulerDispatchDecision;
 use thiserror::Error;
 
+use crate::runtime_host_package_facts::is_path_free_artifact_entry;
+
 const IMAGE_GENERATION_TASK: &str = "image_generation";
 const PROMPT_PORT: &str = "prompt";
 const NEGATIVE_PROMPT_PORT: &str = "negative_prompt";
@@ -370,12 +372,16 @@ fn validate_supported_inputs(
 pub(crate) fn project_pumas_artifact_load_target(
     target: pumas_library::models::PumasArtifactLoadTarget,
 ) -> PumasArtifactLoadTarget {
+    let selected_artifact_path = target
+        .model_ref
+        .selected_artifact_path
+        .filter(|path| is_path_free_artifact_entry(path));
     PumasArtifactLoadTarget {
         model_ref: inference::PumasModelRef {
             model_id: target.model_ref.model_id,
             revision: target.model_ref.revision,
             selected_artifact_id: target.model_ref.selected_artifact_id,
-            selected_artifact_path: target.model_ref.selected_artifact_path,
+            selected_artifact_path,
             migration_diagnostics: target
                 .model_ref
                 .migration_diagnostics
@@ -497,6 +503,59 @@ mod tests {
         RuntimeHostExecutionInput, RuntimeHostExecutionRequest,
         ValidatedRuntimeHostExecutionRequest,
     };
+
+    #[test]
+    fn strips_owner_local_selected_artifact_path_from_executable_target_identity() {
+        let package_facts = image_package_facts();
+        let mut load_target = image_load_target(&package_facts);
+        load_target.model_ref.selected_artifact_path =
+            Some("/tmp/pantograph-rpc-tinyaya-20260926i/shared-resources/models/model".to_string());
+
+        let projected = project_pumas_artifact_load_target(load_target);
+
+        assert_eq!(projected.model_ref.selected_artifact_path, None);
+        assert_eq!(
+            projected.local_load_path,
+            "/pumas/models/image/stable-diffusion/tiny-sd"
+        );
+    }
+
+    #[test]
+    fn preserves_path_free_selected_artifact_identity() {
+        let package_facts = image_package_facts();
+        let mut load_target = image_load_target(&package_facts);
+        load_target.model_ref.selected_artifact_path = Some("image/tiny-sd".to_string());
+
+        let projected = project_pumas_artifact_load_target(load_target);
+
+        assert_eq!(
+            projected.model_ref.selected_artifact_path.as_deref(),
+            Some("image/tiny-sd")
+        );
+    }
+
+    #[test]
+    fn strips_portable_local_path_forms_from_selected_artifact_identity() {
+        let package_facts = image_package_facts();
+        for path in [
+            "C:/models/tiny-sd",
+            "C:\\models\\tiny-sd",
+            "\\\\host\\share\\tiny-sd",
+            "models/../tiny-sd",
+            "~/models/tiny-sd",
+            "image://models/tiny-sd",
+        ] {
+            let mut load_target = image_load_target(&package_facts);
+            load_target.model_ref.selected_artifact_path = Some(path.to_string());
+
+            let projected = project_pumas_artifact_load_target(load_target);
+
+            assert_eq!(
+                projected.model_ref.selected_artifact_path, None,
+                "local or non-canonical path should be stripped: {path}"
+            );
+        }
+    }
 
     #[test]
     fn projects_valid_runtime_host_image_request_to_planning_input() {

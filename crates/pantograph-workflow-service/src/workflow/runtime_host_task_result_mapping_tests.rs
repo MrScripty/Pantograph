@@ -1,7 +1,8 @@
 use pantograph_runtime_host_contracts::{
     RuntimeHostExecutionDiagnostic, RuntimeHostExecutionDiagnosticCode,
-    RuntimeHostExecutionDiagnosticSeverity, RuntimeHostExecutionResponse,
-    RuntimeHostExecutionState, ValidatedRuntimeHostExecutionResponse,
+    RuntimeHostExecutionDiagnosticSeverity, RuntimeHostExecutionOutput,
+    RuntimeHostExecutionOutputValue, RuntimeHostExecutionResponse, RuntimeHostExecutionState,
+    ValidatedRuntimeHostExecutionResponse,
 };
 
 use super::{runtime_host_response_to_task_result, WorkflowRuntimeHostTaskResultMappingError};
@@ -47,6 +48,39 @@ fn completed_runtime_host_response_maps_to_completed_task_result() {
         "runtime_host.execution_completed"
     );
     assert_eq!(result.terminal_metadata.expect("metadata").attempt, Some(1));
+}
+
+#[test]
+fn completed_embedding_response_maps_to_numeric_task_result_vector() {
+    let mut response: RuntimeHostExecutionResponse = serde_json::from_str(include_str!(
+        "../../../pantograph-runtime-host-contracts/tests/fixtures/runtime_host_execution_response_accepted.json"
+    ))
+    .expect("runtime-host response fixture must decode");
+    response.state = RuntimeHostExecutionState::Completed;
+    response.outputs = vec![RuntimeHostExecutionOutput {
+        port_id: "embedding".to_owned(),
+        value: RuntimeHostExecutionOutputValue::EmbeddingVector(vec![
+            serde_json::Number::from_f64(0.25).expect("finite number"),
+            serde_json::Number::from(-1),
+            serde_json::Number::from(3_u64),
+        ]),
+    }];
+    let response = ValidatedRuntimeHostExecutionResponse::try_from(response)
+        .expect("embedding runtime-host response must validate");
+
+    let result = runtime_host_response_to_task_result(&response)
+        .expect("embedding response must map to a completed task result");
+
+    assert_eq!(result.status, WorkflowSchedulerTaskResultStatus::Completed);
+    assert_eq!(result.outputs[0].port_id, "embedding");
+    assert_eq!(
+        result.outputs[0].value,
+        WorkflowSchedulerTaskResultValue::EmbeddingVector(vec![
+            serde_json::Number::from_f64(0.25).expect("finite number"),
+            serde_json::Number::from(-1),
+            serde_json::Number::from(3_u64),
+        ])
+    );
 }
 
 #[test]

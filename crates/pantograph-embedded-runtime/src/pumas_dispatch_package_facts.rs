@@ -3,6 +3,8 @@ use std::sync::Arc;
 use pantograph_dependency_planning::PumasModelRef;
 use workflow_nodes::setup::PumasSelectorAccess;
 
+use crate::runtime_host_package_facts::pumas_library_model_id;
+
 #[derive(Clone)]
 pub(crate) struct PumasDispatchPackageFactsSource {
     selector_access: Option<Arc<PumasSelectorAccess>>,
@@ -119,21 +121,21 @@ pub(crate) async fn resolve_pumas_dispatch_package_facts(
         );
     };
 
-    let api = match selector_access {
-        PumasSelectorAccess::Owner(api) => api,
-        PumasSelectorAccess::LocalClient(_) | PumasSelectorAccess::ReadOnly(_) => {
-            return unavailable(
-                PumasDispatchPackageFactsDiagnosticCode::UnsupportedSelectorAccessRole,
-                format!(
-                    "Pumas {} selector access does not provide full package facts for runtime dispatch",
-                    selector_access.role_name()
-                ),
-            );
-        }
-    };
+    if matches!(
+        selector_access,
+        PumasSelectorAccess::LocalClient(_) | PumasSelectorAccess::ReadOnly(_)
+    ) {
+        return unavailable(
+            PumasDispatchPackageFactsDiagnosticCode::UnsupportedSelectorAccessRole,
+            format!(
+                "Pumas {} selector access does not provide full package facts for runtime dispatch",
+                selector_access.role_name()
+            ),
+        );
+    }
 
-    let raw_facts = match api
-        .resolve_model_package_facts(model_ref.model_id.as_str())
+    let raw_facts = match selector_access
+        .resolve_model_package_facts(pumas_library_model_id(model_ref.model_id.as_str()).as_str())
         .await
     {
         Ok(facts) => facts,

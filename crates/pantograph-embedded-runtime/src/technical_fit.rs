@@ -1196,32 +1196,7 @@ async fn resolve_required_model_package_facts_from_selector_access(
     selector_access: Option<&PumasSelectorAccess>,
     required_model_ids: &[String],
 ) -> Vec<inference::ResolvedModelPackageFacts> {
-    match selector_access {
-        Some(PumasSelectorAccess::Owner(api)) => {
-            resolve_required_model_package_facts_from_api(Some(api.as_ref()), required_model_ids)
-                .await
-        }
-        Some(PumasSelectorAccess::LocalClient(_)) => {
-            log::warn!(
-                "Pumas local-client selector access does not expose full package facts for technical-fit"
-            );
-            Vec::new()
-        }
-        Some(PumasSelectorAccess::ReadOnly(_)) => {
-            log::warn!(
-                "Pumas read-only selector access exposes package summaries, not full package facts for technical-fit"
-            );
-            Vec::new()
-        }
-        None => Vec::new(),
-    }
-}
-
-async fn resolve_required_model_package_facts_from_api(
-    api: Option<&pumas_library::PumasApi>,
-    required_model_ids: &[String],
-) -> Vec<inference::ResolvedModelPackageFacts> {
-    let Some(api) = api else {
+    let Some(selector_access) = selector_access else {
         return Vec::new();
     };
 
@@ -1236,7 +1211,7 @@ async fn resolve_required_model_package_facts_from_api(
             continue;
         }
 
-        match api.resolve_model_package_facts(model_id).await {
+        match selector_access.resolve_model_package_facts(model_id).await {
             Ok(facts) => match decode_inference_package_facts(&facts) {
                 Ok(facts) => resolved.push(facts),
                 Err(error) => {

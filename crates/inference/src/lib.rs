@@ -245,4 +245,5 @@ pub use types::{
 #[cfg(feature = "std-process")]
 pub use process::StdProcessSpawner;
 
+mod selected_embedding_execution;
 mod selected_text_execution;

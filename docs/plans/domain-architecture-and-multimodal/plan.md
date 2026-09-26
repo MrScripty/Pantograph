@@ -1,847 +1,250 @@
-# Plan: Domain Architecture And End-To-End Multimodal Workflows
+# Plan: Isolated Pumas library RPC and Pantograph-owned inference workflows
 
-**Plan status:** `Active`
+**Plan status:** `Active` — continuation; revision 2 changes planning authority, not implemented source.
 
-**Current phase:** M3 Pumas owner/client integration design selected. Full review and required-real text→image acceptance remain open.
+**Current phase:** R2 — qualify Pantograph-owned text/image/embedding gateway routes and dependency/retention behavior; a producer-selected text target now executes through the real embedded runtime-host port while image-target identity remains gated.
 
-**Next slice:** Expose Pumas's existing full package-facts operation through its authenticated typed local client, then migrate Pantograph's existing access facade and hosted execution to supported Owner/LocalClient roles. Use the configured launcher-root identity, preserve ReadOnly browsing without execution, and qualify real owner-produced identities/facts/load targets before model runs. The current reviewed Pumas committed baseline is `3b0d5ee4eda4d68ae33a158162883208e4608edb`; its active uncommitted lifecycle work is separate.
+**Next slice:** `RPC-01` — qualify the remaining producer-selected image target and prove the RPC-backed runtime-host path for the remaining modalities. Tiny Aya now supplies a producer-issued selected-artifact identity and ready no-custom Transformers directory target, and a Pantograph-owned text run returned generated text; Tiny SD still has no producer-issued ID, while Z-Image retains missing text-encoder shard diagnostics and an unadmitted `ZImagePipeline`.
 
-**Acceptance status:** `blocked`
+**Acceptance status:** `blocked` — required live artifact/model/desktop evidence is not established here.
 
-**Execution ledger:** [execution-ledger.md](execution-ledger.md)
+**Decision owner:** Puma / MrScripty. **Integration owner:** the Codex primary session, requested GPT-6 Luna Max.
 
-**Issues:** [issues.md](issues.md)
+**Execution ledger:** [execution-ledger.md](execution-ledger.md). **Issues:** [issues.md](issues.md).
 
-**Reports:** [planning baseline](reports/planning-baseline.md)
-
-**Related ADRs:** [existing decisions](../../adr/README.md), especially ADR-001, ADR-006, and ADR-011–ADR-016. These remain binding until explicitly replaced with consumer and migration evidence.
+**Reports:** [audit](reports/2026-09-25-standards-and-rpc-audit.md), [library contract and baseline inventory](reports/2026-09-25-pumas-contract-inventory.md), [acceptance procedures](reports/2026-09-25-end-to-end-acceptance.md).
 
 ## Objective
 
-Make Pantograph understandable and maintainable through coherent domain ownership
-and small, useful interfaces, while making real text and image model execution
-work together in a desktop-authored workflow and return retained results.
-Review the complete maintained repository against the newly selected standards;
-repair applicable violations and architectural entanglement without rewriting
-sound code merely because it was produced by an older agent.
+A user can connect Pantograph to an independently retained Pumas Library RPC artifact, discover and select appropriate library models/assets, author/save/run workflows, and retrieve complete, correctly attributed text, images and embeddings. Every inference request executes through **Pantograph's existing unified inference-backend API** and its backend implementations. The desktop must demonstrate all three task families, actual generated text feeding image and embedding tasks, and complete retained outputs after a policy-qualified cold reopen.
 
-Use **GPT-5.3 Codex Spark** for evaluation on real small, well-defined changes
-and bounded repairs; **GPT-5.6 Luna max** for larger enumerated changes with
-settled contracts; **GPT-6 Astra low** for complex implementation, integration
-and rescue; and **GPT-6 Astra medium** for consequential analysis/design and
-substantive independent review. GPT-5.6 Sol medium is additionally authorized for bounded implementation and
-verification where it can reduce complete accepted-change costs. These are the user's current routing choices,
-superseding the earlier two-model implementation preference. Preserve exact
-requested models and record availability or fallback explicitly. Select work by
-complete API dollars per accepted change, including checks, review, repairs,
-rescue and shared coordination; differing task classes are not a controlled
-benchmark. These settings apply to delegated tasks, not the primary session's
-configuration.
+Pumas supplies model-library facts, resources, requirements, saved model settings and explicitly authorized acquisition/retention. Pantograph owns workflow semantics, scheduling, resource admission, backend selection, inference runtime/model loading and unloading, execution, cancellation, artifacts and presentation. Pumas is never an inference provider for Pantograph.
 
-## Standards And Plan Authority
+Finish the inherited required standards/remediation objective too. Report product functionality and whole-repository compliance separately until both have matching evidence. This planning package certifies neither.
 
-Standards source:
-`/media/jeremy/OrangeCream/Linux Software/repos/owned/developer-tooling/Coding-Standards`
+## Authority, history and inspected identities
 
-Planning baseline: `366c1d90a24bbfb50973f62b155a5f3396c0f107`.
-Read Core and Router, then canonical workflows/topics/profiles selected by actual
-task facts and their Requires dependencies. Legacy `*-STANDARDS.md` navigation
-files do not restore retired policy. Record material local standards changes or
-later revisions before using them; do not silently mix acceptance baselines.
+Keep `docs/plans/domain-architecture-and-multimodal/plan.md` as the sole active sequencing authority. Use operation `continue` after checking actual local lifecycle and reconciling this revision. The older remediation and image plans remain Superseded; accepted documentation consolidation and scoped EX/RT/tooling repairs remain historical evidence. Keep original issue IDs, the [prior-claim mapping](reports/repository-review.md), reports and execution ledger. Do not rewrite terminal historical plans to satisfy newer templates.
 
-This plan is active under the user's instruction to begin with subagents and
-the cost-effectiveness pilot. M0 superseded the [old portfolio](../current-standards-remediation/plan.md),
-its five child plans and the [image plan](../current-image-generation-graphs/plan.md).
-All old findings/claims are mapped in the [coverage report](reports/repository-review.md);
-none are accepted by supersession. The old audit and accepted cleanup remain history.
+Inspected Pantograph: `56caed029a48db66212a953a1677a94449396d52`. Pumas release 0.7.0: `29242fce4ec9043becaeb061587f364ecc4e7177`; upstream main: `51301bd317d7962b51d534590a685b676de835d9`. Current inspected Coding-Standards: `8fef41d18c524c7ac6a1a16f242cc3f549c791a2`, Engine interface 37. These are evidence references, not an exact-HEAD requirement for every Pantograph edit.
 
-## Documentation Proportionality
+Revision 2 supersedes the previous package's permission to delegate inference to Pumas and its use of the active local Pumas checkout/service as a target. It also replaces historical model-routing assignments with the role policy below. Accepted code evidence is retained only within its original scope; affected behavior needs current regression evidence.
 
-Apply the existing Planning, Documentation, Implementation and Development
-Proportionality workflows; this policy requires no standards exception.
+## Reconciliation of work after the inspected baseline
 
-- Keep this single plan as sequencing authority. Do not create a child plan per
-  agent, crate, finding or commit. Create another plan only when independently
-  owned migration or coordination facts actually require it.
-- Update current decisions, phase, next slice, blockers and acceptance when
-  their meaning changes. Record those changes with the coherent implementation
-  or evidence that caused them; no standalone lifecycle commits or per-command,
-  per-agent-turn or per-commit documentation updates.
-- Keep one concise ledger entry per accepted slice, plus material deviations,
-  failed acceptance gates or verification changes. Link deciding evidence rather
-  than copying command transcripts, diffs or test output into several documents.
-  Successful routine checks need command/scope, result and relevant revision or
-  environment, not a permanent raw-log report. Retain detailed evidence only
-  where it decides a required claim or explains a failure.
-- Agent reports contain source-backed findings, decisions and review coverage;
-  no chronological work diaries or separate polished summary of the same facts.
-  Consolidate duplicate findings into issues; update their disposition there.
-  Completed reports remain dated evidence, not documents kept synchronized with
-  implementation. Current policy lives only in its declared owner.
-- Keep ordinary reversible design choices in code, tests and the change
-  description. Update a canonical guide or contract document only when its
-  durable knowledge changes. Use an ADR for a consequential durable decision,
-  not every extraction, rename, test or interface-preserving refactor. Do not
-  create a source-directory README without a real boundary-documentation need.
-- Use one composed-design record per coherent changed composition; downstream
-  slices link to it. Revisit affected answers only when ownership, caller
-  knowledge, lifecycle, compatibility or observed change propagation changes.
-  Do not copy the full probe into every task or repeat unchanged reviews.
-- At M0, supersede old plan authority once and leave its history alone. At wave
-  closure, compact obsolete narration only when it obscures current decisions;
-  avoid cosmetic rewrites and unrelated formatting.
+The checkout contains committed work after the package's inspected Pantograph revision. Preserve it as history and evidence, but requalify it against revision 2 before treating it as active authority:
 
-These reductions do not excuse stale current authority, missing coverage,
-undispositioned findings, absent migration rationale, or unavailable acceptance
-evidence. No new documentation generator, checker or registry is implied.
+- Commit `4938e405` selected a shared Pumas owner/client integration and recorded owner-dependent consumer design. Its source and review evidence remain in the existing ledger and commit history; revision 2 withdraws any active-Pumas or Pumas-inference permission and requires the independent RPC-00 baseline first.
+- The accepted D-02 complete-image Inspector repair and browser evidence remain valid within their recorded scope. They do not establish real-model, Pumas, embedding, cold-reopen or Pantograph-only inference acceptance; R3 must recheck the affected boundary where necessary.
+- The newer issues and ledger entries are preserved below. They are not overwritten by this update, and their unresolved blockers are carried into RPC-00/R1 rather than silently closed.
 
-## Product Contract And Scope
 
-Initial fixture assumption, subject to Milestone 0 confirmation:
+## Current Coding-Standards MCP requirement
 
-`text input -> real text inference -> generated prompt -> real image inference`
+Use the actual Coding-Standards MCP for planning, implementation, verification and commits. Check its installation/runtime interface, accepted guidance identity and purpose-qualified availability; retrieve Core, route real task facts, and follow the required closure. An online MCP or source checkout is not itself evidence that the selected guidance is current. Repair setup/drift through the supported mechanism; do not manufacture authority through authoring access or use unqualified prose as a substitute.
 
-The desktop user can author/save or load that graph, select real models, submit
-one run, observe progress, and retrieve both generated text and a decodable image
-in I/O Inspector. The image task must consume the text task's actual output;
-two unrelated successful runs do not prove this contract. Both tasks share the
-same workflow run identity, with distinct task/attempt identities.
+Record one relevant standards baseline and route per admitted slice. Reconcile material changes at integration boundaries. Missing applicable guidance blocks its dependent write/commit decision while bounded read-only discovery and independently qualified work continue. These planning files summarize project decisions, not a replacement standards corpus. The live authoring MCP was executed for RPC-00/RPC-01 transport admission; final standards/commit closure remains pending.
 
-The concrete port/fixture and policy-qualified cold-reopen procedure is in the
-[desktop report](reports/desktop-review.md#executable-fixture-contract). Real
-model/artifact IDs and qualified runtime/display remain missing prerequisites;
-the selected text output port is `text`, not the retired `response` port.
+### Current route refresh — 2026-09-26
 
-An image-plus-text input to a vision model is a different capability. Record it
-as required if selected by the user; do not claim vision acceptance from image
-generation. Model families, supported input representations, streaming promises,
-hardware, and persistence lifetime are established from real requirements in M0.
+The current authoring runtime was rechecked before continuing: interface 37, implementation `0.2.0`, instance `6a638e80-40ef-49d7-82ec-a06a947c8f62`, implementation digest `sha256:f7bd0d1d7cb03bc4ae2eb10aba6d840cbad9ea548c2c8a0b17958314a564c4cb`, catalog digest `sha256:3b985fc1bf612c533ab735962f82a27e081deba0ab09fd05c98e5904c59a032f`, schema digest `sha256:32be44913a5e10913bed5d08ffc0dd4961afb5c4e9bd56514e5773f95a0992f5`, purpose `authoring`, and `installation_state=restart-required` with action `restart-and-reconnect`.
 
-In scope: all maintained first-party Rust, Python, TypeScript/Svelte, bindings,
-reusable packages, launchers, scripts, build/CI configuration, tests, and durable
-documentation. Inventory generated, vendored, obsolete, and external material
-separately, with source owners and reasons for exclusions. Review all maintained
-areas, but change only evidenced violations or justified design problems.
+The fresh route snapshot is `snapshot:v1:46d05785-182b-4696-87d6-e739de40925f`. It selected 41 standards with zero unresolved fact categories for the current library/Rust/TypeScript/generated-contract/IPC/interop/persistence implementation, verification, documentation, planning and commit work. Core, Router and every selected target were read through the same snapshot, including the current commit guidance. This route is the current standards evidence for the continuation; the earlier 47-standard route remains historical. Because the runtime still requires restart/reconnect and no such operation is available in the current tool surface, standards-dependent commit closure remains gated.
 
-Out of scope: publishing releases, changing external repositories without a
-separate authorized write set, speculative new model families, restoring live
-generated-UI execution without an accepted isolation design, and a wholesale
-framework or distributed-services rewrite. Existing release/support obligations
-are reviewed even though publication is excluded.
+## Scope and constraints
 
-## Objective Acceptance
+In scope: external library RPC, consumed contract/dependency migration, isolated reference artifact, library discovery and freshness, model details/requirements/settings, asset/load-target resolution, Pantograph backend/preflight/scheduler paths, all three inference families, complete artifacts, GUI/headless consumers, lifecycle and inherited required standards obligations.
 
-| ID | Observable criterion | Kind | Environment | Mode | Status | Evidence |
-| --- | --- | --- | --- | --- | --- | --- |
-| DA-01 | Every maintained area and reachable interface is reviewed against applicable current routes; each finding has evidence, owner, severity and disposition; no required violation remains open. | focused | not-applicable | either | pending | M1/M5 coverage and findings reconciliation |
-| DA-02 | Changed domain interfaces have one owner per invariant/state/lifecycle; representative changes demonstrate reduced unrelated caller knowledge; replaced authorities and unsupported paths are removed or have real migration obligations. | integration | representative | either | pending | M2/M4 composed-design reviews and interface tests |
-| DA-03 | One real desktop-submitted mixed graph runs real text and image models, passes generated text along its edge, and exposes both retained outputs with correct run/task identity. | user-workflow | required-real | automated | blocked | EX-04 and D-02 controlled integration accepted; real fixture/runtime prerequisites remain |
-| DA-04 | Missing models/dependencies, denied model-code trust, invalid graphs, worker failure, cancellation and shutdown produce the declared terminal outcomes without false success, leaked processes/reservations, or cross-run input leakage. | system | representative | automated | pending | Focused lifecycle contracts and real worker process evidence |
-| DA-05 | Accepted saved graphs and retained outputs obey their declared compatibility/lifetime contract through cold reopen; affected bindings and generated/IPC contracts agree with their owners. | contract | representative | automated | pending | Consumer fixtures and cold-process persistence checks |
-| DA-06 | Model selection, submit-to-dispatch overhead and runtime reuse meet workload-specific budgets recorded before optimization; measurement separates model computation from orchestration and includes resource use. | system | required-real | automated | pending | M0 baseline and M4 comparison |
-| DA-07 | Required supported-target, static, test, accessibility and artifact claims pass on the final integrated material revision; required unavailable evidence remains visibly blocked. | system | required-real | either | pending | M5 claim-specific evidence bundle |
+Out of scope: Pumas inference or serving control, Pumas private provider protocols, Whip-Docs integration, a code parser, another inference framework, a second scheduler/catalog, remote/LAN exposure, arbitrary model-family support, automatic model-code trust, upstream source changes and external publication.
 
-DA-07 aggregates links, not proof kinds: any required release-artifact,
-user-workflow, contract, or platform claim retains its own kind and environment
-in the acceptance matrix created in M0/M1. A local build cannot close those claims.
-An exception is explicitly owned and reported; it is not full compliance with
-the overridden obligation. Product success and full review closure are reported
-separately until all seven claims are satisfied.
+### Mandatory execution boundary
 
-## Constraints And Binding Decisions
+Use only library/resource operations on the Pumas client. Do not call Pumas `/v1` routes (including served-model discovery), inference RPC, provider-private endpoints, profile/serving start or Pumas-owned inference through any proxy. This prohibition includes optional paths, compatibility fallbacks and demonstrations. Existing non-Pumas backends may keep their own compatible-provider protocols under Pantograph's support contract; do not globally ban an endpoint path used by unrelated legitimate providers.
 
-| Decision | Owner | Rationale / replaced assumption |
+All text/image/embedding work uses the existing unified Pantograph inference API. Preserve one canonical runtime route and its typed unsupported outcomes. Pumas metadata does not prove that a Pantograph adapter supports a model, grant custom-code permission or authorize a runtime launch. Asset resolution is not inference. Keep model/library/artifact identity distinct from Pantograph runtime/backend and task identity.
+
+HTTP JSON-RPC `/rpc` and core framed IPC are different contracts. Select the exact supported library operation/transport before implementing it. RPC loss does not authorize claiming the library root, directly opening its database, guessing storage paths, substituting another instance/model, or invoking inference through Pumas.
+
+### Immutable integration fixture, not the active development checkout
+
+Before baseline selection, inspect current upstream HEAD and the relevant release-to-head delta. The initial candidate is the host-appropriate 0.7.0 headless artifact; its exact metadata and provisional rationale are in the inventory. GitHub labels it prerelease and not immutable: retain verified bytes by digest and resolve its source commit rather than trusting a moving tag/name.
+
+Use a newer artifact only for a demonstrated required library contract, correctness, security or compatibility reason. If no suitable remote artifact exists, build an exact upstream commit in an independent checkout and separate build target with controlled dependencies. Retain its binary, hash, source, feature/toolchain and lock/build provenance. Do not use a worktree linked to the active local Pumas repository, its target directory, mutable path override or development service. No unrecorded switch to new upstream bytes mid-slice or acceptance run.
+
+Use an explicit independent endpoint, process owner, library root/database, configuration, registry/cache and fixture lifecycle. Preserve shared/user data and production services. Provision models through supported library operations and qualified asset policies; do not attach an older candidate to a newer live writable model database. A missing required operation changes the recorded candidate decision or creates an upstream blocker; it never authorizes an inference fallback.
+
+### Dependency and execution authority
+
+Necessary dependencies may be installed and repository code run under this goal. Added dependencies require a concrete consumer need, owned source/version/lock/provenance, alternatives and trust/license consideration, lifecycle and relevant tests. Prefer existing mechanisms and isolated environments. This permission does not grant arbitrary global upgrades, new paid services/credentials, large downloads or destructive/shared-system changes without their actual authority.
+
+Retain ownership of async work, inference workers and results through the applicable terminal observation. Elapsed time or silence alone is not failure. Keep connection setup, library reads, Pantograph task duration, cancellation request and confirmed stop distinct. Do not copy Pumas serving lifetime or input limits into Pantograph's backend contracts or replay uncertain inference automatically.
+
+## Binding decisions
+
+| Decision | Owner | Selection and supersession |
 | --- | --- | --- |
-| One integrator controls shared contracts, lifecycle and acceptance. | Integrator with Astra medium design/review | Parallel effort must not duplicate authority. |
-| Product execution is demonstrated early, before unrelated repository cleanup. | This plan | Replaces the old portfolio's broad prerequisite queue after M0 handoff; necessary trust/contract prerequisites remain. |
-| Existing code and ADRs are evidence, not automatic proof of good design or defects. | Domain reviewers | Fresh review replaces inherited diagnosis and blanket rewrite assumptions. |
-| Pumas owns model/package/artifact facts; Pantograph owns workflow and execution policy. | Existing architecture and affected contracts | External load-target gaps remain explicit dependency work, never local path guessing. |
-| Runtime host executes a scheduler decision; UI and transports project owned outcomes. | Existing ADRs | No special demo executor or frontend-selected runtime policy. |
-| Prefer ordinary tests and existing tools over new compliance infrastructure. | Verification owner | Every permanent checker/registry requires distinct deciding value and lifecycle justification. |
-| Preserve unrelated local work and real public/persisted contracts. | Integrator | Protected Pumas proposals are outside this plan's write set. |
-
-## Review Method And Domain Map
-
-Start from behavior and trace producers, state transitions, consumers, failures,
-and lifecycle. Do not allocate refactors by file size or presume each crate is
-already a sound domain. The initial investigation map is:
-
-| Concern | Question to settle |
-| --- | --- |
-| Graph authoring and node contracts | Who owns graph validity, inference ports, edits, graph revisions and materialization? |
-| Workflow run and task orchestration | Who owns run identity, dependency readiness, attempts, cancellation and terminal results? |
-| Scheduler and resource admission | Who owns placement, compatible grouping, reservations, waiting, fairness and dispatch? |
-| Model library and dependencies | Which facts belong to Pumas, and how are freshness, readiness and authorized load targets conveyed? |
-| Runtime host and inference | Who owns execution protocols, model residency, trust, worker processes and shutdown? |
-| Media and artifacts | Who owns values versus references, conversions, retention, retrieval and run attribution? |
-| Desktop and graph package | Which state is user intent versus backend projection; how are errors, stale updates and accessibility handled? |
-| Bindings and infrastructure | Which consumers, compatibility promises, build targets and operator lifecycles are actually supported? |
-
-For every material interface record only useful facts: responsibility and
-non-responsibilities; owned values/invariants; callers; inputs/outputs; lifecycle,
-ordering and errors; persistence/version obligations; hidden implementation;
-and focused acceptance evidence. Put durable rationale in its canonical
-architecture/contract document, not duplicated across reports.
-
-Compare keep-and-repair, consolidate/delete, and a new seam only where a material
-decision needs alternatives. Once a reversible design satisfies the contract
-and standards, implement it. Additional review needs a named unresolved decision
-and stopping condition. No recurring review tournament or arbitrary score target.
-
-## Simplicity And Ownership Review
-
-**Applicability:** `applicable`
-
-This planning composition retains current execution owners provisionally; it
-does not yet admit a redesigned runtime. M2/M4 must replace these provisional
-answers with inspected artifact evidence before each structural implementation.
-
-- **Independent concepts and dimensions:** Graph describes what depends on what;
-  a run identifies requested execution; scheduler decides when/where; model facts
-  describe available artifacts; runtime host owns how execution occurs; artifacts
-  own retained results; desktop owns interaction. The concrete division inside
-  workflow-service and embedded-runtime is an explicit M1/M2 investigation.
-- **State, identity, value, time, policy, mechanism:** Keep graph revision, run,
-  task attempt, model/artifact identity, runtime residency, reservations, user
-  input and projection freshness distinct. Scheduling references library facts
-  without owning their meaning. Artifact retention does not own run scheduling.
-  Document actual version roles and consumer overlaps in M1; do not invent one
-  global version. Graph edits must not mutate submitted run snapshots; model
-  changes invalidate dependent execution facts, not unrelated UI identity.
-- **Caller and composition-root knowledge:** Submission callers should supply
-  workflow/session identity and typed inputs, not Python paths, GPU placement or
-  worker setup. The existing embedded composition factory is a starting point
-  to inspect for excess lifecycle/configuration knowledge, not proof of depth.
-- **Representative changes and forced owners:** Changing a model-load protocol
-  should affect its adapter/host contract, not graph interaction. Changing
-  batching policy should stay with scheduler policy and its evidence. Adding an
-  image display should consume an artifact contract without choosing retention.
-  Updating a model selector should not require scheduler policy edits. Compare
-  actual before/after change propagation for these cases.
-- **Stable interfaces versus hidden knowledge:** Graph/session operations,
-  inference descriptors, scheduler handoff and artifact retrieval are candidates
-  for stable interfaces. Storage layout, Python kwargs and concrete runtime
-  wiring remain implementation details unless a real consumer contract says otherwise.
-- **Independent evolution, testing, failure and replacement:** Test each owner
-  through the same interface its consumers use, then exercise the full desktop
-  path. Cross-process execution requires real process failure/lifecycle evidence;
-  synthetic inference cannot establish model functionality.
-- **Deletion result:** This plan introduces documentation only, no production
-  registry, generator, framework or adapter. For each later permanent mechanism,
-  record what necessary complexity returns to callers if it is deleted; delete
-  pass-through machinery whose complexity simply disappears.
-- **Necessary complexity and cumulative machinery:** Resource admission, model
-  trust, async execution and retained artifacts are inherent. Keep them contained
-  in their owners; reassess the complete composition if their knowledge spreads
-  across callers or the refactor adds competing authorities.
-
-## Evidence And Oracle Plan
-
-- DA-03 uses a saved fixture and actual model/runtime identities, a trace of the
-  materialized edge value, real text output and image decoding, plus assertions
-  on I/O Inspector. Exact generated wording/pixels are not required unless a
-  selected model contract promises determinism. Nonempty output alone does not
-  prove that the edge was used.
-- DA-04 uses deliberate failures at the relevant boundary with assertions on the
-  intended diagnostic/terminal state, cleanup, and reservation release. Merely
-  observing any exception does not satisfy the negative case.
-- DA-05 exercises real consumers and cold reopen against authoritative persisted
-  data. A re-created in-memory object is not cold-process evidence.
-- DA-06 records machine/model/runtime, cold/warm conditions, workload, latency
-  distribution and resource use. Initial engineering targets are warm local
-  model-selector rows p95 <=250 ms and already-ready task dispatch overhead p95
-  <=500 ms, excluding declared batching/admission wait and model computation.
-  These bound interactive overhead, not model speed or universal hardware
-  guarantees. Model/runtime/device qualification is still unavailable; measure
-  baseline before optimization and revisit targets only with recorded workload
-  evidence. Run model work serially when contention would invalidate measurements.
-- DA-01/02 use source-backed coverage and concrete change-path comparisons.
-  File counts, grep scans and passing lint are supporting evidence only.
-- Reuse existing scripts and runners after checking their actual proof scope.
-  Extend only what the selected claims need. Keep expensive real runs for
-  behavior-affecting integration points and final acceptance.
-
-## Systemic Finding Audit
-
-For a repeated defect, bound its invariant, owner, representations and all
-reachable consumers before fixing examples. Each occurrence is repaired,
-consolidated, removed, retained with evidence, or blocked with an owner. Expand
-only for a newly reachable consumer, authority, material risk or supported
-contract. Compare the repaired whole composition and remove superseded evidence
-machinery. Stop when the bounded family and its acceptance claims are closed.
-
-## Milestones
-
-### M0 — Establish scope, authority and executable fixture
-
-**Goal:** One current plan authority and a concrete product/verification contract.
-
-**Allowed write set:** this plan directory; `docs/plans/README.md`;
-`docs/README.md`; the `plan.md` and `execution-ledger.md` of the old remediation
-portfolio, its five child plans, and old image plan. Product source is read-only.
-
-**Tasks:** Reconcile old findings/claims without silently dropping any; retire
-overlapping plan authority; record standards revision and local modifications;
-inventory maintained source roots, consumers and supported targets; identify
-real model IDs, runtime/dependency availability, trust requirements, saved
-fixture and desktop runner. Record baseline commands and results only where
-they decide immediate prerequisites. Select initial performance budgets and
-the actual persistence promise. Route standards from observable facts.
-
-**Gate:** DA-01 coverage population is bounded; DA-03/05/06 acceptance contract
-is executable or exact external prerequisites are recorded. Each old claim has
-a disposition. Missing model/hardware evidence blocks the dependent real run,
-not independent architecture review. Review stops when these decisions are possible.
-
-**Status:** `Accepted`
-
-### M1 — Review the domains and repository coverage
-
-**Goal:** Source-backed ownership map and prioritized findings, with execution-path findings delivered first.
-
-**Allowed write set:** this plan's `reports/`, `issues.md`, `execution-ledger.md`
-and `plan.md`; product source remains read-only.
-
-**Tasks:** Trace the mixed graph through every real owner. In parallel review
-other maintained areas using the table below. Map applicable standards to
-actual evidence; distinguish defects, design weaknesses and optional preferences.
-For each finding identify the owned invariant, affected consumers, consequence,
-proposed disposition and deciding test. Inventory old tests/checkers for coverage
-and obsolete guarantees. Do not defer the first production slice until every
-unrelated finding is exhausted.
-
-**Gate:** Execution-path review provides enough facts to admit M2 with exact
-files and tests. Full repository review may continue alongside M2/M3 but must
-close before M5. Record examined populations and unresolved areas explicitly.
-
-**Status:** `Active`
-
-### M2 — Repair the canonical execution path
-
-**Goal:** One coherent backend path can execute the selected mixed graph safely.
-
-**Allowed write set:** plan reports/control files plus RT-01: new
-`crates/inference/torch/worker_diffusion.py`, `crates/inference/torch/worker.py`,
-`crates/inference/src/backend/pytorch_worker.rs`,
-`crates/inference/src/backend/pytorch_worker_image_python_tests.rs`, and
-`scripts/diffusion_cli_smoketest.py` (support/help statement only).
-Also admitted: `crates/inference/src/backend/pytorch_tests.rs`, registering the
-new real helper and completing the existing batch-projector stub in its text-worker fixture; isolated consumer testing
-proved that the new import otherwise breaks four existing text/lifecycle tests.
-The admission decision in `reports/runtime-review.md` defines the finite built-in
-component construction, preserved scheduler configuration, local weights with restricted
-deserialization (see the report correction), typed failures and admission-before-cache invariants. Custom code and
-other pipeline variants remain unavailable; no configurable authorization is
-invented. Astra low implements; independent Astra medium review and real-loader
-regressions decide this slice. Other slices still require exact admission.
-Candidate owners: workflow-service, scheduler, embedded-runtime, inference,
-runtime-host contracts, node contracts and their existing consumers. This list
-is an investigation scope, not blanket source-write authority.
-
-EX-01/EX-03 also admits these five inline-test/source files under
-`crates/pantograph-workflow-service/src/workflow/`:
-`runtime_branch_task_event.rs`, `runtime_dispatch_assignment.rs`,
-`task_execution_worker.rs`, `runtime_branch_batch_execution.rs`, and
-`session_execution_api.rs`. The final scoped-live-claims decision in
-`reports/execution-review.md` governs ownership transfer, both event and batch
-fences, immediate compatible grouping, supervised failure and deterministic
-tests. Keep proofs out of immutable snapshots; retain finite expiry for unowned
-work. Post-dispatch abandonment with unproved host stop is failed/fenced against
-replay, not successful cancellation or resource-release evidence. No new timer,
-service, schema or scheduler API is admitted. Missing lifecycle capability
-returns to medium design before expanding the slice.
-
-Consumer migration additionally admits
-`crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`:
-six session assertions assumed two independently submitted runs always shared
-one host request. Validate nonempty bounded groups and exactly-once run/member
-identities across all requests, retaining existing prompt, result, recovery and
-diagnostic checks. Do not replace the old timing assumption with exactly two calls.
-
-RT-03 is admitted under the runtime report plus the bounded consumer expansion
-found during source verification. Core owner (Astra low):
-`crates/inference/src/backend/mod.rs`, `backend/pytorch.rs`,
-`backend/pytorch_tests.rs`, optional private `backend/pytorch_text_job.rs`,
-`gateway.rs`, `gateway_tests.rs`, and `gateway_tests/start_config.rs` (all paths
-after the first share `crates/inference/src/`). Replace backend stop with
-`async fn stop(&mut self) -> Result<(), BackendError>` and gateway stop with
-`pub async fn stop(&self) -> Result<(), GatewayError>`; preserve failures,
-producer completion and coherent metadata under existing ownership.
-
-Consumer owner (Luna max): `crates/inference/src/backend/llamacpp.rs` and
-`candle.rs`; `crates/node-engine/src/core_executor/kv_cache_test_support.rs`
-and `inference_tests.rs`; these files under
-`crates/pantograph-embedded-runtime/src/`: `embedded_runtime_lifecycle.rs`,
-`runtime_registry_controller.rs`, `runtime_registry_lifecycle.rs`,
-`runtime_registry.rs` (exports), `reservation_lifecycle.rs`,
-`embedded_workflow_host_helpers.rs`, `lib.rs` (exports only), `lib_tests.rs`,
-`runtime_host_execution_port.rs`, `runtime_registry_tests.rs`,
-`runtime_registry_tests/lifecycle.rs`, `reservation_lifecycle_tests.rs`,
-`workflow_runtime_tests.rs`, `lib_tests/session_runtime_lifecycle_tests.rs`,
-`lib_tests/workflow_run_execution_tests.rs`, and
-`lib_tests/runtime_lifecycle_capability_tests.rs`; these files under
-`src-tauri/src/`: `llm/gateway.rs`, `llm/runtime_registry.rs`,
-`llm/rag_sync.rs`, `llm/recovery.rs`, `app_lifecycle.rs`, and
-`llm/commands/server.rs`. Only stop-contract propagation, relevant tests and
-necessary exports are admitted, including producer/stop-all controller Result
-signatures and a local lifecycle error wrapping registry/gateway failures.
-Reconcile observed state even on stop failure; do not return successful reclaim,
-restart recovery, invalidate residency or log successful shutdown on that failure.
-Additional actual callers require bounded source-backed admission.
-
-This is a useful delegation evaluation of different task classes, not a matched
-model benchmark. One integrated medium review covers composition; record both
-implementation lanes, design, all review/repair/verification agent calls and
-root integration/orchestration for RT-03. Shared slice costs remain explicit,
-not zero or an invented per-model allocation. API-dollar estimates use the
-ledger's verified rate assumptions and disclose the measurement cutoff.
-
-RT-02 is admitted using the runtime report's selected-text contract and the
-completed RT-03 lifecycle gate. Inference owner (Astra low), exact paths under
-`crates/inference/src/`: `gateway.rs`, `gateway_tests.rs`, `backend/mod.rs`,
-`backend/pytorch.rs`, `backend/pytorch_tests.rs`, new `selected_text_execution.rs`,
-and `lib.rs` (module/export only). Host owner (Luna max), exact paths under
-`crates/pantograph-embedded-runtime/src/`: new `runtime_host_text_execution.rs`,
-`lib.rs` (module only), `runtime_host_execution_port.rs`, and
-`lib_tests/workflow_run_execution_tests.rs`, and `runtime_host_image_execution.rs`
-(only expose the existing Pumas-target converter as `pub(crate)` for shared use).
-Additionally admit `lib_tests/runtime_preflight_tests.rs` solely to gate its
-Candle-specific test with `cfg(feature = "backend-candle")`; its unconditional
-reference prevents the requested no-Candle test matrix from compiling. Astra low
-owns the remaining host integration and this bounded repair after the Luna handoff.
-Root owns these plan/control files.
-No other image projection, worker Python, external Pumas, wire schema, or other source
-changes are admitted without a source-backed expansion.
-
-The shared gateway operation is `execute_selected_text_with_cancellation`,
-accepting existing `InferenceExecutionRequest`, separate `PumasArtifactLoadTarget`,
-`BackendExecutionDecision`, and `InferenceExecutionCancellationHandle`, returning
-`Result<InferenceExecutionResult, GatewayError>`. Inference validates identity,
-PyTorch runtime, concrete device, directory target and denied custom-code policy
-before effects, and owns residency through observed terminal completion and
-cancellation cleanup. Host projects exact `prompt: String` to `text: String`,
-uses existing generation defaults, rejects unsupported inputs and strings over
-1024 bytes without truncation, and requires no image sink for text. Existing
-image and batch behavior remains part of verification. Canonical EX-01/03 sends
-even singleton text through the batch entrypoint: admit sequential awaited text
-member execution there, validating text member shapes before effects, preserving
-member identities and existing retry/reservation outcomes. Completed earlier
-members remain retained; failed/cancelled members emit no partial output and
-remaining cancelled members do not load. This reuses the selected-text operation,
-not a new native text batching mechanism. Independent Astra medium review judges
-integrated source and deciding tests, including service→batch-host text retention. Cargo ownership is serialized;
-implementation, checks, repairs, review and shared root costs are counted together
-with an explicit reporting cutoff. Real-model acceptance remains outstanding.
-
-EX-04 is admitted after medium confirmation of the canonical worker path.
-Astra low owns exactly these files under
-`crates/pantograph-workflow-service/src/workflow/`, including inline tests:
-`session_scheduler_runner.rs`, `runtime_branch_task_event.rs`,
-`runtime_branch_batch_execution.rs`, and `task_execution_worker.rs`.
-Core additionally owns `session_execution_api.rs` for composed recovery to skip
-validated scheduler-completed upstream tasks without replay while preserving
-mismatch/failed diagnostics, plus its focused recovery regression.
-`task_execution_facade.rs` and `task_execution_runtime.rs` are admitted only for
-two diagnostic test expectation migrations caused by session validation before
-event claim. Pre-proof dependency-pending events remain Ready/unclaimed; this
-does not change post-dispatch deferred settlement/retry policy.
-Luna max initially owned only
-`crates/pantograph-embedded-runtime/src/lib_tests/workflow_run_execution_tests.rs`
-for dependent canonical retained-result fixtures, preserving the accepted singleton
-case. Astra low completed the fixture integration, bounded repairs and composed
-recovery evidence after the explicit ownership handoff; the shared write set did
-not expand. Root owns this plan, issues and ledger. No wire/persisted schema change or
-other source file is admitted without source-backed expansion.
-
-Move scheduler progress/admission before claim, select only a Ready task with its
-dependency proof, and claim its matching run/task event. Classify next-task
-readiness versus all-complete instead of requiring the entire graph Ready.
-After observed host completion, retain task results and settle the current
-assignment/event; unfinished work is a typed continuation. The worker retains
-and rebinds the same run responder under its existing supervised ownership,
-then advances downstream inputs and selects the next task. No detached
-continuation, premature whole-run success, copied-proof authorization, or lost
-cross-run batch responder is allowed. Existing failed/deferred/cancelled and
-shutdown/fencing semantics remain. Call the existing whole-run finalizer only
-when all tasks complete. Canonical dependent retained text and text→image
-fixtures, cancellation/failure and claim-ownership regressions plus independent
-medium review decide acceptance; controlled adapters do not prove real models.
-Cargo ownership is serialized between core and fixture checks.
-
-**Tasks:** Fix confirmed trust authorization before real model execution;
-consolidate inference descriptor/validation authority; settle scheduler versus
-run orchestration ownership; repair Pumas load-target/dependency handoff;
-preserve task identity, real edge materialization and artifact attribution.
-Support solo dispatch without requiring a peer; preserve compatible batch
-semantics. Exercise real text and image model adapters behind canonical entry
-points. Delete replaced paths after consumer migration is covered.
-
-**Gate:** Focused contracts and affected static checks pass; canonical backend
-mixed workflow returns both outputs; denied trust and missing facts fail at
-their proper owner. This is intermediate evidence, not DA-03 desktop acceptance.
-
-**Status:** `Active`
-
-### Pumas owner/client integration — selected design
-
-**Decision:** Reuse the existing Pumas facts/target operations and Pantograph
-access facade. Pumas owns model identity, inspection, freshness, cache and path
-resolution. Pantograph owns scheduling, device/runtime choice, code permission,
-execution and output retention. The two applications share an existing library
-owner; an attached client never owns that process's shutdown.
-
-**Producer change:** Pumas already implements full package facts in its owning
-interface, HTTP RPC and an internal dispatch branch. Complete the typed local
-IPC operation/client exposure with connection-token validation, bounded model
-ID decoding and the existing public diagnostic conventions. Reuse the domain
-resolver and cache. Do not add an aggregate execution API, HTTP endpoint,
-independent cache, model-copy mechanism or general connection framework.
-
-**Consumer change:** Use the existing Owner/LocalClient/ReadOnly facade for
-facts and targets instead of concrete owner dependencies in dispatch and host
-composition. Execution accepts Owner or a client attached to the configured
-launcher root; ReadOnly remains explicitly non-executable. Match Pumas's
-advertised canonical launcher-root identity and try that owner before a
-read-only fallback. Never select another library merely because it connects.
-Retain lifecycle cleanup only for owners constructed by Pantograph.
-
-**Facts and ordering:** Keep model-list snapshots cheap and hydrate full facts
-only for selected execution candidates. `OwnerFresh` target resolution refreshes
-external validation but does not hydrate package facts. Validate selected
-artifact identity across facts/target and preserve typed stale, missing,
-invalid and unsupported outcomes. Schema-version equality is not evidence
-identity; the current target supplies no content fingerprint or file lease.
-The two operations do not promise atomic immutable contents. File-open failure
-remains an execution error; a future immutable-result requirement needs its own
-producer-owned contract. Keep executable paths out of scheduler projections.
-
-**Change locality and deletion:** Existing Pumas owner/client adapters contain
-transport differences. Completing them removes owner-specific rejection and
-branching from Pantograph's facts/target consumers. A Pumas storage/cache change
-stays in Pumas; a Pantograph scheduler-policy change stays in Pantograph.
-Keep existing internal resolver traits for host tests; no new permanent module
-is needed. Separate dispatch and host freshness checks remain until measured
-reuse can preserve their semantics; no speculative cache is admitted.
-
-**Bounded implementation candidates:** In Pumas, paths under
-`rust/crates/pumas-core/src/`: `ipc/protocol.rs`, `ipc/local_client.rs`,
-`api/state.rs` and their existing focused contract tests. In Pantograph:
-`crates/workflow-nodes/src/setup.rs`; embedded-runtime's
-`pumas_dispatch_package_facts.rs`, `runtime_dispatch_load_target_facts.rs`,
-`runtime_host_package_facts.rs`, `runtime_host_load_target.rs`,
-`workflow_service_composition.rs`, and affected existing tests; dependency
-pins/locks and actual independently pinned consumers must be enumerated before
-editing. This design selects scope, but does not authorize overwriting either
-repository's active work; freeze the concrete revision and exact test/pin
-write set when admitting implementation. The existing domain-architecture plan
-remains the sole Pantograph sequencing authority.
-
-**Gate:** Real owner/local-client contract equivalence, authentication/invalid
-request/owner-loss failures, correct-root selection, ReadOnly refusal, selected
-artifact changes and invalid/missing size/target shape rejection; actual
-producer facts through canonical dispatch/host, no scheduler path leakage,
-cheap snapshots and measured selected hydration. Target transport completion
-is separate from current-model identity/path qualification and real inference.
-Pumas path/identity repairs require reproduced current producer evidence.
-
-### M3 — Prove the desktop mixed workflow
-
-**Goal:** The user authors/submits the graph and receives text and image results.
-
-**Allowed write set (D-02):** `src/components/workbench/ioInspectorPresenters.ts`,
-`src/components/workbench/ioInspectorPresenters.test.ts`,
-`src/components/workbench/IoInspectorPage.svelte`, and the existing
-`tests/e2e/workflow-editor-image-generation/workflow-editor-image-generation.e2e.mjs`
-(decode/dimension assertions only). Luna max owns these settled repairs.
-Sol medium owns the disjoint controlled browser fixture
-`tests/e2e/io-inspector-image-preview/run.mjs` and `fixture.ts`.
-Root owns this plan, issues and ledger; Astra medium independently reviews.
-
-D-02 uses the existing full-body request for image Read while retaining bounded
-text previews. Both Read and Read Stream reject incomplete images before
-preview installation. Inspector owns image decode errors, matching-URL cleanup,
-and stale request disposal across selection changes and unmount. Download
-remains independent of display decoding. The new harness mounts the actual
-Inspector with controlled service responses and a valid PNG larger than 64 KiB
-in real WebKit; it supplies the decoder/lifecycle evidence absent from Node
-presenter checks without requiring models. Retain it while those browser
-contracts lack equivalent coverage in the canonical desktop harness. This
-repair preserves artifact storage and IPC contracts. D-02 is accepted after focused requests, browser success/failure/lifecycle
-checks, affected static checks and independent medium review; it does not
-satisfy DA-03. Further mixed-workflow source writes require
-separate concrete admission.
-
-**Tasks:** Integrate actual node ports and model selection, run progress/errors,
-artifact retrieval and I/O Inspector. Extend the existing Tauri/WebKit harness
-to prove the dependent text/image graph. Verify save/reopen, cancellation and
-failure presentation. An inaccessible required interaction is part of this slice.
-
-**Gate:** DA-03 passes on recorded real models/hardware/runtime; affected DA-04
-and DA-05 cases pass. Preserve raw bounded evidence in reports. If blocked,
-record the exact missing prerequisite and continue unrelated admitted work.
-
-**Status:** `Planned`
-
-### M4 — Complete domain remediation and measured efficiency
-
-**Goal:** Close the remaining full-repository findings while preserving the working product path.
-
-**Allowed write set:** P01/P02 exact paths in First Pilot Admission, plus P03
-`crates/inference/src/gateway_tests.rs` for the existing PyTorch alias test's
-feature-independent Mock backend constructor only, plus plan
-reports/control files. Other finding families require exact production/test/
-documentation write sets before implementation.
-
-P04 also admits only
-`crates/inference/tests/fixtures/pytorch_worker_contract/load_transformers_model_request.json`:
-change nested `payload.model_source.source_contract_version` from 2 to 3.
-Medium reviewed all 19 worker JSON fixtures and the source-contract migration;
-no other field or validator change is required. This is a low-complexity positive
-fixture repair assigned to Astra low, comparable in scope to Luna's P03 fixture
-repair. Preserve outer worker version 1 and negative stale-version cases.
-Existing load-envelope consumers and invalid-source tests decide acceptance;
-independent medium review remains required. It is the fourth useful pilot task,
-not a matched test of multi-file architecture implementation.
-
-**Tasks:** Refactor independently changing concerns identified in M1; address
-binding/runtime lifecycles, frontend state/accessibility, dependency ownership,
-test discovery, launcher/build/release obligations and stale documentation as
-applicable. Measure selector performance, scheduling overhead and reuse; fix
-demonstrated problems at the owner. Pumas changes require their own authorized
-work; do not duplicate its semantics. Remove dead paths and unjustified checks.
-
-**Gate:** DA-01/02/04/05/06 evidence closes for each admitted finding family;
-affected tests and static gates pass; the mixed workflow remains functional.
-No arbitrary file-size target, new crate quota, or mandatory universal abstraction.
-
-**Status:** `Active`
-
-### M5 — Integrated acceptance and maintainer handoff
-
-**Goal:** One honest, current product and compliance result.
-
-**Allowed write set:** this plan's files and exact canonical guide paths declared
-at M4 closure; source fixes return to a bounded M2/M4 slice.
-
-**Tasks:** Reconcile complete coverage, all old/new findings, supported consumers
-and required target claims. Review changed architecture independently from its
-implementer. Run the selected integrated checks and real desktop workflow on
-the final material revision; update architecture/consumer/run guidance with
-actual behavior. Explain remaining limits without labeling them compliant.
-
-**Gate:** DA-01–DA-07 satisfied, no undispositioned area or required violation,
-no unavailable evidence represented as passing, and no competing plan authority.
-
-**Status:** `Planned`
-
-## Concurrent Work
-
-### First Pilot Admission (P01/P02)
-
-**Status:** `Accepted` for these two scoped repairs; see ledger for evidence.
-This does not accept the complete M4 milestone or establish a cost winner.
-
-Source-backed review establishes these two independent M4 prerequisite repairs
-can proceed while M2's execution design is resolved. This changes milestone
-ordering only; it does not permit real model execution before trust closure.
-The integrator owns current contracts and plan writes; workers deliver code,
-not outstanding proposals to mutate shared authority. No conflicting write sets
-or stale admission facts have been identified for this pair.
-
-| Slice | Model | Contract and exact allowed write set | Acceptance |
-| --- | --- | --- | --- |
-| P01: D-01 GUI smoke temporary-root cleanup | Luna max | `scripts/check-workflow-editor-image-generation-gui-smoke.sh`; `scripts/check-workflow-editor-image-generation-gui-smoke.test.mjs`. Keep shell lifecycle ownership through direct child completion, preserve status and remove only its own allocated root. Preserve existing INT/TERM delivery addressed to wrapper PID, wait/reap child before cleanup and return 130/143. Whole driver/app process-tree supervision is not newly promised. | Copied real wrapper in isolated fixture with fake wdio verifies child input/root, success/nonzero exit and cleanup; ready-marker INT/TERM tests assert child receives signal while root exists, terminates before cleanup and leaves no direct child; `bash -n`; independent medium review. This is wrapper contract evidence, not GUI/model acceptance. |
-| P02: COV-01 frontend test discovery | Astra low | `package.json`; only if Node's built-in discovery is insufficient, `scripts/run-frontend-tests.mjs` and `scripts/run-frontend-tests.test.mjs`. Discover `.test.ts` under maintained `src/` and `packages/` roots, including new nested files; exclude dependencies/generated output; preserve test failures. Prefer existing Node glob support over a custom runner. | All 90 currently tracked frontend files selected plus a temporary nested regression; intentional failure propagates; excluded-root fixture not selected; complete discovered suite run and independent medium review. Newly exposed failures are reported and assigned, never hidden to make this patch pass. |
-
-These are different tasks with unequal possible repair effort. Their results
-start the four-task pilot but cannot establish a causal model ranking. P03/P04
-remain unassigned until comparable admitted tasks are available; D-02 large-image
-preview and COV-02 packaging are findings, not automatic new write authority.
-Per-agent billing is unavailable from current tools; first-pass quality and
-repair rounds are observable. Total agent wall time was not instrumented for
-this pair; measured test runtime is not model latency. No dollar saving is claimed.
-
-The composition remains the existing shell launcher and Node test runner;
-P01 restores an existing resource owner, P02 removes a duplicate manual test
-inventory. No new domain owner, public contract or persisted schema is admitted.
-Any proposed custom runner must justify why the built-in mechanism cannot own
-discovery; it must not become a new test registry.
-
-Use one integrator, Astra medium analysis/review workers, and
-implementation workers selected by the policy below. The restarted session exposes ten subagent slots;
-that is capacity, not a utilization target. Start with the four bounded review
-lanes below and add workers only for independently useful admitted tasks:
-
-| Owner | Primary write set | Adjacent write set | Forbidden/shared | Output | Integration order |
+| Inference | Pantograph unified inference API and backend owners | All T/I/E execution remains in Pantograph; any earlier conditional Pumas-inference path is withdrawn. |
+| Pumas responsibility | Pumas library service; Pantograph library client | Library/resources only; validate supported RPC facts and resolve assets without duplicating library authority. |
+| Baseline | Integration owner with Astra planning advice | Compare upstream before choosing; initially evaluate pinned 0.7.0 headless bytes; select newer only for a documented relevant need. |
+| Isolation | Fixture/dependency owner | Independent retained artifact, service and writable state; active Pumas development cannot become a build/runtime dependency. |
+| Standards | Current Coding-Standards MCP | Actual routed and available guidance governs all planning, implementation and commits. |
+| Coordination | Luna Max integration role | Use the role policy below and maximize independent concurrency; shared authorities have one writer. |
+| Completeness | Product and verification owners | All three real desktop modalities, dependency flow and retained outputs plus inherited required claims; no selector-only or provider-only substitute. |
+
+## Objective acceptance
+
+The new integrated candidate has no satisfied product/workflow acceptance row yet. RPC-A00 has a qualified artifact/isolated-baseline result; the report defines the remaining procedures and records evidence when obtained.
+
+| ID | Observable criterion | Kind | Environment | Mode | Status |
 | --- | --- | --- | --- | --- | --- |
-| Execution reviewer | `reports/execution-review.md` | none | Product and plan-control files | Run/scheduler/graph ownership and failures | First for M2 |
-| Runtime reviewer | `reports/runtime-review.md` | none | Product and plan-control files | Inference, Pumas, trust, worker lifecycle | First for M2 |
-| Desktop reviewer | `reports/desktop-review.md` | none | Product and plan-control files | UI/graph package, IPC, artifacts, accessibility | For M3 |
-| Coverage reviewer | `reports/repository-review.md` | none | Product and plan-control files | Bindings, tooling, dependencies, docs, remaining coverage | M1/M4 |
-| Integrator | Plan-control files and admitted slice | Explicitly declared consumer files | Protected user changes | Current decisions, integrated code/evidence | Serial |
+| RPC-A00 | Chosen artifact/contract/build is pinned and reproduced independently of the active Pumas development checkout, service and mutable state. | release-artifact | representative | automated | qualified for retained 0.7.0 bytes and isolated root |
+| RPC-A01 | A separately running qualified Pumas artifact supplies the actual Pantograph library facts/assets path; Pantograph never owns its root/database. | system | required-real | automated | partial: producer-supplied Tiny Aya selected identity and `ready/ready` directory target now execute through Pantograph's selected-text path; Z-Image also supplies a target but is incompatible, while complete Tiny SD remains identity-gated |
+| RPC-A02 | Every consumed library request/result/event preserves producer semantics, outcome, correlation, identity, version and extra-field policy. | contract | representative | automated | partial: positive file target, synthetic and producer-derived directory targets, authenticated IPC selector/load-target/facts, Tiny Aya selected identity and Pantograph target projection, and negative outcomes observed; HTTP selector snapshot remains `-32601/not_found`, while Tiny SD has no producer identity and Z-Image retains missing-shard diagnostics |
+| RPC-A03 | Library outage, replacement, cursor gaps and stale selection retain truthful refresh/failure behavior without cross-instance state or replay of uncertain mutations. | integration | representative | automated | partial: same-root producer restart requalified the target, and a stopped producer yielded a typed client transport error without stale replay; cursor gaps, cross-instance replacement and stale-selection recovery remain open |
+| INF-A01 | All actual T/I/E executions traverse Pantograph's unified inference API; observed Pumas traffic contains only admitted library/resource operations and zero inference/serving calls. | system | required-real | automated | partial: producer-qualified Tiny Aya text executed through Pantograph after library-only RPC reads; real producer-selected image/embedding execution and complete three-family observation remain open |
+| DA-01 | Inherited maintained areas have current applicable-standards review and evidenced dispositions; required violations remain open until resolved. | focused | not-applicable | either | pending |
+| DA-02 | Integration has one owner per concern; current composition/change/deletion evidence and real consumer/migration dispositions agree. | integration | representative | either | pending |
+| DA-03 | Real desktop produces complete text, decodable images and meaningful embeddings; generated text actually feeds both downstream task families with correct identity. | user-workflow | required-real | automated | blocked |
+| DA-04 | Missing facts, invalid data, worker failure, cancellation, disconnect and shutdown preserve accurate terminal/unknown results, resource ownership and unrelated work. | system | representative | automated | pending |
+| DA-05 | Saved graphs and complete retained outputs survive the chosen cold-reopen/version/retention procedure; affected IPC/native/host consumers agree. | contract | representative | automated | partial: controlled fresh-process retained-output reopen; desktop/saved-graph scope open |
+| DA-06 | Qualified selector/dispatch/reuse measurements distinguish inference cost from orchestration and satisfy recorded workload-specific targets. | system | required-real | automated | blocked |
+| DA-07 | Required static/test/security/accessibility/dependency/target/artifact obligations and independent reviews pass; actual MCP-guided process/commit evidence is retained. | system | required-real | either | pending |
 
-Each delegated task supplies: model/effort, bounded question, relevant standards
-routes, authoritative contracts, exact write set, prerequisites, acceptance
-command/claim, forbidden shared paths and stop condition. Review reports cite
-source locations and uncertainties; they do not authorize a competing redesign.
+DA-03 procedures T/I/E/C are all mandatory. INF-A01 needs both construction/source-route review and observed actual execution; a grep result or an idle Pumas fixture is not sufficient. DA-07 aggregates references and retains the separate original evidence kinds; it cannot downgrade a required artifact/platform claim. Explicit maintainer scope decisions must remain honest, not reclassify missing required evidence as a pass.
 
-Implementation parallelism is admitted only after contracts and disjoint writes
-are established. One owner edits shared contracts, manifests, composition roots
-and plan controls. Reviewers may work alongside that implementation. If multiple
-outstanding implementation proposals can become stale before integration, first
-route and apply the standards' concurrent-plan-integration profile and record
-its required revision/reconciliation facts. Otherwise keep serial integration;
-agent count alone does not justify new coordination machinery. Reserve real
-model/GPU evidence runs to avoid contention and misleading measurements.
+## Simplicity and ownership review
 
-### COV-02 Spark Admission
+**Composed-design review applicability:** `applicable`. These eight answers select the direction; RPC-00 completes the actual consumed-wire and fixture facts before implementation.
 
-Under the current four-model policy, Spark owns exactly four literal replacements
-of `docs/headless-native-bindings.md` with `docs/headless-workflow.md` in
-`scripts/package-uniffi-csharp-artifacts.sh`. Preserve all other bytes and behavior.
-The latter is the existing live guide and agrees with the package README. Medium
-confirmed the route at `snapshot:v1:1356b67e-26ae-4c5b-9e65-6e3e8f9ef58e`:
-Core/Router, implementation/verification/build/documentation/library, zero
-unresolved facts. Verify the actual script in an isolated temporary fixture with
-stub native build/generation, real archive/checksum tools, and both archived
-manifests resolving to the exact guide bytes. No real binding build/release claim.
-Independent medium review may be combined with EX-04 review. Root owns plan,
-issues and ledger; no other packaging or documentation source changes admitted.
+1. **Independent concerns:** Pumas owns model-library information/assets/acquisition; Pantograph owns inference backends and workflow execution; the integration client owns library transport projection; the fixture owner owns the frozen dependency's build and process. None owns the others' policy.
+2. **State, identity, value, time, policy and mechanism:** separate library/model/artifact revision, wire version, artifact digest, service/root identity, observation cursor, Pantograph runtime/backend/task/attempt, retained result and standards revision. A new Pumas build prompts explicit client qualification, not a new inference engine or rewritten historical result.
+3. **Caller and composition knowledge:** the composition root supplies an explicit library endpoint/client lifetime and existing inference runtime. Callers receive validated library facts or Pantograph execution outcomes. They do not know Pumas's registry paths, internal providers, framing, storage layout or build directory.
+4. **Representative changes:** library-wire changes affect the client/mapping/tests; inference changes affect Pantograph backends/contracts; model metadata changes trigger existing freshness handling; artifact candidate upgrades affect dependency qualification; presentation changes stay out of execution ownership.
+5. **Stable interfaces and hidden knowledge:** stable model references, library result contracts and the existing unified inference API remain distinct. Hide transport and local fixture mechanics. Any retained Rust dependency is commit-pinned and does not grant root ownership or require mutable source adjacency.
+6. **Independent evolution, failure and verification:** Pumas development can proceed or disappear while the retained fixture works. Library outage remains an explicit input/readiness outcome; inference availability is separately established through Pantograph. Qualify artifact, adapter, backend and desktop boundaries separately and then together.
+7. **Deletion result:** removing the library client would spread transport/version/outcome knowledge into callers; removing a Pumas inference adapter removes forbidden complexity entirely, so none is introduced. Prefer a small ordinary inventory/build record over a new version registry, audit framework or second model catalog.
+8. **Necessary and cumulative complexity:** independent deployment, model trust, async lifecycle and retained multimodal values are inherent. Existing owners contain them. A retained binary plus isolated state stabilizes the external boundary without coupling the active upstream checkout or expanding inference authority.
 
-### Cost And Quality Controls
+## Milestones and admission
 
-- Route delegated work using the four-model policy above with explicit model
-  and supported effort settings and bounded context. Spark begins on real small
-  changes; its quality and complete accepted-change cost remain under evaluation.
-  Do not silently replace an unavailable requested model or expand a small repair
-  into consequential design to fill a model lane.
-- A medium analysis task stops once the owner, interface, invariants, relevant
-  consumer migrations, write set and acceptance evidence are sufficiently clear
-  for reversible implementation. Reuse its findings across dependent slices;
-  do not commission duplicate broad investigations.
-- An implementation task receives that contract and implements the complete
-  coherent slice, including focused tests and affected checks. It may make
-  ordinary local choices but must not silently change ownership, compatibility,
-  trust, lifecycle or acceptance semantics to make the patch pass.
-- If implementation exposes a material design contradiction, return the exact
-  evidence and decision to a medium analysis task. Do not repeat blind repair
-  attempts or automatically raise all implementation work to medium. After the
-  decision is resolved, hand the bounded implementation back to the selected
-  implementation model; record any rescue by a different model in pilot evidence.
-- Keep root orchestration context and output bounded: avoid dumping tool schemas
-  or whole reports, batch independent reads/checks, and delegate routine check
-  execution with one consolidated result packet where independent integration
-  evidence permits. Preserve medium decision/review gates; reducing their
-  necessary coverage is not the cost optimization. RT-03 showed root overhead
-  dominates implementation cost.
-- Medium review examines the resulting diff against the admitted design and
-  applicable standards. Review coherent integrated changes together where safe;
-  avoid separate full reviews per file or trivial edit. Re-review only material
-  changes and unresolved findings, not unchanged accepted work.
-- Run focused checks during implementation and broader evidence at the integration
-  points that require it. Neither low reasoning nor cost reduction changes the
-  acceptance criteria or permits substituting simulated success for real model runs.
-- Prioritize API dollars per accepted change over elapsed time and raw tokens.
-  Price recorded uncached input, cache reads/writes and output at verified
-  model/service-tier/context rates; count reasoning within output once. Include
-  attributable design/review/repair/rescue and show shared overhead separately.
-  Distinguish API-equivalent estimates from actual invoices; never infer a cost
-  winner from fewer tokens alone. Use existing usage logs and ledger rather
-  than building a tracking framework. Use fewer workers when decisions, files
-  or hardware are shared.
+R0 has the exact documentation write set, and the reviewed RPC-01 transport-only slice has its exact source/dependency write set recorded below. Later source sets are selected from real callers when dependencies settle, within this authorized goal; normal refinement does not require approval per file. Independent R2/R3/R4 work with settled contracts may be admitted alongside R1, so the sequence is a dependency order, not a universal serialization barrier.
 
-### Bounded Implementation Model Pilot
+| Milestone | Goal / preserved contract | Allowed writes now | Gate | State |
+| --- | --- | --- | --- | --- |
+| R0 / RPC-00 | Route current standards, compare upstream/release, qualify a frozen library artifact, inventory actual operations/callers and native backend tuples, admit the next production slice. | Exact documentation set below; read-only source; controlled isolated dependency provisioning/build/probes are authorized outside application source. | Current MCP route; candidate rationale/digests; actual library observations or precise blockers; bounded consumer dispositions and coherent next source/test write set. | Complete for baseline; external identity/nonempty-library gates remain open |
+| R1 / RPC-01 | Library-only RPC from explicit configuration through selector, dispatch/preflight and executable asset resolution; preserve current unified inference API. | Reviewed transport plus the explicit `PumasSelectorAccess::Rpc` projection/configuration and the enumerated dispatch/runtime-host/technical-fit consumer seams; no inference implementation or owner-root fallback. | RPC-A00/01/02 and a useful canonical Pantograph inference path; no forbidden Pumas calls. | In progress: RPC capability seam admitted; artifact identity and real execution remain gated |
+| R2 / MOD-01 | Complete Pantograph-owned text/image/embedding routes, input/output contracts and dependent execution. | Admitted embedding runtime-host projection, gateway handoff, typed vector contracts and focused mapping tests; remaining source writes are selected from settled callers. | Real backend T/I/E and C, INF-A01 and complete artifacts. | In progress: embedding source seam admitted; real execution, fan-out and retained-output evidence remain gated |
+| R3 / UI-01 | Complete user selection/author/save/run/inspect, D-02 repair, embedding presentation and cold reopen. | None until exact relevant files are selected. | Real desktop DA-03/05 and affected lifecycle/accessibility checks. | Planned |
+| R4 / QUAL-01 | Close inherited current-standards/lifecycle/consumer findings and measured efficiency while preserving the usable path. | None until each coherent finding family is admitted. | Required DA-01/02/04/05/06/07 dispositions and evidence. | Planned |
+| R5 / ACCEPT-01 | Independent final material review, integrated acceptance, current inventory and coherent commits. | Current plan/evidence and exact affected guides; source repairs return to their owning slice. | All required rows satisfied, retained artifact identities match, reviews complete, history/resources appropriately accounted for. | Planned |
 
-**Status:** `Complete` (P01–P04). The ledger records quality, usage and the
-verified API-price correction. Luna max has lower observed API-equivalent
-implementation cost and lower attributable design/review subtotals in this
-unmatched sample; prefer it for qualified bounded repairs. Astra low remains
-provisional for consequential classes beyond the pilot, on quality grounds,
-not a demonstrated cost advantage. Shared overhead and actual billing remain
-unallocated. Continue useful product-task evaluations under the user’s latest instruction;
-record quality gates and complete attributable costs without artificial benchmark tasks.
+### MOD-01 source slice admitted alongside RPC-01
 
-The decision is whether Luna max can lower the total cost of accepted changes
-for particular task classes without weakening design or correctness. Official
-model positioning and reasoning labels do not establish Pantograph performance.
+The next independent source slice now exists for Pantograph-owned embeddings: runtime-host projection, gateway-owned llama.cpp execution, bounded typed vectors, scheduler result/input mapping, workflow JSON projection, and generated-text-to-embedding input coverage. It deliberately preserves the current R1 phase and RPC-01 next slice because executable artifact identity and real execution remain gated. The batch route is semantically complete per member but sequential pending native multi-input qualification; this is implementation progress, not product acceptance.
 
-- After M1 provides admitted production slices, select four useful, reversible
-  implementation tasks, two per model, with comparable domain complexity and
-  evidence requirements. Include both a local behavior repair and a bounded
-  multi-file contract-consumer change per model where available. Do not compare
-  trivial Luna edits against difficult Astra redesigns or split coherent work
-  artificially to fill the sample. Keep unresolved security, persistence and
-  lifecycle design with Astra medium analysis; initially use Astra low for
-  consequential implementation outside the pilot's tested scope.
-- Record task class/difficulty before assignment. Give both models equally
-  explicit contracts, relevant source context, write sets and preselected
-  acceptance tests; preserve initial results before repair. Use disjoint tasks
-  for useful production progress, not duplicate implementations by default.
-- Astra medium reviews both against the same behavior, ownership, failure,
-  lifecycle, maintainability and standards criteria. Omit model attribution
-  from review packets where practical. Tests are run independently by the
-  integrator as required; self-reported success and tests that merely mirror
-  implementation do not decide quality.
-- Keep one compact table in the existing ledger: task/model/effort, first-pass
-  gate results, substantive findings by severity, repair rounds or rescue,
-  implementation/review/repair usage when exposed, elapsed time, and final
-  acceptance. Record later discovered regressions against their originating
-  task. No new benchmark framework or separate recurring report.
-- Compare total implementation + review + repair + rescue cost per accepted
-  task, including failed attempts. Use actual billed cost when available;
-  otherwise distinguish token/latency proxies and API-price estimates from
-  session billing. Missing usage means cost is unknown, not proven lower.
-- Stop after these four tasks and select a provisional routing policy by task
-  class. A small unmatched sample is operational evidence, not a causal model
-  ranking. Expand only if one named uncertainty could change the selection and
-  a further useful task can resolve it cheaply. Do not delay product progress
-  for a statistically strong benchmark.
-- Adopt Luna for a tested class only when required gates pass, review reveals
-  no unresolved material defects and observed total effort/cost supports it.
-  Retain Astra low for classes where Luna needs substantial rescue or design
-  repair. One material trust/data/lifecycle violation stops expansion into that
-  class pending review; passing local tasks does not establish suitability for
-  the scheduler or cross-process architecture. Keep medium review and the same
-  acceptance gates for either implementation model.
+The source slice now also has a controlled scheduler fan-out regression: one generated text result is consumed by both image and embedding downstream members through the existing runtime-host batch handoff, and text/image/embedding terminal values are retained. The fixture uses a controlled runtime-host port and therefore proves scheduler dependency, correlation, projection and retention behavior only; it is not real backend, desktop or DA-03 evidence. Its parent test now launches a separate test process to reopen the persisted run and all three output bodies, advancing cold-reopen evidence without closing the saved-graph/desktop claim.
 
-## Blockers
+That same fixture now drops and recreates file-backed diagnostics and artifact-store services, then queries the persisted completed run and reads the retained text, image-reference and embedding bodies by their projected artifact identities. This is controlled same-process service/store reopen evidence for serialization and projection continuity; it is not a fresh-process saved-graph/desktop cold-reopen result and does not close DA-05.
 
-- No blocker to M0 documentation/read-only work.
-- Real mixed-workflow model/runtime/hardware and desktop-runner availability
-  have not been verified in this planning pass; M0 owns the check.
-- Full consumer/target inventory and project licensing authority remain to be
-  reconciled; unresolved external authority blocks only dependent claims.
-- Exact production write sets are intentionally not admitted before source-backed
-  findings. Later milestones cannot use candidate owner lists as write permission.
+The RPC baseline was also requalified against a disposable Pumas source clone pinned at `96f859443460ad8e4799d563528aaba113ccff21`, built with `--no-default-features` so Pumas inference plugins were absent. That candidate imported a real Granite embedding GGUF and returned complete library facts, but its HTTP surface still supplied no selected-artifact identity and rejected selector snapshots. The Pantograph RPC seam therefore retains its explicit typed `needs_detail`/fail-closed behavior; this evidence advances the external qualification boundary but does not permit inference, filename guessing or product acceptance.
 
-## Re-Plan Triggers
+Direct Pantograph gateway qualification now covers generated text, embeddings and a real local Tiny SD Turbo image through the existing unified API. The text run returned `"Amber Bridge"`, embedding returned two 384-dimensional nonzero vectors, and image returned one 256×256 PNG. These are backend/gateway proofs using explicitly copied local assets, not the missing RPC-selected image target, desktop workflow, or full DA-03 acceptance. The image worker's first-use CUDA metrics failure was repaired with device-context ownership; the focused worker suite is 8/8. Final standards state, independent reviews and coherent commits remain open.
 
-Change the current decision when the user selects a different modality contract;
-source evidence contradicts an owner/ADR; a real external consumer or persisted
-promise changes migration needs; a missing Pumas contract changes sequencing;
-required execution evidence is unavailable; or new machinery/change propagation
-invalidates the composed-design review. Re-run only affected review and gates.
+### Producer-qualified Tiny Aya text execution — 2026-09-26
 
-## Implementation Invocation
+The pinned current-source no-inference Pumas binary (`96f859443460ad8e4799d563528aaba113ccff21`, `--no-default-features`, SHA-256 `3163f4d89d535870cb4ba2549adcbf47af435685576379a862e7ba422badf27c`) indexed a path-normalized Tiny Aya fixture in `/tmp/pantograph-rpc-tinyaya-20260926i`. Library-only `get_models`, package-facts and owner-fresh load-target calls returned model `llm/cohere2/coherelabs--tiny-aya-water__full_repo`, selected artifact `coherelabs--tiny-aya-water__files_b673ab802c36`, contract-3 `hf_compatible_directory` facts, `Cohere2ForCausalLM`, `requires_custom_code=false`, `library_owned`, `valid`, and a `ready/ready` absolute directory target.
 
-`Continue docs/plans/domain-architecture-and-multimodal/plan.md, operation continue.
-Admit D-02's complete retained-image retrieval repair from the existing desktop
-report after confirming its exact consumer write set; preserve artifact identity,
-retention and cancellation semantics. Then qualify concrete owner-fresh Pumas
-text/image targets, runtime/device and the existing desktop fixture before real
-mixed-workflow execution. EX-04's controlled text→image, pending-response and
-readiness-recovery evidence is accepted, not a real-model/desktop substitute.
-Continue the four-model policy and record full implementation, review, rescue,
-commit/coordination and unknown-rate costs. Full audit/static and existing test
-failures remain tracked independently.
+The ignored repository acceptance `runtime_host_execution_port::tests::real_rpc_selected_tiny_aya_text_executes_through_runtime_host_port` consumed that exact target through `EmbeddedRuntimeHostExecutionPort`. Its typed Pumas resolvers normalized the `pumas://models/` URI for the library operation, reconciled the producer's omitted revision, and stripped only the owner-local absolute identity path while preserving the selected artifact ID and executable `local_load_path`. Pantograph's PyTorch/Transformers worker loaded both shards with `trust_remote_code=false` and `local_files_only=true`, then returned generated text `"Amber Bridge "` under the runtime-host's bounded eight-token default. No Pumas inference, serving, `/v1`, provider or profile operation was called. This closes producer-qualified Pantograph text execution only; image/embedding producer targets, real three-family fan-out, desktop acceptance and cold saved-graph evidence remain open.
 
-Subsequent invocations supply this same canonical plan path with the operation
-appropriate to its recorded lifecycle; the next-slice field is not independent
-execution authority. The user has now authorized starting the plan with subagents
-and the bounded implementation pilot.
+### Producer-selected Qwen embedding target remains facts-gated — 2026-09-26
 
-## Final Acceptance
+A fresh isolated current-source producer root `/tmp/pantograph-rpc-qwen-embed-20260926a` indexed the retained producer-selected Qwen3 Q4_K_M GGUF. Library-only `get_models`, package facts and owner-fresh load-target calls returned model `embedding/qwen3/qwen--qwen3-embedding-8b-gguf__q4_k_m`, selected artifact `qwen--qwen3-embedding-8b-gguf__q4_k_m`, valid `gguf`/`library_owned` facts, `requires_custom_code=false`, `artifact_state=ready`, `entry_path_state=ready`, and a file target. The exact GGUF SHA-256 is `3fcd3febec8b3fd64435204db75bf0dd73b91e8d0661e0331acfe7e7c3120b85`.
 
-- Acceptance status: `blocked`
-- Deferred follow-ups: new model families and live generated-UI execution outside the selected product contract; release publication.
-- Final status: `Active`
+The producer facts declare `task_type_primary=unknown`, so Pantograph's real runtime-host embedding acceptance fails closed with an explicit unsupported package-task diagnostic before any llama.cpp load or inference. It does not infer embedding from the model path or task intent. This is stronger producer-selected embedding boundary evidence, but not successful embedding execution; the producer must supply canonical embedding task facts before RPC-backed embedding can be admitted. No Pumas inference, serving, `/v1`, provider or profile operation was called.
+
+### Runtime-host identity and cancellation hardening — 2026-09-26
+
+The image handoff and planner now require one nonblank producer-selected artifact ID and exact agreement across scheduler selection, package facts and the Pumas load target. The runtime-host Pumas target and package-facts resolvers also reject ready/facts responses whose producer model or conflicting nonempty revision differs from the scheduler selection before any Pantograph identity normalization. Focused planner, handoff, resolver-model, resolver-revision and producer-identity tests cover these cases; this keeps the complete Tiny SD candidate gated when its producer supplies no selected artifact ID.
+
+The text runtime-host path now polls cancellation while both owner-fresh load-target and package-facts RPC futures are in flight, drops a pending future before returning the typed cancellation response, and gives cancellation precedence when a delayed resolver fails. `text_port_cancels_while_waiting_for_load_target_resolution`, `text_port_cancellation_wins_over_in_flight_load_target_failure` and `text_port_cancellation_wins_over_in_flight_package_facts_failure` cover those boundaries. These are lifecycle hardening results, not closure of producer-selected image/embedding execution or desktop/saved-graph cold reopen.
+
+### RPC-00 exact documentation write set
+
+- `docs/plans/README.md`
+- `docs/plans/domain-architecture-and-multimodal/plan.md`
+- `docs/plans/domain-architecture-and-multimodal/issues.md`
+- `docs/plans/domain-architecture-and-multimodal/execution-ledger.md`
+- `docs/plans/domain-architecture-and-multimodal/reports/2026-09-25-standards-and-rpc-audit.md`
+- `docs/plans/domain-architecture-and-multimodal/reports/2026-09-25-pumas-contract-inventory.md`
+- `docs/plans/domain-architecture-and-multimodal/reports/2026-09-25-end-to-end-acceptance.md`
+
+Artifact download/build and disposable fixture state have their own recorded external paths and cleanup/retention owner. They are not writes to the active Pumas development repository. Production client/backend changes begin only after their exact admitted source/test set is recorded.
+
+### RPC-01 transport-seam disposition
+
+The first implementation slice is intentionally limited to a closed HTTP JSON-RPC transport in `workflow-nodes/src/pumas_rpc.rs`. It accepts only literal loopback `/rpc` URLs, disables redirects and ambient proxy routing, rejects credentials and non-loopback hosts, bounds response bodies, applies a request timeout, validates JSON-RPC version/correlation and result-versus-error field presence, and preserves typed remote error codes/classes. Its operation enum contains only library/resource methods: model listing/search, execution descriptor, package facts/summary, summary snapshot, update feed and artifact load-target resolution. It exposes no inference, serving, profile, provider-private or arbitrary-method route.
+
+Focused evidence is `cargo test -p workflow-nodes --features model-library pumas_rpc --locked` with nine passing tests under loopback-capable escalation. The transport source/dependency write set is `crates/workflow-nodes/src/pumas_rpc.rs`, `crates/workflow-nodes/src/lib.rs`, `crates/workflow-nodes/Cargo.toml` and `Cargo.lock`. Astra High and Sol Extra High independently reviewed the seam; the first review found and the implementation repaired credential redaction, literal-loopback enforcement, JSON `null`/absent-field handling and request bounds. The final narrow review required an explicit forward-compatible envelope-field policy, which is now documented and covered by a regression. The current final reviews are complete: the security/lifecycle review found no remaining concrete source defect, while the standards review left only the cross-session Coding-Standards runtime-state discrepancy. Commit remains gated on reconciling that authority. This slice does not migrate `PumasApi` owner callers, establish producer/root identity, or claim successful facts/asset mapping from the empty fixture. Those remain the next RPC-01 gate together with configuration and all affected consumer dispositions.
+
+### Current-source producer-selected directory qualification — 2026-09-26
+
+The pinned current-source no-inference producer was run against a fresh isolated root containing a path-normalized copy of the retained Z-Image-Turbo metadata and read-only symlinks to its actual library bytes. The real Pantograph RPC client decoded `get_models`, package facts and `resolve_model_artifact_load_target`; the facts supplied selected artifact `tongyi-mai--z-image-turbo__bundle_e07edb6c5bfd`, `diffusers_bundle`, `requires_custom_code=false`, `validation_state=valid`, `storage_kind=library_owned`, and the exact directory target. The producer returned `artifact_state=ready` and `entry_path_state=ready`. The same HTTP surface returned `-32601/not_found` for `model_library_selector_snapshot`.
+
+This advances RPC-A01/A02 beyond the synthetic fixture, but it does not admit execution: package facts report missing root-level text-encoder shard paths for Z-Image, and its pipeline is `ZImagePipeline`, outside Pantograph's currently qualified closed Stable Diffusion loader. The retained Tiny SD directory independently has all twelve expected files, `requires_custom_code=false`, valid library-owned facts and `StableDiffusionPipeline`, but its producer metadata has no selected-artifact identity; owner-fresh resolution therefore returns `ambiguous/missing_selected_artifact`. Neither candidate may be promoted by guessing an ID, rewriting metadata or treating a path as selection. The next source/evidence slice is a producer-issued identity for the complete Tiny SD target or another complete producer target matching an admitted Pantograph backend, followed by replacement and outage/reopen checks.
+
+### Complete Tiny SD facts with missing producer identity — 2026-09-26
+
+Normal current-source Pumas indexing was run in isolated root `/tmp/pantograph-rpc-tinysd-20260926e` against a path-normalized copy of the retained Tiny SD metadata and read-only symlinks to its bytes. The producer returned model `diffusion/cc-nms/tiny-sd-turbo` and package-facts contract 3 with `diffusers_bundle`, `library_owned`, `validation_state=valid`, `requires_custom_code=false`, `StableDiffusionPipeline`, Stable Diffusion family evidence, and all twelve expected component/config/weight/tokenizer files present. The facts retain the existing invalid `feature_extractor` diagnostic, which Pantograph's closed loader already treats as an absent optional image-processor component.
+
+The producer's `get_models` record and package facts did not carry a selected-artifact ID. An owner-fresh load-target request containing only the model identity returned typed `artifact_state=ambiguous`, `entry_path_state=ambiguous`, and diagnostic `missing_selected_artifact`; supplying the observed absolute path without an identity returned `artifact_missing` rather than authorizing path promotion. The HTTP selector snapshot remained `-32601/not_found`. This is the strongest current complete-admitted candidate, but it is still a fail-closed identity blocker; no inference was run and the isolated owner was stopped with an empty registry.
+
+The available library-only acquisition routes were also exercised in fresh disposable roots: `import_external_diffusers_directory` returned success but left the indexed model without a selected-artifact ID, `import_model_in_place` generated idempotent metadata/facts with the same missing identity, and the lower-level `import_model` route successfully indexed a retained Granite GGUF but likewise exposed no selected artifact while reporting `task_type_primary=unknown`. The analogous direct directory import failed during producer reconciliation at a safetensors weight path before producing a selectable package. All operations were stopped before any inference route; neither authorizes Pantograph to derive or promote an ID locally or infer the embedding task. The producer identity/task gate therefore remains genuine rather than an omitted import step.
+
+A read-only scan of the current shared-library diffusion metadata found no alternate complete admitted candidate: Tiny SD is the only record declaring `pipeline_class=StableDiffusionPipeline`, and it is the same record without `selected_artifact_id`. Other diffusion records with producer-selected identities declare different pipelines or do not have executable package facts. This closes the candidate-search branch without changing the fail-closed identity rule.
+
+### Authenticated framed-IPC qualification — 2026-09-26
+
+The pinned current-source no-inference producer was also exercised through its separate authenticated framed local-IPC contract, using a fresh registry file under `/tmp/pantograph-rpc-zimage-20260926d` and the same isolated Z-Image root. The framed request used the producer's documented 4-byte big-endian length prefix and JSON-RPC operation `model_library_selector_snapshot`; the registry supplied the ephemeral connection token, which is intentionally not retained in project evidence. The producer returned one selector row with the producer-selected identity `tongyi-mai--z-image-turbo__bundle_e07edb6c5bfd`, `artifact_state=ready`, `entry_path_state=ready`, `storage_kind=library_owned`, and a complete cached summary. Authenticated framed `resolve_model_artifact_load_target` returned the same ready directory target, and the package-facts batch route regenerated the same contract-3 facts.
+
+This explains the transport split rather than closing it: the same producer's HTTP `/rpc` route returns `-32601/not_found` for selector snapshots, while its owner-local authenticated IPC route supports selector snapshots and the typed load-target/facts operations. Pantograph's production seam remains the explicitly configured closed HTTP JSON-RPC client; the IPC evidence is retained as a separate qualified Pumas contract and is not silently treated as an HTTP fallback or a reason to discover/claim a Pumas root. The producer process was stopped cleanly and its isolated registry had no remaining instance row. The Z-Image target still reports missing text-encoder shard paths and an unadmitted `ZImagePipeline`, so the next gate remains a complete producer-provided directory target matching an admitted Pantograph backend.
+
+### Linked generated-text fan-out through Pantograph — 2026-09-26
+
+A disposable single-process qualification harness used the existing Pantograph `InferenceGateway` for all three executions. It first called `execute_typed` through the copied llama.cpp `10883` runtime and LFM2.5 GGUF, receiving generated text `"Amber Bridge"`. That exact returned string was then passed unchanged as both the image plan's `prompt` and the single embedding input; the image used the previously serialized synthetic ready Tiny SD directory target and Pantograph's PyTorch backend, while embedding used Pantograph's llama.cpp embedding mode. The run returned one nonzero 384-dimensional embedding and one nonempty 256x256 `image/png` payload (`bytes_base64=145876`), with each runtime stopped cleanly.
+
+This is the required generated-text dependency at the Pantograph gateway boundary: downstream inputs came from the text result rather than a second literal fixture prompt. The text/embedding assets were the independently copied local GGUFs (SHA-256 `67b42337951a2b3140c0c2eb49b5bbbdd14653114337ac15397f68dc664648d4` and `d4b41f5d7db712806722103a1c6aba2f0fe99f77740501d6f313c8240641f145`), and the image run used the existing `.venv` Torch/Diffusers environment (`torch 2.10.0+cu128`, `diffusers 0.37.0`). The image target remains synthetic contract evidence rather than a producer-selected target, so this advances Pantograph fan-out and backend evidence without closing DA-03, INF-A01, or the real RPC-selected execution gate.
+
+## Agent roles and coordination
+
+| Role | Model/effort | Contract |
+| --- | --- | --- |
+| Primary orchestration and integration | GPT-6 Luna Max | Verify state, maintain constraints/inventory, assign disjoint sets, routine coordination, concise handoff inspection, final acceptance and coherent commits. |
+| Planning and final review | GPT-6 Astra High | Design/admission recommendations for integration; final material review is read-only. |
+| Implementation | GPT-6 Sol Medium | Admitted code and tests, especially complex/sensitive work. |
+| Document discovery | GPT-6 Luna High | Read-only, bounded: latest inventory first, then relevant architecture/plan and `context.md` passages; include `architecture-plan` if present. Return constraints, concrete gaps and exact file/line evidence. |
+| Independent architecture/security/lifecycle review | GPT-6 Sol Extra High | Read-only; reuse for narrow repair verification. |
+| Preferred suitable implementation | Passeur MCP / Muse Spark 1.3 Contributor | Settled, bounded implementation/fixtures to reduce cost; never planning or review. |
+
+These are requested assignments, not claims that a model or service is available. Verify exact capabilities/effort and primary-model state; report mismatches. If the Muse lane is unavailable, use Sol Medium for appropriate implementation and record it. Missing required review is an unsatisfied gate, not permission for self-review. Reviewers never edit or commit; implementation owners repair and reviewers inspect.
+
+Verify Passeur's canonical Pantograph root/worktree binding and actual registered Muse capability before submission. Give each assignment goal, relevant facts/standards, material/base identity, exact primary and adjacent write sets, shared/forbidden files, acceptance, output and escalation. Shared contracts, generated files, lockfiles, common fixtures, plan and index are single-owner writes. Worker commits require explicit branch/commit ownership under the same standards; the root owns final integration.
+
+Maximize independent parallelism among discovery, bounded planning, stable-slice review and admitted implementation. Do not implement an unsettled dependency or treat review of changing bytes as final. Apply concurrent-plan safeguards when outstanding proposals can become stale. Coordinate builds/GPU and fixture state to preserve valid evidence. Keep worker lifecycle control evidence-based rather than timer-based. Reuse concise findings and reviewers, not duplicated broad scans.
+
+## Evidence, inventory and commits
+
+Use [the acceptance procedures](reports/2026-09-25-end-to-end-acceptance.md). Extend existing tests before adding new evidence machinery. Tests must reach and discriminate the affected behavior under existing failures; unchanged failure counts alone are insufficient. A fake model, Pumas provider output, selector list or complete metadata envelope cannot establish a real Pantograph workflow.
+
+Update the existing inventory/plan/issues/ledger at material change and acceptance boundaries, including actual artifact and standards identities, consumer mappings, roles, review dispositions, checks and exactly one next slice. Keep dated detail in history; no parallel inventory or per-agent diary. Obtain Sol Extra High review for important architecture/security/lifecycle changes and Astra High final material review; Luna Max runs integrated final acceptance on reviewed bytes. Separate API-equivalent cost estimates from real bills and use only observed data if costs are recorded.
+
+Through current MCP-provided Commit guidance, inspect status, stage only the coherent admitted set, inspect the staged diff and sensitive/generated effects, run required checks/hooks, then commit the implementation and materially changed inventory/evidence. No arbitrary commit count, forced commit topology, implicit hook bypass, history rewrite or unrequested push. Branch/worktree isolation follows actual concurrency/risk and terminal resource ownership.
+
+## Blockers and re-plan triggers
+
+Unverified: complete consumed-operation parity; selector discovery; executable directory-target mapping; qualified image/embedding model/runtime/device and display; full scheduler/desktop lifecycle, cold-reopen and target evidence; final standards/commit closure. Tiny Aya now provides one real runtime-host text-generation acceptance through the unified Pantograph path. Qwen embedding remains correctly blocked by producer task evidence `unknown`, while the complete producer-selected image target and desktop/cold-reopen evidence remain open. Each item blocks only the decision or claim that depends on it.
+
+Replan for material contract/ownership/trust/compatibility/lifecycle/output/acceptance changes, a required library operation missing from the selected artifact, unsafe deployment sharing, or an actual new affected semantic owner. Refine write sets without restarting planning when the original decisions remain sound. A new upstream commit is a review input, not an automatic replan or artifact update. Preserve the immutable selected candidate during a run.
+
+## Completion
+
+Continue through the complete goal, not merely RPC discovery or plan creation. Final acceptance requires all mandatory claims, independent review and truthful inventory/commit/resource state. Preserve required-real blockers and report separate product/compliance status; none of text, image, embeddings or Pantograph-only inference may be dropped to close the plan.

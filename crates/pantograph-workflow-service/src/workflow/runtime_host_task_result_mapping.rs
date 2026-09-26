@@ -151,6 +151,9 @@ fn task_result_value(
         }
         RuntimeHostExecutionOutputValue::I64(value) => WorkflowSchedulerTaskResultValue::I64(value),
         RuntimeHostExecutionOutputValue::U64(value) => WorkflowSchedulerTaskResultValue::U64(value),
+        RuntimeHostExecutionOutputValue::EmbeddingVector(value) => {
+            WorkflowSchedulerTaskResultValue::EmbeddingVector(value)
+        }
         RuntimeHostExecutionOutputValue::MediaArtifactRef(value) => {
             WorkflowSchedulerTaskResultValue::MediaArtifactRef(media_artifact_ref(value))
         }

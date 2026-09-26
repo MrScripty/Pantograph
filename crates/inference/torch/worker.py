@@ -388,8 +388,16 @@ def _reset_resource_peak_stats_for_device(device):
     if reset_peak_memory_stats is None:
         return
     try:
-        reset_peak_memory_stats(device)
-    except TypeError:
+        device_context = getattr(torch.cuda, "device", None)
+        if device_context is None:
+            reset_peak_memory_stats()
+        else:
+            # Entering the device context initializes CUDA before the memory
+            # API receives the selector. PyTorch 2.10 can reject a typed
+            # selector when this is the first CUDA call in the process.
+            with device_context(torch.device(device)):
+                reset_peak_memory_stats()
+    except (AttributeError, TypeError):
         reset_peak_memory_stats()
 
 
@@ -449,8 +457,13 @@ def _cuda_resource_observation(device):
         }
 
     try:
-        peak_vram_bytes = int(max_memory_allocated(device))
-    except TypeError:
+        device_context = getattr(torch.cuda, "device", None)
+        if device_context is None:
+            peak_vram_bytes = int(max_memory_allocated())
+        else:
+            with device_context(torch.device(device)):
+                peak_vram_bytes = int(max_memory_allocated())
+    except (AttributeError, TypeError):
         peak_vram_bytes = int(max_memory_allocated())
     if peak_vram_bytes <= 0:
         return {

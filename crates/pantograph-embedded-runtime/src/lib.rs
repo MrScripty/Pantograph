@@ -85,6 +85,8 @@ mod runtime_dispatch_source_snapshot;
 mod runtime_extensions;
 pub mod runtime_health;
 #[allow(dead_code)]
+mod runtime_host_embedding_execution;
+#[allow(dead_code)]
 mod runtime_host_execution_port;
 #[allow(dead_code)]
 mod runtime_host_image_execution;

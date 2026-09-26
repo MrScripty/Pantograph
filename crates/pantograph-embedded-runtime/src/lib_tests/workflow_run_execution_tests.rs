@@ -35,8 +35,8 @@ use pantograph_runtime_attribution::WorkflowVersionRecord;
 use pantograph_runtime_host_contracts::{
     ReservationLifecycleApplication, ReservationLifecycleApplicationState,
     ReservationLifecycleEvent, ReservationLifecycleOutcome, ReservationLifecyclePort,
-    ReservationLifecyclePortError, RESERVATION_LIFECYCLE_CONTRACT_VERSION,
-    RUNTIME_SESSION_LOAD_PROOF_CONTRACT_VERSION,
+    ReservationLifecyclePortError, RuntimeHostExecutionInputValue,
+    RESERVATION_LIFECYCLE_CONTRACT_VERSION, RUNTIME_SESSION_LOAD_PROOF_CONTRACT_VERSION,
 };
 use pantograph_scheduler::{
     SchedulerDispatchCandidateId, SchedulerEstimateHint, SchedulerEstimateHintKind,
@@ -133,8 +133,12 @@ async fn workflow_execution_session_dispatches_through_production_embedded_image
         .await
         .expect("seed package facts");
     let runtime_host_port = Arc::new(EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
-        Arc::new(RuntimeHostPumasLoadTargetResolver::new(pumas_api.clone())),
-        Arc::new(RuntimeHostPumasPackageFactsResolver::new(pumas_api)),
+        Arc::new(RuntimeHostPumasLoadTargetResolver::new(Arc::new(
+            workflow_nodes::setup::PumasSelectorAccess::Owner(pumas_api.clone()),
+        ))),
+        Arc::new(RuntimeHostPumasPackageFactsResolver::new(Arc::new(
+            workflow_nodes::setup::PumasSelectorAccess::Owner(pumas_api),
+        ))),
         Arc::new(WorkflowServiceRuntimeHostMediaArtifactSink::new(
             artifact_writer,
         )),
@@ -324,6 +328,30 @@ fn text_runtime_inference_interface_snapshot_json() -> serde_json::Value {
     interface
 }
 
+fn embedding_runtime_inference_interface_snapshot_json() -> serde_json::Value {
+    serde_json::json!({
+        "contract_version": INFERENCE_INTERFACE_CONTRACT_VERSION,
+        "descriptor_fingerprint": "embedded_runtime_embedding_descriptor_fingerprint_1",
+        "task_kind": "embedding",
+        "inputs": [{
+            "port_id": "text",
+            "label": "Text",
+            "direction": "input",
+            "requirement": "required",
+            "value_type": { "category": "scalar", "kind": "string" },
+            "availability": { "status": "available" }
+        }],
+        "outputs": [{
+            "port_id": "embedding",
+            "label": "Embedding",
+            "direction": "output",
+            "requirement": "required",
+            "value_type": { "category": "artifact", "kind": "tensor" },
+            "availability": { "status": "available" }
+        }]
+    })
+}
+
 fn make_text_runtime_inference_node(node: &mut GraphNode) {
     node.data["task_kind"] = serde_json::json!("text_generation");
     node.data["device"] = serde_json::json!("cpu");
@@ -395,6 +423,46 @@ fn dependent_text_image_session_graph(
         ],
         derived_graph: None,
     }
+}
+
+fn dependent_text_image_embedding_session_graph(
+    text_model_id: &str,
+    text_selected_artifact_id: &str,
+    image_model_id: &str,
+    image_selected_artifact_id: &str,
+    embedding_model_id: &str,
+    embedding_selected_artifact_id: &str,
+) -> WorkflowGraph {
+    let mut graph = dependent_text_image_session_graph(
+        text_model_id,
+        text_selected_artifact_id,
+        image_model_id,
+        image_selected_artifact_id,
+    );
+    graph.nodes.push(GraphNode {
+        id: "embedding-infer".to_string(),
+        node_type: "llm-inference".to_string(),
+        position: Position { x: 400.0, y: 180.0 },
+        data: serde_json::json!({
+            "task_kind": "embedding",
+            "runtime": "llama.cpp.embedding",
+            "device": "cpu",
+            "inference_interface_snapshot": embedding_runtime_inference_interface_snapshot_json(),
+            "pumas_model_ref": {
+                "model_id": embedding_model_id,
+                "revision": "main",
+                "selected_artifact_id": embedding_selected_artifact_id
+            }
+        }),
+    });
+    graph.edges.push(GraphEdge {
+        id: "generated-text-to-embedding".to_string(),
+        source: "text-infer".to_string(),
+        source_handle: "text".to_string(),
+        target: "embedding-infer".to_string(),
+        target_handle: "text".to_string(),
+    });
+    graph
 }
 
 fn image_runtime_validation_snapshot(
@@ -637,6 +705,14 @@ fn runtime_dependency_environment_request(
     );
     planning.task_id = DependencyTaskId::parse(task_type).expect("valid dependency task id");
     planning.task_type = Some(planning.task_id.clone());
+    planning.scheduler_intent.requested_runtime_id = Some(
+        RuntimeIntentId::parse(if task_type == "embedding" {
+            "llama_cpp.embedding"
+        } else {
+            "pytorch"
+        })
+        .expect("valid dependency runtime id"),
+    );
     planning.scheduler_intent.requested_device_id =
         Some(DeviceIntentId::parse(device_id).expect("valid dependency device id"));
     planning.caller_context.node_id = Some(node_id.to_string());
@@ -696,8 +772,14 @@ fn runtime_validation_snapshot_node(
     node.node_id = WorkflowNodeId::parse(node_id).expect("valid validation node id");
     node.task_kind = InferenceTaskKind::parse(task_type).expect("valid validation task kind");
     node.model_ref = model_ref.clone();
-    node.constraints.requested_runtime_id =
-        Some(RuntimeIntentId::parse("pytorch").expect("valid runtime id"));
+    node.constraints.requested_runtime_id = Some(
+        RuntimeIntentId::parse(if task_type == "embedding" {
+            "llama_cpp.embedding"
+        } else {
+            "pytorch"
+        })
+        .expect("valid runtime id"),
+    );
     node.constraints.requested_device_id =
         Some(DeviceIntentId::parse(device_id).expect("valid device id"));
     node.dependency_requirements_id = dependency_proof.dependency_requirements_id;
@@ -855,18 +937,34 @@ impl WorkflowRuntimeDispatchCandidateProvider for TestRuntimeDispatchCandidatePr
             })?,
             selected_runtime_id,
             selected_runtime_variant_id: Some(
-                if intent.task_type.as_str() == "text_generation" {
-                    "pytorch.cpu"
-                } else {
-                    "pytorch.diffusers"
+                match intent.task_type.as_str() {
+                    "text_generation" => "pytorch.cpu",
+                    "embedding" => "llama_cpp.cpu",
+                    _ => "pytorch.diffusers",
                 }
                 .parse()
                 .unwrap(),
             ),
-            selected_backend_key: "pytorch".to_string(),
-            runtime_family: "test-runtime".to_string(),
+            selected_backend_key: if intent.task_type.as_str() == "embedding" {
+                "llama_cpp".to_string()
+            } else {
+                "pytorch".to_string()
+            },
+            runtime_family: if intent.task_type.as_str() == "embedding" {
+                "llama_cpp".to_string()
+            } else {
+                "test-runtime".to_string()
+            },
             resolved_load_target: format!("test:{}", intent.model_ref.model_id),
-            runtime_residency_key: format!("test-runtime:{}", intent.model_ref.model_id),
+            runtime_residency_key: format!(
+                "{}:{}",
+                if intent.task_type.as_str() == "embedding" {
+                    "llama_cpp"
+                } else {
+                    "test-runtime"
+                },
+                intent.model_ref.model_id
+            ),
             loaded_runtime_memory_estimate_bytes: 1,
             runtime_load_state: WorkflowRuntimeDispatchLoadState::Loaded,
             runtime_instance_id: Some(format!(
@@ -982,18 +1080,34 @@ impl WorkflowHost for ImageRuntimeSessionHost {
                 .iter()
                 .filter(|node| node.node_type == "llm-inference")
                 .map(|node| {
-                    let text = node.data["task_kind"] == "text_generation";
+                    let task_kind = node.data["task_kind"].as_str().unwrap_or_default();
+                    let text = task_kind == "text_generation";
+                    let embedding = task_kind == "embedding";
                     WorkflowIoNode {
                         node_id: node.id.clone(),
                         node_type: node.node_type.clone(),
                         name: None,
                         description: None,
                         ports: vec![WorkflowIoPort {
-                            port_id: if text { "text" } else { "image" }.into(),
+                            port_id: if text {
+                                "text"
+                            } else if embedding {
+                                "embedding"
+                            } else {
+                                "image"
+                            }
+                            .into(),
                             name: None,
                             description: None,
                             data_type: Some(
-                                if text { "string" } else { "media_artifact_ref" }.into(),
+                                if text {
+                                    "string"
+                                } else if embedding {
+                                    "embedding"
+                                } else {
+                                    "media_artifact_ref"
+                                }
+                                .into(),
                             ),
                             required: Some(false),
                             multiple: Some(false),
@@ -2740,6 +2854,646 @@ async fn dependent_text_to_image_resumes_only_downstream_after_readiness_proof_a
     assert!(again.resumed_runs.is_empty());
     assert_eq!(fixture.text_prompts.lock().unwrap().len(), 1);
     assert_eq!(fixture.image_prompts.lock().unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn dependent_text_fans_out_to_image_and_embedding_with_retained_outputs() {
+    if let (Ok(run_id), Ok(artifact_store_path), Ok(diagnostics_ledger_path)) = (
+        std::env::var("PANTOGRAPH_FANOUT_REOPEN_RUN_ID"),
+        std::env::var("PANTOGRAPH_FANOUT_REOPEN_ARTIFACT_STORE"),
+        std::env::var("PANTOGRAPH_FANOUT_REOPEN_DIAGNOSTICS_LEDGER"),
+    ) {
+        let reopened_service = WorkflowService::new()
+            .with_artifact_writer(WorkflowArtifactWriter::new(
+                ArtifactStore::open(&artifact_store_path, test_runtime_artifact_policy())
+                    .expect("fresh-process reopen artifact store"),
+            ))
+            .with_diagnostics_ledger(
+                pantograph_workflow_service::SqliteDiagnosticsLedger::open(
+                    &diagnostics_ledger_path,
+                )
+                .expect("fresh-process reopen diagnostics ledger"),
+            );
+        let detail = reopened_service
+            .workflow_run_detail_query(WorkflowRunDetailQueryRequest {
+                workflow_run_id: run_id.clone(),
+                projection_batch_size: Some(100),
+            })
+            .expect("fresh-process query reopened run detail");
+        assert_eq!(
+            detail.run.expect("fresh-process reopened run").status,
+            pantograph_workflow_service::RunListProjectionStatus::Completed
+        );
+        let artifacts = reopened_service
+            .workflow_io_artifact_query(WorkflowIoArtifactQueryRequest {
+                workflow_run_id: Some(run_id),
+                node_id: None,
+                producer_node_id: None,
+                consumer_node_id: None,
+                artifact_role: Some("node_output".to_string()),
+                media_type: None,
+                retention_state: Some(
+                    pantograph_workflow_service::IoArtifactRetentionState::Retained,
+                ),
+                retention_policy_id: None,
+                runtime_id: None,
+                selected_backend_key: None,
+                model_id: None,
+                after_event_seq: None,
+                limit: Some(100),
+                projection_batch_size: Some(100),
+            })
+            .expect("fresh-process query retained outputs")
+            .artifacts;
+        for (node_id, port_id) in [
+            ("text-infer", "text"),
+            ("image-infer", "image"),
+            ("embedding-infer", "embedding"),
+        ] {
+            let artifact = artifacts
+                .iter()
+                .find(|artifact| {
+                    artifact.producer_node_id.as_deref() == Some(node_id)
+                        && artifact.producer_port_id.as_deref() == Some(port_id)
+                })
+                .unwrap_or_else(|| {
+                    panic!(
+                        "fresh-process retained artifact missing for {node_id}:{port_id}: {artifacts:?}"
+                    )
+                });
+            assert!(
+                !reopened_service
+                    .read_artifact_body(ArtifactReadRequest {
+                        artifact_id: artifact.artifact_id.clone(),
+                        byte_range_start: None,
+                        byte_range_end_exclusive: None,
+                    })
+                    .expect("fresh-process read retained output")
+                    .body
+                    .is_empty(),
+                "fresh-process retained output body must be non-empty for {node_id}:{port_id}"
+            );
+        }
+        return;
+    }
+
+    const TEXT_MODEL_ID: &str = "llm/example/tiny-transformers";
+    const TEXT_ARTIFACT_ID: &str = "text-bundle";
+    const IMAGE_MODEL_ID: &str = "image/example/tiny-diffusion";
+    const IMAGE_ARTIFACT_ID: &str = "image-bundle";
+    const EMBEDDING_MODEL_ID: &str = "embedding/example/tiny-gguf";
+    const EMBEDDING_ARTIFACT_ID: &str = "embedding-gguf";
+
+    let temp = TempDir::new().expect("temp dir");
+    let artifact_store_path = temp.path().join("artifacts");
+    let diagnostics_ledger_path = temp.path().join("workflow-diagnostics.sqlite");
+    let workflow_service = WorkflowService::with_ephemeral_attribution_store()
+        .expect("service")
+        .with_artifact_writer(WorkflowArtifactWriter::new(
+            ArtifactStore::open(&artifact_store_path, test_runtime_artifact_policy())
+                .expect("artifact store"),
+        ))
+        .with_diagnostics_ledger(
+            pantograph_workflow_service::SqliteDiagnosticsLedger::open(&diagnostics_ledger_path)
+                .expect("diagnostics ledger"),
+        );
+    let dependency_readiness_provider = DependencyEnvironmentReadinessSnapshotProvider::new();
+    let dependency_readiness_work_queue = Arc::new(DependencyReadinessWorkQueue::new());
+    let source_refresher = Arc::new(TestRuntimeDispatchSourceRefresher::default());
+    let reservation_lifecycle_port = Arc::new(TestReservationLifecyclePort::default());
+    let runtime_host_port = Arc::new(FanoutRuntimeHostPort::default());
+    let service = Arc::new(
+        workflow_service
+            .with_dependency_environment_provider(Arc::new(dependency_readiness_provider.clone()))
+            .with_dependency_readiness_work_queue(dependency_readiness_work_queue.clone())
+            .with_runtime_dispatch_source_refresher(source_refresher.clone())
+            .with_runtime_dispatch_candidate_provider(Arc::new(
+                TestRuntimeDispatchCandidateProvider,
+            ))
+            .with_runtime_host_execution_port(runtime_host_port.clone())
+            .with_runtime_host_batch_execution_port(runtime_host_port.clone())
+            .with_reservation_lifecycle_port(reservation_lifecycle_port),
+    );
+    let workflow_id = "wf-dependent-text-image-embedding-fanout";
+    let workflow_semantic_version = "1.2.3";
+    let graph = dependent_text_image_embedding_session_graph(
+        TEXT_MODEL_ID,
+        TEXT_ARTIFACT_ID,
+        IMAGE_MODEL_ID,
+        IMAGE_ARTIFACT_ID,
+        EMBEDDING_MODEL_ID,
+        EMBEDDING_ARTIFACT_ID,
+    );
+    let version = service
+        .resolve_workflow_graph_version(workflow_id, workflow_semantic_version, &graph)
+        .expect("resolve workflow version");
+    let mut snapshot =
+        image_runtime_validation_snapshot(&version, &graph, IMAGE_MODEL_ID, IMAGE_ARTIFACT_ID);
+    let template = snapshot.nodes[0].clone();
+    let text_model_ref = PumasModelRef {
+        model_id: TEXT_MODEL_ID.to_string(),
+        revision: Some("main".to_string()),
+        selected_artifact_id: Some(TEXT_ARTIFACT_ID.to_string()),
+        selected_artifact_path: None,
+        migration_diagnostics: Vec::new(),
+    };
+    let image_model_ref = PumasModelRef {
+        model_id: IMAGE_MODEL_ID.to_string(),
+        revision: Some("main".to_string()),
+        selected_artifact_id: Some(IMAGE_ARTIFACT_ID.to_string()),
+        selected_artifact_path: None,
+        migration_diagnostics: Vec::new(),
+    };
+    let embedding_model_ref = PumasModelRef {
+        model_id: EMBEDDING_MODEL_ID.to_string(),
+        revision: Some("main".to_string()),
+        selected_artifact_id: Some(EMBEDDING_ARTIFACT_ID.to_string()),
+        selected_artifact_path: None,
+        migration_diagnostics: Vec::new(),
+    };
+    let (text_node, text_request) = runtime_validation_snapshot_node(
+        &template,
+        &version,
+        "text-infer",
+        "text_generation",
+        &text_model_ref,
+        "torch-transformers",
+        "cpu",
+    );
+    let (image_node, image_request) = runtime_validation_snapshot_node(
+        &template,
+        &version,
+        "image-infer",
+        "image_generation",
+        &image_model_ref,
+        "torch-diffusers",
+        "cuda:0",
+    );
+    let (mut embedding_node, embedding_request) = runtime_validation_snapshot_node(
+        &template,
+        &version,
+        "embedding-infer",
+        "embedding",
+        &embedding_model_ref,
+        "llama-embedding",
+        "cpu",
+    );
+    embedding_node.descriptor_fingerprint =
+        InferenceInterfaceFingerprint::parse("embedded_runtime_embedding_descriptor_fingerprint_1")
+            .expect("valid embedding descriptor fingerprint");
+    snapshot.nodes = vec![text_node, image_node, embedding_node];
+    service
+        .store_workflow_executable_validation_snapshot(snapshot)
+        .expect("store fan-out validation snapshot");
+    for request in [&text_request, &image_request, &embedding_request] {
+        dependency_readiness_provider
+            .insert_snapshot(
+                DependencyEnvironmentReadinessSnapshot::for_request(
+                    request,
+                    ready_image_dependency_environment_result(request),
+                    DependencyEnvironmentReadinessSnapshotStatus::Fresh,
+                )
+                .expect("valid fan-out readiness snapshot"),
+            )
+            .expect("insert fan-out readiness snapshot");
+    }
+
+    let host = Arc::new(ImageRuntimeSessionHost::new(graph));
+    let created = service
+        .create_workflow_execution_session(
+            host.as_ref(),
+            WorkflowExecutionSessionCreateRequest {
+                workflow_id: workflow_id.to_string(),
+                usage_profile: None,
+                keep_alive: false,
+            },
+        )
+        .await
+        .expect("create fan-out session");
+    let runtime =
+        pantograph_workflow_service::workflow::WorkflowSessionExecutionRuntime::from_shared_service(
+            service.clone(),
+            host,
+        );
+    let prompt = "  generated fan-out prompt\n";
+    let response = runtime
+        .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
+            session_id: created.session_id,
+            workflow_semantic_version: workflow_semantic_version.to_string(),
+            inputs: vec![WorkflowPortBinding {
+                node_id: "prompt".to_string(),
+                port_id: "text".to_string(),
+                value: serde_json::json!(prompt),
+            }],
+            output_targets: Some(vec![
+                WorkflowOutputTarget {
+                    node_id: "text-infer".to_string(),
+                    port_id: "text".to_string(),
+                },
+                WorkflowOutputTarget {
+                    node_id: "image-infer".to_string(),
+                    port_id: "image".to_string(),
+                },
+                WorkflowOutputTarget {
+                    node_id: "embedding-infer".to_string(),
+                    port_id: "embedding".to_string(),
+                },
+            ]),
+            override_selection: None,
+            timeout_ms: None,
+            priority: None,
+        })
+        .await
+        .unwrap_or_else(|error| panic!("dependent text fan-out should complete: {error:?}"));
+
+    assert_eq!(response.outputs.len(), 3);
+    assert!(response.outputs.iter().any(|output| {
+        output.node_id == "text-infer"
+            && output.port_id == "text"
+            && output.value == serde_json::json!(format!("expanded:{prompt}"))
+    }));
+    assert!(response.outputs.iter().any(|output| {
+        output.node_id == "image-infer"
+            && output.port_id == "image"
+            && output.value
+                == serde_json::json!({
+                    "artifact_id": "fanout-image-output",
+                    "media_type": "image_png"
+                })
+    }));
+    assert!(response.outputs.iter().any(|output| {
+        output.node_id == "embedding-infer"
+            && output.port_id == "embedding"
+            && output.value == serde_json::json!([format!("expanded:{prompt}").len(), 0.5])
+    }));
+
+    assert!(runtime_host_port.requests().is_empty());
+    let requests = runtime_host_port
+        .batch_requests()
+        .into_iter()
+        .flat_map(|request| request.members)
+        .collect::<Vec<_>>();
+    assert_eq!(requests.len(), 3);
+    let generated_prompt = format!("expanded:{prompt}");
+    for request in requests
+        .iter()
+        .filter(|request| request.handoff.task_intent.task_type.as_str() != "text_generation")
+    {
+        let input = request
+            .materialized_inputs
+            .first()
+            .expect("downstream task input");
+        assert_eq!(
+            input.value,
+            RuntimeHostExecutionInputValue::String(generated_prompt.clone())
+        );
+    }
+    assert_eq!(dependency_readiness_work_queue.len(), 3);
+    let model_refs = source_refresher.model_refs();
+    assert_eq!(model_refs.len(), 3);
+    assert!(model_refs.contains(&TEXT_MODEL_ID.to_string()));
+    assert!(model_refs.contains(&IMAGE_MODEL_ID.to_string()));
+    assert!(model_refs.contains(&EMBEDDING_MODEL_ID.to_string()));
+
+    service
+        .workflow_diagnostics_projection_refresh(
+            pantograph_workflow_service::WorkflowDiagnosticsProjectionRefreshRequest {
+                projections: vec![
+                    pantograph_workflow_service::WorkflowDiagnosticsProjectionKind::RunDetail,
+                    pantograph_workflow_service::WorkflowDiagnosticsProjectionKind::IoArtifact,
+                ],
+                workflow_run_id: Some(response.workflow_run_id.clone()),
+                workflow_id: Some(workflow_id.to_string()),
+                reason: pantograph_workflow_service::WorkflowDiagnosticsProjectionRefreshReason::ExplicitRefresh,
+                batch_size: 50,
+            },
+        )
+        .expect("refresh fan-out retained-output projections");
+    let artifacts = service
+        .workflow_io_artifact_query(WorkflowIoArtifactQueryRequest {
+            workflow_run_id: Some(response.workflow_run_id.clone()),
+            node_id: None,
+            producer_node_id: None,
+            consumer_node_id: None,
+            artifact_role: None,
+            media_type: None,
+            retention_state: None,
+            retention_policy_id: None,
+            runtime_id: None,
+            selected_backend_key: None,
+            model_id: None,
+            after_event_seq: None,
+            limit: Some(100),
+            projection_batch_size: Some(100),
+        })
+        .expect("query fan-out retained artifacts")
+        .artifacts;
+    for (node_id, port_id) in [
+        ("text-infer", "text"),
+        ("image-infer", "image"),
+        ("embedding-infer", "embedding"),
+    ] {
+        assert!(
+            artifacts.iter().any(|artifact| {
+                artifact.producer_node_id.as_deref() == Some(node_id)
+                    && artifact.producer_port_id.as_deref() == Some(port_id)
+                    && artifact.retention_state
+                        == pantograph_workflow_service::IoArtifactRetentionState::Retained
+            }),
+            "retained artifact missing for {node_id}:{port_id}: {artifacts:?}"
+        );
+    }
+
+    drop(runtime);
+    drop(service);
+
+    let child_status =
+        std::process::Command::new(std::env::current_exe().expect("current test executable"))
+            .arg("dependent_text_fans_out_to_image_and_embedding_with_retained_outputs")
+            .arg("--exact")
+            .arg("--nocapture")
+            .env("PANTOGRAPH_FANOUT_REOPEN_RUN_ID", &response.workflow_run_id)
+            .env(
+                "PANTOGRAPH_FANOUT_REOPEN_ARTIFACT_STORE",
+                &artifact_store_path,
+            )
+            .env(
+                "PANTOGRAPH_FANOUT_REOPEN_DIAGNOSTICS_LEDGER",
+                &diagnostics_ledger_path,
+            )
+            .status()
+            .expect("spawn fresh-process retained-output reopen");
+    assert!(
+        child_status.success(),
+        "fresh-process retained-output reopen failed: {child_status}"
+    );
+
+    let reopened_service = WorkflowService::new()
+        .with_artifact_writer(WorkflowArtifactWriter::new(
+            ArtifactStore::open(&artifact_store_path, test_runtime_artifact_policy())
+                .expect("reopen artifact store"),
+        ))
+        .with_diagnostics_ledger(
+            pantograph_workflow_service::SqliteDiagnosticsLedger::open(&diagnostics_ledger_path)
+                .expect("reopen diagnostics ledger"),
+        );
+    let reopened_detail = reopened_service
+        .workflow_run_detail_query(WorkflowRunDetailQueryRequest {
+            workflow_run_id: response.workflow_run_id.clone(),
+            projection_batch_size: Some(100),
+        })
+        .expect("query reopened run detail");
+    assert_eq!(
+        reopened_detail.run.expect("reopened run").status,
+        pantograph_workflow_service::RunListProjectionStatus::Completed
+    );
+    let reopened_artifacts = reopened_service
+        .workflow_io_artifact_query(WorkflowIoArtifactQueryRequest {
+            workflow_run_id: Some(response.workflow_run_id.clone()),
+            node_id: None,
+            producer_node_id: None,
+            consumer_node_id: None,
+            artifact_role: Some("node_output".to_string()),
+            media_type: None,
+            retention_state: Some(pantograph_workflow_service::IoArtifactRetentionState::Retained),
+            retention_policy_id: None,
+            runtime_id: None,
+            selected_backend_key: None,
+            model_id: None,
+            after_event_seq: None,
+            limit: Some(100),
+            projection_batch_size: Some(100),
+        })
+        .expect("query reopened retained outputs")
+        .artifacts;
+    let expected_bodies = [
+        (
+            "text-infer",
+            "text",
+            format!("expanded:{prompt}").into_bytes(),
+        ),
+        (
+            "image-infer",
+            "image",
+            serde_json::to_vec(&serde_json::json!({
+                "artifact_id": "fanout-image-output",
+                "media_type": "image_png"
+            }))
+            .expect("image body"),
+        ),
+        (
+            "embedding-infer",
+            "embedding",
+            serde_json::to_vec(&serde_json::json!([generated_prompt.len(), 0.5]))
+                .expect("embedding body"),
+        ),
+    ];
+    for (node_id, port_id, expected_body) in expected_bodies {
+        let artifact = reopened_artifacts
+            .iter()
+            .find(|artifact| {
+                artifact.producer_node_id.as_deref() == Some(node_id)
+                    && artifact.producer_port_id.as_deref() == Some(port_id)
+            })
+            .unwrap_or_else(|| {
+                panic!(
+                    "reopened retained artifact missing for {node_id}:{port_id}: {reopened_artifacts:?}"
+                )
+            });
+        assert_eq!(
+            reopened_service
+                .read_artifact_body(ArtifactReadRequest {
+                    artifact_id: artifact.artifact_id.clone(),
+                    byte_range_start: None,
+                    byte_range_end_exclusive: None,
+                })
+                .expect("read reopened retained output")
+                .body,
+            expected_body
+        );
+    }
+}
+
+#[derive(Default)]
+struct FanoutRuntimeHostPort {
+    requests: Mutex<Vec<pantograph_runtime_host_contracts::RuntimeHostExecutionRequest>>,
+    batch_requests: Mutex<Vec<pantograph_runtime_host_contracts::RuntimeHostBatchExecutionRequest>>,
+}
+
+impl FanoutRuntimeHostPort {
+    fn requests(&self) -> Vec<pantograph_runtime_host_contracts::RuntimeHostExecutionRequest> {
+        self.requests
+            .lock()
+            .expect("fan-out runtime host request lock")
+            .clone()
+    }
+
+    fn batch_requests(
+        &self,
+    ) -> Vec<pantograph_runtime_host_contracts::RuntimeHostBatchExecutionRequest> {
+        self.batch_requests
+            .lock()
+            .expect("fan-out runtime host batch request lock")
+            .clone()
+    }
+
+    fn output_for(
+        task_type: &str,
+        source_text: &str,
+    ) -> Result<
+        pantograph_runtime_host_contracts::RuntimeHostExecutionOutput,
+        pantograph_runtime_host_contracts::RuntimeHostExecutionPortError,
+    > {
+        match task_type {
+            "text_generation" => Ok(
+                pantograph_runtime_host_contracts::RuntimeHostExecutionOutput {
+                    port_id: "text".to_string(),
+                    value: pantograph_runtime_host_contracts::RuntimeHostExecutionOutputValue::String(
+                        format!("expanded:{source_text}"),
+                    ),
+                },
+            ),
+            "image_generation" => Ok(
+                pantograph_runtime_host_contracts::RuntimeHostExecutionOutput {
+                    port_id: "image".to_string(),
+                    value: pantograph_runtime_host_contracts::RuntimeHostExecutionOutputValue::MediaArtifactRef(
+                        pantograph_runtime_host_contracts::RuntimeHostExecutionMediaArtifactRef {
+                            artifact_id: "fanout-image-output".to_string(),
+                            media_type: Some("image_png".to_string()),
+                        },
+                    ),
+                },
+            ),
+            "embedding" => Ok(
+                pantograph_runtime_host_contracts::RuntimeHostExecutionOutput {
+                    port_id: "embedding".to_string(),
+                    value: pantograph_runtime_host_contracts::RuntimeHostExecutionOutputValue::EmbeddingVector(
+                        vec![
+                            serde_json::Number::from(source_text.len() as u64),
+                            serde_json::Number::from_f64(0.5)
+                                .expect("finite fixture vector value"),
+                        ],
+                    ),
+                },
+            ),
+            other => Err(
+                pantograph_runtime_host_contracts::RuntimeHostExecutionPortError::ExecutionFailed {
+                    message: format!("unsupported fan-out fixture task: {other}"),
+                },
+            ),
+        }
+    }
+}
+
+#[async_trait]
+impl pantograph_runtime_host_contracts::RuntimeHostExecutionPort for FanoutRuntimeHostPort {
+    async fn execute_runtime_host_request(
+        &self,
+        request: pantograph_runtime_host_contracts::RuntimeHostExecutionRequest,
+        _cancellation: pantograph_runtime_host_contracts::RuntimeHostExecutionCancellationHandle,
+    ) -> Result<
+        pantograph_runtime_host_contracts::RuntimeHostExecutionResponse,
+        pantograph_runtime_host_contracts::RuntimeHostExecutionPortError,
+    > {
+        self.requests
+            .lock()
+            .expect("fan-out runtime host request lock")
+            .push(request.clone());
+        let task_type = request.handoff.task_intent.task_type.as_str();
+        let source_text = request
+            .materialized_inputs
+            .first()
+            .and_then(|input| match &input.value {
+                RuntimeHostExecutionInputValue::String(value) => Some(value.clone()),
+                _ => None,
+            })
+            .ok_or_else(|| {
+                pantograph_runtime_host_contracts::RuntimeHostExecutionPortError::ExecutionFailed {
+                    message: "fan-out fixture requires a string runtime input".to_string(),
+                }
+            })?;
+        let output = Self::output_for(task_type, &source_text)?;
+        Ok(
+            pantograph_runtime_host_contracts::RuntimeHostExecutionResponse {
+                contract_version:
+                    pantograph_runtime_host_contracts::RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
+                execution_request_id: request.execution_request_id,
+                workflow_id: request.handoff.task_intent.workflow_id,
+                workflow_run_id: request.handoff.task_intent.workflow_run_id,
+                node_id: request.handoff.task_intent.node_id,
+                task_id: request.handoff.task_intent.task_id,
+                state: pantograph_runtime_host_contracts::RuntimeHostExecutionState::Completed,
+                outputs: vec![output],
+                diagnostics: Vec::new(),
+                terminal_metadata: None,
+            },
+        )
+    }
+}
+
+#[async_trait]
+impl pantograph_runtime_host_contracts::RuntimeHostBatchExecutionPort for FanoutRuntimeHostPort {
+    async fn execute_runtime_host_batch_request(
+        &self,
+        request: pantograph_runtime_host_contracts::RuntimeHostBatchExecutionRequest,
+        _cancellation: pantograph_runtime_host_contracts::RuntimeHostExecutionCancellationHandle,
+    ) -> Result<
+        pantograph_runtime_host_contracts::RuntimeHostBatchExecutionResponse,
+        pantograph_runtime_host_contracts::RuntimeHostExecutionPortError,
+    > {
+        self.batch_requests
+            .lock()
+            .expect("fan-out runtime host batch request lock")
+            .push(request.clone());
+        let members = request
+            .members
+            .into_iter()
+            .map(|member| {
+                let task_type = member.handoff.task_intent.task_type.as_str();
+                let source_text = member
+                    .materialized_inputs
+                    .first()
+                    .and_then(|input| match &input.value {
+                        RuntimeHostExecutionInputValue::String(value) => Some(value.as_str()),
+                        _ => None,
+                    })
+                    .ok_or_else(|| {
+                        pantograph_runtime_host_contracts::RuntimeHostExecutionPortError::ExecutionFailed {
+                            message: "fan-out fixture requires a string batch input".to_string(),
+                        }
+                    })?;
+                let output = Self::output_for(task_type, source_text)?;
+                Ok(
+                    pantograph_runtime_host_contracts::RuntimeHostBatchExecutionMemberResponse {
+                        execution_request_id: member.execution_request_id,
+                        assignment_id: member.assignment_id,
+                        workflow_id: member.handoff.workflow_id,
+                        workflow_run_id: member.handoff.workflow_run_id,
+                        node_id: member.handoff.node_id,
+                        task_id: member.handoff.task_id,
+                        state: pantograph_runtime_host_contracts::RuntimeHostBatchExecutionMemberState::Completed,
+                        retry_disposition: pantograph_runtime_host_contracts::RuntimeHostBatchMemberRetryDisposition::NotRetryable,
+                        reservation_disposition: pantograph_runtime_host_contracts::RuntimeHostBatchMemberReservationDisposition::Released,
+                        outputs: vec![output],
+                        diagnostics: Vec::new(),
+                        terminal_metadata: None,
+                    },
+                )
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let response = pantograph_runtime_host_contracts::RuntimeHostBatchExecutionResponse {
+            contract_version:
+                pantograph_runtime_host_contracts::RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
+            batch_execution_request_id: request.batch_execution_request_id,
+            state: pantograph_runtime_host_contracts::RuntimeHostBatchExecutionState::Completed,
+            members,
+            diagnostics: Vec::new(),
+        };
+        response
+            .validate()
+            .expect("fan-out batch fixture response should validate");
+        Ok(response)
+    }
 }
 
 const VALID_TEST_IMAGE_BASE64: &str =

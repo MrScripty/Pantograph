@@ -16,6 +16,8 @@ pub mod control;
 pub mod input;
 pub mod output;
 pub mod processing;
+#[cfg(feature = "model-library")]
+pub mod pumas_rpc;
 pub mod setup;
 pub mod storage;
 pub mod system;
@@ -27,6 +29,8 @@ pub use control::*;
 pub use input::*;
 pub use output::*;
 pub use processing::*;
+#[cfg(feature = "model-library")]
+pub use setup::setup_extensions_with_rpc_endpoint;
 pub use setup::{setup_extensions, setup_extensions_with_path};
 pub use storage::*;
 pub use system::*;

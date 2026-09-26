@@ -68,6 +68,13 @@ impl<'a> SelectedTextLoad<'a> {
                 ));
             }
         }
+        if model.selected_artifact_id.is_none()
+            || selected.selected_artifact_id.is_none()
+            || package.model_ref.selected_artifact_id.is_none()
+            || target.model_ref.selected_artifact_id.is_none()
+        {
+            return Err(invalid("producer-selected artifact identity is required"));
+        }
         if request.task_id != InferenceTaskId::TextGeneration
             || decision.selected_task_id != Some(InferenceTaskId::TextGeneration)
             || !matches!(
@@ -228,4 +235,41 @@ pub(crate) fn fixture() -> (
         extra_options: serde_json::Value::Null,
     };
     (directory, request, target, decision)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn rejects_execution_without_producer_selected_artifact_identity() {
+        let (_directory, request, mut target, mut decision) = fixture();
+        let mut request = request;
+        request
+            .model_ref
+            .as_mut()
+            .expect("fixture has request model identity")
+            .selected_artifact_id = None;
+        request
+            .resolved_model_package_facts
+            .as_mut()
+            .expect("fixture has package facts")
+            .model_ref
+            .selected_artifact_id = None;
+        target.model_ref.selected_artifact_id = None;
+        decision
+            .selected_model_ref
+            .as_mut()
+            .expect("fixture has scheduler model identity")
+            .selected_artifact_id = None;
+
+        let error = match SelectedTextLoad::validate(&request, &target, &decision).await {
+            Ok(_) => panic!("selected text must require producer artifact identity"),
+            Err(error) => error,
+        };
+
+        assert!(error
+            .to_string()
+            .contains("producer-selected artifact identity is required"));
+    }
 }

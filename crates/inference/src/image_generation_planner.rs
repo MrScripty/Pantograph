@@ -82,6 +82,52 @@ impl PlannedImageGenerationLaunchHandoff {
                     },
                 );
             }
+
+            let Some(scheduler_artifact_id) = non_blank_selected_artifact_id(selected_model_ref)
+            else {
+                return Err(
+                    PlannedImageGenerationLaunchHandoffError::MissingSelectedArtifactIdentity,
+                );
+            };
+            let Some(package_artifact_id) =
+                non_blank_selected_artifact_id(&package_facts.model_ref)
+            else {
+                return Err(
+                    PlannedImageGenerationLaunchHandoffError::MissingSelectedArtifactIdentity,
+                );
+            };
+            let Some(target_artifact_id) =
+                non_blank_selected_artifact_id(&artifact_load_target.model_ref)
+            else {
+                return Err(
+                    PlannedImageGenerationLaunchHandoffError::MissingSelectedArtifactIdentity,
+                );
+            };
+            if scheduler_artifact_id != package_artifact_id
+                || scheduler_artifact_id != target_artifact_id
+            {
+                return Err(
+                    PlannedImageGenerationLaunchHandoffError::SelectedArtifactIdentityMismatch {
+                        scheduler_artifact_id: scheduler_artifact_id.to_string(),
+                        package_artifact_id: package_artifact_id.to_string(),
+                        target_artifact_id: target_artifact_id.to_string(),
+                    },
+                );
+            }
+            let package_revision = package_facts.model_ref.revision.as_ref();
+            let target_revision = artifact_load_target.model_ref.revision.as_ref();
+            if conflicting_revisions(selected_model_ref.revision.as_ref(), package_revision)
+                || conflicting_revisions(selected_model_ref.revision.as_ref(), target_revision)
+                || conflicting_revisions(package_revision, target_revision)
+            {
+                return Err(
+                    PlannedImageGenerationLaunchHandoffError::SelectedRevisionMismatch {
+                        scheduler_revision: selected_model_ref.revision.clone(),
+                        package_revision: package_facts.model_ref.revision.clone(),
+                        target_revision: artifact_load_target.model_ref.revision.clone(),
+                    },
+                );
+            }
         }
 
         Ok(Self {
@@ -133,6 +179,26 @@ pub enum PlannedImageGenerationLaunchHandoffError {
     SelectedModelMismatch {
         selected_model_id: String,
         package_model_id: String,
+    },
+    #[error(
+        "planned image-generation launch handoff requires a producer-selected artifact identity"
+    )]
+    MissingSelectedArtifactIdentity,
+    #[error(
+        "planned image-generation launch handoff selected artifact identities do not match: scheduler='{scheduler_artifact_id}', package='{package_artifact_id}', target='{target_artifact_id}'"
+    )]
+    SelectedArtifactIdentityMismatch {
+        scheduler_artifact_id: String,
+        package_artifact_id: String,
+        target_artifact_id: String,
+    },
+    #[error(
+        "planned image-generation launch handoff selected revisions conflict: scheduler={scheduler_revision:?}, package={package_revision:?}, target={target_revision:?}"
+    )]
+    SelectedRevisionMismatch {
+        scheduler_revision: Option<String>,
+        package_revision: Option<String>,
+        target_revision: Option<String>,
     },
 }
 
@@ -386,6 +452,9 @@ pub enum ImageGenerationPlannerDiagnosticCode {
     MissingDependencyReadinessProof,
     DependencyReadinessUnavailable,
     InvalidArtifactLoadTarget,
+    MissingSelectedArtifactIdentity,
+    SelectedArtifactIdentityMismatch,
+    SelectedRevisionMismatch,
     AmbiguousComponentRole,
     SelectedTaskMismatch,
     InvalidArtifactEntryPath,
@@ -534,6 +603,8 @@ fn validate_artifact_load_target(
             "Pumas artifact load target model ref must match package facts model ref",
         ));
     }
+    validate_selected_artifact_identity(input, diagnostics);
+    validate_selected_revision_identity(input, diagnostics);
     if target.artifact_kind != ModelArtifactKind::DiffusersBundle {
         diagnostics.push(diagnostic(
             ImageGenerationPlannerDiagnosticCode::InvalidArtifactLoadTarget,
@@ -563,6 +634,76 @@ fn validate_artifact_load_target(
             "Pumas artifact load target must include a non-empty local load path",
         ));
     }
+}
+
+fn validate_selected_artifact_identity(
+    input: ImageGenerationPlanningInput<'_>,
+    diagnostics: &mut Vec<ImageGenerationPlannerDiagnostic>,
+) {
+    let Some(selected_model_ref) = input.backend_decision.selected_model_ref.as_ref() else {
+        return;
+    };
+    let scheduler_artifact_id = non_blank_selected_artifact_id(selected_model_ref);
+    let package_artifact_id = non_blank_selected_artifact_id(&input.package_facts.model_ref);
+    let target_artifact_id = non_blank_selected_artifact_id(&input.artifact_load_target.model_ref);
+    if scheduler_artifact_id.is_none()
+        || package_artifact_id.is_none()
+        || target_artifact_id.is_none()
+    {
+        diagnostics.push(diagnostic(
+            ImageGenerationPlannerDiagnosticCode::MissingSelectedArtifactIdentity,
+            "artifact_load_target.model_ref.selected_artifact_id",
+            "image-generation planning requires a producer-selected artifact identity in scheduler, package facts and load target",
+        ));
+        return;
+    }
+    if scheduler_artifact_id != package_artifact_id || scheduler_artifact_id != target_artifact_id {
+        diagnostics.push(diagnostic(
+            ImageGenerationPlannerDiagnosticCode::SelectedArtifactIdentityMismatch,
+            "artifact_load_target.model_ref.selected_artifact_id",
+            format!(
+                "scheduler, package facts and load target selected artifact identities must match (scheduler={scheduler_artifact_id:?}, package={package_artifact_id:?}, target={target_artifact_id:?})"
+            ),
+        ));
+    }
+}
+
+fn validate_selected_revision_identity(
+    input: ImageGenerationPlanningInput<'_>,
+    diagnostics: &mut Vec<ImageGenerationPlannerDiagnostic>,
+) {
+    let Some(selected_model_ref) = input.backend_decision.selected_model_ref.as_ref() else {
+        return;
+    };
+    let package_revision = input.package_facts.model_ref.revision.as_ref();
+    let target_revision = input.artifact_load_target.model_ref.revision.as_ref();
+    if conflicting_revisions(selected_model_ref.revision.as_ref(), package_revision)
+        || conflicting_revisions(selected_model_ref.revision.as_ref(), target_revision)
+        || conflicting_revisions(package_revision, target_revision)
+    {
+        diagnostics.push(diagnostic(
+            ImageGenerationPlannerDiagnosticCode::SelectedRevisionMismatch,
+            "artifact_load_target.model_ref.revision",
+            format!(
+                "scheduler, package facts and load target revisions must not conflict (scheduler={:?}, package={:?}, target={:?})",
+                selected_model_ref.revision,
+                input.package_facts.model_ref.revision,
+                input.artifact_load_target.model_ref.revision
+            ),
+        ));
+    }
+}
+
+fn conflicting_revisions(left: Option<&String>, right: Option<&String>) -> bool {
+    matches!((left, right), (Some(left), Some(right)) if left != right)
+}
+
+fn non_blank_selected_artifact_id(model_ref: &PumasModelRef) -> Option<&str> {
+    model_ref
+        .selected_artifact_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
 }
 
 fn validate_artifact_entry_path(

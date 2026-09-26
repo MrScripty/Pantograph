@@ -104,6 +104,9 @@ fn task_result_value_to_workflow_output(
         WorkflowSchedulerTaskResultValue::Bool(value) => Ok(Value::Bool(*value)),
         WorkflowSchedulerTaskResultValue::I64(value) => Ok(Value::Number((*value).into())),
         WorkflowSchedulerTaskResultValue::U64(value) => Ok(Value::Number((*value).into())),
+        WorkflowSchedulerTaskResultValue::EmbeddingVector(value) => Ok(Value::Array(
+            value.iter().cloned().map(Value::Number).collect(),
+        )),
         WorkflowSchedulerTaskResultValue::MediaArtifactRef(value) => media_artifact_ref_json(value),
         WorkflowSchedulerTaskResultValue::PumasModelRef(_) => Err("pumas_model_ref"),
         WorkflowSchedulerTaskResultValue::DiagnosticOnly => Err("diagnostic_only"),
@@ -228,6 +231,26 @@ mod tests {
         assert_eq!(outputs[0].node_id, "out");
         assert_eq!(outputs[0].port_id, "text");
         assert_eq!(outputs[0].value, json!("ready"));
+    }
+
+    #[test]
+    fn projects_completed_embedding_vector_to_numeric_json_array() {
+        let value = vec![
+            serde_json::Number::from_f64(0.25).expect("finite number"),
+            serde_json::Number::from(-1),
+            serde_json::Number::from(3_u64),
+        ];
+        let outputs = project_scheduler_task_results_to_outputs(
+            &task_graph(),
+            &[result(
+                WorkflowSchedulerTaskResultStatus::Completed,
+                WorkflowSchedulerTaskResultValue::EmbeddingVector(value),
+            )],
+            &[target()],
+        )
+        .expect("embedding output");
+
+        assert_eq!(outputs[0].value, json!([0.25, -1, 3]));
     }
 
     #[test]

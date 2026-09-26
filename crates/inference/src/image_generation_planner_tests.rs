@@ -14,7 +14,10 @@ fn package_fixture(name: &str) -> ResolvedModelPackageFacts {
         ),
         other => panic!("unknown package fixture: {other}"),
     };
-    serde_json::from_str(raw).expect("fixture should decode")
+    let mut facts: ResolvedModelPackageFacts =
+        serde_json::from_str(raw).expect("fixture should decode");
+    facts.model_ref.selected_artifact_id = Some("diffusers".to_string());
+    facts
 }
 
 fn image_request() -> ImageGenerationRequest {
@@ -71,7 +74,7 @@ fn backend_decision(backend_id: &str) -> BackendExecutionDecision {
         selected_model_ref: Some(PumasModelRef {
             model_id: "pumas://models/image/stable-diffusion/tiny-sd".to_string(),
             revision: None,
-            selected_artifact_id: None,
+            selected_artifact_id: Some("diffusers".to_string()),
             selected_artifact_path: None,
             migration_diagnostics: Vec::new(),
         }),
@@ -370,6 +373,73 @@ fn planner_rejects_scheduler_package_model_ref_mismatch() {
     assert!(diagnostics.iter().any(|diagnostic| {
         diagnostic.code == ImageGenerationPlannerDiagnosticCode::SelectedModelRefMismatch
             && diagnostic.field_path == "backend_decision.selected_model_ref"
+    }));
+}
+
+#[test]
+fn planner_rejects_missing_producer_selected_artifact_identity() {
+    let facts = package_fixture("diffusers_sd_text_to_image_package_facts.json");
+    let request = image_request();
+    let mut decision = backend_decision("pytorch");
+    decision
+        .selected_model_ref
+        .as_mut()
+        .expect("fixture has selected model ref")
+        .selected_artifact_id = None;
+
+    let outcome = plan_image_generation_execution(ImageGenerationPlanningInput {
+        request: &request,
+        package_facts: &facts,
+        artifact_load_target: &artifact_load_target(&facts),
+        backend_decision: &decision,
+    });
+
+    assert!(rejected_diagnostics(&outcome).iter().any(|diagnostic| {
+        diagnostic.code == ImageGenerationPlannerDiagnosticCode::MissingSelectedArtifactIdentity
+    }));
+}
+
+#[test]
+fn planner_rejects_mismatched_producer_selected_artifact_identity() {
+    let facts = package_fixture("diffusers_sd_text_to_image_package_facts.json");
+    let request = image_request();
+    let decision = backend_decision("pytorch");
+    let mut target = artifact_load_target(&facts);
+    target.model_ref.selected_artifact_id = Some("other-artifact".to_string());
+
+    let outcome = plan_image_generation_execution(ImageGenerationPlanningInput {
+        request: &request,
+        package_facts: &facts,
+        artifact_load_target: &target,
+        backend_decision: &decision,
+    });
+
+    assert!(rejected_diagnostics(&outcome).iter().any(|diagnostic| {
+        diagnostic.code == ImageGenerationPlannerDiagnosticCode::SelectedArtifactIdentityMismatch
+    }));
+}
+
+#[test]
+fn planner_rejects_conflicting_producer_revision_identity() {
+    let mut facts = package_fixture("diffusers_sd_text_to_image_package_facts.json");
+    facts.model_ref.revision = Some("producer-revision".to_string());
+    let request = image_request();
+    let mut decision = backend_decision("pytorch");
+    decision
+        .selected_model_ref
+        .as_mut()
+        .expect("fixture has selected model ref")
+        .revision = Some("scheduler-revision".to_string());
+
+    let outcome = plan_image_generation_execution(ImageGenerationPlanningInput {
+        request: &request,
+        package_facts: &facts,
+        artifact_load_target: &artifact_load_target(&facts),
+        backend_decision: &decision,
+    });
+
+    assert!(rejected_diagnostics(&outcome).iter().any(|diagnostic| {
+        diagnostic.code == ImageGenerationPlannerDiagnosticCode::SelectedRevisionMismatch
     }));
 }
 

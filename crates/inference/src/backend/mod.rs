@@ -20,6 +20,7 @@ pub mod pytorch;
 use std::path::Path;
 use std::pin::Pin;
 use std::sync::Arc;
+use std::time::Duration;
 
 use async_trait::async_trait;
 use futures_util::Stream;
@@ -1164,6 +1165,51 @@ pub trait InferenceBackend: Send + Sync {
         texts: Vec<String>,
         model: &str,
     ) -> Result<Vec<EmbeddingResult>, BackendError>;
+
+    /// Generate embeddings while observing the host-owned cancellation signal.
+    ///
+    /// The default adapter wraps legacy embedding implementations so a
+    /// cancellation request drops the in-flight operation and returns a typed
+    /// cancellation error. Backends may override this when they can propagate
+    /// cancellation into their native request more directly.
+    async fn embeddings_with_context(
+        &self,
+        texts: Vec<String>,
+        model: &str,
+        context: BackendExecutionContext,
+    ) -> Result<Vec<EmbeddingResult>, BackendError> {
+        if let Some(message) = context.cancellation_rejection_message("embedding") {
+            return Err(BackendError::Cancelled(message));
+        }
+
+        let mut operation = Box::pin(self.embeddings(texts, model));
+        let mut cancellation_poll = tokio::time::interval(Duration::from_millis(25));
+        loop {
+            tokio::select! {
+                result = &mut operation => {
+                    match result {
+                        Ok(result) => {
+                            if let Some(message) = context.cancellation_rejection_message("embedding") {
+                                return Err(BackendError::Cancelled(message));
+                            }
+                            return Ok(result);
+                        }
+                        Err(error) => {
+                            if let Some(message) = context.cancellation_rejection_message("embedding") {
+                                return Err(BackendError::Cancelled(message));
+                            }
+                            return Err(error);
+                        }
+                    }
+                }
+                _ = cancellation_poll.tick() => {
+                    if let Some(message) = context.cancellation_rejection_message("embedding") {
+                        return Err(BackendError::Cancelled(message));
+                    }
+                }
+            }
+        }
+    }
 
     /// Rank candidate documents against a query.
     async fn rerank(&self, request: RerankRequest) -> Result<RerankResponse, BackendError>;

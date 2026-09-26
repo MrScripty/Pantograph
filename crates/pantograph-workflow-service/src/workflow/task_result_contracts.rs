@@ -13,6 +13,7 @@ pub const WORKFLOW_SCHEDULER_TASK_RESULT_MAX_DIAGNOSTICS: usize = 64;
 
 const TASK_RESULT_ID_MAX_LEN: usize = 256;
 const TASK_RESULT_MESSAGE_MAX_LEN: usize = 2048;
+const TASK_RESULT_MAX_VECTOR_ELEMENTS: usize = 65_536;
 
 /// Typed task completion value for scheduler-owned workflow progress.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -107,6 +108,7 @@ pub enum WorkflowSchedulerTaskResultValue {
     Bool(bool),
     I64(i64),
     U64(u64),
+    EmbeddingVector(Vec<serde_json::Number>),
     MediaArtifactRef(WorkflowSchedulerTaskMediaArtifactRef),
     DiagnosticOnly,
 }
@@ -120,6 +122,19 @@ impl WorkflowSchedulerTaskResultValue {
                 }
             }),
             Self::String(value) => validate_message("string output", value),
+            Self::EmbeddingVector(value) => {
+                if value.is_empty() {
+                    return Err(WorkflowSchedulerTaskResultError::InvalidEmbeddingVector {
+                        reason: "embedding vector must not be empty",
+                    });
+                }
+                if value.len() > TASK_RESULT_MAX_VECTOR_ELEMENTS {
+                    return Err(WorkflowSchedulerTaskResultError::InvalidEmbeddingVector {
+                        reason: "embedding vector exceeds the maximum element count",
+                    });
+                }
+                Ok(())
+            }
             Self::MediaArtifactRef(media_ref) => media_ref.validate(),
             Self::Bool(_) | Self::I64(_) | Self::U64(_) | Self::DiagnosticOnly => Ok(()),
         }
@@ -220,6 +235,8 @@ pub enum WorkflowSchedulerTaskResultError {
     TooManyDiagnostics { actual: usize, max: usize },
     #[error("invalid pumas model ref: {message}")]
     InvalidPumasModelRef { message: String },
+    #[error("invalid embedding vector: {reason}")]
+    InvalidEmbeddingVector { reason: &'static str },
 }
 
 fn default_workflow_scheduler_task_result_schema_version() -> u16 {

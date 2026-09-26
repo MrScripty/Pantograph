@@ -60,6 +60,51 @@ fn materializes_path_free_runtime_host_inputs_from_completed_task_results() {
 }
 
 #[test]
+fn materializes_embedding_vector_as_typed_runtime_host_input() {
+    let task = runtime_task(vec![input_binding("embed", "embedding", "embedding")]);
+    let vector = vec![
+        serde_json::Number::from_f64(0.25).expect("finite number"),
+        serde_json::Number::from(-1),
+        serde_json::Number::from(3_u64),
+    ];
+    let results = vec![task_result(
+        "embed",
+        "embedding",
+        WorkflowSchedulerTaskResultValue::EmbeddingVector(vector.clone()),
+    )];
+
+    let inputs =
+        materialize_runtime_host_inputs(&task, &results).expect("embedding input materializes");
+
+    assert_eq!(inputs.len(), 1);
+    assert_eq!(inputs[0].port_id, "embedding");
+    assert_eq!(
+        inputs[0].value,
+        RuntimeHostExecutionInputValue::EmbeddingVector(vector)
+    );
+}
+
+#[test]
+fn forwards_generated_text_result_into_embedding_text_input() {
+    let task = runtime_task(vec![input_binding("text-infer", "text", "text")]);
+    let results = vec![task_result(
+        "text-infer",
+        "text",
+        WorkflowSchedulerTaskResultValue::String("generated prompt for embedding".to_owned()),
+    )];
+
+    let inputs = materialize_runtime_host_inputs(&task, &results)
+        .expect("generated text must materialize for embedding task");
+
+    assert_eq!(inputs.len(), 1);
+    assert_eq!(inputs[0].port_id, "text");
+    assert_eq!(
+        inputs[0].value,
+        RuntimeHostExecutionInputValue::String("generated prompt for embedding".to_owned())
+    );
+}
+
+#[test]
 fn skips_model_ref_binding_because_model_identity_lives_in_scheduler_handoff() {
     let task = runtime_task(vec![
         input_binding("model-selector", "pumas_model_ref", "pumas_model_ref"),

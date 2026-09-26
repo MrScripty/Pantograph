@@ -138,6 +138,7 @@ impl EmbeddedHostedWorkflowServiceCompositionOutput {
 pub enum EmbeddedHostedStartupPumasSelectorSource {
     Provided(Arc<PumasSelectorAccess>),
     SetupPath(Option<PathBuf>),
+    RpcEndpoint(String),
 }
 
 pub struct EmbeddedHostedStartupCompositionInput<C> {
@@ -313,20 +314,24 @@ impl EmbeddedWorkflowServiceComposition {
     where
         C: HostRuntimeRegistryController + Send + Sync + 'static,
     {
-        let pumas_api = match input.pumas_selector_access.as_ref() {
-            PumasSelectorAccess::Owner(api) => api.clone(),
+        match input.pumas_selector_access.as_ref() {
+            PumasSelectorAccess::Owner(_) | PumasSelectorAccess::Rpc(_) => {}
             PumasSelectorAccess::LocalClient(_) | PumasSelectorAccess::ReadOnly(_) => {
                 return Err(WorkflowServiceError::InvalidRequest(format!(
-                    "hosted resource-backed workflow-service construction requires Pumas owner selector access, got {} access",
+                    "hosted resource-backed workflow-service construction requires owner or RPC Pumas selector access, got {} access",
                     input.pumas_selector_access.role_name()
                 )));
             }
-        };
+        }
         let artifact_writer = input.workflow_service.artifact_writer()?;
         let runtime_host_execution_port =
             Arc::new(EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
-                Arc::new(RuntimeHostPumasLoadTargetResolver::new(pumas_api.clone())),
-                Arc::new(RuntimeHostPumasPackageFactsResolver::new(pumas_api)),
+                Arc::new(RuntimeHostPumasLoadTargetResolver::new(
+                    input.pumas_selector_access.clone(),
+                )),
+                Arc::new(RuntimeHostPumasPackageFactsResolver::new(
+                    input.pumas_selector_access.clone(),
+                )),
                 Arc::new(WorkflowServiceRuntimeHostMediaArtifactSink::new(
                     artifact_writer,
                 )),
@@ -372,17 +377,17 @@ impl EmbeddedWorkflowServiceComposition {
     where
         C: HostRuntimeRegistryController + Send + Sync + 'static,
     {
-        let pumas_api = match input.factory_input.pumas_selector_access.as_ref() {
-            PumasSelectorAccess::Owner(api) => api.clone(),
+        match input.factory_input.pumas_selector_access.as_ref() {
+            PumasSelectorAccess::Owner(_) | PumasSelectorAccess::Rpc(_) => {}
             PumasSelectorAccess::LocalClient(_) | PumasSelectorAccess::ReadOnly(_) => {
                 return Err(EmbeddedRuntimeError::Initialization {
                     message: format!(
-                        "hosted resource-backed workflow-service composition requires Pumas owner selector access, got {} access",
+                        "hosted resource-backed workflow-service composition requires owner or RPC Pumas selector access, got {} access",
                         input.factory_input.pumas_selector_access.role_name()
                     ),
                 });
             }
-        };
+        }
         let dependency_readiness_runtime_handle = input.dependency_readiness_runtime_handle;
         let dependency_readiness_producer_config = input.dependency_readiness_producer_config;
         let factory_input = input.factory_input;
@@ -395,8 +400,12 @@ impl EmbeddedWorkflowServiceComposition {
                 })?;
         let runtime_host_execution_port =
             Arc::new(EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
-                Arc::new(RuntimeHostPumasLoadTargetResolver::new(pumas_api.clone())),
-                Arc::new(RuntimeHostPumasPackageFactsResolver::new(pumas_api)),
+                Arc::new(RuntimeHostPumasLoadTargetResolver::new(
+                    factory_input.pumas_selector_access.clone(),
+                )),
+                Arc::new(RuntimeHostPumasPackageFactsResolver::new(
+                    factory_input.pumas_selector_access.clone(),
+                )),
                 Arc::new(WorkflowServiceRuntimeHostMediaArtifactSink::new(
                     artifact_writer,
                 )),
@@ -466,8 +475,7 @@ impl EmbeddedWorkflowServiceComposition {
             input.pumas_selector_source,
         )
         .await?;
-        Self::require_owner_pumas_selector_access(pumas_selector_access.as_ref())?;
-
+        Self::require_hosted_pumas_selector_access(pumas_selector_access.as_ref())?;
         let dependency_activity = Arc::new(DependencyActivityHub::default());
         {
             let kv_store = Arc::new(inference::kv_cache::KvCacheStore::new(
@@ -523,6 +531,12 @@ impl EmbeddedWorkflowServiceComposition {
                 EmbeddedHostedStartupPumasSelectorSource::SetupPath(path) => {
                     workflow_nodes::setup_extensions_with_path(&mut guard, path.as_deref()).await;
                 }
+                EmbeddedHostedStartupPumasSelectorSource::RpcEndpoint(endpoint) => {
+                    workflow_nodes::setup_extensions_with_rpc_endpoint(&mut guard, &endpoint)
+                        .map_err(|error| EmbeddedRuntimeError::Initialization {
+                            message: error.to_string(),
+                        })?;
+                }
             }
         }
 
@@ -540,15 +554,15 @@ impl EmbeddedWorkflowServiceComposition {
         }
     }
 
-    fn require_owner_pumas_selector_access(
+    fn require_hosted_pumas_selector_access(
         selector_access: &PumasSelectorAccess,
     ) -> Result<(), EmbeddedRuntimeError> {
         match selector_access {
-            PumasSelectorAccess::Owner(_) => Ok(()),
+            PumasSelectorAccess::Owner(_) | PumasSelectorAccess::Rpc(_) => Ok(()),
             PumasSelectorAccess::LocalClient(_) | PumasSelectorAccess::ReadOnly(_) => {
                 Err(EmbeddedRuntimeError::Initialization {
                     message: format!(
-                        "hosted startup composition requires Pumas owner selector access, got {} access",
+                        "hosted startup composition requires owner or RPC Pumas selector access, got {} access",
                         selector_access.role_name()
                     ),
                 })
@@ -1112,7 +1126,7 @@ mod tests {
         assert!(matches!(error, WorkflowServiceError::InvalidRequest(_)));
         assert!(error
             .to_string()
-            .contains("requires Pumas owner selector access"));
+            .contains("requires owner or RPC Pumas selector access"));
     }
 
     #[tokio::test]
@@ -1349,7 +1363,7 @@ mod tests {
         assert!(matches!(error, EmbeddedRuntimeError::Initialization { .. }));
         assert!(error
             .to_string()
-            .contains("requires Pumas owner selector access"));
+            .contains("requires owner or RPC Pumas selector access"));
     }
 
     #[tokio::test]

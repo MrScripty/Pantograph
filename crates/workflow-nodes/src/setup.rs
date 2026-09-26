@@ -8,6 +8,10 @@
 use node_engine::ExecutorExtensions;
 
 #[cfg(feature = "model-library")]
+use crate::pumas_rpc::{PumasRpcClient, PumasRpcError, PumasRpcOperation};
+#[cfg(feature = "model-library")]
+use serde::de::DeserializeOwned;
+#[cfg(feature = "model-library")]
 use std::path::{Path, PathBuf};
 #[cfg(feature = "model-library")]
 use std::sync::Arc;
@@ -21,6 +25,7 @@ pub enum PumasSelectorAccess {
     Owner(Arc<pumas_library::PumasApi>),
     LocalClient(Arc<pumas_library::PumasLocalClient>),
     ReadOnly(Arc<pumas_library::PumasReadOnlyLibrary>),
+    Rpc(Arc<PumasRpcClient>),
 }
 
 #[cfg(feature = "model-library")]
@@ -38,6 +43,7 @@ impl PumasSelectorAccess {
             Self::Owner(_) => "owner",
             Self::LocalClient(_) => "local-client",
             Self::ReadOnly(_) => "read-only",
+            Self::Rpc(_) => "rpc",
         }
     }
 
@@ -49,6 +55,7 @@ impl PumasSelectorAccess {
             Self::Owner(api) => api.model_library_selector_snapshot(request).await,
             Self::LocalClient(client) => client.model_library_selector_snapshot(request).await,
             Self::ReadOnly(library) => library.model_library_selector_snapshot(request),
+            Self::Rpc(client) => rpc_selector_snapshot(client, request).await,
         }
     }
 
@@ -79,6 +86,15 @@ impl PumasSelectorAccess {
                 message: "read-only Pumas selector access does not provide update feeds"
                     .to_string(),
             }),
+            Self::Rpc(client) => decode_rpc_value(
+                client
+                    .call(PumasRpcOperation::ListModelLibraryUpdatesSince {
+                        cursor: cursor.map(str::to_string),
+                        limit,
+                    })
+                    .await
+                    .map_err(map_rpc_error)?,
+            ),
         }
     }
 
@@ -123,6 +139,36 @@ impl PumasSelectorAccess {
                 descriptor: None,
                 package_summary_result: None,
             }),
+            Self::Rpc(client) => Ok(PumasSelectedModelDetail {
+                selector_row,
+                descriptor: rpc_optional_model::<pumas_library::models::ModelExecutionDescriptor>(
+                    client,
+                    PumasRpcOperation::ResolveModelExecutionDescriptor {
+                        model_id: model_id.to_string(),
+                    },
+                )
+                .await?,
+                package_summary_result: rpc_optional_model::<
+                    pumas_library::models::ModelPackageFactsSummaryResult,
+                >(
+                    client,
+                    PumasRpcOperation::ResolveModelPackageFactsSummary {
+                        model_id: model_id.to_string(),
+                    },
+                )
+                .await?,
+            }),
+        }
+    }
+
+    pub async fn model_record(
+        &self,
+        model_id: &str,
+    ) -> pumas_library::Result<Option<pumas_library::ModelRecord>> {
+        match self {
+            Self::Owner(api) => api.get_model(model_id).await,
+            Self::LocalClient(_) | Self::ReadOnly(_) => Ok(None),
+            Self::Rpc(client) => rpc_model_record(client, model_id).await,
         }
     }
 
@@ -148,6 +194,12 @@ impl PumasSelectorAccess {
                     .await?;
                 Ok(package_facts_summary_snapshot_from_selector(snapshot))
             }
+            Self::Rpc(client) => decode_rpc_value(
+                client
+                    .call(PumasRpcOperation::ModelPackageFactsSummarySnapshot { limit, offset })
+                    .await
+                    .map_err(map_rpc_error)?,
+            ),
         }
     }
 
@@ -185,6 +237,14 @@ impl PumasSelectorAccess {
                         resource: format!("model package facts summary '{model_id}'"),
                     })
             }
+            Self::Rpc(client) => decode_rpc_value(
+                client
+                    .call(PumasRpcOperation::ResolveModelPackageFactsSummary {
+                        model_id: model_id.to_string(),
+                    })
+                    .await
+                    .map_err(map_rpc_error)?,
+            ),
         }
     }
 
@@ -203,6 +263,14 @@ impl PumasSelectorAccess {
                 message: "read-only Pumas selector access does not provide full package facts"
                     .to_string(),
             }),
+            Self::Rpc(client) => decode_rpc_value(
+                client
+                    .call(PumasRpcOperation::ResolveModelPackageFacts {
+                        model_id: model_id.to_string(),
+                    })
+                    .await
+                    .map_err(map_rpc_error)?,
+            ),
         }
     }
 
@@ -214,7 +282,181 @@ impl PumasSelectorAccess {
             Self::Owner(api) => api.resolve_model_artifact_load_target(request).await,
             Self::LocalClient(client) => client.resolve_model_artifact_load_target(request).await,
             Self::ReadOnly(library) => library.resolve_model_artifact_load_target(request),
+            Self::Rpc(client) => decode_rpc_value(
+                client
+                    .call(PumasRpcOperation::ResolveModelArtifactLoadTarget { request })
+                    .await
+                    .map_err(map_rpc_error)?,
+            ),
         }
+    }
+}
+
+#[cfg(feature = "model-library")]
+async fn rpc_selector_snapshot(
+    client: &PumasRpcClient,
+    request: pumas_library::models::ModelLibrarySelectorSnapshotRequest,
+) -> pumas_library::Result<pumas_library::models::ModelLibrarySelectorSnapshot> {
+    let value = client
+        .call(PumasRpcOperation::GetModels)
+        .await
+        .map_err(map_rpc_error)?;
+    let records = rpc_model_records(value)?;
+    let search = request.search.as_deref().map(str::to_ascii_lowercase);
+    let model_type = request.model_type.as_deref();
+    let offset = request.offset.unwrap_or(0) as usize;
+    let limit = request.limit.unwrap_or(100) as usize;
+    let mut rows = records
+        .into_iter()
+        .filter_map(|(key, record)| {
+            if search.as_ref().is_some_and(|search| {
+                !key.to_ascii_lowercase().contains(search)
+                    && !record.official_name.to_ascii_lowercase().contains(search)
+            }) {
+                return None;
+            }
+            if model_type.is_some_and(|expected| record.model_type != expected) {
+                return None;
+            }
+            let model_id = if record.id.is_empty() { key } else { record.id };
+            Some(pumas_library::models::ModelLibrarySelectorSnapshotRow {
+                model_ref: pumas_library::models::PumasModelRef {
+                    model_id: model_id.clone(),
+                    ..Default::default()
+                },
+                model_id,
+                repo_id: None,
+                selected_artifact_id: None,
+                selected_artifact_path: None,
+                entry_path: None,
+                entry_path_state: pumas_library::models::ModelEntryPathState::NeedsDetail,
+                artifact_state: pumas_library::models::ModelArtifactState::NeedsDetail,
+                display_name: record.official_name,
+                model_type: Some(record.model_type),
+                tags: record.tags,
+                indexed_path: None,
+                task_type_primary: None,
+                pipeline_tag: None,
+                recommended_backend: None,
+                runtime_engine_hints: Vec::new(),
+                storage_kind: None,
+                validation_state: None,
+                package_facts_summary_status:
+                    pumas_library::models::ModelPackageFactsSummaryStatus::Missing,
+                package_facts_summary: None,
+                detail_state:
+                    pumas_library::models::ModelLibrarySelectorDetailState::NeedsPackageFacts,
+                updated_at: Some(record.updated_at),
+            })
+        })
+        .collect::<Vec<_>>();
+    let total_count = rows.len() as u64;
+    rows = rows.into_iter().skip(offset).take(limit).collect();
+    Ok(pumas_library::models::ModelLibrarySelectorSnapshot {
+        selector_snapshot_contract_version:
+            pumas_library::models::MODEL_LIBRARY_SELECTOR_SNAPSHOT_CONTRACT_VERSION,
+        cursor: format!("rpc:get_models:{}", client.endpoint()),
+        rows,
+        total_count: Some(total_count),
+    })
+}
+
+#[cfg(feature = "model-library")]
+async fn rpc_model_record(
+    client: &PumasRpcClient,
+    model_id: &str,
+) -> pumas_library::Result<Option<pumas_library::ModelRecord>> {
+    let value = client
+        .call(PumasRpcOperation::GetModels)
+        .await
+        .map_err(map_rpc_error)?;
+    Ok(rpc_model_records(value)?
+        .into_iter()
+        .find(|(key, record)| key == model_id || record.id == model_id)
+        .map(|(_, mut record)| {
+            record.path.clear();
+            redact_path_fields(&mut record.metadata);
+            record
+        }))
+}
+
+#[cfg(feature = "model-library")]
+fn rpc_model_records(
+    value: serde_json::Value,
+) -> pumas_library::Result<std::collections::BTreeMap<String, pumas_library::ModelRecord>> {
+    let models = value.get("models").cloned().unwrap_or(value);
+    decode_rpc_value(models)
+}
+
+#[cfg(feature = "model-library")]
+fn redact_path_fields(value: &mut serde_json::Value) {
+    match value {
+        serde_json::Value::Object(map) => {
+            let path_keys = map
+                .keys()
+                .filter(|key| key.to_ascii_lowercase().contains("path"))
+                .cloned()
+                .collect::<Vec<_>>();
+            for key in path_keys {
+                map.remove(&key);
+            }
+            for child in map.values_mut() {
+                redact_path_fields(child);
+            }
+        }
+        serde_json::Value::Array(items) => {
+            for item in items {
+                redact_path_fields(item);
+            }
+        }
+        _ => {}
+    }
+}
+
+#[cfg(feature = "model-library")]
+async fn rpc_optional_model<T: DeserializeOwned>(
+    client: &PumasRpcClient,
+    operation: PumasRpcOperation,
+) -> pumas_library::Result<Option<T>> {
+    match client.call(operation).await {
+        Ok(value) => decode_rpc_value(value).map(Some),
+        Err(PumasRpcError::Remote { code: -32002, .. }) => Ok(None),
+        Err(error) => Err(map_rpc_error(error)),
+    }
+}
+
+#[cfg(feature = "model-library")]
+fn decode_rpc_value<T: DeserializeOwned>(value: serde_json::Value) -> pumas_library::Result<T> {
+    serde_json::from_value(value).map_err(|error| pumas_library::PumasError::Json {
+        message: error.to_string(),
+        source: Some(error),
+    })
+}
+
+#[cfg(feature = "model-library")]
+fn map_rpc_error(error: PumasRpcError) -> pumas_library::PumasError {
+    match error {
+        PumasRpcError::Remote {
+            code: -32002,
+            message,
+            ..
+        } => pumas_library::PumasError::ModelNotFound { model_id: message },
+        PumasRpcError::Remote {
+            code: -32601,
+            message,
+            ..
+        }
+        | PumasRpcError::Remote {
+            code: -32602,
+            message,
+            ..
+        } => pumas_library::PumasError::InvalidParams { message },
+        PumasRpcError::Timeout { timeout, .. } => pumas_library::PumasError::Timeout(timeout),
+        PumasRpcError::Transport { message, .. } => pumas_library::PumasError::Network {
+            message,
+            cause: None,
+        },
+        other => pumas_library::PumasError::Other(other.to_string()),
     }
 }
 
@@ -292,6 +534,23 @@ fn package_facts_summary_result_from_selector_row(
 #[cfg(feature = "model-library")]
 pub async fn setup_extensions(extensions: &mut ExecutorExtensions) {
     setup_extensions_with_path(extensions, None).await;
+}
+
+/// Configure an explicit, library-only Pumas HTTP RPC endpoint.
+///
+/// This path intentionally does not inspect launcher roots, open a Pumas
+/// database, discover local instances, or fall back to the global registry.
+#[cfg(feature = "model-library")]
+pub fn setup_extensions_with_rpc_endpoint(
+    extensions: &mut ExecutorExtensions,
+    endpoint: &str,
+) -> Result<(), PumasRpcError> {
+    let client = Arc::new(PumasRpcClient::new(endpoint)?);
+    extensions.set(
+        PUMAS_SELECTOR_ACCESS,
+        Arc::new(PumasSelectorAccess::Rpc(client)),
+    );
+    Ok(())
 }
 
 /// Initialize extensions with an explicit library path fallback.
@@ -523,6 +782,9 @@ mod tests {
     use pumas_library::model_library::ModelLibrary;
     use pumas_library::registry::{InstanceEntry, InstanceStatus, LocalInstanceTransportKind};
     use pumas_library::ModelIndex;
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+    use std::thread;
     use tempfile::TempDir;
 
     struct UpdateStreamDispatch {
@@ -678,6 +940,24 @@ mod tests {
         }
     }
 
+    fn rpc_test_server(response: &'static str) -> String {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind RPC test server");
+        let address = listener.local_addr().expect("RPC test server address");
+        thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept RPC test request");
+            let mut request = [0_u8; 4096];
+            let _ = stream.read(&mut request);
+            write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                response.len(),
+                response
+            )
+            .expect("write RPC test response");
+        });
+        format!("http://{address}/rpc")
+    }
+
     #[test]
     fn read_only_root_resolves_from_direct_models_root() {
         let temp = TempDir::new().unwrap();
@@ -752,6 +1032,58 @@ mod tests {
                 .get::<Arc<pumas_library::PumasApi>>(extension_keys::PUMAS_API)
                 .is_none(),
             "read-only selector setup must not claim owner API access"
+        );
+    }
+
+    #[tokio::test]
+    async fn rpc_selector_access_projects_get_models_without_local_paths() {
+        let endpoint = rpc_test_server(
+            r#"{"jsonrpc":"2.0","result":{"llm/test":{"id":"llm/test","path":"/private/pumas/model","cleanedName":"tiny","officialName":"Tiny Test","modelType":"llm","tags":["text"],"hashes":{},"metadata":{},"updatedAt":"2026-09-25T00:00:00Z"}},"id":1}"#,
+        );
+        let access = PumasSelectorAccess::Rpc(Arc::new(
+            PumasRpcClient::new(&endpoint).expect("RPC client"),
+        ));
+
+        let snapshot = access
+            .model_library_selector_snapshot(
+                pumas_library::models::ModelLibrarySelectorSnapshotRequest {
+                    search: Some("tiny".to_string()),
+                    limit: Some(10),
+                    ..Default::default()
+                },
+            )
+            .await
+            .expect("RPC selector snapshot");
+
+        assert_eq!(access.role_name(), "rpc");
+        assert_eq!(snapshot.rows.len(), 1);
+        let row = &snapshot.rows[0];
+        assert_eq!(row.model_id, "llm/test");
+        assert_eq!(row.display_name, "Tiny Test");
+        assert!(row.entry_path.is_none());
+        assert!(row.selected_artifact_id.is_none());
+        assert_eq!(
+            row.detail_state,
+            pumas_library::models::ModelLibrarySelectorDetailState::NeedsPackageFacts
+        );
+    }
+
+    #[test]
+    fn rpc_model_record_metadata_redacts_path_fields() {
+        let mut value = serde_json::json!({
+            "entry_path": "/private/pumas/model",
+            "nested": {"localPath": "/private/pumas/weights", "size": 1},
+            "task": "text_generation"
+        });
+
+        redact_path_fields(&mut value);
+
+        assert_eq!(
+            value,
+            serde_json::json!({
+                "nested": {"size": 1},
+                "task": "text_generation"
+            })
         );
     }
 

@@ -10,7 +10,7 @@ use pumas_library::models::{
 
 use super::{
     build_runtime_host_artifact_load_target_request, ready_runtime_host_artifact_load_target,
-    RuntimeHostPumasLoadTargetError,
+    validate_runtime_host_producer_target_identity, RuntimeHostPumasLoadTargetError,
 };
 
 #[test]
@@ -19,10 +19,7 @@ fn load_target_request_uses_scheduler_selected_model_ref() {
     let pumas_request = build_runtime_host_artifact_load_target_request(&request)
         .expect("request builder must accept validated scheduler handoff");
 
-    assert_eq!(
-        pumas_request.model_ref.model_id,
-        "pumas://models/juggernaut-xl-v10"
-    );
+    assert_eq!(pumas_request.model_ref.model_id, "juggernaut-xl-v10");
     assert_eq!(
         pumas_request.model_ref.selected_artifact_id.as_deref(),
         Some("diffusers-bundle")
@@ -96,6 +93,72 @@ fn unavailable_load_target_response_returns_typed_error() {
             ..
         } if artifact_state == "Missing" && entry_path_state == "Missing"
     ));
+}
+
+#[test]
+fn producer_target_model_mismatch_fails_before_identity_normalization() {
+    let request = validated_runtime_host_request();
+    let selected_model_ref = request
+        .as_ref()
+        .handoff
+        .dispatch_decision
+        .as_ref()
+        .expect("fixture has dispatch decision")
+        .selected_model_ref
+        .clone();
+    let mut target = ready_target();
+    target.model_ref.model_id = "pumas://models/other-model".to_string();
+
+    let error = validate_runtime_host_producer_target_identity(&selected_model_ref, &target)
+        .expect_err("producer model mismatch must fail before normalization");
+
+    assert!(matches!(
+        error,
+        RuntimeHostPumasLoadTargetError::ProducerModelMismatch { .. }
+    ));
+}
+
+#[test]
+fn producer_target_revision_mismatch_fails_before_identity_normalization() {
+    let request = validated_runtime_host_request();
+    let mut selected_model_ref = request
+        .as_ref()
+        .handoff
+        .dispatch_decision
+        .as_ref()
+        .expect("fixture has dispatch decision")
+        .selected_model_ref
+        .clone();
+    selected_model_ref.revision = Some("selected-revision".to_string());
+    let mut target = ready_target();
+    target.model_ref.revision = Some("producer-revision".to_string());
+
+    let error = validate_runtime_host_producer_target_identity(&selected_model_ref, &target)
+        .expect_err("producer revision mismatch must fail before normalization");
+
+    assert!(matches!(
+        error,
+        RuntimeHostPumasLoadTargetError::ProducerRevisionMismatch { .. }
+    ));
+}
+
+fn ready_target() -> PumasArtifactLoadTarget {
+    PumasArtifactLoadTarget {
+        model_ref: pumas_library::models::PumasModelRef {
+            model_id: "pumas://models/juggernaut-xl-v10".to_string(),
+            selected_artifact_id: Some("diffusers-bundle".to_string()),
+            selected_artifact_path: Some("juggernaut-xl-v10/diffusers".to_string()),
+            ..Default::default()
+        },
+        artifact_kind: PackageArtifactKind::DiffusersBundle,
+        local_load_path: "/host-only/pumas/juggernaut-xl-v10".to_string(),
+        load_path_kind: PumasArtifactLoadPathKind::Directory,
+        library_root_id: Some("default".to_string()),
+        storage_kind: StorageKind::LibraryOwned,
+        validation_state: AssetValidationState::Valid,
+        content_fingerprint: Some("sha256:abc".to_string()),
+        package_facts_contract_version: Some(PACKAGE_FACTS_CONTRACT_VERSION),
+    }
 }
 
 fn validated_runtime_host_request() -> ValidatedRuntimeHostExecutionRequest {

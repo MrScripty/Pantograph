@@ -1418,6 +1418,110 @@ impl InferenceGateway {
         result
     }
 
+    /// Execute embeddings against the scheduler-selected GGUF target.
+    ///
+    /// This is the embedding counterpart to selected text execution: the
+    /// scheduler/Pumas handoff is validated first, then the existing
+    /// Pantograph llama.cpp backend is started in embedding mode and called
+    /// through the gateway-owned embedding API.
+    pub async fn execute_selected_embedding_with_cancellation(
+        &self,
+        request: InferenceExecutionRequest,
+        artifact_load_target: crate::PumasArtifactLoadTarget,
+        backend_decision: crate::BackendExecutionDecision,
+        cancellation: InferenceExecutionCancellationHandle,
+    ) -> Result<InferenceExecutionResult, GatewayError> {
+        let selected = crate::selected_embedding_execution::SelectedEmbeddingLoad::validate(
+            &request,
+            &artifact_load_target,
+            &backend_decision,
+        )
+        .await?;
+        reject_cancelled_execution_handle("selected embedding", &cancellation)?;
+
+        let model = typed_request_model_name(&request);
+        let option_diagnostics = typed_request_option_diagnostics(&request, Some("llama_cpp"));
+        let texts = match &request.input {
+            InferenceExecutionInput::Embedding { texts } => texts.clone(),
+            _ => {
+                return Err(GatewayError::Validation(
+                    InferenceExecutionRequestValidationError::TaskInputMismatch {
+                        task_id: request.task_id,
+                        input_type: "embedding",
+                    },
+                ));
+            }
+        };
+
+        if canonical_backend_key(&self.current_backend_name().await) != "llama_cpp" {
+            self.switch_backend("llama.cpp").await?;
+        }
+
+        let config = BackendConfig {
+            model_path: Some(PathBuf::from(&selected.target.local_load_path)),
+            model_name: Some(selected.target.model_ref.model_id.clone()),
+            device: Some(BackendStartupDeviceIntent::CanonicalDevice(
+                selected.device.clone(),
+            )),
+            embedding_mode: true,
+            ..BackendConfig::default()
+        };
+        self.start(&config).await?;
+        if let Err(error) = reject_cancelled_execution_handle("selected embedding", &cancellation) {
+            self.stop().await?;
+            return Err(error);
+        }
+
+        let embedding_context = BackendExecutionContext::with_cancellation(
+            InferenceExecutionTelemetryScope::new().recorder(),
+            cancellation.clone(),
+        );
+        let embeddings = {
+            let backend = self.backend.read().await;
+            if !backend.is_ready() {
+                drop(backend);
+                self.stop().await?;
+                return Err(GatewayError::Backend(BackendError::NotReady));
+            }
+            match backend
+                .embeddings_with_context(texts, &model, embedding_context)
+                .await
+            {
+                Ok(embeddings) => embeddings,
+                Err(error) => {
+                    drop(backend);
+                    self.stop().await?;
+                    return Err(error.into());
+                }
+            }
+        };
+        if let Err(error) = reject_cancelled_execution_handle("selected embedding", &cancellation) {
+            self.stop().await?;
+            return Err(error);
+        }
+        let embeddings: Vec<InferenceEmbeddingResult> = embeddings
+            .into_iter()
+            .enumerate()
+            .map(|(index, embedding)| InferenceEmbeddingResult {
+                vector: embedding.vector,
+                token_count: Some(embedding.token_count),
+                index: Some(index),
+            })
+            .collect();
+        let usage = match embedding_usage_from_results(&embeddings) {
+            Ok(usage) => usage,
+            Err(error) => {
+                self.stop().await?;
+                return Err(error.into());
+            }
+        };
+        Ok(InferenceExecutionResult::Embedding {
+            embeddings,
+            usage,
+            option_diagnostics,
+        })
+    }
+
     /// Rank documents through the active backend.
     pub async fn rerank(&self, request: RerankRequest) -> Result<RerankResponse, GatewayError> {
         let guard = self.backend.read().await;

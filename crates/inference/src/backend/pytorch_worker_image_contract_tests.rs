@@ -231,10 +231,11 @@ fn test_pytorch_worker_generate_image_request_rejects_unknown_fields() {
 
 #[test]
 fn test_pytorch_worker_generate_image_request_maps_from_validated_plan() {
-    let facts: ResolvedModelPackageFacts = serde_json::from_str(include_str!(
+    let mut facts: ResolvedModelPackageFacts = serde_json::from_str(include_str!(
         "../../tests/fixtures/inference_package_facts/diffusers_sd_text_to_image_package_facts.json"
     ))
     .expect("decode image package facts");
+    facts.model_ref.selected_artifact_id = Some("diffusers".to_string());
     let request = ImageGenerationRequest {
         model: "image/stable-diffusion/tiny-sd".to_string(),
         prompt: "a compact test image".to_string(),
@@ -482,7 +483,7 @@ fn backend_decision() -> BackendExecutionDecision {
         selected_model_ref: Some(PumasModelRef {
             model_id: "pumas://models/image/stable-diffusion/tiny-sd".to_string(),
             revision: None,
-            selected_artifact_id: None,
+            selected_artifact_id: Some("diffusers".to_string()),
             selected_artifact_path: None,
             migration_diagnostics: Vec::new(),
         }),

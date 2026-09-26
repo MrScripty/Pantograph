@@ -12845,6 +12845,7 @@ name = "workflow-nodes"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "futures-util",
  "graph-flow",
  "inference",
  "inventory",
@@ -12852,6 +12853,7 @@ dependencies = [
  "node-engine",
  "pantograph-node-contracts",
  "pumas-library",
+ "reqwest",
  "serde",
  "serde_json",
  "tempfile",

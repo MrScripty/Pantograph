@@ -1,8 +1,9 @@
 use inference::{
     BackendExecutionDecision, BackendId, DeviceResolutionDecision, InferenceDeviceClass,
     InferenceDeviceId, InferenceDevicePolicy, InferenceExecutionInput, InferenceExecutionRequest,
-    InferenceExecutionResult, InferenceTaskId, ModelRefMigrationDiagnostic,
-    PumasArtifactLoadTarget, PumasModelRef, ResolvedModelPackageFacts, RuntimeVariantId,
+    InferenceExecutionResult, InferenceTaskId, LengthGenerationOptions,
+    ModelRefMigrationDiagnostic, PumasArtifactLoadTarget, PumasModelRef, ResolvedModelPackageFacts,
+    RuntimeVariantId,
 };
 use pantograph_runtime_host_contracts::{
     RuntimeHostExecutionInputValue, RuntimeHostExecutionRequest,
@@ -14,6 +15,7 @@ use thiserror::Error;
 pub(crate) const TEXT_GENERATION_TASK: &str = "text_generation";
 pub(crate) const PROMPT_PORT: &str = "prompt";
 pub(crate) const MAX_TEXT_BYTES: usize = 1024;
+const DEFAULT_MAX_NEW_TOKENS: u32 = 8;
 
 /// Owned inputs for the canonical selected-text inference call.
 #[derive(Debug)]
@@ -95,7 +97,13 @@ pub(crate) fn project_runtime_host_text_generation(
             messages: Vec::new(),
             stream: false,
         },
-        generation_options: None,
+        generation_options: Some(inference::GenerationOptions {
+            length: LengthGenerationOptions {
+                max_new_tokens: Some(DEFAULT_MAX_NEW_TOKENS),
+                ..Default::default()
+            },
+            ..Default::default()
+        }),
         extra_options: serde_json::Value::Null,
     };
 

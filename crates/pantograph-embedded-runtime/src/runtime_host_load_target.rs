@@ -9,12 +9,15 @@ use pumas_library::models::{
 };
 use pumas_library::PumasError;
 use thiserror::Error;
+use workflow_nodes::setup::PumasSelectorAccess;
+
+use crate::runtime_host_package_facts::pumas_library_model_id;
 
 const PANTOGRAPH_RUNTIME_HOST_CONSUMER: &str = "pantograph-embedded-runtime";
 const MAX_DIAGNOSTICS: usize = 4;
 
 pub(crate) struct RuntimeHostPumasLoadTargetResolver {
-    pumas_api: Arc<pumas_library::PumasApi>,
+    selector_access: Arc<PumasSelectorAccess>,
 }
 
 #[async_trait]
@@ -26,8 +29,8 @@ pub(crate) trait RuntimeHostLoadTargetResolver: Send + Sync {
 }
 
 impl RuntimeHostPumasLoadTargetResolver {
-    pub(crate) fn new(pumas_api: Arc<pumas_library::PumasApi>) -> Self {
-        Self { pumas_api }
+    pub(crate) fn new(selector_access: Arc<PumasSelectorAccess>) -> Self {
+        Self { selector_access }
     }
 }
 
@@ -39,11 +42,71 @@ impl RuntimeHostLoadTargetResolver for RuntimeHostPumasLoadTargetResolver {
     ) -> Result<PumasArtifactLoadTarget, RuntimeHostPumasLoadTargetError> {
         let pumas_request = build_runtime_host_artifact_load_target_request(request)?;
         let response = self
-            .pumas_api
+            .selector_access
             .resolve_model_artifact_load_target(pumas_request)
             .await?;
-        ready_runtime_host_artifact_load_target(response)
+        let selected_model_ref = request
+            .as_ref()
+            .handoff
+            .dispatch_decision
+            .as_ref()
+            .ok_or(RuntimeHostPumasLoadTargetError::MissingDispatchDecision)?
+            .selected_model_ref
+            .clone();
+        let mut target = ready_runtime_host_artifact_load_target(response)?;
+        validate_runtime_host_producer_target_identity(&selected_model_ref, &target)?;
+        let selected_artifact_id = selected_model_ref
+            .selected_artifact_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .ok_or(RuntimeHostPumasLoadTargetError::MissingSelectedArtifactIdentity)?;
+        let target_artifact_id = target
+            .model_ref
+            .selected_artifact_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .ok_or(RuntimeHostPumasLoadTargetError::MissingSelectedArtifactIdentity)?;
+        if selected_artifact_id != target_artifact_id {
+            return Err(
+                RuntimeHostPumasLoadTargetError::SelectedArtifactIdentityMismatch {
+                    selected_artifact_id: selected_artifact_id.to_string(),
+                    target_artifact_id: target_artifact_id.to_string(),
+                },
+            );
+        }
+        target.model_ref.model_id = selected_model_ref.model_id;
+        target.model_ref.revision = selected_model_ref.revision;
+        Ok(target)
     }
+}
+
+fn validate_runtime_host_producer_target_identity(
+    selected_model_ref: &pantograph_dependency_planning::PumasModelRef,
+    target: &PumasArtifactLoadTarget,
+) -> Result<(), RuntimeHostPumasLoadTargetError> {
+    let selected_model_id = pumas_library_model_id(selected_model_ref.model_id.as_str());
+    let producer_model_id = pumas_library_model_id(target.model_ref.model_id.as_str());
+    if selected_model_id.trim_matches('/') != producer_model_id.trim_matches('/') {
+        return Err(RuntimeHostPumasLoadTargetError::ProducerModelMismatch {
+            selected_model_id: selected_model_ref.model_id.clone(),
+            producer_model_id: target.model_ref.model_id.clone(),
+        });
+    }
+    if let (Some(selected_revision), Some(producer_revision)) = (
+        selected_model_ref.revision.as_ref(),
+        target.model_ref.revision.as_ref(),
+    ) {
+        if selected_revision != producer_revision {
+            return Err(RuntimeHostPumasLoadTargetError::ProducerRevisionMismatch {
+                selected_model_id: selected_model_ref.model_id.clone(),
+                selected_revision: selected_revision.clone(),
+                producer_revision: producer_revision.clone(),
+            });
+        }
+    }
+    Ok(())
 }
 
 fn build_runtime_host_artifact_load_target_request(
@@ -56,7 +119,7 @@ fn build_runtime_host_artifact_load_target_request(
         .ok_or(RuntimeHostPumasLoadTargetError::MissingDispatchDecision)?;
     Ok(ResolveModelArtifactLoadTargetRequest {
         model_ref: pumas_library::models::PumasModelRef {
-            model_id: dispatch_decision.selected_model_ref.model_id.clone(),
+            model_id: pumas_library_model_id(&dispatch_decision.selected_model_ref.model_id),
             revision: dispatch_decision.selected_model_ref.revision.clone(),
             selected_artifact_id: dispatch_decision
                 .selected_model_ref
@@ -130,6 +193,30 @@ fn compact_diagnostics(diagnostics: &[PumasArtifactLoadTargetDiagnostic]) -> Vec
 pub(crate) enum RuntimeHostPumasLoadTargetError {
     #[error("runtime host execution request is missing scheduler dispatch decision")]
     MissingDispatchDecision,
+    #[error("runtime host execution requires a producer-selected artifact identity")]
+    MissingSelectedArtifactIdentity,
+    #[error(
+        "Pumas artifact load target model '{producer_model_id}' does not match scheduler model '{selected_model_id}'"
+    )]
+    ProducerModelMismatch {
+        selected_model_id: String,
+        producer_model_id: String,
+    },
+    #[error(
+        "Pumas artifact load target revision '{producer_revision}' does not match scheduler revision '{selected_revision}' for model '{selected_model_id}'"
+    )]
+    ProducerRevisionMismatch {
+        selected_model_id: String,
+        selected_revision: String,
+        producer_revision: String,
+    },
+    #[error(
+        "Pumas artifact load target selected artifact identity '{target_artifact_id}' does not match scheduler identity '{selected_artifact_id}'"
+    )]
+    SelectedArtifactIdentityMismatch {
+        selected_artifact_id: String,
+        target_artifact_id: String,
+    },
     #[error("ready Pumas artifact load-target response did not include a target")]
     ReadyResponseMissingTarget,
     #[error(

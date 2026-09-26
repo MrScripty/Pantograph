@@ -1,0 +1,182 @@
+# Pumas library contract and integration-baseline inventory — revision 2
+
+This is the existing inventory's revised starting state, not a second registry or a completed live qualification. Update its latest relevant sections at material integration/acceptance boundaries. Source references P/U/S are in [the audit](2026-09-25-standards-and-rpc-audit.md).
+
+## Current boundary
+
+**Pumas is model-library/resources only. Pantograph's existing unified inference API owns every inference backend and execution.** The previous inventory's proposed Pumas image/embedding gateway usage is withdrawn. Pumas's private provider protocols, serving profiles/aliases, image dimensions and provider lifetime rules are not Pantograph inference requirements. They supply neither implementation scope nor acceptance substitutes.
+
+```text
+Pantograph model/resource consumer
+  -> explicit library RPC client
+  -> isolated, pinned Pumas library artifact
+  -> validated model facts / dependency metadata / resolved asset references
+
+Pantograph workflow and scheduler
+  -> existing Pantograph unified inference API
+  -> Pantograph-owned backend adapter and runtime/model lifecycle
+  -> retained text / image / embedding results
+```
+
+The second path may use resolved assets from the first. It never sends prompts, inference inputs or inference execution control to Pumas. Successful library lookup is not runtime/model readiness.
+
+## Upstream comparison performed for this revision
+
+| Item | Observed identity / result |
+| --- | --- |
+| Inspected upstream main | `51301bd317d7962b51d534590a685b676de835d9` |
+| Release tag | `v0.7.0`, resolved to commit `29242fce4ec9043becaeb061587f364ecc4e7177` |
+| Comparison | HEAD is 37 commits ahead, zero behind; [exact comparison](https://github.com/MrScripty/Pumas-Library/compare/29242fce4ec9043becaeb061587f364ecc4e7177...51301bd317d7962b51d534590a685b676de835d9). |
+| Release identity | ID `390400124`; published `2026-09-17T03:51:12Z`; GitHub metadata reports `prerelease: true`, `immutable: false`. |
+| Candidate for Linux x86_64 | `PumasLibrary_0.7.0_Headless_Linux-x86_64`, asset ID `569365979`, reported size 32,648,400 bytes. |
+| Advertised asset digest | `sha256:29fc2be3f2eb64cbb8d06ed245c78407066048aea67cacde1f6be1e7b3ac8079` — upstream metadata only; downloaded bytes have not been verified here. |
+| Other release targets | Headless macOS arm64 and Windows x86_64 assets are listed; select the actual host, do not reuse Linux evidence as their qualification. |
+| Relevant unchanged source | Full-package-facts, execution-descriptor and asset-target HTTP handlers in `rust/crates/pumas-rpc/src/handlers/models/imports.rs` have identical blob `8e25790e0fa8b2e8e1897213f3fd9ca6bdb6f299` at release and inspected HEAD. |
+| Other comparison observations | The returned change set does not list core `api/models.rs` or `ipc/local_client.rs`; it does change shared RPC dispatcher/contract/server files. Substantial changes concern Torch release installation, provider lifecycles, gateway images and their tests. |
+| Consequence | A required library operation must still be tested through the actual candidate. Unchanged handler bytes do not prove every transitive dependency, protocol wrapper or release build is compatible. New Pumas inference features do not justify newer Pantograph library dependencies by themselves. |
+
+Primary records: [release](https://github.com/MrScripty/Pumas-Library/releases/tag/v0.7.0), [release API](https://api.github.com/repos/MrScripty/Pumas-Library/releases/390400124), [tag ref](https://api.github.com/repos/MrScripty/Pumas-Library/git/ref/tags/v0.7.0), [release handler lines](https://github.com/MrScripty/Pumas-Library/blob/29242fce4ec9043becaeb061587f364ecc4e7177/rust/crates/pumas-rpc/src/handlers/models/imports.rs#L428-L467), [HEAD handler](https://github.com/MrScripty/Pumas-Library/blob/51301bd317d7962b51d534590a685b676de835d9/rust/crates/pumas-rpc/src/handlers/models/imports.rs#L428-L467).
+
+## Baseline selection decision
+
+**Initial candidate: the published 0.7.0 headless artifact, not yet accepted.** Before final selection, refresh upstream HEAD and compare changes relevant to the consumed library boundary, security and needed correctness. Prefer this retained release artifact if real operation qualification passes. Neither a prerelease label nor a newer date alone decides compatibility.
+
+Select a newer published/CI artifact when an actual required operation, semantic fix, security issue or compatibility constraint warrants it. If no suitable artifact exists, build the chosen exact commit from a separate independent checkout with its own target/environment and pinned dependency inputs. Record that it is a locally built candidate, not an official release. No mutable branch dependency, live local path override, shared target directory or active-Pumas service is an accepted substitute.
+
+This is candidate selection, not runtime fallback or a mandate to support multiple versions indefinitely. Record the supported producer/client combination; coordinate any actual compatibility overlap. Freeze the chosen bytes throughout implementation/acceptance. Replacing them is an explicit reviewed integration change with affected requalification.
+
+### Fixture identity and isolation to record in RPC-00
+
+Use ordinary owned configuration/evidence, not a new framework. Record artifact source/release/run ID, exact source commit, binary digest and downloaded-byte verification, target/architecture/features, build/toolchain/lock provenance when locally built, matching API/schema source, explicit endpoint, service PID/generation ownership, and isolated root/database/registry/cache/configuration paths. Record the service start/shutdown procedure and retained-resource/cleanup disposition.
+
+A tag/name, health response or directory name does not prove binary identity or operation support. The reported release metadata is not a cryptographic signature of publisher authenticity. Verify the required source and distribution trust through existing mechanisms.
+
+The user's active Pumas checkout is excluded from build and runtime dependencies. A remote commit-pinned reference copy is allowed; a worktree linked to that active checkout is not the selected isolation mechanism. Run no reference service against the active model database, writable assets, caches or registry. Provision isolated fixtures through supported APIs. Deliberate immutable asset sharing requires an actual ownership/retention contract and cannot grant the candidate writes to live state.
+
+At final acceptance, establish that the configured binary/root and dependency paths are independent of that checkout and development server. Check the actual references and exercise the retained service without the development service. Do not test this by disrupting the user's active work.
+
+## Consumed-library operation map to finish before implementation
+
+## Nonempty RPC-01 qualification
+
+The isolated 0.7.0 service accepted the copied Qwen3 fixture through `import_model` and exposed one clean model through `get_models`/FTS search. Summary and full facts successfully decoded as package-facts contract v3 with valid component layout, tokenizer/config/weights evidence and no custom code; the update feed replayed four events from cursor 0. The execution descriptor was valid but pointed at a file entry path.
+
+The HTTP surface does not expose `model_library_selector_snapshot` (`-32601`), and its model record does not provide a selected-artifact ID. `resolve_model_artifact_load_target` therefore returned typed `ambiguous/missing_selected_artifact` and then `needs_detail/artifact_needs_detail` for the guessed `model.safetensors` ID. This is an explicit contract outcome, not permission to guess or use the descriptor path. The service status also gives version/readiness only, so root/process-generation identity remains unqualified. The next adapter must project only the supported HTTP operations, redact producer paths before Pantograph dispatch, preserve selected-artifact identity and typed readiness outcomes, and fail closed until the identity/selection contract is complete.
+
+Populate only operations actually needed by Pantograph. For each row record exact transport, method/route and parameters; envelope/result/error variants; version and extra-field policy; bounds, correlation and identity; permission/effects; freshness and update recovery; cancellation/retry; real caller and executable contract/consumer evidence. Method existence in source is only a starting observation.
+
+| Needed capability | Source-backed starting point | Required decision / verification |
+| --- | --- | --- |
+| Select the library service | Explicit isolated endpoint and producer configuration; HTTP `/health` is liveness only. | How Pantograph identifies/selects one library and reports outage/mismatch without global auto-selection or accidental owner creation. |
+| Discover library models | P02 selector; U02 framed selector; actual HTTP/intent producer dispatch. | Find the real supported HTTP operation(s); no assumption that `model_library_selector_snapshot` exists over HTTP simply because it exists in core IPC. A library model is not a served alias. |
+| Selected model/execution descriptor | U03 `resolve_model_execution_descriptor`. | Preserve actual model/artifact/capability evidence and error cases; do not claim a Pantograph backend supports everything listed. |
+| Full package facts | U03 `resolve_model_package_facts`; P03/P04 currently demand owner access. | Exercise actual HTTP response and complete validated mapping at both dispatch and runtime. Summary facts are not a silent full-facts substitute. |
+| Resolve executable model assets | U03 `resolve_model_artifact_load_target`; P02 currently exposes it in several roles. | Pin library/model/artifact identity and validate current response; paths enter only the Pantograph runtime owner, not scheduler authority. |
+| Requirements and saved model settings | Current library descriptors/settings/intent contracts, selected from real callers. | Separate dependency facts and stored settings from Pantograph execution policy, provisioning and backend support. |
+| Library freshness | U04 model-library feed/SSE and actual snapshot/cursor contract. | Reconcile gaps/restarts/instance replacement without stale permission, silent empty results or cross-library cursor reuse. |
+| Authorized acquisition/retention | Current library/intent APIs only if required by product or isolated fixture. | Exact effect authority, identity, retry/restart and release semantics; no automatic live downloads or data mutation during a read. |
+| Pumas inference or serving | None. | Forbidden for Pantograph: no `/v1`, direct provider calls, inference RPC, serving/profile start, hidden proxy, or fallback. |
+
+Library control/read timing comes from its actual contract. Pantograph inference timing and cancellation come from Pantograph's selected backend/worker contract. Do not copy Pumas's generation policy into the client or globally remove all control-operation bounds.
+
+## 2026-09-25 — Pantograph-owned gateway assets remain separate from RPC qualification
+
+For direct Pantograph backend qualification, an independently copied llama.cpp `10883` runtime and three local model assets were used outside the active Pumas checkout and outside the Pumas RPC root. The runtime binary hash is `53746ea4be345401c4544f952211fb892c010596bd3d167d0b78bce2fae552d2`; the Granite and LFM2 GGUF hashes are `d4b41f5d7db712806722103a1c6aba2f0fe99f77740501d6f313c8240641f145` and `67b42337951a2b3140c0c2eb49b5bbbdd14653114337ac15397f68dc664648d4`. Those runs proved Pantograph gateway text and embedding behavior, but intentionally did not substitute for Pumas-selected executable-target identity.
+
+The Tiny SD Turbo bundle was copied from shared model data into `/tmp/pantograph-image-bundle-20260925` and used only through Pantograph's closed PyTorch image loader. It was not imported, resolved or served through Pumas RPC, and no Pumas inference call occurred. The real gateway result was one 256×256 PNG. This direct asset route is evidence for the Pantograph image adapter and worker lifecycle, not RPC-A01 or INF-A01.
+
+## Pantograph execution tuples
+
+For each T/I/E case record the library/model/artifact identity and actual asset target, **Pantograph backend and runtime**, installed dependency/environment identity, device, trust policy, input/output and retention contract, and evidence. The earlier Pumas ONNX/FLUX/Nunchaku serving evidence is not evidence for these tuples.
+
+Review both single and batch routes. The inspected selected-text path is prompt-only and capped at 1,024 bytes for input/output; qualify the meaningful workload before widening the actual owning contracts. Establish image dimensions and limits from the Pantograph adapter/model. Establish embeddings input ordering, preprocessing, dimension, finite numeric output and any normalization from the chosen Pantograph backend/model. Do not choose guessed universal dimensions or make a dummy vector satisfy the goal.
+
+## RPC-00 stopping condition and next action
+
+Finish when the current standards MCP route, upstream comparison, frozen artifact decision, real library-operation observations (or exact blockers), T/I/E backend feasibility, affected consumer dispositions and one coherent next source/test write set permit implementation. Do not inventory Pumas inference providers or solve unrelated upstream audits. The next implementation updates the existing Pantograph library client/composition and preserves its unified inference API.
+
+## RPC-01 implementation update
+
+The explicit RPC role is now implemented through the shared selector capability boundary and consumed by workflow-host capability metadata, dispatch package facts, runtime-dispatch load targets, technical-fit package facts, runtime-host package facts/load targets and hosted composition. `setup_extensions_with_rpc_endpoint` installs only the configured RPC selector access; hosted composition admits owner or RPC roles and retains fail-closed rejection for read-only/local-client owner-fresh execution. The adapter's `get_models` projection intentionally redacts producer paths and artifact IDs and marks rows `NeedsDetail`/`Missing` until a qualified producer selection contract exists.
+
+This advances implementation readiness but does not close the stopping conditions: the retained 0.7.0 HTTP surface still lacks selected-artifact identity and a qualified executable directory target, and producer root/process-generation identity is unverified. No Pantograph inference path has been run through this role.
+
+### 2026-09-25 qualification re-run
+
+The retained Linux x86-64 artifact was independently restarted outside the restricted sandbox in disposable root `/tmp/pantograph-rpc-qual-root-20260925` (HTTP `127.0.0.1:34795`, framed IPC `127.0.0.1:37689`). The copied Qwen3 fixture was imported through the isolated producer and successfully exercised through `get_models`, FTS search, package-facts summary/detail, execution descriptor and update-feed calls. The observed model was `llm/qwen/qwen3_tiny_rpc_qualification`; facts remained contract 3, valid HF-compatible directory, complete five-file component layout, no custom code, and library-owned storage.
+
+The artifact-load-target probe returned `ambiguous/missing_selected_artifact` without an explicit artifact ID and `needs_detail/artifact_needs_detail` for the guessed `model.safetensors` ID. `get_status` still exposed only version/readiness, and the producer record exposed a path but no selected-artifact identity. The service was stopped and its HTTP listener released. This qualifies the negative/identity boundary more strongly but leaves RPC-A01, artifact-target readiness, producer root/process-generation identity and Pantograph execution blocked.
+
+## Current-source pinned no-inference qualification
+
+To distinguish the retained release limitation from the inspected current source, a disposable clone was pinned to Pumas commit `96f859443460ad8e4799d563528aaba113ccff21` and built with `CARGO_BUILD_JOBS=1 cargo build --manifest-path rust/Cargo.toml -p pumas-rpc --no-default-features --locked --offline`. The resulting debug binary was 489,775,040 bytes with SHA-256 `3163f4d89d535870cb4ba2549adcbf47af435685576379a862e7ba422badf27c`; `--no-default-features` omitted Pumas inference plugins. This is a locally built candidate, not an official release, and its source/target remain outside the Pantograph repository.
+
+The binary ran against the existing isolated root `/tmp/pantograph-rpc-qual-root-20260925` on HTTP `127.0.0.1:34801` and framed IPC `127.0.0.1:40961`. Through library-only RPC, it imported the existing Granite embedding GGUF as `embedding/modern-bert/granite_embedding_small_english_r2`; full facts reported GGUF, library-owned valid storage, no custom code, a 52,445,632-byte artifact and 384-dimensional embedding metadata. The import was library acquisition only; no inference, serving, `/v1`, provider or profile operation was invoked.
+
+The current-source HTTP surface still returned `-32601`/`not_found` for `model_library_selector_snapshot`. `get_models` exposed the Granite model but no selected-artifact ID; package facts exposed only the selected artifact path. Load-target resolution returned `ambiguous`/`missing_selected_artifact` without an ID and `needs_detail`/`artifact_needs_detail` for the explicit GGUF filename. The same current-source run retained the Qwen3 Safetensors result: no selected ID, `ambiguous` without one and `needs_detail` for `model.safetensors`. The process was stopped cleanly and both listeners were released. This strengthens the producer identity blocker and does not authorize path or filename guessing.
+
+### 2026-09-25 — selected identity and ready file-target qualification
+
+The same pinned current-source binary was restarted with external-process permission against the separate writable root `/tmp/pantograph-rpc-qual-root-20260925b`, HTTP `127.0.0.1:34801`, and observed framed IPC `127.0.0.1:42585`. The root contained a copied, provenance-bearing Nomic embedding library record. `get_models` returned `embedding/nomic_bert/nomic-ai--nomic-embed-text-v1_5__files_0a032b7277be`; package facts contract 3 returned selected artifact ID `nomic-ai--nomic-embed-text-v1_5__files_0a032b7277be`, a valid `library_owned` ONNX artifact and its exact `onnx/model_fp16.onnx` entry path.
+
+With that observed identity, `resolve_model_artifact_load_target` returned `artifact_state=ready` and `entry_path_state=ready`, `load_path_kind=file`, `storage_kind=library_owned`, `validation_state=valid`, and the exact producer load path. A temporary Pantograph workspace binary using the real `PumasRpcClient` and closed `PumasRpcOperation` enum decoded and asserted the same facts/target response successfully. No Pumas inference, serving, `/v1`, provider or profile operation was called; the service stopped cleanly.
+
+This qualifies the positive selected-identity/file-target wire path and advances RPC-A01/A02 partially. It does not close them: HTTP `model_library_selector_snapshot` remains unsupported, the tested package facts report `requires_custom_code=true`, the target is a file rather than the directory target needed by the Pantograph text/image routes, and no Pantograph inference was run from this asset. The result is contract evidence, not permission to use this model for product acceptance or to infer a missing selector contract.
+
+### 2026-09-26 — synthetic directory-target qualification
+
+The pinned current-source no-inference Pumas binary (`96f859443460ad8e4799d563528aaba113ccff21`, SHA-256 `3163f4d89d535870cb4ba2549adcbf47af435685576379a862e7ba422badf27c`) was started against fresh root `/tmp/pantograph-rpc-dir-target-20260926b`, HTTP `127.0.0.1:34804`, with framed IPC observed at `127.0.0.1:41621`. The root contained a detached copy of the Tiny SD Turbo bytes and an isolated metadata projection. It did not copy the active Pumas database or registry.
+
+The metadata projection explicitly supplied synthetic selector identity `cc-nms--tiny-sd-turbo__bundle_qualified` and the twelve exact diffusers files. Its SHA-256 was `272363c4f1e72675d4f2ae4724efce821d0e8bef5f204495fded0d5f093e9a64`. Fresh package facts returned contract 3, `diffusers_bundle`, `library_owned`, `valid`, `requires_custom_code=false`, the synthetic identity and the isolated directory path. The typed owner-fresh load-target call returned `ready/ready`, `load_path_kind=directory`, and the same exact path/identity tuple. The facts also retain the pre-existing invalid `feature_extractor` component diagnostic.
+
+This is intentionally synthetic contract evidence, not provenance-bearing producer selection: the source Tiny SD metadata had no selected-artifact ID, and the real current-source producer still returned `-32601`/`not_found` for `model_library_selector_snapshot`. Without an ID it returned `ambiguous/missing_selected_artifact`; a wrong ID returned `needs_detail/artifact_needs_detail`. Only library/resource RPC operations were called; no Pumas inference, serving, `/v1`, provider or profile operation occurred. The evidence advances the directory-target wire contract but leaves RPC-A01/A02, real producer selection/replacement and all Pantograph RPC-backed product acceptance gates open.
+
+### 2026-09-26 — linked Pantograph image boundary
+
+The real Pantograph RPC client serialized the current synthetic fixture's ready directory target, and a separate Pantograph gateway harness consumed that exact response. Pantograph's PyTorch Stable Diffusion path returned one nonempty 256x256 PNG and shut down cleanly. This confirms that a typed RPC target can cross into the Pantograph-owned backend path without a Pumas inference call. It remains synthetic contract/integration evidence only; the current producer still lacks the required selector-snapshot identity route, and no real producer-backed Pantograph T/I/E acceptance is admitted.
+
+### 2026-09-26 — producer-derived selected directory target
+
+The pinned current-source no-inference binary was run against fresh root `/tmp/pantograph-rpc-zimage-20260926d`. Its model index contained one directory fixture built from retained Z-Image-Turbo metadata and read-only symlinks to the actual library files; the active Pumas database and development checkout were not used. The real Pantograph client observed model ID `diffusion/tongyi-mai/tongyi-mai--z-image-turbo__bundle_3af3fa2de99a` and selected artifact ID `tongyi-mai--z-image-turbo__bundle_e07edb6c5bfd`.
+
+Package facts returned contract 3, `diffusers_bundle`, `requires_custom_code=false`, `validation_state=valid`, `storage_kind=library_owned`, and the exact directory entry path. The typed load-target response returned `ready/ready`, `load_path_kind=directory`, and the same identity/path tuple. Facts also retain three missing root-level text-encoder shard diagnostics, while the pipeline is `ZImagePipeline`, not the currently admitted Stable Diffusion family. The HTTP selector-snapshot route returned `-32601/not_found`; no Pumas inference, serving, `/v1`, provider or profile operation was called. This is producer-derived contract evidence, not Pantograph execution acceptance.
+
+The same isolated root was restarted and the typed Pantograph client decoded the same target again. After clean producer termination, a subsequent `get_models` call returned a transport error and did not replay the previous target. This is partial replacement/outage evidence for RPC-A03; cursor gaps, cross-instance identity and stale-selection recovery remain to be qualified.
+
+### 2026-09-26 — framed IPC is a distinct authenticated library contract
+
+The pinned binary also exposed its documented owner-local framed IPC contract. In the isolated Z-Image root, the registry advertised a loopback IPC instance and ephemeral connection token. A length-prefixed authenticated client call to `model_library_selector_snapshot` returned the producer-selected Z-Image row and cursor `model-library-updates:5`; authenticated load-target and package-facts calls returned the same ready directory target and contract-3 facts observed over HTTP. The token is intentionally omitted from this inventory.
+
+The HTTP and IPC observations are not interchangeable: the HTTP selector method returned `-32601/not_found`, whereas framed IPC returned selector data. Pantograph therefore retains HTTP `/rpc` as its explicit production transport and records IPC as a separately qualified owner-local contract, with no automatic fallback or registry/root discovery. The process shut down cleanly and the temporary registry was empty. This improves operation/transport inventory only; it does not qualify the Z-Image target for inference because its facts still report missing text-encoder shards and `ZImagePipeline` is not an admitted Pantograph pipeline.
+
+### 2026-09-26 — complete Tiny SD candidate without selected identity
+
+Normal current-source indexing of the retained Tiny SD directory in isolated root `/tmp/pantograph-rpc-tinysd-20260926e` returned a complete producer package: contract 3, `diffusers_bundle`, `library_owned`, valid, `requires_custom_code=false`, `StableDiffusionPipeline`, Stable Diffusion family evidence and all twelve expected component/config/weight/tokenizer files. The producer retained the known invalid optional `feature_extractor` diagnostic.
+
+The producer model record and package facts supplied no selected-artifact ID. Owner-fresh target resolution returned `ambiguous/missing_selected_artifact` for model-only identity and `artifact_missing` when the observed path was added without an identity. The HTTP selector method remained `-32601/not_found`. This is a complete admitted package candidate but not a selected executable target; no local ID or path promotion is permitted.
+
+### 2026-09-26 — library-only import routes do not issue the missing identity
+
+Two fresh disposable current-source owner roots tested the available acquisition/import hypothesis without enabling Pumas inference. `import_external_diffusers_directory` returned a successful result for the complete Tiny SD directory, but its indexed model remained the existing `diffusion/cc-nms/tiny-sd-turbo` record without a selected-artifact ID. A second root with `metadata.json` temporarily removed exercised `import_model_in_place`; it generated valid diffusers package facts and idempotent metadata, but likewise did not produce a selected-artifact identity. Subsequent model-only load-target resolution therefore remained unavailable/identity-gated. Both owners were stopped cleanly; no path or locally derived ID was promoted.
+
+A third fresh owner exercised the lower-level library-only `import_model` route against the retained Granite GGUF file. The operation returned success and indexed a new library-owned GGUF model, but `get_models` and contract-3 package facts again exposed no selected-artifact ID; the facts reported `task_type_primary=unknown` and a valid 384-dimensional GGUF header. The analogous directory call failed during producer reconciliation at `.../unet/diffusion_pytorch_model.fp16.safetensors/metadata.json` (`Not a directory`) before producing a selectable package. The owner was stopped after read-only inspection; no inference, serving, `/v1`, provider or profile method was called. This closes the remaining import-route hypothesis without authorizing Pantograph to derive an identity or infer the embedding task.
+
+A read-only scan of the current shared-library diffusion metadata found only one `StableDiffusionPipeline` record, the same Tiny SD directory without `selected_artifact_id`. Other producer-selected diffusion records declare pipelines outside Pantograph's admitted closed loader or lack executable package facts. This rules out a compatible alternate candidate in the inspected inventory without changing the no-guessing boundary.
+
+### 2026-09-26 — producer-selected Tiny Aya directory and Pantograph text handoff
+
+The pinned current-source no-inference binary (`96f859443460ad8e4799d563528aaba113ccff21`, `--no-default-features`, binary SHA-256 `3163f4d89d535870cb4ba2549adcbf47af435685576379a862e7ba422badf27c`) indexed isolated root `/tmp/pantograph-rpc-tinyaya-20260926i`. The path-normalized fixture used a copied producer metadata file and read-only symlinks to retained bytes; it did not attach the active Pumas database or development checkout.
+
+The real Pantograph client decoded `get_models`, package facts and load-target results for `llm/cohere2/coherelabs--tiny-aya-water__full_repo`. The producer supplied selected artifact `coherelabs--tiny-aya-water__files_b673ab802c36`, contract-3 `hf_compatible_directory`, `Cohere2ForCausalLM`, text-generation task facts, `requires_custom_code=false`, `library_owned`, `valid`, and `ready/ready` directory target states. A producer logical-size diagnostic remains recorded; it did not invalidate the selected files or target.
+
+The repository's ignored runtime-host acceptance now passes this target through `EmbeddedRuntimeHostExecutionPort`, whose typed resolvers call only package-facts and load-target library operations before invoking Pantograph's unified PyTorch gateway. The adapter removes only the owner-local absolute `selected_artifact_path` from the identity comparison, preserves the producer artifact ID and executable path, normalizes the Pumas URI at the library boundary, and reconciles the producer's omitted revision. Pantograph loaded the shards locally with `trust_remote_code=false` and `local_files_only=true` and returned `"Amber Bridge "` under the runtime-host's eight-token bound. This establishes a real producer-selected text/runtime-host handoff. It does not establish producer-selected image/embedding assets, selector snapshot support (HTTP remains `-32601/not_found`), generated-text scheduler fan-out, desktop acceptance or Pumas inference; only library/resource RPCs were called.
+
+### 2026-09-26 — runtime-host acceptance reproducibility
+
+The exact acceptance source is the ignored test `runtime_host_execution_port::tests::real_rpc_selected_tiny_aya_text_executes_through_runtime_host_port` in `crates/pantograph-embedded-runtime/src/runtime_host_execution_port.rs`; run it with the pinned producer at `http://127.0.0.1:34813/rpc`, `--features backend-pytorch --locked --offline -- --ignored --nocapture`, and the local PyTorch environment variables recorded in the execution ledger. It passed in 46.47 seconds and returned `generated_text="Amber Bridge "`. Tiny Aya selected-file SHA-256 values are recorded in the ledger, and the producer binary/source hashes are pinned above. No inference-capable Pumas feature or operation was present or called.
+
+### 2026-09-26 — producer-selected Qwen embedding target and facts gate
+
+The pinned producer indexed an isolated path-normalized root containing the retained Qwen3 Q4_K_M GGUF and returned one complete model through `get_models`. Typed package-facts and owner-fresh load-target calls returned selected artifact `qwen--qwen3-embedding-8b-gguf__q4_k_m`, `artifact_kind=gguf`, `storage_kind=library_owned`, `validation_state=valid`, `requires_custom_code=false`, and `ready/ready` file-target state. The selected file SHA-256 is `3fcd3febec8b3fd64435204db75bf0dd73b91e8d0661e0331acfe7e7c3120b85`.
+
+The producer facts report `task_type_primary=unknown`. Pantograph's real runtime-host acceptance therefore fails closed with `invalid package task evidence` before llama.cpp load, without promoting the artifact based on its `embedding/` model path. This qualifies the selected target and fail-closed boundary, not successful RPC-backed embedding execution. The isolated producer was stopped cleanly and no Pumas inference, serving, `/v1`, provider or profile operation was called.

@@ -9,6 +9,8 @@ use pumas_library::models::{
 };
 use workflow_nodes::setup::PumasSelectorAccess;
 
+use crate::runtime_host_package_facts::pumas_library_model_id;
+
 const PANTOGRAPH_RUNTIME_DISPATCH_CONSUMER: &str = "pantograph-embedded-runtime-dispatch";
 const MAX_DIAGNOSTICS: usize = 4;
 
@@ -117,7 +119,10 @@ async fn resolve_runtime_dispatch_load_target_facts(
             "Pumas owner API access is required to resolve runtime dispatch load-target facts",
         )]);
     };
-    let PumasSelectorAccess::Owner(api) = selector_access else {
+    if matches!(
+        selector_access,
+        PumasSelectorAccess::LocalClient(_) | PumasSelectorAccess::ReadOnly(_)
+    ) {
         return unavailable(vec![diagnostic(
             RuntimeDispatchLoadTargetFactsDiagnosticCode::UnsupportedSelectorAccessRole,
             None,
@@ -126,8 +131,7 @@ async fn resolve_runtime_dispatch_load_target_facts(
                 selector_access.role_name()
             ),
         )]);
-    };
-
+    }
     let mut facts = Vec::new();
     let mut diagnostics = Vec::new();
     for runtime_family in runtime_families {
@@ -136,7 +140,10 @@ async fn resolve_runtime_dispatch_load_target_facts(
             &runtime_family,
             task_kind.clone(),
         );
-        match api.resolve_model_artifact_load_target(request).await {
+        match selector_access
+            .resolve_model_artifact_load_target(request)
+            .await
+        {
             Ok(response) => match project_ready_load_target(response, &runtime_family) {
                 Ok((fact, mut fact_diagnostics)) => {
                     facts.push(fact);
@@ -195,7 +202,7 @@ fn build_runtime_dispatch_load_target_request(
 
 fn pumas_model_ref(model_ref: &PumasModelRef) -> pumas_library::models::PumasModelRef {
     pumas_library::models::PumasModelRef {
-        model_id: model_ref.model_id.clone(),
+        model_id: pumas_library_model_id(&model_ref.model_id),
         revision: model_ref.revision.clone(),
         selected_artifact_id: model_ref.selected_artifact_id.clone(),
         selected_artifact_path: None,

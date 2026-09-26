@@ -1,25 +1,10 @@
-# Implementation Plans
-
-Only current or recently accepted plan authorities live here:
+# Implementation plans
 
 | Plan | Status and purpose |
 | --- | --- |
-| [Domain architecture and multimodal workflows](domain-architecture-and-multimodal/plan.md) | Active authority for current-standards review, domain ownership and real text/image workflows; milestone evidence and current model routing live in the plan. |
-| [Current-standards remediation](current-standards-remediation/plan.md) | Superseded; audit findings and unresolved claims transfer to the active plan. |
-| [Image-generation workflow](current-image-generation-graphs/plan.md) | Superseded; the real editor-to-artifact objective transfers to the active mixed-workflow plan. |
-| [Documentation consolidation](documentation-consolidation/plan.md) | Accepted cleanup and migration record. |
+| [Domain architecture and multimodal workflows](domain-architecture-and-multimodal/plan.md) | Active; library-only Pumas RPC from an isolated pinned artifact, Pantograph-owned T/I/E inference, real desktop acceptance and current Coding-Standards MCP remediation. Revision 2 includes the current agent and baseline-selection policy. |
+| [Current-standards remediation](current-standards-remediation/plan.md) | Superseded; pending claims remain mapped into the active plan. |
+| [Image-generation workflow](current-image-generation-graphs/plan.md) | Superseded; real image output is retained and extended to text and embeddings in the active plan. |
+| [Documentation consolidation](documentation-consolidation/plan.md) | Accepted historical cleanup and migration evidence. |
 
-Each planned effort uses:
-
-```text
-<plan>/
-  plan.md              # current objective, decisions, status, and one next slice
-  execution-ledger.md  # dated execution and evidence history
-  issues.md            # discovered issues and dispositions
-  reports/             # optional detailed evidence
-```
-
-Implementation starts from one explicit `plan.md` path and operation. Do not
-infer an active plan from recency or directory order. Completed historical
-plans are recoverable from Git history and are not retained as a second source
-of current instructions.
+Select an explicit canonical `plan.md` and lifecycle-compatible operation through current Planning guidance. The active plan owns one current phase and next slice; its ledger owns history, issues own findings, and linked reports own evidence. Do not revive a superseded plan or infer completion from an implemented source fragment.
