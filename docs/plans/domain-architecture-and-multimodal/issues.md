@@ -295,3 +295,16 @@ The final review also confirmed that the image and image-batch paths observe can
 
 - Readiness lifecycle and auto-resume fixtures now synchronize on observable bounded state rather than elapsed sleeps. `cargo test` passed lifecycle 8/8 and auto-resume 6/6; the repair is committed as `b1f3d95a`.
 - This closes test synchronization drift only. It does not promote the Tiny SD handle to runtime success or change the remaining producer profile blocker.
+
+### PANTOGRAPH-GENERATED-OUTPUT-RETENTION — resolved within scheduler scope — 2026-09-26
+
+- **Request/result:** the real ignored Qwen embedding workflow-session test used a producer-issued intent handle, the existing Pantograph scheduler and unified llama.cpp backend. Inference returned a finite 4,096-dimensional vector, but the first retained-body read failed because the serialized structured output exceeded the generic 64 KiB workflow-value threshold and had been recorded as metadata-only.
+- **Owner/correction:** Pantograph workflow artifact retention owned the defect. Commit `9a06d95f` retains outputs carrying runtime/model attribution through the existing artifact-store policy and leaves arbitrary unattributed oversized values on the prior bounded fallback. No truncation, identity change or Pumas operation was introduced.
+- **Evidence:** the focused regression passed red-to-green; the real scheduler acceptance passed 1/1, verified attribution and complete body reads before and after persisted artifact-store/diagnostics-ledger reopen. The 1,024-byte text contract is unchanged.
+- **Disposition:** accepted for runtime-attributed generated outputs. This does not claim text-generated fan-out, real image output, desktop inspection or full product acceptance.
+
+### PANTOGRAPH-REAL-MULTIMODAL-COLD-REOPEN — partially advanced — 2026-09-26
+
+- **Resolved evidence:** the real scheduler embedding path now has a producer-issued `Available` handle, Pantograph-owned inference, complete retained output, correct model/runtime attribution and a successful cold reopen/read.
+- **Remaining claim:** generated text must still feed downstream image and embedding tasks through the normal scheduler, with a producer-coherent text/image selection, real image execution, desktop authoring/inspection and the required saved-workflow/cold-reopen acceptance. Existing deterministic fan-out/reopen evidence remains bounded to its demonstrated fixture scope.
+- **Owner/next action:** Pantograph integration and desktop acceptance, with producer-owned text package coherence and image profile/identity gates. Qualify those supported producer results, then run the single real text→image/embedding workflow. Pumas remains out of the inference path.
