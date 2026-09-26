@@ -2915,10 +2915,19 @@ mod tests {
     }
 
     #[tokio::test]
+    #[cfg(feature = "standalone")]
     #[ignore = "requires a pinned library-only Pumas RPC server and local Qwen embedding assets"]
-    async fn real_rpc_selected_qwen_embedding_fails_closed_on_unknown_task_facts() {
+    async fn real_rpc_selected_qwen_embedding_executes_through_runtime_host_port() {
+        use inference::process::StdProcessSpawner;
+
         let endpoint = std::env::var("PANTOGRAPH_ACCEPTANCE_PUMAS_RPC_ENDPOINT")
             .expect("set PANTOGRAPH_ACCEPTANCE_PUMAS_RPC_ENDPOINT");
+        let binaries_dir = std::env::var_os("PANTOGRAPH_ACCEPTANCE_LLAMA_BINARIES_DIR")
+            .map(std::path::PathBuf::from)
+            .expect("set PANTOGRAPH_ACCEPTANCE_LLAMA_BINARIES_DIR");
+        let data_dir = std::env::var_os("PANTOGRAPH_ACCEPTANCE_LLAMA_DATA_DIR")
+            .map(std::path::PathBuf::from)
+            .expect("set PANTOGRAPH_ACCEPTANCE_LLAMA_DATA_DIR");
         let model_id = "pumas://models/embedding/qwen3/qwen--qwen3-embedding-8b-gguf__q4_k_m";
         let artifact_id = "qwen--qwen3-embedding-8b-gguf__q4_k_m";
         let mut request = embedding_request_fixture();
@@ -2927,34 +2936,44 @@ mod tests {
         let selector_access = Arc::new(PumasSelectorAccess::Rpc(Arc::new(
             PumasRpcClient::new(&endpoint).expect("Pumas RPC endpoint should parse"),
         )));
+        let gateway = Arc::new(inference::InferenceGateway::new());
+        gateway
+            .set_spawner(Arc::new(StdProcessSpawner::new(binaries_dir, data_dir)))
+            .await;
         let port = EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
             Arc::new(RuntimeHostPumasLoadTargetResolver::new(
                 selector_access.clone(),
             )),
             Arc::new(RuntimeHostPumasPackageFactsResolver::new(selector_access)),
             Arc::new(UnusedMediaArtifactSink),
-            Arc::new(inference::InferenceGateway::new()),
+            gateway,
         );
         let cancellation = runtime_host_cancellation(&request);
 
         let response = port
             .execute_runtime_host_request(request, cancellation)
             .await
-            .expect("runtime-host rejection should be typed");
+            .expect("runtime-host execution should return a typed response");
 
         assert_eq!(
             response.state,
-            RuntimeHostExecutionState::Failed,
+            RuntimeHostExecutionState::Completed,
             "{response:#?}"
         );
-        assert!(response.outputs.is_empty());
-        assert!(response
-            .diagnostics
+        let RuntimeHostExecutionOutputValue::EmbeddingVector(vector) = &response.outputs[0].value
+        else {
+            panic!("runtime-host embedding output should be a vector: {response:#?}");
+        };
+        assert_eq!(vector.len(), 4096, "Qwen3-Embedding-8B output dimension");
+        assert!(vector.iter().all(serde_json::Number::is_f64));
+        assert!(vector
             .iter()
-            .any(|diagnostic| diagnostic.message.contains("invalid package task evidence")));
+            .any(|value| value.as_f64().unwrap_or(0.0) != 0.0));
         println!(
-            "runtime_host_model_id={model_id:?} selected_artifact_id={artifact_id:?} state={:?} diagnostics={:?}",
-            response.state, response.diagnostics
+            "runtime_host_model_id={model_id:?} selected_artifact_id={artifact_id:?} state={:?} embedding_dimensions={} first={:?}",
+            response.state,
+            vector.len(),
+            vector.first()
         );
     }
 

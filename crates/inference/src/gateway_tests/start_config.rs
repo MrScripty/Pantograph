@@ -204,6 +204,36 @@ async fn test_build_inference_start_config_rejects_canonical_device_for_llamacpp
     ));
 }
 
+#[test]
+fn test_selected_llamacpp_embedding_projects_canonical_cpu_to_backend_selector() {
+    let device = "cpu".parse().expect("valid canonical cpu device id");
+
+    let intent = InferenceGateway::llamacpp_startup_device_from_canonical(&device)
+        .expect("cpu should project to llama.cpp selector");
+
+    assert_eq!(
+        intent
+            .as_llama_cpp_selector()
+            .map(|selector| selector.to_id()),
+        Some("none".to_string())
+    );
+}
+
+#[test]
+fn test_selected_llamacpp_embedding_projects_canonical_cuda_to_backend_selector() {
+    let device = "cuda:0".parse().expect("valid canonical cuda device id");
+
+    let intent = InferenceGateway::llamacpp_startup_device_from_canonical(&device)
+        .expect("cuda should project to llama.cpp selector");
+
+    assert_eq!(
+        intent
+            .as_llama_cpp_selector()
+            .map(|selector| selector.to_id()),
+        Some("CUDA0".to_string())
+    );
+}
+
 #[tokio::test]
 async fn test_build_inference_start_config_rejects_unresolved_explicit_policy_for_pytorch() {
     let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "PyTorch");

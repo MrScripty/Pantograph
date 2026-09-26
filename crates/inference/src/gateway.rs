@@ -1460,9 +1460,9 @@ impl InferenceGateway {
         let config = BackendConfig {
             model_path: Some(PathBuf::from(&selected.target.local_load_path)),
             model_name: Some(selected.target.model_ref.model_id.clone()),
-            device: Some(BackendStartupDeviceIntent::CanonicalDevice(
-                selected.device.clone(),
-            )),
+            device: Some(Self::llamacpp_startup_device_from_canonical(
+                selected.device,
+            )?),
             embedding_mode: true,
             ..BackendConfig::default()
         };
@@ -1519,6 +1519,37 @@ impl InferenceGateway {
             embeddings,
             usage,
             option_diagnostics,
+        })
+    }
+
+    fn llamacpp_startup_device_from_canonical(
+        device: &InferenceDeviceId,
+    ) -> Result<BackendStartupDeviceIntent, GatewayError> {
+        let canonical = device.as_str();
+        let selector = if canonical == "cpu" {
+            crate::constants::device_types::CPU.to_string()
+        } else if canonical == "mps" {
+            "Metal0".to_string()
+        } else if let Some(index) = canonical.strip_prefix("cuda:") {
+            format!("CUDA{index}")
+        } else if let Some(index) = canonical.strip_prefix("metal:") {
+            format!("Metal{index}")
+        } else if let Some(index) = canonical.strip_prefix("vulkan:") {
+            format!("Vulkan{index}")
+        } else {
+            return Err(GatewayError::Backend(BackendError::Config(format!(
+                "canonical device id '{}' cannot be projected to a llama.cpp startup selector",
+                device.as_str()
+            ))));
+        };
+
+        BackendStartupDeviceIntent::llama_cpp_selector(&selector).map_err(|error| {
+            GatewayError::Backend(BackendError::Config(format!(
+                "canonical device id '{}' produced an invalid llama.cpp startup selector '{}': {}",
+                device.as_str(),
+                selector,
+                error
+            )))
         })
     }
 
