@@ -64,6 +64,8 @@ use pumas_library::models::{
 };
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Mutex;
+#[cfg(feature = "standalone")]
+use workflow_nodes::pumas_rpc::PumasRpcClient;
 
 async fn run_workflow_through_scheduler(
     runtime: &EmbeddedRuntime,
@@ -3187,10 +3189,15 @@ async fn dependent_text_fans_out_to_image_and_embedding_with_retained_outputs() 
         })
         .expect("query fan-out retained artifacts")
         .artifacts;
-    for (node_id, port_id) in [
-        ("text-infer", "text"),
-        ("image-infer", "image"),
-        ("embedding-infer", "embedding"),
+    for (node_id, port_id, model_id, runtime_id) in [
+        ("text-infer", "text", TEXT_MODEL_ID, "pytorch"),
+        ("image-infer", "image", IMAGE_MODEL_ID, "pytorch"),
+        (
+            "embedding-infer",
+            "embedding",
+            EMBEDDING_MODEL_ID,
+            "llama_cpp.embedding",
+        ),
     ] {
         assert!(
             artifacts.iter().any(|artifact| {
@@ -3198,8 +3205,10 @@ async fn dependent_text_fans_out_to_image_and_embedding_with_retained_outputs() 
                     && artifact.producer_port_id.as_deref() == Some(port_id)
                     && artifact.retention_state
                         == pantograph_workflow_service::IoArtifactRetentionState::Retained
+                    && artifact.model_id.as_deref() == Some(model_id)
+                    && artifact.runtime_id.as_deref() == Some(runtime_id)
             }),
-            "retained artifact missing for {node_id}:{port_id}: {artifacts:?}"
+            "retained attributed artifact missing for {node_id}:{port_id}: {artifacts:?}"
         );
     }
 
@@ -3269,11 +3278,15 @@ async fn dependent_text_fans_out_to_image_and_embedding_with_retained_outputs() 
         (
             "text-infer",
             "text",
+            TEXT_MODEL_ID,
+            "pytorch",
             format!("expanded:{prompt}").into_bytes(),
         ),
         (
             "image-infer",
             "image",
+            IMAGE_MODEL_ID,
+            "pytorch",
             serde_json::to_vec(&serde_json::json!({
                 "artifact_id": "fanout-image-output",
                 "media_type": "image_png"
@@ -3283,11 +3296,13 @@ async fn dependent_text_fans_out_to_image_and_embedding_with_retained_outputs() 
         (
             "embedding-infer",
             "embedding",
+            EMBEDDING_MODEL_ID,
+            "llama_cpp.embedding",
             serde_json::to_vec(&serde_json::json!([generated_prompt.len(), 0.5]))
                 .expect("embedding body"),
         ),
     ];
-    for (node_id, port_id, expected_body) in expected_bodies {
+    for (node_id, port_id, model_id, runtime_id, expected_body) in expected_bodies {
         let artifact = reopened_artifacts
             .iter()
             .find(|artifact| {
@@ -3299,6 +3314,8 @@ async fn dependent_text_fans_out_to_image_and_embedding_with_retained_outputs() 
                     "reopened retained artifact missing for {node_id}:{port_id}: {reopened_artifacts:?}"
                 )
             });
+        assert_eq!(artifact.model_id.as_deref(), Some(model_id));
+        assert_eq!(artifact.runtime_id.as_deref(), Some(runtime_id));
         assert_eq!(
             reopened_service
                 .read_artifact_body(ArtifactReadRequest {
@@ -3310,6 +3327,370 @@ async fn dependent_text_fans_out_to_image_and_embedding_with_retained_outputs() 
                 .body,
             expected_body
         );
+    }
+}
+
+#[tokio::test]
+#[cfg(feature = "standalone")]
+#[ignore = "requires a pinned library-only Pumas RPC server and local Qwen embedding assets"]
+async fn real_rpc_selected_qwen_embedding_executes_through_workflow_scheduler() {
+    use inference::process::StdProcessSpawner;
+
+    let endpoint = std::env::var("PANTOGRAPH_ACCEPTANCE_PUMAS_RPC_ENDPOINT")
+        .expect("set PANTOGRAPH_ACCEPTANCE_PUMAS_RPC_ENDPOINT");
+    let binaries_dir = std::env::var_os("PANTOGRAPH_ACCEPTANCE_LLAMA_BINARIES_DIR")
+        .map(std::path::PathBuf::from)
+        .expect("set PANTOGRAPH_ACCEPTANCE_LLAMA_BINARIES_DIR");
+    let data_dir = std::env::var_os("PANTOGRAPH_ACCEPTANCE_LLAMA_DATA_DIR")
+        .map(std::path::PathBuf::from)
+        .expect("set PANTOGRAPH_ACCEPTANCE_LLAMA_DATA_DIR");
+    const MODEL_ID: &str = "pumas://models/embedding/qwen3/qwen--qwen3-embedding-8b-gguf__q4_k_m";
+    const ARTIFACT_ID: &str = "qwen--qwen3-embedding-8b-gguf__q4_k_m";
+
+    let temp = TempDir::new().expect("temp dir");
+    let artifact_store_path = temp.path().join("artifacts");
+    let diagnostics_ledger_path = temp.path().join("workflow-diagnostics.sqlite");
+    let artifact_writer = test_artifact_writer(&temp);
+    let workflow_service = WorkflowService::with_ephemeral_attribution_store()
+        .expect("service")
+        .with_artifact_writer(artifact_writer.clone())
+        .with_diagnostics_ledger(
+            pantograph_workflow_service::SqliteDiagnosticsLedger::open(&diagnostics_ledger_path)
+                .expect("diagnostics ledger"),
+        );
+    let dependency_readiness_provider = DependencyEnvironmentReadinessSnapshotProvider::new();
+    let dependency_readiness_work_queue = Arc::new(DependencyReadinessWorkQueue::new());
+    let source_refresher = Arc::new(TestRuntimeDispatchSourceRefresher::default());
+    let reservation_lifecycle_port = Arc::new(TestReservationLifecyclePort::default());
+
+    let selector_access = Arc::new(PumasSelectorAccess::Rpc(Arc::new(
+        PumasRpcClient::new(&endpoint).expect("Pumas RPC endpoint should parse"),
+    )));
+    let gateway = Arc::new(inference::InferenceGateway::new());
+    gateway
+        .set_spawner(Arc::new(StdProcessSpawner::new(binaries_dir, data_dir)))
+        .await;
+    let runtime_host_inner = Arc::new(EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
+        Arc::new(RuntimeHostPumasLoadTargetResolver::new(
+            selector_access.clone(),
+        )),
+        Arc::new(RuntimeHostPumasPackageFactsResolver::new(selector_access)),
+        Arc::new(WorkflowServiceRuntimeHostMediaArtifactSink::new(
+            artifact_writer,
+        )),
+        gateway,
+    ));
+    let runtime_host_port = runtime_host_inner;
+    let service = Arc::new(
+        workflow_service
+            .with_dependency_environment_provider(Arc::new(dependency_readiness_provider.clone()))
+            .with_dependency_readiness_work_queue(dependency_readiness_work_queue)
+            .with_runtime_dispatch_source_refresher(source_refresher)
+            .with_runtime_dispatch_candidate_provider(Arc::new(
+                TestRuntimeDispatchCandidateProvider,
+            ))
+            .with_runtime_host_execution_port(runtime_host_port.clone())
+            .with_runtime_host_batch_execution_port(runtime_host_port)
+            .with_reservation_lifecycle_port(reservation_lifecycle_port),
+    );
+
+    let workflow_id = "wf-real-qwen-embedding-scheduler";
+    let workflow_semantic_version = "1.0.0";
+    let graph = real_embedding_workflow_graph(MODEL_ID, ARTIFACT_ID);
+    let version = service
+        .resolve_workflow_graph_version(workflow_id, workflow_semantic_version, &graph)
+        .expect("resolve workflow version");
+    let (snapshot, dependency_request) =
+        real_embedding_validation_snapshot(&version, &graph, MODEL_ID, ARTIFACT_ID);
+    service
+        .store_workflow_executable_validation_snapshot(snapshot)
+        .expect("store embedding validation snapshot");
+    dependency_readiness_provider
+        .insert_snapshot(
+            DependencyEnvironmentReadinessSnapshot::for_request(
+                &dependency_request,
+                ready_empty_dependency_environment_result(&dependency_request),
+                DependencyEnvironmentReadinessSnapshotStatus::Fresh,
+            )
+            .expect("valid empty dependency readiness snapshot"),
+        )
+        .expect("insert empty dependency readiness snapshot");
+
+    let host = Arc::new(ImageRuntimeSessionHost::new(graph));
+    let created = service
+        .create_workflow_execution_session(
+            host.as_ref(),
+            WorkflowExecutionSessionCreateRequest {
+                workflow_id: workflow_id.to_string(),
+                usage_profile: None,
+                keep_alive: false,
+            },
+        )
+        .await
+        .expect("create embedding session");
+    let runtime =
+        pantograph_workflow_service::workflow::WorkflowSessionExecutionRuntime::from_shared_service(
+            service.clone(),
+            host,
+        );
+    let response = runtime
+        .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
+            session_id: created.session_id,
+            workflow_semantic_version: workflow_semantic_version.to_string(),
+            inputs: vec![WorkflowPortBinding {
+                node_id: "prompt".to_string(),
+                port_id: "text".to_string(),
+                value: serde_json::json!("generated scheduler probe text"),
+            }],
+            output_targets: Some(vec![WorkflowOutputTarget {
+                node_id: "embedding-infer".to_string(),
+                port_id: "embedding".to_string(),
+            }]),
+            override_selection: None,
+            timeout_ms: None,
+            priority: None,
+        })
+        .await
+        .expect("real embedding scheduler run should complete");
+    let output = response
+        .outputs
+        .iter()
+        .find(|output| output.node_id == "embedding-infer" && output.port_id == "embedding")
+        .expect("embedding workflow output");
+    let vector = output
+        .value
+        .as_array()
+        .expect("embedding workflow output should be an array");
+    assert_eq!(vector.len(), 4096, "Qwen3-Embedding-8B output dimension");
+    assert!(vector.iter().all(serde_json::Value::is_number));
+    assert!(vector
+        .iter()
+        .any(|value| value.as_f64().unwrap_or(0.0) != 0.0));
+
+    service
+        .workflow_diagnostics_projection_refresh(
+            pantograph_workflow_service::WorkflowDiagnosticsProjectionRefreshRequest {
+                projections: vec![
+                    pantograph_workflow_service::WorkflowDiagnosticsProjectionKind::RunDetail,
+                    pantograph_workflow_service::WorkflowDiagnosticsProjectionKind::IoArtifact,
+                ],
+                workflow_run_id: Some(response.workflow_run_id.clone()),
+                workflow_id: Some(workflow_id.to_string()),
+                reason: pantograph_workflow_service::WorkflowDiagnosticsProjectionRefreshReason::ExplicitRefresh,
+                batch_size: 100,
+            },
+        )
+        .expect("refresh embedding projections");
+    let artifacts = service
+        .workflow_io_artifact_query(WorkflowIoArtifactQueryRequest {
+            workflow_run_id: Some(response.workflow_run_id.clone()),
+            node_id: None,
+            producer_node_id: None,
+            consumer_node_id: None,
+            artifact_role: None,
+            media_type: None,
+            retention_state: None,
+            retention_policy_id: None,
+            runtime_id: None,
+            selected_backend_key: None,
+            model_id: None,
+            after_event_seq: None,
+            limit: Some(10),
+            projection_batch_size: Some(100),
+        })
+        .expect("query retained embedding artifact")
+        .artifacts;
+    let artifact = artifacts
+        .iter()
+        .find(|artifact| artifact.producer_port_id.as_deref() == Some("embedding"))
+        .unwrap_or_else(|| panic!("retained embedding artifact: {artifacts:#?}"));
+    assert_eq!(artifact.model_id.as_deref(), Some(MODEL_ID));
+    assert_eq!(artifact.runtime_id.as_deref(), Some("llama_cpp.embedding"));
+    let artifact_id = artifact.artifact_id.clone();
+    let expected_body = service
+        .read_artifact_body(ArtifactReadRequest {
+            artifact_id: artifact_id.clone(),
+            byte_range_start: None,
+            byte_range_end_exclusive: None,
+        })
+        .expect("read retained embedding body")
+        .body;
+    assert!(!expected_body.is_empty());
+
+    drop(runtime);
+    drop(service);
+    let reopened_service = WorkflowService::new()
+        .with_artifact_writer(WorkflowArtifactWriter::new(
+            ArtifactStore::open(&artifact_store_path, test_runtime_artifact_policy())
+                .expect("reopen artifact store"),
+        ))
+        .with_diagnostics_ledger(
+            pantograph_workflow_service::SqliteDiagnosticsLedger::open(&diagnostics_ledger_path)
+                .expect("reopen diagnostics ledger"),
+        );
+    assert_eq!(
+        reopened_service
+            .workflow_run_detail_query(WorkflowRunDetailQueryRequest {
+                workflow_run_id: response.workflow_run_id,
+                projection_batch_size: Some(100),
+            })
+            .expect("query reopened embedding run")
+            .run
+            .expect("reopened embedding run")
+            .status,
+        pantograph_workflow_service::RunListProjectionStatus::Completed
+    );
+    assert_eq!(
+        reopened_service
+            .read_artifact_body(ArtifactReadRequest {
+                artifact_id,
+                byte_range_start: None,
+                byte_range_end_exclusive: None,
+            })
+            .expect("read reopened embedding body")
+            .body,
+        expected_body
+    );
+}
+
+#[cfg(feature = "standalone")]
+fn real_embedding_workflow_graph(model_id: &str, selected_artifact_id: &str) -> WorkflowGraph {
+    WorkflowGraph {
+        nodes: vec![
+            GraphNode {
+                id: "prompt".to_string(),
+                node_type: "text-input".to_string(),
+                position: Position { x: 0.0, y: 0.0 },
+                data: serde_json::json!({}),
+            },
+            GraphNode {
+                id: "embedding-infer".to_string(),
+                node_type: "llm-inference".to_string(),
+                position: Position { x: 240.0, y: 0.0 },
+                data: serde_json::json!({
+                    "task_kind": "embedding",
+                    "runtime": "llama.cpp.embedding",
+                    "device": "cpu",
+                    "inference_interface_snapshot": embedding_runtime_inference_interface_snapshot_json(),
+                    "pumas_model_ref": {
+                        "model_id": model_id,
+                        "selected_artifact_id": selected_artifact_id
+                    }
+                }),
+            },
+        ],
+        edges: vec![GraphEdge {
+            id: "prompt-to-embedding".to_string(),
+            source: "prompt".to_string(),
+            source_handle: "text".to_string(),
+            target: "embedding-infer".to_string(),
+            target_handle: "text".to_string(),
+        }],
+        derived_graph: None,
+    }
+}
+
+#[cfg(feature = "standalone")]
+fn real_embedding_validation_snapshot(
+    version: &WorkflowVersionRecord,
+    graph: &WorkflowGraph,
+    model_id: &str,
+    selected_artifact_id: &str,
+) -> (
+    WorkflowExecutableValidationSnapshotRecord,
+    ValidatedDependencyEnvironmentRequest,
+) {
+    let mut snapshot =
+        image_runtime_validation_snapshot(version, graph, model_id, selected_artifact_id);
+    let model_ref = PumasModelRef {
+        model_id: model_id.to_string(),
+        revision: None,
+        selected_artifact_id: Some(selected_artifact_id.to_string()),
+        selected_artifact_path: None,
+        migration_diagnostics: Vec::new(),
+    };
+    let template = snapshot.nodes[0].clone();
+    let (mut node, _) = runtime_validation_snapshot_node(
+        &template,
+        version,
+        "embedding-infer",
+        "embedding",
+        &model_ref,
+        "llama-embedding",
+        "cpu",
+    );
+    let dependency_request = real_embedding_dependency_environment_request(version, &model_ref);
+    let proof = produce_dependency_requirements_proof(
+        &ValidatedDependencyPlanningRequest::try_from(
+            dependency_request.as_request().planning_request.clone(),
+        )
+        .expect("valid empty embedding planning request"),
+        None,
+    )
+    .expect("empty embedding dependency proof");
+    node.dependency_requirements_id = proof.dependency_requirements_id;
+    node.selected_binding_ids = proof.identity_key.selected_binding_ids;
+    node.dependency_override_fingerprint = proof.dependency_override_fingerprint;
+    snapshot.nodes = vec![node];
+    (snapshot, dependency_request)
+}
+
+#[cfg(feature = "standalone")]
+fn real_embedding_dependency_environment_request(
+    version: &WorkflowVersionRecord,
+    model_ref: &PumasModelRef,
+) -> ValidatedDependencyEnvironmentRequest {
+    let mut planning = image_runtime_dependency_planning_request(version, model_ref, Vec::new());
+    planning.task_id = DependencyTaskId::parse("embedding").expect("valid embedding task id");
+    planning.task_type = Some(planning.task_id.clone());
+    planning.scheduler_intent.requested_runtime_id =
+        Some(RuntimeIntentId::parse("llama_cpp.embedding").expect("valid embedding runtime id"));
+    planning.scheduler_intent.requested_device_id =
+        Some(DeviceIntentId::parse("cpu").expect("valid embedding device id"));
+    planning.caller_context.node_id = Some("embedding-infer".to_string());
+    let identity_key = DependencyPlanningIdentityKey::from_planning_request(&planning)
+        .expect("empty embedding dependency identity");
+    let validated_planning =
+        ValidatedDependencyPlanningRequest::try_from(planning.clone()).expect("valid planning");
+    let proof = produce_dependency_requirements_proof(&validated_planning, None)
+        .expect("empty embedding dependency proof");
+    ValidatedDependencyEnvironmentRequest::try_from(DependencyEnvironmentRequest {
+        contract_version: 1,
+        action: DependencyEnvironmentAction::Resolve,
+        identity_key,
+        planning_request: planning,
+        dependency_requirements_id: Some(proof.dependency_requirements_id),
+        environment_ref: None,
+    })
+    .expect("valid empty embedding dependency request")
+}
+
+#[cfg(feature = "standalone")]
+fn ready_empty_dependency_environment_result(
+    request: &ValidatedDependencyEnvironmentRequest,
+) -> DependencyEnvironmentResult {
+    let request = request.as_request();
+    DependencyEnvironmentResult {
+        contract_version: 1,
+        action: request.action,
+        identity_key: request.identity_key.clone(),
+        readiness_state: DependencyEnvironmentReadinessState::Ready,
+        install_state: DependencyEnvironmentInstallState::Installed,
+        validation_state: DependencyEnvironmentValidationState::Valid,
+        failure_state: None,
+        dependency_requirements_id: request.dependency_requirements_id.clone(),
+        environment_ref: Some(DependencyEnvironmentRef {
+            environment_id: DependencyEnvironmentId::parse("real-qwen-embedding-empty")
+                .expect("valid environment id"),
+            manifest_id: None,
+        }),
+        requirements: Vec::new(),
+        bindings: Vec::new(),
+        selected_binding_ids: Vec::new(),
+        binding_statuses: Vec::new(),
+        operation: None,
+        validation_errors: Vec::new(),
+        diagnostics: Vec::new(),
     }
 }
 

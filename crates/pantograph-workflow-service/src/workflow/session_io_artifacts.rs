@@ -40,6 +40,8 @@ pub(super) fn workflow_io_artifact_metadata(
     workflow_version_id: &str,
     role_label: &str,
     binding: &WorkflowPortBinding,
+    model_id: Option<&str>,
+    runtime_id: Option<&str>,
 ) -> Result<WorkflowIoArtifactMetadata, WorkflowServiceError> {
     let artifact_fact_id = workflow_io_artifact_fact_id(
         workflow_run_id,
@@ -85,8 +87,8 @@ pub(super) fn workflow_io_artifact_metadata(
                     workflow_version_id: Some(workflow_version_id.to_string()),
                     node_id: Some(binding.node_id.clone()),
                     port_id: Some(binding.port_id.clone()),
-                    model_id: None,
-                    runtime_id: None,
+                    model_id: model_id.map(str::to_string),
+                    runtime_id: runtime_id.map(str::to_string),
                 },
                 artifact_role: Some(role_label.to_string()),
                 parent_artifact_id: None,

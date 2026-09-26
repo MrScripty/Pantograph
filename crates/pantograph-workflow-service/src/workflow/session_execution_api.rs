@@ -42,10 +42,10 @@ use super::runtime_branch_task_event::{
     WorkflowRuntimeBranchTaskEventRepository, WorkflowRuntimeBranchTaskEventRequest,
     WorkflowRuntimeBranchTaskEventState,
 };
+use super::runtime_dispatch_assignment::WorkflowRuntimeDispatchAssignmentRepository;
 #[cfg(test)]
 use super::runtime_dispatch_assignment::{
     WorkflowRuntimeDispatchAssignmentId, WorkflowRuntimeDispatchAssignmentRecord,
-    WorkflowRuntimeDispatchAssignmentRepository,
 };
 use super::session_io_artifacts::workflow_io_artifact_metadata;
 use super::session_scheduler_runner::WorkflowSchedulerSessionRunner;
@@ -1280,6 +1280,32 @@ impl WorkflowService {
         .map_err(WorkflowServiceError::from)
     }
 
+    fn runtime_dispatch_output_attribution(
+        &self,
+        workflow_run_id: &str,
+    ) -> Result<HashMap<String, (Option<String>, Option<String>)>, WorkflowServiceError> {
+        let repository = self
+            .runtime_dispatch_assignment_repository
+            .lock()
+            .map_err(|_| {
+                WorkflowServiceError::Internal(
+                    "runtime dispatch assignment repository lock poisoned".to_string(),
+                )
+            })?;
+        Ok(repository
+            .for_workflow_run(workflow_run_id)
+            .into_iter()
+            .map(|record| {
+                let model_id = Some(record.selected_candidate_fact.selected_model_ref.model_id);
+                let runtime_id = record
+                    .selected_runtime_handoff
+                    .dispatch_decision
+                    .map(|decision| decision.selected_runtime_id.as_str().to_string());
+                (record.scheduler_task_id, (model_id, runtime_id))
+            })
+            .collect())
+    }
+
     pub(super) fn record_workflow_io_artifact_events_if_configured(
         &self,
         session: &WorkflowExecutionSessionSummary,
@@ -1296,6 +1322,8 @@ impl WorkflowService {
         let workflow_id = workflow_id_for_scheduler_event(session, snapshot)?;
         let occurred_at_ms = unix_timestamp_ms() as i64;
         let node_types = workflow_run_node_types(snapshot)?;
+        let output_attribution =
+            self.runtime_dispatch_output_attribution(workflow_run_id.as_str())?;
 
         for (role, role_label, binding) in inputs
             .iter()
@@ -1307,6 +1335,10 @@ impl WorkflowService {
                 ]
             }))
         {
+            let (model_id, runtime_id) = output_attribution
+                .get(&binding.node_id)
+                .cloned()
+                .unwrap_or((None, None));
             let metadata = workflow_io_artifact_metadata(
                 self,
                 workflow_run_id.as_str(),
@@ -1316,6 +1348,8 @@ impl WorkflowService {
                     .unwrap_or(workflow_semantic_version),
                 role_label,
                 binding,
+                model_id.as_deref(),
+                runtime_id.as_deref(),
             )?;
             let mut ledger = diagnostics_ledger.lock().map_err(|_| {
                 WorkflowServiceError::Internal("diagnostics ledger lock poisoned".to_string())
@@ -1338,9 +1372,9 @@ impl WorkflowService {
                     node_id: Some(binding.node_id.clone()),
                     node_type: node_types.get(&binding.node_id).cloned(),
                     node_version: None,
-                    runtime_id: None,
+                    runtime_id,
                     runtime_version: None,
-                    model_id: None,
+                    model_id,
                     model_version: None,
                     client_id: event_client_id(session, snapshot)?,
                     client_session_id: event_client_session_id(session, snapshot)?,

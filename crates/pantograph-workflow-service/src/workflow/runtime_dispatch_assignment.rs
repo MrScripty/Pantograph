@@ -211,6 +211,11 @@ pub(super) trait WorkflowRuntimeDispatchAssignmentRepository {
         &self,
         assignment_id: &WorkflowRuntimeDispatchAssignmentId,
     ) -> Option<WorkflowRuntimeDispatchAssignmentRecord>;
+
+    fn for_workflow_run(
+        &self,
+        workflow_run_id: &str,
+    ) -> Vec<WorkflowRuntimeDispatchAssignmentRecord>;
 }
 
 #[derive(Debug, Default)]
@@ -609,6 +614,17 @@ impl WorkflowRuntimeDispatchAssignmentRepository
         assignment_id: &WorkflowRuntimeDispatchAssignmentId,
     ) -> Option<WorkflowRuntimeDispatchAssignmentRecord> {
         self.records.get(assignment_id).cloned()
+    }
+
+    fn for_workflow_run(
+        &self,
+        workflow_run_id: &str,
+    ) -> Vec<WorkflowRuntimeDispatchAssignmentRecord> {
+        self.records
+            .values()
+            .filter(|record| record.workflow_run_id == workflow_run_id)
+            .cloned()
+            .collect()
     }
 
     fn evaluate_running_batch_broker_decision(
