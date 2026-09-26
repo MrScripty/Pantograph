@@ -72,7 +72,13 @@ pub(super) fn workflow_io_artifact_metadata(
 
     let materialized = workflow_io_artifact_body(&binding.value)?;
     let artifact_id = payload_artifact_id.clone();
-    if materialized.body.len() <= RETAINED_WORKFLOW_IO_VALUE_MAX_BYTES {
+    // Runtime-attributed outputs are complete inference results. Their size is
+    // governed by the artifact store policy, rather than the bounded fallback
+    // used for arbitrary oversized workflow values.
+    let requires_complete_retention = model_id.is_some() || runtime_id.is_some();
+    if materialized.body.len() <= RETAINED_WORKFLOW_IO_VALUE_MAX_BYTES
+        || requires_complete_retention
+    {
         if let Ok(writer) = service.artifact_writer() {
             let write_result = writer.write_artifact(ArtifactWriteRequest {
                 artifact_id: Some(artifact_id),
@@ -351,5 +357,89 @@ fn io_artifact_conversion_dependency(
         active_version: dependency.active_version,
         lease_id: dependency.lease_id,
         lease_holder: dependency.lease_holder,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use pantograph_diagnostics_ledger::IoArtifactRetentionState;
+    use tempfile::TempDir;
+
+    use super::workflow_io_artifact_metadata;
+    use crate::workflow::{
+        ArtifactPolicy, ArtifactReadRequest, ArtifactStore, WorkflowPortBinding, WorkflowService,
+    };
+
+    #[test]
+    fn generated_large_structured_output_is_retained_with_model_attribution() {
+        let root = TempDir::new().expect("artifact store root");
+        let store = ArtifactStore::open(
+            root.path(),
+            ArtifactPolicy {
+                policy_id: "generated-output-test".to_string(),
+                policy_version: 1,
+                ttl_seconds: None,
+                max_disk_bytes: Some(1024 * 1024),
+                max_memory_bytes: Some(1024 * 1024),
+                max_single_artifact_bytes: Some(1024 * 1024),
+                spill_threshold_bytes: Some(1024),
+                delete_on_consume: false,
+            },
+        )
+        .expect("open artifact store");
+        let service = WorkflowService::new().with_artifact_store(store);
+        let embedding = serde_json::Value::Array(
+            (0..4096)
+                .map(|_| serde_json::json!(0.12345678901234567))
+                .collect(),
+        );
+        let binding = WorkflowPortBinding {
+            node_id: "embedding-node".to_string(),
+            port_id: "embedding".to_string(),
+            value: embedding.clone(),
+        };
+
+        let metadata = workflow_io_artifact_metadata(
+            &service,
+            "run-generated-large-output",
+            "workflow-generated-output",
+            "version-1",
+            "node_output",
+            &binding,
+            Some("model-qwen-embedding"),
+            Some("runtime-llama-cpp"),
+        )
+        .expect("retain generated output");
+        let expected_body = serde_json::to_vec(&embedding).expect("encode embedding");
+        assert!(expected_body.len() > super::RETAINED_WORKFLOW_IO_VALUE_MAX_BYTES);
+        assert_eq!(metadata.retention_state, IoArtifactRetentionState::Retained);
+        assert!(metadata.payload_ref.is_some());
+        assert!(metadata.read_handle.is_some());
+
+        let descriptor = service
+            .artifact_descriptor(crate::workflow::ArtifactDescriptorQueryRequest {
+                artifact_id: metadata.artifact_id.clone(),
+            })
+            .expect("query retained descriptor")
+            .artifact
+            .expect("retained descriptor");
+        assert_eq!(
+            descriptor.attribution.model_id.as_deref(),
+            Some("model-qwen-embedding")
+        );
+        assert_eq!(
+            descriptor.attribution.runtime_id.as_deref(),
+            Some("runtime-llama-cpp")
+        );
+
+        let retained = service
+            .read_artifact_body(ArtifactReadRequest {
+                artifact_id: metadata.artifact_id,
+                byte_range_start: None,
+                byte_range_end_exclusive: None,
+            })
+            .expect("read complete generated output");
+        assert!(retained.response.complete);
+        assert_eq!(retained.body, expected_body);
     }
 }
