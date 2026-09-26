@@ -81,9 +81,9 @@ fn artifact_store_writes_descriptor_and_reads_body_without_path_leak() {
         descriptor.read_handle.as_deref(),
         Some("artifact-read://artifact_1")
     );
-    assert!(!serde_json::to_string(&descriptor)
-        .expect("serialize descriptor")
-        .contains(temp.path().to_string_lossy().as_ref()));
+    let serialized_descriptor = serde_json::to_string(&descriptor).expect("serialize descriptor");
+    let temp_path = temp.path().to_string_lossy().to_string();
+    assert!(!serialized_descriptor.contains(temp_path.as_str()));
 
     let read = store
         .read_body(ArtifactReadRequest {
