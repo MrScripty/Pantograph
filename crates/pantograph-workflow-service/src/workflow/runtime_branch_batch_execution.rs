@@ -1403,8 +1403,26 @@ fn member_outcome_from_response(
             _ => WorkflowRuntimeBranchBatchMemberExecutionOutcomeState::Failed,
         },
         completed_response: None,
-        diagnostics: Vec::new(),
+        diagnostics: runtime_host_batch_member_diagnostics(response),
     }
+}
+
+fn runtime_host_batch_member_diagnostics(
+    response: &RuntimeHostBatchExecutionMemberResponse,
+) -> Vec<WorkflowRuntimeBranchBatchExecutionDiagnostic> {
+    response
+        .diagnostics
+        .iter()
+        .map(|diagnostic| {
+            WorkflowRuntimeBranchBatchExecutionDiagnostic::new(
+                WorkflowRuntimeBranchBatchExecutionDiagnosticCode::RuntimeHostBatchRequestInvalid,
+                format!(
+                    "runtime-host batch member diagnostic ({:?}): {}",
+                    diagnostic.code, diagnostic.message
+                ),
+            )
+        })
+        .collect()
 }
 
 fn workflow_run_finalization_failure(
@@ -1462,7 +1480,7 @@ fn member_outcome_from_scheduler_mutation(
         workflow_run_id: member.workflow_run_id.clone(),
         state,
         completed_response: None,
-        diagnostics: Vec::new(),
+        diagnostics: runtime_host_batch_member_diagnostics(response),
     }
 }
 
@@ -2136,6 +2154,12 @@ mod tests {
                 WorkflowRuntimeBranchBatchMemberExecutionOutcomeState::Cancelled,
             ]
         );
+        assert!(outcome.member_outcomes[0].diagnostics[0]
+            .message
+            .contains("runtime host rejected the generated image"));
+        assert!(outcome.member_outcomes[1].diagnostics[0]
+            .message
+            .contains("runtime host cancelled the image request"));
         let failed_events = scheduler_task_attempt_terminal_events(&service, "failed");
         assert_eq!(failed_events.len(), 1);
         assert_eq!(
