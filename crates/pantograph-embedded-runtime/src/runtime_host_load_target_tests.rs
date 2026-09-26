@@ -69,6 +69,34 @@ fn intent_requirement_is_local_only_and_preserves_selected_identity() {
         model_ref.selected_artifact_id.as_deref(),
         Some("diffusers-bundle")
     );
+    assert_eq!(model_ref.selected_artifact_path, None);
+}
+
+#[test]
+fn intent_requirement_does_not_promote_legacy_path_constraint() {
+    let request = validated_runtime_host_request();
+    let mut selected_model_ref = request
+        .as_ref()
+        .handoff
+        .dispatch_decision
+        .as_ref()
+        .expect("fixture has dispatch decision")
+        .selected_model_ref
+        .clone();
+    selected_model_ref.selected_artifact_path = Some("/producer/private/model".to_string());
+
+    let requirement = build_runtime_host_model_requirement(&selected_model_ref)
+        .expect("selected model should form a valid intent requirement");
+    let pumas_library::intent::ModelSelector::LocalModel { model_ref } = requirement.selector
+    else {
+        panic!("runtime host must build a local-model requirement");
+    };
+
+    assert_eq!(model_ref.selected_artifact_path, None);
+    assert_eq!(
+        model_ref.selected_artifact_id.as_deref(),
+        Some("diffusers-bundle")
+    );
 }
 
 #[test]

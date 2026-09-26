@@ -123,7 +123,12 @@ fn build_runtime_host_model_requirement(
         model_id: pumas_library_model_id(&selected_model_ref.model_id),
         revision: selected_model_ref.revision.clone(),
         selected_artifact_id: selected_model_ref.selected_artifact_id.clone(),
-        selected_artifact_path: selected_model_ref.selected_artifact_path.clone(),
+        // Pumas intent identity is path-free. The producer-issued executable
+        // path is consumed only after an Available handle crosses the runtime
+        // boundary; forwarding an authored/legacy path here makes it an
+        // intent constraint and can turn a valid local model into an
+        // artifact-mismatch result.
+        selected_artifact_path: None,
         migration_diagnostics: selected_model_ref
             .migration_diagnostics
             .iter()
