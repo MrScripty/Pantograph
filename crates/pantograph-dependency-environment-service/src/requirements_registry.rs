@@ -86,10 +86,14 @@ impl DependencyRequirementsPayload {
             .validate()
             .map_err(DependencyRequirementsRegistryError::InvalidContract)?;
         if self.requirements.is_empty() {
-            return Err(DependencyRequirementsRegistryError::InvalidPayload {
-                field: "dependency_requirements_payload.requirements",
-                reason: "requirements payload must include at least one requirement",
-            });
+            if !self.bindings.is_empty() || !self.selected_binding_ids.is_empty() {
+                return Err(DependencyRequirementsRegistryError::InvalidPayload {
+                    field: "dependency_requirements_payload.requirements",
+                    reason:
+                        "empty requirements payloads must not include bindings or selected binding ids",
+                });
+            }
+            return Ok(());
         }
         if self.bindings.is_empty() {
             return Err(DependencyRequirementsRegistryError::InvalidPayload {

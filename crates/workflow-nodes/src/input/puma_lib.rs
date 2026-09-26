@@ -516,7 +516,6 @@ mod options_provider {
                 .map(|summary| serde_json::Value::Bool(summary.requires_custom_code))
                 .unwrap_or(serde_json::Value::Bool(false)),
             "custom_code_sources": serde_json::Value::Array(Vec::new()),
-            "dependency_bindings": serde_json::Value::Array(Vec::new()),
             "review_reasons": row
                 .package_facts_summary
                 .as_ref()
@@ -1450,6 +1449,10 @@ mod model_library_tests {
         assert_eq!(
             metadata["task_type_primary"],
             serde_json::json!("image_generation")
+        );
+        assert!(
+            metadata.get("dependency_bindings").is_none(),
+            "catalog browsing must not represent an unqueried dependency resolution as empty"
         );
         assert_eq!(metadata["pipeline_tag"], serde_json::json!("text-to-image"));
         assert_eq!(

@@ -1490,6 +1490,133 @@ async fn workflow_execution_session_resume_consumes_fresh_dependency_readiness_s
 }
 
 #[tokio::test]
+async fn workflow_execution_session_admits_resolved_empty_dependencies_to_runtime_host() {
+    let host = Arc::new(RuntimeInferenceSessionHost::new());
+    let dependency_readiness_provider = DependencyEnvironmentReadinessSnapshotProvider::new();
+    let dependency_readiness_work_queue = std::sync::Arc::new(DependencyReadinessWorkQueue::new());
+    let source_refresher = Arc::new(RecordingRuntimeDispatchSourceRefresher::default());
+    let runtime_host_port = Arc::new(CompletingRuntimeHostPort::default());
+    let reservation_lifecycle_port = Arc::new(RecordingReservationLifecyclePort::default());
+    let runtime = WorkflowSessionExecutionRuntime::new(
+        WorkflowService::with_ephemeral_attribution_store()
+            .expect("service")
+            .with_dependency_environment_provider(std::sync::Arc::new(
+                dependency_readiness_provider.clone(),
+            ))
+            .with_dependency_readiness_work_queue(dependency_readiness_work_queue.clone())
+            .with_runtime_dispatch_source_refresher(source_refresher)
+            .with_runtime_dispatch_candidate_provider(Arc::new(
+                SingleCanonicalRuntimeDispatchCandidateProvider,
+            ))
+            .with_runtime_host_execution_port(runtime_host_port.clone())
+            .with_reservation_lifecycle_port(reservation_lifecycle_port.clone()),
+        Arc::clone(&host),
+    );
+    let service = runtime.service();
+    reservation_lifecycle_port.observe_reservation_cleanup_lifecycle(
+        service
+            .scheduler_task_orchestrator
+            .scheduler_lifecycle_handle(),
+    );
+    let workflow_id = "wf-runtime-resolved-empty-dependencies";
+    let workflow_semantic_version = "1.2.3";
+    let graph = runtime_inference_session_graph();
+    let version = service
+        .resolve_workflow_graph_version(workflow_id, workflow_semantic_version, &graph)
+        .expect("resolve workflow version");
+    service
+        .store_workflow_executable_validation_snapshot(
+            runtime_executable_validation_snapshot_with_selected_binding_ids(
+                &version,
+                &graph,
+                Vec::new(),
+            ),
+        )
+        .expect("store executable validation snapshot");
+
+    let dependency_request =
+        runtime_dependency_environment_request_with_selected_binding_ids(&version, Vec::new());
+    dependency_readiness_provider
+        .insert_snapshot(
+            DependencyEnvironmentReadinessSnapshot::for_request(
+                &dependency_request,
+                resolved_empty_dependency_environment_result(&dependency_request),
+                DependencyEnvironmentReadinessSnapshotStatus::Fresh,
+            )
+            .expect("resolved empty dependency snapshot should validate"),
+        )
+        .expect("store resolved empty dependency snapshot");
+
+    let created = service
+        .create_workflow_execution_session(
+            host.as_ref(),
+            WorkflowExecutionSessionCreateRequest {
+                workflow_id: workflow_id.to_string(),
+                usage_profile: None,
+                keep_alive: false,
+            },
+        )
+        .await
+        .expect("create session");
+    let session_id = created.session_id.clone();
+    let pending_error = runtime
+        .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
+            session_id: session_id.clone(),
+            workflow_semantic_version: workflow_semantic_version.to_string(),
+            inputs: vec![WorkflowPortBinding {
+                node_id: "prompt".to_string(),
+                port_id: "text".to_string(),
+                value: serde_json::json!("paint a red cube"),
+            }],
+            output_targets: Some(vec![WorkflowOutputTarget {
+                node_id: "infer".to_string(),
+                port_id: "image".to_string(),
+            }]),
+            override_selection: None,
+            timeout_ms: None,
+            priority: None,
+        })
+        .await
+        .expect_err("resolved dependency requirements should wait for backend readiness");
+    assert_eq!(pending_error.code(), WorkflowErrorCode::RuntimeNotReady);
+    assert_eq!(dependency_readiness_work_queue.len(), 1);
+
+    dependency_readiness_provider
+        .insert_snapshot(
+            DependencyEnvironmentReadinessSnapshot::for_request(
+                &dependency_request,
+                ready_empty_dependency_environment_result(&dependency_request),
+                DependencyEnvironmentReadinessSnapshotStatus::Fresh,
+            )
+            .expect("ready empty dependency snapshot should validate"),
+        )
+        .expect("replace dependency readiness snapshot");
+    let workflow_run_id = {
+        let store = service.session_store_guard().expect("session store");
+        store
+            .active_workflow_run_ids()
+            .into_iter()
+            .next()
+            .expect("active workflow run")
+    };
+
+    let response = service
+        .resume_workflow_execution_session_runtime_dependency_readiness(
+            host.as_ref(),
+            WorkflowExecutionSessionResumeRequest {
+                session_id,
+                workflow_run_id,
+            },
+        )
+        .await
+        .expect("ready ordinary backend should dispatch without custom dependencies");
+
+    assert_eq!(response.outputs.len(), 1);
+    assert_eq!(response.outputs[0].node_id, "infer");
+    assert_eq!(runtime_host_port.requests().len(), 1);
+}
+
+#[tokio::test]
 async fn workflow_execution_session_bootstrap_recovery_applies_dependency_readiness_resume_plan() {
     let host = Arc::new(RuntimeInferenceSessionHost::new());
     let dependency_readiness_provider = DependencyEnvironmentReadinessSnapshotProvider::new();
@@ -2250,16 +2377,21 @@ async fn workflow_execution_session_records_failed_runtime_host_result_as_termin
         .resolve_workflow_graph_version(workflow_id, workflow_semantic_version, &graph)
         .expect("resolve workflow version");
     service
-        .store_workflow_executable_validation_snapshot(runtime_executable_validation_snapshot(
-            &version, &graph,
-        ))
+        .store_workflow_executable_validation_snapshot(
+            runtime_executable_validation_snapshot_with_selected_binding_ids(
+                &version,
+                &graph,
+                Vec::new(),
+            ),
+        )
         .expect("store executable validation snapshot");
-    let dependency_request = runtime_dependency_environment_request(&version);
+    let dependency_request =
+        runtime_dependency_environment_request_with_selected_binding_ids(&version, Vec::new());
     dependency_readiness_provider
         .insert_snapshot(
             DependencyEnvironmentReadinessSnapshot::for_request(
                 &dependency_request,
-                ready_dependency_environment_result(&dependency_request),
+                ready_empty_dependency_environment_result(&dependency_request),
                 DependencyEnvironmentReadinessSnapshotStatus::Fresh,
             )
             .expect("dependency readiness snapshot should validate"),
@@ -2764,6 +2896,58 @@ fn ready_dependency_environment_result(
         requirements: dependency_requirements(),
         bindings: dependency_bindings(&request.identity_key.selected_binding_ids),
         selected_binding_ids: request.identity_key.selected_binding_ids.clone(),
+        binding_statuses: Vec::new(),
+        operation: None,
+        validation_errors: Vec::new(),
+        diagnostics: Vec::new(),
+    }
+}
+
+fn resolved_empty_dependency_environment_result(
+    request: &ValidatedDependencyEnvironmentRequest,
+) -> DependencyEnvironmentResult {
+    let request = request.as_request();
+    DependencyEnvironmentResult {
+        contract_version: 1,
+        action: request.action,
+        identity_key: request.identity_key.clone(),
+        readiness_state: DependencyEnvironmentReadinessState::Resolved,
+        install_state: DependencyEnvironmentInstallState::NotRequested,
+        validation_state: DependencyEnvironmentValidationState::Valid,
+        failure_state: None,
+        dependency_requirements_id: request.dependency_requirements_id.clone(),
+        environment_ref: None,
+        requirements: Vec::new(),
+        bindings: Vec::new(),
+        selected_binding_ids: Vec::new(),
+        binding_statuses: Vec::new(),
+        operation: None,
+        validation_errors: Vec::new(),
+        diagnostics: Vec::new(),
+    }
+}
+
+fn ready_empty_dependency_environment_result(
+    request: &ValidatedDependencyEnvironmentRequest,
+) -> DependencyEnvironmentResult {
+    let request = request.as_request();
+    DependencyEnvironmentResult {
+        contract_version: 1,
+        action: request.action,
+        identity_key: request.identity_key.clone(),
+        readiness_state: DependencyEnvironmentReadinessState::Ready,
+        install_state: DependencyEnvironmentInstallState::Installed,
+        validation_state: DependencyEnvironmentValidationState::Valid,
+        failure_state: None,
+        dependency_requirements_id: request.dependency_requirements_id.clone(),
+        environment_ref: Some(DependencyEnvironmentRef {
+            environment_id: DependencyEnvironmentId::parse("test-empty-dependencies")
+                .expect("valid environment id"),
+            manifest_id: None,
+        }),
+        requirements: Vec::new(),
+        bindings: Vec::new(),
+        selected_binding_ids: Vec::new(),
         binding_statuses: Vec::new(),
         operation: None,
         validation_errors: Vec::new(),
@@ -4325,9 +4509,10 @@ impl RuntimeHostBatchExecutionPort for FailingRuntimeHostBatchPort {
                     outputs: Vec::new(),
                     diagnostics: vec![RuntimeHostExecutionDiagnostic {
                         severity: RuntimeHostExecutionDiagnosticSeverity::Error,
-                        code: RuntimeHostExecutionDiagnosticCode::ExecutionFailed,
-                        message: "runtime host failed image batch execution".to_string(),
-                        hint: Some("test.runtime_host_batch_failed".to_string()),
+                        code: RuntimeHostExecutionDiagnosticCode::RuntimeUnavailable,
+                        message: "runtime host backend is not ready for image batch execution"
+                            .to_string(),
+                        hint: Some("test.runtime_host_backend_unavailable".to_string()),
                     }],
                     terminal_metadata: None,
                 })
@@ -4745,6 +4930,21 @@ fn runtime_executable_validation_snapshot(
     version: &pantograph_runtime_attribution::WorkflowVersionRecord,
     graph: &WorkflowGraph,
 ) -> WorkflowExecutableValidationSnapshotRecord {
+    runtime_executable_validation_snapshot_with_selected_binding_ids(
+        version,
+        graph,
+        vec![
+            pantograph_dependency_planning::DependencyBindingId::parse("torch-diffusers")
+                .expect("valid binding id"),
+        ],
+    )
+}
+
+fn runtime_executable_validation_snapshot_with_selected_binding_ids(
+    version: &pantograph_runtime_attribution::WorkflowVersionRecord,
+    graph: &WorkflowGraph,
+    selected_binding_ids: Vec<pantograph_dependency_planning::DependencyBindingId>,
+) -> WorkflowExecutableValidationSnapshotRecord {
     let model_ref = PumasModelRef {
         model_id: "image/example/tiny-diffusion".to_string(),
         revision: Some("main".to_string()),
@@ -4752,11 +4952,6 @@ fn runtime_executable_validation_snapshot(
         selected_artifact_path: None,
         migration_diagnostics: Vec::new(),
     };
-    let selected_binding_ids =
-        vec![
-            pantograph_dependency_planning::DependencyBindingId::parse("torch-diffusers")
-                .expect("valid binding id"),
-        ];
     let dependency_proof =
         runtime_dependency_requirements_proof(version, &model_ref, selected_binding_ids);
     WorkflowExecutableValidationSnapshotRecord {
@@ -4838,6 +5033,19 @@ fn runtime_dependency_requirements_proof(
 fn runtime_dependency_environment_request(
     version: &pantograph_runtime_attribution::WorkflowVersionRecord,
 ) -> ValidatedDependencyEnvironmentRequest {
+    runtime_dependency_environment_request_with_selected_binding_ids(
+        version,
+        vec![
+            pantograph_dependency_planning::DependencyBindingId::parse("torch-diffusers")
+                .expect("valid binding id"),
+        ],
+    )
+}
+
+fn runtime_dependency_environment_request_with_selected_binding_ids(
+    version: &pantograph_runtime_attribution::WorkflowVersionRecord,
+    selected_binding_ids: Vec<pantograph_dependency_planning::DependencyBindingId>,
+) -> ValidatedDependencyEnvironmentRequest {
     let model_ref = PumasModelRef {
         model_id: "image/example/tiny-diffusion".to_string(),
         revision: Some("main".to_string()),
@@ -4845,11 +5053,6 @@ fn runtime_dependency_environment_request(
         selected_artifact_path: None,
         migration_diagnostics: Vec::new(),
     };
-    let selected_binding_ids =
-        vec![
-            pantograph_dependency_planning::DependencyBindingId::parse("torch-diffusers")
-                .expect("valid binding id"),
-        ];
     let planning_request =
         runtime_dependency_planning_request(version, &model_ref, selected_binding_ids);
     let identity_key = DependencyPlanningIdentityKey::from_planning_request(&planning_request)

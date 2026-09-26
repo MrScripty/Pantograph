@@ -205,6 +205,29 @@ fn payload_extraction_accepts_valid_resolved_result_state() {
     assert_eq!(payload.bindings.len(), 1);
 }
 
+#[test]
+fn payload_extraction_accepts_resolved_result_with_no_additional_requirements() {
+    let mut result: DependencyEnvironmentResult =
+        serde_json::from_str(READY_RESULT).expect("ready fixture should decode");
+    result.readiness_state = DependencyEnvironmentReadinessState::Resolved;
+    result.install_state = DependencyEnvironmentInstallState::NotRequested;
+    result.environment_ref = None;
+    result.requirements.clear();
+    result.bindings.clear();
+    result.selected_binding_ids.clear();
+    result.binding_statuses.clear();
+    result.operation = None;
+    let result = ValidatedDependencyEnvironmentResult::try_from(result)
+        .expect("resolved empty result should validate");
+
+    let payload = DependencyRequirementsPayload::from_result(&result)
+        .expect("resolved empty result should seed an empty payload");
+
+    assert!(payload.requirements.is_empty());
+    assert!(payload.bindings.is_empty());
+    assert!(payload.selected_binding_ids.is_empty());
+}
+
 fn payload_from_ready_result() -> DependencyRequirementsPayload {
     let result = validated_ready_result();
     DependencyRequirementsPayload::from_result(&result).expect("ready result should yield payload")

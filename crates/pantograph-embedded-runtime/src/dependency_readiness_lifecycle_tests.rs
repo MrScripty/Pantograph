@@ -110,6 +110,52 @@ async fn producer_drains_work_queue_into_ready_snapshots_from_package_probe() {
 }
 
 #[tokio::test]
+async fn producer_drains_resolved_empty_requirements_without_package_probe() {
+    let snapshot_provider = Arc::new(DependencyEnvironmentReadinessSnapshotProvider::new());
+    let work_queue = Arc::new(DependencyReadinessWorkQueue::new());
+    let request = validated_empty_requirements_request();
+    let requirements_registry = Arc::new(InMemoryDependencyRequirementsRegistry::new());
+    let empty_payload = empty_requirements_payload(&request);
+    requirements_registry.insert_payload(empty_payload.clone());
+    work_queue.enqueue(work_item(request.clone()));
+    let package_probe_runner = Arc::new(FakePackageProbeRunner::new(
+        PackageReadinessProbeOutcome::Failed(vec![PackageReadinessProbeFailure::new(
+            PackageReadinessProviderDiagnosticCode::PythonUnavailable,
+            None,
+            CapabilityAvailabilityReason::parse("probe must not run for empty requirements")
+                .expect("reason"),
+        )]),
+    ));
+    let inventory = Arc::new(DependencyInventoryService::from_package_probe_runner(
+        package_probe_runner.clone(),
+    ));
+    let producer = EmbeddedDependencyReadinessSnapshotProducer::new(
+        snapshot_provider.clone(),
+        work_queue.clone(),
+        requirements_registry,
+    )
+    .with_dependency_inventory(inventory)
+    .with_config(EmbeddedDependencyReadinessSnapshotProducerConfig {
+        poll_interval: Duration::from_millis(5),
+    });
+    let handle = producer
+        .spawn(tokio::runtime::Handle::current())
+        .expect("producer should spawn");
+
+    tokio::time::sleep(Duration::from_millis(20)).await;
+
+    let result = snapshot_provider.resolve(&request);
+    assert!(work_queue.is_empty());
+    assert_eq!(
+        result.readiness_state,
+        DependencyEnvironmentReadinessState::Ready
+    );
+    assert_eq!(result.binding_statuses.len(), 0);
+    assert_eq!(package_probe_runner.request_count(), 0);
+    handle.shutdown().await;
+}
+
+#[tokio::test]
 async fn producer_reports_missing_snapshot_when_selected_package_is_absent() {
     let snapshot_provider = Arc::new(DependencyEnvironmentReadinessSnapshotProvider::new());
     let work_queue = Arc::new(DependencyReadinessWorkQueue::new());
@@ -353,6 +399,18 @@ fn validated_request() -> ValidatedDependencyEnvironmentRequest {
         .expect("request fixture should validate")
 }
 
+fn validated_empty_requirements_request() -> ValidatedDependencyEnvironmentRequest {
+    let mut request = validated_request().into_inner();
+    request.planning_request.selected_binding_ids.clear();
+    request.identity_key =
+        pantograph_dependency_planning::DependencyPlanningIdentityKey::from_planning_request(
+            &request.planning_request,
+        )
+        .expect("empty requirements identity key");
+    ValidatedDependencyEnvironmentRequest::try_from(request)
+        .expect("empty requirements request should validate")
+}
+
 fn requirements_payload(
     request: &ValidatedDependencyEnvironmentRequest,
 ) -> DependencyRequirementsPayload {
@@ -374,6 +432,20 @@ fn default_host_requirements_payload(
         pantograph_dependency_planning::ValidatedDependencyEnvironmentResult::try_from(result)
             .expect("default-host ready result should validate");
     DependencyRequirementsPayload::from_result(&result).expect("default-host requirements payload")
+}
+
+fn empty_requirements_payload(
+    request: &ValidatedDependencyEnvironmentRequest,
+) -> DependencyRequirementsPayload {
+    let mut result = snapshot_provider_ready_result(request);
+    result.requirements.clear();
+    result.bindings.clear();
+    result.selected_binding_ids.clear();
+    result.binding_statuses.clear();
+    let result =
+        pantograph_dependency_planning::ValidatedDependencyEnvironmentResult::try_from(result)
+            .expect("empty ready result should validate");
+    DependencyRequirementsPayload::from_result(&result).expect("empty requirements payload")
 }
 
 fn snapshot_provider_ready_result(
