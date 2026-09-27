@@ -4,6 +4,7 @@ use crate::runtime_host_load_target::RuntimeHostPumasLoadTargetResolver;
 use crate::runtime_host_media_artifact_sink::WorkflowServiceRuntimeHostMediaArtifactSink;
 use crate::runtime_host_package_facts::RuntimeHostPumasPackageFactsResolver;
 use async_trait::async_trait;
+use futures_util::task::noop_waker;
 use inference::types::{EncodedImage, ImageGenerationResult};
 use inference::{
     BackendExecutionContext, ImageGenerationBatchExecutionMemberResponse,
@@ -62,8 +63,10 @@ use pantograph_workflow_service::{
 use pumas_library::models::{
     AssetValidationState, BundleFormat, ImportState, ModelMetadata, StorageKind,
 };
+use std::future::Future;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Mutex;
+use std::task::{Context, Poll};
 #[cfg(feature = "standalone")]
 use workflow_nodes::pumas_rpc::PumasRpcClient;
 
@@ -2723,10 +2726,10 @@ async fn dependent_text_to_image_keeps_original_response_pending_until_downstrea
         fixture.text_prompts.lock().unwrap().as_slice(),
         ["hold downstream completion"]
     );
+    let waker = noop_waker();
+    let mut context = Context::from_waker(&waker);
     assert!(
-        tokio::time::timeout(std::time::Duration::from_millis(20), &mut run)
-            .await
-            .is_err(),
+        matches!(run.as_mut().poll(&mut context), Poll::Pending),
         "the original caller must remain pending after producer success"
     );
     let plan = fixture

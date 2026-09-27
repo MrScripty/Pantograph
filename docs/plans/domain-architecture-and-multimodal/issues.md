@@ -385,3 +385,14 @@ The final review also confirmed that the image and image-batch paths observe can
 - **Owner/smallest action:** host runtime/storage ownership. Provide a writable service root and run one bounded acquisition/re-observation; do not repeat the same startup probe, manufacture an artifact ID/path, or change Pumas source.
 
 The single product next slice remains a producer-authorized coherent text/image handle or supported acquisition/provenance result, followed by real generated-text scheduler fan-out, desktop inspection and saved-workflow cold reopen. Coding-Standards host restart/reconnect remains outstanding; user-owned proposal files remain unstaged.
+
+### PUMAS-QWEN2-RELEASE-PACKAGE-COHERENCE — open — 2026-09-26
+
+- **Request and identity:** the frozen Pumas 0.7.0 release (`29242fce4ec9043becaeb061587f364ecc4e7177`, binary SHA-256 `61abcd708edea18d7b9cec0fd089c9c45e18b311dcd82b65aa191f5f10038b80`) was exercised from independent roots. Intent-managed upstream acquisition used explicit Qwen/Qwen2.5-0.5B-Instruct-GGUF, GGUF, Q4_K_M constraints; complementary supported HF acquisition used the exact selected filename and producer-issued artifact identity.
+- **Observed result:** acquisition completed. After the supported `submit_model_review` overlay `7a51136a-9733-4145-882d-d8a36b806a9e` removed the producer-created `metadata.json.bak` entry, package-facts resolution still reported an inspection-manifest cache mismatch, logical-size mismatch, and a GGUF header quantization of `MOSTLY_Q5_K_M` against the requested/identified Q4_K_M artifact. LocalOnly intent remained `Incomplete/package_facts_stale`; the independent load-target operation returned a ready file target for the exact selected GGUF path.
+- **Contract meaning and owner:** the release has not produced a coherent intent-available handle. This is Pumas package-facts/cache and artifact-content coherence owned by Pumas release acquisition/indexing, not absent optional dependencies, backend readiness, Pantograph selector logic or permission to derive an identity/path. Pumas source is read-only for this consumer slice.
+- **Smallest next action:** Pumas owner supplies or requalifies one producer-issued artifact whose content, metadata, inspection cache and filesystem target agree, then Pantograph performs one bounded intent re-observation. Do not synthesize an artifact ID, use the parent directory, substitute a Q5 file or repeat the same stale-cache probes.
+
+### PANTOGRAPH-DETERMINISTIC-FANOUT-PENDING — resolved — 2026-09-26
+
+The workflow fan-out regression no longer depends on a 20 ms timeout to prove that the original caller remains pending after producer completion. It directly polls the public future with a noop waker and observes `Poll::Pending`; the focused embedded-runtime test passes 1/1. This is a test determinism repair and does not expand scheduler, desktop or cold-reopen acceptance.
