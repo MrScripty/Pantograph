@@ -172,10 +172,9 @@ impl TauriTaskExecutor {
                         );
                     }
                     Err(error) => {
-                        log::warn!(
-                            "Puma-Lib selected-detail lookup failed during workflow execution: {}; using saved node data",
-                            error
-                        );
+                        return Err(NodeEngineError::ExecutionFailed(format!(
+                            "Puma-Lib selected-detail lookup failed during workflow execution: {error}"
+                        )));
                     }
                 }
             } else {

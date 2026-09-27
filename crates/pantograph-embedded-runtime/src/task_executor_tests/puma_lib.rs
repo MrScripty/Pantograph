@@ -1,5 +1,36 @@
 use super::*;
+use std::io::{Read, Write};
+use std::net::TcpListener;
+use std::thread;
+use workflow_nodes::pumas_rpc::PumasRpcClient;
 use workflow_nodes::setup::{PumasSelectorAccess, PUMAS_SELECTOR_ACCESS};
+
+fn rpc_endpoint_with_selected_detail_failure() -> String {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind Pumas RPC test server");
+    let address = listener
+        .local_addr()
+        .expect("Pumas RPC test server address");
+    thread::spawn(move || {
+        for (request_index, stream) in listener.incoming().take(2).enumerate() {
+            let mut stream = stream.expect("accept Pumas RPC test request");
+            let mut request = [0_u8; 4096];
+            let _ = stream.read(&mut request);
+            let response = if request_index == 0 {
+                r#"{"jsonrpc":"2.0","result":{"llm/test":{"id":"llm/test","path":"/private/pumas/model","cleanedName":"tiny","officialName":"Tiny Test","modelType":"llm","tags":["text"],"hashes":{},"metadata":{},"updatedAt":"2026-09-25T00:00:00Z"}},"id":1}"#
+            } else {
+                r#"{"jsonrpc":"2.0","error":{"code":-32603,"message":"dependency descriptor unavailable","data":{"class":"internal"}},"id":2}"#
+            };
+            write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                response.len(),
+                response
+            )
+            .expect("write Pumas RPC test response");
+        }
+    });
+    format!("http://{address}/rpc")
+}
 
 #[tokio::test]
 async fn puma_lib_execution_hydrates_model_ref_from_model_id_without_path_outputs() {
@@ -405,4 +436,44 @@ async fn puma_lib_execution_does_not_resolve_saved_model_name_without_model_id()
     assert!(outputs.get("resolved_model_package_facts").is_none());
     assert!(outputs.get("resolved_model_artifact_load_target").is_none());
     assert!(outputs.get("pumas_model_ref").is_none());
+}
+
+#[tokio::test]
+async fn puma_lib_execution_fails_closed_when_selected_detail_query_fails() {
+    let adapter: Arc<dyn PythonRuntimeAdapter> = Arc::new(RecordingPythonAdapter {
+        requests: Arc::new(Mutex::new(Vec::new())),
+        response: HashMap::new(),
+    });
+    let (executor, mut extensions) = test_executor(adapter);
+    let endpoint = rpc_endpoint_with_selected_detail_failure();
+    extensions.set(
+        PUMAS_SELECTOR_ACCESS,
+        Arc::new(PumasSelectorAccess::Rpc(Arc::new(
+            PumasRpcClient::new(&endpoint).expect("Pumas RPC client"),
+        ))),
+    );
+
+    let inputs = HashMap::from([(
+        "_data".to_string(),
+        serde_json::json!({
+            "model_id": "llm/test",
+            "task_type_primary": "text-generation"
+        }),
+    )]);
+
+    let error = executor
+        .execute_task("puma-lib-1", inputs, &Context::new(), &extensions)
+        .await
+        .expect_err("a failed producer detail query must not become empty requirements");
+
+    match error {
+        NodeEngineError::ExecutionFailed(message) => {
+            assert!(message.contains("selected-detail lookup failed"));
+            assert!(
+                message.contains("dependency descriptor unavailable"),
+                "unexpected selected-detail error: {message}"
+            );
+        }
+        other => panic!("unexpected error variant: {other:?}"),
+    }
 }
