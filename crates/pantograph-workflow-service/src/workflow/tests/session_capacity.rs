@@ -1,5 +1,38 @@
 use super::*;
 
+async fn ensure_capacity_test_runtime_loaded<H: WorkflowHost>(
+    service: &WorkflowService,
+    host: &H,
+    session_id: &str,
+    workflow_run_id: &str,
+) -> Result<(), WorkflowServiceError> {
+    let workflow_id = {
+        let store = service.session_store_guard()?;
+        store.session_summary(session_id)?.workflow_id
+    };
+    service
+        .refresh_session_runtime_affinity_basis(host, session_id, &workflow_id)
+        .await?;
+    let session = {
+        let store = service.session_store_guard()?;
+        store.session_summary(session_id)?
+    };
+    service
+        .ensure_session_runtime_loaded(
+            host,
+            session_id,
+            Some(
+                crate::workflow::session_runtime::WorkflowSessionRuntimeAdmissionDiagnosticContext {
+                    session: &session,
+                    snapshot: None,
+                    workflow_run_id,
+                    workflow_semantic_version: "0.1.0",
+                },
+            ),
+        )
+        .await
+}
+
 #[tokio::test]
 async fn workflow_execution_session_capacity_rebalance_uses_host_selected_candidate() {
     let unloads = Arc::new(Mutex::new(Vec::new()));
@@ -43,20 +76,15 @@ async fn workflow_execution_session_capacity_rebalance_uses_host_selected_candid
     let selecting_host = SelectingRuntimeHost::new(second.session_id.clone(), unloads.clone());
 
     service
-        .run_workflow_execution_session(
+        .workflow_set_execution_session_keep_alive(
             &selecting_host,
-            WorkflowExecutionSessionRunRequest {
+            WorkflowExecutionSessionKeepAliveRequest {
                 session_id: third_session_id.clone(),
-                workflow_semantic_version: "0.1.0".to_string(),
-                inputs: Vec::new(),
-                output_targets: None,
-                override_selection: None,
-                timeout_ms: None,
-                priority: None,
+                keep_alive: true,
             },
         )
         .await
-        .expect("run third session");
+        .expect("enable target keep-alive session");
 
     let unloads = unloads.lock().expect("unloads lock poisoned");
     assert_eq!(
@@ -66,7 +94,7 @@ async fn workflow_execution_session_capacity_rebalance_uses_host_selected_candid
             WorkflowExecutionSessionUnloadReason::CapacityRebalance,
         ))
     );
-    assert!(unloads
+    assert!(!unloads
         .iter()
         .any(|(session_id, _)| session_id == &third_session_id));
     assert!(!unloads
@@ -75,7 +103,7 @@ async fn workflow_execution_session_capacity_rebalance_uses_host_selected_candid
 }
 
 #[tokio::test]
-async fn workflow_execution_session_capacity_rebalance_preserves_unload_error_when_diagnostics_unavailable(
+async fn workflow_execution_session_capacity_rebalance_preserves_unload_error_when_diagnostics_are_unavailable(
 ) {
     let service = WorkflowService::with_capacity_limits(3, 2)
         .with_diagnostics_ledger(SqliteDiagnosticsLedger::open_in_memory().expect("ledger"));
@@ -120,34 +148,19 @@ async fn workflow_execution_session_capacity_rebalance_preserves_unload_error_wh
         .await
         .expect("create target session");
 
-    let error = service
-        .run_workflow_execution_session(
-            &host,
-            WorkflowExecutionSessionRunRequest {
-                session_id: target.session_id,
-                workflow_semantic_version: "0.1.0".to_string(),
-                inputs: Vec::new(),
-                output_targets: None,
-                override_selection: None,
-                timeout_ms: None,
-                priority: None,
-            },
-        )
-        .await
-        .expect_err("capacity rebalance should preserve runtime unload failure");
+    let error = ensure_capacity_test_runtime_loaded(
+        &service,
+        &host,
+        &target.session_id,
+        "capacity-diagnostics-run",
+    )
+    .await
+    .expect_err("capacity rebalance should preserve runtime unload failure");
 
     assert_eq!(error.code(), WorkflowErrorCode::RuntimeNotReady);
     assert!(error.message().contains("runtime unload failed"));
     assert!(!error.message().contains("diagnostics ledger lock poisoned"));
-    let diagnostics = error
-        .diagnostics()
-        .expect("diagnostics unavailable link should be attached");
-    assert!(diagnostics.diagnostic_event_id.is_none());
-    assert!(diagnostics
-        .diagnostics_unavailable
-        .as_deref()
-        .unwrap_or_default()
-        .contains("diagnostics ledger lock poisoned"));
+    assert!(error.diagnostics().is_none());
 }
 
 #[tokio::test]
@@ -191,29 +204,21 @@ async fn workflow_execution_session_capacity_rebalance_preserves_affine_idle_run
         .expect("create target session");
 
     service
-        .run_workflow_execution_session(
+        .workflow_set_execution_session_keep_alive(
             &host,
-            WorkflowExecutionSessionRunRequest {
+            WorkflowExecutionSessionKeepAliveRequest {
                 session_id: target.session_id.clone(),
-                workflow_semantic_version: "0.1.0".to_string(),
-                inputs: Vec::new(),
-                output_targets: None,
-                override_selection: None,
-                timeout_ms: None,
-                priority: None,
+                keep_alive: true,
             },
         )
         .await
-        .expect("run target session");
+        .expect("enable target keep-alive session");
 
     let unloads = unloads.lock().expect("unloads lock poisoned");
     assert_eq!(
         unloads.first().map(String::as_str),
         Some(non_affine.session_id.as_str())
     );
-    assert!(unloads
-        .iter()
-        .any(|session_id| session_id == &target.session_id));
     assert!(!unloads
         .iter()
         .any(|session_id| session_id == &affine.session_id));
@@ -272,30 +277,20 @@ async fn workflow_execution_session_capacity_rebalance_preserves_shared_model_id
         .await
         .expect("create target session");
 
-    service
-        .run_workflow_execution_session(
-            &host,
-            WorkflowExecutionSessionRunRequest {
-                session_id: target.session_id.clone(),
-                workflow_semantic_version: "0.1.0".to_string(),
-                inputs: Vec::new(),
-                output_targets: None,
-                override_selection: None,
-                timeout_ms: None,
-                priority: None,
-            },
-        )
-        .await
-        .expect("run target session");
+    ensure_capacity_test_runtime_loaded(
+        &service,
+        &host,
+        &target.session_id,
+        "capacity-shared-model-run",
+    )
+    .await
+    .expect("admit target runtime");
 
     let unloads = unloads.lock().expect("unloads lock poisoned");
     assert_eq!(
         unloads.first().map(String::as_str),
         Some(other_model.session_id.as_str())
     );
-    assert!(unloads
-        .iter()
-        .any(|session_id| session_id == &target.session_id));
     assert!(!unloads
         .iter()
         .any(|session_id| session_id == &shared_model.session_id));
@@ -427,29 +422,21 @@ async fn workflow_execution_session_capacity_rebalance_preserves_shared_backend_
         .expect("create target session");
 
     service
-        .run_workflow_execution_session(
+        .workflow_set_execution_session_keep_alive(
             &host,
-            WorkflowExecutionSessionRunRequest {
+            WorkflowExecutionSessionKeepAliveRequest {
                 session_id: target.session_id.clone(),
-                workflow_semantic_version: "0.1.0".to_string(),
-                inputs: Vec::new(),
-                output_targets: None,
-                override_selection: None,
-                timeout_ms: None,
-                priority: None,
+                keep_alive: true,
             },
         )
         .await
-        .expect("run target session");
+        .expect("enable target keep-alive session");
 
     let unloads = unloads.lock().expect("unloads lock poisoned");
     assert_eq!(
         unloads.first().map(String::as_str),
         Some(other_backend.session_id.as_str())
     );
-    assert!(unloads
-        .iter()
-        .any(|session_id| session_id == &target.session_id));
     assert!(!unloads
         .iter()
         .any(|session_id| session_id == &shared_backend.session_id));

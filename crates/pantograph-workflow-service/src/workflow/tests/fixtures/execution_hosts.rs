@@ -364,6 +364,13 @@ impl WorkflowHost for FailingUnloadWithPoisonedDiagnosticsHost {
         self.inner.workflow_graph(workflow_id).await
     }
 
+    async fn workflow_io(
+        &self,
+        workflow_id: &str,
+    ) -> Result<WorkflowIoResponse, WorkflowServiceError> {
+        self.inner.workflow_io(workflow_id).await
+    }
+
     async fn workflow_capabilities(
         &self,
         workflow_id: &str,
