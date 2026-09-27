@@ -308,3 +308,15 @@ The final review also confirmed that the image and image-batch paths observe can
 - **Resolved evidence:** the real scheduler embedding path now has a producer-issued `Available` handle, Pantograph-owned inference, complete retained output, correct model/runtime attribution and a successful cold reopen/read.
 - **Remaining claim:** generated text must still feed downstream image and embedding tasks through the normal scheduler, with a producer-coherent text/image selection, real image execution, desktop authoring/inspection and the required saved-workflow/cold-reopen acceptance. Existing deterministic fan-out/reopen evidence remains bounded to its demonstrated fixture scope.
 - **Owner/next action:** Pantograph integration and desktop acceptance, with producer-owned text package coherence and image profile/identity gates. Qualify those supported producer results, then run the single real text→image/embedding workflow. Pumas remains out of the inference path.
+
+### PANTOGRAPH-REQUIRED-MODEL-READINESS — resolved — 2026-09-26
+
+- **Request/result:** a technical-fit decision with a selected `candle` candidate, `MissingCandidateData`, and a non-empty required-model set previously bypassed readiness because no required backend was listed. Pantograph now treats the model requirement itself as runtime-readiness evidence. With a ready runtime the decision preserves the candidate-incomplete diagnostic; with the unavailable runtime fixture the existing backend-readiness diagnostic remains authoritative.
+- **Regression:** the focused technical-fit test passes, as does the current task-classification suite after its fixture stopped assuming the retired `expand-settings` contract exists. No dependency profile, model identity, or Pumas operation was changed.
+- **Disposition:** accepted as a Pantograph preflight repair. The remaining workflow-service failures are separately classified: graph-session validation/publication (13) and source-input/session-capacity fixtures (5). They remain open and are not hidden by this repair.
+
+### PUMAS-HF-ACQUISITION-REHYDRATION — classified — 2026-09-26
+
+- **Request/result:** released Pumas 0.7.0 source `29242fce4ec9043becaeb061587f364ecc4e7177`, binary SHA-256 `61abcd708edea18d7b9cec0fd089c9c45e18b311dcd82b65aa191f5f10038b80`; the supported `start_model_download_from_hf` implementation resolves a producer-managed artifact destination and starts a new download. It does not rehydrate the retained Qwen imported directory in place.
+- **Classification/owner:** this is a producer acquisition-layout limitation for the retained identity-incomplete fixture, not permission for Pantograph to write a marker, derive an artifact ID, or guess a parent directory. Owner: Pumas provisioning/acquisition contract. No transfer was started because the request would initiate an unbounded multi-gigabyte download.
+- **Smallest next action:** qualify a retained producer-issued identity-bearing package or obtain an explicitly authorized bounded acquisition result, then re-observe intent once and continue Pantograph runtime-host/scheduler acceptance. Pumas source remains read-only.
