@@ -2925,6 +2925,13 @@ mod tests {
             .expect("set PANTOGRAPH_ACCEPTANCE_PUMAS_RPC_ENDPOINT");
         let mut request = runtime_host_request_fixture();
         set_request_model_ref(&mut request, MODEL_ID, SELECTED_ARTIFACT_ID);
+        // This producer-issued package has no upstream revision evidence. Do
+        // not carry the generic fixture's `main` constraint into intent.
+        clear_request_model_revision(&mut request);
+        // The generic fixture also carries a display class name, while the
+        // image contract accepts only primitive option IDs and this runtime
+        // does not support scheduler overrides for this family.
+        request.handoff.task_intent.trait_settings.clear();
         request.handoff.task_intent.constraints.requested_runtime_id =
             Some("pytorch".parse().expect("runtime id"));
         request.handoff.task_intent.constraints.requested_device_id =
@@ -3989,6 +3996,27 @@ mod tests {
                 .preflight_result
                 .identity_key
                 .model_ref = dispatch_decision.task_intent.model_ref.clone();
+        }
+    }
+
+    fn clear_request_model_revision(request: &mut RuntimeHostExecutionRequest) {
+        request.handoff.task_intent.model_ref.revision = None;
+        request
+            .handoff
+            .readiness_proof
+            .preflight_result
+            .identity_key
+            .model_ref
+            .revision = None;
+        if let Some(dispatch_decision) = request.handoff.dispatch_decision.as_mut() {
+            dispatch_decision.task_intent.model_ref.revision = None;
+            dispatch_decision.selected_model_ref.revision = None;
+            dispatch_decision
+                .readiness_proof
+                .preflight_result
+                .identity_key
+                .model_ref
+                .revision = None;
         }
     }
 

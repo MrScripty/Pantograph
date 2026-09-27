@@ -186,9 +186,17 @@ pub(super) struct PyTorchGenerateImageRequest {
 
 impl From<&ImageGenerationExecutionPlan> for PyTorchGenerateImageRequest {
     fn from(plan: &ImageGenerationExecutionPlan) -> Self {
+        // Verification evidence is Pantograph runtime-boundary metadata. The
+        // Python worker contract intentionally accepts only load-target data
+        // it consumes, so do not leak the Rust-only evidence fields into its
+        // deny-unknown-fields payload.
+        let mut artifact_load_target = plan.artifact_load_target.clone();
+        artifact_load_target.verification_source_fingerprint = None;
+        artifact_load_target.verification_observed_from_cache_at = None;
+
         Self {
             model_ref: plan.model_ref.clone(),
-            artifact_load_target: plan.artifact_load_target.clone(),
+            artifact_load_target,
             family: plan.family,
             pipeline_class: plan.pipeline_class.clone(),
             required_components: plan.required_components.clone(),
