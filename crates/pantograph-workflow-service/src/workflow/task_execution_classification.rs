@@ -55,17 +55,16 @@ fn is_first_stage_node_engine_task(node_type: &str) -> bool {
 mod tests {
     use super::*;
 
-    fn contract(node_type: &str) -> NodeTypeContract {
+    fn contract(node_type: &str) -> Option<NodeTypeContract> {
         workflow_nodes::builtin_node_contracts()
             .expect("built-in node contracts")
             .into_iter()
             .find(|contract| contract.node_type.as_str() == node_type)
-            .unwrap_or_else(|| panic!("missing contract for {node_type}"))
     }
 
     #[test]
     fn classifier_marks_llm_inference_as_runtime_inference() {
-        let contract = contract("llm-inference");
+        let contract = contract("llm-inference").expect("llm inference contract");
 
         assert_eq!(
             classify_workflow_scheduler_task("llm-inference", Some(&contract)),
@@ -76,7 +75,7 @@ mod tests {
     #[test]
     fn classifier_marks_source_inputs_as_source_input() {
         for node_type in ["boolean-input", "text-input"] {
-            let contract = contract(node_type);
+            let contract = contract(node_type).expect("source input contract");
 
             assert_eq!(
                 classify_workflow_scheduler_task(node_type, Some(&contract)),
@@ -88,7 +87,7 @@ mod tests {
 
     #[test]
     fn classifier_marks_first_stage_output_as_non_runtime_node_engine() {
-        let contract = contract("text-output");
+        let contract = contract("text-output").expect("text output contract");
 
         assert_eq!(
             classify_workflow_scheduler_task("text-output", Some(&contract)),
@@ -98,7 +97,7 @@ mod tests {
 
     #[test]
     fn classifier_marks_puma_lib_as_materialization_boundary() {
-        let contract = contract("puma-lib");
+        let contract = contract("puma-lib").expect("puma library contract");
 
         assert_eq!(
             classify_workflow_scheduler_task("puma-lib", Some(&contract)),
@@ -109,13 +108,18 @@ mod tests {
     #[test]
     fn classifier_rejects_excluded_and_unknown_nodes() {
         for node_type in ["model-provider", "expand-settings", "image-output"] {
-            let contract = contract(node_type);
-
-            assert_eq!(
-                classify_workflow_scheduler_task(node_type, Some(&contract)),
-                WorkflowSchedulerTaskExecutionClass::Unsupported,
-                "{node_type} should not enter the first-stage adapter"
-            );
+            match contract(node_type) {
+                Some(contract) => assert_eq!(
+                    classify_workflow_scheduler_task(node_type, Some(&contract)),
+                    WorkflowSchedulerTaskExecutionClass::Unsupported,
+                    "{node_type} should not enter the first-stage adapter"
+                ),
+                None => assert_eq!(
+                    classify_workflow_scheduler_task(node_type, None),
+                    WorkflowSchedulerTaskExecutionClass::Unsupported,
+                    "retired {node_type} should not enter the first-stage adapter"
+                ),
+            }
         }
 
         assert_eq!(
@@ -126,8 +130,8 @@ mod tests {
 
     #[test]
     fn classifier_requires_matching_contract_facts() {
-        let text_contract = contract("text-input");
-        let inference_contract = contract("llm-inference");
+        let text_contract = contract("text-input").expect("text input contract");
+        let inference_contract = contract("llm-inference").expect("llm inference contract");
 
         assert_eq!(
             classify_workflow_scheduler_task("llm-inference", Some(&text_contract)),

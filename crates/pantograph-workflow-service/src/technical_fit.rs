@@ -1082,7 +1082,7 @@ fn decision_conflicts_with_required_backends(
 fn decision_enforces_runtime_readiness(
     decision: &WorkflowTechnicalFitDecision,
     required_backends: &[String],
-    _required_models: &[String],
+    required_models: &[String],
 ) -> bool {
     if required_backends
         .iter()
@@ -1092,6 +1092,10 @@ fn decision_enforces_runtime_readiness(
     }
 
     if decision.selected_model_id.is_some() {
+        return true;
+    }
+
+    if required_models.iter().any(|model| !model.trim().is_empty()) {
         return true;
     }
 
@@ -1354,6 +1358,14 @@ mod tests {
                     .to_string(),
             ),
         }
+    }
+
+    fn ready_candle_runtime() -> WorkflowRuntimeCapability {
+        let mut runtime = unavailable_candle_runtime();
+        runtime.configured = true;
+        runtime.readiness_state = Some(WorkflowRuntimeReadinessState::Ready);
+        runtime.unavailable_reason = None;
+        runtime
     }
 
     fn ready_llama_runtime() -> WorkflowRuntimeCapability {
@@ -1638,7 +1650,7 @@ mod tests {
             &decision,
             &[],
             &["llm/gen-verse/trado-8b-instruct".to_string()],
-            &[unavailable_candle_runtime()],
+            &[ready_candle_runtime()],
         );
 
         assert_eq!(assessment.runtime_warnings.len(), 1);
