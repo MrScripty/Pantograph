@@ -396,3 +396,25 @@ The single product next slice remains a producer-authorized coherent text/image 
 ### PANTOGRAPH-DETERMINISTIC-FANOUT-PENDING — resolved — 2026-09-26
 
 The workflow fan-out regression no longer depends on a 20 ms timeout to prove that the original caller remains pending after producer completion. It directly polls the public future with a noop waker and observes `Poll::Pending`; the focused embedded-runtime test passes 1/1. This is a test determinism repair and does not expand scheduler, desktop or cold-reopen acceptance.
+
+### PUMAS-TINY-AYA-DIRECTORY-COHERENCE — open — 2026-09-27
+
+- **Request/result:** against the frozen release at `http://127.0.0.1:34813/rpc`, LocalOnly intent for producer model `llm/cohere2/coherelabs--tiny-aya-water__full_repo` and selected artifact `coherelabs--tiny-aya-water__files_b673ab802c36` returned `Incomplete/artifact_path_invalid` on `handle.local_load_path`. Complementary package facts identify an `hf_compatible_directory` with two shards and a logical-size mismatch.
+- **Meaning/owner:** the release's directory/package filesystem-kind and package-facts coherence is owned by Pumas. It is not evidence that Pantograph may select a parent directory or rewrite identity.
+- **Smallest action:** obtain one producer-issued directory handle whose entry path, filesystem kind, identity and complete package facts agree; then perform one bounded intent re-observation. No Pumas source change is admitted.
+
+### PUMAS-TINYLLAMA-GGUF-CACHE-CONTENT-COHERENCE — open — 2026-09-27
+
+- **Request/result:** intent-managed acquisition for `TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF`, GGUF `q4_k_m`, completed 668,788,096 downloaded bytes and returned producer model/artifact/revision identity. Review overlay `211de3bc-9de1-4345-a230-f4fad7595328` supplied bounded text-generation/llama.cpp evidence and left optional bindings empty. LocalOnly intent nevertheless returned `Incomplete/package_facts_stale`.
+- **Deciding evidence/owner:** package facts are otherwise valid and identity-bearing, but the GGUF header is `MOSTLY_Q5_K_M` while the producer request/identity is Q4_K_M. This is Pumas release cache/content coherence, not optional dependency absence, backend readiness or permission to substitute a file.
+- **Smallest action:** producer reissues or coherently refreshes one artifact/cache result, then Pantograph re-observes intent once. Do not use the low-level ready target to bypass intent, change quantization, or alter metadata locally.
+
+### PANTOGRAPH-TINY-SD-IMAGE-RUNTIME-HOST-RECHECK — accepted in scope — 2026-09-27
+
+- **Evidence:** the frozen release at `http://127.0.0.1:34823/rpc` returned the existing Tiny SD intent handle; the real ignored runtime-host test passed 1/1 and retained a complete 441,767-byte PNG through Pantograph's unified PyTorch/Diffusers gateway.
+- **Boundary:** this accepts producer-handle consumption and real image runtime-host execution only. It does not accept scheduler text fan-out, desktop authoring/inspection, or saved-workflow cold reopen. The isolated service stopped cleanly and no Pumas inference route was used.
+
+### PANTOGRAPH-QWEN-EMBEDDING-RECHECK — producer-gated — 2026-09-27
+
+- **Evidence:** after correcting the sidecar binary-root environment, the real embedding workflow reached the Pumas intent/load-target boundary and failed closed on `Incomplete/package_facts_stale`; no inference occurred.
+- **Owner/action:** Pumas package-facts/cache coherence. Preserve the prior accepted embedding scheduler/cold-reopen evidence within its recorded scope; obtain a current coherent handle before claiming current multimodal fan-out.
