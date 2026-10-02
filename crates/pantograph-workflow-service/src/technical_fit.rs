@@ -1636,9 +1636,9 @@ mod tests {
 
         let assessment = workflow_runtime_preflight_from_decision(
             &decision,
-            &[],
+            &["candle".to_string()],
             &["llm/gen-verse/trado-8b-instruct".to_string()],
-            &[unavailable_candle_runtime()],
+            &[],
         );
 
         assert_eq!(assessment.runtime_warnings.len(), 1);

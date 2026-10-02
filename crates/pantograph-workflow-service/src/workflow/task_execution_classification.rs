@@ -108,7 +108,7 @@ mod tests {
 
     #[test]
     fn classifier_rejects_excluded_and_unknown_nodes() {
-        for node_type in ["model-provider", "expand-settings", "image-output"] {
+        for node_type in ["model-provider", "image-output"] {
             let contract = contract(node_type);
 
             assert_eq!(
@@ -118,6 +118,14 @@ mod tests {
             );
         }
 
+        assert!(!workflow_nodes::builtin_node_contracts()
+            .expect("built-in node contracts")
+            .iter()
+            .any(|contract| contract.node_type.as_str() == "expand-settings"));
+        assert_eq!(
+            classify_workflow_scheduler_task("expand-settings", None),
+            WorkflowSchedulerTaskExecutionClass::Unsupported
+        );
         assert_eq!(
             classify_workflow_scheduler_task("not-registered", None),
             WorkflowSchedulerTaskExecutionClass::Unsupported
