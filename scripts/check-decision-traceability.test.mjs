@@ -310,3 +310,24 @@ test('changing the canonical owner requires disposition of the retained prior gu
   f.git('add', guide);
   passed(f.run());
 });
+
+test('PR callers select the fork point explicitly without changing exact range semantics', t => {
+  const f = fixture(t);
+  f.write('src/internal.rs', 'fn pr_repair() {}\n');
+  const head = f.commit();
+  f.git('checkout', '-b', 'target', f.base);
+  const next = f.map([{ id: 'target-only', triggers: ['docs/adr/ADR-002-target.md'], artifact: 'docs/target-guide.md', profile: 'contract-readme', knowledge: 'Target-only contract' }]);
+  f.writeMap(next);
+  f.write('docs/adr/ADR-002-target.md', '# Target decision\n');
+  f.write('docs/target-guide.md', '# Target owner\n');
+  f.write('scripts/README.md', '# Gate\n\nTarget-only contract added.\n');
+  const target = f.commit();
+  const env = { TRACEABILITY_STAGED_ONLY: undefined, TRACEABILITY_MODE: 'range', TRACEABILITY_BASE_REF: target, TRACEABILITY_HEAD_REF: head };
+  // Exact range is intentionally not silently changed by the checker.
+  failed(f.run(env), /unavailable: docs\/target-guide.md is missing/);
+  const base = f.git('merge-base', '--all', target, head);
+  assert.equal(base, f.base);
+  const result = f.run({ ...env, TRACEABILITY_BASE_REF: base });
+  passed(result);
+  assert.match(result.output, /1 changed path\(s\), 0 mapped impact\(s\)/);
+});

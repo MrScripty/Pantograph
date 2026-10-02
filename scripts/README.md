@@ -173,8 +173,12 @@ TRACEABILITY_MODE=range TRACEABILITY_BASE_REF=<base-commit> \
   TRACEABILITY_HEAD_REF=<head-commit> npm run traceability
 ```
 
-The gate reports the resolved input IDs. CI supplies event base/head commits
-and fetches their history. Missing modes, refs, maps, owners or local targets
+The gate reports and compares the exact supplied input IDs. CI fetches history
+and, for pull requests, explicitly selects the unique merge base of the event
+base/head commits as the comparison base. This excludes unrelated target-branch
+changes from the PR delta. Push events compare the event before/head commits
+directly. Missing or multiple PR merge bases fail; the gate itself never silently
+substitutes a caller-provided revision. Missing modes, refs, maps, owners or local targets
 fail; unreadable Git state also fails. The old source-root/host/producer path
 list overrides are rejected. The shell entrypoint explicitly selects this
 repository's map; the Node implementation accepts `--map` for isolated tests or
