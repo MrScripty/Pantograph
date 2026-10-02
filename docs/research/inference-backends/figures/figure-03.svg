@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="600" viewBox="0 0 1000 600">
+<rect width="1000" height="600" fill="white"/>
+<defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#526d7a"/></marker></defs>
+<text x="30" y="36.0" text-anchor="start" font-family="DejaVu Sans, sans-serif" font-size="25" font-weight="bold" fill="#152b38">Compatibility is an envelope</text>
+<text x="30" y="65.0" text-anchor="start" font-family="DejaVu Sans, sans-serif" font-size="17" font-weight="normal" fill="#52616a">Eligibility is the intersection of semantic, runtime and policy constraints</text>
+<rect x="345" y="245" width="310" height="108" rx="8" fill="#eaf3ee" stroke="#748994" stroke-width="1.5"/>
+<text x="500.0" y="275.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38">Execution case</text>
+<text x="500.0" y="304.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">Artifact + task + request</text>
+<text x="500.0" y="327.76" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">Adapter + runtime + device</text>
+<rect x="30" y="105" width="280" height="99" rx="8" fill="#eaf1f5" stroke="#748994" stroke-width="1.5"/>
+<text x="170.0" y="135.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38">Program</text>
+<text x="170.0" y="164.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">Family / operators / config</text>
+<path d="M170.0,204 L350,246" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+<rect x="360" y="105" width="280" height="99" rx="8" fill="#eaf1f5" stroke="#748994" stroke-width="1.5"/>
+<text x="500.0" y="135.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38">Task</text>
+<text x="500.0" y="164.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">Head / recipe / options</text>
+<path d="M500.0,204 L500.0,246" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+<rect x="690" y="105" width="280" height="99" rx="8" fill="#eaf1f5" stroke="#748994" stroke-width="1.5"/>
+<text x="830.0" y="135.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38">Representation</text>
+<text x="830.0" y="164.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">Layout / dtype / quantization</text>
+<path d="M830.0,204 L650,246" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+<rect x="30" y="390" width="280" height="99" rx="8" fill="#eaf1f5" stroke="#748994" stroke-width="1.5"/>
+<text x="170.0" y="420.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38">Inputs</text>
+<text x="170.0" y="449.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">Shape / units / processors</text>
+<path d="M170.0,390 L350,350" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+<rect x="360" y="390" width="280" height="99" rx="8" fill="#eaf1f5" stroke="#748994" stroke-width="1.5"/>
+<text x="500.0" y="420.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38">Runtime</text>
+<text x="500.0" y="449.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">Build / device / lifecycle</text>
+<path d="M500.0,390 L500.0,350" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+<rect x="690" y="390" width="280" height="99" rx="8" fill="#eaf1f5" stroke="#748994" stroke-width="1.5"/>
+<text x="830.0" y="420.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38">Policy</text>
+<text x="830.0" y="449.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">Trust / network / resources</text>
+<path d="M830.0,390 L650,350" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+<text x="500" y="545.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="bold" fill="#152b38">Recognized → structurally checked → loaded → reference-qualified</text>
+<text x="500" y="575.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="17" font-weight="normal" fill="#152b38">Each evidence claim is bounded by revisions, options and input envelope</text>
+</svg>

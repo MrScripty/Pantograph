@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="565" viewBox="0 0 1000 565">
+<rect width="1000" height="565" fill="white"/>
+<defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#526d7a"/></marker></defs>
+<text x="30" y="36.0" text-anchor="start" font-family="DejaVu Sans, sans-serif" font-size="25" font-weight="bold" fill="#152b38">Static programs can accept dynamic checkpoint data</text>
+<text x="30" y="65.0" text-anchor="start" font-family="DejaVu Sans, sans-serif" font-size="17" font-weight="normal" fill="#52616a">Native Rust implementations do not require one source fork per model ID</text>
+<rect x="45" y="110" width="330" height="115" rx="8" fill="#eaf1f5" stroke="#748994" stroke-width="1.5"/>
+<text x="210.0" y="140.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38">Runtime data</text>
+<text x="210.0" y="169.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">Weights · dimensions · layer count</text>
+<text x="210.0" y="192.76" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">Known configuration choices</text>
+<rect x="470" y="110" width="475" height="115" rx="8" fill="#eaf3ee" stroke="#748994" stroke-width="1.5"/>
+<text x="707.5" y="140.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38">Compiled family semantics</text>
+<text x="707.5" y="169.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">Known forward program · heads · caches</text>
+<text x="707.5" y="192.76" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">Known operators and device paths</text>
+<path d="M375,165 L462,165" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+<rect x="130" y="290" width="740" height="91" rx="8" fill="#eaf3ee" stroke="#748994" stroke-width="1.5"/>
+<text x="500.0" y="320.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38">Many compatible checkpoints</text>
+<text x="500.0" y="349.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">The same implementation accepts parameter variation inside its envelope</text>
+<polyline points="706,225 706,260 500,260 500,282" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+<rect x="45" y="435" width="435" height="94" rx="8" fill="#f5f0e5" stroke="#748994" stroke-width="1.5"/>
+<text x="262.5" y="465.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38">A new serialization convention</text>
+<text x="262.5" y="494.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">May need a tested name / layout rule</text>
+<rect x="520" y="435" width="435" height="94" rx="8" fill="#f7e9e5" stroke="#748994" stroke-width="1.5"/>
+<text x="737.5" y="465.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38">New program or kernel semantics</text>
+<text x="737.5" y="494.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">Needs implementation or an admitted route</text>
+</svg>
