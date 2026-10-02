@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "boundaries": [
+    {
+      "id": "headless-execution",
+      "triggers": [
+        "docs/adr/ADR-001-headless-embedding-service-boundary.md",
+        "docs/adr/ADR-011-scheduler-only-workflow-execution.md"
+      ],
+      "artifact": "docs/headless-workflow.md",
+      "profile": "contract-readme",
+      "knowledge": "Host adapter ownership and the scheduler-session consumer lifecycle"
+    },
+    {
+      "id": "runtime-operations",
+      "triggers": [
+        "docs/adr/ADR-002-runtime-registry-ownership-and-lifecycle.md",
+        "docs/adr/ADR-003-runtime-redistributables-manager-boundary.md",
+        "docs/adr/ADR-007-managed-runtime-observability-ownership.md"
+      ],
+      "artifact": "docs/runtime-operations.md",
+      "profile": "runbook",
+      "knowledge": "Backend runtime lifecycle, readiness, observability, and recovery ownership"
+    },
+    {
+      "id": "node-contract-ownership",
+      "triggers": [
+        "docs/adr/ADR-006-canonical-node-contract-ownership.md",
+        "docs/adr/ADR-009-composed-node-contracts-and-migration.md"
+      ],
+      "artifact": "ARCHITECTURE.md",
+      "profile": "boundary-readme",
+      "knowledge": "Canonical primitive/composed node contracts and migration responsibility"
+    },
+    {
+      "id": "rust-workspace-policy",
+      "triggers": ["docs/adr/ADR-017-rust-workspace-policy.md"],
+      "artifact": "docs/development.md",
+      "profile": "runbook",
+      "knowledge": "Contributor-facing workspace policy and verification procedure"
+    },
+    {
+      "id": "traceability-policy",
+      "triggers": ["scripts/decision-traceability-map.json"],
+      "artifact": "scripts/README.md",
+      "profile": "boundary-readme",
+      "knowledge": "Declared impact coverage and operation of the traceability gate"
+    }
+  ]
+}

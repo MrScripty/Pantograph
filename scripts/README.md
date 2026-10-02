@@ -10,7 +10,9 @@ main app entrypoint.
 | ----------- | ----------- |
 | `check-runtime-redistributables-smoke.sh` | Verifies a built Pantograph release artifact exists, then runs the bounded release contract smoke that covers managed-runtime view projection, runtime diagnostics projection, current image workflow shape, Pumas resolution, stale graph diagnostics, and image artifact retention. |
 | `check-current-image-workflow-smoke.mjs` | Validates the bundled current image workflow template and tracked Juggernaut workflow still use canonical `puma-lib -> llm-inference -> image-output` graph shape without retired executable inference nodes. |
-| `check-decision-traceability.sh` | Enforces source-directory README/ADR decision traceability for changed source directories, with repo-specific host-facing and structured-producer paths plus a grep fallback when `ripgrep` is unavailable. |
+| `check-decision-traceability.sh` | Runs the decision-to-guide traceability gate over explicit Git snapshots using the reviewed impact map. |
+| `check-decision-traceability.mjs` | Validates mapped decision impacts, canonical guides, and local ADR references without per-directory documentation rules. |
+| `check-decision-traceability.test.mjs` | Exercises Git snapshot isolation, impact ownership, missing inputs, broken references, and path transitions. |
 | `check-no-python-linkage.sh` | Verifies the runtime-separation guarantee that Pantograph no longer links Python in-process. |
 | `check-scheduler-only-workflow-execution.sh` | Fails when public Rust, Tauri, binding, or frontend source reintroduces direct workflow execution APIs outside scheduler session execution. |
 | `check-rustler-beam-smoke.sh` | Builds `pantograph_rustler`, verifies the local BEAM toolchain exists, and runs the Mix smoke harness under `bindings/beam/pantograph_native_smoke/`. |
@@ -52,14 +54,12 @@ can be debugged without the full app UI in the loop.
 
 ## Invariants
 - Scripts run relative to the repository root.
-- Decision traceability defaults cover `src`, `src-tauri/src`, `crates`,
-  `packages/svelte-graph/src`, `scripts`, and `.pantograph`; use environment
-  overrides for temporary focused audits. The default host-facing and
-  structured-producer lists include UniFFI binding generator helpers and active
-  inference managed-runtime producers only.
-- Decision traceability must preserve equivalent README/ADR checks when `rg` is
-  unavailable by falling back to standard shell tooling instead of failing on
-  clean CI runners.
+- Decision traceability checks only declared decision-source impacts and local
+  references. It does not infer semantic contract changes from source-directory
+  names, require fixed headings, or accept an unrelated ADR as evidence.
+- The gate reads the selected Git snapshots, including the map and guides. It
+  fails on unavailable or unreadable inputs rather than guessing a branch or
+  treating a failed diff as an empty change.
 - Smoke tests target real Pantograph worker/runtime modules, not forks of that
   logic.
 - Release contract smoke is headless: it validates the built artifact and
@@ -79,7 +79,10 @@ can be debugged without the full app UI in the loop.
 and repo-local build configuration.
 
 **External:** Bash, Node.js, Python, and any runtime libraries required by the
-specific script being executed.
+specific script being executed. Decision traceability additionally uses the
+locked development-only `commonmark` package (BSD-2-Clause); run `npm ci` before
+invoking it. The package owns Markdown parsing, avoiding a parallel regex
+grammar; it does not render or execute document content.
 
 ## Related ADRs
 - `docs/adr/ADR-011-scheduler-only-workflow-execution.md`
@@ -93,11 +96,12 @@ specific script being executed.
 python3 -m py_compile scripts/diffusion_cli_smoketest.py
 ./.venv/bin/python scripts/diffusion_cli_smoketest.py --model-path /path/to/tiny-sd-turbo
 node scripts/check-current-image-workflow-smoke.mjs
-npm run lint:no-new
+TRACEABILITY_STAGED_ONLY=1 npm run lint:no-new
 npm run lint:a11y
 npm run format:check
 npm run release:sbom -- 0.1.0
-./scripts/check-decision-traceability.sh
+TRACEABILITY_STAGED_ONLY=1 ./scripts/check-decision-traceability.sh
+node --test scripts/check-decision-traceability.test.mjs
 ./scripts/check-no-python-linkage.sh
 ./scripts/check-scheduler-only-workflow-execution.sh
 ./scripts/check-rustler-beam-smoke.sh
@@ -135,3 +139,73 @@ Reason: script stdout/stderr is diagnostic and may change unless a future script
 is explicitly documented as machine-consumed.
 Revisit trigger: CI, external tooling, or another repo begins parsing a script's
 output structurally.
+
+## Decision Traceability Operation
+
+The [impact map](decision-traceability-map.json) is owned by this guide. It maps
+exact accepted decision documents to current documentation owners:
+
+- ADR-001/011: host/service ownership and scheduler-session consumer lifecycle,
+  owned by [headless integration](../docs/headless-workflow.md)
+- ADR-002/003/007: runtime lifecycle, readiness, observability and recovery,
+  owned by [runtime operations](../docs/runtime-operations.md)
+- ADR-006/009: canonical/composed-node and migration responsibility,
+  owned by [architecture](../ARCHITECTURE.md)
+- ADR-017: contributor workspace policy and verification procedure,
+  owned by [development](../docs/development.md)
+- The map itself: the gate's declared coverage, owned by this guide
+
+Changing a mapped decision or its mapping requires updating that boundary's
+canonical guide. New or changed unmapped ADRs fail as unresolved coverage until
+an owner and the affected knowledge are declared. Removing a row or moving a
+trigger still evaluates its prior obligation. A moved guide must be replaced in
+the current map and affected links; if the old guide remains, update it to
+explain the migration. A retired row still requires its prior guide
+to explain the change. The map admits exact decision-document paths only, not
+whole source trees or mixed implementation files.
+
+Staged mode (`TRACEABILITY_STAGED_ONLY=1`) compares HEAD with the index tree and
+reads all content from those snapshots. Unstaged documents cannot repair the
+index. Range mode requires both revisions explicitly:
+
+```bash
+TRACEABILITY_MODE=range TRACEABILITY_BASE_REF=<base-commit> \
+  TRACEABILITY_HEAD_REF=<head-commit> npm run traceability
+```
+
+The gate reports and compares the exact supplied input IDs. CI fetches history
+and, for pull requests, explicitly selects the unique merge base of the event
+base/head commits as the comparison base. This excludes unrelated target-branch
+changes from the PR delta. Push events compare the event before/head commits
+directly. Missing or multiple PR merge bases fail; the gate itself never silently
+substitutes a caller-provided revision. Missing modes, refs, maps, owners or local targets
+fail; unreadable Git state also fails. The old source-root/host/producer path
+list overrides are rejected. The shell entrypoint explicitly selects this
+repository's map; the Node implementation accepts `--map` for isolated tests or
+an explicitly reviewed alternative.
+
+Both prior and current maps are read. The sole migration case is the audited
+pre-map commit `4938e405c7f656365eefdca492774ccae110c90d` with this exact map path.
+At that base, current decision rows must also resolve in the prior snapshot;
+there is no general missing-map opt-out. Remove that transition once supported
+comparison bases all contain the map.
+
+Local links in mapped guides and changed Markdown are checked, including ADR
+paths in code spans. Unchanged readers are checked when an ADR or prior/current
+canonical guide target changes, so moving/deleting owned documentation cannot
+leave stale references. Untouched historical links are outside this change-scoped
+gate. The development-only CommonMark parser owns Markdown syntax, including balanced
+link destinations, used reference links and images. Fenced/indented examples
+are not live links; inline code-span ADR paths remain the repository convention.
+Tracked directory targets are valid. Object-key, boundary-row and trigger
+ordering do not change mapped knowledge or create guide-edit obligations.
+URL fragments and remote URLs are outside this file-existence check. A guide
+edit proves traceability, not that its prose is substantively correct.
+
+This gate does not prove semantic contract completeness. A code change that
+alters consumer behavior, responsibility, invariants or procedures still needs
+its canonical documentation under [documentation rules](../docs/README.md),
+with review and applicable contract tests. Routine repairs under unchanged
+contracts need no documentation churn. Existing host/binding, scheduler-only,
+worker-protocol and structured-producer checks remain required; the removed
+universal README headings never proved those contracts.

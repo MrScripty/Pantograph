@@ -73,7 +73,9 @@ directories do not require inventories or fixed headings.
 - Strict workspace Clippy and the current frontend lint/accessibility gates are
   not green.
 - Release smoke does not yet prove the packaged artifact.
-- Decision traceability still implements a retired README-per-directory model.
+- Decision traceability checks declared decision-to-guide impacts and local
+  references; semantic documentation coverage still requires review. See
+  [gate operation](../scripts/README.md#decision-traceability-operation).
 
 Those limitations are active work, not setup exceptions. See the
 [current remediation portfolio](plans/current-standards-remediation/plan.md).

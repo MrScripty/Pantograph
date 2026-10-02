@@ -20,6 +20,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Install Node toolchain
         uses: actions/setup-node@v4
@@ -30,7 +32,36 @@ jobs:
       - name: Install npm dependencies
         run: npm ci --include=optional
 
+      - name: Test decision traceability gate
+        run: node --test scripts/check-decision-traceability.test.mjs
+
+      - name: Resolve explicit traceability range
+        id: traceability-range
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          EVENT_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="$(git rev-parse --verify --end-of-options "${EVENT_BASE}^{commit}")"
+          head="$(git rev-parse --verify --end-of-options "${EVENT_HEAD}^{commit}")"
+          if [[ "$EVENT_NAME" == pull_request ]]; then
+            # The PR owns changes since its fork point, not reverse changes
+            # from an independently advanced target branch.
+            base="$(git merge-base --all "$base" "$head")"
+            if [[ -z "$base" || "$base" == *$'\n'* ]]; then
+              echo "Traceability requires one unambiguous PR merge base" >&2
+              exit 1
+            fi
+          fi
+          printf 'base=%s\nhead=%s\n' "$base" "$head" >> "$GITHUB_OUTPUT"
+
       - name: Run no-new-debt lint gate
+        env:
+          TRACEABILITY_MODE: range
+          TRACEABILITY_BASE_REF: ${{ steps.traceability-range.outputs.base }}
+          TRACEABILITY_HEAD_REF: ${{ steps.traceability-range.outputs.head }}
         run: npm run lint:no-new
 
   typecheck:
