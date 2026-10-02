@@ -534,6 +534,273 @@ mod tests {
             .any(|call| call == &format!("load:{target_path}:cpu")));
     }
 
+    #[cfg(feature = "backend-pytorch")]
+    #[tokio::test]
+    async fn production_registration_and_candidate_reach_text_host_without_injected_selection() {
+        use crate::pumas_dispatch_package_facts::{
+            PumasDispatchPackageFactsBridgeOutcome, PumasDispatchPackageFactsProjection,
+        };
+        use crate::runtime_dispatch_candidate_provider::EmbeddedRuntimeDispatchCandidateProvider;
+        use crate::runtime_dispatch_capability_facts::RuntimeDispatchCapabilityFactsSource;
+        use crate::runtime_dispatch_load_target_facts::{
+            RuntimeDispatchLoadTargetFact, RuntimeDispatchLoadTargetFactsOutcome,
+            RuntimeDispatchLoadTargetFactsProjection,
+        };
+        use crate::runtime_dispatch_resource_facts::RuntimeDispatchResourceFactsSource;
+        use crate::runtime_dispatch_source_snapshot::EmbeddedRuntimeDispatchCandidateSourceSnapshot;
+        use pantograph_scheduler::{
+            select_scheduler_dispatch, SchedulerDispatchSelectionRequest,
+            SchedulerTaskExecutionIntent, SchedulerTaskState, SchedulerTaskStateRecord,
+        };
+        use pantograph_workflow_service::workflow::{
+            WorkflowRuntimeDispatchCandidateProvider, WorkflowSchedulerTaskExecutionClass,
+        };
+
+        let mut request = text_request_fixture();
+        // Only the graph/readiness request is reused. Registration, candidate and
+        // dispatch selection must all come from their production owners below.
+        request.handoff.dispatch_decision = None;
+        let intent = request.handoff.task_intent.clone();
+        let proof = request.handoff.readiness_proof.clone();
+        let registry = Arc::new(pantograph_runtime_registry::RuntimeRegistry::new());
+        let backend = TextBackend::default();
+        let backend_calls = backend.calls.clone();
+        let gateway = Arc::new(inference::InferenceGateway::with_backend(
+            Box::new(backend),
+            "PyTorch",
+        ));
+        let source =
+            RuntimeDispatchCapabilityFactsSource::with_gateway(registry.clone(), gateway.clone());
+        crate::runtime_registry::sync_runtime_registry(gateway.as_ref(), registry.as_ref()).await;
+        let capabilities = source.collect().await;
+        let registered = registry
+            .snapshot()
+            .runtimes
+            .into_iter()
+            .find(|runtime| runtime.runtime_id == "pytorch")
+            .expect("stock PyTorch registration");
+        assert_eq!(registered.runtime_family.as_deref(), Some("pytorch"));
+        assert_eq!(
+            registered.runtime_residency_key.as_deref(),
+            Some("runtime.pytorch.shared")
+        );
+
+        // Pumas facts/target are controlled inputs because upstream HF directory
+        // qualification is a separate gate. No model bytes or real inference run.
+        let mut package_facts: ResolvedModelPackageFacts = serde_json::from_str(include_str!(
+            "../../inference/tests/fixtures/inference_package_facts/hf_transformers_text_generation_package_facts.json"
+        )).unwrap();
+        package_facts.model_ref = project_model_ref(&intent.model_ref);
+        package_facts.custom_code.requires_custom_code = false;
+        package_facts.custom_code.custom_code_sources.clear();
+        package_facts.custom_code.auto_map_sources.clear();
+        let logical_size = inference::PackageLogicalSizeFacts {
+            total_size_bytes: Some(4096),
+            value_source: inference::PackageFactValueSource::FilesystemMetadata,
+            files: Vec::new(),
+            diagnostics: Vec::new(),
+        };
+        let snapshot = EmbeddedRuntimeDispatchCandidateSourceSnapshot {
+            pumas_package_facts: Some(PumasDispatchPackageFactsBridgeOutcome::Projected {
+                facts: PumasDispatchPackageFactsProjection {
+                    model_ref: intent.model_ref.clone(),
+                    artifact_kind: package_facts.artifact.artifact_kind.clone(),
+                    validation_state: package_facts.artifact.validation_state.clone(),
+                    task: package_facts.task.clone(),
+                    backend_hints: package_facts.backend_hints.clone(),
+                    requires_custom_code: false,
+                    logical_size,
+                    diffusers: None,
+                },
+                diagnostics: Vec::new(),
+            }),
+            runtime_capability_facts: Some(capabilities),
+            pumas_load_target_facts: Some(RuntimeDispatchLoadTargetFactsOutcome::Projected {
+                facts: RuntimeDispatchLoadTargetFactsProjection {
+                    load_targets: vec![RuntimeDispatchLoadTargetFact {
+                        runtime_family: "pytorch".into(),
+                        resolved_load_target: "pumas:text-fixture:main".into(),
+                        model_ref: intent.model_ref.clone(),
+                        artifact_kind: "HfCompatibleDirectory".into(),
+                        load_path_kind: "Directory".into(),
+                        library_root_id: Some("text-test-root".into()),
+                        storage_kind: "LibraryOwned".into(),
+                        validation_state: "Valid".into(),
+                        content_fingerprint: None,
+                        package_facts_contract_version: Some(
+                            package_facts.package_facts_contract_version,
+                        ),
+                    }],
+                },
+                diagnostics: Vec::new(),
+            }),
+            ..Default::default()
+        };
+        let graph_request =
+            pantograph_inference_interface_contracts::ResolveInferenceInterfaceRequest {
+                contract_version: 1,
+                model_ref: intent.model_ref.clone(),
+                task_kind: Some("text_generation".parse().unwrap()),
+                runtime_constraint: Some("pytorch".parse().unwrap()),
+                device_constraint: Some("cpu".parse().unwrap()),
+            };
+        let graph_facts = crate::inference_interface_facts_provider::resolver_facts_from_sources(
+            snapshot.pumas_package_facts.clone().unwrap(),
+            snapshot.runtime_capability_facts.as_ref().unwrap(),
+        );
+        let descriptor =
+            pantograph_workflow_service::graph::resolve_inference_interface_from_facts(
+                graph_request.clone(),
+                graph_facts.clone(),
+            )
+            .unwrap();
+        assert_eq!(
+            registered.status,
+            pantograph_runtime_registry::RuntimeRegistryStatus::Stopped
+        );
+        assert_eq!(
+            descriptor.availability.status,
+            pantograph_inference_interface_contracts::InferenceAvailabilityStatus::Available,
+            "cold installed CPU runtime must be usable: {:?}",
+            descriptor.diagnostics
+        );
+        assert_eq!(descriptor.task_kind.as_str(), "text_generation");
+        let mut unknown_device = graph_request.clone();
+        unknown_device.device_constraint = Some("cuda:99".parse().unwrap());
+        let rejected = pantograph_workflow_service::graph::resolve_inference_interface_from_facts(
+            unknown_device,
+            graph_facts,
+        )
+        .unwrap();
+        assert!(rejected.diagnostics.iter().any(|diagnostic| diagnostic.code ==
+            pantograph_inference_interface_contracts::InferenceDiagnosticCode::InvalidDeviceConstraint));
+        let mut unsupported_package = snapshot.pumas_package_facts.clone().unwrap();
+        let PumasDispatchPackageFactsBridgeOutcome::Projected { facts, .. } =
+            &mut unsupported_package
+        else {
+            panic!("projected package")
+        };
+        facts.task.task_type_primary = Some("embedding".into());
+        facts.task.pipeline_tag = Some("feature-extraction".into());
+        let unsupported_facts =
+            crate::inference_interface_facts_provider::resolver_facts_from_sources(
+                unsupported_package,
+                snapshot.runtime_capability_facts.as_ref().unwrap(),
+            );
+        assert!(
+            !unsupported_facts
+                .runtimes
+                .iter()
+                .any(|runtime| runtime.runtime_id.as_str() == "pytorch"),
+            "matching Transformers hint cannot authorize an unsupported task"
+        );
+
+        let provider = EmbeddedRuntimeDispatchCandidateProvider::with_source_snapshot(snapshot)
+            .with_resource_facts_source(RuntimeDispatchResourceFactsSource::new(registry.clone()));
+        let task = pantograph_workflow_service::WorkflowSchedulerTask {
+            workflow_id: intent.workflow_id.clone(),
+            workflow_run_id: intent.workflow_run_id.clone(),
+            node_id: intent.node_id.clone(),
+            task_id: intent.task_id.clone(),
+            node_type: "llm-inference".into(),
+            execution_class: WorkflowSchedulerTaskExecutionClass::RuntimeInference,
+            dependency_task_ids: Vec::new(),
+            input_bindings: Vec::new(),
+            schedulable_intent: Some(intent.clone()),
+            schedulable_intent_template: None,
+            non_runtime_task_template: None,
+            source_input_task_template: None,
+            inference_descriptor_fingerprint: None,
+            runtime_source_context: None,
+            diagnostics: Vec::new(),
+        };
+        let ready = SchedulerTaskStateRecord {
+            contract_version: 1,
+            workflow_id: intent.workflow_id.clone(),
+            workflow_run_id: intent.workflow_run_id.clone(),
+            node_id: intent.node_id.clone(),
+            task_id: intent.task_id.clone(),
+            state: SchedulerTaskState::Ready {
+                execution_intent: SchedulerTaskExecutionIntent::Runtime {
+                    task_intent: intent.clone(),
+                },
+            },
+            state_version: 1,
+            last_transition_id: "ready.text".parse().unwrap(),
+        };
+        let candidates = provider
+            .runtime_dispatch_candidates(&task, &ready, &proof)
+            .unwrap();
+        assert_eq!(
+            candidates.candidates.len(),
+            1,
+            "{:?}",
+            candidates.diagnostics
+        );
+        assert_eq!(
+            candidates.candidates[0]
+                .selected_runtime_variant_id
+                .as_ref()
+                .unwrap()
+                .as_str(),
+            "pytorch.cpu"
+        );
+        let selection = select_scheduler_dispatch(
+            SchedulerDispatchSelectionRequest {
+                contract_version: 1,
+                task_intent: intent,
+                readiness_proof: proof.clone(),
+                environment_ref: proof.preflight_result.environment_ref.clone().unwrap(),
+                candidates: candidates.candidates,
+                diagnostics: candidates.diagnostics,
+            }
+            .try_into()
+            .unwrap(),
+        )
+        .unwrap()
+        .into_inner();
+        request.handoff.dispatch_decision = Some(
+            selection
+                .dispatch_decision
+                .expect("production candidate selected"),
+        );
+
+        let target_directory = tempfile::tempdir().unwrap();
+        let target = text_load_target(&package_facts, &target_directory);
+        let port = crate::runtime_host_execution_port::EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
+            Arc::new(TextLoadTargetResolver { target }), Arc::new(TextPackageFactsResolver { package_facts }),
+            Arc::new(UnusedTextMediaSink), gateway,
+        );
+        let cancellation =
+            pantograph_runtime_host_contracts::RuntimeHostExecutionCancellationHandle::running(
+                request.cancellation_context.clone(),
+            );
+        let response = port
+            .execute_runtime_host_request(request, cancellation)
+            .await
+            .unwrap();
+        assert_eq!(response.state, RuntimeHostExecutionState::Completed);
+        assert_eq!(
+            response.outputs[0].value,
+            RuntimeHostExecutionOutputValue::String("generated text".into())
+        );
+        assert_eq!(
+            backend_calls
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|call| call.starts_with("load:"))
+                .count(),
+            1
+        );
+        for reservation in registry.snapshot().reservations {
+            registry
+                .release_reservation_if_present(reservation.reservation_id)
+                .unwrap();
+        }
+        assert!(registry.snapshot().reservations.is_empty());
+    }
+
     fn text_request_fixture() -> RuntimeHostExecutionRequest {
         let mut request: RuntimeHostExecutionRequest = serde_json::from_str(include_str!(
             "../../pantograph-runtime-host-contracts/tests/fixtures/runtime_host_execution_request_dispatch_selected.json"
@@ -705,9 +972,16 @@ mod tests {
         }
 
         fn capabilities(&self) -> BackendCapabilities {
-            BackendCapabilities {
-                streaming: true,
-                ..BackendCapabilities::default()
+            #[cfg(feature = "backend-pytorch")]
+            {
+                inference::PyTorchBackend::static_capabilities()
+            }
+            #[cfg(not(feature = "backend-pytorch"))]
+            {
+                BackendCapabilities {
+                    streaming: true,
+                    ..BackendCapabilities::default()
+                }
             }
         }
 

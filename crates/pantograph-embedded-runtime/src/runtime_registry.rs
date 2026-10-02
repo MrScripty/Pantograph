@@ -30,9 +30,10 @@ use pantograph_runtime_identity::{
     canonical_runtime_id, runtime_backend_key_aliases, runtime_display_name,
 };
 use pantograph_runtime_registry::{
-    observed_runtime_status_from_lifecycle, RuntimeObservation, RuntimeRegistration,
-    RuntimeRegistry, RuntimeRegistryError, RuntimeRegistryRuntimeSnapshot, RuntimeRegistryStatus,
-    RuntimeReservationRequest, RuntimeReservationRequirements, RuntimeRetentionHint,
+    observed_runtime_status_from_lifecycle, RuntimeDispatchIdentity, RuntimeObservation,
+    RuntimeRegistration, RuntimeRegistry, RuntimeRegistryError, RuntimeRegistryRuntimeSnapshot,
+    RuntimeRegistryStatus, RuntimeReservationRequest, RuntimeReservationRequirements,
+    RuntimeRetentionHint,
 };
 use pantograph_workflow_service::{
     WorkflowExecutionSessionRuntimeUnloadCandidate, WorkflowSchedulerRuntimeDiagnosticsRequest,
@@ -69,6 +70,9 @@ pub fn reconcile_runtime_registry_mode_info_with_health_assessments(
     active_assessment: Option<&RuntimeHealthAssessment>,
     embedding_assessment: Option<&RuntimeHealthAssessment>,
 ) -> Vec<RuntimeRegistryRuntimeSnapshot> {
+    if active_runtime_id(mode_info).is_some() {
+        register_active_runtime(registry, mode_info);
+    }
     registry.observe_runtimes(observations_from_mode_info_with_health_assessments(
         mode_info,
         active_assessment,
@@ -81,14 +85,60 @@ pub fn register_active_runtime(
     mode_info: &HostRuntimeModeSnapshot,
 ) -> ActiveRuntimeDescriptor {
     let descriptor = active_runtime_descriptor(mode_info);
-    registry.register_runtime(
-        RuntimeRegistration::new(
-            descriptor.runtime_id.clone(),
-            descriptor.display_name.clone(),
-        )
-        .with_backend_keys(descriptor.backend_keys.clone()),
+    register_host_runtime(
+        registry,
+        &descriptor.runtime_id,
+        &descriptor.display_name,
+        descriptor.backend_keys.clone(),
     );
     descriptor
+}
+
+/// Register the gateway's available backend catalog without claiming a loaded instance.
+pub(crate) fn register_backend_runtimes(
+    registry: &RuntimeRegistry,
+    backends: &[inference::BackendInfo],
+) {
+    for backend in backends.iter().filter(|backend| backend.available) {
+        register_host_runtime(
+            registry,
+            &backend.backend_key,
+            &backend.name,
+            vec![backend.backend_key.clone()],
+        );
+    }
+}
+
+fn register_host_runtime(
+    registry: &RuntimeRegistry,
+    runtime_id: &str,
+    display_name: &str,
+    backend_keys: Vec<String>,
+) {
+    let runtime_id = canonical_runtime_id(runtime_id);
+    let mut registration =
+        RuntimeRegistration::new(&runtime_id, display_name).with_backend_keys(backend_keys);
+    let has_identity = registry.snapshot().runtimes.iter().any(|runtime| {
+        runtime.runtime_id == runtime_id
+            && runtime.runtime_family.is_some()
+            && runtime.runtime_residency_key.is_some()
+    });
+    // The gateway owns one residency slot per backend in this shared registry.
+    // Its instance ID changes on restart; the stable residency key must not.
+    // Preserve identities explicitly supplied by an embedding host.
+    if !has_identity
+        && registration
+            .backend_keys
+            .iter()
+            .any(|key| canonical_runtime_id(key) == runtime_id)
+        && pantograph_dependency_planning::RuntimeIntentId::parse(&runtime_id).is_ok()
+    {
+        registration = registration.with_dispatch_identity(
+            RuntimeDispatchIdentity::new(&runtime_id, format!("runtime.{runtime_id}.shared"))
+                .expect("validated runtime ID supplies nonempty dispatch identity"),
+        );
+    }
+    registry.register_runtime(registration);
 }
 
 pub fn active_runtime_reservation_request(

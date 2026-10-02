@@ -339,7 +339,10 @@ impl EmbeddedWorkflowServiceComposition {
         let pumas_selector_access = input.pumas_selector_access;
         let dispatch_dependencies = EmbeddedWorkflowServiceDispatchDependencies::resource_backed(
             PumasDispatchPackageFactsSource::new(Some(pumas_selector_access.clone())),
-            RuntimeDispatchCapabilityFactsSource::new(input.runtime_registry.clone()),
+            RuntimeDispatchCapabilityFactsSource::with_gateway(
+                input.runtime_registry.clone(),
+                input.gateway.clone(),
+            ),
             RuntimeDispatchLoadTargetFactsSource::new(Some(pumas_selector_access.clone())),
             RuntimeDispatchResourceFactsSource::new(input.runtime_registry.clone()),
             input.max_dispatch_source_snapshot_age_ms,
@@ -354,7 +357,10 @@ impl EmbeddedWorkflowServiceComposition {
         let inference_interface_facts_provider =
             Arc::new(EmbeddedInferenceInterfaceFactsProvider::new(
                 PumasDispatchPackageFactsSource::new(Some(pumas_selector_access)),
-                RuntimeDispatchCapabilityFactsSource::new(input.runtime_registry),
+                RuntimeDispatchCapabilityFactsSource::with_gateway(
+                    input.runtime_registry,
+                    input.gateway,
+                ),
             ));
         Self::new()
             .with_runtime_dispatch_dependencies(dispatch_dependencies)
@@ -409,7 +415,10 @@ impl EmbeddedWorkflowServiceComposition {
         let pumas_selector_access = factory_input.pumas_selector_access;
         let dispatch_dependencies = EmbeddedWorkflowServiceDispatchDependencies::resource_backed(
             PumasDispatchPackageFactsSource::new(Some(pumas_selector_access.clone())),
-            RuntimeDispatchCapabilityFactsSource::new(factory_input.runtime_registry.clone()),
+            RuntimeDispatchCapabilityFactsSource::with_gateway(
+                factory_input.runtime_registry.clone(),
+                factory_input.gateway.clone(),
+            ),
             RuntimeDispatchLoadTargetFactsSource::new(Some(pumas_selector_access.clone())),
             RuntimeDispatchResourceFactsSource::new(factory_input.runtime_registry.clone()),
             factory_input.max_dispatch_source_snapshot_age_ms,
@@ -418,13 +427,16 @@ impl EmbeddedWorkflowServiceComposition {
         );
         let scheduler_diagnostics_provider =
             Arc::new(EmbeddedWorkflowSchedulerDiagnosticsProvider::new(
-                factory_input.gateway,
+                factory_input.gateway.clone(),
                 factory_input.runtime_registry.clone(),
             ));
         let inference_interface_facts_provider =
             Arc::new(EmbeddedInferenceInterfaceFactsProvider::new(
                 PumasDispatchPackageFactsSource::new(Some(pumas_selector_access)),
-                RuntimeDispatchCapabilityFactsSource::new(factory_input.runtime_registry),
+                RuntimeDispatchCapabilityFactsSource::with_gateway(
+                    factory_input.runtime_registry,
+                    factory_input.gateway,
+                ),
             ));
         let composition = Self::new()
             .with_runtime_dispatch_dependencies(dispatch_dependencies)
