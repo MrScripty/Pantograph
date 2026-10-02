@@ -1,8 +1,8 @@
 import type { SvelteComponent, ComponentType } from 'svelte';
-import type { ImportResult, ValidationResult, LoggerInterface, HotloadConfig } from '../types';
-import { defaultLogger } from '../types';
+import type { ImportResult, ImportFailureCode, ValidationResult, LoggerInterface, HotloadConfig } from '../types.ts';
+import { defaultLogger } from '../types.ts';
 import { getComponentModules, refreshGlobModules, getModuleCount } from './GlobRegistry';
-import { fastHash, getValidationState, setValidationState, invalidatePath } from './ValidationCache';
+import { fastHash, getValidationState, setValidationState, invalidatePath } from './ValidationCache.ts';
 import { invoke } from '@tauri-apps/api/core';
 
 /**
@@ -18,10 +18,9 @@ const DEFAULT_BASE_PATH = '/src/generated/';
 /**
  * Result from validate_component Tauri command.
  */
-interface TauriValidationResult {
-  valid: boolean;
-  error?: string;
-}
+type PreImportValidation =
+  | { valid: true }
+  | { valid: false; error: string; failureCode: ImportFailureCode };
 
 /**
  * HMR update listeners - called when components are hot-reloaded.
@@ -96,7 +95,7 @@ export function subscribeToHmrUpdates(listener: HmrUpdateListener): () => void {
  */
 export class ImportManager {
   private cache: Map<string, ImportResult> = new Map();
-  private pendingImports: Map<string, Promise<ImportResult>> = new Map();
+  private latestImports = new Map<string, { promise: Promise<ImportResult>; pending: boolean }>();
   private logger: LoggerInterface;
   private importTimeout: number;
   private basePath: string;
@@ -119,38 +118,58 @@ export class ImportManager {
     }
 
     // Check if there's already a pending import for this path
-    const pending = this.pendingImports.get(path);
-    if (pending) {
+    const pending = this.latestImports.get(path);
+    if (pending?.pending) {
       this.logger.log('IMPORT_PENDING_REUSE', { path });
-      return pending;
+      return pending.promise;
     }
 
     // Start new import
-    const importPromise = this.doImport(path);
-    this.pendingImports.set(path, importPromise);
+    // Defer execution until this invocation owns the pending slot. Invalidating
+    // the slot revokes publication/import admission, not the underlying IPC work.
+    const importPromise: Promise<ImportResult> = Promise.resolve().then(() => this.doImport(
+      path,
+      () => this.latestImports.get(path)?.promise === importPromise,
+    ));
+    this.latestImports.set(path, { promise: importPromise, pending: true });
 
     try {
       const result = await importPromise;
       // Only cache successful imports
-      if (result.success) {
+      if (result.success && this.latestImports.get(path)?.promise === importPromise) {
         this.cache.set(path, result);
       }
       return result;
     } finally {
-      this.pendingImports.delete(path);
+      if (this.latestImports.get(path)?.promise === importPromise) {
+        this.latestImports.get(path)!.pending = false;
+      }
     }
+  }
+
+  /**
+   * Join the latest already-requested generation, including its terminal failure.
+   * This does not start a retry. Component-ID consumers use it when a shared
+   * path was refreshed while their own candidate is still current.
+   */
+  public getCurrentImport(path: string): Promise<ImportResult> | undefined {
+    return this.latestImports.get(path)?.promise;
   }
 
   /**
    * Validate a component file before importing.
    * Uses hash-based caching to avoid unnecessary re-validation.
    */
-  private async validateBeforeImport(fullPath: string): Promise<{ valid: boolean; error?: string }> {
+  private async validateBeforeImport(fullPath: string): Promise<PreImportValidation> {
     try {
       // Fetch the file content to compute hash
       const response = await fetch(fullPath);
       if (!response.ok) {
-        return { valid: false, error: `File not found: ${fullPath}` };
+        return {
+          valid: false,
+          failureCode: 'validation-unavailable',
+          error: `Component source could not be read (HTTP ${response.status}). Restore the source and retry.`,
+        };
       }
 
       const content = await response.text();
@@ -160,39 +179,61 @@ export class ImportManager {
       const cached = getValidationState(fullPath, contentHash);
       if (cached) {
         this.logger.log('VALIDATION_CACHE_HIT', { path: fullPath, valid: cached.valid });
-        return { valid: cached.valid, error: cached.error };
+        return cached.valid
+          ? { valid: true }
+          : { valid: false, failureCode: 'validation-invalid', error: cached.error ?? 'Component failed pre-import validation' };
       }
 
       // Hash differs or not cached - validate via Tauri
       this.logger.log('VALIDATION_RUNNING', { path: fullPath });
 
       // Pass the relative path - the Tauri backend will resolve to absolute path
-      const result = await invoke<TauriValidationResult>('validate_component', {
+      const result = await invoke<unknown>('validate_component', {
         relativePath: fullPath,
       });
 
-      // Cache the validation result
-      setValidationState(fullPath, contentHash, result.valid, result.error);
+      // The Rust command serializes { valid: bool, error: Option<String> }.
+      // Decode the response before it can authorize executing a module. Extra
+      // fields are ignored for additive diagnostics; no truthy coercion is valid.
+      if (
+        !result || typeof result !== 'object' || Array.isArray(result) ||
+        !('valid' in result) || typeof result.valid !== 'boolean' ||
+        ('error' in result && result.error != null && typeof result.error !== 'string')
+      ) {
+        return {
+          valid: false,
+          failureCode: 'validation-response-invalid',
+          error: 'Component validation returned an invalid response. Restore the validation service and retry.',
+        };
+      }
+      const error = 'error' in result && typeof result.error === 'string' ? result.error : undefined;
+      setValidationState(fullPath, contentHash, result.valid, error);
 
       this.logger.log('VALIDATION_COMPLETE', {
         path: fullPath,
         valid: result.valid,
-        error: result.error,
+        error,
       });
 
-      return { valid: result.valid, error: result.error };
+      return result.valid
+        ? { valid: true }
+        : { valid: false, failureCode: 'validation-invalid', error: error ?? 'Component failed pre-import validation' };
     } catch (error) {
-      // If validation fails (e.g., Tauri not available), log but allow import
-      // This ensures the app works even if validation is broken
-      this.logger.log('VALIDATION_ERROR', { path: fullPath, error: String(error) }, 'warn');
-      return { valid: true }; // Fail open - let Vite catch actual errors
+      this.logger.log('VALIDATION_UNAVAILABLE', { path: fullPath, error: String(error) }, 'warn');
+      // Unavailability is not evidence that this candidate is valid. Do not
+      // cache it: the next explicit retry must contact validation again.
+      return {
+        valid: false,
+        failureCode: 'validation-unavailable',
+        error: 'Component validation is unavailable. Restore the source and desktop validation service, then retry.',
+      };
     }
   }
 
   /**
    * Perform the actual import with timeout.
    */
-  private async doImport(path: string): Promise<ImportResult> {
+  private async doImport(path: string, isCurrent: () => boolean): Promise<ImportResult> {
     const startTime = Date.now();
     const fullPath = `${this.basePath}${path}`;
 
@@ -201,13 +242,15 @@ export class ImportManager {
     try {
       // Validate the component before importing to prevent Vite freeze
       const preValidation = await this.validateBeforeImport(fullPath);
+      if (!isCurrent()) return this.supersededResult(startTime);
       if (!preValidation.valid) {
         const duration = Date.now() - startTime;
         this.logger.log('IMPORT_BLOCKED_BY_VALIDATION', { path, error: preValidation.error }, 'error');
         return {
           success: false,
           component: null,
-          error: preValidation.error ?? 'Component failed pre-import validation',
+          error: preValidation.error,
+          failureCode: preValidation.failureCode,
           duration,
         };
       }
@@ -217,14 +260,8 @@ export class ImportManager {
 
       if (importer) {
         // Use glob-based import - this supports HMR
-        const timeoutPromise = new Promise<never>((_, reject) => {
-          setTimeout(
-            () => reject(new Error(`Import timeout after ${this.importTimeout}ms`)),
-            this.importTimeout
-          );
-        });
-
-        const module = await Promise.race([importer(), timeoutPromise]);
+        const module = await this.importWithTimeout(importer);
+        if (!isCurrent()) return this.supersededResult(startTime);
         const duration = Date.now() - startTime;
 
         const validation = this.validateModule(module);
@@ -234,6 +271,7 @@ export class ImportManager {
             success: false,
             component: null,
             error: validation.error ?? 'Module validation failed',
+            failureCode: 'validation-invalid',
             duration,
           };
         }
@@ -253,19 +291,11 @@ export class ImportManager {
       // use dynamic import with cache-busting timestamp
       this.logger.log('IMPORT_GLOB_MISS', { path, fullPath }, 'warn');
 
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(
-          () => reject(new Error(`Import timeout after ${this.importTimeout}ms`)),
-          this.importTimeout
-        );
-      });
-
-      // Use timestamp for cache-busting on new files
       const timestampedPath = `${fullPath}?t=${Date.now()}`;
-      const module = (await Promise.race([
-        import(/* @vite-ignore */ timestampedPath),
-        timeoutPromise,
-      ])) as { default: ComponentType<SvelteComponent> };
+      const module = await this.importWithTimeout(
+        () => import(/* @vite-ignore */ timestampedPath),
+      );
+      if (!isCurrent()) return this.supersededResult(startTime);
 
       const duration = Date.now() - startTime;
 
@@ -276,6 +306,7 @@ export class ImportManager {
           success: false,
           component: null,
           error: validation.error ?? 'Module validation failed',
+          failureCode: 'validation-invalid',
           duration,
         };
       }
@@ -287,11 +318,12 @@ export class ImportManager {
 
       return {
         success: true,
-        component: module.default,
+        component: (module as { default: ComponentType<SvelteComponent> }).default,
         error: null,
         duration,
       };
     } catch (error) {
+      if (!isCurrent()) return this.supersededResult(startTime);
       const duration = Date.now() - startTime;
       const errorMessage = error instanceof Error ? error.message : String(error);
       const isTimeout = errorMessage.includes('timeout');
@@ -306,8 +338,36 @@ export class ImportManager {
         success: false,
         component: null,
         error: errorMessage,
+        failureCode: isTimeout ? 'import-timeout' : 'import-failed',
         duration,
       };
+    }
+  }
+
+  private supersededResult(startTime: number): ImportResult {
+    return {
+      success: false,
+      component: null,
+      error: 'Component load was superseded by a newer request.',
+      failureCode: 'superseded',
+      duration: Date.now() - startTime,
+    };
+  }
+
+  private async importWithTimeout(importer: () => Promise<unknown>): Promise<unknown> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        importer(),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(
+            () => reject(new Error(`Import timeout after ${this.importTimeout}ms`)),
+            this.importTimeout,
+          );
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer);
     }
   }
 
@@ -421,10 +481,12 @@ export class ImportManager {
   public clearCache(path?: string): void {
     if (path) {
       this.cache.delete(path);
+      this.latestImports.delete(path);
       this.logger.log('CACHE_CLEARED', { path });
     } else {
       const count = this.cache.size;
       this.cache.clear();
+      this.latestImports.clear();
       this.logger.log('CACHE_CLEARED_ALL', { count });
     }
   }
