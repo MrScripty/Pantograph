@@ -114,3 +114,61 @@ fn artifact_store_enforces_global_disk_budget_for_stream_growth() {
     ));
     assert_eq!(store.stats().expect("stats").streaming_body_bytes, 5);
 }
+
+#[test]
+fn creation_defaults_do_not_replace_a_persisted_policy() {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let initial = policy(Some(10));
+    let store = ArtifactStore::open_with_default_policy(temp.path(), initial.clone())
+        .expect("create store with defaults");
+    assert_eq!(store.policy(), &initial);
+    drop(store);
+
+    let changed_defaults = policy(Some(20));
+    for _ in 0..2 {
+        let reopened =
+            ArtifactStore::open_with_default_policy(temp.path(), changed_defaults.clone())
+                .expect("reopen store with different creation defaults");
+        assert_eq!(reopened.policy(), &initial);
+    }
+}
+
+#[test]
+fn explicit_policy_override_remains_persisted_on_subsequent_default_open() {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let initial = policy(Some(10));
+    let store = ArtifactStore::open_with_default_policy(temp.path(), initial.clone())
+        .expect("create store");
+    drop(store);
+
+    let explicit = ArtifactPolicy {
+        policy_id: "host-override".to_string(),
+        policy_version: 3,
+        ttl_seconds: Some(30),
+        max_disk_bytes: Some(12),
+        max_memory_bytes: Some(4),
+        max_single_artifact_bytes: Some(8),
+        spill_threshold_bytes: Some(2),
+        delete_on_consume: true,
+    };
+    let overridden = ArtifactStore::open(temp.path(), explicit.clone()).expect("explicit override");
+    assert_eq!(overridden.policy(), &explicit);
+    drop(overridden);
+
+    let reopened = ArtifactStore::open_with_default_policy(temp.path(), initial)
+        .expect("reopen overridden store");
+    assert_eq!(reopened.policy(), &explicit);
+}
+
+#[test]
+fn creation_defaults_never_replace_an_invalid_manifest() {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let manifest = temp.path().join("manifest.json");
+    let invalid = b"{incomplete manifest";
+    std::fs::write(&manifest, invalid).expect("write invalid manifest");
+
+    let error = ArtifactStore::open_with_default_policy(temp.path(), policy(None))
+        .expect_err("invalid persisted state must reject reopen");
+    assert!(matches!(error, ArtifactStoreError::Manifest(_)));
+    assert_eq!(std::fs::read(manifest).expect("read manifest"), invalid);
+}
