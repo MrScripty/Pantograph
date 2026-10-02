@@ -1,0 +1,822 @@
+{
+  "title": "Designing Compatible Inference Backends",
+  "research_date": "2026-10-02",
+  "source_status": "Primary source inspection, not model execution or hardware qualification",
+  "references": [
+    {
+      "id": "R001",
+      "url": "https://github.com/MrScripty/Pantograph/blob/4938e405c7f656365eefdca492774ccae110c90d/crates/inference/src/model_contracts.rs",
+      "locations": []
+    },
+    {
+      "id": "R002",
+      "url": "https://github.com/safetensors/safetensors",
+      "locations": []
+    },
+    {
+      "id": "R003",
+      "url": "https://github.com/safetensors/safetensors/blob/main/docs/safetensors.schema.json",
+      "locations": []
+    },
+    {
+      "id": "R004",
+      "url": "https://github.com/huggingface/diffusers/blob/578c9b2c6636ab2424a0e56186268b83623656b2/src/diffusers/pipelines/pipeline_utils.py",
+      "locations": [
+        "https://github.com/huggingface/diffusers/blob/578c9b2c6636ab2424a0e56186268b83623656b2/src/diffusers/pipelines/pipeline_utils.py#L920-L1106"
+      ]
+    },
+    {
+      "id": "R005",
+      "url": "https://github.com/huggingface/sentence-transformers/blob/4a3b5cd6ec718e421f57e824a41ed3fd99595df6/sentence_transformers/base/model.py",
+      "locations": [
+        "https://github.com/huggingface/sentence-transformers/blob/4a3b5cd6ec718e421f57e824a41ed3fd99595df6/sentence_transformers/base/model.py#L1207-L1320",
+        "https://github.com/huggingface/sentence-transformers/blob/4a3b5cd6ec718e421f57e824a41ed3fd99595df6/sentence_transformers/base/model.py#L1131-L1320"
+      ]
+    },
+    {
+      "id": "R006",
+      "url": "https://github.com/huggingface/sentence-transformers/blob/4a3b5cd6ec718e421f57e824a41ed3fd99595df6/sentence_transformers/sentence_transformer/modules/pooling.py",
+      "locations": []
+    },
+    {
+      "id": "R007",
+      "url": "https://github.com/huggingface/transformers/blob/35924ec379eec682bbdca219886e16eff4df8b09/src/transformers/models/auto/modeling_auto.py",
+      "locations": []
+    },
+    {
+      "id": "R008",
+      "url": "https://github.com/MrScripty/Pantograph/blob/4938e405c7f656365eefdca492774ccae110c90d/requirements.txt",
+      "locations": []
+    },
+    {
+      "id": "R009",
+      "url": "https://github.com/huggingface/transformers/blob/a5923d4de7df2fbd1f373dfcfe983216b79b6937/src/transformers/models/auto/configuration_auto.py",
+      "locations": [
+        "https://github.com/huggingface/transformers/blob/a5923d4de7df2fbd1f373dfcfe983216b79b6937/src/transformers/models/auto/configuration_auto.py#L1180-L1242"
+      ]
+    },
+    {
+      "id": "R010",
+      "url": "https://github.com/huggingface/transformers/blob/35924ec379eec682bbdca219886e16eff4df8b09/src/transformers/models/auto/configuration_auto.py",
+      "locations": [
+        "https://github.com/huggingface/transformers/blob/35924ec379eec682bbdca219886e16eff4df8b09/src/transformers/models/auto/configuration_auto.py#L381-L446"
+      ]
+    },
+    {
+      "id": "R011",
+      "url": "https://github.com/huggingface/transformers/blob/35924ec379eec682bbdca219886e16eff4df8b09/src/transformers/models/auto/auto_factory.py",
+      "locations": [
+        "https://github.com/huggingface/transformers/blob/35924ec379eec682bbdca219886e16eff4df8b09/src/transformers/models/auto/auto_factory.py#L181-L197",
+        "https://github.com/huggingface/transformers/blob/35924ec379eec682bbdca219886e16eff4df8b09/src/transformers/models/auto/auto_factory.py#L389-L420"
+      ]
+    },
+    {
+      "id": "R012",
+      "url": "https://github.com/huggingface/transformers/blob/a5923d4de7df2fbd1f373dfcfe983216b79b6937/src/transformers/models/auto/auto_factory.py",
+      "locations": []
+    },
+    {
+      "id": "R013",
+      "url": "https://github.com/huggingface/transformers/blob/35924ec379eec682bbdca219886e16eff4df8b09/src/transformers/modeling_utils.py",
+      "locations": []
+    },
+    {
+      "id": "R014",
+      "url": "https://github.com/huggingface/transformers/blob/35924ec379eec682bbdca219886e16eff4df8b09/src/transformers/models/auto/tokenization_auto.py",
+      "locations": []
+    },
+    {
+      "id": "R015",
+      "url": "https://github.com/huggingface/transformers/blob/35924ec379eec682bbdca219886e16eff4df8b09/src/transformers/models/auto/processing_auto.py",
+      "locations": [
+        "https://github.com/huggingface/transformers/blob/35924ec379eec682bbdca219886e16eff4df8b09/src/transformers/models/auto/processing_auto.py#L217-L363"
+      ]
+    },
+    {
+      "id": "R016",
+      "url": "https://github.com/huggingface/transformers/blob/35924ec379eec682bbdca219886e16eff4df8b09/src/transformers/generation/configuration_utils.py",
+      "locations": []
+    },
+    {
+      "id": "R017",
+      "url": "https://huggingface.co/docs/transformers/en/custom_models",
+      "locations": []
+    },
+    {
+      "id": "R018",
+      "url": "https://github.com/huggingface/transformers/blob/35924ec379eec682bbdca219886e16eff4df8b09/src/transformers/dynamic_module_utils.py",
+      "locations": []
+    },
+    {
+      "id": "R019",
+      "url": "https://github.com/MrScripty/Pantograph/blob/4938e405c7f656365eefdca492774ccae110c90d/crates/inference/torch/worker_diffusion.py",
+      "locations": [
+        "https://github.com/MrScripty/Pantograph/blob/4938e405c7f656365eefdca492774ccae110c90d/crates/inference/torch/worker_diffusion.py#L63-L185"
+      ]
+    },
+    {
+      "id": "R020",
+      "url": "https://github.com/huggingface/sentence-transformers/blob/4a3b5cd6ec718e421f57e824a41ed3fd99595df6/sentence_transformers/base/modules/transformer.py",
+      "locations": []
+    },
+    {
+      "id": "R021",
+      "url": "https://github.com/MrScripty/Pantograph/blob/4938e405c7f656365eefdca492774ccae110c90d/Cargo.toml",
+      "locations": [
+        "https://github.com/MrScripty/Pantograph/blob/4938e405c7f656365eefdca492774ccae110c90d/Cargo.toml#L85-L94"
+      ]
+    },
+    {
+      "id": "R022",
+      "url": "https://github.com/MrScripty/Pantograph/blob/4938e405c7f656365eefdca492774ccae110c90d/Cargo.lock",
+      "locations": [
+        "https://github.com/MrScripty/Pantograph/blob/4938e405c7f656365eefdca492774ccae110c90d/Cargo.lock#L1523-L1562"
+      ]
+    },
+    {
+      "id": "R023",
+      "url": "https://github.com/MrScripty/Pantograph/blob/4938e405c7f656365eefdca492774ccae110c90d/requirements-diffusion.txt",
+      "locations": []
+    },
+    {
+      "id": "R024",
+      "url": "https://github.com/MrScripty/Pantograph/blob/4938e405c7f656365eefdca492774ccae110c90d/crates/inference/src/backend/compatibility.rs",
+      "locations": [
+        "https://github.com/MrScripty/Pantograph/blob/4938e405c7f656365eefdca492774ccae110c90d/crates/inference/src/backend/compatibility.rs#L162-L361"
+      ]
+    },
+    {
+      "id": "R025",
+      "url": "https://github.com/MrScripty/Pantograph/blob/4938e405c7f656365eefdca492774ccae110c90d/crates/inference/src/backend/mod.rs",
+      "locations": [
+        "https://github.com/MrScripty/Pantograph/blob/4938e405c7f656365eefdca492774ccae110c90d/crates/inference/src/backend/mod.rs#L1065-L1268"
+      ]
+    },
+    {
+      "id": "R026",
+      "url": "https://github.com/MrScripty/Pantograph/blob/4938e405c7f656365eefdca492774ccae110c90d/crates/inference/src/backend/llamacpp.rs",
+      "locations": [
+        "https://github.com/MrScripty/Pantograph/blob/4938e405c7f656365eefdca492774ccae110c90d/crates/inference/src/backend/llamacpp.rs#L91-L158"
+      ]
+    },
+    {
+      "id": "R027",
+      "url": "https://github.com/MrScripty/Pantograph/blob/4938e405c7f656365eefdca492774ccae110c90d/crates/inference/src/backend/pytorch.rs",
+      "locations": [
+        "https://github.com/MrScripty/Pantograph/blob/4938e405c7f656365eefdca492774ccae110c90d/crates/inference/src/backend/pytorch.rs#L103-L130",
+        "https://github.com/MrScripty/Pantograph/blob/4938e405c7f656365eefdca492774ccae110c90d/crates/inference/src/backend/pytorch.rs#L1013-L1085",
+        "https://github.com/MrScripty/Pantograph/blob/4938e405c7f656365eefdca492774ccae110c90d/crates/inference/src/backend/pytorch.rs#L1-L17"
+      ]
+    },
+    {
+      "id": "R028",
+      "url": "https://github.com/MrScripty/Pantograph/blob/4938e405c7f656365eefdca492774ccae110c90d/crates/inference/torch/worker.py",
+      "locations": [
+        "https://github.com/MrScripty/Pantograph/blob/4938e405c7f656365eefdca492774ccae110c90d/crates/inference/torch/worker.py#L308-L376",
+        "https://github.com/MrScripty/Pantograph/blob/4938e405c7f656365eefdca492774ccae110c90d/crates/inference/torch/worker.py#L796-L909",
+        "https://github.com/MrScripty/Pantograph/blob/4938e405c7f656365eefdca492774ccae110c90d/crates/inference/torch/worker.py#L1280-L1373"
+      ]
+    },
+    {
+      "id": "R029",
+      "url": "https://github.com/MrScripty/Pantograph/blob/4938e405c7f656365eefdca492774ccae110c90d/crates/inference/src/backend/candle.rs",
+      "locations": [
+        "https://github.com/MrScripty/Pantograph/blob/4938e405c7f656365eefdca492774ccae110c90d/crates/inference/src/backend/candle.rs#L100-L176",
+        "https://github.com/MrScripty/Pantograph/blob/4938e405c7f656365eefdca492774ccae110c90d/crates/inference/src/backend/candle.rs#L262-L369",
+        "https://github.com/MrScripty/Pantograph/blob/4938e405c7f656365eefdca492774ccae110c90d/crates/inference/src/backend/candle.rs#L535-L555",
+        "https://github.com/MrScripty/Pantograph/blob/4938e405c7f656365eefdca492774ccae110c90d/crates/inference/src/backend/candle.rs#L76-L88",
+        "https://github.com/MrScripty/Pantograph/blob/4938e405c7f656365eefdca492774ccae110c90d/crates/inference/src/backend/candle.rs#L275-L289",
+        "https://github.com/MrScripty/Pantograph/blob/4938e405c7f656365eefdca492774ccae110c90d/crates/inference/src/backend/candle.rs#L546-L553"
+      ]
+    },
+    {
+      "id": "R030",
+      "url": "https://github.com/MrScripty/Pantograph/blob/4938e405c7f656365eefdca492774ccae110c90d/crates/inference/torch/worker_transformers.py",
+      "locations": [
+        "https://github.com/MrScripty/Pantograph/blob/4938e405c7f656365eefdca492774ccae110c90d/crates/inference/torch/worker_transformers.py#L42-L133"
+      ]
+    },
+    {
+      "id": "R031",
+      "url": "https://github.com/MrScripty/Pumas-Library/blob/f87c3da8276a914a54c6f4f36d617bef9d9f424e/rust/crates/pumas-core/src/models/artifact_load_target.rs",
+      "locations": [
+        "https://github.com/MrScripty/Pumas-Library/blob/f87c3da8276a914a54c6f4f36d617bef9d9f424e/rust/crates/pumas-core/src/models/artifact_load_target.rs#L58-L82"
+      ]
+    },
+    {
+      "id": "R032",
+      "url": "https://github.com/MrScripty/Pumas-Library/blob/f87c3da8276a914a54c6f4f36d617bef9d9f424e/rust/crates/pumas-core/src/model_library/artifact_load_target.rs",
+      "locations": [
+        "https://github.com/MrScripty/Pumas-Library/blob/f87c3da8276a914a54c6f4f36d617bef9d9f424e/rust/crates/pumas-core/src/model_library/artifact_load_target.rs#L310-L334"
+      ]
+    },
+    {
+      "id": "R033",
+      "url": "https://github.com/MrScripty/Pantograph/blob/4938e405c7f656365eefdca492774ccae110c90d/crates/pantograph-embedded-runtime/src/pumas_dispatch_package_facts.rs",
+      "locations": [
+        "https://github.com/MrScripty/Pantograph/blob/4938e405c7f656365eefdca492774ccae110c90d/crates/pantograph-embedded-runtime/src/pumas_dispatch_package_facts.rs#L103-L160"
+      ]
+    },
+    {
+      "id": "R034",
+      "url": "https://github.com/MrScripty/Pantograph/blob/4938e405c7f656365eefdca492774ccae110c90d/crates/inference/src/gateway.rs",
+      "locations": [
+        "https://github.com/MrScripty/Pantograph/blob/4938e405c7f656365eefdca492774ccae110c90d/crates/inference/src/gateway.rs#L130-L157"
+      ]
+    },
+    {
+      "id": "R035",
+      "url": "https://xgboost.readthedocs.io/en/stable/tutorials/saving_model.html",
+      "locations": []
+    },
+    {
+      "id": "R036",
+      "url": "https://github.com/huggingface/transformers/blob/35924ec379eec682bbdca219886e16eff4df8b09/src/transformers/pipelines/object_detection.py",
+      "locations": [
+        "https://github.com/huggingface/transformers/blob/35924ec379eec682bbdca219886e16eff4df8b09/src/transformers/pipelines/object_detection.py#L117-L177"
+      ]
+    },
+    {
+      "id": "R037",
+      "url": "https://github.com/huggingface/transformers/blob/35924ec379eec682bbdca219886e16eff4df8b09/src/transformers/pipelines/automatic_speech_recognition.py",
+      "locations": [
+        "https://github.com/huggingface/transformers/blob/35924ec379eec682bbdca219886e16eff4df8b09/src/transformers/pipelines/automatic_speech_recognition.py#L210-L225"
+      ]
+    },
+    {
+      "id": "R038",
+      "url": "https://github.com/huggingface/transformers/blob/35924ec379eec682bbdca219886e16eff4df8b09/src/transformers/models/time_series_transformer/modeling_time_series_transformer.py",
+      "locations": [
+        "https://github.com/huggingface/transformers/blob/35924ec379eec682bbdca219886e16eff4df8b09/src/transformers/models/time_series_transformer/modeling_time_series_transformer.py#L1114-L1520",
+        "https://github.com/huggingface/transformers/blob/35924ec379eec682bbdca219886e16eff4df8b09/src/transformers/models/time_series_transformer/modeling_time_series_transformer.py#L810-L912"
+      ]
+    },
+    {
+      "id": "R039",
+      "url": "https://github.com/huggingface/transformers/blob/35924ec379eec682bbdca219886e16eff4df8b09/src/transformers/models/decision_transformer/modeling_decision_transformer.py",
+      "locations": [
+        "https://github.com/huggingface/transformers/blob/35924ec379eec682bbdca219886e16eff4df8b09/src/transformers/models/decision_transformer/modeling_decision_transformer.py#L501-L664"
+      ]
+    },
+    {
+      "id": "R040",
+      "url": "https://arxiv.org/abs/2106.01345",
+      "locations": []
+    },
+    {
+      "id": "R041",
+      "url": "https://github.com/huggingface/candle/commit/5ba5d5b468b5b1df40e82dd3d556987bedeea041",
+      "locations": []
+    },
+    {
+      "id": "R042",
+      "url": "https://github.com/huggingface/candle/commit/88ed7911de9e88196b1f55b199145d22647f415e",
+      "locations": []
+    },
+    {
+      "id": "R043",
+      "url": "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/README.md",
+      "locations": []
+    },
+    {
+      "id": "R044",
+      "url": "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-transformers/src/lib.rs",
+      "locations": []
+    },
+    {
+      "id": "R045",
+      "url": "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-transformers/src/models/mod.rs",
+      "locations": []
+    },
+    {
+      "id": "R046",
+      "url": "https://github.com/huggingface/candle/blob/88ed7911de9e88196b1f55b199145d22647f415e/candle-transformers/src/models/mod.rs",
+      "locations": []
+    },
+    {
+      "id": "R047",
+      "url": "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-transformers/src/models/llama.rs",
+      "locations": [
+        "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-transformers/src/models/llama.rs#L38-L103",
+        "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-transformers/src/models/llama.rs#L515-L533",
+        "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-transformers/src/models/llama.rs#L14-L103",
+        "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-transformers/src/models/llama.rs#L480-L512",
+        "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-transformers/src/models/llama.rs#L515-L526"
+      ]
+    },
+    {
+      "id": "R048",
+      "url": "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-nn/src/var_builder.rs",
+      "locations": [
+        "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-nn/src/var_builder.rs#L12-L105",
+        "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-nn/src/var_builder.rs#L576-L906",
+        "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-nn/src/var_builder.rs#L186-L227",
+        "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-nn/src/var_builder.rs#L493-L573"
+      ]
+    },
+    {
+      "id": "R049",
+      "url": "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-transformers/src/models/bert.rs",
+      "locations": [
+        "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-transformers/src/models/bert.rs#L17-L99",
+        "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-transformers/src/models/bert.rs#L465-L532",
+        "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-transformers/src/models/bert.rs#L535-L630",
+        "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-transformers/src/models/bert.rs#L150-L459"
+      ]
+    },
+    {
+      "id": "R050",
+      "url": "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-examples/examples/bert/main.rs",
+      "locations": [
+        "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-examples/examples/bert/main.rs#L58-L95",
+        "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-examples/examples/bert/main.rs#L149-L203"
+      ]
+    },
+    {
+      "id": "R051",
+      "url": "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-transformers/src/models/qwen3.rs",
+      "locations": [
+        "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-transformers/src/models/qwen3.rs#L15-L33",
+        "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-transformers/src/models/qwen3.rs#L120-L240"
+      ]
+    },
+    {
+      "id": "R052",
+      "url": "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-examples/examples/llama/main.rs",
+      "locations": [
+        "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-examples/examples/llama/main.rs#L210-L289"
+      ]
+    },
+    {
+      "id": "R053",
+      "url": "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-transformers/src/generation/mod.rs",
+      "locations": []
+    },
+    {
+      "id": "R054",
+      "url": "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-examples/src/chat_template.rs",
+      "locations": [
+        "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-examples/src/chat_template.rs#L141-L224"
+      ]
+    },
+    {
+      "id": "R055",
+      "url": "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-transformers/src/models/vit.rs",
+      "locations": [
+        "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-transformers/src/models/vit.rs#L22-L68",
+        "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-transformers/src/models/vit.rs#L384-L415"
+      ]
+    },
+    {
+      "id": "R056",
+      "url": "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-examples/examples/vit/main.rs",
+      "locations": [
+        "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-examples/examples/vit/main.rs#L26-L58"
+      ]
+    },
+    {
+      "id": "R057",
+      "url": "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-examples/src/imagenet.rs",
+      "locations": [
+        "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-examples/src/imagenet.rs#L1-L43"
+      ]
+    },
+    {
+      "id": "R058",
+      "url": "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-transformers/src/models/clip/mod.rs",
+      "locations": [
+        "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-transformers/src/models/clip/mod.rs#L92-L151"
+      ]
+    },
+    {
+      "id": "R059",
+      "url": "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-transformers/src/models/whisper/mod.rs",
+      "locations": [
+        "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-transformers/src/models/whisper/mod.rs#L17-L58"
+      ]
+    },
+    {
+      "id": "R060",
+      "url": "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-transformers/src/models/whisper/model.rs",
+      "locations": [
+        "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-transformers/src/models/whisper/model.rs#L374-L399"
+      ]
+    },
+    {
+      "id": "R061",
+      "url": "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-examples/examples/whisper/main.rs",
+      "locations": [
+        "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-examples/examples/whisper/main.rs#L710-L769",
+        "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-examples/examples/whisper/main.rs#L165-L277",
+        "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-examples/examples/whisper/main.rs#L243-L277",
+        "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-examples/examples/whisper/main.rs#L691-L706"
+      ]
+    },
+    {
+      "id": "R062",
+      "url": "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-transformers/src/models/encodec.rs",
+      "locations": [
+        "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-transformers/src/models/encodec.rs#L763-L794"
+      ]
+    },
+    {
+      "id": "R063",
+      "url": "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-transformers/src/models/stable_diffusion/mod.rs",
+      "locations": [
+        "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-transformers/src/models/stable_diffusion/mod.rs#L59-L140",
+        "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-transformers/src/models/stable_diffusion/mod.rs#L461-L527"
+      ]
+    },
+    {
+      "id": "R064",
+      "url": "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-transformers/src/models/stable_diffusion/schedulers.rs",
+      "locations": []
+    },
+    {
+      "id": "R065",
+      "url": "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-examples/examples/stable-diffusion/main.rs",
+      "locations": [
+        "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-examples/examples/stable-diffusion/main.rs#L592-L704",
+        "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-examples/examples/stable-diffusion/main.rs#L708-L813"
+      ]
+    },
+    {
+      "id": "R066",
+      "url": "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-core/src/safetensors.rs",
+      "locations": [
+        "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-core/src/safetensors.rs#L462-L523",
+        "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-core/src/safetensors.rs#L435-L493"
+      ]
+    },
+    {
+      "id": "R067",
+      "url": "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-examples/src/lib.rs",
+      "locations": [
+        "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-examples/src/lib.rs#L125-L175",
+        "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-examples/src/lib.rs#L12-L31"
+      ]
+    },
+    {
+      "id": "R068",
+      "url": "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-nn/tests/layer_norm.rs",
+      "locations": [
+        "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-nn/tests/layer_norm.rs#L66-L112"
+      ]
+    },
+    {
+      "id": "R069",
+      "url": "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-transformers/src/quantized_var_builder.rs",
+      "locations": [
+        "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-transformers/src/quantized_var_builder.rs#L11-L103"
+      ]
+    },
+    {
+      "id": "R070",
+      "url": "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-core/src/quantized/mod.rs",
+      "locations": [
+        "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-core/src/quantized/mod.rs#L285-L346",
+        "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-core/src/quantized/mod.rs#L759-L789"
+      ]
+    },
+    {
+      "id": "R071",
+      "url": "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-transformers/src/models/quantized_llama.rs",
+      "locations": [
+        "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-transformers/src/models/quantized_llama.rs#L367-L445"
+      ]
+    },
+    {
+      "id": "R072",
+      "url": "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-core/src/device.rs",
+      "locations": [
+        "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-core/src/device.rs#L5-L21"
+      ]
+    },
+    {
+      "id": "R073",
+      "url": "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-core/Cargo.toml",
+      "locations": [
+        "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-core/Cargo.toml#L49-L76"
+      ]
+    },
+    {
+      "id": "R074",
+      "url": "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-core/src/custom_op.rs",
+      "locations": [
+        "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-core/src/custom_op.rs#L7-L41"
+      ]
+    },
+    {
+      "id": "R075",
+      "url": "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-core/src/backend.rs",
+      "locations": []
+    },
+    {
+      "id": "R076",
+      "url": "https://huggingface.co/docs/safetensors/index",
+      "locations": []
+    },
+    {
+      "id": "R077",
+      "url": "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-onnx/src/eval.rs",
+      "locations": [
+        "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/candle-onnx/src/eval.rs#L2560-L2568"
+      ]
+    },
+    {
+      "id": "R078",
+      "url": "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/.github/workflows/rust-ci.yml",
+      "locations": []
+    },
+    {
+      "id": "R079",
+      "url": "https://github.com/huggingface/candle/blob/5ba5d5b468b5b1df40e82dd3d556987bedeea041/.github/workflows/ci_cuda.yaml",
+      "locations": []
+    },
+    {
+      "id": "R080",
+      "url": "https://github.com/ggml-org/ggml/blob/353b63b439f27ab2cc19dac97ab1681ba6d2d084/docs/gguf.md",
+      "locations": []
+    },
+    {
+      "id": "R081",
+      "url": "https://github.com/ggml-org/llama.cpp/blob/a4cb4c61fd9d9c2066c7c1747821d3d65b8943bd/src/llama-arch.h",
+      "locations": []
+    },
+    {
+      "id": "R082",
+      "url": "https://github.com/ggml-org/llama.cpp/blob/a4cb4c61fd9d9c2066c7c1747821d3d65b8943bd/src/models/llama.cpp",
+      "locations": []
+    },
+    {
+      "id": "R083",
+      "url": "https://github.com/ggml-org/llama.cpp/blob/a4cb4c61fd9d9c2066c7c1747821d3d65b8943bd/src/llama-model.cpp",
+      "locations": []
+    },
+    {
+      "id": "R084",
+      "url": "https://github.com/ggml-org/llama.cpp/blob/a4cb4c61fd9d9c2066c7c1747821d3d65b8943bd/src/llama-model-loader.cpp",
+      "locations": []
+    },
+    {
+      "id": "R085",
+      "url": "https://github.com/ggml-org/llama.cpp/blob/a4cb4c61fd9d9c2066c7c1747821d3d65b8943bd/conversion/llama.py",
+      "locations": []
+    },
+    {
+      "id": "R086",
+      "url": "https://github.com/ggml-org/llama.cpp/blob/a4cb4c61fd9d9c2066c7c1747821d3d65b8943bd/conversion/__init__.py",
+      "locations": []
+    },
+    {
+      "id": "R087",
+      "url": "https://github.com/ggml-org/llama.cpp/blob/a4cb4c61fd9d9c2066c7c1747821d3d65b8943bd/convert_hf_to_gguf.py",
+      "locations": []
+    },
+    {
+      "id": "R088",
+      "url": "https://github.com/ggml-org/llama.cpp/blob/a4cb4c61fd9d9c2066c7c1747821d3d65b8943bd/conversion/base.py",
+      "locations": []
+    },
+    {
+      "id": "R089",
+      "url": "https://github.com/ggml-org/llama.cpp/blob/a4cb4c61fd9d9c2066c7c1747821d3d65b8943bd/src/llama-vocab.cpp",
+      "locations": []
+    },
+    {
+      "id": "R090",
+      "url": "https://github.com/ggml-org/llama.cpp/blob/a4cb4c61fd9d9c2066c7c1747821d3d65b8943bd/include/llama.h",
+      "locations": []
+    },
+    {
+      "id": "R091",
+      "url": "https://github.com/ggml-org/llama.cpp/blob/a4cb4c61fd9d9c2066c7c1747821d3d65b8943bd/docs/multimodal.md",
+      "locations": []
+    },
+    {
+      "id": "R092",
+      "url": "https://github.com/ggml-org/llama.cpp/blob/a4cb4c61fd9d9c2066c7c1747821d3d65b8943bd/tools/mtmd/README.md",
+      "locations": []
+    },
+    {
+      "id": "R093",
+      "url": "https://github.com/ggml-org/llama.cpp/blob/a4cb4c61fd9d9c2066c7c1747821d3d65b8943bd/tools/mtmd/mtmd.h",
+      "locations": []
+    },
+    {
+      "id": "R094",
+      "url": "https://github.com/ggml-org/llama.cpp/blob/a4cb4c61fd9d9c2066c7c1747821d3d65b8943bd/tools/mtmd/mtmd.cpp",
+      "locations": []
+    },
+    {
+      "id": "R095",
+      "url": "https://github.com/ggml-org/llama.cpp/blob/a4cb4c61fd9d9c2066c7c1747821d3d65b8943bd/ggml/src/ggml-backend.cpp",
+      "locations": []
+    },
+    {
+      "id": "R096",
+      "url": "https://github.com/onnx/onnx/blob/a24171e36ee8d9ed42548f0e9bf78628e4d3cc9e/docs/IR.md",
+      "locations": []
+    },
+    {
+      "id": "R097",
+      "url": "https://github.com/onnx/onnx/blob/a24171e36ee8d9ed42548f0e9bf78628e4d3cc9e/docs/Versioning.md",
+      "locations": []
+    },
+    {
+      "id": "R098",
+      "url": "https://github.com/onnx/onnx/blob/a24171e36ee8d9ed42548f0e9bf78628e4d3cc9e/docs/ExternalData.md",
+      "locations": []
+    },
+    {
+      "id": "R099",
+      "url": "https://github.com/pytorch/pytorch/blob/53a4d4161da8ddac06ee324855c042bf5819ae3a/docs/source/onnx.md",
+      "locations": []
+    },
+    {
+      "id": "R100",
+      "url": "https://github.com/pytorch/pytorch/blob/53a4d4161da8ddac06ee324855c042bf5819ae3a/torch/onnx/__init__.py",
+      "locations": []
+    },
+    {
+      "id": "R101",
+      "url": "https://github.com/microsoft/onnxruntime/blob/27f3d47e38cd949539662415f3791cf9ed751cbd/include/onnxruntime/core/framework/execution_provider.h",
+      "locations": []
+    },
+    {
+      "id": "R102",
+      "url": "https://github.com/microsoft/onnxruntime/blob/27f3d47e38cd949539662415f3791cf9ed751cbd/onnxruntime/core/framework/graph_partitioner.cc",
+      "locations": []
+    },
+    {
+      "id": "R103",
+      "url": "https://github.com/microsoft/onnxruntime/blob/27f3d47e38cd949539662415f3791cf9ed751cbd/docs/OperatorKernels.md",
+      "locations": []
+    },
+    {
+      "id": "R104",
+      "url": "https://github.com/microsoft/onnxruntime/blob/27f3d47e38cd949539662415f3791cf9ed751cbd/docs/Reduced_Operator_Kernel_build.md",
+      "locations": []
+    },
+    {
+      "id": "R105",
+      "url": "https://github.com/microsoft/onnxruntime/blob/27f3d47e38cd949539662415f3791cf9ed751cbd/onnxruntime/core/session/inference_session.cc",
+      "locations": []
+    },
+    {
+      "id": "R106",
+      "url": "https://github.com/microsoft/onnxruntime/blob/27f3d47e38cd949539662415f3791cf9ed751cbd/onnxruntime/python/onnxruntime_inference_collection.py",
+      "locations": []
+    },
+    {
+      "id": "R107",
+      "url": "https://github.com/microsoft/onnxruntime/blob/27f3d47e38cd949539662415f3791cf9ed751cbd/include/onnxruntime/core/session/onnxruntime_c_api.h",
+      "locations": []
+    },
+    {
+      "id": "R108",
+      "url": "https://github.com/microsoft/onnxruntime/blob/27f3d47e38cd949539662415f3791cf9ed751cbd/onnxruntime/python/tools/quantization/quantize.py",
+      "locations": []
+    },
+    {
+      "id": "R109",
+      "url": "https://github.com/huggingface/optimum-onnx/blob/ebfc7c31ee639716c323b59573f27a3a9263ffb5/optimum/onnxruntime/modeling.py",
+      "locations": []
+    },
+    {
+      "id": "R110",
+      "url": "https://github.com/huggingface/optimum-onnx/blob/ebfc7c31ee639716c323b59573f27a3a9263ffb5/optimum/exporters/onnx/model_configs.py",
+      "locations": []
+    },
+    {
+      "id": "R111",
+      "url": "https://github.com/huggingface/transformers/blob/35924ec379eec682bbdca219886e16eff4df8b09/src/transformers/models/wav2vec2/tokenization_wav2vec2.py",
+      "locations": []
+    },
+    {
+      "id": "R112",
+      "url": "https://github.com/huggingface/transformers/blob/35924ec379eec682bbdca219886e16eff4df8b09/src/transformers/models/wav2vec2/feature_extraction_wav2vec2.py",
+      "locations": []
+    },
+    {
+      "id": "R113",
+      "url": "https://github.com/onnx/sklearn-onnx/blob/449ec0526152514345a00370356131e325b9abc0/docs/pipeline.rst",
+      "locations": []
+    },
+    {
+      "id": "R114",
+      "url": "https://github.com/onnx/sklearn-onnx/blob/449ec0526152514345a00370356131e325b9abc0/docs/tutorial/plot_dbegin_options_zipmap.py",
+      "locations": []
+    },
+    {
+      "id": "R115",
+      "url": "https://onnxruntime.ai/docs/reference/operators/add-custom-op.html",
+      "locations": []
+    },
+    {
+      "id": "R116",
+      "url": "https://github.com/microsoft/onnxruntime-genai/blob/40c8c6cb5952deca95033ee7a96c0fa50b7ec7e9/test/models/hf-internal-testing/tiny-random-gpt2-fp32/genai_config.json",
+      "locations": []
+    },
+    {
+      "id": "R117",
+      "url": "https://github.com/microsoft/onnxruntime-genai/blob/40c8c6cb5952deca95033ee7a96c0fa50b7ec7e9/README.md",
+      "locations": []
+    },
+    {
+      "id": "R118",
+      "url": "https://github.com/openvinotoolkit/openvino/blob/c9879810c9ae1cb48d2b0f4cf0aee51b12ea0bac/src/inference/include/openvino/runtime/core.hpp",
+      "locations": []
+    },
+    {
+      "id": "R119",
+      "url": "https://github.com/openvinotoolkit/openvino/blob/c9879810c9ae1cb48d2b0f4cf0aee51b12ea0bac/docs/articles_en/openvino-workflow/running-inference/model-representation.rst",
+      "locations": []
+    },
+    {
+      "id": "R120",
+      "url": "https://github.com/openvinotoolkit/openvino/blob/c9879810c9ae1cb48d2b0f4cf0aee51b12ea0bac/docs/articles_en/openvino-workflow/model-preparation/convert-model-pytorch.rst",
+      "locations": []
+    },
+    {
+      "id": "R121",
+      "url": "https://github.com/openvinotoolkit/openvino/blob/c9879810c9ae1cb48d2b0f4cf0aee51b12ea0bac/docs/articles_en/documentation/compatibility-and-support/supported-operations.rst",
+      "locations": []
+    },
+    {
+      "id": "R122",
+      "url": "https://github.com/openvinotoolkit/openvino/blob/c9879810c9ae1cb48d2b0f4cf0aee51b12ea0bac/docs/articles_en/documentation/compatibility-and-support/supported-models-onnx.rst",
+      "locations": []
+    },
+    {
+      "id": "R123",
+      "url": "https://github.com/openvinotoolkit/openvino/blob/c9879810c9ae1cb48d2b0f4cf0aee51b12ea0bac/docs/articles_en/openvino-workflow/running-inference/inference-devices-and-modes/query-device-properties.rst",
+      "locations": []
+    },
+    {
+      "id": "R124",
+      "url": "https://github.com/openvinotoolkit/openvino/blob/c9879810c9ae1cb48d2b0f4cf0aee51b12ea0bac/docs/articles_en/openvino-workflow/running-inference/optimize-inference/optimize-preprocessing.rst",
+      "locations": []
+    },
+    {
+      "id": "R125",
+      "url": "https://github.com/openvinotoolkit/openvino/blob/c9879810c9ae1cb48d2b0f4cf0aee51b12ea0bac/docs/articles_en/openvino-workflow/running-inference/inference-devices-and-modes/gpu-device.rst",
+      "locations": []
+    },
+    {
+      "id": "R126",
+      "url": "https://github.com/openvinotoolkit/openvino/blob/c9879810c9ae1cb48d2b0f4cf0aee51b12ea0bac/docs/articles_en/openvino-workflow/running-inference/inference-devices-and-modes/auto-device-selection.rst",
+      "locations": []
+    },
+    {
+      "id": "R127",
+      "url": "https://github.com/openvinotoolkit/openvino/blob/c9879810c9ae1cb48d2b0f4cf0aee51b12ea0bac/docs/articles_en/openvino-workflow/running-inference/inference-devices-and-modes/hetero-execution.rst",
+      "locations": []
+    },
+    {
+      "id": "R128",
+      "url": "https://github.com/openvinotoolkit/openvino/blob/c9879810c9ae1cb48d2b0f4cf0aee51b12ea0bac/docs/articles_en/openvino-workflow/running-inference/optimize-inference/precision-control.rst",
+      "locations": []
+    },
+    {
+      "id": "R129",
+      "url": "https://github.com/openvinotoolkit/openvino/blob/c9879810c9ae1cb48d2b0f4cf0aee51b12ea0bac/docs/articles_en/openvino-workflow/running-inference/inference-request/stateful-models.rst",
+      "locations": []
+    },
+    {
+      "id": "R130",
+      "url": "https://github.com/openvinotoolkit/openvino/blob/c9879810c9ae1cb48d2b0f4cf0aee51b12ea0bac/src/inference/include/openvino/runtime/infer_request.hpp",
+      "locations": []
+    },
+    {
+      "id": "R131",
+      "url": "https://github.com/pykeio/ort/blob/5dc34f82b2c3c19a622314774c086157f4f31f48/Cargo.toml",
+      "locations": []
+    },
+    {
+      "id": "R132",
+      "url": "https://github.com/intel/openvino-rs/blob/8782ff8bc5ac3f01899406fc4157d2e2ed4a0ef5/README.md",
+      "locations": []
+    },
+    {
+      "id": "R133",
+      "url": "https://github.com/openvinotoolkit/openvino/blob/c9879810c9ae1cb48d2b0f4cf0aee51b12ea0bac/LICENSE",
+      "locations": []
+    },
+    {
+      "id": "R134",
+      "url": "https://github.com/ggml-org/llama.cpp/blob/a4cb4c61fd9d9c2066c7c1747821d3d65b8943bd/LICENSE",
+      "locations": []
+    },
+    {
+      "id": "R135",
+      "url": "https://github.com/microsoft/onnxruntime/blob/27f3d47e38cd949539662415f3791cf9ed751cbd/LICENSE",
+      "locations": []
+    },
+    {
+      "id": "R136",
+      "url": "https://github.com/MrScripty/Pantograph/blob/4938e405c7f656365eefdca492774ccae110c90d/crates/inference/Cargo.toml",
+      "locations": []
+    }
+  ]
+}
