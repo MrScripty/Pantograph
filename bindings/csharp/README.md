@@ -10,6 +10,26 @@ Runtime smoke coverage for generated Pantograph C# bindings.
 | `Pantograph.DirectRuntimeQuickstart/` | Artifact-ready quickstart showing native save/list/load/edit-session/workflow-session usage from C#. |
 | `PACKAGE-README.md` | README copied to the generated C# binding artifact. |
 
+## Generator prerequisite
+
+The maintained workflow uses UniFFI 0.28.3 and the official
+[uniffi-bindgen-cs v0.9.0+v0.28.3 source](https://github.com/NordSecurity/uniffi-bindgen-cs/tree/2f4880f03ed08d960ad0ee14d11cf95444eee540).
+The generator is not published as crates.io version 0.9.0. Install its exact
+reviewed Git revision with the upstream lockfile:
+
+```bash
+cargo install uniffi-bindgen-cs \
+  --git https://github.com/NordSecurity/uniffi-bindgen-cs \
+  --rev 2f4880f03ed08d960ad0ee14d11cf95444eee540 --locked
+```
+
+This provisions a development/CI tool; it does not change the application's
+UniFFI dependency or hand-edit generated bindings. The headless workflow owns
+its pin and generated-artifact qualification. Keep the upstream MPL-2.0 notices
+with any redistributed generator source/binary; this repository does not vendor
+or package the generator itself. Existing generated-binding/artifact licensing
+obligations remain unchanged.
+
 ## Usage
 Run the repository-level smoke script:
 

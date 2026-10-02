@@ -209,3 +209,13 @@ with review and applicable contract tests. Routine repairs under unchanged
 contracts need no documentation churn. Existing host/binding, scheduler-only,
 worker-protocol and structured-producer checks remain required; the removed
 universal README headings never proved those contracts.
+
+## Ubuntu CI Build Prerequisites
+
+`install-ubuntu-build-dependencies.sh` owns the shared native package list for
+workspace check, warning-deny Clippy and the desktop linkage build on Ubuntu
+hosted runners. It retains the existing GTK/WebKit/libsoup packages and installs
+`protobuf-compiler` for the Lance build's `protoc` requirement. This command
+uses `sudo apt-get` and changes the runner's system packages; do not treat it as
+a read-only check or run it on another computer without authorization. A failed
+install fails the step. It changes no Rust features, pins or verification gates.
