@@ -20,6 +20,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Install Node toolchain
         uses: actions/setup-node@v4
@@ -30,7 +32,14 @@ jobs:
       - name: Install npm dependencies
         run: npm ci --include=optional
 
+      - name: Test decision traceability gate
+        run: node --test scripts/check-decision-traceability.test.mjs
+
       - name: Run no-new-debt lint gate
+        env:
+          TRACEABILITY_MODE: range
+          TRACEABILITY_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
+          TRACEABILITY_HEAD_REF: ${{ github.event.pull_request.head.sha || github.sha }}
         run: npm run lint:no-new
 
   typecheck:

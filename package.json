@@ -61,6 +61,7 @@
     "@wdio/mocha-framework": "^9.29.0",
     "@wdio/spec-reporter": "^9.29.0",
     "autoprefixer": "^10.4.19",
+    "commonmark": "0.31.2",
     "es-module-lexer": "^2.0.0",
     "eslint": "^9.0.0",
     "eslint-plugin-svelte": "^3.0.0",
