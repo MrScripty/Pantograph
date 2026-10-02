@@ -1324,11 +1324,16 @@ async fn refresh_current_validation_summary_rejects_stale_requested_revision() {
 async fn refresh_current_validation_summary_rejects_revision_changed_during_fact_lookup() {
     let entered = Arc::new(Notify::new());
     let release = Arc::new(Notify::new());
+    let second_entered = Arc::new(Notify::new());
+    let second_release = Arc::new(Notify::new());
     let store = Arc::new(GraphSessionStore::with_inference_interface_facts_provider(
-        Arc::new(BlockingInferenceFactsProvider {
+        Arc::new(SequencedBlockingInferenceFactsProvider {
             facts: BTreeMap::from([("infer".to_string(), ready_inference_facts())]),
-            entered: Arc::clone(&entered),
-            release: Arc::clone(&release),
+            calls: Mutex::new(0),
+            first_entered: Arc::clone(&entered),
+            first_release: Arc::clone(&release),
+            second_entered: Arc::clone(&second_entered),
+            second_release: Arc::clone(&second_release),
         }),
     ));
     let session = store
@@ -1357,7 +1362,10 @@ async fn refresh_current_validation_summary_rejects_revision_changed_during_fact
         })
         .await
         .expect("mutate graph while validation facts are pending");
+    second_entered.notified().await;
     release.notify_one();
+    second_release.notify_one();
+    store.drain_validation_tasks_for_tests().await;
     let response = refresh
         .await
         .expect("refresh task should not panic")
@@ -3086,7 +3094,12 @@ fn inference_graph() -> WorkflowGraph {
                 position: Position { x: 200.0, y: 0.0 },
                 data: serde_json::json!({
                     "task_kind": "image_generation",
-                    "runtime": "pytorch"
+                    "runtime": "pytorch",
+                    "runtime_source_context": {
+                        "operation_type": "image_generation",
+                        "context_shape_key": "image.1024.square",
+                        "cancellation_mode": "run_scoped"
+                    }
                 }),
             },
         ],
