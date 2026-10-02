@@ -147,7 +147,7 @@ impl FfiPantographRuntime {
             );
         }
 
-        let artifact_store = ArtifactStore::open(
+        let artifact_store = ArtifactStore::open_with_default_policy(
             config.app_data_dir.join("artifacts"),
             default_artifact_policy(),
         )
