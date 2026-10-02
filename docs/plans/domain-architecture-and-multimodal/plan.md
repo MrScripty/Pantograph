@@ -2,9 +2,9 @@
 
 **Plan status:** `Active`
 
-**Current phase:** M3 Pumas owner/client integration design selected. Full review and required-real text→image acceptance remain open.
+**Current phase:** Production-composition repair verifying under M2/M3. Pumas owner/client integration remains selected; full review and required-real text→image acceptance remain open.
 
-**Next slice:** Expose Pumas's existing full package-facts operation through its authenticated typed local client, then migrate Pantograph's existing access facade and hosted execution to supported Owner/LocalClient roles. Use the configured launcher-root identity, preserve ReadOnly browsing without execution, and qualify real owner-produced identities/facts/load targets before model runs. The current reviewed Pumas committed baseline is `3b0d5ee4eda4d68ae33a158162883208e4608edb`; its active uncommitted lifecycle work is separate.
+**Next slice:** Publish and qualify the focused production-dispatch draft stacked on gate commit `9567186252f7ebb60794911baeeabce0daec5140`; composed traceability/format checks pass, while binary reruns reuse previously compiled unchanged source. Diagnose and repair baseline CI in a separate admitted tooling/security slice before integration. Qualified Pumas owner/client facts and target migration follow; no moving upstream head is accepted.
 
 **Acceptance status:** `blocked`
 
@@ -12,7 +12,7 @@
 
 **Issues:** [issues.md](issues.md)
 
-**Reports:** [planning baseline](reports/planning-baseline.md)
+**Reports:** [planning baseline](reports/planning-baseline.md); [production dispatch repair](reports/2026-10-02-production-dispatch.md)
 
 **Related ADRs:** [existing decisions](../../adr/README.md), especially ADR-001, ADR-006, and ADR-011–ADR-016. These remain binding until explicitly replaced with consumer and migration evidence.
 
@@ -43,7 +43,12 @@ configuration.
 Standards source:
 `/media/jeremy/OrangeCream/Linux Software/repos/owned/developer-tooling/Coding-Standards`
 
-Planning baseline: `366c1d90a24bbfb50973f62b155a5f3396c0f107`.
+Current implementation baseline (reverified 2026-10-02):
+`MrScripty/Coding-Standards@dcc56f26e884ade260770beceba2501d3746200d`.
+The earlier planning baseline `366c1d90a24bbfb50973f62b155a5f3396c0f107`
+remains the authority recorded for historical slices; it is not current acceptance.
+The cloud checkout uses the same canonical standards source, not the unavailable
+historical workstation path above.
 Read Core and Router, then canonical workflows/topics/profiles selected by actual
 task facts and their Requires dependencies. Legacy `*-STANDARDS.md` navigation
 files do not restore retired policy. Record material local standards changes or
@@ -54,6 +59,104 @@ the cost-effectiveness pilot. M0 superseded the [old portfolio](../current-stand
 its five child plans and the [image plan](../current-image-generation-graphs/plan.md).
 All old findings/claims are mapped in the [coverage report](reports/repository-review.md);
 none are accepted by supersession. The old audit and accepted cleanup remain history.
+
+## 2026-10-02 Execution Admission And Branch Dependencies
+
+Operation: `continue` on this active plan. Admitted repository base:
+`4938e405c7f656365eefdca492774ccae110c90d` (`main`, reverified with no open PRs).
+The independent audit is evidence to revalidate, not authority to transplant
+private reports or to edit another repository. Existing accepted singleton,
+JoinSet supervision, scoped claims and dependent continuation remain in force.
+
+The production-dispatch implementer owns this plan, issues and ledger; the
+parent coordinates independent review and user decisions. Other branches report
+through one scoped report, without competing plans. Compare the admitted base,
+current remote target and shared plan decisions before review/integration. A
+changed base or conflicting scope requires fresh admission, not blind merge or
+history rewriting. All branches ultimately target `main`, begin private/unshared and become
+public only after reviewed push. Repair PRs may initially target the independently
+accepted gate branch, with exact dependency commit and focused diff recorded;
+after that branch merges, retarget `main` without forced history rewrite.
+They remain draft PRs until required evidence passes. The user subsequently authorized merges only after exact-head CI passes and
+applicable Greptile/CodeRabbit comment-driven review is satisfied. The parent
+coordinates those merges after independent review/mergeability; workers do not
+merge individually. Draft-skipped review and absent CI are not passes. Release
+publication remains outside this plan. Retain task checkouts while review
+is outstanding; terminal cleanup requires explicit recorded disposition.
+
+| Branch / owner | Coherent outcome and bounded write set | Prerequisites and verification |
+| --- | --- | --- |
+| `codex/production-dispatch-identity` / execution implementer | Stock registration identity; backend-owned task, semantic model-source and variant facts preserved through dispatch. `crates/pantograph-embedded-runtime/src/{runtime_registry.rs,runtime_registry_tests.rs,runtime_dispatch_capability_facts.rs,runtime_dispatch_candidate_provider.rs,runtime_dispatch_source_snapshot.rs,inference_interface_facts_provider.rs,workflow_service_composition.rs,runtime_host_text_execution.rs}` and directly affected existing test fixtures; these three plan-control files and `reports/2026-10-02-production-dispatch.md`. | First integration slice. Actual registration/source/candidate/selection/text-host contract with controlled final inference effects; missing, unavailable, incompatible and ambiguous variants reject before reservations. Focused Rust tests, affected format/lint checks, independent review and exact-head CI; no model/desktop claim. |
+| `codex/artifact-retention-reopen` / persistence implementer | P-05 only: preserve saved policy at default desktop/native reopen, preserving explicit override API. Artifact-store source and `tests/artifact_store_policy.rs`, desktop `app_setup.rs` artifact helper extraction and `app_setup/artifacts.rs`, UniFFI runtime opener, scoped `reports/artifact-retention-reopen.md`. | Parallel disjoint repair; DA-05 prerequisite. Real service policy-save and startup-helper reopen tests, explicit override/default cases, affected Rust checks and independent review. |
+| `docs/pantograph-research-sources` / research owner | Reviewed original synthesis, bibliographic links and redistribution-eligible material under `docs/research/`, linked from `docs/README.md`; no product or plan-control edits. | Independent. [Draft PR #1](https://github.com/MrScripty/Pantograph/pull/1), exact head `b09380618224277e21fc5be2a2fe7ccc21e9d7dd`; source-to-DA map is reference material, not acceptance authority. |
+| `fix/generated-component-validation-admission` / safety owner | P-03 fail-closed unavailable validation only. `src/lib/hotload-sandbox/` ImportManager/types/ComponentRegistry and affected tests plus minimal ComponentContainer handling; `reports/2026-10-02-generated-component-validation-admission.md`. P-04 termination redesign is deferred separately. | Independent of dispatch; DA-04/security prerequisite. No live generated execution is re-enabled by this work. |
+| [Traceability gate PR #2](https://github.com/MrScripty/Pantograph/pull/2) / tooling owner | Replace retired directory/heading rule with explicit narrow decision-source → canonical-guide impact map; exact staged/range inputs and prior/current-map enforcement. Script/wrapper/tests, map, script guide, invocation wiring, scoped `reports/2026-10-02-traceability-gate.md`; exact adoption base `4938e405`. | Reviewed source dependency published at `9567186`; hosted 24-case gate suite passes, aggregate CI and CodeRabbit remain pending/blocked. Old gate fails on missing per-directory README even for preserved-contract changes. No hook bypass or filler documentation; independent negative/deletion/input tests and review required. |
+| Pumas access / execution implementer, later admission | Existing configured-root Owner/LocalClient/ReadOnly facade and full-facts/load-target consumers; exact set and dependency revision fixed before writes. | Requires authenticated local full-facts operation on an authorized upstream revision. No Pumas edits are authorized here. OwnerFresh path/kind/identity qualification is a separate blocking gate. |
+| Dependent desktop fixture / execution and desktop owners, later admission | Narrowly admit only supported fixture node contracts (including required image-output handling), preserving dependent text→image identity and retained results. | Production dispatch + Pumas qualification + safety/persistence gates → DA-03/04/05. Real CPU/GPU and desktop evidence remains required. |
+| Efficiency qualification / later admission | Measure existing real execution before selecting a bounded scheduler optimization. | DA-03 path works first; DA-06 workload budgets precede tuning. PoC whole-run search CPU (116.79 s versus 0.19 s baseline) and no hardware validation rule out a production search transplant as current work. |
+
+Build setup is now approved and available: Rust 1.92.0, rustfmt and Clippy.
+The declared ORT CDN refused connection; the same ONNX Runtime 1.24.2 was
+retrieved from Microsoft's official release, checked against its release-asset
+SHA-256, and linked through ort-sys's supported library-location settings.
+No Cargo dependency or feature was changed for recovery. Python linking uses
+its existing relocated library path; tests use their own writable XDG root.
+This is test-environment qualification, not model/hardware/desktop acceptance.
+
+Focused dispatch checks and the connected no-model text host test pass; broader
+isolated-XDG embedded tests show the same three failure identities and
+assertions as exact-base `4938e405` (449/3 candidate versus 444/3 baseline).
+Independent review required graph-visible cold-runtime/device/task propagation;
+the connected regression and owner-indexed device negatives now pass. Full-warning Clippy
+stops at existing managed-dependencies source before the changed package; package
+isolation reports the same 49 diagnostic observations as exact base, no new
+diagnostics. The warning-deny gate still fails; see the linked report.
+
+### Dispatch Composition And Invariants
+
+Composed-design review: `applicable` to the repaired production projection.
+
+1. The host registration boundary owns stable runtime family/residency identity;
+   inference owns backend task, model-source and available device-variant facts;
+   Pumas owns current package/target facts; registry owns reservations; scheduler
+   owns the decision; runtime host owns executing it. None transfers another's
+   authority or claims hardware qualification from a model artifact.
+2. Necessary joins are runtime identity to backend facts, package hints to
+   backend-declared model sources, explicit device to available variants, and
+   reservation to selected dispatch. Backend IDs, loader dialects, runtime
+   instances, family and residency keys remain distinct. Task intent does not
+   authorize synthesizing a variant or path.
+3. The composition root supplies the existing gateway and shared registry to the
+   capability source. Callers do not construct dispatch identities, inject
+   aliases or guess variant strings. Existing public/persisted DTOs and host
+   validation stay intact; unavailable facts remain explicit diagnostics.
+4. A new backend/variant changes its inference capability owner; projection
+   consumers preserve those facts. A new runtime lifecycle changes the host
+   registration owner. Pumas target rules change upstream and its typed adapter,
+   not scheduler or UI. Extending supported workflow node execution is a later
+   independently tested classifier/host change.
+5. Dependencies carry existing typed capability and registry values. No Python
+   implementation, filesystem path reconstruction, private external source,
+   alternate executor, new protocol or dependency revision is introduced.
+6. Source projection and candidate selection can fail independently before
+   reservation/effects; text-host checks remain a final independent contract.
+   Catalog capability does not establish package dependency readiness, model
+   compatibility or actual GPU execution. Existing readiness/trust checks remain.
+7. No new permanent registry, service, cache, validator framework or version is
+   admitted. Removing the small projection would reintroduce missing producer
+   facts at each consumer; adding broad aliases would conceal distinct domains.
+8. Necessary complexity is the join of already-owned runtime, package, device
+   and reservation facts. Reuse existing snapshot freshness, validated candidate
+   bundles and scheduler selection. Do not change batching/claims/continuation
+   or port simulation search into the production scheduler.
+
+P-01/P-02 share a systemic producer-projection invariant. Source tracing also
+found accepted Pumas `Transformers`/`Diffusers` hints compared directly with the
+stock `pytorch` key; complete hand-built test fixtures had hidden this path.
+The bounded consumer population is registration/reconciliation, capability
+source, graph interface-facts projection, snapshot refresh, candidate provider,
+scheduler projection and host validation. Repair producer propagation and
+source-to-consumer evidence together; do not accept an isolated setter fix.
 
 ## Documentation Proportionality
 
@@ -806,13 +909,23 @@ model positioning and reasoning labels do not establish Pantograph performance.
 
 ## Blockers
 
-- No blocker to M0 documentation/read-only work.
-- Real mixed-workflow model/runtime/hardware and desktop-runner availability
-  have not been verified in this planning pass; M0 owns the check.
-- Full consumer/target inventory and project licensing authority remain to be
-  reconciled; unresolved external authority blocks only dependent claims.
-- Exact production write sets are intentionally not admitted before source-backed
-  findings. Later milestones cannot use candidate owner lists as write permission.
+- Traceability gate reconciliation must pass before source repair publication;
+  no obsolete per-directory README rule or hook bypass is accepted.
+- Current exact-head CI has independent pre-existing blockers: critical frontend
+  lint at `IoInspectorPage.svelte:520`, production dependency audit (three high,
+  three moderate), unavailable `uniffi-bindgen-cs` 0.9.0, and native provisioning
+  in runtime-separation. [Docs-only PR #1](https://github.com/MrScripty/Pantograph/pull/1)
+  at `b093806` reproduces them; these are not dispatch regression findings.
+- Pumas full package facts through authenticated LocalClient require upstream
+  support. External repository edits need separate authority. Current main
+  `e37bbf4b964a0e2aadf25f80ab71edd8fa6b3eb3` and Pantograph's pinned `f87c3da`
+  retain the HF-directory/file target contradiction; do not guess a parent path.
+- No current real model pair, runtime/device, hardware budget and desktop fixture
+  is jointly qualified. Standard models need no custom dependency bindings;
+  an empty custom-binding list is not itself a readiness failure.
+- Full audit/static/supported-target closure remains pending. Existing reported
+  failing suites and historical evidence are not silently relabeled current.
+- Later source slices need exact admitted write sets and independent review.
 
 ## Re-Plan Triggers
 
@@ -825,20 +938,16 @@ invalidates the composed-design review. Re-run only affected review and gates.
 ## Implementation Invocation
 
 `Continue docs/plans/domain-architecture-and-multimodal/plan.md, operation continue.
-Admit D-02's complete retained-image retrieval repair from the existing desktop
-report after confirming its exact consumer write set; preserve artifact identity,
-retention and cancellation semantics. Then qualify concrete owner-fresh Pumas
-text/image targets, runtime/device and the existing desktop fixture before real
-mixed-workflow execution. EX-04's controlled text→image, pending-response and
-readiness-recovery evidence is accepted, not a real-model/desktop substitute.
-Continue the four-model policy and record full implementation, review, rescue,
-commit/coordination and unknown-rate costs. Full audit/static and existing test
-failures remain tracked independently.
+Complete the 2026-10-02 production-dispatch slice and its actual producer-path
+regressions, coordinate disjoint safety/persistence/research proposals through
+independent review, then re-admit the Pumas access/qualification slice from
+current upstream facts. Preserve DA-03 dependent text→image, DA-04 lifecycle,
+DA-05 cold reopen and DA-06 measured efficiency. Commit/push coherent verified
+changes on focused branches and open draft PRs. Parent-controlled merges require passing exact-head CI and
+applicable Greptile/CodeRabbit review under the latest user instruction.`
 
-Subsequent invocations supply this same canonical plan path with the operation
-appropriate to its recorded lifecycle; the next-slice field is not independent
-execution authority. The user has now authorized starting the plan with subagents
-and the bounded implementation pilot.
+This invocation supersedes the old D-02 next-slice wording; D-02 is already
+accepted in this plan and its historical evidence remains in the ledger.
 
 ## Final Acceptance
 

@@ -598,3 +598,71 @@ async fn release_reservation_and_reconcile_runtime_registry_reclaims_evicted_run
     assert_eq!(runtime.status, RuntimeRegistryStatus::Stopped);
     assert!(runtime.runtime_instance_id.is_none());
 }
+
+#[test]
+fn production_registration_supplies_stable_identity_and_reconciliation_preserves_it() {
+    let registry = RuntimeRegistry::new();
+    let mut mode = HostRuntimeModeSnapshot {
+        backend_name: Some("PyTorch".into()),
+        backend_key: Some("pytorch".into()),
+        active_runtime: Some(inference::RuntimeLifecycleSnapshot {
+            runtime_id: Some("pytorch".into()),
+            runtime_instance_id: Some("first-instance".into()),
+            active: true,
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    reconcile_runtime_registry_mode_info(&registry, &mode);
+    let first = registry.snapshot().runtimes.remove(0);
+    assert_eq!(first.runtime_family.as_deref(), Some("pytorch"));
+    assert_eq!(
+        first.runtime_residency_key.as_deref(),
+        Some("runtime.pytorch.shared")
+    );
+    mode.active_runtime.as_mut().unwrap().runtime_instance_id = Some("second-instance".into());
+    reconcile_runtime_registry_mode_info(&registry, &mode);
+    let second = registry.snapshot().runtimes.remove(0);
+    assert_eq!(second.runtime_family, first.runtime_family);
+    assert_eq!(second.runtime_residency_key, first.runtime_residency_key);
+    assert_eq!(
+        second.runtime_instance_id.as_deref(),
+        Some("second-instance")
+    );
+}
+
+#[test]
+fn production_registration_preserves_embedding_identity_and_leaves_unknown_unqualified() {
+    let registry = RuntimeRegistry::new();
+    registry.register_runtime(
+        RuntimeRegistration::new("pytorch", "PyTorch").with_dispatch_identity(
+            RuntimeDispatchIdentity::new("transformers", "host.slot.1").unwrap(),
+        ),
+    );
+    register_active_runtime(
+        &registry,
+        &HostRuntimeModeSnapshot {
+            backend_key: Some("pytorch".into()),
+            ..Default::default()
+        },
+    );
+    register_active_runtime(&registry, &HostRuntimeModeSnapshot::default());
+    let snapshot = registry.snapshot();
+    let pytorch = snapshot
+        .runtimes
+        .iter()
+        .find(|runtime| runtime.runtime_id == "pytorch")
+        .unwrap();
+    assert_eq!(pytorch.runtime_family.as_deref(), Some("transformers"));
+    assert_eq!(
+        pytorch.runtime_residency_key.as_deref(),
+        Some("host.slot.1")
+    );
+    let unknown = snapshot
+        .runtimes
+        .iter()
+        .find(|runtime| runtime.runtime_id == "unknown")
+        .unwrap();
+    assert!(unknown.runtime_family.is_none());
+    assert!(unknown.runtime_residency_key.is_none());
+}
