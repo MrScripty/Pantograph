@@ -59,3 +59,7 @@ The seven validated runtime-host contract wrappers now implement standard `AsRef
 ### Diagnostic event artifact payload construction
 
 `DiagnosticEventPayload::IoArtifactObserved` now stores `Box<IoArtifactObservedPayload>`. Rust callers constructing the public variant use `Box::new`, and owned pattern bindings contain a box. Raw DTO fields, validation and tagged JSON stay unchanged; this adds one allocation for this variant without a measured performance claim. The crate remains `publish = false`.
+
+### Workflow ready inference projection construction
+
+`WorkflowSchedulerInferenceTaskProjection::Ready` now holds `Box<WorkflowSchedulerReadyInferenceTaskProjection>`. Rust constructors use `Box::new`, and owned pattern bindings contain a box; the raw record, equality, borrowed readers and downstream scheduler intent serialization remain unchanged. The projection enum itself has no Serde implementation. This adds one allocation for ready projections without a measured performance claim; the crate remains `publish = false`.

@@ -1468,7 +1468,7 @@ impl CurrentInferenceValidationNodeRecord {
                     },
                 )?;
             return Ok(WorkflowSchedulerInferenceTaskProjection::Ready(
-                WorkflowSchedulerReadyInferenceTaskProjection {
+                Box::new(WorkflowSchedulerReadyInferenceTaskProjection {
                     node_id: pantograph_scheduler::SchedulerNodeId::parse(self.node_id.as_str())
                         .map_err(|error| {
                             CurrentInferenceSchedulerProjectionError::IncompleteNodeState {
@@ -1532,7 +1532,7 @@ impl CurrentInferenceValidationNodeRecord {
                             .dependency_override_fingerprint
                             .clone(),
                     },
-                },
+                }),
             ));
         }
 

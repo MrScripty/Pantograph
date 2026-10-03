@@ -64,7 +64,7 @@ impl WorkflowSchedulerInferenceTaskProjections {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WorkflowSchedulerInferenceTaskProjection {
-    Ready(WorkflowSchedulerReadyInferenceTaskProjection),
+    Ready(Box<WorkflowSchedulerReadyInferenceTaskProjection>),
     Blocked(WorkflowSchedulerBlockedInferenceTaskProjection),
 }
 

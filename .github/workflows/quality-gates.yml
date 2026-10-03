@@ -251,6 +251,13 @@ jobs:
       - name: Run workflow-nodes tests
         run: cargo test -p workflow-nodes --lib
 
+      - name: Run workflow inference projection regression suites
+        run: |
+          for module in workflow::tests::task_graph:: workflow::tests::task_binding_resolution:: workflow::executable_validation_snapshot::tests::; do
+            cargo test -p pantograph-workflow-service --lib "$module" -- --list > "$RUNNER_TEMP/projection-tests.list"
+            python3 -c 'import pathlib, sys; names = [line for line in pathlib.Path(sys.argv[1]).read_text().splitlines() if line.startswith(sys.argv[2]) and line.endswith(": test")]; print(sys.argv[2], "tests discovered:", len(names)); sys.exit(0 if names else 1)' "$RUNNER_TEMP/projection-tests.list" "$module"
+            cargo test -p pantograph-workflow-service --lib "$module"
+          done
       - name: Run private workflow owner regression suites
         run: |
           for module in graph::inference_validation_state::tests:: workflow::task_execution_worker::tests::; do
