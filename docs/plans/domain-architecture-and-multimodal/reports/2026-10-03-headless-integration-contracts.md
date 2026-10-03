@@ -48,3 +48,16 @@ Production scheduling, diagnostics and host APIs are unchanged.
   dependency audit and native Rustler failures remain separate. C# full binding
   and native packaging qualification previously remained blocked downstream of
   the failing integration contracts. No checks or assertions were waived.
+
+## Hosted compilation correction
+
+Initial exact-head hosted run 37098781826 failed compilation with E0046 before
+executing contracts: `WorkflowHost::run_workflow` remains a required compatibility
+trait method. Both fixture hosts now implement it as an explicit panic guard,
+so accidental execution through that hook fails instead of returning canned
+outputs. This preserves the real scheduler path and all assertions. Rustfmt and
+staged whitespace pass; fresh hosted compilation and execution remain required.
+Independent integrator review accepted the exact two-hook correction at staged
+`08b64cd03e0ce645b3aae6e0a5363ff3674397b3`; it satisfies the required trait
+signature while retaining fail-on-legacy-bypass behavior. This acceptance is
+source-only and does not replace hosted Rust execution.

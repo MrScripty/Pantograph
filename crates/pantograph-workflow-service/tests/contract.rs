@@ -71,6 +71,17 @@ struct ContractHost;
 
 #[async_trait]
 impl WorkflowHost for ContractHost {
+    async fn run_workflow(
+        &self,
+        _workflow_id: &str,
+        _inputs: &[WorkflowPortBinding],
+        _output_targets: Option<&[WorkflowOutputTarget]>,
+        _run_options: pantograph_workflow_service::WorkflowRunOptions,
+        _run_handle: pantograph_workflow_service::WorkflowRunHandle,
+    ) -> Result<Vec<WorkflowPortBinding>, WorkflowServiceError> {
+        panic!("session contract tests must execute scheduler tasks, not the legacy host hook");
+    }
+
     async fn validate_workflow(&self, _workflow_id: &str) -> Result<(), WorkflowServiceError> {
         Ok(())
     }
@@ -285,6 +296,17 @@ impl SchedulerContractHost {
 
 #[async_trait]
 impl WorkflowHost for SchedulerContractHost {
+    async fn run_workflow(
+        &self,
+        _workflow_id: &str,
+        _inputs: &[WorkflowPortBinding],
+        _output_targets: Option<&[WorkflowOutputTarget]>,
+        _run_options: pantograph_workflow_service::WorkflowRunOptions,
+        _run_handle: pantograph_workflow_service::WorkflowRunHandle,
+    ) -> Result<Vec<WorkflowPortBinding>, WorkflowServiceError> {
+        panic!("session contract tests must execute scheduler tasks, not the legacy host hook");
+    }
+
     async fn validate_workflow(&self, workflow_id: &str) -> Result<(), WorkflowServiceError> {
         assert_eq!(workflow_id, "wf-1");
         Ok(())
