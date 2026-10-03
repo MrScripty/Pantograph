@@ -190,6 +190,10 @@ jobs:
       - name: Check scheduler standard-trait accessor lint
         run: cargo clippy -p pantograph-scheduler --all-targets -- -D clippy::should_implement_trait
 
+      - name: Run runtime-host contract and accessor compatibility tests
+        run: cargo test -p pantograph-runtime-host-contracts
+      - name: Check runtime-host standard-trait accessor lint
+        run: cargo clippy -p pantograph-runtime-host-contracts --all-targets -- -D clippy::should_implement_trait
       - name: Run media conversion contract tests
         run: cargo test -p pantograph-media-conversion
 

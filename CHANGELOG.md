@@ -47,3 +47,7 @@ The format is based on Keep a Changelog.
 
 ### Security
 - Canonical path validation enforced at file-boundary entry points to block traversal and symlink escape paths.
+
+### Runtime-host borrowed accessor compatibility
+
+The seven validated runtime-host contract wrappers now implement standard `AsRef<Raw>` in place of inherent `as_ref` methods. Borrowed values and lifetimes, wrapper types, validation and `into_inner` are unchanged. Ordinary method syntax, qualified calls and function pointers continue to resolve through the standard prelude. Rust callers using `no_implicit_prelude` must explicitly import `std::convert::AsRef`. The workspace crate remains unpublished (`publish = false`).
