@@ -233,6 +233,12 @@ jobs:
             cargo test -p inference --features backend-llamacpp --lib "$test_filter"
           done
 
+      - name: Run contract-only node lifecycle tests
+        run: |
+          cargo test -p node-engine --features inference-nodes --lib rejects_contract_only_with_lifecycle -- --list > "$RUNNER_TEMP/node-validation-lifecycle-tests.list"
+          python3 -c 'import pathlib, sys; names = [line for line in pathlib.Path(sys.argv[1]).read_text().splitlines() if line.startswith("core_executor::tests::inference_tests::") and "rejects_contract_only_with_lifecycle" in line and line.endswith(": test")]; print("Contract-only lifecycle tests discovered:", len(names)); sys.exit(0 if names else 1)' "$RUNNER_TEMP/node-validation-lifecycle-tests.list"
+          cargo test -p node-engine --features inference-nodes --lib rejects_contract_only_with_lifecycle
+
       - name: Run node-engine tests
         run: cargo test -p node-engine --lib
 
