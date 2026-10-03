@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
+  import { createArtifactDownloadLifecycle, type PendingArtifactDownload } from './artifactDownloadLifecycle';
   import {
     Braces,
     Check,
@@ -96,7 +97,6 @@
     lifecycleGeneration: number;
   }
 
-  const DOWNLOAD_OBJECT_URL_REVOKE_DELAY_MS = 30_000;
   const IMAGE_PREVIEW_DECODE_ERROR = 'Image preview could not be decoded.';
   const IMAGE_PREVIEW_INCOMPLETE_ERROR = 'Image preview is incomplete; the complete image body is required.';
 
@@ -127,6 +127,16 @@
   let inspectingSavedGraphs = false;
   let projectionUnsubscribe: (() => void) | null = null;
   let artifactAccessRequests: Record<string, ArtifactAccessRequest> = {};
+
+  let pendingDownloads = $state<PendingArtifactDownload[]>([]);
+  const downloadLifecycle = createArtifactDownloadLifecycle({
+    publish: (pending) => { pendingDownloads = pending; },
+  });
+
+  function activateDownload(node: HTMLAnchorElement, request: PendingArtifactDownload): void {
+    // The action runs for a Svelte-owned anchor; defer activation until mounting finishes.
+    queueMicrotask(() => downloadLifecycle.activate(request.id, () => node.click()));
+  }
 
   let artifactSummaries = $derived(buildRunGraphNodeArtifactSummaries(artifacts));
   let nodeStatuses = $derived(buildRunGraphNodeStatusMap(runNodeStatuses));
@@ -500,33 +510,29 @@
   }
 
   async function downloadArtifactBody(artifact: IoArtifactProjectionRecord): Promise<void> {
+    if (!pageLive) return;
+    const lifecycleGeneration = pageLifecycleGeneration;
+    const isCurrent = () => pageLive && pageLifecycleGeneration === lifecycleGeneration;
     const payloadArtifactId = ioArtifactPayloadTargetId(artifact);
     setArtifactLoading(artifact.artifact_id, true);
     setArtifactAccessError(artifact.artifact_id, null);
     try {
       await verifyArtifactReadable(artifact);
+      if (!isCurrent()) return;
       const read = await workflowService.readArtifactBody({ artifact_id: payloadArtifactId });
-      const preview = createArtifactBodyPreview(read);
-      const anchor = document.createElement('a');
-      anchor.href = preview.objectUrl;
-      anchor.download = buildIoArtifactDownloadFilename({
+      if (!isCurrent()) return;
+      const filename = buildIoArtifactDownloadFilename({
         artifact_id: payloadArtifactId,
         media_type: read.response.media_type || artifact.media_type,
         format: artifact.format,
         payload_kind: artifact.payload_kind,
       });
-      anchor.rel = 'noopener noreferrer';
-      anchor.style.display = 'none';
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      window.setTimeout(() => {
-        revokeObjectUrl(preview.objectUrl);
-      }, DOWNLOAD_OBJECT_URL_REVOKE_DELAY_MS);
+      const preview = createArtifactBodyPreview(read);
+      await downloadLifecycle.enqueue(preview.objectUrl, filename);
     } catch (error) {
-      setArtifactAccessError(artifact.artifact_id, formatWorkflowCommandError(error));
+      if (isCurrent()) setArtifactAccessError(artifact.artifact_id, formatWorkflowCommandError(error));
     } finally {
-      setArtifactLoading(artifact.artifact_id, false);
+      if (isCurrent()) setArtifactLoading(artifact.artifact_id, false);
     }
   }
 
@@ -752,6 +758,7 @@
   });
 
   onDestroy(() => {
+    downloadLifecycle.dispose();
     revokeAllArtifactObjectUrls();
   });
 
@@ -763,6 +770,17 @@
     invalidatePendingArtifactAccess();
   }
 </script>
+
+{#each pendingDownloads as request (request.id)}
+  <a
+    href={request.objectUrl}
+    download={request.filename}
+    rel="noopener noreferrer"
+    hidden
+    aria-label="Download artifact"
+    use:activateDownload={request}
+  ></a>
+{/each}
 
 <section class="flex h-full min-h-0 flex-col bg-neutral-950" data-testid="io-inspector-page">
   <div class="flex shrink-0 items-center justify-between gap-4 border-b border-neutral-800 px-4 py-3">
