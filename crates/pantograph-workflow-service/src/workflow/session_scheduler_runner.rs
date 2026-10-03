@@ -513,16 +513,18 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                                 "scheduler non-runtime task completion failed: {error}"
                             ))
                         })?;
-                    self.record_scheduler_task_attempt_terminal(WorkflowSchedulerTaskAttemptTerminalInput {
-                        task: started.task(),
-                        attempt_id: started.attempt_id().as_str(),
-                        started_at_ms: started.started_at_ms(),
-                        transition: SchedulerTaskAttemptLifecycleTransition::Completed,
-                        reason: "scheduler task attempt completed",
-                        error_summary: None,
-                        selected_dispatch: None,
-                        terminal_mutation: None,
-                    })?;
+                    self.record_scheduler_task_attempt_terminal(
+                        WorkflowSchedulerTaskAttemptTerminalInput {
+                            task: started.task(),
+                            attempt_id: started.attempt_id().as_str(),
+                            started_at_ms: started.started_at_ms(),
+                            transition: SchedulerTaskAttemptLifecycleTransition::Completed,
+                            reason: "scheduler task attempt completed",
+                            error_summary: None,
+                            selected_dispatch: None,
+                            terminal_mutation: None,
+                        },
+                    )?;
                 }
                 Err(
                     crate::scheduler::WorkflowSchedulerTaskOrchestratorError::NonRuntimeTaskAdapter(
@@ -541,16 +543,18 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                             &error,
                         );
                     if failed.is_ok() {
-                        self.record_scheduler_task_attempt_terminal(WorkflowSchedulerTaskAttemptTerminalInput {
-                            task: started.task(),
-                            attempt_id: started.attempt_id().as_str(),
-                            started_at_ms: started.started_at_ms(),
-                            transition: SchedulerTaskAttemptLifecycleTransition::Failed,
-                            reason: "scheduler non-runtime task execution failed",
-                            error_summary: Some(error.to_string()),
-                            selected_dispatch: None,
-                            terminal_mutation: None,
-                        })?;
+                        self.record_scheduler_task_attempt_terminal(
+                            WorkflowSchedulerTaskAttemptTerminalInput {
+                                task: started.task(),
+                                attempt_id: started.attempt_id().as_str(),
+                                started_at_ms: started.started_at_ms(),
+                                transition: SchedulerTaskAttemptLifecycleTransition::Failed,
+                                reason: "scheduler non-runtime task execution failed",
+                                error_summary: Some(error.to_string()),
+                                selected_dispatch: None,
+                                terminal_mutation: None,
+                            },
+                        )?;
                     }
                     return Err(WorkflowServiceError::InvalidRequest(format!(
                         "scheduler non-runtime task execution failed: {error}"

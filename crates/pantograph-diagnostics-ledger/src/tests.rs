@@ -6485,8 +6485,8 @@ fn sample_inference_execution_diagnostic_event() -> DiagnosticEventAppendRequest
         privacy_class: DiagnosticEventPrivacyClass::SystemMetadata,
         retention_class: DiagnosticEventRetentionClass::AuditMetadata,
         payload_ref: None,
-        payload: DiagnosticEventPayload::InferenceExecutionDiagnosticObserved(
-            Box::new(InferenceExecutionDiagnosticObservedPayload {
+        payload: DiagnosticEventPayload::InferenceExecutionDiagnosticObserved(Box::new(
+            InferenceExecutionDiagnosticObservedPayload {
                 request_id: "req-a".to_string(),
                 task_id: "text_generation".to_string(),
                 lifecycle_phase: Some("task_validation".to_string()),
@@ -6552,8 +6552,8 @@ fn sample_inference_execution_diagnostic_event() -> DiagnosticEventAppendRequest
                         message: Some("not mapped by this backend boundary".to_string()),
                     },
                 ],
-            }),
-        ),
+            },
+        )),
     }
 }
 

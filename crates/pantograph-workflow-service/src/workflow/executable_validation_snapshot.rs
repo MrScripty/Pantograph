@@ -491,8 +491,8 @@ impl WorkflowExecutableValidationSnapshotNode {
             }
         })?;
 
-        Ok(WorkflowSchedulerInferenceTaskProjection::Ready(
-            Box::new(WorkflowSchedulerReadyInferenceTaskProjection {
+        Ok(WorkflowSchedulerInferenceTaskProjection::Ready(Box::new(
+            WorkflowSchedulerReadyInferenceTaskProjection {
                 node_id: scheduler_node_id,
                 descriptor_fingerprint: self.descriptor_fingerprint.clone(),
                 task_type,
@@ -504,8 +504,8 @@ impl WorkflowExecutableValidationSnapshotNode {
                 dependency_readiness_source: workflow_scheduler_dependency_readiness_source(
                     snapshot, self,
                 )?,
-            }),
-        ))
+            },
+        )))
     }
 }
 
