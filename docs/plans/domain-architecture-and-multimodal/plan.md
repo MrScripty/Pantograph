@@ -616,6 +616,43 @@ No arbitrary file-size target, new crate quota, or mandatory universal abstracti
 
 **Status:** `Active`
 
+### CI-01 — Session Capacity Observability Repair
+
+**Decision (2026-10-02):** Explicit keep-alive creation/enablement owns the
+existing session-count capacity limit, host-selected eviction and affinity.
+Runtime-task dispatch continues to own dependency admission and resource
+reservations; non-runtime runs must not acquire a session runtime. The five
+legacy capacity tests reached the wrong owner after this split. Moving only
+their trigger would lose previously asserted eviction diagnostics and timing:
+`session_runtime.rs` currently receives no diagnostic context from its sole
+keep-alive caller, while that context requires a run that does not exist.
+
+**Admitted repair:** Emit eviction lifecycle facts with genuine target and
+unloaded execution-session identities and optional real run attribution. Extend
+the existing typed diagnostic payloads additively, retaining old payload decoding
+and validation of run-only events. Add a registered session-runtime error scope
+so an unload failure retains its original code/message and reports diagnostic
+unavailability without inventing a workflow run. Preserve host selection,
+rollback, cleanup, event order and a shared timing-attempt identity. Session-only
+facts belong in the ledger; they must not create fabricated run projections.
+
+**Write set:** workflow-service `session_runtime.rs`, `diagnostic_errors.rs`,
+`tests/session_capacity.rs`, `tests/session_capacity_faults.rs`, test module
+registration and focused diagnostic tests if needed; diagnostics
+ledger `event.rs` and `tests.rs`; this plan, its scoped report, and the owning
+`docs/headless-workflow.md` guide. No runtime-task admission, resource reservation,
+non-runtime execution, public run facade, or unrelated baseline repair changes.
+The integrator owns this decision and independent review. Implementation is on
+`fix/session-capacity-observability-2026-10-02`, separate from fixture PR #7.
+
+**Gate:** Direct keep-alive lifecycle tests preserve victim selection, all three
+affinity cases, explicit target cleanup, rollback and original unload failure;
+available and unavailable diagnostics are tested. Ledger tests accept valid
+session-only events, reject missing/blank identity, preserve old run-event
+contracts, and demonstrate no fabricated run projection. The non-runtime no-load
+regression and focused runtime-dispatch tests remain green. Full CI gaps remain
+explicit; independent review precedes integration.
+
 ### M5 — Integrated acceptance and maintainer handoff
 
 **Goal:** One honest, current product and compliance result.

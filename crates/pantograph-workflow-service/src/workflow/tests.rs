@@ -23,6 +23,7 @@ mod scheduler_snapshot;
 mod scheduler_snapshot_diagnostics;
 mod session_admission;
 mod session_capacity;
+mod session_capacity_faults;
 mod session_capacity_limits;
 mod session_execution;
 mod session_queue;
