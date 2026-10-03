@@ -178,9 +178,17 @@ jobs:
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@1.92.0
+        with:
+          components: clippy
 
       - name: Cache Cargo
         uses: Swatinem/rust-cache@v2
+
+      - name: Run scheduler contract and accessor compatibility tests
+        run: cargo test -p pantograph-scheduler
+
+      - name: Check scheduler standard-trait accessor lint
+        run: cargo clippy -p pantograph-scheduler --all-targets -- -D clippy::should_implement_trait
 
       - name: Run node-engine tests
         run: cargo test -p node-engine --lib
