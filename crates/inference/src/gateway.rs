@@ -3497,9 +3497,7 @@ fn start_runtime_resource_monitor_for_process(
 fn finish_runtime_resource_monitor(
     guard: Option<RuntimeResourceMonitorGuard>,
 ) -> Option<InferenceExecutionResourceObservation> {
-    let Some(guard) = guard else {
-        return None;
-    };
+    let guard = guard?;
     match guard.finish() {
         Ok(observation) => Some(observation),
         Err(error) => {

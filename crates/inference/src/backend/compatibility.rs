@@ -181,21 +181,25 @@ impl BackendCapabilities {
             &mut issues,
         );
         let option_diagnostics = self.option_compatibility_diagnostics(backend_key, &request);
-        issues.extend(option_diagnostics.iter().filter_map(|diagnostic| {
-            matches!(
-                &diagnostic.state,
-                OptionSupportState::Unsupported | OptionSupportState::Rejected
-            )
-            .then(|| BackendCompatibilityIssue {
-                kind: BackendCompatibilityIssueKind::UnsupportedOption,
-                phase: InferenceLifecyclePhase::TaskValidation,
-                message: diagnostic.message.clone().unwrap_or_else(|| {
-                    format!("option {} is not supported", diagnostic.option_path)
+        issues.extend(
+            option_diagnostics
+                .iter()
+                .filter(|diagnostic| {
+                    matches!(
+                        &diagnostic.state,
+                        OptionSupportState::Unsupported | OptionSupportState::Rejected
+                    )
+                })
+                .map(|diagnostic| BackendCompatibilityIssue {
+                    kind: BackendCompatibilityIssueKind::UnsupportedOption,
+                    phase: InferenceLifecyclePhase::TaskValidation,
+                    message: diagnostic.message.clone().unwrap_or_else(|| {
+                        format!("option {} is not supported", diagnostic.option_path)
+                    }),
+                    model_id: Some(request.package_facts.model_ref.model_id.clone()),
+                    path: None,
                 }),
-                model_id: Some(request.package_facts.model_ref.model_id.clone()),
-                path: None,
-            })
-        }));
+        );
         let compatible = [task, model_source, preprocessing, postprocessing]
             .into_iter()
             .all(|status| status == BackendCompatibilityStatus::Supported)
@@ -452,10 +456,7 @@ fn compatibility_report_status_label(report: &BackendCompatibilityReport) -> &'s
         report.preprocessing,
         report.postprocessing,
     ];
-    if statuses
-        .iter()
-        .any(|status| *status == BackendCompatibilityStatus::Unsupported)
-    {
+    if statuses.contains(&BackendCompatibilityStatus::Unsupported) {
         "rejected"
     } else {
         "degraded"
@@ -909,6 +910,7 @@ mod tests {
             Some("llama_cpp"),
             BackendCompatibilityRequest::new(&task, &package).with_options(
                 BackendCompatibilityOptions {
+                    streaming: true,
                     cache: CacheGenerationOptions {
                         use_cache: Some(true),
                         kv_cache_checkpoint_requested: Some(true),
@@ -919,6 +921,17 @@ mod tests {
         );
 
         assert!(!report.compatible);
+        assert_eq!(
+            report
+                .issues
+                .iter()
+                .map(|issue| issue.message.as_str())
+                .collect::<Vec<_>>(),
+            vec![
+                "option cache.use_cache is not supported by this backend",
+                "option cache.kv_cache_checkpoint_requested is not supported by this backend",
+            ],
+        );
         assert!(report.option_diagnostics.iter().any(|diagnostic| {
             diagnostic.option_path == "cache.use_cache"
                 && matches!(&diagnostic.state, OptionSupportState::Unsupported)
