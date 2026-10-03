@@ -20,7 +20,7 @@
     "lint": "eslint scripts eslint.config.mjs vite.config.ts --max-warnings 0",
     "lint:full": "eslint src packages scripts eslint.config.mjs vite.config.ts --max-warnings 0",
     "lint:critical": "node scripts/check-critical-antipatterns.mjs",
-    "lint:a11y": "node scripts/check-svelte-a11y.mjs",
+    "lint:a11y": "node --test scripts/svelte-role-button-check.test.mjs && node scripts/check-svelte-a11y.mjs",
     "lint:no-new": "npm run lint:critical && npm run lint:a11y && npm run traceability",
     "format:check": "cargo fmt --all -- --check",
     "test:frontend": "node scripts/run-frontend-tests.mjs",
