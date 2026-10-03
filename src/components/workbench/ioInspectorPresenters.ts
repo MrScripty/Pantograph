@@ -40,6 +40,7 @@ export interface IoArtifactRendererSummary {
   family: IoArtifactMediaFamily;
   title: string;
   detail: string;
+  captionNotice?: string;
 }
 
 export interface IoArtifactDescriptorMetadataRow {
@@ -467,7 +468,8 @@ export function buildIoArtifactRendererSummary(
     case 'audio':
       return { family, title: 'Audio', detail };
     case 'video':
-      return { family, title: 'Video', detail };
+      // The artifact projection has no caption-track association to supply to this preview.
+      return { family, title: 'Video', detail, captionNotice: 'No caption track is provided for this preview.' };
     case '3d':
       return { family, title: '3D asset', detail };
     case 'table':

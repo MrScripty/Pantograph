@@ -762,3 +762,15 @@ test('retention cleanup detail rows expose backend cleanup status', () => {
   assert.equal(rows.find((row) => row.label === 'Last Event Seq')?.value, '44');
   assert.deepEqual(buildRetentionCleanupDetailRows(null), []);
 });
+
+
+test('only video previews disclose the currently absent caption-track association', () => {
+  const video = buildIoArtifactRendererSummary({ media_type: 'video/mp4', payload_ref: 'artifact://video' });
+  assert.equal(video.family, 'video');
+  assert.equal(video.captionNotice, 'No caption track is provided for this preview.');
+  const inferredVideo = buildIoArtifactRendererSummary({ media_type: null, payload_kind: 'video', payload_ref: 'artifact://video' });
+  assert.equal(inferredVideo.captionNotice, video.captionNotice);
+  for (const media_type of ['audio/wav', 'image/png', 'text/plain', 'application/json', 'application/octet-stream']) {
+    assert.equal(buildIoArtifactRendererSummary({ media_type, payload_ref: 'artifact://other' }).captionNotice, undefined);
+  }
+});
