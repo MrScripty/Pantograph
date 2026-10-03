@@ -213,6 +213,11 @@ jobs:
           cargo test -p inference --lib gateway::tests::test_runtime_lifecycle_snapshot
           cargo test -p inference --lib gateway::tests::test_failed_restart_clears_active_runtime_config_and_attempted_modes
 
+      - name: Run typed error boundary regression tests
+        run: |
+          cargo test -p inference --lib managed_binaries::tests
+          cargo test -p inference --test model_contracts task_registry_resolution_
+
       - name: Run node-engine tests
         run: cargo test -p node-engine --lib
 

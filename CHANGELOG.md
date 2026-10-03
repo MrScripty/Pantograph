@@ -14,6 +14,10 @@ The format is based on Keep a Changelog.
   canonicalization records.
 
 ### Changed
+- Rust source API: `resolve_managed_binary_command` and
+  `resolve_task_registry_entry_from_evidence` now return boxed concrete errors.
+  Error variants, diagnostic JSON and Display text remain unchanged; callers
+  matching an owned error must dereference the box.
 - Rust source API: `ManagedRuntimeCommandResolutionError::MissingRuntimeVariant.diagnostic`
   and `ImageGenerationPlanningOutcome::Planned.plan` now hold boxed payloads.
   Direct constructors must box their values and consuming plan callers must unbox;
