@@ -199,6 +199,12 @@ jobs:
           cargo test -p inference --lib model_contracts::tests
           cargo test -p inference --lib server::tests::runtime_matchers_preserve_path_component_comparison
 
+      - name: Run inference payload serialization and planner tests
+        run: |
+          cargo test -p inference --lib managed_runtime::contracts::tests
+          cargo test -p inference --lib image_generation_planner_tests
+          cargo test -p inference --lib pytorch_worker_image_contract_tests
+
       - name: Run node-engine tests
         run: cargo test -p node-engine --lib
 
