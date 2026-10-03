@@ -81,3 +81,19 @@ blocker, and both actual C# callers use publication before execution. Missing,
 extra, duplicate and deserialized-empty regressions were inspected; unsupported
 inference-bearing kinds remain fail-closed. No new source blocker was found.
 This report records bounded source acceptance, not hosted execution evidence.
+
+## Hosted attribution-fixture follow-up
+
+Initial PR #15 head `8a8dcbcc0a58aafc0f8e09d7853078856ad78834` compiled and
+ran the workflow library suite: 880 passed, two failed. Exact coverage rejected
+pre-existing synthetic `infer` records attached to pure text graphs in the
+snapshot-ordering and client/bucket attribution fixtures. Their behavioral
+assertions remain unchanged. Both fixtures now create a graph session, refresh
+owner validation and publish through the real service API, then close the edit
+session; they no longer invent an inference node to satisfy the old nonempty
+snapshot rule. Runtime-inference fixtures retain their actual runtime proofs.
+Rustfmt/whitespace pass; narrow review and fresh hosted qualification are pending.
+Independent narrow source review accepted follow-up tree
+`255079840fae85689cc6ff5b508fe3bc66be0e8b`: both fixtures now use the public
+owner validation flow, with all behavioral assertions unchanged and no production
+change. Fresh hosted full-library and downstream C# qualification remain required.
