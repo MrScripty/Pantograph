@@ -14,6 +14,10 @@ The format is based on Keep a Changelog.
   canonicalization records.
 
 ### Changed
+- Rust source API: `LlamaServer::start_sidecar_inference` and
+  `matches_inference_runtime` now borrow the existing `LlamaCppRuntimeSettings`
+  for effective device/context/thread/batch values. Model/mmproj paths, process
+  spawner and port override retain their existing roles and ownership.
 - Rust source API: PyTorch `generate_with_top_k` and `generate_stream_with_top_k`
   now accept `PyTorchTextGenerationRequest` with the same seven named inputs.
   Legacy `generate`/`generate_stream` signatures and the worker wire contract
