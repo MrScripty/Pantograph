@@ -3992,9 +3992,9 @@ mod tests {
             node_id: SchedulerNodeId::parse(WORKER_BATCH_NODE_ID).expect("node id"),
             task_id: SchedulerTaskId::parse(WORKER_BATCH_TASK_ID).expect("task id"),
             state: SchedulerTaskState::Ready {
-                execution_intent: SchedulerTaskExecutionIntent::Runtime {
-                    task_intent: task_intent_for_run(workflow_run_id),
-                },
+                execution_intent: SchedulerTaskExecutionIntent::runtime(task_intent_for_run(
+                    workflow_run_id,
+                )),
             },
             state_version: 1,
             last_transition_id: SchedulerTaskStateTransitionId::parse(format!(

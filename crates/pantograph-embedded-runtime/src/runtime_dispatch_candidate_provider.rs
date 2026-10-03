@@ -1636,9 +1636,9 @@ mod tests {
             node_id: intent.node_id,
             task_id: intent.task_id,
             state: SchedulerTaskState::Ready {
-                execution_intent: pantograph_scheduler::SchedulerTaskExecutionIntent::Runtime {
-                    task_intent: schedulable_intent(Some("cuda:0")),
-                },
+                execution_intent: pantograph_scheduler::SchedulerTaskExecutionIntent::runtime(
+                    schedulable_intent(Some("cuda:0")),
+                ),
             },
             state_version: 1,
             last_transition_id: SchedulerTaskStateTransitionId::parse("transition.ready")

@@ -14,6 +14,10 @@ The format is based on Keep a Changelog.
   canonicalization records.
 
 ### Changed
+- Rust source API: `SchedulerTaskExecutionIntent::Runtime.task_intent` is now boxed.
+  Construct runtime variants with `SchedulerTaskExecutionIntent::runtime(intent)`;
+  direct struct-variant callers must pass `Box::new(intent)`. Serialized JSON and
+  borrowed `runtime_task_intent()` access remain unchanged.
 - Root project `README.md` reorganized around install, usage, development, and contribution workflows.
 - Documentation consolidated around current guides, accepted decisions, audits,
   and active plans; superseded narration remains available in Git history.

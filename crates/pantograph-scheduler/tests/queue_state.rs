@@ -13,6 +13,50 @@ use pantograph_scheduler::{
 };
 
 #[test]
+fn boxed_runtime_intent_preserves_exact_json_and_borrowed_payload() {
+    let raw = task_intent("run.001", "task.001");
+    let execution = SchedulerTaskExecutionIntent::runtime(raw.clone());
+    let expected = serde_json::json!({ "execution_kind": "runtime", "task_intent": raw });
+    assert_eq!(
+        serde_json::to_value(&execution).expect("serialize runtime intent"),
+        expected
+    );
+    let decoded: SchedulerTaskExecutionIntent =
+        serde_json::from_value(expected).expect("decode existing wire shape");
+    assert_eq!(decoded, execution);
+    assert_eq!(decoded.runtime_task_intent(), Some(&raw));
+    assert!(
+        std::mem::size_of::<SchedulerTaskExecutionIntent>()
+            < std::mem::size_of::<SchedulableTaskIntent>()
+    );
+}
+
+#[test]
+fn boxed_runtime_intent_retains_validation_and_task_correlation() {
+    let valid = task_intent("run.001", "task.001");
+    ValidatedSchedulerTaskStateRecord::try_from(task_record_with_state(ready_state(valid.clone())))
+        .expect("valid runtime intent remains accepted");
+    let mut invalid = valid;
+    invalid.contract_version = 0;
+    let expected = invalid.validate().expect_err("invalid raw version");
+    assert_eq!(
+        task_record_with_state(ready_state(invalid))
+            .validate()
+            .expect_err("boxed invalid version"),
+        expected
+    );
+    assert_eq!(
+        task_record_with_state(ready_state(task_intent("run.other", "task.001")))
+            .validate()
+            .expect_err("mismatched run"),
+        SchedulerContractError::InvalidField {
+            field: "workflow_run_id",
+            reason: "task state workflow run id must match task intent",
+        },
+    );
+}
+
+#[test]
 fn valid_task_state_transition_fixture_decodes_validates_and_applies() {
     let transition: SchedulerTaskStateTransition =
         serde_json::from_str(include_str!("fixtures/task_state_transition_ready.json"))
@@ -643,7 +687,7 @@ fn completed_source_input_state(task_kind: &str) -> SchedulerTaskState {
 }
 
 fn runtime_execution_intent(task_intent: SchedulableTaskIntent) -> SchedulerTaskExecutionIntent {
-    SchedulerTaskExecutionIntent::Runtime { task_intent }
+    SchedulerTaskExecutionIntent::runtime(task_intent)
 }
 
 fn source_input_execution_intent(task_kind: &str) -> SchedulerTaskExecutionIntent {

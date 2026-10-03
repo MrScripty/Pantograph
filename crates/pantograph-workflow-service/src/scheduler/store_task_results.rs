@@ -1176,9 +1176,8 @@ mod tests {
         workflow_run_id: &str,
         task_id: &str,
     ) -> SchedulerTaskState {
-        let execution_intent = SchedulerTaskExecutionIntent::Runtime {
-            task_intent: task_intent(workflow_run_id, task_id),
-        };
+        let execution_intent =
+            SchedulerTaskExecutionIntent::runtime(task_intent(workflow_run_id, task_id));
         match state {
             SchedulerTaskStateKind::AwaitingInputs => SchedulerTaskState::AwaitingInputs {
                 diagnostics: Vec::new(),
