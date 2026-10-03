@@ -952,7 +952,7 @@ fn build_kv_cache_diagnostic_event_ledger_append_request(
         retention_class: DiagnosticEventRetentionClass::AuditMetadata,
         payload_ref: None,
         payload: DiagnosticEventPayload::InferenceExecutionDiagnosticObserved(
-            InferenceExecutionDiagnosticObservedPayload {
+            Box::new(InferenceExecutionDiagnosticObservedPayload {
                 request_id: format!("{task_id}:kv_cache"),
                 task_id: "kv_cache".to_string(),
                 lifecycle_phase: Some("kv_cache".to_string()),
@@ -981,7 +981,7 @@ fn build_kv_cache_diagnostic_event_ledger_append_request(
                     .take(MAX_INFERENCE_OPTION_DIAGNOSTICS)
                     .map(kv_cache_option_diagnostic_summary)
                     .collect(),
-            },
+            }),
         ),
     })
 }
@@ -1048,7 +1048,7 @@ fn build_runtime_settings_diagnostic_event_ledger_append_request(
         retention_class: DiagnosticEventRetentionClass::AuditMetadata,
         payload_ref: None,
         payload: DiagnosticEventPayload::InferenceExecutionDiagnosticObserved(
-            InferenceExecutionDiagnosticObservedPayload {
+            Box::new(InferenceExecutionDiagnosticObservedPayload {
                 request_id: format!("{task_id}:runtime_settings"),
                 task_id: "runtime_settings".to_string(),
                 lifecycle_phase: Some("runtime_settings".to_string()),
@@ -1075,7 +1075,7 @@ fn build_runtime_settings_diagnostic_event_ledger_append_request(
                 compatibility_issues: Vec::new(),
                 option_support_counts: InferenceOptionSupportCounts::default(),
                 option_diagnostics: Vec::new(),
-            },
+            }),
         ),
     })
 }
@@ -1147,7 +1147,7 @@ fn build_inference_diagnostic_event_ledger_append_request(
         retention_class: DiagnosticEventRetentionClass::AuditMetadata,
         payload_ref: None,
         payload: DiagnosticEventPayload::InferenceExecutionDiagnosticObserved(
-            InferenceExecutionDiagnosticObservedPayload {
+            Box::new(InferenceExecutionDiagnosticObservedPayload {
                 request_id: event
                     .request_id
                     .clone()
@@ -1196,7 +1196,7 @@ fn build_inference_diagnostic_event_ledger_append_request(
                     .take(MAX_INFERENCE_OPTION_DIAGNOSTICS)
                     .map(option_diagnostic_summary)
                     .collect(),
-            },
+            }),
         ),
     })
 }

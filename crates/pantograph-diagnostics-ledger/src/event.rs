@@ -272,7 +272,7 @@ pub enum DiagnosticEventPayload {
     RetentionPolicyChanged(RetentionPolicyChangedPayload),
     RuntimeCapabilityObserved(RuntimeCapabilityObservedPayload),
     NodeExecutionStatus(NodeExecutionStatusPayload),
-    InferenceExecutionDiagnosticObserved(InferenceExecutionDiagnosticObservedPayload),
+    InferenceExecutionDiagnosticObserved(Box<InferenceExecutionDiagnosticObservedPayload>),
     DiagnosticErrorOccurred(DiagnosticErrorOccurredPayload),
 }
 
