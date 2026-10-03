@@ -2563,15 +2563,18 @@ fn selector_reports_resource_accounting_overflow_before_selection() {
 
     assert_eq!(decision.selected_candidate_id, None);
     assert_eq!(decision.device_diagnostics.len(), 1);
-    assert_eq!(serde_json::to_value(&decision.device_diagnostics[0]).unwrap(), serde_json::json!({
-        "code": "resource_accounting_overflow",
-        "severity": "error",
-        "message": "technical-fit resource accounting overflowed while summing active ram_bytes claims for runtime 'runtime-overflow'",
-        "runtime_id": "runtime-overflow",
-        "backend_key": "pytorch",
-        "evidence_key": "ram_bytes",
-        "requested_runtime_key": "pytorch"
-    }));
+    assert_eq!(
+        serde_json::to_value(&decision.device_diagnostics[0]).unwrap(),
+        serde_json::json!({
+            "code": "resource_accounting_overflow",
+            "severity": "error",
+            "message": "technical-fit resource accounting overflowed while summing active ram_bytes claims for runtime 'runtime-overflow'",
+            "runtime_id": "runtime-overflow",
+            "backend_key": "pytorch",
+            "evidence_key": "ram_bytes",
+            "requested_runtime_key": "pytorch"
+        })
+    );
     assert_eq!(
         decision.device_diagnostics[0].code,
         RuntimeTechnicalFitDeviceDiagnosticCode::ResourceAccountingOverflow

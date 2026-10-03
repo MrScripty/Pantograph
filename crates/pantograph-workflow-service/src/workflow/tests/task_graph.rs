@@ -44,8 +44,8 @@ fn ready_inference_projection(
     estimate_hints: Vec<SchedulerEstimateHint>,
 ) -> WorkflowSchedulerInferenceTaskProjections {
     WorkflowSchedulerInferenceTaskProjections::from_records(vec![
-        WorkflowSchedulerInferenceTaskProjection::Ready(
-            Box::new(WorkflowSchedulerReadyInferenceTaskProjection {
+        WorkflowSchedulerInferenceTaskProjection::Ready(Box::new(
+            WorkflowSchedulerReadyInferenceTaskProjection {
                 node_id: SchedulerNodeId::parse("infer").expect("node id"),
                 descriptor_fingerprint: InferenceInterfaceFingerprint::parse("iface.test.v1")
                     .expect("fingerprint"),
@@ -70,8 +70,8 @@ fn ready_inference_projection(
                 }],
                 estimate_hints,
                 dependency_readiness_source: dependency_readiness_source("iface.test.v1"),
-            }),
-        ),
+            },
+        )),
     ])
     .expect("projection")
 }

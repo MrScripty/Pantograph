@@ -1467,8 +1467,8 @@ impl CurrentInferenceValidationNodeRecord {
                         message: format!("dependency requirements proof is not current: {error:?}"),
                     },
                 )?;
-            return Ok(WorkflowSchedulerInferenceTaskProjection::Ready(
-                Box::new(WorkflowSchedulerReadyInferenceTaskProjection {
+            return Ok(WorkflowSchedulerInferenceTaskProjection::Ready(Box::new(
+                WorkflowSchedulerReadyInferenceTaskProjection {
                     node_id: pantograph_scheduler::SchedulerNodeId::parse(self.node_id.as_str())
                         .map_err(|error| {
                             CurrentInferenceSchedulerProjectionError::IncompleteNodeState {
@@ -1532,8 +1532,8 @@ impl CurrentInferenceValidationNodeRecord {
                             .dependency_override_fingerprint
                             .clone(),
                     },
-                }),
-            ));
+                },
+            )));
         }
 
         Ok(WorkflowSchedulerInferenceTaskProjection::Blocked(

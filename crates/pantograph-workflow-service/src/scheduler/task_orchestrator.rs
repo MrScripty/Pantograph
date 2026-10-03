@@ -2115,9 +2115,9 @@ fn dispatch_selected_handoff_from_selection(
 ) -> Result<SchedulerRuntimeHandoff, WorkflowSchedulerTaskOrchestratorError> {
     if selection.state != SchedulerDispatchSelectionState::Selected {
         return Err(
-            WorkflowSchedulerTaskOrchestratorError::RuntimeDispatchSelectionNoSelection(
-                Box::new(selection),
-            ),
+            WorkflowSchedulerTaskOrchestratorError::RuntimeDispatchSelectionNoSelection(Box::new(
+                selection,
+            )),
         );
     }
     let Some(dispatch_decision) = selection.dispatch_decision else {

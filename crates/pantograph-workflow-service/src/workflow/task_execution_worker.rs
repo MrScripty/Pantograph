@@ -1124,12 +1124,14 @@ impl WorkflowTaskExecutionWorkerOutcome {
         response: WorkflowRunResponse,
         diagnostics: Vec<WorkflowTaskExecutionWorkerDiagnostic>,
     ) -> Self {
-        Self::RuntimeBranchCompleted(Box::new(WorkflowTaskExecutionWorkerRuntimeBranchCompletedOutcome {
-            session_id: command.session_id.clone(),
-            workflow_run_id: command.workflow_run_id.clone(),
-            response,
-            diagnostics,
-        }))
+        Self::RuntimeBranchCompleted(Box::new(
+            WorkflowTaskExecutionWorkerRuntimeBranchCompletedOutcome {
+                session_id: command.session_id.clone(),
+                workflow_run_id: command.workflow_run_id.clone(),
+                response,
+                diagnostics,
+            },
+        ))
     }
 
     pub(super) fn runtime_branch_failed(
@@ -1369,14 +1371,14 @@ async fn claim_and_execute_runtime_branch_event(
         )
         .await
         {
-            Ok(response) => WorkflowTaskExecutionWorkerOutcome::RuntimeBranchCompleted(
-                Box::new(WorkflowTaskExecutionWorkerRuntimeBranchCompletedOutcome {
+            Ok(response) => WorkflowTaskExecutionWorkerOutcome::RuntimeBranchCompleted(Box::new(
+                WorkflowTaskExecutionWorkerRuntimeBranchCompletedOutcome {
                     session_id: command.session_id.clone(),
                     workflow_run_id: command.workflow_run_id.clone(),
                     response,
                     diagnostics: Vec::new(),
-                }),
-            ),
+                },
+            )),
             Err(error) => WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
                 command,
                 error.to_string(),
