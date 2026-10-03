@@ -199,6 +199,14 @@ jobs:
           cargo test -p inference --lib model_contracts::tests
           cargo test -p inference --lib server::tests::runtime_matchers_preserve_path_component_comparison
 
+      - name: Run inference payload serialization and planner tests
+        run: |
+          cargo test -p inference --lib managed_runtime::contracts::tests
+          cargo test -p inference --lib image_generation_planner_tests
+          cargo test -p inference --features backend-pytorch --lib pytorch_worker_image_contract_tests -- --list > "$RUNNER_TEMP/pytorch-image-contract-tests.list"
+          python3 -c 'import pathlib, sys; names = [line for line in pathlib.Path(sys.argv[1]).read_text().splitlines() if line.startswith("backend::pytorch::pytorch_worker_image_contract_tests::") and line.endswith(": test")]; print("PyTorch image contract tests discovered:", len(names)); sys.exit(0 if names else 1)' "$RUNNER_TEMP/pytorch-image-contract-tests.list"
+          cargo test -p inference --features backend-pytorch --lib pytorch_worker_image_contract_tests
+
       - name: Run node-engine tests
         run: cargo test -p node-engine --lib
 

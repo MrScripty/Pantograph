@@ -1613,7 +1613,7 @@ impl InferenceGateway {
         reject_cancelled_execution_handle("image generation planning", &cancellation)?;
         match plan_image_generation_execution(input) {
             ImageGenerationPlanningOutcome::Planned { plan } => {
-                self.generate_image_from_plan_with_cancellation(plan, cancellation)
+                self.generate_image_from_plan_with_cancellation(*plan, cancellation)
                     .await
             }
             ImageGenerationPlanningOutcome::Rejected { diagnostics } => {
@@ -1699,7 +1699,7 @@ impl InferenceGateway {
                 let execution_telemetry = self.start_execution_telemetry().await;
                 let context = execution_telemetry.backend_execution_context();
                 let result = self
-                    .generate_image_from_plan_with_context(plan, context)
+                    .generate_image_from_plan_with_context(*plan, context)
                     .await;
                 let resource_observation = finish_execution_telemetry(execution_telemetry);
                 record_planned_image_generation_lifecycle_result(
