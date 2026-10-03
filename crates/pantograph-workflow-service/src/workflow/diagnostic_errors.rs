@@ -20,6 +20,7 @@ use super::{WorkflowErrorDiagnosticsLink, WorkflowService, WorkflowServiceError}
 pub(crate) enum WorkflowDiagnosticErrorPhase {
     RunSnapshot,
     SchedulerAdmission,
+    SessionRuntimeAdmission,
     RuntimePreflight,
     RuntimeModelLoad,
     RuntimeLaunch,
@@ -77,6 +78,18 @@ const WORKFLOW_SERVICE_SOURCE: &[DiagnosticEventSourceComponent] =
     &[DiagnosticEventSourceComponent::WorkflowService];
 
 const WORKFLOW_DIAGNOSTIC_ERROR_REGISTRY: &[WorkflowDiagnosticErrorRegistryEntry] = &[
+    WorkflowDiagnosticErrorRegistryEntry {
+        phase: WorkflowDiagnosticErrorPhase::SessionRuntimeAdmission,
+        phase_id: "session_runtime_admission",
+        code: "session_runtime_admission_failed",
+        scope_kind: DiagnosticErrorScopeKind::SessionRuntime,
+        default_source: DiagnosticEventSourceComponent::Scheduler,
+        allowed_sources: SCHEDULER_SOURCE,
+        default_severity: DiagnosticErrorSeverity::Error,
+        default_recoverability: DiagnosticErrorRecoverability::Retryable,
+        causality_policy: WorkflowDiagnosticCausalityPolicy::DirectProducerKnowledgeOnly,
+        projection_effect: WorkflowDiagnosticProjectionEffect::DiagnosticsOnly,
+    },
     WorkflowDiagnosticErrorRegistryEntry {
         phase: WorkflowDiagnosticErrorPhase::RunSnapshot,
         phase_id: "run_snapshot",
@@ -305,7 +318,15 @@ pub(crate) struct WorkflowDiagnosticTransportScope {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct WorkflowDiagnosticSessionRuntimeScope {
+    pub session_id: String,
+    pub workflow_id: WorkflowId,
+    pub workflow_run_id: Option<WorkflowRunId>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum WorkflowDiagnosticErrorScope {
+    SessionRuntime(WorkflowDiagnosticSessionRuntimeScope),
     Run(WorkflowDiagnosticRunScope),
     Node(WorkflowDiagnosticNodeScope),
     RuntimeModel(WorkflowDiagnosticRuntimeModelScope),
@@ -318,6 +339,7 @@ pub(crate) enum WorkflowDiagnosticErrorScope {
 impl WorkflowDiagnosticErrorScope {
     fn kind(&self) -> DiagnosticErrorScopeKind {
         match self {
+            Self::SessionRuntime(_) => DiagnosticErrorScopeKind::SessionRuntime,
             Self::Run(_) => DiagnosticErrorScopeKind::Run,
             Self::Node(_) => DiagnosticErrorScopeKind::Node,
             Self::RuntimeModel(_) => DiagnosticErrorScopeKind::RuntimeModel,
@@ -330,6 +352,16 @@ impl WorkflowDiagnosticErrorScope {
 
     fn append_request_fields(&self, request: &mut DiagnosticEventAppendRequest) {
         match self {
+            Self::SessionRuntime(scope) => {
+                request.workflow_id = Some(scope.workflow_id.clone());
+                request.workflow_run_id = scope.workflow_run_id.clone();
+                request.scheduler_policy_id = Some("priority_then_fifo".to_string());
+                if let DiagnosticEventPayload::DiagnosticErrorOccurred(payload) =
+                    &mut request.payload
+                {
+                    payload.workflow_execution_session_id = Some(scope.session_id.clone());
+                }
+            }
             Self::Run(scope) => apply_run_context(request, &scope.run),
             Self::Node(scope) => {
                 apply_run_context(request, &scope.run);
@@ -420,6 +452,18 @@ pub(crate) struct WorkflowDiagnosticErrorRecordRequest {
 }
 
 impl WorkflowDiagnosticErrorRecordRequest {
+    #[track_caller]
+    pub(crate) fn session_runtime_admission_failed(
+        scope: WorkflowDiagnosticSessionRuntimeScope,
+        error: &WorkflowServiceError,
+    ) -> Self {
+        Self::from_error(
+            WorkflowDiagnosticErrorPhase::SessionRuntimeAdmission,
+            WorkflowDiagnosticErrorScope::SessionRuntime(scope),
+            error,
+        )
+    }
+
     #[track_caller]
     pub(crate) fn run_snapshot_failed(
         scope: WorkflowDiagnosticRunScope,
@@ -693,6 +737,7 @@ impl WorkflowService {
             payload_ref: None,
             payload: DiagnosticEventPayload::DiagnosticErrorOccurred(
                 DiagnosticErrorOccurredPayload {
+                    workflow_execution_session_id: None,
                     phase: registry_entry.phase_id.to_string(),
                     scope: registry_entry.scope_kind,
                     severity: request.severity.unwrap_or(registry_entry.default_severity),

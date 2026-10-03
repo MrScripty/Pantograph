@@ -1173,6 +1173,8 @@ fn model_lifecycle_projects_canonical_error_link_without_counting_new_error() {
     let mut lifecycle = sample_scheduler_model_lifecycle_event("workflow_run_alpha");
     lifecycle.payload = DiagnosticEventPayload::SchedulerModelLifecycleChanged(
         SchedulerModelLifecycleChangedPayload {
+            workflow_execution_session_id: None,
+            unloaded_workflow_execution_session_id: None,
             transition: SchedulerModelLifecycleTransition::LoadFailed,
             cache_state: Some(SchedulerModelCacheState::Failed),
             execution_plan_summary: Some(SchedulerExecutionPlanSummary {
@@ -5872,6 +5874,8 @@ fn sample_scheduler_model_lifecycle_event(workflow_run_id: &str) -> DiagnosticEv
         payload_ref: None,
         payload: DiagnosticEventPayload::SchedulerModelLifecycleChanged(
             SchedulerModelLifecycleChangedPayload {
+                workflow_execution_session_id: None,
+                unloaded_workflow_execution_session_id: None,
                 transition: SchedulerModelLifecycleTransition::LoadRequested,
                 cache_state: Some(SchedulerModelCacheState::CacheMiss),
                 execution_plan_summary: None,
@@ -5911,6 +5915,7 @@ fn sample_diagnostic_error_event(workflow_run_id: &str) -> DiagnosticEventAppend
         retention_class: DiagnosticEventRetentionClass::AuditMetadata,
         payload_ref: None,
         payload: DiagnosticEventPayload::DiagnosticErrorOccurred(DiagnosticErrorOccurredPayload {
+            workflow_execution_session_id: None,
             phase: "runtime_model_load".to_string(),
             scope: DiagnosticErrorScopeKind::RuntimeModel,
             severity: DiagnosticErrorSeverity::Fatal,
@@ -6580,4 +6585,80 @@ fn sample_event(
         completed_at_ms: Some(completed_at_ms),
         correlation_id: Some("corr-1".to_string()),
     }
+}
+
+#[test]
+fn session_capacity_events_preserve_identity_without_creating_a_run() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger");
+    let mut event = sample_scheduler_model_lifecycle_event("unused");
+    event.workflow_run_id = None;
+    event.workflow_version_id = None;
+    event.workflow_semantic_version = None;
+    let DiagnosticEventPayload::SchedulerModelLifecycleChanged(payload) = &mut event.payload else {
+        panic!("model lifecycle payload");
+    };
+    payload.workflow_execution_session_id = Some("session-target".to_string());
+    payload.unloaded_workflow_execution_session_id = Some("session-victim".to_string());
+    payload.transition = SchedulerModelLifecycleTransition::UnloadCompleted;
+    payload.duration_ms = Some(7);
+    let recorded = ledger
+        .append_diagnostic_event(event)
+        .expect("session event");
+    assert!(recorded.workflow_run_id.is_none());
+    let payload: serde_json::Value = serde_json::from_str(&recorded.payload_json).expect("payload");
+    assert_eq!(payload["workflow_execution_session_id"], "session-target");
+    ledger
+        .drain_run_list_projection(100)
+        .expect("list projection");
+    ledger
+        .drain_run_detail_projection(100)
+        .expect("detail projection");
+    assert!(ledger
+        .query_run_list_projection(RunListProjectionQuery::default())
+        .expect("runs")
+        .is_empty());
+}
+
+#[test]
+fn session_capacity_identity_does_not_relax_legacy_run_event_requirements() {
+    let mut event = sample_scheduler_model_lifecycle_event("run-real");
+    let original = serde_json::to_value(&event.payload).expect("legacy payload");
+    let decoded: DiagnosticEventPayload =
+        serde_json::from_value(original.clone()).expect("old payload parses");
+    assert_eq!(serde_json::to_value(decoded).expect("round trip"), original);
+    event.workflow_run_id = None;
+    assert!(event.validate().is_err());
+    let DiagnosticEventPayload::SchedulerModelLifecycleChanged(payload) = &mut event.payload else {
+        panic!("model lifecycle payload");
+    };
+    payload.workflow_execution_session_id = Some("session-target".to_string());
+    assert!(event.validate().is_err());
+    let DiagnosticEventPayload::SchedulerModelLifecycleChanged(payload) = &mut event.payload else {
+        panic!("model lifecycle payload");
+    };
+    payload.unloaded_workflow_execution_session_id = Some(" ".to_string());
+    assert!(event.validate().is_err());
+    let mut run_event = sample_run_started_event("run-real");
+    run_event.workflow_run_id = None;
+    assert!(run_event.validate().is_err());
+}
+
+#[test]
+fn session_runtime_error_requires_genuine_session_and_workflow_identity() {
+    let mut event = sample_diagnostic_error_event("unused");
+    event.workflow_run_id = None;
+    event.source_component = DiagnosticEventSourceComponent::Scheduler;
+    let DiagnosticEventPayload::DiagnosticErrorOccurred(payload) = &mut event.payload else {
+        panic!("error payload");
+    };
+    payload.scope = DiagnosticErrorScopeKind::SessionRuntime;
+    payload.severity = DiagnosticErrorSeverity::Error;
+    assert!(event.validate().is_err());
+    let DiagnosticEventPayload::DiagnosticErrorOccurred(payload) = &mut event.payload else {
+        panic!("error payload");
+    };
+    payload.workflow_execution_session_id = Some("session-target".to_string());
+    event.validate().expect("session-scoped error");
+    event.workflow_id = None;
+    assert!(event.validate().is_err());
 }

@@ -76,3 +76,32 @@ must decode runtime input rather than relying on static-language assertions.
 
 Packaging, platform support, and binding compatibility are not yet established
 as release-grade claims. See [Release](release.md) and the current audit.
+
+### Session capacity and keep-alive diagnostics
+
+Explicit keep-alive creation and enablement own session-count capacity eviction.
+The host may choose an idle victim; the default policy preserves workflow,
+model and backend affinity. Disabling keep-alive or closing the session performs
+explicit cleanup. Ordinary non-runtime runs do not load a session runtime, and
+runtime-task resource reservations remain a separate admission contract.
+
+Capacity eviction events carry `workflow_execution_session_id` for the target
+and `unloaded_workflow_execution_session_id` for the victim, plus the existing
+model/runtime facts and shared timing-attempt ID. Session-only operations leave
+run attribution absent and do not create run projections. Historical run-scoped
+payloads retain their existing decoding and required run identity.
+
+A failed session-runtime admission records the `session_runtime_admission` error
+phase under `session_runtime` scope. The returned error retains the operational
+code and message; its diagnostic link identifies the recorded error or explains
+why diagnostics were unavailable. No workflow-run ID is synthesized. Failed
+keep-alive enablement rolls back the flag; failed keep-alive creation removes
+the new session. A failed victim unload does not mark that victim unloaded.
+
+Once the host confirms an eviction, session residency is updated before terminal
+telemetry is recorded. If that recording fails, admission reports the diagnostic
+failure and the caller rolls back its target request, but the evicted session
+remains correctly unloaded and can be reloaded on retry. An unload failure leaves
+the victim loaded. Missing lifecycle telemetry is reported even when recording
+the separate canonical error succeeds; lifecycle error text is sanitized without
+changing the original operational error returned to the caller.
