@@ -576,12 +576,13 @@ pub fn apply_scheduler_task_state_transition(
 #[must_use]
 pub struct ValidatedSchedulerTaskStateRecord(SchedulerTaskStateRecord);
 
-impl ValidatedSchedulerTaskStateRecord {
-    #[must_use]
-    pub fn as_ref(&self) -> &SchedulerTaskStateRecord {
+impl AsRef<SchedulerTaskStateRecord> for ValidatedSchedulerTaskStateRecord {
+    fn as_ref(&self) -> &SchedulerTaskStateRecord {
         &self.0
     }
+}
 
+impl ValidatedSchedulerTaskStateRecord {
     #[must_use]
     pub fn into_inner(self) -> SchedulerTaskStateRecord {
         self.0
@@ -601,12 +602,13 @@ impl TryFrom<SchedulerTaskStateRecord> for ValidatedSchedulerTaskStateRecord {
 #[must_use]
 pub struct ValidatedSchedulerTaskStateTransition(SchedulerTaskStateTransition);
 
-impl ValidatedSchedulerTaskStateTransition {
-    #[must_use]
-    pub fn as_ref(&self) -> &SchedulerTaskStateTransition {
+impl AsRef<SchedulerTaskStateTransition> for ValidatedSchedulerTaskStateTransition {
+    fn as_ref(&self) -> &SchedulerTaskStateTransition {
         &self.0
     }
+}
 
+impl ValidatedSchedulerTaskStateTransition {
     #[must_use]
     pub fn into_inner(self) -> SchedulerTaskStateTransition {
         self.0

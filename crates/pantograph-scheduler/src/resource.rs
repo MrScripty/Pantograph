@@ -290,12 +290,13 @@ impl SchedulerResourceResidencySnapshot {
 #[must_use]
 pub struct ValidatedSchedulerResourceResidencySnapshot(SchedulerResourceResidencySnapshot);
 
-impl ValidatedSchedulerResourceResidencySnapshot {
-    #[must_use]
-    pub fn as_ref(&self) -> &SchedulerResourceResidencySnapshot {
+impl AsRef<SchedulerResourceResidencySnapshot> for ValidatedSchedulerResourceResidencySnapshot {
+    fn as_ref(&self) -> &SchedulerResourceResidencySnapshot {
         &self.0
     }
+}
 
+impl ValidatedSchedulerResourceResidencySnapshot {
     #[must_use]
     pub fn into_inner(self) -> SchedulerResourceResidencySnapshot {
         self.0
