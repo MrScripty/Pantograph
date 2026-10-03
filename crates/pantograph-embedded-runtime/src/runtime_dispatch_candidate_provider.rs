@@ -70,7 +70,7 @@ const INCOMPATIBLE_RUNTIME_BACKEND_HINT: &str =
 const MISSING_RUNTIME_DISPATCH_EVIDENCE_HINT: &str =
     "embedded_runtime_dispatch_candidate_provider.missing_runtime_dispatch_evidence";
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub(crate) struct EmbeddedRuntimeDispatchCandidateProvider {
     source_snapshot: EmbeddedRuntimeDispatchCandidateSource,
     resource_facts_source: Option<RuntimeDispatchResourceFactsSource>,
@@ -85,15 +85,6 @@ enum EmbeddedRuntimeDispatchCandidateSource {
 impl Default for EmbeddedRuntimeDispatchCandidateSource {
     fn default() -> Self {
         Self::Snapshot(EmbeddedRuntimeDispatchCandidateSourceSnapshot::default())
-    }
-}
-
-impl Default for EmbeddedRuntimeDispatchCandidateProvider {
-    fn default() -> Self {
-        Self {
-            source_snapshot: EmbeddedRuntimeDispatchCandidateSource::default(),
-            resource_facts_source: None,
-        }
     }
 }
 
@@ -1010,6 +1001,25 @@ mod tests {
     use crate::runtime_dispatch_capability_facts::{
         RuntimeDispatchCapabilityFactsProjection, RuntimeDispatchRuntimeCapabilityFacts,
     };
+
+    #[test]
+    fn default_provider_retains_empty_snapshot_and_fail_closed_diagnostics() {
+        let provider = EmbeddedRuntimeDispatchCandidateProvider::default();
+        assert!(provider.resource_facts_source.is_none());
+        let EmbeddedRuntimeDispatchCandidateSource::Snapshot(snapshot) = provider.source_snapshot
+        else {
+            panic!("default provider must retain snapshot mode");
+        };
+        assert_eq!(
+            snapshot,
+            EmbeddedRuntimeDispatchCandidateSourceSnapshot::default()
+        );
+        let diagnostics = fail_closed_diagnostics(&snapshot, &path_free_model_ref());
+        assert_eq!(diagnostics.len(), 4);
+        assert!(diagnostics.iter().all(|diagnostic| diagnostic.code
+            == SchedulerDispatchSelectionDiagnosticCode::NoCandidates
+            && diagnostic.severity == SchedulerDispatchSelectionDiagnosticSeverity::Error));
+    }
 
     #[test]
     fn fail_closed_provider_reports_missing_source_facts() {
