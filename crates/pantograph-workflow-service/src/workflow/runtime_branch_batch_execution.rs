@@ -1981,7 +1981,7 @@ mod tests {
             plan.runtime_host_request
                 .members
                 .iter()
-                .map(|member| prompt_text_from_runtime_host_member_request(member))
+                .map(prompt_text_from_runtime_host_member_request)
                 .collect::<Vec<_>>(),
             vec![
                 "prompt owned by run.2026-05-22.001".to_string(),

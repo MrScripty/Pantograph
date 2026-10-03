@@ -34,8 +34,10 @@ fn boxed_runtime_intent_preserves_exact_json_and_borrowed_payload() {
 #[test]
 fn boxed_runtime_intent_retains_validation_and_task_correlation() {
     let valid = task_intent("run.001", "task.001");
-    ValidatedSchedulerTaskStateRecord::try_from(task_record_with_state(ready_state(valid.clone())))
+    let expected_record = task_record_with_state(ready_state(valid.clone()));
+    let validated = ValidatedSchedulerTaskStateRecord::try_from(expected_record.clone())
         .expect("valid runtime intent remains accepted");
+    assert_eq!(validated.as_ref(), &expected_record);
     let mut invalid = valid;
     invalid.contract_version = 0;
     let expected = invalid.validate().expect_err("invalid raw version");

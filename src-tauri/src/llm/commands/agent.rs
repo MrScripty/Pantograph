@@ -508,19 +508,6 @@ fn format_agent_prompt_with_analysis(
     prompt
 }
 
-#[cfg(test)]
-mod tests {
-    use super::drawing_vision_contract_only_error;
-
-    #[test]
-    fn drawing_vision_error_points_to_typed_inference_contracts() {
-        let error = drawing_vision_contract_only_error();
-
-        assert!(error.contains("image_understanding"));
-        assert!(error.contains("canonical typed inference contracts"));
-    }
-}
-
 /// Format the agent prompt for fix/repair mode.
 /// Skips vision analysis, includes error context and file content directly.
 fn format_fix_mode_prompt(request: &AgentRequest) -> String {
@@ -587,4 +574,17 @@ fn create_component_updates(
             })
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::drawing_vision_contract_only_error;
+
+    #[test]
+    fn drawing_vision_error_points_to_typed_inference_contracts() {
+        let error = drawing_vision_contract_only_error();
+
+        assert!(error.contains("image_understanding"));
+        assert!(error.contains("canonical typed inference contracts"));
+    }
 }

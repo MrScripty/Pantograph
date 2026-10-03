@@ -59,7 +59,8 @@ use tauri::{ipc::Channel, AppHandle, State};
 use crate::agent::rag::SharedRagManager;
 use crate::llm::{SharedGateway, SharedRuntimeRegistry};
 
-use super::commands::{SharedExtensions, SharedWorkflowDiagnosticsStore, SharedWorkflowService};
+use super::command_state::WorkflowRunCommandState;
+use super::commands::{SharedExtensions, SharedWorkflowService};
 use super::events::WorkflowEvent;
 use super::headless_diagnostics::workflow_scheduler_snapshot_response;
 pub(crate) use super::headless_runtime::build_runtime;
@@ -188,14 +189,17 @@ pub async fn workflow_create_execution_session(
 pub async fn workflow_run_execution_session(
     request: WorkflowExecutionSessionRunRequest,
     app: AppHandle,
-    gateway: State<'_, SharedGateway>,
-    runtime_registry: State<'_, SharedRuntimeRegistry>,
-    extensions: State<'_, SharedExtensions>,
-    rag_manager: State<'_, SharedRagManager>,
-    workflow_service: State<'_, SharedWorkflowService>,
-    diagnostics_store: State<'_, SharedWorkflowDiagnosticsStore>,
+    state: WorkflowRunCommandState<'_>,
     channel: Channel<WorkflowEvent>,
 ) -> Result<WorkflowRunResponse, String> {
+    let WorkflowRunCommandState {
+        gateway,
+        runtime_registry,
+        extensions,
+        rag_manager,
+        workflow_service,
+        diagnostics_store,
+    } = state;
     let runtime = build_runtime(
         &app,
         gateway.inner(),

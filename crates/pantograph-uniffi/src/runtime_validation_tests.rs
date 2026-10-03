@@ -170,7 +170,7 @@ async fn public_validation_publication_is_required_again_after_runtime_reopen() 
             .expect("published text runs"),
     );
     assert_eq!(response["outputs"][0]["value"], "published text");
-    runtime.shutdown().await;
+    runtime.shutdown().await.expect("runtime shutdown");
     drop(runtime);
 
     let reopened = open_runtime(&root).await;
@@ -186,7 +186,7 @@ async fn public_validation_publication_is_required_again_after_runtime_reopen() 
             .expect("republished text runs"),
     );
     assert_eq!(response["outputs"][0]["value"], "published text");
-    reopened.shutdown().await;
+    reopened.shutdown().await.expect("runtime shutdown");
     drop(reopened);
     std::fs::remove_dir_all(root).expect("remove fixture");
 }
@@ -234,7 +234,7 @@ async fn public_publication_rejects_stale_validation_and_caller_supplied_proof()
             .await
             .expect_err("rejected publication stores no executable snapshot"),
     );
-    runtime.shutdown().await;
+    runtime.shutdown().await.expect("runtime shutdown");
     drop(runtime);
     std::fs::remove_dir_all(root).expect("remove fixture");
 }

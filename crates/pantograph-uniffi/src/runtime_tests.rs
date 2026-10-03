@@ -371,7 +371,7 @@ async fn direct_runtime_runs_workflow_session_from_json() {
     let close: serde_json::Value = serde_json::from_str(&close_json).expect("parse close");
     assert_eq!(close["ok"], true);
 
-    runtime.shutdown().await;
+    runtime.shutdown().await.expect("runtime shutdown");
 
     let _ = std::fs::remove_dir_all(root);
 }
@@ -434,7 +434,7 @@ async fn direct_runtime_rejects_interactive_graph_at_scheduler_boundary() {
         .contains("scheduler task session runner has no execution path"));
     assert!(envelope.message.contains("unsupported=1"));
 
-    runtime.shutdown().await;
+    runtime.shutdown().await.expect("runtime shutdown");
     let _ = std::fs::remove_dir_all(root);
 }
 
@@ -490,7 +490,7 @@ async fn direct_runtime_exposes_attribution_client_session_json() {
         serde_json::from_str(&open_session_json).expect("parse open response");
     assert!(opened["session"]["client_session_id"].as_str().is_some());
 
-    runtime.shutdown().await;
+    runtime.shutdown().await.expect("runtime shutdown");
     let _ = std::fs::remove_dir_all(root);
 }
 
@@ -610,7 +610,7 @@ async fn direct_runtime_exposes_workflow_graph_persistence_and_edit_session() {
         )
         .await
         .expect("close graph edit session");
-    runtime.shutdown().await;
+    runtime.shutdown().await.expect("runtime shutdown");
 
     let _ = std::fs::remove_dir_all(root);
 }
@@ -701,7 +701,7 @@ async fn direct_runtime_exposes_backend_owned_graph_authoring_discovery() {
         .message
         .contains("No options provider for text-input:text"));
 
-    runtime.shutdown().await;
+    runtime.shutdown().await.expect("runtime shutdown");
     let _ = std::fs::remove_dir_all(root);
 }
 
@@ -781,7 +781,7 @@ async fn direct_runtime_puma_lib_options_use_selector_access_from_pumas_api() {
         .as_str()
         .is_some_and(|cursor| cursor.starts_with("model-library-updates:")));
 
-    runtime.shutdown().await;
+    runtime.shutdown().await.expect("runtime shutdown");
     let _ = std::fs::remove_dir_all(root);
 }
 
@@ -841,7 +841,7 @@ async fn direct_runtime_exposes_artifact_store_contract_surface() {
     assert_eq!(envelope.code, WorkflowErrorCode::InvalidRequest);
     assert!(envelope.message.contains("artifact not found"));
 
-    runtime.shutdown().await;
+    runtime.shutdown().await.expect("runtime shutdown");
     let _ = std::fs::remove_dir_all(root);
 }
 
@@ -987,7 +987,7 @@ async fn direct_runtime_exposes_artifact_format_settings_and_capabilities_json()
         "image quality_percent 0 is outside allowed range"
     );
 
-    runtime.shutdown().await;
+    runtime.shutdown().await.expect("runtime shutdown");
     let _ = std::fs::remove_dir_all(root);
 }
 
@@ -1184,7 +1184,7 @@ async fn direct_runtime_exposes_managed_media_dependency_statuses_and_actions_js
         assert!(envelope.message.contains("missing expected file"));
     }
 
-    runtime.shutdown().await;
+    runtime.shutdown().await.expect("runtime shutdown");
     let _ = std::fs::remove_dir_all(root);
 }
 

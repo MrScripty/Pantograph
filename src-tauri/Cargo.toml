@@ -96,4 +96,5 @@ axum = { workspace = true }
 tower-http = { workspace = true, optional = true }
 
 [dev-dependencies]
+tauri = { version = "2.9.0", features = ["test"] }
 tempfile.workspace = true

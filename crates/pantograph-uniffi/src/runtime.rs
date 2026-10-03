@@ -208,8 +208,13 @@ impl FfiPantographRuntime {
     }
 
     /// Stop inference backends owned by this runtime.
-    pub async fn shutdown(&self) {
-        self.runtime.shutdown().await;
+    ///
+    /// A failed shutdown is returned through the standard error envelope; the
+    /// embedded owner retains residency and permits a later retry.
+    pub async fn shutdown(&self) -> Result<(), FfiError> {
+        self.runtime.shutdown().await.map_err(|error| {
+            workflow_adapter_error(WorkflowErrorCode::InternalError, error.to_string())
+        })
     }
 
     /// Register an attribution client and return ClientRegistrationResponse JSON.
@@ -1116,3 +1121,7 @@ mod runtime_tests;
 #[cfg(test)]
 #[path = "runtime_validation_tests.rs"]
 mod runtime_validation_tests;
+
+#[cfg(test)]
+#[path = "runtime_shutdown_tests.rs"]
+mod runtime_shutdown_tests;

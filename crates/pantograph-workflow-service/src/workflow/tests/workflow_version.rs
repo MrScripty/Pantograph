@@ -423,7 +423,7 @@ fn executable_validation_publication(
     graph: &WorkflowGraph,
 ) -> WorkflowGraphInferenceValidationPublication {
     let graph_revision =
-        WorkflowGraphRevision::parse(&graph.compute_fingerprint()).expect("valid graph revision");
+        WorkflowGraphRevision::parse(graph.compute_fingerprint()).expect("valid graph revision");
     let validation_session_id = DraftGraphValidationSessionId::parse("validation_session_publish")
         .expect("valid validation session id");
     let summary = DraftGraphValidationSummary {

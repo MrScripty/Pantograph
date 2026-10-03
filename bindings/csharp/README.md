@@ -30,6 +30,16 @@ with any redistributed generator source/binary; this repository does not vendor
 or package the generator itself. Existing generated-binding/artifact licensing
 obligations remain unchanged.
 
+## Shutdown result
+
+Await `runtime.Shutdown()` and handle the generated `FfiException` if the
+owned backend cannot stop. Its message contains the standard JSON error envelope
+with `internal_error` and the original shutdown cause. A failed stop does not
+mean the runtime released its residency; callers may retry after resolving the
+cause. Existing C# await expressions remain valid, but regenerate bindings and
+ship them with the matching native library when adopting this fallible API.
+Rust callers now handle `Result<(), FfiError>` explicitly.
+
 ## Usage
 Run the repository-level smoke script:
 
