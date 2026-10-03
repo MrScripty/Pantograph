@@ -3,11 +3,11 @@
 use tauri::ipc::{CommandArg, CommandItem, InvokeError};
 use tauri::{Runtime, State};
 
-use crate::agent::rag::SharedRagManager;
-use crate::llm::{SharedGateway, SharedRuntimeRegistry};
 use super::commands::{
     SharedExtensions, SharedNodeRegistry, SharedWorkflowDiagnosticsStore, SharedWorkflowService,
 };
+use crate::agent::rag::SharedRagManager;
+use crate::llm::{SharedGateway, SharedRuntimeRegistry};
 
 pub struct WorkflowRunCommandState<'r> {
     pub gateway: State<'r, SharedGateway>,

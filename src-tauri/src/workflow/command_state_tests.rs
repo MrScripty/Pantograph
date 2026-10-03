@@ -19,7 +19,13 @@ impl inference::ProcessSpawner for NoSpawn {
         &self,
         _: &str,
         _: &[&str],
-    ) -> Result<(mpsc::Receiver<inference::ProcessEvent>, Box<dyn inference::ProcessHandle>), String> {
+    ) -> Result<
+        (
+            mpsc::Receiver<inference::ProcessEvent>,
+            Box<dyn inference::ProcessHandle>,
+        ),
+        String,
+    > {
         panic!("state extraction must not spawn a backend")
     }
 
@@ -50,7 +56,9 @@ impl ManagedStates {
             gateway: Arc::new(crate::llm::InferenceGateway::new(Arc::new(NoSpawn))),
             runtime_registry: Arc::new(pantograph_runtime_registry::RuntimeRegistry::new()),
             extensions: Arc::new(RwLock::new(extensions)),
-            rag_manager: crate::agent::rag::create_rag_manager(PathBuf::from("unused-state-fixture")),
+            rag_manager: crate::agent::rag::create_rag_manager(PathBuf::from(
+                "unused-state-fixture",
+            )),
             workflow_service: Arc::new(pantograph_workflow_service::WorkflowService::new()),
             diagnostics_store: Arc::new(crate::workflow::WorkflowDiagnosticsStore::default()),
             registry,
@@ -135,20 +143,30 @@ fn build(builder: Builder<MockRuntime>) -> (App<MockRuntime>, WebviewWindow<Mock
     (app, webview)
 }
 
-fn invoke(webview: &WebviewWindow<MockRuntime>, command: &str, body: Value) -> Result<Value, Value> {
-    tauri::test::get_ipc_response(webview, tauri::webview::InvokeRequest {
-        cmd: command.to_string(),
-        callback: tauri::ipc::CallbackFn(0),
-        error: tauri::ipc::CallbackFn(1),
-        url: if cfg!(any(windows, target_os = "android")) {
-            "http://tauri.localhost"
-        } else {
-            "tauri://localhost"
-        }.parse().expect("mock IPC URL"),
-        body: tauri::ipc::InvokeBody::Json(body),
-        headers: Default::default(),
-        invoke_key: tauri::test::INVOKE_KEY.to_string(),
-    }).map(|body| body.deserialize().expect("JSON response"))
+fn invoke(
+    webview: &WebviewWindow<MockRuntime>,
+    command: &str,
+    body: Value,
+) -> Result<Value, Value> {
+    tauri::test::get_ipc_response(
+        webview,
+        tauri::webview::InvokeRequest {
+            cmd: command.to_string(),
+            callback: tauri::ipc::CallbackFn(0),
+            error: tauri::ipc::CallbackFn(1),
+            url: if cfg!(any(windows, target_os = "android")) {
+                "http://tauri.localhost"
+            } else {
+                "tauri://localhost"
+            }
+            .parse()
+            .expect("mock IPC URL"),
+            body: tauri::ipc::InvokeBody::Json(body),
+            headers: Default::default(),
+            invoke_key: tauri::test::INVOKE_KEY.to_string(),
+        },
+    )
+    .map(|body| body.deserialize().expect("JSON response"))
 }
 
 fn missing_state(command: &str, key: &str) -> Value {
@@ -159,19 +177,44 @@ fn missing_state(command: &str, key: &str) -> Value {
 fn run_bundle_preserves_managed_identity_without_payload_state() {
     let states = ManagedStates::new(Arc::new(node_engine::NodeRegistry::new()));
     let (_app, webview) = build(states.run_builder(6));
-    let actual = invoke(&webview, "inspect_run_state", json!({"state": "ignored client input"})).expect("managed state");
-    assert_eq!(actual, json!([
-        identity(&states.gateway), identity(&states.runtime_registry), identity(&states.extensions),
-        identity(&states.rag_manager), identity(&states.workflow_service), identity(&states.diagnostics_store),
-    ]));
+    let actual = invoke(
+        &webview,
+        "inspect_run_state",
+        json!({"state": "ignored client input"}),
+    )
+    .expect("managed state");
+    assert_eq!(
+        actual,
+        json!([
+            identity(&states.gateway),
+            identity(&states.runtime_registry),
+            identity(&states.extensions),
+            identity(&states.rag_manager),
+            identity(&states.workflow_service),
+            identity(&states.diagnostics_store),
+        ])
+    );
 }
 
 #[test]
 fn run_bundle_preserves_missing_state_order_and_original_camel_case_keys() {
     let states = ManagedStates::new(Arc::new(node_engine::NodeRegistry::new()));
-    for (prefix, key) in ["gateway", "runtimeRegistry", "extensions", "ragManager", "workflowService", "diagnosticsStore"].iter().enumerate() {
+    for (prefix, key) in [
+        "gateway",
+        "runtimeRegistry",
+        "extensions",
+        "ragManager",
+        "workflowService",
+        "diagnosticsStore",
+    ]
+    .iter()
+    .enumerate()
+    {
         let (_app, webview) = build(states.run_builder(prefix));
-        assert_eq!(invoke(&webview, "inspect_run_state", json!({})), Err(missing_state("inspect_run_state", key)));
+        assert_eq!(
+            invoke(&webview, "inspect_run_state", json!({})),
+            Err(missing_state("inspect_run_state", key))
+        );
     }
 }
 
@@ -180,15 +223,32 @@ fn query_bundle_preserves_managed_identity_without_payload_state() {
     let states = ManagedStates::new(Arc::new(node_engine::NodeRegistry::new()));
     let (_app, webview) = build(states.query_builder(3));
     let actual = invoke(&webview, "inspect_query_state", json!({})).expect("managed state");
-    assert_eq!(actual, json!([identity(&states.registry), identity(&states.extensions), identity(&states.workflow_service)]));
+    assert_eq!(
+        actual,
+        json!([
+            identity(&states.registry),
+            identity(&states.extensions),
+            identity(&states.workflow_service)
+        ])
+    );
 }
 
 #[test]
 fn query_command_preserves_missing_state_order_and_original_keys() {
     let states = ManagedStates::new(Arc::new(node_engine::NodeRegistry::new()));
-    for (prefix, key) in ["registry", "extensions", "workflowService"].iter().enumerate() {
+    for (prefix, key) in ["registry", "extensions", "workflowService"]
+        .iter()
+        .enumerate()
+    {
         let (_app, webview) = build(states.query_builder(prefix));
-        assert_eq!(invoke(&webview, "query_port_options", json!({"nodeType":"fixture", "portId":"choice"})), Err(missing_state("query_port_options", key)));
+        assert_eq!(
+            invoke(
+                &webview,
+                "query_port_options",
+                json!({"nodeType":"fixture", "portId":"choice"})
+            ),
+            Err(missing_state("query_port_options", key))
+        );
     }
 }
 
@@ -203,8 +263,12 @@ impl node_engine::PortOptionsProvider for EchoOptionsProvider {
     ) -> node_engine::Result<node_engine::PortOptionsResult> {
         self.0.fetch_add(1, Ordering::SeqCst);
         Ok(node_engine::PortOptionsResult {
-            options: Vec::new(), total_count: 0, searchable: true,
-            metadata: Some(json!({"query":query,"marker":extensions.get::<String>("state-fixture-marker")})),
+            options: Vec::new(),
+            total_count: 0,
+            searchable: true,
+            metadata: Some(
+                json!({"query":query,"marker":extensions.get::<String>("state-fixture-marker")}),
+            ),
         })
     }
 }
@@ -213,7 +277,11 @@ impl node_engine::PortOptionsProvider for EchoOptionsProvider {
 fn query_command_preserves_flat_required_optional_and_context_payloads() {
     let calls = Arc::new(AtomicUsize::new(0));
     let mut registry = node_engine::NodeRegistry::new();
-    registry.register_port_provider("fixture", "choice", Box::new(EchoOptionsProvider(calls.clone())));
+    registry.register_port_provider(
+        "fixture",
+        "choice",
+        Box::new(EchoOptionsProvider(calls.clone())),
+    );
     let states = ManagedStates::new(Arc::new(registry));
     let (_app, webview) = build(states.query_builder(3));
     let context = json!({"targetNodeId":"target-1", "taskKind":"embedding"});
@@ -221,10 +289,21 @@ fn query_command_preserves_flat_required_optional_and_context_payloads() {
         "nodeType":"fixture", "portId":"choice", "search":"needle", "limit":7, "offset":3,
         "context":context, "state":"must not deserialize", "registry":"must not replace managed state",
     })).expect("original flat command payload");
-    assert_eq!(actual, json!({"options":[],"totalCount":0,"searchable":true,"metadata":{
-        "query":{"search":"needle","limit":7,"offset":3,"context":context},"marker":"managed extension",
-    }}));
-    let minimal = invoke(&webview, "query_port_options", json!({"nodeType":"fixture", "portId":"choice"})).expect("original optional defaults");
-    assert_eq!(minimal["metadata"]["query"], json!({"search":null,"limit":null,"offset":null}));
+    assert_eq!(
+        actual,
+        json!({"options":[],"totalCount":0,"searchable":true,"metadata":{
+            "query":{"search":"needle","limit":7,"offset":3,"context":context},"marker":"managed extension",
+        }})
+    );
+    let minimal = invoke(
+        &webview,
+        "query_port_options",
+        json!({"nodeType":"fixture", "portId":"choice"}),
+    )
+    .expect("original optional defaults");
+    assert_eq!(
+        minimal["metadata"]["query"],
+        json!({"search":null,"limit":null,"offset":null})
+    );
     assert_eq!(calls.load(Ordering::SeqCst), 2);
 }

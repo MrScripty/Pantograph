@@ -204,13 +204,8 @@ pub async fn workflow_run_execution_session(
     state: WorkflowRunCommandState<'_>,
     channel: tauri::ipc::Channel<super::events::WorkflowEvent>,
 ) -> Result<pantograph_workflow_service::WorkflowRunResponse, String> {
-    super::headless_workflow_commands::workflow_run_execution_session(
-        request,
-        app,
-        state,
-        channel,
-    )
-    .await
+    super::headless_workflow_commands::workflow_run_execution_session(request, app, state, channel)
+        .await
 }
 
 #[command]
@@ -770,13 +765,7 @@ pub async fn query_port_options(
     context: Option<node_engine::PortOptionsQueryContext>,
 ) -> Result<node_engine::PortOptionsResult, String> {
     super::workflow_port_query_commands::query_port_options(
-        state,
-        node_type,
-        port_id,
-        search,
-        limit,
-        offset,
-        context,
+        state, node_type, port_id, search, limit, offset, context,
     )
     .await
 }
