@@ -32,3 +32,23 @@ Independent integrator source review accepted staged tree
 `ad33e068e8057e70e8552fdb6e9f122d3ac82667` after comparing all three new
 names/arities against the Rust NIF definitions and reading the unchanged generated
 stub behavior. Actual BEAM loading remains a hosted qualification requirement.
+
+## Hosted loading result and newly reachable fixture repairs
+
+At head `2c5f22b09025c557585a010076af75bed5b0859b`, hosted job 111136852470
+built and loaded the native library successfully. Three smoke tests passed and
+two reached outdated assertions. This qualifies native loading, not the full
+smoke suite.
+
+Canonical graph contract validation reports an unknown source first and returns
+for that edge before checking the target. Give the fixture two edges, each with
+one known endpoint, to preserve both unknown-source and unknown-target checks.
+Assert the current role-specific messages. Canonical `puma-lib` discovery exposes
+`pumas_model_ref`; assert that port and reject the retired `model_path` port.
+These changes preserve the validation/discovery coverage at the actual public
+BEAM boundary. Production code and all other assertions remain unchanged.
+Whitespace passes; independent source review and hosted rerun are pending.
+Independent integrator source review accepted follow-up tree
+`421f3be33e9504040c6e93c00f11bad7f8b8ec77` against the canonical edge validator
+and current path-free model selector port. Fresh hosted smoke execution remains
+required for these fixture assertions.
