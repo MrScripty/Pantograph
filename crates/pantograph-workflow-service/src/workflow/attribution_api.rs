@@ -277,6 +277,7 @@ impl WorkflowService {
             &workflow_version,
             snapshot_id,
             &source,
+            &graph,
         )
         .map_err(workflow_executable_validation_snapshot_service_error)?;
         self.reject_changed_dependency_proof_freshness(&snapshot)?;

@@ -1697,7 +1697,7 @@ async fn workflow_execution_session_bootstrap_recovery_applies_progress_loop_bef
     )
     .expect("validated executable snapshot");
     let projections = snapshot
-        .scheduler_inference_task_projections()
+        .scheduler_inference_task_projections(&graph)
         .expect("scheduler inference task projections");
 
     let first_created = service
@@ -1876,7 +1876,7 @@ async fn workflow_execution_session_bootstrap_recovery_redispatches_ready_runtim
     )
     .expect("validated executable snapshot");
     let projections = snapshot
-        .scheduler_inference_task_projections()
+        .scheduler_inference_task_projections(&graph)
         .expect("scheduler inference task projections");
 
     let first_created = service

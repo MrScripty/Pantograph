@@ -10,7 +10,7 @@ use pantograph_workflow_service::{WorkflowErrorCode, WorkflowErrorEnvelope};
 use super::{FfiEmbeddedRuntimeConfig, FfiPantographRuntime};
 use crate::FfiError;
 
-fn create_temp_root(workflow_id: &str) -> PathBuf {
+pub(super) fn create_temp_root(workflow_id: &str) -> PathBuf {
     let suffix = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("clock")
@@ -270,7 +270,7 @@ fn write_human_input_workflow(root: &Path, workflow_id: &str) {
     .expect("write workflow");
 }
 
-fn workflow_error_envelope(err: FfiError) -> WorkflowErrorEnvelope {
+pub(super) fn workflow_error_envelope(err: FfiError) -> WorkflowErrorEnvelope {
     let message = match err {
         FfiError::Other { message } => message,
         other => panic!("expected FfiError::Other with envelope JSON, got {other:?}"),
@@ -294,6 +294,8 @@ async fn direct_runtime_runs_workflow_session_from_json() {
     )
     .await
     .expect("runtime");
+
+    super::runtime_validation_tests::publish_saved_workflow(&runtime, &root, workflow_id).await;
 
     let create_session_json = runtime
         .workflow_create_session(
@@ -375,7 +377,7 @@ async fn direct_runtime_runs_workflow_session_from_json() {
 }
 
 #[tokio::test]
-async fn direct_runtime_workflow_session_run_preserves_invalid_request_envelope() {
+async fn direct_runtime_rejects_interactive_graph_at_scheduler_boundary() {
     let workflow_id = "uniffi-runtime-interactive-run";
     let root = create_temp_root(workflow_id);
     write_human_input_workflow(&root, workflow_id);
@@ -391,6 +393,8 @@ async fn direct_runtime_workflow_session_run_preserves_invalid_request_envelope(
     )
     .await
     .expect("runtime");
+
+    super::runtime_validation_tests::publish_saved_workflow(&runtime, &root, workflow_id).await;
 
     let create_session_json = runtime
         .workflow_create_session(
@@ -421,14 +425,14 @@ async fn direct_runtime_workflow_session_run_preserves_invalid_request_envelope(
             .to_string(),
         )
         .await
-        .expect_err("interactive workflow session run should preserve invalid-request envelope");
+        .expect_err("interactive workflow must remain unsupported by the scheduler");
 
     let envelope = workflow_error_envelope(err);
-    assert_eq!(envelope.code, WorkflowErrorCode::InvalidRequest);
-    assert_eq!(
-        envelope.message,
-        "workflow 'uniffi-runtime-interactive-run' requires interactive input at node 'human-input-1'"
-    );
+    assert_eq!(envelope.code, WorkflowErrorCode::CapabilityViolation);
+    assert!(envelope
+        .message
+        .contains("scheduler task session runner has no execution path"));
+    assert!(envelope.message.contains("unsupported=1"));
 
     runtime.shutdown().await;
     let _ = std::fs::remove_dir_all(root);

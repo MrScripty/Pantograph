@@ -877,6 +877,41 @@ appropriate to its recorded lifecycle; the next-slice field is not independent
 execution authority. The user has now authorized starting the plan with subagents
 and the bounded implementation pilot.
 
+## UniFFI Validation Publication Bridge (2026-10-03)
+
+Hosted headless qualification now reaches the UniFFI runtime tests. The FFI
+constructor owns an ephemeral attribution store, and execution correctly requires
+an owner-published executable validation snapshot. The embedding API exposes
+edit sessions but omits validation refresh and snapshot publication, so a valid
+text graph cannot currently complete the public create/run flow.
+
+Accepted bounded repair: expose typed EmbeddedRuntime delegates and strict JSON
+UniFFI entrypoints for the existing workflow-service current-validation refresh
+and graph-session snapshot publication methods. Keep graph/proof construction,
+revision checks, descriptor compatibility and dependency-proof freshness at their
+existing owners. A client supplies session/version identifiers, never trusted
+snapshot content. It loads/saves a graph, creates an edit session, refreshes the
+returned graph revision, publishes its current executable validation session,
+then creates/runs an execution session. Reopening the ephemeral FFI runtime
+requires publication again. Missing, stale and unavailable validation still fail
+closed; runtime inference facts and readiness are not fabricated.
+
+Required evidence: actual public JSON text execution; missing/stale/reopened
+runtime rejection; existing error-envelope fidelity; UniFFI metadata and generated
+C# surface checks. Independent read-only review is required before publication.
+Canonical selector fixtures and managed-runtime readiness evidence stay separate.
+
+Independent review found that inference-only snapshots rejected every legitimate
+zero-inference graph and that real C# callers had not been migrated. The accepted
+correction keeps publication mandatory and checks exact canonical inference-node
+coverage at owner publication and executable projection, including imported
+records. Empty coverage is valid only for a graph with no inference nodes. Missing,
+extra and duplicate runtime projections fail closed; per-node proofs and existing
+freshness checks remain. The canonical inference request owner supplies the shared
+classification; unsupported inference-bearing task types remain rejected. Both
+NativeSmoke and the packaged DirectRuntimeQuickstart must perform the real public
+load/edit/refresh/publish lifecycle before execution.
+
 ## Final Acceptance
 
 - Acceptance status: `blocked`

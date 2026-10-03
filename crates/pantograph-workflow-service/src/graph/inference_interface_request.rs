@@ -73,6 +73,14 @@ pub enum InferenceInterfaceGraphResolutionDiagnosticCode {
     InvalidRuntimeSourceContext,
 }
 
+/// Canonical graph nodes requiring inference-interface and dependency proofs.
+pub(crate) fn inference_nodes_in_graph(graph: &WorkflowGraph) -> impl Iterator<Item = &GraphNode> {
+    graph
+        .nodes
+        .iter()
+        .filter(|node| node.node_type == NODE_TYPE_GENERIC_INFERENCE)
+}
+
 pub fn inference_interface_resolution_inputs_from_graph(
     graph: &WorkflowGraph,
 ) -> InferenceInterfaceGraphResolutionInputs {
@@ -85,11 +93,7 @@ pub fn inference_interface_resolution_inputs_from_graph(
     let mut requests = Vec::new();
     let mut diagnostics = Vec::new();
 
-    for node in graph
-        .nodes
-        .iter()
-        .filter(|node| node.node_type == NODE_TYPE_GENERIC_INFERENCE)
-    {
+    for node in inference_nodes_in_graph(graph) {
         let Some(model_ref) = model_ref_for_inference_node(
             &node.id,
             &node.data,

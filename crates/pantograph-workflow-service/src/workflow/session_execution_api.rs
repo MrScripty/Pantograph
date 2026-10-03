@@ -777,7 +777,7 @@ impl WorkflowService {
                 },
             )?;
             let projections = snapshot
-                .scheduler_inference_task_projections()
+                .scheduler_inference_task_projections(&graph)
                 .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
             return workflow_scheduler_task_graph_with_inference_projections(
                 &workflow_id,

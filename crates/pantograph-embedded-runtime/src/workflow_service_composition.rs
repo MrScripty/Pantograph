@@ -1012,7 +1012,7 @@ mod tests {
         }));
 
         let projections = snapshot
-            .scheduler_inference_task_projections()
+            .scheduler_inference_task_projections(&connected_dependency_inference_graph(model_id))
             .expect("scheduler projections");
         let scheduler_node_id = "infer".parse().expect("scheduler node id");
         let projection = projections

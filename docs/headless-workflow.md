@@ -105,3 +105,39 @@ remains correctly unloaded and can be reloaded on retry. An unload failure leave
 the victim loaded. Missing lifecycle telemetry is reported even when recording
 the separate canonical error succeeds; lifecycle error text is sanitized without
 changing the original operational error returned to the caller.
+
+## Publishing validation before native session execution
+
+The UniFFI runtime owns an ephemeral attribution store. Before running a saved
+workflow version, an embedding client must publish validation through the public
+graph-session API:
+
+1. Load the saved graph with `workflow_graph_load`, or save it with
+   `workflow_graph_save`, and create a graph edit session for that workflow ID.
+2. Call `workflow_graph_refresh_current_validation_summary` with the returned
+   `graph_session_id` and `graph_revision`. Inspect the returned summary and
+   require its submit gate to allow execution; unavailable facts remain blocking.
+3. Call `publish_graph_session_executable_validation_snapshot` with workflow ID,
+   semantic version, graph-session ID and the current validation-session ID.
+   The service derives the graph, descriptor facts and dependency proof from its
+   own session state. The request accepts identifiers, not a caller-authored proof
+   or snapshot body, and rejects stale publication.
+4. Create an execution session and run the same saved workflow/version through
+   `workflow_run_session`. A missing snapshot still fails closed. Closing the
+   graph edit session after successful publication does not erase the published
+   validation record.
+
+Reopening `FfiPantographRuntime` starts a fresh attribution store, even when its
+app-data directory is reused. Repeat validation/publication before execution;
+filesystem persistence of the workflow alone is not evidence of current
+executable validation. The bridge does not add support for interactive scheduler
+tasks or fabricate inference/runtime readiness. Errors retain the existing JSON
+workflow error envelopes.
+
+Executable snapshots contain inference proofs, so a graph with no inference nodes
+has an empty proof list. Publication and executable projection both compare that
+list against the canonical graph's complete inference-node set. Empty records
+cannot stand in for missing runtime proofs, and extra/duplicate node identities
+are rejected. Rust callers of `scheduler_inference_task_projections` must supply
+the actual graph for this coverage check; normal run admission also retains its
+workflow-version and fingerprint checks.
