@@ -669,7 +669,12 @@ async fn direct_runtime_exposes_backend_owned_graph_authoring_discovery() {
         .as_array()
         .expect("queryable ports")
         .iter()
-        .any(|port| port["node_type"] == "puma-lib" && port["port_id"] == "model_path"));
+        .any(|port| port["node_type"] == "puma-lib" && port["port_id"] == "pumas_model_ref"));
+    assert!(!queryable
+        .as_array()
+        .expect("queryable ports")
+        .iter()
+        .any(|port| { port["node_type"] == "puma-lib" && port["port_id"] == "model_path" }));
 
     let missing = runtime
         .workflow_graph_get_node_definition("missing-node".to_string())
@@ -732,7 +737,7 @@ async fn direct_runtime_puma_lib_options_use_selector_access_from_pumas_api() {
     let options_json = runtime
         .workflow_graph_query_port_options(
             "puma-lib".to_string(),
-            "model_path".to_string(),
+            "pumas_model_ref".to_string(),
             serde_json::json!({
                 "limit": 10,
                 "context": {
@@ -757,8 +762,15 @@ async fn direct_runtime_puma_lib_options_use_selector_access_from_pumas_api() {
         .find(|option| option["metadata"]["id"] == "llm/imported/uniffi-test-gguf")
         .expect("selector option should be present");
 
+    assert!(
+        option["value"].is_object(),
+        "selection must carry a model reference, not a display path"
+    );
+    assert_eq!(option["value"]["model_ref_contract_version"], 1);
+    assert_eq!(option["value"]["model_id"], "llm/imported/uniffi-test-gguf");
+    assert_eq!(option["value"], option["metadata"]["pumas_model_ref"]);
     assert_eq!(
-        option["value"],
+        option["metadata"]["display_entry_path"],
         serde_json::json!(model_file.display().to_string())
     );
     assert!(result["metadata"]["package_facts_summary_cursor"]
