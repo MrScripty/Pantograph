@@ -224,32 +224,6 @@ impl WorkflowHost for ContractHost {
         Ok("contract-graph".to_string())
     }
 
-    async fn run_workflow(
-        &self,
-        _workflow_id: &str,
-        _inputs: &[WorkflowPortBinding],
-        output_targets: Option<&[WorkflowOutputTarget]>,
-        _run_options: pantograph_workflow_service::WorkflowRunOptions,
-        _run_handle: pantograph_workflow_service::WorkflowRunHandle,
-    ) -> Result<Vec<WorkflowPortBinding>, WorkflowServiceError> {
-        if let Some(targets) = output_targets {
-            return Ok(targets
-                .iter()
-                .map(|target| WorkflowPortBinding {
-                    node_id: target.node_id.clone(),
-                    port_id: target.port_id.clone(),
-                    value: serde_json::json!([0.1, 0.2, 0.3]),
-                })
-                .collect());
-        }
-
-        Ok(vec![WorkflowPortBinding {
-            node_id: "vector-output-1".to_string(),
-            port_id: "vector".to_string(),
-            value: serde_json::json!([0.1, 0.2, 0.3]),
-        }])
-    }
-
     async fn workflow_io(
         &self,
         _workflow_id: &str,
@@ -287,10 +261,139 @@ impl WorkflowHost for ContractHost {
     }
 }
 
+// Execution contracts use supported scheduler tasks and a real graph. The
+// metadata-only ContractHost above retains its embedding capability snapshots.
+#[derive(Default)]
+struct SchedulerContractHost {
+    graph_reads: std::sync::atomic::AtomicUsize,
+    io_reads: std::sync::atomic::AtomicUsize,
+}
+
+impl SchedulerContractHost {
+    fn assert_admission_callbacks(&self) {
+        use std::sync::atomic::Ordering;
+        assert!(
+            self.graph_reads.load(Ordering::SeqCst) > 0,
+            "graph admission must consult the host"
+        );
+        assert!(
+            self.io_reads.load(Ordering::SeqCst) > 0,
+            "I/O admission must consult the host"
+        );
+    }
+}
+
+#[async_trait]
+impl WorkflowHost for SchedulerContractHost {
+    async fn validate_workflow(&self, workflow_id: &str) -> Result<(), WorkflowServiceError> {
+        assert_eq!(workflow_id, "wf-1");
+        Ok(())
+    }
+
+    async fn workflow_graph_fingerprint(
+        &self,
+        _workflow_id: &str,
+    ) -> Result<String, WorkflowServiceError> {
+        Ok("contract-text-graph".to_string())
+    }
+
+    async fn workflow_graph(
+        &self,
+        _workflow_id: &str,
+    ) -> Result<pantograph_workflow_service::WorkflowGraph, WorkflowServiceError> {
+        self.graph_reads
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        use pantograph_workflow_service::{GraphEdge, GraphNode, Position, WorkflowGraph};
+        Ok(WorkflowGraph {
+            nodes: vec![
+                GraphNode {
+                    id: "text-input-1".to_string(),
+                    node_type: "text-input".to_string(),
+                    position: Position { x: 0.0, y: 0.0 },
+                    data: serde_json::json!({}),
+                },
+                GraphNode {
+                    id: "text-output-1".to_string(),
+                    node_type: "text-output".to_string(),
+                    position: Position { x: 100.0, y: 0.0 },
+                    data: serde_json::json!({}),
+                },
+            ],
+            edges: vec![GraphEdge {
+                id: "edge".to_string(),
+                source: "text-input-1".to_string(),
+                source_handle: "text".to_string(),
+                target: "text-output-1".to_string(),
+                target_handle: "text".to_string(),
+            }],
+            derived_graph: None,
+        })
+    }
+
+    async fn workflow_capabilities(
+        &self,
+        _workflow_id: &str,
+    ) -> Result<WorkflowHostCapabilities, WorkflowServiceError> {
+        Ok(WorkflowHostCapabilities {
+            max_input_bindings: 32,
+            max_output_targets: 8,
+            max_value_bytes: 4096,
+            runtime_requirements: WorkflowRuntimeRequirements::default(),
+            models: Vec::new(),
+            runtime_capabilities: Vec::new(),
+        })
+    }
+
+    async fn workflow_io(
+        &self,
+        workflow_id: &str,
+    ) -> Result<WorkflowIoResponse, WorkflowServiceError> {
+        self.io_reads
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let mut io = ContractHost.workflow_io(workflow_id).await?;
+        io.outputs = vec![WorkflowIoNode {
+            node_id: "text-output-1".to_string(),
+            node_type: "text-output".to_string(),
+            name: Some("Text Output".to_string()),
+            description: None,
+            ports: vec![WorkflowIoPort {
+                port_id: "text".to_string(),
+                name: Some("Text".to_string()),
+                description: None,
+                data_type: Some("string".to_string()),
+                required: Some(false),
+                multiple: Some(false),
+            }],
+        }];
+        Ok(io)
+    }
+}
+
+#[test]
+fn workflow_run_vector_response_contract_round_trip() {
+    // Vector serialization remains a public DTO contract even though this
+    // integration fixture executes only the scheduler's supported text tasks.
+    let expected = serde_json::json!({
+        "workflow_run_id": "run-vector-contract",
+        "outputs": [{
+            "node_id": "vector-output-1",
+            "port_id": "vector",
+            "value": [0.1, 0.2, 0.3]
+        }],
+        "timing_ms": 42
+    });
+    let response: pantograph_workflow_service::WorkflowRunResponse =
+        serde_json::from_value(expected.clone()).expect("deserialize vector run response");
+    assert_eq!(
+        serde_json::to_value(response).expect("serialize vector run response"),
+        expected
+    );
+}
+
 #[tokio::test]
 async fn workflow_run_contract_snapshot() {
     let service = WorkflowService::new();
-    let host = ContractHost;
+    let host = SchedulerContractHost::default();
     let session = service
         .create_workflow_execution_session(
             &host,
@@ -315,8 +418,8 @@ async fn workflow_run_contract_snapshot() {
                     value: serde_json::json!("hello world"),
                 }],
                 output_targets: Some(vec![WorkflowOutputTarget {
-                    node_id: "vector-output-1".to_string(),
-                    port_id: "vector".to_string(),
+                    node_id: "text-output-1".to_string(),
+                    port_id: "text".to_string(),
                 }]),
                 override_selection: None,
                 timeout_ms: None,
@@ -325,6 +428,7 @@ async fn workflow_run_contract_snapshot() {
         )
         .await
         .expect("session workflow run response");
+    host.assert_admission_callbacks();
 
     let value = serde_json::to_value(response).expect("serialize response");
     assert!(value["workflow_run_id"]
@@ -334,15 +438,64 @@ async fn workflow_run_contract_snapshot() {
         "workflow_run_id": value["workflow_run_id"],
         "outputs": [
             {
-                "node_id": "vector-output-1",
-                "port_id": "vector",
-                "value": [0.1, 0.2, 0.3]
+                "node_id": "text-output-1",
+                "port_id": "text",
+                "value": "hello world"
             }
         ],
         "timing_ms": value["timing_ms"]
     });
 
     assert_eq!(value, expected);
+}
+
+#[tokio::test]
+async fn workflow_run_missing_graph_preserves_admission_diagnostics_contract() {
+    let service = WorkflowService::new();
+    let host = ContractHost;
+    let session = service
+        .create_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionCreateRequest {
+                workflow_id: "wf-1".to_string(),
+                usage_profile: None,
+                keep_alive: false,
+            },
+        )
+        .await
+        .expect("create metadata-only session");
+    let error = service
+        .run_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionRunRequest {
+                session_id: session.session_id,
+                workflow_semantic_version: "0.1.0".to_string(),
+                inputs: Vec::new(),
+                output_targets: None,
+                override_selection: None,
+                timeout_ms: None,
+                priority: None,
+            },
+        )
+        .await
+        .expect_err("execution requires a stored graph");
+    assert_eq!(
+        error.code(),
+        pantograph_workflow_service::WorkflowErrorCode::WorkflowNotFound
+    );
+    assert_eq!(error.message(), "workflow 'wf-1' not found");
+    let diagnostics = error
+        .diagnostics()
+        .expect("admission error retains diagnostics attribution");
+    assert!(diagnostics
+        .workflow_run_id
+        .as_deref()
+        .is_some_and(|id| !id.is_empty()));
+    assert_eq!(diagnostics.diagnostic_event_id, None);
+    assert_eq!(
+        diagnostics.diagnostics_unavailable.as_deref(),
+        Some("diagnostics ledger is not configured")
+    );
 }
 
 #[tokio::test]
@@ -2398,7 +2551,7 @@ fn workflow_trace_snapshot_request_rejects_blank_contract_filter() {
 #[tokio::test]
 async fn workflow_run_rejects_non_discovered_output_target_contract() {
     let service = WorkflowService::new();
-    let host = ContractHost;
+    let host = SchedulerContractHost::default();
     let session = service
         .create_workflow_execution_session(
             &host,
@@ -2417,9 +2570,13 @@ async fn workflow_run_rejects_non_discovered_output_target_contract() {
             WorkflowExecutionSessionRunRequest {
                 session_id: session.session_id,
                 workflow_semantic_version: "0.1.0".to_string(),
-                inputs: Vec::new(),
+                inputs: vec![WorkflowPortBinding {
+                    node_id: "text-input-1".to_string(),
+                    port_id: "text".to_string(),
+                    value: serde_json::json!("hello world"),
+                }],
                 output_targets: Some(vec![WorkflowOutputTarget {
-                    node_id: "vector-output-1".to_string(),
+                    node_id: "text-output-1".to_string(),
                     port_id: "stream".to_string(),
                 }]),
                 override_selection: None,
@@ -2429,8 +2586,21 @@ async fn workflow_run_rejects_non_discovered_output_target_contract() {
         )
         .await
         .expect_err("expected invalid request for non-discovered target");
+    host.assert_admission_callbacks();
 
+    assert_eq!(
+        err.code(),
+        pantograph_workflow_service::WorkflowErrorCode::InvalidRequest
+    );
+    assert_eq!(
+        err.message(),
+        "output_targets.0 references non-discoverable output 'text-output-1.stream'"
+    );
     assert!(matches!(err, WorkflowServiceError::InvalidRequest(_)));
+    assert!(
+        err.diagnostics().is_none(),
+        "unconfigured terminal ledger preserves the original error"
+    );
 }
 
 #[tokio::test]
