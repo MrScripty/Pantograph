@@ -251,6 +251,11 @@ jobs:
       - name: Run workflow-nodes tests
         run: cargo test -p workflow-nodes --lib
 
+      - name: Run terminal diagnostic regression suite
+        run: |
+          cargo test -p pantograph-workflow-service --lib workflow::runtime_branch_run_finalization::tests:: -- --list > "$RUNNER_TEMP/terminal-diagnostic-tests.list"
+          python3 -c 'import pathlib, sys; names = [line for line in pathlib.Path(sys.argv[1]).read_text().splitlines() if line.startswith("workflow::runtime_branch_run_finalization::tests::") and line.endswith(": test")]; print("Terminal diagnostic tests discovered:", len(names)); sys.exit(0 if names else 1)' "$RUNNER_TEMP/terminal-diagnostic-tests.list"
+          cargo test -p pantograph-workflow-service --lib workflow::runtime_branch_run_finalization::tests::
       - name: Run workflow inference projection regression suites
         run: |
           for module in workflow::tests::task_graph:: workflow::tests::task_binding_resolution:: workflow::executable_validation_snapshot::tests::; do

@@ -24,7 +24,7 @@ use crate::scheduler::task_orchestrator::{
 };
 use crate::scheduler::{
     WorkflowDependencyReadinessLifecycle, WorkflowDependencyReadinessLifecycleError,
-    WorkflowSchedulerRetryLifecycle, WorkflowSchedulerTaskTerminalMutation,
+    WorkflowSchedulerRetryLifecycle,
 };
 
 use super::runtime_branch_run_finalization::{
@@ -33,6 +33,7 @@ use super::runtime_branch_run_finalization::{
     WorkflowRuntimeTaskDispatchFinalizationOutcome,
     WorkflowSchedulerTaskAttemptDiagnosticAttribution,
     WorkflowSchedulerTaskAttemptTerminalDiagnosticRequest,
+    WorkflowSchedulerTaskAttemptTerminalInput,
 };
 use super::{
     WorkflowHost, WorkflowOutputTarget, WorkflowPortBinding, WorkflowRunResponse,
@@ -513,17 +514,16 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                                 "scheduler non-runtime task completion failed: {error}"
                             ))
                         })?;
-                    self.record_scheduler_task_attempt_terminal(
-                        session_id,
-                        started.task(),
-                        started.attempt_id().as_str(),
-                        started.started_at_ms(),
-                        SchedulerTaskAttemptLifecycleTransition::Completed,
-                        "scheduler task attempt completed",
-                        None,
-                        None,
-                        None,
-                    )?;
+                    self.record_scheduler_task_attempt_terminal(WorkflowSchedulerTaskAttemptTerminalInput {
+                        task: started.task(),
+                        attempt_id: started.attempt_id().as_str(),
+                        started_at_ms: started.started_at_ms(),
+                        transition: SchedulerTaskAttemptLifecycleTransition::Completed,
+                        reason: "scheduler task attempt completed",
+                        error_summary: None,
+                        selected_dispatch: None,
+                        terminal_mutation: None,
+                    })?;
                 }
                 Err(
                     crate::scheduler::WorkflowSchedulerTaskOrchestratorError::NonRuntimeTaskAdapter(
@@ -542,17 +542,16 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                             &error,
                         );
                     if failed.is_ok() {
-                        self.record_scheduler_task_attempt_terminal(
-                            session_id,
-                            started.task(),
-                            started.attempt_id().as_str(),
-                            started.started_at_ms(),
-                            SchedulerTaskAttemptLifecycleTransition::Failed,
-                            "scheduler non-runtime task execution failed",
-                            Some(error.to_string()),
-                            None,
-                            None,
-                        )?;
+                        self.record_scheduler_task_attempt_terminal(WorkflowSchedulerTaskAttemptTerminalInput {
+                            task: started.task(),
+                            attempt_id: started.attempt_id().as_str(),
+                            started_at_ms: started.started_at_ms(),
+                            transition: SchedulerTaskAttemptLifecycleTransition::Failed,
+                            reason: "scheduler non-runtime task execution failed",
+                            error_summary: Some(error.to_string()),
+                            selected_dispatch: None,
+                            terminal_mutation: None,
+                        })?;
                     }
                     return Err(WorkflowServiceError::InvalidRequest(format!(
                         "scheduler non-runtime task execution failed: {error}"
@@ -886,17 +885,16 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                                     ))
                                 })?
                         };
-                        self.record_scheduler_task_attempt_terminal(
-                            session_id,
-                            started_runtime_task.task(),
-                            started_runtime_task.attempt_id().as_str(),
-                            started_runtime_task.started_at_ms(),
-                            SchedulerTaskAttemptLifecycleTransition::Failed,
-                            "scheduler runtime dispatch selection failed",
-                            Some(scheduler_error.to_string()),
-                            None,
-                            Some(&terminal_mutation),
-                        )?;
+                        self.record_scheduler_task_attempt_terminal(WorkflowSchedulerTaskAttemptTerminalInput {
+                            task: started_runtime_task.task(),
+                            attempt_id: started_runtime_task.attempt_id().as_str(),
+                            started_at_ms: started_runtime_task.started_at_ms(),
+                            transition: SchedulerTaskAttemptLifecycleTransition::Failed,
+                            reason: "scheduler runtime dispatch selection failed",
+                            error_summary: Some(scheduler_error.to_string()),
+                            selected_dispatch: None,
+                            terminal_mutation: Some(&terminal_mutation),
+                        })?;
                     } else {
                         let terminal_mutation = {
                             let mut store = self.service.session_store_guard()?;
@@ -915,17 +913,16 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                                 ))
                             })?
                         };
-                        self.record_scheduler_task_attempt_terminal(
-                            session_id,
-                            started_runtime_task.task(),
-                            started_runtime_task.attempt_id().as_str(),
-                            started_runtime_task.started_at_ms(),
-                            SchedulerTaskAttemptLifecycleTransition::Failed,
-                            "scheduler runtime dispatch failed",
-                            Some(scheduler_error.to_string()),
-                            None,
-                            Some(&terminal_mutation),
-                        )?;
+                        self.record_scheduler_task_attempt_terminal(WorkflowSchedulerTaskAttemptTerminalInput {
+                            task: started_runtime_task.task(),
+                            attempt_id: started_runtime_task.attempt_id().as_str(),
+                            started_at_ms: started_runtime_task.started_at_ms(),
+                            transition: SchedulerTaskAttemptLifecycleTransition::Failed,
+                            reason: "scheduler runtime dispatch failed",
+                            error_summary: Some(scheduler_error.to_string()),
+                            selected_dispatch: None,
+                            terminal_mutation: Some(&terminal_mutation),
+                        })?;
                     }
                     return Err(WorkflowServiceError::CapabilityViolation(format!(
                         "runtime scheduler dispatch selection failed closed for {count} runtime inference task(s): {scheduler_error}",
@@ -1101,16 +1098,18 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
 
     fn record_scheduler_task_attempt_terminal(
         &self,
-        _session_id: &str,
-        task: &WorkflowSchedulerTask,
-        attempt_id: &str,
-        started_at_ms: u64,
-        transition: SchedulerTaskAttemptLifecycleTransition,
-        reason: &str,
-        error_summary: Option<String>,
-        selected_dispatch: Option<&SelectedRuntimeTaskDispatch>,
-        terminal_mutation: Option<&WorkflowSchedulerTaskTerminalMutation>,
+        input: WorkflowSchedulerTaskAttemptTerminalInput<'_>,
     ) -> Result<(), WorkflowServiceError> {
+        let WorkflowSchedulerTaskAttemptTerminalInput {
+            task,
+            attempt_id,
+            started_at_ms,
+            transition,
+            reason,
+            error_summary,
+            selected_dispatch,
+            terminal_mutation,
+        } = input;
         let attribution =
             self.scheduler_task_attempt_diagnostic_attribution(task.workflow_run_id.as_str())?;
         self.service.workflow_diagnostic_event_record(
