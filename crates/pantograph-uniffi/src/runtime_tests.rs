@@ -1024,11 +1024,22 @@ async fn direct_runtime_exposes_managed_media_dependency_statuses_and_actions_js
     let neutral_statuses: serde_json::Value = serde_json::from_str(&neutral_statuses_json)
         .expect("parse neutral managed dependency statuses");
     let neutral_statuses = neutral_statuses.as_array().expect("neutral statuses array");
-    assert!(neutral_statuses.iter().any(|status| {
-        status["key"]["runtime_sidecar"] == serde_json::json!("llama_cpp")
-            && status["category"] == serde_json::json!("runtime_sidecar")
-            && status["readiness_state"] == serde_json::json!("ready")
-    }));
+    let runtime_status = neutral_statuses
+        .iter()
+        .find(|status| {
+            status["key"]["runtime_sidecar"] == serde_json::json!("llama_cpp")
+                && status["category"] == serde_json::json!("runtime_sidecar")
+        })
+        .expect("neutral runtime sidecar status");
+    // Legacy files under app-data/runtimes are not a managed installation.
+    // The current owner resolves app-data/third-party/runtimes instead.
+    assert_eq!(runtime_status["install_state"], "missing");
+    assert_eq!(runtime_status["readiness_state"], "missing");
+    assert_eq!(runtime_status["available"], false);
+    assert!(!runtime_status["missing_files"]
+        .as_array()
+        .expect("missing runtime files")
+        .is_empty());
     assert!(neutral_statuses.iter().any(|status| {
         status["key"]["media_tool"] == serde_json::json!("ffmpeg")
             && status["category"] == serde_json::json!("media_tool")
