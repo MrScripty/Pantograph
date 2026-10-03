@@ -33,3 +33,11 @@ Passed against the reviewed manifest/lock: `npm ci --include=optional --no-fund 
 `npm run test:workflow-editor-image-gui` exits 2 at preflight because PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_MODEL_ID is unavailable. Real Pumas model/artifact IDs, saved workflow, Python runtime, desktop drivers/display and built host remain prerequisites; no GUI success is claimed. The integration owner must obtain that qualified evidence. Rust/desktop compilation and release publication are outside this dependency slice.
 
 The source manifest/lock pair was independently reviewed before publication at staged tree `b75bac90dbbda40c3006e3228f0ce5eab8ed8f56`. Subsequent documentation adds this report without changing those files. Keep the task worktree protected while hosted qualification or integration is pending; the integration owner controls final merge and terminal disposition.
+
+## Hosted qualification follow-up
+
+[Quality Gates run 37115665903](https://github.com/MrScripty/Pantograph/actions/runs/37115665903) confirms Node 24.12.0/npm 11.6.2, clean npm ci, zero production-audit findings, 540/540 frontend tests, typecheck and full lint. Its synthetic merge `e66f54bc7b3f2963956918a6a781fc3a2ecf47ca` has the same tree `1c51bc4dcce332846e550ecf6374864521a11099` as published source commit `0b5c0df663d76dc97f2ba3836d33ea2404ca79df`. The unchanged critical-lint failure remains visible.
+
+That workflow lacked installed-tree and frontend-build checks. Add `npm ls --all` and `npm run build` to the existing dependency-audit job after clean installation and the production audit, preserving every existing command and aggregate gate. These checks prove resolver consistency and frontend asset compilation on the declared toolchain; they do not establish GUI or packaged-release acceptance. Exact-head hosted results for this workflow change remain pending.
+
+The hosted development-inclusive install audit reports 41 affected package nodes (1 low, 5 moderate, 35 high). Dependency maintainers must triage that separate follow-up before any broader security claim; this slice does not upgrade unrelated development tools or claim zero vulnerabilities across the complete graph. Headless/Runtime Separation results remain under observation, and the real-model GUI prerequisites above remain unavailable.
