@@ -143,7 +143,7 @@ fn translated_task_inputs_resolved_event_preserves_inputs_without_trace_noise() 
         TauriWorkflowEvent::DiagnosticsSnapshot { snapshot, .. } => {
             let trace = snapshot.runs_by_id.get("exec-1").expect("trace");
             assert_eq!(trace.event_count, 1);
-            assert!(trace.nodes.get("node-a").is_none());
+            assert!(!trace.nodes.contains_key("node-a"));
         }
         other => panic!("unexpected diagnostics event: {other:?}"),
     }

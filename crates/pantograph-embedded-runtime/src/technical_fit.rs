@@ -1837,7 +1837,7 @@ mod tests {
                         kv_cache: inference::BackendFeatureSupport::Supported,
                     },
                     runtime_variants: vec![inference::RuntimeVariantCapability {
-                        runtime_variant_id: inference::RuntimeVariantId::parse(&format!(
+                        runtime_variant_id: inference::RuntimeVariantId::parse(format!(
                             "{}.cuda",
                             backend_key
                         ))

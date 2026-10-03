@@ -450,7 +450,7 @@ fn image_runtime_validation_snapshot(
         workflow_semantic_version: version.semantic_version.clone(),
         workflow_execution_fingerprint: version.execution_fingerprint.clone(),
         descriptor_contract_version: INFERENCE_INTERFACE_CONTRACT_VERSION,
-        graph_revision: WorkflowGraphRevision::parse(&graph.compute_fingerprint())
+        graph_revision: WorkflowGraphRevision::parse(graph.compute_fingerprint())
             .expect("valid graph revision"),
         validation_session_id: DraftGraphValidationSessionId::parse(
             "embedded_runtime_validation_session_1",

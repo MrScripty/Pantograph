@@ -1571,12 +1571,9 @@ fn scheduler_timeline_projection_includes_inference_execution_diagnostics() {
     assert!(detail.contains("cache handle observed"));
     assert!(detail.contains("artifact refs 1"));
     assert!(detail.contains("kv cache restore_input hit"));
-    assert_eq!(
-        record
-            .payload_json
-            .contains("generated text should not appear"),
-        false
-    );
+    assert!(!record
+        .payload_json
+        .contains("generated text should not appear"));
 }
 
 #[test]
@@ -5083,10 +5080,9 @@ fn sqlite_column_exists(conn: &Connection, table_name: &str, column_name: &str) 
     let columns = stmt
         .query_map([], |row| row.get::<_, String>(1))
         .expect("table info query succeeds");
-    let exists = columns
+    columns
         .map(|column| column.expect("column row loads"))
-        .any(|column| column == column_name);
-    exists
+        .any(|column| column == column_name)
 }
 
 fn assert_columns_exist(conn: &Connection, table_name: &str, column_names: &[&str]) {

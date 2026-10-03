@@ -271,7 +271,7 @@ mod options_provider {
         }
 
         pub(crate) fn needs_resolution(&self, model_id: &str) -> bool {
-            self.summaries.get(model_id).map_or(true, |result| {
+            self.summaries.get(model_id).is_none_or(|result| {
                 result.summary.is_none()
                     || matches!(
                         result.status,

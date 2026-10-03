@@ -311,6 +311,8 @@ jobs:
           cargo test -p pantograph-workflow-service --lib scheduler::task_orchestrator::tests::
       - name: Run workflow-service contract tests
         run: cargo test -p pantograph-workflow-service --test contract
+      - name: Run artifact-store integration contracts
+        run: cargo test -p pantograph-workflow-service --test artifact_store
 
   rust-doc-tests:
     name: Rust doc tests
