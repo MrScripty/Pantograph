@@ -5077,12 +5077,10 @@ fn sqlite_column_exists(conn: &Connection, table_name: &str, column_name: &str) 
     let mut stmt = conn
         .prepare(&format!("PRAGMA table_info({table_name})"))
         .expect("table info statement prepares");
-    let columns = stmt
+    let mut columns = stmt
         .query_map([], |row| row.get::<_, String>(1))
         .expect("table info query succeeds");
-    columns
-        .map(|column| column.expect("column row loads"))
-        .any(|column| column == column_name)
+    columns.any(|column| column.expect("column row loads") == column_name)
 }
 
 fn assert_columns_exist(conn: &Connection, table_name: &str, column_names: &[&str]) {
