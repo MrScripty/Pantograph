@@ -167,12 +167,13 @@ impl RuntimeHostExecutionInputValue {
 #[must_use]
 pub struct ValidatedRuntimeHostExecutionRequest(RuntimeHostExecutionRequest);
 
-impl ValidatedRuntimeHostExecutionRequest {
-    #[must_use]
-    pub fn as_ref(&self) -> &RuntimeHostExecutionRequest {
+impl AsRef<RuntimeHostExecutionRequest> for ValidatedRuntimeHostExecutionRequest {
+    fn as_ref(&self) -> &RuntimeHostExecutionRequest {
         &self.0
     }
+}
 
+impl ValidatedRuntimeHostExecutionRequest {
     #[must_use]
     pub fn into_inner(self) -> RuntimeHostExecutionRequest {
         self.0
@@ -388,12 +389,13 @@ impl RuntimeHostExecutionResponse {
 #[must_use]
 pub struct ValidatedRuntimeHostExecutionResponse(RuntimeHostExecutionResponse);
 
-impl ValidatedRuntimeHostExecutionResponse {
-    #[must_use]
-    pub fn as_ref(&self) -> &RuntimeHostExecutionResponse {
+impl AsRef<RuntimeHostExecutionResponse> for ValidatedRuntimeHostExecutionResponse {
+    fn as_ref(&self) -> &RuntimeHostExecutionResponse {
         &self.0
     }
+}
 
+impl ValidatedRuntimeHostExecutionResponse {
     #[must_use]
     pub fn into_inner(self) -> RuntimeHostExecutionResponse {
         self.0
@@ -724,12 +726,13 @@ pub enum RuntimeHostBatchMemberReservationDisposition {
 #[must_use]
 pub struct ValidatedRuntimeHostBatchExecutionRequest(RuntimeHostBatchExecutionRequest);
 
-impl ValidatedRuntimeHostBatchExecutionRequest {
-    #[must_use]
-    pub fn as_ref(&self) -> &RuntimeHostBatchExecutionRequest {
+impl AsRef<RuntimeHostBatchExecutionRequest> for ValidatedRuntimeHostBatchExecutionRequest {
+    fn as_ref(&self) -> &RuntimeHostBatchExecutionRequest {
         &self.0
     }
+}
 
+impl ValidatedRuntimeHostBatchExecutionRequest {
     #[must_use]
     pub fn into_inner(self) -> RuntimeHostBatchExecutionRequest {
         self.0
@@ -749,12 +752,13 @@ impl TryFrom<RuntimeHostBatchExecutionRequest> for ValidatedRuntimeHostBatchExec
 #[must_use]
 pub struct ValidatedRuntimeHostBatchExecutionResponse(RuntimeHostBatchExecutionResponse);
 
-impl ValidatedRuntimeHostBatchExecutionResponse {
-    #[must_use]
-    pub fn as_ref(&self) -> &RuntimeHostBatchExecutionResponse {
+impl AsRef<RuntimeHostBatchExecutionResponse> for ValidatedRuntimeHostBatchExecutionResponse {
+    fn as_ref(&self) -> &RuntimeHostBatchExecutionResponse {
         &self.0
     }
+}
 
+impl ValidatedRuntimeHostBatchExecutionResponse {
     #[must_use]
     pub fn into_inner(self) -> RuntimeHostBatchExecutionResponse {
         self.0
