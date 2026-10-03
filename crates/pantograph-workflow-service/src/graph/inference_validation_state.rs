@@ -1158,7 +1158,7 @@ pub(crate) enum DependencyEnvironmentActionIntentStateResolution {
     Blocked(DependencyEnvironmentActionIntentResult),
     RequestReady {
         intent: DependencyEnvironmentActionIntent,
-        environment_request: ValidatedDependencyEnvironmentRequest,
+        environment_request: Box<ValidatedDependencyEnvironmentRequest>,
     },
 }
 
@@ -1468,7 +1468,7 @@ impl CurrentInferenceValidationNodeRecord {
                     },
                 )?;
             return Ok(WorkflowSchedulerInferenceTaskProjection::Ready(
-                WorkflowSchedulerReadyInferenceTaskProjection {
+                Box::new(WorkflowSchedulerReadyInferenceTaskProjection {
                     node_id: pantograph_scheduler::SchedulerNodeId::parse(self.node_id.as_str())
                         .map_err(|error| {
                             CurrentInferenceSchedulerProjectionError::IncompleteNodeState {
@@ -1532,7 +1532,7 @@ impl CurrentInferenceValidationNodeRecord {
                             .dependency_override_fingerprint
                             .clone(),
                     },
-                },
+                }),
             ));
         }
 
@@ -1846,7 +1846,7 @@ fn request_ready_dependency_environment_action_resolution(
 ) -> DependencyEnvironmentActionIntentStateResolution {
     DependencyEnvironmentActionIntentStateResolution::RequestReady {
         intent,
-        environment_request,
+        environment_request: Box::new(environment_request),
     }
 }
 
@@ -1876,6 +1876,15 @@ mod tests {
     use pantograph_scheduler::SchedulerEstimateHintKind;
 
     use super::*;
+
+    #[test]
+    fn action_resolution_keeps_validated_environment_request_indirect() {
+        assert!(std::mem::size_of::<DependencyEnvironmentActionIntentStateResolution>() <= 384);
+        assert!(
+            std::mem::size_of::<DependencyEnvironmentActionIntentStateResolution>()
+                < std::mem::size_of::<ValidatedDependencyEnvironmentRequest>()
+        );
+    }
 
     #[tokio::test]
     async fn action_intent_state_rejects_stale_graph_revision() {
@@ -2284,6 +2293,36 @@ mod tests {
             DependencyEnvironmentActionIntentStatus::RequestReady
         );
         assert!(result.diagnostics.is_empty());
+
+        let resolution = store
+            .resolve_dependency_environment_action_request(state_request_with_validation_session(
+                "graph-session-1",
+                "aaaaaaaaaaaaaaaa",
+                "aaaaaaaaaaaaaaaa",
+                "validation.session.1",
+                "dependency-node-1",
+                true,
+            ))
+            .await;
+        let DependencyEnvironmentActionIntentStateResolution::RequestReady {
+            intent,
+            environment_request,
+        } = resolution
+        else {
+            panic!("current proof must retain a ready validated request");
+        };
+        let raw = environment_request.as_request();
+        assert_eq!(raw.action, intent.action);
+        assert_eq!(raw.planning_request.task_id.as_str(), "image_generation");
+        assert_eq!(
+            raw.identity_key,
+            DependencyPlanningIdentityKey::from_planning_request(&raw.planning_request).unwrap()
+        );
+        raw.validate()
+            .expect("retained environment request validates");
+        let encoded = serde_json::to_value(raw).unwrap();
+        let decoded = ValidatedDependencyEnvironmentRequest::try_from(encoded.clone()).unwrap();
+        assert_eq!(serde_json::to_value(decoded.as_request()).unwrap(), encoded);
     }
 
     #[tokio::test]

@@ -48,8 +48,10 @@ use super::runtime_dispatch_assignment::{
     WorkflowRuntimeDispatchAssignmentRepository,
 };
 use super::session_io_artifacts::workflow_io_artifact_metadata;
-use super::session_scheduler_runner::WorkflowSchedulerSessionRunner;
-use super::task_execution_owner::WorkflowTaskExecutionOwner;
+use super::session_scheduler_runner::{
+    WorkflowSchedulerRunContext, WorkflowSchedulerSessionRunner,
+};
+use super::task_execution_owner::{WorkflowNonRuntimeExecutionInput, WorkflowTaskExecutionOwner};
 use super::task_execution_runtime::WorkflowTaskExecutionRuntimeOwner;
 use super::task_execution_worker::{
     WorkflowTaskExecutionWorkerOutcome, WorkflowTaskExecutionWorkerRuntimeBranchCommand,
@@ -415,12 +417,14 @@ impl WorkflowService {
             return WorkflowTaskExecutionOwner::run_non_runtime_to_completion(
                 self,
                 host,
-                &session,
-                run_snapshot.as_ref(),
-                &session_id,
-                &workflow_run_id,
-                &queued_run,
-                &scheduler_task_run_summary,
+                WorkflowNonRuntimeExecutionInput {
+                    session: &session,
+                    run_snapshot: run_snapshot.as_ref(),
+                    session_id: &session_id,
+                    workflow_run_id: &workflow_run_id,
+                    queued_run: &queued_run,
+                    summary: &scheduler_task_run_summary,
+                },
             )
             .await;
         }
@@ -565,12 +569,14 @@ impl WorkflowService {
             Ok(Some(timeout_ms)) => {
                 let run_future = runner.resume_runtime_dependency_readiness(
                     host,
-                    &session_id,
-                    &workflow_run_id,
-                    &active_run.workflow_id,
-                    active_run.output_targets.as_deref(),
-                    &scheduler_task_run_summary,
-                    started_at,
+                    WorkflowSchedulerRunContext {
+                        session_id: &session_id,
+                        workflow_run_id: &workflow_run_id,
+                        workflow_id: &active_run.workflow_id,
+                        output_targets: active_run.output_targets.as_deref(),
+                        summary: &scheduler_task_run_summary,
+                        started_at,
+                    },
                     attempt_start_transition,
                 );
                 match tokio::time::timeout(Duration::from_millis(timeout_ms), run_future).await {
@@ -585,12 +591,14 @@ impl WorkflowService {
                 runner
                     .resume_runtime_dependency_readiness(
                         host,
-                        &session_id,
-                        &workflow_run_id,
-                        &active_run.workflow_id,
-                        active_run.output_targets.as_deref(),
-                        &scheduler_task_run_summary,
-                        started_at,
+                        WorkflowSchedulerRunContext {
+                            session_id: &session_id,
+                            workflow_run_id: &workflow_run_id,
+                            workflow_id: &active_run.workflow_id,
+                            output_targets: active_run.output_targets.as_deref(),
+                            summary: &scheduler_task_run_summary,
+                            started_at,
+                        },
                         attempt_start_transition,
                     )
                     .await

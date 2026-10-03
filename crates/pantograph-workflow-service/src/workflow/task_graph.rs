@@ -64,7 +64,7 @@ impl WorkflowSchedulerInferenceTaskProjections {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WorkflowSchedulerInferenceTaskProjection {
-    Ready(WorkflowSchedulerReadyInferenceTaskProjection),
+    Ready(Box<WorkflowSchedulerReadyInferenceTaskProjection>),
     Blocked(WorkflowSchedulerBlockedInferenceTaskProjection),
 }
 
@@ -259,6 +259,14 @@ fn dependency_task_ids(bindings: &[WorkflowSchedulerTaskInputBinding]) -> Vec<Sc
         .collect()
 }
 
+type SchedulableIntentProjection = (
+    Option<SchedulableTaskIntent>,
+    Option<WorkflowSchedulerTaskIntentTemplate>,
+    Option<InferenceInterfaceFingerprint>,
+    Option<WorkflowRuntimeSourceContext>,
+    Vec<WorkflowSchedulerTaskProjectionDiagnostic>,
+);
+
 fn schedulable_intent_for_node(
     workflow_id: &SchedulerWorkflowId,
     workflow_run_id: &SchedulerWorkflowRunId,
@@ -266,13 +274,7 @@ fn schedulable_intent_for_node(
     task_id: &SchedulerTaskId,
     execution_class: WorkflowSchedulerTaskExecutionClass,
     inference_task_projection: Option<&WorkflowSchedulerInferenceTaskProjection>,
-) -> (
-    Option<SchedulableTaskIntent>,
-    Option<WorkflowSchedulerTaskIntentTemplate>,
-    Option<InferenceInterfaceFingerprint>,
-    Option<WorkflowRuntimeSourceContext>,
-    Vec<WorkflowSchedulerTaskProjectionDiagnostic>,
-) {
+) -> SchedulableIntentProjection {
     if execution_class != WorkflowSchedulerTaskExecutionClass::RuntimeInference {
         return (None, None, None, None, Vec::new());
     }
