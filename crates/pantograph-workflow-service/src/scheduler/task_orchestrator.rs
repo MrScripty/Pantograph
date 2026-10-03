@@ -631,7 +631,7 @@ impl WorkflowSchedulerTaskOrchestrator {
                 .await?;
             return Err(
                 WorkflowSchedulerTaskOrchestratorError::RuntimeDispatchSelectionNoSelection(
-                    selection,
+                    Box::new(selection),
                 ),
             );
         }
@@ -2115,7 +2115,9 @@ fn dispatch_selected_handoff_from_selection(
 ) -> Result<SchedulerRuntimeHandoff, WorkflowSchedulerTaskOrchestratorError> {
     if selection.state != SchedulerDispatchSelectionState::Selected {
         return Err(
-            WorkflowSchedulerTaskOrchestratorError::RuntimeDispatchSelectionNoSelection(selection),
+            WorkflowSchedulerTaskOrchestratorError::RuntimeDispatchSelectionNoSelection(
+                Box::new(selection),
+            ),
         );
     }
     let Some(dispatch_decision) = selection.dispatch_decision else {
@@ -2812,7 +2814,7 @@ pub(crate) enum WorkflowSchedulerTaskOrchestratorError {
     #[error("runtime-host task input mapping failed")]
     RuntimeHostTaskInputMapping(WorkflowRuntimeHostTaskInputMappingError),
     #[error("scheduler dispatch selection did not select a runtime task")]
-    RuntimeDispatchSelectionNoSelection(SchedulerDispatchSelectionDecision),
+    RuntimeDispatchSelectionNoSelection(Box<SchedulerDispatchSelectionDecision>),
     #[error("reservation lifecycle contract validation failed: {0}")]
     ReservationLifecycleContract(ReservationLifecycleContractError),
     #[error("reservation lifecycle port failed: {0}")]
