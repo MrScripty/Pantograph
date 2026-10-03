@@ -194,6 +194,8 @@ jobs:
         run: cargo test -p pantograph-runtime-host-contracts
       - name: Check runtime-host standard-trait accessor lint
         run: cargo clippy -p pantograph-runtime-host-contracts --all-targets -- -D clippy::should_implement_trait
+      - name: Run diagnostics ledger contract tests
+        run: cargo test -p pantograph-diagnostics-ledger
       - name: Run media conversion contract tests
         run: cargo test -p pantograph-media-conversion
 

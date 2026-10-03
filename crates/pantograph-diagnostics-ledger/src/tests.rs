@@ -2222,6 +2222,10 @@ fn projection_state_persists_failure_health_and_success_clears_it() {
         })
         .expect("failed projection state stores");
 
+    assert_eq!(failed.projection_name, "scheduler_timeline");
+    assert_eq!(failed.projection_version, 1);
+    assert_eq!(failed.last_applied_event_seq, 10);
+    assert_eq!(failed.rebuilt_at_ms, None);
     assert_eq!(failed.status, ProjectionStatus::Failed);
     assert_eq!(
         failed.last_error.as_deref(),
@@ -2229,6 +2233,11 @@ fn projection_state_persists_failure_health_and_success_clears_it() {
     );
     assert_eq!(failed.last_error_at_ms, Some(20));
     assert_eq!(failed.last_failed_event_seq, Some(11));
+
+    assert_eq!(
+        ledger.projection_state("scheduler_timeline").unwrap(),
+        Some(failed.clone())
+    );
 
     let recovered = ledger
         .upsert_projection_state(ProjectionStateUpdate {
