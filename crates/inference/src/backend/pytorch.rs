@@ -115,8 +115,9 @@ pub struct PyTorchTextGenerationRequest {
 
 /// PyTorch backend using in-process PyO3 embedded Python.
 ///
-/// Loads models via HuggingFace transformers with `trust_remote_code=True`,
-/// supporting standard models, dLLM architectures, and Sherry quantised models.
+/// Loads models via HuggingFace transformers using explicit model-load security
+/// policy; custom remote code is denied by default. Supports standard models,
+/// dLLM architectures, and Sherry quantised models.
 pub struct PyTorchBackend {
     /// Whether the backend has been initialised and is ready
     ready: bool,
