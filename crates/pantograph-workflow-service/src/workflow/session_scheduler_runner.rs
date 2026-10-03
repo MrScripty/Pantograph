@@ -231,6 +231,16 @@ impl WorkflowPreDispatchPreparationOutcome {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub(super) struct WorkflowSchedulerRunContext<'a> {
+    pub(super) session_id: &'a str,
+    pub(super) workflow_run_id: &'a str,
+    pub(super) workflow_id: &'a str,
+    pub(super) output_targets: Option<&'a [WorkflowOutputTarget]>,
+    pub(super) summary: &'a WorkflowSchedulerTaskRunSummary,
+    pub(super) started_at: Instant,
+}
+
 struct ReadyRuntimeDispatchContext {
     task: WorkflowSchedulerTask,
     ready_record: SchedulerTaskStateRecord,
@@ -244,14 +254,17 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
     pub(super) async fn run_non_runtime_only<H: WorkflowHost + ?Sized>(
         &self,
         host: &H,
-        session_id: &str,
-        workflow_run_id: &str,
-        workflow_id: &str,
         inputs: &[WorkflowPortBinding],
-        output_targets: Option<&[WorkflowOutputTarget]>,
-        summary: &WorkflowSchedulerTaskRunSummary,
-        started_at: Instant,
+        context: WorkflowSchedulerRunContext<'_>,
     ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
+        let WorkflowSchedulerRunContext {
+            session_id,
+            workflow_run_id,
+            workflow_id,
+            output_targets,
+            summary,
+            started_at,
+        } = context;
         if !summary.is_non_runtime_only() || summary.has_runtime_inference() {
             return Err(WorkflowServiceError::Internal(
                 "scheduler session runner received a runtime-containing run".to_string(),
@@ -278,31 +291,22 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
     pub(super) async fn resume_runtime_dependency_readiness(
         &self,
         host: &(impl WorkflowHost + ?Sized),
-        session_id: &str,
-        workflow_run_id: &str,
-        workflow_id: &str,
-        output_targets: Option<&[WorkflowOutputTarget]>,
-        summary: &WorkflowSchedulerTaskRunSummary,
-        started_at: Instant,
+        context: WorkflowSchedulerRunContext<'_>,
         attempt_start_transition: SchedulerTaskAttemptLifecycleTransition,
     ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
+        let WorkflowSchedulerRunContext {
+            workflow_run_id,
+            summary,
+            ..
+        } = context;
         if !summary.has_runtime_inference() {
             return Err(WorkflowServiceError::InvalidRequest(format!(
                 "workflow run '{}' is not a runtime inference run",
                 workflow_run_id
             )));
         }
-        self.continue_runtime_dependency_readiness(
-            host,
-            session_id,
-            workflow_run_id,
-            workflow_id,
-            output_targets,
-            summary,
-            started_at,
-            attempt_start_transition,
-        )
-        .await
+        self.continue_runtime_dependency_readiness(host, context, attempt_start_transition)
+            .await
     }
 
     pub(super) async fn resume_progress_loop(
@@ -318,14 +322,14 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
     async fn continue_runtime_dependency_readiness(
         &self,
         host: &(impl WorkflowHost + ?Sized),
-        session_id: &str,
-        workflow_run_id: &str,
-        workflow_id: &str,
-        output_targets: Option<&[WorkflowOutputTarget]>,
-        summary: &WorkflowSchedulerTaskRunSummary,
-        started_at: Instant,
+        context: WorkflowSchedulerRunContext<'_>,
         attempt_start_transition: SchedulerTaskAttemptLifecycleTransition,
     ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
+        let WorkflowSchedulerRunContext {
+            session_id,
+            workflow_run_id,
+            ..
+        } = context;
         let preparation = WorkflowPreDispatchPreparationBoundary::new(self.service)
             .prepare_runtime_dispatch(session_id, workflow_run_id)
             .await?;
@@ -341,12 +345,7 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
         }
         self.run_runtime_dispatch_ready_tasks(
             host,
-            session_id,
-            workflow_run_id,
-            workflow_id,
-            output_targets,
-            summary,
-            started_at,
+            context,
             preparation.admitted_runtime_readiness(),
             attempt_start_transition,
         )
@@ -804,15 +803,18 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
     async fn run_runtime_dispatch_ready_tasks(
         &self,
         host: &(impl WorkflowHost + ?Sized),
-        session_id: &str,
-        workflow_run_id: &str,
-        workflow_id: &str,
-        output_targets: Option<&[WorkflowOutputTarget]>,
-        summary: &WorkflowSchedulerTaskRunSummary,
-        started_at: Instant,
+        context: WorkflowSchedulerRunContext<'_>,
         admitted_runtime_readiness: &[AdmittedRuntimeTaskReadiness],
         attempt_start_transition: SchedulerTaskAttemptLifecycleTransition,
     ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
+        let WorkflowSchedulerRunContext {
+            session_id,
+            workflow_run_id,
+            workflow_id,
+            output_targets,
+            summary,
+            started_at,
+        } = context;
         let runtime_task_ids =
             runtime_task_ids_in_state(self.service, session_id, workflow_run_id, |kind| {
                 kind == SchedulerTaskStateKind::Ready
