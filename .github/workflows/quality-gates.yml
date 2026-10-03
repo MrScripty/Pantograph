@@ -251,6 +251,8 @@ jobs:
       - name: Run workflow-nodes tests
         run: cargo test -p workflow-nodes --lib
 
+      - name: Run runtime registry contract tests
+        run: cargo test -p pantograph-runtime-registry
       - name: Run task summary contract tests
         run: |
           cargo test -p pantograph-workflow-service --lib workflow::task_run_summary::tests:: -- --list > "$RUNNER_TEMP/task-summary-tests.list"
