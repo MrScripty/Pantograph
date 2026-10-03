@@ -156,6 +156,9 @@ jobs:
       - name: Check workspace with all features
         run: cargo check --workspace --all-features
 
+      - name: Verify Tauri injected-state IPC contracts
+        run: bash scripts/check-tauri-command-state-tests.sh
+
   rust-tests:
     name: Rust focused tests
     runs-on: ubuntu-latest
