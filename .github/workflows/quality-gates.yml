@@ -456,7 +456,7 @@ jobs:
       - name: Run warning-deny clippy audit
         id: run-clippy-audit
         continue-on-error: true
-        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+        run: cargo clippy --workspace --all-targets --all-features --keep-going -- -D warnings
 
       - name: Record clippy audit result
         id: report-clippy-audit
