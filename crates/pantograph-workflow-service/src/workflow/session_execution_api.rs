@@ -1351,7 +1351,7 @@ impl WorkflowService {
                     retention_class: metadata.retention_class,
                     payload_ref: metadata.payload_ref.clone(),
                     payload: DiagnosticEventPayload::IoArtifactObserved(
-                        IoArtifactObservedPayload {
+                        Box::new(IoArtifactObservedPayload {
                             artifact_fact_id: Some(metadata.artifact_fact_id),
                             payload_artifact_id: Some(metadata.payload_artifact_id),
                             artifact_id: metadata.artifact_id,
@@ -1388,7 +1388,7 @@ impl WorkflowService {
                             read_handle: metadata.read_handle,
                             stream_handle: metadata.stream_handle,
                             format: metadata.format,
-                        },
+                        }),
                     ),
                 },
             )

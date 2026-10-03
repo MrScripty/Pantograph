@@ -55,3 +55,7 @@ The seven validated runtime-host contract wrappers now implement standard `AsRef
 ### Diagnostic event inference payload construction
 
 `DiagnosticEventPayload::InferenceExecutionDiagnosticObserved` now stores `Box<InferenceExecutionDiagnosticObservedPayload>`. Rust callers constructing this public variant must wrap the existing raw payload in `Box::new`; owned pattern bindings now contain a box. Tagged serialized JSON, raw payload fields and validation remain unchanged. This adds one allocation for this event variant; no measured performance improvement is claimed. The crate remains `publish = false`.
+
+### Diagnostic event artifact payload construction
+
+`DiagnosticEventPayload::IoArtifactObserved` now stores `Box<IoArtifactObservedPayload>`. Rust callers constructing the public variant use `Box::new`, and owned pattern bindings contain a box. Raw DTO fields, validation and tagged JSON stay unchanged; this adds one allocation for this variant without a measured performance claim. The crate remains `publish = false`.

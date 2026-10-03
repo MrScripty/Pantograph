@@ -2811,7 +2811,7 @@ fn sample_io_artifact_event(
         privacy_class: DiagnosticEventPrivacyClass::SensitiveReference,
         retention_class: DiagnosticEventRetentionClass::PayloadReference,
         payload_ref: Some(format!("artifact://{artifact_id}")),
-        payload: DiagnosticEventPayload::IoArtifactObserved(IoArtifactObservedPayload {
+        payload: DiagnosticEventPayload::IoArtifactObserved(Box::new(IoArtifactObservedPayload {
             artifact_fact_id: None,
             payload_artifact_id: None,
             artifact_id: artifact_id.to_string(),
@@ -2836,7 +2836,7 @@ fn sample_io_artifact_event(
             read_handle: None,
             stream_handle: None,
             format: None,
-        }),
+        })),
     }
 }
 

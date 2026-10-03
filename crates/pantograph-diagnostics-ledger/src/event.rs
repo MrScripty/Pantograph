@@ -266,7 +266,7 @@ pub enum DiagnosticEventPayload {
     RunStarted(RunStartedPayload),
     RunTerminal(RunTerminalPayload),
     RunSnapshotAccepted(RunSnapshotAcceptedPayload),
-    IoArtifactObserved(IoArtifactObservedPayload),
+    IoArtifactObserved(Box<IoArtifactObservedPayload>),
     RetentionArtifactStateChanged(RetentionArtifactStateChangedPayload),
     LibraryAssetAccessed(LibraryAssetAccessedPayload),
     RetentionPolicyChanged(RetentionPolicyChangedPayload),
