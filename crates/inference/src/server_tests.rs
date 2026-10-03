@@ -1,4 +1,5 @@
 use super::{parse_sidecar_pid, LlamaServer, ServerMode};
+use crate::backend::LlamaCppRuntimeSettings;
 use crate::config::DeviceConfig;
 use crate::device::DeviceBackend;
 use crate::llamacpp_sidecar_events::LlamaCppSidecarStartupError;
@@ -89,21 +90,13 @@ fn inference_runtime_matcher_requires_matching_port() {
     assert!(server.matches_inference_runtime(
         "/models/main.gguf",
         Some("/models/vision.mmproj"),
-        &device,
-        4096,
-        Some(8),
-        Some(512),
-        Some(128),
+        &inference_settings(&device, 4096, Some(8), Some(512), Some(128)),
         Some(11434),
     ));
     assert!(!server.matches_inference_runtime(
         "/models/other.gguf",
         Some("/models/vision.mmproj"),
-        &device,
-        4096,
-        Some(8),
-        Some(512),
-        Some(128),
+        &inference_settings(&device, 4096, Some(8), Some(512), Some(128)),
         Some(11434),
     ));
     assert!(!server.matches_embedding_runtime("/models/main.gguf", &device, Some(11434),));
@@ -111,31 +104,19 @@ fn inference_runtime_matcher_requires_matching_port() {
     assert!(!server.matches_inference_runtime(
         "/models/main.gguf",
         Some("/models/vision.mmproj"),
-        &device,
-        4096,
-        Some(8),
-        Some(512),
-        Some(128),
+        &inference_settings(&device, 4096, Some(8), Some(512), Some(128)),
         Some(18080),
     ));
     assert!(!server.matches_inference_runtime(
         "/models/main.gguf",
         Some("/models/vision.mmproj"),
-        &device,
-        8192,
-        Some(8),
-        Some(512),
-        Some(128),
+        &inference_settings(&device, 8192, Some(8), Some(512), Some(128)),
         Some(11434),
     ));
     assert!(!server.matches_inference_runtime(
         "/models/main.gguf",
         Some("/models/vision.mmproj"),
-        &device,
-        4096,
-        Some(16),
-        Some(512),
-        Some(128),
+        &inference_settings(&device, 4096, Some(16), Some(512), Some(128)),
         Some(11434),
     ));
 }
@@ -356,14 +337,16 @@ async fn start_sidecar_inference_cleans_process_and_pid_file_on_start_error() {
             }),
             "/models/main.gguf",
             None,
-            &DeviceConfig {
-                device: DeviceBackend::Auto,
-                gpu_layers: -1,
-            },
-            4096,
-            None,
-            None,
-            None,
+            &inference_settings(
+                &DeviceConfig {
+                    device: DeviceBackend::Auto,
+                    gpu_layers: -1,
+                },
+                4096,
+                None,
+                None,
+                None,
+            ),
             Some(18080),
         )
         .await;
@@ -394,14 +377,16 @@ async fn start_sidecar_inference_applies_runtime_settings_to_llama_server_args()
             }),
             "/models/main.gguf",
             Some("/models/mmproj.gguf"),
-            &DeviceConfig {
-                device: DeviceBackend::Vulkan(0),
-                gpu_layers: 12,
-            },
-            16384,
-            Some(8),
-            Some(512),
-            Some(128),
+            &inference_settings(
+                &DeviceConfig {
+                    device: DeviceBackend::Vulkan(0),
+                    gpu_layers: 12,
+                },
+                16384,
+                Some(8),
+                Some(512),
+                Some(128),
+            ),
             Some(18080),
         )
         .await;
@@ -448,22 +433,14 @@ fn runtime_matchers_preserve_path_component_comparison() {
     assert!(server.matches_inference_runtime(
         "models/./main.gguf",
         None,
-        &device,
-        4096,
-        None,
-        None,
-        None,
-        Some(11434)
+        &inference_settings(&device, 4096, None, None, None),
+        Some(11434),
     ));
     assert!(!server.matches_inference_runtime(
         "models/other.gguf",
         None,
-        &device,
-        4096,
-        None,
-        None,
-        None,
-        Some(11434)
+        &inference_settings(&device, 4096, None, None, None),
+        Some(11434),
     ));
     server.set_test_runtime_state(
         ServerMode::SidecarEmbedding {
@@ -485,4 +462,21 @@ fn runtime_matchers_preserve_path_component_comparison() {
     );
     assert!(server.matches_reranking_runtime("models/./main.gguf", &device, Some(11434)));
     assert!(!server.matches_reranking_runtime("models/other.gguf", &device, Some(11434)));
+}
+
+fn inference_settings(
+    device: &DeviceConfig,
+    context_size: u32,
+    cpu_threads: Option<u32>,
+    batch_size: Option<u32>,
+    ubatch_size: Option<u32>,
+) -> LlamaCppRuntimeSettings {
+    LlamaCppRuntimeSettings {
+        device: device.device.clone(),
+        gpu_layers: device.gpu_layers,
+        context_size,
+        cpu_threads,
+        batch_size,
+        ubatch_size,
+    }
 }

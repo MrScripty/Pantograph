@@ -12,6 +12,7 @@ use std::sync::Arc;
 use sysinfo::{Pid, ProcessesToUpdate, Signal, System};
 use tokio::sync::RwLock;
 
+use crate::backend::LlamaCppRuntimeSettings;
 use crate::config::DeviceConfig;
 use crate::constants::{hosts, ports, timeouts};
 use crate::llamacpp_sidecar_events::{
@@ -54,17 +55,32 @@ fn parse_sidecar_pid(raw: &str) -> Option<i32> {
         .map(|record| record.pid)
 }
 
-fn active_runtime_descriptor(
+struct RuntimeDescriptorInput<'a> {
     mode: LlamaCppRuntimeMode,
     port: u16,
-    model_path: &str,
-    mmproj_path: Option<&str>,
-    device: &DeviceConfig,
+    model_path: &'a str,
+    mmproj_path: Option<&'a str>,
+    device: &'a DeviceConfig,
     context_size: Option<u32>,
     cpu_threads: Option<u32>,
     batch_size: Option<u32>,
     ubatch_size: Option<u32>,
+}
+
+fn active_runtime_descriptor(
+    input: RuntimeDescriptorInput<'_>,
 ) -> Option<LlamaCppActiveRuntimeDescriptor> {
+    let RuntimeDescriptorInput {
+        mode,
+        port,
+        model_path,
+        mmproj_path,
+        device,
+        context_size,
+        cpu_threads,
+        batch_size,
+        ubatch_size,
+    } = input;
     let selected_device = selected_contract_device(device)?;
     let (selected_device_class, selected_device_id) = selected_device
         .map(|(device_class, device_id)| (Some(device_class), Some(device_id)))
@@ -250,13 +266,14 @@ impl LlamaServer {
         spawner: Arc<dyn ProcessSpawner>,
         model_path: &str,
         mmproj_path: Option<&str>,
-        device: &DeviceConfig,
-        context_size: u32,
-        cpu_threads: Option<u32>,
-        batch_size: Option<u32>,
-        ubatch_size: Option<u32>,
+        settings: &LlamaCppRuntimeSettings,
         port_override: Option<u16>,
     ) -> Result<(), LlamaCppSidecarStartupError> {
+        let device = &settings.device_config();
+        let context_size = settings.context_size;
+        let cpu_threads = settings.cpu_threads;
+        let batch_size = settings.batch_size;
+        let ubatch_size = settings.ubatch_size;
         // Stop any existing connection
         self.stop();
 
@@ -636,13 +653,14 @@ impl LlamaServer {
         &self,
         model_path: &str,
         mmproj_path: Option<&str>,
-        device: &DeviceConfig,
-        context_size: u32,
-        cpu_threads: Option<u32>,
-        batch_size: Option<u32>,
-        ubatch_size: Option<u32>,
+        settings: &LlamaCppRuntimeSettings,
         port_override: Option<u16>,
     ) -> bool {
+        let device = &settings.device_config();
+        let context_size = settings.context_size;
+        let cpu_threads = settings.cpu_threads;
+        let batch_size = settings.batch_size;
+        let ubatch_size = settings.ubatch_size;
         let expected_port = port_override.unwrap_or(ports::SERVER);
         let Some(active) = self.active_runtime_descriptor() else {
             return false;
@@ -719,47 +737,47 @@ impl LlamaServer {
                 cpu_threads,
                 batch_size,
                 ubatch_size,
-            } => active_runtime_descriptor(
-                LlamaCppRuntimeMode::Inference,
-                *port,
+            } => active_runtime_descriptor(RuntimeDescriptorInput {
+                mode: LlamaCppRuntimeMode::Inference,
+                port: *port,
                 model_path,
-                mmproj_path.as_deref(),
+                mmproj_path: mmproj_path.as_deref(),
                 device,
-                Some(*context_size),
-                *cpu_threads,
-                *batch_size,
-                *ubatch_size,
-            ),
+                context_size: Some(*context_size),
+                cpu_threads: *cpu_threads,
+                batch_size: *batch_size,
+                ubatch_size: *ubatch_size,
+            }),
             ServerMode::SidecarEmbedding {
                 port,
                 model_path,
                 device,
-            } => active_runtime_descriptor(
-                LlamaCppRuntimeMode::Embedding,
-                *port,
+            } => active_runtime_descriptor(RuntimeDescriptorInput {
+                mode: LlamaCppRuntimeMode::Embedding,
+                port: *port,
                 model_path,
-                None,
+                mmproj_path: None,
                 device,
-                None,
-                None,
-                None,
-                None,
-            ),
+                context_size: None,
+                cpu_threads: None,
+                batch_size: None,
+                ubatch_size: None,
+            }),
             ServerMode::SidecarReranking {
                 port,
                 model_path,
                 device,
-            } => active_runtime_descriptor(
-                LlamaCppRuntimeMode::Reranking,
-                *port,
+            } => active_runtime_descriptor(RuntimeDescriptorInput {
+                mode: LlamaCppRuntimeMode::Reranking,
+                port: *port,
                 model_path,
-                None,
+                mmproj_path: None,
                 device,
-                None,
-                None,
-                None,
-                None,
-            ),
+                context_size: None,
+                cpu_threads: None,
+                batch_size: None,
+                ubatch_size: None,
+            }),
             ServerMode::None | ServerMode::External { .. } => None,
         }
     }

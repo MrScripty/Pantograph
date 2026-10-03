@@ -225,6 +225,14 @@ jobs:
           cargo test -p inference --features backend-pytorch --lib pytorch_named_text_request
           cargo test -p inference --features backend-pytorch --lib test_pytorch_generate_text_
 
+      - name: Run llama server startup and reuse contract tests
+        run: |
+          for test_filter in server::tests backend::llamacpp::tests; do
+            cargo test -p inference --features backend-llamacpp --lib "$test_filter" -- --list > "$RUNNER_TEMP/llama-settings-tests.list"
+            python3 -c 'import pathlib, sys; prefix = sys.argv[2] + "::"; names = [line for line in pathlib.Path(sys.argv[1]).read_text().splitlines() if line.startswith(prefix) and line.endswith(": test")]; print(prefix, "tests discovered:", len(names)); sys.exit(0 if names else 1)' "$RUNNER_TEMP/llama-settings-tests.list" "$test_filter"
+            cargo test -p inference --features backend-llamacpp --lib "$test_filter"
+          done
+
       - name: Run node-engine tests
         run: cargo test -p node-engine --lib
 
