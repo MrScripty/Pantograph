@@ -850,6 +850,12 @@ mod tests {
             .await
             .expect("refresh validation summary");
 
+        assert!(
+            validation.summary.diagnostics.is_empty(),
+            "validation diagnostics: {:?}",
+            validation.summary.diagnostics
+        );
+        assert_eq!(validation.node_projections.len(), 1);
         let summary = validation
             .summary
             .summary
@@ -946,6 +952,21 @@ mod tests {
             )
             .await
             .expect("refresh validation summary");
+        assert!(
+            validation.summary.diagnostics.is_empty(),
+            "validation diagnostics: {:?}",
+            validation.summary.diagnostics
+        );
+        assert_eq!(validation.node_projections.len(), 1);
+        assert_eq!(
+            validation
+                .summary
+                .summary
+                .as_ref()
+                .expect("current validation summary")
+                .status,
+            DraftGraphValidationStatus::Executable
+        );
         let validation_session_id = validation
             .summary
             .validation_session_id
@@ -1435,7 +1456,12 @@ mod tests {
                     position: Position { x: 200.0, y: 0.0 },
                     data: serde_json::json!({
                         "task_kind": "image_generation",
-                        "runtime": "pytorch"
+                        "runtime": "pytorch",
+                        "runtime_source_context": {
+                            "operation_type": "image-generation.txt2img",
+                            "context_shape_key": "txt2img.1024x1024.steps30",
+                            "cancellation_mode": "per-run-fanout"
+                        }
                     }),
                 },
             ],
