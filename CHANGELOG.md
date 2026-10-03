@@ -14,6 +14,9 @@ The format is based on Keep a Changelog.
   canonicalization records.
 
 ### Changed
+- Rust source API: `MediaConversionResult::try_new` now accepts one
+  `MediaConversionResultInput` with the same eight named fields instead of eight
+  positional arguments. Result fields and validation behavior are unchanged.
 - Rust source API: `SchedulerTaskExecutionIntent::Runtime.task_intent` is now boxed.
   Construct runtime variants with `SchedulerTaskExecutionIntent::runtime(intent)`;
   direct struct-variant callers must pass `Box::new(intent)`. Serialized JSON and
