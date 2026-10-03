@@ -12,7 +12,6 @@ use crate::error::SchedulerContractError;
 use crate::intent::SchedulableTaskIntent;
 use crate::resource_types::SchedulerResourceFitState;
 
-#[must_use]
 pub fn select_scheduler_dispatch(
     request: ValidatedSchedulerDispatchSelectionRequest,
 ) -> Result<ValidatedSchedulerDispatchSelectionDecision, SchedulerContractError> {
