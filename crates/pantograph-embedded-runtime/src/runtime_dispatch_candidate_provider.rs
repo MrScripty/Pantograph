@@ -70,7 +70,7 @@ const INCOMPATIBLE_RUNTIME_BACKEND_HINT: &str =
 const MISSING_RUNTIME_DISPATCH_EVIDENCE_HINT: &str =
     "embedded_runtime_dispatch_candidate_provider.missing_runtime_dispatch_evidence";
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub(crate) struct EmbeddedRuntimeDispatchCandidateProvider {
     source_snapshot: EmbeddedRuntimeDispatchCandidateSource,
     resource_facts_source: Option<RuntimeDispatchResourceFactsSource>,
@@ -78,22 +78,13 @@ pub(crate) struct EmbeddedRuntimeDispatchCandidateProvider {
 
 #[derive(Clone)]
 enum EmbeddedRuntimeDispatchCandidateSource {
-    Snapshot(EmbeddedRuntimeDispatchCandidateSourceSnapshot),
+    Snapshot(Box<EmbeddedRuntimeDispatchCandidateSourceSnapshot>),
     Store(EmbeddedRuntimeDispatchSourceFactSnapshotStore),
 }
 
 impl Default for EmbeddedRuntimeDispatchCandidateSource {
     fn default() -> Self {
-        Self::Snapshot(EmbeddedRuntimeDispatchCandidateSourceSnapshot::default())
-    }
-}
-
-impl Default for EmbeddedRuntimeDispatchCandidateProvider {
-    fn default() -> Self {
-        Self {
-            source_snapshot: EmbeddedRuntimeDispatchCandidateSource::default(),
-            resource_facts_source: None,
-        }
+        Self::Snapshot(Box::default())
     }
 }
 
@@ -122,7 +113,9 @@ impl EmbeddedRuntimeDispatchCandidateProvider {
         source_snapshot: EmbeddedRuntimeDispatchCandidateSourceSnapshot,
     ) -> Self {
         Self {
-            source_snapshot: EmbeddedRuntimeDispatchCandidateSource::Snapshot(source_snapshot),
+            source_snapshot: EmbeddedRuntimeDispatchCandidateSource::Snapshot(Box::new(
+                source_snapshot,
+            )),
             resource_facts_source: None,
         }
     }
@@ -181,7 +174,7 @@ impl EmbeddedRuntimeDispatchCandidateSource {
         model_ref: &PumasModelRef,
     ) -> EmbeddedRuntimeDispatchCandidateSourceSnapshot {
         match self {
-            Self::Snapshot(snapshot) => snapshot.clone(),
+            Self::Snapshot(snapshot) => snapshot.as_ref().clone(),
             Self::Store(store) => store.snapshot_for_dispatch(model_ref, current_time_ms()),
         }
     }
@@ -1012,6 +1005,54 @@ mod tests {
     };
 
     #[test]
+    fn private_source_indirections_preserve_raw_facts_and_snapshot_clone_isolation() {
+        let expected = source_snapshot(Vec::new(), Vec::new());
+        let expected_facts = pumas_package_facts(vec![inference::BackendHintLabel::Diffusers]);
+        let provider =
+            EmbeddedRuntimeDispatchCandidateProvider::with_source_snapshot(expected.clone());
+        let mut returned = provider
+            .source_snapshot
+            .snapshot_for_dispatch(&path_free_model_ref());
+        assert_eq!(returned, expected);
+        let Some(PumasDispatchPackageFactsBridgeOutcome::Projected { facts, diagnostics }) =
+            returned.pumas_package_facts.as_mut()
+        else {
+            panic!("snapshot must preserve projected package facts");
+        };
+        assert_eq!(facts.as_ref(), &expected_facts);
+        assert!(diagnostics.is_empty());
+        facts.model_ref.model_id = "changed-returned-copy".to_string();
+        returned.snapshot_version = 99;
+        assert_eq!(
+            provider
+                .source_snapshot
+                .snapshot_for_dispatch(&path_free_model_ref()),
+            expected
+        );
+        assert!(std::mem::size_of::<PumasDispatchPackageFactsBridgeOutcome>() <= 64);
+        assert!(std::mem::size_of::<EmbeddedRuntimeDispatchCandidateSource>() <= 64);
+    }
+
+    #[test]
+    fn default_provider_retains_empty_snapshot_and_fail_closed_diagnostics() {
+        let provider = EmbeddedRuntimeDispatchCandidateProvider::default();
+        assert!(provider.resource_facts_source.is_none());
+        let EmbeddedRuntimeDispatchCandidateSource::Snapshot(snapshot) = provider.source_snapshot
+        else {
+            panic!("default provider must retain snapshot mode");
+        };
+        assert_eq!(
+            *snapshot,
+            EmbeddedRuntimeDispatchCandidateSourceSnapshot::default()
+        );
+        let diagnostics = fail_closed_diagnostics(&snapshot, &path_free_model_ref());
+        assert_eq!(diagnostics.len(), 4);
+        assert!(diagnostics.iter().all(|diagnostic| diagnostic.code
+            == SchedulerDispatchSelectionDiagnosticCode::NoCandidates
+            && diagnostic.severity == SchedulerDispatchSelectionDiagnosticSeverity::Error));
+    }
+
+    #[test]
     fn fail_closed_provider_reports_missing_source_facts() {
         let diagnostics = fail_closed_diagnostics(
             &EmbeddedRuntimeDispatchCandidateSourceSnapshot::default(),
@@ -1235,7 +1276,9 @@ mod tests {
         let provider = EmbeddedRuntimeDispatchCandidateProvider::with_source_snapshot(
             EmbeddedRuntimeDispatchCandidateSourceSnapshot {
                 pumas_package_facts: Some(PumasDispatchPackageFactsBridgeOutcome::Projected {
-                    facts: pumas_package_facts(vec![inference::BackendHintLabel::Diffusers]),
+                    facts: Box::new(pumas_package_facts(vec![
+                        inference::BackendHintLabel::Diffusers,
+                    ])),
                     diagnostics: Vec::new(),
                 }),
                 runtime_capability_facts: Some(RuntimeDispatchCapabilityFactsOutcome::Projected {
@@ -1395,7 +1438,9 @@ mod tests {
         let provider = EmbeddedRuntimeDispatchCandidateProvider::with_source_snapshot(
             EmbeddedRuntimeDispatchCandidateSourceSnapshot {
                 pumas_package_facts: Some(PumasDispatchPackageFactsBridgeOutcome::Projected {
-                    facts: pumas_package_facts(vec![inference::BackendHintLabel::Diffusers]),
+                    facts: Box::new(pumas_package_facts(vec![
+                        inference::BackendHintLabel::Diffusers,
+                    ])),
                     diagnostics: Vec::new(),
                 }),
                 runtime_capability_facts: Some(RuntimeDispatchCapabilityFactsOutcome::Projected {
@@ -1536,7 +1581,9 @@ mod tests {
     ) -> EmbeddedRuntimeDispatchCandidateSourceSnapshot {
         EmbeddedRuntimeDispatchCandidateSourceSnapshot {
             pumas_package_facts: Some(PumasDispatchPackageFactsBridgeOutcome::Projected {
-                facts: pumas_package_facts(vec![inference::BackendHintLabel::Diffusers]),
+                facts: Box::new(pumas_package_facts(vec![
+                    inference::BackendHintLabel::Diffusers,
+                ])),
                 diagnostics: Vec::new(),
             }),
             runtime_capability_facts: Some(RuntimeDispatchCapabilityFactsOutcome::Projected {

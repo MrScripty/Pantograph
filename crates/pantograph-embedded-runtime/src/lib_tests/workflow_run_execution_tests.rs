@@ -34,9 +34,10 @@ use pantograph_inference_interface_contracts::{
 use pantograph_runtime_attribution::WorkflowVersionRecord;
 use pantograph_runtime_host_contracts::{
     ReservationLifecycleApplication, ReservationLifecycleApplicationState,
-    ReservationLifecycleEvent, ReservationLifecycleOutcome, ReservationLifecyclePort,
-    ReservationLifecyclePortError, RESERVATION_LIFECYCLE_CONTRACT_VERSION,
-    RUNTIME_SESSION_LOAD_PROOF_CONTRACT_VERSION,
+    ReservationLifecycleDiagnostic, ReservationLifecycleDiagnosticCode,
+    ReservationLifecycleDiagnosticSeverity, ReservationLifecycleEvent, ReservationLifecycleOutcome,
+    ReservationLifecyclePort, ReservationLifecyclePortError,
+    RESERVATION_LIFECYCLE_CONTRACT_VERSION, RUNTIME_SESSION_LOAD_PROOF_CONTRACT_VERSION,
 };
 use pantograph_scheduler::{
     SchedulerDispatchCandidateId, SchedulerEstimateHint, SchedulerEstimateHintKind,
@@ -239,16 +240,40 @@ async fn workflow_execution_session_dispatches_through_production_embedded_image
     assert_eq!(body.response.media_type, "image/png");
     assert_eq!(dependency_readiness_work_queue.len(), 1);
     assert_eq!(source_refresher.model_refs(), vec![MODEL_ID.to_string()]);
+    let lifecycle_events = reservation_lifecycle_port.events();
     assert_eq!(
-        reservation_lifecycle_port
-            .events()
+        lifecycle_events
             .iter()
             .map(|event| &event.outcome)
             .collect::<Vec<_>>(),
         vec![
             &ReservationLifecycleOutcome::DispatchStarted,
-            &ReservationLifecycleOutcome::RuntimeHostCompleted,
+            &ReservationLifecycleOutcome::RetryDeferred,
         ]
+    );
+    let deferred = &lifecycle_events[1];
+    assert_eq!(
+        deferred.reservation_lease_id,
+        lifecycle_events[0].reservation_lease_id
+    );
+    assert_eq!(
+        deferred.reservation_lease_id.as_str(),
+        "reservation.embedded_runtime_session_test.infer"
+    );
+    assert_eq!(
+        deferred.workflow_run_id,
+        lifecycle_events[0].workflow_run_id
+    );
+    assert_eq!(deferred.task_id, lifecycle_events[0].task_id);
+    assert_eq!(deferred.candidate_id, lifecycle_events[0].candidate_id);
+    assert_eq!(
+        deferred.diagnostics,
+        vec![ReservationLifecycleDiagnostic {
+            severity: ReservationLifecycleDiagnosticSeverity::Info,
+            code: ReservationLifecycleDiagnosticCode::RetryDeferred,
+            message: "embedded runtime-host image batch member completed".to_string(),
+            hint: None,
+        }]
     );
     assert_eq!(host.runtime_load_attempts.load(Ordering::SeqCst), 0);
     assert_eq!(host.run_attempts.load(Ordering::SeqCst), 0);
