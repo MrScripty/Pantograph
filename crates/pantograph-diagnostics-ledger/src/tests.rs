@@ -1433,6 +1433,48 @@ fn diagnostic_event_ledger_projects_backend_and_task_on_node_status() {
 }
 
 #[test]
+fn inference_diagnostic_payload_preserves_exact_tagged_wire_and_ledger_round_trip() {
+    let expected = serde_json::json!({
+        "payload_type": "inference_execution_diagnostic_observed",
+        "request_id": "req-wire",
+        "task_id": "text_generation",
+        "compatibility_issue_count": 0,
+        "option_support_counts": {
+            "honored": 0, "mapped": 0, "defaulted": 0, "ignored": 0,
+            "unsupported": 0, "rejected": 0, "conflict": 0,
+            "model_unavailable": 0, "backend_unavailable": 0,
+            "requires_model_support": 0, "requires_backend_support": 0
+        }
+    });
+    let payload: DiagnosticEventPayload = serde_json::from_value(expected.clone()).unwrap();
+    assert_eq!(serde_json::to_value(&payload).unwrap(), expected);
+    let mut event = sample_inference_execution_diagnostic_event();
+    event.payload = payload.clone();
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().unwrap();
+    ledger
+        .append_diagnostic_event(event)
+        .expect("valid inference payload appends");
+    let records = ledger.diagnostic_events_after(0, 10).unwrap();
+    assert_eq!(records.len(), 1);
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&records[0].payload_json).unwrap(),
+        expected
+    );
+    assert_eq!(
+        serde_json::from_str::<DiagnosticEventPayload>(&records[0].payload_json).unwrap(),
+        payload
+    );
+}
+
+#[test]
+fn diagnostic_event_payload_keeps_large_inference_record_indirect() {
+    assert!(
+        std::mem::size_of::<DiagnosticEventPayload>()
+            < std::mem::size_of::<InferenceExecutionDiagnosticObservedPayload>()
+    );
+}
+
+#[test]
 fn diagnostic_event_ledger_appends_inference_execution_diagnostic_summary() {
     let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
     let event = sample_inference_execution_diagnostic_event();
@@ -6404,7 +6446,7 @@ fn sample_inference_execution_diagnostic_event() -> DiagnosticEventAppendRequest
         retention_class: DiagnosticEventRetentionClass::AuditMetadata,
         payload_ref: None,
         payload: DiagnosticEventPayload::InferenceExecutionDiagnosticObserved(
-            InferenceExecutionDiagnosticObservedPayload {
+            Box::new(InferenceExecutionDiagnosticObservedPayload {
                 request_id: "req-a".to_string(),
                 task_id: "text_generation".to_string(),
                 lifecycle_phase: Some("task_validation".to_string()),
@@ -6470,7 +6512,7 @@ fn sample_inference_execution_diagnostic_event() -> DiagnosticEventAppendRequest
                         message: Some("not mapped by this backend boundary".to_string()),
                     },
                 ],
-            },
+            }),
         ),
     }
 }

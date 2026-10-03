@@ -3103,7 +3103,7 @@ mod tests {
             retention_class: DiagnosticEventRetentionClass::AuditMetadata,
             payload_ref: None,
             payload: DiagnosticEventPayload::InferenceExecutionDiagnosticObserved(
-                pantograph_diagnostics_ledger::InferenceExecutionDiagnosticObservedPayload {
+                Box::new(pantograph_diagnostics_ledger::InferenceExecutionDiagnosticObservedPayload {
                     request_id: "req-a".to_string(),
                     task_id: "image_generation".to_string(),
                     lifecycle_phase: Some("backend_execution".to_string()),
@@ -3138,7 +3138,7 @@ mod tests {
                     option_support_counts:
                         pantograph_diagnostics_ledger::InferenceOptionSupportCounts::default(),
                     option_diagnostics: Vec::new(),
-                },
+                }),
             ),
         }
     }

@@ -51,3 +51,7 @@ The format is based on Keep a Changelog.
 ### Runtime-host borrowed accessor compatibility
 
 The seven validated runtime-host contract wrappers now implement standard `AsRef<Raw>` in place of inherent `as_ref` methods. Borrowed values and lifetimes, wrapper types, validation and `into_inner` are unchanged. Ordinary method syntax, qualified calls and function pointers continue to resolve through the standard prelude. Rust callers using `no_implicit_prelude` must explicitly import `std::convert::AsRef`. The workspace crate remains unpublished (`publish = false`).
+
+### Diagnostic event inference payload construction
+
+`DiagnosticEventPayload::InferenceExecutionDiagnosticObserved` now stores `Box<InferenceExecutionDiagnosticObservedPayload>`. Rust callers constructing this public variant must wrap the existing raw payload in `Box::new`; owned pattern bindings now contain a box. Tagged serialized JSON, raw payload fields and validation remain unchanged. This adds one allocation for this event variant; no measured performance improvement is claimed. The crate remains `publish = false`.
