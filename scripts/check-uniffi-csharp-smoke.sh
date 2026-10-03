@@ -72,6 +72,8 @@ require_generated_text 'public record FfiEmbeddedRuntimeConfig'
 require_generated_text 'namespace uniffi.pantograph_headless;'
 reject_generated_text 'Task<String> WorkflowRun(String @requestJson)'
 require_generated_text 'Task<String> WorkflowCreateSession(String @requestJson)'
+require_generated_text 'Task<String> WorkflowGraphRefreshCurrentValidationSummary(String @requestJson)'
+require_generated_text 'Task<String> PublishGraphSessionExecutableValidationSnapshot(String @requestJson)'
 
 dotnet_root="$(dirname "$(readlink -f "$(command -v dotnet)")")"
 sdk_dir="$dotnet_root/sdk"

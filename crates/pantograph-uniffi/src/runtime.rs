@@ -17,14 +17,17 @@ use pantograph_workflow_service::{
     WorkflowExecutionSessionQueueListRequest, WorkflowExecutionSessionQueuePushFrontRequest,
     WorkflowExecutionSessionQueueReprioritizeRequest, WorkflowExecutionSessionRunRequest,
     WorkflowExecutionSessionStatusRequest, WorkflowGraphAddEdgeRequest,
-    WorkflowGraphAddNodeRequest, WorkflowGraphConnectRequest, WorkflowGraphEditSessionCloseRequest,
+    WorkflowGraphAddNodeRequest, WorkflowGraphConnectRequest,
+    WorkflowGraphCurrentValidationRefreshRequest, WorkflowGraphEditSessionCloseRequest,
     WorkflowGraphEditSessionCreateRequest, WorkflowGraphEditSessionGraphRequest,
     WorkflowGraphGetConnectionCandidatesRequest, WorkflowGraphInsertNodeAndConnectRequest,
     WorkflowGraphInsertNodeOnEdgeRequest, WorkflowGraphLoadRequest,
     WorkflowGraphPreviewNodeInsertOnEdgeRequest, WorkflowGraphRemoveEdgeRequest,
-    WorkflowGraphRemoveNodeRequest, WorkflowGraphSaveRequest, WorkflowGraphUndoRedoStateRequest,
-    WorkflowGraphUpdateNodeDataRequest, WorkflowGraphUpdateNodePositionRequest, WorkflowIoRequest,
-    WorkflowPreflightRequest, WorkflowService, WorkflowServiceError,
+    WorkflowGraphRemoveNodeRequest, WorkflowGraphSaveRequest,
+    WorkflowGraphSessionExecutableValidationSnapshotPublishRequest,
+    WorkflowGraphUndoRedoStateRequest, WorkflowGraphUpdateNodeDataRequest,
+    WorkflowGraphUpdateNodePositionRequest, WorkflowIoRequest, WorkflowPreflightRequest,
+    WorkflowService, WorkflowServiceError,
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use tokio::sync::RwLock;
@@ -761,6 +764,38 @@ impl FfiPantographRuntime {
         serialize_response(&response)
     }
 
+    /// Refresh owner-derived graph validation and return WorkflowGraphCurrentValidationRefreshResponse JSON.
+    pub async fn workflow_graph_refresh_current_validation_summary(
+        &self,
+        request_json: String,
+    ) -> Result<String, FfiError> {
+        let request: WorkflowGraphCurrentValidationRefreshRequest = parse_request(request_json)?;
+        let response = self
+            .runtime
+            .workflow_graph_refresh_current_validation_summary(request)
+            .await
+            .map_err(map_workflow_service_error)?;
+        serialize_response(&response)
+    }
+
+    /// Publish the current graph-session validation as WorkflowExecutableValidationSnapshotRecord JSON.
+    ///
+    /// Snapshot provenance is derived by the workflow service, never supplied by
+    /// the caller. This runtime's attribution store is ephemeral: republish after reopening it.
+    pub async fn publish_graph_session_executable_validation_snapshot(
+        &self,
+        request_json: String,
+    ) -> Result<String, FfiError> {
+        let request: WorkflowGraphSessionExecutableValidationSnapshotPublishRequest =
+            parse_request(request_json)?;
+        let response = self
+            .runtime
+            .publish_graph_session_executable_validation_snapshot(request)
+            .await
+            .map_err(map_workflow_service_error)?;
+        serialize_response(response.as_record())
+    }
+
     /// Close a graph edit session and return WorkflowGraphEditSessionCloseResponse JSON.
     pub async fn workflow_graph_close_edit_session(
         &self,
@@ -1077,3 +1112,7 @@ fn workflow_adapter_error(code: WorkflowErrorCode, message: impl Into<String>) -
 #[cfg(test)]
 #[path = "runtime_tests.rs"]
 mod runtime_tests;
+
+#[cfg(test)]
+#[path = "runtime_validation_tests.rs"]
+mod runtime_validation_tests;

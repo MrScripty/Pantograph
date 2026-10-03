@@ -133,6 +133,17 @@ mod tests {
     }
 
     #[test]
+    fn other_inference_bearing_node_types_remain_unsupported() {
+        let mut other = contract("llm-inference");
+        other.node_type = "future-inference".parse().expect("valid node type");
+        assert!(!other.inference_tasks.is_empty());
+        assert_eq!(
+            classify_workflow_scheduler_task("future-inference", Some(&other)),
+            WorkflowSchedulerTaskExecutionClass::Unsupported,
+        );
+    }
+
+    #[test]
     fn classifier_requires_matching_contract_facts() {
         let text_contract = contract("text-input");
         let inference_contract = contract("llm-inference");
