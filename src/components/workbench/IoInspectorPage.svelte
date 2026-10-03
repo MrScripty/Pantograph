@@ -1049,6 +1049,7 @@
                             aria-label={`Audio preview of ${artifact.artifact_id}`}
                           ></audio>
                         {:else if renderer.family === 'video'}
+                          <!-- a11y-reviewed: arbitrary artifact preview has no caption-track association; disclose the limitation below rather than supplying a fictitious track. -->
                           <!-- svelte-ignore a11y_media_has_caption -->
                           <video
                             src={bodyPreview.objectUrl}
@@ -1056,6 +1057,11 @@
                             class="max-h-64 w-full bg-black"
                             aria-label={`Video preview of ${artifact.artifact_id}`}
                           ></video>
+                          {#if renderer.captionNotice}
+                            <p class="mt-2 text-xs text-neutral-400" data-testid="io-artifact-caption-notice">
+                              {renderer.captionNotice}
+                            </p>
+                          {/if}
                         {:else if bodyPreview.text !== null && bodyPreview.text !== undefined}
                           <pre
                             class="max-h-72 overflow-auto whitespace-pre-wrap break-words px-3 py-2 font-mono text-xs leading-relaxed text-neutral-100"
