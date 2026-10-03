@@ -3178,8 +3178,11 @@ impl InferenceBackend for MockTypedTextBackend {
 }
 
 #[cfg(feature = "inference-nodes")]
+type CapturedEmbeddingRequest = (Vec<String>, String);
+
+#[cfg(feature = "inference-nodes")]
 struct MockTypedEmbeddingBackend {
-    embedding_requests: Arc<Mutex<Vec<(Vec<String>, String)>>>,
+    embedding_requests: Arc<Mutex<Vec<CapturedEmbeddingRequest>>>,
 }
 
 #[cfg(feature = "inference-nodes")]
