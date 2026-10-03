@@ -19,8 +19,8 @@ use inference::{
     PackageSizeRole, ProcessorComponentKind, PumasArtifactLoadPathKind, PumasArtifactLoadTarget,
     PumasModelRef, ResolvedModelPackageFacts, ResolvedModelSource, ResolvedModelSourceKind,
     RuntimeLifecycleSnapshot, SupportTier, TaskEvidence, TaskExecutionBehavior, TaskFamily,
-    TaskRegistryEntry, TaskRegistryResolutionDiagnosticKind, TaskRequestContract,
-    TaskStreamingSupport, MODEL_PACKAGE_FACTS_CONTRACT_VERSION,
+    TaskRegistryEntry, TaskRegistryResolutionDiagnostic, TaskRegistryResolutionDiagnosticKind,
+    TaskRequestContract, TaskStreamingSupport, MODEL_PACKAGE_FACTS_CONTRACT_VERSION,
 };
 
 const PACKAGE_FACT_FIXTURES: &[(&str, &str)] = &[
@@ -1156,6 +1156,11 @@ fn task_registry_resolution_returns_validated_entry_from_package_evidence() {
     .expect("text generation evidence should resolve");
 
     assert_eq!(entry.task_id, InferenceTaskId::TextGeneration);
+    let expected = resolve_task_registry_entry("text_generation").expect("canonical entry");
+    assert_eq!(
+        serde_json::to_value(&entry).expect("resolved entry"),
+        serde_json::to_value(expected).expect("canonical entry")
+    );
 }
 
 #[test]
@@ -1181,7 +1186,17 @@ fn task_registry_resolution_reports_unsupported_task_evidence() {
     );
 
     let encoded = serde_json::to_value(&diagnostic).expect("encode diagnostic");
-    assert_eq!(encoded["kind"], serde_json::json!("unsupported_task_label"));
+    assert_eq!(
+        encoded,
+        serde_json::json!({
+            "kind": "unsupported_task_label",
+            "message": "package task evidence does not match a canonical inference task registry entry",
+            "labels": ["object_detection", "object-detection"],
+        })
+    );
+    let decoded: TaskRegistryResolutionDiagnostic =
+        serde_json::from_value(encoded).expect("decode existing diagnostic shape");
+    assert_eq!(&decoded, diagnostic.as_ref());
 }
 
 #[test]
@@ -1198,6 +1213,13 @@ fn task_registry_resolution_reports_missing_task_evidence() {
         TaskRegistryResolutionDiagnosticKind::MissingTaskEvidence
     );
     assert!(diagnostic.labels.is_empty());
+    assert_eq!(
+        serde_json::to_value(&diagnostic).expect("missing diagnostic"),
+        serde_json::json!({
+            "kind": "missing_task_evidence",
+            "message": "package task evidence does not include a task label",
+        })
+    );
 }
 
 #[test]

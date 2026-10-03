@@ -800,10 +800,12 @@ pub fn resolve_task_registry_entry(value: &str) -> Option<TaskRegistryEntry> {
 /// task signature.
 pub fn resolve_task_registry_entry_from_evidence(
     evidence: &TaskEvidence,
-) -> Result<TaskRegistryEntry, TaskRegistryResolutionDiagnostic> {
+) -> Result<TaskRegistryEntry, Box<TaskRegistryResolutionDiagnostic>> {
     let labels = task_evidence_labels(evidence);
     if labels.is_empty() {
-        return Err(TaskRegistryResolutionDiagnostic::missing_task_evidence());
+        return Err(Box::new(
+            TaskRegistryResolutionDiagnostic::missing_task_evidence(),
+        ));
     }
 
     let mut resolved_entries = Vec::new();
@@ -814,8 +816,8 @@ pub fn resolve_task_registry_entry_from_evidence(
     }
 
     let Some(first) = resolved_entries.first().cloned() else {
-        return Err(TaskRegistryResolutionDiagnostic::unsupported_task_label(
-            labels,
+        return Err(Box::new(
+            TaskRegistryResolutionDiagnostic::unsupported_task_label(labels),
         ));
     };
 
@@ -830,21 +832,20 @@ pub fn resolve_task_registry_entry_from_evidence(
     }
 
     if canonical_task_ids.len() > 1 {
-        return Err(TaskRegistryResolutionDiagnostic::conflicting_task_evidence(
-            labels,
-            canonical_task_ids,
+        return Err(Box::new(
+            TaskRegistryResolutionDiagnostic::conflicting_task_evidence(labels, canonical_task_ids),
         ));
     }
 
     if !first.matches_task_evidence(evidence) {
-        return Err(TaskRegistryResolutionDiagnostic::unsupported_task_label(
-            labels,
+        return Err(Box::new(
+            TaskRegistryResolutionDiagnostic::unsupported_task_label(labels),
         ));
     }
 
     if !first.matches_modality_evidence(evidence) {
-        return Err(TaskRegistryResolutionDiagnostic::modality_mismatch(
-            &first, evidence,
+        return Err(Box::new(
+            TaskRegistryResolutionDiagnostic::modality_mismatch(&first, evidence),
         ));
     }
 
