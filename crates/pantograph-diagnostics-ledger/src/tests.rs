@@ -3052,6 +3052,46 @@ fn run_detail_projection_backfills_selected_runtime_from_node_status() {
 }
 
 #[test]
+fn io_artifact_payload_preserves_exact_tagged_wire_and_ledger_round_trip() {
+    let expected = serde_json::json!({
+        "payload_type": "io_artifact_observed",
+        "artifact_id": "artifact-wire",
+        "artifact_role": "node_output",
+        "producer_node_id": null, "producer_port_id": null,
+        "consumer_node_id": null, "consumer_port_id": null,
+        "media_type": null, "size_bytes": null, "content_hash": null,
+        "retention_state": null, "retention_reason": null
+    });
+    let payload: DiagnosticEventPayload = serde_json::from_value(expected.clone()).unwrap();
+    assert_eq!(serde_json::to_value(&payload).unwrap(), expected);
+    let mut event =
+        sample_io_artifact_event("run-wire", "node-wire", "node_output", "artifact-wire");
+    event.payload = payload.clone();
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().unwrap();
+    ledger
+        .append_diagnostic_event(event)
+        .expect("valid artifact payload appends");
+    let records = ledger.diagnostic_events_after(0, 10).unwrap();
+    assert_eq!(records.len(), 1);
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&records[0].payload_json).unwrap(),
+        expected
+    );
+    assert_eq!(
+        serde_json::from_str::<DiagnosticEventPayload>(&records[0].payload_json).unwrap(),
+        payload
+    );
+}
+
+#[test]
+fn diagnostic_event_payload_keeps_large_artifact_record_indirect() {
+    assert!(
+        std::mem::size_of::<DiagnosticEventPayload>()
+            < std::mem::size_of::<IoArtifactObservedPayload>()
+    );
+}
+
+#[test]
 fn io_artifact_projection_drains_artifact_events_incrementally() {
     let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
     let input_event = ledger
@@ -6262,7 +6302,7 @@ fn sample_io_artifact_event(
         privacy_class: DiagnosticEventPrivacyClass::SensitiveReference,
         retention_class: DiagnosticEventRetentionClass::PayloadReference,
         payload_ref: Some(format!("artifact://{artifact_id}")),
-        payload: DiagnosticEventPayload::IoArtifactObserved(IoArtifactObservedPayload {
+        payload: DiagnosticEventPayload::IoArtifactObserved(Box::new(IoArtifactObservedPayload {
             artifact_fact_id: None,
             payload_artifact_id: None,
             artifact_id: artifact_id.to_string(),
@@ -6303,7 +6343,7 @@ fn sample_io_artifact_event(
                 conversion_command_id: None,
                 conversion_dependencies: Vec::new(),
             }),
-        }),
+        })),
     }
 }
 

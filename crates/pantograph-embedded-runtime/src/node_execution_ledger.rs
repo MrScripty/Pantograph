@@ -532,7 +532,7 @@ impl NodeExecutionWorkflowLedgerSink {
             privacy_class: artifact.privacy_class,
             retention_class: artifact.retention_class,
             payload_ref: artifact.payload_ref,
-            payload: DiagnosticEventPayload::IoArtifactObserved(IoArtifactObservedPayload {
+            payload: DiagnosticEventPayload::IoArtifactObserved(Box::new(IoArtifactObservedPayload {
                 artifact_fact_id: Some(artifact.artifact_fact_id),
                 payload_artifact_id: Some(artifact.payload_artifact_id),
                 artifact_id: artifact.artifact_id,
@@ -553,7 +553,7 @@ impl NodeExecutionWorkflowLedgerSink {
                 read_handle: artifact.read_handle,
                 stream_handle: None,
                 format: artifact.format,
-            }),
+            })),
         };
 
         self.workflow_service
