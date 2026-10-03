@@ -207,6 +207,12 @@ jobs:
           python3 -c 'import pathlib, sys; names = [line for line in pathlib.Path(sys.argv[1]).read_text().splitlines() if line.startswith("backend::pytorch::pytorch_worker_image_contract_tests::") and line.endswith(": test")]; print("PyTorch image contract tests discovered:", len(names)); sys.exit(0 if names else 1)' "$RUNNER_TEMP/pytorch-image-contract-tests.list"
           cargo test -p inference --features backend-pytorch --lib pytorch_worker_image_contract_tests
 
+      - name: Run gateway attribution and warmup regression tests
+        run: |
+          cargo test -p inference --lib gateway::tests::private_lifecycle_context
+          cargo test -p inference --lib gateway::tests::test_runtime_lifecycle_snapshot
+          cargo test -p inference --lib gateway::tests::test_failed_restart_clears_active_runtime_config_and_attempted_modes
+
       - name: Run node-engine tests
         run: cargo test -p node-engine --lib
 
