@@ -251,6 +251,11 @@ jobs:
       - name: Run workflow-nodes tests
         run: cargo test -p workflow-nodes --lib
 
+      - name: Run workflow scheduler orchestrator regression tests
+        run: |
+          cargo test -p pantograph-workflow-service --lib scheduler::task_orchestrator::tests:: -- --list > "$RUNNER_TEMP/orchestrator-tests.list"
+          python3 -c 'import pathlib, sys; names = [line for line in pathlib.Path(sys.argv[1]).read_text().splitlines() if line.startswith("scheduler::task_orchestrator::tests::") and line.endswith(": test")]; print("Orchestrator tests discovered:", len(names)); sys.exit(0 if names else 1)' "$RUNNER_TEMP/orchestrator-tests.list"
+          cargo test -p pantograph-workflow-service --lib scheduler::task_orchestrator::tests::
       - name: Run workflow-service contract tests
         run: cargo test -p pantograph-workflow-service --test contract
 
