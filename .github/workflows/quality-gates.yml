@@ -193,6 +193,12 @@ jobs:
       - name: Run media conversion contract tests
         run: cargo test -p pantograph-media-conversion
 
+      - name: Run inference compatibility and contract tests
+        run: |
+          cargo test -p inference --lib backend::compatibility::tests
+          cargo test -p inference --lib model_contracts::tests
+          cargo test -p inference --lib server::tests::runtime_matchers_preserve_path_component_comparison
+
       - name: Run node-engine tests
         run: cargo test -p node-engine --lib
 

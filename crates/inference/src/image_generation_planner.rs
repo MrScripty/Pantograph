@@ -101,7 +101,6 @@ impl PlannedImageGenerationLaunchHandoff {
         &self.artifact_load_target
     }
 
-    #[must_use]
     pub fn backend_decision(&self) -> &BackendExecutionDecision {
         &self.backend_decision
     }

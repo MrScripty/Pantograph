@@ -424,3 +424,65 @@ fn assert_arg_pair(args: &[String], name: &str, value: &str) {
         "expected arg pair {name} {value} in {args:?}"
     );
 }
+
+#[test]
+fn runtime_matchers_preserve_path_component_comparison() {
+    let device = DeviceConfig {
+        device: DeviceBackend::Auto,
+        gpu_layers: -1,
+    };
+    let mut server = LlamaServer::new();
+    server.set_test_runtime_state(
+        ServerMode::SidecarInference {
+            port: 11434,
+            model_path: "models/main.gguf".to_string(),
+            mmproj_path: None,
+            device: device.clone(),
+            context_size: 4096,
+            cpu_threads: None,
+            batch_size: None,
+            ubatch_size: None,
+        },
+        true,
+    );
+    assert!(server.matches_inference_runtime(
+        "models/./main.gguf",
+        None,
+        &device,
+        4096,
+        None,
+        None,
+        None,
+        Some(11434)
+    ));
+    assert!(!server.matches_inference_runtime(
+        "models/other.gguf",
+        None,
+        &device,
+        4096,
+        None,
+        None,
+        None,
+        Some(11434)
+    ));
+    server.set_test_runtime_state(
+        ServerMode::SidecarEmbedding {
+            port: 11434,
+            model_path: "models/main.gguf".to_string(),
+            device: device.clone(),
+        },
+        true,
+    );
+    assert!(server.matches_embedding_runtime("models/./main.gguf", &device, Some(11434)));
+    assert!(!server.matches_embedding_runtime("models/other.gguf", &device, Some(11434)));
+    server.set_test_runtime_state(
+        ServerMode::SidecarReranking {
+            port: 11434,
+            model_path: "models/main.gguf".to_string(),
+            device: device.clone(),
+        },
+        true,
+    );
+    assert!(server.matches_reranking_runtime("models/./main.gguf", &device, Some(11434)));
+    assert!(!server.matches_reranking_runtime("models/other.gguf", &device, Some(11434)));
+}

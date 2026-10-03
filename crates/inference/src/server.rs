@@ -648,7 +648,7 @@ impl LlamaServer {
             return false;
         };
         active.mode == LlamaCppRuntimeMode::Inference
-            && active.model_path == PathBuf::from(model_path)
+            && active.model_path.as_path() == Path::new(model_path)
             && active.mmproj_path == mmproj_path.map(PathBuf::from)
             && active.device == *device
             && active.context_size == Some(context_size)
@@ -669,7 +669,7 @@ impl LlamaServer {
             return false;
         };
         active.mode == LlamaCppRuntimeMode::Embedding
-            && active.model_path == PathBuf::from(model_path)
+            && active.model_path.as_path() == Path::new(model_path)
             && active.device == *device
             && active.port == expected_port
     }
@@ -685,7 +685,7 @@ impl LlamaServer {
             return false;
         };
         active.mode == LlamaCppRuntimeMode::Reranking
-            && active.model_path == PathBuf::from(model_path)
+            && active.model_path.as_path() == Path::new(model_path)
             && active.device == *device
             && active.port == expected_port
     }

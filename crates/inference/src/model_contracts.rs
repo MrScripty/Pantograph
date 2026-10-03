@@ -343,20 +343,15 @@ impl TaskModalitySignature {
 }
 
 /// Support tier for a task or backend mapping.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum SupportTier {
     Stable,
     Experimental,
     Roadmap,
     Unsupported,
+    #[default]
     Unknown,
-}
-
-impl Default for SupportTier {
-    fn default() -> Self {
-        Self::Unknown
-    }
 }
 
 /// Broad task family used for compatibility diagnostics without choosing a
@@ -2136,7 +2131,6 @@ impl ResolvedModelSource {
     ///
     /// This enforces model-source shape invariants without selecting a backend
     /// or deciding runtime placement.
-    #[must_use]
     pub fn validate_for_backend_load(&self) -> Result<(), Vec<ModelPackageDiagnostic>> {
         let mut diagnostics = Vec::new();
 
@@ -2421,6 +2415,15 @@ mod tests {
         resolve_task_registry_entry(task_id.canonical_label())
             .and_then(|entry| entry.request_contract())
             .unwrap_or_else(|| panic!("missing request contract for {task_id:?}"))
+    }
+
+    #[test]
+    fn support_tier_default_retains_unknown_wire_value() {
+        assert_eq!(SupportTier::default(), SupportTier::Unknown);
+        assert_eq!(
+            serde_json::to_value(SupportTier::default()).expect("default serializes"),
+            serde_json::json!("unknown")
+        );
     }
 
     #[test]
