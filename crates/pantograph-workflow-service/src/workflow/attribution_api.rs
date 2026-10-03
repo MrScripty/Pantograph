@@ -216,7 +216,7 @@ impl WorkflowService {
             ));
         }
         validate_workflow_id(&request.workflow_id)?;
-        let graph_revision = WorkflowGraphRevision::parse(&request.graph.compute_fingerprint())
+        let graph_revision = WorkflowGraphRevision::parse(request.graph.compute_fingerprint())
             .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
         if graph_revision
             != request
@@ -258,7 +258,7 @@ impl WorkflowService {
                 request.validation_session_id.clone(),
             )
             .await?;
-        let graph_revision = WorkflowGraphRevision::parse(&graph.compute_fingerprint())
+        let graph_revision = WorkflowGraphRevision::parse(graph.compute_fingerprint())
             .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
         if graph_revision != source.graph_revision {
             return Err(WorkflowServiceError::InvalidRequest(
