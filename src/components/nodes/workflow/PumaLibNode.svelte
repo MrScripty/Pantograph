@@ -31,16 +31,12 @@
 
   let { id, data, selected = false }: Props = $props();
 
-  let modelId = $state<string | undefined>(undefined);
+  let modelId = $derived(typeof data.model_id === 'string' ? data.model_id : undefined);
   let availableModels: PortOption[] = $state([]);
   let isLoading = $state(false);
   let loadError = $state<string | null>(null);
   let selectionError = $state<string | null>(null);
   let searchQuery = $state('');
-
-  $effect(() => {
-    modelId = typeof data.model_id === 'string' ? data.model_id : undefined;
-  });
 
   let filteredModels = $derived(
     searchQuery
