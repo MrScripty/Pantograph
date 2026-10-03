@@ -3224,9 +3224,7 @@ mod tests {
     }
 
     fn runtime_execution_intent(workflow_run_id: &str) -> SchedulerTaskExecutionIntent {
-        SchedulerTaskExecutionIntent::Runtime {
-            task_intent: task_intent_for_run(workflow_run_id),
-        }
+        SchedulerTaskExecutionIntent::runtime(task_intent_for_run(workflow_run_id))
     }
 
     fn prompt_task_result(workflow_run_id: &str, prompt_text: &str) -> WorkflowSchedulerTaskResult {

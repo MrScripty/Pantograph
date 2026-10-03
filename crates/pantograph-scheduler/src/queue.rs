@@ -274,7 +274,7 @@ impl SchedulerNonRuntimeTaskIntent {
 #[non_exhaustive]
 pub enum SchedulerTaskExecutionIntent {
     Runtime {
-        task_intent: SchedulableTaskIntent,
+        task_intent: Box<SchedulableTaskIntent>,
     },
     SourceInput {
         task_intent: SchedulerSourceInputTaskIntent,
@@ -285,6 +285,14 @@ pub enum SchedulerTaskExecutionIntent {
 }
 
 impl SchedulerTaskExecutionIntent {
+    /// Wraps a runtime intent without changing its validation or wire representation.
+    #[must_use]
+    pub fn runtime(task_intent: SchedulableTaskIntent) -> Self {
+        Self::Runtime {
+            task_intent: Box::new(task_intent),
+        }
+    }
+
     #[must_use]
     pub fn runtime_task_intent(&self) -> Option<&SchedulableTaskIntent> {
         match self {

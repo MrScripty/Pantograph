@@ -2643,8 +2643,8 @@ mod tests {
                 node_id: task.node_id.clone(),
                 task_id: task.task_id.clone(),
                 state: SchedulerTaskState::Completed {
-                    execution_intent: SchedulerTaskExecutionIntent::Runtime {
-                        task_intent: pantograph_scheduler::SchedulableTaskIntent {
+                    execution_intent: SchedulerTaskExecutionIntent::runtime(
+                        pantograph_scheduler::SchedulableTaskIntent {
                             contract_version:
                                 pantograph_scheduler::SCHEDULABLE_TASK_INTENT_CONTRACT_VERSION,
                             workflow_id: task.workflow_id.clone(),
@@ -2668,7 +2668,7 @@ mod tests {
                             dependency_override_patches: Vec::new(),
                             estimate_hints: Vec::new(),
                         },
-                    },
+                    ),
                 },
                 state_version: 1,
                 last_transition_id: "transition.completed".parse().expect("transition id"),

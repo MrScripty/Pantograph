@@ -2718,7 +2718,7 @@ fn initial_task_state(
             }
             if let Some(task_intent) = task.schedulable_intent.clone() {
                 Ok(SchedulerTaskState::WaitingDependencyReadiness {
-                    execution_intent: SchedulerTaskExecutionIntent::Runtime { task_intent },
+                    execution_intent: SchedulerTaskExecutionIntent::runtime(task_intent),
                 })
             } else {
                 Ok(awaiting_inputs_state())
@@ -3601,7 +3601,7 @@ fn runtime_execution_intent(
             )),
         ));
     };
-    Ok(SchedulerTaskExecutionIntent::Runtime { task_intent })
+    Ok(SchedulerTaskExecutionIntent::runtime(task_intent))
 }
 
 enum MaterializedBindingValue<'a> {
