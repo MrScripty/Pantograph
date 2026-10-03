@@ -357,7 +357,7 @@ mod tests {
 
         let facts = resolver_facts_from_sources(
             PumasDispatchPackageFactsBridgeOutcome::Projected {
-                facts: package,
+                facts: Box::new(package),
                 diagnostics: Vec::new(),
             },
             &runtime,
@@ -388,7 +388,7 @@ mod tests {
     fn missing_runtime_facts_keep_capability_but_publish_no_runtime_availability() {
         let facts = resolver_facts_from_sources(
             PumasDispatchPackageFactsBridgeOutcome::Projected {
-                facts: projected_package_facts(),
+                facts: Box::new(projected_package_facts()),
                 diagnostics: Vec::new(),
             },
             &RuntimeDispatchCapabilityFactsOutcome::Unavailable {
