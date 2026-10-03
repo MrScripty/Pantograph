@@ -636,13 +636,13 @@ impl WorkflowSchedulerTaskOrchestrator {
             );
         }
         let handoff = dispatch_selected_handoff_from_selection(selection)?;
-        let dispatch_decision = handoff.dispatch_decision.as_ref().ok_or_else(|| {
+        let dispatch_decision = handoff.dispatch_decision.as_ref().ok_or(
             WorkflowSchedulerTaskOrchestratorError::SchedulerContract(
                 SchedulerContractError::MissingField {
                     field: "dispatch_decision",
                 },
-            )
-        })?;
+            ),
+        )?;
         let reservation_lease_id = dispatch_decision.reservation_lease_id.clone();
         let candidate_id = selected_candidate_id(&selection_request, dispatch_decision);
         Ok(SelectedRuntimeTaskDispatch {

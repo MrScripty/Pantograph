@@ -51,7 +51,6 @@ const SNAPSHOT_ID_PREFIX: &str = "wfvalsnap_";
 pub struct WorkflowExecutableValidationSnapshotId(String);
 
 impl WorkflowExecutableValidationSnapshotId {
-    #[must_use]
     pub fn generate() -> Self {
         Self(format!("{SNAPSHOT_ID_PREFIX}{}", Uuid::new_v4()))
     }

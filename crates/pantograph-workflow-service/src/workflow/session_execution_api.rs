@@ -1032,7 +1032,6 @@ impl WorkflowService {
             },
         )
         .map(|_| ())
-        .map_err(WorkflowServiceError::from)
     }
 
     fn record_library_model_access_events_if_configured(
@@ -1085,8 +1084,7 @@ impl WorkflowService {
                         },
                     ),
                 },
-            )
-            .map_err(WorkflowServiceError::from)?;
+            )?;
         }
         Ok(())
     }
@@ -1157,7 +1155,6 @@ impl WorkflowService {
             },
         )
         .map(|_| ())
-        .map_err(WorkflowServiceError::from)
     }
 
     fn record_scheduler_queue_placement_event_if_configured(
@@ -1217,7 +1214,6 @@ impl WorkflowService {
             },
         )
         .map(|_| ())
-        .map_err(WorkflowServiceError::from)
     }
 
     pub(super) fn record_run_started_event_if_configured(
@@ -1277,7 +1273,6 @@ impl WorkflowService {
             },
         )
         .map(|_| ())
-        .map_err(WorkflowServiceError::from)
     }
 
     pub(super) fn record_workflow_io_artifact_events_if_configured(
@@ -1391,8 +1386,7 @@ impl WorkflowService {
                         }),
                     ),
                 },
-            )
-            .map_err(WorkflowServiceError::from)?;
+            )?;
         }
         Ok(())
     }
@@ -1481,7 +1475,6 @@ impl WorkflowService {
             },
         )
         .map(|_| ())
-        .map_err(WorkflowServiceError::from)
     }
 }
 

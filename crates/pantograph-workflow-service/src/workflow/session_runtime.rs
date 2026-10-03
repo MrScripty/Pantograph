@@ -348,8 +348,7 @@ impl WorkflowService {
                         },
                     ),
                 },
-            )
-            .map_err(WorkflowServiceError::from)?;
+            )?;
         }
         Ok(())
     }

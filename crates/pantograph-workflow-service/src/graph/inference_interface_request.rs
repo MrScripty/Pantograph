@@ -282,9 +282,7 @@ fn parse_model_ref(
     value: Option<&Value>,
     diagnostics: &mut Vec<InferenceInterfaceGraphResolutionDiagnostic>,
 ) -> Option<PumasModelRef> {
-    let Some(value) = value else {
-        return None;
-    };
+    let value = value?;
 
     match serde_json::from_value::<PumasModelRef>(value.clone()) {
         Ok(model_ref) => match model_ref.validate() {
@@ -893,5 +891,24 @@ mod tests {
             ],
             "outputs": []
         })
+    }
+}
+
+#[cfg(test)]
+mod lint_style_regressions {
+    use super::{parse_model_ref, InferenceInterfaceGraphResolutionDiagnosticCode};
+
+    #[test]
+    fn lint_style_absent_model_ref_does_not_emit_invalid_value_diagnostic() {
+        let mut diagnostics = Vec::new();
+        assert!(parse_model_ref("node-a", None, &mut diagnostics).is_none());
+        assert!(diagnostics.is_empty());
+        let invalid = serde_json::json!(7);
+        assert!(parse_model_ref("node-a", Some(&invalid), &mut diagnostics).is_none());
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(
+            diagnostics[0].code,
+            InferenceInterfaceGraphResolutionDiagnosticCode::InvalidPumasModelRef
+        );
     }
 }

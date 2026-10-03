@@ -251,6 +251,11 @@ jobs:
       - name: Run workflow-nodes tests
         run: cargo test -p workflow-nodes --lib
 
+      - name: Run workflow style contract regressions
+        run: |
+          cargo test -p pantograph-workflow-service --lib lint_style_ -- --list > "$RUNNER_TEMP/workflow-style-tests.list"
+          python3 -c 'import pathlib, sys; names = [line for line in pathlib.Path(sys.argv[1]).read_text().splitlines() if "lint_style_regressions::lint_style_" in line and line.endswith(": test")]; print("Workflow style tests discovered:", len(names)); sys.exit(0 if names else 1)' "$RUNNER_TEMP/workflow-style-tests.list"
+          cargo test -p pantograph-workflow-service --lib lint_style_
       - name: Run workflow scheduler orchestrator regression tests
         run: |
           cargo test -p pantograph-workflow-service --lib scheduler::task_orchestrator::tests:: -- --list > "$RUNNER_TEMP/orchestrator-tests.list"

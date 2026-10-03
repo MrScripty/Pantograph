@@ -654,8 +654,7 @@ impl WorkflowService {
                             resource_observation: None,
                         }),
                     },
-                )
-                .map_err(WorkflowServiceError::from)?;
+                )?;
                 repaired = increment_startup_repair_count(repaired)?;
             }
         }
