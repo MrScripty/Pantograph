@@ -79,7 +79,7 @@ pub use backend::LlamaCppBackend;
 pub use backend::CandleBackend;
 
 #[cfg(feature = "backend-pytorch")]
-pub use backend::PyTorchBackend;
+pub use backend::{PyTorchBackend, PyTorchTextGenerationRequest};
 
 pub use config::{DeviceConfig, EmbeddingMemoryMode};
 pub use dependency_requirements::{
