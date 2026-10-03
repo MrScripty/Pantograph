@@ -218,6 +218,13 @@ jobs:
           cargo test -p inference --lib managed_binaries::tests
           cargo test -p inference --test model_contracts task_registry_resolution_
 
+      - name: Run named PyTorch text request contract tests
+        run: |
+          cargo test -p inference --features backend-pytorch --lib pytorch_named_text_request -- --list > "$RUNNER_TEMP/pytorch-named-text-tests.list"
+          python3 -c 'import pathlib, sys; names = [line for line in pathlib.Path(sys.argv[1]).read_text().splitlines() if line.startswith("backend::pytorch::tests::pytorch_named_text_request") and line.endswith(": test")]; print("Named PyTorch text tests discovered:", len(names)); sys.exit(0 if names else 1)' "$RUNNER_TEMP/pytorch-named-text-tests.list"
+          cargo test -p inference --features backend-pytorch --lib pytorch_named_text_request
+          cargo test -p inference --features backend-pytorch --lib test_pytorch_generate_text_
+
       - name: Run node-engine tests
         run: cargo test -p node-engine --lib
 

@@ -14,6 +14,10 @@ The format is based on Keep a Changelog.
   canonicalization records.
 
 ### Changed
+- Rust source API: PyTorch `generate_with_top_k` and `generate_stream_with_top_k`
+  now accept `PyTorchTextGenerationRequest` with the same seven named inputs.
+  Legacy `generate`/`generate_stream` signatures and the worker wire contract
+  remain unchanged.
 - Rust source API: `resolve_managed_binary_command` and
   `resolve_task_registry_entry_from_evidence` now return boxed concrete errors.
   Error variants, diagnostic JSON and Display text remain unchanged; callers

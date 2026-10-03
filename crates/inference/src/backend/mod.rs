@@ -63,7 +63,7 @@ pub use llamacpp::LlamaCppBackend;
 pub use candle::CandleBackend;
 
 #[cfg(feature = "backend-pytorch")]
-pub use pytorch::PyTorchBackend;
+pub use pytorch::{PyTorchBackend, PyTorchTextGenerationRequest};
 
 pub use compatibility::{
     BackendCompatibilityIssue, BackendCompatibilityIssueKind, BackendCompatibilityOptions,
