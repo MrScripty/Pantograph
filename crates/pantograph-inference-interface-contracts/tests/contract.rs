@@ -24,6 +24,47 @@ const CONNECTION_SURFACE_DRIFT_BLOCKED: &str =
 const IMAGE_BASIC_INPUTS: &str = include_str!("fixtures/image_generation_basic_inputs.json");
 
 #[test]
+fn text_system_prompt_is_optional_string_without_changing_token_limit_or_defaults() {
+    let ports: Vec<InferencePortDescriptor> = serde_json::from_str(include_str!(
+        "fixtures/text_generation_system_prompt_inputs.json"
+    ))
+    .unwrap();
+    assert_eq!(
+        ports
+            .iter()
+            .map(|port| port.port_id.as_str())
+            .collect::<Vec<_>>(),
+        ["prompt", "max_new_tokens", "system_prompt"]
+    );
+    assert_eq!(ports[0].requirement, InferencePortRequirement::Required);
+    assert_eq!(
+        ports[1].value_type,
+        InferenceValueType::Scalar(InferenceScalarType::U64)
+    );
+    assert!(matches!(
+        ports[1].options,
+        InferencePortOptions::NumericRange { .. }
+    ));
+    let system = &ports[2];
+    assert_eq!(system.direction, InferencePortDirection::Input);
+    assert_eq!(system.requirement, InferencePortRequirement::Optional);
+    assert_eq!(
+        system.value_type,
+        InferenceValueType::Scalar(InferenceScalarType::String)
+    );
+    assert_eq!(system.options, InferencePortOptions::None);
+    for port in &ports {
+        port.validate().unwrap();
+        assert!(port.default.is_none());
+    }
+    let encoded = serde_json::to_string(&ports).unwrap();
+    assert_eq!(
+        serde_json::from_str::<Vec<InferencePortDescriptor>>(&encoded).unwrap(),
+        ports
+    );
+}
+
+#[test]
 fn basic_image_inputs_keep_optional_controls_and_backend_defaults_on_the_wire() {
     let ports: Vec<InferencePortDescriptor> =
         serde_json::from_str(IMAGE_BASIC_INPUTS).expect("basic image input contract");

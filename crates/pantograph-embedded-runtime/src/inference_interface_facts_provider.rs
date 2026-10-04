@@ -245,6 +245,13 @@ fn input_ports(task_entry: &TaskRegistryEntry) -> Vec<InferencePortDescriptor> {
                     crate::runtime_host_text_execution::MAX_NEW_TOKENS_PORT,
                     "Max new tokens",
                 ),
+                port(
+                    crate::runtime_host_text_execution::SYSTEM_PROMPT_PORT,
+                    "System prompt",
+                    InferencePortDirection::Input,
+                    InferencePortRequirement::Optional,
+                    InferenceValueType::Scalar(InferenceScalarType::String),
+                ),
             ]
         }
         InferenceTaskId::ImageGeneration => vec![
@@ -396,7 +403,7 @@ mod tests {
     fn text_generation_descriptor_exposes_optional_integer_limit_without_a_default() {
         let task = inference::resolve_task_registry_entry("text_generation").expect("task entry");
         let inputs = input_ports(&task);
-        assert_eq!(inputs.len(), 2);
+        assert_eq!(inputs.len(), 3);
         let limit = &inputs[1];
         assert_eq!(limit.port_id.as_str(), "max_new_tokens");
         assert_eq!(limit.requirement, InferencePortRequirement::Optional);
@@ -419,6 +426,15 @@ mod tests {
         limit.validate().expect("limit port contract");
         let chat = inference::resolve_task_registry_entry("chat_completion").expect("chat task");
         assert_eq!(input_ports(&chat).len(), 1);
+    }
+
+    #[test]
+    fn text_generation_inputs_match_shared_system_prompt_contract() {
+        let task = inference::resolve_task_registry_entry("text_generation").unwrap();
+        let expected: Vec<InferencePortDescriptor> = serde_json::from_str(include_str!(
+            "../../pantograph-inference-interface-contracts/tests/fixtures/text_generation_system_prompt_inputs.json"
+        )).unwrap();
+        assert_eq!(input_ports(&task), expected);
     }
 
     #[test]

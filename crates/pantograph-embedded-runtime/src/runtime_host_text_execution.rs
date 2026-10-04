@@ -15,6 +15,7 @@ use thiserror::Error;
 pub(crate) const TEXT_GENERATION_TASK: &str = "text_generation";
 pub(crate) const PROMPT_PORT: &str = "prompt";
 pub(crate) const MAX_NEW_TOKENS_PORT: &str = "max_new_tokens";
+pub(crate) const SYSTEM_PROMPT_PORT: &str = "system_prompt";
 pub(crate) const MAX_TEXT_BYTES: usize = 1024;
 
 /// Owned inputs for the canonical selected-text inference call.
@@ -57,6 +58,7 @@ pub(crate) fn validate_runtime_host_text_generation_request(
         .ok_or(RuntimeHostTextGenerationProjectionError::MissingDispatchDecision)?;
     validate_supported_inputs(request)?;
     optional_max_new_tokens(request)?;
+    optional_system_prompt(request)?;
     let prompt = required_prompt(request)?;
     if prompt.trim().is_empty() {
         return Err(RuntimeHostTextGenerationProjectionError::BlankPrompt);
@@ -94,7 +96,7 @@ pub(crate) fn project_runtime_host_text_generation(
         resolved_model_package_facts: Some(package_facts),
         input: InferenceExecutionInput::TextGeneration {
             prompt: Some(prompt),
-            system_prompt: None,
+            system_prompt: optional_system_prompt(request)?.map(str::to_owned),
             messages: Vec::new(),
             stream: false,
         },
@@ -298,7 +300,8 @@ fn validate_supported_inputs(
     request: &RuntimeHostExecutionRequest,
 ) -> Result<(), RuntimeHostTextGenerationProjectionError> {
     for input in &request.materialized_inputs {
-        if input.port_id != PROMPT_PORT && input.port_id != MAX_NEW_TOKENS_PORT {
+        if ![PROMPT_PORT, MAX_NEW_TOKENS_PORT, SYSTEM_PROMPT_PORT].contains(&input.port_id.as_str())
+        {
             return Err(
                 RuntimeHostTextGenerationProjectionError::UnsupportedInputPort {
                     port_id: input.port_id.clone(),
@@ -330,6 +333,28 @@ fn optional_max_new_tokens(
             value
                 .filter(|value| *value > 0)
                 .ok_or(RuntimeHostTextGenerationProjectionError::InvalidMaxNewTokens)
+        })
+        .transpose()
+}
+
+fn optional_system_prompt(
+    request: &RuntimeHostExecutionRequest,
+) -> Result<Option<&str>, RuntimeHostTextGenerationProjectionError> {
+    request
+        .materialized_inputs
+        .iter()
+        .find(|input| input.port_id == SYSTEM_PROMPT_PORT)
+        .map(|input| match &input.value {
+            RuntimeHostExecutionInputValue::String(value) if value.len() <= MAX_TEXT_BYTES => {
+                Ok(value.as_str())
+            }
+            RuntimeHostExecutionInputValue::String(value) => {
+                Err(RuntimeHostTextGenerationProjectionError::InputTooLong { bytes: value.len() })
+            }
+            _ => Err(RuntimeHostTextGenerationProjectionError::InvalidInputType {
+                port_id: SYSTEM_PROMPT_PORT,
+                expected: "string",
+            }),
         })
         .transpose()
 }
@@ -533,19 +558,76 @@ mod tests {
     }
 
     #[test]
+    fn optional_system_prompt_preserves_exact_strings_and_existing_byte_bounds() {
+        let mut request = text_request_fixture();
+        assert_eq!(optional_system_prompt(&request).unwrap(), None);
+        for text in [
+            String::new(),
+            "  image prompt instructions\n".into(),
+            "🦀".repeat(256),
+        ] {
+            request
+                .materialized_inputs
+                .retain(|input| input.port_id != SYSTEM_PROMPT_PORT);
+            request.materialized_inputs.push(RuntimeHostExecutionInput {
+                port_id: SYSTEM_PROMPT_PORT.into(),
+                value: RuntimeHostExecutionInputValue::String(text.clone()),
+            });
+            validate_runtime_host_text_generation_request(&request).unwrap();
+            assert_eq!(
+                optional_system_prompt(&request).unwrap(),
+                Some(text.as_str())
+            );
+            let validated =
+                ValidatedRuntimeHostExecutionRequest::try_from(request.clone()).unwrap();
+            let package = text_package_facts(&validated);
+            let directory = tempfile::tempdir().unwrap();
+            let target = text_load_target(&package, &directory);
+            let projection =
+                project_runtime_host_text_generation(&validated, package, target).unwrap();
+            assert!(matches!(&projection.request().input,
+                InferenceExecutionInput::TextGeneration { system_prompt: Some(actual), .. }
+                    if actual == &text));
+        }
+        let input = request
+            .materialized_inputs
+            .iter_mut()
+            .find(|input| input.port_id == SYSTEM_PROMPT_PORT)
+            .unwrap();
+        input.value = RuntimeHostExecutionInputValue::String("🦀".repeat(257));
+        assert_eq!(
+            validate_runtime_host_text_generation_request(&request),
+            Err(RuntimeHostTextGenerationProjectionError::InputTooLong { bytes: 1028 })
+        );
+        request
+            .materialized_inputs
+            .iter_mut()
+            .find(|input| input.port_id == SYSTEM_PROMPT_PORT)
+            .unwrap()
+            .value = RuntimeHostExecutionInputValue::U64(1);
+        assert_eq!(
+            validate_runtime_host_text_generation_request(&request),
+            Err(RuntimeHostTextGenerationProjectionError::InvalidInputType {
+                port_id: SYSTEM_PROMPT_PORT,
+                expected: "string",
+            })
+        );
+    }
+
+    #[test]
     fn rejects_unsupported_inputs_before_dependency_resolution() {
         let mut request = text_request_fixture();
         request.materialized_inputs.push(RuntimeHostExecutionInput {
-            port_id: "system_prompt".to_string(),
+            port_id: "messages".to_string(),
             value: RuntimeHostExecutionInputValue::String("ignored".to_string()),
         });
 
         let error = validate_runtime_host_text_generation_request(&request)
-            .expect_err("system prompt is not a host text input");
+            .expect_err("arbitrary message arrays are not host text inputs");
         assert!(matches!(
             error,
             RuntimeHostTextGenerationProjectionError::UnsupportedInputPort { port_id }
-                if port_id == "system_prompt"
+                if port_id == "messages"
         ));
     }
 
@@ -576,11 +658,17 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn executes_text_with_token_limit_without_calling_an_image_sink() {
+    async fn executes_text_with_system_prompt_and_token_limit_without_calling_an_image_sink() {
         let mut request = text_request_fixture();
         request.materialized_inputs.push(RuntimeHostExecutionInput {
             port_id: MAX_NEW_TOKENS_PORT.to_string(),
             value: RuntimeHostExecutionInputValue::I64(128),
+        });
+        request.materialized_inputs.push(RuntimeHostExecutionInput {
+            port_id: SYSTEM_PROMPT_PORT.into(),
+            value: RuntimeHostExecutionInputValue::String(
+                "  Return an image prompt only.\n".into(),
+            ),
         });
         let validated_request = ValidatedRuntimeHostExecutionRequest::try_from(request.clone())
             .expect("text request fixture should validate");
@@ -625,6 +713,11 @@ mod tests {
             .expect("backend calls")
             .iter()
             .any(|call| call == "max_tokens:128"));
+        assert!(backend_calls
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|call| call == "system:  Return an image prompt only.\n"));
     }
 
     fn text_request_fixture() -> RuntimeHostExecutionRequest {
@@ -875,7 +968,19 @@ mod tests {
                     .expect("backend calls")
                     .push(format!("max_tokens:{max_tokens}"));
             }
-            let prompt = json["messages"][0]["content"][0]["text"].as_str().unwrap();
+            let messages = json["messages"].as_array().unwrap();
+            if let Some(system) = messages.iter().find(|message| message["role"] == "system") {
+                self.calls.lock().unwrap().push(format!(
+                    "system:{}",
+                    system["content"][0]["text"].as_str().unwrap()
+                ));
+            }
+            let prompt = messages
+                .iter()
+                .find(|message| message["role"] == "user")
+                .unwrap()["content"][0]["text"]
+                .as_str()
+                .unwrap();
             if prompt == "cancel" {
                 self.cancel
                     .as_ref()
