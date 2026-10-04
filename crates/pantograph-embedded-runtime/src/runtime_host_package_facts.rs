@@ -327,6 +327,54 @@ mod tests {
     }
 
     #[test]
+    fn full_package_model_and_revision_mismatches_fail_closed() {
+        let request = validated_runtime_host_request();
+        let selected = selected_pumas_model_ref(&request).unwrap();
+        for different_model in [true, false] {
+            let mut facts = image_package_facts_for_request(selected);
+            if different_model {
+                facts.model_ref.model_id = "other/model".into();
+            } else {
+                facts.model_ref.revision = Some("different-revision".into());
+            }
+            assert!(validate_runtime_host_package_facts(selected, facts).is_err());
+        }
+        let mut selected = selected.clone();
+        selected.revision = Some("requested-revision".into());
+        let mut facts = image_package_facts_for_request(&selected);
+        facts.model_ref.revision = None;
+        assert!(
+            validate_runtime_host_package_facts(&selected, facts).is_err(),
+            "a requested revision cannot be inferred from missing producer evidence"
+        );
+    }
+
+    #[test]
+    fn relative_producer_entry_and_embedding_evidence_survive_host_adaptation() {
+        let mut raw: serde_json::Value = serde_json::from_str(include_str!(
+            "../../inference/tests/fixtures/inference_package_facts/hf_candle_embedding_package_facts.json"
+        )).unwrap();
+        raw["model_ref"]["model_ref_contract_version"] = serde_json::json!(1);
+        let producer = serde_json::from_value(raw).unwrap();
+        let facts = decode_pumas_package_facts(producer).unwrap();
+        let selected = facts.model_ref.clone();
+        let expected_entry = facts.artifact.entry_path.clone();
+        let expected_components = facts.components.clone();
+        let expected_transformers = facts.transformers.clone();
+        let expected_task = facts.task.clone();
+        let facts = normalize_runtime_host_package_fact_identity(&selected, facts);
+        assert_eq!(facts.artifact.entry_path, expected_entry);
+        assert_eq!(facts.components, expected_components);
+        assert_eq!(facts.transformers, expected_transformers);
+        assert_eq!(facts.task, expected_task);
+        assert_eq!(facts.model_ref.model_id, selected.model_id);
+        assert_eq!(
+            facts.model_ref.selected_artifact_id,
+            selected.selected_artifact_id
+        );
+    }
+
+    #[test]
     fn runtime_host_package_fact_identity_removes_owner_local_entry_paths() {
         let request = validated_runtime_host_request();
         let selected_model_ref = selected_pumas_model_ref(&request).expect("selected model ref");

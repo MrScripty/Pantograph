@@ -207,8 +207,14 @@ impl PumasSelectorAccess {
 
     pub async fn resolve_model_artifact_load_target(
         &self,
-        request: pumas_library::models::ResolveModelArtifactLoadTargetRequest,
+        mut request: pumas_library::models::ResolveModelArtifactLoadTargetRequest,
     ) -> pumas_library::Result<pumas_library::models::ResolveModelArtifactLoadTargetResponse> {
+        request.model_ref.model_id = request
+            .model_ref
+            .model_id
+            .strip_prefix("pumas://models/")
+            .unwrap_or(&request.model_ref.model_id)
+            .to_string();
         match self {
             Self::Owner(api) => api.resolve_model_artifact_load_target(request).await,
             Self::LocalClient(client) => client.resolve_model_artifact_load_target(request).await,
@@ -851,6 +857,128 @@ mod tests {
             .model_library_selector_snapshot(request)
             .await
             .expect("owner IPC must survive dropping attached extensions");
+    }
+
+    #[tokio::test]
+    async fn configured_local_client_full_facts_and_guarded_target_match_real_owner() {
+        use pumas_library::models::{
+            PumasArtifactConsumer, PumasArtifactLoadTargetResolutionMode,
+            ResolveModelArtifactLoadTargetRequest,
+        };
+        let root = create_launcher_root();
+        let owner = pumas_library::PumasApi::builder(root.path())
+            .auto_create_dirs(true)
+            .with_hf_client(false)
+            .with_process_manager(false)
+            .build()
+            .await
+            .expect("isolated real owner");
+        let source = root.path().join("source.gguf");
+        let mut bytes = [0_u8; 24];
+        bytes[..4].copy_from_slice(b"GGUF");
+        bytes[4..8].copy_from_slice(&2_u32.to_le_bytes());
+        std::fs::write(&source, bytes).unwrap();
+        let imported = owner
+            .import_model(&pumas_library::model_library::ModelImportSpec {
+                path: source.display().to_string(),
+                family: "fixture".into(),
+                official_name: "Consumer Full Facts".into(),
+                repo_id: None,
+                model_type: Some("llm".into()),
+                subtype: None,
+                tags: None,
+                security_acknowledged: Some(true),
+            })
+            .await
+            .unwrap();
+        assert!(imported.success, "import failed: {:?}", imported.error);
+        let model_id = imported.model_id.unwrap();
+        let expected = owner.resolve_model_package_facts(&model_id).await.unwrap();
+        assert_eq!(expected.package_facts_contract_version, 3);
+        assert!(expected.gguf.is_some());
+        assert!(expected.inspection_manifest.is_some());
+        assert!(expected.artifact.logical_size.is_some());
+        let mut extensions = ExecutorExtensions::new();
+        setup_extensions_with_path(&mut extensions, Some(root.path())).await;
+        let access = extensions
+            .get::<Arc<PumasSelectorAccess>>(PUMAS_SELECTOR_ACCESS)
+            .unwrap();
+        let PumasSelectorAccess::LocalClient(client) = access.as_ref() else {
+            panic!("real owner must be attached as a client")
+        };
+        assert!(extensions
+            .get::<Arc<pumas_library::PumasApi>>(extension_keys::PUMAS_API)
+            .is_none());
+        let consumer_id = format!("pumas://models/{model_id}");
+        let actual = access
+            .resolve_model_package_facts(&consumer_id)
+            .await
+            .unwrap();
+        assert_eq!(
+            serde_json::to_value(&actual).unwrap(),
+            serde_json::to_value(&expected).unwrap()
+        );
+        let mut request = ResolveModelArtifactLoadTargetRequest {
+            model_ref: expected.model_ref.clone(),
+            expected_artifact_kind: None,
+            caller_observed_entry_path: None,
+            caller_observed_package_facts_contract_version: Some(3),
+            resolution_mode: PumasArtifactLoadTargetResolutionMode::OwnerFresh,
+            consumer: PumasArtifactConsumer {
+                consumer_name: "pantograph-consumer-test".into(),
+                task_kind: Some("text_generation".into()),
+                runtime_family: Some("llamacpp".into()),
+            },
+        };
+        let owner_target = owner
+            .resolve_model_artifact_load_target(request.clone())
+            .await
+            .unwrap();
+        request.model_ref.model_id = consumer_id;
+        let client_target = access
+            .resolve_model_artifact_load_target(request)
+            .await
+            .unwrap();
+        assert_eq!(client_target.artifact_state, owner_target.artifact_state);
+        assert_eq!(
+            client_target.entry_path_state,
+            owner_target.entry_path_state
+        );
+        assert_eq!(client_target.target, owner_target.target);
+        assert_eq!(
+            client_target
+                .diagnostics
+                .iter()
+                .map(|diagnostic| diagnostic.code)
+                .collect::<Vec<_>>(),
+            owner_target
+                .diagnostics
+                .iter()
+                .map(|diagnostic| diagnostic.code)
+                .collect::<Vec<_>>()
+        );
+        // Public local import has no explicit selected artifact identity. Preserve
+        // the owner's admission failure instead of inventing one from a filename.
+        assert_eq!(expected.model_ref.selected_artifact_id, None);
+        assert!(!client_target.is_ready());
+        assert!(client_target.target.is_none());
+        assert!(!client_target.diagnostics.is_empty());
+        assert!(client_target
+            .diagnostics
+            .iter()
+            .all(|diagnostic| diagnostic.field_path.is_none()
+                && diagnostic.message == "Artifact load target is not available"));
+        let mut wrong = client.instance().clone();
+        wrong.connection_token = Some("wrong-owner-token".into());
+        let wrong = pumas_library::PumasLocalClient::connect(wrong)
+            .await
+            .unwrap();
+        assert!(matches!(
+            wrong.resolve_model_package_facts(&model_id).await,
+            Err(pumas_library::PumasError::InvalidParams { .. })
+        ));
+        drop(extensions);
+        owner.resolve_model_package_facts(&model_id).await.unwrap();
     }
 
     #[tokio::test]
