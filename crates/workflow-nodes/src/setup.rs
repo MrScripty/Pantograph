@@ -549,134 +549,53 @@ pub fn resolve_pumas_model_library_root(path: &Path) -> Option<PathBuf> {
 #[cfg(all(test, feature = "model-library"))]
 mod tests {
     use super::*;
-    use async_trait::async_trait;
     use node_engine::extension_keys;
-    use pumas_library::ipc::{IpcDispatch, IpcServer};
-    use pumas_library::model_library::ModelLibrary;
-    use pumas_library::registry::{InstanceEntry, InstanceStatus, LocalInstanceTransportKind};
+    use pumas_library::registry::InstanceEntry;
     use pumas_library::ModelIndex;
     use tempfile::TempDir;
 
-    struct UpdateStreamDispatch {
-        library: ModelLibrary,
+    async fn create_owner(root: &Path) -> pumas_library::PumasApi {
+        pumas_library::PumasApi::builder(root)
+            .auto_create_dirs(true)
+            .with_hf_client(false)
+            .with_process_manager(false)
+            .build()
+            .await
+            .expect("isolated public Pumas owner should start")
     }
 
-    struct SelectedDetailDispatch;
-
-    #[async_trait]
-    impl IpcDispatch for UpdateStreamDispatch {
-        async fn dispatch(
-            &self,
-            method: &str,
-            _params: serde_json::Value,
-        ) -> pumas_library::Result<serde_json::Value> {
-            Err(pumas_library::PumasError::Other(format!(
-                "unexpected IPC method: {method}"
-            )))
-        }
-
-        async fn subscribe_model_library_update_stream_since(
-            &self,
-            cursor: &str,
-            _connection_token: Option<&str>,
-        ) -> pumas_library::Result<Option<pumas_library::model_library::ModelLibraryUpdateSubscriber>>
-        {
-            Ok(Some(
-                self.library
-                    .subscribe_model_library_update_stream_since(cursor)
-                    .await?,
-            ))
-        }
+    fn owner_instance(owner: &pumas_library::PumasApi) -> InstanceEntry {
+        let root = std::fs::canonicalize(owner.launcher_root()).unwrap();
+        pumas_library::PumasLocalClient::discover_ready_instances()
+            .expect("public owner registry discovery")
+            .into_iter()
+            .find(|instance| {
+                std::fs::canonicalize(&instance.library_path).ok().as_ref() == Some(&root)
+            })
+            .expect("owner should publish an authenticated ready instance")
     }
 
-    #[async_trait]
-    impl IpcDispatch for SelectedDetailDispatch {
-        async fn dispatch(
-            &self,
-            method: &str,
-            _params: serde_json::Value,
-        ) -> pumas_library::Result<serde_json::Value> {
-            let model_id = "llm/imported/local-client-test";
-            match method {
-                "model_library_selector_snapshot" => {
-                    serde_json::to_value(pumas_library::models::ModelLibrarySelectorSnapshot {
-                        selector_snapshot_contract_version:
-                            pumas_library::models::MODEL_LIBRARY_SELECTOR_SNAPSHOT_CONTRACT_VERSION,
-                        cursor: "model-library-updates:7".to_string(),
-                        rows: vec![pumas_library::models::ModelLibrarySelectorSnapshotRow {
-                            model_id: model_id.to_string(),
-                            model_ref: pumas_library::models::PumasModelRef {
-                                model_id: model_id.to_string(),
-                                selected_artifact_id: Some("model.gguf".to_string()),
-                                selected_artifact_path: Some(format!("{model_id}/model.gguf")),
-                                ..Default::default()
-                            },
-                            repo_id: None,
-                            selected_artifact_id: Some("model.gguf".to_string()),
-                            selected_artifact_path: Some(format!("{model_id}/model.gguf")),
-                            entry_path: Some("/tmp/pumas/model.gguf".to_string()),
-                            entry_path_state: pumas_library::models::ModelEntryPathState::Ready,
-                            artifact_state: pumas_library::models::ModelArtifactState::Ready,
-                            display_name: "Local Client Test".to_string(),
-                            model_type: Some("llm".to_string()),
-                            tags: vec!["gguf".to_string()],
-                            indexed_path: Some(model_id.to_string()),
-                            task_type_primary: Some("text-generation".to_string()),
-                            pipeline_tag: Some("text-generation".to_string()),
-                            recommended_backend: Some("llamacpp".to_string()),
-                            runtime_engine_hints: vec!["llamacpp".to_string()],
-                            storage_kind: Some(pumas_library::models::StorageKind::LibraryOwned),
-                            validation_state: Some(
-                                pumas_library::models::AssetValidationState::Valid,
-                            ),
-                            package_facts_summary_status:
-                                pumas_library::models::ModelPackageFactsSummaryStatus::Cached,
-                            package_facts_summary: None,
-                            detail_state:
-                                pumas_library::models::ModelLibrarySelectorDetailState::Complete,
-                            updated_at: Some("2026-05-08T00:00:00Z".to_string()),
-                        }],
-                        total_count: Some(1),
-                    })
-                    .map_err(|error| pumas_library::PumasError::Other(error.to_string()))
-                }
-                "resolve_model_execution_descriptors_batch" => serde_json::to_value(vec![
-                    pumas_library::models::ModelExecutionDescriptorBatchItem {
-                        model_id: model_id.to_string(),
-                        descriptor: Some(pumas_library::models::ModelExecutionDescriptor {
-                            execution_contract_version: 1,
-                            model_id: model_id.to_string(),
-                            entry_path: "/tmp/pumas/model.gguf".to_string(),
-                            model_type: "llm".to_string(),
-                            task_type_primary: "text-generation".to_string(),
-                            recommended_backend: Some("llamacpp".to_string()),
-                            runtime_engine_hints: vec!["llamacpp".to_string()],
-                            storage_kind: pumas_library::models::StorageKind::LibraryOwned,
-                            validation_state: pumas_library::models::AssetValidationState::Valid,
-                            dependency_resolution: Some(serde_json::json!({
-                                "bindings": [{
-                                    "binding_id": "binding-a",
-                                    "backend_key": "llamacpp"
-                                }]
-                            })),
-                        }),
-                        error: None,
-                    },
-                ])
-                .map_err(|error| pumas_library::PumasError::Other(error.to_string())),
-                "resolve_model_package_facts_summaries" => serde_json::to_value(vec![
-                    pumas_library::models::ModelPackageFactsSummaryBatchItem {
-                        model_id: model_id.to_string(),
-                        result: None,
-                        error: None,
-                    },
-                ])
-                .map_err(|error| pumas_library::PumasError::Other(error.to_string())),
-                _ => Err(pumas_library::PumasError::Other(format!(
-                    "unexpected IPC method: {method}"
-                ))),
-            }
-        }
+    async fn import_fixture_model(owner: &pumas_library::PumasApi) -> String {
+        let source = owner.launcher_root().join("source.gguf");
+        let mut bytes = [0_u8; 24];
+        bytes[..4].copy_from_slice(b"GGUF");
+        bytes[4..8].copy_from_slice(&2_u32.to_le_bytes());
+        std::fs::write(&source, bytes).unwrap();
+        let imported = owner
+            .import_model(&pumas_library::model_library::ModelImportSpec {
+                path: source.display().to_string(),
+                family: "fixture".into(),
+                official_name: "Local Client Test".into(),
+                repo_id: None,
+                model_type: Some("llm".into()),
+                subtype: None,
+                tags: None,
+                security_acknowledged: Some(true),
+            })
+            .await
+            .expect("public fixture import");
+        assert!(imported.success, "import failed: {:?}", imported.error);
+        imported.model_id.expect("imported model identity")
     }
 
     fn create_models_db(model_root: &Path) {
@@ -694,20 +613,6 @@ mod tests {
         std::fs::create_dir_all(temp.path().join("launcher-data")).unwrap();
         std::fs::create_dir_all(temp.path().join("shared-resources/models")).unwrap();
         temp
-    }
-
-    fn ready_instance(port: u16) -> InstanceEntry {
-        InstanceEntry {
-            library_path: PathBuf::from("/tmp/pantograph-pumas-test-library"),
-            pid: std::process::id(),
-            port,
-            transport_kind: LocalInstanceTransportKind::LoopbackTcp,
-            endpoint: format!("127.0.0.1:{port}"),
-            connection_token: Some("token".to_string()),
-            started_at: "2026-05-06T00:00:00Z".to_string(),
-            version: None,
-            status: InstanceStatus::Ready,
-        }
     }
 
     #[test]
@@ -985,26 +890,29 @@ mod tests {
     async fn configured_local_client_skips_other_libraries_and_survives_client_drop() {
         let expected_root = create_launcher_root();
         let other_root = create_launcher_root();
-        let server = IpcServer::start(Arc::new(SelectedDetailDispatch))
-            .await
-            .expect("real IPC fixture must start");
-        let mut other = ready_instance(server.port);
-        other.library_path = other_root.path().to_path_buf();
-        let mut expected = ready_instance(server.port);
-        expected.library_path = expected_root.path().to_path_buf();
-        let instances = [other, expected];
+        let expected_owner = create_owner(expected_root.path()).await;
+        let other_owner = create_owner(other_root.path()).await;
+        let instances = [
+            owner_instance(&other_owner),
+            owner_instance(&expected_owner),
+        ];
 
         let client = connect_local_client(&instances, Some(expected_root.path()))
             .await
             .expect("matching owner should connect");
         assert_eq!(client.instance().library_path, expected_root.path());
         let access = PumasSelectorAccess::LocalClient(Arc::new(client));
-        assert!(access
-            .selected_model_detail("llm/imported/local-client-test")
+        let snapshot = access
+            .model_library_selector_snapshot(Default::default())
             .await
-            .unwrap()
-            .descriptor
-            .is_some());
+            .expect("authenticated matching owner snapshot");
+        assert_eq!(
+            snapshot,
+            expected_owner
+                .model_library_selector_snapshot(Default::default())
+                .await
+                .unwrap()
+        );
         drop(access);
 
         connect_local_client(&instances, Some(expected_root.path()))
@@ -1019,13 +927,10 @@ mod tests {
     async fn configured_local_client_does_not_fall_back_to_another_owner() {
         let expected_root = create_launcher_root();
         let other_root = create_launcher_root();
-        let server = IpcServer::start(Arc::new(SelectedDetailDispatch))
-            .await
-            .expect("real IPC fixture must start");
-        let mut other = ready_instance(server.port);
-        other.library_path = other_root.path().to_path_buf();
-        let mut unavailable = ready_instance(server.port);
-        unavailable.library_path = expected_root.path().to_path_buf();
+        let expected_owner = create_owner(expected_root.path()).await;
+        let other_owner = create_owner(other_root.path()).await;
+        let other = owner_instance(&other_owner);
+        let mut unavailable = owner_instance(&expected_owner);
         unavailable.connection_token = None;
         let instances = [unavailable, other];
 
@@ -1047,11 +952,8 @@ mod tests {
         let alias_parent = TempDir::new().unwrap();
         let alias = alias_parent.path().join("launcher-alias");
         std::os::unix::fs::symlink(root.path(), &alias).unwrap();
-        let server = IpcServer::start(Arc::new(SelectedDetailDispatch))
-            .await
-            .expect("real IPC fixture must start");
-        let mut instance = ready_instance(server.port);
-        instance.library_path = root.path().to_path_buf();
+        let owner = create_owner(root.path()).await;
+        let instance = owner_instance(&owner);
 
         let client = connect_local_client(&[instance], Some(&alias))
             .await
@@ -1061,27 +963,23 @@ mod tests {
 
     #[tokio::test]
     async fn local_client_update_feed_recovers_events_from_selector_cursor() {
-        let temp = TempDir::new().unwrap();
-        let library_root = temp.path().join("models");
-        std::fs::create_dir_all(&library_root).unwrap();
-        let library = ModelLibrary::new(&library_root).await.unwrap();
-        let cursor = library
-            .list_model_library_updates_since(None, 100)
+        let root = create_launcher_root();
+        let owner = create_owner(root.path()).await;
+        let cursor = owner
+            .model_library_selector_snapshot(Default::default())
             .await
             .unwrap()
             .cursor;
-        library
-            .notify_model_library_refresh("local-client-handoff-test")
+        let model_id = import_fixture_model(&owner).await;
+        let expected = owner
+            .list_model_library_updates_since(Some(&cursor), 100)
+            .await
             .unwrap();
-        let Some(server) = IpcServer::start(Arc::new(UpdateStreamDispatch {
-            library: library.clone(),
-        }))
-        .await
-        .ok() else {
-            eprintln!("Skipping local_client_update_feed_recovers_events_from_selector_cursor");
-            return;
-        };
-        let client = pumas_library::PumasLocalClient::connect(ready_instance(server.port))
+        assert!(expected
+            .events
+            .iter()
+            .any(|event| event.model_id == model_id));
+        let client = pumas_library::PumasLocalClient::connect(owner_instance(&owner))
             .await
             .unwrap();
         let access = PumasSelectorAccess::LocalClient(Arc::new(client));
@@ -1094,38 +992,77 @@ mod tests {
         assert!(!feed.stale_cursor);
         assert!(!feed.snapshot_required);
         assert!(feed.cursor.starts_with("model-library-updates:"));
-        assert_eq!(feed.events.len(), 1);
-        assert_eq!(feed.events[0].model_id, "__library__/model-library-refresh");
+        assert!(feed.events.iter().any(|event| event.model_id == model_id));
+        for event in expected.events {
+            assert!(
+                feed.events.contains(&event),
+                "owner update must survive IPC recovery"
+            );
+        }
     }
 
     #[tokio::test]
     async fn local_client_selected_model_detail_uses_batch_detail_methods() {
-        let Some(server) = IpcServer::start(Arc::new(SelectedDetailDispatch))
+        let root = create_launcher_root();
+        let owner = create_owner(root.path()).await;
+        let model_id = import_fixture_model(&owner).await;
+        let expected_descriptor = owner
+            .resolve_model_execution_descriptors_batch(vec![model_id.clone()])
             .await
-            .ok()
-        else {
-            eprintln!("Skipping local_client_selected_model_detail_uses_batch_detail_methods");
-            return;
-        };
-        let client = pumas_library::PumasLocalClient::connect(ready_instance(server.port))
+            .unwrap()
+            .into_iter()
+            .find(|item| item.model_id == model_id)
+            .and_then(|item| item.descriptor)
+            .expect("owner should resolve an imported GGUF descriptor");
+        // Compare the same cache state on both sides of IPC; the first lookup
+        // may regenerate a summary and report that transition.
+        owner
+            .resolve_model_package_facts_summaries(vec![model_id.clone()])
+            .await
+            .expect("warm owner summary cache");
+        let expected_summary = owner
+            .resolve_model_package_facts_summaries(vec![model_id.clone()])
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|item| item.model_id == model_id)
+            .and_then(|item| item.result)
+            .expect("owner should resolve an imported GGUF summary");
+        let expected_row = owner
+            .model_library_selector_snapshot(Default::default())
+            .await
+            .unwrap()
+            .rows
+            .into_iter()
+            .find(|row| row.model_id == model_id)
+            .expect("imported selector row after owner detail hydration");
+        let client = pumas_library::PumasLocalClient::connect(owner_instance(&owner))
             .await
             .unwrap();
         let access = PumasSelectorAccess::LocalClient(Arc::new(client));
 
         let detail = access
-            .selected_model_detail("llm/imported/local-client-test")
+            .selected_model_detail(&model_id)
             .await
             .expect("local client selected detail should load from batch APIs");
 
         assert_eq!(
-            detail
-                .selector_row
-                .as_ref()
-                .map(|row| row.display_name.as_str()),
-            Some("Local Client Test")
+            serde_json::to_value(detail.selector_row.expect("selector row")).unwrap(),
+            serde_json::to_value(expected_row).unwrap()
         );
-        let descriptor = detail.descriptor.expect("descriptor should hydrate");
-        assert_eq!(descriptor.recommended_backend.as_deref(), Some("llamacpp"));
+        assert_eq!(
+            serde_json::to_value(detail.descriptor.expect("descriptor should hydrate")).unwrap(),
+            serde_json::to_value(expected_descriptor).unwrap()
+        );
+        assert_eq!(
+            serde_json::to_value(
+                detail
+                    .package_summary_result
+                    .expect("summary should hydrate")
+            )
+            .unwrap(),
+            serde_json::to_value(expected_summary).unwrap()
+        );
     }
 
     #[tokio::test]
