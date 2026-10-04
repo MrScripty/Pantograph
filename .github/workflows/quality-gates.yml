@@ -251,6 +251,9 @@ jobs:
           cargo test -p inference --features backend-pytorch --lib pytorch_named_text_request
           cargo test -p inference --features backend-pytorch --lib test_pytorch_generate_text_
 
+      - name: Run aggregate inference tests with Python worker fixtures
+        run: cargo test -p inference --features backend-pytorch --lib
+
       - name: Run llama server startup and reuse contract tests
         run: |
           for test_filter in server::tests backend::llamacpp::tests; do

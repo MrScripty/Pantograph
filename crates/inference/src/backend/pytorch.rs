@@ -3103,6 +3103,12 @@ fn extract_system_prompt(request: &serde_json::Value) -> Option<String> {
         })
 }
 
+// Python fixtures replace process-global modules and production worker functions.
+// The GIL may be released during imports and worker execution, so hold this lock
+// for each complete fixture lifetime, including asynchronous lifecycle tests.
+#[cfg(test)]
+static PYTHON_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 #[cfg(test)]
 #[path = "pytorch_worker_image_contract_tests.rs"]
 mod pytorch_worker_image_contract_tests;

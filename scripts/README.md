@@ -219,3 +219,18 @@ hosted runners. It retains the existing GTK/WebKit/libsoup packages and installs
 uses `sudo apt-get` and changes the runner's system packages; do not treat it as
 a read-only check or run it on another computer without authorization. A failed
 install fails the step. It changes no Rust features, pins or verification gates.
+
+## Role-Button Name Evidence
+
+The parsed literal-role scanner accepts explicit `aria-label`/`aria-labelledby`
+attributes or directly rendered descendant text and `ExpressionTag` evidence.
+Snippet declarations are inert, and a `RenderTag` alone does not prove an
+accessible name: local, nested, shadowed, recursive and external calls may
+produce no text. The guard intentionally does not resolve snippet bindings or
+execute calls. Even a nonempty local snippet used as the sole label needs an
+explicit label attribute or independent rendered evidence to pass this gate.
+This conservative policy avoids treating render-call source as visible content;
+it preserves the existing expression-evidence policy rather than proving its
+runtime value. Native-button rules and reviewed-ignore rules are unchanged.
+Runtime accessibility and dynamically empty/hidden content still require UI
+validation.
