@@ -443,14 +443,19 @@ impl EmbeddingJobs {
             if cancel {
                 job.stop.store(true, Ordering::Release);
             }
-            let result = job.completion.await;
-            match result.as_ref() {
-                Ok(_) | Err(BackendError::Cancelled(_)) => Ok(()),
-                Err(error) => Err(inference(error)),
+            job.completion.await;
+            // Execution owns the request outcome. Lifecycle cleanup observes the
+            // join, then retires this completed job even when inference failed.
+            // A concurrent request may already have installed a different job.
+            let mut slot = self.0.lock().unwrap();
+            if slot
+                .as_ref()
+                .is_some_and(|current| Arc::ptr_eq(&current.stop, &job.stop))
+            {
+                *slot = None;
             }
-        } else {
-            Ok(())
         }
+        Ok(())
     }
 }
 
@@ -660,12 +665,104 @@ mod tests {
         release_tx.send(()).unwrap();
         drain.await.unwrap().unwrap();
         assert!(exited.load(Ordering::Acquire));
+        assert!(jobs.0.lock().unwrap().is_none());
         jobs.spawn(|_| Ok(vec![]))
             .unwrap()
             .await
             .as_ref()
             .as_ref()
             .unwrap();
+    }
+
+    #[tokio::test]
+    async fn config_failure_allows_stop_and_direct_reload_recovery() {
+        for stop_first in [true, false] {
+            let (_directory, request, target, decision) =
+                crate::selected_embedding_execution::fixture(8);
+            let mut backend = super::super::candle::CandleBackend::new();
+            backend
+                .load_selected_embedding(&request, &target, &decision)
+                .await
+                .unwrap();
+            assert!(matches!(
+                backend.embeddings(vec![" ".into()], "").await,
+                Err(BackendError::Config(_))
+            ));
+            assert!(backend.is_ready());
+            if stop_first {
+                backend.stop().await.unwrap();
+                assert!(!backend.is_ready());
+                backend.stop().await.unwrap();
+            }
+            backend
+                .load_selected_embedding(&request, &target, &decision)
+                .await
+                .unwrap();
+            assert_eq!(
+                backend.embeddings(vec!["hello".into()], "").await.unwrap()[0]
+                    .vector
+                    .len(),
+                8
+            );
+            backend.stop().await.unwrap();
+        }
+    }
+
+    #[tokio::test]
+    async fn inference_failure_allows_stop_and_direct_reload_recovery() {
+        for stop_first in [true, false] {
+            let (_directory, request, target, decision) =
+                crate::selected_embedding_execution::fixture(8);
+            let mut backend = super::super::candle::CandleBackend::new();
+            backend
+                .load_selected_embedding(&request, &target, &decision)
+                .await
+                .unwrap();
+            // Controlled tokenizer fault creates a genuine inconsistent-shape
+            // execution error, without replacing inference with a mock result.
+            Arc::get_mut(backend.model.as_mut().unwrap())
+                .unwrap()
+                .tokenizer
+                .with_padding(None);
+            assert!(matches!(
+                backend
+                    .embeddings(vec!["hello world".into(), "hello".into()], "")
+                    .await,
+                Err(BackendError::Inference(_))
+            ));
+            assert!(backend.is_ready());
+            if stop_first {
+                backend.stop().await.unwrap();
+                assert!(!backend.is_ready());
+                backend.stop().await.unwrap();
+            }
+            backend
+                .load_selected_embedding(&request, &target, &decision)
+                .await
+                .unwrap();
+            assert_eq!(
+                backend.embeddings(vec!["hello".into()], "").await.unwrap()[0]
+                    .vector
+                    .len(),
+                8
+            );
+            backend.stop().await.unwrap();
+        }
+    }
+
+    #[tokio::test]
+    async fn request_failure_remains_observable_after_lifecycle_retirement() {
+        let jobs = EmbeddingJobs::default();
+        let request_completion = jobs
+            .spawn(|_| Err(BackendError::Inference("controlled failure".into())))
+            .unwrap();
+        jobs.drain(false).await.unwrap();
+        assert!(jobs.0.lock().unwrap().is_none());
+        assert!(matches!(
+            copy_result(request_completion.await.as_ref()),
+            Err(BackendError::Inference(_))
+        ));
+        jobs.drain(true).await.unwrap();
     }
 
     #[tokio::test]
