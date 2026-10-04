@@ -582,6 +582,7 @@ fn load_target_diagnostic_code(
 ) -> SchedulerDispatchSelectionDiagnosticCode {
     match code {
         RuntimeDispatchLoadTargetFactsDiagnosticCode::ReadyResponseMissingTarget
+        | RuntimeDispatchLoadTargetFactsDiagnosticCode::SelectedIdentityMismatch
         | RuntimeDispatchLoadTargetFactsDiagnosticCode::EmptyLoadTargetPath => {
             SchedulerDispatchSelectionDiagnosticCode::InvalidCandidateEvidence
         }
@@ -618,6 +619,9 @@ fn load_target_diagnostic_hint(code: RuntimeDispatchLoadTargetFactsDiagnosticCod
         }
         RuntimeDispatchLoadTargetFactsDiagnosticCode::EmptyLoadTargetPath => {
             "embedded_runtime_dispatch_candidate_provider.load_target.empty_load_target_path"
+        }
+        RuntimeDispatchLoadTargetFactsDiagnosticCode::SelectedIdentityMismatch => {
+            "embedded_runtime_dispatch_candidate_provider.load_target.selected_identity_mismatch"
         }
         RuntimeDispatchLoadTargetFactsDiagnosticCode::PathFactsStripped => {
             "embedded_runtime_dispatch_candidate_provider.load_target.path_facts_stripped"
@@ -1252,6 +1256,39 @@ mod tests {
         assert!(diagnostics.is_empty());
         assert_eq!(drafts.len(), 1);
         assert_eq!(drafts[0].loaded_runtime_memory_estimate_bytes, None);
+    }
+
+    #[test]
+    fn mismatched_load_target_identity_cannot_reserve_a_candidate() {
+        let registry = dispatch_registry();
+        let mut snapshot = source_snapshot(
+            vec![runtime_capability("pytorch", vec!["diffusers"])],
+            Vec::new(),
+        );
+        snapshot.pumas_load_target_facts =
+            Some(RuntimeDispatchLoadTargetFactsOutcome::Unavailable {
+                diagnostics: vec![RuntimeDispatchLoadTargetFactsDiagnostic {
+                    code: RuntimeDispatchLoadTargetFactsDiagnosticCode::SelectedIdentityMismatch,
+                    runtime_family: Some("diffusers".to_string()),
+                    message: "selected model identity disagrees with the ready target".to_string(),
+                }],
+            });
+        let provider = EmbeddedRuntimeDispatchCandidateProvider::with_source_snapshot(snapshot)
+            .with_resource_facts_source(RuntimeDispatchResourceFactsSource::new(registry.clone()));
+        let result = provider
+            .runtime_dispatch_candidates(
+                &workflow_task(Some("cuda:0")),
+                &ready_record(),
+                &readiness_proof(),
+            )
+            .expect("identity mismatch must remain a typed rejection");
+        assert!(result.candidates.is_empty());
+        assert!(result.diagnostics.iter().any(|diagnostic| {
+            diagnostic.code == SchedulerDispatchSelectionDiagnosticCode::InvalidCandidateEvidence
+                && diagnostic.hint.as_deref()
+                    == Some("embedded_runtime_dispatch_candidate_provider.load_target.selected_identity_mismatch")
+        }));
+        assert!(registry.snapshot().reservations.is_empty());
     }
 
     #[test]

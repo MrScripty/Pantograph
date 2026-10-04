@@ -44,7 +44,7 @@ pub use runtime_host_execution::{
     RuntimeHostExecutionState, RuntimeHostExecutionTerminalMetadata,
     ValidatedRuntimeHostBatchExecutionRequest, ValidatedRuntimeHostBatchExecutionResponse,
     ValidatedRuntimeHostExecutionRequest, ValidatedRuntimeHostExecutionResponse,
-    RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
+    RUNTIME_HOST_EXECUTION_CONTRACT_VERSION, RUNTIME_HOST_STRUCTURED_OUTPUT_MAX_BYTES,
 };
 pub use runtime_session_load::{
     RuntimeSessionLoadProofContractError, ValidatedWorkflowSessionRuntimeLoadProof,

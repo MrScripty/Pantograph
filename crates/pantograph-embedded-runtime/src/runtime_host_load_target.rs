@@ -14,7 +14,7 @@ const PANTOGRAPH_RUNTIME_HOST_CONSUMER: &str = "pantograph-embedded-runtime";
 const MAX_DIAGNOSTICS: usize = 4;
 
 pub(crate) struct RuntimeHostPumasLoadTargetResolver {
-    pumas_api: Arc<pumas_library::PumasApi>,
+    selector_access: Arc<workflow_nodes::setup::PumasSelectorAccess>,
 }
 
 #[async_trait]
@@ -26,8 +26,8 @@ pub(crate) trait RuntimeHostLoadTargetResolver: Send + Sync {
 }
 
 impl RuntimeHostPumasLoadTargetResolver {
-    pub(crate) fn new(pumas_api: Arc<pumas_library::PumasApi>) -> Self {
-        Self { pumas_api }
+    pub(crate) fn new(selector_access: Arc<workflow_nodes::setup::PumasSelectorAccess>) -> Self {
+        Self { selector_access }
     }
 }
 
@@ -39,10 +39,45 @@ impl RuntimeHostLoadTargetResolver for RuntimeHostPumasLoadTargetResolver {
     ) -> Result<PumasArtifactLoadTarget, RuntimeHostPumasLoadTargetError> {
         let pumas_request = build_runtime_host_artifact_load_target_request(request)?;
         let response = self
-            .pumas_api
+            .selector_access
             .resolve_model_artifact_load_target(pumas_request)
             .await?;
-        ready_runtime_host_artifact_load_target(response)
+        let mut target = ready_runtime_host_artifact_load_target(response)?;
+        let selected = &request
+            .as_ref()
+            .handoff
+            .dispatch_decision
+            .as_ref()
+            .ok_or(RuntimeHostPumasLoadTargetError::MissingDispatchDecision)?
+            .selected_model_ref;
+        if selected
+            .model_id
+            .strip_prefix("pumas://models/")
+            .unwrap_or(&selected.model_id)
+            != target
+                .model_ref
+                .model_id
+                .strip_prefix("pumas://models/")
+                .unwrap_or(&target.model_ref.model_id)
+            || selected
+                .revision
+                .as_ref()
+                .is_some_and(|revision| target.model_ref.revision.as_ref() != Some(revision))
+            || selected
+                .selected_artifact_id
+                .as_ref()
+                .is_some_and(|id| target.model_ref.selected_artifact_id.as_ref() != Some(id))
+            || selected
+                .selected_artifact_path
+                .as_ref()
+                .is_some_and(|path| target.model_ref.selected_artifact_path.as_ref() != Some(path))
+        {
+            return Err(RuntimeHostPumasLoadTargetError::SelectedIdentityMismatch);
+        }
+        // The physical executable path remains only in this host-owned target.
+        // Scheduler refs omit path data; preserve their canonical identity shape.
+        target.model_ref.selected_artifact_path = selected.selected_artifact_path.clone();
+        Ok(target)
     }
 }
 
@@ -130,6 +165,8 @@ fn compact_diagnostics(diagnostics: &[PumasArtifactLoadTargetDiagnostic]) -> Vec
 pub(crate) enum RuntimeHostPumasLoadTargetError {
     #[error("runtime host execution request is missing scheduler dispatch decision")]
     MissingDispatchDecision,
+    #[error("Pumas load target disagrees with selected model/revision/artifact identity")]
+    SelectedIdentityMismatch,
     #[error("ready Pumas artifact load-target response did not include a target")]
     ReadyResponseMissingTarget,
     #[error(

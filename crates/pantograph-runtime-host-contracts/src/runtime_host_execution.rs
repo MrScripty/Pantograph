@@ -9,6 +9,9 @@ use thiserror::Error;
 
 const MAX_ID_LEN: usize = 128;
 const MAX_TEXT_LEN: usize = 1024;
+/// Maximum serialized size of one structured node output.
+pub const RUNTIME_HOST_STRUCTURED_OUTPUT_MAX_BYTES: usize = 64 * 1024;
+
 const MAX_RUNTIME_HOST_INPUTS: usize = 128;
 const MAX_RUNTIME_HOST_OUTPUTS: usize = 64;
 const MAX_RUNTIME_HOST_DIAGNOSTICS: usize = 64;
@@ -268,6 +271,8 @@ impl RuntimeHostExecutionOutput {
 )]
 #[non_exhaustive]
 pub enum RuntimeHostExecutionOutputValue {
+    /// Structured node output, bounded independently of scalar text.
+    Json(serde_json::Value),
     String(String),
     Bool(bool),
     I64(i64),
@@ -279,6 +284,22 @@ pub enum RuntimeHostExecutionOutputValue {
 impl RuntimeHostExecutionOutputValue {
     fn validate(&self) -> Result<(), RuntimeHostExecutionContractError> {
         match self {
+            Self::Json(value) => {
+                if serde_json::to_vec(value)
+                    .map_err(|_| RuntimeHostExecutionContractError::InvalidField {
+                        field: "output.json",
+                        reason: "cannot serialize structured output",
+                    })?
+                    .len()
+                    > RUNTIME_HOST_STRUCTURED_OUTPUT_MAX_BYTES
+                {
+                    return Err(RuntimeHostExecutionContractError::FieldTooLong {
+                        field: "output.json",
+                        max_len: RUNTIME_HOST_STRUCTURED_OUTPUT_MAX_BYTES,
+                    });
+                }
+                Ok(())
+            }
             Self::String(value) => validate_optional_text("output.string", value),
             Self::MediaArtifactRef(value) => value.validate(),
             Self::Bool(_) | Self::I64(_) | Self::U64(_) | Self::DiagnosticOnly => Ok(()),

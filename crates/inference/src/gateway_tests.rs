@@ -4998,6 +4998,193 @@ async fn selected_text_switches_to_requested_target_and_requires_terminal_output
     }
 }
 
+#[cfg(feature = "backend-candle")]
+#[tokio::test]
+async fn selected_embedding_gateway_executes_real_models_and_replaces_width() {
+    let gateway =
+        InferenceGateway::with_backend(Box::new(crate::backend::CandleBackend::new()), "Candle");
+    for width in [8, 12] {
+        let (_directory, request, target, decision) =
+            crate::selected_embedding_execution::fixture(width);
+        let expected_path = target.local_load_path.clone();
+        let result = gateway
+            .execute_selected_embedding_with_cancellation(
+                request,
+                target,
+                decision,
+                InferenceExecutionCancellationHandle::running(),
+            )
+            .await
+            .unwrap();
+        let InferenceExecutionResult::Embedding {
+            embeddings, usage, ..
+        } = result
+        else {
+            panic!("embedding result required")
+        };
+        assert_eq!(embeddings.len(), 3);
+        for (index, result) in embeddings.iter().enumerate() {
+            assert_eq!(result.index, Some(index));
+            assert_eq!(result.vector.len(), width);
+            assert_eq!(result.token_count, Some(if index == 1 { 3 } else { 4 }));
+            assert!(result.vector.iter().all(|value| value.is_finite()));
+        }
+        assert_eq!(usage.unwrap().prompt_tokens, Some(11));
+        assert_eq!(gateway.current_backend_name().await, "Candle");
+        assert!(gateway.is_embedding_mode().await);
+        assert!(gateway.is_ready().await);
+        assert_eq!(
+            gateway
+                .current_runtime_config
+                .read()
+                .await
+                .as_ref()
+                .unwrap()
+                .model_path
+                .as_ref()
+                .unwrap(),
+            &PathBuf::from(expected_path)
+        );
+    }
+    gateway.stop().await.unwrap();
+    assert!(!gateway.is_ready().await);
+}
+
+#[cfg(feature = "backend-candle")]
+#[tokio::test]
+async fn selected_embedding_gateway_reuse_preserves_runtime_identity_with_optional_revision() {
+    let (_directory, mut request, target, mut decision) =
+        crate::selected_embedding_execution::fixture(8);
+    request.model_ref.as_mut().unwrap().revision = None;
+    decision.selected_model_ref.as_mut().unwrap().revision = None;
+    let gateway =
+        InferenceGateway::with_backend(Box::new(crate::backend::CandleBackend::new()), "Candle");
+    gateway
+        .execute_selected_embedding_with_cancellation(
+            request.clone(),
+            target.clone(),
+            decision.clone(),
+            crate::InferenceExecutionCancellationHandle::running(),
+        )
+        .await
+        .unwrap();
+    let first = gateway.runtime_lifecycle_snapshot().await;
+    assert_eq!(first.runtime_reused, Some(false));
+    let result = gateway
+        .execute_selected_embedding_with_cancellation(
+            request,
+            target,
+            decision,
+            crate::InferenceExecutionCancellationHandle::running(),
+        )
+        .await
+        .unwrap();
+    let second = gateway.runtime_lifecycle_snapshot().await;
+    assert_eq!(second.runtime_reused, Some(true));
+    assert_eq!(second.runtime_instance_id, first.runtime_instance_id);
+    assert_eq!(
+        second.lifecycle_decision_reason.as_deref(),
+        Some("scheduler_selected_embedding_package_reused")
+    );
+    let crate::InferenceExecutionResult::Embedding { embeddings, .. } = result else {
+        panic!("native embedding output required")
+    };
+    assert_eq!(embeddings[0].vector.len(), 8);
+    gateway.stop().await.unwrap();
+}
+
+#[cfg(feature = "backend-candle")]
+#[tokio::test]
+async fn selected_embedding_invalid_handoffs_and_precancellation_preserve_residency() {
+    let (_directory, request, target, decision) = crate::selected_embedding_execution::fixture(8);
+    let gateway =
+        InferenceGateway::with_backend(Box::new(crate::backend::CandleBackend::new()), "Candle");
+    gateway
+        .execute_selected_embedding_with_cancellation(
+            request.clone(),
+            target.clone(),
+            decision.clone(),
+            InferenceExecutionCancellationHandle::running(),
+        )
+        .await
+        .unwrap();
+    let original_instance = gateway
+        .runtime_lifecycle
+        .read()
+        .await
+        .runtime_instance_id
+        .clone();
+    for mutation in 0..8 {
+        let mut request = request.clone();
+        let mut target = target.clone();
+        let mut decision = decision.clone();
+        match mutation {
+            0 => request.model_ref.as_mut().unwrap().revision = Some("other-revision".into()),
+            1 => {
+                decision
+                    .selected_model_ref
+                    .as_mut()
+                    .unwrap()
+                    .selected_artifact_id = Some("other-artifact".into())
+            }
+            2 => target.model_ref.selected_artifact_path = Some("other/path".into()),
+            3 => {
+                request
+                    .resolved_model_package_facts
+                    .as_mut()
+                    .unwrap()
+                    .model_ref
+                    .model_id = "other/model".into()
+            }
+            4 => {
+                decision.selected_runtime_variant_id =
+                    crate::RuntimeVariantId::parse("candle.cuda").unwrap()
+            }
+            5 => {
+                decision.selected_device_id =
+                    Some(crate::InferenceDeviceId::parse("cuda:0").unwrap())
+            }
+            6 => {
+                request
+                    .resolved_model_package_facts
+                    .as_mut()
+                    .unwrap()
+                    .custom_code
+                    .requires_custom_code = true
+            }
+            7 => target.package_facts_contract_version = None,
+            _ => unreachable!(),
+        }
+        assert!(gateway
+            .execute_selected_embedding_with_cancellation(
+                request,
+                target,
+                decision,
+                InferenceExecutionCancellationHandle::running()
+            )
+            .await
+            .is_err());
+        assert!(gateway.is_ready().await);
+        assert_eq!(
+            gateway.runtime_lifecycle.read().await.runtime_instance_id,
+            original_instance
+        );
+    }
+    assert!(gateway
+        .execute_selected_embedding_with_cancellation(
+            request,
+            target,
+            decision,
+            InferenceExecutionCancellationHandle::cancellation_requested("before load")
+        )
+        .await
+        .is_err());
+    assert_eq!(
+        gateway.runtime_lifecycle.read().await.runtime_instance_id,
+        original_instance
+    );
+}
+
 #[tokio::test]
 async fn selected_text_invalid_handoffs_have_no_backend_effects() {
     for invalid in 0..13 {
@@ -5150,3 +5337,7 @@ fn private_lifecycle_context_preserves_complete_attribution_and_absence() {
         .build()
     );
 }
+
+#[cfg(feature = "backend-candle")]
+#[path = "gateway_embedding_replacement_tests.rs"]
+mod embedding_replacement;

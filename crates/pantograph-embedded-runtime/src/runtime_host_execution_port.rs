@@ -170,6 +170,19 @@ impl RuntimeHostExecutionPort for EmbeddedRuntimeHostExecutionPort {
                 .await;
         }
 
+        if validated_request
+            .as_ref()
+            .handoff
+            .task_intent
+            .task_type
+            .as_str()
+            == crate::runtime_host_embedding_execution::EMBEDDING_TASK
+        {
+            return self
+                .execute_runtime_host_embedding_request(&validated_request, cancellation)
+                .await;
+        }
+
         let Some(load_target_resolver) = self.load_target_resolver.as_ref() else {
             return Ok(rejected_response(
                 validated_request.as_ref(),
@@ -427,7 +440,168 @@ impl EmbeddedRuntimeHostExecutionPort {
             }
         };
 
-        Ok(completed_text_response(request_ref, text))
+        Ok(completed_node_response(
+            request_ref,
+            vec![RuntimeHostExecutionOutput {
+                port_id: "text".into(),
+                value: RuntimeHostExecutionOutputValue::String(text),
+            }],
+            "embedded runtime-host text execution completed",
+        ))
+    }
+
+    async fn execute_runtime_host_embedding_request(
+        &self,
+        request: &ValidatedRuntimeHostExecutionRequest,
+        cancellation: RuntimeHostExecutionCancellationHandle,
+    ) -> Result<RuntimeHostExecutionResponse, RuntimeHostExecutionPortError> {
+        let request_ref = request.as_ref();
+        if let Err(error) =
+            crate::runtime_host_embedding_execution::validate_runtime_host_embedding_request(
+                request_ref,
+            )
+        {
+            return Ok(rejected_response(
+                request_ref,
+                RuntimeHostExecutionDiagnosticCode::ExecutionFailed,
+                &format!("embedded runtime-host embedding projection failed: {error}"),
+                "embedded_runtime_host_execution_port.embedding_projection_failed",
+            ));
+        }
+
+        let Some(load_target_resolver) = self.load_target_resolver.as_ref() else {
+            return Ok(rejected_response(
+                request_ref,
+                RuntimeHostExecutionDiagnosticCode::PumasLoadTargetRequired,
+                "embedded runtime-host embedding execution requires a Pumas load-target resolver",
+                MISSING_LOAD_TARGET_RESOLVER_HINT,
+            ));
+        };
+        let Some(package_facts_resolver) = self.package_facts_resolver.as_ref() else {
+            return Ok(rejected_response(
+                request_ref,
+                RuntimeHostExecutionDiagnosticCode::RuntimeUnavailable,
+                "embedded runtime-host embedding execution requires a Pumas package-facts resolver",
+                MISSING_PACKAGE_FACTS_RESOLVER_HINT,
+            ));
+        };
+        let Some(gateway) = self.gateway.as_ref() else {
+            return Ok(rejected_response(
+                request_ref,
+                RuntimeHostExecutionDiagnosticCode::RuntimeUnavailable,
+                "embedded runtime-host embedding execution requires an inference gateway",
+                MISSING_INFERENCE_GATEWAY_HINT,
+            ));
+        };
+
+        let load_target = match load_target_resolver.resolve(request).await {
+            Ok(load_target) => load_target,
+            Err(error) => {
+                return Ok(rejected_response(
+                    request_ref,
+                    RuntimeHostExecutionDiagnosticCode::PumasLoadTargetUnavailable,
+                    &load_target_error_message(error),
+                    LOAD_TARGET_UNAVAILABLE_HINT,
+                ));
+            }
+        };
+        if let Some(response) = cancellation_rejection_response(request_ref, &cancellation)? {
+            return Ok(response);
+        }
+
+        let package_facts = match package_facts_resolver.resolve(request).await {
+            Ok(package_facts) => package_facts,
+            Err(error) => {
+                return Ok(rejected_response(
+                    request_ref,
+                    RuntimeHostExecutionDiagnosticCode::PumasLoadTargetUnavailable,
+                    &package_facts_error_message(error),
+                    PACKAGE_FACTS_UNAVAILABLE_HINT,
+                ));
+            }
+        };
+        if let Some(response) = cancellation_rejection_response(request_ref, &cancellation)? {
+            return Ok(response);
+        }
+
+        let projection =
+            match crate::runtime_host_embedding_execution::project_runtime_host_embedding(
+                request,
+                package_facts,
+                crate::runtime_host_image_execution::project_pumas_artifact_load_target(
+                    load_target,
+                ),
+            ) {
+                Ok(projection) => projection,
+                Err(error) => {
+                    return Ok(rejected_response(
+                        request_ref,
+                        RuntimeHostExecutionDiagnosticCode::ExecutionFailed,
+                        &format!("embedded runtime-host embedding projection failed: {error}"),
+                        "embedded_runtime_host_execution_port.embedding_projection_failed",
+                    ));
+                }
+            };
+        if let Some(response) = cancellation_rejection_response(request_ref, &cancellation)? {
+            return Ok(response);
+        }
+
+        let inference_cancellation =
+            inference_cancellation_handle_from_runtime_host(cancellation.clone());
+        let result = match gateway
+            .execute_selected_embedding_with_cancellation(
+                projection.request,
+                projection.target,
+                projection.decision,
+                inference_cancellation,
+            )
+            .await
+        {
+            Ok(result) => result,
+            Err(error) => {
+                if matches!(
+                    error,
+                    inference::GatewayError::Backend(inference::BackendError::Cancelled(_))
+                ) {
+                    if let Some(response) =
+                        cancellation_rejection_response(request_ref, &cancellation)?
+                    {
+                        return Ok(response);
+                    }
+                }
+                return Ok(failed_response(
+                    request_ref,
+                    &format!("embedded runtime-host embedding gateway execution failed: {error}"),
+                    "embedded_runtime_host_execution_port.embedding_gateway_execution_failed",
+                ));
+            }
+        };
+
+        let outputs =
+            match crate::runtime_host_embedding_execution::embedding_outputs(request_ref, result) {
+                Ok(outputs) => outputs,
+                Err(error) => {
+                    return Ok(failed_response(
+                        request_ref,
+                        &format!("embedded runtime-host embedding projection failed: {error}"),
+                        "embedded_runtime_host_execution_port.embedding_projection_failed",
+                    ));
+                }
+            };
+
+        let response = completed_node_response(
+            request_ref,
+            outputs,
+            "embedded runtime-host embedding execution completed",
+        );
+        if let Err(error) = response.validate() {
+            return Ok(failed_response(
+                request_ref,
+                &format!("embedding output contract failed: {error}"),
+                "embedded_runtime_host_execution_port.embedding_projection_failed",
+            ));
+        }
+        Ok(response)
     }
 }
 
@@ -1575,9 +1749,10 @@ fn failed_response(
     }
 }
 
-fn completed_text_response(
+fn completed_node_response(
     request: &RuntimeHostExecutionRequest,
-    text: String,
+    outputs: Vec<RuntimeHostExecutionOutput>,
+    completion_message: &str,
 ) -> RuntimeHostExecutionResponse {
     RuntimeHostExecutionResponse {
         contract_version: RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
@@ -1587,14 +1762,11 @@ fn completed_text_response(
         node_id: request.handoff.node_id.clone(),
         task_id: request.handoff.task_id.clone(),
         state: RuntimeHostExecutionState::Completed,
-        outputs: vec![RuntimeHostExecutionOutput {
-            port_id: "text".to_string(),
-            value: RuntimeHostExecutionOutputValue::String(text),
-        }],
+        outputs,
         diagnostics: vec![RuntimeHostExecutionDiagnostic {
             severity: RuntimeHostExecutionDiagnosticSeverity::Info,
             code: RuntimeHostExecutionDiagnosticCode::ExecutionCompleted,
-            message: "embedded runtime-host text execution completed".to_string(),
+            message: completion_message.to_string(),
             hint: None,
         }],
         terminal_metadata: None,
@@ -2066,9 +2238,12 @@ mod tests {
             .expect("fixture has dispatch decision")
             .runtime_trait_settings
             .clear();
+        let pumas_access = Arc::new(workflow_nodes::setup::PumasSelectorAccess::Owner(pumas_api));
         let port = EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
-            Arc::new(RuntimeHostPumasLoadTargetResolver::new(pumas_api.clone())),
-            Arc::new(RuntimeHostPumasPackageFactsResolver::new(pumas_api)),
+            Arc::new(RuntimeHostPumasLoadTargetResolver::new(
+                pumas_access.clone(),
+            )),
+            Arc::new(RuntimeHostPumasPackageFactsResolver::new(pumas_access)),
             Arc::new(WorkflowServiceRuntimeHostMediaArtifactSink::new(
                 artifact_writer,
             )),
@@ -2436,6 +2611,7 @@ mod tests {
         selected_artifact_id: &str,
     ) {
         request.handoff.task_intent.model_ref.model_id = model_id.to_string();
+        request.handoff.task_intent.model_ref.revision = None;
         request.handoff.task_intent.model_ref.selected_artifact_id =
             Some(selected_artifact_id.to_string());
         request.handoff.task_intent.model_ref.selected_artifact_path = None;
@@ -2447,6 +2623,7 @@ mod tests {
             .model_ref = request.handoff.task_intent.model_ref.clone();
         if let Some(dispatch_decision) = request.handoff.dispatch_decision.as_mut() {
             dispatch_decision.task_intent.model_ref.model_id = model_id.to_string();
+            dispatch_decision.task_intent.model_ref.revision = None;
             dispatch_decision.task_intent.model_ref.selected_artifact_id =
                 Some(selected_artifact_id.to_string());
             dispatch_decision
@@ -2454,6 +2631,7 @@ mod tests {
                 .model_ref
                 .selected_artifact_path = None;
             dispatch_decision.selected_model_ref.model_id = model_id.to_string();
+            dispatch_decision.selected_model_ref.revision = None;
             dispatch_decision.selected_model_ref.selected_artifact_id =
                 Some(selected_artifact_id.to_string());
             dispatch_decision.selected_model_ref.selected_artifact_path = None;
