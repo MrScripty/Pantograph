@@ -1259,6 +1259,39 @@ mod tests {
     }
 
     #[test]
+    fn mismatched_load_target_identity_cannot_reserve_a_candidate() {
+        let registry = dispatch_registry();
+        let mut snapshot = source_snapshot(
+            vec![runtime_capability("pytorch", vec!["diffusers"])],
+            Vec::new(),
+        );
+        snapshot.pumas_load_target_facts =
+            Some(RuntimeDispatchLoadTargetFactsOutcome::Unavailable {
+                diagnostics: vec![RuntimeDispatchLoadTargetFactsDiagnostic {
+                    code: RuntimeDispatchLoadTargetFactsDiagnosticCode::SelectedIdentityMismatch,
+                    runtime_family: Some("diffusers".to_string()),
+                    message: "selected model identity disagrees with the ready target".to_string(),
+                }],
+            });
+        let provider = EmbeddedRuntimeDispatchCandidateProvider::with_source_snapshot(snapshot)
+            .with_resource_facts_source(RuntimeDispatchResourceFactsSource::new(registry.clone()));
+        let result = provider
+            .runtime_dispatch_candidates(
+                &workflow_task(Some("cuda:0")),
+                &ready_record(),
+                &readiness_proof(),
+            )
+            .expect("identity mismatch must remain a typed rejection");
+        assert!(result.candidates.is_empty());
+        assert!(result.diagnostics.iter().any(|diagnostic| {
+            diagnostic.code == SchedulerDispatchSelectionDiagnosticCode::InvalidCandidateEvidence
+                && diagnostic.hint.as_deref()
+                    == Some("embedded_runtime_dispatch_candidate_provider.load_target.selected_identity_mismatch")
+        }));
+        assert!(registry.snapshot().reservations.is_empty());
+    }
+
+    #[test]
     fn provider_fails_closed_when_load_target_evidence_is_missing() {
         let registry = Arc::new(RuntimeRegistry::new());
         registry.register_runtime(
