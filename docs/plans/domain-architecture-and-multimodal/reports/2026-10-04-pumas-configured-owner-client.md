@@ -39,22 +39,33 @@ empty temporary library, without Hugging Face or process management.
   required; the scanner is not architectural acceptance.
 - Required feature command:
   `cargo test --locked -p workflow-nodes --features model-library --lib`.
-  Not executed for this slice. The unmodified dependency graph requires
-  `ort-sys 2.0.0-rc.12`; its known CDN access failure remains pending the
-  coordinator's approved network update. No configuration changes, alternate
-  download source, reduced Pumas feature graph, or new credentials were used.
+  The native independent reviewer, reported by the coordinator, executed the
+  actual feature-enabled suite at exact head
+  `03fb03943060abbb0d505f79b769a74fb4ec9b5f`: **208 passed**, including all four
+  new real-owner/IPC cases. The declared default gate also passed there:
+  258 node-engine and 168 workflow-nodes tests, with one inherited benchmark
+  ignore. The reviewer accepted bounded configured-owner attachment without
+  source changes. Native qualification used the existing verified ORT runtime.
+- This cloud environment did not execute the feature-enabled suite. The approved
+  saved-domain settings were already applied, but this cloud path still returns
+  403 for the required ORT download. There is no pending network update. No
+  network settings, credentials or dependency features were changed here.
+- A small successor adds the exact feature command immediately after the
+  existing workflow-nodes default test step in Quality Gates, preserving that
+  step. Its hosted CI result remains pending coordinated publication/review.
 - No GUI, real model load, model inference, CUDA execution, or multimodal
   workflow was executed. Current Coding-Standards MCP is unavailable in this
   environment; current MCP compliance is not claimed.
 
-This is an implementation candidate awaiting feature-enabled qualification and
-coordinated review, not accepted M3 or complete product functionality.
+Configured-owner attachment is independently accepted at `03fb0394`. Full-facts
+transport, M3 execution and complete product functionality remain unaccepted.
 
 ## Executable next sequence for the coordinator
 
-1. Qualify this branch with the feature command above after ordinary CDN access
-   is restored. Keep the real-owner test mandatory; socket failure must fail
-   these new tests rather than silently skip them.
+1. Keep the feature command above in CI and qualify its successor at the actual
+   published head. Native attachment qualification is complete. The real-owner
+   test remains mandatory; socket failure fails these new tests rather than
+   silently skipping them.
 2. Admit the assessed Pumas dependency update separately. Merged upstream main
    `58b74e83fdf34131290933f576c7e338bde4a49d` already contains the registry
    startup repair. Its changed download-progress Result needs explicit error
@@ -67,6 +78,16 @@ coordinated review, not accepted M3 or complete product functionality.
    ReadOnly execution refusal, selected-artifact identity, freshness, and
    owner-only shutdown. This attachment slice does not remove their current
    Owner-only execution restriction.
+   The coordinator's current producer candidate
+   `40c035705641e344e8b4c91698cffea53b47e2e0` adds a closed
+   `LocalIpcOperation` wire-name enum. At that revision the producer must also
+   register the missing operation in existing `ipc/protocol.rs`; the existing
+   dispatch branch is otherwise unreachable through framed ingress. Its client
+   preserves RPC `-32602` as `InvalidParams`, maps other server errors to
+   `Other`, and preserves transport loss as `SharedInstanceLost`. These are
+   current-candidate observations, distinct from the consumed `f87c3da` and
+   assessed merged `58b74e83`. The Pumas lane owns this producer change and
+   actual framed-IPC qualification.
 4. Obtain legitimate producer identities and complete package evidence for real
    text/image models, then execute the existing canonical scheduler path and
    retain both outputs under one run. GUI/display and model prerequisites remain
@@ -89,6 +110,22 @@ coordinated review, not accepted M3 or complete product functionality.
    priority/aging, cancellation, and single-gateway serialization. No replicas,
    split/offload execution, continuous batching, or deep search is admitted by
    this proposal.
+
+The owner's Lean 4 commitment applies alongside that functional scheduler
+slice. First target: for a finite lease ledger, prove per-resource budget
+preservation under atomic grant, owner-bound update (excluding the previous
+claim), and exact-lease release. Map this to the existing runtime registry's
+`can_acquire_reservation`, locked `acquire_reservation`, update and release
+operations; reuse its admission owner. Second, when ranking is admitted, prove
+that a finite minimum selects only an eligible feasible candidate and obeys
+the declared deterministic tie rule. Keep the initial formalization bounded
+to these transition/selection lemmas, with a pinned Lean 4 toolchain and explicit
+assumptions. No Lean/Lake executable is available here and no proof ran.
+Natural-number or abstract-state proofs do not certify Rust refinement, u64
+overflow handling, floating-point estimates, hardware envelopes, cancellation
+acknowledgement or performance. Those still need actual dispatch-path tests
+and real workload measurements. Formalization must not delay the earlier
+working inference and producer/consumer slices.
 
 The October 2 compatible-inference book proposes the native embedding rollout;
 it executed no models. The newer October scheduler v2 evaluation is a standalone

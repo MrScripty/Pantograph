@@ -289,6 +289,9 @@ jobs:
       - name: Run workflow-nodes tests
         run: cargo test -p workflow-nodes --lib
 
+      - name: Run workflow-nodes model-library tests
+        run: cargo test --locked -p workflow-nodes --features model-library --lib
+
       - name: Run embedded runtime unit tests
         run: cargo test -p pantograph-embedded-runtime --lib
       - name: Run runtime registry contract tests
