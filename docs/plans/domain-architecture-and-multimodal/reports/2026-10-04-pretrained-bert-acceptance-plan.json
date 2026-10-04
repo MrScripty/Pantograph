@@ -1,0 +1,59 @@
+{
+  "status": "blocked_before_acquisition",
+  "candidate": "sentence-transformers/all-MiniLM-L6-v2",
+  "revision": "1110a243fdf4706b3f48f1d95db1a4f5529b4d41",
+  "license_declaration": "apache-2.0",
+  "license_source": "pinned publisher model card; no separate LICENSE file observed in the pinned tree",
+  "safetensors": {
+    "path": "model.safetensors",
+    "size_bytes": 90868376,
+    "sha256": "53aa51172d142c89d9012cce15ae4d6cc0ca6895895114379cacb4fab128d9db",
+    "local_bytes_verified": false
+  },
+  "estimated_selected_download_bytes": 91580000,
+  "estimated_selected_download_is_rounded": true,
+  "selected_files": [
+    "model.safetensors", "config.json", "modules.json", "1_Pooling/config.json",
+    "sentence_bert_config.json", "config_sentence_transformers.json", "tokenizer.json",
+    "tokenizer_config.json", "special_tokens_map.json", "vocab.txt", "README.md"
+  ],
+  "architecture": "BertModel",
+  "dimension": 384,
+  "recipe": ["Transformer", "attention_mask_mean_including_special_tokens", "L2_Normalize_eps_1e-12"],
+  "max_seq_length": 256,
+  "raw_package_compatible_with_frozen_loader": false,
+  "demonstrated_source_blocker": "pooling config omits include_prompt; frozen Candle loader requires explicit true",
+  "additional_unverified_risks": [
+    "sentence preprocessing flag differs from tokenizer lowercasing configuration",
+    "actual tokenizer JSON padding and truncation declarations unavailable",
+    "actual safetensors header must be checked against all-F32-tensors guard"
+  ],
+  "network_blocker": "Workspace Hugging Face API request failed at proxy tunnel with 403 Forbidden",
+  "reference_versions": {
+    "torch": "2.14.1+cpu", "transformers": "4.53.3", "tokenizers": "0.21.4", "safetensors": "0.8.0"
+  },
+  "candle_revision": "88ed7911de9e88196b1f55b199145d22647f415e",
+  "planned_atol": 0.00001,
+  "planned_rtol": 0.0001,
+  "planned_norm_tolerance": 0.0001,
+  "illustrative_semantic_texts": [
+    "The cat is sleeping on the sofa.",
+    "A cat is resting on a couch.",
+    "A person is repairing a bicycle.",
+    "Someone is fixing a bike.",
+    "The stock market closed higher today."
+  ],
+  "illustrative_pairs": [
+    {"left_index": 0, "paraphrase_index": 1, "unrelated_index": 4},
+    {"left_index": 2, "paraphrase_index": 3, "unrelated_index": 4}
+  ],
+  "semantic_results": null,
+  "pretrained_weights_acquired": false,
+  "remote_model_code_executed": false,
+  "pretrained_reference_forward_executed": false,
+  "pretrained_candle_gateway_forward_executed": false,
+  "pretrained_host_workflow_executed": false,
+  "pretrained_real_pumas_ipc_executed": false,
+  "gui_executed": false,
+  "gpu_executed": false
+}
