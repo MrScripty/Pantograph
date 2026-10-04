@@ -298,11 +298,12 @@ pub async fn setup_extensions(extensions: &mut ExecutorExtensions) {
 ///
 /// Tries in order:
 /// 1. Owner API from configured launcher roots derived from `library_path` and
-///    `PUMAS_LIBRARY_PATH`.
+///    `PUMAS_LIBRARY_PATH`, or the local client for that same root when another
+///    process already owns it.
 /// 2. Read-only selector access from configured model-library roots containing
 ///    `models.db`.
-/// 3. Local-client selector access from Pumas ready-instance discovery.
-/// 4. Owner API from `PumasApi::discover()`.
+/// 3. When no root is configured, local-client ready-instance discovery and
+///    then owner API discovery.
 #[cfg(feature = "model-library")]
 pub async fn setup_extensions_with_path(
     extensions: &mut ExecutorExtensions,
@@ -327,6 +328,7 @@ pub async fn setup_extensions_with_path(
 
     let mut api: Option<Arc<pumas_library::PumasApi>> = None;
     let mut selector_access: Option<Arc<PumasSelectorAccess>> = None;
+    let mut ready_instances = None;
     for path in &candidates {
         if !path.exists() {
             log::info!("Skipping non-existent library path: {:?}", path);
@@ -348,6 +350,12 @@ pub async fn setup_extensions_with_path(
             }
             Err(e) => {
                 log::warn!("PumasApi::builder({:?}) failed: {}", path, e);
+                let instances = ready_instances.get_or_insert_with(discover_ready_pumas_instances);
+                if let Some(client) = connect_local_client(instances, Some(path)).await {
+                    selector_access =
+                        Some(Arc::new(PumasSelectorAccess::LocalClient(Arc::new(client))));
+                    break;
+                }
             }
         }
     }
@@ -378,36 +386,18 @@ pub async fn setup_extensions_with_path(
         }
     }
 
-    if selector_access.is_none() {
-        match pumas_library::PumasLocalClient::discover_ready_instances() {
-            Ok(instances) => {
-                for instance in instances {
-                    match pumas_library::PumasLocalClient::connect(instance).await {
-                        Ok(client) => {
-                            log::info!("Pumas selector access connected as local client");
-                            selector_access =
-                                Some(Arc::new(PumasSelectorAccess::LocalClient(Arc::new(client))));
-                            break;
-                        }
-                        Err(error) => {
-                            log::warn!("PumasLocalClient connect failed: {}", error);
-                        }
-                    }
-                }
-            }
-            Err(error) => {
-                log::info!("PumasLocalClient discovery unavailable: {}", error);
-            }
+    if selector_access.is_none() && raw_candidates.is_empty() {
+        let instances = ready_instances.get_or_insert_with(discover_ready_pumas_instances);
+        if let Some(client) = connect_local_client(instances, None).await {
+            selector_access = Some(Arc::new(PumasSelectorAccess::LocalClient(Arc::new(client))));
         }
     }
 
-    if api.is_none() && selector_access.is_none() {
-        if raw_candidates.is_empty() {
-            log::info!(
-                "No pumas-library path configured. \
-                 Set PUMAS_LIBRARY_PATH or pass a path to setup_extensions_with_path()."
-            );
-        }
+    if api.is_none() && selector_access.is_none() && raw_candidates.is_empty() {
+        log::info!(
+            "No pumas-library path configured. \
+             Set PUMAS_LIBRARY_PATH or pass a path to setup_extensions_with_path()."
+        );
         match pumas_library::PumasApi::discover().await {
             Ok(found) => {
                 log::info!("PumasApi connected via discover()");
@@ -428,6 +418,43 @@ pub async fn setup_extensions_with_path(
     if let Some(selector_access) = selector_access {
         extensions.set(PUMAS_SELECTOR_ACCESS, selector_access);
     }
+}
+
+#[cfg(feature = "model-library")]
+fn discover_ready_pumas_instances() -> Vec<pumas_library::registry::InstanceEntry> {
+    pumas_library::PumasLocalClient::discover_ready_instances().unwrap_or_else(|error| {
+        log::info!("PumasLocalClient discovery unavailable: {}", error);
+        Vec::new()
+    })
+}
+
+#[cfg(feature = "model-library")]
+async fn connect_local_client(
+    instances: &[pumas_library::registry::InstanceEntry],
+    launcher_root: Option<&Path>,
+) -> Option<pumas_library::PumasLocalClient> {
+    let canonical_root = match launcher_root {
+        Some(root) => Some(std::fs::canonicalize(root).ok()?),
+        None => None,
+    };
+    for instance in instances {
+        if let Some(root) = &canonical_root {
+            if std::fs::canonicalize(&instance.library_path).ok().as_ref() != Some(root) {
+                continue;
+            }
+        }
+        match pumas_library::PumasLocalClient::connect(instance.clone()).await {
+            Ok(client) => {
+                log::info!(
+                    "Pumas selector access connected as local client at {:?}",
+                    client.instance().library_path
+                );
+                return Some(client);
+            }
+            Err(error) => log::warn!("PumasLocalClient connect failed: {}", error),
+        }
+    }
+    None
 }
 
 #[cfg(feature = "model-library")]
@@ -753,6 +780,156 @@ mod tests {
                 .is_none(),
             "read-only selector setup must not claim owner API access"
         );
+    }
+
+    #[tokio::test]
+    async fn configured_setup_attaches_to_real_owner_before_read_only_fallback() {
+        let temp = create_launcher_root();
+        let owner = pumas_library::PumasApi::builder(temp.path())
+            .auto_create_dirs(true)
+            .with_hf_client(false)
+            .with_process_manager(false)
+            .build()
+            .await
+            .expect("isolated Pumas owner should start");
+        let build_dir = temp.path().join("rust/target/release");
+        std::fs::create_dir_all(&build_dir).unwrap();
+        let mut extensions = ExecutorExtensions::new();
+
+        setup_extensions_with_path(&mut extensions, Some(&build_dir)).await;
+
+        let access = extensions
+            .get::<Arc<PumasSelectorAccess>>(PUMAS_SELECTOR_ACCESS)
+            .expect("existing owner should provide selector access");
+        let PumasSelectorAccess::LocalClient(client) = access.as_ref() else {
+            panic!("expected local-client access, got {}", access.role_name());
+        };
+        assert_eq!(
+            std::fs::canonicalize(&client.instance().library_path).unwrap(),
+            std::fs::canonicalize(temp.path()).unwrap()
+        );
+        assert!(extensions
+            .get::<Arc<pumas_library::PumasApi>>(extension_keys::PUMAS_API)
+            .is_none());
+        let request = pumas_library::models::ModelLibrarySelectorSnapshotRequest {
+            limit: Some(1),
+            ..Default::default()
+        };
+        let owner_snapshot = owner
+            .model_library_selector_snapshot(request.clone())
+            .await
+            .expect("owner selector snapshot");
+        let client_snapshot = access
+            .model_library_selector_snapshot(request.clone())
+            .await
+            .expect("authenticated selector snapshot over real owner IPC");
+        assert_eq!(client_snapshot.cursor, owner_snapshot.cursor);
+        assert_eq!(client_snapshot.total_count, owner_snapshot.total_count);
+        assert!(client_snapshot.rows.is_empty());
+
+        let instance = client.instance().clone();
+        let mut invalid_instance = instance.clone();
+        invalid_instance.connection_token = Some("invalid-owner-token".to_string());
+        let invalid_client = pumas_library::PumasLocalClient::connect(invalid_instance)
+            .await
+            .expect("TCP connection does not authenticate owner methods");
+        let error = invalid_client
+            .model_library_selector_snapshot(request.clone())
+            .await
+            .expect_err("owner must reject an invalid local-client token");
+        assert!(error
+            .to_string()
+            .contains("invalid local client connection token"));
+
+        drop(extensions);
+        owner
+            .model_library_selector_snapshot(request.clone())
+            .await
+            .expect("dropping attached access must not shut down the owner");
+        pumas_library::PumasLocalClient::connect(instance)
+            .await
+            .expect("owner must still accept clients")
+            .model_library_selector_snapshot(request)
+            .await
+            .expect("owner IPC must survive dropping attached extensions");
+    }
+
+    #[tokio::test]
+    async fn configured_local_client_skips_other_libraries_and_survives_client_drop() {
+        let expected_root = create_launcher_root();
+        let other_root = create_launcher_root();
+        let server = IpcServer::start(Arc::new(SelectedDetailDispatch))
+            .await
+            .expect("real IPC fixture must start");
+        let mut other = ready_instance(server.port);
+        other.library_path = other_root.path().to_path_buf();
+        let mut expected = ready_instance(server.port);
+        expected.library_path = expected_root.path().to_path_buf();
+        let instances = [other, expected];
+
+        let client = connect_local_client(&instances, Some(expected_root.path()))
+            .await
+            .expect("matching owner should connect");
+        assert_eq!(client.instance().library_path, expected_root.path());
+        let access = PumasSelectorAccess::LocalClient(Arc::new(client));
+        assert!(access
+            .selected_model_detail("llm/imported/local-client-test")
+            .await
+            .unwrap()
+            .descriptor
+            .is_some());
+        drop(access);
+
+        connect_local_client(&instances, Some(expected_root.path()))
+            .await
+            .expect("attached client must not own server shutdown")
+            .model_library_selector_snapshot(Default::default())
+            .await
+            .expect("owner IPC should remain available");
+    }
+
+    #[tokio::test]
+    async fn configured_local_client_does_not_fall_back_to_another_owner() {
+        let expected_root = create_launcher_root();
+        let other_root = create_launcher_root();
+        let server = IpcServer::start(Arc::new(SelectedDetailDispatch))
+            .await
+            .expect("real IPC fixture must start");
+        let mut other = ready_instance(server.port);
+        other.library_path = other_root.path().to_path_buf();
+        let mut unavailable = ready_instance(server.port);
+        unavailable.library_path = expected_root.path().to_path_buf();
+        unavailable.connection_token = None;
+        let instances = [unavailable, other];
+
+        assert!(connect_local_client(&instances, Some(expected_root.path()))
+            .await
+            .is_none());
+        assert!(
+            connect_local_client(&instances, Some(&expected_root.path().join("missing")))
+                .await
+                .is_none()
+        );
+        assert!(connect_local_client(&instances, None).await.is_some());
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn configured_local_client_matches_canonical_launcher_root() {
+        let root = create_launcher_root();
+        let alias_parent = TempDir::new().unwrap();
+        let alias = alias_parent.path().join("launcher-alias");
+        std::os::unix::fs::symlink(root.path(), &alias).unwrap();
+        let server = IpcServer::start(Arc::new(SelectedDetailDispatch))
+            .await
+            .expect("real IPC fixture must start");
+        let mut instance = ready_instance(server.port);
+        instance.library_path = root.path().to_path_buf();
+
+        let client = connect_local_client(&[instance], Some(&alias))
+            .await
+            .expect("canonical launcher identity should accept an alias");
+        assert_eq!(client.instance().library_path, root.path());
     }
 
     #[tokio::test]
