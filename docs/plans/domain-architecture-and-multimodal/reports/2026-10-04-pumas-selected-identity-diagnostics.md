@@ -22,8 +22,8 @@ Executed in the cloud environment:
   passed with the original default/full Pumas features and pinned producer
   `5be6d967dbd5c0ff7449f342e77f05f9cd645a8e`. This is compiler evidence only:
   it checks the new regression's source but does not link or execute tests.
-- Rust format, critical anti-pattern lint, diff whitespace and staged decision
-  traceability passed.
+- Rust format, critical anti-pattern lint and diff whitespace passed. Decision
+  traceability passed for the range from the frozen consumer through the repair.
 
 The parent's exact native full-feature test/check attempts stopped during Pumas
 compilation at the RAM floor, before consumer tests. Real IPC, linked runtime
