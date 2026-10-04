@@ -5,6 +5,7 @@
   import { RagService } from '../services/RagService';
   import { expandedSection, toggleSection } from '../stores/accordionStore';
   import { createScopedDeviceRefresh, type DeviceRefreshScope } from './deviceConfigRefreshScope';
+  import { createDeviceConfigLifecycle, type DeviceConfigLifecycle } from './deviceConfigLifecycle';
   import {
     buildBackendConfirmedDeviceOptions,
     formatDeviceDisplayName,
@@ -24,6 +25,7 @@
   let oomFlashTimer: ReturnType<typeof setTimeout> | null = null;
   let lastOomAt = 0;
   let deviceRefreshScope: DeviceRefreshScope | null = null;
+  let deviceLifecycle: DeviceConfigLifecycle | null = null;
 
   // Available devices confirmed by the backend.
   let availableDevices: DeviceInfo[] = $state([]);
@@ -34,7 +36,7 @@
   let embeddingMemoryMode: EmbeddingMemoryMode = $state('cpu_parallel');
   let initialEmbeddingMode: EmbeddingMemoryMode = $state('cpu_parallel');
 
-  onMount(async () => {
+  onMount(() => {
     unsubscribe = ConfigService.subscribe((nextState) => {
       state = nextState;
       // Sync local form state
@@ -51,28 +53,39 @@
       triggerOomFlash(nextState.error);
     });
 
-    // Load available devices
-    await loadDevices();
-    deviceRefreshScope = createScopedDeviceRefresh(
-      () => {
-        void loadDevices({ silent: true });
+    deviceLifecycle = createDeviceConfigLifecycle({
+      loadDevices,
+      startRefresh: () => {
+        const scope = createScopedDeviceRefresh(
+          () => {
+            void loadDevices({ silent: true });
+          },
+          window,
+        );
+        deviceRefreshScope = scope;
+        scope.update($expandedSection === 'device');
+        return () => {
+          scope.stop();
+          deviceRefreshScope = null;
+        };
       },
-      window,
-    );
-    deviceRefreshScope.update($expandedSection === 'device');
-
-    // Load embedding memory mode
-    const mode = await ConfigService.getEmbeddingMemoryMode();
-    embeddingMemoryMode = mode;
-    initialEmbeddingMode = mode;
+      loadEmbeddingMemoryMode: () => ConfigService.getEmbeddingMemoryMode(),
+      applyEmbeddingMemoryMode: (mode) => {
+        embeddingMemoryMode = mode;
+        initialEmbeddingMode = mode;
+      },
+      onFailure: (error) => {
+        console.error('Failed to initialize device config:', error);
+      },
+    });
+    void deviceLifecycle.start();
   });
 
   onDestroy(() => {
+    deviceLifecycle?.stop();
     unsubscribe?.();
     unsubscribeLLM?.();
     unsubscribeRag?.();
-    deviceRefreshScope?.stop();
-    deviceRefreshScope = null;
     if (oomFlashTimer) {
       clearTimeout(oomFlashTimer);
       oomFlashTimer = null;
@@ -108,6 +121,8 @@
   };
 
   const loadDevices = async (options: { silent?: boolean } = {}) => {
+    const lifecycle = deviceLifecycle;
+    if (!lifecycle?.isActive()) return;
     const silent = options.silent ?? false;
     if (silent) {
       if (isRefreshingDevices) return;
@@ -118,21 +133,26 @@
       deviceLoadError = null;
     }
     try {
-      availableDevices = await ConfigService.listDevices();
+      const devices = await ConfigService.listDevices();
+      if (!lifecycle.isActive()) return;
+      availableDevices = devices;
       if (deviceLoadError && silent) {
         deviceLoadError = null;
       }
     } catch (error) {
+      if (!lifecycle.isActive()) return;
       if (!silent) {
         deviceLoadError = String(error);
         console.error('Failed to load devices:', error);
         availableDevices = [];
       }
     } finally {
-      if (silent) {
-        isRefreshingDevices = false;
-      } else {
-        isLoadingDevices = false;
+      if (lifecycle.isActive()) {
+        if (silent) {
+          isRefreshingDevices = false;
+        } else {
+          isLoadingDevices = false;
+        }
       }
     }
   };
