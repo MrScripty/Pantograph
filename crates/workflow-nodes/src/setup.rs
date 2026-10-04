@@ -747,9 +747,14 @@ mod tests {
             .model_library_selector_snapshot(request.clone())
             .await
             .expect_err("owner must reject an invalid local-client token");
-        assert!(error
-            .to_string()
-            .contains("invalid local client connection token"));
+        assert!(
+            matches!(
+                &error,
+                pumas_library::PumasError::InvalidParams { message }
+                    if message == "Invalid local IPC parameters"
+            ),
+            "invalid token must return the public IPC authentication error: {error}"
+        );
 
         drop(extensions);
         owner
@@ -1014,20 +1019,6 @@ mod tests {
             .find(|item| item.model_id == model_id)
             .and_then(|item| item.descriptor)
             .expect("owner should resolve an imported GGUF descriptor");
-        // Compare the same cache state on both sides of IPC; the first lookup
-        // may regenerate a summary and report that transition.
-        owner
-            .resolve_model_package_facts_summaries(vec![model_id.clone()])
-            .await
-            .expect("warm owner summary cache");
-        let expected_summary = owner
-            .resolve_model_package_facts_summaries(vec![model_id.clone()])
-            .await
-            .unwrap()
-            .into_iter()
-            .find(|item| item.model_id == model_id)
-            .and_then(|item| item.result)
-            .expect("owner should resolve an imported GGUF summary");
         let expected_row = owner
             .model_library_selector_snapshot(Default::default())
             .await
@@ -1035,7 +1026,7 @@ mod tests {
             .rows
             .into_iter()
             .find(|row| row.model_id == model_id)
-            .expect("imported selector row after owner detail hydration");
+            .expect("imported selector row before detail hydration");
         let client = pumas_library::PumasLocalClient::connect(owner_instance(&owner))
             .await
             .unwrap();
@@ -1054,14 +1045,42 @@ mod tests {
             serde_json::to_value(detail.descriptor.expect("descriptor should hydrate")).unwrap(),
             serde_json::to_value(expected_descriptor).unwrap()
         );
+        // The selected-detail call hydrates a cold summary over IPC. A later
+        // owner lookup observes the populated cache, so freshness must change
+        // while the complete model identity and summary payload stay equal.
+        let cold_summary = detail
+            .package_summary_result
+            .expect("summary should hydrate");
+        let warm_summary = owner
+            .resolve_model_package_facts_summaries(vec![model_id.clone()])
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|item| item.model_id == model_id)
+            .and_then(|item| item.result)
+            .expect("owner should resolve the hydrated GGUF summary");
         assert_eq!(
-            serde_json::to_value(
-                detail
-                    .package_summary_result
-                    .expect("summary should hydrate")
-            )
-            .unwrap(),
-            serde_json::to_value(expected_summary).unwrap()
+            cold_summary.status,
+            pumas_library::models::ModelPackageFactsSummaryStatus::Regenerated
+        );
+        assert_eq!(
+            warm_summary.status,
+            pumas_library::models::ModelPackageFactsSummaryStatus::Fresh
+        );
+        assert_eq!(cold_summary.model_id, model_id);
+        assert_eq!(warm_summary.model_id, model_id);
+        assert_eq!(
+            serde_json::to_value(cold_summary.summary.expect("cold summary payload")).unwrap(),
+            serde_json::to_value(warm_summary.summary.as_ref().expect("warm summary payload"))
+                .unwrap()
+        );
+        let warm_client_summary = access
+            .resolve_model_package_facts_summary(&model_id)
+            .await
+            .expect("client should observe the same warm summary");
+        assert_eq!(
+            serde_json::to_value(warm_client_summary).unwrap(),
+            serde_json::to_value(warm_summary).unwrap()
         );
     }
 
