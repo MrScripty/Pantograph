@@ -94,6 +94,27 @@ pub(crate) fn materialize_external_workflow_inputs(
                         }
                     })?
             }
+            (WorkflowSchedulerSourceInputTemplate::Integer { port_id }, PORT_VALUE)
+                if port_id == PORT_VALUE =>
+            {
+                input
+                    .value
+                    .as_i64()
+                    .map(WorkflowSchedulerTaskResultValue::I64)
+                    .or_else(|| {
+                        input
+                            .value
+                            .as_u64()
+                            .map(WorkflowSchedulerTaskResultValue::U64)
+                    })
+                    .ok_or_else(|| {
+                        WorkflowExternalInputMaterializationError::WrongInputValueType {
+                            node_id: input.node_id.clone(),
+                            port_id: input.port_id.clone(),
+                            expected: "integer",
+                        }
+                    })?
+            }
             _ => {
                 return Err(
                     WorkflowExternalInputMaterializationError::UnsupportedInputTask {
@@ -184,6 +205,12 @@ mod tests {
                     data: json!({}),
                 },
                 GraphNode {
+                    id: "limit".to_string(),
+                    node_type: "number-input".to_string(),
+                    position: Position { x: 100.0, y: 100.0 },
+                    data: json!({}),
+                },
+                GraphNode {
                     id: "out".to_string(),
                     node_type: "text-output".to_string(),
                     position: Position { x: 200.0, y: 0.0 },
@@ -202,6 +229,80 @@ mod tests {
             &graph_with_external_inputs(),
         )
         .expect("scheduler task graph")
+    }
+
+    #[test]
+    fn integer_number_source_materializes_token_limit_for_runtime_host() {
+        let task_graph = task_graph();
+        let source = task_graph
+            .tasks
+            .iter()
+            .find(|task| task.node_id.as_str() == "limit")
+            .expect("number source");
+        assert_eq!(
+            source.execution_class,
+            WorkflowSchedulerTaskExecutionClass::SourceInput
+        );
+        assert_eq!(
+            source.source_input_task_template,
+            Some(WorkflowSchedulerSourceInputTemplate::Integer {
+                port_id: "value".to_string(),
+            })
+        );
+        let results = materialize_external_workflow_inputs(
+            &task_graph,
+            &[WorkflowPortBinding {
+                node_id: "limit".to_string(),
+                port_id: "value".to_string(),
+                value: json!(128),
+            }],
+        )
+        .expect("integer source input");
+        let mut target = source.clone();
+        target.node_id = "inference".parse().expect("target node id");
+        target.task_id = "inference".parse().expect("target task id");
+        target.node_type = "llm-inference".to_string();
+        target.execution_class = WorkflowSchedulerTaskExecutionClass::RuntimeInference;
+        target.source_input_task_template = None;
+        target.dependency_task_ids = vec![source.task_id.clone()];
+        target.input_bindings = vec![super::super::WorkflowSchedulerTaskInputBinding {
+            source_task_id: source.task_id.clone(),
+            source_node_id: source.node_id.clone(),
+            source_port_id: "value".to_string(),
+            target_port_id: "max_new_tokens".to_string(),
+        }];
+        let inputs =
+            super::super::runtime_host_task_input_mapping::materialize_runtime_host_inputs(
+                &target, &results,
+            )
+            .expect("typed runtime host inputs");
+        assert_eq!(inputs[0].port_id, "max_new_tokens");
+        assert_eq!(
+            inputs[0].value,
+            pantograph_runtime_host_contracts::RuntimeHostExecutionInputValue::I64(128)
+        );
+    }
+
+    #[test]
+    fn integer_number_source_rejects_fractional_and_string_inputs() {
+        for value in [json!(1.5), json!("128"), json!(true)] {
+            assert!(matches!(
+                materialize_external_workflow_inputs(
+                    &task_graph(),
+                    &[WorkflowPortBinding {
+                        node_id: "limit".to_string(),
+                        port_id: "value".to_string(),
+                        value,
+                    }]
+                ),
+                Err(
+                    WorkflowExternalInputMaterializationError::WrongInputValueType {
+                        expected: "integer",
+                        ..
+                    }
+                )
+            ));
+        }
     }
 
     #[test]

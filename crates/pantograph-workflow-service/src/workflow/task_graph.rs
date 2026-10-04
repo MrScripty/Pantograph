@@ -27,6 +27,7 @@ use crate::graph::{workflow_executable_topology, WorkflowGraph, WorkflowRuntimeS
 const PORT_TEXT: &str = "text";
 const PORT_VALUE: &str = "value";
 const NODE_TYPE_BOOLEAN_INPUT: &str = "boolean-input";
+const NODE_TYPE_NUMBER_INPUT: &str = "number-input";
 const NODE_TYPE_TEXT_INPUT: &str = "text-input";
 const NODE_TYPE_TEXT_OUTPUT: &str = "text-output";
 const MISSING_RESOURCE_ESTIMATES_MESSAGE: &str =
@@ -403,6 +404,12 @@ fn source_input_task_template_for_node(
         ),
         NODE_TYPE_BOOLEAN_INPUT => (
             Some(WorkflowSchedulerSourceInputTemplate::Boolean {
+                port_id: PORT_VALUE.to_string(),
+            }),
+            Vec::new(),
+        ),
+        NODE_TYPE_NUMBER_INPUT => (
+            Some(WorkflowSchedulerSourceInputTemplate::Integer {
                 port_id: PORT_VALUE.to_string(),
             }),
             Vec::new(),

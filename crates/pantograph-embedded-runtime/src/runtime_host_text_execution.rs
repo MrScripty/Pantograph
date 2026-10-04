@@ -1,8 +1,9 @@
 use inference::{
-    BackendExecutionDecision, BackendId, DeviceResolutionDecision, InferenceDeviceClass,
-    InferenceDeviceId, InferenceDevicePolicy, InferenceExecutionInput, InferenceExecutionRequest,
-    InferenceExecutionResult, InferenceTaskId, ModelRefMigrationDiagnostic,
-    PumasArtifactLoadTarget, PumasModelRef, ResolvedModelPackageFacts, RuntimeVariantId,
+    BackendExecutionDecision, BackendId, DeviceResolutionDecision, GenerationOptions,
+    InferenceDeviceClass, InferenceDeviceId, InferenceDevicePolicy, InferenceExecutionInput,
+    InferenceExecutionRequest, InferenceExecutionResult, InferenceTaskId, LengthGenerationOptions,
+    ModelRefMigrationDiagnostic, PumasArtifactLoadTarget, PumasModelRef, ResolvedModelPackageFacts,
+    RuntimeVariantId,
 };
 use pantograph_runtime_host_contracts::{
     RuntimeHostExecutionInputValue, RuntimeHostExecutionRequest,
@@ -13,6 +14,7 @@ use thiserror::Error;
 
 pub(crate) const TEXT_GENERATION_TASK: &str = "text_generation";
 pub(crate) const PROMPT_PORT: &str = "prompt";
+pub(crate) const MAX_NEW_TOKENS_PORT: &str = "max_new_tokens";
 pub(crate) const MAX_TEXT_BYTES: usize = 1024;
 
 /// Owned inputs for the canonical selected-text inference call.
@@ -54,6 +56,7 @@ pub(crate) fn validate_runtime_host_text_generation_request(
         .as_ref()
         .ok_or(RuntimeHostTextGenerationProjectionError::MissingDispatchDecision)?;
     validate_supported_inputs(request)?;
+    optional_max_new_tokens(request)?;
     let prompt = required_prompt(request)?;
     if prompt.trim().is_empty() {
         return Err(RuntimeHostTextGenerationProjectionError::BlankPrompt);
@@ -95,7 +98,15 @@ pub(crate) fn project_runtime_host_text_generation(
             messages: Vec::new(),
             stream: false,
         },
-        generation_options: None,
+        generation_options: optional_max_new_tokens(request)?.map(|max_new_tokens| {
+            GenerationOptions {
+                length: LengthGenerationOptions {
+                    max_new_tokens: Some(max_new_tokens),
+                    ..LengthGenerationOptions::default()
+                },
+                ..GenerationOptions::default()
+            }
+        }),
         extra_options: serde_json::Value::Null,
     };
 
@@ -287,7 +298,7 @@ fn validate_supported_inputs(
     request: &RuntimeHostExecutionRequest,
 ) -> Result<(), RuntimeHostTextGenerationProjectionError> {
     for input in &request.materialized_inputs {
-        if input.port_id != PROMPT_PORT {
+        if input.port_id != PROMPT_PORT && input.port_id != MAX_NEW_TOKENS_PORT {
             return Err(
                 RuntimeHostTextGenerationProjectionError::UnsupportedInputPort {
                     port_id: input.port_id.clone(),
@@ -298,6 +309,31 @@ fn validate_supported_inputs(
     Ok(())
 }
 
+fn optional_max_new_tokens(
+    request: &RuntimeHostExecutionRequest,
+) -> Result<Option<u32>, RuntimeHostTextGenerationProjectionError> {
+    request
+        .materialized_inputs
+        .iter()
+        .find(|input| input.port_id == MAX_NEW_TOKENS_PORT)
+        .map(|input| {
+            let value = match input.value {
+                RuntimeHostExecutionInputValue::U64(value) => u32::try_from(value).ok(),
+                RuntimeHostExecutionInputValue::I64(value) => u32::try_from(value).ok(),
+                _ => {
+                    return Err(RuntimeHostTextGenerationProjectionError::InvalidInputType {
+                        port_id: MAX_NEW_TOKENS_PORT,
+                        expected: "integer",
+                    });
+                }
+            };
+            value
+                .filter(|value| *value > 0)
+                .ok_or(RuntimeHostTextGenerationProjectionError::InvalidMaxNewTokens)
+        })
+        .transpose()
+}
+
 #[derive(Debug, Error, PartialEq, Eq)]
 pub(crate) enum RuntimeHostTextGenerationProjectionError {
     #[error("runtime-host text execution supports text_generation only, got {task_type}")]
@@ -306,6 +342,8 @@ pub(crate) enum RuntimeHostTextGenerationProjectionError {
     MissingDispatchDecision,
     #[error("runtime-host text execution requires materialized input '{port_id}'")]
     MissingRequiredInput { port_id: &'static str },
+    #[error("runtime-host text input 'max_new_tokens' must be between 1 and 4294967295")]
+    InvalidMaxNewTokens,
     #[error("runtime-host text execution prompt must not be blank")]
     BlankPrompt,
     #[error("runtime-host text input '{port_id}' must be {expected}")]
@@ -398,6 +436,7 @@ mod tests {
             InferenceExecutionInput::TextGeneration { prompt: Some(prompt), system_prompt: None, messages, stream: false }
                 if prompt == "exact prompt" && messages.is_empty()
         ));
+        assert!(projection.request().generation_options.is_none());
         assert_eq!(
             projection.backend_decision().selected_backend_id.as_str(),
             "pytorch"
@@ -430,6 +469,49 @@ mod tests {
             projection.artifact_load_target().local_load_path,
             target_path
         );
+    }
+
+    #[test]
+    fn token_limit_preserves_integer_boundaries_and_rejects_invalid_values() {
+        for value in [1, 128, u64::from(u32::MAX)] {
+            let mut request = text_request_fixture();
+            request.materialized_inputs.push(RuntimeHostExecutionInput {
+                port_id: MAX_NEW_TOKENS_PORT.to_string(),
+                value: RuntimeHostExecutionInputValue::U64(value),
+            });
+            validate_runtime_host_text_generation_request(&request).expect("valid limit");
+            assert_eq!(
+                optional_max_new_tokens(&request).unwrap(),
+                Some(value as u32)
+            );
+        }
+        for value in [
+            RuntimeHostExecutionInputValue::U64(0),
+            RuntimeHostExecutionInputValue::U64(u64::from(u32::MAX) + 1),
+            RuntimeHostExecutionInputValue::I64(-1),
+        ] {
+            let mut request = text_request_fixture();
+            request.materialized_inputs.push(RuntimeHostExecutionInput {
+                port_id: MAX_NEW_TOKENS_PORT.to_string(),
+                value,
+            });
+            assert_eq!(
+                validate_runtime_host_text_generation_request(&request),
+                Err(RuntimeHostTextGenerationProjectionError::InvalidMaxNewTokens),
+            );
+        }
+        let mut request = text_request_fixture();
+        request.materialized_inputs.push(RuntimeHostExecutionInput {
+            port_id: MAX_NEW_TOKENS_PORT.to_string(),
+            value: RuntimeHostExecutionInputValue::String("128".to_string()),
+        });
+        assert!(matches!(
+            validate_runtime_host_text_generation_request(&request),
+            Err(RuntimeHostTextGenerationProjectionError::InvalidInputType {
+                port_id: MAX_NEW_TOKENS_PORT,
+                ..
+            }),
+        ));
     }
 
     #[test]
@@ -494,8 +576,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn executes_text_without_calling_an_image_sink() {
-        let request = text_request_fixture();
+    async fn executes_text_with_token_limit_without_calling_an_image_sink() {
+        let mut request = text_request_fixture();
+        request.materialized_inputs.push(RuntimeHostExecutionInput {
+            port_id: MAX_NEW_TOKENS_PORT.to_string(),
+            value: RuntimeHostExecutionInputValue::I64(128),
+        });
         let validated_request = ValidatedRuntimeHostExecutionRequest::try_from(request.clone())
             .expect("text request fixture should validate");
         let package_facts = text_package_facts(&validated_request);
@@ -534,6 +620,11 @@ mod tests {
             .expect("backend calls")
             .iter()
             .any(|call| call == &format!("load:{target_path}:cpu")));
+        assert!(backend_calls
+            .lock()
+            .expect("backend calls")
+            .iter()
+            .any(|call| call == "max_tokens:128"));
     }
 
     fn text_request_fixture() -> RuntimeHostExecutionRequest {
@@ -778,6 +869,12 @@ mod tests {
             BackendError,
         > {
             let json: serde_json::Value = serde_json::from_str(&request_json).unwrap();
+            if let Some(max_tokens) = json.get("max_tokens") {
+                self.calls
+                    .lock()
+                    .expect("backend calls")
+                    .push(format!("max_tokens:{max_tokens}"));
+            }
             let prompt = json["messages"][0]["content"][0]["text"].as_str().unwrap();
             if prompt == "cancel" {
                 self.cancel

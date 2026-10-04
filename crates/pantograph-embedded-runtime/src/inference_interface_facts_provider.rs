@@ -4,9 +4,9 @@ use std::fmt;
 use async_trait::async_trait;
 use inference::{BackendHintLabel, InferenceTaskId, ModelValidationState, TaskRegistryEntry};
 use pantograph_inference_interface_contracts::{
-    InferenceArtifactType, InferenceAvailability, InferencePortDescriptor, InferencePortDirection,
-    InferencePortId, InferencePortOptions, InferencePortRequirement, InferenceScalarType,
-    InferenceTaskKind, InferenceValueType, RuntimeIntentId,
+    InferenceArtifactType, InferenceAvailability, InferenceNumericRange, InferencePortDescriptor,
+    InferencePortDirection, InferencePortId, InferencePortOptions, InferencePortRequirement,
+    InferenceScalarType, InferenceTaskKind, InferenceValueType, RuntimeIntentId,
 };
 use pantograph_runtime_registry::RuntimeRegistryStatus;
 use pantograph_workflow_service::graph::{
@@ -231,8 +231,34 @@ fn runtime_availability_state(status: RuntimeRegistryStatus) -> InferenceRuntime
 
 fn input_ports(task_entry: &TaskRegistryEntry) -> Vec<InferencePortDescriptor> {
     match task_entry.task_id {
+        InferenceTaskId::TextGeneration => {
+            let mut max_new_tokens = port(
+                crate::runtime_host_text_execution::MAX_NEW_TOKENS_PORT,
+                "Max new tokens",
+                InferencePortDirection::Input,
+                InferencePortRequirement::Optional,
+                InferenceValueType::Scalar(InferenceScalarType::U64),
+            );
+            max_new_tokens.options = InferencePortOptions::NumericRange {
+                range: InferenceNumericRange {
+                    min: 1.0,
+                    max: f64::from(u32::MAX),
+                    step: Some(1.0),
+                    default: None,
+                },
+            };
+            vec![
+                port(
+                    "prompt",
+                    "Prompt",
+                    InferencePortDirection::Input,
+                    InferencePortRequirement::Required,
+                    InferenceValueType::Scalar(InferenceScalarType::String),
+                ),
+                max_new_tokens,
+            ]
+        }
         InferenceTaskId::ImageGeneration
-        | InferenceTaskId::TextGeneration
         | InferenceTaskId::ChatCompletion
         | InferenceTaskId::MultimodalGeneration => vec![port(
             "prompt",
@@ -333,6 +359,35 @@ mod tests {
     use pantograph_scheduler::SchedulerEstimateHintKind;
 
     use super::*;
+
+    #[test]
+    fn text_generation_descriptor_exposes_optional_integer_limit_without_a_default() {
+        let task = inference::resolve_task_registry_entry("text_generation").expect("task entry");
+        let inputs = input_ports(&task);
+        assert_eq!(inputs.len(), 2);
+        let limit = &inputs[1];
+        assert_eq!(limit.port_id.as_str(), "max_new_tokens");
+        assert_eq!(limit.requirement, InferencePortRequirement::Optional);
+        assert_eq!(
+            limit.value_type,
+            InferenceValueType::Scalar(InferenceScalarType::U64)
+        );
+        assert!(limit.default.is_none());
+        assert_eq!(
+            limit.options,
+            InferencePortOptions::NumericRange {
+                range: InferenceNumericRange {
+                    min: 1.0,
+                    max: f64::from(u32::MAX),
+                    step: Some(1.0),
+                    default: None,
+                },
+            }
+        );
+        limit.validate().expect("limit port contract");
+        let image = inference::resolve_task_registry_entry("image_generation").expect("image task");
+        assert_eq!(input_ports(&image).len(), 1);
+    }
 
     #[test]
     fn projected_package_and_runtime_facts_publish_descriptor_inputs_and_estimates() {
