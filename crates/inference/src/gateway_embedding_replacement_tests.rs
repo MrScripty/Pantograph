@@ -269,6 +269,54 @@ async fn assert_resident(gateway: &InferenceGateway, stops: &AtomicUsize) {
 }
 
 #[tokio::test]
+async fn typed_model_name_mismatch_preserves_resident_before_replacement() {
+    let (_a, gateway, stops) = resident().await;
+    let (_b, mut request, target, decision) = crate::selected_embedding_execution::fixture(12);
+    for name in ["embedding/test/synthetic-bert-8", "synthetic-bert-12", " "] {
+        request.model_name = Some(name.into());
+        let error = gateway
+            .execute_selected_embedding_with_cancellation(
+                request.clone(),
+                target.clone(),
+                decision.clone(),
+                InferenceExecutionCancellationHandle::running(),
+            )
+            .await
+            .expect_err("conflicting typed name must not replace the resident");
+        assert!(
+            matches!(error, GatewayError::Backend(BackendError::Config(ref message))
+            if message.contains("model name"))
+        );
+        assert_resident(&gateway, &stops).await;
+    }
+    for name in [
+        None,
+        Some(String::new()),
+        Some(target.model_ref.model_id.clone()),
+        Some(format!("pumas://models/{}", target.model_ref.model_id)),
+    ] {
+        request.model_name = name;
+        let result = gateway
+            .execute_selected_embedding_with_cancellation(
+                request.clone(),
+                target.clone(),
+                decision.clone(),
+                InferenceExecutionCancellationHandle::running(),
+            )
+            .await
+            .expect("omitted, empty and exact names keep selected identity");
+        let InferenceExecutionResult::Embedding { embeddings, .. } = result else {
+            panic!("embedding result expected");
+        };
+        assert!(embeddings
+            .iter()
+            .all(|embedding| embedding.vector.len() == 12));
+    }
+    assert_eq!(stops.load(Ordering::SeqCst), 1);
+    gateway.stop().await.unwrap();
+}
+
+#[tokio::test]
 async fn backend_and_gateway_refuse_other_model_without_changing_real_residency() {
     let (_a, request, target, decision) = crate::selected_embedding_execution::fixture(8);
     let (_b, request_b, target_b, decision_b) = crate::selected_embedding_execution::fixture(12);

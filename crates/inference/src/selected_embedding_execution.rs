@@ -149,6 +149,19 @@ impl<'a> SelectedEmbeddingLoad<'a> {
                 ));
             }
         }
+        if request.model_name.as_deref().is_some_and(|name| {
+            !name.is_empty()
+                && name.strip_prefix("pumas://models/").unwrap_or(name)
+                    != target
+                        .model_ref
+                        .model_id
+                        .strip_prefix("pumas://models/")
+                        .unwrap_or(&target.model_ref.model_id)
+        }) {
+            return Err(invalid(
+                "request model name conflicts with selected model identity",
+            ));
+        }
         // Request and scheduler revisions constrain both producer observations.
         // An omitted request revision permits additional target evidence, but
         // never supplies a missing explicitly requested package/target revision.
