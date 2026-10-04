@@ -201,6 +201,28 @@ fn runtime_host_completed_response_accepts_typed_path_free_outputs() {
 }
 
 #[test]
+fn structured_vector_round_trips_and_obeys_its_own_byte_limit() {
+    use super::{RuntimeHostExecutionOutput, RuntimeHostExecutionOutputValue};
+    let mut response = completed_runtime_host_response_fixture();
+    response.outputs = vec![RuntimeHostExecutionOutput {
+        port_id: "embedding".to_string(),
+        value: RuntimeHostExecutionOutputValue::Json(json!([0.25, -0.5, 0.75])),
+    }];
+    let encoded = serde_json::to_vec(&response).unwrap();
+    let decoded: RuntimeHostExecutionResponse = serde_json::from_slice(&encoded).unwrap();
+    assert_eq!(decoded, response);
+    decoded.validate().unwrap();
+    response.outputs[0].value = RuntimeHostExecutionOutputValue::Json(json!("x".repeat(65535)));
+    assert_eq!(
+        response.validate().unwrap_err(),
+        RuntimeHostExecutionContractError::FieldTooLong {
+            field: "output.json",
+            max_len: 65536,
+        }
+    );
+}
+
+#[test]
 fn runtime_host_response_rejects_path_shaped_output_fields() {
     let mut value: serde_json::Value = serde_json::from_str(include_str!(
         "../tests/fixtures/runtime_host_execution_response_completed_outputs.json"

@@ -122,7 +122,9 @@ pub(crate) fn text_from_inference_result(
     Ok(text)
 }
 
-fn project_model_ref(model_ref: &pantograph_dependency_planning::PumasModelRef) -> PumasModelRef {
+pub(crate) fn project_model_ref(
+    model_ref: &pantograph_dependency_planning::PumasModelRef,
+) -> PumasModelRef {
     PumasModelRef {
         model_id: model_ref.model_id.clone(),
         revision: model_ref.revision.clone(),

@@ -100,6 +100,7 @@ fn task_result_value_to_workflow_output(
     value: &WorkflowSchedulerTaskResultValue,
 ) -> Result<Value, &'static str> {
     match value {
+        WorkflowSchedulerTaskResultValue::Json(value) => Ok(value.clone()),
         WorkflowSchedulerTaskResultValue::String(value) => Ok(Value::String(value.clone())),
         WorkflowSchedulerTaskResultValue::Bool(value) => Ok(Value::Bool(*value)),
         WorkflowSchedulerTaskResultValue::I64(value) => Ok(Value::Number((*value).into())),
@@ -210,6 +211,57 @@ mod tests {
             diagnostics: Vec::new(),
             terminal_metadata: None,
         }
+    }
+
+    #[test]
+    fn host_structured_embedding_survives_task_result_and_requested_output_projection() {
+        use pantograph_runtime_host_contracts::{
+            RuntimeHostExecutionOutput, RuntimeHostExecutionOutputValue,
+            RuntimeHostExecutionResponse, ValidatedRuntimeHostExecutionResponse,
+        };
+        let mut response: RuntimeHostExecutionResponse = serde_json::from_str(include_str!(
+            "../../../pantograph-runtime-host-contracts/tests/fixtures/runtime_host_execution_response_completed_outputs.json"
+        )).unwrap();
+        response.workflow_id = "workflow-output-projection".into();
+        response.workflow_run_id = "run-output-projection".into();
+        response.node_id = "out".into();
+        response.task_id = "out".into();
+        let vector = json!([0.25, -0.5, 0.75]);
+        response.outputs = vec![RuntimeHostExecutionOutput {
+            port_id: "embedding".into(),
+            value: RuntimeHostExecutionOutputValue::Json(vector.clone()),
+        }];
+        let validated = ValidatedRuntimeHostExecutionResponse::try_from(response).unwrap();
+        let result =
+            super::super::runtime_host_task_result_mapping::runtime_host_response_to_task_result(
+                &validated,
+            )
+            .unwrap();
+        let result = serde_json::from_slice(&serde_json::to_vec(&result).unwrap()).unwrap();
+        let target = WorkflowOutputTarget {
+            node_id: "out".into(),
+            port_id: "embedding".into(),
+        };
+        let outputs =
+            project_scheduler_task_results_to_outputs(&task_graph(), &[result], &[target]).unwrap();
+        assert_eq!(outputs[0].port_id, "embedding");
+        assert_eq!(outputs[0].value, vector);
+    }
+
+    #[test]
+    fn scheduler_rejects_oversized_structured_output_before_projection() {
+        let result = result(
+            WorkflowSchedulerTaskResultStatus::Completed,
+            WorkflowSchedulerTaskResultValue::Json(json!("x".repeat(65535))),
+        );
+        assert!(matches!(
+            result.validate(),
+            Err(super::super::WorkflowSchedulerTaskResultError::MessageTooLong { .. })
+        ));
+        assert!(
+            project_scheduler_task_results_to_outputs(&task_graph(), &[result], &[target()])
+                .is_err()
+        );
     }
 
     #[test]

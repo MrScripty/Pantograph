@@ -130,6 +130,14 @@ fn runtime_host_input_value(
                 )
             }
         }
+        WorkflowSchedulerTaskResultValue::Json(_) => Err(
+            WorkflowRuntimeHostTaskInputMappingError::UnsupportedMaterializedInput {
+                source_task_id: binding.source_task_id.as_str().to_string(),
+                source_port_id: binding.source_port_id.clone(),
+                target_port_id: binding.target_port_id.clone(),
+                value_type: "json",
+            },
+        ),
         WorkflowSchedulerTaskResultValue::DiagnosticOnly => Err(
             WorkflowRuntimeHostTaskInputMappingError::UnsupportedMaterializedInput {
                 source_task_id: binding.source_task_id.as_str().to_string(),

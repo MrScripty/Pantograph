@@ -143,6 +143,9 @@ fn task_result_value(
     value: RuntimeHostExecutionOutputValue,
 ) -> Result<WorkflowSchedulerTaskResultValue, WorkflowRuntimeHostTaskResultMappingError> {
     let value = match value {
+        RuntimeHostExecutionOutputValue::Json(value) => {
+            WorkflowSchedulerTaskResultValue::Json(value)
+        }
         RuntimeHostExecutionOutputValue::String(value) => {
             WorkflowSchedulerTaskResultValue::String(value)
         }
