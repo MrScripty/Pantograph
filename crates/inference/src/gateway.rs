@@ -1193,6 +1193,108 @@ impl InferenceGateway {
         result
     }
 
+    /// Execute native embeddings under the existing gateway's exclusive residency owner.
+    /// Worker completion is observed before this method releases the backend lock.
+    pub async fn execute_selected_embedding_with_cancellation(
+        &self,
+        request: InferenceExecutionRequest,
+        artifact_load_target: crate::PumasArtifactLoadTarget,
+        backend_decision: crate::BackendExecutionDecision,
+        cancellation: InferenceExecutionCancellationHandle,
+    ) -> Result<InferenceExecutionResult, GatewayError> {
+        let selected = crate::selected_embedding_execution::SelectedEmbeddingLoad::validate(
+            &request,
+            &artifact_load_target,
+            &backend_decision,
+        )
+        .await?;
+        let config = BackendConfig {
+            model_path: Some(PathBuf::from(&selected.target.local_load_path)),
+            model_name: Some(selected.package.model_ref.model_id.clone()),
+            embedding_mode: true,
+            device: Some(BackendStartupDeviceIntent::CanonicalDevice(
+                selected.device.clone(),
+            )),
+            ..Default::default()
+        };
+        let option_diagnostics = typed_request_option_diagnostics(&request, Some("candle"));
+        let texts = match &request.input {
+            InferenceExecutionInput::Embedding { texts } => texts.clone(),
+            _ => unreachable!("validated embedding input"),
+        };
+        reject_cancelled_execution_handle("selected embedding", &cancellation)?;
+        let mut backend = self.backend.write().await;
+        reject_cancelled_execution_handle("selected embedding", &cancellation)?;
+        if canonical_backend_key(backend.name()) != "candle" {
+            let replacement = self.registry.create("candle")?;
+            if let Err(error) = backend.stop().await {
+                self.runtime_lifecycle.write().await.last_error = Some(error.to_string());
+                return Err(error.into());
+            }
+            *backend = replacement;
+            *self.current_backend_name.write().await = backend.name().to_owned();
+            *self.runtime_lifecycle.write().await = RuntimeLifecycleSnapshot {
+                runtime_id: Some("candle".into()),
+                ..Default::default()
+            };
+            *self.current_runtime_config.write().await = None;
+        }
+        if let Err(error) = backend
+            .load_selected_embedding(&request, &artifact_load_target, &backend_decision)
+            .await
+        {
+            let ready = backend.is_ready();
+            if !ready {
+                *self.current_runtime_config.write().await = None;
+            }
+            let mut lifecycle = self.runtime_lifecycle.write().await;
+            lifecycle.active = ready;
+            lifecycle.last_error = Some(error.to_string());
+            if !ready {
+                lifecycle.runtime_instance_id = None;
+            }
+            return Err(error.into());
+        }
+        *self.current_runtime_config.write().await = Some(config);
+        *self.embedding_mode.write().await = true;
+        *self.reranking_mode.write().await = false;
+        *self.external_mode.write().await = false;
+        *self.runtime_lifecycle.write().await = RuntimeLifecycleSnapshot {
+            runtime_id: Some("candle".into()),
+            runtime_instance_id: Some(format!(
+                "candle-{}",
+                self.runtime_instance_sequence
+                    .fetch_add(1, Ordering::Relaxed)
+            )),
+            runtime_reused: Some(false),
+            lifecycle_decision_reason: Some("scheduler_selected_embedding_package_loaded".into()),
+            active: backend.is_ready(),
+            ..Default::default()
+        };
+        reject_cancelled_execution_handle("selected embedding", &cancellation)?;
+        let result = backend
+            .selected_embeddings(texts, cancellation.clone())
+            .await;
+        let cleanup = backend.finish_selected_embedding(result.is_err()).await;
+        cleanup?;
+        reject_cancelled_execution_handle("selected embedding", &cancellation)?;
+        let embeddings = result?
+            .into_iter()
+            .enumerate()
+            .map(|(index, result)| crate::InferenceEmbeddingResult {
+                vector: result.vector,
+                token_count: Some(result.token_count),
+                index: Some(index),
+            })
+            .collect::<Vec<_>>();
+        let usage = embedding_usage_from_results(&embeddings)?;
+        Ok(InferenceExecutionResult::Embedding {
+            embeddings,
+            usage,
+            option_diagnostics,
+        })
+    }
+
     /// Stream a typed text/chat generation request.
     ///
     /// This keeps OpenAI-compatible transport JSON inside the gateway adapter

@@ -14,6 +14,9 @@ pub mod llamacpp;
 #[cfg(feature = "backend-candle")]
 pub mod candle;
 
+#[cfg(feature = "backend-candle")]
+mod candle_embedding;
+
 #[cfg(feature = "backend-pytorch")]
 pub mod pytorch;
 
@@ -1105,6 +1108,36 @@ pub trait InferenceBackend: Send + Sync {
     async fn finish_selected_text(&self, _cancel: bool) -> Result<(), BackendError> {
         Err(BackendError::Config(
             "selected text completion is unsupported by this backend".into(),
+        ))
+    }
+
+    /// Load the exact selected embedding package without introducing another owner.
+    async fn load_selected_embedding(
+        &mut self,
+        _request: &crate::InferenceExecutionRequest,
+        _target: &crate::PumasArtifactLoadTarget,
+        _decision: &crate::BackendExecutionDecision,
+    ) -> Result<BackendStartOutcome, BackendError> {
+        Err(BackendError::Config(
+            "selected embedding loading is unsupported by this backend".into(),
+        ))
+    }
+
+    /// Execute selected embeddings while retaining actual worker completion.
+    async fn selected_embeddings(
+        &self,
+        _texts: Vec<String>,
+        _cancellation: crate::InferenceExecutionCancellationHandle,
+    ) -> Result<Vec<EmbeddingResult>, BackendError> {
+        Err(BackendError::Config(
+            "selected embedding execution is unsupported by this backend".into(),
+        ))
+    }
+
+    /// Observe termination before residency or scheduler reservations can be released.
+    async fn finish_selected_embedding(&self, _cancel: bool) -> Result<(), BackendError> {
+        Err(BackendError::Config(
+            "selected embedding completion is unsupported by this backend".into(),
         ))
     }
 

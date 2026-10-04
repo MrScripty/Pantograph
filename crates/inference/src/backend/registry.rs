@@ -79,17 +79,13 @@ impl BackendFactory for CandleFactory {
         BackendInfo {
             name: "Candle".to_string(),
             backend_key: "candle".to_string(),
-            description: if available {
-                "In-process Candle inference (CUDA)".to_string()
-            } else {
-                "In-process Candle inference (CUDA required)".to_string()
-            },
+            description: "In-process CPU F32 BERT embeddings".to_string(),
             capabilities: CandleBackend::static_capabilities(),
             default_start_mode: BackendDefaultStartMode::Embedding,
             active: false,
             available,
             unavailable_reason,
-            can_install: false, // CUDA must be installed system-wide, can't auto-install
+            can_install: false, // Compiled in-process backend, no managed installation.
             runtime_binary_id: None,
         }
     }
@@ -253,7 +249,7 @@ mod tests {
 
     #[cfg(feature = "backend-candle")]
     #[test]
-    fn test_registry_marks_staged_candle_unavailable() {
+    fn test_registry_reports_native_candle_cpu_available() {
         let registry = BackendRegistry::new();
         let candle = registry
             .list()
@@ -261,11 +257,8 @@ mod tests {
             .find(|backend| backend.backend_key == "candle")
             .expect("candle backend info should be registered behind feature");
 
-        assert!(!candle.available);
-        assert!(candle
-            .unavailable_reason
-            .as_deref()
-            .is_some_and(|reason| reason.contains("executable model loading is not implemented")));
+        assert!(candle.available);
+        assert!(candle.unavailable_reason.is_none());
         assert_eq!(
             candle.default_start_mode,
             BackendDefaultStartMode::Embedding

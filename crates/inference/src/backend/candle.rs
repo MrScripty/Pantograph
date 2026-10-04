@@ -1,7 +1,7 @@
 //! Candle backend implementation
 //!
 //! This backend provides in-process inference using Hugging Face Candle.
-//! It supports CUDA acceleration and various model architectures.
+//! Its executable embedding profile is CPU F32 BERT with a declared pooling recipe.
 
 use std::path::{Component, Path, PathBuf};
 use std::pin::Pin;
@@ -11,7 +11,7 @@ use async_trait::async_trait;
 use futures_util::Stream;
 
 use super::{
-    openai_embedding_token_count_for_single_result, unavailable_runtime_variant_capability,
+    available_runtime_variant_capability, unavailable_runtime_variant_capability,
     BackendCapabilities, BackendCapabilityFacts, BackendComponentCapability, BackendConfig,
     BackendError, BackendFeatureCapabilityFacts, BackendFeatureSupport,
     BackendModelSourceCapabilityFacts, BackendStartOutcome, BackendTaskCapability, ChatChunk,
@@ -30,14 +30,10 @@ use crate::{BackendHintLabel, ModelArtifactKind};
 /// Candle backend for in-process inference
 ///
 /// This backend runs inference directly in the process using Candle.
-/// It supports embedding models with CUDA acceleration.
+/// It supports the explicitly declared CPU F32 BERT embedding recipe.
 pub struct CandleBackend {
-    /// HTTP client for API requests (to local Axum server)
-    http_client: reqwest::Client,
-    /// Base URL of the local server
-    base_url: Option<String>,
-    /// Whether the backend is ready
-    ready: bool,
+    pub(super) model: Option<Arc<super::candle_embedding::EmbeddingModel>>,
+    jobs: super::candle_embedding::EmbeddingJobs,
 }
 
 /// Narrow staged load plan for Candle embedding models.
@@ -91,9 +87,8 @@ impl CandleBackend {
     /// Create a new Candle backend
     pub fn new() -> Self {
         Self {
-            http_client: reqwest::Client::new(),
-            base_url: None,
-            ready: false,
+            model: None,
+            jobs: Default::default(),
         }
     }
 
@@ -105,10 +100,10 @@ impl CandleBackend {
             image_generation_batch: false,
             embeddings: true, // Primary use case
             reranking: false,
-            gpu: true,               // CUDA support
-            device_selection: false, // Limited device selection
-            streaming: false,        // Not supported yet
-            tool_calling: false,     // Not supported
+            gpu: false,             // Executable profile is CPU only
+            device_selection: true, // Concrete CPU selection
+            streaming: false,       // Not supported yet
+            tool_calling: false,    // Not supported
             external_connection: false,
             facts: BackendCapabilityFacts {
                 tasks: vec![BackendTaskCapability::stable(
@@ -117,7 +112,7 @@ impl CandleBackend {
                     vec![InferenceModality::Embedding],
                 )],
                 preprocessing: BackendComponentCapability::RequiresPackageComponent,
-                postprocessing: BackendComponentCapability::NotRequired,
+                postprocessing: BackendComponentCapability::BackendManaged,
                 model_sources: BackendModelSourceCapabilityFacts {
                     artifact_kinds: vec![ModelArtifactKind::HfCompatibleDirectory],
                     backend_hints: vec![BackendHintLabel::Candle],
@@ -125,17 +120,15 @@ impl CandleBackend {
                 },
                 features: BackendFeatureCapabilityFacts {
                     streaming: BackendFeatureSupport::Unsupported,
-                    device_selection: BackendFeatureSupport::Unsupported,
+                    device_selection: BackendFeatureSupport::Supported,
                     external_connection: BackendFeatureSupport::Unsupported,
                     kv_cache: BackendFeatureSupport::Unsupported,
                 },
                 runtime_variants: vec![
-                    unavailable_runtime_variant_capability(
+                    available_runtime_variant_capability(
                         "candle",
                         "candle.cpu",
                         InferenceDeviceClass::Cpu,
-                        DeviceResolutionDiagnosticCode::CandidateUnavailable,
-                        "Candle executable model loading is not implemented",
                     ),
                     unavailable_runtime_variant_capability(
                         "candle",
@@ -161,13 +154,7 @@ impl CandleBackend {
     pub fn check_availability() -> (bool, Option<String>) {
         #[cfg(feature = "backend-candle")]
         {
-            (
-                false,
-                Some(
-                    "Candle backend has a staged embedding load planner but executable model loading is not implemented"
-                        .to_string(),
-                ),
-            )
+            (true, None)
         }
 
         #[cfg(not(feature = "backend-candle"))]
@@ -536,7 +523,7 @@ impl InferenceBackend for CandleBackend {
     }
 
     fn description(&self) -> &'static str {
-        "In-process Candle inference with CUDA support. Optimized for embedding models."
+        "In-process CPU F32 BERT embeddings with declared masked mean pooling and normalization."
     }
 
     fn capabilities(&self) -> BackendCapabilities {
@@ -549,34 +536,74 @@ impl InferenceBackend for CandleBackend {
         _spawner: Arc<dyn ProcessSpawner>,
     ) -> Result<BackendStartOutcome, BackendError> {
         Err(BackendError::StartupFailed(
-            "Candle backend is staged for embedding-only support, but executable model loading is not implemented".to_string()
+            "Candle requires the typed scheduler-selected embedding package and executable target"
+                .to_string(),
         ))
     }
 
+    async fn load_selected_embedding(
+        &mut self,
+        request: &crate::InferenceExecutionRequest,
+        target: &crate::PumasArtifactLoadTarget,
+        decision: &crate::BackendExecutionDecision,
+    ) -> Result<BackendStartOutcome, BackendError> {
+        let selected = crate::selected_embedding_execution::SelectedEmbeddingLoad::validate(
+            request, target, decision,
+        )
+        .await?;
+        let mut package = selected.package.clone();
+        package.artifact.entry_path = selected.target.local_load_path.clone();
+        let plan =
+            Self::embedding_load_plan_from_package(&package, Some(selected.device.as_str()))?;
+        if package
+            .transformers
+            .as_ref()
+            .is_none_or(|evidence| evidence.architectures != ["BertModel"])
+        {
+            return Err(BackendError::Config(
+                "Candle executable architecture requires BertModel".into(),
+            ));
+        }
+        self.jobs.drain(true).await?;
+        // Synchronous construction cannot detach when the load future is dropped.
+        // A failed candidate leaves the previous loaded model intact.
+        let model = super::candle_embedding::EmbeddingModel::load(plan, target.clone())?;
+        self.model = Some(Arc::new(model));
+        Ok(BackendStartOutcome {
+            runtime_reused: Some(false),
+            lifecycle_decision_reason: Some("scheduler_selected_embedding_package_loaded".into()),
+        })
+    }
+
+    async fn selected_embeddings(
+        &self,
+        texts: Vec<String>,
+        cancellation: crate::InferenceExecutionCancellationHandle,
+    ) -> Result<Vec<EmbeddingResult>, BackendError> {
+        let model = self.model.clone().ok_or(BackendError::NotReady)?;
+        self.jobs.execute(model, texts, cancellation).await
+    }
+
+    async fn finish_selected_embedding(&self, cancel: bool) -> Result<(), BackendError> {
+        self.jobs.drain(cancel).await
+    }
+
     async fn stop(&mut self) -> Result<(), BackendError> {
-        self.base_url = None;
-        self.ready = false;
+        self.jobs.drain(true).await?;
+        self.model = None;
         Ok(())
     }
 
     fn is_ready(&self) -> bool {
-        self.ready
+        self.model.is_some()
     }
 
     async fn health_check(&self) -> bool {
-        if let Some(ref base_url) = self.base_url {
-            let health_url = format!("{}/health", base_url);
-            match self.http_client.get(&health_url).send().await {
-                Ok(resp) => resp.status().is_success(),
-                Err(_) => false,
-            }
-        } else {
-            false
-        }
+        self.is_ready()
     }
 
     fn base_url(&self) -> Option<String> {
-        self.base_url.clone()
+        None
     }
 
     async fn chat_completion_stream(
@@ -594,61 +621,12 @@ impl InferenceBackend for CandleBackend {
         texts: Vec<String>,
         model: &str,
     ) -> Result<Vec<EmbeddingResult>, BackendError> {
-        let base_url = self.base_url.as_ref().ok_or(BackendError::NotReady)?;
-
-        let url = format!("{}/v1/embeddings", base_url);
-
-        let request = serde_json::json!({
-            "input": texts,
-            "model": model,
-        });
-
-        let response = self
-            .http_client
-            .post(&url)
-            .json(&request)
-            .send()
-            .await
-            .map_err(BackendError::Http)?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            return Err(BackendError::Inference(format!(
-                "Embedding API error {}: {}",
-                status, body
-            )));
-        }
-
-        let json: serde_json::Value = response
-            .json()
-            .await
-            .map_err(|e| BackendError::Inference(format!("Failed to parse response: {}", e)))?;
-
-        let data = json.get("data").and_then(|d| d.as_array()).ok_or_else(|| {
-            BackendError::Inference("Invalid embedding response format".to_string())
-        })?;
-        let token_count = openai_embedding_token_count_for_single_result(&json, data.len());
-
-        let mut results = Vec::new();
-        for item in data {
-            let embedding = item
-                .get("embedding")
-                .and_then(|e| e.as_array())
-                .ok_or_else(|| BackendError::Inference("Missing embedding vector".to_string()))?;
-
-            let vector: Vec<f32> = embedding
-                .iter()
-                .filter_map(|v| v.as_f64().map(|f| f as f32))
-                .collect();
-
-            results.push(EmbeddingResult {
-                vector,
-                token_count,
-            });
-        }
-
-        Ok(results)
+        let _ = model;
+        self.selected_embeddings(
+            texts,
+            crate::InferenceExecutionCancellationHandle::running(),
+        )
+        .await
     }
 
     async fn rerank(&self, _request: RerankRequest) -> Result<RerankResponse, BackendError> {
@@ -728,7 +706,7 @@ mod tests {
         assert!(!caps.vision);
         assert!(!caps.image_generation);
         assert!(caps.embeddings);
-        assert!(caps.gpu);
+        assert!(!caps.gpu);
         assert!(!caps.streaming);
         assert!(caps.supports_task(InferenceTaskId::Embedding));
         assert!(!caps.supports_task(InferenceTaskId::ImageGeneration));
@@ -738,12 +716,8 @@ mod tests {
         assert!(caps.facts.runtime_variants.iter().any(|variant| {
             variant.runtime_variant_id.as_str() == "candle.cpu"
                 && variant.device_class == InferenceDeviceClass::Cpu
-                && !variant.available
-                && variant.diagnostics.iter().any(|diagnostic| {
-                    diagnostic
-                        .message
-                        .contains("executable model loading is not implemented")
-                })
+                && variant.available
+                && variant.diagnostics.is_empty()
         }));
         assert!(caps.facts.runtime_variants.iter().any(|variant| {
             variant.runtime_variant_id.as_str() == "candle.cuda"
@@ -783,13 +757,11 @@ mod tests {
 
     #[cfg(feature = "backend-candle")]
     #[test]
-    fn test_staged_backend_reports_unavailable_until_loader_exists() {
+    fn test_native_cpu_backend_reports_available() {
         let (available, reason) = CandleBackend::check_availability();
 
-        assert!(!available);
-        assert!(reason
-            .as_deref()
-            .is_some_and(|value| value.contains("executable model loading is not implemented")));
+        assert!(available);
+        assert!(reason.is_none());
     }
 
     #[test]
