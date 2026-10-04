@@ -25,6 +25,7 @@ use crate::runtime_dispatch_capability_facts::{
     RuntimeDispatchCapabilityFactsOutcome, RuntimeDispatchCapabilityFactsProjection,
     RuntimeDispatchCapabilityFactsSource, RuntimeDispatchRuntimeCapabilityFacts,
 };
+use crate::runtime_host_image_execution as image;
 
 #[derive(Clone)]
 pub(crate) struct EmbeddedInferenceInterfaceFactsProvider {
@@ -232,21 +233,6 @@ fn runtime_availability_state(status: RuntimeRegistryStatus) -> InferenceRuntime
 fn input_ports(task_entry: &TaskRegistryEntry) -> Vec<InferencePortDescriptor> {
     match task_entry.task_id {
         InferenceTaskId::TextGeneration => {
-            let mut max_new_tokens = port(
-                crate::runtime_host_text_execution::MAX_NEW_TOKENS_PORT,
-                "Max new tokens",
-                InferencePortDirection::Input,
-                InferencePortRequirement::Optional,
-                InferenceValueType::Scalar(InferenceScalarType::U64),
-            );
-            max_new_tokens.options = InferencePortOptions::NumericRange {
-                range: InferenceNumericRange {
-                    min: 1.0,
-                    max: f64::from(u32::MAX),
-                    step: Some(1.0),
-                    default: None,
-                },
-            };
             vec![
                 port(
                     "prompt",
@@ -255,12 +241,39 @@ fn input_ports(task_entry: &TaskRegistryEntry) -> Vec<InferencePortDescriptor> {
                     InferencePortRequirement::Required,
                     InferenceValueType::Scalar(InferenceScalarType::String),
                 ),
-                max_new_tokens,
+                positive_u32_input_port(
+                    crate::runtime_host_text_execution::MAX_NEW_TOKENS_PORT,
+                    "Max new tokens",
+                ),
             ]
         }
-        InferenceTaskId::ImageGeneration
-        | InferenceTaskId::ChatCompletion
-        | InferenceTaskId::MultimodalGeneration => vec![port(
+        InferenceTaskId::ImageGeneration => vec![
+            port(
+                image::PROMPT_PORT,
+                "Prompt",
+                InferencePortDirection::Input,
+                InferencePortRequirement::Required,
+                InferenceValueType::Scalar(InferenceScalarType::String),
+            ),
+            port(
+                image::NEGATIVE_PROMPT_PORT,
+                "Negative prompt",
+                InferencePortDirection::Input,
+                InferencePortRequirement::Optional,
+                InferenceValueType::Scalar(InferenceScalarType::String),
+            ),
+            positive_u32_input_port(image::WIDTH_PORT, "Width"),
+            positive_u32_input_port(image::HEIGHT_PORT, "Height"),
+            positive_u32_input_port(image::STEPS_PORT, "Inference steps"),
+            port(
+                image::SEED_PORT,
+                "Seed",
+                InferencePortDirection::Input,
+                InferencePortRequirement::Optional,
+                InferenceValueType::Scalar(InferenceScalarType::U64),
+            ),
+        ],
+        InferenceTaskId::ChatCompletion | InferenceTaskId::MultimodalGeneration => vec![port(
             "prompt",
             "Prompt",
             InferencePortDirection::Input,
@@ -269,6 +282,25 @@ fn input_ports(task_entry: &TaskRegistryEntry) -> Vec<InferencePortDescriptor> {
         )],
         _ => Vec::new(),
     }
+}
+
+fn positive_u32_input_port(port_id: &str, label: &str) -> InferencePortDescriptor {
+    let mut descriptor = port(
+        port_id,
+        label,
+        InferencePortDirection::Input,
+        InferencePortRequirement::Optional,
+        InferenceValueType::Scalar(InferenceScalarType::U64),
+    );
+    descriptor.options = InferencePortOptions::NumericRange {
+        range: InferenceNumericRange {
+            min: 1.0,
+            max: f64::from(u32::MAX),
+            step: Some(1.0),
+            default: None,
+        },
+    };
+    descriptor
 }
 
 fn output_ports(task_entry: &TaskRegistryEntry) -> Vec<InferencePortDescriptor> {
@@ -385,8 +417,21 @@ mod tests {
             }
         );
         limit.validate().expect("limit port contract");
-        let image = inference::resolve_task_registry_entry("image_generation").expect("image task");
-        assert_eq!(input_ports(&image).len(), 1);
+        let chat = inference::resolve_task_registry_entry("chat_completion").expect("chat task");
+        assert_eq!(input_ports(&chat).len(), 1);
+    }
+
+    #[test]
+    fn image_generation_inputs_match_the_shared_basic_controls_contract() {
+        let task = inference::resolve_task_registry_entry("image_generation").expect("image task");
+        let expected: Vec<InferencePortDescriptor> = serde_json::from_str(include_str!(
+            "../../pantograph-inference-interface-contracts/tests/fixtures/image_generation_basic_inputs.json"
+        )).expect("image input contract fixture");
+        let actual = input_ports(&task);
+        assert_eq!(actual, expected);
+        for input in actual {
+            input.validate().expect("image input contract");
+        }
     }
 
     #[test]

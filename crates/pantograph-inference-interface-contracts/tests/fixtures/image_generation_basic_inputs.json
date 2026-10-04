@@ -1,0 +1,56 @@
+[
+  {
+    "port_id": "prompt",
+    "label": "Prompt",
+    "direction": "input",
+    "requirement": "required",
+    "value_type": { "category": "scalar", "kind": "string" },
+    "options": { "kind": "none" },
+    "availability": { "status": "available" }
+  },
+  {
+    "port_id": "negative_prompt",
+    "label": "Negative prompt",
+    "direction": "input",
+    "requirement": "optional",
+    "value_type": { "category": "scalar", "kind": "string" },
+    "options": { "kind": "none" },
+    "availability": { "status": "available" }
+  },
+  {
+    "port_id": "width",
+    "label": "Width",
+    "direction": "input",
+    "requirement": "optional",
+    "value_type": { "category": "scalar", "kind": "u64" },
+    "options": { "kind": "numeric_range", "range": { "min": 1.0, "max": 4294967295.0, "step": 1.0 } },
+    "availability": { "status": "available" }
+  },
+  {
+    "port_id": "height",
+    "label": "Height",
+    "direction": "input",
+    "requirement": "optional",
+    "value_type": { "category": "scalar", "kind": "u64" },
+    "options": { "kind": "numeric_range", "range": { "min": 1.0, "max": 4294967295.0, "step": 1.0 } },
+    "availability": { "status": "available" }
+  },
+  {
+    "port_id": "num_inference_steps",
+    "label": "Inference steps",
+    "direction": "input",
+    "requirement": "optional",
+    "value_type": { "category": "scalar", "kind": "u64" },
+    "options": { "kind": "numeric_range", "range": { "min": 1.0, "max": 4294967295.0, "step": 1.0 } },
+    "availability": { "status": "available" }
+  },
+  {
+    "port_id": "seed",
+    "label": "Seed",
+    "direction": "input",
+    "requirement": "optional",
+    "value_type": { "category": "scalar", "kind": "u64" },
+    "options": { "kind": "none" },
+    "availability": { "status": "available" }
+  }
+]
