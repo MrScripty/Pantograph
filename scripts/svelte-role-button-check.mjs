@@ -7,8 +7,9 @@ const INTERACTIVE_SEMANTIC_TAGS = new Set(['button', 'a', 'input', 'select', 'te
 function hasRenderedName(node) {
   if (!node || typeof node !== 'object') return false;
   if (node.type === 'Text') return /[A-Za-z0-9]/.test(node.data);
-  if (node.type === 'ExpressionTag') return true;
-  if (node.type === 'Comment') return false;
+  if (node.type === 'ExpressionTag' || node.type === 'RenderTag') return true;
+  // A snippet declaration is inert until a RenderTag invokes it.
+  if (node.type === 'Comment' || node.type === 'SnippetBlock') return false;
   if (node.type === 'RegularElement' && ['script', 'style'].includes(node.name)) return false;
   return ['nodes', 'fragment', 'consequent', 'alternate', 'body', 'fallback'].some((key) => {
     const value = node[key];

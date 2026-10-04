@@ -40,3 +40,8 @@ test('visible descendant text supplies a name, but handler expressions do not', 
   assert.deepEqual(check('<div role="button" tabindex="0" onkeydown={activate}><span>{label}</span></div>'), []);
   assert.deepEqual(rules('<div role="button" tabindex="0" onkeydown={() => activate()}><!-- Select --></div>'), ['role-button-accessible-name']);
 });
+
+test('an unused snippet declaration is not rendered name evidence', () => {
+  assert.deepEqual(rules('<div role="button" tabindex="0" onkeydown={activate}>{#snippet label()}Select{/snippet}</div>'), ['role-button-accessible-name']);
+  assert.deepEqual(check('<div role="button" tabindex="0" onkeydown={activate}>{#snippet label()}Select{/snippet}{@render label()}</div>'), []);
+});
