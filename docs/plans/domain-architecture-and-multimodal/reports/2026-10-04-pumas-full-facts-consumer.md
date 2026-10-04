@@ -6,13 +6,24 @@ This candidate completes the source integration on
 `1c0d86dc6275ac2be466c3f918d2fcd35be99cb6`. It is ready for native compilation
 and qualification, **not yet runtime-qualified or accepted**.
 
-The exact dependency is Pumas `5be6d967dbd5c0ff7449f342e77f05f9cd645a8e`,
-inspected tree `8e693fe410dac9142e6213430638e7180e5643c7`, version 0.7.0.
-The parent reports independent acceptance of that producer's IPC scope.
+The current dependency is published Pumas
+`2243a2b6909fcf4fe4b4ffa0f7f0a2b4ca027d32`, verified tree
+`6d27a72603a7571724c6d17179cab64368734a38`, version 0.7.0. Its ordered parents are
+`4c850426b528df115db636b0f4798511946710fc` (fixture API timeout repair) and
+`58f320a31216872d1a3a389c66bb0c7bb3a30daa` (semantic hash no-op repair). The parent
+reports independent acceptance and non-force publication of this exact source.
+Its tree matches reviewed composition `9d569b14801220e94b03464a2d9fcc6615e95456`;
+the published commit mapping changes metadata only. Both accepted fixes and the
+full stacked producer ancestry remain present.
+
 `Cargo.toml` and `Cargo.lock` pin this exact source. Full/default features,
-including ONNX Runtime, remain intact; the resolved feature graph is recorded.
-Lock changes are the new producer and its dependency additions/removals, with
-no deliberate unrelated dependency refresh.
+including ONNX Runtime, remain intact. This repin preserves accepted Pantograph
+`92e38b85d735ad5efc8c3e4bdd7d11cfab0fa060` and all preceding embedding/custody
+repairs. Strict cache freshness assertions and source gates are unchanged. The
+lock delta changes only the producer source identity. Earlier receipts below
+remain historical evidence from pin
+`5be6d967dbd5c0ff7449f342e77f05f9cd645a8e`, tree
+`8e693fe410dac9142e6213430638e7180e5643c7`; they do not qualify the current pin.
 
 ## Six consumer boundaries
 
@@ -103,3 +114,27 @@ No known source-only TODO remains after this bounded audit; successful native
 compilation and the listed tests are still required before acceptance. The known
 pre-existing Pumas load-target fixture decode failure is not newly attributed to
 this change. Gates and external review coordination remain with the parent.
+
+## Published composition repin qualification
+
+This three-file repin starts from accepted Pantograph `92e38b85` and changes no
+Rust implementation, fixture, freshness assertion, embedding contract, custody
+boundary, feature selection, or gate. The current manifest/lock source is the
+published composition above; all other lockfile bytes remain unchanged.
+
+The all-target compiler check for `workflow-nodes` with `model-library` and
+`pantograph-embedded-runtime` passed with the default feature graph intact using
+`ORT_SKIP_DOWNLOAD=1`. This is **compiler evidence only**: it skips obtaining ORT
+binaries, does not link or execute the runtime, and proves no inference. It
+reported one warning for unchanged inference fields `package`, `target`, and
+`device`. Formatting, critical anti-pattern, diff, and staged/range traceability
+checks are recorded in the handoff receipts.
+
+The ordinary locked native check still stops at the pinned ORT 1.24.2 CDN CONNECT
+proxy `403`. No credential, permission, network setting, runtime substitution, or
+feature reduction was used to claim runtime qualification. The full native
+owner/client freshness test, GUI, and model-dependent inference were not executed
+at this consumer pin. Earlier real IPC tests from the accepted producer source
+remain separate evidence. Exact consumer hosted qualification must run after
+independent candidate review and the parent's coordinated PR49 advancement; no
+previous-head producer or consumer build substitutes for that gate.
