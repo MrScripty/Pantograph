@@ -10,8 +10,9 @@ bounded consumer slice. Base: merged main
 `crates/workflow-nodes/src/setup.rs`; accepted PR48 source is untouched.
 This historical attachment slice consumed Pumas revision
 `f87c3da8276a914a54c6f4f36d617bef9d9f424e` and made no manifest or lockfile
-changes. The current integrated consumer instead pins
-`5be6d967dbd5c0ff7449f342e77f05f9cd645a8e`; its dependency upgrade and
+changes. The integrated consumer historically pinned
+`5be6d967dbd5c0ff7449f342e77f05f9cd645a8e` and currently pins
+`2243a2b6909fcf4fe4b4ffa0f7f0a2b4ca027d32`; its dependency upgrade and
 subsequent qualification receipts are recorded in the later consumer reports.
 
 When the configured launcher root already has an owner, setup now tries its
