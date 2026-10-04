@@ -3570,6 +3570,29 @@ fn non_runtime_input_readiness(
     };
 
     match template {
+        WorkflowSchedulerNonRuntimeTaskTemplate::Merge => {
+            for binding in &task.input_bindings {
+                match materialized_bound_output(task, results, binding) {
+                    MaterializedBindingValue::Ready(WorkflowSchedulerTaskResultValue::String(
+                        _,
+                    )) => {}
+                    MaterializedBindingValue::Ready(_) => {
+                        return NonRuntimeInputReadiness::Invalid(scheduler_input_diagnostic(
+                            SchedulerTaskStateDiagnosticCode::InvalidTask,
+                            "materialized merge input has the wrong value type",
+                        ))
+                    }
+                    MaterializedBindingValue::Blocked => return NonRuntimeInputReadiness::Blocked,
+                    MaterializedBindingValue::Unavailable(diagnostic) => {
+                        return NonRuntimeInputReadiness::InputUnavailable(diagnostic)
+                    }
+                    MaterializedBindingValue::Invalid(diagnostic) => {
+                        return NonRuntimeInputReadiness::Invalid(diagnostic)
+                    }
+                }
+            }
+            NonRuntimeInputReadiness::Ready
+        }
         WorkflowSchedulerNonRuntimeTaskTemplate::TextOutput => {
             match materialized_binding_value(task, results, "text") {
                 MaterializedBindingValue::Ready(WorkflowSchedulerTaskResultValue::String(_)) => {

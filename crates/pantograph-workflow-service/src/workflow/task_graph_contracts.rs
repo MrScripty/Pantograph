@@ -110,6 +110,7 @@ pub struct WorkflowSchedulerDependencyReadinessSource {
 #[non_exhaustive]
 pub enum WorkflowSchedulerNonRuntimeTaskTemplate {
     TextOutput,
+    Merge,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

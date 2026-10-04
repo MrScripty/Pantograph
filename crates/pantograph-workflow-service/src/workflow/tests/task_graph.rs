@@ -613,6 +613,56 @@ fn scheduler_task_graph_projects_source_input_and_non_runtime_templates() {
 }
 
 #[test]
+fn scheduler_task_graph_lowers_merge_with_all_dependencies_in_canonical_order() {
+    let graph = WorkflowGraph {
+        nodes: ["b", "a", "join"]
+            .map(|id| GraphNode {
+                id: id.into(),
+                node_type: if id == "join" { "merge" } else { "text-input" }.into(),
+                position: Position { x: 0.0, y: 0.0 },
+                data: json!({}),
+            })
+            .to_vec(),
+        edges: ["b", "a"]
+            .map(|id| GraphEdge {
+                id: format!("{id}-join"),
+                source: id.into(),
+                target: "join".into(),
+                source_handle: "text".into(),
+                target_handle: "inputs".into(),
+            })
+            .to_vec(),
+        derived_graph: None,
+    };
+    let tasks = workflow_scheduler_task_graph(&workflow_id(), &workflow_run_id(), &graph).unwrap();
+    let merge = tasks
+        .tasks
+        .iter()
+        .find(|task| task.node_id.as_str() == "join")
+        .unwrap();
+    assert_eq!(
+        merge.execution_class,
+        WorkflowSchedulerTaskExecutionClass::NonRuntimeNodeEngine
+    );
+    assert_eq!(
+        merge.non_runtime_task_template,
+        Some(WorkflowSchedulerNonRuntimeTaskTemplate::Merge)
+    );
+    assert_eq!(
+        merge
+            .dependency_task_ids
+            .iter()
+            .map(|id| id.as_str())
+            .collect::<Vec<_>>(),
+        ["a", "b"]
+    );
+    assert!(merge.diagnostics.is_empty());
+    let decoded: crate::workflow::WorkflowSchedulerTaskGraph =
+        serde_json::from_str(&serde_json::to_string(&tasks).unwrap()).unwrap();
+    assert_eq!(decoded, tasks);
+}
+
+#[test]
 fn scheduler_task_graph_ignores_source_input_graph_data() {
     let graph = WorkflowGraph {
         nodes: vec![

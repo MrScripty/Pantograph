@@ -30,6 +30,7 @@ const NODE_TYPE_BOOLEAN_INPUT: &str = "boolean-input";
 const NODE_TYPE_NUMBER_INPUT: &str = "number-input";
 const NODE_TYPE_TEXT_INPUT: &str = "text-input";
 const NODE_TYPE_TEXT_OUTPUT: &str = "text-output";
+const NODE_TYPE_MERGE: &str = "merge";
 const MISSING_RESOURCE_ESTIMATES_MESSAGE: &str =
     "runtime inference scheduler tasks require validated resource estimate hints";
 
@@ -371,6 +372,16 @@ fn non_runtime_task_template_for_node(
 
     match node_type {
         NODE_TYPE_TEXT_OUTPUT => text_output_template(node_id, input_bindings),
+        NODE_TYPE_MERGE
+            if input_bindings
+                .iter()
+                .all(|binding| binding.target_port_id == "inputs") =>
+        {
+            (
+                Some(WorkflowSchedulerNonRuntimeTaskTemplate::Merge),
+                Vec::new(),
+            )
+        }
         _ => (
             None,
             vec![diagnostic(

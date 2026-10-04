@@ -252,6 +252,28 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn single_task_merge_preserves_order_and_filters_only_blank_strings() {
+        let inputs = HashMap::from([(
+            "inputs".into(),
+            serde_json::json!(["  first\n", " ", "second", ""]),
+        )]);
+        let response = execute_core_task_once(request("join", "merge", inputs))
+            .await
+            .unwrap();
+        assert_eq!(response.outputs()["merged"], "  first\n\nsecond");
+        assert_eq!(response.outputs()["count"], 2);
+        let empty = execute_core_task_once(request(
+            "empty-join",
+            "merge",
+            HashMap::from([("inputs".into(), serde_json::json!([]))]),
+        ))
+        .await
+        .unwrap();
+        assert_eq!(empty.outputs()["merged"], "");
+        assert_eq!(empty.outputs()["count"], 0);
+    }
+
+    #[tokio::test]
     async fn explicit_node_type_overrides_task_id_suffix_fallback() {
         let mut inputs = HashMap::new();
         inputs.insert("text".to_string(), Value::String("explicit".to_string()));

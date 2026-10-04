@@ -78,6 +78,19 @@ fn node_engine_inputs(
                 )?),
             );
         }
+        WorkflowSchedulerNonRuntimeTaskTemplate::Merge => {
+            let values = task.input_bindings.iter().map(|binding| {
+                match materialized_output(task, binding, materialized_results)? {
+                    WorkflowSchedulerTaskResultValue::String(value) => Ok(Value::String(value.clone())),
+                    _ => Err(WorkflowSchedulerNonRuntimeTaskAdapterError::WrongMaterializedInputType {
+                        source_task_id: binding.source_task_id.as_str().to_string(),
+                        source_port_id: binding.source_port_id.clone(),
+                        expected: "string",
+                    }),
+                }
+            }).collect::<Result<Vec<_>, _>>()?;
+            inputs.insert("inputs".to_string(), Value::Array(values));
+        }
     }
     Ok(inputs)
 }
@@ -93,6 +106,28 @@ fn scheduler_outputs(
                 port_id: PORT_TEXT.to_string(),
                 value: WorkflowSchedulerTaskResultValue::String(value),
             }])
+        }
+        WorkflowSchedulerNonRuntimeTaskTemplate::Merge => {
+            let merged = output_string(outputs, "merged")?;
+            let count = outputs
+                .get("count")
+                .and_then(Value::as_u64)
+                .ok_or_else(|| {
+                    WorkflowSchedulerNonRuntimeTaskAdapterError::InvalidNodeEngineOutput {
+                        port_id: "count".to_string(),
+                        expected: "unsigned integer",
+                    }
+                })?;
+            Ok(vec![
+                WorkflowSchedulerTaskResultOutput {
+                    port_id: "merged".to_string(),
+                    value: WorkflowSchedulerTaskResultValue::String(merged),
+                },
+                WorkflowSchedulerTaskResultOutput {
+                    port_id: "count".to_string(),
+                    value: WorkflowSchedulerTaskResultValue::U64(count),
+                },
+            ])
         }
     }
 }
@@ -357,6 +392,76 @@ mod tests {
         assert_eq!(
             result.outputs[0].value,
             WorkflowSchedulerTaskResultValue::String("ready text".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn merge_adapter_retains_order_count_and_rejects_incomplete_or_wrong_inputs() {
+        let bindings = ["a", "b"]
+            .map(|id| {
+                let mut binding = text_binding(id);
+                binding.target_port_id = "inputs".into();
+                binding
+            })
+            .to_vec();
+        let merge = task(
+            "join",
+            "merge",
+            Some(WorkflowSchedulerNonRuntimeTaskTemplate::Merge),
+            bindings,
+        );
+        let a = completed_result(
+            "a",
+            PORT_TEXT,
+            WorkflowSchedulerTaskResultValue::String("  first ".into()),
+        );
+        let b = completed_result(
+            "b",
+            PORT_TEXT,
+            WorkflowSchedulerTaskResultValue::String("second".into()),
+        );
+        let result = execute_non_runtime_scheduler_task(&merge, &[b.clone(), a.clone()])
+            .await
+            .unwrap();
+        assert_eq!(
+            result.outputs,
+            [
+                WorkflowSchedulerTaskResultOutput {
+                    port_id: "merged".into(),
+                    value: WorkflowSchedulerTaskResultValue::String("  first \nsecond".into())
+                },
+                WorkflowSchedulerTaskResultOutput {
+                    port_id: "count".into(),
+                    value: WorkflowSchedulerTaskResultValue::U64(2)
+                },
+            ]
+        );
+        assert!(matches!(
+            execute_non_runtime_scheduler_task(&merge, std::slice::from_ref(&a)).await,
+            Err(WorkflowSchedulerNonRuntimeTaskAdapterError::MissingMaterializedInput { .. })
+        ));
+        let mut wrong = b;
+        wrong.outputs[0].value = WorkflowSchedulerTaskResultValue::Bool(true);
+        assert!(matches!(
+            execute_non_runtime_scheduler_task(&merge, &[a, wrong]).await,
+            Err(WorkflowSchedulerNonRuntimeTaskAdapterError::WrongMaterializedInputType { .. })
+        ));
+        let empty = task(
+            "empty",
+            "merge",
+            Some(WorkflowSchedulerNonRuntimeTaskTemplate::Merge),
+            vec![],
+        );
+        let result = execute_non_runtime_scheduler_task(&empty, &[])
+            .await
+            .unwrap();
+        assert_eq!(
+            result.outputs[0].value,
+            WorkflowSchedulerTaskResultValue::String(String::new())
+        );
+        assert_eq!(
+            result.outputs[1].value,
+            WorkflowSchedulerTaskResultValue::U64(0)
         );
     }
 

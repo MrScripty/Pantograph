@@ -8,6 +8,7 @@ const NODE_TYPE_BOOLEAN_INPUT: &str = "boolean-input";
 const NODE_TYPE_NUMBER_INPUT: &str = "number-input";
 const NODE_TYPE_TEXT_INPUT: &str = "text-input";
 const NODE_TYPE_TEXT_OUTPUT: &str = "text-output";
+const NODE_TYPE_MERGE: &str = "merge";
 
 pub(super) fn classify_workflow_scheduler_task(
     node_type: &str,
@@ -52,7 +53,7 @@ fn is_source_input_task(node_type: &str) -> bool {
 }
 
 fn is_first_stage_node_engine_task(node_type: &str) -> bool {
-    matches!(node_type, NODE_TYPE_TEXT_OUTPUT)
+    matches!(node_type, NODE_TYPE_TEXT_OUTPUT | NODE_TYPE_MERGE)
 }
 
 #[cfg(test)]
@@ -92,12 +93,13 @@ mod tests {
 
     #[test]
     fn classifier_marks_first_stage_output_as_non_runtime_node_engine() {
-        let contract = contract("text-output");
-
-        assert_eq!(
-            classify_workflow_scheduler_task("text-output", Some(&contract)),
-            WorkflowSchedulerTaskExecutionClass::NonRuntimeNodeEngine
-        );
+        for node_type in ["text-output", "merge"] {
+            let contract = contract(node_type);
+            assert_eq!(
+                classify_workflow_scheduler_task(node_type, Some(&contract)),
+                WorkflowSchedulerTaskExecutionClass::NonRuntimeNodeEngine
+            );
+        }
     }
 
     #[test]

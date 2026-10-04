@@ -2401,6 +2401,59 @@ fn orchestrator_advances_dependent_non_runtime_task_when_inputs_materialize() {
 }
 
 #[test]
+fn orchestrator_merge_waits_for_every_upstream_result() {
+    let orchestrator = orchestrator_without_runtime_host_response();
+    let mut merge = text_output_task();
+    merge.node_id = "join".parse().unwrap();
+    merge.task_id = "join".parse().unwrap();
+    merge.node_type = "merge".into();
+    merge.non_runtime_task_template = Some(WorkflowSchedulerNonRuntimeTaskTemplate::Merge);
+    merge.input_bindings = ["a", "b"]
+        .map(|id| WorkflowSchedulerTaskInputBinding {
+            source_node_id: id.parse().unwrap(),
+            source_task_id: id.parse().unwrap(),
+            source_port_id: "text".into(),
+            target_port_id: "inputs".into(),
+        })
+        .to_vec();
+    merge.dependency_task_ids = ["a".parse().unwrap(), "b".parse().unwrap()].to_vec();
+    let graph = task_graph(vec![
+        text_input_task("a", "first"),
+        text_input_task("b", "second"),
+        merge,
+    ]);
+    let run = graph.workflow_run_id.as_str().to_owned();
+    let mut store = WorkflowExecutionSessionStore::new(1, 1);
+    let session = begin_active_run_for_task_graph(&mut store, &graph);
+    orchestrator
+        .initialize_active_run_task_state(&mut store, &session, &run, graph)
+        .unwrap();
+    store
+        .record_active_run_scheduler_task_result(
+            &session,
+            &run,
+            text_result("a", WorkflowSchedulerTaskResultStatus::Completed),
+        )
+        .unwrap();
+    assert!(orchestrator
+        .advance_awaiting_non_runtime_task_inputs(&mut store, &session, &run, "join")
+        .unwrap()
+        .is_none());
+    store
+        .record_active_run_scheduler_task_result(
+            &session,
+            &run,
+            text_result("b", WorkflowSchedulerTaskResultStatus::Completed),
+        )
+        .unwrap();
+    let ready = orchestrator
+        .advance_awaiting_non_runtime_task_inputs(&mut store, &session, &run, "join")
+        .unwrap()
+        .unwrap();
+    assert_eq!(ready.state.kind(), SchedulerTaskStateKind::Ready);
+}
+
+#[test]
 fn orchestrator_retains_integer_number_source_as_completed_task_result() {
     let orchestrator = orchestrator_without_runtime_host_response();
     let mut source = text_input_task("limit", "");

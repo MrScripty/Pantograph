@@ -3885,6 +3885,144 @@ async fn keep_alive_session_loads_runtime_with_keep_alive_retention_hint() {
 }
 
 #[tokio::test]
+async fn scheduler_session_runs_text_fan_in_and_downstream_output_without_a_runtime() {
+    struct MergeHost {
+        root: PathBuf,
+        loads: AtomicUsize,
+    }
+    #[async_trait::async_trait]
+    impl WorkflowHost for MergeHost {
+        fn workflow_roots(&self) -> Vec<PathBuf> {
+            vec![self.root.clone()]
+        }
+        async fn load_session_runtime(
+            &self,
+            _session_id: &str,
+            _workflow_id: &str,
+            _usage_profile: Option<&str>,
+            _retention_hint: WorkflowExecutionSessionRetentionHint,
+        ) -> Result<(), WorkflowServiceError> {
+            self.loads.fetch_add(1, Ordering::SeqCst);
+            panic!("text fan-in must not load a runtime");
+        }
+        async fn run_workflow(
+            &self,
+            _workflow_id: &str,
+            _inputs: &[WorkflowPortBinding],
+            _output_targets: Option<&[WorkflowOutputTarget]>,
+            _run_options: WorkflowRunOptions,
+            _run_handle: WorkflowRunHandle,
+        ) -> Result<Vec<WorkflowPortBinding>, WorkflowServiceError> {
+            panic!("scheduler must execute its typed tasks through node-engine");
+        }
+    }
+    let directory = tempfile::tempdir().unwrap();
+    let graph = WorkflowGraph {
+        nodes: ["b", "a", "join", "out"]
+            .map(|id| GraphNode {
+                id: id.into(),
+                node_type: match id {
+                    "join" => "merge",
+                    "out" => "text-output",
+                    _ => "text-input",
+                }
+                .into(),
+                position: Position { x: 0.0, y: 0.0 },
+                data: serde_json::json!({}),
+            })
+            .to_vec(),
+        edges: vec![
+            crate::GraphEdge {
+                id: "b-join".into(),
+                source: "b".into(),
+                target: "join".into(),
+                source_handle: "text".into(),
+                target_handle: "inputs".into(),
+            },
+            crate::GraphEdge {
+                id: "a-join".into(),
+                source: "a".into(),
+                target: "join".into(),
+                source_handle: "text".into(),
+                target_handle: "inputs".into(),
+            },
+            crate::GraphEdge {
+                id: "join-out".into(),
+                source: "join".into(),
+                target: "out".into(),
+                source_handle: "merged".into(),
+                target_handle: "text".into(),
+            },
+        ],
+        derived_graph: None,
+    };
+    fs::write(
+        directory.path().join("wf-fan-in.json"),
+        serde_json::json!({
+            "metadata": { "name": "Scheduler text fan-in" }, "graph": graph,
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let host = MergeHost {
+        root: directory.path().to_owned(),
+        loads: AtomicUsize::new(0),
+    };
+    assert!(host.runtime_capabilities().await.unwrap().is_empty());
+    let service = WorkflowService::with_max_sessions(1);
+    publish_non_runtime_execution_snapshot(&service, "wf-fan-in", "1.0.0", graph).await;
+    let session = service
+        .create_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionCreateRequest {
+                workflow_id: "wf-fan-in".into(),
+                usage_profile: None,
+                keep_alive: false,
+            },
+        )
+        .await
+        .unwrap();
+    let result = service
+        .run_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionRunRequest {
+                session_id: session.session_id,
+                workflow_semantic_version: "1.0.0".into(),
+                inputs: vec![
+                    WorkflowPortBinding {
+                        node_id: "b".into(),
+                        port_id: "text".into(),
+                        value: serde_json::json!("second"),
+                    },
+                    WorkflowPortBinding {
+                        node_id: "a".into(),
+                        port_id: "text".into(),
+                        value: serde_json::json!("  first "),
+                    },
+                ],
+                output_targets: Some(vec![WorkflowOutputTarget {
+                    node_id: "out".into(),
+                    port_id: "text".into(),
+                }]),
+                override_selection: None,
+                timeout_ms: None,
+                priority: None,
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        result.outputs,
+        [WorkflowPortBinding {
+            node_id: "out".into(),
+            port_id: "text".into(),
+            value: serde_json::json!("  first \nsecond"),
+        }]
+    );
+    assert_eq!(host.loads.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
 async fn one_shot_non_runtime_session_run_does_not_load_session_runtime() {
     let retention_hints = Arc::new(Mutex::new(Vec::new()));
     let host = RecordingRuntimeHost::new(retention_hints.clone());
