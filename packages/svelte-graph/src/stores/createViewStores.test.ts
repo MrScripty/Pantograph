@@ -149,7 +149,10 @@ function useStorage(t: TestContext) {
   const writes: { key: string; value: string }[] = [];
   Object.defineProperty(globalThis, 'localStorage', {
     configurable: true,
-    value: { setItem: (key: string, value: string) => { writes.push({ key, value }); } },
+    value: {
+      getItem: () => null,
+      setItem: (key: string, value: string) => { writes.push({ key, value }); },
+    },
   });
   t.after(() => {
     if (previous) Object.defineProperty(globalThis, 'localStorage', previous);

@@ -9,10 +9,13 @@
 import { writable, derived, get } from 'svelte/store';
 import type { ViewLevel, BreadcrumbItem, ViewportState, ZoomTarget, AnimationConfig } from '../types/view.js';
 import { DEFAULT_ANIMATION } from '../types/view.ts';
+import { decodeViewStateRecord, type ViewStateRecord } from './viewStatePersistence.ts';
 
 export interface ViewStoreOptions {
   /** localStorage key for auto-persistence (omit to disable) */
   storageKey?: string;
+  /** Per-instance storage boundary; defaults to browser localStorage. */
+  storage?: Pick<Storage, 'getItem' | 'setItem'>;
 }
 
 export interface ViewStores {
@@ -249,51 +252,109 @@ export function createViewStores(options?: ViewStoreOptions): ViewStores {
     animationConfig.update((current) => ({ ...current, ...config }));
   }
 
-  function persistViewState(): void {
-    if (!storageKey) return;
+  let persistenceOwners = 0;
+  let cleanupPersistence: (() => void) | null = null;
+  let restoringViewState = false;
+  let writebackBlocked = false;
+  let storageInitialized = false;
+
+  function blockWriteback(): void {
+    // Retain rejected/unavailable bytes for this instance, without recovery writes.
+    writebackBlocked = true;
+    cleanupPersistence?.();
+    cleanupPersistence = null;
+  }
+
+  function readViewState():
+    | { status: 'valid'; record: ViewStateRecord }
+    | { status: 'missing' | 'invalid' | 'unavailable' } {
+    if (!storageKey) return { status: 'missing' };
+    let stored: string | null;
     try {
-      const state = {
-        viewLevel: get(viewLevel),
-        orchestrationId: get(currentOrchestrationId),
-        dataGraphId: get(currentDataGraphId),
-        groupStack: get(groupStack),
-      };
-      localStorage.setItem(storageKey, JSON.stringify(state));
+      stored = (options?.storage ?? localStorage).getItem(storageKey);
     } catch {
-      // localStorage might not be available
+      blockWriteback();
+      return { status: 'unavailable' };
+    }
+    if (stored === null) return { status: 'missing' };
+    try {
+      const value: unknown = JSON.parse(stored);
+      const record = decodeViewStateRecord(value);
+      if (record) return { status: 'valid', record };
+    } catch {
+      // Invalid JSON has the same non-applying disposition as an invalid record.
+    }
+    blockWriteback();
+    return { status: 'invalid' };
+  }
+
+  function persistViewState(): void {
+    if (!storageKey || writebackBlocked || restoringViewState) return;
+    // Recheck before each write, including changes since subscriptions started.
+    const existing = readViewState();
+    if (existing.status === 'invalid' || existing.status === 'unavailable') return;
+    const state = decodeViewStateRecord({
+      viewLevel: get(viewLevel),
+      orchestrationId: get(currentOrchestrationId),
+      dataGraphId: get(currentDataGraphId),
+      groupStack: get(groupStack),
+    });
+    if (!state) {
+      blockWriteback();
+      return;
+    }
+    try {
+      (options?.storage ?? localStorage).setItem(storageKey, JSON.stringify(state));
+      storageInitialized = true;
+    } catch {
+      blockWriteback();
     }
   }
 
   function restoreViewState(): boolean {
-    if (!storageKey) return false;
-    try {
-      const stored = localStorage.getItem(storageKey);
-      if (stored) {
-        const state = JSON.parse(stored);
-        if (state.viewLevel) viewLevel.set(state.viewLevel);
-        if (state.orchestrationId) currentOrchestrationId.set(state.orchestrationId);
-        if (state.dataGraphId) currentDataGraphId.set(state.dataGraphId);
-        if (state.groupStack) groupStack.set(state.groupStack);
-        return true;
-      }
-    } catch {
-      // localStorage might not be available or corrupted
+    if (restoringViewState) return false;
+    const stored = readViewState();
+    if (stored.status !== 'valid') {
+      if (stored.status === 'missing') storageInitialized = true;
+      return false;
     }
-    return false;
+    restoringViewState = true;
+    try {
+      const state = stored.record;
+      if (state.groupStack !== undefined) groupStack.set(state.groupStack);
+      if (state.orchestrationId !== undefined) currentOrchestrationId.set(state.orchestrationId);
+      if (state.dataGraphId !== undefined) currentDataGraphId.set(state.dataGraphId);
+      if (state.viewLevel !== undefined) viewLevel.set(state.viewLevel);
+      storageInitialized = true;
+      return true;
+    } catch {
+      blockWriteback();
+      return false;
+    } finally {
+      restoringViewState = false;
+    }
   }
-
-  let persistenceOwners = 0;
-  let cleanupPersistence: (() => void) | null = null;
 
   /** Share auto-persistence while any caller owns an enable handle. */
   function enablePersistence(): () => void {
-    if (!storageKey) return () => {};
+    if (!storageKey || writebackBlocked || restoringViewState) return () => {};
 
+    if (persistenceOwners === 0) {
+      // Initialize before subscriptions schedule defaults; restarts retain local edits.
+      if (storageInitialized) readViewState();
+      else restoreViewState();
+      if (writebackBlocked) return () => {};
+    }
     persistenceOwners += 1;
     if (persistenceOwners === 1) {
       let persistTimeout: ReturnType<typeof setTimeout> | null = null;
-      const debouncedPersist = () => {
+      const cancelPending = () => {
         if (persistTimeout) clearTimeout(persistTimeout);
+        persistTimeout = null;
+      };
+      const debouncedPersist = () => {
+        if (restoringViewState || writebackBlocked) return;
+        cancelPending();
         persistTimeout = setTimeout(() => {
           persistTimeout = null;
           persistViewState();
@@ -305,7 +366,7 @@ export function createViewStores(options?: ViewStoreOptions): ViewStores {
       cleanupPersistence = () => {
         unsub1();
         unsub2();
-        if (persistTimeout) clearTimeout(persistTimeout);
+        cancelPending();
       };
     }
 

@@ -49,3 +49,23 @@ store. Each `enablePersistence()` call returns an independent, idempotent releas
 handle. Persistence remains active until the last handle is released; final
 release unsubscribes and cancels the pending write. Re-enabling starts a fresh
 scope. The existing storage shape and 500 ms debounce are unchanged.
+
+
+View persistence reads the existing unversioned record's `viewLevel`, nullable
+string `orchestrationId`/`dataGraphId`, and string-array `groupStack`. It validates
+all present owned fields before applying any of them. Missing legacy fields leave
+current state intact; explicit null identities clear that identity. Empty strings,
+partial records and ignored extension fields remain compatible. No new length or
+group-count limit or schema migration is introduced.
+
+`enablePersistence()` initializes valid stored state before installing the first
+shared writeback scope. After an explicit restore or earlier scope, enabling
+validates storage without replacing current edits. Each write rechecks existing
+storage and validates its outgoing snapshot. Restoration suppresses synchronous
+subscriber write attempts; an already pending debounce observes the complete
+restored snapshot. Invalid JSON/records or unavailable storage stop writeback
+for that instance and retain
+the stored bytes. Later reads may update memory from externally corrected data,
+but they do not restart writes. There are no recovery writes. A fresh instance
+must validate storage again. `ViewStoreOptions.storage` can supply a per-instance
+`getItem`/`setItem` boundary; it otherwise uses browser `localStorage`.
