@@ -1,6 +1,6 @@
 # Frontend dependency security repair (2026-10-03)
 
-Status: implemented and source-reviewed; exact-head hosted and GUI qualification remain pending. Parent: PR #20, `8a08b6a010ee62fbd3b29e193c65922c0769b928`. Standards reviewed at Coding-Standards `dcc56f26e884ade260770beceba2501d3746200d`; this is newer than the active plan's planning baseline, without changing plan or release authority.
+Status: implemented and source-reviewed; dependency-audit checks passed on reviewed head `ca9edde6850cd58ade0b7e534bb4f58e704c2c64`. GUI and packaged-release qualification remain pending. Parent: PR #20, `8a08b6a010ee62fbd3b29e193c65922c0769b928`. Standards reviewed at Coding-Standards `dcc56f26e884ade260770beceba2501d3746200d`; this is newer than the active plan's planning baseline, without changing plan or release authority.
 
 ## Resolution and rationale
 
@@ -22,7 +22,7 @@ A fresh production audit of the parent lock reported five affected package nodes
 - markdown-it: [GHSA-6v5v-wf23-fmfq](https://github.com/advisories/GHSA-6v5v-wf23-fmfq), [GHSA-253c-mchw-3w2r](https://github.com/advisories/GHSA-253c-mchw-3w2r).
 - svelte: [GHSA-f3cj-j4f6-wq85](https://github.com/advisories/GHSA-f3cj-j4f6-wq85), [GHSA-rcqx-6q8c-2c42](https://github.com/advisories/GHSA-rcqx-6q8c-2c42), [GHSA-9rmh-mm8f-r9h6](https://github.com/advisories/GHSA-9rmh-mm8f-r9h6), [GHSA-pr6f-5x2q-rwfp](https://github.com/advisories/GHSA-pr6f-5x2q-rwfp).
 
-## Verification and limits
+## Original slice verification and limits (historical)
 
 Local generation and clean install used Node 24.19.0/npm 11.9.0 because the pinned Node 24.12.0/npm 11.6.2 were unavailable. No global toolchain was changed. A clean hosted install and applicable checks using both declared versions are required before qualification; the local results do not waive this requirement.
 
@@ -38,6 +38,6 @@ The source manifest/lock pair was independently reviewed before publication at s
 
 [Quality Gates run 37115665903](https://github.com/MrScripty/Pantograph/actions/runs/37115665903) confirms Node 24.12.0/npm 11.6.2, clean npm ci, zero production-audit findings, 540/540 frontend tests, typecheck and full lint. Its synthetic merge `e66f54bc7b3f2963956918a6a781fc3a2ecf47ca` has the same tree `1c51bc4dcce332846e550ecf6374864521a11099` as published source commit `0b5c0df663d76dc97f2ba3836d33ea2404ca79df`. The unchanged critical-lint failure remains visible.
 
-That workflow lacked installed-tree and frontend-build checks. Add `npm ls --all` and `npm run build` to the existing dependency-audit job after clean installation and the production audit, preserving every existing command and aggregate gate. These checks prove resolver consistency and frontend asset compilation on the declared toolchain; they do not establish GUI or packaged-release acceptance. Exact-head hosted results for this workflow change remain pending.
+That earlier workflow lacked installed-tree and frontend-build checks. The integration added `npm ls --all` and `npm run build` to the existing dependency-audit job after clean installation and the production audit, preserving every existing command and aggregate gate. [Quality Gates run 37170993215](https://github.com/MrScripty/Pantograph/actions/runs/37170993215), associated with reviewed head `ca9edde6850cd58ade0b7e534bb4f58e704c2c64`, completed successfully. Its Dependency audit job passed clean installation, the production audit, installed-tree verification and frontend asset compilation. These results qualify those checks for that head only; they do not establish GUI or packaged-release acceptance or qualify subsequent repair commits.
 
-The hosted development-inclusive install audit reports 41 affected package nodes (1 low, 5 moderate, 35 high). Dependency maintainers must triage that separate follow-up before any broader security claim; this slice does not upgrade unrelated development tools or claim zero vulnerabilities across the complete graph. Headless/Runtime Separation results remain under observation, and the real-model GUI prerequisites above remain unavailable.
+At the earlier hosted milestone, the development-inclusive install audit reported 41 affected package nodes (1 low, 5 moderate, 35 high). Dependency maintainers must triage that separate follow-up before any broader security claim; this slice does not upgrade unrelated development tools or claim zero vulnerabilities across the complete graph. Headless/Runtime Separation results were still under observation at that earlier milestone; this report does not use those suites to claim GUI or packaged-release acceptance. The real-model GUI prerequisites above remain unqualified.
