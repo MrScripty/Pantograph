@@ -121,6 +121,12 @@ jobs:
       - name: Block high severity production vulnerabilities
         run: npm audit --omit=dev --audit-level=high
 
+      - name: Verify installed dependency tree
+        run: npm ls --all
+
+      - name: Build frontend assets
+        run: npm run build
+
   rust-check:
     name: Rust workspace check
     runs-on: ubuntu-latest
