@@ -51,7 +51,6 @@ const SNAPSHOT_ID_PREFIX: &str = "wfvalsnap_";
 pub struct WorkflowExecutableValidationSnapshotId(String);
 
 impl WorkflowExecutableValidationSnapshotId {
-    #[must_use]
     pub fn generate() -> Self {
         Self(format!("{SNAPSHOT_ID_PREFIX}{}", Uuid::new_v4()))
     }
@@ -204,6 +203,7 @@ impl WorkflowExecutableValidationSnapshotRecord {
         workflow_version: &WorkflowVersionRecord,
         validation_snapshot_id: WorkflowExecutableValidationSnapshotId,
         source: &CurrentExecutableValidationSnapshotSource,
+        graph: &WorkflowGraph,
     ) -> Result<Self, WorkflowExecutableValidationSnapshotError> {
         let nodes = source
             .nodes
@@ -223,7 +223,7 @@ impl WorkflowExecutableValidationSnapshotRecord {
             validation_summary: source.validation_summary.clone(),
             nodes,
         };
-        snapshot.validate()?;
+        snapshot.validate_graph_inference_coverage(graph)?;
         Ok(snapshot)
     }
 
@@ -263,10 +263,6 @@ impl WorkflowExecutableValidationSnapshotRecord {
             self.nodes.len(),
             WORKFLOW_EXECUTABLE_VALIDATION_SNAPSHOT_MAX_NODES,
         )?;
-        if self.nodes.is_empty() {
-            return Err(WorkflowExecutableValidationSnapshotError::MissingNodes);
-        }
-
         let mut seen_nodes = BTreeSet::new();
         for node in &self.nodes {
             node.validate()?;
@@ -275,6 +271,45 @@ impl WorkflowExecutableValidationSnapshotRecord {
                     node_id: node.node_id.clone(),
                 });
             }
+        }
+        Ok(())
+    }
+
+    /// Validate contextual coverage before publication or executable projection.
+    /// Empty inference coverage is valid for a graph with no inference nodes.
+    fn validate_graph_inference_coverage(
+        &self,
+        graph: &WorkflowGraph,
+    ) -> Result<(), WorkflowExecutableValidationSnapshotError> {
+        self.validate()?;
+        let mut expected = BTreeSet::new();
+        for node in crate::graph::inference_nodes_in_graph(graph) {
+            if !expected.insert(node.id.as_str()) {
+                return Err(
+                    WorkflowExecutableValidationSnapshotError::DuplicateGraphInferenceNode {
+                        node_id: node.id.clone(),
+                    },
+                );
+            }
+        }
+        let actual = self
+            .nodes
+            .iter()
+            .map(|node| node.node_id.as_str())
+            .collect::<BTreeSet<_>>();
+        if actual != expected {
+            return Err(
+                WorkflowExecutableValidationSnapshotError::InferenceNodeCoverageMismatch {
+                    missing_node_ids: expected
+                        .difference(&actual)
+                        .map(|id| (*id).to_string())
+                        .collect(),
+                    unexpected_node_ids: actual
+                        .difference(&expected)
+                        .map(|id| (*id).to_string())
+                        .collect(),
+                },
+            );
         }
         Ok(())
     }
@@ -456,7 +491,7 @@ impl WorkflowExecutableValidationSnapshotNode {
             }
         })?;
 
-        Ok(WorkflowSchedulerInferenceTaskProjection::Ready(
+        Ok(WorkflowSchedulerInferenceTaskProjection::Ready(Box::new(
             WorkflowSchedulerReadyInferenceTaskProjection {
                 node_id: scheduler_node_id,
                 descriptor_fingerprint: self.descriptor_fingerprint.clone(),
@@ -470,7 +505,7 @@ impl WorkflowExecutableValidationSnapshotNode {
                     snapshot, self,
                 )?,
             },
-        ))
+        )))
     }
 }
 
@@ -574,8 +609,10 @@ impl ValidatedWorkflowExecutableValidationSnapshotRecord {
 
     pub fn scheduler_inference_task_projections(
         &self,
+        graph: &WorkflowGraph,
     ) -> Result<WorkflowSchedulerInferenceTaskProjections, WorkflowExecutableValidationSnapshotError>
     {
+        self.0.validate_graph_inference_coverage(graph)?;
         let records = self
             .0
             .nodes
@@ -764,6 +801,13 @@ pub enum WorkflowExecutableValidationSnapshotError {
     NonExecutableSummary { status: DraftGraphValidationStatus },
     #[error("executable validation snapshot must contain at least one inference node")]
     MissingNodes,
+    #[error("duplicate graph inference node '{node_id}'")]
+    DuplicateGraphInferenceNode { node_id: String },
+    #[error("inference snapshot coverage mismatch: missing {missing_node_ids:?}, unexpected {unexpected_node_ids:?}")]
+    InferenceNodeCoverageMismatch {
+        missing_node_ids: Vec<String>,
+        unexpected_node_ids: Vec<String>,
+    },
     #[error("duplicate executable validation snapshot node '{node_id}'")]
     DuplicateNode { node_id: WorkflowNodeId },
     #[error("node '{node_id}' model ref is invalid: {message}")]
@@ -1093,6 +1137,92 @@ mod tests {
 
     use super::*;
 
+    fn inference_graph_fixture() -> WorkflowGraph {
+        WorkflowGraph {
+            nodes: vec![crate::graph::GraphNode {
+                id: "infer_node".to_string(),
+                node_type: "llm-inference".to_string(),
+                position: crate::graph::Position { x: 0.0, y: 0.0 },
+                data: serde_json::json!({}),
+            }],
+            edges: Vec::new(),
+            derived_graph: None,
+        }
+    }
+
+    #[test]
+    fn empty_snapshot_projects_only_for_zero_inference_graph() {
+        let mut snapshot = snapshot_fixture();
+        snapshot.nodes.clear();
+        let imported: WorkflowExecutableValidationSnapshotRecord = serde_json::from_str(
+            &serde_json::to_string(&snapshot).expect("serialize empty snapshot"),
+        )
+        .expect("deserialize empty snapshot");
+        let validated = ValidatedWorkflowExecutableValidationSnapshotRecord::try_from(imported)
+            .expect("empty structurally executable record");
+        assert!(validated
+            .scheduler_inference_task_projections(&WorkflowGraph::new())
+            .is_ok());
+        assert!(matches!(
+            validated.scheduler_inference_task_projections(&inference_graph_fixture()),
+            Err(WorkflowExecutableValidationSnapshotError::InferenceNodeCoverageMismatch { missing_node_ids, unexpected_node_ids })
+                if missing_node_ids == vec!["infer_node"] && unexpected_node_ids.is_empty()
+        ));
+    }
+
+    #[test]
+    fn projection_rejects_extra_and_duplicate_inference_nodes() {
+        let snapshot = snapshot_fixture();
+        let validated =
+            ValidatedWorkflowExecutableValidationSnapshotRecord::try_from(snapshot.clone())
+                .expect("valid runtime snapshot");
+        assert!(matches!(
+            validated.scheduler_inference_task_projections(&WorkflowGraph::new()),
+            Err(WorkflowExecutableValidationSnapshotError::InferenceNodeCoverageMismatch { missing_node_ids, unexpected_node_ids })
+                if missing_node_ids.is_empty() && unexpected_node_ids == vec!["infer_node"]
+        ));
+        let mut duplicate_graph = inference_graph_fixture();
+        duplicate_graph.nodes.push(duplicate_graph.nodes[0].clone());
+        assert!(matches!(
+            validated.scheduler_inference_task_projections(&duplicate_graph),
+            Err(WorkflowExecutableValidationSnapshotError::DuplicateGraphInferenceNode { .. })
+        ));
+        let mut duplicate_snapshot = snapshot;
+        duplicate_snapshot
+            .nodes
+            .push(duplicate_snapshot.nodes[0].clone());
+        assert!(matches!(
+            ValidatedWorkflowExecutableValidationSnapshotRecord::try_from(duplicate_snapshot),
+            Err(WorkflowExecutableValidationSnapshotError::DuplicateNode { .. })
+        ));
+    }
+
+    #[test]
+    fn owner_publication_requires_exact_graph_inference_coverage() {
+        let version = workflow_version_fixture();
+        let mut source = snapshot_source_fixture();
+        source.nodes.clear();
+        let id = WorkflowExecutableValidationSnapshotId::generate();
+        assert!(
+            WorkflowExecutableValidationSnapshotRecord::from_snapshot_source(
+                &version,
+                id.clone(),
+                &source,
+                &WorkflowGraph::new()
+            )
+            .is_ok()
+        );
+        assert!(matches!(
+            WorkflowExecutableValidationSnapshotRecord::from_snapshot_source(
+                &version,
+                id,
+                &source,
+                &inference_graph_fixture()
+            ),
+            Err(WorkflowExecutableValidationSnapshotError::InferenceNodeCoverageMismatch { .. })
+        ));
+    }
+
     #[test]
     fn validation_publication_without_dependency_proof_fails_closed() {
         let workflow_version = workflow_version_fixture();
@@ -1128,6 +1258,7 @@ mod tests {
             &workflow_version,
             snapshot_id.clone(),
             &source,
+            &inference_graph_fixture(),
         )
         .expect("source should compact to snapshot");
 
@@ -1163,7 +1294,7 @@ mod tests {
             ValidatedWorkflowExecutableValidationSnapshotRecord::try_from(snapshot.clone())
                 .expect("snapshot should validate");
         let projections = validated
-            .scheduler_inference_task_projections()
+            .scheduler_inference_task_projections(&inference_graph_fixture())
             .expect("snapshot should project scheduler tasks");
         let node_id = SchedulerNodeId::parse("infer_node").expect("valid scheduler node id");
 

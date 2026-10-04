@@ -1697,7 +1697,7 @@ async fn workflow_execution_session_bootstrap_recovery_applies_progress_loop_bef
     )
     .expect("validated executable snapshot");
     let projections = snapshot
-        .scheduler_inference_task_projections()
+        .scheduler_inference_task_projections(&graph)
         .expect("scheduler inference task projections");
 
     let first_created = service
@@ -1876,7 +1876,7 @@ async fn workflow_execution_session_bootstrap_recovery_redispatches_ready_runtim
     )
     .expect("validated executable snapshot");
     let projections = snapshot
-        .scheduler_inference_task_projections()
+        .scheduler_inference_task_projections(&graph)
         .expect("scheduler inference task projections");
 
     let first_created = service
@@ -3252,6 +3252,49 @@ async fn workflow_execution_session_run_rejects_stale_graph_before_queue_admissi
     assert_eq!(host.run_attempts.load(Ordering::SeqCst), 0);
 }
 
+async fn publish_non_runtime_execution_snapshot(
+    service: &WorkflowService,
+    workflow_id: &str,
+    semantic_version: &str,
+    graph: WorkflowGraph,
+) {
+    let edit = service
+        .workflow_graph_create_edit_session(crate::WorkflowGraphEditSessionCreateRequest {
+            graph,
+            workflow_id: Some(workflow_id.to_string()),
+        })
+        .await
+        .expect("create non-runtime graph session");
+    let validation = service
+        .workflow_graph_refresh_current_validation_summary(
+            crate::WorkflowGraphCurrentValidationRefreshRequest {
+                graph_session_id: edit.session_id.clone(),
+                graph_revision: edit.graph_revision.parse().expect("graph revision"),
+            },
+        )
+        .await
+        .expect("validate non-runtime graph");
+    assert!(validation.summary.submit_gate.allowed);
+    service
+        .publish_graph_session_executable_validation_snapshot(
+            crate::WorkflowGraphSessionExecutableValidationSnapshotPublishRequest {
+                workflow_id: workflow_id.to_string(),
+                workflow_semantic_version: semantic_version.to_string(),
+                graph_session_id: edit.session_id.clone(),
+                validation_session_id: validation.summary.validation_session_id,
+                validation_snapshot_id: None,
+            },
+        )
+        .await
+        .expect("publish non-runtime executable snapshot");
+    service
+        .workflow_graph_close_edit_session(crate::WorkflowGraphEditSessionCloseRequest {
+            session_id: edit.session_id,
+        })
+        .await
+        .expect("close published graph session");
+}
+
 #[tokio::test]
 async fn workflow_execution_session_run_records_snapshot_before_execution() {
     let host = MockWorkflowHost::with_technical_fit_decision(
@@ -3286,14 +3329,8 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
     let workflow_id = "wf-snapshot";
     let workflow_semantic_version = "1.2.3";
     let graph = mock_workflow_graph();
-    let version = service
-        .resolve_workflow_graph_version(workflow_id, workflow_semantic_version, &graph)
-        .expect("resolve workflow version");
-    service
-        .store_workflow_executable_validation_snapshot(runtime_executable_validation_snapshot(
-            &version, &graph,
-        ))
-        .expect("store executable validation snapshot");
+    publish_non_runtime_execution_snapshot(&service, workflow_id, workflow_semantic_version, graph)
+        .await;
 
     let created = service
         .create_workflow_execution_session(
@@ -3700,14 +3737,8 @@ async fn attributed_workflow_execution_session_carries_client_bucket_into_run_ev
     let workflow_id = "wf-attributed";
     let workflow_semantic_version = "1.2.3";
     let graph = mock_workflow_graph();
-    let version = service
-        .resolve_workflow_graph_version(workflow_id, workflow_semantic_version, &graph)
-        .expect("resolve workflow version");
-    service
-        .store_workflow_executable_validation_snapshot(runtime_executable_validation_snapshot(
-            &version, &graph,
-        ))
-        .expect("store executable validation snapshot");
+    publish_non_runtime_execution_snapshot(&service, workflow_id, workflow_semantic_version, graph)
+        .await;
     let registered = service
         .register_attribution_client(ClientRegistrationRequest {
             display_name: Some("local gui".to_string()),
@@ -4770,7 +4801,7 @@ fn runtime_executable_validation_snapshot(
         workflow_semantic_version: version.semantic_version.clone(),
         workflow_execution_fingerprint: version.execution_fingerprint.clone(),
         descriptor_contract_version: INFERENCE_INTERFACE_CONTRACT_VERSION,
-        graph_revision: WorkflowGraphRevision::parse(&graph.compute_fingerprint())
+        graph_revision: WorkflowGraphRevision::parse(graph.compute_fingerprint())
             .expect("valid graph revision"),
         validation_session_id: DraftGraphValidationSessionId::parse("runtime_validation_session_1")
             .expect("valid validation session id"),

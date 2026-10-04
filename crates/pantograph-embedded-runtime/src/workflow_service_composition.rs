@@ -140,6 +140,22 @@ pub enum EmbeddedHostedStartupPumasSelectorSource {
     SetupPath(Option<PathBuf>),
 }
 
+/// Owned inputs for hosted startup composition, without changing startup defaults.
+///
+/// Rust callers construct these named fields and pass the config to
+/// `EmbeddedHostedStartupCompositionInput::new`.
+pub struct EmbeddedHostedStartupConfig<C> {
+    pub runtime_registry: SharedRuntimeRegistry,
+    pub runtime_registry_controller: Arc<C>,
+    pub gateway: Arc<inference::InferenceGateway>,
+    pub pumas_selector_source: Option<EmbeddedHostedStartupPumasSelectorSource>,
+    pub project_root: PathBuf,
+    pub kv_cache_dir: PathBuf,
+    pub dependency_readiness_runtime_handle: tokio::runtime::Handle,
+    pub max_loaded_sessions: Option<usize>,
+    pub max_dispatch_source_snapshot_age_ms: u64,
+}
+
 pub struct EmbeddedHostedStartupCompositionInput<C> {
     workflow_service: WorkflowService,
     max_loaded_sessions: Option<usize>,
@@ -156,17 +172,18 @@ pub struct EmbeddedHostedStartupCompositionInput<C> {
 
 impl<C> EmbeddedHostedStartupCompositionInput<C> {
     #[must_use]
-    pub fn new(
-        runtime_registry: SharedRuntimeRegistry,
-        runtime_registry_controller: Arc<C>,
-        gateway: Arc<inference::InferenceGateway>,
-        pumas_selector_source: Option<EmbeddedHostedStartupPumasSelectorSource>,
-        project_root: PathBuf,
-        kv_cache_dir: PathBuf,
-        dependency_readiness_runtime_handle: tokio::runtime::Handle,
-        max_loaded_sessions: Option<usize>,
-        max_dispatch_source_snapshot_age_ms: u64,
-    ) -> Self {
+    pub fn new(config: EmbeddedHostedStartupConfig<C>) -> Self {
+        let EmbeddedHostedStartupConfig {
+            runtime_registry,
+            runtime_registry_controller,
+            gateway,
+            pumas_selector_source,
+            project_root,
+            kv_cache_dir,
+            dependency_readiness_runtime_handle,
+            max_loaded_sessions,
+            max_dispatch_source_snapshot_age_ms,
+        } = config;
         Self {
             workflow_service: WorkflowService::new(),
             max_loaded_sessions,
@@ -850,6 +867,12 @@ mod tests {
             .await
             .expect("refresh validation summary");
 
+        assert!(
+            validation.summary.diagnostics.is_empty(),
+            "validation diagnostics: {:?}",
+            validation.summary.diagnostics
+        );
+        assert_eq!(validation.node_projections.len(), 1);
         let summary = validation
             .summary
             .summary
@@ -946,6 +969,21 @@ mod tests {
             )
             .await
             .expect("refresh validation summary");
+        assert!(
+            validation.summary.diagnostics.is_empty(),
+            "validation diagnostics: {:?}",
+            validation.summary.diagnostics
+        );
+        assert_eq!(validation.node_projections.len(), 1);
+        assert_eq!(
+            validation
+                .summary
+                .summary
+                .as_ref()
+                .expect("current validation summary")
+                .status,
+            DraftGraphValidationStatus::Executable
+        );
         let validation_session_id = validation
             .summary
             .validation_session_id
@@ -1012,7 +1050,7 @@ mod tests {
         }));
 
         let projections = snapshot
-            .scheduler_inference_task_projections()
+            .scheduler_inference_task_projections(&connected_dependency_inference_graph(model_id))
             .expect("scheduler projections");
         let scheduler_node_id = "infer".parse().expect("scheduler node id");
         let projection = projections
@@ -1196,6 +1234,52 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn hosted_startup_named_config_preserves_owned_values_and_defaults() {
+        let registry: SharedRuntimeRegistry = Arc::new(RuntimeRegistry::new());
+        let gateway = Arc::new(inference::InferenceGateway::new());
+        let input = EmbeddedHostedStartupCompositionInput::new(EmbeddedHostedStartupConfig {
+            runtime_registry: registry.clone(),
+            runtime_registry_controller: gateway.clone(),
+            gateway: gateway.clone(),
+            pumas_selector_source: Some(EmbeddedHostedStartupPumasSelectorSource::SetupPath(Some(
+                PathBuf::from("pumas-root"),
+            ))),
+            project_root: PathBuf::from("project-root"),
+            kv_cache_dir: PathBuf::from("kv-root"),
+            dependency_readiness_runtime_handle: tokio::runtime::Handle::current(),
+            max_loaded_sessions: Some(7),
+            max_dispatch_source_snapshot_age_ms: 2_345,
+        });
+        assert!(Arc::ptr_eq(&input.runtime_registry, &registry));
+        assert!(Arc::ptr_eq(&input.runtime_registry_controller, &gateway));
+        assert!(Arc::ptr_eq(&input.gateway, &gateway));
+        assert!(
+            matches!(&input.pumas_selector_source, Some(EmbeddedHostedStartupPumasSelectorSource::SetupPath(Some(path))) if path == std::path::Path::new("pumas-root"))
+        );
+        assert_eq!(input.project_root, PathBuf::from("project-root"));
+        assert_eq!(input.kv_cache_dir, PathBuf::from("kv-root"));
+        assert_eq!(input.max_loaded_sessions, Some(7));
+        assert_eq!(input.max_dispatch_source_snapshot_age_ms, 2_345);
+        assert_eq!(
+            input.dependency_readiness_producer_config,
+            EmbeddedDependencyReadinessSnapshotProducerConfig::default()
+        );
+        assert_eq!(
+            input
+                .dependency_readiness_runtime_handle
+                .spawn(async { 42 })
+                .await
+                .expect("original runtime handle"),
+            42
+        );
+        let config = EmbeddedDependencyReadinessSnapshotProducerConfig {
+            poll_interval: std::time::Duration::from_secs(17),
+        };
+        let input = input.with_dependency_readiness_producer_config(config.clone());
+        assert_eq!(input.dependency_readiness_producer_config, config);
+    }
+
+    #[tokio::test]
     async fn hosted_startup_composition_returns_service_extensions_and_lifecycle_handle() {
         let temp_dir = tempfile::tempdir().expect("tempdir");
         let pumas_api = Arc::new(
@@ -1208,19 +1292,19 @@ mod tests {
         );
         let registry: SharedRuntimeRegistry = Arc::new(RuntimeRegistry::new());
         let gateway = Arc::new(inference::InferenceGateway::new());
-        let input = EmbeddedHostedStartupCompositionInput::new(
-            registry,
-            gateway.clone(),
+        let input = EmbeddedHostedStartupCompositionInput::new(EmbeddedHostedStartupConfig {
+            runtime_registry: registry,
+            runtime_registry_controller: gateway.clone(),
             gateway,
-            Some(EmbeddedHostedStartupPumasSelectorSource::Provided(
+            pumas_selector_source: Some(EmbeddedHostedStartupPumasSelectorSource::Provided(
                 Arc::new(PumasSelectorAccess::Owner(pumas_api.clone())),
             )),
-            temp_dir.path().to_path_buf(),
-            temp_dir.path().join("kv-cache"),
-            tokio::runtime::Handle::current(),
-            Some(1),
-            1_000,
-        )
+            project_root: temp_dir.path().to_path_buf(),
+            kv_cache_dir: temp_dir.path().join("kv-cache"),
+            dependency_readiness_runtime_handle: tokio::runtime::Handle::current(),
+            max_loaded_sessions: Some(1),
+            max_dispatch_source_snapshot_age_ms: 1_000,
+        })
         .with_workflow_service(workflow_service_with_artifact_store(&temp_dir));
 
         let output = EmbeddedWorkflowServiceComposition::resource_backed_hosted_startup(input)
@@ -1283,17 +1367,17 @@ mod tests {
         let temp_dir = tempfile::tempdir().expect("tempdir");
         let registry: SharedRuntimeRegistry = Arc::new(RuntimeRegistry::new());
         let gateway = Arc::new(inference::InferenceGateway::new());
-        let input = EmbeddedHostedStartupCompositionInput::new(
-            registry,
-            gateway.clone(),
+        let input = EmbeddedHostedStartupCompositionInput::new(EmbeddedHostedStartupConfig {
+            runtime_registry: registry,
+            runtime_registry_controller: gateway.clone(),
             gateway,
-            None,
-            temp_dir.path().to_path_buf(),
-            temp_dir.path().join("kv-cache"),
-            tokio::runtime::Handle::current(),
-            Some(1),
-            1_000,
-        );
+            pumas_selector_source: None,
+            project_root: temp_dir.path().to_path_buf(),
+            kv_cache_dir: temp_dir.path().join("kv-cache"),
+            dependency_readiness_runtime_handle: tokio::runtime::Handle::current(),
+            max_loaded_sessions: Some(1),
+            max_dispatch_source_snapshot_age_ms: 1_000,
+        });
 
         let error =
             match EmbeddedWorkflowServiceComposition::resource_backed_hosted_startup(input).await {
@@ -1326,19 +1410,19 @@ mod tests {
         .expect("read-only pumas");
         let registry: SharedRuntimeRegistry = Arc::new(RuntimeRegistry::new());
         let gateway = Arc::new(inference::InferenceGateway::new());
-        let input = EmbeddedHostedStartupCompositionInput::new(
-            registry,
-            gateway.clone(),
+        let input = EmbeddedHostedStartupCompositionInput::new(EmbeddedHostedStartupConfig {
+            runtime_registry: registry,
+            runtime_registry_controller: gateway.clone(),
             gateway,
-            Some(EmbeddedHostedStartupPumasSelectorSource::Provided(
+            pumas_selector_source: Some(EmbeddedHostedStartupPumasSelectorSource::Provided(
                 Arc::new(PumasSelectorAccess::ReadOnly(Arc::new(read_only))),
             )),
-            temp_dir.path().to_path_buf(),
-            temp_dir.path().join("kv-cache"),
-            tokio::runtime::Handle::current(),
-            Some(1),
-            1_000,
-        );
+            project_root: temp_dir.path().to_path_buf(),
+            kv_cache_dir: temp_dir.path().join("kv-cache"),
+            dependency_readiness_runtime_handle: tokio::runtime::Handle::current(),
+            max_loaded_sessions: Some(1),
+            max_dispatch_source_snapshot_age_ms: 1_000,
+        });
 
         let error =
             match EmbeddedWorkflowServiceComposition::resource_backed_hosted_startup(input).await {
@@ -1365,19 +1449,19 @@ mod tests {
         );
         let registry: SharedRuntimeRegistry = Arc::new(RuntimeRegistry::new());
         let gateway = Arc::new(inference::InferenceGateway::new());
-        let input = EmbeddedHostedStartupCompositionInput::new(
-            registry,
-            gateway.clone(),
+        let input = EmbeddedHostedStartupCompositionInput::new(EmbeddedHostedStartupConfig {
+            runtime_registry: registry,
+            runtime_registry_controller: gateway.clone(),
             gateway,
-            Some(EmbeddedHostedStartupPumasSelectorSource::Provided(
+            pumas_selector_source: Some(EmbeddedHostedStartupPumasSelectorSource::Provided(
                 Arc::new(PumasSelectorAccess::Owner(pumas_api)),
             )),
-            temp_dir.path().to_path_buf(),
-            temp_dir.path().join("kv-cache"),
-            tokio::runtime::Handle::current(),
-            Some(0),
-            1_000,
-        )
+            project_root: temp_dir.path().to_path_buf(),
+            kv_cache_dir: temp_dir.path().join("kv-cache"),
+            dependency_readiness_runtime_handle: tokio::runtime::Handle::current(),
+            max_loaded_sessions: Some(0),
+            max_dispatch_source_snapshot_age_ms: 1_000,
+        })
         .with_workflow_service(workflow_service_with_store(
             &temp_dir,
             WorkflowService::with_capacity_limits(2, 2),
@@ -1435,7 +1519,12 @@ mod tests {
                     position: Position { x: 200.0, y: 0.0 },
                     data: serde_json::json!({
                         "task_kind": "image_generation",
-                        "runtime": "pytorch"
+                        "runtime": "pytorch",
+                        "runtime_source_context": {
+                            "operation_type": "image-generation.txt2img",
+                            "context_shape_key": "txt2img.1024x1024.steps30",
+                            "cancellation_mode": "per-run-fanout"
+                        }
                     }),
                 },
             ],

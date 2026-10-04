@@ -1,0 +1,9 @@
+# Shared private terminal diagnostic input
+
+Fresh PR #39 Clippy retains high-arity terminal diagnostic recorders in the session runner and runtime finalization owner. Group exactly eight existing values into private WorkflowSchedulerTaskAttemptTerminalInput: task, attempt_id, started_at_ms, transition, reason, owned error_summary, borrowed selected_dispatch and borrowed terminal_mutation. Migrate eight callers: four runner paths, three finalization paths and one batch path.
+
+Remove the runner's proven-unused _session_id argument. All four removed expressions were a plain session_id local with no side effects, and the parameter performed no validation. Both recorder bodies after destructuring remain byte-identical, including task.workflow_run_id attribution lookup and the unchanged lower event builder. No attribution-policy or public API change is made.
+
+A real in-memory ledger regression sends the new input through the recorder for success, failure and cancellation, verifying run/node/task/attempt scope, absent attribution, timing consistency, reason and original error detail. Existing precise-timing and incomplete-run tests remain, with nonzero module discovery in hosted CI. Source comparison, changed-call syntax formatting and staged whitespace pass locally. Root approved the design; source review and actual hosted execution remain pending.
+
+Root initial review confirmed the field/caller mapping and recorder-body preservation. The narrow follow-up removes six redundant field labels and the now-unused runner terminal-mutation import; the new duration assertion uses saturating subtraction. The production event builder remains unchanged and rejects a terminal timestamp preceding the start. Root narrow re-review accepted frozen tree a79c7c43eb66667ec8c0e97c5fc83e5dc9e93ab4. Hosted execution remains pending.

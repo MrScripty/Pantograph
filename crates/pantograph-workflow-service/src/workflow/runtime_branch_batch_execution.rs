@@ -24,6 +24,7 @@ use pantograph_scheduler::{
 
 use super::runtime_branch_run_finalization::{
     completed_scheduler_run_response, record_scheduler_task_attempt_terminal,
+    WorkflowSchedulerTaskAttemptTerminalInput,
 };
 use super::runtime_dispatch_assignment::{
     WorkflowRuntimeDispatchAssignmentBatchClaim,
@@ -439,18 +440,20 @@ where
                         })?;
                 record_scheduler_task_attempt_terminal(
                     service,
-                    application.started_batch_member.started().task(),
-                    application
-                        .started_batch_member
-                        .started()
-                        .attempt_id()
-                        .as_str(),
-                    application.started_batch_member.started().started_at_ms(),
-                    transition,
-                    reason,
-                    error_summary,
-                    Some(application.started_batch_member.selected_dispatch()),
-                    Some(terminal_mutation),
+                    WorkflowSchedulerTaskAttemptTerminalInput {
+                        task: application.started_batch_member.started().task(),
+                        attempt_id: application
+                            .started_batch_member
+                            .started()
+                            .attempt_id()
+                            .as_str(),
+                        started_at_ms: application.started_batch_member.started().started_at_ms(),
+                        transition,
+                        reason,
+                        error_summary,
+                        selected_dispatch: Some(application.started_batch_member.selected_dispatch()),
+                        terminal_mutation: Some(terminal_mutation),
+                    },
                 )
                 .map_err(|error| {
                     WorkflowRuntimeBranchBatchExecutionFailure::active_run_member(
@@ -1978,7 +1981,7 @@ mod tests {
             plan.runtime_host_request
                 .members
                 .iter()
-                .map(|member| prompt_text_from_runtime_host_member_request(member))
+                .map(prompt_text_from_runtime_host_member_request)
                 .collect::<Vec<_>>(),
             vec![
                 "prompt owned by run.2026-05-22.001".to_string(),
@@ -3224,9 +3227,7 @@ mod tests {
     }
 
     fn runtime_execution_intent(workflow_run_id: &str) -> SchedulerTaskExecutionIntent {
-        SchedulerTaskExecutionIntent::Runtime {
-            task_intent: task_intent_for_run(workflow_run_id),
-        }
+        SchedulerTaskExecutionIntent::runtime(task_intent_for_run(workflow_run_id))
     }
 
     fn prompt_task_result(workflow_run_id: &str, prompt_text: &str) -> WorkflowSchedulerTaskResult {

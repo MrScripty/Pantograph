@@ -262,12 +262,13 @@ impl SchedulerDispatchSelectionRequest {
 #[must_use]
 pub struct ValidatedSchedulerDispatchSelectionRequest(SchedulerDispatchSelectionRequest);
 
-impl ValidatedSchedulerDispatchSelectionRequest {
-    #[must_use]
-    pub fn as_ref(&self) -> &SchedulerDispatchSelectionRequest {
+impl AsRef<SchedulerDispatchSelectionRequest> for ValidatedSchedulerDispatchSelectionRequest {
+    fn as_ref(&self) -> &SchedulerDispatchSelectionRequest {
         &self.0
     }
+}
 
+impl ValidatedSchedulerDispatchSelectionRequest {
     #[must_use]
     pub fn into_inner(self) -> SchedulerDispatchSelectionRequest {
         self.0
@@ -341,12 +342,13 @@ impl SchedulerDispatchSelectionDecision {
 #[must_use]
 pub struct ValidatedSchedulerDispatchSelectionDecision(SchedulerDispatchSelectionDecision);
 
-impl ValidatedSchedulerDispatchSelectionDecision {
-    #[must_use]
-    pub fn as_ref(&self) -> &SchedulerDispatchSelectionDecision {
+impl AsRef<SchedulerDispatchSelectionDecision> for ValidatedSchedulerDispatchSelectionDecision {
+    fn as_ref(&self) -> &SchedulerDispatchSelectionDecision {
         &self.0
     }
+}
 
+impl ValidatedSchedulerDispatchSelectionDecision {
     #[must_use]
     pub fn into_inner(self) -> SchedulerDispatchSelectionDecision {
         self.0

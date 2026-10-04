@@ -33,7 +33,7 @@ fn workflow_run_id() -> WorkflowRunId {
 
 fn inference_projection() -> WorkflowSchedulerInferenceTaskProjections {
     WorkflowSchedulerInferenceTaskProjections::from_records(vec![
-        WorkflowSchedulerInferenceTaskProjection::Ready(
+        WorkflowSchedulerInferenceTaskProjection::Ready(Box::new(
             WorkflowSchedulerReadyInferenceTaskProjection {
                 node_id: SchedulerNodeId::parse("infer").expect("node id"),
                 descriptor_fingerprint: InferenceInterfaceFingerprint::parse("iface.binding.v1")
@@ -51,7 +51,7 @@ fn inference_projection() -> WorkflowSchedulerInferenceTaskProjections {
                 estimate_hints: resource_estimate_hints(),
                 dependency_readiness_source: dependency_readiness_source("iface.binding.v1"),
             },
-        ),
+        )),
     ])
     .expect("projection")
 }

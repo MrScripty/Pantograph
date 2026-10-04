@@ -9,8 +9,8 @@ use crate::llm::{
 use crate::project_root::resolve_project_root;
 use crate::workflow;
 use pantograph_embedded_runtime::{
-    EmbeddedHostedStartupCompositionInput, EmbeddedHostedStartupPumasSelectorSource,
-    EmbeddedWorkflowServiceComposition,
+    EmbeddedHostedStartupCompositionInput, EmbeddedHostedStartupConfig,
+    EmbeddedHostedStartupPumasSelectorSource, EmbeddedWorkflowServiceComposition,
 };
 use std::sync::Arc;
 use tauri::{Emitter, Manager};
@@ -245,17 +245,20 @@ pub fn run_app() -> AppStartupResult<()> {
                 let pumas_library_path = pumas_release_dir.or(pumas_launcher_root);
 
                 let startup_input = EmbeddedHostedStartupCompositionInput::new(
-                    runtime_registry.clone(),
-                    gateway.clone(),
-                    gateway.inner_arc(),
-                    Some(EmbeddedHostedStartupPumasSelectorSource::SetupPath(
-                        pumas_library_path,
-                    )),
-                    project_root.clone(),
-                    kv_cache_dir,
-                    runtime_handle.clone(),
-                    max_loaded_sessions,
-                    HOSTED_DISPATCH_SOURCE_SNAPSHOT_MAX_AGE_MS,
+                    EmbeddedHostedStartupConfig {
+                        runtime_registry: runtime_registry.clone(),
+                        runtime_registry_controller: gateway.clone(),
+                        gateway: gateway.inner_arc(),
+                        pumas_selector_source: Some(
+                            EmbeddedHostedStartupPumasSelectorSource::SetupPath(pumas_library_path),
+                        ),
+                        project_root: project_root.clone(),
+                        kv_cache_dir,
+                        dependency_readiness_runtime_handle: runtime_handle.clone(),
+                        max_loaded_sessions,
+                        max_dispatch_source_snapshot_age_ms:
+                            HOSTED_DISPATCH_SOURCE_SNAPSHOT_MAX_AGE_MS,
+                    },
                 )
                 .with_workflow_service(workflow_service);
                 let startup_output = tauri::async_runtime::block_on(

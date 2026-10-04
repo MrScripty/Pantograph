@@ -262,7 +262,7 @@ fn test_pytorch_worker_generate_image_request_maps_from_validated_plan() {
         panic!("expected validated image plan");
     };
 
-    let worker_request = PyTorchGenerateImageRequest::from(&plan);
+    let worker_request = PyTorchGenerateImageRequest::from(plan.as_ref());
 
     assert_eq!(
         worker_request.model_ref.model_id,

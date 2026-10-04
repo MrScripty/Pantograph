@@ -166,7 +166,7 @@ mod tests {
         let payload = &encoded["inference_payloads"][0];
         assert_eq!(payload["role"], serde_json::json!("diagnostics"));
         assert_eq!(payload["task_id"], serde_json::json!("text_generation"));
-        assert_llm_inference_payloads_do_not_expose_runtime_policy(&definition);
+        assert_llm_inference_payloads_do_not_expose_runtime_policy(definition);
     }
 
     #[test]

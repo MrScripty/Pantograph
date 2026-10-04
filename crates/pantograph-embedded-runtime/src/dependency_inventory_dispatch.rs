@@ -360,7 +360,7 @@ impl DependencyInventoryProvider for NotImplementedDependencyInventoryProvider {
         let failure = PackageReadinessProbeFailure::new(
             PackageReadinessProviderDiagnosticCode::ProbeNotImplemented,
             None,
-            CapabilityAvailabilityReason::parse(&not_implemented_reason(&request.payload))
+            CapabilityAvailabilityReason::parse(not_implemented_reason(&request.payload))
                 .expect("inventory provider not implemented reason is valid"),
         );
         let (rows, diagnostics) =

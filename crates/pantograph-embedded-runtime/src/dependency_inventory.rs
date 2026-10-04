@@ -48,6 +48,14 @@ use crate::dependency_inventory_system_package_source::SystemPackageProviderSour
 use crate::package_readiness_provider::PackageReadinessProbeRunner;
 use crate::python_package_readiness_probe::ProcessPythonPackageReadinessProbeRunner;
 
+/// Provider-owned diagnostic details; request attribution remains with the observer.
+#[cfg(any(test, feature = "standalone"))]
+pub(crate) struct DependencyInventoryDiagnosticInput {
+    pub code: pantograph_dependency_planning::DependencyPlanningDiagnosticCode,
+    pub message: String,
+    pub field_path: &'static str,
+}
+
 /// Request context passed from the snapshot producer to dependency inventory.
 #[derive(Debug, Clone)]
 pub(crate) struct DependencyInventoryRequest {

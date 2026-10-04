@@ -326,6 +326,31 @@ async fn inventory_service_routes_device_toolchain_payloads_with_alternatives() 
         device_toolchain_status.state,
         DependencyBindingStatusState::Unavailable
     );
+    assert_eq!(
+        device_toolchain_status.diagnostics,
+        vec![
+            pantograph_dependency_planning::DependencyPlanningDiagnostic {
+                code: DependencyPlanningDiagnosticCode::RuntimeUnavailable,
+                severity: pantograph_dependency_planning::DependencyPlanningSeverity::Error,
+                message: "Device-toolchain source is not ready for the requested toolchain."
+                    .to_string(),
+                model_id: Some(request.as_request().identity_key.model_ref.model_id.clone()),
+                runtime_id: request
+                    .as_request()
+                    .identity_key
+                    .scheduler_intent
+                    .requested_runtime_id
+                    .clone(),
+                device_id: request
+                    .as_request()
+                    .identity_key
+                    .scheduler_intent
+                    .requested_device_id
+                    .clone(),
+                field_path: Some("dependency_environment.device_toolchain.source".to_string()),
+            }
+        ]
+    );
     assert_eq!(device_toolchain_status.alternatives.len(), 1);
     assert_eq!(
         device_toolchain_status.alternatives[0]

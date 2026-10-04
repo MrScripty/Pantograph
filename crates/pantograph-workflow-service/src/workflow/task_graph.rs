@@ -64,7 +64,7 @@ impl WorkflowSchedulerInferenceTaskProjections {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WorkflowSchedulerInferenceTaskProjection {
-    Ready(WorkflowSchedulerReadyInferenceTaskProjection),
+    Ready(Box<WorkflowSchedulerReadyInferenceTaskProjection>),
     Blocked(WorkflowSchedulerBlockedInferenceTaskProjection),
 }
 
@@ -254,12 +254,18 @@ fn dependency_task_ids(bindings: &[WorkflowSchedulerTaskInputBinding]) -> Vec<Sc
     let mut seen = BTreeSet::new();
     bindings
         .iter()
-        .filter_map(|binding| {
-            seen.insert(binding.source_task_id.clone())
-                .then(|| binding.source_task_id.clone())
-        })
+        .filter(|binding| seen.insert(binding.source_task_id.clone()))
+        .map(|binding| binding.source_task_id.clone())
         .collect()
 }
+
+type SchedulableIntentProjection = (
+    Option<SchedulableTaskIntent>,
+    Option<WorkflowSchedulerTaskIntentTemplate>,
+    Option<InferenceInterfaceFingerprint>,
+    Option<WorkflowRuntimeSourceContext>,
+    Vec<WorkflowSchedulerTaskProjectionDiagnostic>,
+);
 
 fn schedulable_intent_for_node(
     workflow_id: &SchedulerWorkflowId,
@@ -268,13 +274,7 @@ fn schedulable_intent_for_node(
     task_id: &SchedulerTaskId,
     execution_class: WorkflowSchedulerTaskExecutionClass,
     inference_task_projection: Option<&WorkflowSchedulerInferenceTaskProjection>,
-) -> (
-    Option<SchedulableTaskIntent>,
-    Option<WorkflowSchedulerTaskIntentTemplate>,
-    Option<InferenceInterfaceFingerprint>,
-    Option<WorkflowRuntimeSourceContext>,
-    Vec<WorkflowSchedulerTaskProjectionDiagnostic>,
-) {
+) -> SchedulableIntentProjection {
     if execution_class != WorkflowSchedulerTaskExecutionClass::RuntimeInference {
         return (None, None, None, None, Vec::new());
     }
@@ -504,5 +504,31 @@ fn diagnostic(
         node_id: node_id.clone(),
         port_id: port_id.map(str::to_string),
         message: message.into(),
+    }
+}
+
+#[cfg(test)]
+mod lint_style_regressions {
+    use super::{
+        dependency_task_ids, SchedulerNodeId, SchedulerTaskId, WorkflowSchedulerTaskInputBinding,
+    };
+
+    #[test]
+    fn lint_style_dependency_ids_preserve_first_seen_order() {
+        let bindings = ["z", "a", "z", "b", "a"]
+            .into_iter()
+            .map(|id| WorkflowSchedulerTaskInputBinding {
+                source_node_id: SchedulerNodeId::parse(id).unwrap(),
+                source_task_id: SchedulerTaskId::parse(id).unwrap(),
+                source_port_id: "out".to_string(),
+                target_port_id: "in".to_string(),
+            })
+            .collect::<Vec<_>>();
+        let ids = dependency_task_ids(&bindings);
+        assert_eq!(
+            ids.iter().map(|id| id.as_str()).collect::<Vec<_>>(),
+            vec!["z", "a", "b"]
+        );
+        assert!(dependency_task_ids(&[]).is_empty());
     }
 }

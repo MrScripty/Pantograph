@@ -84,7 +84,7 @@ pub(crate) enum PumasDispatchPackageFactsDiagnosticCode {
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum PumasDispatchPackageFactsBridgeOutcome {
     Projected {
-        facts: PumasDispatchPackageFactsProjection,
+        facts: Box<PumasDispatchPackageFactsProjection>,
         diagnostics: Vec<PumasDispatchPackageFactsDiagnostic>,
     },
     Unavailable {
@@ -210,7 +210,7 @@ fn validate_and_project_dispatch_package_facts(
     }
 
     PumasDispatchPackageFactsBridgeOutcome::Projected {
-        facts: project_dispatch_package_facts(facts),
+        facts: Box::new(project_dispatch_package_facts(facts)),
         diagnostics,
     }
 }

@@ -133,12 +133,13 @@ impl ReservationLifecycleEvent {
 #[must_use]
 pub struct ValidatedReservationLifecycleEvent(ReservationLifecycleEvent);
 
-impl ValidatedReservationLifecycleEvent {
-    #[must_use]
-    pub fn as_ref(&self) -> &ReservationLifecycleEvent {
+impl AsRef<ReservationLifecycleEvent> for ValidatedReservationLifecycleEvent {
+    fn as_ref(&self) -> &ReservationLifecycleEvent {
         &self.0
     }
+}
 
+impl ValidatedReservationLifecycleEvent {
     #[must_use]
     pub fn into_inner(self) -> ReservationLifecycleEvent {
         self.0
@@ -195,12 +196,13 @@ impl ReservationLifecycleApplication {
 #[must_use]
 pub struct ValidatedReservationLifecycleApplication(ReservationLifecycleApplication);
 
-impl ValidatedReservationLifecycleApplication {
-    #[must_use]
-    pub fn as_ref(&self) -> &ReservationLifecycleApplication {
+impl AsRef<ReservationLifecycleApplication> for ValidatedReservationLifecycleApplication {
+    fn as_ref(&self) -> &ReservationLifecycleApplication {
         &self.0
     }
+}
 
+impl ValidatedReservationLifecycleApplication {
     #[must_use]
     pub fn into_inner(self) -> ReservationLifecycleApplication {
         self.0

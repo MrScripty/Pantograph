@@ -368,7 +368,7 @@ pub(super) enum WorkflowTaskExecutionWorkerShutdownReason {
 pub(super) enum WorkflowTaskExecutionWorkerOutcome {
     TaskTerminal(WorkflowTaskExecutionWorkerTerminalOutcome),
     TaskDeferred(WorkflowTaskExecutionWorkerDeferredOutcome),
-    RuntimeBranchCompleted(WorkflowTaskExecutionWorkerRuntimeBranchCompletedOutcome),
+    RuntimeBranchCompleted(Box<WorkflowTaskExecutionWorkerRuntimeBranchCompletedOutcome>),
     RuntimeBranchFailed(WorkflowTaskExecutionWorkerRuntimeBranchFailedOutcome),
     RuntimeBranchCancelled(WorkflowTaskExecutionWorkerRuntimeBranchCancelledOutcome),
     RuntimeBranchDeferred(WorkflowTaskExecutionWorkerRuntimeBranchDeferredOutcome),
@@ -1124,12 +1124,14 @@ impl WorkflowTaskExecutionWorkerOutcome {
         response: WorkflowRunResponse,
         diagnostics: Vec<WorkflowTaskExecutionWorkerDiagnostic>,
     ) -> Self {
-        Self::RuntimeBranchCompleted(WorkflowTaskExecutionWorkerRuntimeBranchCompletedOutcome {
-            session_id: command.session_id.clone(),
-            workflow_run_id: command.workflow_run_id.clone(),
-            response,
-            diagnostics,
-        })
+        Self::RuntimeBranchCompleted(Box::new(
+            WorkflowTaskExecutionWorkerRuntimeBranchCompletedOutcome {
+                session_id: command.session_id.clone(),
+                workflow_run_id: command.workflow_run_id.clone(),
+                response,
+                diagnostics,
+            },
+        ))
     }
 
     pub(super) fn runtime_branch_failed(
@@ -1369,14 +1371,14 @@ async fn claim_and_execute_runtime_branch_event(
         )
         .await
         {
-            Ok(response) => WorkflowTaskExecutionWorkerOutcome::RuntimeBranchCompleted(
+            Ok(response) => WorkflowTaskExecutionWorkerOutcome::RuntimeBranchCompleted(Box::new(
                 WorkflowTaskExecutionWorkerRuntimeBranchCompletedOutcome {
                     session_id: command.session_id.clone(),
                     workflow_run_id: command.workflow_run_id.clone(),
                     response,
                     diagnostics: Vec::new(),
                 },
-            ),
+            )),
             Err(error) => WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
                 command,
                 error.to_string(),
@@ -1886,12 +1888,12 @@ fn runtime_branch_batch_member_completion(
                 unix_timestamp_ms(), proof) {
                 Ok(_record) => match member_outcome.completed_response {
                     Some(response) => WorkflowTaskExecutionWorkerOutcome::RuntimeBranchCompleted(
-                        WorkflowTaskExecutionWorkerRuntimeBranchCompletedOutcome {
+                        Box::new(WorkflowTaskExecutionWorkerRuntimeBranchCompletedOutcome {
                             session_id: member_outcome.session_id.clone(),
                             workflow_run_id: member_outcome.workflow_run_id.clone(),
                             response,
                             diagnostics,
-                        },
+                        }),
                     ),
                     None => WorkflowTaskExecutionWorkerOutcome::RuntimeBranchFailed(
                         WorkflowTaskExecutionWorkerRuntimeBranchFailedOutcome {
@@ -3992,9 +3994,9 @@ mod tests {
             node_id: SchedulerNodeId::parse(WORKER_BATCH_NODE_ID).expect("node id"),
             task_id: SchedulerTaskId::parse(WORKER_BATCH_TASK_ID).expect("task id"),
             state: SchedulerTaskState::Ready {
-                execution_intent: SchedulerTaskExecutionIntent::Runtime {
-                    task_intent: task_intent_for_run(workflow_run_id),
-                },
+                execution_intent: SchedulerTaskExecutionIntent::runtime(task_intent_for_run(
+                    workflow_run_id,
+                )),
             },
             state_version: 1,
             last_transition_id: SchedulerTaskStateTransitionId::parse(format!(
@@ -4354,6 +4356,11 @@ mod tests {
     }
 
     #[test]
+    fn worker_outcome_keeps_completed_response_indirect() {
+        assert!(std::mem::size_of::<WorkflowTaskExecutionWorkerOutcome>() <= 128);
+    }
+
+    #[test]
     fn runtime_branch_completed_outcome_preserves_run_scope_and_response() {
         let command = runtime_branch_command();
         let response = WorkflowRunResponse {
@@ -4379,6 +4386,14 @@ mod tests {
         assert_eq!(outcome.session_id, command.session_id);
         assert_eq!(outcome.workflow_run_id, command.workflow_run_id);
         assert_eq!(outcome.response, response);
+        assert_eq!(
+            serde_json::to_value(&outcome.response).unwrap(),
+            serde_json::json!({
+                "workflow_run_id": command.workflow_run_id,
+                "outputs": [],
+                "timing_ms": 42
+            })
+        );
         assert_eq!(outcome.diagnostics, vec![diagnostic]);
     }
 

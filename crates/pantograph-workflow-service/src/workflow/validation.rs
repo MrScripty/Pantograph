@@ -154,23 +154,6 @@ pub(super) fn validate_bindings(
     Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn stale_graph_remaining_count_rejects_formatter_underflow() {
-        let error = remaining_stale_graph_diagnostic_count(1, 2)
-            .expect_err("shown diagnostics cannot exceed total diagnostics");
-
-        assert!(matches!(
-            error,
-            WorkflowServiceError::Internal(message)
-                if message.contains("formatter showed 2 reasons for 1 diagnostics")
-        ));
-    }
-}
-
 pub(super) fn validate_host_output_bindings(
     bindings: &[WorkflowPortBinding],
     field_name: &str,
@@ -339,4 +322,21 @@ pub(super) fn validate_payload_size(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stale_graph_remaining_count_rejects_formatter_underflow() {
+        let error = remaining_stale_graph_diagnostic_count(1, 2)
+            .expect_err("shown diagnostics cannot exceed total diagnostics");
+
+        assert!(matches!(
+            error,
+            WorkflowServiceError::Internal(message)
+                if message.contains("formatter showed 2 reasons for 1 diagnostics")
+        ));
+    }
 }

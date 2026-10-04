@@ -54,6 +54,7 @@ required-features = ["cli"]
 uniffi = { version = "0.28", features = ["build"] }
 
 [dev-dependencies]
+futures-util.workspace = true
 uniffi = { version = "0.28", features = ["bindgen-tests"] }
 
 [features]

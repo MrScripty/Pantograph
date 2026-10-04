@@ -2650,24 +2650,28 @@ fn test_pytorch_generate_text_envelopes_thread_top_k_for_generate_and_stream() {
     let generate_envelope = PyTorchBackend::generate_text_envelope(
         "req-generate-top-k",
         PyTorchWorkerOperation::GenerateText,
-        "Explain adapters.".to_string(),
-        Some("Be precise.".to_string()),
-        48,
-        0.3,
-        0.9,
-        Some(33),
-        None,
+        PyTorchTextGenerationRequest {
+            prompt: "Explain adapters.".to_string(),
+            system_prompt: Some("Be precise.".to_string()),
+            max_tokens: 48,
+            temperature: 0.3,
+            top_p: 0.9,
+            top_k: Some(33),
+            masked_prompt_json: None,
+        },
     );
     let stream_envelope = PyTorchBackend::generate_text_envelope(
         "req-stream-top-k",
         PyTorchWorkerOperation::GenerateTextStream,
-        "Explain adapters.".to_string(),
-        Some("Be precise.".to_string()),
-        48,
-        0.3,
-        0.9,
-        Some(33),
-        None,
+        PyTorchTextGenerationRequest {
+            prompt: "Explain adapters.".to_string(),
+            system_prompt: Some("Be precise.".to_string()),
+            max_tokens: 48,
+            temperature: 0.3,
+            top_p: 0.9,
+            top_k: Some(33),
+            masked_prompt_json: None,
+        },
     );
 
     PyTorchBackend::validate_generate_text_envelope(&generate_envelope)
@@ -2689,13 +2693,15 @@ fn test_pytorch_generate_text_envelope_rejects_unscoped_transformers_kwargs() {
     let mut generate_envelope = PyTorchBackend::generate_text_envelope(
         "req-generate-raw-kwarg",
         PyTorchWorkerOperation::GenerateText,
-        "Explain adapters.".to_string(),
-        None,
-        48,
-        0.3,
-        0.9,
-        None,
-        None,
+        PyTorchTextGenerationRequest {
+            prompt: "Explain adapters.".to_string(),
+            system_prompt: None,
+            max_tokens: 48,
+            temperature: 0.3,
+            top_p: 0.9,
+            top_k: None,
+            masked_prompt_json: None,
+        },
     );
     generate_envelope
         .payload
@@ -2716,13 +2722,15 @@ fn test_pytorch_generate_text_stream_envelope_rejects_policy_transformers_kwargs
     let mut stream_envelope = PyTorchBackend::generate_text_envelope(
         "req-stream-policy-kwarg",
         PyTorchWorkerOperation::GenerateTextStream,
-        "Explain adapters.".to_string(),
-        None,
-        48,
-        0.3,
-        0.9,
-        None,
-        None,
+        PyTorchTextGenerationRequest {
+            prompt: "Explain adapters.".to_string(),
+            system_prompt: None,
+            max_tokens: 48,
+            temperature: 0.3,
+            top_p: 0.9,
+            top_k: None,
+            masked_prompt_json: None,
+        },
     );
     stream_envelope
         .payload
@@ -6397,4 +6405,119 @@ fn selected_text_adapter_preserves_text_parts_and_rejects_nontext_parts() {
         {"type": "text", "text": "partial"}, {"type": "image_url", "image_url": {"url": "file:///image"}}
     ]}]});
     assert!(extract_prompt_from_messages(&request).is_err());
+}
+
+fn named_text_request(prompt: &str) -> crate::PyTorchTextGenerationRequest {
+    crate::PyTorchTextGenerationRequest {
+        prompt: prompt.to_string(),
+        system_prompt: Some("Be concise.".to_string()),
+        max_tokens: 64,
+        temperature: 0.2,
+        top_p: 0.95,
+        top_k: Some(40),
+        masked_prompt_json: Some("{\"prompt\":\"masked\"}".to_string()),
+    }
+}
+
+#[test]
+fn pytorch_named_text_request_preserves_exact_worker_envelopes() {
+    for (operation, label) in [
+        (PyTorchWorkerOperation::GenerateText, "generate_text"),
+        (
+            PyTorchWorkerOperation::GenerateTextStream,
+            "generate_text_stream",
+        ),
+    ] {
+        let envelope = PyTorchBackend::generate_text_envelope(
+            "request-named",
+            operation,
+            named_text_request("Explain adapters."),
+        );
+        PyTorchBackend::validate_generate_text_envelope_operation(&envelope, operation)
+            .expect("same worker validation");
+        assert_eq!(
+            serde_json::to_value(&envelope).expect("worker envelope"),
+            serde_json::json!({
+                "contract_version": 1,
+                "request_id": "request-named",
+                "operation": label,
+                "cancellation": { "drop_stream_cancels": false },
+                "payload": {
+                    "prompt": "Explain adapters.",
+                    "system_prompt": "Be concise.",
+                    "max_tokens": 64,
+                    "temperature": 0.2,
+                    "top_p": 0.95,
+                    "masked_prompt_json": "{\"prompt\":\"masked\"}",
+                    "transformers_kwargs": { "top_k": 40 },
+                },
+            })
+        );
+    }
+}
+
+#[tokio::test]
+async fn pytorch_named_text_request_preserves_legacy_validation_paths() {
+    use futures_util::StreamExt;
+    use std::time::Duration;
+
+    let backend = PyTorchBackend::new();
+    let mut request = named_text_request("  ");
+    request.top_k = None;
+    request.masked_prompt_json = None;
+    let legacy = backend
+        .generate(
+            "  ".to_string(),
+            Some("Be concise.".to_string()),
+            64,
+            0.2,
+            0.95,
+            None,
+        )
+        .await
+        .expect_err("blank legacy prompt");
+    let named = backend
+        .generate_with_top_k(request.clone())
+        .await
+        .expect_err("blank named prompt");
+    assert_eq!(legacy.to_string(), named.to_string());
+    assert!(
+        matches!(named, BackendError::Config(ref message) if message == "PyTorch worker generate_text envelope requires a prompt")
+    );
+
+    let mut legacy_stream = backend.generate_stream(
+        "  ".to_string(),
+        Some("Be concise.".to_string()),
+        64,
+        0.2,
+        0.95,
+        None,
+    );
+    let mut named_stream = backend.generate_stream_with_top_k(request);
+    let legacy_error = tokio::time::timeout(Duration::from_secs(2), legacy_stream.next())
+        .await
+        .expect("bounded legacy validation")
+        .expect("legacy error item")
+        .expect_err("legacy validation failure");
+    let named_error = tokio::time::timeout(Duration::from_secs(2), named_stream.next())
+        .await
+        .expect("bounded named validation")
+        .expect("named error item")
+        .expect_err("named validation failure");
+    assert_eq!(legacy_error.to_string(), named_error.to_string());
+    assert!(
+        matches!(named_error, BackendError::Config(ref message) if message == "PyTorch worker generate_text envelope requires a prompt")
+    );
+    assert!(
+        tokio::time::timeout(Duration::from_secs(2), legacy_stream.next())
+            .await
+            .expect("legacy stream closes")
+            .is_none()
+    );
+    assert!(
+        tokio::time::timeout(Duration::from_secs(2), named_stream.next())
+            .await
+            .expect("named stream closes")
+            .is_none()
+    );
 }

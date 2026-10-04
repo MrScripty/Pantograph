@@ -6,7 +6,7 @@ cd "$repo_root"
 
 if ! command -v uniffi-bindgen-cs >/dev/null 2>&1; then
   echo "Missing required generator: uniffi-bindgen-cs" >&2
-  echo "Install a UniFFI 0.28-compatible C# generator, for example uniffi-bindgen-cs 0.9.x." >&2
+  echo "See bindings/csharp/README.md for the pinned UniFFI 0.28-compatible generator install." >&2
   exit 1
 fi
 
