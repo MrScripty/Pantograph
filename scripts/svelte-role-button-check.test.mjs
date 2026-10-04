@@ -43,5 +43,45 @@ test('visible descendant text supplies a name, but handler expressions do not', 
 
 test('an unused snippet declaration is not rendered name evidence', () => {
   assert.deepEqual(rules('<div role="button" tabindex="0" onkeydown={activate}>{#snippet label()}Select{/snippet}</div>'), ['role-button-accessible-name']);
-  assert.deepEqual(check('<div role="button" tabindex="0" onkeydown={activate}>{#snippet label()}Select{/snippet}{@render label()}</div>'), []);
 });
+
+// This static guard deliberately does not resolve snippet calls or their bindings.
+const renderOnlyCases = [
+  ['empty local snippet', '{#snippet label()}{/snippet}{@render label()}'],
+  ['whitespace and comments', '{#snippet label()} \n<!-- Select -->{/snippet}{@render label()}'],
+  ['nonempty local snippet', '{#snippet label()}Select{/snippet}{@render label()}'],
+  ['nested unused snippet', '{#snippet label()}{#snippet unused()}Select{/snippet}{/snippet}{@render label()}'],
+  ['nested render call', '{#snippet inner()}Select{/snippet}{#snippet label()}{@render inner()}{/snippet}{@render label()}'],
+  ['shadowed local snippet', '{#snippet label()}Select{/snippet}{#if visible}{#snippet label()}{/snippet}{@render label()}{/if}'],
+  ['snippet parameter', '{#snippet wrapper(label)}{@render label()}{/snippet}{@render wrapper(label)}'],
+  ['self recursion', '{#snippet label()}{@render label()}{/snippet}{@render label()}'],
+  ['mutual recursion', '{#snippet first()}{@render second()}{/snippet}{#snippet second()}{@render first()}{/snippet}{@render first()}'],
+  ['unknown snippet', '{@render unknown()}'],
+  ['optional snippet', '{@render unknown?.()}'],
+  ['member call', '{@render snippets.label()}'],
+];
+
+for (const [name, content] of renderOnlyCases) {
+  test(`render-only content requires independent name evidence: ${name}`, () => {
+    const violations = check(`\n<div role="button" tabindex="0" onkeydown={activate}>${content}</div>`);
+    assert.deepEqual(violations.map(({ rule }) => rule), ['role-button-accessible-name']);
+    assert.equal(violations[0].file, 'Fixture.svelte');
+    assert.equal(violations[0].line, 2);
+  });
+}
+
+for (const attribute of ['aria-label="Select"', 'aria-labelledby="label"']) {
+  test(`explicit ${attribute} supports render-only content`, () => {
+    for (const [, content] of renderOnlyCases) {
+      assert.deepEqual(check(`<div role="button" tabindex="0" onkeydown={activate} ${attribute}>${content}</div>`), []);
+    }
+  });
+}
+
+for (const name of ['Select', '<span>Select</span>', '{label}', '<span>{label}</span>']) {
+  test(`adjacent rendered evidence remains accepted: ${name}`, () => {
+    for (const [, content] of renderOnlyCases) {
+      assert.deepEqual(check(`<div role="button" tabindex="0" onkeydown={activate}>${content}${name}</div>`), []);
+    }
+  });
+}
