@@ -101,10 +101,9 @@ fn invalid(message: impl Into<String>) -> BackendError {
     BackendError::Config(format!("selected embedding: {}", message.into()))
 }
 
-fn same_model(left: &PumasModelRef, right: &PumasModelRef) -> bool {
+fn same_model_identity(left: &PumasModelRef, right: &PumasModelRef) -> bool {
     left.model_id.trim_start_matches("pumas://models/")
         == right.model_id.trim_start_matches("pumas://models/")
-        && left.revision == right.revision
         && left.selected_artifact_id == right.selected_artifact_id
         && left.selected_artifact_path == right.selected_artifact_path
 }
@@ -144,11 +143,33 @@ impl<'a> SelectedEmbeddingLoad<'a> {
             reference
                 .validate()
                 .map_err(|error| invalid(error.to_string()))?;
-            if !same_model(reference, &target.model_ref) {
+            if !same_model_identity(reference, &target.model_ref) {
                 return Err(invalid(
                     "request/package/target/scheduler model or artifact mismatch",
                 ));
             }
+        }
+        // Request and scheduler revisions constrain both producer observations.
+        // An omitted request revision permits additional target evidence, but
+        // never supplies a missing explicitly requested package/target revision.
+        for requested in [model, selected] {
+            if let Some(revision) = &requested.revision {
+                if package.model_ref.revision.as_ref() != Some(revision)
+                    || target.model_ref.revision.as_ref() != Some(revision)
+                {
+                    return Err(invalid(
+                        "explicit requested revision is missing or mismatched",
+                    ));
+                }
+            }
+        }
+        if package
+            .model_ref
+            .revision
+            .as_ref()
+            .is_some_and(|revision| target.model_ref.revision.as_ref() != Some(revision))
+        {
+            return Err(invalid("target must preserve the known package revision"));
         }
         if request.task_id != InferenceTaskId::Embedding
             || decision.selected_task_id != Some(InferenceTaskId::Embedding)
@@ -234,5 +255,44 @@ impl<'a> SelectedEmbeddingLoad<'a> {
             target,
             device,
         })
+    }
+}
+
+#[cfg(all(test, feature = "backend-candle"))]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn optional_request_revisions_preserve_required_producer_evidence() {
+        for (requested, scheduled, package_revision, target_revision, valid) in [
+            (None, None, None, None, true),
+            (None, None, None, Some("a"), true),
+            (None, None, Some("a"), Some("a"), true),
+            (Some("a"), Some("a"), Some("a"), Some("a"), true),
+            (None, Some("a"), Some("a"), Some("a"), true),
+            (Some("a"), None, Some("a"), Some("a"), true),
+            (Some("a"), Some("a"), None, Some("a"), false),
+            (Some("a"), Some("a"), Some("a"), None, false),
+            (Some("a"), Some("a"), Some("b"), Some("a"), false),
+            (Some("a"), Some("a"), Some("a"), Some("b"), false),
+            (Some("a"), Some("b"), Some("a"), Some("a"), false),
+            (None, Some("a"), None, Some("a"), false),
+            (None, None, Some("a"), None, false),
+            (None, None, Some("a"), Some("b"), false),
+        ] {
+            let (_directory, mut request, mut target, mut decision) = fixture(8);
+            request.model_ref.as_mut().unwrap().revision = requested.map(str::to_owned);
+            decision.selected_model_ref.as_mut().unwrap().revision = scheduled.map(str::to_owned);
+            request
+                .resolved_model_package_facts
+                .as_mut()
+                .unwrap()
+                .model_ref
+                .revision = package_revision.map(str::to_owned);
+            target.model_ref.revision = target_revision.map(str::to_owned);
+            let result = SelectedEmbeddingLoad::validate(&request, &target, &decision).await;
+            assert_eq!(result.is_ok(), valid,
+                "request={requested:?}, scheduler={scheduled:?}, package={package_revision:?}, target={target_revision:?}");
+        }
     }
 }

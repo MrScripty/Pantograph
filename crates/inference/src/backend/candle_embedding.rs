@@ -31,16 +31,71 @@ struct Module {
 /// Retained with the model: exact selected target and the actual parsed input bytes.
 /// This is an in-memory load snapshot, not a new package/residency authority.
 struct LoadIdentity {
-    _target: PumasArtifactLoadTarget,
-    _plan: CandleEmbeddingLoadPlan,
-    _inputs: Vec<(String, Vec<u8>)>,
+    target: PumasArtifactLoadTarget,
+    plan: CandleEmbeddingLoadPlan,
+    inputs: Vec<(String, Vec<u8>)>,
+    weights: FileIdentity,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct FileIdentity {
+    path: std::path::PathBuf,
+    len: u64,
+    modified: std::time::SystemTime,
+    #[cfg(unix)]
+    inode: (u64, u64, i64, i64),
+}
+
+impl FileIdentity {
+    fn read(path: &Path) -> Result<Self, BackendError> {
+        let path = path.canonicalize().map_err(invalid)?;
+        let metadata = std::fs::metadata(&path).map_err(invalid)?;
+        if !metadata.is_file() {
+            return Err(invalid("checkpoint must be a regular file"));
+        }
+        #[cfg(unix)]
+        use std::os::unix::fs::MetadataExt;
+        Ok(Self {
+            path,
+            len: metadata.len(),
+            modified: metadata.modified().map_err(invalid)?,
+            #[cfg(unix)]
+            inode: (
+                metadata.dev(),
+                metadata.ino(),
+                metadata.ctime(),
+                metadata.ctime_nsec(),
+            ),
+        })
+    }
+}
+
+#[derive(Clone)]
+pub(super) struct LoadedEmbedding {
+    pub(super) model: Arc<EmbeddingModel>,
+    pub(super) reused: bool,
+}
+
+pub(super) fn check_load_stop(
+    stop: &AtomicBool,
+    cancellation: &InferenceExecutionCancellationHandle,
+) -> Result<(), BackendError> {
+    if stop.load(Ordering::Acquire) {
+        Err(BackendError::Cancelled(
+            "Candle model load cancelled".into(),
+        ))
+    } else if let Some(reason) = cancellation.rejection_message("Candle model load") {
+        Err(BackendError::Cancelled(reason))
+    } else {
+        Ok(())
+    }
 }
 
 pub(super) struct EmbeddingModel {
     bert: BertModel,
     tokenizer: tokenizers::Tokenizer,
     width: usize,
-    _identity: LoadIdentity,
+    identity: LoadIdentity,
 }
 
 fn read_input(
@@ -68,7 +123,10 @@ impl EmbeddingModel {
     pub(super) fn load(
         plan: CandleEmbeddingLoadPlan,
         target: PumasArtifactLoadTarget,
+        stop: &AtomicBool,
+        cancellation: &InferenceExecutionCancellationHandle,
     ) -> Result<Self, BackendError> {
+        check_load_stop(stop, cancellation)?;
         if plan.dtype != CandleLoadDType::F32
             || !matches!(plan.device, CandleLoadDevice::Auto | CandleLoadDevice::Cpu)
         {
@@ -260,24 +318,73 @@ impl EmbeddingModel {
         if !weights.starts_with(root.canonicalize().map_err(invalid)?) {
             return Err(invalid("weights resolve outside selected target"));
         }
+        check_load_stop(stop, cancellation)?;
+        let weights_identity = FileIdentity::read(&weights)?;
         let tensors =
-            candle_core::safetensors::load(weights, &candle_core::Device::Cpu).map_err(invalid)?;
+            candle_core::safetensors::load(&weights, &candle_core::Device::Cpu).map_err(invalid)?;
+        check_load_stop(stop, cancellation)?;
+        if FileIdentity::read(&weights)? != weights_identity {
+            return Err(invalid("checkpoint changed during model loading"));
+        }
         if tensors.is_empty() || tensors.values().any(|tensor| tensor.dtype() != DType::F32) {
             return Err(invalid("all checkpoint tensors must be F32"));
         }
         let vb =
             candle_nn::VarBuilder::from_tensors(tensors, DType::F32, &candle_core::Device::Cpu);
         let bert = BertModel::load(vb, &config).map_err(invalid)?;
+        check_load_stop(stop, cancellation)?;
         Ok(Self {
             bert,
             tokenizer,
             width: config.hidden_size,
-            _identity: LoadIdentity {
-                _target: target,
-                _plan: plan,
-                _inputs: inputs,
+            identity: LoadIdentity {
+                target,
+                plan,
+                inputs,
+                weights: weights_identity,
             },
         })
+    }
+
+    pub(super) fn matches_load(
+        &self,
+        plan: &CandleEmbeddingLoadPlan,
+        target: &PumasArtifactLoadTarget,
+    ) -> bool {
+        if self.identity.target != *target || self.identity.plan != *plan {
+            return false;
+        }
+        // Recheck small recipe/tokenizer bytes and the physical checkpoint
+        // identity, without deserializing tensors or rebuilding the BERT model.
+        let mut inputs = Vec::new();
+        for (relative, bytes) in &self.identity.inputs {
+            if read_input(&plan.model_dir, Path::new(relative), &mut inputs)
+                .map_or(true, |current| current != *bytes)
+            {
+                return false;
+            }
+        }
+        let normalize: Result<Vec<Module>, _> = serde_json::from_slice(
+            &self
+                .identity
+                .inputs
+                .iter()
+                .find(|(path, _)| path == "modules.json")
+                .unwrap()
+                .1,
+        );
+        let Ok(modules) = normalize else { return false };
+        let path = plan.model_dir.join(&modules[2].path);
+        if path.exists()
+            && (path
+                .canonicalize()
+                .map_or(true, |path| !path.starts_with(&plan.model_dir))
+                || std::fs::read_dir(path).map_or(true, |mut entries| entries.next().is_some()))
+        {
+            return false;
+        }
+        FileIdentity::read(&plan.safetensors_path)
+            .is_ok_and(|current| current == self.identity.weights)
     }
 
     pub(super) fn forward(
@@ -376,20 +483,28 @@ impl EmbeddingModel {
     }
 }
 
-type Completion = Shared<
-    futures_util::future::BoxFuture<'static, Arc<Result<Vec<EmbeddingResult>, BackendError>>>,
->;
+type Completion<T> = Shared<futures_util::future::BoxFuture<'static, Arc<Result<T, BackendError>>>>;
 #[derive(Clone)]
-struct Job {
+struct Job<T> {
     stop: Arc<AtomicBool>,
-    completion: Completion,
+    completion: Completion<T>,
 }
-#[derive(Default)]
-pub(super) struct EmbeddingJobs(Mutex<Option<Job>>);
+pub(super) struct EmbeddingJobs<T = Vec<EmbeddingResult>>(Mutex<Option<Job<T>>>);
 
-fn copy_result(
-    result: &Result<Vec<EmbeddingResult>, BackendError>,
-) -> Result<Vec<EmbeddingResult>, BackendError> {
+impl<T> Default for EmbeddingJobs<T> {
+    fn default() -> Self {
+        Self(Mutex::new(None))
+    }
+}
+
+struct CancelLoadOnDrop(Arc<AtomicBool>);
+impl Drop for CancelLoadOnDrop {
+    fn drop(&mut self) {
+        self.0.store(true, Ordering::Release);
+    }
+}
+
+fn copy_result<T: Clone>(result: &Result<T, BackendError>) -> Result<T, BackendError> {
     match result {
         Ok(embeddings) => Ok(embeddings.clone()),
         Err(BackendError::Cancelled(reason)) => Err(BackendError::Cancelled(reason.clone())),
@@ -408,10 +523,31 @@ impl EmbeddingJobs {
         let completion = self.spawn(move |stop| model.forward(texts, &cancellation, &stop))?;
         copy_result(completion.await.as_ref())
     }
+}
+
+impl<T: Clone + Send + Sync + 'static> EmbeddingJobs<T> {
+    pub(super) async fn load(
+        &self,
+        run: impl FnOnce(Arc<AtomicBool>) -> Result<T, BackendError> + Send + 'static,
+    ) -> Result<T, BackendError> {
+        let job = self.start(run)?;
+        // Caller loss signals cancellation; the slot retains the actual join.
+        // Replacement and stop must drain that join before releasing residency.
+        let _cancel = CancelLoadOnDrop(job.stop);
+        copy_result(job.completion.await.as_ref())
+    }
+
     fn spawn(
         &self,
-        run: impl FnOnce(Arc<AtomicBool>) -> Result<Vec<EmbeddingResult>, BackendError> + Send + 'static,
-    ) -> Result<Completion, BackendError> {
+        run: impl FnOnce(Arc<AtomicBool>) -> Result<T, BackendError> + Send + 'static,
+    ) -> Result<Completion<T>, BackendError> {
+        Ok(self.start(run)?.completion)
+    }
+
+    fn start(
+        &self,
+        run: impl FnOnce(Arc<AtomicBool>) -> Result<T, BackendError> + Send + 'static,
+    ) -> Result<Job<T>, BackendError> {
         let mut slot = self.0.lock().unwrap();
         if slot
             .as_ref()
@@ -431,11 +567,9 @@ impl EmbeddingJobs {
         }
         .boxed()
         .shared();
-        *slot = Some(Job {
-            stop,
-            completion: completion.clone(),
-        });
-        Ok(completion)
+        let job = Job { stop, completion };
+        *slot = Some(job.clone());
+        Ok(job)
     }
     pub(super) async fn drain(&self, cancel: bool) -> Result<(), BackendError> {
         let job = self.0.lock().unwrap().clone();
@@ -564,6 +698,258 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn repeated_load_reuses_only_the_matching_target_and_input_snapshot() {
+        let (directory, mut request, mut target, mut decision) =
+            crate::selected_embedding_execution::fixture(8);
+        let mut backend = super::super::candle::CandleBackend::new();
+        assert_eq!(
+            backend
+                .load_selected_embedding(&request, &target, &decision)
+                .await
+                .unwrap()
+                .runtime_reused,
+            Some(false)
+        );
+        let original = backend.model.clone().unwrap();
+        let baseline = backend.embeddings(vec!["hello".into()], "").await.unwrap();
+        assert_eq!(
+            backend
+                .load_selected_embedding(&request, &target, &decision)
+                .await
+                .unwrap()
+                .runtime_reused,
+            Some(true)
+        );
+        assert!(Arc::ptr_eq(&original, backend.model.as_ref().unwrap()));
+        assert_eq!(
+            backend.embeddings(vec!["hello".into()], "").await.unwrap()[0].vector,
+            baseline[0].vector
+        );
+
+        // A known revision change is a distinct selected identity even when
+        // the physical checkpoint and resulting vectors happen to be equal.
+        for reference in [
+            request.model_ref.as_mut().unwrap(),
+            decision.selected_model_ref.as_mut().unwrap(),
+            &mut request
+                .resolved_model_package_facts
+                .as_mut()
+                .unwrap()
+                .model_ref,
+            &mut target.model_ref,
+        ] {
+            reference.revision = Some("new-known-fixture-revision".into());
+        }
+        assert_eq!(
+            backend
+                .load_selected_embedding(&request, &target, &decision)
+                .await
+                .unwrap()
+                .runtime_reused,
+            Some(false)
+        );
+        assert!(!Arc::ptr_eq(&original, backend.model.as_ref().unwrap()));
+        let revised = backend.model.clone().unwrap();
+        target.content_fingerprint = Some("fixture-fingerprint-v2".into());
+        assert_eq!(
+            backend
+                .load_selected_embedding(&request, &target, &decision)
+                .await
+                .unwrap()
+                .runtime_reused,
+            Some(false)
+        );
+        assert!(!Arc::ptr_eq(&revised, backend.model.as_ref().unwrap()));
+
+        let before = backend.model.clone().unwrap();
+        let config_path = directory.path().join("config.json");
+        let mut config: Value =
+            serde_json::from_slice(&std::fs::read(&config_path).unwrap()).unwrap();
+        config["layer_norm_eps"] = serde_json::json!(1e-10);
+        std::fs::write(config_path, serde_json::to_vec(&config).unwrap()).unwrap();
+        assert_eq!(
+            backend
+                .load_selected_embedding(&request, &target, &decision)
+                .await
+                .unwrap()
+                .runtime_reused,
+            Some(false)
+        );
+        assert!(!Arc::ptr_eq(&before, backend.model.as_ref().unwrap()));
+
+        let before = backend.model.clone().unwrap();
+        let weights = directory.path().join("model.safetensors");
+        let replacement = directory.path().join("replacement.safetensors");
+        std::fs::copy(&weights, &replacement).unwrap();
+        std::fs::rename(replacement, weights).unwrap();
+        assert_eq!(
+            backend
+                .load_selected_embedding(&request, &target, &decision)
+                .await
+                .unwrap()
+                .runtime_reused,
+            Some(false)
+        );
+        assert!(!Arc::ptr_eq(&before, backend.model.as_ref().unwrap()));
+        backend.stop().await.unwrap();
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn cancelled_real_load_retains_join_and_previous_model_until_replacement_or_stop() {
+        for stop_backend in [false, true] {
+            let (_original_directory, request, target, decision) =
+                crate::selected_embedding_execution::fixture(8);
+            let (_candidate_directory, candidate_request, candidate_target, candidate_decision) =
+                crate::selected_embedding_execution::fixture(12);
+            let backend = Arc::new(tokio::sync::Mutex::new(
+                super::super::candle::CandleBackend::new(),
+            ));
+            let mut owner = backend.lock().await;
+            owner
+                .load_selected_embedding(&request, &target, &decision)
+                .await
+                .unwrap();
+            let original = owner.model.clone().unwrap();
+            let (built_tx, built_rx) = tokio::sync::oneshot::channel();
+            let (release_tx, release_rx) = std::sync::mpsc::channel();
+            let built_tx = Mutex::new(Some(built_tx));
+            let release_rx = Mutex::new(release_rx);
+            owner.load_hook = Some(Arc::new(move || {
+                built_tx.lock().unwrap().take().unwrap().send(()).unwrap();
+                release_rx.lock().unwrap().recv().unwrap();
+            }));
+            drop(owner);
+            let loading_backend = backend.clone();
+            let loading = tokio::spawn(async move {
+                loading_backend
+                    .lock()
+                    .await
+                    .load_selected_embedding(
+                        &candidate_request,
+                        &candidate_target,
+                        &candidate_decision,
+                    )
+                    .await
+            });
+            // This signal follows actual checkpoint parsing and BERT construction
+            // on a blocking worker. The sole Tokio worker remains responsive.
+            built_rx.await.unwrap();
+            loading.abort();
+            assert!(loading.await.unwrap_err().is_cancelled());
+            assert!(Arc::ptr_eq(
+                &original,
+                backend.lock().await.model.as_ref().unwrap()
+            ));
+            let draining_backend = backend.clone();
+            let (draining_tx, draining_rx) = tokio::sync::oneshot::channel();
+            let draining = tokio::spawn(async move {
+                let mut owner = draining_backend.lock().await;
+                owner.load_hook = None;
+                draining_tx.send(()).unwrap();
+                if stop_backend {
+                    owner.stop().await.map(|_| None)
+                } else {
+                    owner
+                        .load_selected_embedding(&request, &target, &decision)
+                        .await
+                        .map(|outcome| outcome.runtime_reused)
+                }
+            });
+            draining_rx.await.unwrap();
+            assert!(
+                !draining.is_finished(),
+                "custody must wait for the real worker's exit"
+            );
+            release_tx.send(()).unwrap();
+            let outcome = draining.await.unwrap().unwrap();
+            let owner = backend.lock().await;
+            if stop_backend {
+                assert!(!owner.is_ready());
+            } else {
+                assert_eq!(outcome, Some(true));
+                assert!(Arc::ptr_eq(&original, owner.model.as_ref().unwrap()));
+                assert_eq!(
+                    owner.embeddings(vec!["hello".into()], "").await.unwrap()[0]
+                        .vector
+                        .len(),
+                    8
+                );
+            }
+        }
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn host_cancelled_real_load_preserves_the_previous_model() {
+        use crate::{InferenceExecutionCancellationSignal, InferenceExecutionCancellationSnapshot};
+        struct HostCancellation(AtomicBool);
+        impl InferenceExecutionCancellationSignal for HostCancellation {
+            fn snapshot(&self) -> InferenceExecutionCancellationSnapshot {
+                if self.0.load(Ordering::Acquire) {
+                    InferenceExecutionCancellationSnapshot::cancellation_requested(Some(
+                        "host cancelled candidate load".into(),
+                    ))
+                } else {
+                    InferenceExecutionCancellationSnapshot::running()
+                }
+            }
+        }
+        let (_original_directory, request, target, decision) =
+            crate::selected_embedding_execution::fixture(8);
+        let (_candidate_directory, candidate_request, candidate_target, candidate_decision) =
+            crate::selected_embedding_execution::fixture(12);
+        let backend = Arc::new(tokio::sync::Mutex::new(
+            super::super::candle::CandleBackend::new(),
+        ));
+        let mut owner = backend.lock().await;
+        owner
+            .load_selected_embedding(&request, &target, &decision)
+            .await
+            .unwrap();
+        let original = owner.model.clone().unwrap();
+        let (built_tx, built_rx) = tokio::sync::oneshot::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let built_tx = Mutex::new(Some(built_tx));
+        let release_rx = Mutex::new(release_rx);
+        owner.load_hook = Some(Arc::new(move || {
+            built_tx.lock().unwrap().take().unwrap().send(()).unwrap();
+            release_rx.lock().unwrap().recv().unwrap();
+        }));
+        drop(owner);
+        let signal = Arc::new(HostCancellation(AtomicBool::new(false)));
+        let cancellation = InferenceExecutionCancellationHandle::with_signal(signal.clone());
+        let loading_backend = backend.clone();
+        let loading = tokio::spawn(async move {
+            loading_backend
+                .lock()
+                .await
+                .load_selected_embedding_with_cancellation(
+                    &candidate_request,
+                    &candidate_target,
+                    &candidate_decision,
+                    cancellation,
+                )
+                .await
+        });
+        built_rx.await.unwrap();
+        signal.0.store(true, Ordering::Release);
+        assert!(!loading.is_finished());
+        release_tx.send(()).unwrap();
+        assert!(matches!(
+            loading.await.unwrap(),
+            Err(BackendError::Cancelled(_))
+        ));
+        let mut owner = backend.lock().await;
+        assert!(Arc::ptr_eq(&original, owner.model.as_ref().unwrap()));
+        assert_eq!(
+            owner.embeddings(vec!["hello".into()], "").await.unwrap()[0]
+                .vector
+                .len(),
+            8
+        );
+        owner.stop().await.unwrap();
+    }
+
+    #[tokio::test]
     async fn invalid_candidates_preserve_the_loaded_model() {
         let (directory, mut request, target, decision) =
             crate::selected_embedding_execution::fixture(8);
@@ -626,7 +1012,7 @@ mod tests {
 
     #[tokio::test]
     async fn drain_observes_real_worker_exit_after_caller_loss() {
-        let jobs = Arc::new(EmbeddingJobs::default());
+        let jobs: Arc<EmbeddingJobs> = Arc::new(EmbeddingJobs::default());
         let (started_tx, started_rx) = tokio::sync::oneshot::channel();
         let (release_tx, release_rx) = std::sync::mpsc::channel();
         let exited = Arc::new(AtomicBool::new(false));
@@ -752,7 +1138,7 @@ mod tests {
 
     #[tokio::test]
     async fn request_failure_remains_observable_after_lifecycle_retirement() {
-        let jobs = EmbeddingJobs::default();
+        let jobs: EmbeddingJobs = EmbeddingJobs::default();
         let request_completion = jobs
             .spawn(|_| Err(BackendError::Inference("controlled failure".into())))
             .unwrap();

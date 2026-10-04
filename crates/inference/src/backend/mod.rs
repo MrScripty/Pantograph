@@ -1123,6 +1123,22 @@ pub trait InferenceBackend: Send + Sync {
         ))
     }
 
+    /// Cancellation-aware loading; the original method remains available for
+    /// consumers that do not provide a host cancellation signal.
+    async fn load_selected_embedding_with_cancellation(
+        &mut self,
+        request: &crate::InferenceExecutionRequest,
+        target: &crate::PumasArtifactLoadTarget,
+        decision: &crate::BackendExecutionDecision,
+        cancellation: crate::InferenceExecutionCancellationHandle,
+    ) -> Result<BackendStartOutcome, BackendError> {
+        if let Some(reason) = cancellation.rejection_message("selected embedding load") {
+            return Err(BackendError::Cancelled(reason));
+        }
+        self.load_selected_embedding(request, target, decision)
+            .await
+    }
+
     /// Execute selected embeddings while retaining actual worker completion.
     async fn selected_embeddings(
         &self,

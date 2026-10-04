@@ -1239,38 +1239,56 @@ impl InferenceGateway {
             };
             *self.current_runtime_config.write().await = None;
         }
-        if let Err(error) = backend
-            .load_selected_embedding(&request, &artifact_load_target, &backend_decision)
+        let start_outcome = match backend
+            .load_selected_embedding_with_cancellation(
+                &request,
+                &artifact_load_target,
+                &backend_decision,
+                cancellation.clone(),
+            )
             .await
         {
-            let ready = backend.is_ready();
-            if !ready {
-                *self.current_runtime_config.write().await = None;
+            Ok(outcome) => outcome,
+            Err(error) => {
+                let ready = backend.is_ready();
+                if !ready {
+                    *self.current_runtime_config.write().await = None;
+                }
+                let mut lifecycle = self.runtime_lifecycle.write().await;
+                lifecycle.active = ready;
+                lifecycle.last_error = Some(error.to_string());
+                if !ready {
+                    lifecycle.runtime_instance_id = None;
+                }
+                return Err(error.into());
             }
-            let mut lifecycle = self.runtime_lifecycle.write().await;
-            lifecycle.active = ready;
-            lifecycle.last_error = Some(error.to_string());
-            if !ready {
-                lifecycle.runtime_instance_id = None;
-            }
-            return Err(error.into());
-        }
+        };
         *self.current_runtime_config.write().await = Some(config);
         *self.embedding_mode.write().await = true;
         *self.reranking_mode.write().await = false;
         *self.external_mode.write().await = false;
-        *self.runtime_lifecycle.write().await = RuntimeLifecycleSnapshot {
-            runtime_id: Some("candle".into()),
-            runtime_instance_id: Some(format!(
+        let mut lifecycle = self.runtime_lifecycle.write().await;
+        let runtime_instance_id = if start_outcome.runtime_reused == Some(true) {
+            lifecycle.runtime_instance_id.clone()
+        } else {
+            None
+        }
+        .unwrap_or_else(|| {
+            format!(
                 "candle-{}",
                 self.runtime_instance_sequence
                     .fetch_add(1, Ordering::Relaxed)
-            )),
-            runtime_reused: Some(false),
-            lifecycle_decision_reason: Some("scheduler_selected_embedding_package_loaded".into()),
+            )
+        });
+        *lifecycle = RuntimeLifecycleSnapshot {
+            runtime_id: Some("candle".into()),
+            runtime_instance_id: Some(runtime_instance_id),
+            runtime_reused: start_outcome.runtime_reused,
+            lifecycle_decision_reason: start_outcome.lifecycle_decision_reason,
             active: backend.is_ready(),
             ..Default::default()
         };
+        drop(lifecycle);
         reject_cancelled_execution_handle("selected embedding", &cancellation)?;
         let result = backend
             .selected_embeddings(texts, cancellation.clone())

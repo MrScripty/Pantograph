@@ -5052,6 +5052,49 @@ async fn selected_embedding_gateway_executes_real_models_and_replaces_width() {
 
 #[cfg(feature = "backend-candle")]
 #[tokio::test]
+async fn selected_embedding_gateway_reuse_preserves_runtime_identity_with_optional_revision() {
+    let (_directory, mut request, target, mut decision) =
+        crate::selected_embedding_execution::fixture(8);
+    request.model_ref.as_mut().unwrap().revision = None;
+    decision.selected_model_ref.as_mut().unwrap().revision = None;
+    let gateway =
+        InferenceGateway::with_backend(Box::new(crate::backend::CandleBackend::new()), "Candle");
+    gateway
+        .execute_selected_embedding_with_cancellation(
+            request.clone(),
+            target.clone(),
+            decision.clone(),
+            crate::InferenceExecutionCancellationHandle::running(),
+        )
+        .await
+        .unwrap();
+    let first = gateway.runtime_lifecycle_snapshot().await;
+    assert_eq!(first.runtime_reused, Some(false));
+    let result = gateway
+        .execute_selected_embedding_with_cancellation(
+            request,
+            target,
+            decision,
+            crate::InferenceExecutionCancellationHandle::running(),
+        )
+        .await
+        .unwrap();
+    let second = gateway.runtime_lifecycle_snapshot().await;
+    assert_eq!(second.runtime_reused, Some(true));
+    assert_eq!(second.runtime_instance_id, first.runtime_instance_id);
+    assert_eq!(
+        second.lifecycle_decision_reason.as_deref(),
+        Some("scheduler_selected_embedding_package_reused")
+    );
+    let crate::InferenceExecutionResult::Embedding { embeddings, .. } = result else {
+        panic!("native embedding output required")
+    };
+    assert_eq!(embeddings[0].vector.len(), 8);
+    gateway.stop().await.unwrap();
+}
+
+#[cfg(feature = "backend-candle")]
+#[tokio::test]
 async fn selected_embedding_invalid_handoffs_and_precancellation_preserve_residency() {
     let (_directory, request, target, decision) = crate::selected_embedding_execution::fixture(8);
     let gateway =
