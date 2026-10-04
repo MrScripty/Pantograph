@@ -1011,6 +1011,26 @@ mod tests {
         let root = create_launcher_root();
         let owner = create_owner(root.path()).await;
         let model_id = import_fixture_model(&owner).await;
+        // Import publishes the model before the owner's background index work
+        // necessarily settles. Await a forced pass before testing cache reuse;
+        // only the documented in-flight conflict is eligible for retry.
+        let indexed_count = tokio::time::timeout(std::time::Duration::from_secs(10), async {
+            loop {
+                match owner.rebuild_model_index().await {
+                    Ok(count) => break count,
+                    Err(pumas_library::PumasError::ModelIndexRefreshInProgress) => {
+                        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+                    }
+                    Err(error) => panic!("fixture index reconciliation failed: {error}"),
+                }
+            }
+        })
+        .await
+        .expect("fixture index reconciliation must settle");
+        assert_eq!(
+            indexed_count, 1,
+            "the fixture must retain its imported model"
+        );
         let expected_descriptor = owner
             .resolve_model_execution_descriptors_batch(vec![model_id.clone()])
             .await
@@ -1074,14 +1094,48 @@ mod tests {
             serde_json::to_value(warm_summary.summary.as_ref().expect("warm summary payload"))
                 .unwrap()
         );
+        // Observe the producer-owned cache without reconciling or mutating it.
+        // Equal summary payloads alone do not prove equal source fingerprints.
+        let model_root = owner.launcher_root().join("shared-resources/models");
+        let index = ModelIndex::open_read_only(model_root.join("models.db")).unwrap();
+        let selected_artifact_id = warm_summary
+            .summary
+            .as_ref()
+            .unwrap()
+            .model_ref
+            .selected_artifact_id
+            .as_deref();
+        let cache_before = index
+            .get_model_package_facts_cache(
+                &model_id,
+                selected_artifact_id,
+                pumas_library::index::ModelPackageFactsCacheScope::Summary,
+            )
+            .unwrap()
+            .expect("warm owner summary must have a durable cache row");
+        let metadata_path = model_root.join(&model_id).join("metadata.json");
+        let metadata_before = std::fs::read_to_string(&metadata_path).unwrap();
         let warm_client_summary = access
             .resolve_model_package_facts_summary(&model_id)
             .await
             .expect("client should observe the same warm summary");
+        let cache_after = index
+            .get_model_package_facts_cache(
+                &model_id,
+                selected_artifact_id,
+                pumas_library::index::ModelPackageFactsCacheScope::Summary,
+            )
+            .unwrap();
+        let metadata_after = std::fs::read_to_string(&metadata_path).unwrap();
         assert_eq!(
             serde_json::to_value(warm_client_summary).unwrap(),
-            serde_json::to_value(warm_summary).unwrap()
+            serde_json::to_value(warm_summary).unwrap(),
+            "warm IPC must preserve freshness; cache before={cache_before:?}, \
+             cache after={cache_after:?}, metadata before={metadata_before}, \
+             metadata after={metadata_after}"
         );
+        assert_eq!(cache_after.as_ref(), Some(&cache_before));
+        assert_eq!(metadata_after, metadata_before);
     }
 
     #[tokio::test]
