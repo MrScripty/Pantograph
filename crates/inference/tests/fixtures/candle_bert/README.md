@@ -35,3 +35,20 @@ absent directory and an empty one. This follows the maintained
 These tests qualify numerical execution and the supported declared recipe.
 They do not qualify semantic retrieval quality, pretrained model admission,
 live Pumas artifact handoff, GPU execution, or a GUI/model workflow.
+
+The exact `sentence_transformers.models.Pooling` class has a defined inclusion
+default. The pinned MiniLM [exporter metadata](https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/raw/1110a243fdf4706b3f48f1d95db1a4f5529b4d41/config_sentence_transformers.json)
+declares Sentence Transformers 2.0.0. Its [original Pooling implementation](https://raw.githubusercontent.com/UKPLab/sentence-transformers/3ddd7a76257a2611d48a7f6ceba6e3906b520eb1/sentence_transformers/models/Pooling.py)
+has no prompt-exclusion parameter, saves no `include_prompt` field and pools
+every token enabled by the supplied attention mask. The later [2.6.0 class](https://raw.githubusercontent.com/UKPLab/sentence-transformers/a5f774998eaae056e0cbe42dc1d587a636115c3d/sentence_transformers/models/Pooling.py)
+loads configuration with `Pooling(**config)` and defaults `include_prompt` to
+true; explicit false can mask a prompt prefix when prompt length is supplied.
+Prompt-prefix exclusion is distinct from excluding BERT special tokens.
+
+Only omission receives that class default in the existing admitted BERT recipe.
+Tests load unchanged explicit-true fixtures, remove the field in temporary
+copies and compare real Candle forwards exactly for both widths, against the
+existing independent reference vectors. Explicit false, null and malformed
+values are rejected without replacing the resident model. Other recipe,
+tokenizer, dtype, identity and architecture gates remain unchanged. These
+sources establish this field's semantics, not complete MiniLM admission.

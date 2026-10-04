@@ -169,9 +169,14 @@ impl EmbeddingModel {
             &mut inputs,
         )?)
         .map_err(invalid)?;
+        // This exact Pooling class includes all attention-masked tokens in v2.0.0;
+        // v2.6.0 loads omitted include_prompt as true. Pinned source provenance:
+        // tests/fixtures/candle_bert/README.md. Explicit non-true values stay rejected.
         if pooling["word_embedding_dimension"].as_u64() != Some(config.hidden_size as u64)
             || pooling["pooling_mode_mean_tokens"] != true
-            || pooling["include_prompt"] != true
+            || pooling
+                .get("include_prompt")
+                .is_some_and(|value| value != true)
             || pooling.as_object().is_none_or(|fields| {
                 fields.iter().any(|(key, value)| {
                     key.starts_with("pooling_mode_")
@@ -560,6 +565,86 @@ mod tests {
             }
             backend.stop().await.unwrap();
             assert!(!backend.is_ready());
+        }
+    }
+
+    #[tokio::test]
+    async fn include_prompt_default_matches_true_and_rejects_false_without_replacement() {
+        for width in [8, 12] {
+            let (directory, request, target, decision) =
+                crate::selected_embedding_execution::fixture(width);
+            let path = directory.path().join("1_Pooling/config.json");
+            let mut pooling: Value =
+                serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+            assert_eq!(pooling["include_prompt"], true);
+            let golden: Value = serde_json::from_slice(
+                &std::fs::read(directory.path().join("golden.json")).unwrap(),
+            )
+            .unwrap();
+            let texts: Vec<String> = serde_json::from_value(golden["texts"].clone()).unwrap();
+            let mut backend = super::super::candle::CandleBackend::new();
+            backend
+                .load_selected_embedding(&request, &target, &decision)
+                .await
+                .expect("explicit include_prompt=true should load");
+            let explicit = backend.embeddings(texts.clone(), "").await.unwrap();
+
+            pooling.as_object_mut().unwrap().remove("include_prompt");
+            std::fs::write(&path, serde_json::to_vec(&pooling).unwrap()).unwrap();
+            backend
+                .load_selected_embedding(&request, &target, &decision)
+                .await
+                .expect("omitted include_prompt should use the defined inclusion default");
+            let defaulted = backend.embeddings(texts.clone(), "").await.unwrap();
+            assert_eq!(defaulted.len(), explicit.len());
+            let mut max_error = 0.0_f32;
+            for (index, (actual, expected)) in defaulted.iter().zip(&explicit).enumerate() {
+                assert_eq!(actual.vector, expected.vector);
+                assert_eq!(actual.vector.len(), width);
+                assert_eq!(actual.token_count, expected.token_count);
+                assert_eq!(actual.token_count, if index == 1 { 3 } else { 4 });
+                let norm = actual
+                    .vector
+                    .iter()
+                    .map(|value| value * value)
+                    .sum::<f32>()
+                    .sqrt();
+                assert!((norm - 1.0).abs() < 1e-5);
+                for (column, value) in actual.vector.iter().enumerate() {
+                    assert!(value.is_finite());
+                    let reference = golden["batch_vectors"][index][column].as_f64().unwrap() as f32;
+                    max_error = max_error.max((value - reference).abs());
+                    assert!((value - reference).abs() <= 1e-5 + 1e-4 * reference.abs());
+                }
+            }
+            println!("actual Candle BERT width={width}: absent=true, max_abs_reference_error={max_error:e}");
+
+            for rejected in [
+                serde_json::json!(false),
+                Value::Null,
+                serde_json::json!("true"),
+                serde_json::json!(1),
+                serde_json::json!({}),
+            ] {
+                pooling["include_prompt"] = rejected.clone();
+                std::fs::write(&path, serde_json::to_vec(&pooling).unwrap()).unwrap();
+                assert!(
+                    matches!(
+                        backend
+                            .load_selected_embedding(&request, &target, &decision)
+                            .await,
+                        Err(BackendError::Config(_))
+                    ),
+                    "unsupported include_prompt={rejected} must be rejected"
+                );
+                assert!(backend.is_ready());
+                let retained = backend.embeddings(texts.clone(), "").await.unwrap();
+                for (actual, expected) in retained.iter().zip(&explicit) {
+                    assert_eq!(actual.vector, expected.vector);
+                    assert_eq!(actual.token_count, expected.token_count);
+                }
+            }
+            backend.stop().await.unwrap();
         }
     }
 
