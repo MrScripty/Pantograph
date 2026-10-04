@@ -582,6 +582,7 @@ fn load_target_diagnostic_code(
 ) -> SchedulerDispatchSelectionDiagnosticCode {
     match code {
         RuntimeDispatchLoadTargetFactsDiagnosticCode::ReadyResponseMissingTarget
+        | RuntimeDispatchLoadTargetFactsDiagnosticCode::SelectedIdentityMismatch
         | RuntimeDispatchLoadTargetFactsDiagnosticCode::EmptyLoadTargetPath => {
             SchedulerDispatchSelectionDiagnosticCode::InvalidCandidateEvidence
         }
@@ -618,6 +619,9 @@ fn load_target_diagnostic_hint(code: RuntimeDispatchLoadTargetFactsDiagnosticCod
         }
         RuntimeDispatchLoadTargetFactsDiagnosticCode::EmptyLoadTargetPath => {
             "embedded_runtime_dispatch_candidate_provider.load_target.empty_load_target_path"
+        }
+        RuntimeDispatchLoadTargetFactsDiagnosticCode::SelectedIdentityMismatch => {
+            "embedded_runtime_dispatch_candidate_provider.load_target.selected_identity_mismatch"
         }
         RuntimeDispatchLoadTargetFactsDiagnosticCode::PathFactsStripped => {
             "embedded_runtime_dispatch_candidate_provider.load_target.path_facts_stripped"
