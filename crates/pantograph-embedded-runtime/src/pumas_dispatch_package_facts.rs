@@ -332,7 +332,7 @@ mod tests {
         write_test_diffusers_bundle(&model_dir);
         write_imported_diffusion_metadata(&model_dir, model_id, &model_dir);
         let api = Arc::new(
-            pumas_library::PumasApi::builder(temp_dir.path())
+            crate::pumas_test_support::builder(temp_dir.path())
                 .with_hf_client(false)
                 .with_process_manager(false)
                 .build()
@@ -400,7 +400,7 @@ mod tests {
         write_test_diffusers_bundle(&model_dir);
         write_imported_diffusion_metadata(&model_dir, model_id, &model_dir);
         let api = Arc::new(
-            pumas_library::PumasApi::builder(temp_dir.path())
+            crate::pumas_test_support::builder(temp_dir.path())
                 .with_hf_client(false)
                 .with_process_manager(false)
                 .build()
@@ -490,7 +490,7 @@ mod tests {
     #[tokio::test]
     async fn read_only_selector_access_does_not_promote_summaries() {
         let temp_dir = create_test_env();
-        let api = pumas_library::PumasApi::builder(temp_dir.path())
+        let api = crate::pumas_test_support::builder(temp_dir.path())
             .with_hf_client(false)
             .with_process_manager(false)
             .build()
