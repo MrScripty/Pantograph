@@ -772,7 +772,7 @@ mod tests {
     async fn builds_resource_backed_hosted_workflow_service_before_sharing() {
         let temp_dir = tempfile::tempdir().expect("tempdir");
         let pumas_api = Arc::new(
-            pumas_library::PumasApi::builder(temp_dir.path())
+            crate::pumas_test_support::builder(temp_dir.path())
                 .with_hf_client(false)
                 .with_process_manager(false)
                 .build()
@@ -808,7 +808,7 @@ mod tests {
         write_test_diffusers_bundle(&model_dir);
         write_imported_diffusion_metadata(&model_dir, model_id, &model_dir);
         let pumas_api = Arc::new(
-            pumas_library::PumasApi::builder(temp_dir.path())
+            crate::pumas_test_support::builder(temp_dir.path())
                 .with_hf_client(false)
                 .with_process_manager(false)
                 .build()
@@ -909,7 +909,7 @@ mod tests {
         write_test_diffusers_bundle(&model_dir);
         write_imported_diffusion_metadata(&model_dir, model_id, &model_dir);
         let pumas_api = Arc::new(
-            pumas_library::PumasApi::builder(temp_dir.path())
+            crate::pumas_test_support::builder(temp_dir.path())
                 .with_hf_client(false)
                 .with_process_manager(false)
                 .build()
@@ -1084,7 +1084,7 @@ mod tests {
     async fn hosted_resource_backed_factory_requires_artifact_writer_before_sharing() {
         let temp_dir = tempfile::tempdir().expect("tempdir");
         let pumas_api = Arc::new(
-            pumas_library::PumasApi::builder(temp_dir.path())
+            crate::pumas_test_support::builder(temp_dir.path())
                 .with_hf_client(false)
                 .with_process_manager(false)
                 .build()
@@ -1117,7 +1117,7 @@ mod tests {
     #[tokio::test]
     async fn hosted_resource_backed_factory_rejects_non_owner_pumas_access() {
         let temp_dir = tempfile::tempdir().expect("tempdir");
-        let pumas_api = pumas_library::PumasApi::builder(temp_dir.path())
+        let pumas_api = crate::pumas_test_support::builder(temp_dir.path())
             .with_hf_client(false)
             .with_process_manager(false)
             .build()
@@ -1157,7 +1157,7 @@ mod tests {
     async fn resource_backed_hosted_bundle_returns_service_and_lifecycle_handle() {
         let temp_dir = tempfile::tempdir().expect("tempdir");
         let pumas_api = Arc::new(
-            pumas_library::PumasApi::builder(temp_dir.path())
+            crate::pumas_test_support::builder(temp_dir.path())
                 .with_hf_client(false)
                 .with_process_manager(false)
                 .build()
@@ -1194,7 +1194,7 @@ mod tests {
     async fn resource_backed_hosted_bundle_rejects_invalid_producer_config_before_sharing() {
         let temp_dir = tempfile::tempdir().expect("tempdir");
         let pumas_api = Arc::new(
-            pumas_library::PumasApi::builder(temp_dir.path())
+            crate::pumas_test_support::builder(temp_dir.path())
                 .with_hf_client(false)
                 .with_process_manager(false)
                 .build()
@@ -1283,7 +1283,7 @@ mod tests {
     async fn hosted_startup_composition_returns_service_extensions_and_lifecycle_handle() {
         let temp_dir = tempfile::tempdir().expect("tempdir");
         let pumas_api = Arc::new(
-            pumas_library::PumasApi::builder(temp_dir.path())
+            crate::pumas_test_support::builder(temp_dir.path())
                 .with_hf_client(false)
                 .with_process_manager(false)
                 .build()
@@ -1394,7 +1394,7 @@ mod tests {
     #[tokio::test]
     async fn hosted_startup_composition_rejects_non_owner_pumas_selector_access() {
         let temp_dir = tempfile::tempdir().expect("tempdir");
-        let pumas_api = pumas_library::PumasApi::builder(temp_dir.path())
+        let pumas_api = crate::pumas_test_support::builder(temp_dir.path())
             .with_hf_client(false)
             .with_process_manager(false)
             .build()
@@ -1440,7 +1440,7 @@ mod tests {
     async fn hosted_startup_composition_rejects_service_error_before_starting_sidecar() {
         let temp_dir = tempfile::tempdir().expect("tempdir");
         let pumas_api = Arc::new(
-            pumas_library::PumasApi::builder(temp_dir.path())
+            crate::pumas_test_support::builder(temp_dir.path())
                 .with_hf_client(false)
                 .with_process_manager(false)
                 .build()

@@ -18,7 +18,7 @@ async fn puma_lib_execution_hydrates_model_ref_from_model_id_without_path_output
     write_imported_diffusion_metadata(&model_dir, "diffusion/imported/test-bundle", &bundle_root);
 
     let api = Arc::new(
-        pumas_library::PumasApi::builder(temp_dir.path())
+        crate::pumas_test_support::builder(temp_dir.path())
             .build()
             .await
             .expect("pumas api should initialize"),
@@ -157,7 +157,7 @@ async fn puma_lib_execution_does_not_rebind_model_id_from_raw_pumas_api() {
     write_imported_diffusion_metadata(&model_dir, model_id, &bundle_root);
 
     let api = Arc::new(
-        pumas_library::PumasApi::builder(temp_dir.path())
+        crate::pumas_test_support::builder(temp_dir.path())
             .build()
             .await
             .expect("pumas api should initialize"),
@@ -227,7 +227,7 @@ async fn puma_lib_execution_hydrates_model_ref_from_selector_access_without_puma
         .join(model_id);
     write_imported_diffusion_metadata(&model_dir, model_id, &bundle_root);
 
-    let api = pumas_library::PumasApi::builder(temp_dir.path())
+    let api = crate::pumas_test_support::builder(temp_dir.path())
         .build()
         .await
         .expect("pumas api should initialize");
@@ -310,7 +310,7 @@ async fn puma_lib_execution_does_not_emit_inference_settings_from_saved_or_selec
     write_imported_diffusion_metadata(&model_dir, model_id, &bundle_root);
 
     let api = Arc::new(
-        pumas_library::PumasApi::builder(temp_dir.path())
+        crate::pumas_test_support::builder(temp_dir.path())
             .build()
             .await
             .expect("pumas api should initialize"),
@@ -373,7 +373,7 @@ async fn puma_lib_execution_does_not_resolve_saved_model_name_without_model_id()
     write_imported_diffusion_metadata(&model_dir, model_id, &bundle_root);
 
     let api = Arc::new(
-        pumas_library::PumasApi::builder(temp_dir.path())
+        crate::pumas_test_support::builder(temp_dir.path())
             .build()
             .await
             .expect("pumas api should initialize"),

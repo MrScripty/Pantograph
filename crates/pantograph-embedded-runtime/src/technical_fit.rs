@@ -2884,7 +2884,7 @@ mod tests {
         let temp_dir = tempfile::tempdir().expect("temp dir");
         let model_id = "llm/test/live-technical-fit-facts";
         let api = Arc::new(
-            pumas_library::PumasApi::builder(temp_dir.path())
+            crate::pumas_test_support::builder(temp_dir.path())
                 .with_hf_client(false)
                 .with_process_manager(false)
                 .build()
@@ -2960,7 +2960,7 @@ mod tests {
         let temp_dir = tempfile::tempdir().expect("temp dir");
         std::fs::create_dir_all(temp_dir.path().join("shared-resources/models"))
             .expect("models dir");
-        let api = pumas_library::PumasApi::builder(temp_dir.path())
+        let api = crate::pumas_test_support::builder(temp_dir.path())
             .with_hf_client(false)
             .with_process_manager(false)
             .build()

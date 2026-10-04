@@ -68,7 +68,7 @@
   import { resolveWorkflowReconnectResultDecision, resolveWorkflowReconnectStartDecision } from '../workflowGraphReconnect.js';
   import { resolveWorkflowDragCursorUpdate } from '../workflowDragCursor.js';
   import { resolveWorkflowGraphInteractionState } from '../workflowGraphInteraction.js';
-  import { registerWorkflowGraphWindowListeners } from '../workflowGraphWindowListeners.js';
+  import { createWorkflowGraphMount } from '../workflowGraphWindowListeners.js';
   import { resolveWorkflowHorseshoeBlockedReasonLog } from '../workflowHorseshoeTrace.js';
   import {
     resolveWorkflowGroupZoomTarget,
@@ -211,17 +211,20 @@
     }
   });
 
-  onMount(async () => {
-    const removeWindowListeners = registerWorkflowGraphWindowListeners(window, {
+  onMount(() => {
+    const scope = createWorkflowGraphMount(window, {
       onKeyDown: handleWindowKeyDown,
       onPaletteDragEnd: handleWorkflowPaletteDragEnd,
       onPaletteDragStart: handleWorkflowPaletteDragStart,
+    }, {
+      loadNodeDefinitions: () => backend.getNodeDefinitions(),
+      applyNodeDefinitions: (definitions) => nodeDefsStore.set(definitions),
+      onFailure: (error) => {
+        console.error('[WorkflowGraph] Failed to load node definitions:', error);
+      },
     });
 
-    const definitions = await backend.getNodeDefinitions();
-    nodeDefsStore.set(definitions);
-
-    return removeWindowListeners;
+    return scope.stop;
   });
 
   onDestroy(() => {

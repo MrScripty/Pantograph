@@ -61,6 +61,8 @@ mod node_io_artifacts;
 pub mod package_readiness_provider;
 #[allow(dead_code)]
 mod pumas_dispatch_package_facts;
+#[cfg(test)]
+mod pumas_test_support;
 pub mod python_package_readiness_probe;
 pub mod python_runtime;
 mod python_runtime_env_resolution;

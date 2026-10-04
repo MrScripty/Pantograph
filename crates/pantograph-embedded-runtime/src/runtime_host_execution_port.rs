@@ -2045,7 +2045,7 @@ mod tests {
         let pumas_root = temp.path().join("pumas");
         std::fs::create_dir_all(&pumas_root).expect("pumas launcher root");
         let pumas_api = Arc::new(
-            pumas_library::PumasApi::builder(pumas_root)
+            crate::pumas_test_support::builder(pumas_root)
                 .with_hf_client(false)
                 .with_process_manager(false)
                 .build()
