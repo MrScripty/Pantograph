@@ -222,10 +222,12 @@ mod tests {
         let mut response: RuntimeHostExecutionResponse = serde_json::from_str(include_str!(
             "../../../pantograph-runtime-host-contracts/tests/fixtures/runtime_host_execution_response_completed_outputs.json"
         )).unwrap();
-        response.workflow_id = "workflow-output-projection".into();
-        response.workflow_run_id = "run-output-projection".into();
-        response.node_id = "out".into();
-        response.task_id = "out".into();
+        response.workflow_id =
+            SchedulerWorkflowId::parse("workflow-output-projection").expect("workflow id");
+        response.workflow_run_id =
+            SchedulerWorkflowRunId::parse("run-output-projection").expect("run id");
+        response.node_id = SchedulerNodeId::parse("out").expect("node id");
+        response.task_id = SchedulerTaskId::parse("out").expect("task id");
         let vector = json!([0.25, -0.5, 0.75]);
         response.outputs = vec![RuntimeHostExecutionOutput {
             port_id: "embedding".into(),
