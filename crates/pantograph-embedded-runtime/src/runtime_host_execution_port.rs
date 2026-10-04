@@ -2238,9 +2238,12 @@ mod tests {
             .expect("fixture has dispatch decision")
             .runtime_trait_settings
             .clear();
+        let pumas_access = Arc::new(workflow_nodes::setup::PumasSelectorAccess::Owner(pumas_api));
         let port = EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
-            Arc::new(RuntimeHostPumasLoadTargetResolver::new(pumas_api.clone())),
-            Arc::new(RuntimeHostPumasPackageFactsResolver::new(pumas_api)),
+            Arc::new(RuntimeHostPumasLoadTargetResolver::new(
+                pumas_access.clone(),
+            )),
+            Arc::new(RuntimeHostPumasPackageFactsResolver::new(pumas_access)),
             Arc::new(WorkflowServiceRuntimeHostMediaArtifactSink::new(
                 artifact_writer,
             )),
@@ -2608,6 +2611,7 @@ mod tests {
         selected_artifact_id: &str,
     ) {
         request.handoff.task_intent.model_ref.model_id = model_id.to_string();
+        request.handoff.task_intent.model_ref.revision = None;
         request.handoff.task_intent.model_ref.selected_artifact_id =
             Some(selected_artifact_id.to_string());
         request.handoff.task_intent.model_ref.selected_artifact_path = None;
@@ -2619,6 +2623,7 @@ mod tests {
             .model_ref = request.handoff.task_intent.model_ref.clone();
         if let Some(dispatch_decision) = request.handoff.dispatch_decision.as_mut() {
             dispatch_decision.task_intent.model_ref.model_id = model_id.to_string();
+            dispatch_decision.task_intent.model_ref.revision = None;
             dispatch_decision.task_intent.model_ref.selected_artifact_id =
                 Some(selected_artifact_id.to_string());
             dispatch_decision
@@ -2626,6 +2631,7 @@ mod tests {
                 .model_ref
                 .selected_artifact_path = None;
             dispatch_decision.selected_model_ref.model_id = model_id.to_string();
+            dispatch_decision.selected_model_ref.revision = None;
             dispatch_decision.selected_model_ref.selected_artifact_id =
                 Some(selected_artifact_id.to_string());
             dispatch_decision.selected_model_ref.selected_artifact_path = None;

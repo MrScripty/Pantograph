@@ -133,9 +133,12 @@ async fn workflow_execution_session_dispatches_through_production_embedded_image
         .resolve_model_package_facts(MODEL_ID)
         .await
         .expect("seed package facts");
+    let pumas_access = Arc::new(workflow_nodes::setup::PumasSelectorAccess::Owner(pumas_api));
     let runtime_host_port = Arc::new(EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
-        Arc::new(RuntimeHostPumasLoadTargetResolver::new(pumas_api.clone())),
-        Arc::new(RuntimeHostPumasPackageFactsResolver::new(pumas_api)),
+        Arc::new(RuntimeHostPumasLoadTargetResolver::new(
+            pumas_access.clone(),
+        )),
+        Arc::new(RuntimeHostPumasPackageFactsResolver::new(pumas_access)),
         Arc::new(WorkflowServiceRuntimeHostMediaArtifactSink::new(
             artifact_writer,
         )),
@@ -299,7 +302,7 @@ fn image_runtime_session_graph(model_id: &str, selected_artifact_id: &str) -> Wo
                     "inference_interface_snapshot": image_runtime_inference_interface_snapshot_json(),
                     "pumas_model_ref": {
                         "model_id": model_id,
-                        "revision": "main",
+                        "revision": null,
                         "selected_artifact_id": selected_artifact_id
                     }
                 }),
@@ -380,7 +383,7 @@ fn dependent_text_image_session_graph(
                     "inference_interface_snapshot": text_runtime_inference_interface_snapshot_json(),
                     "pumas_model_ref": {
                         "model_id": text_model_id,
-                        "revision": "main",
+                        "revision": null,
                         "selected_artifact_id": text_selected_artifact_id
                     }
                 }),
@@ -396,7 +399,7 @@ fn dependent_text_image_session_graph(
                     "inference_interface_snapshot": image_runtime_inference_interface_snapshot_json(),
                     "pumas_model_ref": {
                         "model_id": image_model_id,
-                        "revision": "main",
+                        "revision": null,
                         "selected_artifact_id": image_selected_artifact_id
                     }
                 }),
@@ -430,7 +433,7 @@ fn image_runtime_validation_snapshot(
 ) -> WorkflowExecutableValidationSnapshotRecord {
     let model_ref = PumasModelRef {
         model_id: model_id.to_string(),
-        revision: Some("main".to_string()),
+        revision: None,
         selected_artifact_id: Some(selected_artifact_id.to_string()),
         selected_artifact_path: None,
         migration_diagnostics: Vec::new(),
@@ -529,7 +532,7 @@ fn image_runtime_dependency_environment_request(
 ) -> ValidatedDependencyEnvironmentRequest {
     let model_ref = PumasModelRef {
         model_id: model_id.to_string(),
-        revision: Some("main".to_string()),
+        revision: None,
         selected_artifact_id: Some(selected_artifact_id.to_string()),
         selected_artifact_path: None,
         migration_diagnostics: Vec::new(),
@@ -2875,14 +2878,14 @@ impl DependentTextImageFixture {
         let template = snapshot.nodes[0].clone();
         let text_model_ref = PumasModelRef {
             model_id: TEXT_MODEL_ID.to_string(),
-            revision: Some("main".to_string()),
+            revision: None,
             selected_artifact_id: Some(TEXT_ARTIFACT_ID.to_string()),
             selected_artifact_path: None,
             migration_diagnostics: Vec::new(),
         };
         let image_model_ref = PumasModelRef {
             model_id: IMAGE_MODEL_ID.to_string(),
-            revision: Some("main".to_string()),
+            revision: None,
             selected_artifact_id: Some(IMAGE_ARTIFACT_ID.to_string()),
             selected_artifact_path: None,
             migration_diagnostics: Vec::new(),
