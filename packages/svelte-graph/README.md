@@ -33,3 +33,19 @@ become an implicit dependency of a package-local command.
 Implementation lives under `packages/svelte-graph/src/`. Repository-level
 development and verification guidance is in
 [`docs/development.md`](../../docs/development.md).
+
+## Navigation Animation Lifetime
+
+Each view-store instance owns one navigation animation timer. New animated
+navigation supersedes the prior animation; reset and immediate breadcrumb
+navigation cancel it. Superseded/cancelled callers settle their existing
+`Promise<void>` without clearing a newer target or animation state. Navigation
+state still changes immediately, and the current animation clears its transient
+target only when its configured duration finishes. No-op navigation preserves
+the current animation. Store instances keep independent timer ownership.
+
+Automatic view persistence also has one shared subscription/debounce scope per
+store. Each `enablePersistence()` call returns an independent, idempotent release
+handle. Persistence remains active until the last handle is released; final
+release unsubscribes and cancels the pending write. Re-enabling starts a fresh
+scope. The existing storage shape and 500 ms debounce are unchanged.
