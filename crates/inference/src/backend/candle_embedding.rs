@@ -354,6 +354,9 @@ impl EmbeddingModel {
         if self.identity.target != *target || self.identity.plan != *plan {
             return false;
         }
+        let Ok(root) = plan.model_dir.canonicalize() else {
+            return false;
+        };
         // Recheck small recipe/tokenizer bytes and the physical checkpoint
         // identity, without deserializing tensors or rebuilding the BERT model.
         let mut inputs = Vec::new();
@@ -378,7 +381,7 @@ impl EmbeddingModel {
         if path.exists()
             && (path
                 .canonicalize()
-                .map_or(true, |path| !path.starts_with(&plan.model_dir))
+                .map_or(true, |path| !path.starts_with(&root))
                 || std::fs::read_dir(path).map_or(true, |mut entries| entries.next().is_some()))
         {
             return false;
@@ -791,6 +794,72 @@ mod tests {
             Some(false)
         );
         assert!(!Arc::ptr_eq(&before, backend.model.as_ref().unwrap()));
+        backend.stop().await.unwrap();
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn repeated_load_reuses_symlink_and_noncanonical_roots_without_accepting_escape() {
+        let (directory, request, mut target, decision) =
+            crate::selected_embedding_execution::fixture(8);
+        let aliases = tempfile::tempdir().unwrap();
+        let alias = aliases.path().join("selected-model");
+        std::os::unix::fs::symlink(directory.path(), &alias).unwrap();
+        for root in [alias, directory.path().join("2_Normalize/..")] {
+            target.local_load_path = root.to_str().unwrap().into();
+            let mut backend = super::super::candle::CandleBackend::new();
+            assert_eq!(
+                backend
+                    .load_selected_embedding(&request, &target, &decision)
+                    .await
+                    .unwrap()
+                    .runtime_reused,
+                Some(false)
+            );
+            let original = backend.model.clone().unwrap();
+            let baseline = backend.embeddings(vec!["hello".into()], "").await.unwrap();
+            assert_eq!(
+                backend
+                    .load_selected_embedding(&request, &target, &decision)
+                    .await
+                    .unwrap()
+                    .runtime_reused,
+                Some(true)
+            );
+            assert!(Arc::ptr_eq(&original, backend.model.as_ref().unwrap()));
+            assert_eq!(
+                backend.embeddings(vec!["hello".into()], "").await.unwrap()[0].vector,
+                baseline[0].vector
+            );
+            backend.stop().await.unwrap();
+        }
+
+        // Canonical containment still rejects an empty Normalize directory
+        // redirected outside the selected root, preserving the resident model.
+        target.local_load_path = directory.path().to_str().unwrap().into();
+        let mut backend = super::super::candle::CandleBackend::new();
+        backend
+            .load_selected_embedding(&request, &target, &decision)
+            .await
+            .unwrap();
+        let original = backend.model.clone().unwrap();
+        let normalize = directory.path().join("2_Normalize");
+        let outside = tempfile::tempdir().unwrap();
+        std::fs::remove_dir(&normalize).unwrap();
+        std::os::unix::fs::symlink(outside.path(), &normalize).unwrap();
+        assert!(matches!(
+            backend
+                .load_selected_embedding(&request, &target, &decision)
+                .await,
+            Err(BackendError::Config(_))
+        ));
+        assert!(Arc::ptr_eq(&original, backend.model.as_ref().unwrap()));
+        assert_eq!(
+            backend.embeddings(vec!["hello".into()], "").await.unwrap()[0]
+                .vector
+                .len(),
+            8
+        );
         backend.stop().await.unwrap();
     }
 
