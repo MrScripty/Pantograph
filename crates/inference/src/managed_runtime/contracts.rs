@@ -240,7 +240,7 @@ pub enum ManagedRuntimeCommandResolutionError {
         missing_file: String,
     },
     MissingRuntimeVariant {
-        diagnostic: DeviceResolutionDiagnostic,
+        diagnostic: Box<DeviceResolutionDiagnostic>,
         requested_device: Option<String>,
         missing_path: PathBuf,
     },
@@ -293,7 +293,7 @@ impl ManagedRuntimeCommandResolutionError {
             _ => None,
         };
         Self::MissingRuntimeVariant {
-            diagnostic: DeviceResolutionDiagnostic {
+            diagnostic: Box::new(DeviceResolutionDiagnostic {
                 code: DeviceResolutionDiagnosticCode::MissingRuntimeVariant,
                 severity: DeviceResolutionDiagnosticSeverity::Error,
                 message: format!(
@@ -305,7 +305,7 @@ impl ManagedRuntimeCommandResolutionError {
                 device_id: None,
                 runtime_variant_id: Some(runtime_variant_id.clone()),
                 backend_id: Some(backend_id),
-            },
+            }),
             requested_device: None,
             missing_path,
         }
@@ -370,6 +370,27 @@ mod tests {
         );
 
         let encoded = serde_json::to_value(&error).expect("serialize command error");
+        let message = "llama.cpp runtime variant 'llama_cpp.cuda' is selected but server binary is missing at /tmp/runtime/cuda/llama-server";
+        let expected = serde_json::json!({
+            "kind": "missing_runtime_variant",
+            "diagnostic": {
+                "code": "missing_runtime_variant",
+                "severity": "error",
+                "message": message,
+                "device_class": "cuda",
+                "runtime_variant_id": "llama_cpp.cuda",
+                "backend_id": "llama_cpp",
+            },
+            "requested_device": null,
+            "missing_path": "/tmp/runtime/cuda/llama-server",
+        });
+        assert_eq!(encoded, expected);
+        assert_eq!(error.to_string(), message);
+        let round_trip: ManagedRuntimeCommandResolutionError =
+            serde_json::from_value(expected).expect("existing error wire shape");
+        assert_eq!(round_trip, error);
+        assert_eq!(round_trip.to_string(), message);
+        assert!(std::mem::size_of::<ManagedRuntimeCommandResolutionError>() < 128);
 
         assert_eq!(
             encoded["kind"],

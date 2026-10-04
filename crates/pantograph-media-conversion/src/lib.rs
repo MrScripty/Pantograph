@@ -1299,16 +1299,16 @@ where
         }
 
         let command_id = request.target.format_id.as_str().to_string();
-        MediaConversionResult::try_new(
-            request.conversion_id,
-            MediaConversionStatus::Converted,
-            self.converter.target_media_type.clone(),
-            request.target,
+        MediaConversionResult::try_new(MediaConversionResultInput {
+            conversion_id: request.conversion_id,
+            status: MediaConversionStatus::Converted,
+            media_type: self.converter.target_media_type.clone(),
+            target: request.target,
             command_id,
-            output.stdout,
-            vec![self.converter.dependency.clone()],
-            output.stderr_summary,
-        )
+            body: output.stdout,
+            dependencies: vec![self.converter.dependency.clone()],
+            stderr_summary: output.stderr_summary,
+        })
     }
 }
 
@@ -1324,17 +1324,33 @@ pub struct MediaConversionResult {
     pub stderr_summary: Option<String>,
 }
 
+/// Named, unvalidated input to the result constructor.
+///
+/// This preserves the result field representation while making construction explicit.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MediaConversionResultInput {
+    pub conversion_id: MediaConversionId,
+    pub status: MediaConversionStatus,
+    pub media_type: MediaType,
+    pub target: MediaConversionTarget,
+    pub command_id: String,
+    pub body: Vec<u8>,
+    pub dependencies: Vec<MediaConversionDependencyAttribution>,
+    pub stderr_summary: Option<String>,
+}
+
 impl MediaConversionResult {
-    pub fn try_new(
-        conversion_id: MediaConversionId,
-        status: MediaConversionStatus,
-        media_type: MediaType,
-        target: MediaConversionTarget,
-        command_id: String,
-        body: Vec<u8>,
-        dependencies: Vec<MediaConversionDependencyAttribution>,
-        stderr_summary: Option<String>,
-    ) -> Result<Self, MediaConversionError> {
+    pub fn try_new(input: MediaConversionResultInput) -> Result<Self, MediaConversionError> {
+        let MediaConversionResultInput {
+            conversion_id,
+            status,
+            media_type,
+            target,
+            command_id,
+            body,
+            dependencies,
+            stderr_summary,
+        } = input;
         if body.is_empty() {
             return Err(MediaConversionError::MissingField { field: "body" });
         }
@@ -2027,20 +2043,133 @@ mod tests {
                 .to_string(),
         };
 
-        let result = MediaConversionResult::try_new(
-            id("conversion-a"),
-            MediaConversionStatus::Converted,
-            "image/jpeg".parse().expect("media type"),
-            target(),
-            "oiiotool_jpg".to_string(),
-            vec![1, 2, 3],
-            vec![dependency.clone()],
-            Some("bounded stderr".to_string()),
-        )
+        let result = MediaConversionResult::try_new(MediaConversionResultInput {
+            conversion_id: id("conversion-a"),
+            status: MediaConversionStatus::Converted,
+            media_type: "image/jpeg".parse().expect("media type"),
+            target: target(),
+            command_id: "oiiotool_jpg".to_string(),
+            body: vec![1, 2, 3],
+            dependencies: vec![dependency.clone()],
+            stderr_summary: Some("bounded stderr".to_string()),
+        })
         .expect("result");
 
         assert_eq!(result.dependencies, vec![dependency]);
         assert_eq!(result.status, MediaConversionStatus::Converted);
+    }
+
+    fn valid_result_input() -> MediaConversionResultInput {
+        MediaConversionResultInput {
+            conversion_id: id("conversion-a"),
+            status: MediaConversionStatus::Converted,
+            media_type: "image/jpeg".parse().expect("media type"),
+            target: target(),
+            command_id: "oiiotool_jpg".to_string(),
+            body: vec![1, 2, 3],
+            dependencies: vec![MediaConversionDependencyAttribution {
+                dependency_id: ManagedMediaDependencyId::Oiiotool,
+                version: id("2.5.18"),
+                lease_id: id("lease-1"),
+                lease_holder: "lease holder".to_string(),
+            }],
+            stderr_summary: Some("bounded stderr".to_string()),
+        }
+    }
+
+    #[test]
+    fn named_result_input_preserves_all_fields_and_existing_normalization() {
+        let mut input = valid_result_input();
+        input.command_id = "  oiiotool_jpg  ".to_string();
+        input.stderr_summary = Some("  bounded stderr  ".to_string());
+        input.dependencies[0].lease_holder = "  lease holder  ".to_string();
+        let result = MediaConversionResult::try_new(input.clone()).expect("valid named input");
+        assert_eq!(
+            result,
+            MediaConversionResult {
+                conversion_id: input.conversion_id,
+                status: input.status,
+                media_type: input.media_type,
+                target: input.target,
+                command_id: "oiiotool_jpg".to_string(),
+                body: input.body,
+                dependencies: input.dependencies,
+                stderr_summary: input.stderr_summary,
+            }
+        );
+    }
+
+    #[test]
+    fn result_fields_round_trip_through_named_input() {
+        let result = MediaConversionResult::try_new(valid_result_input()).expect("result");
+        let round_trip = MediaConversionResult::try_new(MediaConversionResultInput {
+            conversion_id: result.conversion_id.clone(),
+            status: result.status,
+            media_type: result.media_type.clone(),
+            target: result.target.clone(),
+            command_id: result.command_id.clone(),
+            body: result.body.clone(),
+            dependencies: result.dependencies.clone(),
+            stderr_summary: result.stderr_summary.clone(),
+        })
+        .expect("result round trip");
+        assert_eq!(round_trip, result);
+    }
+
+    #[test]
+    fn named_result_input_preserves_validation_order_and_errors() {
+        let mut input = valid_result_input();
+        input.body.clear();
+        input.command_id = "bad command".to_string();
+        input.stderr_summary = Some("bad\nsummary".to_string());
+        input.dependencies[0].lease_holder = "bad\nlease".to_string();
+        assert_eq!(
+            MediaConversionResult::try_new(input.clone()).expect_err("body first"),
+            MediaConversionError::MissingField { field: "body" }
+        );
+        input.body.push(1);
+        assert_eq!(
+            MediaConversionResult::try_new(input.clone()).expect_err("command second"),
+            MediaConversionError::InvalidIdentifier {
+                field: "command_id"
+            }
+        );
+        input.command_id = "valid".to_string();
+        assert_eq!(
+            MediaConversionResult::try_new(input.clone()).expect_err("stderr third"),
+            MediaConversionError::InvalidText {
+                field: "stderr_summary"
+            }
+        );
+        input.stderr_summary = None;
+        assert_eq!(
+            MediaConversionResult::try_new(input).expect_err("lease last"),
+            MediaConversionError::InvalidText {
+                field: "dependency_lease_holder"
+            }
+        );
+    }
+
+    #[test]
+    fn named_result_input_preserves_text_bounds() {
+        let mut input = valid_result_input();
+        input.stderr_summary = Some("x".repeat(MAX_ERROR_SUMMARY_LEN + 1));
+        assert_eq!(
+            MediaConversionResult::try_new(input.clone()).expect_err("stderr bound"),
+            MediaConversionError::FieldTooLong {
+                field: "stderr_summary",
+                max_len: MAX_ERROR_SUMMARY_LEN
+            }
+        );
+        input.stderr_summary = None;
+        input.dependencies[0].lease_holder = "x".repeat(MAX_LEASE_HOLDER_LEN + 1);
+        assert_eq!(
+            MediaConversionResult::try_new(input).expect_err("lease bound"),
+            MediaConversionError::FieldTooLong {
+                field: "dependency_lease_holder",
+                max_len: MAX_LEASE_HOLDER_LEN
+            }
+        );
     }
 
     #[test]
@@ -2056,16 +2185,16 @@ mod tests {
             MediaConversionError::MissingField { field: "body" }
         ));
 
-        let result_error = MediaConversionResult::try_new(
-            id("conversion-a"),
-            MediaConversionStatus::Converted,
-            "image/jpeg".parse().expect("media type"),
-            target(),
-            "oiiotool_jpg".to_string(),
-            Vec::new(),
-            Vec::new(),
-            None,
-        )
+        let result_error = MediaConversionResult::try_new(MediaConversionResultInput {
+            conversion_id: id("conversion-a"),
+            status: MediaConversionStatus::Converted,
+            media_type: "image/jpeg".parse().expect("media type"),
+            target: target(),
+            command_id: "oiiotool_jpg".to_string(),
+            body: Vec::new(),
+            dependencies: Vec::new(),
+            stderr_summary: None,
+        })
         .expect_err("empty result body");
         assert!(matches!(
             result_error,

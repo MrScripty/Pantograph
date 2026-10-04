@@ -356,56 +356,11 @@ fn normalize_base_url(raw_base_url: String) -> Result<String, FrontendHttpWorkfl
 mod tests {
     use super::*;
     use pantograph_workflow_service::{
-        WorkflowErrorCode, WorkflowExecutionSessionCreateRequest,
-        WorkflowExecutionSessionRunRequest, WorkflowGraphErrorDetails, WorkflowOutputTarget,
-        WorkflowRunRequest, WorkflowRunResponse, WorkflowService, WorkflowServiceError,
+        WorkflowErrorCode, WorkflowGraphErrorDetails, WorkflowOutputTarget, WorkflowServiceError,
     };
-    use std::io::{Read, Write};
+    use std::io::{BufRead, BufReader, Read, Write};
     use std::net::TcpListener;
-    use std::time::{Duration, SystemTime, UNIX_EPOCH};
-
-    #[async_trait::async_trait]
-    trait WorkflowServiceSessionRunExt {
-        async fn workflow_run(
-            &self,
-            host: &FrontendHttpWorkflowHost,
-            request: WorkflowRunRequest,
-        ) -> Result<WorkflowRunResponse, WorkflowServiceError>;
-    }
-
-    #[async_trait::async_trait]
-    impl WorkflowServiceSessionRunExt for WorkflowService {
-        async fn workflow_run(
-            &self,
-            host: &FrontendHttpWorkflowHost,
-            request: WorkflowRunRequest,
-        ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
-            let session = self
-                .create_workflow_execution_session(
-                    host,
-                    WorkflowExecutionSessionCreateRequest {
-                        workflow_id: request.workflow_id,
-                        usage_profile: None,
-                        keep_alive: false,
-                    },
-                )
-                .await?;
-
-            self.run_workflow_execution_session(
-                host,
-                WorkflowExecutionSessionRunRequest {
-                    session_id: session.session_id,
-                    workflow_semantic_version: request.workflow_semantic_version,
-                    inputs: request.inputs,
-                    output_targets: request.output_targets,
-                    override_selection: request.override_selection,
-                    timeout_ms: request.timeout_ms,
-                    priority: None,
-                },
-            )
-            .await
-        }
-    }
+    use std::time::{Duration, Instant};
 
     #[test]
     fn parse_workflow_outputs_payload_rejects_missing_fields() {
@@ -463,71 +418,62 @@ mod tests {
         );
     }
 
-    fn create_temp_workflow_root_with_output(workflow_id: &str) -> std::path::PathBuf {
-        let suffix = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("clock")
-            .as_nanos();
-        let root = std::env::temp_dir().join(format!("pantograph-frontend-http-tests-{suffix}"));
-        let workflows_dir = root.join(".pantograph").join("workflows");
-        std::fs::create_dir_all(&workflows_dir).expect("create workflows dir");
-
-        let workflow_json = serde_json::json!({
-            "version": "1.0",
-            "metadata": {
-                "name": "Output Workflow"
-            },
-            "graph": {
-                "nodes": [
-                    {
-                        "id": "vector-output-1",
-                        "node_type": "vector-output",
-                        "data": {
-                            "definition": {
-                                "category": "output",
-                                "io_binding_origin": "client_session",
-                                "outputs": [
-                                    {
-                                        "id": "vector",
-                                        "data_type": "embedding",
-                                        "required": false,
-                                        "multiple": false
-                                    }
-                                ]
-                            }
-                        },
-                        "position": { "x": 0.0, "y": 0.0 }
-                    }
-                ],
-                "edges": []
-            }
-        });
-
-        let file_path = workflows_dir.join(format!("{}.json", workflow_id));
-        std::fs::write(
-            file_path,
-            serde_json::to_vec(&workflow_json).expect("serialize workflow"),
-        )
-        .expect("write workflow");
-        root
-    }
-
     fn spawn_single_workflow_server(
         status_code: u16,
         body: serde_json::Value,
-    ) -> (String, std::thread::JoinHandle<()>) {
+    ) -> (String, std::thread::JoinHandle<serde_json::Value>) {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
+        listener
+            .set_nonblocking(true)
+            .expect("set nonblocking accept");
         let addr = listener.local_addr().expect("local addr");
         let body_text = body.to_string();
         let reason = if status_code == 200 { "OK" } else { "ERROR" };
 
         let handle = std::thread::spawn(move || {
-            let (mut stream, _) = listener.accept().expect("accept");
+            let deadline = Instant::now() + Duration::from_secs(5);
+            let mut stream = loop {
+                match listener.accept() {
+                    Ok((stream, _)) => break stream,
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        assert!(
+                            Instant::now() < deadline,
+                            "HTTP transport was never called before the test-server deadline"
+                        );
+                        std::thread::sleep(Duration::from_millis(10));
+                    }
+                    Err(error) => panic!("test server accept failed: {error}"),
+                }
+            };
+            stream.set_nonblocking(false).expect("set blocking read");
             stream
                 .set_read_timeout(Some(Duration::from_secs(2)))
                 .expect("set timeout");
-            let mut request_buf = [0_u8; 8192];
-            let _ = stream.read(&mut request_buf);
+            let mut reader = BufReader::new(&stream);
+            let mut line = String::new();
+            reader.read_line(&mut line).expect("read request line");
+            assert_eq!(line, "POST /v1/workflow/run HTTP/1.1\r\n");
+            let mut content_length = None;
+            loop {
+                line.clear();
+                assert!(reader.read_line(&mut line).expect("read request header") > 0);
+                if line == "\r\n" {
+                    break;
+                }
+                if let Some((name, value)) = line.split_once(':') {
+                    if name.eq_ignore_ascii_case("content-length") {
+                        content_length =
+                            Some(value.trim().parse::<usize>().expect("content length"));
+                    }
+                }
+            }
+            let content_length = content_length.expect("JSON request has content length");
+            assert!(content_length <= 8192, "unexpected test request size");
+            let mut request_body = vec![0_u8; content_length];
+            reader
+                .read_exact(&mut request_body)
+                .expect("read complete JSON request");
+            drop(reader);
 
             let response = format!(
                 "HTTP/1.1 {} {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
@@ -539,17 +485,15 @@ mod tests {
             stream
                 .write_all(response.as_bytes())
                 .expect("write response");
+            serde_json::from_slice(&request_body).expect("request body is JSON")
         });
 
         (format!("http://{}", addr), handle)
     }
 
     #[tokio::test]
-    async fn workflow_run_returns_output_not_produced_for_missing_target_output() {
+    async fn transport_preserves_empty_outputs_for_a_requested_target() {
         let workflow_id = "wf-output-not-produced";
-        let workflow_root = create_temp_workflow_root_with_output(workflow_id)
-            .join(".pantograph")
-            .join("workflows");
 
         let payload = serde_json::json!({
             "workflow_run_id": "adapter-run-1",
@@ -561,7 +505,7 @@ mod tests {
         let host = FrontendHttpWorkflowHost::new(
             base_url,
             None,
-            vec![workflow_root],
+            Vec::new(),
             DEFAULT_MAX_INPUT_BINDINGS,
             DEFAULT_MAX_OUTPUT_TARGETS,
             DEFAULT_MAX_VALUE_BYTES,
@@ -569,34 +513,84 @@ mod tests {
         )
         .expect("build frontend host");
 
-        let err = WorkflowService::new()
-            .workflow_run(
-                &host,
-                WorkflowRunRequest {
-                    workflow_id: workflow_id.to_string(),
-                    workflow_semantic_version: "0.1.0".to_string(),
-                    inputs: Vec::new(),
-                    output_targets: Some(vec![WorkflowOutputTarget {
-                        node_id: "vector-output-1".to_string(),
-                        port_id: "vector".to_string(),
-                    }]),
-                    override_selection: None,
-                    timeout_ms: None,
+        let outputs = host
+            .run_workflow(
+                workflow_id,
+                &[],
+                Some(&[WorkflowOutputTarget {
+                    node_id: "vector-output-1".to_string(),
+                    port_id: "vector".to_string(),
+                }]),
+                WorkflowRunOptions {
+                    timeout_ms: Some(2_000),
+                    ..WorkflowRunOptions::default()
                 },
+                WorkflowRunHandle::new(),
             )
             .await
-            .expect_err("missing output should return output_not_produced");
+            .expect("transport preserves a valid empty outputs array");
+
+        let request = server_thread.join().expect("join server");
+        assert_eq!(
+            request,
+            serde_json::json!({
+                "workflow_id": workflow_id,
+                "inputs": [],
+                "output_targets": [{"node_id": "vector-output-1", "port_id": "vector"}],
+            })
+        );
+        assert!(outputs.is_empty());
+    }
+
+    #[tokio::test]
+    async fn transport_maps_output_not_produced_error_envelope() {
+        let workflow_id = "wf-output-not-produced";
+        let payload = serde_json::json!({
+            "code": "output_not_produced",
+            "message": "requested output target 'vector-output-1.vector' was not produced"
+        });
+        let (base_url, server_thread) = spawn_single_workflow_server(422, payload);
+
+        let host = FrontendHttpWorkflowHost::new(
+            base_url,
+            None,
+            Vec::new(),
+            DEFAULT_MAX_INPUT_BINDINGS,
+            DEFAULT_MAX_OUTPUT_TARGETS,
+            DEFAULT_MAX_VALUE_BYTES,
+            DEFAULT_BACKEND_NAME.to_string(),
+        )
+        .expect("build frontend host");
+
+        let err = host
+            .run_workflow(
+                workflow_id,
+                &[],
+                None,
+                WorkflowRunOptions {
+                    timeout_ms: Some(2_000),
+                    ..WorkflowRunOptions::default()
+                },
+                WorkflowRunHandle::new(),
+            )
+            .await
+            .expect_err("422 envelope should map to output_not_produced");
 
         server_thread.join().expect("join server");
-        assert!(matches!(err, WorkflowServiceError::OutputNotProduced(_)));
+        match err {
+            WorkflowServiceError::OutputNotProduced(message) => {
+                assert_eq!(
+                    message,
+                    "requested output target 'vector-output-1.vector' was not produced"
+                );
+            }
+            other => panic!("expected output_not_produced, got {}", other),
+        }
     }
 
     #[tokio::test]
     async fn workflow_run_maps_non_2xx_error_envelope_to_service_error() {
         let workflow_id = "wf-runtime-not-ready";
-        let workflow_root = create_temp_workflow_root_with_output(workflow_id)
-            .join(".pantograph")
-            .join("workflows");
         let payload = serde_json::json!({
             "code": "runtime_not_ready",
             "message": "backend unavailable"
@@ -606,7 +600,7 @@ mod tests {
         let host = FrontendHttpWorkflowHost::new(
             base_url,
             None,
-            vec![workflow_root],
+            Vec::new(),
             DEFAULT_MAX_INPUT_BINDINGS,
             DEFAULT_MAX_OUTPUT_TARGETS,
             DEFAULT_MAX_VALUE_BYTES,
@@ -614,17 +608,16 @@ mod tests {
         )
         .expect("build frontend host");
 
-        let err = WorkflowService::new()
-            .workflow_run(
-                &host,
-                WorkflowRunRequest {
-                    workflow_id: workflow_id.to_string(),
-                    workflow_semantic_version: "0.1.0".to_string(),
-                    inputs: Vec::new(),
-                    output_targets: None,
-                    override_selection: None,
-                    timeout_ms: None,
+        let err = host
+            .run_workflow(
+                workflow_id,
+                &[],
+                None,
+                WorkflowRunOptions {
+                    timeout_ms: Some(2_000),
+                    ..WorkflowRunOptions::default()
                 },
+                WorkflowRunHandle::new(),
             )
             .await
             .expect_err("503 envelope should map to runtime_not_ready");
@@ -641,9 +634,6 @@ mod tests {
     #[tokio::test]
     async fn workflow_run_maps_cancelled_error_envelope_to_service_error() {
         let workflow_id = "wf-cancelled";
-        let workflow_root = create_temp_workflow_root_with_output(workflow_id)
-            .join(".pantograph")
-            .join("workflows");
         let payload = serde_json::json!({
             "code": "cancelled",
             "message": "workflow run cancelled"
@@ -653,7 +643,7 @@ mod tests {
         let host = FrontendHttpWorkflowHost::new(
             base_url,
             None,
-            vec![workflow_root],
+            Vec::new(),
             DEFAULT_MAX_INPUT_BINDINGS,
             DEFAULT_MAX_OUTPUT_TARGETS,
             DEFAULT_MAX_VALUE_BYTES,
@@ -661,17 +651,16 @@ mod tests {
         )
         .expect("build frontend host");
 
-        let err = WorkflowService::new()
-            .workflow_run(
-                &host,
-                WorkflowRunRequest {
-                    workflow_id: workflow_id.to_string(),
-                    workflow_semantic_version: "0.1.0".to_string(),
-                    inputs: Vec::new(),
-                    output_targets: None,
-                    override_selection: None,
-                    timeout_ms: None,
+        let err = host
+            .run_workflow(
+                workflow_id,
+                &[],
+                None,
+                WorkflowRunOptions {
+                    timeout_ms: Some(2_000),
+                    ..WorkflowRunOptions::default()
                 },
+                WorkflowRunHandle::new(),
             )
             .await
             .expect_err("409 cancelled envelope should map to cancelled");
@@ -688,9 +677,6 @@ mod tests {
     #[tokio::test]
     async fn workflow_run_maps_invalid_request_error_envelope_to_service_error() {
         let workflow_id = "wf-invalid-request";
-        let workflow_root = create_temp_workflow_root_with_output(workflow_id)
-            .join(".pantograph")
-            .join("workflows");
         let payload = serde_json::json!({
             "code": "invalid_request",
             "message": "workflow requires interactive input"
@@ -700,7 +686,7 @@ mod tests {
         let host = FrontendHttpWorkflowHost::new(
             base_url,
             None,
-            vec![workflow_root],
+            Vec::new(),
             DEFAULT_MAX_INPUT_BINDINGS,
             DEFAULT_MAX_OUTPUT_TARGETS,
             DEFAULT_MAX_VALUE_BYTES,
@@ -708,17 +694,16 @@ mod tests {
         )
         .expect("build frontend host");
 
-        let err = WorkflowService::new()
-            .workflow_run(
-                &host,
-                WorkflowRunRequest {
-                    workflow_id: workflow_id.to_string(),
-                    workflow_semantic_version: "0.1.0".to_string(),
-                    inputs: Vec::new(),
-                    output_targets: None,
-                    override_selection: None,
-                    timeout_ms: None,
+        let err = host
+            .run_workflow(
+                workflow_id,
+                &[],
+                None,
+                WorkflowRunOptions {
+                    timeout_ms: Some(2_000),
+                    ..WorkflowRunOptions::default()
                 },
+                WorkflowRunHandle::new(),
             )
             .await
             .expect_err("400 invalid_request envelope should map to invalid request");
@@ -735,9 +720,6 @@ mod tests {
     #[tokio::test]
     async fn workflow_run_rejects_non_envelope_non_2xx_error_payload() {
         let workflow_id = "wf-malformed-error";
-        let workflow_root = create_temp_workflow_root_with_output(workflow_id)
-            .join(".pantograph")
-            .join("workflows");
         let payload = serde_json::json!({
             "error": "backend unavailable"
         });
@@ -746,7 +728,7 @@ mod tests {
         let host = FrontendHttpWorkflowHost::new(
             base_url,
             None,
-            vec![workflow_root],
+            Vec::new(),
             DEFAULT_MAX_INPUT_BINDINGS,
             DEFAULT_MAX_OUTPUT_TARGETS,
             DEFAULT_MAX_VALUE_BYTES,
@@ -754,17 +736,16 @@ mod tests {
         )
         .expect("build frontend host");
 
-        let err = WorkflowService::new()
-            .workflow_run(
-                &host,
-                WorkflowRunRequest {
-                    workflow_id: workflow_id.to_string(),
-                    workflow_semantic_version: "0.1.0".to_string(),
-                    inputs: Vec::new(),
-                    output_targets: None,
-                    override_selection: None,
-                    timeout_ms: None,
+        let err = host
+            .run_workflow(
+                workflow_id,
+                &[],
+                None,
+                WorkflowRunOptions {
+                    timeout_ms: Some(2_000),
+                    ..WorkflowRunOptions::default()
                 },
+                WorkflowRunHandle::new(),
             )
             .await
             .expect_err("non-envelope errors must not be silently remapped");

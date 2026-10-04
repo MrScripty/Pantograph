@@ -212,7 +212,6 @@ impl InferenceBackend for LlamaCppBackend {
 
         let runtime_settings = LlamaCppRuntimeSettings::try_from_backend_config(config)?;
         let device_config = runtime_settings.device_config();
-        let context_size = runtime_settings.context_size;
 
         if config.embedding_mode {
             // Start in embedding mode
@@ -289,11 +288,7 @@ impl InferenceBackend for LlamaCppBackend {
             if self.server.matches_inference_runtime(
                 &model_path.to_string_lossy(),
                 mmproj_path.as_deref(),
-                &device_config,
-                context_size,
-                runtime_settings.cpu_threads,
-                runtime_settings.batch_size,
-                runtime_settings.ubatch_size,
+                &runtime_settings,
                 config.port_override,
             ) {
                 return Ok(BackendStartOutcome {
@@ -307,11 +302,7 @@ impl InferenceBackend for LlamaCppBackend {
                     spawner,
                     &model_path.to_string_lossy(),
                     mmproj_path.as_deref(),
-                    &device_config,
-                    context_size,
-                    runtime_settings.cpu_threads,
-                    runtime_settings.batch_size,
-                    runtime_settings.ubatch_size,
+                    &runtime_settings,
                     config.port_override,
                 )
                 .await

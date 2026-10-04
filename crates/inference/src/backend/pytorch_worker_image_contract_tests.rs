@@ -262,7 +262,7 @@ fn test_pytorch_worker_generate_image_request_maps_from_validated_plan() {
         panic!("expected validated image plan");
     };
 
-    let worker_request = PyTorchGenerateImageRequest::from(&plan);
+    let worker_request = PyTorchGenerateImageRequest::from(plan.as_ref());
 
     assert_eq!(
         worker_request.model_ref.model_id,
@@ -292,6 +292,7 @@ fn test_pytorch_worker_generate_image_request_maps_from_validated_plan() {
 
 #[test]
 fn test_python_worker_generate_image_contract_projects_planned_kwargs() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_image_contract_module(py);
         let envelope = include_str!(
@@ -349,6 +350,7 @@ fn test_python_worker_generate_image_contract_projects_planned_kwargs() {
 
 #[test]
 fn test_python_worker_generate_image_batch_contract_projects_member_kwargs() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_image_contract_module(py);
         let envelope = include_str!(
@@ -413,6 +415,7 @@ fn test_python_worker_generate_image_batch_contract_projects_member_kwargs() {
 
 #[test]
 fn test_python_worker_generate_image_contract_rejects_unknown_payload_fields() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_image_contract_module(py);
         let mut envelope: serde_json::Value = serde_json::from_str(include_str!(
@@ -436,6 +439,7 @@ fn test_python_worker_generate_image_contract_rejects_unknown_payload_fields() {
 
 #[test]
 fn test_python_worker_generate_image_contract_requires_rust_selected_device() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_image_contract_module(py);
         let mut envelope: serde_json::Value = serde_json::from_str(include_str!(

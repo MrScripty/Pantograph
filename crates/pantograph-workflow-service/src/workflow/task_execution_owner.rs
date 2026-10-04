@@ -3,7 +3,9 @@ use std::time::Duration;
 use crate::scheduler::WorkflowExecutionSessionDequeuedRun;
 use pantograph_runtime_attribution::WorkflowRunSnapshotRecord;
 
-use super::session_scheduler_runner::WorkflowSchedulerSessionRunner;
+use super::session_scheduler_runner::{
+    WorkflowSchedulerRunContext, WorkflowSchedulerSessionRunner,
+};
 use super::workflow_run_finalization::{
     finalize_admitted_workflow_run, WorkflowRunFinalizationRequest,
 };
@@ -11,6 +13,15 @@ use super::{
     WorkflowExecutionSessionSummary, WorkflowHost, WorkflowPortBinding, WorkflowRunResponse,
     WorkflowSchedulerTaskRunSummary, WorkflowService, WorkflowServiceError,
 };
+
+pub(super) struct WorkflowNonRuntimeExecutionInput<'a> {
+    pub(super) session: &'a WorkflowExecutionSessionSummary,
+    pub(super) run_snapshot: Option<&'a WorkflowRunSnapshotRecord>,
+    pub(super) session_id: &'a str,
+    pub(super) workflow_run_id: &'a str,
+    pub(super) queued_run: &'a WorkflowExecutionSessionDequeuedRun,
+    pub(super) summary: &'a WorkflowSchedulerTaskRunSummary,
+}
 
 pub(super) struct WorkflowTaskExecutionOwner;
 
@@ -26,13 +37,16 @@ impl WorkflowTaskExecutionOwner {
     pub(super) async fn run_non_runtime_to_completion<H: WorkflowHost + ?Sized>(
         service: &WorkflowService,
         host: &H,
-        session: &WorkflowExecutionSessionSummary,
-        run_snapshot: Option<&WorkflowRunSnapshotRecord>,
-        session_id: &str,
-        workflow_run_id: &str,
-        queued_run: &WorkflowExecutionSessionDequeuedRun,
-        summary: &WorkflowSchedulerTaskRunSummary,
+        input: WorkflowNonRuntimeExecutionInput<'_>,
     ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
+        let WorkflowNonRuntimeExecutionInput {
+            session,
+            run_snapshot,
+            session_id,
+            workflow_run_id,
+            queued_run,
+            summary,
+        } = input;
         service.record_run_started_event_if_configured(session, run_snapshot, queued_run)?;
         let run_started_at = std::time::Instant::now();
         let queued_workflow_semantic_version = queued_run.queued.workflow_semantic_version.clone();
@@ -40,13 +54,15 @@ impl WorkflowTaskExecutionOwner {
         let runner = WorkflowSchedulerSessionRunner::new(service);
         let run_future = runner.run_non_runtime_only(
             host,
-            session_id,
-            workflow_run_id,
-            &queued_run.workflow_id,
             &queued_run.queued.inputs,
-            queued_run.queued.output_targets.as_deref(),
-            summary,
-            run_started_at,
+            WorkflowSchedulerRunContext {
+                session_id,
+                workflow_run_id,
+                workflow_id: &queued_run.workflow_id,
+                output_targets: queued_run.queued.output_targets.as_deref(),
+                summary,
+                started_at: run_started_at,
+            },
         );
         let run_result = if let Some(timeout_ms) = queued_run.queued.timeout_ms {
             match tokio::time::timeout(Duration::from_millis(timeout_ms), run_future).await {

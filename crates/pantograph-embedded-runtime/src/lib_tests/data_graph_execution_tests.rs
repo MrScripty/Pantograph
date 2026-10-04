@@ -41,7 +41,7 @@ async fn execute_data_graph_retired_onnx_audio_path_does_not_call_python_sidecar
         .await
         .expect("data graph execution");
 
-    assert!(outputs.get("audio").is_none());
+    assert!(!outputs.contains_key("audio"));
     assert_eq!(
         outputs.get("_graph_id"),
         Some(&serde_json::json!("runtime-onnx-audio-data-graph"))

@@ -100,10 +100,24 @@ impl PyTorchDeviceProbeSnapshot {
     }
 }
 
+/// Owned scalar inputs accepted by the PyTorch text generation entry points.
+/// Worker-specific policy fields remain private to the worker contract.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PyTorchTextGenerationRequest {
+    pub prompt: String,
+    pub system_prompt: Option<String>,
+    pub max_tokens: i64,
+    pub temperature: f64,
+    pub top_p: f64,
+    pub top_k: Option<u32>,
+    pub masked_prompt_json: Option<String>,
+}
+
 /// PyTorch backend using in-process PyO3 embedded Python.
 ///
-/// Loads models via HuggingFace transformers with `trust_remote_code=True`,
-/// supporting standard models, dLLM architectures, and Sherry quantised models.
+/// Loads models via HuggingFace transformers using explicit model-load security
+/// policy; custom remote code is denied by default. Supports standard models,
+/// dLLM architectures, and Sherry quantised models.
 pub struct PyTorchBackend {
     /// Whether the backend has been initialised and is ready
     ready: bool,
@@ -2109,25 +2123,19 @@ impl PyTorchBackend {
     fn generate_text_envelope(
         request_id: impl Into<String>,
         operation: PyTorchWorkerOperation,
-        prompt: String,
-        system_prompt: Option<String>,
-        max_tokens: i64,
-        temperature: f64,
-        top_p: f64,
-        top_k: Option<u32>,
-        masked_prompt_json: Option<String>,
+        request: PyTorchTextGenerationRequest,
     ) -> PyTorchWorkerEnvelope<PyTorchGenerateTextRequest> {
         PyTorchWorkerEnvelope::new(
             request_id,
             operation,
             Self::generate_text_request(
-                prompt,
-                system_prompt,
-                max_tokens,
-                temperature,
-                top_p,
-                top_k,
-                masked_prompt_json,
+                request.prompt,
+                request.system_prompt,
+                request.max_tokens,
+                request.temperature,
+                request.top_p,
+                request.top_k,
+                request.masked_prompt_json,
             ),
         )
     }
@@ -2492,39 +2500,27 @@ impl PyTorchBackend {
         top_p: f64,
         masked_prompt_json: Option<String>,
     ) -> Result<String, BackendError> {
-        self.generate_with_top_k(
+        self.generate_with_top_k(PyTorchTextGenerationRequest {
             prompt,
             system_prompt,
             max_tokens,
             temperature,
             top_p,
-            None,
+            top_k: None,
             masked_prompt_json,
-        )
+        })
         .await
     }
 
     pub async fn generate_with_top_k(
         &self,
-        prompt: String,
-        system_prompt: Option<String>,
-        max_tokens: i64,
-        temperature: f64,
-        top_p: f64,
-        top_k: Option<u32>,
-        masked_prompt_json: Option<String>,
+        request: PyTorchTextGenerationRequest,
     ) -> Result<String, BackendError> {
         let request_id = format!("pytorch-generate-text-{}", Uuid::new_v4().simple());
         let envelope = Self::generate_text_envelope(
             request_id.clone(),
             PyTorchWorkerOperation::GenerateText,
-            prompt,
-            system_prompt,
-            max_tokens,
-            temperature,
-            top_p,
-            top_k,
-            masked_prompt_json,
+            request,
         );
         Self::validate_generate_text_envelope(&envelope)?;
         let envelope_json = serde_json::to_string(&envelope).map_err(|error| {
@@ -2601,39 +2597,27 @@ impl PyTorchBackend {
         top_p: f64,
         masked_prompt_json: Option<String>,
     ) -> Pin<Box<dyn Stream<Item = Result<ChatChunk, BackendError>> + Send>> {
-        self.generate_stream_with_top_k(
+        self.generate_stream_with_top_k(PyTorchTextGenerationRequest {
             prompt,
             system_prompt,
             max_tokens,
             temperature,
             top_p,
-            None,
+            top_k: None,
             masked_prompt_json,
-        )
+        })
     }
 
     pub fn generate_stream_with_top_k(
         &self,
-        prompt: String,
-        system_prompt: Option<String>,
-        max_tokens: i64,
-        temperature: f64,
-        top_p: f64,
-        top_k: Option<u32>,
-        masked_prompt_json: Option<String>,
+        request: PyTorchTextGenerationRequest,
     ) -> Pin<Box<dyn Stream<Item = Result<ChatChunk, BackendError>> + Send>> {
         let (tx, rx) = tokio::sync::mpsc::channel::<Result<ChatChunk, BackendError>>(32);
         let request_id = format!("pytorch-generate-text-stream-{}", Uuid::new_v4().simple());
         let envelope = Self::generate_text_envelope(
             request_id.clone(),
             PyTorchWorkerOperation::GenerateTextStream,
-            prompt,
-            system_prompt,
-            max_tokens,
-            temperature,
-            top_p,
-            top_k,
-            masked_prompt_json,
+            request,
         );
 
         if let Err(error) = Self::validate_generate_text_stream_envelope(&envelope) {
@@ -2887,15 +2871,17 @@ impl InferenceBackend for PyTorchBackend {
             .and_then(|value| value.as_u64())
             .and_then(|value| u32::try_from(value).ok());
 
-        Ok(self.generate_stream_with_top_k(
-            prompt,
-            system_prompt,
-            max_tokens,
-            temperature,
-            top_p,
-            top_k,
-            None,
-        ))
+        Ok(
+            self.generate_stream_with_top_k(PyTorchTextGenerationRequest {
+                prompt,
+                system_prompt,
+                max_tokens,
+                temperature,
+                top_p,
+                top_k,
+                masked_prompt_json: None,
+            }),
+        )
     }
 
     async fn embeddings(
@@ -3116,6 +3102,12 @@ fn extract_system_prompt(request: &serde_json::Value) -> Option<String> {
                 .and_then(message_text_content)
         })
 }
+
+// Python fixtures replace process-global modules and production worker functions.
+// The GIL may be released during imports and worker execution, so hold this lock
+// for each complete fixture lifetime, including asynchronous lifecycle tests.
+#[cfg(test)]
+static PYTHON_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 #[cfg(test)]
 #[path = "pytorch_worker_image_contract_tests.rs"]

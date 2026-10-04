@@ -631,7 +631,7 @@ impl RuntimeHostBatchExecutionPort for EmbeddedRuntimeHostExecutionPort {
             };
             let plan = match inference::plan_image_generation_execution(projection.planning_input())
             {
-                ImageGenerationPlanningOutcome::Planned { plan } => plan,
+                ImageGenerationPlanningOutcome::Planned { plan } => *plan,
                 ImageGenerationPlanningOutcome::Rejected { diagnostics } => {
                     return Ok(rejected_batch_member_response(
                         request,

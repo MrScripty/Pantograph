@@ -35,7 +35,7 @@ struct ResolvedInputAnchor<'a> {
     port: PortDefinition,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct InferenceConnectionSurfaceView<'a> {
     surfaces: &'a [InferenceConnectionSurface],
 }
@@ -50,12 +50,6 @@ impl<'a> InferenceConnectionSurfaceView<'a> {
             surface.status == InferenceConnectionSurfaceStatus::Current
                 && surface.node_id.as_str() == node_id
         })
-    }
-}
-
-impl Default for InferenceConnectionSurfaceView<'_> {
-    fn default() -> Self {
-        Self { surfaces: &[] }
     }
 }
 
@@ -982,5 +976,17 @@ mod tests {
             }],
             derived_graph: None,
         }
+    }
+}
+
+#[cfg(test)]
+mod lint_style_regressions {
+    use super::InferenceConnectionSurfaceView;
+
+    #[test]
+    fn lint_style_default_connection_surface_has_no_current_node() {
+        assert!(InferenceConnectionSurfaceView::default()
+            .current_surface_for("node-a")
+            .is_none());
     }
 }

@@ -631,18 +631,18 @@ impl WorkflowSchedulerTaskOrchestrator {
                 .await?;
             return Err(
                 WorkflowSchedulerTaskOrchestratorError::RuntimeDispatchSelectionNoSelection(
-                    selection,
+                    Box::new(selection),
                 ),
             );
         }
         let handoff = dispatch_selected_handoff_from_selection(selection)?;
-        let dispatch_decision = handoff.dispatch_decision.as_ref().ok_or_else(|| {
+        let dispatch_decision = handoff.dispatch_decision.as_ref().ok_or(
             WorkflowSchedulerTaskOrchestratorError::SchedulerContract(
                 SchedulerContractError::MissingField {
                     field: "dispatch_decision",
                 },
-            )
-        })?;
+            ),
+        )?;
         let reservation_lease_id = dispatch_decision.reservation_lease_id.clone();
         let candidate_id = selected_candidate_id(&selection_request, dispatch_decision);
         Ok(SelectedRuntimeTaskDispatch {
@@ -2115,7 +2115,9 @@ fn dispatch_selected_handoff_from_selection(
 ) -> Result<SchedulerRuntimeHandoff, WorkflowSchedulerTaskOrchestratorError> {
     if selection.state != SchedulerDispatchSelectionState::Selected {
         return Err(
-            WorkflowSchedulerTaskOrchestratorError::RuntimeDispatchSelectionNoSelection(selection),
+            WorkflowSchedulerTaskOrchestratorError::RuntimeDispatchSelectionNoSelection(Box::new(
+                selection,
+            )),
         );
     }
     let Some(dispatch_decision) = selection.dispatch_decision else {
@@ -2718,7 +2720,7 @@ fn initial_task_state(
             }
             if let Some(task_intent) = task.schedulable_intent.clone() {
                 Ok(SchedulerTaskState::WaitingDependencyReadiness {
-                    execution_intent: SchedulerTaskExecutionIntent::Runtime { task_intent },
+                    execution_intent: SchedulerTaskExecutionIntent::runtime(task_intent),
                 })
             } else {
                 Ok(awaiting_inputs_state())
@@ -2812,7 +2814,7 @@ pub(crate) enum WorkflowSchedulerTaskOrchestratorError {
     #[error("runtime-host task input mapping failed")]
     RuntimeHostTaskInputMapping(WorkflowRuntimeHostTaskInputMappingError),
     #[error("scheduler dispatch selection did not select a runtime task")]
-    RuntimeDispatchSelectionNoSelection(SchedulerDispatchSelectionDecision),
+    RuntimeDispatchSelectionNoSelection(Box<SchedulerDispatchSelectionDecision>),
     #[error("reservation lifecycle contract validation failed: {0}")]
     ReservationLifecycleContract(ReservationLifecycleContractError),
     #[error("reservation lifecycle port failed: {0}")]
@@ -3601,7 +3603,7 @@ fn runtime_execution_intent(
             )),
         ));
     };
-    Ok(SchedulerTaskExecutionIntent::Runtime { task_intent })
+    Ok(SchedulerTaskExecutionIntent::runtime(task_intent))
 }
 
 enum MaterializedBindingValue<'a> {

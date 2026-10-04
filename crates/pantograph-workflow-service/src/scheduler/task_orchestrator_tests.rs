@@ -689,6 +689,12 @@ async fn orchestrator_selects_scheduler_dispatch_before_runtime_host_port() {
 async fn orchestrator_does_not_dispatch_runtime_host_when_scheduler_selects_no_candidate() {
     let mut selection_request = dispatch_selection_request_fixture();
     selection_request.candidates.clear();
+    let expected_selection = select_scheduler_dispatch(
+        ValidatedSchedulerDispatchSelectionRequest::try_from(selection_request.clone()).unwrap(),
+    )
+    .unwrap()
+    .into_inner();
+    let expected_json = serde_json::to_value(&expected_selection).unwrap();
     let port = Arc::new(RecordingRuntimeHostPort::with_response(
         runtime_host_response_fixture(),
     ));
@@ -708,12 +714,57 @@ async fn orchestrator_does_not_dispatch_runtime_host_when_scheduler_selects_no_c
         .await
         .expect_err("no-selection diagnostics must stop before runtime host");
 
-    assert!(matches!(
-        error,
-        WorkflowSchedulerTaskOrchestratorError::RuntimeDispatchSelectionNoSelection(selection)
-            if selection.state == SchedulerDispatchSelectionState::NoSelection
-    ));
+    assert_eq!(
+        error.to_string(),
+        "scheduler dispatch selection did not select a runtime task"
+    );
+    let WorkflowSchedulerTaskOrchestratorError::RuntimeDispatchSelectionNoSelection(selection) =
+        error
+    else {
+        panic!("expected retained no-selection decision");
+    };
+    assert_eq!(
+        selection.state,
+        SchedulerDispatchSelectionState::NoSelection
+    );
+    assert_eq!(*selection, expected_selection);
+    assert_eq!(
+        serde_json::to_value(selection.as_ref()).unwrap(),
+        expected_json
+    );
     assert!(port.requests().is_empty());
+}
+
+#[test]
+fn no_selection_handoff_error_preserves_the_complete_decision() {
+    let mut request = dispatch_selection_request_fixture();
+    request.candidates.clear();
+    let decision = select_scheduler_dispatch(
+        ValidatedSchedulerDispatchSelectionRequest::try_from(request).unwrap(),
+    )
+    .unwrap()
+    .into_inner();
+    let expected_json = serde_json::to_value(&decision).unwrap();
+    let error = super::dispatch_selected_handoff_from_selection(decision.clone()).unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        "scheduler dispatch selection did not select a runtime task"
+    );
+    let WorkflowSchedulerTaskOrchestratorError::RuntimeDispatchSelectionNoSelection(retained) =
+        error
+    else {
+        panic!("expected retained no-selection decision");
+    };
+    assert_eq!(*retained, decision);
+    assert_eq!(
+        serde_json::to_value(retained.as_ref()).unwrap(),
+        expected_json
+    );
+}
+
+#[test]
+fn orchestrator_error_does_not_embed_the_large_selection_decision() {
+    assert!(std::mem::size_of::<WorkflowSchedulerTaskOrchestratorError>() <= 128);
 }
 
 #[tokio::test]

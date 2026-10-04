@@ -135,7 +135,7 @@ mod tests {
 
     #[test]
     fn unsupported_resource_monitor_returns_typed_unavailable_observation() {
-        let monitor = unsupported::UnsupportedRuntimeResourceMonitor::default();
+        let monitor = unsupported::UnsupportedRuntimeResourceMonitor;
         let guard = monitor
             .start_process_monitor(std::process::id())
             .expect("unsupported monitor starts");

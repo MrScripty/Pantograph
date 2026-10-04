@@ -44,7 +44,7 @@ fn ready_inference_projection(
     estimate_hints: Vec<SchedulerEstimateHint>,
 ) -> WorkflowSchedulerInferenceTaskProjections {
     WorkflowSchedulerInferenceTaskProjections::from_records(vec![
-        WorkflowSchedulerInferenceTaskProjection::Ready(
+        WorkflowSchedulerInferenceTaskProjection::Ready(Box::new(
             WorkflowSchedulerReadyInferenceTaskProjection {
                 node_id: SchedulerNodeId::parse("infer").expect("node id"),
                 descriptor_fingerprint: InferenceInterfaceFingerprint::parse("iface.test.v1")
@@ -71,7 +71,7 @@ fn ready_inference_projection(
                 estimate_hints,
                 dependency_readiness_source: dependency_readiness_source("iface.test.v1"),
             },
-        ),
+        )),
     ])
     .expect("projection")
 }
@@ -201,6 +201,26 @@ fn graph_with_inline_inference_ref() -> WorkflowGraph {
 }
 
 #[test]
+fn ready_projection_preserves_owned_raw_record_and_compact_layout() {
+    let projections = inference_projection();
+    let projection = projections
+        .get(&SchedulerNodeId::parse("infer").unwrap())
+        .unwrap();
+    let WorkflowSchedulerInferenceTaskProjection::Ready(borrowed) = projection else {
+        panic!("expected ready projection");
+    };
+    let WorkflowSchedulerInferenceTaskProjection::Ready(owned) = projection.clone() else {
+        panic!("expected cloned ready projection");
+    };
+    let raw: WorkflowSchedulerReadyInferenceTaskProjection = *owned;
+    assert_eq!(&raw, borrowed.as_ref());
+    assert!(
+        std::mem::size_of::<WorkflowSchedulerInferenceTaskProjection>()
+            < std::mem::size_of::<WorkflowSchedulerReadyInferenceTaskProjection>()
+    );
+}
+
+#[test]
 fn scheduler_task_graph_projects_path_free_inference_intent() {
     let graph = workflow_scheduler_task_graph_with_inference_projections(
         &workflow_id(),
@@ -293,6 +313,32 @@ fn scheduler_task_graph_projects_path_free_inference_intent() {
     assert_eq!(
         intent.trait_settings[0].value,
         SchedulerTraitValue::String("euler_discrete".to_string())
+    );
+
+    let expected_intent = json!({
+        "contract_version": 1,
+        "workflow_id": "workflow-task-graph",
+        "workflow_run_id": "run-task-graph",
+        "node_id": "infer",
+        "task_id": "infer",
+        "task_type": "image_generation",
+        "model_ref": {
+            "model_id": "image/example/tiny-diffusion",
+            "revision": "main",
+            "selected_artifact_id": "diffusers-bundle"
+        },
+        "constraints": { "requested_runtime_id": "pytorch", "requested_device_id": "cuda:0" },
+        "trait_settings": [{ "trait_id": "denoising_scheduler", "value": { "kind": "string", "value": "euler_discrete" } }],
+        "estimate_hints": [
+            { "kind": "peak_ram_bytes", "value": 2_147_483_648_u64 },
+            { "kind": "peak_vram_bytes", "value": 4_294_967_296_u64 }
+        ]
+    });
+    assert_eq!(serde_json::to_value(intent).unwrap(), expected_intent);
+    assert_eq!(
+        serde_json::from_value::<pantograph_scheduler::SchedulableTaskIntent>(expected_intent)
+            .unwrap(),
+        *intent
     );
 
     let encoded = serde_json::to_string(&graph).expect("encode task graph");

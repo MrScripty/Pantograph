@@ -174,6 +174,7 @@ def load_diffusion_model(path, device=None, torch_dtype=None):
 
 #[test]
 fn test_python_worker_generate_image_batch_from_envelope_returns_worker_response() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_module_with_image_stubs(py);
         attach_stub_diffusion_pipeline(&module);
@@ -240,6 +241,7 @@ fn test_python_worker_generate_image_batch_from_envelope_returns_worker_response
 
 #[test]
 fn test_python_worker_generate_image_from_envelope_returns_worker_response() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_module_with_image_stubs(py);
         attach_stub_diffusion_pipeline(&module);
@@ -275,6 +277,7 @@ fn test_python_worker_generate_image_from_envelope_returns_worker_response() {
 
 #[test]
 fn test_python_worker_generate_image_from_envelope_reports_cuda_peak_vram() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_module_with_image_stubs(py);
         attach_stub_diffusion_pipeline(&module);
@@ -334,6 +337,7 @@ worker.torch.cuda = _Cuda()
 
 #[test]
 fn test_python_worker_generate_image_from_envelope_reports_mps_metric_unimplemented() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_module_with_image_stubs(py);
         attach_stub_diffusion_pipeline(&module);
@@ -386,6 +390,7 @@ worker.torch.backends = types.SimpleNamespace(
 
 #[test]
 fn test_python_worker_generate_image_from_envelope_reports_oom_failure() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_module_with_image_stubs(py);
         attach_stub_diffusion_pipeline(&module);
@@ -432,6 +437,7 @@ worker._diffusion_pipeline = _FailingPipeline()
 
 #[test]
 fn test_python_worker_generate_image_from_envelope_rejects_unsupported_denoising_scheduler() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_module_with_image_stubs(py);
         attach_stub_diffusion_pipeline(&module);
@@ -462,6 +468,7 @@ fn test_python_worker_generate_image_from_envelope_rejects_unsupported_denoising
 
 #[test]
 fn test_python_worker_generate_image_from_envelope_rejects_unplanned_fields() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_module_with_image_stubs(py);
         attach_stub_diffusion_pipeline(&module);
@@ -494,6 +501,7 @@ fn test_python_worker_generate_image_from_envelope_rejects_unplanned_fields() {
 
 #[test]
 fn test_python_worker_real_diffusion_loader_enforces_closed_bundle_admission() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_module_with_image_stubs(py);
         let locals = PyDict::new(py);

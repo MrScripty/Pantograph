@@ -922,7 +922,6 @@ pub struct InferenceRequestLifecycleEvent {
 }
 
 impl InferenceRequestLifecycleEvent {
-    #[must_use]
     pub fn builder(
         phase: InferenceLifecyclePhase,
         kind: InferenceRequestLifecycleEventKind,
@@ -950,7 +949,6 @@ pub struct InferenceRequestLifecycleEventContext {
 }
 
 impl InferenceRequestLifecycleEventContext {
-    #[must_use]
     pub fn builder(
         &self,
         phase: InferenceLifecyclePhase,
@@ -980,7 +978,6 @@ pub struct InferenceRequestLifecycleEventBuilder {
 }
 
 impl InferenceRequestLifecycleEventBuilder {
-    #[must_use]
     pub fn new(
         phase: InferenceLifecyclePhase,
         kind: InferenceRequestLifecycleEventKind,
@@ -1015,49 +1012,41 @@ impl InferenceRequestLifecycleEventBuilder {
         }
     }
 
-    #[must_use]
     pub fn with_request_id(mut self, request_id: Option<String>) -> Self {
         self.event.request_id = request_id;
         self
     }
 
-    #[must_use]
     pub fn with_phase(mut self, phase: InferenceLifecyclePhase) -> Self {
         self.event.phase = phase;
         self
     }
 
-    #[must_use]
     pub fn with_kind(mut self, kind: InferenceRequestLifecycleEventKind) -> Self {
         self.event.kind = kind;
         self
     }
 
-    #[must_use]
     pub fn with_occurred_at_ms(mut self, occurred_at_ms: u64) -> Self {
         self.event.occurred_at_ms = occurred_at_ms;
         self
     }
 
-    #[must_use]
     pub fn with_task_id(mut self, task_id: Option<String>) -> Self {
         self.event.task_id = task_id;
         self
     }
 
-    #[must_use]
     pub fn with_backend_key(mut self, backend_key: Option<String>) -> Self {
         self.event.backend_key = backend_key;
         self
     }
 
-    #[must_use]
     pub fn with_runtime_id(mut self, runtime_id: Option<String>) -> Self {
         self.event.runtime_id = runtime_id;
         self
     }
 
-    #[must_use]
     pub fn with_selected_runtime_variant_id(
         mut self,
         selected_runtime_variant_id: Option<String>,
@@ -1066,13 +1055,11 @@ impl InferenceRequestLifecycleEventBuilder {
         self
     }
 
-    #[must_use]
     pub fn with_runtime_instance_id(mut self, runtime_instance_id: Option<String>) -> Self {
         self.event.runtime_instance_id = runtime_instance_id;
         self
     }
 
-    #[must_use]
     pub fn with_selected_device_class(
         mut self,
         selected_device_class: Option<InferenceDeviceClass>,
@@ -1081,7 +1068,6 @@ impl InferenceRequestLifecycleEventBuilder {
         self
     }
 
-    #[must_use]
     pub fn with_selected_device_id(
         mut self,
         selected_device_id: Option<InferenceDeviceId>,
@@ -1090,7 +1076,6 @@ impl InferenceRequestLifecycleEventBuilder {
         self
     }
 
-    #[must_use]
     pub fn with_selected_network_node_id(
         mut self,
         selected_network_node_id: Option<String>,
@@ -1099,37 +1084,31 @@ impl InferenceRequestLifecycleEventBuilder {
         self
     }
 
-    #[must_use]
     pub fn with_model_id(mut self, model_id: Option<String>) -> Self {
         self.event.model_id = model_id;
         self
     }
 
-    #[must_use]
     pub fn with_resolved_artifact_kind(mut self, resolved_artifact_kind: Option<String>) -> Self {
         self.event.resolved_artifact_kind = resolved_artifact_kind;
         self
     }
 
-    #[must_use]
     pub fn with_usage(mut self, usage: Option<InferenceUsage>) -> Self {
         self.event.usage = usage;
         self
     }
 
-    #[must_use]
     pub fn with_cache_handle_id(mut self, cache_handle_id: Option<String>) -> Self {
         self.event.cache_handle_id = cache_handle_id;
         self
     }
 
-    #[must_use]
     pub fn with_artifact_refs(mut self, artifact_refs: Vec<String>) -> Self {
         self.event.artifact_refs = artifact_refs;
         self
     }
 
-    #[must_use]
     pub fn with_resource_observation(
         mut self,
         resource_observation: Option<InferenceExecutionResourceObservation>,
@@ -1138,13 +1117,11 @@ impl InferenceRequestLifecycleEventBuilder {
         self
     }
 
-    #[must_use]
     pub fn with_detail(mut self, detail: Option<String>) -> Self {
         self.event.detail = detail;
         self
     }
 
-    #[must_use]
     pub fn with_canonical_error_event_id(
         mut self,
         canonical_error_event_id: Option<String>,
@@ -1153,7 +1130,6 @@ impl InferenceRequestLifecycleEventBuilder {
         self
     }
 
-    #[must_use]
     pub fn with_compatibility_report(
         mut self,
         compatibility_report: Option<InferenceCompatibilityReportSummary>,
@@ -1162,7 +1138,6 @@ impl InferenceRequestLifecycleEventBuilder {
         self
     }
 
-    #[must_use]
     pub fn with_compatibility_issues(
         mut self,
         compatibility_issues: Vec<InferenceCompatibilityIssueSummary>,
@@ -1171,7 +1146,6 @@ impl InferenceRequestLifecycleEventBuilder {
         self
     }
 
-    #[must_use]
     pub fn with_option_diagnostics(
         mut self,
         option_diagnostics: Vec<OptionCompatibilityDiagnostic>,

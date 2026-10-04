@@ -1,0 +1,7 @@
+# Private orchestrator no-selection error payload
+
+Fresh PR #36 Clippy job 111214475174 clears diagnostics-ledger and reaches workflow-service: 134 library findings, including 89 large-error reports. The private WorkflowSchedulerTaskOrchestratorError embeds a 1,984-byte no-selection decision, versus its next 112-byte variant. Box only RuntimeDispatchSelectionNoSelection at its two constructors. Preserve the error Display text, raw scheduler decision type, complete diagnostics and JSON, borrowed readers, success paths and all Result signatures.
+
+The existing no-candidate integration test now checks complete decision/JSON equality and exact Display while retaining the assertion that no runtime-host request occurs. A direct handoff rejection test covers the other constructor, and a layout bound checks the private error remains at most 128 bytes. Existing successful selection and persisted terminal-diagnostic tests remain, with explicit nonzero discovery and the full orchestrator test module in CI.
+
+This adds one allocation on the no-selection error path without changing public contracts or claiming measured performance. Other style, public layout and arity findings remain separate and require fresh evidence. Root approved the bounded design. Staged whitespace and focused test formatting pass locally; root source review accepted all four files at frozen tree da720da95b3f4f6ac6bafb4cfb552937412d483d; hosted execution remains pending.

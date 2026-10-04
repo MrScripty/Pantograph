@@ -48,8 +48,10 @@ use super::runtime_dispatch_assignment::{
     WorkflowRuntimeDispatchAssignmentRepository,
 };
 use super::session_io_artifacts::workflow_io_artifact_metadata;
-use super::session_scheduler_runner::WorkflowSchedulerSessionRunner;
-use super::task_execution_owner::WorkflowTaskExecutionOwner;
+use super::session_scheduler_runner::{
+    WorkflowSchedulerRunContext, WorkflowSchedulerSessionRunner,
+};
+use super::task_execution_owner::{WorkflowNonRuntimeExecutionInput, WorkflowTaskExecutionOwner};
 use super::task_execution_runtime::WorkflowTaskExecutionRuntimeOwner;
 use super::task_execution_worker::{
     WorkflowTaskExecutionWorkerOutcome, WorkflowTaskExecutionWorkerRuntimeBranchCommand,
@@ -415,12 +417,14 @@ impl WorkflowService {
             return WorkflowTaskExecutionOwner::run_non_runtime_to_completion(
                 self,
                 host,
-                &session,
-                run_snapshot.as_ref(),
-                &session_id,
-                &workflow_run_id,
-                &queued_run,
-                &scheduler_task_run_summary,
+                WorkflowNonRuntimeExecutionInput {
+                    session: &session,
+                    run_snapshot: run_snapshot.as_ref(),
+                    session_id: &session_id,
+                    workflow_run_id: &workflow_run_id,
+                    queued_run: &queued_run,
+                    summary: &scheduler_task_run_summary,
+                },
             )
             .await;
         }
@@ -565,12 +569,14 @@ impl WorkflowService {
             Ok(Some(timeout_ms)) => {
                 let run_future = runner.resume_runtime_dependency_readiness(
                     host,
-                    &session_id,
-                    &workflow_run_id,
-                    &active_run.workflow_id,
-                    active_run.output_targets.as_deref(),
-                    &scheduler_task_run_summary,
-                    started_at,
+                    WorkflowSchedulerRunContext {
+                        session_id: &session_id,
+                        workflow_run_id: &workflow_run_id,
+                        workflow_id: &active_run.workflow_id,
+                        output_targets: active_run.output_targets.as_deref(),
+                        summary: &scheduler_task_run_summary,
+                        started_at,
+                    },
                     attempt_start_transition,
                 );
                 match tokio::time::timeout(Duration::from_millis(timeout_ms), run_future).await {
@@ -585,12 +591,14 @@ impl WorkflowService {
                 runner
                     .resume_runtime_dependency_readiness(
                         host,
-                        &session_id,
-                        &workflow_run_id,
-                        &active_run.workflow_id,
-                        active_run.output_targets.as_deref(),
-                        &scheduler_task_run_summary,
-                        started_at,
+                        WorkflowSchedulerRunContext {
+                            session_id: &session_id,
+                            workflow_run_id: &workflow_run_id,
+                            workflow_id: &active_run.workflow_id,
+                            output_targets: active_run.output_targets.as_deref(),
+                            summary: &scheduler_task_run_summary,
+                            started_at,
+                        },
                         attempt_start_transition,
                     )
                     .await
@@ -777,7 +785,7 @@ impl WorkflowService {
                 },
             )?;
             let projections = snapshot
-                .scheduler_inference_task_projections()
+                .scheduler_inference_task_projections(&graph)
                 .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
             return workflow_scheduler_task_graph_with_inference_projections(
                 &workflow_id,
@@ -1032,7 +1040,6 @@ impl WorkflowService {
             },
         )
         .map(|_| ())
-        .map_err(WorkflowServiceError::from)
     }
 
     fn record_library_model_access_events_if_configured(
@@ -1085,8 +1092,7 @@ impl WorkflowService {
                         },
                     ),
                 },
-            )
-            .map_err(WorkflowServiceError::from)?;
+            )?;
         }
         Ok(())
     }
@@ -1157,7 +1163,6 @@ impl WorkflowService {
             },
         )
         .map(|_| ())
-        .map_err(WorkflowServiceError::from)
     }
 
     fn record_scheduler_queue_placement_event_if_configured(
@@ -1217,7 +1222,6 @@ impl WorkflowService {
             },
         )
         .map(|_| ())
-        .map_err(WorkflowServiceError::from)
     }
 
     pub(super) fn record_run_started_event_if_configured(
@@ -1277,7 +1281,6 @@ impl WorkflowService {
             },
         )
         .map(|_| ())
-        .map_err(WorkflowServiceError::from)
     }
 
     pub(super) fn record_workflow_io_artifact_events_if_configured(
@@ -1350,7 +1353,7 @@ impl WorkflowService {
                     privacy_class: metadata.privacy_class,
                     retention_class: metadata.retention_class,
                     payload_ref: metadata.payload_ref.clone(),
-                    payload: DiagnosticEventPayload::IoArtifactObserved(
+                    payload: DiagnosticEventPayload::IoArtifactObserved(Box::new(
                         IoArtifactObservedPayload {
                             artifact_fact_id: Some(metadata.artifact_fact_id),
                             payload_artifact_id: Some(metadata.payload_artifact_id),
@@ -1389,10 +1392,9 @@ impl WorkflowService {
                             stream_handle: metadata.stream_handle,
                             format: metadata.format,
                         },
-                    ),
+                    )),
                 },
-            )
-            .map_err(WorkflowServiceError::from)?;
+            )?;
         }
         Ok(())
     }
@@ -1481,7 +1483,6 @@ impl WorkflowService {
             },
         )
         .map(|_| ())
-        .map_err(WorkflowServiceError::from)
     }
 }
 
@@ -2643,8 +2644,8 @@ mod tests {
                 node_id: task.node_id.clone(),
                 task_id: task.task_id.clone(),
                 state: SchedulerTaskState::Completed {
-                    execution_intent: SchedulerTaskExecutionIntent::Runtime {
-                        task_intent: pantograph_scheduler::SchedulableTaskIntent {
+                    execution_intent: SchedulerTaskExecutionIntent::runtime(
+                        pantograph_scheduler::SchedulableTaskIntent {
                             contract_version:
                                 pantograph_scheduler::SCHEDULABLE_TASK_INTENT_CONTRACT_VERSION,
                             workflow_id: task.workflow_id.clone(),
@@ -2668,7 +2669,7 @@ mod tests {
                             dependency_override_patches: Vec::new(),
                             estimate_hints: Vec::new(),
                         },
-                    },
+                    ),
                 },
                 state_version: 1,
                 last_transition_id: "transition.completed".parse().expect("transition id"),
@@ -3103,7 +3104,7 @@ mod tests {
             retention_class: DiagnosticEventRetentionClass::AuditMetadata,
             payload_ref: None,
             payload: DiagnosticEventPayload::InferenceExecutionDiagnosticObserved(
-                pantograph_diagnostics_ledger::InferenceExecutionDiagnosticObservedPayload {
+                Box::new(pantograph_diagnostics_ledger::InferenceExecutionDiagnosticObservedPayload {
                     request_id: "req-a".to_string(),
                     task_id: "image_generation".to_string(),
                     lifecycle_phase: Some("backend_execution".to_string()),
@@ -3138,7 +3139,7 @@ mod tests {
                     option_support_counts:
                         pantograph_diagnostics_ledger::InferenceOptionSupportCounts::default(),
                     option_diagnostics: Vec::new(),
-                },
+                }),
             ),
         }
     }

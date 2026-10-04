@@ -49,7 +49,7 @@ async fn puma_lib_execution_hydrates_model_ref_from_model_id_without_path_output
         .expect("puma-lib should resolve selector metadata");
 
     assert!(
-        outputs.get("model_path").is_none(),
+        !outputs.contains_key("model_path"),
         "puma-lib must not emit executable path outputs"
     );
     assert_eq!(
@@ -74,15 +74,15 @@ async fn puma_lib_execution_hydrates_model_ref_from_model_id_without_path_output
         "puma-lib must not hide executable paths inside pumas_model_ref"
     );
     assert!(
-        outputs.get("backend_key").is_none(),
+        !outputs.contains_key("backend_key"),
         "puma-lib must not emit graph-visible backend-key aliases"
     );
     assert!(
-        outputs.get("resolved_model_package_facts").is_none(),
+        !outputs.contains_key("resolved_model_package_facts"),
         "puma-lib must not emit hidden package facts"
     );
     assert!(
-        outputs.get("resolved_model_artifact_load_target").is_none(),
+        !outputs.contains_key("resolved_model_artifact_load_target"),
         "puma-lib must not emit hidden artifact load targets"
     );
 }
@@ -117,7 +117,7 @@ async fn puma_lib_execution_preserves_explicit_model_ref_without_model_path_outp
         .expect("puma-lib should preserve explicit model ref");
 
     assert!(
-        outputs.get("model_path").is_none(),
+        !outputs.contains_key("model_path"),
         "puma-lib must not promote selected artifact paths to executable outputs"
     );
     assert_eq!(
@@ -133,7 +133,7 @@ async fn puma_lib_execution_preserves_explicit_model_ref_without_model_path_outp
         ))
     );
     assert!(
-        outputs.get("backend_key").is_none(),
+        !outputs.contains_key("backend_key"),
         "puma-lib must not emit graph-visible backend-key aliases"
     );
 }
@@ -182,7 +182,7 @@ async fn puma_lib_execution_does_not_rebind_model_id_from_raw_pumas_api() {
         .expect("puma-lib should preserve saved data without selector access");
 
     assert!(
-        outputs.get("model_path").is_none(),
+        !outputs.contains_key("model_path"),
         "raw saved paths must not be emitted as executable outputs"
     );
     assert_eq!(
@@ -196,15 +196,15 @@ async fn puma_lib_execution_does_not_rebind_model_id_from_raw_pumas_api() {
         Some(&serde_json::json!(model_id))
     );
     assert!(
-        outputs.get("backend_key").is_none(),
+        !outputs.contains_key("backend_key"),
         "puma-lib must not emit graph-visible backend-key aliases"
     );
     assert!(
-        outputs.get("resolved_model_package_facts").is_none(),
+        !outputs.contains_key("resolved_model_package_facts"),
         "raw PUMAS_API alone must not rehydrate selected model facts"
     );
     assert!(
-        outputs.get("resolved_model_artifact_load_target").is_none(),
+        !outputs.contains_key("resolved_model_artifact_load_target"),
         "raw PUMAS_API alone must not rehydrate selected artifact load targets"
     );
 }
@@ -260,7 +260,7 @@ async fn puma_lib_execution_hydrates_model_ref_from_selector_access_without_puma
         .expect("puma-lib should resolve selector metadata from selector access");
 
     assert!(
-        outputs.get("model_path").is_none(),
+        !outputs.contains_key("model_path"),
         "puma-lib must not emit executable path outputs"
     );
     assert_eq!(outputs.get("model_id"), Some(&serde_json::json!(model_id)));
@@ -282,11 +282,11 @@ async fn puma_lib_execution_hydrates_model_ref_from_selector_access_without_puma
         "puma-lib must not hide executable paths inside pumas_model_ref"
     );
     assert!(
-        outputs.get("resolved_model_package_facts").is_none(),
+        !outputs.contains_key("resolved_model_package_facts"),
         "read-only selector rows must not be promoted to full package facts"
     );
     assert!(
-        outputs.get("resolved_model_artifact_load_target").is_none(),
+        !outputs.contains_key("resolved_model_artifact_load_target"),
         "read-only selector rows must not be promoted to artifact load targets"
     );
 }
@@ -349,7 +349,7 @@ async fn puma_lib_execution_does_not_emit_inference_settings_from_saved_or_selec
         .expect("puma-lib should resolve selected detail without inference settings");
 
     assert!(
-        outputs.get("inference_settings").is_none(),
+        !outputs.contains_key("inference_settings"),
         "puma-lib must not emit inference settings from saved node data or selected detail"
     );
 }
@@ -396,13 +396,13 @@ async fn puma_lib_execution_does_not_resolve_saved_model_name_without_model_id()
         .expect("puma-lib should execute with saved data only");
 
     assert!(
-        outputs.get("model_path").is_none(),
+        !outputs.contains_key("model_path"),
         "puma-lib must not emit empty path outputs"
     );
-    assert!(outputs.get("model_id").is_none());
-    assert!(outputs.get("model_type").is_none());
-    assert!(outputs.get("task_type_primary").is_none());
-    assert!(outputs.get("resolved_model_package_facts").is_none());
-    assert!(outputs.get("resolved_model_artifact_load_target").is_none());
-    assert!(outputs.get("pumas_model_ref").is_none());
+    assert!(!outputs.contains_key("model_id"));
+    assert!(!outputs.contains_key("model_type"));
+    assert!(!outputs.contains_key("task_type_primary"));
+    assert!(!outputs.contains_key("resolved_model_package_facts"));
+    assert!(!outputs.contains_key("resolved_model_artifact_load_target"));
+    assert!(!outputs.contains_key("pumas_model_ref"));
 }

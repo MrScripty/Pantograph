@@ -616,6 +616,43 @@ No arbitrary file-size target, new crate quota, or mandatory universal abstracti
 
 **Status:** `Active`
 
+### CI-01 — Session Capacity Observability Repair
+
+**Decision (2026-10-02):** Explicit keep-alive creation/enablement owns the
+existing session-count capacity limit, host-selected eviction and affinity.
+Runtime-task dispatch continues to own dependency admission and resource
+reservations; non-runtime runs must not acquire a session runtime. The five
+legacy capacity tests reached the wrong owner after this split. Moving only
+their trigger would lose previously asserted eviction diagnostics and timing:
+`session_runtime.rs` currently receives no diagnostic context from its sole
+keep-alive caller, while that context requires a run that does not exist.
+
+**Admitted repair:** Emit eviction lifecycle facts with genuine target and
+unloaded execution-session identities and optional real run attribution. Extend
+the existing typed diagnostic payloads additively, retaining old payload decoding
+and validation of run-only events. Add a registered session-runtime error scope
+so an unload failure retains its original code/message and reports diagnostic
+unavailability without inventing a workflow run. Preserve host selection,
+rollback, cleanup, event order and a shared timing-attempt identity. Session-only
+facts belong in the ledger; they must not create fabricated run projections.
+
+**Write set:** workflow-service `session_runtime.rs`, `diagnostic_errors.rs`,
+`tests/session_capacity.rs`, `tests/session_capacity_faults.rs`, test module
+registration and focused diagnostic tests if needed; diagnostics
+ledger `event.rs` and `tests.rs`; this plan, its scoped report, and the owning
+`docs/headless-workflow.md` guide. No runtime-task admission, resource reservation,
+non-runtime execution, public run facade, or unrelated baseline repair changes.
+The integrator owns this decision and independent review. Implementation is on
+`fix/session-capacity-observability-2026-10-02`, separate from fixture PR #7.
+
+**Gate:** Direct keep-alive lifecycle tests preserve victim selection, all three
+affinity cases, explicit target cleanup, rollback and original unload failure;
+available and unavailable diagnostics are tested. Ledger tests accept valid
+session-only events, reject missing/blank identity, preserve old run-event
+contracts, and demonstrate no fabricated run projection. The non-runtime no-load
+regression and focused runtime-dispatch tests remain green. Full CI gaps remain
+explicit; independent review precedes integration.
+
 ### M5 — Integrated acceptance and maintainer handoff
 
 **Goal:** One honest, current product and compliance result.
@@ -839,6 +876,41 @@ Subsequent invocations supply this same canonical plan path with the operation
 appropriate to its recorded lifecycle; the next-slice field is not independent
 execution authority. The user has now authorized starting the plan with subagents
 and the bounded implementation pilot.
+
+## UniFFI Validation Publication Bridge (2026-10-03)
+
+Hosted headless qualification now reaches the UniFFI runtime tests. The FFI
+constructor owns an ephemeral attribution store, and execution correctly requires
+an owner-published executable validation snapshot. The embedding API exposes
+edit sessions but omits validation refresh and snapshot publication, so a valid
+text graph cannot currently complete the public create/run flow.
+
+Accepted bounded repair: expose typed EmbeddedRuntime delegates and strict JSON
+UniFFI entrypoints for the existing workflow-service current-validation refresh
+and graph-session snapshot publication methods. Keep graph/proof construction,
+revision checks, descriptor compatibility and dependency-proof freshness at their
+existing owners. A client supplies session/version identifiers, never trusted
+snapshot content. It loads/saves a graph, creates an edit session, refreshes the
+returned graph revision, publishes its current executable validation session,
+then creates/runs an execution session. Reopening the ephemeral FFI runtime
+requires publication again. Missing, stale and unavailable validation still fail
+closed; runtime inference facts and readiness are not fabricated.
+
+Required evidence: actual public JSON text execution; missing/stale/reopened
+runtime rejection; existing error-envelope fidelity; UniFFI metadata and generated
+C# surface checks. Independent read-only review is required before publication.
+Canonical selector fixtures and managed-runtime readiness evidence stay separate.
+
+Independent review found that inference-only snapshots rejected every legitimate
+zero-inference graph and that real C# callers had not been migrated. The accepted
+correction keeps publication mandatory and checks exact canonical inference-node
+coverage at owner publication and executable projection, including imported
+records. Empty coverage is valid only for a graph with no inference nodes. Missing,
+extra and duplicate runtime projections fail closed; per-node proofs and existing
+freshness checks remain. The canonical inference request owner supplies the shared
+classification; unsupported inference-bearing task types remain rejected. Both
+NativeSmoke and the packaged DirectRuntimeQuickstart must perform the real public
+load/edit/refresh/publish lifecycle before execution.
 
 ## Final Acceptance
 

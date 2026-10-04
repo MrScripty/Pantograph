@@ -29,7 +29,7 @@ pub fn load_managed_redistributable_state(
 }
 
 fn load_state_file(path: &Path) -> Result<ManagedRedistributablePersistedState, String> {
-    let contents = fs::read_to_string(&path).map_err(|e| {
+    let contents = fs::read_to_string(path).map_err(|e| {
         format!(
             "Failed to read managed redistributable state {:?}: {}",
             path, e

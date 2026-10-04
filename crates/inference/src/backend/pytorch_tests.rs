@@ -645,6 +645,7 @@ fn test_pytorch_worker_load_envelope_tolerates_additive_fields() {
 
 #[test]
 fn test_python_worker_contract_projects_task_profile_loader() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
         let envelope = serde_json::json!({
@@ -689,6 +690,7 @@ fn test_python_worker_contract_projects_task_profile_loader() {
 
 #[test]
 fn test_python_worker_contract_tolerates_additive_load_fields() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
         let envelope = serde_json::json!({
@@ -748,6 +750,7 @@ fn test_python_worker_contract_tolerates_additive_load_fields() {
 
 #[test]
 fn test_python_worker_contract_rejects_unsupported_task_profile_loader() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
         let envelope = serde_json::json!({
@@ -789,6 +792,7 @@ fn test_python_worker_contract_rejects_unsupported_task_profile_loader() {
 
 #[test]
 fn test_python_worker_contract_rejects_missing_load_entry_path() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
         let envelope = serde_json::json!({
@@ -826,6 +830,7 @@ fn test_python_worker_contract_rejects_missing_load_entry_path() {
 
 #[test]
 fn test_python_worker_load_value_error_after_projection_maps_to_model_load_failed() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_module_with_stubbed_dependencies(py);
         let patch = CString::new(
@@ -882,6 +887,7 @@ module.load_model = fail_load_model
 
 #[test]
 fn test_python_worker_load_unexpected_loader_exception_maps_to_model_load_failed() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_module_with_stubbed_dependencies(py);
         let patch = CString::new(
@@ -938,6 +944,7 @@ module.load_model = fail_load_model
 
 #[test]
 fn test_python_worker_load_invalid_loader_stays_invalid_request() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_module_with_stubbed_dependencies(py);
         let envelope = serde_json::json!({
@@ -1069,6 +1076,7 @@ fn test_pytorch_worker_generate_text_dllm_envelope_decodes_backend_local_control
 
 #[test]
 fn test_python_worker_contract_projects_dllm_generation_controls() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
         let fixture = include_str!(
@@ -1103,6 +1111,7 @@ fn test_python_worker_contract_projects_dllm_generation_controls() {
 
 #[test]
 fn test_python_worker_contract_tolerates_additive_generate_fields() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
         let envelope = serde_json::json!({
@@ -1572,6 +1581,7 @@ fn test_pytorch_worker_truncate_kv_cache_envelope_rejects_empty_path() {
 
 #[test]
 fn test_python_worker_contract_projects_unload_envelope() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
         let fixture =
@@ -1588,6 +1598,7 @@ fn test_python_worker_contract_projects_unload_envelope() {
 
 #[test]
 fn test_python_worker_contract_projects_init_envelope() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
         let fixture =
@@ -1604,6 +1615,7 @@ fn test_python_worker_contract_projects_init_envelope() {
 
 #[test]
 fn test_python_worker_contract_projects_shutdown_envelope() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
         let fixture = include_str!(
@@ -1621,6 +1633,7 @@ fn test_python_worker_contract_projects_shutdown_envelope() {
 
 #[test]
 fn test_python_worker_shutdown_from_envelope_returns_structured_success() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_module_with_stubbed_dependencies(py);
         let fixture = include_str!(
@@ -1645,6 +1658,7 @@ fn test_python_worker_shutdown_from_envelope_returns_structured_success() {
 
 #[test]
 fn test_python_worker_response_helpers_emit_success_contract() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
         let locals = PyDict::new(py);
@@ -1690,6 +1704,7 @@ response_json = worker_contract.worker_success_response_json(
 
 #[test]
 fn test_python_worker_response_helpers_emit_error_contract() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
 
@@ -1727,6 +1742,7 @@ fn test_python_worker_response_helpers_emit_error_contract() {
 
 #[test]
 fn test_python_worker_contract_rejects_invalid_init_envelope() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
         let wrong_operation = serde_json::json!({
@@ -1769,6 +1785,7 @@ fn test_python_worker_contract_rejects_invalid_init_envelope() {
 
 #[test]
 fn test_python_worker_contract_rejects_invalid_shutdown_envelope() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
         let wrong_operation = serde_json::json!({
@@ -1811,6 +1828,7 @@ fn test_python_worker_contract_rejects_invalid_shutdown_envelope() {
 
 #[test]
 fn test_python_worker_contract_projects_get_loaded_info_envelope() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
         let fixture = include_str!(
@@ -1828,6 +1846,7 @@ fn test_python_worker_contract_projects_get_loaded_info_envelope() {
 
 #[test]
 fn test_python_worker_contract_rejects_invalid_get_loaded_info_envelope() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
         let wrong_operation = serde_json::json!({
@@ -1870,6 +1889,7 @@ fn test_python_worker_contract_rejects_invalid_get_loaded_info_envelope() {
 
 #[test]
 fn test_python_worker_contract_projects_clear_kv_cache_envelope() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
         let fixture = include_str!(
@@ -1887,6 +1907,7 @@ fn test_python_worker_contract_projects_clear_kv_cache_envelope() {
 
 #[test]
 fn test_python_worker_contract_rejects_invalid_clear_kv_cache_envelope() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
         let wrong_operation = serde_json::json!({
@@ -1929,6 +1950,7 @@ fn test_python_worker_contract_rejects_invalid_clear_kv_cache_envelope() {
 
 #[test]
 fn test_python_worker_contract_projects_save_kv_cache_envelope() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
         let fixture =
@@ -1951,6 +1973,7 @@ fn test_python_worker_contract_projects_save_kv_cache_envelope() {
 
 #[test]
 fn test_python_worker_contract_rejects_invalid_save_kv_cache_envelope() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
         let wrong_operation = serde_json::json!({
@@ -1993,6 +2016,7 @@ fn test_python_worker_contract_rejects_invalid_save_kv_cache_envelope() {
 
 #[test]
 fn test_python_worker_contract_projects_restore_kv_cache_envelope() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
         let fixture = include_str!(
@@ -2016,6 +2040,7 @@ fn test_python_worker_contract_projects_restore_kv_cache_envelope() {
 
 #[test]
 fn test_python_worker_contract_rejects_invalid_restore_kv_cache_envelope() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
         let wrong_operation = serde_json::json!({
@@ -2058,6 +2083,7 @@ fn test_python_worker_contract_rejects_invalid_restore_kv_cache_envelope() {
 
 #[test]
 fn test_python_worker_contract_projects_truncate_kv_cache_envelope() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
         let fixture = include_str!(
@@ -2089,6 +2115,7 @@ fn test_python_worker_contract_projects_truncate_kv_cache_envelope() {
 
 #[test]
 fn test_python_worker_contract_rejects_invalid_truncate_kv_cache_envelope() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
         let wrong_operation = serde_json::json!({
@@ -2131,6 +2158,7 @@ fn test_python_worker_contract_rejects_invalid_truncate_kv_cache_envelope() {
 
 #[test]
 fn test_python_worker_contract_rejects_invalid_unload_envelope() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
         let wrong_operation = serde_json::json!({
@@ -2254,6 +2282,7 @@ fn test_pytorch_worker_audio_transcription_envelope_tolerates_additive_fields() 
 
 #[test]
 fn test_python_worker_contract_projects_audio_transcription_fields() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
         let fixture = include_str!(
@@ -2309,6 +2338,7 @@ fn test_python_worker_contract_projects_audio_transcription_fields() {
 
 #[test]
 fn test_python_worker_contract_tolerates_additive_audio_transcription_fields() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
         let envelope = serde_json::json!({
@@ -2344,6 +2374,7 @@ fn test_python_worker_contract_tolerates_additive_audio_transcription_fields() {
 
 #[test]
 fn test_python_worker_contract_rejects_audio_transcription_legacy_device() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
         let mut value: serde_json::Value = serde_json::from_str(include_str!(
@@ -2366,6 +2397,7 @@ fn test_python_worker_contract_rejects_audio_transcription_legacy_device() {
 
 #[test]
 fn test_python_worker_contract_rejects_audio_transcription_auto_device_field() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
         let mut value: serde_json::Value = serde_json::from_str(include_str!(
@@ -2650,24 +2682,28 @@ fn test_pytorch_generate_text_envelopes_thread_top_k_for_generate_and_stream() {
     let generate_envelope = PyTorchBackend::generate_text_envelope(
         "req-generate-top-k",
         PyTorchWorkerOperation::GenerateText,
-        "Explain adapters.".to_string(),
-        Some("Be precise.".to_string()),
-        48,
-        0.3,
-        0.9,
-        Some(33),
-        None,
+        PyTorchTextGenerationRequest {
+            prompt: "Explain adapters.".to_string(),
+            system_prompt: Some("Be precise.".to_string()),
+            max_tokens: 48,
+            temperature: 0.3,
+            top_p: 0.9,
+            top_k: Some(33),
+            masked_prompt_json: None,
+        },
     );
     let stream_envelope = PyTorchBackend::generate_text_envelope(
         "req-stream-top-k",
         PyTorchWorkerOperation::GenerateTextStream,
-        "Explain adapters.".to_string(),
-        Some("Be precise.".to_string()),
-        48,
-        0.3,
-        0.9,
-        Some(33),
-        None,
+        PyTorchTextGenerationRequest {
+            prompt: "Explain adapters.".to_string(),
+            system_prompt: Some("Be precise.".to_string()),
+            max_tokens: 48,
+            temperature: 0.3,
+            top_p: 0.9,
+            top_k: Some(33),
+            masked_prompt_json: None,
+        },
     );
 
     PyTorchBackend::validate_generate_text_envelope(&generate_envelope)
@@ -2689,13 +2725,15 @@ fn test_pytorch_generate_text_envelope_rejects_unscoped_transformers_kwargs() {
     let mut generate_envelope = PyTorchBackend::generate_text_envelope(
         "req-generate-raw-kwarg",
         PyTorchWorkerOperation::GenerateText,
-        "Explain adapters.".to_string(),
-        None,
-        48,
-        0.3,
-        0.9,
-        None,
-        None,
+        PyTorchTextGenerationRequest {
+            prompt: "Explain adapters.".to_string(),
+            system_prompt: None,
+            max_tokens: 48,
+            temperature: 0.3,
+            top_p: 0.9,
+            top_k: None,
+            masked_prompt_json: None,
+        },
     );
     generate_envelope
         .payload
@@ -2716,13 +2754,15 @@ fn test_pytorch_generate_text_stream_envelope_rejects_policy_transformers_kwargs
     let mut stream_envelope = PyTorchBackend::generate_text_envelope(
         "req-stream-policy-kwarg",
         PyTorchWorkerOperation::GenerateTextStream,
-        "Explain adapters.".to_string(),
-        None,
-        48,
-        0.3,
-        0.9,
-        None,
-        None,
+        PyTorchTextGenerationRequest {
+            prompt: "Explain adapters.".to_string(),
+            system_prompt: None,
+            max_tokens: 48,
+            temperature: 0.3,
+            top_p: 0.9,
+            top_k: None,
+            masked_prompt_json: None,
+        },
     );
     stream_envelope
         .payload
@@ -2740,6 +2780,7 @@ fn test_pytorch_generate_text_stream_envelope_rejects_policy_transformers_kwargs
 
 #[test]
 fn test_python_worker_contract_rejects_additive_backend_kwargs() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
         let envelope = serde_json::json!({
@@ -3617,6 +3658,7 @@ fn test_pytorch_worker_stream_token_extraction_error_normalizes_to_backend_error
 
 #[test]
 fn test_pytorch_worker_stream_token_accepts_string_chunk() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let token = pyo3::types::PyString::new(py, "hello");
         let chunk =
@@ -3630,6 +3672,7 @@ fn test_pytorch_worker_stream_token_accepts_string_chunk() {
 
 #[test]
 fn test_pytorch_worker_stream_token_accepts_replace_dict_chunk() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let token = pyo3::types::PyDict::new(py);
         token.set_item("mode", "replace").expect("set mode");
@@ -3657,6 +3700,7 @@ fn test_pytorch_worker_stream_token_accepts_replace_dict_chunk() {
 
 #[test]
 fn test_pytorch_worker_stream_token_accepts_usage_only_dict_chunk() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let token = pyo3::types::PyDict::new(py);
         let usage = pyo3::types::PyDict::new(py);
@@ -3682,6 +3726,7 @@ fn test_pytorch_worker_stream_token_accepts_usage_only_dict_chunk() {
 
 #[test]
 fn test_pytorch_worker_stream_token_bounds_usage_counts() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let token = pyo3::types::PyDict::new(py);
         let usage = pyo3::types::PyDict::new(py);
@@ -3707,6 +3752,7 @@ fn test_pytorch_worker_stream_token_bounds_usage_counts() {
 
 #[test]
 fn test_pytorch_worker_stream_token_rejects_dict_without_text_or_usage() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let token = pyo3::types::PyDict::new(py);
         token.set_item("mode", "replace").expect("set mode");
@@ -5897,6 +5943,7 @@ impl TextIteratorBarrier {
 
 #[tokio::test]
 async fn production_text_iterator_drains_before_successful_load_and_unload() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.lock().await;
     use futures_util::{FutureExt, StreamExt};
     for action in ["load", "unload", "stop", "failed_restart", "failed_load"] {
         let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();
@@ -6205,6 +6252,7 @@ impl crate::InferenceExecutionCancellationSignal for SelectedTextCancellation {
 
 #[tokio::test]
 async fn selected_text_production_loader_and_worker_retain_selection_until_termination() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.lock().await;
     use futures_util::FutureExt;
     for mode in ["success", "error", "cancel"] {
         let (_directory, request, target, mut decision) = crate::selected_text_execution::fixture();
@@ -6397,4 +6445,119 @@ fn selected_text_adapter_preserves_text_parts_and_rejects_nontext_parts() {
         {"type": "text", "text": "partial"}, {"type": "image_url", "image_url": {"url": "file:///image"}}
     ]}]});
     assert!(extract_prompt_from_messages(&request).is_err());
+}
+
+fn named_text_request(prompt: &str) -> crate::PyTorchTextGenerationRequest {
+    crate::PyTorchTextGenerationRequest {
+        prompt: prompt.to_string(),
+        system_prompt: Some("Be concise.".to_string()),
+        max_tokens: 64,
+        temperature: 0.2,
+        top_p: 0.95,
+        top_k: Some(40),
+        masked_prompt_json: Some("{\"prompt\":\"masked\"}".to_string()),
+    }
+}
+
+#[test]
+fn pytorch_named_text_request_preserves_exact_worker_envelopes() {
+    for (operation, label) in [
+        (PyTorchWorkerOperation::GenerateText, "generate_text"),
+        (
+            PyTorchWorkerOperation::GenerateTextStream,
+            "generate_text_stream",
+        ),
+    ] {
+        let envelope = PyTorchBackend::generate_text_envelope(
+            "request-named",
+            operation,
+            named_text_request("Explain adapters."),
+        );
+        PyTorchBackend::validate_generate_text_envelope_operation(&envelope, operation)
+            .expect("same worker validation");
+        assert_eq!(
+            serde_json::to_value(&envelope).expect("worker envelope"),
+            serde_json::json!({
+                "contract_version": 1,
+                "request_id": "request-named",
+                "operation": label,
+                "cancellation": { "drop_stream_cancels": false },
+                "payload": {
+                    "prompt": "Explain adapters.",
+                    "system_prompt": "Be concise.",
+                    "max_tokens": 64,
+                    "temperature": 0.2,
+                    "top_p": 0.95,
+                    "masked_prompt_json": "{\"prompt\":\"masked\"}",
+                    "transformers_kwargs": { "top_k": 40 },
+                },
+            })
+        );
+    }
+}
+
+#[tokio::test]
+async fn pytorch_named_text_request_preserves_legacy_validation_paths() {
+    use futures_util::StreamExt;
+    use std::time::Duration;
+
+    let backend = PyTorchBackend::new();
+    let mut request = named_text_request("  ");
+    request.top_k = None;
+    request.masked_prompt_json = None;
+    let legacy = backend
+        .generate(
+            "  ".to_string(),
+            Some("Be concise.".to_string()),
+            64,
+            0.2,
+            0.95,
+            None,
+        )
+        .await
+        .expect_err("blank legacy prompt");
+    let named = backend
+        .generate_with_top_k(request.clone())
+        .await
+        .expect_err("blank named prompt");
+    assert_eq!(legacy.to_string(), named.to_string());
+    assert!(
+        matches!(named, BackendError::Config(ref message) if message == "PyTorch worker generate_text envelope requires a prompt")
+    );
+
+    let mut legacy_stream = backend.generate_stream(
+        "  ".to_string(),
+        Some("Be concise.".to_string()),
+        64,
+        0.2,
+        0.95,
+        None,
+    );
+    let mut named_stream = backend.generate_stream_with_top_k(request);
+    let legacy_error = tokio::time::timeout(Duration::from_secs(2), legacy_stream.next())
+        .await
+        .expect("bounded legacy validation")
+        .expect("legacy error item")
+        .expect_err("legacy validation failure");
+    let named_error = tokio::time::timeout(Duration::from_secs(2), named_stream.next())
+        .await
+        .expect("bounded named validation")
+        .expect("named error item")
+        .expect_err("named validation failure");
+    assert_eq!(legacy_error.to_string(), named_error.to_string());
+    assert!(
+        matches!(named_error, BackendError::Config(ref message) if message == "PyTorch worker generate_text envelope requires a prompt")
+    );
+    assert!(
+        tokio::time::timeout(Duration::from_secs(2), legacy_stream.next())
+            .await
+            .expect("legacy stream closes")
+            .is_none()
+    );
+    assert!(
+        tokio::time::timeout(Duration::from_secs(2), named_stream.next())
+            .await
+            .expect("named stream closes")
+            .is_none()
+    );
 }

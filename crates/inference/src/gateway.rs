@@ -46,9 +46,9 @@ use crate::types::{
     InferenceCompatibilityIssueSummary, InferenceCompatibilityReportSummary,
     InferenceEmbeddingResult, InferenceExecutionInput, InferenceExecutionRequest,
     InferenceExecutionRequestValidationError, InferenceExecutionResult,
-    InferenceRequestLifecycleEvent, InferenceRequestLifecycleEventKind,
-    InferenceRequestLifecycleEventSink, InferenceUsage, RerankRequest, RerankResponse,
-    RuntimeLifecycleSnapshot, ServerModeInfo,
+    InferenceRequestLifecycleEvent, InferenceRequestLifecycleEventContext,
+    InferenceRequestLifecycleEventKind, InferenceRequestLifecycleEventSink, InferenceUsage,
+    RerankRequest, RerankResponse, RuntimeLifecycleSnapshot, ServerModeInfo,
 };
 use crate::{
     BackendExecutionContext, InferenceExecutionCancellationHandle,
@@ -153,6 +153,15 @@ pub struct InferenceGateway {
     runtime_lifecycle: Arc<RwLock<RuntimeLifecycleSnapshot>>,
     /// Monotonic instance counter for runtime instance IDs.
     runtime_instance_sequence: Arc<AtomicU64>,
+}
+
+struct RuntimeWarmupStartContext<'a> {
+    config: &'a BackendConfig,
+    previous_last_inference_config: Option<BackendConfig>,
+    previous_runtime_instance_id: Option<String>,
+    runtime_id: String,
+    warmup_started_at_ms: u64,
+    warmup_timing_attempt_id: pantograph_timing_contracts::WorkflowTimingAttemptId,
 }
 
 fn config_model_target(config: &BackendConfig) -> Option<String> {
@@ -657,12 +666,14 @@ impl InferenceGateway {
         }
 
         self.record_start_result(
-            config,
-            previous_last_inference_config,
-            previous_runtime_instance_id,
-            runtime_id,
-            warmup_started_at_ms,
-            warmup_timing_attempt_id,
+            RuntimeWarmupStartContext {
+                config,
+                previous_last_inference_config,
+                previous_runtime_instance_id,
+                runtime_id,
+                warmup_started_at_ms,
+                warmup_timing_attempt_id,
+            },
             start_result,
         )
         .await
@@ -670,14 +681,17 @@ impl InferenceGateway {
 
     async fn record_start_result(
         &self,
-        config: &BackendConfig,
-        previous_last_inference_config: Option<BackendConfig>,
-        previous_runtime_instance_id: Option<String>,
-        runtime_id: String,
-        warmup_started_at_ms: u64,
-        warmup_timing_attempt_id: pantograph_timing_contracts::WorkflowTimingAttemptId,
+        context: RuntimeWarmupStartContext<'_>,
         start_result: Result<crate::backend::BackendStartOutcome, BackendError>,
     ) -> Result<(), GatewayError> {
+        let RuntimeWarmupStartContext {
+            config,
+            previous_last_inference_config,
+            previous_runtime_instance_id,
+            runtime_id,
+            warmup_started_at_ms,
+            warmup_timing_attempt_id,
+        } = context;
         match start_result {
             Ok(start_outcome) => {
                 let mut current_runtime_config = self.current_runtime_config.write().await;
@@ -1014,14 +1028,17 @@ impl InferenceGateway {
 
         record_inference_lifecycle_event(
             lifecycle_sink.as_ref(),
-            request_id.clone(),
-            task_id.clone(),
-            backend_key.clone(),
-            runtime_id.clone(),
-            runtime_instance_id.clone(),
-            selected_device_class,
-            selected_device_id.clone(),
-            model_id.clone(),
+            InferenceRequestLifecycleEventContext {
+                request_id: request_id.clone(),
+                task_id: task_id.clone(),
+                backend_key: backend_key.clone(),
+                runtime_id: runtime_id.clone(),
+                runtime_instance_id: runtime_instance_id.clone(),
+                selected_device_class,
+                selected_device_id: selected_device_id.clone(),
+                model_id: model_id.clone(),
+                ..Default::default()
+            },
             InferenceRequestLifecycleEventKind::Started,
             None,
         );
@@ -1065,14 +1082,17 @@ impl InferenceGateway {
                 );
                 record_inference_lifecycle_event(
                     lifecycle_sink.as_ref(),
-                    request_id,
-                    task_id,
-                    backend_key,
-                    runtime_id,
-                    runtime_instance_id,
-                    selected_device_class,
-                    selected_device_id,
-                    model_id,
+                    InferenceRequestLifecycleEventContext {
+                        request_id,
+                        task_id,
+                        backend_key,
+                        runtime_id,
+                        runtime_instance_id,
+                        selected_device_class,
+                        selected_device_id,
+                        model_id,
+                        ..Default::default()
+                    },
                     InferenceRequestLifecycleEventKind::CleanupCompleted,
                     None,
                 );
@@ -1219,14 +1239,17 @@ impl InferenceGateway {
         record_inference_lifecycle_phase_event(
             lifecycle_sink.as_ref(),
             InferenceLifecyclePhase::TaskValidation,
-            request_id.clone(),
-            task_id.clone(),
-            backend_key.clone(),
-            runtime_id.clone(),
-            runtime_instance_id.clone(),
-            selected_device_class,
-            selected_device_id.clone(),
-            model_id.clone(),
+            InferenceRequestLifecycleEventContext {
+                request_id: request_id.clone(),
+                task_id: task_id.clone(),
+                backend_key: backend_key.clone(),
+                runtime_id: runtime_id.clone(),
+                runtime_instance_id: runtime_instance_id.clone(),
+                selected_device_class,
+                selected_device_id: selected_device_id.clone(),
+                model_id: model_id.clone(),
+                ..Default::default()
+            },
             InferenceRequestLifecycleEventKind::Started,
             None,
         );
@@ -1279,14 +1302,17 @@ impl InferenceGateway {
         record_inference_lifecycle_phase_event(
             lifecycle_sink.as_ref(),
             InferenceLifecyclePhase::Preprocessing,
-            request_id.clone(),
-            task_id.clone(),
-            backend_key.clone(),
-            runtime_id.clone(),
-            runtime_instance_id.clone(),
-            selected_device_class,
-            selected_device_id.clone(),
-            model_id.clone(),
+            InferenceRequestLifecycleEventContext {
+                request_id: request_id.clone(),
+                task_id: task_id.clone(),
+                backend_key: backend_key.clone(),
+                runtime_id: runtime_id.clone(),
+                runtime_instance_id: runtime_instance_id.clone(),
+                selected_device_class,
+                selected_device_id: selected_device_id.clone(),
+                model_id: model_id.clone(),
+                ..Default::default()
+            },
             InferenceRequestLifecycleEventKind::Started,
             None,
         );
@@ -1352,14 +1378,17 @@ impl InferenceGateway {
         let model_id = non_empty_model_id(model);
         record_inference_lifecycle_event(
             lifecycle_sink.as_ref(),
-            request_id.clone(),
-            Some("embedding".to_string()),
-            backend_key.clone(),
-            runtime_id.clone(),
-            runtime_instance_id.clone(),
-            selected_device_class,
-            selected_device_id.clone(),
-            model_id.clone(),
+            InferenceRequestLifecycleEventContext {
+                request_id: request_id.clone(),
+                task_id: Some("embedding".to_string()),
+                backend_key: backend_key.clone(),
+                runtime_id: runtime_id.clone(),
+                runtime_instance_id: runtime_instance_id.clone(),
+                selected_device_class,
+                selected_device_id: selected_device_id.clone(),
+                model_id: model_id.clone(),
+                ..Default::default()
+            },
             InferenceRequestLifecycleEventKind::Started,
             None,
         );
@@ -1444,14 +1473,17 @@ impl InferenceGateway {
         let model_id = non_empty_model_id(&request.model);
         record_inference_lifecycle_event(
             lifecycle_sink.as_ref(),
-            request_id.clone(),
-            Some("rerank".to_string()),
-            backend_key.clone(),
-            runtime_id.clone(),
-            runtime_instance_id.clone(),
-            selected_device_class,
-            selected_device_id.clone(),
-            model_id.clone(),
+            InferenceRequestLifecycleEventContext {
+                request_id: request_id.clone(),
+                task_id: Some("rerank".to_string()),
+                backend_key: backend_key.clone(),
+                runtime_id: runtime_id.clone(),
+                runtime_instance_id: runtime_instance_id.clone(),
+                selected_device_class,
+                selected_device_id: selected_device_id.clone(),
+                model_id: model_id.clone(),
+                ..Default::default()
+            },
             InferenceRequestLifecycleEventKind::Started,
             None,
         );
@@ -1613,7 +1645,7 @@ impl InferenceGateway {
         reject_cancelled_execution_handle("image generation planning", &cancellation)?;
         match plan_image_generation_execution(input) {
             ImageGenerationPlanningOutcome::Planned { plan } => {
-                self.generate_image_from_plan_with_cancellation(plan, cancellation)
+                self.generate_image_from_plan_with_cancellation(*plan, cancellation)
                     .await
             }
             ImageGenerationPlanningOutcome::Rejected { diagnostics } => {
@@ -1699,7 +1731,7 @@ impl InferenceGateway {
                 let execution_telemetry = self.start_execution_telemetry().await;
                 let context = execution_telemetry.backend_execution_context();
                 let result = self
-                    .generate_image_from_plan_with_context(plan, context)
+                    .generate_image_from_plan_with_context(*plan, context)
                     .await;
                 let resource_observation = finish_execution_telemetry(execution_telemetry);
                 record_planned_image_generation_lifecycle_result(
@@ -1781,14 +1813,17 @@ impl InferenceGateway {
         let model_id = non_empty_model_id(&request.model);
         record_inference_lifecycle_event(
             lifecycle_sink.as_ref(),
-            request_id.clone(),
-            Some("image_generation".to_string()),
-            backend_key.clone(),
-            runtime_id.clone(),
-            runtime_instance_id.clone(),
-            selected_device_class,
-            selected_device_id.clone(),
-            model_id.clone(),
+            InferenceRequestLifecycleEventContext {
+                request_id: request_id.clone(),
+                task_id: Some("image_generation".to_string()),
+                backend_key: backend_key.clone(),
+                runtime_id: runtime_id.clone(),
+                runtime_instance_id: runtime_instance_id.clone(),
+                selected_device_class,
+                selected_device_id: selected_device_id.clone(),
+                model_id: model_id.clone(),
+                ..Default::default()
+            },
             InferenceRequestLifecycleEventKind::Started,
             None,
         );
@@ -1865,14 +1900,17 @@ impl InferenceGateway {
         record_inference_lifecycle_phase_event(
             lifecycle_sink.as_ref(),
             InferenceLifecyclePhase::TaskValidation,
-            request_id.clone(),
-            task_id.clone(),
-            backend_key.clone(),
-            runtime_id.clone(),
-            runtime_instance_id.clone(),
-            selected_device_class,
-            selected_device_id.clone(),
-            model_id.clone(),
+            InferenceRequestLifecycleEventContext {
+                request_id: request_id.clone(),
+                task_id: task_id.clone(),
+                backend_key: backend_key.clone(),
+                runtime_id: runtime_id.clone(),
+                runtime_instance_id: runtime_instance_id.clone(),
+                selected_device_class,
+                selected_device_id: selected_device_id.clone(),
+                model_id: model_id.clone(),
+                ..Default::default()
+            },
             InferenceRequestLifecycleEventKind::Started,
             None,
         );
@@ -1948,14 +1986,17 @@ impl InferenceGateway {
         }
         record_inference_lifecycle_event(
             lifecycle_sink.as_ref(),
-            request_id.clone(),
-            task_id.clone(),
-            backend_key.clone(),
-            runtime_id.clone(),
-            runtime_instance_id.clone(),
-            selected_device_class,
-            selected_device_id.clone(),
-            model_id.clone(),
+            InferenceRequestLifecycleEventContext {
+                request_id: request_id.clone(),
+                task_id: task_id.clone(),
+                backend_key: backend_key.clone(),
+                runtime_id: runtime_id.clone(),
+                runtime_instance_id: runtime_instance_id.clone(),
+                selected_device_class,
+                selected_device_id: selected_device_id.clone(),
+                model_id: model_id.clone(),
+                ..Default::default()
+            },
             InferenceRequestLifecycleEventKind::Started,
             None,
         );
@@ -2307,14 +2348,17 @@ impl LifecycleStream {
     fn record(&self, kind: InferenceRequestLifecycleEventKind, detail: Option<String>) {
         record_inference_lifecycle_event(
             self.lifecycle_sink.as_ref(),
-            self.request_id.clone(),
-            self.task_id.clone(),
-            self.backend_key.clone(),
-            self.runtime_id.clone(),
-            self.runtime_instance_id.clone(),
-            self.selected_device_class,
-            self.selected_device_id.clone(),
-            self.model_id.clone(),
+            InferenceRequestLifecycleEventContext {
+                request_id: self.request_id.clone(),
+                task_id: self.task_id.clone(),
+                backend_key: self.backend_key.clone(),
+                runtime_id: self.runtime_id.clone(),
+                runtime_instance_id: self.runtime_instance_id.clone(),
+                selected_device_class: self.selected_device_class,
+                selected_device_id: self.selected_device_id.clone(),
+                model_id: self.model_id.clone(),
+                ..Default::default()
+            },
             kind,
             detail,
         );
@@ -3118,28 +3162,14 @@ fn typed_text_generation_stream_request_json(
 
 fn record_inference_lifecycle_event(
     sink: &dyn InferenceRequestLifecycleEventSink,
-    request_id: Option<String>,
-    task_id: Option<String>,
-    backend_key: Option<String>,
-    runtime_id: Option<String>,
-    runtime_instance_id: Option<String>,
-    selected_device_class: Option<InferenceDeviceClass>,
-    selected_device_id: Option<InferenceDeviceId>,
-    model_id: Option<String>,
+    context: InferenceRequestLifecycleEventContext,
     kind: InferenceRequestLifecycleEventKind,
     detail: Option<String>,
 ) {
     record_inference_lifecycle_phase_event(
         sink,
         InferenceLifecyclePhase::BackendExecution,
-        request_id,
-        task_id,
-        backend_key,
-        runtime_id,
-        runtime_instance_id,
-        selected_device_class,
-        selected_device_id,
-        model_id,
+        context,
         kind,
         detail,
     );
@@ -3148,28 +3178,21 @@ fn record_inference_lifecycle_event(
 fn record_inference_lifecycle_phase_event(
     sink: &dyn InferenceRequestLifecycleEventSink,
     phase: InferenceLifecyclePhase,
-    request_id: Option<String>,
-    task_id: Option<String>,
-    backend_key: Option<String>,
-    runtime_id: Option<String>,
-    runtime_instance_id: Option<String>,
-    selected_device_class: Option<InferenceDeviceClass>,
-    selected_device_id: Option<InferenceDeviceId>,
-    model_id: Option<String>,
+    context: InferenceRequestLifecycleEventContext,
     kind: InferenceRequestLifecycleEventKind,
     detail: Option<String>,
 ) {
     record_inference_lifecycle_phase_event_with_option_diagnostics(
         sink,
         phase,
-        request_id,
-        task_id,
-        backend_key,
-        runtime_id,
-        runtime_instance_id,
-        selected_device_class,
-        selected_device_id,
-        model_id,
+        context.request_id,
+        context.task_id,
+        context.backend_key,
+        context.runtime_id,
+        context.runtime_instance_id,
+        context.selected_device_class,
+        context.selected_device_id,
+        context.model_id,
         kind,
         detail,
         Vec::new(),
@@ -3497,9 +3520,7 @@ fn start_runtime_resource_monitor_for_process(
 fn finish_runtime_resource_monitor(
     guard: Option<RuntimeResourceMonitorGuard>,
 ) -> Option<InferenceExecutionResourceObservation> {
-    let Some(guard) = guard else {
-        return None;
-    };
+    let guard = guard?;
     match guard.finish() {
         Ok(observation) => Some(observation),
         Err(error) => {
@@ -3780,14 +3801,17 @@ fn record_typed_lifecycle_result_with_option_diagnostics(
     record_inference_lifecycle_phase_event(
         sink,
         InferenceLifecyclePhase::BackendExecution,
-        request_id,
-        task_id,
-        backend_key,
-        runtime_id,
-        runtime_instance_id,
-        selected_device_class,
-        selected_device_id,
-        model_id,
+        InferenceRequestLifecycleEventContext {
+            request_id,
+            task_id,
+            backend_key,
+            runtime_id,
+            runtime_instance_id,
+            selected_device_class,
+            selected_device_id,
+            model_id,
+            ..Default::default()
+        },
         InferenceRequestLifecycleEventKind::CleanupCompleted,
         None,
     );
@@ -3869,14 +3893,17 @@ fn record_successful_non_streaming_lifecycle_phase(
     record_inference_lifecycle_phase_event(
         sink,
         phase.clone(),
-        request_id.clone(),
-        task_id.clone(),
-        backend_key.clone(),
-        runtime_id.clone(),
-        runtime_instance_id.clone(),
-        selected_device_class,
-        selected_device_id.clone(),
-        model_id.clone(),
+        InferenceRequestLifecycleEventContext {
+            request_id: request_id.clone(),
+            task_id: task_id.clone(),
+            backend_key: backend_key.clone(),
+            runtime_id: runtime_id.clone(),
+            runtime_instance_id: runtime_instance_id.clone(),
+            selected_device_class,
+            selected_device_id: selected_device_id.clone(),
+            model_id: model_id.clone(),
+            ..Default::default()
+        },
         InferenceRequestLifecycleEventKind::Started,
         None,
     );
@@ -4039,14 +4066,17 @@ fn record_non_streaming_lifecycle_phase_result_with_references<T>(
     record_inference_lifecycle_phase_event(
         sink,
         phase,
-        request_id,
-        task_id,
-        backend_key,
-        runtime_id,
-        runtime_instance_id,
-        selected_device_class,
-        selected_device_id,
-        model_id,
+        InferenceRequestLifecycleEventContext {
+            request_id,
+            task_id,
+            backend_key,
+            runtime_id,
+            runtime_instance_id,
+            selected_device_class,
+            selected_device_id,
+            model_id,
+            ..Default::default()
+        },
         InferenceRequestLifecycleEventKind::CleanupCompleted,
         None,
     );

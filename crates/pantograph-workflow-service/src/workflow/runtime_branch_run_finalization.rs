@@ -38,6 +38,18 @@ pub(super) struct WorkflowSchedulerTaskAttemptDiagnosticAttribution {
 }
 
 #[derive(Debug)]
+pub(super) struct WorkflowSchedulerTaskAttemptTerminalInput<'a> {
+    pub(super) task: &'a WorkflowSchedulerTask,
+    pub(super) attempt_id: &'a str,
+    pub(super) started_at_ms: u64,
+    pub(super) transition: SchedulerTaskAttemptLifecycleTransition,
+    pub(super) reason: &'a str,
+    pub(super) error_summary: Option<String>,
+    pub(super) selected_dispatch: Option<&'a SelectedRuntimeTaskDispatch>,
+    pub(super) terminal_mutation: Option<&'a WorkflowSchedulerTaskTerminalMutation>,
+}
+
+#[derive(Debug)]
 pub(super) struct WorkflowSchedulerTaskAttemptTerminalDiagnosticRequest<'a> {
     pub(super) task: &'a WorkflowSchedulerTask,
     pub(super) attempt_id: &'a str,
@@ -142,14 +154,16 @@ pub(super) async fn finalize_started_runtime_task_dispatch(
                 scheduler_task_attempt_terminal_transition_from_result(&result);
             record_scheduler_task_attempt_terminal(
                 service,
-                started_runtime_task.task(),
-                started_runtime_task.attempt_id().as_str(),
-                started_runtime_task.started_at_ms(),
-                transition,
-                reason,
-                error_summary,
-                Some(selected_dispatch),
-                Some(&terminal_mutation),
+                WorkflowSchedulerTaskAttemptTerminalInput {
+                    task: started_runtime_task.task(),
+                    attempt_id: started_runtime_task.attempt_id().as_str(),
+                    started_at_ms: started_runtime_task.started_at_ms(),
+                    transition,
+                    reason,
+                    error_summary,
+                    selected_dispatch: Some(selected_dispatch),
+                    terminal_mutation: Some(&terminal_mutation),
+                },
             )?;
             service
                 .scheduler_task_orchestrator
@@ -191,14 +205,16 @@ pub(super) async fn finalize_started_runtime_task_dispatch(
                 };
                 record_scheduler_task_attempt_terminal(
                     service,
-                    started_runtime_task.task(),
-                    started_runtime_task.attempt_id().as_str(),
-                    started_runtime_task.started_at_ms(),
-                    SchedulerTaskAttemptLifecycleTransition::Cancelled,
-                    "scheduler runtime task cancellation observed",
-                    Some(message.clone()),
-                    Some(selected_dispatch),
-                    Some(&terminal_mutation),
+                    WorkflowSchedulerTaskAttemptTerminalInput {
+                        task: started_runtime_task.task(),
+                        attempt_id: started_runtime_task.attempt_id().as_str(),
+                        started_at_ms: started_runtime_task.started_at_ms(),
+                        transition: SchedulerTaskAttemptLifecycleTransition::Cancelled,
+                        reason: "scheduler runtime task cancellation observed",
+                        error_summary: Some(message.clone()),
+                        selected_dispatch: Some(selected_dispatch),
+                        terminal_mutation: Some(&terminal_mutation),
+                    },
                 )?;
                 service
                     .scheduler_task_orchestrator
@@ -234,14 +250,16 @@ pub(super) async fn finalize_started_runtime_task_dispatch(
             };
             record_scheduler_task_attempt_terminal(
                 service,
-                started_runtime_task.task(),
-                started_runtime_task.attempt_id().as_str(),
-                started_runtime_task.started_at_ms(),
-                SchedulerTaskAttemptLifecycleTransition::Failed,
-                "scheduler runtime task dispatch failed",
-                Some(error.to_string()),
-                Some(selected_dispatch),
-                Some(&terminal_mutation),
+                WorkflowSchedulerTaskAttemptTerminalInput {
+                    task: started_runtime_task.task(),
+                    attempt_id: started_runtime_task.attempt_id().as_str(),
+                    started_at_ms: started_runtime_task.started_at_ms(),
+                    transition: SchedulerTaskAttemptLifecycleTransition::Failed,
+                    reason: "scheduler runtime task dispatch failed",
+                    error_summary: Some(error.to_string()),
+                    selected_dispatch: Some(selected_dispatch),
+                    terminal_mutation: Some(&terminal_mutation),
+                },
             )?;
             service
                 .scheduler_task_orchestrator
@@ -358,15 +376,18 @@ fn scheduler_task_attempt_terminal_diagnostic_event_at(
 
 pub(super) fn record_scheduler_task_attempt_terminal(
     service: &WorkflowService,
-    task: &WorkflowSchedulerTask,
-    attempt_id: &str,
-    started_at_ms: u64,
-    transition: SchedulerTaskAttemptLifecycleTransition,
-    reason: &str,
-    error_summary: Option<String>,
-    selected_dispatch: Option<&SelectedRuntimeTaskDispatch>,
-    terminal_mutation: Option<&WorkflowSchedulerTaskTerminalMutation>,
+    input: WorkflowSchedulerTaskAttemptTerminalInput<'_>,
 ) -> Result<(), WorkflowServiceError> {
+    let WorkflowSchedulerTaskAttemptTerminalInput {
+        task,
+        attempt_id,
+        started_at_ms,
+        transition,
+        reason,
+        error_summary,
+        selected_dispatch,
+        terminal_mutation,
+    } = input;
     let attribution =
         scheduler_task_attempt_diagnostic_attribution(service, task.workflow_run_id.as_str())?;
     service.workflow_diagnostic_event_record(scheduler_task_attempt_terminal_diagnostic_event(
@@ -540,6 +561,69 @@ mod tests {
     };
 
     use super::*;
+
+    #[test]
+    fn terminal_input_records_success_failure_and_cancellation_scope() {
+        use pantograph_diagnostics_ledger::{DiagnosticsLedgerRepository, SqliteDiagnosticsLedger};
+
+        for transition in [
+            SchedulerTaskAttemptLifecycleTransition::Completed,
+            SchedulerTaskAttemptLifecycleTransition::Failed,
+            SchedulerTaskAttemptLifecycleTransition::Cancelled,
+        ] {
+            let service = WorkflowService::new()
+                .with_diagnostics_ledger(SqliteDiagnosticsLedger::open_in_memory().unwrap());
+            let task = runtime_task();
+            let started_at_ms = unix_timestamp_ms();
+            let error_summary = (transition != SchedulerTaskAttemptLifecycleTransition::Completed)
+                .then(|| "terminal fixture detail".to_string());
+            record_scheduler_task_attempt_terminal(
+                &service,
+                WorkflowSchedulerTaskAttemptTerminalInput {
+                    task: &task,
+                    attempt_id: "attempt.terminal.input",
+                    started_at_ms,
+                    transition,
+                    reason: "terminal input fixture",
+                    error_summary: error_summary.clone(),
+                    selected_dispatch: None,
+                    terminal_mutation: None,
+                },
+            )
+            .expect("terminal input records event");
+            let records = service
+                .diagnostics_ledger_guard()
+                .unwrap()
+                .diagnostic_events_after(0, 10)
+                .unwrap();
+            assert_eq!(records.len(), 1);
+            let record = &records[0];
+            assert_eq!(
+                record.workflow_run_id.as_ref().unwrap().as_str(),
+                task.workflow_run_id.as_str()
+            );
+            assert_eq!(record.node_id.as_deref(), Some(task.node_id.as_str()));
+            assert!(record.client_id.is_none());
+            assert!(record.client_session_id.is_none());
+            assert!(record.bucket_id.is_none());
+            let DiagnosticEventPayload::SchedulerTaskAttemptLifecycleChanged(payload) =
+                serde_json::from_str(&record.payload_json).unwrap()
+            else {
+                panic!("expected task-attempt terminal event");
+            };
+            assert_eq!(payload.scheduler_task_id, task.task_id.as_str());
+            assert_eq!(payload.scheduler_attempt_id, "attempt.terminal.input");
+            assert_eq!(payload.transition, transition);
+            assert_eq!(payload.started_at_ms, Some(started_at_ms as i64));
+            assert_eq!(
+                payload.duration_ms,
+                Some((payload.ended_at_ms.unwrap() as u64).saturating_sub(started_at_ms))
+            );
+            assert_eq!(payload.reason.as_deref(), Some("terminal input fixture"));
+            assert_eq!(payload.error_summary, error_summary);
+            assert!(payload.reservation_id.is_none());
+        }
+    }
 
     #[test]
     fn terminal_diagnostic_event_preserves_scheduler_task_attempt_scope() {

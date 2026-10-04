@@ -266,13 +266,13 @@ pub enum DiagnosticEventPayload {
     RunStarted(RunStartedPayload),
     RunTerminal(RunTerminalPayload),
     RunSnapshotAccepted(RunSnapshotAcceptedPayload),
-    IoArtifactObserved(IoArtifactObservedPayload),
+    IoArtifactObserved(Box<IoArtifactObservedPayload>),
     RetentionArtifactStateChanged(RetentionArtifactStateChangedPayload),
     LibraryAssetAccessed(LibraryAssetAccessedPayload),
     RetentionPolicyChanged(RetentionPolicyChangedPayload),
     RuntimeCapabilityObserved(RuntimeCapabilityObservedPayload),
     NodeExecutionStatus(NodeExecutionStatusPayload),
-    InferenceExecutionDiagnosticObserved(InferenceExecutionDiagnosticObservedPayload),
+    InferenceExecutionDiagnosticObserved(Box<InferenceExecutionDiagnosticObservedPayload>),
     DiagnosticErrorOccurred(DiagnosticErrorOccurredPayload),
 }
 
@@ -1062,6 +1062,10 @@ impl SchedulerModelCacheState {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct SchedulerModelLifecycleChangedPayload {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workflow_execution_session_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unloaded_workflow_execution_session_id: Option<String>,
     pub transition: SchedulerModelLifecycleTransition,
     #[serde(default)]
     pub cache_state: Option<SchedulerModelCacheState>,
@@ -1080,6 +1084,25 @@ pub struct SchedulerModelLifecycleChangedPayload {
 
 impl SchedulerModelLifecycleChangedPayload {
     fn validate(&self) -> Result<(), DiagnosticsLedgerError> {
+        match (
+            &self.workflow_execution_session_id,
+            &self.unloaded_workflow_execution_session_id,
+        ) {
+            (Some(target), Some(unloaded)) => {
+                validate_required_text("workflow_execution_session_id", target, MAX_ID_LEN)?;
+                validate_required_text(
+                    "unloaded_workflow_execution_session_id",
+                    unloaded,
+                    MAX_ID_LEN,
+                )?;
+            }
+            (None, None) => {}
+            _ => {
+                return Err(DiagnosticsLedgerError::MissingField {
+                    field: "capacity_session_identity_pair",
+                })
+            }
+        }
         if let Some(summary) = self.execution_plan_summary.as_ref() {
             summary.validate()?;
         }
@@ -2316,6 +2339,7 @@ impl InferenceOptionDiagnosticSummary {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DiagnosticErrorScopeKind {
+    SessionRuntime,
     Run,
     Node,
     RuntimeModel,
@@ -2397,6 +2421,8 @@ impl DiagnosticErrorLocation {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct DiagnosticErrorOccurredPayload {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workflow_execution_session_id: Option<String>,
     pub phase: String,
     pub scope: DiagnosticErrorScopeKind,
     pub severity: DiagnosticErrorSeverity,
@@ -2415,6 +2441,18 @@ pub struct DiagnosticErrorOccurredPayload {
 
 impl DiagnosticErrorOccurredPayload {
     fn validate(&self) -> Result<(), DiagnosticsLedgerError> {
+        if self.scope == DiagnosticErrorScopeKind::SessionRuntime {
+            let session_id = self.workflow_execution_session_id.as_deref().ok_or(
+                DiagnosticsLedgerError::MissingField {
+                    field: "workflow_execution_session_id",
+                },
+            )?;
+            validate_required_text("workflow_execution_session_id", session_id, MAX_ID_LEN)?;
+        } else if self.workflow_execution_session_id.is_some() {
+            return Err(DiagnosticsLedgerError::InvalidField {
+                field: "workflow_execution_session_id",
+            });
+        }
         validate_required_text("error_phase", &self.phase, MAX_ID_LEN)?;
         validate_required_text("error_code", &self.code, MAX_ID_LEN)?;
         validate_required_text(
@@ -3465,7 +3503,6 @@ fn validate_event_scope(
         | DiagnosticEventKind::SchedulerQueuePlacement
         | DiagnosticEventKind::SchedulerQueueControl
         | DiagnosticEventKind::SchedulerRunDelayed
-        | DiagnosticEventKind::SchedulerModelLifecycleChanged
         | DiagnosticEventKind::SchedulerRunAdmitted
         | DiagnosticEventKind::SchedulerReservationChanged
         | DiagnosticEventKind::SchedulerTaskAttemptLifecycleChanged
@@ -3501,9 +3538,26 @@ fn validate_event_scope(
             {
                 return Err(DiagnosticsLedgerError::MissingField { field: "node_id" });
             }
-            if request.payload.event_kind() == DiagnosticEventKind::SchedulerModelLifecycleChanged
-                && request.model_id.is_none()
+        }
+        DiagnosticEventKind::SchedulerModelLifecycleChanged => {
+            let DiagnosticEventPayload::SchedulerModelLifecycleChanged(payload) = &request.payload
+            else {
+                return Err(DiagnosticsLedgerError::InvalidField {
+                    field: "event_kind",
+                });
+            };
+            if request.workflow_run_id.is_none() && payload.workflow_execution_session_id.is_none()
             {
+                return Err(DiagnosticsLedgerError::MissingField {
+                    field: "workflow_run_id_or_execution_session_id",
+                });
+            }
+            if request.workflow_id.is_none() {
+                return Err(DiagnosticsLedgerError::MissingField {
+                    field: "workflow_id",
+                });
+            }
+            if request.model_id.is_none() {
                 return Err(DiagnosticsLedgerError::MissingField { field: "model_id" });
             }
         }
@@ -3515,7 +3569,9 @@ fn validate_event_scope(
             };
             if !matches!(
                 payload.scope,
-                DiagnosticErrorScopeKind::Transport | DiagnosticErrorScopeKind::Projection
+                DiagnosticErrorScopeKind::Transport
+                    | DiagnosticErrorScopeKind::Projection
+                    | DiagnosticErrorScopeKind::SessionRuntime
             ) {
                 if request.workflow_run_id.is_none() {
                     return Err(DiagnosticsLedgerError::MissingField {
@@ -3565,6 +3621,19 @@ fn validate_diagnostic_error_scope(
             if request.runtime_id.is_none() {
                 return Err(DiagnosticsLedgerError::MissingField {
                     field: "runtime_id",
+                });
+            }
+            Ok(())
+        }
+        DiagnosticErrorScopeKind::SessionRuntime => {
+            if request.workflow_id.is_none() {
+                return Err(DiagnosticsLedgerError::MissingField {
+                    field: "workflow_id",
+                });
+            }
+            if request.scheduler_policy_id.is_none() {
+                return Err(DiagnosticsLedgerError::MissingField {
+                    field: "scheduler_policy_id",
                 });
             }
             Ok(())

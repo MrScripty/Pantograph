@@ -5071,3 +5071,82 @@ async fn selected_text_invalid_handoffs_have_no_backend_effects() {
         .is_err());
     assert!(effects.lock().unwrap().is_empty());
 }
+
+#[test]
+fn private_lifecycle_context_preserves_complete_attribution_and_absence() {
+    let sink = RecordingLifecycleSink::default();
+    let device_id = InferenceDeviceId::parse("cuda:0").expect("device id");
+    let context = InferenceRequestLifecycleEventContext {
+        request_id: Some("request-1".to_string()),
+        task_id: Some("text_generation".to_string()),
+        backend_key: Some("llama_cpp".to_string()),
+        runtime_id: Some("llama_cpp.cuda".to_string()),
+        runtime_instance_id: Some("instance-1".to_string()),
+        selected_device_class: Some(InferenceDeviceClass::Cuda),
+        selected_device_id: Some(device_id.clone()),
+        model_id: Some("pumas://models/example".to_string()),
+        ..Default::default()
+    };
+    record_inference_lifecycle_event(
+        &sink,
+        context.clone(),
+        InferenceRequestLifecycleEventKind::Started,
+        Some("start detail".to_string()),
+    );
+    record_inference_lifecycle_phase_event(
+        &sink,
+        InferenceLifecyclePhase::Preprocessing,
+        context,
+        InferenceRequestLifecycleEventKind::Completed,
+        None,
+    );
+    record_inference_lifecycle_event(
+        &sink,
+        InferenceRequestLifecycleEventContext::default(),
+        InferenceRequestLifecycleEventKind::CleanupCompleted,
+        None,
+    );
+    let events = sink.events();
+    assert_eq!(events.len(), 3);
+    for (index, (phase, kind, detail)) in [
+        (
+            InferenceLifecyclePhase::BackendExecution,
+            InferenceRequestLifecycleEventKind::Started,
+            Some("start detail".to_string()),
+        ),
+        (
+            InferenceLifecyclePhase::Preprocessing,
+            InferenceRequestLifecycleEventKind::Completed,
+            None,
+        ),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let expected =
+            InferenceRequestLifecycleEvent::builder(phase, kind, events[index].occurred_at_ms)
+                .with_request_id(Some("request-1".to_string()))
+                .with_task_id(Some("text_generation".to_string()))
+                .with_backend_key(Some("llama_cpp".to_string()))
+                .with_runtime_id(Some("llama_cpp.cuda".to_string()))
+                .with_runtime_instance_id(Some("instance-1".to_string()))
+                .with_selected_device_class(Some(InferenceDeviceClass::Cuda))
+                .with_selected_device_id(Some(device_id.clone()))
+                .with_model_id(Some("pumas://models/example".to_string()))
+                .with_detail(detail)
+                .build();
+        assert_eq!(events[index], expected);
+        assert_eq!(events[index].selected_runtime_variant_id, None);
+        assert_eq!(events[index].selected_network_node_id, None);
+        assert_eq!(events[index].resolved_artifact_kind, None);
+    }
+    assert_eq!(
+        events[2],
+        InferenceRequestLifecycleEvent::builder(
+            InferenceLifecyclePhase::BackendExecution,
+            InferenceRequestLifecycleEventKind::CleanupCompleted,
+            events[2].occurred_at_ms,
+        )
+        .build()
+    );
+}

@@ -383,6 +383,34 @@ pub fn rejected_insert_response(
     }
 }
 
+pub fn rejected_edge_insert_preview_response(
+    graph: &WorkflowGraph,
+    rejection: ConnectionRejection,
+) -> EdgeInsertionPreviewResponse {
+    EdgeInsertionPreviewResponse {
+        accepted: false,
+        graph_revision: graph.compute_fingerprint(),
+        bridge: None,
+        rejection: Some(rejection),
+    }
+}
+
+pub fn rejected_insert_on_edge_response(
+    graph: &WorkflowGraph,
+    rejection: ConnectionRejection,
+) -> InsertNodeOnEdgeResponse {
+    InsertNodeOnEdgeResponse {
+        accepted: false,
+        graph_revision: graph.compute_fingerprint(),
+        inserted_node_id: None,
+        bridge: None,
+        graph: Some(graph.clone()),
+        workflow_event: None,
+        workflow_execution_session_state: None,
+        rejection: Some(rejection),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -417,33 +445,5 @@ mod tests {
             edge_insert_input_priority(&optional_json_port("resolved_model_package_facts")),
             2
         );
-    }
-}
-
-pub fn rejected_edge_insert_preview_response(
-    graph: &WorkflowGraph,
-    rejection: ConnectionRejection,
-) -> EdgeInsertionPreviewResponse {
-    EdgeInsertionPreviewResponse {
-        accepted: false,
-        graph_revision: graph.compute_fingerprint(),
-        bridge: None,
-        rejection: Some(rejection),
-    }
-}
-
-pub fn rejected_insert_on_edge_response(
-    graph: &WorkflowGraph,
-    rejection: ConnectionRejection,
-) -> InsertNodeOnEdgeResponse {
-    InsertNodeOnEdgeResponse {
-        accepted: false,
-        graph_revision: graph.compute_fingerprint(),
-        inserted_node_id: None,
-        bridge: None,
-        graph: Some(graph.clone()),
-        workflow_event: None,
-        workflow_execution_session_state: None,
-        rejection: Some(rejection),
     }
 }

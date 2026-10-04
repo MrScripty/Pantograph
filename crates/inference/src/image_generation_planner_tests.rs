@@ -126,9 +126,21 @@ fn planner_accepts_pumas_diffusers_stable_diffusion_facts() {
         backend_decision: &decision,
     });
 
+    let encoded = serde_json::to_value(&outcome).expect("serialize planned outcome");
+    let round_trip: ImageGenerationPlanningOutcome =
+        serde_json::from_value(encoded.clone()).expect("decode planned outcome");
+    assert_eq!(round_trip, outcome);
     let ImageGenerationPlanningOutcome::Planned { plan } = outcome else {
         panic!("expected valid image-generation plan");
     };
+    assert_eq!(
+        encoded,
+        serde_json::json!({ "status": "planned", "plan": plan.as_ref() })
+    );
+    assert!(
+        std::mem::size_of::<ImageGenerationPlanningOutcome>()
+            < std::mem::size_of::<crate::ImageGenerationExecutionPlan>()
+    );
 
     assert_eq!(plan.model_ref.model_id, "image/stable-diffusion/tiny-sd");
     assert_eq!(plan.backend_id.as_str(), "pytorch");

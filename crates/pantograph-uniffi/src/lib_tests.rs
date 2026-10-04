@@ -317,7 +317,18 @@ fn test_workflow_get_capabilities_contract_success() {
     assert_eq!(response.max_input_bindings, DEFAULT_MAX_INPUT_BINDINGS);
     assert_eq!(response.max_value_bytes, DEFAULT_MAX_VALUE_BYTES);
     assert_eq!(response.runtime_requirements.required_models.len(), 0);
-    assert_eq!(response.runtime_requirements.estimated_peak_ram_mb, Some(0));
+    let peak_ram = response.runtime_requirements.resource_estimates.iter().find(|estimate| {
+        estimate.kind() == pantograph_workflow_service::WorkflowTechnicalFitResourceEstimateKind::PeakRamBytes
+    });
+    assert_eq!(
+        peak_ram,
+        Some(
+            &pantograph_workflow_service::WorkflowTechnicalFitResourceEstimate::available(
+                pantograph_workflow_service::WorkflowTechnicalFitResourceEstimateKind::PeakRamBytes,
+                0,
+            )
+        ),
+    );
 }
 
 #[test]

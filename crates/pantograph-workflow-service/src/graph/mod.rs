@@ -83,6 +83,7 @@ pub use inference_interface_publication::{
     InferenceInterfaceNodeProjectionRecord, InferenceInterfacePublicationError,
     WorkflowGraphInferenceValidationPublication,
 };
+pub(crate) use inference_interface_request::inference_nodes_in_graph;
 pub use inference_interface_request::{
     inference_interface_resolution_inputs_from_graph, InferenceInterfaceGraphResolutionDiagnostic,
     InferenceInterfaceGraphResolutionDiagnosticCode, InferenceInterfaceGraphResolutionInput,
