@@ -21,9 +21,27 @@ impl ReplacementCustody {
     pub(super) async fn drain(&self) -> Result<(), GatewayError> {
         let completion = self.completion.lock().unwrap().clone();
         if let Some(completion) = completion {
-            completion.await.map_err(GatewayError::SwitchFailed)?;
+            let outcome = completion.clone().await;
+            self.retire_completed(&completion);
+            // Drain establishes termination for a new operation. The failed
+            // replacement reports its JoinError to its own requesting caller.
+            if let Err(error) = outcome {
+                log::warn!("drained terminated replacement: {error}");
+            }
         }
         Ok(())
+    }
+
+    fn retire_completed(&self, completion: &Completion) {
+        let mut current = self.completion.lock().unwrap();
+        // A delayed observer of an older join must never remove new live custody.
+        if completion.peek().is_some()
+            && current
+                .as_ref()
+                .is_some_and(|current| current.ptr_eq(completion))
+        {
+            *current = None;
+        }
     }
 }
 
@@ -152,9 +170,40 @@ impl InferenceGateway {
         .boxed()
         .shared();
         *self.embedding_replacement.completion.lock().unwrap() = Some(completion.clone());
-        completion.await.map_err(GatewayError::SwitchFailed)?;
+        let outcome = completion.clone().await;
+        self.embedding_replacement.retire_completed(&completion);
+        outcome.map_err(GatewayError::SwitchFailed)?;
         receiver
             .await
             .map_err(|error| GatewayError::SwitchFailed(error.to_string()))?
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn stale_observer_cannot_retire_new_live_completion() {
+        let custody = ReplacementCustody::default();
+        let older: Completion = async { Ok(()) }.boxed().shared();
+        older.clone().await.unwrap();
+        let (release, pending) = oneshot::channel();
+        let live: Completion = async move { pending.await.map_err(|error| error.to_string()) }
+            .boxed()
+            .shared();
+        *custody.completion.lock().unwrap() = Some(live.clone());
+        custody.retire_completed(&older);
+        custody.retire_completed(&live);
+        assert!(custody
+            .completion
+            .lock()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .ptr_eq(&live));
+        release.send(()).unwrap();
+        custody.drain().await.unwrap();
+        assert!(custody.completion.lock().unwrap().is_none());
     }
 }
