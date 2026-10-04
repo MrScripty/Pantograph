@@ -7,7 +7,7 @@ use pumas_library::PumasError;
 use thiserror::Error;
 
 pub(crate) struct RuntimeHostPumasPackageFactsResolver {
-    pumas_api: Arc<pumas_library::PumasApi>,
+    selector_access: Arc<workflow_nodes::setup::PumasSelectorAccess>,
 }
 
 #[async_trait]
@@ -19,8 +19,8 @@ pub(crate) trait RuntimeHostPackageFactsResolver: Send + Sync {
 }
 
 impl RuntimeHostPumasPackageFactsResolver {
-    pub(crate) fn new(pumas_api: Arc<pumas_library::PumasApi>) -> Self {
-        Self { pumas_api }
+    pub(crate) fn new(selector_access: Arc<workflow_nodes::setup::PumasSelectorAccess>) -> Self {
+        Self { selector_access }
     }
 }
 
@@ -32,14 +32,17 @@ impl RuntimeHostPackageFactsResolver for RuntimeHostPumasPackageFactsResolver {
     ) -> Result<ResolvedModelPackageFacts, RuntimeHostPumasPackageFactsError> {
         let selected_model_ref = selected_pumas_model_ref(request)?;
         let raw_facts = self
-            .pumas_api
+            .selector_access
             .resolve_model_package_facts(selected_model_ref.model_id.as_str())
             .await?;
-        let package_facts = normalize_runtime_host_package_fact_identity(
+        let package_facts = validate_runtime_host_package_facts(
             selected_model_ref,
             decode_pumas_package_facts(raw_facts)?,
-        );
-        validate_runtime_host_package_facts(selected_model_ref, package_facts)
+        )?;
+        Ok(normalize_runtime_host_package_fact_identity(
+            selected_model_ref,
+            package_facts,
+        ))
     }
 }
 
@@ -67,6 +70,26 @@ fn validate_runtime_host_package_facts(
             },
         );
     }
+    let canonical_id = |id: &str| id.strip_prefix("pumas://models/").unwrap_or(id).to_string();
+    if canonical_id(&selected_model_ref.model_id) != canonical_id(&package_facts.model_ref.model_id)
+        || selected_model_ref
+            .revision
+            .as_ref()
+            .is_some_and(|revision| package_facts.model_ref.revision.as_ref() != Some(revision))
+        || selected_model_ref
+            .selected_artifact_path
+            .as_ref()
+            .is_some_and(|path| {
+                package_facts.model_ref.selected_artifact_path.as_ref() != Some(path)
+            })
+    {
+        return Err(
+            RuntimeHostPumasPackageFactsError::PackageFactsDecodeFailed {
+                message: "full package facts disagree with selected model/revision/artifact path"
+                    .into(),
+            },
+        );
+    }
     if selected_model_ref.selected_artifact_id.is_some()
         && package_facts.model_ref.selected_artifact_id != selected_model_ref.selected_artifact_id
     {
@@ -90,7 +113,12 @@ fn normalize_runtime_host_package_fact_identity(
     selected_model_ref: &pantograph_dependency_planning::PumasModelRef,
     mut package_facts: ResolvedModelPackageFacts,
 ) -> ResolvedModelPackageFacts {
-    package_facts.artifact.entry_path = runtime_host_package_fact_entry_path(selected_model_ref);
+    // Keep the producer's concrete root-relative entry when available. The
+    // existing logical privacy projection remains for owner-local absolute paths.
+    if !is_path_free_artifact_entry(&package_facts.artifact.entry_path) {
+        package_facts.artifact.entry_path =
+            runtime_host_package_fact_entry_path(selected_model_ref);
+    }
     package_facts.model_ref.selected_artifact_path = selected_model_ref
         .selected_artifact_path
         .as_deref()

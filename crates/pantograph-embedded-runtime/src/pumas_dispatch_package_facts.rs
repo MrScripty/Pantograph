@@ -119,20 +119,14 @@ pub(crate) async fn resolve_pumas_dispatch_package_facts(
         );
     };
 
-    let api = match selector_access {
-        PumasSelectorAccess::Owner(api) => api,
-        PumasSelectorAccess::LocalClient(_) | PumasSelectorAccess::ReadOnly(_) => {
-            return unavailable(
-                PumasDispatchPackageFactsDiagnosticCode::UnsupportedSelectorAccessRole,
-                format!(
-                    "Pumas {} selector access does not provide full package facts for runtime dispatch",
-                    selector_access.role_name()
-                ),
-            );
-        }
-    };
+    if matches!(selector_access, PumasSelectorAccess::ReadOnly(_)) {
+        return unavailable(
+            PumasDispatchPackageFactsDiagnosticCode::UnsupportedSelectorAccessRole,
+            "read-only Pumas access cannot provide owner-fresh full package facts".into(),
+        );
+    }
 
-    let raw_facts = match api
+    let raw_facts = match selector_access
         .resolve_model_package_facts(model_ref.model_id.as_str())
         .await
     {
@@ -174,6 +168,26 @@ fn validate_and_project_dispatch_package_facts(
                 "Pumas package facts for model '{}' use stale contract version {}",
                 model_ref.model_id, facts.package_facts_contract_version
             ),
+        ));
+        return PumasDispatchPackageFactsBridgeOutcome::Unavailable { diagnostics };
+    }
+    if model_ref
+        .model_id
+        .strip_prefix("pumas://models/")
+        .unwrap_or(&model_ref.model_id)
+        != facts
+            .model_ref
+            .model_id
+            .strip_prefix("pumas://models/")
+            .unwrap_or(&facts.model_ref.model_id)
+        || model_ref
+            .revision
+            .as_ref()
+            .is_some_and(|revision| facts.model_ref.revision.as_ref() != Some(revision))
+    {
+        diagnostics.push(diagnostic(
+            PumasDispatchPackageFactsDiagnosticCode::SelectedArtifactMismatch,
+            "Pumas full package facts do not match selected model/revision".into(),
         ));
         return PumasDispatchPackageFactsBridgeOutcome::Unavailable { diagnostics };
     }

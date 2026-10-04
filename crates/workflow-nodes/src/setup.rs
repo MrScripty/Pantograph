@@ -192,13 +192,12 @@ impl PumasSelectorAccess {
         &self,
         model_id: &str,
     ) -> pumas_library::Result<pumas_library::models::ResolvedModelPackageFacts> {
+        // The consumer URI denotes the same relative Pumas identity; the IPC
+        // operation accepts the relative identity, never an executable path.
+        let model_id = model_id.strip_prefix("pumas://models/").unwrap_or(model_id);
         match self {
             Self::Owner(api) => api.resolve_model_package_facts(model_id).await,
-            Self::LocalClient(_) => Err(pumas_library::PumasError::InvalidParams {
-                message:
-                    "local-client Pumas selector access does not provide full package facts yet"
-                        .to_string(),
-            }),
+            Self::LocalClient(client) => client.resolve_model_package_facts(model_id).await,
             Self::ReadOnly(_) => Err(pumas_library::PumasError::InvalidParams {
                 message: "read-only Pumas selector access does not provide full package facts"
                     .to_string(),
