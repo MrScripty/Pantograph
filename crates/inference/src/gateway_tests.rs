@@ -5337,3 +5337,7 @@ fn private_lifecycle_context_preserves_complete_attribution_and_absence() {
         .build()
     );
 }
+
+#[cfg(feature = "backend-candle")]
+#[path = "gateway_embedding_replacement_tests.rs"]
+mod embedding_replacement;

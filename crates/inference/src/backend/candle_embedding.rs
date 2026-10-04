@@ -120,6 +120,13 @@ fn read_input(
 }
 
 impl EmbeddingModel {
+    pub(super) fn accepts_model_name(&self, name: &str) -> bool {
+        fn identity(name: &str) -> &str {
+            name.strip_prefix("pumas://models/").unwrap_or(name)
+        }
+        name.is_empty() || identity(name) == identity(&self.identity.target.model_ref.model_id)
+    }
+
     pub(super) fn load(
         plan: CandleEmbeddingLoadPlan,
         target: PumasArtifactLoadTarget,
@@ -621,7 +628,7 @@ mod tests {
             assert!(backend.is_ready());
             let texts: Vec<String> = serde_json::from_value(golden["texts"].clone()).unwrap();
             let batch = backend
-                .embeddings(texts.clone(), "not-a-model-path")
+                .embeddings(texts.clone(), &target.model_ref.model_id)
                 .await
                 .unwrap();
             let encodings = backend
@@ -647,10 +654,7 @@ mod tests {
             }
             let mut max_error = 0.0f32;
             for (index, (embedding, text)) in batch.iter().zip(texts).enumerate() {
-                let single = backend
-                    .embeddings(vec![text], "ignored-legacy-name")
-                    .await
-                    .unwrap();
+                let single = backend.embeddings(vec![text], "").await.unwrap();
                 assert_eq!(embedding.vector.len(), width);
                 assert_eq!(embedding.token_count, if index == 1 { 3 } else { 4 });
                 let norm = embedding

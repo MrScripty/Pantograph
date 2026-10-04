@@ -56,6 +56,9 @@ use crate::{
     RuntimeNativeTelemetryProvider, RuntimeResourceMonitor, RuntimeResourceMonitorGuard,
 };
 
+#[path = "gateway_embedding_replacement.rs"]
+mod embedding_replacement;
+
 const IMAGE_GENERATION_BYTES_PER_RGBA_PIXEL: u64 = 4;
 const MAX_LIFECYCLE_COMPATIBILITY_ISSUES: usize = 32;
 
@@ -131,6 +134,8 @@ pub struct EmbeddingRuntimePreparation {
 pub struct InferenceGateway {
     /// The currently active backend
     backend: Arc<RwLock<Box<dyn InferenceBackend>>>,
+    /// Custody of an admitted cross-backend embedding replacement.
+    embedding_replacement: embedding_replacement::ReplacementCustody,
     /// Registry of available backends
     registry: BackendRegistry,
     /// Name of the current backend
@@ -231,6 +236,7 @@ impl InferenceGateway {
     pub fn new() -> Self {
         Self {
             backend: Arc::new(RwLock::new(Box::new(LlamaCppBackend::new()))),
+            embedding_replacement: Default::default(),
             registry: BackendRegistry::new(),
             current_backend_name: Arc::new(RwLock::new("llama.cpp".to_string())),
             embedding_mode: Arc::new(RwLock::new(false)),
@@ -252,6 +258,7 @@ impl InferenceGateway {
     pub fn with_backend(backend: Box<dyn InferenceBackend>, name: &str) -> Self {
         Self {
             backend: Arc::new(RwLock::new(backend)),
+            embedding_replacement: Default::default(),
             registry: BackendRegistry::new(),
             current_backend_name: Arc::new(RwLock::new(name.to_string())),
             embedding_mode: Arc::new(RwLock::new(false)),
@@ -514,6 +521,7 @@ impl InferenceGateway {
                 "Unknown backend: {name}"
             )));
         }
+        self.embedding_replacement.drain().await?;
         let mut guard = self.backend.write().await;
         if let Err(error) = guard.stop().await {
             self.runtime_lifecycle.write().await.last_error = Some(error.to_string());
@@ -593,6 +601,7 @@ impl InferenceGateway {
             let guard = self.spawner.read().await;
             guard.clone().ok_or(GatewayError::NoSpawner)?
         };
+        self.embedding_replacement.drain().await?;
         let mut guard = self.backend.write().await;
         let previous_last_inference_config = self.last_inference_config.read().await.clone();
         let previous_ready = guard.is_ready();
@@ -783,6 +792,7 @@ impl InferenceGateway {
     /// Await backend termination before publishing stopped state. Failure keeps
     /// the current backend and residency metadata and records the error.
     pub async fn stop(&self) -> Result<(), GatewayError> {
+        self.embedding_replacement.drain().await?;
         let mut guard = self.backend.write().await;
         if let Err(error) = guard.stop().await {
             self.runtime_lifecycle.write().await.last_error = Some(error.to_string());
@@ -1119,6 +1129,7 @@ impl InferenceGateway {
         let option_diagnostics = typed_request_option_diagnostics(&request, Some("pytorch"));
         let request_json = typed_text_generation_stream_request_json(request.clone())?;
         reject_cancelled_execution_handle("selected text", &cancellation)?;
+        self.embedding_replacement.drain().await?;
         let mut backend = self.backend.write().await;
         reject_cancelled_execution_handle("selected text", &cancellation)?;
         if canonical_backend_key(backend.name()) != "pytorch" {
@@ -1223,72 +1234,72 @@ impl InferenceGateway {
             _ => unreachable!("validated embedding input"),
         };
         reject_cancelled_execution_handle("selected embedding", &cancellation)?;
-        let mut backend = self.backend.write().await;
+        self.embedding_replacement.drain().await?;
+        let mut backend = self.backend.clone().write_owned().await;
         reject_cancelled_execution_handle("selected embedding", &cancellation)?;
         if canonical_backend_key(backend.name()) != "candle" {
-            let replacement = self.registry.create("candle")?;
-            if let Err(error) = backend.stop().await {
-                self.runtime_lifecycle.write().await.last_error = Some(error.to_string());
-                return Err(error.into());
+            backend = self
+                .replace_selected_embedding(
+                    backend,
+                    request.clone(),
+                    artifact_load_target.clone(),
+                    backend_decision.clone(),
+                    cancellation.clone(),
+                    config.clone(),
+                )
+                .await?;
+        } else {
+            let start_outcome = match backend
+                .load_selected_embedding_with_cancellation(
+                    &request,
+                    &artifact_load_target,
+                    &backend_decision,
+                    cancellation.clone(),
+                )
+                .await
+            {
+                Ok(outcome) => outcome,
+                Err(error) => {
+                    let ready = backend.is_ready();
+                    if !ready {
+                        *self.current_runtime_config.write().await = None;
+                    }
+                    let mut lifecycle = self.runtime_lifecycle.write().await;
+                    lifecycle.active = ready;
+                    lifecycle.last_error = Some(error.to_string());
+                    if !ready {
+                        lifecycle.runtime_instance_id = None;
+                    }
+                    return Err(error.into());
+                }
+            };
+            *self.current_runtime_config.write().await = Some(config);
+            *self.embedding_mode.write().await = true;
+            *self.reranking_mode.write().await = false;
+            *self.external_mode.write().await = false;
+            let mut lifecycle = self.runtime_lifecycle.write().await;
+            let runtime_instance_id = if start_outcome.runtime_reused == Some(true) {
+                lifecycle.runtime_instance_id.clone()
+            } else {
+                None
             }
-            *backend = replacement;
-            *self.current_backend_name.write().await = backend.name().to_owned();
-            *self.runtime_lifecycle.write().await = RuntimeLifecycleSnapshot {
+            .unwrap_or_else(|| {
+                format!(
+                    "candle-{}",
+                    self.runtime_instance_sequence
+                        .fetch_add(1, Ordering::Relaxed)
+                )
+            });
+            *lifecycle = RuntimeLifecycleSnapshot {
                 runtime_id: Some("candle".into()),
+                runtime_instance_id: Some(runtime_instance_id),
+                runtime_reused: start_outcome.runtime_reused,
+                lifecycle_decision_reason: start_outcome.lifecycle_decision_reason,
+                active: backend.is_ready(),
                 ..Default::default()
             };
-            *self.current_runtime_config.write().await = None;
+            drop(lifecycle);
         }
-        let start_outcome = match backend
-            .load_selected_embedding_with_cancellation(
-                &request,
-                &artifact_load_target,
-                &backend_decision,
-                cancellation.clone(),
-            )
-            .await
-        {
-            Ok(outcome) => outcome,
-            Err(error) => {
-                let ready = backend.is_ready();
-                if !ready {
-                    *self.current_runtime_config.write().await = None;
-                }
-                let mut lifecycle = self.runtime_lifecycle.write().await;
-                lifecycle.active = ready;
-                lifecycle.last_error = Some(error.to_string());
-                if !ready {
-                    lifecycle.runtime_instance_id = None;
-                }
-                return Err(error.into());
-            }
-        };
-        *self.current_runtime_config.write().await = Some(config);
-        *self.embedding_mode.write().await = true;
-        *self.reranking_mode.write().await = false;
-        *self.external_mode.write().await = false;
-        let mut lifecycle = self.runtime_lifecycle.write().await;
-        let runtime_instance_id = if start_outcome.runtime_reused == Some(true) {
-            lifecycle.runtime_instance_id.clone()
-        } else {
-            None
-        }
-        .unwrap_or_else(|| {
-            format!(
-                "candle-{}",
-                self.runtime_instance_sequence
-                    .fetch_add(1, Ordering::Relaxed)
-            )
-        });
-        *lifecycle = RuntimeLifecycleSnapshot {
-            runtime_id: Some("candle".into()),
-            runtime_instance_id: Some(runtime_instance_id),
-            runtime_reused: start_outcome.runtime_reused,
-            lifecycle_decision_reason: start_outcome.lifecycle_decision_reason,
-            active: backend.is_ready(),
-            ..Default::default()
-        };
-        drop(lifecycle);
         reject_cancelled_execution_handle("selected embedding", &cancellation)?;
         let result = backend
             .selected_embeddings(texts, cancellation.clone())

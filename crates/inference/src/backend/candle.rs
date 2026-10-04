@@ -36,7 +36,7 @@ pub struct CandleBackend {
     jobs: super::candle_embedding::EmbeddingJobs,
     loads: super::candle_embedding::EmbeddingJobs<super::candle_embedding::LoadedEmbedding>,
     #[cfg(test)]
-    pub(super) load_hook: Option<Arc<dyn Fn() + Send + Sync>>,
+    pub(crate) load_hook: Option<Arc<dyn Fn() + Send + Sync>>,
 }
 
 /// Narrow staged load plan for Candle embedding models.
@@ -686,7 +686,12 @@ impl InferenceBackend for CandleBackend {
         texts: Vec<String>,
         model: &str,
     ) -> Result<Vec<EmbeddingResult>, BackendError> {
-        let _ = model;
+        let resident = self.model.as_ref().ok_or(BackendError::NotReady)?;
+        if !resident.accepts_model_name(model) {
+            return Err(BackendError::Config(
+                "Requested embedding model does not match the resident model identity".into(),
+            ));
+        }
         self.selected_embeddings(
             texts,
             crate::InferenceExecutionCancellationHandle::running(),
