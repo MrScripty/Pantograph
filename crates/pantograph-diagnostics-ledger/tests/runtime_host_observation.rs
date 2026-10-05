@@ -304,7 +304,10 @@ fn concurrent_identical_retry_waits_for_the_original_writer_and_is_idempotent() 
     tx.commit().unwrap();
     let _ = committed_tx.send(());
     let result = retry.join().unwrap();
-    assert!(blocked.is_ok(), "the retry must wait for the original writer");
+    assert!(
+        blocked.is_ok(),
+        "the retry must wait for the original writer"
+    );
     result.unwrap();
 
     let ledger = SqliteDiagnosticsLedger::open(path).unwrap();
