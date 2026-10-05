@@ -30,7 +30,8 @@ def _sample_next_token(logits, temperature, top_p, top_k=0):
 
     logits = logits / max(temperature, 0.01)
     if top_k and top_k > 0:
-        values, _ = torch.topk(logits, top_k)
+        # Match Transformers: k above the vocabulary retains every token.
+        values, _ = torch.topk(logits, min(top_k, logits.size(-1)))
         logits = torch.where(logits < values[..., -1, None], float("-inf"), logits)
     if top_p < 1.0:
         sorted_logits, sorted_indices = torch.sort(logits, descending=True)
@@ -220,7 +221,7 @@ def _generate_autoregressive(model, tokenizer, device, formatted_prompt,
             "top_p": top_p,
             "do_sample": temperature > 0,
         }
-        if resolved_top_k and resolved_top_k > 0:
+        if top_k is not None or resolved_top_k > 0:
             gen_kwargs["top_k"] = resolved_top_k
         outputs = model.generate(**inputs, **gen_kwargs)
 
