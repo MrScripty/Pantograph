@@ -18,6 +18,7 @@ pub(crate) const MAX_NEW_TOKENS_PORT: &str = "max_new_tokens";
 pub(crate) const SYSTEM_PROMPT_PORT: &str = "system_prompt";
 pub(crate) const TOP_K_PORT: &str = "top_k";
 pub(crate) const TEMPERATURE_PORT: &str = "temperature";
+pub(crate) const TOP_P_PORT: &str = "top_p";
 pub(crate) const MAX_TEXT_BYTES: usize = 1024;
 
 /// Owned inputs for the canonical selected-text inference call.
@@ -62,6 +63,7 @@ pub(crate) fn validate_runtime_host_text_generation_request(
     optional_max_new_tokens(request)?;
     optional_top_k(request)?;
     optional_temperature(request)?;
+    optional_top_p(request)?;
     optional_system_prompt(request)?;
     let prompt = required_prompt(request)?;
     if prompt.trim().is_empty() {
@@ -302,6 +304,7 @@ fn validate_supported_inputs(
             SYSTEM_PROMPT_PORT,
             TOP_K_PORT,
             TEMPERATURE_PORT,
+            TOP_P_PORT,
         ]
         .contains(&input.port_id.as_str())
         {
@@ -366,10 +369,35 @@ fn optional_top_k(
 fn optional_temperature(
     request: &RuntimeHostExecutionRequest,
 ) -> Result<Option<f32>, RuntimeHostTextGenerationProjectionError> {
+    optional_sampling_number(
+        request,
+        TEMPERATURE_PORT,
+        0.0..=f32::MAX,
+        RuntimeHostTextGenerationProjectionError::InvalidTemperature,
+    )
+}
+
+fn optional_top_p(
+    request: &RuntimeHostExecutionRequest,
+) -> Result<Option<f32>, RuntimeHostTextGenerationProjectionError> {
+    optional_sampling_number(
+        request,
+        TOP_P_PORT,
+        0.0..=1.0,
+        RuntimeHostTextGenerationProjectionError::InvalidTopP,
+    )
+}
+
+fn optional_sampling_number(
+    request: &RuntimeHostExecutionRequest,
+    port_id: &'static str,
+    range: std::ops::RangeInclusive<f32>,
+    invalid: RuntimeHostTextGenerationProjectionError,
+) -> Result<Option<f32>, RuntimeHostTextGenerationProjectionError> {
     request
         .materialized_inputs
         .iter()
-        .find(|input| input.port_id == TEMPERATURE_PORT)
+        .find(|input| input.port_id == port_id)
         .map(|input| {
             if !matches!(
                 input.value,
@@ -378,7 +406,7 @@ fn optional_temperature(
                     | RuntimeHostExecutionInputValue::U64(_)
             ) {
                 return Err(RuntimeHostTextGenerationProjectionError::InvalidInputType {
-                    port_id: TEMPERATURE_PORT,
+                    port_id,
                     expected: "finite number",
                 });
             }
@@ -386,8 +414,8 @@ fn optional_temperature(
                 .value
                 .try_as_f32()
                 .ok()
-                .filter(|value| *value >= 0.0)
-                .ok_or(RuntimeHostTextGenerationProjectionError::InvalidTemperature)
+                .filter(|value| range.contains(value))
+                .ok_or(invalid)
         })
         .transpose()
 }
@@ -398,7 +426,8 @@ fn optional_generation_options(
     let max_new_tokens = optional_max_new_tokens(request)?;
     let top_k = optional_top_k(request)?;
     let temperature = optional_temperature(request)?;
-    if max_new_tokens.is_none() && top_k.is_none() && temperature.is_none() {
+    let top_p = optional_top_p(request)?;
+    if max_new_tokens.is_none() && top_k.is_none() && temperature.is_none() && top_p.is_none() {
         return Ok(None);
     }
     Ok(Some(GenerationOptions {
@@ -409,6 +438,7 @@ fn optional_generation_options(
         sampling: SamplingGenerationOptions {
             top_k,
             temperature,
+            top_p,
             ..SamplingGenerationOptions::default()
         },
         ..GenerationOptions::default()
@@ -451,6 +481,8 @@ pub(crate) enum RuntimeHostTextGenerationProjectionError {
     InvalidTopK,
     #[error("runtime-host text input 'temperature' must be a nonnegative finite number representable by the generation f32 contract without losing authored precision")]
     InvalidTemperature,
+    #[error("runtime-host text input 'top_p' must be between 0 and 1, retaining authored precision in the generation f32 contract")]
+    InvalidTopP,
     #[error("runtime-host text execution prompt must not be blank")]
     BlankPrompt,
     #[error("runtime-host text input '{port_id}' must be {expected}")]
@@ -619,6 +651,76 @@ mod tests {
                 ..
             }),
         ));
+    }
+
+    #[test]
+    fn top_p_accepts_unit_interval_and_rejects_wrong_type_range_or_precision() {
+        let number = |value| {
+            RuntimeHostExecutionInputValue::F64(serde_json::Number::from_f64(value).unwrap())
+        };
+        assert_eq!(optional_top_p(&text_request_fixture()).unwrap(), None);
+        for (value, expected) in [
+            (number(0.0), 0.0),
+            (number(0.7), 0.7),
+            (number(1.0), 1.0),
+            (number(f64::from(f32::from_bits(1))), f32::from_bits(1)),
+            (RuntimeHostExecutionInputValue::I64(0), 0.0),
+            (RuntimeHostExecutionInputValue::U64(1), 1.0),
+        ] {
+            let mut request = text_request_fixture();
+            request.materialized_inputs.push(RuntimeHostExecutionInput {
+                port_id: TOP_P_PORT.into(),
+                value,
+            });
+            validate_runtime_host_text_generation_request(&request).unwrap();
+            assert_eq!(optional_top_p(&request).unwrap(), Some(expected));
+            assert_eq!(
+                optional_generation_options(&request)
+                    .unwrap()
+                    .unwrap()
+                    .sampling
+                    .top_p,
+                Some(expected)
+            );
+        }
+        for value in [
+            number(-0.1),
+            number(1.1),
+            number(1.0000000000000002),
+            number(f64::MAX),
+            number(1e-100),
+            number(0.7000000000000001),
+            RuntimeHostExecutionInputValue::I64(-1),
+            RuntimeHostExecutionInputValue::U64(2),
+            RuntimeHostExecutionInputValue::U64(u64::MAX),
+        ] {
+            let mut request = text_request_fixture();
+            request.materialized_inputs.push(RuntimeHostExecutionInput {
+                port_id: TOP_P_PORT.into(),
+                value,
+            });
+            assert_eq!(
+                validate_runtime_host_text_generation_request(&request),
+                Err(RuntimeHostTextGenerationProjectionError::InvalidTopP)
+            );
+        }
+        for value in [
+            RuntimeHostExecutionInputValue::String("0.7".into()),
+            RuntimeHostExecutionInputValue::Bool(true),
+        ] {
+            let mut request = text_request_fixture();
+            request.materialized_inputs.push(RuntimeHostExecutionInput {
+                port_id: TOP_P_PORT.into(),
+                value,
+            });
+            assert!(matches!(
+                validate_runtime_host_text_generation_request(&request),
+                Err(RuntimeHostTextGenerationProjectionError::InvalidInputType {
+                    port_id: TOP_P_PORT,
+                    expected: "finite number"
+                })
+            ));
+        }
     }
 
     #[test]
@@ -888,6 +990,84 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn invalid_top_p_fails_host_execution_before_recording_gateway_calls() {
+        for (value, expected) in [
+            (
+                RuntimeHostExecutionInputValue::I64(-1),
+                "top_p' must be between 0 and 1",
+            ),
+            (
+                RuntimeHostExecutionInputValue::F64(
+                    serde_json::Number::from_f64(f64::MAX).unwrap(),
+                ),
+                "top_p' must be between 0 and 1",
+            ),
+            (
+                RuntimeHostExecutionInputValue::F64(serde_json::Number::from_f64(1e-100).unwrap()),
+                "top_p' must be between 0 and 1",
+            ),
+            (
+                RuntimeHostExecutionInputValue::F64(
+                    serde_json::Number::from_f64(0.7000000000000001).unwrap(),
+                ),
+                "top_p' must be between 0 and 1",
+            ),
+            (
+                RuntimeHostExecutionInputValue::F64(serde_json::Number::from_f64(1.1).unwrap()),
+                "top_p' must be between 0 and 1",
+            ),
+            (
+                RuntimeHostExecutionInputValue::String("40".into()),
+                "top_p' must be finite number",
+            ),
+            (
+                RuntimeHostExecutionInputValue::Bool(true),
+                "top_p' must be finite number",
+            ),
+        ] {
+            let mut request = text_request_fixture();
+            request.materialized_inputs.push(RuntimeHostExecutionInput {
+                port_id: TOP_P_PORT.into(),
+                value,
+            });
+            let validated =
+                ValidatedRuntimeHostExecutionRequest::try_from(request.clone()).unwrap();
+            let package_facts = text_package_facts(&validated);
+            let directory = tempfile::tempdir().unwrap();
+            let target = text_load_target(&package_facts, &directory);
+            let backend = TextBackend::default();
+            let calls = backend.calls.clone();
+            let recorded = backend.requests.clone();
+            let port = crate::runtime_host_execution_port::EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
+                Arc::new(TextLoadTargetResolver { target }),
+                Arc::new(TextPackageFactsResolver { package_facts }),
+                Arc::new(UnusedTextMediaSink),
+                Arc::new(inference::InferenceGateway::with_backend(Box::new(backend), "PyTorch")),
+            );
+            let cancellation =
+                pantograph_runtime_host_contracts::RuntimeHostExecutionCancellationHandle::running(
+                    request.cancellation_context.clone(),
+                );
+            let response = port
+                .execute_runtime_host_request(request, cancellation)
+                .await
+                .unwrap();
+            assert_eq!(response.state, RuntimeHostExecutionState::Rejected);
+            assert!(response.outputs.is_empty());
+            assert!(
+                response
+                    .diagnostics
+                    .iter()
+                    .any(|diagnostic| diagnostic.message.contains(expected)),
+                "{:?}",
+                response.diagnostics
+            );
+            assert!(calls.lock().unwrap().is_empty());
+            assert!(recorded.lock().unwrap().is_empty());
+        }
+    }
+
+    #[tokio::test]
     async fn temperature_reaches_recording_gateway_with_optional_existing_controls() {
         for temperature in [None, Some(0.0), Some(0.7), Some(2.0), Some(f32::MAX)] {
             for companion_controls in [false, true] {
@@ -960,6 +1140,111 @@ mod tests {
                             &serde_json::to_string(&value).unwrap()
                         )
                         .unwrap())
+                        .as_ref()
+                );
+                assert_eq!(
+                    json.get("top_k"),
+                    companion_controls.then_some(serde_json::json!(0)).as_ref()
+                );
+                assert_eq!(
+                    json.get("max_tokens"),
+                    companion_controls
+                        .then_some(serde_json::json!(128))
+                        .as_ref()
+                );
+                if companion_controls {
+                    assert_eq!(
+                        json["messages"][0]["content"][0]["text"],
+                        "  image prompt\n"
+                    );
+                }
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn top_p_reaches_recording_gateway_with_optional_existing_controls() {
+        for top_p in [None, Some(0.0), Some(0.7), Some(1.0)] {
+            for companion_controls in [false, true] {
+                let mut request = text_request_fixture();
+                if let Some(value) = top_p {
+                    request.materialized_inputs.push(RuntimeHostExecutionInput {
+                        port_id: TOP_P_PORT.into(),
+                        value: RuntimeHostExecutionInputValue::F64(
+                            serde_json::Number::from_f64(f64::from(value)).unwrap(),
+                        ),
+                    });
+                }
+                if companion_controls {
+                    request.materialized_inputs.extend([
+                        RuntimeHostExecutionInput {
+                            port_id: TEMPERATURE_PORT.into(),
+                            value: RuntimeHostExecutionInputValue::F64(
+                                serde_json::Number::from_f64(0.0).unwrap(),
+                            ),
+                        },
+                        RuntimeHostExecutionInput {
+                            port_id: TOP_K_PORT.into(),
+                            value: RuntimeHostExecutionInputValue::U64(0),
+                        },
+                        RuntimeHostExecutionInput {
+                            port_id: MAX_NEW_TOKENS_PORT.into(),
+                            value: RuntimeHostExecutionInputValue::U64(128),
+                        },
+                        RuntimeHostExecutionInput {
+                            port_id: SYSTEM_PROMPT_PORT.into(),
+                            value: RuntimeHostExecutionInputValue::String(
+                                "  image prompt\n".into(),
+                            ),
+                        },
+                    ]);
+                }
+                let validated =
+                    ValidatedRuntimeHostExecutionRequest::try_from(request.clone()).unwrap();
+                let package_facts = text_package_facts(&validated);
+                let directory = tempfile::tempdir().unwrap();
+                let target = text_load_target(&package_facts, &directory);
+                let projection = project_runtime_host_text_generation(
+                    &validated,
+                    package_facts.clone(),
+                    target.clone(),
+                )
+                .unwrap();
+                let options = projection.request().generation_options.as_ref();
+                assert_eq!(options.is_some(), top_p.is_some() || companion_controls);
+                assert_eq!(options.and_then(|options| options.sampling.top_p), top_p);
+                assert_eq!(
+                    options.and_then(|options| options.sampling.temperature),
+                    companion_controls.then_some(0.0)
+                );
+                let backend = TextBackend::default();
+                let recorded = backend.requests.clone();
+                let port = crate::runtime_host_execution_port::EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
+                    Arc::new(TextLoadTargetResolver { target }), Arc::new(TextPackageFactsResolver { package_facts }),
+                    Arc::new(UnusedTextMediaSink), Arc::new(inference::InferenceGateway::with_backend(Box::new(backend), "PyTorch")),
+                );
+                let cancellation = pantograph_runtime_host_contracts::RuntimeHostExecutionCancellationHandle::running(request.cancellation_context.clone());
+                let response = port
+                    .execute_runtime_host_request(request, cancellation)
+                    .await
+                    .unwrap();
+                assert_eq!(response.state, RuntimeHostExecutionState::Completed);
+                let recorded = recorded.lock().unwrap();
+                assert_eq!(recorded.len(), 1);
+                let json = &recorded[0];
+                assert_eq!(
+                    json.get("top_p"),
+                    top_p
+                        .map(|value| serde_json::from_str::<serde_json::Value>(
+                            &serde_json::to_string(&value).unwrap()
+                        )
+                        .unwrap())
+                        .as_ref()
+                );
+                assert_eq!(
+                    json.get("temperature"),
+                    companion_controls
+                        .then_some(serde_json::json!(0.0))
                         .as_ref()
                 );
                 assert_eq!(

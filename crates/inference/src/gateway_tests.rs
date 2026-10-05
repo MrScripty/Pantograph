@@ -5179,6 +5179,94 @@ async fn selected_text_preserves_temperature_boundaries_with_optional_length_and
 }
 
 #[tokio::test]
+async fn selected_text_preserves_top_p_boundaries_with_optional_length_and_system() {
+    for top_p in [None, Some(0.0), Some(0.7), Some(1.0)] {
+        for max_new_tokens in [None, Some(128)] {
+            for system in [None, Some("  Return an image prompt only.\n".to_string())] {
+                let (_directory, mut request, target, decision) =
+                    crate::selected_text_execution::fixture();
+                let InferenceExecutionInput::TextGeneration { system_prompt, .. } =
+                    &mut request.input
+                else {
+                    panic!("text fixture expected");
+                };
+                *system_prompt = system.clone();
+                request.generation_options = if top_p.is_some() || max_new_tokens.is_some() {
+                    Some(GenerationOptions {
+                        sampling: SamplingGenerationOptions {
+                            top_p,
+                            ..Default::default()
+                        },
+                        length: LengthGenerationOptions {
+                            max_new_tokens,
+                            ..Default::default()
+                        },
+                        ..Default::default()
+                    })
+                } else {
+                    None
+                };
+                let selected = SelectedTextBackend {
+                    expected_system_prompt: system,
+                    ..Default::default()
+                };
+                let requests = selected.requests.clone();
+                let effects = selected.effects.clone();
+                let gateway = InferenceGateway::with_backend(Box::new(selected), "PyTorch");
+                let result = gateway
+                    .execute_selected_text_with_cancellation(
+                        request,
+                        target.clone(),
+                        decision,
+                        InferenceExecutionCancellationHandle::running(),
+                    )
+                    .await
+                    .unwrap();
+                let InferenceExecutionResult::TextGeneration {
+                    text,
+                    option_diagnostics,
+                    ..
+                } = result
+                else {
+                    panic!("text result expected");
+                };
+                assert_eq!(text, "exact text");
+                let requests = requests.lock().unwrap();
+                assert_eq!(requests.len(), 1);
+                assert_eq!(
+                    requests[0].get("top_p"),
+                    top_p
+                        .map(|value| serde_json::from_str::<serde_json::Value>(
+                            &serde_json::to_string(&value).unwrap()
+                        )
+                        .unwrap())
+                        .as_ref()
+                );
+                assert_eq!(
+                    requests[0].get("max_tokens"),
+                    max_new_tokens.map(serde_json::Value::from).as_ref()
+                );
+                assert_eq!(
+                    option_diagnostics
+                        .iter()
+                        .any(|diagnostic| diagnostic.option_path == "sampling.top_p"
+                            && diagnostic.state == OptionSupportState::Mapped),
+                    top_p.is_some()
+                );
+                assert_eq!(
+                    *effects.lock().unwrap(),
+                    [
+                        format!("load:{}:cpu", target.local_load_path),
+                        "stream".into(),
+                        "finish:false".into()
+                    ]
+                );
+            }
+        }
+    }
+}
+
+#[tokio::test]
 async fn selected_text_switches_to_requested_target_and_requires_terminal_output() {
     for terminal in [0, 1, 2] {
         let (_directory, request, target, decision) = crate::selected_text_execution::fixture();

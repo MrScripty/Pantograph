@@ -353,7 +353,7 @@ jobs:
           TRANSFORMERS_OFFLINE: '1'
         run: |
           set -euo pipefail
-          "$RUNNER_TEMP/sampler-venv/bin/python" -c 'import torch, transformers, unittest; print("torch", torch.__version__, "transformers", transformers.__version__); assert torch.version.cuda is None; suite = unittest.defaultTestLoader.discover("crates/inference/torch/tests"); print("Sampler tests discovered:", suite.countTestCases()); assert suite.countTestCases() >= 4'
+          "$RUNNER_TEMP/sampler-venv/bin/python" -c 'import torch, transformers, unittest; print("torch", torch.__version__, "transformers", transformers.__version__); assert torch.version.cuda is None; suite = unittest.defaultTestLoader.discover("crates/inference/torch/tests"); print("Sampler tests discovered:", suite.countTestCases()); assert suite.countTestCases() >= 6'
           "$RUNNER_TEMP/sampler-venv/bin/python" -m unittest discover -s crates/inference/torch/tests -v 2>&1 | tee "$RUNNER_TEMP/cpu-sampler-tests.log"
 
       - name: Upload CPU sampler test evidence

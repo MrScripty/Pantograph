@@ -2712,6 +2712,59 @@ fn test_pytorch_temperature_keeps_zero_and_finite_f32_range_in_worker_envelopes(
 }
 
 #[test]
+fn test_pytorch_top_p_preserves_unit_interval_in_generate_and_stream_envelopes() {
+    for top_p in [0.0, 0.7, 1.0] {
+        for temperature in [0.0, 0.7] {
+            for operation in [
+                PyTorchWorkerOperation::GenerateText,
+                PyTorchWorkerOperation::GenerateTextStream,
+            ] {
+                let envelope = PyTorchBackend::generate_text_envelope(
+                    "req-top-p",
+                    operation,
+                    PyTorchTextGenerationRequest {
+                        prompt: "Explain adapters.".into(),
+                        system_prompt: None,
+                        max_tokens: 2,
+                        temperature,
+                        top_p,
+                        top_k: Some(0),
+                        masked_prompt_json: None,
+                    },
+                );
+                match operation {
+                    PyTorchWorkerOperation::GenerateText => {
+                        PyTorchBackend::validate_generate_text_envelope(&envelope).unwrap()
+                    }
+                    PyTorchWorkerOperation::GenerateTextStream => {
+                        PyTorchBackend::validate_generate_text_stream_envelope(&envelope).unwrap()
+                    }
+                    _ => unreachable!(),
+                }
+                assert_eq!(envelope.payload.top_p, top_p);
+                assert_eq!(
+                    serde_json::to_value(&envelope).unwrap()["payload"]["top_p"].as_f64(),
+                    Some(top_p)
+                );
+                let options = GenerationOptions {
+                    sampling: SamplingGenerationOptions {
+                        top_p: Some(top_p as f32),
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                };
+                let mapping = PyTorchBackend::transformers_generation_option_mapping(&options);
+                assert!(mapping
+                    .diagnostics
+                    .iter()
+                    .any(|diagnostic| diagnostic.option_path == "sampling.top_p"
+                        && diagnostic.state == OptionSupportState::Honored));
+            }
+        }
+    }
+}
+
+#[test]
 fn test_pytorch_generate_text_request_threads_top_k_as_transformers_kwarg() {
     let request = PyTorchBackend::generate_text_request(
         "Explain adapters.".to_string(),

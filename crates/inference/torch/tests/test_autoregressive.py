@@ -80,6 +80,78 @@ class TinyGenerationModel(GenerationMixin):
 
 
 class AutoregressiveSamplingTests(unittest.TestCase):
+    def test_top_p_boundaries_defaults_and_interactions_match_real_generation(self):
+        for logits in [[0.0, 0.01, 0.02, 0.03], [0.03, 0.03, 0.01, 0.0], [0.0] * 4]:
+            for authored_p in [None, 0.0, 0.5, 0.7, 1.0]:
+                for authored_temperature in [None, 0.0, 0.001, 0.7, 2.0]:
+                    for authored_k in [None, 0, 2, 5, (1 << 32) - 1]:
+                        with self.subTest(logits=logits, top_p=authored_p,
+                                          temperature=authored_temperature, top_k=authored_k):
+                            model = TinyGenerationModel()
+                            model.logits = torch.tensor(logits)
+                            model.generation_config.top_k = 2
+                            model.generation_config.top_p = 0.25
+                            temperature = 0.7 if authored_temperature is None else authored_temperature
+                            top_p = 1.0 if authored_p is None else authored_p
+                            top_k = 2 if authored_k is None else authored_k
+                            scores = model.logits.unsqueeze(0)
+                            if temperature > 0:
+                                scores = scores / max(temperature, 0.01)
+                                if top_k > 0:
+                                    scores = TopKLogitsWarper(top_k)(None, scores)
+                                if top_p < 1.0:
+                                    scores = TopPLogitsWarper(top_p)(None, scores)
+                                expected_probs = torch.softmax(scores, dim=-1)
+
+                            def generate(streaming):
+                                operation = "generate_text_stream" if streaming else "generate_text"
+                                payload = {"prompt": "prompt", "max_tokens": 2,
+                                           "transformers_kwargs": {}}
+                                if authored_p is not None:
+                                    payload["top_p"] = authored_p
+                                if authored_temperature is not None:
+                                    payload["temperature"] = authored_temperature
+                                if authored_k is not None:
+                                    payload["transformers_kwargs"]["top_k"] = authored_k
+                                kwargs = worker_contract.generate_text_kwargs_from_envelope(
+                                    {"contract_version": 1, "request_id": "tiny-nucleus",
+                                     "operation": operation, "payload": payload},
+                                    expected_operation=operation,
+                                )
+                                self.assertEqual(kwargs["top_p"], top_p)
+                                observed_probs = []
+                                multinomial = torch.multinomial
+
+                                def record_and_sample(probs, num_samples, **extra):
+                                    observed_probs.append(probs.clone())
+                                    return multinomial(probs, num_samples, **extra)
+
+                                with torch.random.fork_rng(devices=[]):
+                                    torch.manual_seed(41)
+                                    with mock.patch.object(torch, "multinomial", side_effect=record_and_sample):
+                                        args = (model, TokenizerFixture(), "cpu", "prompt", 2,
+                                                kwargs["temperature"], kwargs["top_p"])
+                                        if streaming:
+                                            result = list(autoregressive._generate_autoregressive_streaming(
+                                                *args, top_k=kwargs.get("top_k"),
+                                            ))
+                                            text = ",".join(chunk["text"] for chunk in result)
+                                        else:
+                                            text = autoregressive._generate_autoregressive(
+                                                *args, top_k=kwargs.get("top_k"),
+                                            )
+                                if temperature == 0:
+                                    self.assertEqual(observed_probs, [])
+                                    expected = str(int(model.logits.argmax()))
+                                    self.assertEqual(text, f"{expected},{expected}")
+                                else:
+                                    self.assertEqual(len(observed_probs), 2)
+                                    for probs in observed_probs:
+                                        torch.testing.assert_close(probs, expected_probs)
+                                return text
+
+                            self.assertEqual(generate(False), generate(True))
+
     def test_temperature_controls_real_streaming_and_transformers_generation(self):
         for authored in [None, 0.0, 0.001, 0.01, 0.7, 2.0, torch.finfo(torch.float32).max]:
             with self.subTest(temperature=authored):
@@ -133,9 +205,9 @@ class AutoregressiveSamplingTests(unittest.TestCase):
                 self.assertEqual(generate(False), generate(True))
 
     def test_real_logits_match_transformers_top_k_and_top_p_probabilities(self):
-        logits = torch.tensor([[0.0, 1.0, 2.0, 3.0], [2.0, 2.0, 0.0, -1.0]])
+        logits = torch.tensor([[0.0, 1.0, 2.0, 3.0], [2.0, 2.0, 0.0, -1.0], [0.0] * 4])
         for top_k in [0, 1, 2, 4, 5, (1 << 32) - 1]:
-            for top_p in [1.0, 0.7]:
+            for top_p in [0.0, 0.25, 0.5, 0.7, 1.0]:
                 with self.subTest(top_k=top_k, top_p=top_p):
                     expected_scores = logits / 0.8
                     if top_k > 0:

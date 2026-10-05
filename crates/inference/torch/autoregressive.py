@@ -34,11 +34,12 @@ def _sample_next_token(logits, temperature, top_p, top_k=0):
         values, _ = torch.topk(logits, min(top_k, logits.size(-1)))
         logits = torch.where(logits < values[..., -1, None], float("-inf"), logits)
     if top_p < 1.0:
-        sorted_logits, sorted_indices = torch.sort(logits, descending=True)
+        # Match Transformers TopPLogitsWarper, including ties and p=0:
+        # remove the low-probability tail and retain at least one token.
+        sorted_logits, sorted_indices = torch.sort(logits, descending=False)
         cum_probs = torch.cumsum(torch.softmax(sorted_logits, dim=-1), dim=-1)
-        mask = cum_probs > top_p
-        mask[..., 1:] = mask[..., :-1].clone()
-        mask[..., 0] = False
+        mask = cum_probs <= (1.0 - top_p)
+        mask[..., -1] = False
         scatter_mask = torch.zeros_like(logits, dtype=torch.bool).scatter(-1, sorted_indices, mask)
         logits = logits.masked_fill(scatter_mask, float("-inf"))
 

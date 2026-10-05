@@ -385,3 +385,24 @@ preserved. Shared contracts pass 73 tests, inference passes 688, and five real
 CPU tests include actual Transformers generation and streaming sampling on
 fixed logits. Native descriptor/host/workflow tests are compiler checked only.
 Parent owns publication and review; required-real acceptance remains open.
+
+
+## 2026-10-05 — Nucleus sampling and CI failure propagation
+
+Independent review found the frozen CPU CI step could mask unittest failures
+through tee. Separate corrective commit `fddae90d` explicitly enables Bash
+pipefail and corrects the earlier report; exact-script red/green shell checks
+return failing/passing status correctly while retaining logs. A green run from
+uncorrected `a6d1fd15` alone cannot qualify sampling. Frozen histories and
+Library packets remain unchanged.
+
+The separate [top_p milestone](reports/2026-10-05-workflow-text-top-p.md) starts
+from temperature `e0293ebf` and integrates that CI correction. It reuses the
+finite-number host contract, exposes an optional [0,1] input without a default,
+and repairs streaming ties/cutoffs to match actual Transformers nucleus
+sampling. Six real CPU tests pass, including 375 interaction cases; the new
+matrix detects 112 failures against the frozen sampler. Shared tests pass 74,
+inference passes 690, and embedded library/test compilation passes. Native
+host/source execution and hosted provisioning remain pending; parent owns
+independent review/publication, including any forthcoming finite-contract
+corrections. No model weights, ONNX retry or complete-workflow acceptance.

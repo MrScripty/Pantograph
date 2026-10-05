@@ -39,7 +39,8 @@ fn text_system_prompt_is_optional_string_without_changing_token_limit_or_default
             "max_new_tokens",
             "system_prompt",
             "top_k",
-            "temperature"
+            "temperature",
+            "top_p"
         ]
     );
     assert_eq!(ports[0].requirement, InferencePortRequirement::Required);
@@ -129,6 +130,37 @@ fn text_temperature_is_optional_zero_inclusive_without_a_default_or_step() {
     );
     assert!(temperature.default.is_none());
     temperature.validate().unwrap();
+}
+
+#[test]
+fn text_top_p_is_optional_zero_inclusive_unit_interval_without_a_default() {
+    let ports: Vec<InferencePortDescriptor> = serde_json::from_str(include_str!(
+        "fixtures/text_generation_system_prompt_inputs.json"
+    ))
+    .unwrap();
+    let top_p = ports
+        .iter()
+        .find(|port| port.port_id.as_str() == "top_p")
+        .unwrap();
+    assert_eq!(top_p.direction, InferencePortDirection::Input);
+    assert_eq!(top_p.requirement, InferencePortRequirement::Optional);
+    assert_eq!(
+        top_p.value_type,
+        InferenceValueType::Scalar(InferenceScalarType::F64)
+    );
+    assert_eq!(
+        top_p.options,
+        InferencePortOptions::NumericRange {
+            range: pantograph_inference_interface_contracts::InferenceNumericRange {
+                min: 0.0,
+                max: 1.0,
+                step: None,
+                default: None,
+            },
+        }
+    );
+    assert!(top_p.default.is_none());
+    top_p.validate().unwrap();
 }
 
 #[test]
