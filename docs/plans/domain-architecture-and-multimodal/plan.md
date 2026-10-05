@@ -27,6 +27,14 @@ execute locally. Authorized official dependency installation is blocked by OS
 permission denial; the real desktop build fails at missing GLib prerequisites.
 Tauri setup/IPC and a running desktop remain unqualified.
 
+The independent [resident-resource successor](reports/2026-10-05-resident-resource-accounting.md)
+adds explicit model/producer resident envelopes to the registry's existing local
+and shared accounting, preserving charges after task release until confirmed
+stop. Missing shared-pool resident estimates produce typed unavailable outcomes.
+Portable lifecycle/contended admission tests qualify this owner capability;
+automatic producer estimate publication, a proven resident/transient split and
+native execution remain separate gaps. Frozen `eabbcc83` is unchanged.
+
 **Execution ledger:** [execution-ledger.md](execution-ledger.md)
 
 **Issues:** [issues.md](issues.md)

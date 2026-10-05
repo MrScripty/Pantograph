@@ -470,3 +470,19 @@ runtime is simulated. Official APT update was attempted with owner authorization
 but returned OS permission denial; desktop compilation fails at missing
 `glib-2.0.pc`. Tauri setup/IPC and desktop-process qualification stay blocked.
 Parent retains review/publication; old source milestones and PR54 remain frozen.
+
+## 2026-10-05 — Explicit retained model resource accounting
+
+Parent froze `eabbcc83` and authorized the next independent scheduler capability.
+Source inspection confirms shared domains sum task leases only; model residency
+metadata and candidate loaded-memory estimates do not keep an idle producer's
+allocations charged. The [successor](reports/2026-10-05-resident-resource-accounting.md)
+adds explicit model/instance resident declarations at the registry owner, counts
+them in local/shared admission, and preserves envelopes after task cleanup.
+Unknown loaded shared-pool members fail admission with typed unavailable
+diagnostics instead of exposing free capacity. Fifteen new portable tests cover
+lifecycle, identity freshness, real contention, unified kinds, overflow and
+provisional replacement. Current host producers still need a bridge publishing
+per-kind estimates; peak task envelopes remain conservatively charged in full.
+No hardware measurements, native execution or pin changes are claimed. Parent
+retains review/publication; frozen qualifications and PR54 remain unchanged.

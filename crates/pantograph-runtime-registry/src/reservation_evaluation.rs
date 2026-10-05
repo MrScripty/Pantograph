@@ -30,6 +30,8 @@ pub struct RuntimeReservationResourceObservation {
     pub kind: RuntimeAdmissionResourceKind,
     pub requested_bytes: u64,
     pub reserved_bytes: u64,
+    /// Separately declared resident envelope included in reserved_bytes.
+    pub resident_bytes: u64,
     /// Missing capacity is unknown, never a measurement of unlimited memory.
     pub capacity_bytes: Option<u64>,
     pub safety_margin_bytes: u64,
@@ -121,7 +123,7 @@ impl RuntimeRegistry {
                 continue;
             };
             let reserved_bytes = total_reserved_resource_bytes(
-                &runtime_id,
+                record,
                 kind.resource_label(),
                 &guard.reservations,
                 replaces_reservation_id,
@@ -149,6 +151,7 @@ impl RuntimeRegistry {
                 kind,
                 requested_bytes,
                 reserved_bytes,
+                resident_bytes: crate::model_resources::resident_bytes(record, kind, false)?,
                 capacity_bytes,
                 safety_margin_bytes: budget.map(|budget| budget.safety_margin_bytes).unwrap_or(0),
                 available_bytes,

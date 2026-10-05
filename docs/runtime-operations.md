@@ -114,7 +114,7 @@ still cover all live claims. The desktop restores explicit declarations from
 workflow startup. Omission or an empty list composes the existing empty registry
 with no shared bindings. Unconfigured resources retain runtime-local
 accounting. Claims remain declared envelopes: missing claims, allocations outside
-this registry, retained model allocations outside declared leases, per-device
+this registry, undeclared allocations, per-device
 subdivision within one runtime, automatic host binding, and measured allocator
 safety are not established by this API.
 
@@ -156,6 +156,40 @@ symlinks and filesystem permission/metadata failures are errors. The production
 and passes that same registry to its existing gateway/workflow consumers.
 Existing config commands preserve the section but reject live
 changes to it: shared backing membership requires editing the file and restarting.
+
+### Resident Model Envelopes
+
+Producer observations now keep a separate `model_resource_residency` in each
+registry runtime snapshot. Its optional requirements are explicit resident
+estimates, not allocator measurements. A producer publishes them through
+`declare_model_residency_resources` using the exact observed model and runtime
+instance identity. The registry charges those RAM/VRAM estimates together with
+live task claims against configured local and shared budgets. Unified pools sum
+their bound kinds; equal model content in two producers remains two allocations.
+
+Task completion releases its lease while leaving the resident envelope charged.
+Repeated observations, missing health/model metadata, health failures, omitted
+members in bulk snapshots and stop requests do not prove deallocation. Confirmed
+stop or reclaim after producer inactivity clears the envelope. A new model or
+instance invalidates its estimate; smaller/partial declarations for the same
+resident identity retain the previous componentwise maximum. Growth must fit
+alongside current task/custody claims, and rejected growth preserves prior state.
+
+If a loaded member has no declaration for a resource bound to a shared pool,
+admission for that pool returns `ModelResidencyResourcesUnavailable`. It does not
+report that capacity as free. Current host mode snapshots supply identities but
+do not publish per-kind resident estimates; configuring shared domains can
+therefore block loaded-model dispatch until that producer bridge supplies them.
+Legacy local-only admission keeps its existing missing-estimate behavior; known
+resident declarations also count against local budgets.
+
+Existing task reservations remain complete peak envelopes. They may already
+include model weights, and charging a separate resident envelope is deliberately
+conservative until a producer supplies a proven resident/transient split. The
+registry does not infer device placement, subtract guessed weights, or claim
+physical allocator safety. Replacing a model inside a live producer requires fresh
+declarations; releasing an individual model's envelope without stopping the
+producer is not yet a supported operation.
 
 ## Recovery And Reclaim
 

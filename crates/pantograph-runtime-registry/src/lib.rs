@@ -1,4 +1,6 @@
 mod admission;
+mod model_resources;
+pub use model_resources::RuntimeModelResourceResidency;
 mod observation;
 mod reclaim;
 mod registry_queries;
@@ -79,6 +81,21 @@ pub type SharedRuntimeRegistry = Arc<RuntimeRegistry>;
 
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum RuntimeRegistryError {
+    #[error("runtime '{0}' model/producer identity changed before resident resource publication")]
+    ModelResidencyObservationChanged(String),
+
+    #[error("runtime '{runtime_id}' model '{model_id}' has no declared resident {resource_kind} estimate")]
+    ModelResidencyResourcesUnavailable {
+        runtime_id: String,
+        model_id: String,
+        resource_kind: &'static str,
+    },
+
+    #[error("runtime '{runtime_id}' resident resource declaration is invalid: {reason}")]
+    InvalidModelResidencyResources {
+        runtime_id: String,
+        reason: &'static str,
+    },
     #[error("resource domain '{domain_id}' is invalid: {reason}")]
     InvalidResourceDomain {
         domain_id: String,
@@ -277,6 +294,13 @@ impl RuntimeRegistry {
                 runtime_instance_id,
             } => {
                 if let Some(runtime_instance_id) = runtime_instance_id {
+                    if let Some(resident) = record.model_resource_residency.as_mut() {
+                        if resident.runtime_instance_id.as_ref() != Some(&runtime_instance_id) {
+                            resident.runtime_instance_id = Some(runtime_instance_id.clone());
+                            resident.requirements = None;
+                            record.models.clear();
+                        }
+                    }
                     record.runtime_instance_id = Some(runtime_instance_id);
                 }
                 if !matches!(
@@ -293,6 +317,8 @@ impl RuntimeRegistry {
             Transition::Stopped => {
                 record.runtime_instance_id = None;
                 record.last_error = None;
+                record.models.clear();
+                record.model_resource_residency = None;
             }
         }
 
@@ -487,9 +513,26 @@ impl RuntimeRegistry {
             apply_runtime_observation(&mut guard, observation, now_ms);
         }
 
+        let bound_runtime_ids = guard
+            .resource_domains
+            .values()
+            .flat_map(|domain| {
+                domain
+                    .bindings
+                    .iter()
+                    .map(|binding| binding.runtime_id.clone())
+            })
+            .collect::<BTreeSet<_>>();
         for record in guard.runtimes.values_mut() {
             if observed_runtime_ids.contains(&record.runtime_id)
                 || !record.active_reservations.is_empty()
+                || record
+                    .model_resource_residency
+                    .as_ref()
+                    .is_some_and(|resident| {
+                        resident.requirements.is_some()
+                            || bound_runtime_ids.contains(&record.runtime_id)
+                    })
             {
                 continue;
             }
@@ -498,6 +541,7 @@ impl RuntimeRegistry {
             record.runtime_instance_id = None;
             record.last_error = None;
             record.models.clear();
+            record.model_resource_residency = None;
             record.last_transition_at_ms = now_ms;
         }
 
@@ -668,6 +712,7 @@ fn runtime_reclaim(
         record.runtime_instance_id = None;
         record.last_error = None;
         record.models.clear();
+        record.model_resource_residency = None;
         record.last_transition_at_ms = now_ms;
     }
 
@@ -709,7 +754,7 @@ fn admission_failure(
     if let Some(requested_ram_bytes) = claim.ram_bytes {
         let resource_kind = RuntimeAdmissionResourceKind::RamBytes.resource_label();
         let reserved_ram_bytes = total_reserved_resource_bytes(
-            &record.runtime_id,
+            record,
             resource_kind,
             reservations,
             excluded_reservation_id,
@@ -740,7 +785,7 @@ fn admission_failure(
     if let Some(requested_vram_bytes) = claim.vram_bytes {
         let resource_kind = RuntimeAdmissionResourceKind::VramBytes.resource_label();
         let reserved_vram_bytes = total_reserved_resource_bytes(
-            &record.runtime_id,
+            record,
             resource_kind,
             reservations,
             excluded_reservation_id,
@@ -852,7 +897,7 @@ fn add_optional_resource_claim_bytes(
 }
 
 fn total_reserved_resource_bytes<F>(
-    runtime_id: &str,
+    record: &RuntimeRegistryRecord,
     resource_kind: &'static str,
     reservations: &BTreeMap<u64, RuntimeReservationRecord>,
     excluded_reservation_id: Option<u64>,
@@ -861,12 +906,22 @@ fn total_reserved_resource_bytes<F>(
 where
     F: Fn(&RuntimeReservationRecord) -> Option<u64>,
 {
+    let runtime_id = record.runtime_id.as_str();
+    let resident_bytes = model_resources::resident_bytes(
+        record,
+        match resource_kind {
+            "ram_bytes" => RuntimeAdmissionResourceKind::RamBytes,
+            "vram_bytes" => RuntimeAdmissionResourceKind::VramBytes,
+            _ => unreachable!("known resource kind"),
+        },
+        false,
+    )?;
     reservations
         .values()
         .filter(|reservation| reservation.runtime_id == runtime_id)
         .filter(|reservation| Some(reservation.reservation_id) != excluded_reservation_id)
         .filter_map(claim_bytes)
-        .try_fold(0_u64, |total, claim_bytes| {
+        .try_fold(resident_bytes, |total, claim_bytes| {
             total.checked_add(claim_bytes).ok_or_else(|| {
                 RuntimeRegistryError::ResourceAccountingOverflow {
                     runtime_id: runtime_id.to_string(),
@@ -915,6 +970,8 @@ fn apply_runtime_observation(
     let record = state.runtimes.entry(runtime_id.clone()).or_insert_with(|| {
         RuntimeRegistryRecord::new(&runtime_id, &observation.display_name, now_ms)
     });
+
+    model_resources::observe_model_resources(record, &observation);
 
     record.runtime_id = runtime_id;
     record.display_name = observation.display_name;

@@ -34,6 +34,8 @@ pub struct RuntimeRegistryRuntimeSnapshot {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub admission_budget: Option<RuntimeAdmissionBudget>,
     pub models: Vec<RuntimeModelResidencyRecord>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_resource_residency: Option<crate::RuntimeModelResourceResidency>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

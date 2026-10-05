@@ -89,6 +89,13 @@ Adopt the following ownership and lifecycle boundary for the planned
   precedes mutation. Custody transfer after binding leaves normal task lifecycle
   cleanup authoritative; this contract does not promise process-abort recovery.
 - Eviction decisions must exclude active, reserved, or pinned runtimes/models.
+- Explicit model-resident RAM/VRAM envelopes belong to this same registry and
+  admission lock, separately from task leases. Task release, health failure and
+  stop requests do not confirm model deallocation. Observed stop/inactive-producer
+  reclaim clears resident accounting. Model or producer-instance changes require
+  fresh identity evidence and declarations; a smaller/partial estimate cannot
+  free a held envelope for the same resident identity. Shared backing admission
+  treats missing per-kind resident declarations as unavailable, not zero.
 
 8. `crates/pantograph-embedded-runtime` remains a runtime producer and executor.
 - It continues to expose Pantograph-specific runtime capabilities and execute

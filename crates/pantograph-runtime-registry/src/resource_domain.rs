@@ -74,6 +74,8 @@ pub struct RuntimeResourceDomainObservation {
     pub domain_id: String,
     pub requested_bytes: u64,
     pub reserved_bytes: u64,
+    /// Resident estimates are part of reserved_bytes, separate from task leases.
+    pub resident_bytes: u64,
     pub total_bytes: u64,
     pub safety_margin_bytes: u64,
     pub available_bytes: u64,
@@ -142,7 +144,7 @@ impl RuntimeRegistry {
                 "logical resource already belongs to another domain",
             ));
         }
-        let reserved = reserved_bytes(&state, &domain, None)?;
+        let reserved = reserved_bytes(&state, &domain, None, false)?;
         if reserved > domain.total_bytes - domain.safety_margin_bytes {
             return Err(invalid(
                 &domain,
@@ -197,18 +199,61 @@ fn reserved_bytes(
     state: &RuntimeRegistryState,
     domain: &RuntimeResourceDomain,
     excluded: Option<u64>,
+    require_known: bool,
 ) -> Result<u64, RuntimeRegistryError> {
+    let resident = resident_domain_bytes(state, domain, require_known)?;
     state
         .reservations
         .values()
         .filter(|lease| Some(lease.reservation_id) != excluded)
-        .try_fold(0, |total, lease| {
+        .try_fold(resident, |total, lease| {
             add(
                 domain,
                 total,
                 claim_bytes(domain, &lease.runtime_id, lease.claim)?,
             )
         })
+}
+
+fn resident_domain_bytes(
+    state: &RuntimeRegistryState,
+    domain: &RuntimeResourceDomain,
+    require_known: bool,
+) -> Result<u64, RuntimeRegistryError> {
+    domain.bindings.iter().try_fold(0, |total, binding| {
+        let record = state
+            .runtimes
+            .get(&binding.runtime_id)
+            .expect("configured runtime");
+        add(
+            domain,
+            total,
+            crate::model_resources::resident_bytes(record, binding.resource_kind, require_known)?,
+        )
+    })
+}
+
+pub(crate) fn validate_resident_domain_capacity(
+    state: &RuntimeRegistryState,
+    runtime_id: &str,
+    claim: RuntimeReservationClaim,
+) -> Result<(), RuntimeRegistryError> {
+    for domain in state.resource_domains.values() {
+        // Other loaded members may not yet have declarations. Their unknown
+        // state blocks admission, but must not prevent publishing known facts.
+        let reserved = reserved_bytes(state, domain, None, false)?;
+        let capacity = domain.total_bytes - domain.safety_margin_bytes;
+        if reserved > capacity {
+            let requested = claim_bytes(domain, runtime_id, claim)?;
+            return Err(RuntimeRegistryError::ResourceDomainAdmissionRejected {
+                runtime_id: runtime_id.to_string(),
+                domain_id: domain.domain_id.clone(),
+                requested_bytes: requested,
+                available_bytes: capacity.saturating_sub(reserved - requested),
+            });
+        }
+    }
+    Ok(())
 }
 
 pub(crate) fn domain_observations(
@@ -227,11 +272,12 @@ pub(crate) fn domain_observations(
                 .any(|binding| binding.runtime_id == runtime_id)
         })
         .map(|domain| {
-            let reserved_bytes = reserved_bytes(state, domain, excluded)?;
+            let reserved_bytes = reserved_bytes(state, domain, excluded, true)?;
             Ok(RuntimeResourceDomainObservation {
                 domain_id: domain.domain_id.clone(),
                 requested_bytes: claim_bytes(domain, runtime_id, claim)?,
                 reserved_bytes,
+                resident_bytes: resident_domain_bytes(state, domain, true)?,
                 total_bytes: domain.total_bytes,
                 safety_margin_bytes: domain.safety_margin_bytes,
                 // Configuration and every mutation uphold this subtraction.
