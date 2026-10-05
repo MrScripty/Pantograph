@@ -11,7 +11,7 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  PUMAS_LIBRARY_REF: 10fe0bb2d92c8ef147a328803a3425672ac30bdb
+  PUMAS_LIBRARY_REF: a94fd92021f27fdeedb6e2de6e01c41c250ef576
 
 jobs:
   lint-no-new:

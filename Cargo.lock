@@ -8225,7 +8225,7 @@ checksum = "40e24eee682d89fb193496edf918a7f407d30175b2e785fe057e4392dfd182e0"
 [[package]]
 name = "pumas-library"
 version = "0.7.0"
-source = "git+https://github.com/MrScripty/Pumas-Library.git?rev=10fe0bb2d92c8ef147a328803a3425672ac30bdb#10fe0bb2d92c8ef147a328803a3425672ac30bdb"
+source = "git+https://github.com/MrScripty/Pumas-Library.git?rev=a94fd92021f27fdeedb6e2de6e01c41c250ef576#a94fd92021f27fdeedb6e2de6e01c41c250ef576"
 dependencies = [
  "anyhow",
  "async-trait",
