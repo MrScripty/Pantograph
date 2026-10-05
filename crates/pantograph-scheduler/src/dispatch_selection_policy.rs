@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 
 use crate::dispatch::{SchedulerDispatchDecision, SCHEDULER_DISPATCH_DECISION_CONTRACT_VERSION};
 use crate::dispatch_selection::{
-    SchedulerDispatchCandidate, SchedulerDispatchSelectionDecision,
+    SchedulerDispatchCandidate, SchedulerDispatchCandidateId, SchedulerDispatchSelectionDecision,
     SchedulerDispatchSelectionDiagnostic, SchedulerDispatchSelectionDiagnosticCode,
     SchedulerDispatchSelectionRequest, SchedulerDispatchSelectionState,
     ValidatedSchedulerDispatchSelectionDecision, ValidatedSchedulerDispatchSelectionRequest,
@@ -26,7 +26,7 @@ pub fn select_scheduler_dispatch(
     let mut eligible = Vec::new();
     let mut diagnostics = source_diagnostics;
     for candidate in &request.candidates {
-        match candidate_eligibility(&request, candidate) {
+        match candidate_eligibility(&request, candidate, true) {
             Ok(()) => eligible.push(candidate.clone()),
             Err(diagnostic) => diagnostics.push(diagnostic),
         }
@@ -58,6 +58,73 @@ pub fn select_scheduler_dispatch(
                 "Multiple dispatch candidates are eligible and no ranking policy resolved one.",
             )],
         )),
+    }
+}
+
+/// A policy choice for reservation, not an executable dispatch decision.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SchedulerDispatchReservationSelection {
+    Selected {
+        candidate_id: SchedulerDispatchCandidateId,
+        diagnostics: Vec<SchedulerDispatchSelectionDiagnostic>,
+    },
+    NoSelection {
+        diagnostics: Vec<SchedulerDispatchSelectionDiagnostic>,
+    },
+}
+
+/// Select from advisory resource-fit observations before any lease is acquired.
+///
+/// Uses the same identity, explicit constraints and fit policy as dispatch.
+/// Multiple eligible candidates remain ambiguous until a ranking policy exists.
+/// A selected ID must be committed and pass ordinary dispatch validation before
+/// execution; this operation never manufactures a reservation or dispatch proof.
+pub fn select_scheduler_candidate_for_reservation(
+    request: &ValidatedSchedulerDispatchSelectionRequest,
+) -> SchedulerDispatchReservationSelection {
+    let request = request.as_ref();
+    let mut diagnostics = duplicate_candidate_diagnostics(&request.candidates);
+    if !diagnostics.is_empty() {
+        diagnostics.extend(request.diagnostics.clone());
+        return SchedulerDispatchReservationSelection::NoSelection { diagnostics };
+    }
+    diagnostics.extend(request.diagnostics.clone());
+    let mut eligible = Vec::new();
+    for candidate in &request.candidates {
+        match candidate_eligibility(request, candidate, false) {
+            Ok(()) => eligible.push(candidate),
+            Err(diagnostic) => diagnostics.push(diagnostic),
+        }
+    }
+    match eligible.as_slice() {
+        [candidate] => {
+            diagnostics.push(SchedulerDispatchSelectionDiagnostic::info(
+                SchedulerDispatchSelectionDiagnosticCode::CandidateSelected,
+                Some(&candidate.candidate_id),
+                "Scheduler chose the sole eligible candidate for reservation; commit is required.",
+            ));
+            SchedulerDispatchReservationSelection::Selected {
+                candidate_id: candidate.candidate_id.clone(),
+                diagnostics,
+            }
+        }
+        [] => {
+            if diagnostics.is_empty() {
+                diagnostics.push(SchedulerDispatchSelectionDiagnostic::error(
+                    SchedulerDispatchSelectionDiagnosticCode::NoCandidates,
+                    None,
+                    "No scheduler candidates were eligible for reservation.",
+                ));
+            }
+            SchedulerDispatchReservationSelection::NoSelection { diagnostics }
+        }
+        _ => {
+            diagnostics.push(SchedulerDispatchSelectionDiagnostic::error(
+                SchedulerDispatchSelectionDiagnosticCode::AmbiguousRanking, None,
+                "Multiple candidates are eligible for reservation and no ranking policy resolved one.",
+            ));
+            SchedulerDispatchReservationSelection::NoSelection { diagnostics }
+        }
     }
 }
 
@@ -129,6 +196,7 @@ fn validate_decision(
 fn candidate_eligibility(
     request: &SchedulerDispatchSelectionRequest,
     candidate: &SchedulerDispatchCandidate,
+    require_reservation: bool,
 ) -> Result<(), SchedulerDispatchSelectionDiagnostic> {
     if let Some(requested_runtime_id) = &request.task_intent.constraints.requested_runtime_id {
         if requested_runtime_id != &candidate.selected_runtime_id {
@@ -148,34 +216,36 @@ fn candidate_eligibility(
             ));
         }
     }
-    let Some(reservation) = candidate.reservations.first() else {
-        return Err(SchedulerDispatchSelectionDiagnostic::error(
-            SchedulerDispatchSelectionDiagnosticCode::MissingReservation,
-            Some(&candidate.candidate_id),
-            "Dispatch candidate is missing a resource reservation fact.",
-        ));
-    };
-    if candidate.reservations.iter().any(|reservation| {
-        !candidate
-            .selected_device_ids
-            .contains(&reservation.device_id)
-    }) {
-        return Err(SchedulerDispatchSelectionDiagnostic::error(
-            SchedulerDispatchSelectionDiagnosticCode::InvalidCandidateEvidence,
-            Some(&candidate.candidate_id),
-            "Dispatch candidate reservation device is not selected by the candidate.",
-        ));
-    }
-    if candidate
-        .reservations
-        .iter()
-        .any(|other| other.reservation_lease_id != reservation.reservation_lease_id)
-    {
-        return Err(SchedulerDispatchSelectionDiagnostic::error(
-            SchedulerDispatchSelectionDiagnosticCode::InvalidCandidateEvidence,
-            Some(&candidate.candidate_id),
-            "Dispatch candidate reservations do not share one lease id.",
-        ));
+    if require_reservation {
+        let Some(reservation) = candidate.reservations.first() else {
+            return Err(SchedulerDispatchSelectionDiagnostic::error(
+                SchedulerDispatchSelectionDiagnosticCode::MissingReservation,
+                Some(&candidate.candidate_id),
+                "Dispatch candidate is missing a resource reservation fact.",
+            ));
+        };
+        if candidate.reservations.iter().any(|reservation| {
+            !candidate
+                .selected_device_ids
+                .contains(&reservation.device_id)
+        }) {
+            return Err(SchedulerDispatchSelectionDiagnostic::error(
+                SchedulerDispatchSelectionDiagnosticCode::InvalidCandidateEvidence,
+                Some(&candidate.candidate_id),
+                "Dispatch candidate reservation device is not selected by the candidate.",
+            ));
+        }
+        if candidate
+            .reservations
+            .iter()
+            .any(|other| other.reservation_lease_id != reservation.reservation_lease_id)
+        {
+            return Err(SchedulerDispatchSelectionDiagnostic::error(
+                SchedulerDispatchSelectionDiagnosticCode::InvalidCandidateEvidence,
+                Some(&candidate.candidate_id),
+                "Dispatch candidate reservations do not share one lease id.",
+            ));
+        }
     }
     let Some(resource_fit_assessment) = &candidate.resource_fit_assessment else {
         return Err(SchedulerDispatchSelectionDiagnostic::error(

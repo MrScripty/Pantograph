@@ -1,7 +1,8 @@
 use pantograph_dependency_planning::{DeviceIntentId, RuntimeIntentId};
 use pantograph_runtime_registry::{
-    RuntimeAdmissionResourceKind, RuntimeRegistryError, RuntimeReservationRequest,
-    RuntimeReservationRequirements, RuntimeRetentionHint, SharedRuntimeRegistry,
+    RuntimeAdmissionResourceKind, RuntimeRegistryError, RuntimeReservationAdmissionObservation,
+    RuntimeReservationRequest, RuntimeReservationRequirements, RuntimeRetentionHint,
+    SharedRuntimeRegistry,
 };
 use pantograph_scheduler::{
     SchedulerReservationLeaseId, SchedulerResourceDiagnostic, SchedulerResourceDiagnosticCode,
@@ -17,6 +18,22 @@ pub(crate) struct RuntimeDispatchResourceFactsSource {
 impl RuntimeDispatchResourceFactsSource {
     pub(crate) fn new(registry: SharedRuntimeRegistry) -> Self {
         Self { registry }
+    }
+
+    /// Observe an alternative without allocating or updating a lease.
+    pub(crate) fn evaluate(
+        &self,
+        request: &RuntimeDispatchResourceFactsRequest,
+    ) -> Result<RuntimeReservationAdmissionObservation, Vec<RuntimeDispatchResourceFactsDiagnostic>>
+    {
+        let diagnostics = validate_request(request);
+        if !diagnostics.is_empty() {
+            return Err(diagnostics);
+        }
+        self.registry
+            .evaluate_reservation(runtime_reservation_request(request))
+            .map(|evaluation| evaluation.observation().clone())
+            .map_err(|error| vec![diagnostic_from_registry_error(request, error)])
     }
 
     pub(crate) fn reserve(
