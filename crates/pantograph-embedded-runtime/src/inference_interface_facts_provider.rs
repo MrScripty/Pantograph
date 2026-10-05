@@ -483,7 +483,11 @@ mod tests {
                 .iter()
                 .find(|input| input.port_id.as_str() == port_id)
                 .expect("numeric control port");
-            assert_eq!(control.direction, InferencePortDirection::Input, "{port_id}");
+            assert_eq!(
+                control.direction,
+                InferencePortDirection::Input,
+                "{port_id}"
+            );
             assert_eq!(
                 control.requirement,
                 InferencePortRequirement::Optional,
