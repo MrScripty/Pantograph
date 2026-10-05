@@ -340,6 +340,28 @@ jobs:
       - name: Run artifact-store integration contracts
         run: cargo test -p pantograph-workflow-service --test artifact_store
 
+      - name: Install CPU sampler test dependencies
+        run: |
+          python3 -m venv "$RUNNER_TEMP/sampler-venv"
+          "$RUNNER_TEMP/sampler-venv/bin/python" -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          "$RUNNER_TEMP/sampler-venv/bin/python" -m pip install 'transformers>=4.52,<4.54'
+
+      - name: Run real CPU sampler tests without model downloads
+        env:
+          HF_HUB_OFFLINE: '1'
+          TRANSFORMERS_OFFLINE: '1'
+        run: |
+          "$RUNNER_TEMP/sampler-venv/bin/python" -c 'import torch, transformers, unittest; print("torch", torch.__version__, "transformers", transformers.__version__); assert torch.version.cuda is None; suite = unittest.defaultTestLoader.discover("crates/inference/torch/tests"); print("Sampler tests discovered:", suite.countTestCases()); assert suite.countTestCases() >= 4'
+          "$RUNNER_TEMP/sampler-venv/bin/python" -m unittest discover -s crates/inference/torch/tests -v 2>&1 | tee "$RUNNER_TEMP/cpu-sampler-tests.log"
+
+      - name: Upload CPU sampler test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cpu-sampler-tests
+          path: ${{ runner.temp }}/cpu-sampler-tests.log
+          if-no-files-found: warn
+
   rust-doc-tests:
     name: Rust doc tests
     runs-on: ubuntu-latest
