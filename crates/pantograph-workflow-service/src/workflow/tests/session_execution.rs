@@ -3960,7 +3960,8 @@ async fn scheduler_session_extracts_json_prompt_into_downstream_text_output() {
     let host = DefaultCapabilitiesHost {
         workflow_root: directory.path().to_owned(),
     };
-    let service = WorkflowService::with_max_sessions(1);
+    let service = WorkflowService::with_max_sessions(1)
+        .with_attribution_store(SqliteAttributionStore::open_in_memory().expect("store"));
     publish_non_runtime_execution_snapshot(&service, "wf-json-filter", "1.0.0", graph).await;
     let session = service
         .create_workflow_execution_session(
@@ -4090,7 +4091,8 @@ async fn scheduler_session_runs_text_fan_in_and_downstream_output_without_a_runt
         loads: AtomicUsize::new(0),
     };
     assert!(host.runtime_capabilities().await.unwrap().is_empty());
-    let service = WorkflowService::with_max_sessions(1);
+    let service = WorkflowService::with_max_sessions(1)
+        .with_attribution_store(SqliteAttributionStore::open_in_memory().expect("store"));
     publish_non_runtime_execution_snapshot(&service, "wf-fan-in", "1.0.0", graph).await;
     let session = service
         .create_workflow_execution_session(
