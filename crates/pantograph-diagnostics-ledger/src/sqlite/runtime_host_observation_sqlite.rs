@@ -12,7 +12,9 @@ pub(super) fn record(
 ) -> Result<(), DiagnosticsLedgerError> {
     observation.validate()?;
     let payload = serde_json::to_string(&observation)?;
-    let tx = ledger.conn.transaction()?;
+    let tx = ledger
+        .conn
+        .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
     let existing: Option<String> = tx
         .query_row(
             "SELECT payload_json FROM runtime_host_request_observations WHERE observation_id = ?1",

@@ -1,7 +1,7 @@
 use pantograph_diagnostics_ledger::{
-    DiagnosticsLedgerRepository, RuntimeHostObservationOutcome, RuntimeHostObservationProfile,
-    RuntimeHostObservationQuery, RuntimeHostRequestObservation, SqliteDiagnosticsLedger,
-    RUNTIME_HOST_OBSERVATION_STORED_LIMIT,
+    DiagnosticsLedgerError, DiagnosticsLedgerRepository, RuntimeHostObservationOutcome,
+    RuntimeHostObservationProfile, RuntimeHostObservationQuery, RuntimeHostRequestObservation,
+    SqliteDiagnosticsLedger, RUNTIME_HOST_OBSERVATION_STORED_LIMIT,
 };
 
 fn observation(id: u32, outcome: RuntimeHostObservationOutcome) -> RuntimeHostRequestObservation {
@@ -246,6 +246,75 @@ fn v26_additive_migration_preserves_existing_data_and_reopens_observations() {
 }
 
 #[test]
+fn concurrent_identical_retry_waits_for_the_original_writer_and_is_idempotent() {
+    use std::{cell::RefCell, sync::mpsc, time::Duration};
+
+    const WAIT_TIMEOUT: Duration = Duration::from_secs(10);
+    thread_local! {
+        static WRITER_RELEASE: RefCell<Option<(mpsc::Sender<()>, mpsc::Receiver<()>)>> =
+            const { RefCell::new(None) };
+    }
+
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("identical-retry.sqlite3");
+    drop(SqliteDiagnosticsLedger::open(&path).unwrap());
+    let original = observation(10, RuntimeHostObservationOutcome::Completed);
+    let retry_conn = rusqlite::Connection::open(&path).unwrap();
+    retry_conn
+        .busy_handler(Some(|_| {
+            WRITER_RELEASE.with(|release| {
+                let Some((blocked, committed)) = release.borrow_mut().take() else {
+                    return false;
+                };
+                blocked.send(()).is_ok() && committed.recv_timeout(WAIT_TIMEOUT).is_ok()
+            })
+        }))
+        .unwrap();
+    let mut retry_ledger = SqliteDiagnosticsLedger::from_connection(retry_conn).unwrap();
+    let mut writer = rusqlite::Connection::open(&path).unwrap();
+    let tx = writer
+        .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+        .unwrap();
+    tx.execute(
+        "INSERT INTO runtime_host_request_observations
+            (observation_id, host_epoch, request_fingerprint, recorded_at_ms, payload_json)
+         VALUES (?1, ?2, ?3, ?4, ?5)",
+        rusqlite::params![
+            original.observation_id,
+            original.profile.host_epoch,
+            original.profile.request_fingerprint,
+            original.recorded_at_ms,
+            serde_json::to_string(&original).unwrap(),
+        ],
+    )
+    .unwrap();
+
+    let (blocked_tx, blocked_rx) = mpsc::channel();
+    let (committed_tx, committed_rx) = mpsc::channel();
+    let retry = std::thread::spawn(move || {
+        WRITER_RELEASE.with(|release| {
+            *release.borrow_mut() = Some((blocked_tx, committed_rx));
+        });
+        retry_ledger.record_runtime_host_observation(original)
+    });
+
+    // Wait for actual lock contention, not a timing-dependent thread interleaving.
+    // A deferred transaction instead reads the absent row and fails to upgrade.
+    let blocked = blocked_rx.recv_timeout(WAIT_TIMEOUT);
+    tx.commit().unwrap();
+    let _ = committed_tx.send(());
+    let result = retry.join().unwrap();
+    assert!(blocked.is_ok(), "the retry must wait for the original writer");
+    result.unwrap();
+
+    let ledger = SqliteDiagnosticsLedger::open(path).unwrap();
+    let summary = ledger.runtime_host_observation_summary(query()).unwrap();
+    assert_eq!(summary.observed_count, 1);
+    assert_eq!(summary.completed_count, 1);
+    assert_eq!(summary.median_completed_host_elapsed_ms, Some(10));
+}
+
+#[test]
 fn concurrent_writers_cannot_overwrite_one_observation_identity() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("concurrent.sqlite3");
@@ -268,7 +337,12 @@ fn concurrent_writers_cannot_overwrite_one_observation_identity() {
         .map(|handle| handle.join().unwrap())
         .collect();
     assert_eq!(results.iter().filter(|result| result.is_ok()).count(), 1);
-    assert_eq!(results.iter().filter(|result| result.is_err()).count(), 1);
+    assert!(matches!(
+        results.into_iter().find_map(Result::err),
+        Some(DiagnosticsLedgerError::InvalidField {
+            field: "observation_id_conflict"
+        })
+    ));
     let ledger = SqliteDiagnosticsLedger::open(path).unwrap();
     let summary = ledger.runtime_host_observation_summary(query()).unwrap();
     assert_eq!(summary.completed_count, 1);
