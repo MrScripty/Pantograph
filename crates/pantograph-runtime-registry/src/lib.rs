@@ -3,6 +3,7 @@ mod observation;
 mod reclaim;
 mod registry_queries;
 mod reservation;
+mod reservation_evaluation;
 mod retention;
 mod runtime_selection_policy;
 mod snapshot;
@@ -26,6 +27,10 @@ use pantograph_runtime_identity::canonical_runtime_id;
 pub use reclaim::{RuntimeReclaimAction, RuntimeReclaimDisposition};
 use reservation::RuntimeReservationRecord;
 pub use reservation::{RuntimeReservationLease, RuntimeReservationRequest, RuntimeRetentionHint};
+pub use reservation_evaluation::{
+    RuntimeReservationAdmissionObservation, RuntimeReservationEvaluation,
+    RuntimeReservationResourceObservation,
+};
 pub use retention::{
     RuntimeRetentionDecision, RuntimeRetentionDisposition, RuntimeRetentionReason,
 };

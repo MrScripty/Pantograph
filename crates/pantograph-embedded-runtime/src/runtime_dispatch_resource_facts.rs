@@ -40,7 +40,8 @@ impl RuntimeDispatchResourceFactsSource {
 
         match self
             .registry
-            .acquire_reservation(runtime_reservation_request(&request))
+            .evaluate_reservation(runtime_reservation_request(&request))
+            .and_then(|evaluation| evaluation.commit())
         {
             Ok(lease) => RuntimeDispatchResourceFactsOutcome::Reserved {
                 facts: RuntimeDispatchResourceFacts {
