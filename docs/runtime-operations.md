@@ -52,6 +52,23 @@ These commands are projections. Runtime identity, state transitions, reclaim
 eligibility, and reconciliation remain owned by the runtime registry and
 embedded runtime, not by Tauri or the frontend.
 
+## Runtime-Host Observations
+
+Host-request observations are diagnostic samples, not execution or cancellation
+authority. Their SQLite writes run on Tokio's blocking pool, with a shared limit
+of 64 queued or running writes. Saturation, an unavailable Tokio runtime, and
+recording failures are logged; they do not replace the host's execution result.
+Normal completion awaits an admitted write, so ledger contention can still delay
+response delivery without blocking a Tokio worker. The measured host elapsed time
+excludes that recording delay.
+
+Dropping an execution future submits an abandonment sample without waiting.
+These samples are best-effort and may not be visible immediately or survive
+runtime shutdown. There is no explicit observation flush guarantee; existing
+backend cancellation and reservation cleanup owners remain unchanged. Successful
+queries continue to require the exact request fingerprint, host epoch and
+freshness bounds. Missing samples do not authorize a timing prediction.
+
 ## Prepared Reservation Ownership
 
 Resource-backed dispatch preparation carries registry rollback custody until the

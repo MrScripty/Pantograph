@@ -11,6 +11,12 @@ use pantograph_runtime_host_contracts::{
     RuntimeHostExecutionResponse, RuntimeHostExecutionState, ValidatedRuntimeHostExecutionRequest,
 };
 use pantograph_workflow_service::workflow::WorkflowRuntimeHostObservationRecorder;
+use tokio::sync::Semaphore;
+use tokio::task::JoinHandle;
+
+// Bound running and queued diagnostic writes across all embedded execution ports.
+// Saturation drops a sample rather than delaying admission or growing a queue.
+static OBSERVATION_RECORDING_SLOTS: Semaphore = Semaphore::const_new(64);
 
 /// Measures the single-request host boundary. Batch member compute, gateway
 /// phases, physical hardware identity and competing gateway clients are unknown.
@@ -70,7 +76,11 @@ impl RuntimeHostExecutionPort for ObservedRuntimeHostExecutionPort {
             .execute_runtime_host_request(request.clone(), cancellation)
             .await;
         if let Some(mut observation) = observation {
-            observation.finish(observation_outcome(&request, &result));
+            if let Some(recording) = observation.finish(observation_outcome(&request, &result)) {
+                if let Err(error) = recording.await {
+                    log::warn!("runtime-host observation recording task failed: {error}");
+                }
+            }
         }
         result
     }
@@ -161,25 +171,47 @@ struct RuntimeHostObservationAttempt {
 }
 
 impl RuntimeHostObservationAttempt {
-    fn finish(&mut self, outcome: RuntimeHostObservationOutcome) {
-        if let Some(mut observation) = self.observation.take() {
-            observation.outcome = outcome;
-            observation.host_elapsed_ms =
-                u64::try_from(self.started.elapsed().as_millis()).unwrap_or(u64::MAX);
-            observation.recorded_at_ms = chrono::Utc::now().timestamp_millis();
-            if let Err(error) = self.recorder.record(observation) {
+    fn finish(&mut self, outcome: RuntimeHostObservationOutcome) -> Option<JoinHandle<()>> {
+        let mut observation = self.observation.take()?;
+        observation.outcome = outcome;
+        observation.host_elapsed_ms =
+            u64::try_from(self.started.elapsed().as_millis()).unwrap_or(u64::MAX);
+        observation.recorded_at_ms = chrono::Utc::now().timestamp_millis();
+        let recorder = self.recorder.clone();
+        spawn_observation_recording(&OBSERVATION_RECORDING_SLOTS, move || {
+            if let Err(error) = recorder.record(observation) {
                 // Observation failure never changes the execution result. Queries
                 // remain fallible and missing data cannot authorize prediction.
                 log::warn!("runtime-host observation recording failed: {error}");
             }
-        }
+        })
     }
 }
 
 impl Drop for RuntimeHostObservationAttempt {
     fn drop(&mut self) {
-        self.finish(RuntimeHostObservationOutcome::Abandoned);
+        // Never wait for SQLite from Drop, including cancellation on a Tokio
+        // worker. The submitted write retains its admission permit until done.
+        drop(self.finish(RuntimeHostObservationOutcome::Abandoned));
     }
+}
+
+fn spawn_observation_recording(
+    slots: &'static Semaphore,
+    record: impl FnOnce() + Send + 'static,
+) -> Option<JoinHandle<()>> {
+    let Ok(runtime) = tokio::runtime::Handle::try_current() else {
+        log::warn!("runtime-host observation recording skipped: no Tokio runtime");
+        return None;
+    };
+    let Ok(permit) = slots.try_acquire() else {
+        log::warn!("runtime-host observation recording skipped: writer capacity exhausted");
+        return None;
+    };
+    Some(runtime.spawn_blocking(move || {
+        let _permit = permit;
+        record();
+    }))
 }
 
 #[cfg(test)]
@@ -211,6 +243,27 @@ mod tests {
             until_ms: i64::MAX,
             sample_limit: 500,
         }
+    }
+
+    async fn recorded_summary(
+        port: &ObservedRuntimeHostExecutionPort,
+    ) -> pantograph_diagnostics_ledger::RuntimeHostObservationSummary {
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            loop {
+                let recorder = port.recorder.clone();
+                let query = query(port);
+                let summary = tokio::task::spawn_blocking(move || recorder.summary(query))
+                    .await
+                    .unwrap()
+                    .unwrap();
+                if summary.observed_count > 0 {
+                    break summary;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+            }
+        })
+        .await
+        .expect("observation recording completes")
     }
 
     struct ControlledPort {
@@ -337,10 +390,91 @@ mod tests {
         ));
         assert!(futures_util::poll!(execution.as_mut()).is_pending());
         drop(execution);
-        let summary = port.recorder.summary(query(&port)).unwrap();
+        // Drop submits best-effort recording without waiting for its SQLite write.
+        let summary = recorded_summary(&port).await;
         assert_eq!(summary.observed_count, 1);
         assert_eq!(summary.other_outcome_count, 1);
         assert_eq!(summary.median_completed_host_elapsed_ms, None);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn detached_recording_keeps_its_bounded_slot_without_blocking_the_executor() {
+        static SLOTS: Semaphore = Semaphore::const_new(1);
+        let (started_tx, started_rx) = tokio::sync::oneshot::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let recording = spawn_observation_recording(&SLOTS, move || {
+            started_tx.send(()).unwrap();
+            // The timeout bounds teardown even if a regression fails the test.
+            release_rx
+                .recv_timeout(std::time::Duration::from_secs(5))
+                .unwrap();
+        })
+        .expect("first write admitted");
+        started_rx.await.unwrap();
+        drop(recording);
+        assert_eq!(SLOTS.available_permits(), 0);
+        assert!(spawn_observation_recording(&SLOTS, || {
+            panic!("saturated writer must not enqueue another write");
+        })
+        .is_none());
+        tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+        release_tx.send(()).unwrap();
+        let permit = tokio::time::timeout(std::time::Duration::from_secs(5), SLOTS.acquire())
+            .await
+            .expect("detached write releases its slot")
+            .unwrap();
+        drop(permit);
+        spawn_observation_recording(&SLOTS, || {})
+            .expect("capacity is reusable")
+            .await
+            .unwrap();
+    }
+
+    #[test]
+    fn recording_without_a_runtime_is_skipped_without_running_inline() {
+        static SLOTS: Semaphore = Semaphore::const_new(1);
+        assert!(spawn_observation_recording(&SLOTS, || {
+            panic!("recording must never fall back to the calling thread");
+        })
+        .is_none());
+        assert_eq!(SLOTS.available_permits(), 1);
+    }
+
+    #[test]
+    fn dropping_while_a_completed_write_is_queued_does_not_record_abandonment() {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .max_blocking_threads(1)
+            .build()
+            .unwrap();
+        runtime.block_on(async {
+            let (started_tx, started_rx) = tokio::sync::oneshot::channel();
+            let (release_tx, release_rx) = std::sync::mpsc::channel();
+            let blocker = tokio::task::spawn_blocking(move || {
+                started_tx.send(()).unwrap();
+                release_rx
+                    .recv_timeout(std::time::Duration::from_secs(5))
+                    .unwrap();
+            });
+            started_rx.await.unwrap();
+            let port = port(response());
+            let request = request();
+            let mut execution = Box::pin(port.execute_runtime_host_request(
+                request.clone(),
+                RuntimeHostExecutionCancellationHandle::running(request.cancellation_context),
+            ));
+            // The host is already complete, but its diagnostic write is queued
+            // behind the occupied blocking worker rather than running inline.
+            assert!(futures_util::poll!(execution.as_mut()).is_pending());
+            drop(execution);
+            tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+            release_tx.send(()).unwrap();
+            blocker.await.unwrap();
+            let summary = recorded_summary(&port).await;
+            assert_eq!(summary.observed_count, 1);
+            assert_eq!(summary.completed_count, 1);
+            assert_eq!(summary.other_outcome_count, 0);
+        });
     }
 
     #[test]
