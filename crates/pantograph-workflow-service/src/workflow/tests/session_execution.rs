@@ -954,7 +954,10 @@ async fn workflow_execution_session_dispatches_ready_runtime_task_through_schedu
     let dependency_readiness_provider = DependencyEnvironmentReadinessSnapshotProvider::new();
     let dependency_readiness_work_queue = std::sync::Arc::new(DependencyReadinessWorkQueue::new());
     let source_refresher = Arc::new(RecordingRuntimeDispatchSourceRefresher::default());
-    let runtime_host_batch_port = Arc::new(CompletingRuntimeHostBatchPort::default());
+    let runtime_host_batch_port = Arc::new(CompletingRuntimeHostBatchPort {
+        per_run_artifacts: true,
+        ..CompletingRuntimeHostBatchPort::default()
+    });
     let reservation_lifecycle_port = Arc::new(RecordingReservationLifecyclePort::default());
     let runtime = WorkflowSessionExecutionRuntime::new(
         WorkflowService::with_ephemeral_attribution_store()
@@ -1065,6 +1068,11 @@ async fn workflow_execution_session_dispatches_ready_runtime_task_through_schedu
     let second_response =
         second_response.expect("second compatible runtime task should complete through batch");
 
+    assert_ne!(
+        first_response.outputs[0].value,
+        second_response.outputs[0].value
+    );
+
     for response in [&first_response, &second_response] {
         assert_eq!(response.outputs.len(), 1);
         assert_eq!(response.outputs[0].node_id, "image-output");
@@ -1072,7 +1080,7 @@ async fn workflow_execution_session_dispatches_ready_runtime_task_through_schedu
         assert_eq!(
             response.outputs[0].value,
             serde_json::json!({
-                "artifact_id": "runtime-output-image",
+                "artifact_id": format!("runtime-output-image.{}", response.workflow_run_id),
                 "media_type": "image_png"
             })
         );
@@ -4509,6 +4517,7 @@ impl RuntimeHostExecutionPort for CompletingRuntimeHostPort {
 #[derive(Default)]
 struct CompletingRuntimeHostBatchPort {
     requests: Mutex<Vec<RuntimeHostBatchExecutionRequest>>,
+    per_run_artifacts: bool,
 }
 
 impl CompletingRuntimeHostBatchPort {
@@ -4538,27 +4547,35 @@ impl RuntimeHostBatchExecutionPort for CompletingRuntimeHostBatchPort {
             members: request
                 .members
                 .into_iter()
-                .map(|member| RuntimeHostBatchExecutionMemberResponse {
-                    execution_request_id: member.execution_request_id,
-                    assignment_id: member.assignment_id,
-                    workflow_id: member.handoff.workflow_id,
-                    workflow_run_id: member.handoff.workflow_run_id,
-                    node_id: member.handoff.node_id,
-                    task_id: member.handoff.task_id,
-                    state: RuntimeHostBatchExecutionMemberState::Completed,
-                    retry_disposition: RuntimeHostBatchMemberRetryDisposition::NotRetryable,
-                    reservation_disposition: RuntimeHostBatchMemberReservationDisposition::Released,
-                    outputs: vec![RuntimeHostExecutionOutput {
-                        port_id: "image".to_string(),
-                        value: RuntimeHostExecutionOutputValue::MediaArtifactRef(
-                            RuntimeHostExecutionMediaArtifactRef {
-                                artifact_id: "runtime-output-image".to_string(),
-                                media_type: Some("image_png".to_string()),
-                            },
-                        ),
-                    }],
-                    diagnostics: Vec::new(),
-                    terminal_metadata: None,
+                .map(|member| {
+                    let artifact_id = if self.per_run_artifacts {
+                        format!("runtime-output-image.{}", member.handoff.workflow_run_id)
+                    } else {
+                        "runtime-output-image".to_string()
+                    };
+                    RuntimeHostBatchExecutionMemberResponse {
+                        execution_request_id: member.execution_request_id,
+                        assignment_id: member.assignment_id,
+                        workflow_id: member.handoff.workflow_id,
+                        workflow_run_id: member.handoff.workflow_run_id,
+                        node_id: member.handoff.node_id,
+                        task_id: member.handoff.task_id,
+                        state: RuntimeHostBatchExecutionMemberState::Completed,
+                        retry_disposition: RuntimeHostBatchMemberRetryDisposition::NotRetryable,
+                        reservation_disposition:
+                            RuntimeHostBatchMemberReservationDisposition::Released,
+                        outputs: vec![RuntimeHostExecutionOutput {
+                            port_id: "image".to_string(),
+                            value: RuntimeHostExecutionOutputValue::MediaArtifactRef(
+                                RuntimeHostExecutionMediaArtifactRef {
+                                    artifact_id,
+                                    media_type: Some("image_png".to_string()),
+                                },
+                            ),
+                        }],
+                        diagnostics: Vec::new(),
+                        terminal_metadata: None,
+                    }
                 })
                 .collect(),
             diagnostics: Vec::new(),
