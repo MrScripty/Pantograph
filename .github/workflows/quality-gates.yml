@@ -11,7 +11,7 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  PUMAS_LIBRARY_REF: 66c0c11a57b8bfe8fb70d827efced0fbc442b156
+  PUMAS_LIBRARY_REF: 10fe0bb2d92c8ef147a328803a3425672ac30bdb
 
 jobs:
   lint-no-new:
@@ -166,6 +166,9 @@ jobs:
 
       - name: Cache Cargo
         uses: Swatinem/rust-cache@v2
+
+      - name: Verify ONNX cannot download during builds
+        run: python3 scripts/check-onnx-no-build-download.py
 
       - name: Check workspace without default features
         run: cargo check --workspace --no-default-features

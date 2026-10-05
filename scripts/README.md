@@ -13,6 +13,7 @@ main app entrypoint.
 | `check-decision-traceability.sh` | Runs the decision-to-guide traceability gate over explicit Git snapshots using the reviewed impact map. |
 | `check-decision-traceability.mjs` | Validates mapped decision impacts, canonical guides, and local ADR references without per-directory documentation rules. |
 | `check-decision-traceability.test.mjs` | Exercises Git snapshot isolation, impact ownership, missing inputs, broken references, and path transitions. |
+| `check-onnx-no-build-download.py` | Verifies the Pumas manifest/lock/CI pin and rejects additive ORT download/copy features across default, all-feature, and mixed embedded graphs for Linux, Windows, and macOS. Honors Cargo offline configuration; provisions no native SDK. |
 | `check-no-python-linkage.sh` | Verifies the runtime-separation guarantee that Pantograph no longer links Python in-process. |
 | `check-scheduler-only-workflow-execution.sh` | Fails when public Rust, Tauri, binding, or frontend source reintroduces direct workflow execution APIs outside scheduler session execution. |
 | `check-rustler-beam-smoke.sh` | Builds `pantograph_rustler`, verifies the local BEAM toolchain exists, and runs the Mix smoke harness under `bindings/beam/pantograph_native_smoke/`. |
