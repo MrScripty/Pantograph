@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
+use std::sync::Arc;
 
 use crate::admission::RuntimeReservationClaim;
 use crate::{
@@ -80,12 +81,36 @@ pub struct RuntimeResourceDomainObservation {
     pub reserved_bytes: u64,
     /// Resident estimates are part of reserved_bytes, separate from task leases.
     pub resident_bytes: u64,
+    /// Effective admission budget; unavailable owner facts conservatively yield zero.
     pub total_bytes: u64,
+    pub host_ram_capacity_source_bound: bool,
+    /// Current owner ceiling, if this RAM pool has an attached capacity source.
+    /// Missing observations from an attached source produce an effective zero.
+    pub owner_capacity_ceiling_bytes: Option<u64>,
     pub safety_margin_bytes: u64,
     pub available_bytes: u64,
 }
 
+/// Fresh necessary host RAM bound, not free memory or permission to allocate.
+///
+/// Called synchronously under the admission lock. Implementations must be bounded,
+/// must not call the registry, and return None for unavailable or stale facts.
+/// The configured domain budget and all task/resident charges remain authoritative.
+pub trait RuntimeHostRamCapacitySource: std::fmt::Debug + Send + Sync {
+    fn capacity_ceiling_bytes(&self) -> Option<u64>;
+}
+
 impl RuntimeRegistry {
+    /// Attach one immutable host owner to declared pools containing RAM, including
+    /// later declarations. Existing owners cannot be replaced; VRAM-only pools
+    /// are untouched. This neither discovers bindings nor raises budgets.
+    pub fn bind_host_ram_capacity_source(&self, source: Arc<dyn RuntimeHostRamCapacitySource>) {
+        let mut state = self
+            .state
+            .lock()
+            .expect("runtime registry state lock poisoned");
+        state.host_ram_capacity_source.get_or_insert(source);
+    }
     /// Add a shared capacity or change its budget under the admission lock.
     ///
     /// Bindings are canonicalized and remain fixed once configured. Each logical
@@ -159,6 +184,25 @@ impl RuntimeRegistry {
             .resource_domains
             .insert(domain.domain_id.clone(), domain);
         Ok(())
+    }
+}
+
+fn capacity(
+    state: &RuntimeRegistryState,
+    domain: &RuntimeResourceDomain,
+) -> (u64, Option<u64>, bool) {
+    let source = state.host_ram_capacity_source.as_ref().filter(|_| {
+        domain
+            .bindings
+            .iter()
+            .any(|binding| binding.resource_kind == RuntimeAdmissionResourceKind::RamBytes)
+    });
+    match source {
+        Some(source) => {
+            let ceiling = source.capacity_ceiling_bytes();
+            (domain.total_bytes.min(ceiling.unwrap_or(0)), ceiling, true)
+        }
+        None => (domain.total_bytes, None, false),
     }
 }
 
@@ -246,7 +290,9 @@ pub(crate) fn validate_resident_domain_capacity(
         // Other loaded members may not yet have declarations. Their unknown
         // state blocks admission, but must not prevent publishing known facts.
         let reserved = reserved_bytes(state, domain, None, false)?;
-        let capacity = domain.total_bytes - domain.safety_margin_bytes;
+        let capacity = capacity(state, domain)
+            .0
+            .saturating_sub(domain.safety_margin_bytes);
         if reserved > capacity {
             let requested = claim_bytes(domain, runtime_id, claim)?;
             return Err(RuntimeRegistryError::ResourceDomainAdmissionRejected {
@@ -277,15 +323,21 @@ pub(crate) fn domain_observations(
         })
         .map(|domain| {
             let reserved_bytes = reserved_bytes(state, domain, excluded, true)?;
+            let (total_bytes, owner_capacity_ceiling_bytes, host_ram_capacity_source_bound) =
+                capacity(state, domain);
             Ok(RuntimeResourceDomainObservation {
                 domain_id: domain.domain_id.clone(),
                 requested_bytes: claim_bytes(domain, runtime_id, claim)?,
                 reserved_bytes,
                 resident_bytes: resident_domain_bytes(state, domain, true)?,
-                total_bytes: domain.total_bytes,
+                total_bytes,
+                host_ram_capacity_source_bound,
+                owner_capacity_ceiling_bytes,
                 safety_margin_bytes: domain.safety_margin_bytes,
-                // Configuration and every mutation uphold this subtraction.
-                available_bytes: domain.total_bytes - domain.safety_margin_bytes - reserved_bytes,
+                // Host limits may fall below live charges; retain custody and block new claims.
+                available_bytes: total_bytes
+                    .saturating_sub(domain.safety_margin_bytes)
+                    .saturating_sub(reserved_bytes),
             })
         })
         .collect()

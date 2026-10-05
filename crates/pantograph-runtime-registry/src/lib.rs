@@ -17,8 +17,8 @@ use reservation_custody::{
 };
 pub use reservation_custody::{RuntimeReservationCustody, RuntimeReservationPublicationError};
 pub use resource_domain::{
-    RuntimeResourceDomain, RuntimeResourceDomainBinding, RuntimeResourceDomainConfig,
-    RuntimeResourceDomainObservation,
+    RuntimeHostRamCapacitySource, RuntimeResourceDomain, RuntimeResourceDomainBinding,
+    RuntimeResourceDomainConfig, RuntimeResourceDomainObservation,
 };
 mod retention;
 mod runtime_selection_policy;
@@ -212,6 +212,7 @@ impl RuntimeRegistration {
 #[derive(Debug, Default)]
 struct RuntimeRegistryState {
     resource_domains: BTreeMap<String, RuntimeResourceDomain>,
+    host_ram_capacity_source: Option<Arc<dyn RuntimeHostRamCapacitySource>>,
     resident_estimates: BTreeMap<(String, String), RuntimeReservationRequirements>,
     producer_observations: BTreeMap<String, (String, u64)>,
     runtimes: BTreeMap<String, RuntimeRegistryRecord>,

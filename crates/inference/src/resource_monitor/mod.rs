@@ -14,6 +14,7 @@ use crate::{
     InferenceResourceObservationSourceKind, InferenceResourceObservationUnavailableState,
 };
 
+pub mod host_ram;
 mod platform;
 pub mod process_rss;
 pub mod unsupported;

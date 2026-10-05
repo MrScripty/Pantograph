@@ -357,6 +357,11 @@ impl EmbeddedWorkflowServiceComposition {
                 )));
             }
         };
+        input
+            .runtime_registry
+            .bind_host_ram_capacity_source(Arc::new(
+                inference::resource_monitor::host_ram::NativeHostRamCapacitySource,
+            ));
         let artifact_writer = input.workflow_service.artifact_writer()?;
         let runtime_host_execution_port =
             Arc::new(EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
@@ -429,6 +434,11 @@ impl EmbeddedWorkflowServiceComposition {
         let dependency_readiness_runtime_handle = input.dependency_readiness_runtime_handle;
         let dependency_readiness_producer_config = input.dependency_readiness_producer_config;
         let factory_input = input.factory_input;
+        factory_input
+            .runtime_registry
+            .bind_host_ram_capacity_source(Arc::new(
+                inference::resource_monitor::host_ram::NativeHostRamCapacitySource,
+            ));
         let artifact_writer =
             factory_input
                 .workflow_service

@@ -2,9 +2,11 @@
 
 **Plan status:** `Active`
 
-**Current phase:** M3 owner/client consumer source is implemented at the pinned Pumas revision. Workflow text/image inputs are being qualified through the existing runtime host. Full review and required-real text→image acceptance remain open.
+**Current phase:** M3 owner/client consumer source is implemented. Native CPU sampling and the supported inference/embedded host route are qualified separately; the desktop-authored dependent text-to-image graph and full review remain open.
 
-**Next slice:** Parent reviews frozen text-control source `a8c6970f` and its separate [exact-head native qualification route](reports/2026-10-05-text-control-native-qualification-route.md). The new environment's native host/workflow attempts failed before execution: the pinned ONNX dependency remains unavailable (HTTP 403), and no-download builds lack linker symbols. Shared serialization and real CPU sampling pass; actual native host/workflow execution remains blocked. Run the independent focused hosted job at the exact approved head, then qualify current owner-produced Pumas identities/facts/load targets/devices and the desktop-authored dependent text-to-image graph (DA-03). Frozen temperature `e0293ebf`, CI correction `fddae90d`, fixture `174c1950`, top-k `3bf3eb45` and composition `60197971` remain unchanged with their stated qualification requirements. Parent holds publication for owner confirmation and integrates review corrections without rewriting history. Current Pumas pin: `2243a2b6909fcf4fe4b4ffa0f7f0a2b4ca027d32`. DA-03/DA-07 remain open.
+**Next slice:** Parent reviews frozen CPU candidate source `394d4748be333fade6653aa5665a13129d8f4495` independently and advances PR55 through hosted CI/external review at `390e194faa6cb8eee52d00da99f66db2f7a7b34c`. Its frozen native qualification parent is `ff84841accf976dd9bcb04154ca5090cc25ffbb8`; the final Pumas pin is `26a84e323cae566a46a8f76bef48fa1010aed48b`. The independent scheduler ancestry retains Pumas `a94fd92021f27fdeedb6e2de6e01c41c250ef576` and the no-build-download guard. Official separately provisioned ONNX CPU execution resolved the earlier dependency blocker; GTK/WebKit desktop execution, real text-to-image models and DA-03/DA-07 acceptance remain unqualified. Keep PR54/55 and scheduler features separate until parent-approved integration.
+
+The next bounded scheduler capability is a fresh host RAM ceiling for explicitly declared backing pools, after CPU candidate discovery. See [host RAM ceilings](reports/2026-10-05-runtime-owned-host-ram-ceilings.md). It may only lower the configured budget, must preserve live task/resident charges after shrink, and must reread missing or changed owner facts at authoritative admission. It does not infer GPU placement, external-consumer allowance or a resident/transient discount.
 
 **Acceptance status:** `blocked`
 
@@ -15,9 +17,9 @@ adds explicit backing domains across runtime RAM/VRAM claims, including unified
 memory and authoritative commit/custody checks. Its separate
 [startup composition successor](reports/2026-10-05-shared-resource-composition.md)
 activates explicit persisted declarations through actual AppConfig/desktop setup;
-portable config-factory/registry tests execute without ONNX. Native desktop
-qualification, automatic physical binding/capacity production and full residency
-accounting remain pending; parent owns coordinated review.
+portable config-factory/registry tests execute without ONNX. Native desktop qualification and automatic physical bindings remain pending;
+parent owns coordinated review. Explicit-domain capacity now has an independent
+host RAM ceiling successor; it does not establish complete available capacity.
 
 The separate [AppConfig qualification successor](reports/2026-10-05-app-config-startup-qualification.md)
 preserves frozen `73211ddc`, moves the actual persisted settings/startup composition
@@ -34,9 +36,28 @@ stop. Missing shared-pool resident estimates produce typed unavailable outcomes.
 Portable lifecycle/contended admission tests qualify this owner capability;
 the [producer bridge](reports/2026-10-05-runtime-producer-resident-estimates.md)
 now publishes explicitly configured estimates from the active PyTorch lifecycle
-owner with ordered-generation and known-zero handling. Other producers, a proven
-resident/transient split and native execution remain separate gaps. Frozen
+owner with ordered-generation and known-zero handling. The bounded lifecycle repair at `b9e83208` establishes resident accounting or
+uncertainty before terminal custody release, reconciles Retain, and makes failed
+owned allocations ordinarily reclaimable. `dedbef88` adds acknowledged llama
+child shutdown and ordered resident batches across PyTorch and llama owners.
+Controlled real-host regressions qualify those paths. A proven resident/transient
+split, GPU execution and real model execution remain separate gaps. Frozen
 `eabbcc83` and `254aef1` are unchanged.
+
+The [CPU candidate successor](reports/2026-10-05-runtime-owned-cpu-device-candidates.md)
+projects available owner CPU variants into automatic selection and real selected
+text execution while preserving full peak claims. Its full embedded suite has two
+explicit frozen-parent failures: the four-versus-six descriptor assertion and the
+warmup-timeout test receiving success. The descriptor repair `9ec3c2e` is already
+an ancestor of PR55 qualification `ff84841`, but is absent from CPU `394d4748`.
+Do not duplicate it on this ancestry or increase the warmup timeout.
+
+Scheduler thesis priorities after the RAM ceiling slice are comparable exact-model
+load/execution observations, actual per-device GPU ownership/backing facts, and
+then completion-oriented ranking evaluated on frozen matched cohorts. Existing
+technical-fit history ranking is already present. Warm-first heuristics, GPU class
+counts as physical devices, and unproven resident/transient discounts do not meet
+the thesis's physical-feasibility or timing-evidence requirements.
 
 **Execution ledger:** [execution-ledger.md](execution-ledger.md)
 

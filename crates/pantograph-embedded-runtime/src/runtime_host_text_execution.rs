@@ -1535,6 +1535,17 @@ mod tests {
     #[cfg(feature = "backend-pytorch")]
     #[tokio::test]
     async fn unconstrained_owned_cpu_candidate_reaches_selected_text_host_with_full_peak_lease() {
+        exercise_owned_cpu_selected_text_host(false).await;
+    }
+
+    #[cfg(feature = "backend-pytorch")]
+    #[tokio::test]
+    async fn host_ram_ceiling_gates_actual_cpu_selection_and_preserves_execution_custody() {
+        exercise_owned_cpu_selected_text_host(true).await;
+    }
+
+    #[cfg(feature = "backend-pytorch")]
+    async fn exercise_owned_cpu_selected_text_host(clamp_capacity: bool) {
         use crate::pumas_dispatch_package_facts::{
             PumasDispatchPackageFactsBridgeOutcome, PumasDispatchPackageFactsProjection,
         };
@@ -1613,6 +1624,31 @@ mod tests {
                 },
             )
             .unwrap();
+        #[derive(Debug)]
+        struct ControlledCapacity(std::sync::atomic::AtomicU64);
+        impl pantograph_runtime_registry::RuntimeHostRamCapacitySource for ControlledCapacity {
+            fn capacity_ceiling_bytes(&self) -> Option<u64> {
+                Some(self.0.load(std::sync::atomic::Ordering::SeqCst))
+            }
+        }
+        let capacity = Arc::new(ControlledCapacity(std::sync::atomic::AtomicU64::new(
+            PEAK_BYTES - 1,
+        )));
+        if clamp_capacity {
+            registry
+                .configure_resource_domain(pantograph_runtime_registry::RuntimeResourceDomain {
+                    domain_id: "host.ram".into(),
+                    total_bytes: 8 * 1024 * 1024,
+                    safety_margin_bytes: 0,
+                    bindings: vec![pantograph_runtime_registry::RuntimeResourceDomainBinding {
+                        runtime_id: "pytorch".into(),
+                        resource_kind:
+                            pantograph_runtime_registry::RuntimeAdmissionResourceKind::RamBytes,
+                    }],
+                })
+                .unwrap();
+            registry.bind_host_ram_capacity_source(capacity.clone());
+        }
         let capabilities = RuntimeDispatchCapabilityFactsSource::new(registry.clone())
             .with_gateway(gateway.clone())
             .collect();
@@ -1692,6 +1728,20 @@ mod tests {
             state_version: 1,
             last_transition_id: "transition.ready.cpu".parse().unwrap(),
         };
+        if clamp_capacity {
+            let blocked = provider
+                .runtime_dispatch_candidates(&task, &ready, &proof)
+                .unwrap();
+            assert!(blocked.candidates.is_empty(), "{:?}", blocked.diagnostics);
+            assert!(registry.snapshot().reservations.is_empty());
+            assert!(
+                calls.lock().unwrap().is_empty(),
+                "insufficient RAM cannot load a backend"
+            );
+            capacity
+                .0
+                .store(PEAK_BYTES, std::sync::atomic::Ordering::SeqCst);
+        }
         let result = provider
             .runtime_dispatch_candidates(&task, &ready, &proof)
             .unwrap();
@@ -1761,6 +1811,28 @@ mod tests {
             1,
             "execution cannot silently drop provisional peak coverage"
         );
+        if clamp_capacity {
+            capacity.0.store(1, std::sync::atomic::Ordering::SeqCst);
+            let probe = pantograph_runtime_registry::RuntimeReservationRequest {
+                runtime_id: "pytorch".into(),
+                workflow_id: "probe".into(),
+                reservation_owner_id: Some("another-task".into()),
+                usage_profile: None,
+                model_id: None,
+                pin_runtime: false,
+                retention_hint: pantograph_runtime_registry::RuntimeRetentionHint::Ephemeral,
+                requirements: Some(
+                    pantograph_runtime_registry::RuntimeReservationRequirements::from_claims(vec![
+                        pantograph_runtime_registry::RuntimeReservationResourceClaim::ram_bytes(1),
+                    ]),
+                ),
+            };
+            assert!(registry.evaluate_reservation(probe).is_err());
+            assert_eq!(
+                registry.snapshot().runtimes[0].active_reservation_claims[0].claims[0].bytes,
+                PEAK_BYTES
+            );
+        }
         drop(result);
         assert!(
             registry.snapshot().reservations.is_empty(),
