@@ -619,6 +619,27 @@ impl WorkflowSchedulerTaskOrchestrator {
         task: &WorkflowSchedulerTask,
         selection_request: ValidatedSchedulerDispatchSelectionRequest,
     ) -> Result<SelectedRuntimeTaskDispatch, WorkflowSchedulerTaskOrchestratorError> {
+        self.select_runtime_task_dispatch_inner(task, selection_request, true)
+            .await
+    }
+
+    /// The prepared request's custody owns rollback; releasing its lease here
+    /// would also end a predecessor that a failed replacement must preserve.
+    pub(crate) async fn select_runtime_task_dispatch_with_custody(
+        &self,
+        task: &WorkflowSchedulerTask,
+        selection_request: ValidatedSchedulerDispatchSelectionRequest,
+    ) -> Result<SelectedRuntimeTaskDispatch, WorkflowSchedulerTaskOrchestratorError> {
+        self.select_runtime_task_dispatch_inner(task, selection_request, false)
+            .await
+    }
+
+    async fn select_runtime_task_dispatch_inner(
+        &self,
+        task: &WorkflowSchedulerTask,
+        selection_request: ValidatedSchedulerDispatchSelectionRequest,
+        cleanup_unselected: bool,
+    ) -> Result<SelectedRuntimeTaskDispatch, WorkflowSchedulerTaskOrchestratorError> {
         let selection_request = selection_request.into_inner();
         let selection = select_scheduler_dispatch(
             ValidatedSchedulerDispatchSelectionRequest::try_from(selection_request.clone())
@@ -627,8 +648,10 @@ impl WorkflowSchedulerTaskOrchestrator {
         .map_err(WorkflowSchedulerTaskOrchestratorError::SchedulerContract)?
         .into_inner();
         if selection.state != SchedulerDispatchSelectionState::Selected {
-            self.apply_unselected_candidate_lifecycle_events(task, &selection_request)
-                .await?;
+            if cleanup_unselected {
+                self.apply_unselected_candidate_lifecycle_events(task, &selection_request)
+                    .await?;
+            }
             return Err(
                 WorkflowSchedulerTaskOrchestratorError::RuntimeDispatchSelectionNoSelection(
                     Box::new(selection),
@@ -3500,6 +3523,7 @@ fn source_input_task_kind(
         WorkflowSchedulerSourceInputTemplate::Text { .. } => "text-input",
         WorkflowSchedulerSourceInputTemplate::Boolean { .. } => "boolean-input",
         WorkflowSchedulerSourceInputTemplate::Integer { .. } => "number-input",
+        WorkflowSchedulerSourceInputTemplate::Selection { .. } => "selection-input",
     };
     SchedulerSourceInputTaskKind::parse(task_kind)
         .map_err(WorkflowSchedulerTaskOrchestratorError::SchedulerContract)
@@ -3570,6 +3594,73 @@ fn non_runtime_input_readiness(
     };
 
     match template {
+        WorkflowSchedulerNonRuntimeTaskTemplate::ImageOutput => {
+            match materialized_binding_value(task, results, "image") {
+                MaterializedBindingValue::Ready(
+                    WorkflowSchedulerTaskResultValue::MediaArtifactRef(_),
+                ) => NonRuntimeInputReadiness::Ready,
+                MaterializedBindingValue::Ready(_) => {
+                    NonRuntimeInputReadiness::Invalid(scheduler_input_diagnostic(
+                        SchedulerTaskStateDiagnosticCode::InvalidTask,
+                        "image-output input is not a typed media artifact reference",
+                    ))
+                }
+                MaterializedBindingValue::Blocked => NonRuntimeInputReadiness::Blocked,
+                MaterializedBindingValue::Unavailable(diagnostic) => {
+                    NonRuntimeInputReadiness::InputUnavailable(diagnostic)
+                }
+                MaterializedBindingValue::Invalid(diagnostic) => {
+                    NonRuntimeInputReadiness::Invalid(diagnostic)
+                }
+            }
+        }
+        WorkflowSchedulerNonRuntimeTaskTemplate::JsonFilter { .. } => {
+            match materialized_binding_value(task, results, "json") {
+                MaterializedBindingValue::Ready(
+                    WorkflowSchedulerTaskResultValue::Json(_)
+                    | WorkflowSchedulerTaskResultValue::String(_)
+                    | WorkflowSchedulerTaskResultValue::Bool(_)
+                    | WorkflowSchedulerTaskResultValue::I64(_)
+                    | WorkflowSchedulerTaskResultValue::U64(_),
+                ) => NonRuntimeInputReadiness::Ready,
+                MaterializedBindingValue::Ready(_) => {
+                    NonRuntimeInputReadiness::Invalid(scheduler_input_diagnostic(
+                        SchedulerTaskStateDiagnosticCode::InvalidTask,
+                        "json-filter input is not a JSON-compatible value",
+                    ))
+                }
+                MaterializedBindingValue::Blocked => NonRuntimeInputReadiness::Blocked,
+                MaterializedBindingValue::Unavailable(diagnostic) => {
+                    NonRuntimeInputReadiness::InputUnavailable(diagnostic)
+                }
+                MaterializedBindingValue::Invalid(diagnostic) => {
+                    NonRuntimeInputReadiness::Invalid(diagnostic)
+                }
+            }
+        }
+        WorkflowSchedulerNonRuntimeTaskTemplate::Merge => {
+            for binding in &task.input_bindings {
+                match materialized_bound_output(task, results, binding) {
+                    MaterializedBindingValue::Ready(WorkflowSchedulerTaskResultValue::String(
+                        _,
+                    )) => {}
+                    MaterializedBindingValue::Ready(_) => {
+                        return NonRuntimeInputReadiness::Invalid(scheduler_input_diagnostic(
+                            SchedulerTaskStateDiagnosticCode::InvalidTask,
+                            "materialized merge input has the wrong value type",
+                        ))
+                    }
+                    MaterializedBindingValue::Blocked => return NonRuntimeInputReadiness::Blocked,
+                    MaterializedBindingValue::Unavailable(diagnostic) => {
+                        return NonRuntimeInputReadiness::InputUnavailable(diagnostic)
+                    }
+                    MaterializedBindingValue::Invalid(diagnostic) => {
+                        return NonRuntimeInputReadiness::Invalid(diagnostic)
+                    }
+                }
+            }
+            NonRuntimeInputReadiness::Ready
+        }
         WorkflowSchedulerNonRuntimeTaskTemplate::TextOutput => {
             match materialized_binding_value(task, results, "text") {
                 MaterializedBindingValue::Ready(WorkflowSchedulerTaskResultValue::String(_)) => {

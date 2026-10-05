@@ -25,6 +25,7 @@ use crate::runtime_dispatch_source_snapshot::{
 use crate::runtime_host_execution_port::EmbeddedRuntimeHostExecutionPort;
 use crate::runtime_host_load_target::RuntimeHostPumasLoadTargetResolver;
 use crate::runtime_host_media_artifact_sink::WorkflowServiceRuntimeHostMediaArtifactSink;
+use crate::runtime_host_observation::ObservedRuntimeHostExecutionPort;
 use crate::runtime_host_package_facts::RuntimeHostPumasPackageFactsResolver;
 use crate::workflow_scheduler_diagnostics::EmbeddedWorkflowSchedulerDiagnosticsProvider;
 use crate::SharedExtensions;
@@ -33,6 +34,21 @@ use crate::{
     EmbeddedDependencyReadinessSnapshotProducer, EmbeddedDependencyReadinessSnapshotProducerConfig,
     EmbeddedDependencyReadinessSnapshotProducerHandle, EmbeddedRuntimeError, SharedWorkflowService,
 };
+
+fn observe_runtime_host_port(
+    port: Arc<dyn RuntimeHostExecutionPort>,
+    service: &WorkflowService,
+) -> Arc<dyn RuntimeHostExecutionPort> {
+    match service.runtime_host_observation_recorder() {
+        Some(recorder) => Arc::new(ObservedRuntimeHostExecutionPort::new(port, recorder)),
+        None => {
+            log::warn!(
+                "runtime-host observations unavailable: workflow service has no diagnostics ledger"
+            );
+            port
+        }
+    }
+}
 
 /// Builds embedded-runtime workflow services before sharing them across hosts.
 ///
@@ -357,6 +373,8 @@ impl EmbeddedWorkflowServiceComposition {
             input.runtime_registry.clone(),
             input.runtime_registry_controller,
         ));
+        let runtime_host_execution_port =
+            observe_runtime_host_port(runtime_host_execution_port, &input.workflow_service);
         let pumas_selector_access = input.pumas_selector_access;
         let dispatch_dependencies = EmbeddedWorkflowServiceDispatchDependencies::resource_backed(
             PumasDispatchPackageFactsSource::new(Some(pumas_selector_access.clone())),
@@ -431,6 +449,8 @@ impl EmbeddedWorkflowServiceComposition {
             factory_input.runtime_registry.clone(),
             factory_input.runtime_registry_controller,
         ));
+        let runtime_host_execution_port =
+            observe_runtime_host_port(runtime_host_execution_port, &factory_input.workflow_service);
         let pumas_selector_access = factory_input.pumas_selector_access;
         let dispatch_dependencies = EmbeddedWorkflowServiceDispatchDependencies::resource_backed(
             PumasDispatchPackageFactsSource::new(Some(pumas_selector_access.clone())),

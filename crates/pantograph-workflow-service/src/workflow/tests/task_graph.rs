@@ -482,6 +482,64 @@ fn scheduler_task_graph_reports_blocked_descriptor_projection() {
 }
 
 #[test]
+fn scheduler_image_output_retains_runtime_dependency_and_diagnoses_missing_image() {
+    let mut graph = graph_with_inline_inference_ref();
+    let task_graph = workflow_scheduler_task_graph_with_inference_projections(
+        &workflow_id(),
+        &workflow_run_id(),
+        &graph,
+        &inference_projection(),
+    )
+    .unwrap();
+    let output = task_graph
+        .tasks
+        .iter()
+        .find(|task| task.node_id.as_str() == "image-output")
+        .unwrap();
+    assert_eq!(
+        output.execution_class,
+        WorkflowSchedulerTaskExecutionClass::NonRuntimeNodeEngine
+    );
+    assert_eq!(
+        output.non_runtime_task_template,
+        Some(WorkflowSchedulerNonRuntimeTaskTemplate::ImageOutput)
+    );
+    assert_eq!(
+        output
+            .dependency_task_ids
+            .iter()
+            .map(|id| id.as_str())
+            .collect::<Vec<_>>(),
+        ["infer"]
+    );
+    assert_eq!(output.input_bindings[0].source_port_id, "image");
+    assert_eq!(
+        serde_json::from_str::<crate::workflow::WorkflowSchedulerTaskGraph>(
+            &serde_json::to_string(&task_graph).unwrap()
+        )
+        .unwrap(),
+        task_graph
+    );
+
+    graph.edges.retain(|edge| edge.target != "image-output");
+    let task_graph = workflow_scheduler_task_graph_with_inference_projections(
+        &workflow_id(),
+        &workflow_run_id(),
+        &graph,
+        &inference_projection(),
+    )
+    .unwrap();
+    let output = task_graph
+        .tasks
+        .iter()
+        .find(|task| task.node_id.as_str() == "image-output")
+        .unwrap();
+    assert!(output.non_runtime_task_template.is_none());
+    assert!(output.diagnostics.iter().any(|diagnostic| diagnostic.code
+        == WorkflowSchedulerTaskProjectionDiagnosticCode::MissingNonRuntimeTemplateValue));
+}
+
+#[test]
 fn scheduler_task_graph_classifies_materialization_and_unsupported_tasks() {
     let mut graph = graph_with_inline_inference_ref();
     graph.nodes.push(GraphNode {
@@ -492,7 +550,7 @@ fn scheduler_task_graph_classifies_materialization_and_unsupported_tasks() {
     });
     graph.nodes.push(GraphNode {
         id: "settings".to_string(),
-        node_type: "image-output".to_string(),
+        node_type: "audio-output".to_string(),
         position: Position { x: 100.0, y: 200.0 },
         data: json!({}),
     });
@@ -610,6 +668,168 @@ fn scheduler_task_graph_projects_source_input_and_non_runtime_templates() {
     let encoded = serde_json::to_string(&task_graph).expect("encode task graph");
     assert!(!encoded.contains("frontend display data"));
     assert!(!encoded.contains("describe the image"));
+}
+
+#[test]
+fn scheduler_json_filter_captures_only_its_path_and_typed_selection_source() {
+    let mut graph = WorkflowGraph {
+        nodes: vec![
+            GraphNode {
+                id: "source".into(),
+                node_type: "selection-input".into(),
+                position: Position { x: 0.0, y: 0.0 },
+                data: json!({"value": "legacy source data"}),
+            },
+            GraphNode {
+                id: "filter".into(),
+                node_type: "json-filter".into(),
+                position: Position { x: 0.0, y: 0.0 },
+                data: json!({"path": "items[0].prompt", "label": "display data"}),
+            },
+        ],
+        edges: vec![GraphEdge {
+            id: "source-filter".into(),
+            source: "source".into(),
+            target: "filter".into(),
+            source_handle: "value".into(),
+            target_handle: "json".into(),
+        }],
+        derived_graph: None,
+    };
+    let tasks = workflow_scheduler_task_graph(&workflow_id(), &workflow_run_id(), &graph).unwrap();
+    let source = tasks
+        .tasks
+        .iter()
+        .find(|task| task.node_id.as_str() == "source")
+        .unwrap();
+    assert_eq!(
+        source.source_input_task_template,
+        Some(WorkflowSchedulerSourceInputTemplate::Selection {
+            port_id: "value".into()
+        })
+    );
+    graph.nodes[1].data["path"] = json!("changed.after.submission");
+    let filter = tasks
+        .tasks
+        .iter()
+        .find(|task| task.node_id.as_str() == "filter")
+        .unwrap();
+    assert_eq!(
+        filter.non_runtime_task_template,
+        Some(WorkflowSchedulerNonRuntimeTaskTemplate::JsonFilter {
+            path: "items[0].prompt".into()
+        })
+    );
+    let encoded = serde_json::to_string(&tasks).unwrap();
+    assert!(!encoded.contains("legacy source data"));
+    assert!(!encoded.contains("display data"));
+    assert_eq!(
+        serde_json::from_str::<crate::workflow::WorkflowSchedulerTaskGraph>(&encoded).unwrap(),
+        tasks
+    );
+    graph.nodes[1].data["path"] = json!(false);
+    let invalid =
+        workflow_scheduler_task_graph(&workflow_id(), &workflow_run_id(), &graph).unwrap();
+    let filter = invalid
+        .tasks
+        .iter()
+        .find(|task| task.node_id.as_str() == "filter")
+        .unwrap();
+    assert!(filter.non_runtime_task_template.is_none());
+    assert_eq!(
+        filter.diagnostics[0].code,
+        WorkflowSchedulerTaskProjectionDiagnosticCode::InvalidNonRuntimeTemplateValue
+    );
+}
+
+#[test]
+fn scheduler_task_graph_lowers_merge_with_all_dependencies_in_canonical_order() {
+    let graph = WorkflowGraph {
+        nodes: ["b", "a", "join"]
+            .map(|id| GraphNode {
+                id: id.into(),
+                node_type: if id == "join" { "merge" } else { "text-input" }.into(),
+                position: Position { x: 0.0, y: 0.0 },
+                data: json!({}),
+            })
+            .to_vec(),
+        edges: ["b", "a"]
+            .map(|id| GraphEdge {
+                id: format!("{id}-join"),
+                source: id.into(),
+                target: "join".into(),
+                source_handle: "text".into(),
+                target_handle: "inputs".into(),
+            })
+            .to_vec(),
+        derived_graph: None,
+    };
+    let tasks = workflow_scheduler_task_graph(&workflow_id(), &workflow_run_id(), &graph).unwrap();
+    let merge = tasks
+        .tasks
+        .iter()
+        .find(|task| task.node_id.as_str() == "join")
+        .unwrap();
+    assert_eq!(
+        merge.execution_class,
+        WorkflowSchedulerTaskExecutionClass::NonRuntimeNodeEngine
+    );
+    assert_eq!(
+        merge.non_runtime_task_template,
+        Some(WorkflowSchedulerNonRuntimeTaskTemplate::Merge)
+    );
+    assert_eq!(
+        merge
+            .dependency_task_ids
+            .iter()
+            .map(|id| id.as_str())
+            .collect::<Vec<_>>(),
+        ["a", "b"]
+    );
+    assert!(merge.diagnostics.is_empty());
+    let decoded: crate::workflow::WorkflowSchedulerTaskGraph =
+        serde_json::from_str(&serde_json::to_string(&tasks).unwrap()).unwrap();
+    assert_eq!(decoded, tasks);
+}
+
+#[test]
+fn scheduler_task_graph_reports_invalid_merge_input_port() {
+    let graph = WorkflowGraph {
+        nodes: ["source", "join"]
+            .map(|id| GraphNode {
+                id: id.into(),
+                node_type: if id == "join" { "merge" } else { "text-input" }.into(),
+                position: Position { x: 0.0, y: 0.0 },
+                data: json!({}),
+            })
+            .to_vec(),
+        edges: vec![GraphEdge {
+            id: "source-join".into(),
+            source: "source".into(),
+            target: "join".into(),
+            source_handle: "text".into(),
+            target_handle: "unexpected".into(),
+        }],
+        derived_graph: None,
+    };
+    let tasks = workflow_scheduler_task_graph(&workflow_id(), &workflow_run_id(), &graph).unwrap();
+    let merge = tasks
+        .tasks
+        .iter()
+        .find(|task| task.node_id.as_str() == "join")
+        .unwrap();
+    assert_eq!(merge.non_runtime_task_template, None);
+    assert_eq!(merge.diagnostics.len(), 1);
+    let diagnostic = &merge.diagnostics[0];
+    assert_eq!(
+        diagnostic.code,
+        WorkflowSchedulerTaskProjectionDiagnosticCode::InvalidNonRuntimeTemplateValue
+    );
+    assert_eq!(diagnostic.port_id.as_deref(), Some("inputs"));
+    assert_eq!(
+        diagnostic.message,
+        "merge accepts only bindings that target 'inputs'"
+    );
 }
 
 #[test]

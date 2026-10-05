@@ -9,6 +9,8 @@ pub(crate) fn workflow_service_error_from_runtime_registry(
     match error {
         RuntimeRegistryError::RuntimeNotFound(_)
         | RuntimeRegistryError::ReservationRejected(_)
+        | RuntimeRegistryError::ReservationCustodyPending(_)
+        | RuntimeRegistryError::ReservationObservationChanged(_)
         | RuntimeRegistryError::AdmissionRejected { .. } => {
             WorkflowServiceError::RuntimeNotReady(error.to_string())
         }

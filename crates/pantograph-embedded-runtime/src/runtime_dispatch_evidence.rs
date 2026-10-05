@@ -112,25 +112,36 @@ impl RuntimeDispatchEvidenceDiagnostic {
 fn validate_request(
     request: &RuntimeDispatchEvidenceRequest,
 ) -> Result<(), RuntimeDispatchEvidenceDiagnostic> {
-    validate_selected_fact("selected_backend_key", &request.selected_backend_key)?;
-    validate_selected_fact("runtime_family", &request.runtime_family)?;
-    validate_selected_fact("resolved_load_target", &request.resolved_load_target)?;
-    validate_selected_fact("runtime_residency_key", &request.runtime_residency_key)?;
-    if request.loaded_runtime_memory_estimate_bytes == 0 {
-        return Err(RuntimeDispatchEvidenceDiagnostic::new(
-            RuntimeDispatchEvidenceDiagnosticCode::InvalidMemoryEstimate,
-            "loaded_runtime_memory_estimate_bytes",
-            "loaded-runtime memory estimate must be greater than zero",
-        ));
-    }
-    validate_runtime_load_state(
-        request.runtime_load_state,
-        request.runtime_instance_id.as_deref(),
-    )?;
-    validate_model_ref(&request.selected_model_ref)?;
+    request.validate_candidate_identity()?;
     validate_reservations(request)?;
     validate_resource_fit(&request.resource_fit_assessment)?;
     Ok(())
+}
+
+impl RuntimeDispatchEvidenceRequest {
+    /// Check candidate identity without claiming any reservation proof.
+    pub(crate) fn validate_candidate_identity(
+        &self,
+    ) -> Result<(), RuntimeDispatchEvidenceDiagnostic> {
+        let request = self;
+        validate_selected_fact("selected_backend_key", &request.selected_backend_key)?;
+        validate_selected_fact("runtime_family", &request.runtime_family)?;
+        validate_selected_fact("resolved_load_target", &request.resolved_load_target)?;
+        validate_selected_fact("runtime_residency_key", &request.runtime_residency_key)?;
+        if request.loaded_runtime_memory_estimate_bytes == 0 {
+            return Err(RuntimeDispatchEvidenceDiagnostic::new(
+                RuntimeDispatchEvidenceDiagnosticCode::InvalidMemoryEstimate,
+                "loaded_runtime_memory_estimate_bytes",
+                "loaded-runtime memory estimate must be greater than zero",
+            ));
+        }
+        validate_runtime_load_state(
+            request.runtime_load_state,
+            request.runtime_instance_id.as_deref(),
+        )?;
+        validate_model_ref(&request.selected_model_ref)?;
+        Ok(())
+    }
 }
 
 fn validate_selected_fact(

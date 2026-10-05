@@ -8,6 +8,10 @@ const NODE_TYPE_BOOLEAN_INPUT: &str = "boolean-input";
 const NODE_TYPE_NUMBER_INPUT: &str = "number-input";
 const NODE_TYPE_TEXT_INPUT: &str = "text-input";
 const NODE_TYPE_TEXT_OUTPUT: &str = "text-output";
+const NODE_TYPE_IMAGE_OUTPUT: &str = "image-output";
+const NODE_TYPE_MERGE: &str = "merge";
+const NODE_TYPE_JSON_FILTER: &str = "json-filter";
+const NODE_TYPE_SELECTION_INPUT: &str = "selection-input";
 
 pub(super) fn classify_workflow_scheduler_task(
     node_type: &str,
@@ -47,12 +51,18 @@ pub(super) fn classify_workflow_scheduler_task(
 fn is_source_input_task(node_type: &str) -> bool {
     matches!(
         node_type,
-        NODE_TYPE_BOOLEAN_INPUT | NODE_TYPE_TEXT_INPUT | NODE_TYPE_NUMBER_INPUT
+        NODE_TYPE_BOOLEAN_INPUT
+            | NODE_TYPE_TEXT_INPUT
+            | NODE_TYPE_NUMBER_INPUT
+            | NODE_TYPE_SELECTION_INPUT
     )
 }
 
 fn is_first_stage_node_engine_task(node_type: &str) -> bool {
-    matches!(node_type, NODE_TYPE_TEXT_OUTPUT)
+    matches!(
+        node_type,
+        NODE_TYPE_TEXT_OUTPUT | NODE_TYPE_IMAGE_OUTPUT | NODE_TYPE_MERGE | NODE_TYPE_JSON_FILTER
+    )
 }
 
 #[cfg(test)]
@@ -79,7 +89,12 @@ mod tests {
 
     #[test]
     fn classifier_marks_source_inputs_as_source_input() {
-        for node_type in ["boolean-input", "text-input", "number-input"] {
+        for node_type in [
+            "boolean-input",
+            "text-input",
+            "number-input",
+            "selection-input",
+        ] {
             let contract = contract(node_type);
 
             assert_eq!(
@@ -92,12 +107,13 @@ mod tests {
 
     #[test]
     fn classifier_marks_first_stage_output_as_non_runtime_node_engine() {
-        let contract = contract("text-output");
-
-        assert_eq!(
-            classify_workflow_scheduler_task("text-output", Some(&contract)),
-            WorkflowSchedulerTaskExecutionClass::NonRuntimeNodeEngine
-        );
+        for node_type in ["text-output", "image-output", "merge", "json-filter"] {
+            let contract = contract(node_type);
+            assert_eq!(
+                classify_workflow_scheduler_task(node_type, Some(&contract)),
+                WorkflowSchedulerTaskExecutionClass::NonRuntimeNodeEngine
+            );
+        }
     }
 
     #[test]
@@ -112,7 +128,7 @@ mod tests {
 
     #[test]
     fn classifier_rejects_excluded_and_unknown_nodes() {
-        for node_type in ["model-provider", "image-output"] {
+        for node_type in ["model-provider", "audio-output"] {
             let contract = contract(node_type);
 
             assert_eq!(

@@ -110,6 +110,9 @@ pub struct WorkflowSchedulerDependencyReadinessSource {
 #[non_exhaustive]
 pub enum WorkflowSchedulerNonRuntimeTaskTemplate {
     TextOutput,
+    ImageOutput,
+    Merge,
+    JsonFilter { path: String },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -124,6 +127,9 @@ pub enum WorkflowSchedulerSourceInputTemplate {
     },
     /// Integer-only materialization of a number-input node in scheduler-owned runs.
     Integer {
+        port_id: String,
+    },
+    Selection {
         port_id: String,
     },
 }
