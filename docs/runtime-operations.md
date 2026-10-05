@@ -150,7 +150,11 @@ capabilities or readiness. Producer reconciliation still supplies actual runtime
 facts. Unknown runtimes, malformed declarations, duplicate domain IDs and unsafe
 budgets fail startup. A present unreadable or invalid app configuration also fails
 startup, rather than falling back to unconstrained defaults. Missing config files
-still use defaults. Existing config commands preserve the section but reject live
+still use defaults when absence is confirmed. Broken configuration or app-data
+symlinks and filesystem permission/metadata failures are errors. The production
+`pantograph-app-config` loader composes the startup registry; Tauri then manages
+and passes that same registry to its existing gateway/workflow consumers.
+Existing config commands preserve the section but reject live
 changes to it: shared backing membership requires editing the file and restarting.
 
 ## Recovery And Reclaim

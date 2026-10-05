@@ -19,6 +19,14 @@ portable config-factory/registry tests execute without ONNX. Native desktop
 qualification, automatic physical binding/capacity production and full residency
 accounting remain pending; parent owns coordinated review.
 
+The separate [AppConfig qualification successor](reports/2026-10-05-app-config-startup-qualification.md)
+preserves frozen `73211ddc`, moves the actual persisted settings/startup composition
+owner into `pantograph-app-config`, and fixes `Path::exists` hiding filesystem
+failures. Real AppConfig cold-load/save/composition and filesystem regressions
+execute locally. Authorized official dependency installation is blocked by OS
+permission denial; the real desktop build fails at missing GLib prerequisites.
+Tauri setup/IPC and a running desktop remain unqualified.
+
 **Execution ledger:** [execution-ledger.md](execution-ledger.md)
 
 **Issues:** [issues.md](issues.md)

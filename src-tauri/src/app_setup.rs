@@ -174,13 +174,9 @@ pub fn run_app() -> AppStartupResult<()> {
 
                 // A missing config uses defaults. A present unreadable/invalid config
                 // must not silently discard declared shared-capacity constraints.
-                let config = tauri::async_runtime::block_on(AppConfig::load(&app_data_dir))
+                let (config, registry) = tauri::async_runtime::block_on(AppConfig::load_with_runtime_registry(&app_data_dir))
                     .map_err(|error| startup_error(format!("failed to load app configuration: {error}")))?;
-                let runtime_registry: SharedRuntimeRegistry = Arc::new(
-                    config.runtime_resources.compose_registry().map_err(|error| {
-                        startup_error(format!("failed to compose runtime resource domains: {error}"))
-                    })?,
-                );
+                let runtime_registry: SharedRuntimeRegistry = Arc::new(registry);
                 app.manage(runtime_registry.clone());
 
                 if let Err(err) =

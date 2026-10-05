@@ -15,10 +15,7 @@ pub mod ports {
 
 /// Default values for inference configuration
 pub mod defaults {
-    /// Default GPU layers (-1 = all layers on GPU)
-    pub const GPU_LAYERS: i32 = -1;
-    /// Default device selection
-    pub const DEVICE: &str = "auto";
+    pub use pantograph_app_config::defaults::{DEVICE, GPU_LAYERS};
 }
 
 /// Data storage paths

@@ -7297,6 +7297,7 @@ dependencies = [
  "log",
  "node-engine",
  "once_cell",
+ "pantograph-app-config",
  "pantograph-dependency-planning",
  "pantograph-embedded-runtime",
  "pantograph-inference-interface-contracts",
@@ -7326,6 +7327,19 @@ dependencies = [
  "workflow-nodes",
  "zip 2.4.2",
  "zstd",
+]
+
+[[package]]
+name = "pantograph-app-config"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "pantograph-runtime-registry",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tokio",
 ]
 
 [[package]]

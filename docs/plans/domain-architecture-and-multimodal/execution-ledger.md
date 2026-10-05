@@ -453,3 +453,20 @@ persisted declarations, shared contention, unified memory and rollback/transfer.
 Native AppConfig tests are authored but unexecuted because GTK/WebKit prerequisites
 are absent. Parent retains desktop/native qualification and review; frozen
 sampling source and PR54 diagnostics remain unchanged.
+
+## 2026-10-05 — AppConfig filesystem repair and production composition qualification
+
+Continued separately from frozen `73211ddc` on
+`qualification/shared-resource-app-config`. Peer review found `Path::exists`
+discarded permission/metadata failures and broken symlinks as apparent absence.
+The [repair and qualification](reports/2026-10-05-app-config-startup-qualification.md)
+uses a fallible read and confirms genuine absence, preserving other filesystem,
+JSON and domain errors. The actual AppConfig implementation now lives in a
+production crate consumed by Tauri setup, so full settings, persistence and
+startup registry composition execute without unrelated GUI/inference dependencies.
+Ten AppConfig tests and the existing 114 registry/133 scheduler tests pass;
+the exact frozen loader fails three new filesystem regressions. No native
+runtime is simulated. Official APT update was attempted with owner authorization
+but returned OS permission denial; desktop compilation fails at missing
+`glib-2.0.pc`. Tauri setup/IPC and desktop-process qualification stay blocked.
+Parent retains review/publication; old source milestones and PR54 remain frozen.
