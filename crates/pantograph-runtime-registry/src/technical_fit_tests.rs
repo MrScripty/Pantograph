@@ -83,6 +83,7 @@ fn runtime_snapshot(
         active_reservation_claims: Vec::new(),
         admission_budget: None,
         models: Vec::new(),
+        resident_resources_uncertain: false,
         model_resource_residency: None,
     }
 }

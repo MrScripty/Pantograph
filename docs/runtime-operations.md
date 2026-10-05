@@ -159,37 +159,68 @@ changes to it: shared backing membership requires editing the file and restartin
 
 ### Resident Model Envelopes
 
-Producer observations now keep a separate `model_resource_residency` in each
-registry runtime snapshot. Its optional requirements are explicit resident
-estimates, not allocator measurements. A producer publishes them through
-`declare_model_residency_resources` using the exact observed model and runtime
-instance identity. The registry charges those RAM/VRAM estimates together with
-live task claims against configured local and shared budgets. Unified pools sum
-their bound kinds; equal model content in two producers remains two allocations.
+The active PyTorch producer in `InferenceGateway` publishes ordered allocation
+observations during host sync, warmup, restore, stop and reclaim reconciliation.
+The registry applies its explicitly configured estimates under the existing
+admission lock. Configure exact observed model targets in `config.json`:
 
-Task completion releases its lease while leaving the resident envelope charged.
-Repeated observations, missing health/model metadata, health failures, omitted
-members in bulk snapshots and stop requests do not prove deallocation. Confirmed
-stop or reclaim after producer inactivity clears the envelope. A new model or
-instance invalidates its estimate; smaller/partial declarations for the same
-resident identity retain the previous componentwise maximum. Growth must fit
-alongside current task/custody claims, and rejected growth preserves prior state.
+```json
+"runtime_model_resident_estimates": [
+  {
+    "runtime_id": "pytorch",
+    "model_id": "/models/exact-target",
+    "requirements": {
+      "claims": [
+        { "kind": "ram_bytes", "bytes": 4294967296 },
+        { "kind": "vram_bytes", "bytes": 0 }
+      ]
+    }
+  }
+]
+```
 
-If a loaded member has no declaration for a resource bound to a shared pool,
-admission for that pool returns `ModelResidencyResourcesUnavailable`. It does not
-report that capacity as free. Current host mode snapshots supply identities but
-do not publish per-kind resident estimates; configuring shared domains can
-therefore block loaded-model dispatch until that producer bridge supplies them.
-Legacy local-only admission keeps its existing missing-estimate behavior; known
-resident declarations also count against local budgets.
+The numbers are operator estimates, never measurements or a guessed device split.
+`model_id` must equal the gateway's observed model target, usually its load path;
+there is no path normalization or substitution with a catalogue identifier.
+These settings require restart, like resource domains. Missing, legacy and empty
+configuration preserves unconfigured lifecycle/admission behavior. Configuration
+alone creates no loaded model, readiness or resident allocation. A declared zero
+for a kind is known zero; an omitted kind is unknown and blocks a bound shared pool.
+Estimates for other producers can be persisted, but automatic publication in this
+successor is limited to the active PyTorch owner.
 
-Existing task reservations remain complete peak envelopes. They may already
-include model weights, and charging a separate resident envelope is deliberately
-conservative until a producer supplies a proven resident/transient split. The
-registry does not infer device placement, subtract guessed weights, or claim
-physical allocator safety. Replacing a model inside a live producer requires fresh
-declarations; releasing an individual model's envelope without stopping the
-producer is not yet a supported operation.
+`model_resource_residency` in runtime snapshots holds the exact model/instance
+and its optional envelope. Resident bytes and complete task peak envelopes count
+against local/shared budgets; unified pools sum bound kinds. Equal content in
+different producers remains separate allocations. Task cleanup retains weights;
+acknowledged gateway stop releases resident bytes while live task custody stays
+charged. Confirmed replacement requires fresh estimates for the new identity.
+Rejected publication keeps the actual new identity unknown and blocks shared
+admission; the next owner snapshot retries after task capacity becomes available.
+Smaller/partial declarations for the same identity retain the componentwise maximum.
+
+A gateway source token and monotonically sequenced snapshots reject old loads,
+stops and reload reports even when model/instance labels are reused. Once bound,
+unsequenced observations, stopped transitions, manual declarations and negative
+inactivity projections cannot release this producer's envelope. Matching negative
+health assessments can still make dispatch less permissive. A different gateway
+source requires fresh startup composition rather than an implicit owner handoff.
+
+Readiness loss, failed effectful load and unacknowledged stop do not prove release.
+They retain the previous envelope and expose `resident_resources_uncertain`;
+shared admission returns `ModelResidencyResourcesUnavailable`, including for a
+request from another runtime. PyTorch retains uncertainty after losing load
+metadata, so a subsequent stop must obtain worker shutdown acknowledgement.
+Successful gateway stop/switch supplies logical absence evidence. There is no new
+process watcher or controller, and an unseen process loss requires the existing
+owner to reconcile or stop before capacity becomes available.
+
+All task peak claims remain fully charged, including any weights already inside
+them. This deliberately conservative accounting does not establish a measured
+resident/transient split or physical GPU allocator safety. The bridge covers the
+gateway's current text-model lifecycle; independent diffusion caches, standalone
+backend unloads, and allocations outside that owner are not measured or projected.
+Native GUI/runtime qualification remains separate.
 
 ## Recovery And Reclaim
 

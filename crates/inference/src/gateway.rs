@@ -7,7 +7,7 @@
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::pin::Pin;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
@@ -158,6 +158,11 @@ pub struct InferenceGateway {
     runtime_lifecycle: Arc<RwLock<RuntimeLifecycleSnapshot>>,
     /// Monotonic instance counter for runtime instance IDs.
     runtime_instance_sequence: Arc<AtomicU64>,
+    /// Observation metadata only; backend start/stop remain the lifecycle owner.
+    resident_source_id: String,
+    resident_observation_sequence: AtomicU64,
+    pytorch_release_confirmed: Arc<AtomicBool>,
+    pytorch_ever_owned: Arc<AtomicBool>,
 }
 
 struct RuntimeWarmupStartContext<'a> {
@@ -251,6 +256,10 @@ impl InferenceGateway {
                 ..RuntimeLifecycleSnapshot::default()
             })),
             runtime_instance_sequence: Arc::new(AtomicU64::new(0)),
+            resident_source_id: uuid::Uuid::new_v4().to_string(),
+            resident_observation_sequence: AtomicU64::new(0),
+            pytorch_release_confirmed: Arc::new(AtomicBool::new(false)),
+            pytorch_ever_owned: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -273,6 +282,10 @@ impl InferenceGateway {
                 ..RuntimeLifecycleSnapshot::default()
             })),
             runtime_instance_sequence: Arc::new(AtomicU64::new(0)),
+            resident_source_id: uuid::Uuid::new_v4().to_string(),
+            resident_observation_sequence: AtomicU64::new(0),
+            pytorch_release_confirmed: Arc::new(AtomicBool::new(false)),
+            pytorch_ever_owned: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -527,11 +540,22 @@ impl InferenceGateway {
             self.runtime_lifecycle.write().await.last_error = Some(error.to_string());
             return Err(GatewayError::Backend(error));
         }
+        if runtime_id_for_backend_name(&self.current_backend_name().await) == "pytorch" {
+            self.pytorch_ever_owned.store(true, Ordering::Relaxed);
+            self.pytorch_release_confirmed
+                .store(true, Ordering::Relaxed);
+        }
         let new_backend = self
             .registry
             .create(name)
             .map_err(|e| GatewayError::SwitchFailed(e.to_string()))?;
         let canonical_backend_name = new_backend.name().to_string();
+        if runtime_id_for_backend_name(&canonical_backend_name) == "pytorch" {
+            // Factory creation establishes a fresh, unstarted logical owner.
+            self.pytorch_ever_owned.store(true, Ordering::Relaxed);
+            self.pytorch_release_confirmed
+                .store(true, Ordering::Relaxed);
+        }
         *guard = new_backend;
 
         // Update current backend name
@@ -634,6 +658,12 @@ impl InferenceGateway {
         }
 
         let runtime_id = runtime_id_for_backend_name(&self.current_backend_name().await);
+        if runtime_id == "pytorch" {
+            self.pytorch_ever_owned.store(true, Ordering::Relaxed);
+            // A failed effectful load does not acknowledge release.
+            self.pytorch_release_confirmed
+                .store(false, Ordering::Relaxed);
+        }
         let warmup_started_at_ms = unix_timestamp_ms();
         let previous_runtime_instance_id = {
             let lifecycle = self.runtime_lifecycle.read().await;
@@ -798,6 +828,11 @@ impl InferenceGateway {
             self.runtime_lifecycle.write().await.last_error = Some(error.to_string());
             return Err(GatewayError::Backend(error));
         }
+        if runtime_id_for_backend_name(&self.current_backend_name().await) == "pytorch" {
+            self.pytorch_ever_owned.store(true, Ordering::Relaxed);
+            self.pytorch_release_confirmed
+                .store(true, Ordering::Relaxed);
+        }
         // Reset embedding mode
         let mut mode = self.embedding_mode.write().await;
         *mode = false;
@@ -883,6 +918,70 @@ impl InferenceGateway {
             self.start(&config).await?;
         }
         Ok(())
+    }
+
+    /// Sample PyTorch allocation evidence while excluding start/stop/switch.
+    /// Readiness loss alone never proves deallocation. Only an acknowledged
+    /// stop (including switch's stop) or a fresh empty owner proves release.
+    /// Sequence is assigned before delivery, so a delayed old stop cannot
+    /// clear a newer reload, even when model/instance labels are reused.
+    pub async fn resident_lifecycle_snapshot(
+        &self,
+    ) -> Option<crate::resident_lifecycle::ResidentLifecycleSnapshot> {
+        use crate::resident_lifecycle::{ResidentAllocationState, ResidentLifecycleSnapshot};
+        let backend = self.backend.read().await;
+        let runtime_id = runtime_id_for_backend_name(&self.current_backend_name().await);
+        if runtime_id != "pytorch" {
+            if !self.pytorch_ever_owned.load(Ordering::Relaxed) {
+                return None;
+            }
+            return Some(ResidentLifecycleSnapshot {
+                source_id: self.resident_source_id.clone(),
+                sequence: self
+                    .resident_observation_sequence
+                    .fetch_add(1, Ordering::Relaxed)
+                    + 1,
+                allocation_state: ResidentAllocationState::Released,
+                model_target: None,
+                lifecycle: RuntimeLifecycleSnapshot {
+                    runtime_id: Some("pytorch".into()),
+                    ..Default::default()
+                },
+            });
+        }
+        self.pytorch_ever_owned.store(true, Ordering::Relaxed);
+        let model_target = self
+            .current_runtime_config
+            .read()
+            .await
+            .as_ref()
+            .and_then(config_model_target);
+        let mut lifecycle = self.runtime_lifecycle.read().await.clone();
+        let allocation_state = if backend.is_ready()
+            && model_target.is_some()
+            && lifecycle.runtime_instance_id.is_some()
+        {
+            ResidentAllocationState::Resident
+        } else if !backend.is_ready() && self.pytorch_release_confirmed.load(Ordering::Relaxed) {
+            lifecycle.active = false;
+            ResidentAllocationState::Released
+        } else {
+            ResidentAllocationState::Unknown
+        };
+        Some(ResidentLifecycleSnapshot {
+            source_id: self.resident_source_id.clone(),
+            sequence: self
+                .resident_observation_sequence
+                .fetch_add(1, Ordering::Relaxed)
+                + 1,
+            allocation_state,
+            model_target: if allocation_state == ResidentAllocationState::Released {
+                None
+            } else {
+                model_target
+            },
+            lifecycle,
+        })
     }
 
     /// Get server mode info (for legacy compatibility)
@@ -1146,6 +1245,9 @@ impl InferenceGateway {
             };
             *self.current_runtime_config.write().await = None;
         }
+        self.pytorch_ever_owned.store(true, Ordering::Relaxed);
+        self.pytorch_release_confirmed
+            .store(false, Ordering::Relaxed);
         let outcome = backend
             .load_selected_text(&request, &artifact_load_target, &backend_decision)
             .await;

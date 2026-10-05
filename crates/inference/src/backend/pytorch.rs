@@ -124,6 +124,9 @@ pub struct PyTorchBackend {
     text_jobs: pytorch_text_job::TextJobs,
     /// Currently loaded model metadata
     loaded_model: Option<LoadedModelInfo>,
+    /// Effectful load may lose metadata before worker allocation is released.
+    /// Only an acknowledged unload/shutdown clears this uncertainty.
+    resident_allocation_uncertain: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -1020,6 +1023,7 @@ impl PyTorchBackend {
             ready: false,
             text_jobs: Default::default(),
             loaded_model: None,
+            resident_allocation_uncertain: false,
         }
     }
 
@@ -1387,6 +1391,7 @@ impl PyTorchBackend {
         // The worker can unload the resident model before replacement fails.
         // Once effectful loading begins, old metadata no longer proves residency.
         // Drain and envelope validation above leave the prior residency intact.
+        self.resident_allocation_uncertain = true;
         self.ready = false;
         self.loaded_model = None;
 
@@ -1416,6 +1421,7 @@ impl PyTorchBackend {
         .map_err(|e| BackendError::Inference(task_join_error_message(e)))??;
 
         self.loaded_model = Some(info.clone());
+        self.resident_allocation_uncertain = false;
         self.ready = true;
         Ok(info)
     }
@@ -2484,6 +2490,7 @@ impl PyTorchBackend {
         .map_err(|e| BackendError::Inference(task_join_error_message(e)))??;
 
         self.loaded_model = None;
+        self.resident_allocation_uncertain = false;
         Ok(())
     }
 
@@ -2802,7 +2809,7 @@ impl InferenceBackend for PyTorchBackend {
 
     async fn stop(&mut self) -> Result<(), BackendError> {
         self.text_jobs.drain(true).await?;
-        if self.ready || self.loaded_model.is_some() {
+        if self.ready || self.loaded_model.is_some() || self.resident_allocation_uncertain {
             let request_id = format!("pytorch-stop-shutdown-{}", Uuid::new_v4().simple());
             let envelope_json = shutdown_worker_envelope_json(&request_id)?;
             tokio::task::spawn_blocking(move || {
@@ -2812,6 +2819,7 @@ impl InferenceBackend for PyTorchBackend {
             .map_err(|e| BackendError::Inference(task_join_error_message(e)))??;
         }
         self.loaded_model = None;
+        self.resident_allocation_uncertain = false;
         self.ready = false;
         Ok(())
     }

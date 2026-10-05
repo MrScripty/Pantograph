@@ -178,6 +178,7 @@ fn runtime_snapshot_with_claims(
         active_reservation_claims,
         admission_budget: record.admission_budget.clone(),
         models,
+        resident_resources_uncertain: record.resident_resources_uncertain,
         model_resource_residency: record.model_resource_residency.clone(),
     }
 }

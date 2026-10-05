@@ -96,6 +96,12 @@ Adopt the following ownership and lifecycle boundary for the planned
   fresh identity evidence and declarations; a smaller/partial estimate cannot
   free a held envelope for the same resident identity. Shared backing admission
   treats missing per-kind resident declarations as unavailable, not zero.
+  Explicit zero-byte claims represent known zero. The active PyTorch gateway
+  publishes exact model/instance observations with a stable owner token and
+  sample-time sequence; only newer frames from that owner may replace its
+  allocation. Unsequenced stops/inactivity cannot free an owned envelope.
+  Failed effectful loads retain uncertainty until acknowledged owner cleanup;
+  estimates are immutable startup configuration and are not measurements.
 
 8. `crates/pantograph-embedded-runtime` remains a runtime producer and executor.
 - It continues to expose Pantograph-specific runtime capabilities and execute

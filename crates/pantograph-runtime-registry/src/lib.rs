@@ -1,6 +1,10 @@
 mod admission;
 mod model_resources;
+mod producer_resources;
 pub use model_resources::RuntimeModelResourceResidency;
+pub use producer_resources::{
+    RuntimeModelResidentEstimate, RuntimeProducerAllocationState, RuntimeProducerObservation,
+};
 mod observation;
 mod reclaim;
 mod registry_queries;
@@ -208,6 +212,8 @@ impl RuntimeRegistration {
 #[derive(Debug, Default)]
 struct RuntimeRegistryState {
     resource_domains: BTreeMap<String, RuntimeResourceDomain>,
+    resident_estimates: BTreeMap<(String, String), RuntimeReservationRequirements>,
+    producer_observations: BTreeMap<String, (String, u64)>,
     runtimes: BTreeMap<String, RuntimeRegistryRecord>,
     reservations: BTreeMap<u64, RuntimeReservationRecord>,
     pending_reservations: BTreeMap<u64, PendingReservation>,
@@ -267,6 +273,32 @@ impl RuntimeRegistry {
             .state
             .lock()
             .expect("runtime registry state lock poisoned");
+        if guard.producer_observations.contains_key(&runtime_id) {
+            let current_instance = guard
+                .runtimes
+                .get(&runtime_id)
+                .and_then(|record| record.runtime_instance_id.as_ref());
+            let changes_identity = match &transition {
+                Transition::Stopped => true,
+                Transition::WarmupStarted {
+                    runtime_instance_id,
+                }
+                | Transition::Ready {
+                    runtime_instance_id,
+                }
+                | Transition::Busy {
+                    runtime_instance_id,
+                } => runtime_instance_id
+                    .as_ref()
+                    .is_some_and(|instance| Some(instance) != current_instance),
+                _ => false,
+            };
+            if changes_identity {
+                return Err(RuntimeRegistryError::ModelResidencyObservationChanged(
+                    runtime_id,
+                ));
+            }
+        }
         let record = guard
             .runtimes
             .get_mut(&runtime_id)
@@ -523,8 +555,14 @@ impl RuntimeRegistry {
                     .map(|binding| binding.runtime_id.clone())
             })
             .collect::<BTreeSet<_>>();
+        let owned_runtime_ids = guard
+            .producer_observations
+            .keys()
+            .cloned()
+            .collect::<BTreeSet<_>>();
         for record in guard.runtimes.values_mut() {
-            if observed_runtime_ids.contains(&record.runtime_id)
+            if owned_runtime_ids.contains(&record.runtime_id)
+                || observed_runtime_ids.contains(&record.runtime_id)
                 || !record.active_reservations.is_empty()
                 || record
                     .model_resource_residency
@@ -695,7 +733,10 @@ fn runtime_reclaim(
         ));
     }
 
-    if producer_active {
+    if producer_active
+        || (state.producer_observations.contains_key(&runtime_id)
+            && (record.model_resource_residency.is_some() || record.resident_resources_uncertain))
+    {
         if record.status != RuntimeRegistryStatus::Stopping {
             record.status = RuntimeRegistryStatus::Stopping;
             record.last_transition_at_ms = now_ms;
@@ -962,6 +1003,36 @@ fn available_budget_bytes(
 }
 
 fn apply_runtime_observation(
+    state: &mut RuntimeRegistryState,
+    observation: RuntimeObservation,
+    now_ms: u64,
+) {
+    let runtime_id = canonical_runtime_id(&observation.runtime_id);
+    if state.producer_observations.contains_key(&runtime_id) {
+        // Matching health assessments may make dispatch less permissive, but
+        // unsequenced projections never replace identity or release allocation.
+        if let Some(record) = state.runtimes.get_mut(&runtime_id) {
+            if matches!(
+                observation.status,
+                RuntimeRegistryStatus::Unhealthy | RuntimeRegistryStatus::Failed
+            ) && observation.runtime_instance_id.is_some()
+                && observation.runtime_instance_id == record.runtime_instance_id
+                && observation.model_id.as_ref()
+                    == record
+                        .model_resource_residency
+                        .as_ref()
+                        .map(|resident| &resident.model_id)
+            {
+                record.status = observation.status;
+                record.last_error = observation.last_error;
+            }
+        }
+        return;
+    }
+    apply_producer_runtime_observation(state, observation, now_ms);
+}
+
+fn apply_producer_runtime_observation(
     state: &mut RuntimeRegistryState,
     observation: RuntimeObservation,
     now_ms: u64,

@@ -94,6 +94,8 @@ impl InferenceGateway {
         let external = self.external_mode.clone();
         let lifecycle = self.runtime_lifecycle.clone();
         let sequence = self.runtime_instance_sequence.clone();
+        let pytorch_release_confirmed = self.pytorch_release_confirmed.clone();
+        let pytorch_ever_owned = self.pytorch_ever_owned.clone();
         #[cfg(test)]
         let after_publication = self
             .embedding_replacement
@@ -127,6 +129,10 @@ impl InferenceGateway {
                 // Retirement and publication are supervised to completion, even if the
                 // caller disappears or the host cancels after this admission point.
                 backend.stop().await?;
+                if canonical_backend_key(backend.name()) == "pytorch" {
+                    pytorch_ever_owned.store(true, Ordering::Relaxed);
+                    pytorch_release_confirmed.store(true, Ordering::Relaxed);
+                }
                 std::mem::swap(&mut *backend, &mut candidate);
                 *name = backend.name().to_owned();
                 *current_config = Some(config);

@@ -486,3 +486,18 @@ provisional replacement. Current host producers still need a bridge publishing
 per-kind estimates; peak task envelopes remain conservatively charged in full.
 No hardware measurements, native execution or pin changes are claimed. Parent
 retains review/publication; frozen qualifications and PR54 remain unchanged.
+
+
+## 2026-10-05 — Ordered PyTorch producer resident estimates
+
+Continued from frozen `254aef1` on `feat/runtime-producer-resident-estimates`.
+The [producer bridge](reports/2026-10-05-runtime-producer-resident-estimates.md)
+uses explicit startup estimates for the exact observed model target, publishing
+coherent source/sequence/model/instance facts from the existing gateway owner.
+Old stops and loads cannot replace newer allocation facts; explicit zero and
+missing per-kind estimates remain distinct. Effectful load failure retains the
+previous envelope and blocks shared admission until owner evidence resolves it.
+PyTorch shutdown must acknowledge cleanup even after failed load erased metadata.
+Existing peak task claims/custody remain fully charged. Portable owner/config
+fixtures qualify the logical accounting; native GUI/GPU execution and other
+producers remain unqualified. No previous branch rewrite or PR/review creation.

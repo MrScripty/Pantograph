@@ -8,6 +8,12 @@ impl runtime_registry::HostRuntimeRegistryController for inference::InferenceGat
         HostRuntimeModeSnapshot::from_mode_info(&self.mode_info().await)
     }
 
+    async fn resident_lifecycle_snapshot(
+        &self,
+    ) -> Option<inference::resident_lifecycle::ResidentLifecycleSnapshot> {
+        inference::InferenceGateway::resident_lifecycle_snapshot(self).await
+    }
+
     async fn stop_runtime_producer(
         &self,
         producer: runtime_registry::HostRuntimeProducer,

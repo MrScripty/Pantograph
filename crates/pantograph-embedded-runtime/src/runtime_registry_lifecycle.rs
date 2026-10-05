@@ -22,6 +22,11 @@ use pantograph_runtime_registry::{
 #[async_trait]
 pub trait HostRuntimeRegistryController {
     async fn mode_info_snapshot(&self) -> HostRuntimeModeSnapshot;
+    async fn resident_lifecycle_snapshot(
+        &self,
+    ) -> Option<inference::resident_lifecycle::ResidentLifecycleSnapshot> {
+        None
+    }
     async fn stop_runtime_producer(
         &self,
         producer: HostRuntimeProducer,
@@ -58,10 +63,22 @@ pub enum RuntimeLifecycleCoordinationError {
     Gateway(#[from] inference::GatewayError),
 }
 
+async fn publish_resident_lifecycle<C: HostRuntimeRegistryController + Sync>(
+    controller: &C,
+    registry: &RuntimeRegistry,
+) {
+    if let Some(snapshot) = controller.resident_lifecycle_snapshot().await {
+        if let Err(error) = snapshot.publish(registry) {
+            log::warn!("Resident resource lifecycle publication rejected: {error}");
+        }
+    }
+}
+
 pub async fn sync_runtime_registry<C: HostRuntimeRegistryController + Sync>(
     controller: &C,
     registry: &RuntimeRegistry,
 ) -> Vec<RuntimeRegistryRuntimeSnapshot> {
+    publish_resident_lifecycle(controller, registry).await;
     let mode_info = controller.mode_info_snapshot().await;
     let health_assessments = controller.runtime_health_assessment_snapshot().await;
     crate::runtime_registry::reconcile_runtime_registry_mode_info_with_health_snapshot(
@@ -89,6 +106,7 @@ pub async fn sync_runtime_registry_with_health_assessments<
     active_assessment: Option<&RuntimeHealthAssessment>,
     embedding_assessment: Option<&RuntimeHealthAssessment>,
 ) -> Vec<RuntimeRegistryRuntimeSnapshot> {
+    publish_resident_lifecycle(controller, registry).await;
     let mode_info = controller.mode_info_snapshot().await;
     crate::runtime_registry::reconcile_runtime_registry_mode_info_with_health_assessments(
         registry,
@@ -197,6 +215,7 @@ async fn reconcile_active_runtime_mode_info_snapshot<C: HostRuntimeRegistryContr
     controller: &C,
     registry: &RuntimeRegistry,
 ) -> HostRuntimeModeSnapshot {
+    publish_resident_lifecycle(controller, registry).await;
     let mode_info = controller.mode_info_snapshot().await;
     crate::runtime_registry::reconcile_active_runtime_mode_info(registry, &mode_info, false);
     mode_info
@@ -251,6 +270,7 @@ pub async fn reclaim_runtime_and_reconcile_runtime_registry<
     registry: &RuntimeRegistry,
     runtime_id: &str,
 ) -> Result<RuntimeReclaimDisposition, RuntimeLifecycleCoordinationError> {
+    publish_resident_lifecycle(controller, registry).await;
     let mode_info = controller.mode_info_snapshot().await;
     crate::runtime_registry::reconcile_runtime_registry_mode_info(registry, &mode_info);
     let live_producer = crate::runtime_registry::live_host_runtime_producer(&mode_info, runtime_id);
@@ -267,6 +287,7 @@ pub async fn reclaim_runtime_and_reconcile_runtime_registry<
             None
         };
 
+    publish_resident_lifecycle(controller, registry).await;
     let mode_info = controller.mode_info_snapshot().await;
     crate::runtime_registry::reconcile_runtime_registry_mode_info(registry, &mode_info);
     if let Some(stop_result) = stop_result {

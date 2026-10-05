@@ -53,6 +53,9 @@ use crate::{
     InferenceExecutionTelemetryError, RuntimeNativeTelemetryProvider,
 };
 
+#[path = "gateway_tests/resident_lifecycle.rs"]
+mod resident_lifecycle;
+
 #[path = "gateway_tests/start_config.rs"]
 mod start_config;
 

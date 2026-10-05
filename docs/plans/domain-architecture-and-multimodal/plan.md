@@ -32,8 +32,11 @@ adds explicit model/producer resident envelopes to the registry's existing local
 and shared accounting, preserving charges after task release until confirmed
 stop. Missing shared-pool resident estimates produce typed unavailable outcomes.
 Portable lifecycle/contended admission tests qualify this owner capability;
-automatic producer estimate publication, a proven resident/transient split and
-native execution remain separate gaps. Frozen `eabbcc83` is unchanged.
+the [producer bridge](reports/2026-10-05-runtime-producer-resident-estimates.md)
+now publishes explicitly configured estimates from the active PyTorch lifecycle
+owner with ordered-generation and known-zero handling. Other producers, a proven
+resident/transient split and native execution remain separate gaps. Frozen
+`eabbcc83` and `254aef1` are unchanged.
 
 **Execution ledger:** [execution-ledger.md](execution-ledger.md)
 

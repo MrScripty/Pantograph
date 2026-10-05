@@ -38,6 +38,8 @@ pub struct RuntimeResourceDomain {
 pub struct RuntimeResourceDomainConfig {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub runtime_resource_domains: Vec<RuntimeResourceDomain>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub runtime_model_resident_estimates: Vec<crate::RuntimeModelResidentEstimate>,
 }
 
 impl RuntimeResourceDomainConfig {
@@ -64,6 +66,8 @@ impl RuntimeResourceDomainConfig {
             }
             registry.configure_resource_domain(domain.clone())?;
         }
+        registry
+            .configure_model_resident_estimates(self.runtime_model_resident_estimates.clone())?;
         Ok(registry)
     }
 }

@@ -370,17 +370,15 @@ fn resident_overflow_invalid_claims_and_legacy_snapshots_never_fabricate_capacit
         Some("instance-a"),
         Status::Ready,
     ));
-    for requirements in [RuntimeReservationRequirements::default(), claims(0, None)] {
-        assert!(matches!(
-            registry.declare_model_residency_resources(
-                "pytorch",
-                "model-a",
-                "instance-a",
-                requirements
-            ),
-            Err(RuntimeRegistryError::InvalidModelResidencyResources { .. })
-        ));
-    }
+    assert!(matches!(
+        registry.declare_model_residency_resources(
+            "pytorch",
+            "model-a",
+            "instance-a",
+            RuntimeReservationRequirements::default()
+        ),
+        Err(RuntimeRegistryError::InvalidModelResidencyResources { .. })
+    ));
     assert!(matches!(
         registry.declare_model_residency_resources(
             "pytorch",

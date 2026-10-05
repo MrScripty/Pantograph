@@ -47,6 +47,7 @@ mod managed_redistributables;
 pub mod managed_runtime;
 pub mod model_contracts;
 pub mod process;
+pub mod resident_lifecycle;
 pub mod resource_estimates;
 pub mod resource_monitor;
 pub mod resource_observation;
