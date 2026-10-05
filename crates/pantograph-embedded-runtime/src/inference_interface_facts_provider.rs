@@ -252,6 +252,7 @@ fn input_ports(task_entry: &TaskRegistryEntry) -> Vec<InferencePortDescriptor> {
                     InferencePortRequirement::Optional,
                     InferenceValueType::Scalar(InferenceScalarType::String),
                 ),
+                u32_input_port(crate::runtime_host_text_execution::TOP_K_PORT, "Top k", 0),
             ]
         }
         InferenceTaskId::ImageGeneration => vec![
@@ -292,6 +293,10 @@ fn input_ports(task_entry: &TaskRegistryEntry) -> Vec<InferencePortDescriptor> {
 }
 
 fn positive_u32_input_port(port_id: &str, label: &str) -> InferencePortDescriptor {
+    u32_input_port(port_id, label, 1)
+}
+
+fn u32_input_port(port_id: &str, label: &str, min: u32) -> InferencePortDescriptor {
     let mut descriptor = port(
         port_id,
         label,
@@ -301,7 +306,7 @@ fn positive_u32_input_port(port_id: &str, label: &str) -> InferencePortDescripto
     );
     descriptor.options = InferencePortOptions::NumericRange {
         range: InferenceNumericRange {
-            min: 1.0,
+            min: f64::from(min),
             max: f64::from(u32::MAX),
             step: Some(1.0),
             default: None,
@@ -403,7 +408,7 @@ mod tests {
     fn text_generation_descriptor_exposes_optional_integer_limit_without_a_default() {
         let task = inference::resolve_task_registry_entry("text_generation").expect("task entry");
         let inputs = input_ports(&task);
-        assert_eq!(inputs.len(), 3);
+        assert_eq!(inputs.len(), 4);
         let limit = &inputs[1];
         assert_eq!(limit.port_id.as_str(), "max_new_tokens");
         assert_eq!(limit.requirement, InferencePortRequirement::Optional);

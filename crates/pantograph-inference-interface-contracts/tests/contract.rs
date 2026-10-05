@@ -34,7 +34,7 @@ fn text_system_prompt_is_optional_string_without_changing_token_limit_or_default
             .iter()
             .map(|port| port.port_id.as_str())
             .collect::<Vec<_>>(),
-        ["prompt", "max_new_tokens", "system_prompt"]
+        ["prompt", "max_new_tokens", "system_prompt", "top_k"]
     );
     assert_eq!(ports[0].requirement, InferencePortRequirement::Required);
     assert_eq!(
@@ -62,6 +62,37 @@ fn text_system_prompt_is_optional_string_without_changing_token_limit_or_default
         serde_json::from_str::<Vec<InferencePortDescriptor>>(&encoded).unwrap(),
         ports
     );
+}
+
+#[test]
+fn text_top_k_is_optional_zero_inclusive_u32_without_a_default() {
+    let ports: Vec<InferencePortDescriptor> = serde_json::from_str(include_str!(
+        "fixtures/text_generation_system_prompt_inputs.json"
+    ))
+    .unwrap();
+    let top_k = ports
+        .iter()
+        .find(|port| port.port_id.as_str() == "top_k")
+        .unwrap();
+    assert_eq!(top_k.direction, InferencePortDirection::Input);
+    assert_eq!(top_k.requirement, InferencePortRequirement::Optional);
+    assert_eq!(
+        top_k.value_type,
+        InferenceValueType::Scalar(InferenceScalarType::U64)
+    );
+    assert_eq!(
+        top_k.options,
+        InferencePortOptions::NumericRange {
+            range: pantograph_inference_interface_contracts::InferenceNumericRange {
+                min: 0.0,
+                max: f64::from(u32::MAX),
+                step: Some(1.0),
+                default: None,
+            },
+        }
+    );
+    assert!(top_k.default.is_none());
+    top_k.validate().unwrap();
 }
 
 #[test]

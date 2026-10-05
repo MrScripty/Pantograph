@@ -2721,6 +2721,48 @@ fn test_pytorch_generate_text_envelopes_thread_top_k_for_generate_and_stream() {
 }
 
 #[test]
+fn test_pytorch_generate_text_top_k_keeps_zero_and_u32_max_in_worker_envelopes() {
+    for top_k in [0, u32::MAX] {
+        for operation in [
+            PyTorchWorkerOperation::GenerateText,
+            PyTorchWorkerOperation::GenerateTextStream,
+        ] {
+            let envelope = PyTorchBackend::generate_text_envelope(
+                "req-top-k-boundary",
+                operation,
+                PyTorchTextGenerationRequest {
+                    prompt: "Explain adapters.".into(),
+                    system_prompt: Some("Be precise.".into()),
+                    max_tokens: 48,
+                    temperature: 0.3,
+                    top_p: 0.9,
+                    top_k: Some(top_k),
+                    masked_prompt_json: None,
+                },
+            );
+            match operation {
+                PyTorchWorkerOperation::GenerateText => {
+                    PyTorchBackend::validate_generate_text_envelope(&envelope).unwrap()
+                }
+                PyTorchWorkerOperation::GenerateTextStream => {
+                    PyTorchBackend::validate_generate_text_stream_envelope(&envelope).unwrap()
+                }
+                _ => unreachable!(),
+            }
+            assert_eq!(
+                envelope.payload.transformers_kwargs["top_k"],
+                serde_json::json!(top_k)
+            );
+            assert_eq!(envelope.payload.max_tokens, 48);
+            assert_eq!(
+                envelope.payload.system_prompt.as_deref(),
+                Some("Be precise.")
+            );
+        }
+    }
+}
+
+#[test]
 fn test_pytorch_generate_text_envelope_rejects_unscoped_transformers_kwargs() {
     let mut generate_envelope = PyTorchBackend::generate_text_envelope(
         "req-generate-raw-kwarg",

@@ -3,7 +3,7 @@ use inference::{
     InferenceDeviceClass, InferenceDeviceId, InferenceDevicePolicy, InferenceExecutionInput,
     InferenceExecutionRequest, InferenceExecutionResult, InferenceTaskId, LengthGenerationOptions,
     ModelRefMigrationDiagnostic, PumasArtifactLoadTarget, PumasModelRef, ResolvedModelPackageFacts,
-    RuntimeVariantId,
+    RuntimeVariantId, SamplingGenerationOptions,
 };
 use pantograph_runtime_host_contracts::{
     RuntimeHostExecutionInputValue, RuntimeHostExecutionRequest,
@@ -16,6 +16,7 @@ pub(crate) const TEXT_GENERATION_TASK: &str = "text_generation";
 pub(crate) const PROMPT_PORT: &str = "prompt";
 pub(crate) const MAX_NEW_TOKENS_PORT: &str = "max_new_tokens";
 pub(crate) const SYSTEM_PROMPT_PORT: &str = "system_prompt";
+pub(crate) const TOP_K_PORT: &str = "top_k";
 pub(crate) const MAX_TEXT_BYTES: usize = 1024;
 
 /// Owned inputs for the canonical selected-text inference call.
@@ -58,6 +59,7 @@ pub(crate) fn validate_runtime_host_text_generation_request(
         .ok_or(RuntimeHostTextGenerationProjectionError::MissingDispatchDecision)?;
     validate_supported_inputs(request)?;
     optional_max_new_tokens(request)?;
+    optional_top_k(request)?;
     optional_system_prompt(request)?;
     let prompt = required_prompt(request)?;
     if prompt.trim().is_empty() {
@@ -100,15 +102,7 @@ pub(crate) fn project_runtime_host_text_generation(
             messages: Vec::new(),
             stream: false,
         },
-        generation_options: optional_max_new_tokens(request)?.map(|max_new_tokens| {
-            GenerationOptions {
-                length: LengthGenerationOptions {
-                    max_new_tokens: Some(max_new_tokens),
-                    ..LengthGenerationOptions::default()
-                },
-                ..GenerationOptions::default()
-            }
-        }),
+        generation_options: optional_generation_options(request)?,
         extra_options: serde_json::Value::Null,
     };
 
@@ -300,7 +294,13 @@ fn validate_supported_inputs(
     request: &RuntimeHostExecutionRequest,
 ) -> Result<(), RuntimeHostTextGenerationProjectionError> {
     for input in &request.materialized_inputs {
-        if ![PROMPT_PORT, MAX_NEW_TOKENS_PORT, SYSTEM_PROMPT_PORT].contains(&input.port_id.as_str())
+        if ![
+            PROMPT_PORT,
+            MAX_NEW_TOKENS_PORT,
+            SYSTEM_PROMPT_PORT,
+            TOP_K_PORT,
+        ]
+        .contains(&input.port_id.as_str())
         {
             return Err(
                 RuntimeHostTextGenerationProjectionError::UnsupportedInputPort {
@@ -337,6 +337,50 @@ fn optional_max_new_tokens(
         .transpose()
 }
 
+fn optional_top_k(
+    request: &RuntimeHostExecutionRequest,
+) -> Result<Option<u32>, RuntimeHostTextGenerationProjectionError> {
+    request
+        .materialized_inputs
+        .iter()
+        .find(|input| input.port_id == TOP_K_PORT)
+        .map(|input| {
+            match input.value {
+                RuntimeHostExecutionInputValue::U64(value) => u32::try_from(value).ok(),
+                RuntimeHostExecutionInputValue::I64(value) => u32::try_from(value).ok(),
+                _ => {
+                    return Err(RuntimeHostTextGenerationProjectionError::InvalidInputType {
+                        port_id: TOP_K_PORT,
+                        expected: "integer",
+                    });
+                }
+            }
+            .ok_or(RuntimeHostTextGenerationProjectionError::InvalidTopK)
+        })
+        .transpose()
+}
+
+fn optional_generation_options(
+    request: &RuntimeHostExecutionRequest,
+) -> Result<Option<GenerationOptions>, RuntimeHostTextGenerationProjectionError> {
+    let max_new_tokens = optional_max_new_tokens(request)?;
+    let top_k = optional_top_k(request)?;
+    if max_new_tokens.is_none() && top_k.is_none() {
+        return Ok(None);
+    }
+    Ok(Some(GenerationOptions {
+        length: LengthGenerationOptions {
+            max_new_tokens,
+            ..LengthGenerationOptions::default()
+        },
+        sampling: SamplingGenerationOptions {
+            top_k,
+            ..SamplingGenerationOptions::default()
+        },
+        ..GenerationOptions::default()
+    }))
+}
+
 fn optional_system_prompt(
     request: &RuntimeHostExecutionRequest,
 ) -> Result<Option<&str>, RuntimeHostTextGenerationProjectionError> {
@@ -369,6 +413,8 @@ pub(crate) enum RuntimeHostTextGenerationProjectionError {
     MissingRequiredInput { port_id: &'static str },
     #[error("runtime-host text input 'max_new_tokens' must be between 1 and 4294967295")]
     InvalidMaxNewTokens,
+    #[error("runtime-host text input 'top_k' must be between 0 and 4294967295")]
+    InvalidTopK,
     #[error("runtime-host text execution prompt must not be blank")]
     BlankPrompt,
     #[error("runtime-host text input '{port_id}' must be {expected}")]
@@ -537,6 +583,212 @@ mod tests {
                 ..
             }),
         ));
+    }
+
+    #[test]
+    fn top_k_accepts_zero_and_u32_boundaries_and_rejects_invalid_values() {
+        let request = text_request_fixture();
+        assert_eq!(optional_top_k(&request).unwrap(), None);
+        for value in [
+            RuntimeHostExecutionInputValue::U64(0),
+            RuntimeHostExecutionInputValue::U64(40),
+            RuntimeHostExecutionInputValue::U64(u64::from(u32::MAX)),
+            RuntimeHostExecutionInputValue::I64(0),
+            RuntimeHostExecutionInputValue::I64(40),
+            RuntimeHostExecutionInputValue::I64(i64::from(u32::MAX)),
+        ] {
+            let expected = match value {
+                RuntimeHostExecutionInputValue::U64(value) => value as u32,
+                RuntimeHostExecutionInputValue::I64(value) => value as u32,
+                _ => unreachable!(),
+            };
+            let mut request = text_request_fixture();
+            request.materialized_inputs.push(RuntimeHostExecutionInput {
+                port_id: TOP_K_PORT.into(),
+                value,
+            });
+            validate_runtime_host_text_generation_request(&request).unwrap();
+            assert_eq!(optional_top_k(&request).unwrap(), Some(expected));
+        }
+        for value in [
+            RuntimeHostExecutionInputValue::I64(-1),
+            RuntimeHostExecutionInputValue::U64(u64::from(u32::MAX) + 1),
+            RuntimeHostExecutionInputValue::U64(u64::MAX),
+            RuntimeHostExecutionInputValue::I64(i64::MAX),
+        ] {
+            let mut request = text_request_fixture();
+            request.materialized_inputs.push(RuntimeHostExecutionInput {
+                port_id: TOP_K_PORT.into(),
+                value,
+            });
+            assert_eq!(
+                validate_runtime_host_text_generation_request(&request),
+                Err(RuntimeHostTextGenerationProjectionError::InvalidTopK)
+            );
+        }
+        for value in [
+            RuntimeHostExecutionInputValue::String("40".into()),
+            RuntimeHostExecutionInputValue::Bool(true),
+        ] {
+            let mut request = text_request_fixture();
+            request.materialized_inputs.push(RuntimeHostExecutionInput {
+                port_id: TOP_K_PORT.into(),
+                value,
+            });
+            assert_eq!(
+                validate_runtime_host_text_generation_request(&request),
+                Err(RuntimeHostTextGenerationProjectionError::InvalidInputType {
+                    port_id: TOP_K_PORT,
+                    expected: "integer",
+                })
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn invalid_top_k_fails_host_execution_before_recording_gateway_calls() {
+        for (value, expected) in [
+            (
+                RuntimeHostExecutionInputValue::I64(-1),
+                "top_k' must be between 0",
+            ),
+            (
+                RuntimeHostExecutionInputValue::U64(u64::from(u32::MAX) + 1),
+                "top_k' must be between 0",
+            ),
+            (
+                RuntimeHostExecutionInputValue::String("40".into()),
+                "top_k' must be integer",
+            ),
+            (
+                RuntimeHostExecutionInputValue::Bool(true),
+                "top_k' must be integer",
+            ),
+        ] {
+            let mut request = text_request_fixture();
+            request.materialized_inputs.push(RuntimeHostExecutionInput {
+                port_id: TOP_K_PORT.into(),
+                value,
+            });
+            let validated =
+                ValidatedRuntimeHostExecutionRequest::try_from(request.clone()).unwrap();
+            let package_facts = text_package_facts(&validated);
+            let directory = tempfile::tempdir().unwrap();
+            let target = text_load_target(&package_facts, &directory);
+            let backend = TextBackend::default();
+            let calls = backend.calls.clone();
+            let recorded = backend.requests.clone();
+            let port = crate::runtime_host_execution_port::EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
+                Arc::new(TextLoadTargetResolver { target }),
+                Arc::new(TextPackageFactsResolver { package_facts }),
+                Arc::new(UnusedTextMediaSink),
+                Arc::new(inference::InferenceGateway::with_backend(Box::new(backend), "PyTorch")),
+            );
+            let cancellation =
+                pantograph_runtime_host_contracts::RuntimeHostExecutionCancellationHandle::running(
+                    request.cancellation_context.clone(),
+                );
+            let response = port
+                .execute_runtime_host_request(request, cancellation)
+                .await
+                .unwrap();
+            assert_eq!(response.state, RuntimeHostExecutionState::Rejected);
+            assert!(response.outputs.is_empty());
+            assert!(
+                response
+                    .diagnostics
+                    .iter()
+                    .any(|diagnostic| diagnostic.message.contains(expected)),
+                "{:?}",
+                response.diagnostics
+            );
+            assert!(calls.lock().unwrap().is_empty());
+            assert!(recorded.lock().unwrap().is_empty());
+        }
+    }
+
+    #[tokio::test]
+    async fn top_k_reaches_recording_gateway_alone_and_with_limit_and_system_prompt() {
+        for top_k in [None, Some(0), Some(40), Some(u32::MAX)] {
+            for max_new_tokens in [None, Some(128)] {
+                for system_prompt in [None, Some("  image prompt instructions\n")] {
+                    let mut request = text_request_fixture();
+                    for (port_id, value) in
+                        [(TOP_K_PORT, top_k), (MAX_NEW_TOKENS_PORT, max_new_tokens)]
+                    {
+                        if let Some(value) = value {
+                            request.materialized_inputs.push(RuntimeHostExecutionInput {
+                                port_id: port_id.into(),
+                                value: RuntimeHostExecutionInputValue::U64(u64::from(value)),
+                            });
+                        }
+                    }
+                    if let Some(system_prompt) = system_prompt {
+                        request.materialized_inputs.push(RuntimeHostExecutionInput {
+                            port_id: SYSTEM_PROMPT_PORT.into(),
+                            value: RuntimeHostExecutionInputValue::String(system_prompt.into()),
+                        });
+                    }
+                    let validated =
+                        ValidatedRuntimeHostExecutionRequest::try_from(request.clone()).unwrap();
+                    let package_facts = text_package_facts(&validated);
+                    let directory = tempfile::tempdir().unwrap();
+                    let target = text_load_target(&package_facts, &directory);
+                    let projection = project_runtime_host_text_generation(
+                        &validated,
+                        package_facts.clone(),
+                        target.clone(),
+                    )
+                    .unwrap();
+                    let options = projection.request().generation_options.as_ref();
+                    assert_eq!(
+                        options.is_some(),
+                        top_k.is_some() || max_new_tokens.is_some()
+                    );
+                    assert_eq!(options.and_then(|options| options.sampling.top_k), top_k);
+                    assert_eq!(
+                        options.and_then(|options| options.length.max_new_tokens),
+                        max_new_tokens
+                    );
+                    let backend = TextBackend::default();
+                    let recorded = backend.requests.clone();
+                    let port = crate::runtime_host_execution_port::EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
+                        Arc::new(TextLoadTargetResolver { target }),
+                        Arc::new(TextPackageFactsResolver { package_facts }),
+                        Arc::new(UnusedTextMediaSink),
+                        Arc::new(inference::InferenceGateway::with_backend(Box::new(backend), "PyTorch")),
+                    );
+                    let cancellation = pantograph_runtime_host_contracts::RuntimeHostExecutionCancellationHandle::running(request.cancellation_context.clone());
+                    let response = port
+                        .execute_runtime_host_request(request, cancellation)
+                        .await
+                        .unwrap();
+                    assert_eq!(response.state, RuntimeHostExecutionState::Completed);
+                    let recorded = recorded.lock().unwrap();
+                    assert_eq!(recorded.len(), 1);
+                    let json = &recorded[0];
+                    assert_eq!(
+                        json.get("top_k"),
+                        top_k.map(serde_json::Value::from).as_ref()
+                    );
+                    assert_eq!(
+                        json.get("max_tokens"),
+                        max_new_tokens.map(serde_json::Value::from).as_ref()
+                    );
+                    let messages = json["messages"].as_array().unwrap();
+                    assert_eq!(messages.len(), if system_prompt.is_some() { 2 } else { 1 });
+                    if let Some(system_prompt) = system_prompt {
+                        assert_eq!(messages[0]["role"], "system");
+                        assert_eq!(messages[0]["content"][0]["text"], system_prompt);
+                    }
+                    assert_eq!(messages.last().unwrap()["role"], "user");
+                    assert_eq!(
+                        messages.last().unwrap()["content"][0]["text"],
+                        "exact prompt"
+                    );
+                }
+            }
+        }
     }
 
     #[test]
@@ -876,6 +1128,7 @@ mod tests {
     #[derive(Default)]
     struct TextBackend {
         calls: Arc<Mutex<Vec<String>>>,
+        requests: Arc<Mutex<Vec<serde_json::Value>>>,
         cancel: Option<Arc<std::sync::atomic::AtomicBool>>,
         fail_completion: bool,
     }
@@ -962,6 +1215,7 @@ mod tests {
             BackendError,
         > {
             let json: serde_json::Value = serde_json::from_str(&request_json).unwrap();
+            self.requests.lock().unwrap().push(json.clone());
             if let Some(max_tokens) = json.get("max_tokens") {
                 self.calls
                     .lock()
@@ -1165,6 +1419,7 @@ mod tests {
                 cancel: Some(cancelled.clone()),
                 fail_completion,
                 calls: calls.clone(),
+                ..Default::default()
             };
             let port = text_test_port(backend, &directory);
             let request = text_batch(&["cancel", "exact prompt"]);
