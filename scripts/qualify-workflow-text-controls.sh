@@ -25,7 +25,7 @@ python_executable="${PANTOGRAPH_QUALIFICATION_PYTHON:-python3}"
   cargo --version
   rustc --version
   "$python_executable" --version
-  printf 'ORT_SKIP_DOWNLOAD=%s\n' "${ORT_SKIP_DOWNLOAD:-unset}"
+  printf 'ORT_DYLIB_PATH=%s\n' "${ORT_DYLIB_PATH:-unset}"
 } | tee "$log_directory/source-and-tools.log"
 
 run_suite() {
