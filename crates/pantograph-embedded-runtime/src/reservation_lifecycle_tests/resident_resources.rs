@@ -11,9 +11,9 @@ use super::*;
 use crate::runtime_registry::reclaim_runtime_and_reconcile_runtime_registry;
 
 fn requirements(bytes: u64) -> RuntimeReservationRequirements {
-    RuntimeReservationRequirements::from_claims(vec![
-        RuntimeReservationResourceClaim::ram_bytes(bytes),
-    ])
+    RuntimeReservationRequirements::from_claims(vec![RuntimeReservationResourceClaim::ram_bytes(
+        bytes,
+    )])
 }
 
 fn registry() -> Arc<RuntimeRegistry> {
@@ -119,7 +119,8 @@ impl HostRuntimeRegistryController for ResidentController {
             // This runs at the awaited publication boundary after custody was
             // released, before the retry can install the 40-byte estimate.
             assert!(matches!(
-                self.registry.acquire_reservation(task("candle", "racing", 20)),
+                self.registry
+                    .acquire_reservation(task("candle", "racing", 20)),
                 Err(RuntimeRegistryError::ModelResidencyResourcesUnavailable { .. })
             ));
             self.probed_after_release.store(true, Ordering::SeqCst);
@@ -191,7 +192,10 @@ async fn terminal_cold_load_retains_residency_without_an_admission_window() {
     assert_eq!(controller.stop_count.load(Ordering::SeqCst), 0);
     let snapshot = registry.snapshot();
     assert_eq!(snapshot.reservations.len(), 1);
-    assert_eq!(snapshot.reservations[0].reservation_id, second.reservation_id);
+    assert_eq!(
+        snapshot.reservations[0].reservation_id,
+        second.reservation_id
+    );
     let probe = registry
         .evaluate_reservation(task("candle", "probe", 0))
         .unwrap();
@@ -260,13 +264,10 @@ async fn terminal_failed_load_reclaims_inactive_owner_and_requires_release_ackno
 
     controller.stop_fails.store(false, Ordering::SeqCst);
     controller.stop_acknowledged.store(false, Ordering::SeqCst);
-    let reclaim = reclaim_runtime_and_reconcile_runtime_registry(
-        controller.as_ref(),
-        &registry,
-        "pytorch",
-    )
-    .await
-    .expect("retry reaches owner");
+    let reclaim =
+        reclaim_runtime_and_reconcile_runtime_registry(controller.as_ref(), &registry, "pytorch")
+            .await
+            .expect("retry reaches owner");
     assert_eq!(reclaim.action, RuntimeReclaimAction::StopProducer);
     assert_eq!(controller.stop_count.load(Ordering::SeqCst), 2);
     assert!(registry
