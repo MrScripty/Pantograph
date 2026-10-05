@@ -312,3 +312,29 @@ API-equivalent checkpoint through **2026-09-09T23:43:08.278Z** (USD, recorded pr
 Known-rate subtotal **$7.303404 Standard / $14.606808 Fast**. Current root turn `01a08885-4a8e-7902-a3db-f0adc510c020` and dedicated `pumas_shared_design`/`pumas_consumer_fields` descendants are selected by root_turn_id and deduplicated response_id. Source evidence `/tmp/pantograph-pumas-design-costs.json`; reusable adapted helper `/tmp/pantograph-pumas-design-costs.py`. Historical-tail output is excluded to avoid recounting other sessions. Cached input and reasoning are not added twice; actual billed tier/approval/tool charges remain unknown, and final publication/commit is a tail.
 
 Delegation lesson: Astra delivered the consequential source-backed comparison. The Luna inventory lane did not supply a consolidated handoff before the bounded design stop and was interrupted; its attempts and root waiting remain charged, not an accepted independent change. The existing source trace and Astra comparison establish the selected contract; do not invent a completed field inventory. Use a shorter, explicitly bounded consumer enumeration or Sol medium for a future such task when coordination cost outweighs the direct model saving. This is one design outcome, not a controlled model benchmark.
+
+## 2026-10-05 — Workflow top-k candidate and current M3 sequencing
+
+- Feature milestone `9d6646a47c0dda8d391266970e160f0fb53aacb3`, tree
+  `6b4e09ae6b7ad80cf010babb1096072ce6a1edad`, is published on
+  `feat/workflow-text-top-k`, directly based on PR54
+  `d6e9fcd15b135bedf36437ab2eceba229a0c9e2c`. Optional U64 `top_k`
+  projects into existing typed sampling options, accepts zero, and leaves
+  omitted controls at backend defaults. The [feature report](reports/2026-10-05-workflow-text-top-k.md)
+  records boundaries, test coverage and final hosted/native commands.
+- Contract tests: 20 passed; PyTorch-enabled inference tests: 686 passed.
+  Normal-default embedded library/test compiler-Clippy check passed with ONNX
+  downloading disabled. Native host tests are compiled but unexecuted locally;
+  cloud ONNX/native execution remains deferred. Formatting, critical,
+  accessibility and staged/range traceability gates accompany publication.
+- Source reconciliation confirms current Pumas pin `2243a2b6` already exposes
+  authenticated full facts, and Pantograph's existing facade and dispatch/host
+  composition already support Owner/LocalClient. Plan header and DA-I03/04 now
+  distinguish implemented source from pending qualification; the old
+  producer/consumer implementation step is retired from current sequencing.
+- Parent owns composition with accepted repair series `c83d5179`, `029ac704`,
+  `cd54e12`, independent review and merge. That series is not included here;
+  graph/reservation/observation files are untouched. Final hosted/native tests
+  and current owner-produced model/device qualification precede required-real
+  dependent text-to-image acceptance. No DA-03/07 closure, broader runtime
+  capability, model inference or speculative scheduler work is claimed.

@@ -2,9 +2,9 @@
 
 **Plan status:** `Active`
 
-**Current phase:** M3 Pumas owner/client integration design selected. Full review and required-real text→image acceptance remain open.
+**Current phase:** M3 owner/client consumer source is implemented at the pinned Pumas revision. Workflow text/image inputs are being qualified through the existing runtime host. Full review and required-real text→image acceptance remain open.
 
-**Next slice:** Expose Pumas's existing full package-facts operation through its authenticated typed local client, then migrate Pantograph's existing access facade and hosted execution to supported Owner/LocalClient roles. Use the configured launcher-root identity, preserve ReadOnly browsing without execution, and qualify real owner-produced identities/facts/load targets before model runs. The current reviewed Pumas committed baseline is `3b0d5ee4eda4d68ae33a158162883208e4608edb`; its active uncommitted lifecycle work is separate.
+**Next slice:** The parent composes the optional workflow `top_k` candidate with its separate accepted PR54 repair series, then qualifies the final embedded descriptor/host tests in hosted or native CI. Qualify current owner-produced text/image identities, full facts, load targets and devices before the required-real dependent workflow run. Do not repeat the completed owner/client transport or consumer implementation. Current Pumas pin: `2243a2b6909fcf4fe4b4ffa0f7f0a2b4ca027d32`. Cloud ONNX/native execution remains deferred; passing recording tests does not close DA-03 or DA-07.
 
 **Acceptance status:** `blocked`
 
@@ -482,7 +482,25 @@ their proper owner. This is intermediate evidence, not DA-03 desktop acceptance.
 
 **Status:** `Active`
 
-### Pumas owner/client integration — selected design
+### Pumas owner/client integration — implemented source, qualification open
+
+The selected design below is retained as rationale. Its producer operation and
+consumer migration are already present at the current pin; they are no longer
+the next implementation slice. `PumasSelectorAccess` routes full facts and
+targets through Owner/LocalClient, while dispatch, host resolution and hosted
+composition consume that facade and preserve ReadOnly execution refusal.
+The [full-facts consumer report](reports/2026-10-04-pumas-full-facts-consumer.md)
+records the six boundaries, exact producer identity and outstanding native
+acceptance. Its earlier source-only receipts do not establish real model or
+desktop acceptance. The [configured-owner report](reports/2026-10-04-pumas-configured-owner-client.md)
+records accepted attachment and configured-root ownership behavior.
+
+Workflow text generation already supports `max_new_tokens` and `system_prompt`.
+The [top-k candidate](reports/2026-10-05-workflow-text-top-k.md) adds the missing
+optional integer sampling input through existing U64 values and typed options,
+with explicit zero and unchanged omission semantics. This is a bounded input
+projection; scheduler redesign and broader backend support are not admitted.
+Parent composition/review and final native qualification remain outstanding.
 
 **Decision:** Reuse the existing Pumas facts/target operations and Pantograph
 access facade. Pumas owns model identity, inspection, freshness, cache and path
