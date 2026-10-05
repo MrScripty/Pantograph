@@ -504,6 +504,7 @@ mod tests {
                     loaded_model_ids: Vec::new(),
                     active_reservation_ids: Vec::new(),
                     has_admission_budget: true,
+                    automatic_device_candidates: Vec::new(),
                 }],
             },
             diagnostics: Vec::new(),

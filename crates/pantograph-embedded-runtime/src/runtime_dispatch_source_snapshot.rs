@@ -366,6 +366,48 @@ mod tests {
             .expect("dispatch identity fixture")
     }
 
+    #[cfg(feature = "backend-pytorch")]
+    #[tokio::test]
+    async fn owned_cpu_candidates_are_removed_with_stale_or_mismatched_source_snapshots() {
+        let registry = Arc::new(RuntimeRegistry::new());
+        registry.register_runtime(
+            RuntimeRegistration::new("pytorch", "PyTorch")
+                .with_backend_keys(vec!["pytorch".into()])
+                .with_dispatch_identity(dispatch_identity()),
+        );
+        let source = RuntimeDispatchCapabilityFactsSource::new(registry)
+            .with_gateway(Arc::new(inference::InferenceGateway::new()));
+        let store = EmbeddedRuntimeDispatchSourceFactSnapshotStore::new(
+            PumasDispatchPackageFactsSource::new(None),
+            source,
+            RuntimeDispatchLoadTargetFactsSource::new(None),
+            100,
+        );
+        let model = model_ref("pumas.model.sdxl");
+        store.refresh_for_model_ref(&model, 1_000).await;
+        let fresh = store.snapshot_for_dispatch(&model, 1_050);
+        let Some(RuntimeDispatchCapabilityFactsOutcome::Projected { facts, .. }) =
+            fresh.runtime_capability_facts
+        else {
+            panic!("fresh owner facts");
+        };
+        assert_eq!(
+            facts.runtimes[0].automatic_device_candidates[0]
+                .device_id
+                .as_str(),
+            "cpu"
+        );
+        for invalid in [
+            store.snapshot_for_dispatch(&model, 1_101),
+            store.snapshot_for_dispatch(&model_ref("pumas.other"), 1_050),
+        ] {
+            assert!(
+                invalid.runtime_capability_facts.is_none(),
+                "device capabilities must not escape the source snapshot gate"
+            );
+        }
+    }
+
     #[tokio::test]
     async fn store_rejects_stale_snapshot_without_returning_source_facts() {
         let store = EmbeddedRuntimeDispatchSourceFactSnapshotStore::new(

@@ -1532,6 +1532,242 @@ mod tests {
             .any(|call| call == "system:  Return an image prompt only.\n"));
     }
 
+    #[cfg(feature = "backend-pytorch")]
+    #[tokio::test]
+    async fn unconstrained_owned_cpu_candidate_reaches_selected_text_host_with_full_peak_lease() {
+        use crate::pumas_dispatch_package_facts::{
+            PumasDispatchPackageFactsBridgeOutcome, PumasDispatchPackageFactsProjection,
+        };
+        use crate::runtime_dispatch_candidate_provider::EmbeddedRuntimeDispatchCandidateProvider;
+        use crate::runtime_dispatch_capability_facts::RuntimeDispatchCapabilityFactsSource;
+        use crate::runtime_dispatch_load_target_facts::{
+            RuntimeDispatchLoadTargetFact, RuntimeDispatchLoadTargetFactsOutcome,
+            RuntimeDispatchLoadTargetFactsProjection,
+        };
+        use crate::runtime_dispatch_resource_facts::RuntimeDispatchResourceFactsSource;
+        use crate::runtime_dispatch_source_snapshot::EmbeddedRuntimeDispatchCandidateSourceSnapshot;
+        use pantograph_runtime_registry::{
+            RuntimeAdmissionBudget, RuntimeAdmissionResourceBudget, RuntimeDispatchIdentity,
+            RuntimeRegistration, RuntimeRegistry, RuntimeTransition,
+        };
+        use pantograph_scheduler::{
+            SchedulerDispatchSelectionRequest, SchedulerTaskExecutionIntent, SchedulerTaskState,
+            SchedulerTaskStateRecord, ValidatedSchedulerDispatchSelectionRequest,
+        };
+        use pantograph_workflow_service::workflow::WorkflowRuntimeDispatchCandidateProvider;
+        use pantograph_workflow_service::{
+            WorkflowSchedulerTask, WorkflowSchedulerTaskExecutionClass,
+        };
+
+        const PEAK_BYTES: u64 = 3 * 1024 * 1024;
+        let mut request = text_request_fixture();
+        request.handoff.task_intent.constraints.requested_device_id = None;
+        request.handoff.task_intent.estimate_hints =
+            vec![pantograph_scheduler::SchedulerEstimateHint {
+                kind: pantograph_scheduler::SchedulerEstimateHintKind::PeakRamBytes,
+                value: PEAK_BYTES,
+            }];
+        request
+            .handoff
+            .readiness_proof
+            .preflight_result
+            .identity_key
+            .scheduler_intent
+            .requested_device_id = None;
+        let intent = request.handoff.task_intent.clone();
+        let proof = request.handoff.readiness_proof.clone();
+        // Keep the reusable package fixture valid while preparing a new selection.
+        let previous = request.handoff.dispatch_decision.as_mut().unwrap();
+        previous.task_intent = intent.clone();
+        previous.readiness_proof = proof.clone();
+        let validated = ValidatedRuntimeHostExecutionRequest::try_from(request.clone()).unwrap();
+        let package = text_package_facts(&validated);
+        let directory = tempfile::tempdir().unwrap();
+        let target = text_load_target(&package, &directory);
+        let backend = TextBackend::default();
+        let calls = backend.calls.clone();
+        let gateway = Arc::new(inference::InferenceGateway::with_backend(
+            Box::new(backend),
+            "PyTorch",
+        ));
+        let registry = Arc::new(RuntimeRegistry::new());
+        registry.register_runtime(
+            RuntimeRegistration::new("pytorch", "PyTorch")
+                .with_backend_keys(vec!["pytorch".into(), "transformers".into()])
+                .with_dispatch_identity(
+                    RuntimeDispatchIdentity::new(
+                        "transformers",
+                        "runtime.transformers.pytorch.shared",
+                    )
+                    .unwrap(),
+                )
+                .with_admission_budget(RuntimeAdmissionBudget::from_resources(vec![
+                    RuntimeAdmissionResourceBudget::ram_bytes(Some(8 * 1024 * 1024)),
+                ])),
+        );
+        registry
+            .transition_runtime(
+                "pytorch",
+                RuntimeTransition::Ready {
+                    runtime_instance_id: Some("runtime.pytorch.cpu.001".into()),
+                },
+            )
+            .unwrap();
+        let capabilities = RuntimeDispatchCapabilityFactsSource::new(registry.clone())
+            .with_gateway(gateway.clone())
+            .collect();
+        assert!(
+            registry.snapshot().reservations.is_empty(),
+            "capability reads acquire no custody"
+        );
+        let snapshot = EmbeddedRuntimeDispatchCandidateSourceSnapshot {
+            runtime_capability_facts: Some(capabilities),
+            pumas_package_facts: Some(PumasDispatchPackageFactsBridgeOutcome::Projected {
+                facts: Box::new(PumasDispatchPackageFactsProjection {
+                    model_ref: intent.model_ref.clone(),
+                    artifact_kind: package.artifact.artifact_kind.clone(),
+                    validation_state: package.artifact.validation_state.clone(),
+                    task: package.task.clone(),
+                    backend_hints: package.backend_hints.clone(),
+                    requires_custom_code: false,
+                    logical_size: inference::PackageLogicalSizeFacts {
+                        total_size_bytes: Some(4096),
+                        value_source: inference::PackageFactValueSource::FilesystemMetadata,
+                        files: Vec::new(),
+                        diagnostics: Vec::new(),
+                    },
+                    diffusers: None,
+                }),
+                diagnostics: Vec::new(),
+            }),
+            pumas_load_target_facts: Some(RuntimeDispatchLoadTargetFactsOutcome::Projected {
+                facts: RuntimeDispatchLoadTargetFactsProjection {
+                    load_targets: vec![RuntimeDispatchLoadTargetFact {
+                        runtime_family: "transformers".into(),
+                        resolved_load_target: target.local_load_path.clone(),
+                        model_ref: intent.model_ref.clone(),
+                        artifact_kind: "HfCompatibleDirectory".into(),
+                        load_path_kind: "Directory".into(),
+                        library_root_id: target.library_root_id.clone(),
+                        storage_kind: "LibraryOwned".into(),
+                        validation_state: "Valid".into(),
+                        content_fingerprint: None,
+                        package_facts_contract_version: Some(
+                            package.package_facts_contract_version,
+                        ),
+                    }],
+                },
+                diagnostics: Vec::new(),
+            }),
+            ..Default::default()
+        };
+        let provider = EmbeddedRuntimeDispatchCandidateProvider::with_source_snapshot(snapshot)
+            .with_resource_facts_source(RuntimeDispatchResourceFactsSource::new(registry.clone()));
+        let task = WorkflowSchedulerTask {
+            workflow_id: intent.workflow_id.clone(),
+            workflow_run_id: intent.workflow_run_id.clone(),
+            node_id: intent.node_id.clone(),
+            task_id: intent.task_id.clone(),
+            node_type: "inference".into(),
+            execution_class: WorkflowSchedulerTaskExecutionClass::RuntimeInference,
+            dependency_task_ids: Vec::new(),
+            input_bindings: Vec::new(),
+            schedulable_intent: Some(intent.clone()),
+            schedulable_intent_template: None,
+            non_runtime_task_template: None,
+            source_input_task_template: None,
+            inference_descriptor_fingerprint: None,
+            runtime_source_context: None,
+            diagnostics: Vec::new(),
+        };
+        let ready = SchedulerTaskStateRecord {
+            contract_version: 1,
+            workflow_id: intent.workflow_id.clone(),
+            workflow_run_id: intent.workflow_run_id.clone(),
+            node_id: intent.node_id.clone(),
+            task_id: intent.task_id.clone(),
+            state: SchedulerTaskState::Ready {
+                execution_intent: SchedulerTaskExecutionIntent::runtime(intent.clone()),
+            },
+            state_version: 1,
+            last_transition_id: "transition.ready.cpu".parse().unwrap(),
+        };
+        let result = provider
+            .runtime_dispatch_candidates(&task, &ready, &proof)
+            .unwrap();
+        assert_eq!(result.candidates.len(), 1, "{:?}", result.diagnostics);
+        let candidate = &result.candidates[0];
+        assert_eq!(candidate.selected_device_ids[0].as_str(), "cpu");
+        assert_eq!(
+            candidate
+                .selected_runtime_variant_id
+                .as_ref()
+                .unwrap()
+                .as_str(),
+            "pytorch.cpu"
+        );
+        assert_eq!(
+            candidate
+                .reservations
+                .iter()
+                .map(|claim| claim.reserved_bytes)
+                .sum::<u64>(),
+            PEAK_BYTES
+        );
+        assert_eq!(registry.snapshot().reservations.len(), 1);
+        let selected_request = ValidatedSchedulerDispatchSelectionRequest::try_from(
+            SchedulerDispatchSelectionRequest {
+                contract_version: 1,
+                task_intent: intent,
+                readiness_proof: proof.clone(),
+                environment_ref: proof.preflight_result.environment_ref.clone().unwrap(),
+                candidates: result.candidates.clone(),
+                diagnostics: result.diagnostics.clone(),
+            },
+        )
+        .unwrap();
+        request.handoff.dispatch_decision =
+            pantograph_scheduler::select_scheduler_dispatch(selected_request)
+                .unwrap()
+                .into_inner()
+                .dispatch_decision;
+        assert!(request.handoff.dispatch_decision.is_some());
+        let port = crate::runtime_host_execution_port::EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(Arc::new(TextLoadTargetResolver { target }), Arc::new(TextPackageFactsResolver { package_facts: package }), Arc::new(UnusedTextMediaSink), gateway);
+        let cancellation =
+            pantograph_runtime_host_contracts::RuntimeHostExecutionCancellationHandle::running(
+                request.cancellation_context.clone(),
+            );
+        let response = port
+            .execute_runtime_host_request(request, cancellation)
+            .await
+            .unwrap();
+        assert_eq!(
+            response.state,
+            RuntimeHostExecutionState::Completed,
+            "{:?}",
+            response.diagnostics
+        );
+        assert_eq!(
+            response.outputs[0].value,
+            RuntimeHostExecutionOutputValue::String("generated text".into())
+        );
+        assert!(calls
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|call| call.starts_with("load:") && call.ends_with(":cpu")));
+        assert_eq!(
+            registry.snapshot().reservations.len(),
+            1,
+            "execution cannot silently drop provisional peak coverage"
+        );
+        drop(result);
+        assert!(
+            registry.snapshot().reservations.is_empty(),
+            "untransferred test custody rolls back"
+        );
+    }
+
     fn text_request_fixture() -> RuntimeHostExecutionRequest {
         let mut request: RuntimeHostExecutionRequest = serde_json::from_str(include_str!(
             "../../pantograph-runtime-host-contracts/tests/fixtures/runtime_host_execution_request_dispatch_selected.json"

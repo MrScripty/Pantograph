@@ -1,4 +1,42 @@
 use super::*;
+
+#[test]
+fn owned_cpu_candidates_require_available_matching_owner_facts_and_never_guess_gpu_ids() {
+    let mut info = BackendInfo {
+        name: "PyTorch".into(),
+        backend_key: "pytorch".into(),
+        description: String::new(),
+        capabilities: BackendCapabilities::default(),
+        default_start_mode: BackendDefaultStartMode::Inference,
+        active: false,
+        available: true,
+        unavailable_reason: None,
+        can_install: false,
+        runtime_binary_id: None,
+    };
+    let variant =
+        |id: &str, device_class, available| crate::device_contracts::RuntimeVariantCapability {
+            runtime_variant_id: id.parse().unwrap(),
+            device_class,
+            available,
+            diagnostics: Vec::new(),
+        };
+    info.capabilities.facts.runtime_variants = vec![
+        variant("pytorch.cpu", InferenceDeviceClass::Cpu, true),
+        variant("pytorch.cuda", InferenceDeviceClass::Cuda, true),
+        variant("other.cpu", InferenceDeviceClass::Cpu, true),
+    ];
+    let candidates = cpu_device_candidates(vec![info.clone()]);
+    assert_eq!(candidates.len(), 1);
+    assert_eq!(candidates[0].backend_key, "pytorch");
+    assert_eq!(candidates[0].device_id.as_str(), "cpu");
+    assert_eq!(candidates[0].runtime_variant_id.as_str(), "pytorch.cpu");
+    info.available = false;
+    assert!(cpu_device_candidates(vec![info.clone()]).is_empty());
+    info.available = true;
+    info.capabilities.facts.runtime_variants[0].available = false;
+    assert!(cpu_device_candidates(vec![info]).is_empty());
+}
 use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};

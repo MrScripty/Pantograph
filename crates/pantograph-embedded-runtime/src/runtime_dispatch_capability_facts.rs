@@ -1,3 +1,6 @@
+use std::sync::Arc;
+
+use inference::{gateway::RuntimeOwnedDeviceCandidate, InferenceGateway};
 use pantograph_runtime_registry::{
     RuntimeRegistryRuntimeSnapshot, RuntimeRegistryStatus, SharedRuntimeRegistry,
 };
@@ -5,15 +8,29 @@ use pantograph_runtime_registry::{
 #[derive(Clone)]
 pub(crate) struct RuntimeDispatchCapabilityFactsSource {
     registry: SharedRuntimeRegistry,
+    gateway: Option<Arc<InferenceGateway>>,
 }
 
 impl RuntimeDispatchCapabilityFactsSource {
     pub(crate) fn new(registry: SharedRuntimeRegistry) -> Self {
-        Self { registry }
+        Self {
+            registry,
+            gateway: None,
+        }
+    }
+
+    pub(crate) fn with_gateway(mut self, gateway: Arc<InferenceGateway>) -> Self {
+        self.gateway = Some(gateway);
+        self
     }
 
     pub(crate) fn collect(&self) -> RuntimeDispatchCapabilityFactsOutcome {
         let snapshot = self.registry.snapshot();
+        let owned_devices = self
+            .gateway
+            .as_ref()
+            .map(|gateway| gateway.runtime_owned_device_candidates())
+            .unwrap_or_default();
         let mut diagnostics = Vec::new();
         if snapshot.runtimes.is_empty() {
             diagnostics.push(diagnostic(
@@ -26,7 +43,7 @@ impl RuntimeDispatchCapabilityFactsSource {
         let runtimes = snapshot
             .runtimes
             .into_iter()
-            .filter_map(|runtime| project_runtime(runtime, &mut diagnostics))
+            .filter_map(|runtime| project_runtime(runtime, &owned_devices, &mut diagnostics))
             .collect::<Vec<_>>();
         if runtimes.is_empty() {
             return RuntimeDispatchCapabilityFactsOutcome::Unavailable { diagnostics };
@@ -59,6 +76,8 @@ pub(crate) struct RuntimeDispatchRuntimeCapabilityFacts {
     pub loaded_model_ids: Vec<String>,
     pub active_reservation_ids: Vec<u64>,
     pub has_admission_budget: bool,
+    /// Additive discovery facts; this CPU slice is not an inventory of GPUs.
+    pub automatic_device_candidates: Vec<RuntimeOwnedDeviceCandidate>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -96,6 +115,7 @@ impl RuntimeDispatchCapabilityFactsOutcome {
 
 fn project_runtime(
     runtime: RuntimeRegistryRuntimeSnapshot,
+    owned_devices: &[RuntimeOwnedDeviceCandidate],
     diagnostics: &mut Vec<RuntimeDispatchCapabilityFactsDiagnostic>,
 ) -> Option<RuntimeDispatchRuntimeCapabilityFacts> {
     if runtime.backend_keys.is_empty() {
@@ -121,6 +141,16 @@ fn project_runtime(
         return None;
     };
 
+    let automatic_device_candidates = owned_devices
+        .iter()
+        .filter(|device| {
+            runtime
+                .backend_keys
+                .iter()
+                .any(|key| inference::backend::canonical_backend_key(key) == device.backend_key)
+        })
+        .cloned()
+        .collect();
     Some(RuntimeDispatchRuntimeCapabilityFacts {
         runtime_id: runtime.runtime_id,
         backend_keys: runtime.backend_keys,
@@ -135,6 +165,7 @@ fn project_runtime(
             .collect(),
         active_reservation_ids: runtime.active_reservation_ids,
         has_admission_budget: runtime.admission_budget.is_some(),
+        automatic_device_candidates,
     })
 }
 
@@ -158,6 +189,62 @@ mod tests {
     };
 
     use super::*;
+
+    #[cfg(feature = "backend-pytorch")]
+    #[test]
+    fn projection_joins_registered_backend_aliases_to_gateway_owned_cpu_candidates() {
+        let registry = Arc::new(RuntimeRegistry::new());
+        for (id, key) in [("pytorch", "torch"), ("other", "unsupported")] {
+            registry.register_runtime(
+                RuntimeRegistration::new(id, id)
+                    .with_backend_keys(vec![key.into()])
+                    .with_dispatch_identity(
+                        RuntimeDispatchIdentity::new(
+                            "transformers",
+                            format!("runtime.{id}.shared"),
+                        )
+                        .expect("valid dispatch identity"),
+                    ),
+            );
+        }
+        let source = RuntimeDispatchCapabilityFactsSource::new(registry.clone());
+        let RuntimeDispatchCapabilityFactsOutcome::Projected { facts, .. } = source.collect()
+        else {
+            panic!("registered facts");
+        };
+        assert!(facts
+            .runtimes
+            .iter()
+            .all(|runtime| runtime.automatic_device_candidates.is_empty()));
+        let gateway = Arc::new(InferenceGateway::new());
+        assert!(gateway
+            .runtime_owned_device_candidates()
+            .iter()
+            .any(|device| device.backend_key == "pytorch"));
+        let RuntimeDispatchCapabilityFactsOutcome::Projected { facts, .. } =
+            source.with_gateway(gateway).collect()
+        else {
+            panic!("owned facts");
+        };
+        let pytorch = facts
+            .runtimes
+            .iter()
+            .find(|runtime| runtime.runtime_id == "pytorch")
+            .unwrap();
+        assert_eq!(pytorch.automatic_device_candidates.len(), 1);
+        assert_eq!(
+            pytorch.automatic_device_candidates[0].device_id.as_str(),
+            "cpu"
+        );
+        assert!(facts
+            .runtimes
+            .iter()
+            .find(|runtime| runtime.runtime_id == "other")
+            .unwrap()
+            .automatic_device_candidates
+            .is_empty());
+        assert!(registry.snapshot().reservations.is_empty());
+    }
 
     #[test]
     fn source_projects_path_free_runtime_registry_facts() {

@@ -22,7 +22,9 @@ use crate::backend::{
     BackendRegistry, BackendStartupDeviceIntent, ChatChunk, EmbeddingResult, InferenceBackend,
 };
 use crate::config::EmbeddingMemoryMode;
-use crate::device_contracts::{InferenceDeviceClass, InferenceDeviceId, InferenceDevicePolicy};
+use crate::device_contracts::{
+    InferenceDeviceClass, InferenceDeviceId, InferenceDevicePolicy, RuntimeVariantId,
+};
 use crate::image_generation_batch::{
     ImageGenerationBatchContractError, ImageGenerationBatchDiagnostic,
     ImageGenerationBatchDiagnosticCode, ImageGenerationBatchDiagnosticSeverity,
@@ -61,6 +63,46 @@ mod embedding_replacement;
 
 const IMAGE_GENERATION_BYTES_PER_RGBA_PIXEL: u64 = 4;
 const MAX_LIFECYCLE_COMPATIBILITY_ISSUES: usize = 32;
+
+/// A canonical device candidate advertised by an available backend owner.
+/// This is capability evidence, not a device reservation or a loaded runtime.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuntimeOwnedDeviceCandidate {
+    /// Canonical backend that advertised this capability.
+    pub backend_key: String,
+    /// Owner-declared available CPU execution variant.
+    pub runtime_variant_id: RuntimeVariantId,
+    /// Canonical host CPU device; this carries no reservation authority.
+    pub device_id: InferenceDeviceId,
+}
+
+fn cpu_device_candidates(backends: Vec<BackendInfo>) -> Vec<RuntimeOwnedDeviceCandidate> {
+    backends
+        .into_iter()
+        .filter(|backend| backend.available)
+        .flat_map(|backend| {
+            let backend_key = canonical_backend_key(&backend.backend_key);
+            let expected_variant_id = format!("{backend_key}.cpu");
+            backend
+                .capabilities
+                .facts
+                .runtime_variants
+                .into_iter()
+                .filter(move |variant| {
+                    // CPU is one canonical device. GPU class facts do not identify
+                    // physical devices and must never be turned into guessed IDs.
+                    variant.available
+                        && variant.device_class == InferenceDeviceClass::Cpu
+                        && variant.runtime_variant_id.as_str() == expected_variant_id
+                })
+                .map(move |variant| RuntimeOwnedDeviceCandidate {
+                    backend_key: backend_key.clone(),
+                    runtime_variant_id: variant.runtime_variant_id,
+                    device_id: InferenceDeviceId::parse("cpu").expect("canonical CPU device"),
+                })
+        })
+        .collect()
+}
 
 #[cfg(feature = "backend-llamacpp")]
 use crate::backend::LlamaCppBackend;
@@ -587,6 +629,12 @@ impl InferenceGateway {
     /// List all available backends with their info
     pub fn available_backends(&self) -> Vec<BackendInfo> {
         self.registry.list()
+    }
+
+    /// Read owner-advertised CPU device capabilities without starting a backend
+    /// or acquiring custody. Dependency readiness and admission remain separate.
+    pub fn runtime_owned_device_candidates(&self) -> Vec<RuntimeOwnedDeviceCandidate> {
+        cpu_device_candidates(self.available_backends())
     }
 
     /// Describe the currently active backend instance.
