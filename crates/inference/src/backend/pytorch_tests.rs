@@ -2661,6 +2661,110 @@ fn test_pytorch_worker_generate_text_transport_no_model_normalizes_to_not_runnin
 }
 
 #[test]
+fn test_pytorch_temperature_keeps_zero_and_finite_f32_range_in_worker_envelopes() {
+    for temperature in [0.0, 0.001, 0.7, f64::from(f32::MAX)] {
+        for operation in [
+            PyTorchWorkerOperation::GenerateText,
+            PyTorchWorkerOperation::GenerateTextStream,
+        ] {
+            let envelope = PyTorchBackend::generate_text_envelope(
+                "req-temperature",
+                operation,
+                PyTorchTextGenerationRequest {
+                    prompt: "Explain adapters.".into(),
+                    system_prompt: None,
+                    max_tokens: 3,
+                    temperature,
+                    top_p: 1.0,
+                    top_k: Some(0),
+                    masked_prompt_json: None,
+                },
+            );
+            match operation {
+                PyTorchWorkerOperation::GenerateText => {
+                    PyTorchBackend::validate_generate_text_envelope(&envelope).unwrap()
+                }
+                PyTorchWorkerOperation::GenerateTextStream => {
+                    PyTorchBackend::validate_generate_text_stream_envelope(&envelope).unwrap()
+                }
+                _ => unreachable!(),
+            }
+            assert_eq!(envelope.payload.temperature, temperature);
+            let value = serde_json::to_value(&envelope).unwrap();
+            assert_eq!(value["payload"]["temperature"].as_f64(), Some(temperature));
+            let options = GenerationOptions {
+                sampling: SamplingGenerationOptions {
+                    temperature: Some(temperature as f32),
+                    ..Default::default()
+                },
+                ..Default::default()
+            };
+            let mapping = PyTorchBackend::transformers_generation_option_mapping(&options);
+            assert!(mapping
+                .diagnostics
+                .iter()
+                .any(
+                    |diagnostic| diagnostic.option_path == "sampling.temperature"
+                        && diagnostic.state == OptionSupportState::Honored
+                ));
+        }
+    }
+}
+
+#[test]
+fn test_pytorch_top_p_preserves_unit_interval_in_generate_and_stream_envelopes() {
+    for top_p in [0.0, 0.7, 1.0] {
+        for temperature in [0.0, 0.7] {
+            for operation in [
+                PyTorchWorkerOperation::GenerateText,
+                PyTorchWorkerOperation::GenerateTextStream,
+            ] {
+                let envelope = PyTorchBackend::generate_text_envelope(
+                    "req-top-p",
+                    operation,
+                    PyTorchTextGenerationRequest {
+                        prompt: "Explain adapters.".into(),
+                        system_prompt: None,
+                        max_tokens: 2,
+                        temperature,
+                        top_p,
+                        top_k: Some(0),
+                        masked_prompt_json: None,
+                    },
+                );
+                match operation {
+                    PyTorchWorkerOperation::GenerateText => {
+                        PyTorchBackend::validate_generate_text_envelope(&envelope).unwrap()
+                    }
+                    PyTorchWorkerOperation::GenerateTextStream => {
+                        PyTorchBackend::validate_generate_text_stream_envelope(&envelope).unwrap()
+                    }
+                    _ => unreachable!(),
+                }
+                assert_eq!(envelope.payload.top_p, top_p);
+                assert_eq!(
+                    serde_json::to_value(&envelope).unwrap()["payload"]["top_p"].as_f64(),
+                    Some(top_p)
+                );
+                let options = GenerationOptions {
+                    sampling: SamplingGenerationOptions {
+                        top_p: Some(top_p as f32),
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                };
+                let mapping = PyTorchBackend::transformers_generation_option_mapping(&options);
+                assert!(mapping
+                    .diagnostics
+                    .iter()
+                    .any(|diagnostic| diagnostic.option_path == "sampling.top_p"
+                        && diagnostic.state == OptionSupportState::Honored));
+            }
+        }
+    }
+}
+
+#[test]
 fn test_pytorch_generate_text_request_threads_top_k_as_transformers_kwarg() {
     let request = PyTorchBackend::generate_text_request(
         "Explain adapters.".to_string(),
@@ -2718,6 +2822,48 @@ fn test_pytorch_generate_text_envelopes_thread_top_k_for_generate_and_stream() {
         stream_envelope.payload.transformers_kwargs["top_k"],
         serde_json::json!(33)
     );
+}
+
+#[test]
+fn test_pytorch_generate_text_top_k_keeps_zero_and_u32_max_in_worker_envelopes() {
+    for top_k in [0, u32::MAX] {
+        for operation in [
+            PyTorchWorkerOperation::GenerateText,
+            PyTorchWorkerOperation::GenerateTextStream,
+        ] {
+            let envelope = PyTorchBackend::generate_text_envelope(
+                "req-top-k-boundary",
+                operation,
+                PyTorchTextGenerationRequest {
+                    prompt: "Explain adapters.".into(),
+                    system_prompt: Some("Be precise.".into()),
+                    max_tokens: 48,
+                    temperature: 0.3,
+                    top_p: 0.9,
+                    top_k: Some(top_k),
+                    masked_prompt_json: None,
+                },
+            );
+            match operation {
+                PyTorchWorkerOperation::GenerateText => {
+                    PyTorchBackend::validate_generate_text_envelope(&envelope).unwrap()
+                }
+                PyTorchWorkerOperation::GenerateTextStream => {
+                    PyTorchBackend::validate_generate_text_stream_envelope(&envelope).unwrap()
+                }
+                _ => unreachable!(),
+            }
+            assert_eq!(
+                envelope.payload.transformers_kwargs["top_k"],
+                serde_json::json!(top_k)
+            );
+            assert_eq!(envelope.payload.max_tokens, 48);
+            assert_eq!(
+                envelope.payload.system_prompt.as_deref(),
+                Some("Be precise.")
+            );
+        }
+    }
 }
 
 #[test]

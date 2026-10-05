@@ -34,6 +34,23 @@ Platform-specific Tauri prerequisites are maintained in the
 [official Tauri setup guide](https://v2.tauri.app/start/prerequisites/) and the
 CI bootstrap in `.github/workflows/quality-gates.yml`.
 
+## ONNX Runtime provisioning
+
+Cargo builds do not download ONNX Runtime. The Pumas dependency uses dynamic
+loading; metadata and host lifecycle use does not require a native SDK. The
+consumer feature gate (`python3 scripts/check-onnx-no-build-download.py`) checks
+additive features and keeps the manifest, lockfile and CI checkout pin aligned.
+
+Before ONNX execution, separately provision and verify Microsoft's ONNX Runtime
+1.24.2 for the host target (C API 24). Record the official archive and library
+hashes and preserve upstream notices. Set `ORT_DYLIB_PATH` to the absolute library
+file for that invocation, or stage the full SDK closure beside the executable.
+This is runtime configuration; `ORT_LIB_PATH` and download-suppression variables
+are not substitutes. Missing/invalid selection returns a typed `runtime_library`
+error. Build and test jobs must consume an already provisioned SDK when execution
+needs it; they must not acquire one. Native inference and extracted-package
+qualification are separate from successful compilation and metadata tests.
+
 ## Useful Checks
 
 ```bash

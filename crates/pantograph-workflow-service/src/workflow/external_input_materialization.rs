@@ -291,6 +291,106 @@ mod tests {
     }
 
     #[test]
+    fn selection_source_materializes_authored_temperature_without_truncation() {
+        let mut graph = graph_with_external_inputs();
+        graph.nodes[2].node_type = "selection-input".into();
+        let graph =
+            workflow_scheduler_task_graph(&workflow_id(), &workflow_run_id(), &graph).unwrap();
+        let source = graph
+            .tasks
+            .iter()
+            .find(|task| task.node_id.as_str() == "limit")
+            .unwrap();
+        let mut target = source.clone();
+        target.node_id = "inference".parse().unwrap();
+        target.task_id = "inference".parse().unwrap();
+        target.node_type = "llm-inference".into();
+        target.execution_class = WorkflowSchedulerTaskExecutionClass::RuntimeInference;
+        target.source_input_task_template = None;
+        target.dependency_task_ids = vec![source.task_id.clone()];
+        target.input_bindings = vec![super::super::WorkflowSchedulerTaskInputBinding {
+            source_task_id: source.task_id.clone(),
+            source_node_id: source.node_id.clone(),
+            source_port_id: "value".into(),
+            target_port_id: "temperature".into(),
+        }];
+        for temperature in [0.0, 0.7, 2.0] {
+            let results = materialize_external_workflow_inputs(
+                &graph,
+                &[WorkflowPortBinding {
+                    node_id: "limit".into(),
+                    port_id: "value".into(),
+                    value: json!(temperature),
+                }],
+            )
+            .unwrap();
+            let inputs =
+                super::super::runtime_host_task_input_mapping::materialize_runtime_host_inputs(
+                    &target, &results,
+                )
+                .unwrap();
+            assert_eq!(inputs[0].port_id, "temperature");
+            assert_eq!(
+                inputs[0].value,
+                pantograph_runtime_host_contracts::RuntimeHostExecutionInputValue::F64(
+                    serde_json::Number::from_f64(temperature).unwrap()
+                )
+            );
+            assert_eq!(inputs[0].value.try_as_f32().unwrap(), temperature as f32);
+        }
+    }
+
+    #[test]
+    fn selection_source_materializes_authored_top_p_without_truncation() {
+        let mut graph = graph_with_external_inputs();
+        graph.nodes[2].node_type = "selection-input".into();
+        let graph =
+            workflow_scheduler_task_graph(&workflow_id(), &workflow_run_id(), &graph).unwrap();
+        let source = graph
+            .tasks
+            .iter()
+            .find(|task| task.node_id.as_str() == "limit")
+            .unwrap();
+        let mut target = source.clone();
+        target.node_id = "inference".parse().unwrap();
+        target.task_id = "inference".parse().unwrap();
+        target.node_type = "llm-inference".into();
+        target.execution_class = WorkflowSchedulerTaskExecutionClass::RuntimeInference;
+        target.source_input_task_template = None;
+        target.dependency_task_ids = vec![source.task_id.clone()];
+        target.input_bindings = vec![super::super::WorkflowSchedulerTaskInputBinding {
+            source_task_id: source.task_id.clone(),
+            source_node_id: source.node_id.clone(),
+            source_port_id: "value".into(),
+            target_port_id: "top_p".into(),
+        }];
+        for top_p in [0.0, 0.7, 1.0] {
+            let results = materialize_external_workflow_inputs(
+                &graph,
+                &[WorkflowPortBinding {
+                    node_id: "limit".into(),
+                    port_id: "value".into(),
+                    value: json!(top_p),
+                }],
+            )
+            .unwrap();
+            let inputs =
+                super::super::runtime_host_task_input_mapping::materialize_runtime_host_inputs(
+                    &target, &results,
+                )
+                .unwrap();
+            assert_eq!(inputs[0].port_id, "top_p");
+            assert_eq!(
+                inputs[0].value,
+                pantograph_runtime_host_contracts::RuntimeHostExecutionInputValue::F64(
+                    serde_json::Number::from_f64(top_p).unwrap()
+                )
+            );
+            assert_eq!(inputs[0].value.try_as_f32().unwrap(), top_p as f32);
+        }
+    }
+
+    #[test]
     fn integer_number_source_materializes_token_limit_for_runtime_host() {
         let task_graph = task_graph();
         let source = task_graph

@@ -312,3 +312,116 @@ API-equivalent checkpoint through **2026-09-09T23:43:08.278Z** (USD, recorded pr
 Known-rate subtotal **$7.303404 Standard / $14.606808 Fast**. Current root turn `01a08885-4a8e-7902-a3db-f0adc510c020` and dedicated `pumas_shared_design`/`pumas_consumer_fields` descendants are selected by root_turn_id and deduplicated response_id. Source evidence `/tmp/pantograph-pumas-design-costs.json`; reusable adapted helper `/tmp/pantograph-pumas-design-costs.py`. Historical-tail output is excluded to avoid recounting other sessions. Cached input and reasoning are not added twice; actual billed tier/approval/tool charges remain unknown, and final publication/commit is a tail.
 
 Delegation lesson: Astra delivered the consequential source-backed comparison. The Luna inventory lane did not supply a consolidated handoff before the bounded design stop and was interrupted; its attempts and root waiting remain charged, not an accepted independent change. The existing source trace and Astra comparison establish the selected contract; do not invent a completed field inventory. Use a shorter, explicitly bounded consumer enumeration or Sol medium for a future such task when coordination cost outweighs the direct model saving. This is one design outcome, not a controlled model benchmark.
+
+## 2026-10-05 — Workflow top-k candidate and current M3 sequencing
+
+- Feature milestone `9d6646a47c0dda8d391266970e160f0fb53aacb3`, tree
+  `6b4e09ae6b7ad80cf010babb1096072ce6a1edad`, is published on
+  `feat/workflow-text-top-k`, directly based on PR54
+  `d6e9fcd15b135bedf36437ab2eceba229a0c9e2c`. Optional U64 `top_k`
+  projects into existing typed sampling options, accepts zero, and leaves
+  omitted controls at backend defaults. The [feature report](reports/2026-10-05-workflow-text-top-k.md)
+  records boundaries, test coverage and final hosted/native commands.
+- Contract tests: 20 passed; PyTorch-enabled inference tests: 686 passed.
+  Normal-default embedded library/test compiler-Clippy check passed with ONNX
+  downloading disabled. Native host tests are compiled but unexecuted locally;
+  cloud ONNX/native execution remains deferred. Formatting, critical,
+  accessibility and staged/range traceability gates accompany publication.
+- Source reconciliation confirms current Pumas pin `2243a2b6` already exposes
+  authenticated full facts, and Pantograph's existing facade and dispatch/host
+  composition already support Owner/LocalClient. Plan header and DA-I03/04 now
+  distinguish implemented source from pending qualification; the old
+  producer/consumer implementation step is retired from current sequencing.
+- Parent owns composition with accepted repair series `c83d5179`, `029ac704`,
+  `cd54e12`, independent review and merge. That series is not included here;
+  graph/reservation/observation files are untouched. Final hosted/native tests
+  and current owner-produced model/device qualification precede required-real
+  dependent text-to-image acceptance. No DA-03/07 closure, broader runtime
+  capability, model inference or speculative scheduler work is claimed.
+
+The parent subsequently published those repairs as `f56e2b5a` → `f9fb470c` →
+`78bc71931772d891a6b5555076a072a63fe969a7`, exact tree
+`141a0eae52ec7aa587536da297dd14a652836431`, and authorized composition.
+PR54's remote head/ancestry match that source. The feature branch merges it
+without conflicts, preserving the separate feature and plan milestones; all
+five repair paths match the published bytes. The composed normal-default
+embedded compiler-Clippy check, formatting and critical gate pass. Native
+execution remains deferred and the parent's repair-head CI does not substitute
+for qualification of the final feature composition. The plan now sequences
+parent review and final hosted/native acceptance of that composition.
+
+Independent top-k review then identified real sampling failure for k above
+vocabulary; the earlier recording/envelope evidence and no-blocker assessment
+were provisional. Separate sampler milestone `3bf3eb45` caps positive k at
+logits width using Transformers semantics and preserves explicit non-streaming
+zero. Four real CPU tensor/streaming/kwargs tests pass and detect both defects
+in the frozen original; [sampling evidence](reports/2026-10-05-top-k-vocabulary-sampling.md)
+distinguishes this from model inference.
+
+Separate PR54 fixture successor `174c1950`, based directly on `78bc7193`,
+persists canonical built-in definitions and asserts public I/O discovery while
+retaining exact final text and zero runtime loads. The [fixture handoff](reports/2026-10-05-pr54-session-output-discovery.md)
+records the full finalization trace and exact native test names. Eleven
+supported node-engine tests pass; native public-session execution remains
+deferred. Their conflict-free composition preserves the frozen top-k branch
+and both independent commits. The composed 686-test inference suite and normal
+embedded library/test compiler-Clippy check pass; final hosted/native scenario
+execution and parent review remain outstanding.
+
+
+## 2026-10-05 — Finite temperature and real CPU hosted qualification
+
+Peer source review accepts frozen `174c1950` and `3bf3eb45`; composition
+`60197971` remains unchanged pending exact-head hosted/native execution.
+The existing review logs and exact source/hash inventory are saved in Library
+`libfile_cdf0c1d747c0819183dfb308ea0875d0`, without expensive reruns. Small
+CI successor `a6d1fd15` adds real offline CPU sampler tests to the existing
+focused-test job and retains their log; hosted provisioning is not yet claimed.
+
+The separate [temperature milestone](reports/2026-10-05-workflow-text-temperature.md)
+adds an optional zero-inclusive descriptor, a finite JSON-number host variant,
+and checked f32 conversion. Existing integer ports and omitted defaults are
+preserved. Shared contracts pass 73 tests, inference passes 688, and five real
+CPU tests include actual Transformers generation and streaming sampling on
+fixed logits. Native descriptor/host/workflow tests are compiler checked only.
+Parent owns publication and review; required-real acceptance remains open.
+
+
+## 2026-10-05 — Nucleus sampling and CI failure propagation
+
+Independent review found the frozen CPU CI step could mask unittest failures
+through tee. Separate corrective commit `fddae90d` explicitly enables Bash
+pipefail and corrects the earlier report; exact-script red/green shell checks
+return failing/passing status correctly while retaining logs. A green run from
+uncorrected `a6d1fd15` alone cannot qualify sampling. Frozen histories and
+Library packets remain unchanged.
+
+The separate [top_p milestone](reports/2026-10-05-workflow-text-top-p.md) starts
+from temperature `e0293ebf` and integrates that CI correction. It reuses the
+finite-number host contract, exposes an optional [0,1] input without a default,
+and repairs streaming ties/cutoffs to match actual Transformers nucleus
+sampling. Six real CPU tests pass, including 375 interaction cases; the new
+matrix detects 112 failures against the frozen sampler. Shared tests pass 74,
+inference passes 690, and embedded library/test compilation passes. Native
+host/source execution and hosted provisioning remain pending; parent owns
+independent review/publication, including any forthcoming finite-contract
+corrections. No model weights, ONNX retry or complete-workflow acceptance.
+
+
+## 2026-10-05 — Exact-head native text-control route and dependency blocker
+
+Continued from frozen `a8c6970f` in the newly ready environment. Embedded host
+and workflow binary attempts failed at missing ONNX symbols; one standard
+locked build returned HTTP 403 for the pinned ONNX Runtime 1.24.2 artifact.
+Zero native host/workflow tests executed. No further dependency download,
+substitution, pin change or model-weight download occurred.
+
+The separate [qualification route](reports/2026-10-05-text-control-native-qualification-route.md)
+adds exact-source/cleanliness and nonempty-suite guards, real CPU tests,
+pipefail/log capture and an independent required job in existing Quality Gates.
+A controlled Rust-command fixture with actual CPU tests proves 112 frozen-source
+sampling failures return exit 1 and six corrected tests return exit 0. Those
+controlled statuses do not count as native execution. Shared serialization
+passes 74 tests. Parent retains hosted/native qualification and publication;
+next planned feature is DA-03's desktop-authored dependent real text-to-image
+workflow after owner identity/target/device and desktop prerequisites.

@@ -130,6 +130,9 @@ fn runtime_host_input_value(
                 )
             }
         }
+        WorkflowSchedulerTaskResultValue::Json(serde_json::Value::Number(value)) => {
+            Ok(Some(RuntimeHostExecutionInputValue::F64(value.clone())))
+        }
         WorkflowSchedulerTaskResultValue::Json(_) => Err(
             WorkflowRuntimeHostTaskInputMappingError::UnsupportedMaterializedInput {
                 source_task_id: binding.source_task_id.as_str().to_string(),

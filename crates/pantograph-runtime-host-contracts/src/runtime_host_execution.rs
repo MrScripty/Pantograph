@@ -153,14 +153,66 @@ pub enum RuntimeHostExecutionInputValue {
     Bool(bool),
     I64(i64),
     U64(u64),
+    /// Finite JSON number; reuses the scheduler's numeric domain without
+    /// permitting NaN/infinity or changing existing integer variants.
+    F64(serde_json::Number),
     MediaArtifactRef(RuntimeHostExecutionMediaArtifactRef),
 }
 
 impl RuntimeHostExecutionInputValue {
+    /// Convert a numeric input to existing f32 consumers without dropping
+    /// authored precision. Exact binary f32 values and their shortest JSON
+    /// decimals are accepted; other rounding, overflow and underflow fail.
+    pub fn try_as_f32(&self) -> Result<f32, RuntimeHostExecutionContractError> {
+        let invalid = || RuntimeHostExecutionContractError::InvalidField {
+            field: "input.f32",
+            reason: "number must retain authored precision in finite f32",
+        };
+        let number = match self {
+            Self::F64(value) => value.clone(),
+            Self::I64(value) => (*value).into(),
+            Self::U64(value) => (*value).into(),
+            _ => return Err(invalid()),
+        };
+        let value = number
+            .as_f64()
+            .filter(|value| value.is_finite())
+            .ok_or_else(invalid)?;
+        let narrowed = value as f32;
+        if !narrowed.is_finite() || (value != 0.0 && narrowed == 0.0) {
+            return Err(invalid());
+        }
+        let preserved = if let Some(integer) = number.as_i64() {
+            i128::from(integer) == narrowed as i128
+        } else if let Some(integer) = number.as_u64() {
+            i128::from(integer) == narrowed as i128
+        } else {
+            f64::from(narrowed) == value
+                || serde_json::to_string(&narrowed)
+                    .ok()
+                    .and_then(|value| value.parse::<f64>().ok())
+                    == Some(value)
+        };
+        if !preserved || value.abs() > f64::from(f32::MAX) {
+            return Err(invalid());
+        }
+        Ok(narrowed)
+    }
+
     fn validate(&self) -> Result<(), RuntimeHostExecutionContractError> {
         match self {
             Self::String(value) => validate_optional_text("input.string", value),
             Self::MediaArtifactRef(value) => value.validate(),
+            Self::F64(value) => {
+                if value.as_f64().is_some_and(f64::is_finite) {
+                    Ok(())
+                } else {
+                    Err(RuntimeHostExecutionContractError::InvalidField {
+                        field: "input.f64",
+                        reason: "number must be finite",
+                    })
+                }
+            }
             Self::Bool(_) | Self::I64(_) | Self::U64(_) => Ok(()),
         }
     }

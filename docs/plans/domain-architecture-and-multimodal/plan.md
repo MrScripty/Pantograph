@@ -2,9 +2,9 @@
 
 **Plan status:** `Active`
 
-**Current phase:** M3 Pumas owner/client integration design selected. Full review and required-real text→image acceptance remain open.
+**Current phase:** M3 owner/client consumer source is implemented at the pinned Pumas revision. Workflow text/image inputs are being qualified through the existing runtime host. Full review and required-real text→image acceptance remain open.
 
-**Next slice:** Expose Pumas's existing full package-facts operation through its authenticated typed local client, then migrate Pantograph's existing access facade and hosted execution to supported Owner/LocalClient roles. Use the configured launcher-root identity, preserve ReadOnly browsing without execution, and qualify real owner-produced identities/facts/load targets before model runs. The current reviewed Pumas committed baseline is `3b0d5ee4eda4d68ae33a158162883208e4608edb`; its active uncommitted lifecycle work is separate.
+**Next slice:** Parent reviews frozen text-control source `a8c6970f` and its separate [exact-head native qualification route](reports/2026-10-05-text-control-native-qualification-route.md). Earlier local native host/workflow attempts failed before execution: the pinned ONNX dependency download returned HTTP 403, and no-download builds lacked linker symbols. Subsequent [hosted run 37360010163, job 111931961024](https://github.com/MrScripty/Pantograph/actions/runs/37360010163/job/111931961024) at exact head `815bceffbb0d877644184b71be6584f586be2e6e` passed 145 Rust tests across eight groups and six actual CPU sampler tests; all individual quality checks and all three workflows passed at that head. The focused native host/workflow qualification is complete for that head. Next qualify current owner-produced Pumas identities/facts/load targets/devices and the desktop-authored dependent text-to-image graph (DA-03). Frozen temperature `e0293ebf`, CI correction `fddae90d`, fixture `174c1950`, top-k `3bf3eb45` and composition `60197971` remain unchanged with their stated qualification requirements. Parent holds publication for owner confirmation and integrates review corrections without rewriting history. Current Pumas pin: `26a84e323cae566a46a8f76bef48fa1010aed48b`. DA-03/DA-07 remain open.
 
 **Acceptance status:** `blocked`
 
@@ -482,7 +482,29 @@ their proper owner. This is intermediate evidence, not DA-03 desktop acceptance.
 
 **Status:** `Active`
 
-### Pumas owner/client integration — selected design
+### Pumas owner/client integration — implemented source, qualification open
+
+The selected design below is retained as rationale. Its producer operation and
+consumer migration are already present at the current pin; they are no longer
+the next implementation slice. `PumasSelectorAccess` routes full facts and
+targets through Owner/LocalClient, while dispatch, host resolution and hosted
+composition consume that facade and preserve ReadOnly execution refusal.
+The [full-facts consumer report](reports/2026-10-04-pumas-full-facts-consumer.md)
+records the six boundaries, exact producer identity and outstanding native
+acceptance. Its earlier source-only receipts do not establish real model or
+desktop acceptance. The [configured-owner report](reports/2026-10-04-pumas-configured-owner-client.md)
+records accepted attachment and configured-root ownership behavior.
+
+Workflow text generation already supports `max_new_tokens` and `system_prompt`.
+The [top-k candidate](reports/2026-10-05-workflow-text-top-k.md) adds the missing
+optional integer sampling input through existing U64 values and typed options,
+with explicit zero and unchanged omission semantics. This is a bounded input
+projection; scheduler redesign and broader backend support are not admitted.
+The original feature composition with PR54 repair head `78bc7193` remains
+frozen. Its successors preserve both histories: the [public-session fixture repair](reports/2026-10-05-pr54-session-output-discovery.md)
+persists real built-in I/O definitions, and the [sampling repair](reports/2026-10-05-top-k-vocabulary-sampling.md)
+caps positive k at vocabulary width and preserves non-streaming explicit zero.
+Parent review and final native qualification remain outstanding.
 
 **Decision:** Reuse the existing Pumas facts/target operations and Pantograph
 access facade. Pumas owns model identity, inspection, freshness, cache and path

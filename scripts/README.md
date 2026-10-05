@@ -13,6 +13,7 @@ main app entrypoint.
 | `check-decision-traceability.sh` | Runs the decision-to-guide traceability gate over explicit Git snapshots using the reviewed impact map. |
 | `check-decision-traceability.mjs` | Validates mapped decision impacts, canonical guides, and local ADR references without per-directory documentation rules. |
 | `check-decision-traceability.test.mjs` | Exercises Git snapshot isolation, impact ownership, missing inputs, broken references, and path transitions. |
+| `check-onnx-no-build-download.py` | Verifies the Pumas manifest/lock/CI pin and rejects additive ORT download/copy features across default, all-feature, and mixed embedded graphs for Linux, Windows, and macOS. Honors Cargo offline configuration; provisions no native SDK. |
 | `check-no-python-linkage.sh` | Verifies the runtime-separation guarantee that Pantograph no longer links Python in-process. |
 | `check-scheduler-only-workflow-execution.sh` | Fails when public Rust, Tauri, binding, or frontend source reintroduces direct workflow execution APIs outside scheduler session execution. |
 | `check-rustler-beam-smoke.sh` | Builds `pantograph_rustler`, verifies the local BEAM toolchain exists, and runs the Mix smoke harness under `bindings/beam/pantograph_native_smoke/`. |
@@ -219,6 +220,25 @@ hosted runners. It retains the existing GTK/WebKit/libsoup packages and installs
 uses `sudo apt-get` and changes the runner's system packages; do not treat it as
 a read-only check or run it on another computer without authorization. A failed
 install fails the step. It changes no Rust features, pins or verification gates.
+
+## Exact-Head Text Control Qualification
+
+`bash scripts/qualify-workflow-text-controls.sh FULL_COMMIT_SHA LOG_DIRECTORY`
+checks the requested commit, tracked-source cleanliness and untracked source
+before executing native host, descriptor, workflow input mapping, authored
+source, public-session and shared serialization tests. It then executes all
+six real CPU sampler tests. Discovery guards reject empty/ignored-only suites;
+Bash pipefail preserves every test failure through log capture. The final
+source check and log checksums retain review evidence. Logs should live outside
+the checkout. Set `PANTOGRAPH_QUALIFICATION_PYTHON` to an installed CPU Python
+environment; model Hub access is disabled. No model weights are required.
+
+The existing Quality Gates workflow includes a separate focused job checking
+out the PR head SHA (or exact push SHA), using normal locked native dependency
+resolution and recording the source identity. Parent owns PR publication;
+adding this route does not dispatch it. A missing ONNX Runtime or failed native
+dependency download fails qualification before native execution. Compilation
+or a historical sampler log does not replace the missing native result.
 
 ## Role-Button Name Evidence
 
