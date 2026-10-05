@@ -793,6 +793,46 @@ fn scheduler_task_graph_lowers_merge_with_all_dependencies_in_canonical_order() 
 }
 
 #[test]
+fn scheduler_task_graph_reports_invalid_merge_input_port() {
+    let graph = WorkflowGraph {
+        nodes: ["source", "join"]
+            .map(|id| GraphNode {
+                id: id.into(),
+                node_type: if id == "join" { "merge" } else { "text-input" }.into(),
+                position: Position { x: 0.0, y: 0.0 },
+                data: json!({}),
+            })
+            .to_vec(),
+        edges: vec![GraphEdge {
+            id: "source-join".into(),
+            source: "source".into(),
+            target: "join".into(),
+            source_handle: "text".into(),
+            target_handle: "unexpected".into(),
+        }],
+        derived_graph: None,
+    };
+    let tasks = workflow_scheduler_task_graph(&workflow_id(), &workflow_run_id(), &graph).unwrap();
+    let merge = tasks
+        .tasks
+        .iter()
+        .find(|task| task.node_id.as_str() == "join")
+        .unwrap();
+    assert_eq!(merge.non_runtime_task_template, None);
+    assert_eq!(merge.diagnostics.len(), 1);
+    let diagnostic = &merge.diagnostics[0];
+    assert_eq!(
+        diagnostic.code,
+        WorkflowSchedulerTaskProjectionDiagnosticCode::InvalidNonRuntimeTemplateValue
+    );
+    assert_eq!(diagnostic.port_id.as_deref(), Some("inputs"));
+    assert_eq!(
+        diagnostic.message,
+        "merge accepts only bindings that target 'inputs'"
+    );
+}
+
+#[test]
 fn scheduler_task_graph_ignores_source_input_graph_data() {
     let graph = WorkflowGraph {
         nodes: vec![

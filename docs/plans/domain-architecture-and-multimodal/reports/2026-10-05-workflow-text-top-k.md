@@ -11,7 +11,7 @@ exact string content and existing byte bounds.
 ## Source and ownership
 
 - Branch: `feat/workflow-text-top-k`.
-- Base: PR54 `d6e9fcd15b135bedf36437ab2eceba229a0c9e2c`, verified against
+- Feature base: PR54 `d6e9fcd15b135bedf36437ab2eceba229a0c9e2c`, verified against
   `refs/pull/54/head` before creating the branch.
 - Pumas pin: `2243a2b6909fcf4fe4b4ffa0f7f0a2b4ca027d32`, unchanged.
 - Pattern: [workflow system prompt](2026-10-04-workflow-system-prompt.md).
@@ -26,10 +26,11 @@ chat JSON, and the PyTorch adapter already forwards it into the worker's
 allowlisted Transformers kwargs. Passing those contracts does not establish
 support for other runtimes, model families, or dLLM/Sherry sampling behavior.
 
-The parent's separate accepted PR54 repair series (`c83d5179`, `029ac704`,
-`cd54e12`) is not included or duplicated. Graph qualification, reservation and
-observation files remain outside this write set. Parent owns composition, PRs,
-review and merge.
+The feature milestone excludes the parent's separate accepted PR54 repair
+series (original local identities `c83d5179`, `029ac704`, `cd54e12`). Graph
+qualification, reservation and observation implementation remain outside the
+feature write set. The later published composition is recorded below. Parent
+owns PRs, review and merge.
 
 ## Qualification
 
@@ -74,3 +75,28 @@ These native commands were not run locally. ONNX download/link execution and
 its existing CDN 403 remain deferred; there was no download retry, runtime
 substitution, dependency repin or network-policy change. GUI, real model
 inference and dependent text-to-image acceptance remain open.
+
+## Published PR54 repair composition
+
+The feature remains independently available at
+`9d6646a47c0dda8d391266970e160f0fb53aacb3`, tree
+`6b4e09ae6b7ad80cf010babb1096072ce6a1edad`, with plan reconciliation at
+`b08fdb61b9c7cb93f9f888960340f0cd1452cb70`.
+
+The parent subsequently published the repair series as
+`f56e2b5a` → `f9fb470c` → `78bc71931772d891a6b5555076a072a63fe969a7`,
+tree `141a0eae52ec7aa587536da297dd14a652836431`.
+The actual PR54 remote head and source ancestry were verified before its
+conflict-free merge into this feature branch. All five repair paths match the
+published repair bytes, including graph diagnostics, session attribution,
+bounded host observations and the runtime operations guide. No repair was
+reimplemented or edited. The parent's hosted CI on the repair head remains
+separate from final composed-feature acceptance.
+
+The composed source passes the same normal-default embedded library/test
+compiler-Clippy command with ONNX downloading disabled, with no warnings
+(`/tmp/top-k-composed-clippy.log`). Formatting, whitespace and critical gates
+also pass. The six feature code/fixture paths still match milestone `9d6646a4`
+exactly, so its 20 contract and 686 inference test results retain that unchanged
+scope. The composed native host tests remain unexecuted locally; successful
+compilation is not native or real-model acceptance.

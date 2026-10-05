@@ -338,3 +338,14 @@ Delegation lesson: Astra delivered the consequential source-backed comparison. T
   and current owner-produced model/device qualification precede required-real
   dependent text-to-image acceptance. No DA-03/07 closure, broader runtime
   capability, model inference or speculative scheduler work is claimed.
+
+The parent subsequently published those repairs as `f56e2b5a` → `f9fb470c` →
+`78bc71931772d891a6b5555076a072a63fe969a7`, exact tree
+`141a0eae52ec7aa587536da297dd14a652836431`, and authorized composition.
+PR54's remote head/ancestry match that source. The feature branch merges it
+without conflicts, preserving the separate feature and plan milestones; all
+five repair paths match the published bytes. The composed normal-default
+embedded compiler-Clippy check, formatting and critical gate pass. Native
+execution remains deferred and the parent's repair-head CI does not substitute
+for qualification of the final feature composition. The plan now sequences
+parent review and final hosted/native acceptance of that composition.

@@ -4,7 +4,7 @@
 
 **Current phase:** M3 owner/client consumer source is implemented at the pinned Pumas revision. Workflow text/image inputs are being qualified through the existing runtime host. Full review and required-real text→image acceptance remain open.
 
-**Next slice:** The parent composes the optional workflow `top_k` candidate with its separate accepted PR54 repair series, then qualifies the final embedded descriptor/host tests in hosted or native CI. Qualify current owner-produced text/image identities, full facts, load targets and devices before the required-real dependent workflow run. Do not repeat the completed owner/client transport or consumer implementation. Current Pumas pin: `2243a2b6909fcf4fe4b4ffa0f7f0a2b4ca027d32`. Cloud ONNX/native execution remains deferred; passing recording tests does not close DA-03 or DA-07.
+**Next slice:** The parent reviews the composed optional workflow `top_k` candidate and published PR54 repair head `78bc71931772d891a6b5555076a072a63fe969a7`, then qualifies the final embedded descriptor/host tests in hosted or native CI. Qualify current owner-produced text/image identities, full facts, load targets and devices before the required-real dependent workflow run. Do not repeat the completed owner/client transport or consumer implementation. Current Pumas pin: `2243a2b6909fcf4fe4b4ffa0f7f0a2b4ca027d32`. Cloud ONNX/native execution remains deferred; passing recording tests does not close DA-03 or DA-07.
 
 **Acceptance status:** `blocked`
 
@@ -500,7 +500,9 @@ The [top-k candidate](reports/2026-10-05-workflow-text-top-k.md) adds the missin
 optional integer sampling input through existing U64 values and typed options,
 with explicit zero and unchanged omission semantics. This is a bounded input
 projection; scheduler redesign and broader backend support are not admitted.
-Parent composition/review and final native qualification remain outstanding.
+The feature branch composes published PR54 repair head `78bc7193` without
+changing its graph/observation implementation. Parent review and final native
+qualification remain outstanding.
 
 **Decision:** Reuse the existing Pumas facts/target operations and Pantograph
 access facade. Pumas owns model identity, inspection, freshness, cache and path
