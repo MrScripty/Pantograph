@@ -55,6 +55,7 @@ mod runtime_branch_task_event;
 #[allow(dead_code)]
 mod runtime_dispatch_assignment;
 mod runtime_dispatch_selection;
+mod runtime_host_observation;
 mod runtime_host_task_input_mapping;
 mod runtime_host_task_result_mapping;
 mod runtime_preflight;
@@ -171,6 +172,7 @@ pub use self::runtime_dispatch_selection::{
     WorkflowRuntimeDispatchSourceRefreshError, WorkflowRuntimeDispatchSourceRefresher,
     WORKFLOW_RUNTIME_DISPATCH_CANDIDATE_FACT_BUNDLE_CONTRACT_VERSION,
 };
+pub use self::runtime_host_observation::WorkflowRuntimeHostObservationRecorder;
 pub(crate) use self::runtime_host_task_input_mapping::{
     materialize_runtime_host_inputs, WorkflowRuntimeHostTaskInputMappingError,
 };
