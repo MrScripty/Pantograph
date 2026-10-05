@@ -60,6 +60,59 @@ fn materializes_path_free_runtime_host_inputs_from_completed_task_results() {
 }
 
 #[test]
+fn materializes_numeric_node_results_without_truncating_or_coercing_integer_ports() {
+    for (node_value, expected) in [
+        (
+            serde_json::json!(0.7),
+            RuntimeHostExecutionInputValue::F64(serde_json::Number::from_f64(0.7).unwrap()),
+        ),
+        (serde_json::json!(0), RuntimeHostExecutionInputValue::I64(0)),
+        (
+            serde_json::json!(u64::MAX),
+            RuntimeHostExecutionInputValue::U64(u64::MAX),
+        ),
+    ] {
+        let result = WorkflowSchedulerTaskResultValue::from_node_json(node_value);
+        // A float sent to an integer target stays a float; that target's host
+        // validator must reject it instead of materialization truncating it.
+        for port_id in ["temperature", "top_k", "max_new_tokens"] {
+            let task = runtime_task(vec![input_binding("source", "value", port_id)]);
+            let inputs = materialize_runtime_host_inputs(
+                &task,
+                &[task_result("source", "value", result.clone())],
+            )
+            .unwrap();
+            assert_eq!(inputs[0].value, expected);
+        }
+    }
+}
+
+#[test]
+fn rejects_structured_json_instead_of_treating_it_as_a_numeric_host_input() {
+    for value in [
+        serde_json::json!({"temperature":0.7}),
+        serde_json::json!([0.7]),
+        serde_json::Value::Null,
+    ] {
+        let task = runtime_task(vec![input_binding("source", "value", "temperature")]);
+        let result = task_result(
+            "source",
+            "value",
+            WorkflowSchedulerTaskResultValue::from_node_json(value),
+        );
+        assert!(matches!(
+            materialize_runtime_host_inputs(&task, &[result]),
+            Err(
+                WorkflowRuntimeHostTaskInputMappingError::UnsupportedMaterializedInput {
+                    value_type: "json",
+                    ..
+                }
+            )
+        ));
+    }
+}
+
+#[test]
 fn skips_model_ref_binding_because_model_identity_lives_in_scheduler_handoff() {
     let task = runtime_task(vec![
         input_binding("model-selector", "pumas_model_ref", "pumas_model_ref"),

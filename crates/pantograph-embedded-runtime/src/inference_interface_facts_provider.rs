@@ -253,6 +253,7 @@ fn input_ports(task_entry: &TaskRegistryEntry) -> Vec<InferencePortDescriptor> {
                     InferenceValueType::Scalar(InferenceScalarType::String),
                 ),
                 u32_input_port(crate::runtime_host_text_execution::TOP_K_PORT, "Top k", 0),
+                temperature_input_port(),
             ]
         }
         InferenceTaskId::ImageGeneration => vec![
@@ -309,6 +310,25 @@ fn u32_input_port(port_id: &str, label: &str, min: u32) -> InferencePortDescript
             min: f64::from(min),
             max: f64::from(u32::MAX),
             step: Some(1.0),
+            default: None,
+        },
+    };
+    descriptor
+}
+
+fn temperature_input_port() -> InferencePortDescriptor {
+    let mut descriptor = port(
+        crate::runtime_host_text_execution::TEMPERATURE_PORT,
+        "Temperature",
+        InferencePortDirection::Input,
+        InferencePortRequirement::Optional,
+        InferenceValueType::Scalar(InferenceScalarType::F64),
+    );
+    descriptor.options = InferencePortOptions::NumericRange {
+        range: InferenceNumericRange {
+            min: 0.0,
+            max: f64::from(f32::MAX),
+            step: None,
             default: None,
         },
     };

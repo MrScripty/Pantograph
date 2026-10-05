@@ -7,7 +7,8 @@ import unittest
 from unittest import mock
 
 import torch
-from transformers import BatchEncoding
+from transformers import BatchEncoding, GenerationConfig, GenerationMixin, PretrainedConfig
+from transformers.modeling_outputs import CausalLMOutputWithPast
 from transformers.generation.logits_process import TopKLogitsWarper, TopPLogitsWarper
 
 
@@ -16,6 +17,11 @@ spec = importlib.util.spec_from_file_location(
 )
 autoregressive = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(autoregressive)
+contract_spec = importlib.util.spec_from_file_location(
+    "pantograph_worker_contract", Path(__file__).parents[1] / "worker_contract.py"
+)
+worker_contract = importlib.util.module_from_spec(contract_spec)
+contract_spec.loader.exec_module(worker_contract)
 
 
 class TokenizerFixture:
@@ -42,7 +48,90 @@ class LogitsModelFixture:
         return torch.cat([kwargs["input_ids"], torch.tensor([[2]])], dim=-1)
 
 
+class TinyGenerationModel(GenerationMixin):
+    """Real Transformers generation on fixed logits; no weights or Hub access."""
+
+    main_input_name = "input_ids"
+    _is_stateful = False
+    _supports_cache_class = False
+    device = torch.device("cpu")
+
+    def __init__(self):
+        self.config = PretrainedConfig(is_encoder_decoder=False)
+        self.generation_config = GenerationConfig(
+            use_cache=False, pad_token_id=0, bos_token_id=0, eos_token_id=None,
+            top_k=0,
+        )
+        self.logits = torch.tensor([0.0, 0.01, 0.02, 0.03])
+
+    @classmethod
+    def can_generate(cls):
+        return True
+
+    def prepare_inputs_for_generation(self, input_ids, **_kwargs):
+        return {"input_ids": input_ids}
+
+    def forward(self, input_ids, **_kwargs):
+        return CausalLMOutputWithPast(
+            logits=self.logits.expand(1, input_ids.shape[1], 4),
+        )
+
+    __call__ = forward
+
+
 class AutoregressiveSamplingTests(unittest.TestCase):
+    def test_temperature_controls_real_streaming_and_transformers_generation(self):
+        for authored in [None, 0.0, 0.001, 0.01, 0.7, 2.0, torch.finfo(torch.float32).max]:
+            with self.subTest(temperature=authored):
+                temperature = 0.7 if authored is None else authored
+                model = TinyGenerationModel()
+                logits = model.logits.unsqueeze(0)
+                observed_probs = []
+                multinomial = torch.multinomial
+
+                def record_and_sample(probs, num_samples, **kwargs):
+                    observed_probs.append(probs.clone())
+                    return multinomial(probs, num_samples, **kwargs)
+
+                def generate(streaming):
+                    observed_probs.clear()
+                    operation = "generate_text_stream" if streaming else "generate_text"
+                    payload = {"prompt": "prompt", "max_tokens": 3, "top_p": 1.0,
+                               "transformers_kwargs": {"top_k": 0}}
+                    if authored is not None:
+                        payload["temperature"] = authored
+                    envelope = {"contract_version": 1, "request_id": "tiny-logits",
+                                "operation": operation, "payload": payload}
+                    kwargs = worker_contract.generate_text_kwargs_from_envelope(
+                        envelope, expected_operation=operation,
+                    )
+                    self.assertEqual(kwargs["temperature"], temperature)
+                    with torch.random.fork_rng(devices=[]):
+                        torch.manual_seed(37)
+                        with mock.patch.object(torch, "multinomial", side_effect=record_and_sample):
+                            if streaming:
+                                result = list(autoregressive._generate_autoregressive_streaming(
+                                    model, TokenizerFixture(), "cpu", "prompt", 3,
+                                    kwargs["temperature"], kwargs["top_p"], top_k=kwargs["top_k"],
+                                ))
+                                text = ",".join(chunk["text"] for chunk in result)
+                            else:
+                                text = autoregressive._generate_autoregressive(
+                                    model, TokenizerFixture(), "cpu", "prompt", 3,
+                                    kwargs["temperature"], kwargs["top_p"], top_k=kwargs["top_k"],
+                                )
+                    if temperature == 0:
+                        self.assertEqual(observed_probs, [])
+                        self.assertEqual(text, "3,3,3")
+                    else:
+                        self.assertEqual(len(observed_probs), 3)
+                        expected_probs = torch.softmax(logits / max(temperature, 0.01), dim=-1)
+                        for probs in observed_probs:
+                            torch.testing.assert_close(probs, expected_probs)
+                    return text
+
+                self.assertEqual(generate(False), generate(True))
+
     def test_real_logits_match_transformers_top_k_and_top_p_probabilities(self):
         logits = torch.tensor([[0.0, 1.0, 2.0, 3.0], [2.0, 2.0, 0.0, -1.0]])
         for top_k in [0, 1, 2, 4, 5, (1 << 32) - 1]:

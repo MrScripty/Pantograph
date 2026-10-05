@@ -367,3 +367,21 @@ deferred. Their conflict-free composition preserves the frozen top-k branch
 and both independent commits. The composed 686-test inference suite and normal
 embedded library/test compiler-Clippy check pass; final hosted/native scenario
 execution and parent review remain outstanding.
+
+
+## 2026-10-05 — Finite temperature and real CPU hosted qualification
+
+Peer source review accepts frozen `174c1950` and `3bf3eb45`; composition
+`60197971` remains unchanged pending exact-head hosted/native execution.
+The existing review logs and exact source/hash inventory are saved in Library
+`libfile_cdf0c1d747c0819183dfb308ea0875d0`, without expensive reruns. Small
+CI successor `a6d1fd15` adds real offline CPU sampler tests to the existing
+focused-test job and retains their log; hosted provisioning is not yet claimed.
+
+The separate [temperature milestone](reports/2026-10-05-workflow-text-temperature.md)
+adds an optional zero-inclusive descriptor, a finite JSON-number host variant,
+and checked f32 conversion. Existing integer ports and omitted defaults are
+preserved. Shared contracts pass 73 tests, inference passes 688, and five real
+CPU tests include actual Transformers generation and streaming sampling on
+fixed logits. Native descriptor/host/workflow tests are compiler checked only.
+Parent owns publication and review; required-real acceptance remains open.
