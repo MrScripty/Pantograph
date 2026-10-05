@@ -3571,6 +3571,26 @@ fn non_runtime_input_readiness(
     };
 
     match template {
+        WorkflowSchedulerNonRuntimeTaskTemplate::ImageOutput => {
+            match materialized_binding_value(task, results, "image") {
+                MaterializedBindingValue::Ready(
+                    WorkflowSchedulerTaskResultValue::MediaArtifactRef(_),
+                ) => NonRuntimeInputReadiness::Ready,
+                MaterializedBindingValue::Ready(_) => {
+                    NonRuntimeInputReadiness::Invalid(scheduler_input_diagnostic(
+                        SchedulerTaskStateDiagnosticCode::InvalidTask,
+                        "image-output input is not a typed media artifact reference",
+                    ))
+                }
+                MaterializedBindingValue::Blocked => NonRuntimeInputReadiness::Blocked,
+                MaterializedBindingValue::Unavailable(diagnostic) => {
+                    NonRuntimeInputReadiness::InputUnavailable(diagnostic)
+                }
+                MaterializedBindingValue::Invalid(diagnostic) => {
+                    NonRuntimeInputReadiness::Invalid(diagnostic)
+                }
+            }
+        }
         WorkflowSchedulerNonRuntimeTaskTemplate::JsonFilter { .. } => {
             match materialized_binding_value(task, results, "json") {
                 MaterializedBindingValue::Ready(

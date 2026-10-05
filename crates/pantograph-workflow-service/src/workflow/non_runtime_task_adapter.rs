@@ -9,9 +9,9 @@ use super::task_graph_contracts::{
     WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskInputBinding,
 };
 use super::task_result_contracts::{
-    WorkflowSchedulerTaskResult, WorkflowSchedulerTaskResultOutput,
-    WorkflowSchedulerTaskResultStatus, WorkflowSchedulerTaskResultValue,
-    WORKFLOW_SCHEDULER_TASK_RESULT_SCHEMA_VERSION,
+    WorkflowSchedulerTaskMediaArtifactRef, WorkflowSchedulerTaskResult,
+    WorkflowSchedulerTaskResultOutput, WorkflowSchedulerTaskResultStatus,
+    WorkflowSchedulerTaskResultValue, WORKFLOW_SCHEDULER_TASK_RESULT_SCHEMA_VERSION,
 };
 
 const PORT_TEXT: &str = "text";
@@ -68,6 +68,35 @@ fn node_engine_inputs(
 ) -> Result<HashMap<String, Value>, WorkflowSchedulerNonRuntimeTaskAdapterError> {
     let mut inputs = HashMap::new();
     match template {
+        WorkflowSchedulerNonRuntimeTaskTemplate::ImageOutput => {
+            let binding = task
+                .input_bindings
+                .iter()
+                .find(|binding| binding.target_port_id == "image")
+                .ok_or_else(|| {
+                    WorkflowSchedulerNonRuntimeTaskAdapterError::MissingInputBinding {
+                        task_id: task.task_id.as_str().to_string(),
+                        target_port_id: "image".into(),
+                    }
+                })?;
+            let WorkflowSchedulerTaskResultValue::MediaArtifactRef(value) =
+                materialized_output(task, binding, materialized_results)?
+            else {
+                return Err(
+                    WorkflowSchedulerNonRuntimeTaskAdapterError::WrongMaterializedInputType {
+                        source_task_id: binding.source_task_id.as_str().to_string(),
+                        source_port_id: binding.source_port_id.clone(),
+                        expected: "typed media artifact reference",
+                    },
+                );
+            };
+            inputs.insert(
+                "image".into(),
+                serde_json::to_value(value).map_err(
+                    WorkflowSchedulerNonRuntimeTaskAdapterError::MediaArtifactSerialization,
+                )?,
+            );
+        }
         WorkflowSchedulerNonRuntimeTaskTemplate::JsonFilter { path } => {
             let binding = task
                 .input_bindings
@@ -123,6 +152,24 @@ fn scheduler_outputs(
     outputs: &HashMap<String, Value>,
 ) -> Result<Vec<WorkflowSchedulerTaskResultOutput>, WorkflowSchedulerNonRuntimeTaskAdapterError> {
     match template {
+        WorkflowSchedulerNonRuntimeTaskTemplate::ImageOutput => {
+            let value = outputs
+                .get("image")
+                .cloned()
+                .and_then(|value| {
+                    serde_json::from_value::<WorkflowSchedulerTaskMediaArtifactRef>(value).ok()
+                })
+                .ok_or_else(|| {
+                    WorkflowSchedulerNonRuntimeTaskAdapterError::InvalidNodeEngineOutput {
+                        port_id: "image".into(),
+                        expected: "media artifact reference",
+                    }
+                })?;
+            Ok(vec![WorkflowSchedulerTaskResultOutput {
+                port_id: "image".into(),
+                value: WorkflowSchedulerTaskResultValue::MediaArtifactRef(value),
+            }])
+        }
         WorkflowSchedulerNonRuntimeTaskTemplate::JsonFilter { .. } => {
             let value = outputs.get("value").cloned().ok_or_else(|| {
                 WorkflowSchedulerNonRuntimeTaskAdapterError::InvalidNodeEngineOutput {
@@ -322,6 +369,8 @@ pub(crate) enum WorkflowSchedulerNonRuntimeTaskAdapterError {
         port_id: String,
         expected: &'static str,
     },
+    #[error("media artifact reference serialization failed")]
+    MediaArtifactSerialization(#[source] serde_json::Error),
     #[error("node-engine single-task execution failed")]
     NodeEngine(NodeEngineSingleTaskError),
     #[error("scheduler task result contract validation failed: {0}")]
@@ -443,6 +492,69 @@ mod tests {
             result.outputs[0].value,
             WorkflowSchedulerTaskResultValue::String("ready text".to_string())
         );
+    }
+
+    #[tokio::test]
+    async fn image_output_adapter_preserves_typed_reference_and_rejects_untyped_inputs() {
+        let mut binding = text_binding("infer");
+        binding.source_port_id = "image".into();
+        binding.target_port_id = "image".into();
+        let image_output = task(
+            "out",
+            "image-output",
+            Some(WorkflowSchedulerNonRuntimeTaskTemplate::ImageOutput),
+            vec![binding],
+        );
+        for media_type in [None, Some("image/png".to_string())] {
+            let value = WorkflowSchedulerTaskResultValue::MediaArtifactRef(
+                WorkflowSchedulerTaskMediaArtifactRef {
+                    artifact_id: "image.result.001".into(),
+                    media_type,
+                },
+            );
+            let result = execute_non_runtime_scheduler_task(
+                &image_output,
+                &[completed_result("infer", "image", value.clone())],
+            )
+            .await
+            .unwrap();
+            assert_eq!(
+                result.outputs,
+                [WorkflowSchedulerTaskResultOutput {
+                    port_id: "image".into(),
+                    value,
+                }]
+            );
+        }
+        assert!(matches!(
+            execute_non_runtime_scheduler_task(&image_output, &[]).await,
+            Err(WorkflowSchedulerNonRuntimeTaskAdapterError::MissingMaterializedInput { .. })
+        ));
+        for value in [
+            WorkflowSchedulerTaskResultValue::String("artifact://image.result.001".into()),
+            WorkflowSchedulerTaskResultValue::Json(
+                serde_json::json!({"artifact_id": "image.result.001"}),
+            ),
+        ] {
+            assert!(matches!(
+                execute_non_runtime_scheduler_task(
+                    &image_output,
+                    &[completed_result("infer", "image", value)]
+                )
+                .await,
+                Err(WorkflowSchedulerNonRuntimeTaskAdapterError::WrongMaterializedInputType { .. })
+            ));
+        }
+        assert!(matches!(
+            scheduler_outputs(
+                &WorkflowSchedulerNonRuntimeTaskTemplate::ImageOutput,
+                &HashMap::from([(
+                    "image".into(),
+                    serde_json::json!({"artifact_id": "image.result.001", "path": "/tmp/raw"})
+                )])
+            ),
+            Err(WorkflowSchedulerNonRuntimeTaskAdapterError::InvalidNodeEngineOutput { .. })
+        ));
     }
 
     #[tokio::test]

@@ -935,7 +935,22 @@ async fn workflow_execution_session_ready_runtime_task_fails_closed_without_disp
 
 #[tokio::test]
 async fn workflow_execution_session_dispatches_ready_runtime_task_through_scheduler_selection() {
-    let host = Arc::new(RuntimeInferenceSessionHost::new());
+    let mut session_host = RuntimeInferenceSessionHost::new();
+    session_host.graph.nodes.push(GraphNode {
+        id: "image-output".into(),
+        node_type: "image-output".into(),
+        position: Position { x: 400.0, y: 0.0 },
+        data: serde_json::json!({}),
+    });
+    session_host.graph.edges.push(crate::GraphEdge {
+        id: "infer-to-output".into(),
+        source: "infer".into(),
+        source_handle: "image".into(),
+        target: "image-output".into(),
+        target_handle: "image".into(),
+    });
+    session_host.output_node_id = "image-output";
+    let host = Arc::new(session_host);
     let dependency_readiness_provider = DependencyEnvironmentReadinessSnapshotProvider::new();
     let dependency_readiness_work_queue = std::sync::Arc::new(DependencyReadinessWorkQueue::new());
     let source_refresher = Arc::new(RecordingRuntimeDispatchSourceRefresher::default());
@@ -964,7 +979,7 @@ async fn workflow_execution_session_dispatches_ready_runtime_task_through_schedu
     );
     let workflow_id = "wf-runtime-selected-dispatch";
     let workflow_semantic_version = "1.2.3";
-    let graph = runtime_inference_session_graph();
+    let graph = host.graph.clone();
     let version = service
         .resolve_workflow_graph_version(workflow_id, workflow_semantic_version, &graph)
         .expect("resolve workflow version");
@@ -1019,7 +1034,7 @@ async fn workflow_execution_session_dispatches_ready_runtime_task_through_schedu
             value: serde_json::json!("paint a red cube"),
         }],
         output_targets: Some(vec![WorkflowOutputTarget {
-            node_id: "infer".to_string(),
+            node_id: "image-output".to_string(),
             port_id: "image".to_string(),
         }]),
         override_selection: None,
@@ -1035,7 +1050,7 @@ async fn workflow_execution_session_dispatches_ready_runtime_task_through_schedu
             value: serde_json::json!("paint a blue cube"),
         }],
         output_targets: Some(vec![WorkflowOutputTarget {
-            node_id: "infer".to_string(),
+            node_id: "image-output".to_string(),
             port_id: "image".to_string(),
         }]),
         override_selection: None,
@@ -1052,7 +1067,7 @@ async fn workflow_execution_session_dispatches_ready_runtime_task_through_schedu
 
     for response in [&first_response, &second_response] {
         assert_eq!(response.outputs.len(), 1);
-        assert_eq!(response.outputs[0].node_id, "infer");
+        assert_eq!(response.outputs[0].node_id, "image-output");
         assert_eq!(response.outputs[0].port_id, "image");
         assert_eq!(
             response.outputs[0].value,
@@ -4236,6 +4251,8 @@ struct RuntimeInferenceSessionHost {
     inner: MockWorkflowHost,
     runtime_load_attempts: Arc<AtomicUsize>,
     run_attempts: Arc<AtomicUsize>,
+    graph: WorkflowGraph,
+    output_node_id: &'static str,
 }
 
 impl RuntimeInferenceSessionHost {
@@ -4244,6 +4261,8 @@ impl RuntimeInferenceSessionHost {
             inner: MockWorkflowHost::new(8, 1024),
             runtime_load_attempts: Arc::new(AtomicUsize::new(0)),
             run_attempts: Arc::new(AtomicUsize::new(0)),
+            graph: runtime_inference_session_graph(),
+            output_node_id: "infer",
         }
     }
 }
@@ -4839,7 +4858,7 @@ impl WorkflowHost for RuntimeInferenceSessionHost {
         &self,
         _workflow_id: &str,
     ) -> Result<WorkflowGraph, WorkflowServiceError> {
-        Ok(runtime_inference_session_graph())
+        Ok(self.graph.clone())
     }
 
     async fn workflow_capabilities(
@@ -4869,8 +4888,13 @@ impl WorkflowHost for RuntimeInferenceSessionHost {
                 }],
             }],
             outputs: vec![WorkflowIoNode {
-                node_id: "infer".to_string(),
-                node_type: "llm-inference".to_string(),
+                node_id: self.output_node_id.to_string(),
+                node_type: if self.output_node_id == "infer" {
+                    "llm-inference"
+                } else {
+                    "image-output"
+                }
+                .to_string(),
                 name: None,
                 description: None,
                 ports: vec![WorkflowIoPort {

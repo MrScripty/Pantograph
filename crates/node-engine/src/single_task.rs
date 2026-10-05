@@ -252,6 +252,20 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn single_task_image_output_preserves_artifact_reference_exactly() {
+        let image =
+            serde_json::json!({"artifact_id": "image.result.001", "media_type": "image/png"});
+        let response = execute_core_task_once(request(
+            "image-out",
+            "image-output",
+            HashMap::from([("image".into(), image.clone())]),
+        ))
+        .await
+        .unwrap();
+        assert_eq!(response.outputs().get("image"), Some(&image));
+    }
+
+    #[tokio::test]
     async fn single_task_json_filter_preserves_nested_values_and_missing_status() {
         let document = serde_json::json!({"items": [{"prompt": "  red cube\n", "seed": u64::MAX}]});
         for (path, value, found) in [

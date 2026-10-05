@@ -482,6 +482,64 @@ fn scheduler_task_graph_reports_blocked_descriptor_projection() {
 }
 
 #[test]
+fn scheduler_image_output_retains_runtime_dependency_and_diagnoses_missing_image() {
+    let mut graph = graph_with_inline_inference_ref();
+    let task_graph = workflow_scheduler_task_graph_with_inference_projections(
+        &workflow_id(),
+        &workflow_run_id(),
+        &graph,
+        &inference_projection(),
+    )
+    .unwrap();
+    let output = task_graph
+        .tasks
+        .iter()
+        .find(|task| task.node_id.as_str() == "image-output")
+        .unwrap();
+    assert_eq!(
+        output.execution_class,
+        WorkflowSchedulerTaskExecutionClass::NonRuntimeNodeEngine
+    );
+    assert_eq!(
+        output.non_runtime_task_template,
+        Some(WorkflowSchedulerNonRuntimeTaskTemplate::ImageOutput)
+    );
+    assert_eq!(
+        output
+            .dependency_task_ids
+            .iter()
+            .map(|id| id.as_str())
+            .collect::<Vec<_>>(),
+        ["infer"]
+    );
+    assert_eq!(output.input_bindings[0].source_port_id, "image");
+    assert_eq!(
+        serde_json::from_str::<crate::workflow::WorkflowSchedulerTaskGraph>(
+            &serde_json::to_string(&task_graph).unwrap()
+        )
+        .unwrap(),
+        task_graph
+    );
+
+    graph.edges.retain(|edge| edge.target != "image-output");
+    let task_graph = workflow_scheduler_task_graph_with_inference_projections(
+        &workflow_id(),
+        &workflow_run_id(),
+        &graph,
+        &inference_projection(),
+    )
+    .unwrap();
+    let output = task_graph
+        .tasks
+        .iter()
+        .find(|task| task.node_id.as_str() == "image-output")
+        .unwrap();
+    assert!(output.non_runtime_task_template.is_none());
+    assert!(output.diagnostics.iter().any(|diagnostic| diagnostic.code
+        == WorkflowSchedulerTaskProjectionDiagnosticCode::MissingNonRuntimeTemplateValue));
+}
+
+#[test]
 fn scheduler_task_graph_classifies_materialization_and_unsupported_tasks() {
     let mut graph = graph_with_inline_inference_ref();
     graph.nodes.push(GraphNode {
@@ -492,7 +550,7 @@ fn scheduler_task_graph_classifies_materialization_and_unsupported_tasks() {
     });
     graph.nodes.push(GraphNode {
         id: "settings".to_string(),
-        node_type: "image-output".to_string(),
+        node_type: "audio-output".to_string(),
         position: Position { x: 100.0, y: 200.0 },
         data: json!({}),
     });
