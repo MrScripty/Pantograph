@@ -64,6 +64,11 @@ pub(crate) fn materialize_external_workflow_inputs(
         };
 
         let value = match (template, input.port_id.as_str()) {
+            (WorkflowSchedulerSourceInputTemplate::Selection { port_id }, PORT_VALUE)
+                if port_id == PORT_VALUE =>
+            {
+                WorkflowSchedulerTaskResultValue::from_node_json(input.value.clone())
+            }
             (WorkflowSchedulerSourceInputTemplate::Text { port_id }, PORT_TEXT)
                 if port_id == PORT_TEXT =>
             {
@@ -229,6 +234,60 @@ mod tests {
             &graph_with_external_inputs(),
         )
         .expect("scheduler task graph")
+    }
+
+    #[test]
+    fn selection_source_retains_structured_and_scalar_values_without_coercion() {
+        let mut graph = graph_with_external_inputs();
+        graph.nodes[2].node_type = "selection-input".into();
+        let graph =
+            workflow_scheduler_task_graph(&workflow_id(), &workflow_run_id(), &graph).unwrap();
+        for (value, expected) in [
+            (
+                json!({"items": ["exact", 4]}),
+                WorkflowSchedulerTaskResultValue::Json(json!({"items": ["exact", 4]})),
+            ),
+            (
+                json!("  exact\n"),
+                WorkflowSchedulerTaskResultValue::String("  exact\n".into()),
+            ),
+            (json!(true), WorkflowSchedulerTaskResultValue::Bool(true)),
+            (json!(-2), WorkflowSchedulerTaskResultValue::I64(-2)),
+            (
+                json!(u64::MAX),
+                WorkflowSchedulerTaskResultValue::U64(u64::MAX),
+            ),
+            (
+                json!(0.5),
+                WorkflowSchedulerTaskResultValue::Json(json!(0.5)),
+            ),
+            (
+                json!(null),
+                WorkflowSchedulerTaskResultValue::Json(json!(null)),
+            ),
+        ] {
+            let results = materialize_external_workflow_inputs(
+                &graph,
+                &[WorkflowPortBinding {
+                    node_id: "limit".into(),
+                    port_id: "value".into(),
+                    value,
+                }],
+            )
+            .unwrap();
+            assert_eq!(results[0].outputs[0].value, expected);
+        }
+        assert!(matches!(
+            materialize_external_workflow_inputs(
+                &graph,
+                &[WorkflowPortBinding {
+                    node_id: "limit".into(),
+                    port_id: "value".into(),
+                    value: json!({"data": "x".repeat(65536)}),
+                }]
+            ),
+            Err(WorkflowExternalInputMaterializationError::InvalidTaskResult(_))
+        ));
     }
 
     #[test]

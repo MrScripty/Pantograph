@@ -935,11 +935,29 @@ async fn workflow_execution_session_ready_runtime_task_fails_closed_without_disp
 
 #[tokio::test]
 async fn workflow_execution_session_dispatches_ready_runtime_task_through_scheduler_selection() {
-    let host = Arc::new(RuntimeInferenceSessionHost::new());
+    let mut session_host = RuntimeInferenceSessionHost::new();
+    session_host.graph.nodes.push(GraphNode {
+        id: "image-output".into(),
+        node_type: "image-output".into(),
+        position: Position { x: 400.0, y: 0.0 },
+        data: serde_json::json!({}),
+    });
+    session_host.graph.edges.push(crate::GraphEdge {
+        id: "infer-to-output".into(),
+        source: "infer".into(),
+        source_handle: "image".into(),
+        target: "image-output".into(),
+        target_handle: "image".into(),
+    });
+    session_host.output_node_id = "image-output";
+    let host = Arc::new(session_host);
     let dependency_readiness_provider = DependencyEnvironmentReadinessSnapshotProvider::new();
     let dependency_readiness_work_queue = std::sync::Arc::new(DependencyReadinessWorkQueue::new());
     let source_refresher = Arc::new(RecordingRuntimeDispatchSourceRefresher::default());
-    let runtime_host_batch_port = Arc::new(CompletingRuntimeHostBatchPort::default());
+    let runtime_host_batch_port = Arc::new(CompletingRuntimeHostBatchPort {
+        per_run_artifacts: true,
+        ..CompletingRuntimeHostBatchPort::default()
+    });
     let reservation_lifecycle_port = Arc::new(RecordingReservationLifecyclePort::default());
     let runtime = WorkflowSessionExecutionRuntime::new(
         WorkflowService::with_ephemeral_attribution_store()
@@ -964,7 +982,7 @@ async fn workflow_execution_session_dispatches_ready_runtime_task_through_schedu
     );
     let workflow_id = "wf-runtime-selected-dispatch";
     let workflow_semantic_version = "1.2.3";
-    let graph = runtime_inference_session_graph();
+    let graph = host.graph.clone();
     let version = service
         .resolve_workflow_graph_version(workflow_id, workflow_semantic_version, &graph)
         .expect("resolve workflow version");
@@ -1019,7 +1037,7 @@ async fn workflow_execution_session_dispatches_ready_runtime_task_through_schedu
             value: serde_json::json!("paint a red cube"),
         }],
         output_targets: Some(vec![WorkflowOutputTarget {
-            node_id: "infer".to_string(),
+            node_id: "image-output".to_string(),
             port_id: "image".to_string(),
         }]),
         override_selection: None,
@@ -1035,7 +1053,7 @@ async fn workflow_execution_session_dispatches_ready_runtime_task_through_schedu
             value: serde_json::json!("paint a blue cube"),
         }],
         output_targets: Some(vec![WorkflowOutputTarget {
-            node_id: "infer".to_string(),
+            node_id: "image-output".to_string(),
             port_id: "image".to_string(),
         }]),
         override_selection: None,
@@ -1050,14 +1068,19 @@ async fn workflow_execution_session_dispatches_ready_runtime_task_through_schedu
     let second_response =
         second_response.expect("second compatible runtime task should complete through batch");
 
+    assert_ne!(
+        first_response.outputs[0].value,
+        second_response.outputs[0].value
+    );
+
     for response in [&first_response, &second_response] {
         assert_eq!(response.outputs.len(), 1);
-        assert_eq!(response.outputs[0].node_id, "infer");
+        assert_eq!(response.outputs[0].node_id, "image-output");
         assert_eq!(response.outputs[0].port_id, "image");
         assert_eq!(
             response.outputs[0].value,
             serde_json::json!({
-                "artifact_id": "runtime-output-image",
+                "artifact_id": format!("runtime-output-image.{}", response.workflow_run_id),
                 "media_type": "image_png"
             })
         );
@@ -3885,6 +3908,242 @@ async fn keep_alive_session_loads_runtime_with_keep_alive_retention_hint() {
 }
 
 #[tokio::test]
+async fn scheduler_session_extracts_json_prompt_into_downstream_text_output() {
+    let directory = tempfile::tempdir().unwrap();
+    let graph = WorkflowGraph {
+        nodes: vec![
+            GraphNode {
+                id: "source".into(),
+                node_type: "selection-input".into(),
+                position: Position { x: 0.0, y: 0.0 },
+                data: serde_json::json!({}),
+            },
+            GraphNode {
+                id: "filter".into(),
+                node_type: "json-filter".into(),
+                position: Position { x: 0.0, y: 0.0 },
+                data: serde_json::json!({"path": "items[0].prompt"}),
+            },
+            GraphNode {
+                id: "out".into(),
+                node_type: "text-output".into(),
+                position: Position { x: 0.0, y: 0.0 },
+                data: serde_json::json!({}),
+            },
+        ],
+        edges: vec![
+            crate::GraphEdge {
+                id: "source-filter".into(),
+                source: "source".into(),
+                target: "filter".into(),
+                source_handle: "value".into(),
+                target_handle: "json".into(),
+            },
+            crate::GraphEdge {
+                id: "filter-out".into(),
+                source: "filter".into(),
+                target: "out".into(),
+                source_handle: "value".into(),
+                target_handle: "text".into(),
+            },
+        ],
+        derived_graph: None,
+    };
+    fs::write(
+        directory.path().join("wf-json-filter.json"),
+        serde_json::json!({
+            "metadata": {"name": "Scheduler JSON extraction"}, "graph": graph,
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let host = DefaultCapabilitiesHost {
+        workflow_root: directory.path().to_owned(),
+    };
+    let service = WorkflowService::with_max_sessions(1);
+    publish_non_runtime_execution_snapshot(&service, "wf-json-filter", "1.0.0", graph).await;
+    let session = service
+        .create_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionCreateRequest {
+                workflow_id: "wf-json-filter".into(),
+                usage_profile: None,
+                keep_alive: false,
+            },
+        )
+        .await
+        .unwrap();
+    let result = service
+        .run_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionRunRequest {
+                session_id: session.session_id,
+                workflow_semantic_version: "1.0.0".into(),
+                inputs: vec![WorkflowPortBinding {
+                    node_id: "source".into(),
+                    port_id: "value".into(),
+                    value: serde_json::json!({"items": [{"prompt": "  red cube\n"}]}),
+                }],
+                output_targets: Some(vec![WorkflowOutputTarget {
+                    node_id: "out".into(),
+                    port_id: "text".into(),
+                }]),
+                override_selection: None,
+                timeout_ms: None,
+                priority: None,
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        result.outputs,
+        [WorkflowPortBinding {
+            node_id: "out".into(),
+            port_id: "text".into(),
+            value: serde_json::json!("  red cube\n"),
+        }]
+    );
+}
+
+#[tokio::test]
+async fn scheduler_session_runs_text_fan_in_and_downstream_output_without_a_runtime() {
+    struct MergeHost {
+        root: PathBuf,
+        loads: AtomicUsize,
+    }
+    #[async_trait::async_trait]
+    impl WorkflowHost for MergeHost {
+        fn workflow_roots(&self) -> Vec<PathBuf> {
+            vec![self.root.clone()]
+        }
+        async fn load_session_runtime(
+            &self,
+            _session_id: &str,
+            _workflow_id: &str,
+            _usage_profile: Option<&str>,
+            _retention_hint: WorkflowExecutionSessionRetentionHint,
+        ) -> Result<(), WorkflowServiceError> {
+            self.loads.fetch_add(1, Ordering::SeqCst);
+            panic!("text fan-in must not load a runtime");
+        }
+        async fn run_workflow(
+            &self,
+            _workflow_id: &str,
+            _inputs: &[WorkflowPortBinding],
+            _output_targets: Option<&[WorkflowOutputTarget]>,
+            _run_options: WorkflowRunOptions,
+            _run_handle: WorkflowRunHandle,
+        ) -> Result<Vec<WorkflowPortBinding>, WorkflowServiceError> {
+            panic!("scheduler must execute its typed tasks through node-engine");
+        }
+    }
+    let directory = tempfile::tempdir().unwrap();
+    let graph = WorkflowGraph {
+        nodes: ["b", "a", "join", "out"]
+            .map(|id| GraphNode {
+                id: id.into(),
+                node_type: match id {
+                    "join" => "merge",
+                    "out" => "text-output",
+                    _ => "text-input",
+                }
+                .into(),
+                position: Position { x: 0.0, y: 0.0 },
+                data: serde_json::json!({}),
+            })
+            .to_vec(),
+        edges: vec![
+            crate::GraphEdge {
+                id: "b-join".into(),
+                source: "b".into(),
+                target: "join".into(),
+                source_handle: "text".into(),
+                target_handle: "inputs".into(),
+            },
+            crate::GraphEdge {
+                id: "a-join".into(),
+                source: "a".into(),
+                target: "join".into(),
+                source_handle: "text".into(),
+                target_handle: "inputs".into(),
+            },
+            crate::GraphEdge {
+                id: "join-out".into(),
+                source: "join".into(),
+                target: "out".into(),
+                source_handle: "merged".into(),
+                target_handle: "text".into(),
+            },
+        ],
+        derived_graph: None,
+    };
+    fs::write(
+        directory.path().join("wf-fan-in.json"),
+        serde_json::json!({
+            "metadata": { "name": "Scheduler text fan-in" }, "graph": graph,
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let host = MergeHost {
+        root: directory.path().to_owned(),
+        loads: AtomicUsize::new(0),
+    };
+    assert!(host.runtime_capabilities().await.unwrap().is_empty());
+    let service = WorkflowService::with_max_sessions(1);
+    publish_non_runtime_execution_snapshot(&service, "wf-fan-in", "1.0.0", graph).await;
+    let session = service
+        .create_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionCreateRequest {
+                workflow_id: "wf-fan-in".into(),
+                usage_profile: None,
+                keep_alive: false,
+            },
+        )
+        .await
+        .unwrap();
+    let result = service
+        .run_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionRunRequest {
+                session_id: session.session_id,
+                workflow_semantic_version: "1.0.0".into(),
+                inputs: vec![
+                    WorkflowPortBinding {
+                        node_id: "b".into(),
+                        port_id: "text".into(),
+                        value: serde_json::json!("second"),
+                    },
+                    WorkflowPortBinding {
+                        node_id: "a".into(),
+                        port_id: "text".into(),
+                        value: serde_json::json!("  first "),
+                    },
+                ],
+                output_targets: Some(vec![WorkflowOutputTarget {
+                    node_id: "out".into(),
+                    port_id: "text".into(),
+                }]),
+                override_selection: None,
+                timeout_ms: None,
+                priority: None,
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        result.outputs,
+        [WorkflowPortBinding {
+            node_id: "out".into(),
+            port_id: "text".into(),
+            value: serde_json::json!("  first \nsecond"),
+        }]
+    );
+    assert_eq!(host.loads.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
 async fn one_shot_non_runtime_session_run_does_not_load_session_runtime() {
     let retention_hints = Arc::new(Mutex::new(Vec::new()));
     let host = RecordingRuntimeHost::new(retention_hints.clone());
@@ -4000,6 +4259,8 @@ struct RuntimeInferenceSessionHost {
     inner: MockWorkflowHost,
     runtime_load_attempts: Arc<AtomicUsize>,
     run_attempts: Arc<AtomicUsize>,
+    graph: WorkflowGraph,
+    output_node_id: &'static str,
 }
 
 impl RuntimeInferenceSessionHost {
@@ -4008,6 +4269,8 @@ impl RuntimeInferenceSessionHost {
             inner: MockWorkflowHost::new(8, 1024),
             runtime_load_attempts: Arc::new(AtomicUsize::new(0)),
             run_attempts: Arc::new(AtomicUsize::new(0)),
+            graph: runtime_inference_session_graph(),
+            output_node_id: "infer",
         }
     }
 }
@@ -4254,6 +4517,7 @@ impl RuntimeHostExecutionPort for CompletingRuntimeHostPort {
 #[derive(Default)]
 struct CompletingRuntimeHostBatchPort {
     requests: Mutex<Vec<RuntimeHostBatchExecutionRequest>>,
+    per_run_artifacts: bool,
 }
 
 impl CompletingRuntimeHostBatchPort {
@@ -4283,27 +4547,35 @@ impl RuntimeHostBatchExecutionPort for CompletingRuntimeHostBatchPort {
             members: request
                 .members
                 .into_iter()
-                .map(|member| RuntimeHostBatchExecutionMemberResponse {
-                    execution_request_id: member.execution_request_id,
-                    assignment_id: member.assignment_id,
-                    workflow_id: member.handoff.workflow_id,
-                    workflow_run_id: member.handoff.workflow_run_id,
-                    node_id: member.handoff.node_id,
-                    task_id: member.handoff.task_id,
-                    state: RuntimeHostBatchExecutionMemberState::Completed,
-                    retry_disposition: RuntimeHostBatchMemberRetryDisposition::NotRetryable,
-                    reservation_disposition: RuntimeHostBatchMemberReservationDisposition::Released,
-                    outputs: vec![RuntimeHostExecutionOutput {
-                        port_id: "image".to_string(),
-                        value: RuntimeHostExecutionOutputValue::MediaArtifactRef(
-                            RuntimeHostExecutionMediaArtifactRef {
-                                artifact_id: "runtime-output-image".to_string(),
-                                media_type: Some("image_png".to_string()),
-                            },
-                        ),
-                    }],
-                    diagnostics: Vec::new(),
-                    terminal_metadata: None,
+                .map(|member| {
+                    let artifact_id = if self.per_run_artifacts {
+                        format!("runtime-output-image.{}", member.handoff.workflow_run_id)
+                    } else {
+                        "runtime-output-image".to_string()
+                    };
+                    RuntimeHostBatchExecutionMemberResponse {
+                        execution_request_id: member.execution_request_id,
+                        assignment_id: member.assignment_id,
+                        workflow_id: member.handoff.workflow_id,
+                        workflow_run_id: member.handoff.workflow_run_id,
+                        node_id: member.handoff.node_id,
+                        task_id: member.handoff.task_id,
+                        state: RuntimeHostBatchExecutionMemberState::Completed,
+                        retry_disposition: RuntimeHostBatchMemberRetryDisposition::NotRetryable,
+                        reservation_disposition:
+                            RuntimeHostBatchMemberReservationDisposition::Released,
+                        outputs: vec![RuntimeHostExecutionOutput {
+                            port_id: "image".to_string(),
+                            value: RuntimeHostExecutionOutputValue::MediaArtifactRef(
+                                RuntimeHostExecutionMediaArtifactRef {
+                                    artifact_id,
+                                    media_type: Some("image_png".to_string()),
+                                },
+                            ),
+                        }],
+                        diagnostics: Vec::new(),
+                        terminal_metadata: None,
+                    }
                 })
                 .collect(),
             diagnostics: Vec::new(),
@@ -4603,7 +4875,7 @@ impl WorkflowHost for RuntimeInferenceSessionHost {
         &self,
         _workflow_id: &str,
     ) -> Result<WorkflowGraph, WorkflowServiceError> {
-        Ok(runtime_inference_session_graph())
+        Ok(self.graph.clone())
     }
 
     async fn workflow_capabilities(
@@ -4633,8 +4905,13 @@ impl WorkflowHost for RuntimeInferenceSessionHost {
                 }],
             }],
             outputs: vec![WorkflowIoNode {
-                node_id: "infer".to_string(),
-                node_type: "llm-inference".to_string(),
+                node_id: self.output_node_id.to_string(),
+                node_type: if self.output_node_id == "infer" {
+                    "llm-inference"
+                } else {
+                    "image-output"
+                }
+                .to_string(),
                 name: None,
                 description: None,
                 ports: vec![WorkflowIoPort {
