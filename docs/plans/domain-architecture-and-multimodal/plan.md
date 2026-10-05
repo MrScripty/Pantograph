@@ -14,9 +14,12 @@ and over-capacity RAM incorrectly blocked unrelated VRAM resident publication.
 The [narrow review repair](reports/2026-10-05-host-ram-ceiling-review-repairs.md)
 distinguishes verified real roots from namespace-visible roots and limits resident
 validation to charged pools. Its native source remains unavailable in this
-container's unresolved `/..` mount layout. Exact-model service timing work is
-preserved separately and resumes after this repair checkpoint; ranking remains
-separate until timing identity and provenance contracts are qualified.
+container's unresolved `/..` mount layout. The independent [exact runtime service timing slice](reports/2026-10-05-exact-runtime-service-timing.md)
+adds opt-in actual gateway/host observations with strict identity and provenance,
+deterministic lifecycle tests, and disabled-by-default collection. Native owners
+without immutable content and loaded implementation/configuration/device facts
+remain unknown; controlled tests do not qualify real model latency. Ranking and
+calibration remain separate until comparable native owner evidence is available.
 
 **Acceptance status:** `blocked`
 

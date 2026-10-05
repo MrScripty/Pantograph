@@ -38,6 +38,8 @@ fn owned_cpu_candidates_require_available_matching_owner_facts_and_never_guess_g
     assert!(cpu_device_candidates(vec![info]).is_empty());
 }
 use std::path::PathBuf;
+#[path = "gateway_tests/service_timing.rs"]
+mod service_timing;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};

@@ -1535,25 +1535,32 @@ mod tests {
     #[cfg(feature = "backend-pytorch")]
     #[tokio::test]
     async fn unconstrained_owned_cpu_candidate_reaches_selected_text_host_with_full_peak_lease() {
-        exercise_owned_cpu_selected_text_host(false, false).await;
+        exercise_owned_cpu_selected_text_host(false, false, false).await;
     }
 
     #[cfg(feature = "backend-pytorch")]
     #[tokio::test]
     async fn host_ram_ceiling_gates_actual_cpu_selection_and_preserves_execution_custody() {
-        exercise_owned_cpu_selected_text_host(true, false).await;
+        exercise_owned_cpu_selected_text_host(true, false, false).await;
     }
 
     #[cfg(feature = "backend-pytorch")]
     #[tokio::test]
     async fn host_ram_shrink_does_not_starve_unrelated_vram_owner_publication() {
-        exercise_owned_cpu_selected_text_host(true, true).await;
+        exercise_owned_cpu_selected_text_host(true, true, false).await;
+    }
+
+    #[cfg(feature = "backend-pytorch")]
+    #[tokio::test]
+    async fn service_timing_capture_reaches_actual_selected_text_host_with_peak_custody() {
+        exercise_owned_cpu_selected_text_host(false, false, true).await;
     }
 
     #[cfg(feature = "backend-pytorch")]
     async fn exercise_owned_cpu_selected_text_host(
         clamp_capacity: bool,
         unrelated_vram_owner: bool,
+        record_timing: bool,
     ) {
         use crate::pumas_dispatch_package_facts::{
             PumasDispatchPackageFactsBridgeOutcome, PumasDispatchPackageFactsProjection,
@@ -1603,13 +1610,39 @@ mod tests {
         let validated = ValidatedRuntimeHostExecutionRequest::try_from(request.clone()).unwrap();
         let package = text_package_facts(&validated);
         let directory = tempfile::tempdir().unwrap();
-        let target = text_load_target(&package, &directory);
-        let backend = TextBackend::default();
+        let mut target = text_load_target(&package, &directory);
+        let mut backend = TextBackend::default();
+        if record_timing {
+            target.content_fingerprint = Some("controlled-host-content-v1".into());
+            backend.timing_facts = Some(inference::RuntimeServiceTimingOwnerFacts {
+                implementation_fingerprint: "controlled-host-implementation-v1".into(),
+                effective_configuration_fingerprint: "controlled-host-config-v1".into(),
+                physical_device_fingerprint: "controlled-host-device-v1".into(),
+                device_id: "cpu".parse().unwrap(),
+            });
+        }
+        let timing_rows = Arc::new(Mutex::new(Vec::new()));
+        struct HostTimingRecorder(Arc<Mutex<Vec<inference::RuntimeServiceTimingAttempt>>>);
+        impl inference::RuntimeServiceTimingRecorder for HostTimingRecorder {
+            fn try_record(&self, attempt: inference::RuntimeServiceTimingAttempt) -> bool {
+                let Ok(mut rows) = self.0.try_lock() else {
+                    return false;
+                };
+                if rows.len() == 4 {
+                    return false;
+                }
+                rows.push(attempt);
+                true
+            }
+        }
         let calls = backend.calls.clone();
-        let gateway = Arc::new(inference::InferenceGateway::with_backend(
-            Box::new(backend),
-            "PyTorch",
-        ));
+        let mut gateway = inference::InferenceGateway::with_backend(Box::new(backend), "PyTorch");
+        if record_timing {
+            gateway = gateway.with_runtime_service_timing_recorder(Arc::new(HostTimingRecorder(
+                timing_rows.clone(),
+            )));
+        }
+        let gateway = Arc::new(gateway);
         let registry = Arc::new(RuntimeRegistry::new());
         registry.register_runtime(
             RuntimeRegistration::new("pytorch", "PyTorch")
@@ -1820,6 +1853,30 @@ mod tests {
             1,
             "execution cannot silently drop provisional peak coverage"
         );
+        if record_timing {
+            let rows = timing_rows.lock().unwrap();
+            assert_eq!(rows.len(), 1);
+            let inference::RuntimeServiceTimingIdentity::Exact { profile } = &rows[0].identity
+            else {
+                panic!("{:?}", rows[0].identity);
+            };
+            assert_eq!(
+                rows[0].outcome,
+                inference::RuntimeServiceTimingOutcome::Completed
+            );
+            for phase in [
+                inference::RuntimeServiceTimingPhase::GatewayCustodyWait,
+                inference::RuntimeServiceTimingPhase::SelectedModelLoad,
+                inference::RuntimeServiceTimingPhase::TextExecution,
+                inference::RuntimeServiceTimingPhase::WorkerCleanup,
+            ] {
+                assert!(rows[0].observed_completed_ns(profile, phase).is_some());
+            }
+            assert_eq!(
+                registry.snapshot().runtimes[0].active_reservation_claims[0].claims[0].bytes,
+                PEAK_BYTES
+            );
+        }
         if clamp_capacity {
             capacity.0.store(1, std::sync::atomic::Ordering::SeqCst);
             if unrelated_vram_owner {
@@ -2055,10 +2112,16 @@ mod tests {
         requests: Arc<Mutex<Vec<serde_json::Value>>>,
         cancel: Option<Arc<std::sync::atomic::AtomicBool>>,
         fail_completion: bool,
+        timing_facts: Option<inference::RuntimeServiceTimingOwnerFacts>,
     }
 
     #[async_trait]
     impl InferenceBackend for TextBackend {
+        fn runtime_service_timing_owner_facts(
+            &self,
+        ) -> Option<inference::RuntimeServiceTimingOwnerFacts> {
+            self.timing_facts.clone()
+        }
         fn name(&self) -> &'static str {
             "PyTorch"
         }

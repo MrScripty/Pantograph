@@ -207,6 +207,8 @@ pub struct InferenceGateway {
     pytorch_ever_owned: Arc<AtomicBool>,
     llamacpp_release_confirmed: Arc<AtomicBool>,
     llamacpp_ever_owned: Arc<AtomicBool>,
+    /// Disabled by default; no phase clocks, identity hashing or recording work.
+    service_timing: Option<crate::service_timing::ServiceTimingInstrumentation>,
 }
 
 struct RuntimeWarmupStartContext<'a> {
@@ -306,6 +308,7 @@ impl InferenceGateway {
             pytorch_ever_owned: Arc::new(AtomicBool::new(false)),
             llamacpp_release_confirmed: Arc::new(AtomicBool::new(true)),
             llamacpp_ever_owned: Arc::new(AtomicBool::new(false)),
+            service_timing: None,
         }
     }
 
@@ -334,7 +337,21 @@ impl InferenceGateway {
             pytorch_ever_owned: Arc::new(AtomicBool::new(false)),
             llamacpp_release_confirmed: Arc::new(AtomicBool::new(false)),
             llamacpp_ever_owned: Arc::new(AtomicBool::new(false)),
+            service_timing: None,
         }
+    }
+
+    /// Opt into bounded selected-text phase observations. The backend and target
+    /// owners must supply exact facts before samples have a comparable identity.
+    #[must_use]
+    pub fn with_runtime_service_timing_recorder(
+        mut self,
+        recorder: Arc<dyn crate::RuntimeServiceTimingRecorder>,
+    ) -> Self {
+        self.service_timing = Some(crate::service_timing::ServiceTimingInstrumentation::new(
+            recorder,
+        ));
+        self
     }
 
     /// Set the process spawner
@@ -1315,6 +1332,41 @@ impl InferenceGateway {
         backend_decision: crate::BackendExecutionDecision,
         cancellation: InferenceExecutionCancellationHandle,
     ) -> Result<InferenceExecutionResult, GatewayError> {
+        let mut timing = self.service_timing.as_ref().map(|instrumentation| {
+            crate::service_timing::SelectedTextServiceTimingAttempt::new(
+                instrumentation,
+                &self.resident_source_id,
+                &request,
+                &artifact_load_target,
+                &backend_decision,
+            )
+        });
+        let result = self
+            .execute_selected_text_inner(
+                request,
+                artifact_load_target,
+                backend_decision,
+                cancellation,
+                timing.as_mut(),
+            )
+            .await;
+        if let Some(timing) = timing.as_mut() {
+            timing.finish(result.is_ok());
+        }
+        result
+    }
+
+    async fn execute_selected_text_inner(
+        &self,
+        request: InferenceExecutionRequest,
+        artifact_load_target: crate::PumasArtifactLoadTarget,
+        backend_decision: crate::BackendExecutionDecision,
+        cancellation: InferenceExecutionCancellationHandle,
+        mut timing: Option<&mut crate::service_timing::SelectedTextServiceTimingAttempt<'_>>,
+    ) -> Result<InferenceExecutionResult, GatewayError> {
+        use pantograph_timing_contracts::{
+            RuntimeServiceTimingOutcome as Outcome, RuntimeServiceTimingPhase as Phase,
+        };
         crate::selected_text_execution::SelectedTextLoad::validate(
             &request,
             &artifact_load_target,
@@ -1324,8 +1376,14 @@ impl InferenceGateway {
         let option_diagnostics = typed_request_option_diagnostics(&request, Some("pytorch"));
         let request_json = typed_text_generation_stream_request_json(request.clone())?;
         reject_cancelled_execution_handle("selected text", &cancellation)?;
+        if let Some(timing) = timing.as_deref_mut() {
+            timing.begin(Phase::GatewayCustodyWait);
+        }
         self.embedding_replacement.drain().await?;
         let mut backend = self.backend.write().await;
+        if let Some(timing) = timing.as_deref_mut() {
+            timing.end(Outcome::Completed);
+        }
         reject_cancelled_execution_handle("selected text", &cancellation)?;
         if canonical_backend_key(backend.name()) != "pytorch" {
             let replacement = self.registry.create("pytorch")?;
@@ -1345,9 +1403,19 @@ impl InferenceGateway {
         self.pytorch_ever_owned.store(true, Ordering::Relaxed);
         self.pytorch_release_confirmed
             .store(false, Ordering::Relaxed);
+        if let Some(timing) = timing.as_deref_mut() {
+            timing.begin(Phase::SelectedModelLoad);
+        }
         let outcome = backend
             .load_selected_text(&request, &artifact_load_target, &backend_decision)
             .await;
+        if let Some(timing) = timing.as_deref_mut() {
+            timing.end(if outcome.is_ok() {
+                Outcome::Completed
+            } else {
+                Outcome::Failed
+            });
+        }
         if let Err(error) = outcome {
             let ready = backend.is_ready();
             if !ready {
@@ -1387,7 +1455,21 @@ impl InferenceGateway {
             active: backend.is_ready(),
             ..Default::default()
         };
+        if let Some(timing) = timing.as_deref_mut() {
+            let lifecycle = self.runtime_lifecycle.read().await;
+            timing.bind_owner(
+                if lifecycle.active {
+                    lifecycle.runtime_instance_id.as_deref()
+                } else {
+                    None
+                },
+                backend.runtime_service_timing_owner_facts(),
+            );
+        }
         reject_cancelled_execution_handle("selected text", &cancellation)?;
+        if let Some(timing) = timing.as_deref_mut() {
+            timing.begin(Phase::TextExecution);
+        }
         let result = collect_selected_text(
             backend.as_ref(),
             request_json,
@@ -1395,9 +1477,24 @@ impl InferenceGateway {
             option_diagnostics,
         )
         .await;
+        if let Some(timing) = timing.as_deref_mut() {
+            timing.end(if result.is_ok() {
+                Outcome::Completed
+            } else {
+                Outcome::Failed
+            });
+            timing.begin(Phase::WorkerCleanup);
+        }
         // Collector drop requests cooperative cancellation; the backend retains
         // the producer join until this drain observes its actual termination.
         let cleanup = backend.finish_selected_text(result.is_err()).await;
+        if let Some(timing) = timing {
+            timing.end(if cleanup.is_ok() {
+                Outcome::Completed
+            } else {
+                Outcome::Failed
+            });
+        }
         cleanup?;
         reject_cancelled_execution_handle("selected text", &cancellation)?;
         result
