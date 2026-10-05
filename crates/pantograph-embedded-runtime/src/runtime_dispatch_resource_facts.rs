@@ -1,8 +1,8 @@
 use pantograph_dependency_planning::{DeviceIntentId, RuntimeIntentId};
 use pantograph_runtime_registry::{
     RuntimeAdmissionResourceKind, RuntimeRegistryError, RuntimeReservationAdmissionObservation,
-    RuntimeReservationRequest, RuntimeReservationRequirements, RuntimeRetentionHint,
-    SharedRuntimeRegistry,
+    RuntimeReservationCustody, RuntimeReservationPublicationError, RuntimeReservationRequest,
+    RuntimeReservationRequirements, RuntimeRetentionHint, SharedRuntimeRegistry,
 };
 use pantograph_scheduler::{
     SchedulerReservationLeaseId, SchedulerResourceDiagnostic, SchedulerResourceDiagnosticCode,
@@ -16,6 +16,52 @@ pub(crate) struct RuntimeDispatchResourceFactsSource {
 }
 
 impl RuntimeDispatchResourceFactsSource {
+    pub(crate) fn reserve_provisional<T>(
+        &self,
+        request: RuntimeDispatchResourceFactsRequest,
+        expected: &RuntimeReservationAdmissionObservation,
+        validate: impl FnOnce(
+            RuntimeDispatchResourceFacts,
+        ) -> Result<
+            T,
+            pantograph_workflow_service::workflow::WorkflowRuntimeDispatchCandidateProviderError,
+        >,
+    ) -> Result<
+        RuntimeDispatchPublicationOutcome<T>,
+        pantograph_workflow_service::workflow::WorkflowRuntimeDispatchCandidateProviderError,
+    > {
+        let diagnostics = validate_request(&request);
+        if !diagnostics.is_empty() {
+            return Ok(RuntimeDispatchPublicationOutcome::Unavailable { diagnostics });
+        }
+        match self.registry.acquire_reservation_provisional(
+            runtime_reservation_request(&request),
+            expected,
+            |lease| {
+                validate(RuntimeDispatchResourceFacts {
+                    #[cfg(test)]
+                    lease_id: lease.reservation_id,
+                    reservations: scheduler_reservations(&request, lease.reservation_id),
+                    fit_assessment: fit_assessment(
+                        &request,
+                        SchedulerResourceFitState::Fits,
+                        Vec::new(),
+                    ),
+                })
+            },
+        ) {
+            Ok((value, custody)) => {
+                Ok(RuntimeDispatchPublicationOutcome::Reserved { value, custody })
+            }
+            Err(RuntimeReservationPublicationError::Validation(error)) => Err(error),
+            Err(RuntimeReservationPublicationError::Registry(error)) => {
+                Ok(RuntimeDispatchPublicationOutcome::Unavailable {
+                    diagnostics: vec![diagnostic_from_registry_error(&request, error)],
+                })
+            }
+        }
+    }
+
     pub(crate) fn new(registry: SharedRuntimeRegistry) -> Self {
         Self { registry }
     }
@@ -36,6 +82,7 @@ impl RuntimeDispatchResourceFactsSource {
             .map_err(|error| vec![diagnostic_from_registry_error(request, error)])
     }
 
+    #[cfg(test)]
     pub(crate) fn reserve(
         &self,
         request: RuntimeDispatchResourceFactsRequest,
@@ -85,15 +132,16 @@ impl RuntimeDispatchResourceFactsSource {
             }
         }
     }
+}
 
-    pub(crate) fn release_if_present(
-        &self,
-        reservation_id: u64,
-    ) -> Result<(), RuntimeRegistryError> {
-        self.registry
-            .release_reservation_if_present(reservation_id)
-            .map(|_| ())
-    }
+pub(crate) enum RuntimeDispatchPublicationOutcome<T> {
+    Reserved {
+        value: T,
+        custody: RuntimeReservationCustody,
+    },
+    Unavailable {
+        diagnostics: Vec<RuntimeDispatchResourceFactsDiagnostic>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -112,6 +160,7 @@ pub(crate) struct RuntimeDispatchResourceFactsRequest {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct RuntimeDispatchResourceFacts {
+    #[cfg(test)]
     pub lease_id: u64,
     pub reservations: Vec<SchedulerResourceReservation>,
     pub fit_assessment: SchedulerResourceFitAssessment,
@@ -132,6 +181,7 @@ pub(crate) enum RuntimeDispatchResourceFactsDiagnosticCode {
     RuntimeRegistryRejected,
 }
 
+#[cfg(test)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum RuntimeDispatchResourceFactsOutcome {
     Reserved {
@@ -144,6 +194,7 @@ pub(crate) enum RuntimeDispatchResourceFactsOutcome {
     },
 }
 
+#[cfg(test)]
 impl RuntimeDispatchResourceFactsOutcome {
     pub(crate) fn diagnostics(&self) -> &[RuntimeDispatchResourceFactsDiagnostic] {
         match self {

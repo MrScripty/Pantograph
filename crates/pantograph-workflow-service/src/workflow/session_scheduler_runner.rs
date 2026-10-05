@@ -173,7 +173,7 @@ impl<'a> WorkflowPreDispatchPreparationBoundary<'a> {
             started_runtime_task.started_at_ms(),
             attempt_start_transition,
         )?;
-        let preselection = runtime_dispatch_selection_boundary
+        let mut preselection = runtime_dispatch_selection_boundary
             .select_prepared_started_runtime_task_dispatch(
                 &started_runtime_task,
                 prepared_dispatch_selection,
@@ -197,6 +197,7 @@ impl<'a> WorkflowPreDispatchPreparationBoundary<'a> {
                     ))
                 })?;
         }
+        preselection.transfer_reservation_custody()?;
         Ok(WorkflowStartedRuntimeDispatchAttempt {
             started_runtime_task,
             selected_dispatch: preselection.selected_dispatch,
@@ -867,7 +868,7 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                     prepared_dispatch_selection,
                 )
                 .await;
-            let preselection = match preselection {
+            let mut preselection = match preselection {
                 Ok(preselection) => preselection,
                 Err(error) => {
                     let Some(scheduler_error) = error.scheduler_selection_error() else {
@@ -936,8 +937,6 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                     )));
                 }
             };
-            let selected_dispatch = preselection.selected_dispatch;
-            let _selected_candidate_fact = preselection.selected_candidate_fact;
             {
                 let mut store = self.service.session_store_guard()?;
                 self.service
@@ -947,7 +946,7 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                         session_id,
                         workflow_run_id,
                         &started_runtime_task,
-                        &selected_dispatch,
+                        &preselection.selected_dispatch,
                     )
                     .map_err(|error| {
                         WorkflowServiceError::InvalidRequest(format!(
@@ -955,6 +954,9 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                         ))
                     })?;
             }
+            preselection.transfer_reservation_custody()?;
+            let selected_dispatch = preselection.selected_dispatch;
+            let _selected_candidate_fact = preselection.selected_candidate_fact;
             let execution_request_id =
                 format!("workflow-runtime-task:{}:{}", workflow_run_id, task_id);
             let dispatch_result = self

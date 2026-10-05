@@ -21,7 +21,7 @@ use pantograph_workflow_service::workflow::{
     ValidatedWorkflowRuntimeDispatchCandidateFactBundle, WorkflowRuntimeDispatchCandidateFact,
     WorkflowRuntimeDispatchCandidateFactBundle, WorkflowRuntimeDispatchCandidateProvider,
     WorkflowRuntimeDispatchCandidateProviderError, WorkflowRuntimeDispatchCandidateSet,
-    WorkflowRuntimeDispatchLoadState,
+    WorkflowRuntimeDispatchLoadState, WorkflowRuntimeDispatchReservationCustody,
 };
 use pantograph_workflow_service::WorkflowSchedulerTask;
 
@@ -44,7 +44,7 @@ use crate::runtime_dispatch_load_target_facts::{
     RuntimeDispatchLoadTargetFactsProjection,
 };
 use crate::runtime_dispatch_resource_facts::{
-    RuntimeDispatchResourceFactsDiagnostic, RuntimeDispatchResourceFactsOutcome,
+    RuntimeDispatchPublicationOutcome, RuntimeDispatchResourceFactsDiagnostic,
     RuntimeDispatchResourceFactsRequest, RuntimeDispatchResourceFactsSource,
 };
 use crate::runtime_dispatch_source_snapshot::{
@@ -270,7 +270,7 @@ fn resource_backed_candidate_set(
         )) {
             Ok(observation) => {
                 draft.runtime_status = observation.runtime_status;
-                draft.runtime_instance_id = observation.runtime_instance_id;
+                draft.runtime_instance_id = observation.runtime_instance_id.clone();
                 if let Err(evidence_diagnostic) =
                     pre_reservation_evidence_check(&draft, task_intent, selected_device_id.clone())
                 {
@@ -292,7 +292,7 @@ fn resource_backed_candidate_set(
                     batching_group_id: None,
                     candidate_source_diagnostics: Vec::new(),
                 });
-                evaluated_drafts.push(draft);
+                evaluated_drafts.push((draft, observation));
             }
             Err(resource_diagnostics) => diagnostics.extend(resource_source_diagnostics(
                 &draft.candidate_id,
@@ -328,93 +328,85 @@ fn resource_backed_candidate_set(
             candidate_id
         }
     };
-    let mut facts = Vec::new();
-    for draft in evaluated_drafts
+    let Some((draft, expected)) = evaluated_drafts
         .into_iter()
-        .filter(|draft| draft.candidate_id == selected_id)
-    {
-        match resource_facts_source.reserve(resource_facts_request(
-            &draft,
-            task_intent,
-            selected_device_id.clone(),
-        )) {
-            RuntimeDispatchResourceFactsOutcome::Reserved {
-                facts: resource_facts,
-                diagnostics: resource_diagnostics,
-            } => {
-                diagnostics.extend(resource_source_diagnostics(
-                    &draft.candidate_id,
-                    &resource_diagnostics,
-                ));
-                let evidence_record = match runtime_dispatch_evidence_record(
-                    &draft,
-                    selected_device_id.clone(),
-                    resource_facts.reservations.clone(),
-                    resource_facts.fit_assessment.clone(),
-                ) {
-                    Ok(evidence_record) => evidence_record,
-                    Err(evidence_diagnostic) => {
-                        let _ = resource_facts_source.release_if_present(resource_facts.lease_id);
-                        diagnostics.push(runtime_dispatch_evidence_diagnostic(
-                            &draft.candidate_id,
-                            evidence_diagnostic,
-                        ));
-                        continue;
-                    }
-                };
-                facts.push(WorkflowRuntimeDispatchCandidateFact {
-                    candidate_id: draft.candidate_id,
-                    selected_runtime_id: evidence_record.selected_runtime_id,
-                    selected_runtime_variant_id: None,
-                    selected_backend_key: evidence_record.selected_backend_key,
-                    runtime_family: evidence_record.runtime_family,
-                    resolved_load_target: evidence_record.resolved_load_target,
-                    runtime_residency_key: evidence_record.runtime_residency_key,
-                    loaded_runtime_memory_estimate_bytes: evidence_record
-                        .loaded_runtime_memory_estimate_bytes,
-                    runtime_load_state: workflow_runtime_dispatch_load_state(
-                        evidence_record.runtime_load_state,
-                    ),
-                    runtime_instance_id: evidence_record.runtime_instance_id,
-                    selected_device_ids: vec![evidence_record.selected_device_id],
-                    selected_model_ref: evidence_record.selected_model_ref,
-                    runtime_trait_settings: task_intent.trait_settings.clone(),
-                    environment_ref: environment_ref.clone(),
-                    reservations: evidence_record.reservations,
-                    resource_fit_assessment: evidence_record.resource_fit_assessment,
-                    batching_group_id: None,
-                });
-            }
-            RuntimeDispatchResourceFactsOutcome::Unavailable {
-                diagnostics: resource_diagnostics,
-                ..
-            } => diagnostics.extend(resource_source_diagnostics(
+        .find(|(draft, _)| draft.candidate_id == selected_id)
+    else {
+        return Err(WorkflowRuntimeDispatchCandidateProviderError::Failed {
+            message: "selected candidate has no evaluated source draft".into(),
+        });
+    };
+    let publication = resource_facts_source.reserve_provisional(
+        resource_facts_request(&draft, task_intent, selected_device_id.clone()),
+        &expected,
+        |resource_facts| {
+            let evidence_record = runtime_dispatch_evidence_record(
+                &draft, selected_device_id.clone(), resource_facts.reservations,
+                resource_facts.fit_assessment,
+            ).map_err(|error| WorkflowRuntimeDispatchCandidateProviderError::Failed {
+                message: format!("runtime dispatch evidence failed before reservation publication: {error:?}"),
+            })?;
+            let fact = WorkflowRuntimeDispatchCandidateFact {
+                candidate_id: draft.candidate_id.clone(),
+                selected_runtime_id: evidence_record.selected_runtime_id,
+                selected_runtime_variant_id: None,
+                selected_backend_key: evidence_record.selected_backend_key,
+                runtime_family: evidence_record.runtime_family,
+                resolved_load_target: evidence_record.resolved_load_target,
+                runtime_residency_key: evidence_record.runtime_residency_key,
+                loaded_runtime_memory_estimate_bytes: evidence_record.loaded_runtime_memory_estimate_bytes,
+                runtime_load_state: workflow_runtime_dispatch_load_state(evidence_record.runtime_load_state),
+                runtime_instance_id: evidence_record.runtime_instance_id,
+                selected_device_ids: vec![evidence_record.selected_device_id],
+                selected_model_ref: evidence_record.selected_model_ref,
+                runtime_trait_settings: task_intent.trait_settings.clone(),
+                environment_ref: environment_ref.clone(),
+                reservations: evidence_record.reservations,
+                resource_fit_assessment: evidence_record.resource_fit_assessment,
+                batching_group_id: None,
+            };
+            ValidatedWorkflowRuntimeDispatchCandidateFactBundle::try_from(WorkflowRuntimeDispatchCandidateFactBundle {
+                contract_version: pantograph_workflow_service::workflow::WORKFLOW_RUNTIME_DISPATCH_CANDIDATE_FACT_BUNDLE_CONTRACT_VERSION,
+                facts: vec![fact], diagnostics: diagnostics.clone(),
+            }).map_err(|error| WorkflowRuntimeDispatchCandidateProviderError::Failed {
+                message: format!("runtime dispatch candidate facts failed before reservation publication: {error}"),
+            })
+        },
+    )?;
+    match publication {
+        RuntimeDispatchPublicationOutcome::Reserved { value, custody } => Ok(
+            WorkflowRuntimeDispatchCandidateSet::from_candidate_fact_bundle(value)
+                .with_reservation_custody(Box::new(EmbeddedRuntimeDispatchReservationCustody(
+                    custody,
+                ))),
+        ),
+        RuntimeDispatchPublicationOutcome::Unavailable {
+            diagnostics: resource_diagnostics,
+        } => {
+            diagnostics.extend(resource_source_diagnostics(
                 &draft.candidate_id,
                 &resource_diagnostics,
-            )),
+            ));
+            Ok(WorkflowRuntimeDispatchCandidateSet::from_diagnostics(
+                diagnostics,
+            ))
         }
     }
+}
 
-    if facts.is_empty() && diagnostics.is_empty() {
-        diagnostics.push(provider_diagnostic(
-            SchedulerDispatchSelectionDiagnosticCode::NoCandidates,
-            "runtime dispatch candidate provider produced no resource-backed candidates",
-            MISSING_RUNTIME_RESOURCE_FACTS_HINT,
-        ));
-    }
+#[derive(Debug)]
+struct EmbeddedRuntimeDispatchReservationCustody(
+    pantograph_runtime_registry::RuntimeReservationCustody,
+);
 
-    let bundle =
-        ValidatedWorkflowRuntimeDispatchCandidateFactBundle::try_from(
-            WorkflowRuntimeDispatchCandidateFactBundle {
-                contract_version: pantograph_workflow_service::workflow::WORKFLOW_RUNTIME_DISPATCH_CANDIDATE_FACT_BUNDLE_CONTRACT_VERSION,
-                facts,
-                diagnostics,
+impl WorkflowRuntimeDispatchReservationCustody for EmbeddedRuntimeDispatchReservationCustody {
+    fn transfer(self: Box<Self>) -> Result<(), WorkflowRuntimeDispatchCandidateProviderError> {
+        self.0.transfer().map_err(
+            |error| WorkflowRuntimeDispatchCandidateProviderError::Failed {
+                message: format!("runtime registry custody transfer failed: {error}"),
             },
         )
-        .map_err(|error| WorkflowRuntimeDispatchCandidateProviderError::Failed {
-            message: format!("runtime dispatch candidate facts failed validation: {error}"),
-        })?;
-    Ok(WorkflowRuntimeDispatchCandidateSet::from_candidate_fact_bundle(bundle))
+    }
 }
 
 fn fail_closed_diagnostics(

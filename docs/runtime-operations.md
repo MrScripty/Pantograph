@@ -52,6 +52,29 @@ These commands are projections. Runtime identity, state transitions, reclaim
 eligibility, and reconciliation remain owned by the runtime registry and
 embedded runtime, not by Tauri or the frontend.
 
+## Prepared Reservation Ownership
+
+Resource-backed dispatch preparation carries registry rollback custody until the
+workflow task binds its in-memory cleanup intent. A failed start, rejected
+selection, cancelled preparation or failed bind drops that custody. Fresh claims
+are removed; a replacement restores the entire previous lease. Once binding and
+custody transfer succeed, normal task completion/cancellation/failure cleanup
+releases the selected lease. See [ADR-002](adr/ADR-002-runtime-registry-ownership-and-lifecycle.md).
+
+During a pending replacement, snapshots account for the componentwise maximum
+old/new claim and retain the predecessor's pin/keep-alive protection. This held
+capacity protects rollback; it is not evidence that both requests are executing.
+Same-owner updates and retention mutation remain unavailable until transfer or
+rollback. An explicit registry release ends the lease, so a later custody drop
+cannot revive it. Do not manually release a prepared replacement to imitate
+cancellation: cancellation belongs to its custody owner.
+
+Publication rejects changed observed runtime status/instance and rechecks current
+configured capacity and owner conflicts. This does not prove physical host-wide
+capacity, unchanged model/catalog epochs, or recovery after process abort. Missing
+capacity remains unknown. Verification evidence and native execution limits are
+recorded in the [reservation custody report](plans/domain-architecture-and-multimodal/reports/2026-10-05-reservation-custody.md).
+
 ## Recovery And Reclaim
 
 Recovery follows this ownership flow:

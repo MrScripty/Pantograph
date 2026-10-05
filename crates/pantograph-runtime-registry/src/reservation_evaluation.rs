@@ -65,9 +65,10 @@ impl RuntimeReservationEvaluation<'_> {
         &self.request
     }
 
-    /// Revalidate and acquire/update only this request under the registry lock.
+    /// Revalidate capacity, owner, status and observed runtime instance under the lock.
     pub fn commit(self) -> Result<RuntimeReservationLease, RuntimeRegistryError> {
-        self.registry.acquire_reservation(self.request)
+        self.registry
+            .acquire_reservation_observed(self.request, Some(&self.observation))
     }
 }
 

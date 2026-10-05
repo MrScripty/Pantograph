@@ -43,6 +43,25 @@ fn request(owner: &str, bytes: u64) -> RuntimeReservationRequest {
 }
 
 #[test]
+fn commit_rejects_a_replaced_runtime_instance_before_allocating_a_lease() {
+    let registry = registry();
+    let evaluation = registry.evaluate_reservation(request("a", 40)).unwrap();
+    registry
+        .transition_runtime(
+            "pytorch",
+            RuntimeTransition::Ready {
+                runtime_instance_id: Some("runtime.002".into()),
+            },
+        )
+        .unwrap();
+    assert!(
+        evaluation.commit().is_err(),
+        "stale instance must not commit"
+    );
+    assert!(registry.snapshot().reservations.is_empty());
+}
+
+#[test]
 fn evaluating_and_discarding_alternatives_does_not_mutate_registry_or_lease_ids() {
     let registry = registry();
     let before = registry.snapshot();

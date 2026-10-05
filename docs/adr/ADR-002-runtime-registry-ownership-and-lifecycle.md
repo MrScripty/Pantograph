@@ -80,6 +80,14 @@ Adopt the following ownership and lifecycle boundary for the planned
   and technical-fit admission proceed.
 - Reservations must be released on successful completion, cancellation, and
   failure paths.
+- Preparation owns rollback custody until the workflow task records its
+  in-memory reservation cleanup intent. Failed or abandoned preparation rolls
+  back its provisional claim; a failed replacement restores its predecessor.
+  Explicit owner release ends the lease and must not be undone by later rollback.
+- The registry rechecks observed runtime status/instance, current capacity and
+  owner conflicts when publishing a reservation. Final candidate validation
+  precedes mutation. Custody transfer after binding leaves normal task lifecycle
+  cleanup authoritative; this contract does not promise process-abort recovery.
 - Eviction decisions must exclude active, reserved, or pinned runtimes/models.
 
 8. `crates/pantograph-embedded-runtime` remains a runtime producer and executor.

@@ -619,6 +619,27 @@ impl WorkflowSchedulerTaskOrchestrator {
         task: &WorkflowSchedulerTask,
         selection_request: ValidatedSchedulerDispatchSelectionRequest,
     ) -> Result<SelectedRuntimeTaskDispatch, WorkflowSchedulerTaskOrchestratorError> {
+        self.select_runtime_task_dispatch_inner(task, selection_request, true)
+            .await
+    }
+
+    /// The prepared request's custody owns rollback; releasing its lease here
+    /// would also end a predecessor that a failed replacement must preserve.
+    pub(crate) async fn select_runtime_task_dispatch_with_custody(
+        &self,
+        task: &WorkflowSchedulerTask,
+        selection_request: ValidatedSchedulerDispatchSelectionRequest,
+    ) -> Result<SelectedRuntimeTaskDispatch, WorkflowSchedulerTaskOrchestratorError> {
+        self.select_runtime_task_dispatch_inner(task, selection_request, false)
+            .await
+    }
+
+    async fn select_runtime_task_dispatch_inner(
+        &self,
+        task: &WorkflowSchedulerTask,
+        selection_request: ValidatedSchedulerDispatchSelectionRequest,
+        cleanup_unselected: bool,
+    ) -> Result<SelectedRuntimeTaskDispatch, WorkflowSchedulerTaskOrchestratorError> {
         let selection_request = selection_request.into_inner();
         let selection = select_scheduler_dispatch(
             ValidatedSchedulerDispatchSelectionRequest::try_from(selection_request.clone())
@@ -627,8 +648,10 @@ impl WorkflowSchedulerTaskOrchestrator {
         .map_err(WorkflowSchedulerTaskOrchestratorError::SchedulerContract)?
         .into_inner();
         if selection.state != SchedulerDispatchSelectionState::Selected {
-            self.apply_unselected_candidate_lifecycle_events(task, &selection_request)
-                .await?;
+            if cleanup_unselected {
+                self.apply_unselected_candidate_lifecycle_events(task, &selection_request)
+                    .await?;
+            }
             return Err(
                 WorkflowSchedulerTaskOrchestratorError::RuntimeDispatchSelectionNoSelection(
                     Box::new(selection),

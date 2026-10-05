@@ -169,7 +169,8 @@ pub use self::runtime_dispatch_selection::{
     WorkflowRuntimeDispatchCandidateFactBundle, WorkflowRuntimeDispatchCandidateFactBundleError,
     WorkflowRuntimeDispatchCandidateProvider, WorkflowRuntimeDispatchCandidateProviderError,
     WorkflowRuntimeDispatchCandidateSet, WorkflowRuntimeDispatchLoadState,
-    WorkflowRuntimeDispatchSourceRefreshError, WorkflowRuntimeDispatchSourceRefresher,
+    WorkflowRuntimeDispatchReservationCustody, WorkflowRuntimeDispatchSourceRefreshError,
+    WorkflowRuntimeDispatchSourceRefresher,
     WORKFLOW_RUNTIME_DISPATCH_CANDIDATE_FACT_BUNDLE_CONTRACT_VERSION,
 };
 pub use self::runtime_host_observation::WorkflowRuntimeHostObservationRecorder;
