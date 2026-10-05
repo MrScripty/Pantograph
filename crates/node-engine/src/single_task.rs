@@ -252,6 +252,27 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn single_task_json_filter_preserves_nested_values_and_missing_status() {
+        let document = serde_json::json!({"items": [{"prompt": "  red cube\n", "seed": u64::MAX}]});
+        for (path, value, found) in [
+            ("items[0].prompt", serde_json::json!("  red cube\n"), true),
+            ("items[0].seed", serde_json::json!(u64::MAX), true),
+            ("items[1].prompt", serde_json::Value::Null, false),
+            ("", document.clone(), true),
+        ] {
+            let inputs = HashMap::from([
+                ("json".into(), document.clone()),
+                ("_data".into(), serde_json::json!({"path": path})),
+            ]);
+            let response = execute_core_task_once(request("filter", "json-filter", inputs))
+                .await
+                .unwrap();
+            assert_eq!(response.outputs()["value"], value);
+            assert_eq!(response.outputs()["found"], found);
+        }
+    }
+
+    #[tokio::test]
     async fn single_task_merge_preserves_order_and_filters_only_blank_strings() {
         let inputs = HashMap::from([(
             "inputs".into(),

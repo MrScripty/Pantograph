@@ -68,6 +68,29 @@ fn node_engine_inputs(
 ) -> Result<HashMap<String, Value>, WorkflowSchedulerNonRuntimeTaskAdapterError> {
     let mut inputs = HashMap::new();
     match template {
+        WorkflowSchedulerNonRuntimeTaskTemplate::JsonFilter { path } => {
+            let binding = task
+                .input_bindings
+                .iter()
+                .find(|binding| binding.target_port_id == "json")
+                .ok_or_else(|| {
+                    WorkflowSchedulerNonRuntimeTaskAdapterError::MissingInputBinding {
+                        task_id: task.task_id.as_str().to_string(),
+                        target_port_id: "json".into(),
+                    }
+                })?;
+            let value = materialized_output(task, binding, materialized_results)?
+                .node_json()
+                .ok_or_else(|| {
+                    WorkflowSchedulerNonRuntimeTaskAdapterError::WrongMaterializedInputType {
+                        source_task_id: binding.source_task_id.as_str().to_string(),
+                        source_port_id: binding.source_port_id.clone(),
+                        expected: "JSON-compatible value",
+                    }
+                })?;
+            inputs.insert("json".into(), value);
+            inputs.insert("_data".into(), serde_json::json!({ "path": path }));
+        }
         WorkflowSchedulerNonRuntimeTaskTemplate::TextOutput => {
             inputs.insert(
                 PORT_TEXT.to_string(),
@@ -100,6 +123,33 @@ fn scheduler_outputs(
     outputs: &HashMap<String, Value>,
 ) -> Result<Vec<WorkflowSchedulerTaskResultOutput>, WorkflowSchedulerNonRuntimeTaskAdapterError> {
     match template {
+        WorkflowSchedulerNonRuntimeTaskTemplate::JsonFilter { .. } => {
+            let value = outputs.get("value").cloned().ok_or_else(|| {
+                WorkflowSchedulerNonRuntimeTaskAdapterError::InvalidNodeEngineOutput {
+                    port_id: "value".into(),
+                    expected: "JSON value",
+                }
+            })?;
+            let found = outputs
+                .get("found")
+                .and_then(Value::as_bool)
+                .ok_or_else(|| {
+                    WorkflowSchedulerNonRuntimeTaskAdapterError::InvalidNodeEngineOutput {
+                        port_id: "found".into(),
+                        expected: "boolean",
+                    }
+                })?;
+            Ok(vec![
+                WorkflowSchedulerTaskResultOutput {
+                    port_id: "value".into(),
+                    value: WorkflowSchedulerTaskResultValue::from_node_json(value),
+                },
+                WorkflowSchedulerTaskResultOutput {
+                    port_id: "found".into(),
+                    value: WorkflowSchedulerTaskResultValue::Bool(found),
+                },
+            ])
+        }
         WorkflowSchedulerNonRuntimeTaskTemplate::TextOutput => {
             let value = output_string(outputs, PORT_TEXT)?;
             Ok(vec![WorkflowSchedulerTaskResultOutput {
@@ -393,6 +443,61 @@ mod tests {
             result.outputs[0].value,
             WorkflowSchedulerTaskResultValue::String("ready text".to_string())
         );
+    }
+
+    #[tokio::test]
+    async fn json_filter_adapter_retains_typed_value_and_found_without_rewriting_content() {
+        let mut binding = text_binding("source");
+        binding.source_port_id = "value".into();
+        binding.target_port_id = "json".into();
+        let upstream = completed_result(
+            "source",
+            "value",
+            WorkflowSchedulerTaskResultValue::Json(
+                serde_json::json!({"items": [{"prompt": "  red cube\n", "seed": u64::MAX}]}),
+            ),
+        );
+        for (path, expected, found) in [
+            (
+                "items[0].prompt",
+                WorkflowSchedulerTaskResultValue::String("  red cube\n".into()),
+                true,
+            ),
+            (
+                "items[0].seed",
+                WorkflowSchedulerTaskResultValue::U64(u64::MAX),
+                true,
+            ),
+            (
+                "items[1].prompt",
+                WorkflowSchedulerTaskResultValue::Json(Value::Null),
+                false,
+            ),
+        ] {
+            let filter = task(
+                "filter",
+                "json-filter",
+                Some(WorkflowSchedulerNonRuntimeTaskTemplate::JsonFilter { path: path.into() }),
+                vec![binding.clone()],
+            );
+            let result =
+                execute_non_runtime_scheduler_task(&filter, std::slice::from_ref(&upstream))
+                    .await
+                    .unwrap();
+            assert_eq!(
+                result.outputs,
+                [
+                    WorkflowSchedulerTaskResultOutput {
+                        port_id: "value".into(),
+                        value: expected
+                    },
+                    WorkflowSchedulerTaskResultOutput {
+                        port_id: "found".into(),
+                        value: WorkflowSchedulerTaskResultValue::Bool(found)
+                    },
+                ]
+            );
+        }
     }
 
     #[tokio::test]

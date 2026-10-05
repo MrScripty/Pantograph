@@ -31,6 +31,8 @@ const NODE_TYPE_NUMBER_INPUT: &str = "number-input";
 const NODE_TYPE_TEXT_INPUT: &str = "text-input";
 const NODE_TYPE_TEXT_OUTPUT: &str = "text-output";
 const NODE_TYPE_MERGE: &str = "merge";
+const NODE_TYPE_JSON_FILTER: &str = "json-filter";
+const NODE_TYPE_SELECTION_INPUT: &str = "selection-input";
 const MISSING_RESOURCE_ESTIMATES_MESSAGE: &str =
     "runtime inference scheduler tasks require validated resource estimate hints";
 
@@ -170,6 +172,11 @@ pub fn workflow_scheduler_task_graph_with_inference_projections(
                 &node.node_type,
                 execution_class,
                 &input_bindings,
+                graph
+                    .nodes
+                    .iter()
+                    .find(|source| source.id == node.node_id)
+                    .map(|source| &source.data),
             );
         let (source_input_task_template, source_input_diagnostics) =
             source_input_task_template_for_node(&node_id, &node.node_type, execution_class);
@@ -362,6 +369,7 @@ fn non_runtime_task_template_for_node(
     node_type: &str,
     execution_class: WorkflowSchedulerTaskExecutionClass,
     input_bindings: &[WorkflowSchedulerTaskInputBinding],
+    node_data: Option<&serde_json::Value>,
 ) -> (
     Option<WorkflowSchedulerNonRuntimeTaskTemplate>,
     Vec<WorkflowSchedulerTaskProjectionDiagnostic>,
@@ -372,6 +380,7 @@ fn non_runtime_task_template_for_node(
 
     match node_type {
         NODE_TYPE_TEXT_OUTPUT => text_output_template(node_id, input_bindings),
+        NODE_TYPE_JSON_FILTER => json_filter_template(node_id, input_bindings, node_data),
         NODE_TYPE_MERGE
             if input_bindings
                 .iter()
@@ -407,6 +416,12 @@ fn source_input_task_template_for_node(
     }
 
     match node_type {
+        NODE_TYPE_SELECTION_INPUT => (
+            Some(WorkflowSchedulerSourceInputTemplate::Selection {
+                port_id: PORT_VALUE.to_string(),
+            }),
+            Vec::new(),
+        ),
         NODE_TYPE_TEXT_INPUT => (
             Some(WorkflowSchedulerSourceInputTemplate::Text {
                 port_id: PORT_TEXT.to_string(),
@@ -435,6 +450,46 @@ fn source_input_task_template_for_node(
             )],
         ),
     }
+}
+
+fn json_filter_template(
+    node_id: &SchedulerNodeId,
+    input_bindings: &[WorkflowSchedulerTaskInputBinding],
+    node_data: Option<&serde_json::Value>,
+) -> (
+    Option<WorkflowSchedulerNonRuntimeTaskTemplate>,
+    Vec<WorkflowSchedulerTaskProjectionDiagnostic>,
+) {
+    if input_bindings.len() != 1 || input_bindings[0].target_port_id != "json" {
+        return (
+            None,
+            vec![diagnostic(
+                node_id,
+                Some("json"),
+                WorkflowSchedulerTaskProjectionDiagnosticCode::MissingNonRuntimeTemplateValue,
+                "json-filter requires one materialized upstream JSON input",
+            )],
+        );
+    }
+    let path = match node_data.and_then(|data| data.get("path")) {
+        None => String::new(),
+        Some(serde_json::Value::String(path)) => path.clone(),
+        Some(_) => {
+            return (
+                None,
+                vec![diagnostic(
+                    node_id,
+                    None,
+                    WorkflowSchedulerTaskProjectionDiagnosticCode::InvalidNonRuntimeTemplateValue,
+                    "json-filter path must be a string",
+                )],
+            )
+        }
+    };
+    (
+        Some(WorkflowSchedulerNonRuntimeTaskTemplate::JsonFilter { path }),
+        Vec::new(),
+    )
 }
 
 fn text_output_template(

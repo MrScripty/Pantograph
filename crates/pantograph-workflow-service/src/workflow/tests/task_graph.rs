@@ -613,6 +613,78 @@ fn scheduler_task_graph_projects_source_input_and_non_runtime_templates() {
 }
 
 #[test]
+fn scheduler_json_filter_captures_only_its_path_and_typed_selection_source() {
+    let mut graph = WorkflowGraph {
+        nodes: vec![
+            GraphNode {
+                id: "source".into(),
+                node_type: "selection-input".into(),
+                position: Position { x: 0.0, y: 0.0 },
+                data: json!({"value": "legacy source data"}),
+            },
+            GraphNode {
+                id: "filter".into(),
+                node_type: "json-filter".into(),
+                position: Position { x: 0.0, y: 0.0 },
+                data: json!({"path": "items[0].prompt", "label": "display data"}),
+            },
+        ],
+        edges: vec![GraphEdge {
+            id: "source-filter".into(),
+            source: "source".into(),
+            target: "filter".into(),
+            source_handle: "value".into(),
+            target_handle: "json".into(),
+        }],
+        derived_graph: None,
+    };
+    let tasks = workflow_scheduler_task_graph(&workflow_id(), &workflow_run_id(), &graph).unwrap();
+    let source = tasks
+        .tasks
+        .iter()
+        .find(|task| task.node_id.as_str() == "source")
+        .unwrap();
+    assert_eq!(
+        source.source_input_task_template,
+        Some(WorkflowSchedulerSourceInputTemplate::Selection {
+            port_id: "value".into()
+        })
+    );
+    graph.nodes[1].data["path"] = json!("changed.after.submission");
+    let filter = tasks
+        .tasks
+        .iter()
+        .find(|task| task.node_id.as_str() == "filter")
+        .unwrap();
+    assert_eq!(
+        filter.non_runtime_task_template,
+        Some(WorkflowSchedulerNonRuntimeTaskTemplate::JsonFilter {
+            path: "items[0].prompt".into()
+        })
+    );
+    let encoded = serde_json::to_string(&tasks).unwrap();
+    assert!(!encoded.contains("legacy source data"));
+    assert!(!encoded.contains("display data"));
+    assert_eq!(
+        serde_json::from_str::<crate::workflow::WorkflowSchedulerTaskGraph>(&encoded).unwrap(),
+        tasks
+    );
+    graph.nodes[1].data["path"] = json!(false);
+    let invalid =
+        workflow_scheduler_task_graph(&workflow_id(), &workflow_run_id(), &graph).unwrap();
+    let filter = invalid
+        .tasks
+        .iter()
+        .find(|task| task.node_id.as_str() == "filter")
+        .unwrap();
+    assert!(filter.non_runtime_task_template.is_none());
+    assert_eq!(
+        filter.diagnostics[0].code,
+        WorkflowSchedulerTaskProjectionDiagnosticCode::InvalidNonRuntimeTemplateValue
+    );
+}
+
+#[test]
 fn scheduler_task_graph_lowers_merge_with_all_dependencies_in_canonical_order() {
     let graph = WorkflowGraph {
         nodes: ["b", "a", "join"]

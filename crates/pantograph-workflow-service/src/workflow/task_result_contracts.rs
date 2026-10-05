@@ -114,6 +114,34 @@ pub enum WorkflowSchedulerTaskResultValue {
 }
 
 impl WorkflowSchedulerTaskResultValue {
+    pub(crate) fn from_node_json(value: serde_json::Value) -> Self {
+        match value {
+            serde_json::Value::String(value) => Self::String(value),
+            serde_json::Value::Bool(value) => Self::Bool(value),
+            serde_json::Value::Number(number) => {
+                if let Some(value) = number.as_i64() {
+                    Self::I64(value)
+                } else if let Some(value) = number.as_u64() {
+                    Self::U64(value)
+                } else {
+                    Self::Json(serde_json::Value::Number(number))
+                }
+            }
+            value => Self::Json(value),
+        }
+    }
+
+    pub(crate) fn node_json(&self) -> Option<serde_json::Value> {
+        Some(match self {
+            Self::String(value) => serde_json::Value::String(value.clone()),
+            Self::Bool(value) => serde_json::Value::Bool(*value),
+            Self::I64(value) => serde_json::Value::from(*value),
+            Self::U64(value) => serde_json::Value::from(*value),
+            Self::Json(value) => value.clone(),
+            _ => return None,
+        })
+    }
+
     fn validate(&self) -> Result<(), WorkflowSchedulerTaskResultError> {
         match self {
             Self::Json(value) => {

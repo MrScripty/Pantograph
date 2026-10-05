@@ -3500,6 +3500,7 @@ fn source_input_task_kind(
         WorkflowSchedulerSourceInputTemplate::Text { .. } => "text-input",
         WorkflowSchedulerSourceInputTemplate::Boolean { .. } => "boolean-input",
         WorkflowSchedulerSourceInputTemplate::Integer { .. } => "number-input",
+        WorkflowSchedulerSourceInputTemplate::Selection { .. } => "selection-input",
     };
     SchedulerSourceInputTaskKind::parse(task_kind)
         .map_err(WorkflowSchedulerTaskOrchestratorError::SchedulerContract)
@@ -3570,6 +3571,30 @@ fn non_runtime_input_readiness(
     };
 
     match template {
+        WorkflowSchedulerNonRuntimeTaskTemplate::JsonFilter { .. } => {
+            match materialized_binding_value(task, results, "json") {
+                MaterializedBindingValue::Ready(
+                    WorkflowSchedulerTaskResultValue::Json(_)
+                    | WorkflowSchedulerTaskResultValue::String(_)
+                    | WorkflowSchedulerTaskResultValue::Bool(_)
+                    | WorkflowSchedulerTaskResultValue::I64(_)
+                    | WorkflowSchedulerTaskResultValue::U64(_),
+                ) => NonRuntimeInputReadiness::Ready,
+                MaterializedBindingValue::Ready(_) => {
+                    NonRuntimeInputReadiness::Invalid(scheduler_input_diagnostic(
+                        SchedulerTaskStateDiagnosticCode::InvalidTask,
+                        "json-filter input is not a JSON-compatible value",
+                    ))
+                }
+                MaterializedBindingValue::Blocked => NonRuntimeInputReadiness::Blocked,
+                MaterializedBindingValue::Unavailable(diagnostic) => {
+                    NonRuntimeInputReadiness::InputUnavailable(diagnostic)
+                }
+                MaterializedBindingValue::Invalid(diagnostic) => {
+                    NonRuntimeInputReadiness::Invalid(diagnostic)
+                }
+            }
+        }
         WorkflowSchedulerNonRuntimeTaskTemplate::Merge => {
             for binding in &task.input_bindings {
                 match materialized_bound_output(task, results, binding) {

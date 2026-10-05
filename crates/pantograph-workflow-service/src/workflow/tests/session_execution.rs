@@ -3885,6 +3885,104 @@ async fn keep_alive_session_loads_runtime_with_keep_alive_retention_hint() {
 }
 
 #[tokio::test]
+async fn scheduler_session_extracts_json_prompt_into_downstream_text_output() {
+    let directory = tempfile::tempdir().unwrap();
+    let graph = WorkflowGraph {
+        nodes: vec![
+            GraphNode {
+                id: "source".into(),
+                node_type: "selection-input".into(),
+                position: Position { x: 0.0, y: 0.0 },
+                data: serde_json::json!({}),
+            },
+            GraphNode {
+                id: "filter".into(),
+                node_type: "json-filter".into(),
+                position: Position { x: 0.0, y: 0.0 },
+                data: serde_json::json!({"path": "items[0].prompt"}),
+            },
+            GraphNode {
+                id: "out".into(),
+                node_type: "text-output".into(),
+                position: Position { x: 0.0, y: 0.0 },
+                data: serde_json::json!({}),
+            },
+        ],
+        edges: vec![
+            crate::GraphEdge {
+                id: "source-filter".into(),
+                source: "source".into(),
+                target: "filter".into(),
+                source_handle: "value".into(),
+                target_handle: "json".into(),
+            },
+            crate::GraphEdge {
+                id: "filter-out".into(),
+                source: "filter".into(),
+                target: "out".into(),
+                source_handle: "value".into(),
+                target_handle: "text".into(),
+            },
+        ],
+        derived_graph: None,
+    };
+    fs::write(
+        directory.path().join("wf-json-filter.json"),
+        serde_json::json!({
+            "metadata": {"name": "Scheduler JSON extraction"}, "graph": graph,
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let host = DefaultCapabilitiesHost {
+        workflow_root: directory.path().to_owned(),
+    };
+    let service = WorkflowService::with_max_sessions(1);
+    publish_non_runtime_execution_snapshot(&service, "wf-json-filter", "1.0.0", graph).await;
+    let session = service
+        .create_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionCreateRequest {
+                workflow_id: "wf-json-filter".into(),
+                usage_profile: None,
+                keep_alive: false,
+            },
+        )
+        .await
+        .unwrap();
+    let result = service
+        .run_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionRunRequest {
+                session_id: session.session_id,
+                workflow_semantic_version: "1.0.0".into(),
+                inputs: vec![WorkflowPortBinding {
+                    node_id: "source".into(),
+                    port_id: "value".into(),
+                    value: serde_json::json!({"items": [{"prompt": "  red cube\n"}]}),
+                }],
+                output_targets: Some(vec![WorkflowOutputTarget {
+                    node_id: "out".into(),
+                    port_id: "text".into(),
+                }]),
+                override_selection: None,
+                timeout_ms: None,
+                priority: None,
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        result.outputs,
+        [WorkflowPortBinding {
+            node_id: "out".into(),
+            port_id: "text".into(),
+            value: serde_json::json!("  red cube\n"),
+        }]
+    );
+}
+
+#[tokio::test]
 async fn scheduler_session_runs_text_fan_in_and_downstream_output_without_a_runtime() {
     struct MergeHost {
         root: PathBuf,
