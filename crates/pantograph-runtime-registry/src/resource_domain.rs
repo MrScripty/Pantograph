@@ -1,5 +1,6 @@
 //! Explicit shared backing capacities for runtime reservation admission.
 
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
 use crate::admission::RuntimeReservationClaim;
@@ -9,7 +10,8 @@ use crate::{
 };
 
 /// One logical resource charged against a physical backing pool.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(deny_unknown_fields)]
 pub struct RuntimeResourceDomainBinding {
     pub runtime_id: String,
     pub resource_kind: RuntimeAdmissionResourceKind,
@@ -20,12 +22,50 @@ pub struct RuntimeResourceDomainBinding {
 /// Bind RAM from multiple runtimes to a host pool, VRAM to a shared device pool,
 /// or both kinds to one unified-memory pool. Distinct copies are charged fully;
 /// this contract does not infer aliases or deduplicate model content.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub struct RuntimeResourceDomain {
     pub domain_id: String,
     pub total_bytes: u64,
+    #[serde(default)]
     pub safety_margin_bytes: u64,
     pub bindings: Vec<RuntimeResourceDomainBinding>,
+}
+
+/// Optional persisted application configuration projected into startup composition.
+/// Other application settings are owned by the enclosing application config.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RuntimeResourceDomainConfig {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub runtime_resource_domains: Vec<RuntimeResourceDomain>,
+}
+
+impl RuntimeResourceDomainConfig {
+    /// Build the registry consumed by host composition. No partial configuration
+    /// is published if a declaration is invalid. Declared known runtime IDs are
+    /// registered without capabilities, readiness, model facts or backend keys;
+    /// ordinary producer reconciliation remains authoritative for those facts.
+    pub fn compose_registry(&self) -> Result<RuntimeRegistry, RuntimeRegistryError> {
+        let registry = RuntimeRegistry::new();
+        let mut ids = BTreeSet::new();
+        for domain in &self.runtime_resource_domains {
+            if !ids.insert(domain.domain_id.as_str()) {
+                return Err(invalid(domain, "duplicate declared domain id"));
+            }
+            for binding in &domain.bindings {
+                let runtime_id = canonical_runtime_id(&binding.runtime_id);
+                let Some(display_name) =
+                    pantograph_runtime_identity::runtime_display_name(&runtime_id)
+                else {
+                    return Err(invalid(domain, "unknown declared runtime id"));
+                };
+                registry
+                    .register_runtime(crate::RuntimeRegistration::new(runtime_id, display_name));
+            }
+            registry.configure_resource_domain(domain.clone())?;
+        }
+        Ok(registry)
+    }
 }
 
 /// Read-only accounting at evaluation time, never execution authority.

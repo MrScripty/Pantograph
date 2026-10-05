@@ -109,12 +109,49 @@ including when RAM and VRAM share one backing pool. Releases restore capacity.
 
 Every runtime/resource-kind pair can belong to at most one domain. Membership is
 fixed for the registry lifetime; capacity and margin may change only if they
-still cover all live claims. Configuration is in-process and must be restored
-when composing a new registry. Unconfigured resources retain runtime-local
+still cover all live claims. The desktop restores explicit declarations from
+`runtime_resource_domains` in its app-data `config.json` before gateway and
+workflow startup. Omission or an empty list composes the existing empty registry
+with no shared bindings. Unconfigured resources retain runtime-local
 accounting. Claims remain declared envelopes: missing claims, allocations outside
 this registry, retained model allocations outside declared leases, per-device
 subdivision within one runtime, automatic host binding, and measured allocator
 safety are not established by this API.
+
+To activate a pool, close Pantograph, add the section below to the existing app
+configuration, and restart. The byte values are an illustrative declaration;
+replace them with the capacity and margin you intend to admit. Device selection
+and offload settings do not imply any backing-pool membership.
+
+```json
+{
+  "runtime_resource_domains": [
+    {
+      "domain_id": "host.ram",
+      "total_bytes": 1073741824,
+      "safety_margin_bytes": 134217728,
+      "bindings": [
+        { "runtime_id": "pytorch", "resource_kind": "ram_bytes" },
+        { "runtime_id": "candle", "resource_kind": "ram_bytes" }
+      ]
+    }
+  ]
+}
+```
+
+For unified memory, use **one domain with one capacity**, listing both RAM and
+VRAM bindings against it. Each logical claim is charged once; duplicate bindings
+and overlapping domain membership are rejected. Do not describe one backing pool
+as two independent capacities. Distinct allocations remain fully charged;
+verified allocation aliases are not inferred from hardware names.
+
+Startup canonicalizes known runtime aliases and seeds declared identities without
+capabilities or readiness. Producer reconciliation still supplies actual runtime
+facts. Unknown runtimes, malformed declarations, duplicate domain IDs and unsafe
+budgets fail startup. A present unreadable or invalid app configuration also fails
+startup, rather than falling back to unconstrained defaults. Missing config files
+still use defaults. Existing config commands preserve the section but reject live
+changes to it: shared backing membership requires editing the file and restarting.
 
 ## Recovery And Reclaim
 

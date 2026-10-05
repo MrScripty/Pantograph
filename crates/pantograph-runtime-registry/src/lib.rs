@@ -11,7 +11,8 @@ use reservation_custody::{
 };
 pub use reservation_custody::{RuntimeReservationCustody, RuntimeReservationPublicationError};
 pub use resource_domain::{
-    RuntimeResourceDomain, RuntimeResourceDomainBinding, RuntimeResourceDomainObservation,
+    RuntimeResourceDomain, RuntimeResourceDomainBinding, RuntimeResourceDomainConfig,
+    RuntimeResourceDomainObservation,
 };
 mod retention;
 mod runtime_selection_policy;

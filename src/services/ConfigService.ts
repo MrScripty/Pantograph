@@ -29,6 +29,13 @@ export interface ConnectionMode {
 }
 
 export interface AppConfig {
+  /** Explicit backing pools applied at app startup; changing these requires restart. */
+  runtime_resource_domains?: Array<{
+    domain_id: string;
+    total_bytes: number;
+    safety_margin_bytes?: number;
+    bindings: Array<{ runtime_id: string; resource_kind: 'ram_bytes' | 'vram_bytes' }>;
+  }>;
   models: ModelConfig;
   device: DeviceConfig;
   connection_mode: ConnectionMode;

@@ -158,6 +158,9 @@ pub struct WorkflowConfig {
 /// Full application configuration
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AppConfig {
+    /// Explicit shared backing capacities applied at startup, independent of device selection.
+    #[serde(flatten)]
+    pub runtime_resources: pantograph_runtime_registry::RuntimeResourceDomainConfig,
     /// Model paths for sidecar mode
     pub models: ModelConfig,
     /// Device configuration for inference
@@ -227,7 +230,27 @@ impl AppConfig {
 
 #[cfg(test)]
 mod tests {
-    use super::ModelConfig;
+    use super::{AppConfig, ModelConfig};
+
+    #[test]
+    fn app_config_round_trip_preserves_flattened_startup_resource_domains() {
+        let source = include_str!("../../crates/pantograph-runtime-registry/tests/fixtures/startup_shared_resource_config.json");
+        let config: AppConfig = serde_json::from_str(source).expect("startup fixture must decode");
+        assert_eq!(config.runtime_resources.runtime_resource_domains.len(), 1);
+        let value = serde_json::to_value(&config).expect("app config must serialize");
+        assert!(value.get("runtime_resource_domains").is_some());
+        assert!(value.get("runtime_resources").is_none());
+        let restored: AppConfig = serde_json::from_value(value).expect("app config must restore");
+        assert_eq!(restored.runtime_resources, config.runtime_resources);
+    }
+
+    #[test]
+    fn old_app_config_defaults_to_no_shared_domains() {
+        let config: AppConfig =
+            serde_json::from_str(r#"{"models":{},"connection_mode":{"type":"None"}}"#)
+                .expect("legacy app config must decode");
+        assert!(config.runtime_resources.runtime_resource_domains.is_empty());
+    }
 
     #[test]
     fn model_config_ignores_unknown_retired_fields() {

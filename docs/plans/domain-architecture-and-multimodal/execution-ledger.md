@@ -439,3 +439,17 @@ replacement rollback/transfer, margins and configuration. Full portable suites
 pass 106 registry plus 133 scheduler tests. Production physical bindings and
 desktop activation remain open; native sampling qualification stays blocked.
 Parent retains review/PR/hosted execution; old milestones remain frozen.
+
+## 2026-10-05 — Explicit shared-resource startup composition candidate
+
+The parent froze `27af8aa3` and authorized connecting its shared admission API
+through the application. The [successor](reports/2026-10-05-shared-resource-composition.md)
+adds optional domains to existing AppConfig/config.json and uses the registry's
+portable factory in actual desktop setup before gateway/workflow startup. No
+backing topology is inferred from device selection. Empty/absent configuration
+retains the previous empty registry; malformed declarations fail startup, and
+live domain edits require restart. Eight actual portable composition tests cover
+persisted declarations, shared contention, unified memory and rollback/transfer.
+Native AppConfig tests are authored but unexecuted because GTK/WebKit prerequisites
+are absent. Parent retains desktop/native qualification and review; frozen
+sampling source and PR54 diagnostics remain unchanged.
