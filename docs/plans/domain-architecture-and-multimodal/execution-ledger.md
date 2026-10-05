@@ -406,3 +406,22 @@ inference passes 690, and embedded library/test compilation passes. Native
 host/source execution and hosted provisioning remain pending; parent owns
 independent review/publication, including any forthcoming finite-contract
 corrections. No model weights, ONNX retry or complete-workflow acceptance.
+
+
+## 2026-10-05 — Exact-head native text-control route and dependency blocker
+
+Continued from frozen `a8c6970f` in the newly ready environment. Embedded host
+and workflow binary attempts failed at missing ONNX symbols; one standard
+locked build returned HTTP 403 for the pinned ONNX Runtime 1.24.2 artifact.
+Zero native host/workflow tests executed. No further dependency download,
+substitution, pin change or model-weight download occurred.
+
+The separate [qualification route](reports/2026-10-05-text-control-native-qualification-route.md)
+adds exact-source/cleanliness and nonempty-suite guards, real CPU tests,
+pipefail/log capture and an independent required job in existing Quality Gates.
+A controlled Rust-command fixture with actual CPU tests proves 112 frozen-source
+sampling failures return exit 1 and six corrected tests return exit 0. Those
+controlled statuses do not count as native execution. Shared serialization
+passes 74 tests. Parent retains hosted/native qualification and publication;
+next planned feature is DA-03's desktop-authored dependent real text-to-image
+workflow after owner identity/target/device and desktop prerequisites.

@@ -364,6 +364,58 @@ jobs:
           path: ${{ runner.temp }}/cpu-sampler-tests.log
           if-no-files-found: warn
 
+  text-control-qualification:
+    name: Exact-head native text controls
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact requested source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Install Ubuntu native build dependencies
+        run: ./scripts/install-ubuntu-build-dependencies.sh
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@1.92.0
+
+      - name: Install Python toolchain
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install CPU sampler test dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m venv "$RUNNER_TEMP/text-control-venv"
+          "$RUNNER_TEMP/text-control-venv/bin/python" -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          "$RUNNER_TEMP/text-control-venv/bin/python" -m pip install 'transformers>=4.52,<4.54'
+
+      - name: Execute exact-head native host, workflow and CPU tests
+        shell: bash
+        env:
+          TEXT_CONTROL_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          export PANTOGRAPH_QUALIFICATION_PYTHON="$RUNNER_TEMP/text-control-venv/bin/python"
+          export PYO3_PYTHON="$PANTOGRAPH_QUALIFICATION_PYTHON"
+          python_library_dir="$("$PANTOGRAPH_QUALIFICATION_PYTHON" -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR"))')"
+          export LD_LIBRARY_PATH="$python_library_dir${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+          bash scripts/qualify-workflow-text-controls.sh "$TEXT_CONTROL_SOURCE_SHA" "$RUNNER_TEMP/text-control-qualification"
+
+      - name: Upload exact-head qualification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: exact-head-text-control-qualification
+          path: ${{ runner.temp }}/text-control-qualification/
+          if-no-files-found: warn
+
   rust-doc-tests:
     name: Rust doc tests
     runs-on: ubuntu-latest
@@ -554,6 +606,7 @@ jobs:
       - dependency-audit
       - rust-check
       - rust-tests
+      - text-control-qualification
       - rust-doc-tests
       - rustler-beam-smoke
       - rust-format-audit
@@ -571,6 +624,7 @@ jobs:
             "dependency-audit:${{ needs.dependency-audit.result }}" \
             "rust-check:${{ needs.rust-check.result }}" \
             "rust-tests:${{ needs.rust-tests.result }}" \
+            "text-control-qualification:${{ needs.text-control-qualification.result }}" \
             "rust-doc-tests:${{ needs.rust-doc-tests.result }}" \
             "rustler-beam-smoke:${{ needs.rustler-beam-smoke.result }}"
           do
