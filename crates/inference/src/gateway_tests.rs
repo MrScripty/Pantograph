@@ -4842,6 +4842,7 @@ async fn typed_text_rejects_premature_eof() {
 struct SelectedTextBackend {
     effects: Arc<Mutex<Vec<String>>>,
     terminal: u8,
+    expected_system_prompt: Option<String>,
 }
 #[async_trait]
 impl InferenceBackend for SelectedTextBackend {
@@ -4902,8 +4903,19 @@ impl InferenceBackend for SelectedTextBackend {
     ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, BackendError>> + Send>>, BackendError>
     {
         let request: serde_json::Value = serde_json::from_str(&request).unwrap();
+        let messages = request["messages"].as_array().unwrap();
+        let user_index = if let Some(system) = &self.expected_system_prompt {
+            assert_eq!(messages.len(), 2);
+            assert_eq!(messages[0]["role"], "system");
+            assert_eq!(messages[0]["content"][0]["text"], system.as_str());
+            1
+        } else {
+            assert_eq!(messages.len(), 1);
+            0
+        };
+        assert_eq!(messages[user_index]["role"], "user");
         assert_eq!(
-            request["messages"][0]["content"][0]["text"],
+            messages[user_index]["content"][0]["text"],
             "  exact prompt\n"
         );
         self.effects.lock().unwrap().push("stream".into());
@@ -4946,6 +4958,48 @@ impl crate::backend::BackendFactory for SelectedTextFactory {
     }
     fn info(&self) -> BackendInfo {
         panic!("not used")
+    }
+}
+
+#[tokio::test]
+async fn selected_text_preserves_optional_system_prompt_before_user_message() {
+    for system in [
+        None,
+        Some(String::new()),
+        Some("  Return an image prompt only.\n".into()),
+    ] {
+        let (_directory, mut request, target, decision) = crate::selected_text_execution::fixture();
+        let InferenceExecutionInput::TextGeneration { system_prompt, .. } = &mut request.input
+        else {
+            panic!("text fixture expected");
+        };
+        *system_prompt = system.clone();
+        let selected = SelectedTextBackend {
+            expected_system_prompt: system,
+            ..Default::default()
+        };
+        let effects = selected.effects.clone();
+        let gateway = InferenceGateway::with_backend(Box::new(selected), "PyTorch");
+        let result = gateway
+            .execute_selected_text_with_cancellation(
+                request,
+                target.clone(),
+                decision,
+                InferenceExecutionCancellationHandle::running(),
+            )
+            .await
+            .unwrap();
+        assert!(
+            matches!(result, InferenceExecutionResult::TextGeneration { text, .. } if text == "exact text")
+        );
+        assert_eq!(
+            *effects.lock().unwrap(),
+            [
+                format!("load:{}:cpu", target.local_load_path),
+                "stream".into(),
+                "finish:false".into(),
+            ]
+        );
     }
 }
 

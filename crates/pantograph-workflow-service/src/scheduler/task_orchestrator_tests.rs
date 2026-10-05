@@ -2401,6 +2401,54 @@ fn orchestrator_advances_dependent_non_runtime_task_when_inputs_materialize() {
 }
 
 #[test]
+fn orchestrator_retains_integer_number_source_as_completed_task_result() {
+    let orchestrator = orchestrator_without_runtime_host_response();
+    let mut source = text_input_task("limit", "");
+    source.node_type = "number-input".to_string();
+    source.source_input_task_template = Some(WorkflowSchedulerSourceInputTemplate::Integer {
+        port_id: "value".to_string(),
+    });
+    let task_graph = task_graph(vec![source]);
+    let workflow_run_id = task_graph.workflow_run_id.as_str().to_string();
+    let mut store = WorkflowExecutionSessionStore::new(1, 1);
+    let session_id = begin_active_run_for_task_graph(&mut store, &task_graph);
+    orchestrator
+        .initialize_active_run_task_state(&mut store, &session_id, &workflow_run_id, task_graph)
+        .expect("initialize number source");
+    let completed = orchestrator
+        .materialize_external_inputs_for_active_run(
+            &mut store,
+            &session_id,
+            &workflow_run_id,
+            &[WorkflowPortBinding {
+                node_id: "limit".to_string(),
+                port_id: "value".to_string(),
+                value: json!(128),
+            }],
+        )
+        .expect("materialize integer number source");
+    let SchedulerTaskState::Completed { execution_intent } = &completed[0].state else {
+        panic!("expected completed number source");
+    };
+    assert_eq!(
+        execution_intent
+            .source_input_task_intent()
+            .unwrap()
+            .task_kind
+            .as_str(),
+        "number-input"
+    );
+    let results = store
+        .active_run_scheduler_task_results(&session_id, &workflow_run_id)
+        .expect("retained number result");
+    assert_eq!(results[0].task_id, "limit");
+    assert_eq!(
+        results[0].outputs[0].value,
+        WorkflowSchedulerTaskResultValue::I64(128)
+    );
+}
+
+#[test]
 fn orchestrator_materializes_external_source_input_through_task_state() {
     let orchestrator = orchestrator_without_runtime_host_response();
     let task_graph = task_graph(vec![

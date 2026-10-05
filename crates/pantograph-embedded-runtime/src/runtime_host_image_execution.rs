@@ -12,12 +12,12 @@ use pantograph_scheduler::SchedulerDispatchDecision;
 use thiserror::Error;
 
 const IMAGE_GENERATION_TASK: &str = "image_generation";
-const PROMPT_PORT: &str = "prompt";
-const NEGATIVE_PROMPT_PORT: &str = "negative_prompt";
-const WIDTH_PORT: &str = "width";
-const HEIGHT_PORT: &str = "height";
-const STEPS_PORT: &str = "num_inference_steps";
-const SEED_PORT: &str = "seed";
+pub(crate) const PROMPT_PORT: &str = "prompt";
+pub(crate) const NEGATIVE_PROMPT_PORT: &str = "negative_prompt";
+pub(crate) const WIDTH_PORT: &str = "width";
+pub(crate) const HEIGHT_PORT: &str = "height";
+pub(crate) const STEPS_PORT: &str = "num_inference_steps";
+pub(crate) const SEED_PORT: &str = "seed";
 const NUM_IMAGES_PORT: &str = "num_images_per_prompt";
 const DENOISING_SCHEDULER_PORT: &str = "denoising_scheduler";
 const PYTORCH_BACKEND_ID: &str = "pytorch";
@@ -497,6 +497,68 @@ mod tests {
         RuntimeHostExecutionInput, RuntimeHostExecutionRequest,
         ValidatedRuntimeHostExecutionRequest,
     };
+
+    #[test]
+    fn advertised_basic_image_controls_reach_canonical_planning_without_loss() {
+        let ports: Vec<pantograph_inference_interface_contracts::InferencePortDescriptor> =
+            serde_json::from_str(include_str!(
+                "../../pantograph-inference-interface-contracts/tests/fixtures/image_generation_basic_inputs.json"
+            ))
+            .expect("shared image controls fixture");
+        let mut request = runtime_host_request_fixture();
+        request
+            .handoff
+            .dispatch_decision
+            .as_mut()
+            .unwrap()
+            .runtime_trait_settings
+            .clear();
+        request.materialized_inputs = ports
+            .into_iter()
+            .zip([
+                RuntimeHostExecutionInputValue::String("a red cube".into()),
+                RuntimeHostExecutionInputValue::String(" blur, low quality ".into()),
+                RuntimeHostExecutionInputValue::U64(512),
+                RuntimeHostExecutionInputValue::U64(768),
+                RuntimeHostExecutionInputValue::U64(12),
+                RuntimeHostExecutionInputValue::U64(u64::MAX),
+            ])
+            .map(|(port, value)| input(port.port_id.as_str(), value))
+            .collect();
+        let request = ValidatedRuntimeHostExecutionRequest::try_from(request).unwrap();
+        let package = image_package_facts();
+        let target = image_load_target(&package);
+        let projection = project_runtime_host_image_generation(&request, package, target).unwrap();
+        let inference::ImageGenerationPlanningOutcome::Planned { plan } =
+            inference::plan_image_generation_execution(projection.planning_input())
+        else {
+            panic!("advertised controls must produce an image plan");
+        };
+        assert_eq!(plan.prompt, "a red cube");
+        assert_eq!(plan.negative_prompt.as_deref(), Some(" blur, low quality "));
+        assert_eq!(plan.width, Some(512));
+        assert_eq!(plan.height, Some(768));
+        assert_eq!(plan.num_inference_steps, Some(12));
+        assert_eq!(plan.seed, Some(u64::MAX));
+    }
+
+    #[test]
+    fn omitted_basic_image_controls_preserve_backend_defaults() {
+        let mut request = runtime_host_request_fixture();
+        request
+            .materialized_inputs
+            .retain(|input| input.port_id == PROMPT_PORT);
+        let request = ValidatedRuntimeHostExecutionRequest::try_from(request).unwrap();
+        let package = image_package_facts();
+        let target = image_load_target(&package);
+        let projection = project_runtime_host_image_generation(&request, package, target).unwrap();
+        let image = projection.request();
+        assert_eq!(image.negative_prompt, None);
+        assert_eq!(image.width, None);
+        assert_eq!(image.height, None);
+        assert_eq!(image.num_inference_steps, None);
+        assert_eq!(image.seed, None);
+    }
 
     #[test]
     fn projects_valid_runtime_host_image_request_to_planning_input() {
