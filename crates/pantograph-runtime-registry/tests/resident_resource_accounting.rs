@@ -88,6 +88,59 @@ fn task(runtime: &str, owner: &str, bytes: u64) -> RuntimeReservationRequest {
 }
 
 #[test]
+fn uncertain_failed_owner_is_reclaimable_but_keeps_shared_admission_blocked() {
+    use pantograph_runtime_registry::{
+        RuntimeProducerAllocationState, RuntimeProducerObservation, RuntimeReclaimAction,
+        RuntimeRetentionDecision,
+    };
+
+    let registry = registry(100, false);
+    let lease = registry
+        .acquire_reservation(task("pytorch", "failed-load", 50))
+        .unwrap();
+    registry
+        .observe_runtime_producer(RuntimeProducerObservation {
+            source_id: "owner".into(),
+            sequence: 1,
+            allocation_state: RuntimeProducerAllocationState::Unknown,
+            observation: observation(None, None, Status::Failed),
+        })
+        .unwrap();
+    assert!(registry.eviction_candidates().is_empty());
+    assert_eq!(
+        registry.retention_disposition("pytorch").unwrap().decision,
+        RuntimeRetentionDecision::Retain
+    );
+    assert_eq!(registry.eviction_reservation_candidates().len(), 1);
+    registry.release_reservation(lease.reservation_id).unwrap();
+    assert_eq!(registry.eviction_candidates().len(), 1);
+    assert_eq!(
+        registry.reclaim_runtime("pytorch", false).unwrap().action,
+        RuntimeReclaimAction::StopProducer
+    );
+    assert!(matches!(
+        registry.acquire_reservation(task("candle", "before-ack", 1)),
+        Err(RuntimeRegistryError::ModelResidencyResourcesUnavailable { .. })
+    ));
+    registry
+        .observe_runtime_producer(RuntimeProducerObservation {
+            source_id: "owner".into(),
+            sequence: 2,
+            allocation_state: RuntimeProducerAllocationState::Released,
+            observation: observation(None, None, Status::Failed),
+        })
+        .unwrap();
+    assert!(registry.eviction_candidates().is_empty());
+    assert_eq!(
+        registry.reclaim_runtime("pytorch", false).unwrap().action,
+        RuntimeReclaimAction::None
+    );
+    registry
+        .acquire_reservation(task("candle", "after-ack", 100))
+        .unwrap();
+}
+
+#[test]
 fn task_completion_keeps_weights_charged_until_confirmed_stop() {
     let registry = registry(100, false);
     resident(&registry, 60);

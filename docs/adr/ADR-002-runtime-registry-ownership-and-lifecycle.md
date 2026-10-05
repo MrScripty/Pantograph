@@ -102,6 +102,11 @@ Adopt the following ownership and lifecycle boundary for the planned
   allocation. Unsequenced stops/inactivity cannot free an owned envelope.
   Failed effectful loads retain uncertainty until acknowledged owner cleanup;
   estimates are immutable startup configuration and are not measurements.
+  Terminal host cleanup publishes residency or uncertainty before releasing task
+  custody, then retries publication after release even when another lease retains
+  the runtime. Failed uncertain allocations remain reclaimable through the
+  matching lifecycle owner even when that producer is no longer ready. Neither
+  a stop request nor an inactive snapshot substitutes for ordered release evidence.
 
 8. `crates/pantograph-embedded-runtime` remains a runtime producer and executor.
 - It continues to expose Pantograph-specific runtime capabilities and execute

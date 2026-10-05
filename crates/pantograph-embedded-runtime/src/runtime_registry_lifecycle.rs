@@ -278,10 +278,29 @@ pub async fn reclaim_runtime_and_reconcile_runtime_registry<
 
     let stop_result =
         if reclaim.action == pantograph_runtime_registry::RuntimeReclaimAction::StopProducer {
-            if let Some(producer) = live_producer {
+            // A failed load can leave an owned allocation without readiness.
+            // Stop the matching owner even when it is not a live producer; only
+            // its ordered release acknowledgment may clear allocation uncertainty.
+            let producer = live_producer.or_else(|| {
+                let runtime_id = pantograph_runtime_identity::canonical_runtime_id(runtime_id);
+                if crate::runtime_registry::active_runtime_id(&mode_info).as_deref()
+                    == Some(runtime_id.as_str())
+                {
+                    Some(HostRuntimeProducer::Active)
+                } else if crate::runtime_registry::embedding_runtime_id(&mode_info).as_deref()
+                    == Some(runtime_id.as_str())
+                {
+                    Some(HostRuntimeProducer::Embedding)
+                } else {
+                    None
+                }
+            });
+            if let Some(producer) = producer {
                 Some(controller.stop_runtime_producer(producer).await)
             } else {
-                None
+                Some(Err(inference::GatewayError::SwitchFailed(format!(
+                    "cannot reclaim runtime '{runtime_id}' without its lifecycle owner"
+                ))))
             }
         } else {
             None
@@ -303,7 +322,14 @@ pub async fn release_reservation_and_reconcile_runtime_registry<
     registry: &RuntimeRegistry,
     reservation_id: u64,
 ) -> Result<Option<RuntimeRetentionDisposition>, RuntimeLifecycleCoordinationError> {
+    // Establish resident accounting (or fail-closed unknown accounting) before
+    // task custody is released. A cold load may not have been published yet.
+    sync_runtime_registry(controller, registry).await;
     let disposition = registry.release_reservation_if_present(reservation_id)?;
+    // Full peak task claims can reject the first resident estimate. Retry after
+    // release while the unknown allocation still blocks competing admission,
+    // including when another lease makes the retention decision Retain.
+    sync_runtime_registry(controller, registry).await;
 
     if let Some(disposition) = disposition.as_ref() {
         if disposition.decision == RuntimeRetentionDecision::Evict {

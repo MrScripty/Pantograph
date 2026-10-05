@@ -215,6 +215,14 @@ Successful gateway stop/switch supplies logical absence evidence. There is no ne
 process watcher or controller, and an unseen process loss requires the existing
 owner to reconcile or stop before capacity becomes available.
 
+Terminal host cleanup publishes current allocation evidence before releasing its
+task lease. If full peak claims temporarily prevent a resident estimate from
+fitting, unknown accounting blocks competing admission until publication retries
+after release. This retry also runs when other leases retain the producer. A
+failed uncertain allocation is eligible for normal reclaim once reservations and
+pins permit it; reclaim calls the matching lifecycle owner despite lost readiness
+and keeps shared admission blocked until ordered release evidence arrives.
+
 All task peak claims remain fully charged, including any weights already inside
 them. This deliberately conservative accounting does not establish a measured
 resident/transient split or physical GPU allocator safety. The bridge covers the

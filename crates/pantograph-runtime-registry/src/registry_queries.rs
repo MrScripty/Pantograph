@@ -198,7 +198,7 @@ pub(super) fn runtime_is_evictable(record: &RuntimeRegistryRecord) -> bool {
             | RuntimeRegistryStatus::Ready
             | RuntimeRegistryStatus::Unhealthy
             | RuntimeRegistryStatus::Stopping
-    )
+    ) || (record.status == RuntimeRegistryStatus::Failed && record.resident_resources_uncertain)
 }
 
 fn runtime_is_reservation_evictable(record: &RuntimeRegistryRecord) -> bool {
@@ -212,7 +212,7 @@ fn runtime_is_reservation_evictable(record: &RuntimeRegistryRecord) -> bool {
             | RuntimeRegistryStatus::Ready
             | RuntimeRegistryStatus::Unhealthy
             | RuntimeRegistryStatus::Stopping
-    )
+    ) || (record.status == RuntimeRegistryStatus::Failed && record.resident_resources_uncertain)
 }
 
 fn eviction_status_rank(status: RuntimeRegistryStatus) -> u8 {
