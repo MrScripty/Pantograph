@@ -287,6 +287,12 @@ pub(crate) fn validate_resident_domain_capacity(
     claim: RuntimeReservationClaim,
 ) -> Result<(), RuntimeRegistryError> {
     for domain in state.resource_domains.values() {
+        let requested = claim_bytes(domain, runtime_id, claim)?;
+        if requested == 0 {
+            // This declaration does not charge this pool. An overcommitted or
+            // unavailable unrelated pool must not hide known resident facts.
+            continue;
+        }
         // Other loaded members may not yet have declarations. Their unknown
         // state blocks admission, but must not prevent publishing known facts.
         let reserved = reserved_bytes(state, domain, None, false)?;
@@ -294,7 +300,6 @@ pub(crate) fn validate_resident_domain_capacity(
             .0
             .saturating_sub(domain.safety_margin_bytes);
         if reserved > capacity {
-            let requested = claim_bytes(domain, runtime_id, claim)?;
             return Err(RuntimeRegistryError::ResourceDomainAdmissionRejected {
                 runtime_id: runtime_id.to_string(),
                 domain_id: domain.domain_id.clone(),

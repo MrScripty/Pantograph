@@ -8,6 +8,16 @@
 
 The next bounded scheduler capability is a fresh host RAM ceiling for explicitly declared backing pools, after CPU candidate discovery. See [host RAM ceilings](reports/2026-10-05-runtime-owned-host-ram-ceilings.md). It may only lower the configured budget, must preserve live task/resident charges after shrink, and must reread missing or changed owner facts at authoritative admission. It does not infer GPU placement, external-consumer allowance or a resident/transient discount.
 
+CPU `394d4748` passed independent bounded source review. Frozen RAM `d7903010`
+received two correctness findings: real cgroup hierarchy roots lack `memory.max`,
+and over-capacity RAM incorrectly blocked unrelated VRAM resident publication.
+The [narrow review repair](reports/2026-10-05-host-ram-ceiling-review-repairs.md)
+distinguishes verified real roots from namespace-visible roots and limits resident
+validation to charged pools. Its native source remains unavailable in this
+container's unresolved `/..` mount layout. Exact-model service timing work is
+preserved separately and resumes after this repair checkpoint; ranking remains
+separate until timing identity and provenance contracts are qualified.
+
 **Acceptance status:** `blocked`
 
 **Independent scheduler slice:** The parent authorized continued feature delivery

@@ -345,3 +345,91 @@ fn owner_ram_ceiling_known_zero_and_unavailable_remain_distinct_facts() {
         .is_err());
     assert!(registry.snapshot().reservations.is_empty());
 }
+
+#[test]
+fn owner_ram_shrink_does_not_block_unrelated_vram_resident_publication() {
+    let registry = Arc::new(RuntimeRegistry::new());
+    for runtime in ["pytorch", "candle"] {
+        registry.register_runtime(RuntimeRegistration::new(runtime, runtime));
+    }
+    registry
+        .configure_resource_domain(RuntimeResourceDomain {
+            domain_id: "host.ram".into(),
+            total_bytes: 100,
+            safety_margin_bytes: 0,
+            bindings: vec![RuntimeResourceDomainBinding {
+                runtime_id: "pytorch".into(),
+                resource_kind: RuntimeAdmissionResourceKind::RamBytes,
+            }],
+        })
+        .unwrap();
+    let owner = Arc::new(Owner(AtomicU64::new(100)));
+    registry.bind_host_ram_capacity_source(owner.clone());
+    registry
+        .configure_resource_domain(RuntimeResourceDomain {
+            domain_id: "candle.vram".into(),
+            total_bytes: 100,
+            safety_margin_bytes: 0,
+            bindings: vec![RuntimeResourceDomainBinding {
+                runtime_id: "candle".into(),
+                resource_kind: RuntimeAdmissionResourceKind::VramBytes,
+            }],
+        })
+        .unwrap();
+    let held = registry
+        .acquire_reservation(request("pytorch", "held", 60))
+        .unwrap();
+    owner.0.store(40, Ordering::SeqCst);
+    registry.observe_runtime(RuntimeObservation {
+        runtime_id: "candle".into(),
+        display_name: "Candle".into(),
+        backend_keys: vec!["candle".into()],
+        model_id: Some("candle-model".into()),
+        runtime_instance_id: Some("candle-instance".into()),
+        status: RuntimeRegistryStatus::Ready,
+        last_error: None,
+    });
+    registry
+        .declare_model_residency_resources(
+            "candle",
+            "candle-model",
+            "candle-instance",
+            RuntimeReservationRequirements::from_claims(vec![
+                RuntimeReservationResourceClaim::vram_bytes(10),
+            ]),
+        )
+        .unwrap();
+    let mut vram = request("candle", "vram", 0);
+    vram.requirements = Some(RuntimeReservationRequirements::from_claims(vec![
+        RuntimeReservationResourceClaim::vram_bytes(20),
+    ]));
+    let probe = registry.evaluate_reservation(vram.clone()).unwrap();
+    let pool = probe
+        .observation()
+        .resource_domains
+        .iter()
+        .find(|pool| pool.domain_id == "candle.vram")
+        .unwrap();
+    assert_eq!((pool.resident_bytes, pool.available_bytes), (10, 90));
+    registry.acquire_reservation(vram).unwrap();
+    assert!(registry
+        .acquire_reservation(request("pytorch", "new-ram", 1))
+        .is_err());
+    assert!(registry
+        .snapshot()
+        .reservations
+        .iter()
+        .any(|lease| lease.reservation_id == held.reservation_id));
+    assert_eq!(
+        registry
+            .snapshot()
+            .runtimes
+            .iter()
+            .find(|runtime| runtime.runtime_id == "pytorch")
+            .unwrap()
+            .active_reservation_claims[0]
+            .claims[0]
+            .bytes,
+        60
+    );
+}

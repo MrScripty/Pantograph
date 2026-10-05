@@ -23,7 +23,7 @@ impl RuntimeHostRamCapacitySource for NativeHostRamCapacitySource {
             let cgroup = std::fs::read_to_string("/proc/self/cgroup").ok()?;
             let mounts = std::fs::read_to_string("/proc/self/mountinfo").ok()?;
             visible_cgroup_ceiling(total, &cgroup, &mounts, |path| {
-                std::fs::read_to_string(path).ok()
+                std::fs::read_to_string(path)
             })
         }
         #[cfg(not(target_os = "linux"))]
@@ -38,7 +38,7 @@ fn visible_cgroup_ceiling(
     total: u64,
     cgroup: &str,
     mounts: &str,
-    read: impl Fn(&std::path::Path) -> Option<String>,
+    read: impl Fn(&std::path::Path) -> std::io::Result<String>,
 ) -> Option<u64> {
     use std::path::{Component, Path};
     let location = Path::new(cgroup.lines().find_map(|line| line.strip_prefix("0::"))?);
@@ -66,7 +66,23 @@ fn visible_cgroup_ceiling(
     let mut current = root.join(location.strip_prefix("/").ok()?);
     let mut ceiling = total;
     loop {
-        let limit = read(&current.join("memory.max"))?;
+        let limit = match read(&current.join("memory.max")) {
+            Ok(limit) => limit,
+            Err(error) if current == root && error.kind() == std::io::ErrorKind::NotFound => {
+                // memory.max and cgroup.type exist only on non-root cgroups.
+                // A namespace-visible mount root may still be a non-root cgroup;
+                // require the kernel's root shape, not just a '/' mountinfo label.
+                match read(&root.join("cgroup.type")) {
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                    _ => return None,
+                }
+                // Confirm the mounted hierarchy is readable. Permission/I/O
+                // errors and missing intermediate limits never mean unlimited.
+                read(&root.join("cgroup.controllers")).ok()?;
+                break;
+            }
+            Err(_) => return None,
+        };
         let limit = limit.trim();
         if limit != "max" {
             ceiling = ceiling.min(limit.parse::<u64>().ok()?);
@@ -87,23 +103,23 @@ mod tests {
     #[test]
     fn host_ram_ceiling_checks_current_group_and_every_visible_ancestor() {
         let result = visible_cgroup_ceiling(100, "0::/parent/child\n", MOUNT, |path| {
-            Some(
-                match path.to_str().unwrap() {
-                    "/sys/fs/cgroup/parent/child/memory.max" => "80",
-                    "/sys/fs/cgroup/parent/memory.max" => "60",
-                    "/sys/fs/cgroup/memory.max" => "max",
-                    _ => panic!("unexpected path"),
+            match path.to_str().unwrap() {
+                "/sys/fs/cgroup/parent/child/memory.max" => Ok("80".into()),
+                "/sys/fs/cgroup/parent/memory.max" => Ok("60".into()),
+                "/sys/fs/cgroup/cgroup.controllers" => Ok("cpu memory".into()),
+                "/sys/fs/cgroup/memory.max" | "/sys/fs/cgroup/cgroup.type" => {
+                    Err(std::io::ErrorKind::NotFound.into())
                 }
-                .into(),
-            )
+                _ => panic!("unexpected path"),
+            }
         });
         assert_eq!(result, Some(60));
         assert_eq!(
-            visible_cgroup_ceiling(100, "0::/", MOUNT, |_| Some("200".into())),
+            visible_cgroup_ceiling(100, "0::/", MOUNT, |_| Ok("200".into())),
             Some(100)
         );
         assert_eq!(
-            visible_cgroup_ceiling(100, "0::/", MOUNT, |_| Some("0".into())),
+            visible_cgroup_ceiling(100, "0::/", MOUNT, |_| Ok("0".into())),
             Some(0)
         );
     }
@@ -112,15 +128,105 @@ mod tests {
     fn host_ram_ceiling_missing_malformed_or_unsupported_layout_is_unavailable() {
         for (group, mounts) in [("1:memory:/", MOUNT), ("0::/../other", MOUNT), ("0::/", "")] {
             assert_eq!(
-                visible_cgroup_ceiling(100, group, mounts, |_| Some("60".into())),
+                visible_cgroup_ceiling(100, group, mounts, |_| Ok("60".into())),
                 None
             );
         }
-        assert_eq!(visible_cgroup_ceiling(100, "0::/", MOUNT, |_| None), None);
         assert_eq!(
-            visible_cgroup_ceiling(100, "0::/", MOUNT, |_| Some("broken".into())),
+            visible_cgroup_ceiling(100, "0::/", MOUNT, |_| Err(
+                std::io::ErrorKind::NotFound.into()
+            )),
             None
         );
+        assert_eq!(
+            visible_cgroup_ceiling(100, "0::/", MOUNT, |_| Ok("broken".into())),
+            None
+        );
+    }
+
+    #[test]
+    fn host_ram_ceiling_verified_real_root_has_no_memory_limit_interface() {
+        let read = |path: &std::path::Path| match path.file_name().unwrap().to_str().unwrap() {
+            "cgroup.controllers" => Ok("cpu memory".into()),
+            "memory.max" | "cgroup.type" => Err(std::io::ErrorKind::NotFound.into()),
+            _ => panic!("unexpected root probe"),
+        };
+        assert_eq!(visible_cgroup_ceiling(100, "0::/", MOUNT, read), Some(100));
+    }
+
+    #[test]
+    fn host_ram_ceiling_namespace_root_keeps_its_limit_or_unavailability() {
+        for (limit, expected) in [("30", 30), ("0", 0), ("max", 100)] {
+            let result = visible_cgroup_ceiling(100, "0::/", MOUNT, |path| {
+                match path.file_name().unwrap().to_str().unwrap() {
+                    "memory.max" => Ok(limit.into()),
+                    "cgroup.type" => Ok("domain".into()),
+                    _ => panic!("unexpected namespace probe"),
+                }
+            });
+            assert_eq!(result, Some(expected));
+        }
+        assert_eq!(
+            visible_cgroup_ceiling(100, "0::/parent/child", MOUNT, |path| {
+                match path.to_str().unwrap() {
+                    "/sys/fs/cgroup/parent/child/memory.max" => Ok("80".into()),
+                    "/sys/fs/cgroup/parent/memory.max" => Ok("60".into()),
+                    "/sys/fs/cgroup/memory.max" => Ok("30".into()),
+                    _ => panic!("must retain the namespace-root memory ceiling"),
+                }
+            }),
+            Some(30)
+        );
+        assert_eq!(
+            visible_cgroup_ceiling(100, "0::/", MOUNT, |path| {
+                if path.ends_with("cgroup.type") {
+                    Ok("domain".into())
+                } else {
+                    Err(std::io::ErrorKind::NotFound.into())
+                }
+            }),
+            None
+        );
+    }
+
+    #[test]
+    fn host_ram_ceiling_missing_or_unreadable_intermediate_is_not_root_exemption() {
+        for error in [
+            std::io::ErrorKind::NotFound,
+            std::io::ErrorKind::PermissionDenied,
+            std::io::ErrorKind::Other,
+        ] {
+            assert_eq!(
+                visible_cgroup_ceiling(100, "0::/parent/child", MOUNT, |path| {
+                    match path.to_str().unwrap() {
+                        "/sys/fs/cgroup/parent/child/memory.max" => Ok("80".into()),
+                        "/sys/fs/cgroup/parent/memory.max" => Err(error.into()),
+                        _ => panic!("must stop at missing/unreadable intermediate"),
+                    }
+                }),
+                None
+            );
+        }
+    }
+
+    #[test]
+    fn host_ram_ceiling_root_permission_or_missing_verification_stays_unavailable() {
+        for failed in ["memory.max", "cgroup.type", "cgroup.controllers"] {
+            assert_eq!(
+                visible_cgroup_ceiling(100, "0::/", MOUNT, |path| {
+                    let name = path.file_name().unwrap().to_str().unwrap();
+                    if name == failed {
+                        return Err(std::io::ErrorKind::PermissionDenied.into());
+                    }
+                    match name {
+                        "memory.max" | "cgroup.type" => Err(std::io::ErrorKind::NotFound.into()),
+                        "cgroup.controllers" => Ok("cpu memory".into()),
+                        _ => panic!("unexpected verification probe"),
+                    }
+                }),
+                None
+            );
+        }
     }
 
     #[test]

@@ -1535,17 +1535,26 @@ mod tests {
     #[cfg(feature = "backend-pytorch")]
     #[tokio::test]
     async fn unconstrained_owned_cpu_candidate_reaches_selected_text_host_with_full_peak_lease() {
-        exercise_owned_cpu_selected_text_host(false).await;
+        exercise_owned_cpu_selected_text_host(false, false).await;
     }
 
     #[cfg(feature = "backend-pytorch")]
     #[tokio::test]
     async fn host_ram_ceiling_gates_actual_cpu_selection_and_preserves_execution_custody() {
-        exercise_owned_cpu_selected_text_host(true).await;
+        exercise_owned_cpu_selected_text_host(true, false).await;
     }
 
     #[cfg(feature = "backend-pytorch")]
-    async fn exercise_owned_cpu_selected_text_host(clamp_capacity: bool) {
+    #[tokio::test]
+    async fn host_ram_shrink_does_not_starve_unrelated_vram_owner_publication() {
+        exercise_owned_cpu_selected_text_host(true, true).await;
+    }
+
+    #[cfg(feature = "backend-pytorch")]
+    async fn exercise_owned_cpu_selected_text_host(
+        clamp_capacity: bool,
+        unrelated_vram_owner: bool,
+    ) {
         use crate::pumas_dispatch_package_facts::{
             PumasDispatchPackageFactsBridgeOutcome, PumasDispatchPackageFactsProjection,
         };
@@ -1813,6 +1822,45 @@ mod tests {
         );
         if clamp_capacity {
             capacity.0.store(1, std::sync::atomic::Ordering::SeqCst);
+            if unrelated_vram_owner {
+                registry.register_runtime(RuntimeRegistration::new("candle", "Candle"));
+                registry.configure_resource_domain(pantograph_runtime_registry::RuntimeResourceDomain {
+                    domain_id: "controlled.candle.vram".into(), total_bytes: 100, safety_margin_bytes: 0,
+                    bindings: vec![pantograph_runtime_registry::RuntimeResourceDomainBinding {
+                        runtime_id: "candle".into(), resource_kind: pantograph_runtime_registry::RuntimeAdmissionResourceKind::VramBytes,
+                    }],
+                }).unwrap();
+                registry.observe_runtime(pantograph_runtime_registry::RuntimeObservation {
+                    runtime_id: "candle".into(),
+                    display_name: "Candle".into(),
+                    backend_keys: vec!["candle".into()],
+                    model_id: Some("controlled-candle-model".into()),
+                    runtime_instance_id: Some("controlled-candle-generation".into()),
+                    status: pantograph_runtime_registry::RuntimeRegistryStatus::Ready,
+                    last_error: None,
+                });
+                registry.declare_model_residency_resources("candle", "controlled-candle-model", "controlled-candle-generation", pantograph_runtime_registry::RuntimeReservationRequirements::from_claims(vec![pantograph_runtime_registry::RuntimeReservationResourceClaim::vram_bytes(10)])).unwrap();
+                let vram_request = pantograph_runtime_registry::RuntimeReservationRequest {
+                    runtime_id: "candle".into(), workflow_id: "controlled-vram".into(), reservation_owner_id: Some("controlled-candle-task".into()),
+                    usage_profile: None, model_id: None, pin_runtime: false, retention_hint: pantograph_runtime_registry::RuntimeRetentionHint::Ephemeral,
+                    requirements: Some(pantograph_runtime_registry::RuntimeReservationRequirements::from_claims(vec![pantograph_runtime_registry::RuntimeReservationResourceClaim::vram_bytes(20)])),
+                };
+                let observation = registry.evaluate_reservation(vram_request.clone()).unwrap();
+                let pool = &observation.observation().resource_domains[0];
+                assert_eq!(
+                    (
+                        pool.resident_bytes,
+                        pool.reserved_bytes,
+                        pool.available_bytes
+                    ),
+                    (10, 10, 90)
+                );
+                let vram_lease = registry.acquire_reservation(vram_request).unwrap();
+                assert_eq!(registry.snapshot().reservations.len(), 2);
+                registry
+                    .release_reservation(vram_lease.reservation_id)
+                    .unwrap();
+            }
             let probe = pantograph_runtime_registry::RuntimeReservationRequest {
                 runtime_id: "pytorch".into(),
                 workflow_id: "probe".into(),
@@ -1829,7 +1877,15 @@ mod tests {
             };
             assert!(registry.evaluate_reservation(probe).is_err());
             assert_eq!(
-                registry.snapshot().runtimes[0].active_reservation_claims[0].claims[0].bytes,
+                registry
+                    .snapshot()
+                    .runtimes
+                    .iter()
+                    .find(|runtime| runtime.runtime_id == "pytorch")
+                    .unwrap()
+                    .active_reservation_claims[0]
+                    .claims[0]
+                    .bytes,
                 PEAK_BYTES
             );
         }
