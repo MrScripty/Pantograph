@@ -116,8 +116,16 @@ pub enum WorkflowSchedulerNonRuntimeTaskTemplate {
 #[serde(tag = "template_type", rename_all = "snake_case", deny_unknown_fields)]
 #[non_exhaustive]
 pub enum WorkflowSchedulerSourceInputTemplate {
-    Text { port_id: String },
-    Boolean { port_id: String },
+    Text {
+        port_id: String,
+    },
+    Boolean {
+        port_id: String,
+    },
+    /// Integer-only materialization of a number-input node in scheduler-owned runs.
+    Integer {
+        port_id: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

@@ -3499,6 +3499,7 @@ fn source_input_task_kind(
     let task_kind = match template {
         WorkflowSchedulerSourceInputTemplate::Text { .. } => "text-input",
         WorkflowSchedulerSourceInputTemplate::Boolean { .. } => "boolean-input",
+        WorkflowSchedulerSourceInputTemplate::Integer { .. } => "number-input",
     };
     SchedulerSourceInputTaskKind::parse(task_kind)
         .map_err(WorkflowSchedulerTaskOrchestratorError::SchedulerContract)
