@@ -397,15 +397,26 @@ fn non_runtime_task_template_for_node(
             }
         }
         NODE_TYPE_JSON_FILTER => json_filter_template(node_id, input_bindings, node_data),
-        NODE_TYPE_MERGE
+        NODE_TYPE_MERGE => {
             if input_bindings
                 .iter()
-                .all(|binding| binding.target_port_id == "inputs") =>
-        {
-            (
-                Some(WorkflowSchedulerNonRuntimeTaskTemplate::Merge),
-                Vec::new(),
-            )
+                .all(|binding| binding.target_port_id == "inputs")
+            {
+                (
+                    Some(WorkflowSchedulerNonRuntimeTaskTemplate::Merge),
+                    Vec::new(),
+                )
+            } else {
+                (
+                    None,
+                    vec![diagnostic(
+                        node_id,
+                        Some("inputs"),
+                        WorkflowSchedulerTaskProjectionDiagnosticCode::InvalidNonRuntimeTemplateValue,
+                        "merge accepts only bindings that target 'inputs'",
+                    )],
+                )
+            }
         }
         _ => (
             None,
