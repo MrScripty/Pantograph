@@ -27,6 +27,14 @@ pub trait HostRuntimeRegistryController {
     ) -> Option<inference::resident_lifecycle::ResidentLifecycleSnapshot> {
         None
     }
+    async fn resident_lifecycle_snapshots(
+        &self,
+    ) -> Vec<inference::resident_lifecycle::ResidentLifecycleSnapshot> {
+        self.resident_lifecycle_snapshot()
+            .await
+            .into_iter()
+            .collect()
+    }
     async fn stop_runtime_producer(
         &self,
         producer: HostRuntimeProducer,
@@ -67,7 +75,7 @@ async fn publish_resident_lifecycle<C: HostRuntimeRegistryController + Sync>(
     controller: &C,
     registry: &RuntimeRegistry,
 ) {
-    if let Some(snapshot) = controller.resident_lifecycle_snapshot().await {
+    for snapshot in controller.resident_lifecycle_snapshots().await {
         if let Err(error) = snapshot.publish(registry) {
             log::warn!("Resident resource lifecycle publication rejected: {error}");
         }

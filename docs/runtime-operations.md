@@ -159,7 +159,7 @@ changes to it: shared backing membership requires editing the file and restartin
 
 ### Resident Model Envelopes
 
-The active PyTorch producer in `InferenceGateway` publishes ordered allocation
+The PyTorch and owned llama.cpp producers in `InferenceGateway` publish ordered allocation
 observations during host sync, warmup, restore, stop and reclaim reconciliation.
 The registry applies its explicitly configured estimates under the existing
 admission lock. Configure exact observed model targets in `config.json`:
@@ -186,8 +186,10 @@ These settings require restart, like resource domains. Missing, legacy and empty
 configuration preserves unconfigured lifecycle/admission behavior. Configuration
 alone creates no loaded model, readiness or resident allocation. A declared zero
 for a kind is known zero; an omitted kind is unknown and blocks a bound shared pool.
-Estimates for other producers can be persisted, but automatic publication in this
-successor is limited to the active PyTorch owner.
+Automatic publication covers these gateway owners. Use runtime ID `llama_cpp`
+for an owned llama.cpp sidecar. An external URL is an externally owned allocation
+and publishes no local resident envelope. Dedicated embedding-server owners and
+other independent producers remain outside this bridge.
 
 `model_resource_residency` in runtime snapshots holds the exact model/instance
 and its optional envelope. Resident bytes and complete task peak envelopes count
@@ -211,9 +213,16 @@ They retain the previous envelope and expose `resident_resources_uncertain`;
 shared admission returns `ModelResidencyResourcesUnavailable`, including for a
 request from another runtime. PyTorch retains uncertainty after losing load
 metadata, so a subsequent stop must obtain worker shutdown acknowledgement.
-Successful gateway stop/switch supplies logical absence evidence. There is no new
-process watcher or controller, and an unseen process loss requires the existing
-owner to reconcile or stop before capacity becomes available.
+For llama.cpp, `LlamaServer` retains the owned process handle and its existing
+process-event stream after readiness. Signal acceptance alone is insufficient:
+stop/switch must consume that generation's `Terminated` event before releasing
+accounting or spawning a successor. Kill errors, a closed event stream without
+termination, a five-second acknowledgment timeout and cancelled stop retain
+custody. Idle output is drained through the existing event stream. Desktop
+process shutdown retains its existing monitor until termination acknowledgment.
+An unseen process loss requires the owner to reconcile or stop before capacity
+becomes available. Backend switches publish both current and retired owner
+observations, so a previous producer's release is not lost.
 
 Terminal host cleanup publishes current allocation evidence before releasing its
 task lease. If full peak claims temporarily prevent a resident estimate from
@@ -226,7 +235,8 @@ and keeps shared admission blocked until ordered release evidence arrives.
 All task peak claims remain fully charged, including any weights already inside
 them. This deliberately conservative accounting does not establish a measured
 resident/transient split or physical GPU allocator safety. The bridge covers the
-gateway's current text-model lifecycle; independent diffusion caches, standalone
+gateway's PyTorch text-model and owned llama.cpp lifecycle; independent diffusion
+caches, dedicated embedding servers, standalone
 backend unloads, and allocations outside that owner are not measured or projected.
 Native GUI/runtime qualification remains separate.
 

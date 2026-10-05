@@ -34,6 +34,12 @@ impl HostRuntimeRegistryController for crate::llm::gateway::InferenceGateway {
         self.inner_arc().resident_lifecycle_snapshot().await
     }
 
+    async fn resident_lifecycle_snapshots(
+        &self,
+    ) -> Vec<inference::resident_lifecycle::ResidentLifecycleSnapshot> {
+        self.inner_arc().resident_lifecycle_snapshots().await
+    }
+
     async fn stop_runtime_producer(
         &self,
         producer: HostRuntimeProducer,

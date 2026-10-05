@@ -96,6 +96,8 @@ impl InferenceGateway {
         let sequence = self.runtime_instance_sequence.clone();
         let pytorch_release_confirmed = self.pytorch_release_confirmed.clone();
         let pytorch_ever_owned = self.pytorch_ever_owned.clone();
+        let llamacpp_release_confirmed = self.llamacpp_release_confirmed.clone();
+        let llamacpp_ever_owned = self.llamacpp_ever_owned.clone();
         #[cfg(test)]
         let after_publication = self
             .embedding_replacement
@@ -132,6 +134,10 @@ impl InferenceGateway {
                 if canonical_backend_key(backend.name()) == "pytorch" {
                     pytorch_ever_owned.store(true, Ordering::Relaxed);
                     pytorch_release_confirmed.store(true, Ordering::Relaxed);
+                }
+                if canonical_backend_key(backend.name()) == "llama_cpp" {
+                    llamacpp_ever_owned.store(true, Ordering::Relaxed);
+                    llamacpp_release_confirmed.store(true, Ordering::Relaxed);
                 }
                 std::mem::swap(&mut *backend, &mut candidate);
                 *name = backend.name().to_owned();

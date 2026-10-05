@@ -234,6 +234,72 @@ impl ProcessHandle for ErroringProcessHandle {
     }
 }
 
+#[tokio::test]
+async fn stop_signal_without_termination_retains_handle_and_blocks_replacement() {
+    let killed = Arc::new(AtomicBool::new(false));
+    let mut server = LlamaServer::new();
+    server.child = Some(Box::new(ErroringProcessHandle {
+        killed: killed.clone(),
+    }));
+    let (sender, receiver) = mpsc::channel(1);
+    drop(sender);
+    server.process_events = Some(receiver);
+    assert!(server.stop_confirmed().await.is_err());
+    assert!(killed.load(Ordering::SeqCst));
+    assert!(server.child.is_some());
+    let temp = tempfile::tempdir().unwrap();
+    let captured = Arc::new(Mutex::new(Vec::new()));
+    assert!(server
+        .start_sidecar_inference(
+            Arc::new(ErroringProcessSpawner {
+                app_data_dir: temp.path().into(),
+                killed,
+                captured_args: Some(captured.clone())
+            }),
+            "model-a",
+            None,
+            &inference_settings(
+                &DeviceConfig {
+                    device: DeviceBackend::Auto,
+                    gpu_layers: -1
+                },
+                4096,
+                None,
+                None,
+                None
+            ),
+            Some(18080),
+        )
+        .await
+        .is_err());
+    assert!(
+        captured.lock().unwrap().is_empty(),
+        "replacement must not spawn over an unconfirmed owner"
+    );
+    assert!(server.child.is_some());
+}
+
+#[tokio::test]
+async fn owned_termination_clears_handle_and_pid_file() {
+    let temp = tempfile::tempdir().unwrap();
+    let pid_file = temp.path().join(super::SIDECAR_PID_FILE);
+    std::fs::write(&pid_file, "1234").unwrap();
+    let mut server = LlamaServer::new();
+    server.child = Some(Box::new(ErroringProcessHandle {
+        killed: Arc::new(AtomicBool::new(false)),
+    }));
+    server.pid_file = Some(pid_file.clone());
+    let (sender, receiver) = mpsc::channel(1);
+    sender
+        .send(ProcessEvent::Terminated(Some(0)))
+        .await
+        .unwrap();
+    server.process_events = Some(receiver);
+    server.stop_confirmed().await.unwrap();
+    assert!(server.child.is_none());
+    assert!(!pid_file.exists());
+}
+
 #[test]
 fn active_process_id_reports_ready_sidecar_child_pid_only() {
     let mut server = LlamaServer::new();
@@ -322,7 +388,7 @@ fn pid_path_arg(args: &[&str]) -> Option<PathBuf> {
 }
 
 #[tokio::test]
-async fn start_sidecar_inference_cleans_process_and_pid_file_on_start_error() {
+async fn start_sidecar_inference_retains_custody_without_termination_on_start_error() {
     let temp = tempfile::tempdir().expect("temp dir");
     let pid_file = temp.path().join(super::SIDECAR_PID_FILE);
     let killed = Arc::new(AtomicBool::new(false));
@@ -353,12 +419,14 @@ async fn start_sidecar_inference_cleans_process_and_pid_file_on_start_error() {
 
     assert_eq!(result, Err(LlamaCppSidecarStartupError::ProcessError));
     assert!(killed.load(Ordering::SeqCst));
-    assert!(!pid_file.exists());
+    assert!(pid_file.exists());
+    assert!(server.stop_confirmed().await.is_err());
+    assert!(server.child.is_some());
     assert!(!server.is_ready());
-    assert_eq!(server.mode_info().mode, "none");
+    assert_eq!(server.mode_info().mode, "sidecar_inference");
 
     server.stop();
-    assert_eq!(server.mode_info().mode, "none");
+    assert_eq!(server.mode_info().mode, "sidecar_inference");
 }
 
 #[tokio::test]

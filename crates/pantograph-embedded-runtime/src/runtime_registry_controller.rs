@@ -14,6 +14,12 @@ impl runtime_registry::HostRuntimeRegistryController for inference::InferenceGat
         inference::InferenceGateway::resident_lifecycle_snapshot(self).await
     }
 
+    async fn resident_lifecycle_snapshots(
+        &self,
+    ) -> Vec<inference::resident_lifecycle::ResidentLifecycleSnapshot> {
+        inference::InferenceGateway::resident_lifecycle_snapshots(self).await
+    }
+
     async fn stop_runtime_producer(
         &self,
         producer: runtime_registry::HostRuntimeProducer,

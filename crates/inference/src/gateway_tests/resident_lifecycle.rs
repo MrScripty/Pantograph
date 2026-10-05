@@ -525,6 +525,19 @@ async fn fresh_backend_switch_admits_first_load_and_switch_away_confirms_release
     assert_eq!(available(&registry).unwrap(), 10);
     registry.release_reservation(peak.reservation_id).unwrap();
     gateway.switch_backend("llama.cpp").await.unwrap();
-    publish(&gateway, &registry).await;
+    let batch = gateway.resident_lifecycle_snapshots().await;
+    assert_eq!(batch.len(), 2);
+    assert!(batch
+        .iter()
+        .all(|snapshot| snapshot.allocation_state == ResidentAllocationState::Released));
+    assert!(batch
+        .iter()
+        .any(|snapshot| snapshot.lifecycle.runtime_id.as_deref() == Some("pytorch")));
+    assert!(batch
+        .iter()
+        .any(|snapshot| snapshot.lifecycle.runtime_id.as_deref() == Some("llama_cpp")));
+    for snapshot in batch {
+        snapshot.publish(&registry).unwrap();
+    }
     assert_eq!(available(&registry).unwrap(), 100);
 }

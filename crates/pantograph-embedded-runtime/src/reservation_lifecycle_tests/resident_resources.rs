@@ -10,7 +10,7 @@ use pantograph_runtime_registry::{
 use super::*;
 use crate::runtime_registry::reclaim_runtime_and_reconcile_runtime_registry;
 
-fn requirements(bytes: u64) -> RuntimeReservationRequirements {
+pub(super) fn requirements(bytes: u64) -> RuntimeReservationRequirements {
     RuntimeReservationRequirements::from_claims(vec![RuntimeReservationResourceClaim::ram_bytes(
         bytes,
     )])
@@ -47,7 +47,7 @@ fn registry() -> Arc<RuntimeRegistry> {
     registry
 }
 
-fn task(runtime: &str, owner: &str, bytes: u64) -> RuntimeReservationRequest {
+pub(super) fn task(runtime: &str, owner: &str, bytes: u64) -> RuntimeReservationRequest {
     RuntimeReservationRequest {
         runtime_id: runtime.into(),
         workflow_id: "wf-image".into(),

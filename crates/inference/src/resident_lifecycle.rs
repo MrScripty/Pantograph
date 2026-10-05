@@ -42,14 +42,21 @@ impl ResidentLifecycleSnapshot {
             lifecycle.warmup_completed_at_ms,
             lifecycle.last_error.is_some(),
         );
+        let runtime_id = lifecycle.runtime_id.unwrap_or_else(|| "pytorch".into());
+        let display_name = match runtime_id.as_str() {
+            "llama_cpp" => "llama.cpp",
+            "pytorch" => "PyTorch",
+            _ => runtime_id.as_str(),
+        }
+        .to_string();
         registry.observe_runtime_producer(RuntimeProducerObservation {
             source_id: self.source_id,
             sequence: self.sequence,
             allocation_state,
             observation: RuntimeObservation {
-                runtime_id: lifecycle.runtime_id.unwrap_or_else(|| "pytorch".into()),
-                display_name: "PyTorch".into(),
-                backend_keys: vec!["pytorch".into()],
+                runtime_id: runtime_id.clone(),
+                display_name,
+                backend_keys: vec![runtime_id],
                 model_id: self.model_target,
                 runtime_instance_id: lifecycle.runtime_instance_id,
                 status,

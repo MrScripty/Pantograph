@@ -163,6 +163,8 @@ pub struct InferenceGateway {
     resident_observation_sequence: AtomicU64,
     pytorch_release_confirmed: Arc<AtomicBool>,
     pytorch_ever_owned: Arc<AtomicBool>,
+    llamacpp_release_confirmed: Arc<AtomicBool>,
+    llamacpp_ever_owned: Arc<AtomicBool>,
 }
 
 struct RuntimeWarmupStartContext<'a> {
@@ -260,6 +262,8 @@ impl InferenceGateway {
             resident_observation_sequence: AtomicU64::new(0),
             pytorch_release_confirmed: Arc::new(AtomicBool::new(false)),
             pytorch_ever_owned: Arc::new(AtomicBool::new(false)),
+            llamacpp_release_confirmed: Arc::new(AtomicBool::new(true)),
+            llamacpp_ever_owned: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -286,6 +290,8 @@ impl InferenceGateway {
             resident_observation_sequence: AtomicU64::new(0),
             pytorch_release_confirmed: Arc::new(AtomicBool::new(false)),
             pytorch_ever_owned: Arc::new(AtomicBool::new(false)),
+            llamacpp_release_confirmed: Arc::new(AtomicBool::new(false)),
+            llamacpp_ever_owned: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -540,22 +546,17 @@ impl InferenceGateway {
             self.runtime_lifecycle.write().await.last_error = Some(error.to_string());
             return Err(GatewayError::Backend(error));
         }
-        if runtime_id_for_backend_name(&self.current_backend_name().await) == "pytorch" {
-            self.pytorch_ever_owned.store(true, Ordering::Relaxed);
-            self.pytorch_release_confirmed
-                .store(true, Ordering::Relaxed);
-        }
+        self.record_resident_release(
+            &runtime_id_for_backend_name(&self.current_backend_name().await),
+            true,
+        );
         let new_backend = self
             .registry
             .create(name)
             .map_err(|e| GatewayError::SwitchFailed(e.to_string()))?;
         let canonical_backend_name = new_backend.name().to_string();
-        if runtime_id_for_backend_name(&canonical_backend_name) == "pytorch" {
-            // Factory creation establishes a fresh, unstarted logical owner.
-            self.pytorch_ever_owned.store(true, Ordering::Relaxed);
-            self.pytorch_release_confirmed
-                .store(true, Ordering::Relaxed);
-        }
+        // Factory creation establishes a fresh, unstarted logical owner.
+        self.record_resident_release(&runtime_id_for_backend_name(&canonical_backend_name), true);
         *guard = new_backend;
 
         // Update current backend name
@@ -658,12 +659,8 @@ impl InferenceGateway {
         }
 
         let runtime_id = runtime_id_for_backend_name(&self.current_backend_name().await);
-        if runtime_id == "pytorch" {
-            self.pytorch_ever_owned.store(true, Ordering::Relaxed);
-            // A failed effectful load does not acknowledge release.
-            self.pytorch_release_confirmed
-                .store(false, Ordering::Relaxed);
-        }
+        // A failed effectful load does not acknowledge release.
+        self.record_resident_release(&runtime_id, false);
         let warmup_started_at_ms = unix_timestamp_ms();
         let previous_runtime_instance_id = {
             let lifecycle = self.runtime_lifecycle.read().await;
@@ -828,11 +825,10 @@ impl InferenceGateway {
             self.runtime_lifecycle.write().await.last_error = Some(error.to_string());
             return Err(GatewayError::Backend(error));
         }
-        if runtime_id_for_backend_name(&self.current_backend_name().await) == "pytorch" {
-            self.pytorch_ever_owned.store(true, Ordering::Relaxed);
-            self.pytorch_release_confirmed
-                .store(true, Ordering::Relaxed);
-        }
+        self.record_resident_release(
+            &runtime_id_for_backend_name(&self.current_backend_name().await),
+            true,
+        );
         // Reset embedding mode
         let mut mode = self.embedding_mode.write().await;
         *mode = false;
@@ -920,68 +916,120 @@ impl InferenceGateway {
         Ok(())
     }
 
-    /// Sample PyTorch allocation evidence while excluding start/stop/switch.
-    /// Readiness loss alone never proves deallocation. Only an acknowledged
-    /// stop (including switch's stop) or a fresh empty owner proves release.
-    /// Sequence is assigned before delivery, so a delayed old stop cannot
-    /// clear a newer reload, even when model/instance labels are reused.
+    fn record_resident_release(&self, runtime_id: &str, confirmed: bool) {
+        let flags = match runtime_id {
+            "pytorch" => Some((&self.pytorch_ever_owned, &self.pytorch_release_confirmed)),
+            "llama_cpp" => Some((&self.llamacpp_ever_owned, &self.llamacpp_release_confirmed)),
+            _ => None,
+        };
+        if let Some((owned, release)) = flags {
+            owned.store(true, Ordering::Relaxed);
+            release.store(confirmed, Ordering::Relaxed);
+        }
+    }
+
+    /// Legacy single-owner observation. Host reconciliation uses the batch
+    /// so acknowledged retirement survives a switch between producer kinds.
     pub async fn resident_lifecycle_snapshot(
         &self,
     ) -> Option<crate::resident_lifecycle::ResidentLifecycleSnapshot> {
+        let snapshots = self.resident_lifecycle_snapshots().await;
+        snapshots
+            .iter()
+            .find(|snapshot| snapshot.lifecycle.runtime_id.as_deref() == Some("pytorch"))
+            .cloned()
+            .or_else(|| snapshots.into_iter().next())
+    }
+
+    /// Sample configured-estimate producer evidence under the existing owner
+    /// lock. Readiness loss is uncertainty; only acknowledged stop or a fresh
+    /// empty owner proves release. Sequence precedes delivery, protecting a
+    /// newer generation against delayed release observations.
+    pub async fn resident_lifecycle_snapshots(
+        &self,
+    ) -> Vec<crate::resident_lifecycle::ResidentLifecycleSnapshot> {
         use crate::resident_lifecycle::{ResidentAllocationState, ResidentLifecycleSnapshot};
         let backend = self.backend.read().await;
         let runtime_id = runtime_id_for_backend_name(&self.current_backend_name().await);
-        if runtime_id != "pytorch" {
-            if !self.pytorch_ever_owned.load(Ordering::Relaxed) {
-                return None;
+        self.record_resident_release_if_first_observation(&runtime_id);
+        let config = self.current_runtime_config.read().await;
+        let model_target = config.as_ref().and_then(config_model_target);
+        let external = config
+            .as_ref()
+            .is_some_and(|config| config.external_url.is_some());
+        let lifecycle = self.runtime_lifecycle.read().await.clone();
+        let mut snapshots = Vec::new();
+        for (id, owned, released) in [
+            (
+                "pytorch",
+                &self.pytorch_ever_owned,
+                &self.pytorch_release_confirmed,
+            ),
+            (
+                "llama_cpp",
+                &self.llamacpp_ever_owned,
+                &self.llamacpp_release_confirmed,
+            ),
+        ] {
+            if !owned.load(Ordering::Relaxed) {
+                continue;
             }
-            return Some(ResidentLifecycleSnapshot {
+            let current = runtime_id == id;
+            let mut evidence = if current {
+                lifecycle.clone()
+            } else {
+                RuntimeLifecycleSnapshot {
+                    runtime_id: Some(id.into()),
+                    ..Default::default()
+                }
+            };
+            let state = if current && backend.is_ready() && external && id == "llama_cpp" {
+                // connect_external confirms retirement before attaching to an
+                // externally owned process. Its allocation is not ours.
+                evidence.active = false;
+                ResidentAllocationState::Released
+            } else if current
+                && backend.is_ready()
+                && model_target.is_some()
+                && evidence.runtime_instance_id.is_some()
+            {
+                ResidentAllocationState::Resident
+            } else if released.load(Ordering::Relaxed) && (!current || !backend.is_ready()) {
+                evidence.active = false;
+                ResidentAllocationState::Released
+            } else {
+                ResidentAllocationState::Unknown
+            };
+            let snapshot = ResidentLifecycleSnapshot {
                 source_id: self.resident_source_id.clone(),
                 sequence: self
                     .resident_observation_sequence
                     .fetch_add(1, Ordering::Relaxed)
                     + 1,
-                allocation_state: ResidentAllocationState::Released,
-                model_target: None,
-                lifecycle: RuntimeLifecycleSnapshot {
-                    runtime_id: Some("pytorch".into()),
-                    ..Default::default()
+                allocation_state: state,
+                model_target: if current && state != ResidentAllocationState::Released {
+                    model_target.clone()
+                } else {
+                    None
                 },
-            });
-        }
-        self.pytorch_ever_owned.store(true, Ordering::Relaxed);
-        let model_target = self
-            .current_runtime_config
-            .read()
-            .await
-            .as_ref()
-            .and_then(config_model_target);
-        let mut lifecycle = self.runtime_lifecycle.read().await.clone();
-        let allocation_state = if backend.is_ready()
-            && model_target.is_some()
-            && lifecycle.runtime_instance_id.is_some()
-        {
-            ResidentAllocationState::Resident
-        } else if !backend.is_ready() && self.pytorch_release_confirmed.load(Ordering::Relaxed) {
-            lifecycle.active = false;
-            ResidentAllocationState::Released
-        } else {
-            ResidentAllocationState::Unknown
-        };
-        Some(ResidentLifecycleSnapshot {
-            source_id: self.resident_source_id.clone(),
-            sequence: self
-                .resident_observation_sequence
-                .fetch_add(1, Ordering::Relaxed)
-                + 1,
-            allocation_state,
-            model_target: if allocation_state == ResidentAllocationState::Released {
-                None
+                lifecycle: evidence,
+            };
+            if current {
+                snapshots.insert(0, snapshot);
             } else {
-                model_target
-            },
-            lifecycle,
-        })
+                snapshots.push(snapshot);
+            }
+        }
+        snapshots
+    }
+
+    fn record_resident_release_if_first_observation(&self, runtime_id: &str) {
+        // Sampling a custom or failed owner must never manufacture release.
+        match runtime_id {
+            "pytorch" => self.pytorch_ever_owned.store(true, Ordering::Relaxed),
+            "llama_cpp" => self.llamacpp_ever_owned.store(true, Ordering::Relaxed),
+            _ => {}
+        }
     }
 
     /// Get server mode info (for legacy compatibility)
@@ -1237,6 +1285,7 @@ impl InferenceGateway {
                 self.runtime_lifecycle.write().await.last_error = Some(error.to_string());
                 return Err(error.into());
             }
+            self.record_resident_release(&canonical_runtime_id(backend.name()), true);
             *backend = replacement;
             *self.current_backend_name.write().await = backend.name().to_owned();
             *self.runtime_lifecycle.write().await = RuntimeLifecycleSnapshot {
