@@ -21,6 +21,14 @@ without immutable content and loaded implementation/configuration/device facts
 remain unknown; controlled tests do not qualify real model latency. Ranking and
 calibration remain separate until comparable native owner evidence is available.
 
+The [runtime-owned CUDA fact slice](reports/2026-10-05-runtime-owned-cuda-device-facts.md)
+uses the existing embedded PyTorch owner for explicit UUID/property observations.
+The real CPU-only runtime qualifies the unavailable path; positive UUID tests are
+controlled and GPU execution/capacity remain unqualified. Configured labels, Pumas
+monitor aggregates and llama.cpp selectors cannot become physical backing facts.
+Automatic GPU admission and completion ranking remain pending authoritative owner
+placement, shared backing/capacity and comparable timing evidence.
+
 **Acceptance status:** `blocked`
 
 **Independent scheduler slice:** The parent authorized continued feature delivery

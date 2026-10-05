@@ -654,6 +654,16 @@ impl InferenceGateway {
         cpu_device_candidates(self.available_backends())
     }
 
+    /// Explicitly observe the embedded PyTorch owner's CUDA device namespace.
+    /// This does not load a model, reserve capacity or advertise GPU candidates.
+    /// UUIDs are runtime-observed device identities, not backing-pool mappings.
+    #[cfg(feature = "backend-pytorch")]
+    pub async fn observe_pytorch_cuda_inventory(
+        &self,
+    ) -> crate::backend::pytorch::PyTorchCudaInventory {
+        crate::backend::pytorch::PyTorchBackend::observe_cuda_inventory().await
+    }
+
     /// Describe the currently active backend instance.
     pub async fn current_backend_info(&self) -> BackendInfo {
         let selected_name = self.current_backend_name().await;
