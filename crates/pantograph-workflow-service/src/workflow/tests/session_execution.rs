@@ -3949,6 +3949,7 @@ async fn scheduler_session_extracts_json_prompt_into_downstream_text_output() {
         ],
         derived_graph: None,
     };
+    let graph = with_builtin_node_definitions(graph);
     fs::write(
         directory.path().join("wf-json-filter.json"),
         serde_json::json!({
@@ -3962,6 +3963,17 @@ async fn scheduler_session_extracts_json_prompt_into_downstream_text_output() {
     };
     let service = WorkflowService::with_max_sessions(1)
         .with_attribution_store(SqliteAttributionStore::open_in_memory().expect("store"));
+    let io = service
+        .workflow_get_io(
+            &host,
+            WorkflowIoRequest {
+                workflow_id: "wf-json-filter".into(),
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(io_port_ids(&io.inputs), [("source", "value")]);
+    assert_eq!(io_port_ids(&io.outputs), [("out", "text")]);
     publish_non_runtime_execution_snapshot(&service, "wf-json-filter", "1.0.0", graph).await;
     let session = service
         .create_workflow_execution_session(
@@ -4078,6 +4090,7 @@ async fn scheduler_session_runs_text_fan_in_and_downstream_output_without_a_runt
         ],
         derived_graph: None,
     };
+    let graph = with_builtin_node_definitions(graph);
     fs::write(
         directory.path().join("wf-fan-in.json"),
         serde_json::json!({
@@ -4093,6 +4106,17 @@ async fn scheduler_session_runs_text_fan_in_and_downstream_output_without_a_runt
     assert!(host.runtime_capabilities().await.unwrap().is_empty());
     let service = WorkflowService::with_max_sessions(1)
         .with_attribution_store(SqliteAttributionStore::open_in_memory().expect("store"));
+    let io = service
+        .workflow_get_io(
+            &host,
+            WorkflowIoRequest {
+                workflow_id: "wf-fan-in".into(),
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(io_port_ids(&io.inputs), [("a", "text"), ("b", "text")]);
+    assert_eq!(io_port_ids(&io.outputs), [("out", "text")]);
     publish_non_runtime_execution_snapshot(&service, "wf-fan-in", "1.0.0", graph).await;
     let session = service
         .create_workflow_execution_session(
@@ -4143,6 +4167,30 @@ async fn scheduler_session_runs_text_fan_in_and_downstream_output_without_a_runt
         }]
     );
     assert_eq!(host.loads.load(Ordering::SeqCst), 0);
+}
+
+fn with_builtin_node_definitions(mut graph: WorkflowGraph) -> WorkflowGraph {
+    let registry = crate::NodeRegistry::new();
+    for node in &mut graph.nodes {
+        node.data["definition"] = serde_json::to_value(
+            registry
+                .get_definition(&node.node_type)
+                .expect("built-in fixture node"),
+        )
+        .expect("serialize built-in definition");
+    }
+    graph
+}
+
+fn io_port_ids(nodes: &[WorkflowIoNode]) -> Vec<(&str, &str)> {
+    nodes
+        .iter()
+        .flat_map(|node| {
+            node.ports
+                .iter()
+                .map(move |port| (node.node_id.as_str(), port.port_id.as_str()))
+        })
+        .collect()
 }
 
 #[tokio::test]
