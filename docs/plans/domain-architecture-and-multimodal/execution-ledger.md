@@ -425,3 +425,17 @@ controlled statuses do not count as native execution. Shared serialization
 passes 74 tests. Parent retains hosted/native qualification and publication;
 next planned feature is DA-03's desktop-authored dependent real text-to-image
 workflow after owner identity/target/device and desktop prerequisites.
+
+## 2026-10-05 — Shared backing resource admission candidate
+
+Continued independent scheduler delivery from frozen qualification `6aa6b717`
+on `feat/scheduler-shared-resource-admission`. Research and current registry
+inspection identify per-runtime capacity as the bounded prerequisite: two runtime
+claims can spend one backing pool independently. The
+[candidate](reports/2026-10-05-shared-resource-admission.md) adds explicit shared
+RAM/VRAM domains to existing evaluation, authoritative admission and provisional
+custody. Eleven public tests exercise actual contention, unified-memory sums,
+replacement rollback/transfer, margins and configuration. Full portable suites
+pass 106 registry plus 133 scheduler tests. Production physical bindings and
+desktop activation remain open; native sampling qualification stays blocked.
+Parent retains review/PR/hosted execution; old milestones remain frozen.

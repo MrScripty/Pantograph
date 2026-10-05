@@ -8,6 +8,14 @@
 
 **Acceptance status:** `blocked`
 
+**Independent scheduler slice:** The parent authorized continued feature delivery
+while frozen native sampling qualification is blocked. The
+[shared resource admission candidate](reports/2026-10-05-shared-resource-admission.md)
+adds explicit backing domains across runtime RAM/VRAM claims, including unified
+memory and authoritative commit/custody checks. Portable registry/scheduler tests
+execute without ONNX. Physical binding/capacity production, desktop activation and
+full residency accounting remain pending; parent owns coordinated review.
+
 **Execution ledger:** [execution-ledger.md](execution-ledger.md)
 
 **Issues:** [issues.md](issues.md)

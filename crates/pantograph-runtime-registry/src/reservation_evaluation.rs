@@ -21,6 +21,8 @@ pub struct RuntimeReservationAdmissionObservation {
     /// An existing same-owner lease excluded while evaluating its replacement.
     pub replaces_reservation_id: Option<u64>,
     pub resources: Vec<RuntimeReservationResourceObservation>,
+    /// Explicit shared backing capacities, in addition to runtime-local budgets.
+    pub resource_domains: Vec<crate::RuntimeResourceDomainObservation>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -152,6 +154,12 @@ impl RuntimeRegistry {
                 available_bytes,
             });
         }
+        let resource_domains = crate::resource_domain::domain_observations(
+            &guard,
+            &runtime_id,
+            claim,
+            replaces_reservation_id,
+        )?;
         Ok(RuntimeReservationEvaluation {
             registry: self,
             request,
@@ -162,6 +170,7 @@ impl RuntimeRegistry {
                 observed_at_ms: crate::unix_timestamp_ms(),
                 replaces_reservation_id,
                 resources,
+                resource_domains,
             },
         })
     }

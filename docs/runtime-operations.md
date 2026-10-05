@@ -92,6 +92,30 @@ capacity, unchanged model/catalog epochs, or recovery after process abort. Missi
 capacity remains unknown. Verification evidence and native execution limits are
 recorded in the [reservation custody report](plans/domain-architecture-and-multimodal/reports/2026-10-05-reservation-custody.md).
 
+## Shared Resource Admission
+
+The registry can explicitly bind logical RAM/VRAM claims from registered runtimes
+to a shared backing pool with `configure_resource_domain`. For example, bind
+PyTorch and Candle RAM to one host domain; bind both RAM and VRAM to one domain
+when those allocations use a unified-memory pool. Capacity and membership come
+from the composition owner; the registry does not discover hardware or infer
+shared allocation aliases. Equal-content copies are charged separately.
+
+Shared admission applies in addition to runtime-local budgets. Evaluations expose
+domain requested/reserved/available bytes without allocating leases. Selected
+commits recheck all domains under the registry lock. Provisional replacements
+protect the componentwise maximum old/new claims until transfer or rollback,
+including when RAM and VRAM share one backing pool. Releases restore capacity.
+
+Every runtime/resource-kind pair can belong to at most one domain. Membership is
+fixed for the registry lifetime; capacity and margin may change only if they
+still cover all live claims. Configuration is in-process and must be restored
+when composing a new registry. Unconfigured resources retain runtime-local
+accounting. Claims remain declared envelopes: missing claims, allocations outside
+this registry, retained model allocations outside declared leases, per-device
+subdivision within one runtime, automatic host binding, and measured allocator
+safety are not established by this API.
+
 ## Recovery And Reclaim
 
 Recovery follows this ownership flow:

@@ -158,6 +158,7 @@ impl WorkflowHost for EmbeddedWorkflowHost {
         match runtime_registry.can_acquire_reservation(&reservation_request) {
             Ok(()) => Ok(true),
             Err(RuntimeRegistryError::AdmissionRejected { .. })
+            | Err(RuntimeRegistryError::ResourceDomainAdmissionRejected { .. })
             | Err(RuntimeRegistryError::ReservationRejected(_)) => Ok(false),
             Err(error) => {
                 Err(runtime_registry_errors::workflow_service_error_from_runtime_registry(error))

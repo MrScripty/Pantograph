@@ -5,10 +5,14 @@ mod registry_queries;
 mod reservation;
 mod reservation_custody;
 mod reservation_evaluation;
+mod resource_domain;
 use reservation_custody::{
     check_observed_runtime_identity, prospective_reservation, PendingReservation,
 };
 pub use reservation_custody::{RuntimeReservationCustody, RuntimeReservationPublicationError};
+pub use resource_domain::{
+    RuntimeResourceDomain, RuntimeResourceDomainBinding, RuntimeResourceDomainObservation,
+};
 mod retention;
 mod runtime_selection_policy;
 mod snapshot;
@@ -74,6 +78,22 @@ pub type SharedRuntimeRegistry = Arc<RuntimeRegistry>;
 
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum RuntimeRegistryError {
+    #[error("resource domain '{domain_id}' is invalid: {reason}")]
+    InvalidResourceDomain {
+        domain_id: String,
+        reason: &'static str,
+    },
+
+    #[error("resource domain '{domain_id}' byte accounting overflowed")]
+    ResourceDomainAccountingOverflow { domain_id: String },
+
+    #[error("runtime '{runtime_id}' cannot reserve {requested_bytes} bytes in resource domain '{domain_id}': {available_bytes} bytes available")]
+    ResourceDomainAdmissionRejected {
+        runtime_id: String,
+        domain_id: String,
+        requested_bytes: u64,
+        available_bytes: u64,
+    },
     #[error("runtime '{0}' is not registered")]
     RuntimeNotFound(String),
 
@@ -169,6 +189,7 @@ impl RuntimeRegistration {
 
 #[derive(Debug, Default)]
 struct RuntimeRegistryState {
+    resource_domains: BTreeMap<String, RuntimeResourceDomain>,
     runtimes: BTreeMap<String, RuntimeRegistryRecord>,
     reservations: BTreeMap<u64, RuntimeReservationRecord>,
     pending_reservations: BTreeMap<u64, PendingReservation>,
@@ -778,8 +799,7 @@ fn validate_reservation_request(
             failure,
         });
     }
-
-    Ok(())
+    resource_domain::validate_domain_admission(state, runtime_id, claim, existing_reservation_id)
 }
 
 fn reservation_claim_from_requirements(
