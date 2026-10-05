@@ -43,3 +43,19 @@ of its two public session scenarios remains required; see the
 [published fixture report](https://github.com/MrScripty/Pantograph/blob/174c1950312150512e917cab5b0027551fab786b/docs/plans/domain-architecture-and-multimodal/reports/2026-10-05-pr54-session-output-discovery.md).
 Parent owns independent review and PR publication. Frozen feature evidence
 and repair histories are retained separately before composition.
+
+## Tested composition
+
+Sampler milestone `3bf3eb45d9ce68d889bf9aebed497ead961ee6db`, tree
+`9c9fd9d61dc67c6055670def16eadce0307dabcc`, composes conflict-free with fixture
+successor `174c1950`. The sampler/test and session fixture source bytes match
+their separate milestones; the original `bc655d3` branch is unchanged.
+
+The composed PyTorch-enabled inference library suite passes all 686 tests.
+Normal-default embedded library/test compiler-Clippy checking with
+`ORT_SKIP_DOWNLOAD=1` passes without warnings, as do formatting, whitespace and
+critical gates. Logs: `/tmp/top-k-final-inference-tests.log` and
+`/tmp/top-k-final-composition-clippy.log`. These checks compile the session
+fixtures but do not execute them. Parent-hosted exact-head execution of both
+repaired scenarios and embedded host tests, plus independent review of the
+sampler semantics, remain required. No full top-k acceptance is claimed.

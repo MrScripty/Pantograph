@@ -349,3 +349,21 @@ embedded compiler-Clippy check, formatting and critical gate pass. Native
 execution remains deferred and the parent's repair-head CI does not substitute
 for qualification of the final feature composition. The plan now sequences
 parent review and final hosted/native acceptance of that composition.
+
+Independent top-k review then identified real sampling failure for k above
+vocabulary; the earlier recording/envelope evidence and no-blocker assessment
+were provisional. Separate sampler milestone `3bf3eb45` caps positive k at
+logits width using Transformers semantics and preserves explicit non-streaming
+zero. Four real CPU tensor/streaming/kwargs tests pass and detect both defects
+in the frozen original; [sampling evidence](reports/2026-10-05-top-k-vocabulary-sampling.md)
+distinguishes this from model inference.
+
+Separate PR54 fixture successor `174c1950`, based directly on `78bc7193`,
+persists canonical built-in definitions and asserts public I/O discovery while
+retaining exact final text and zero runtime loads. The [fixture handoff](reports/2026-10-05-pr54-session-output-discovery.md)
+records the full finalization trace and exact native test names. Eleven
+supported node-engine tests pass; native public-session execution remains
+deferred. Their conflict-free composition preserves the frozen top-k branch
+and both independent commits. The composed 686-test inference suite and normal
+embedded library/test compiler-Clippy check pass; final hosted/native scenario
+execution and parent review remain outstanding.
