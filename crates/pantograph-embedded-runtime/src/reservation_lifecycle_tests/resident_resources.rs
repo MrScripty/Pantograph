@@ -252,7 +252,11 @@ async fn terminal_failed_load_reclaims_inactive_owner_and_requires_release_ackno
     port.apply_reservation_lifecycle(event(
         lease.reservation_id,
         ReservationLifecycleOutcome::RuntimeHostFailed,
-        Vec::new(),
+        vec![diagnostic(
+            ReservationLifecycleDiagnosticSeverity::Error,
+            ReservationLifecycleDiagnosticCode::RuntimeHostFailed,
+            "load failed after allocation",
+        )],
     ))
     .await
     .expect_err("failed owned stop must be reported");
