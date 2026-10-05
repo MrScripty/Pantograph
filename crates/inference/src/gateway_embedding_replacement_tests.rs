@@ -8,6 +8,7 @@ use std::sync::atomic::AtomicBool;
 struct Resident {
     candle: CandleBackend,
     stops: Arc<AtomicUsize>,
+    panic_next_stop: bool,
 }
 
 #[async_trait]
@@ -29,6 +30,10 @@ impl InferenceBackend for Resident {
         self.candle.start(config, spawner).await
     }
     async fn stop(&mut self) -> Result<(), BackendError> {
+        if self.panic_next_stop {
+            self.panic_next_stop = false;
+            panic!("resident stop panic");
+        }
         self.stops.fetch_add(1, Ordering::SeqCst);
         self.candle.stop().await
     }
@@ -88,6 +93,12 @@ impl crate::InferenceExecutionCancellationSignal for Cancellation {
 }
 
 async fn resident() -> (tempfile::TempDir, InferenceGateway, Arc<AtomicUsize>) {
+    resident_with_stop_panic(false).await
+}
+
+async fn resident_with_stop_panic(
+    panic_next_stop: bool,
+) -> (tempfile::TempDir, InferenceGateway, Arc<AtomicUsize>) {
     let (directory, request, target, decision) = crate::selected_embedding_execution::fixture(8);
     let mut candle = CandleBackend::new();
     candle
@@ -99,6 +110,7 @@ async fn resident() -> (tempfile::TempDir, InferenceGateway, Arc<AtomicUsize>) {
         Box::new(Resident {
             candle,
             stops: stops.clone(),
+            panic_next_stop,
         }),
         "fixture-resident",
     );
@@ -109,6 +121,120 @@ async fn resident() -> (tempfile::TempDir, InferenceGateway, Arc<AtomicUsize>) {
     gateway.runtime_lifecycle.write().await.runtime_instance_id = Some("resident-A".into());
     gateway.runtime_lifecycle.write().await.active = true;
     (directory, gateway, stops)
+}
+
+#[tokio::test]
+async fn supervisor_panic_reports_to_caller_without_poisoning_later_replacement_and_stop() {
+    let (_a, gateway, stops) = resident_with_stop_panic(true).await;
+    let (_b, request, target, decision) = crate::selected_embedding_execution::fixture(12);
+    let error = gateway
+        .execute_selected_embedding_with_cancellation(
+            request.clone(),
+            target.clone(),
+            decision.clone(),
+            InferenceExecutionCancellationHandle::running(),
+        )
+        .await
+        .expect_err("resident stop panic must reach requesting caller");
+    assert!(matches!(error, GatewayError::SwitchFailed(ref message)
+        if message.contains("embedding replacement supervisor") && message.contains("resident stop panic")));
+    assert_resident(&gateway, &stops).await;
+    let result = gateway
+        .execute_selected_embedding_with_cancellation(
+            request,
+            target,
+            decision,
+            InferenceExecutionCancellationHandle::running(),
+        )
+        .await
+        .expect("terminated failed supervisor must not fence later replacement");
+    assert!(matches!(result, InferenceExecutionResult::Embedding { .. }));
+    assert_eq!(
+        gateway.embeddings(vec!["hello".into()], "").await.unwrap()[0]
+            .vector
+            .len(),
+        12
+    );
+    gateway.stop().await.expect("stop after failed supervisor");
+    assert_eq!(stops.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn lost_caller_and_supervisor_panic_keep_stop_waiting_until_actual_join() {
+    let (_a, gateway, stops) = resident().await;
+    let (_b, request, target, decision) = crate::selected_embedding_execution::fixture(12);
+    let published = Arc::new(tokio::sync::Notify::new());
+    let release = Arc::new(tokio::sync::Notify::new());
+    *gateway
+        .embedding_replacement
+        .after_publication
+        .lock()
+        .unwrap() = Some(Arc::new({
+        let published = published.clone();
+        let release = release.clone();
+        move || {
+            let release = release.clone();
+            published.notify_one();
+            async move {
+                release.notified().await;
+                panic!("publication supervisor panic");
+            }
+            .boxed()
+        }
+    }));
+    let gateway = Arc::new(gateway);
+    let caller = tokio::spawn({
+        let gateway = gateway.clone();
+        let request = request.clone();
+        let target = target.clone();
+        let decision = decision.clone();
+        async move {
+            gateway
+                .execute_selected_embedding_with_cancellation(
+                    request,
+                    target,
+                    decision,
+                    InferenceExecutionCancellationHandle::running(),
+                )
+                .await
+        }
+    });
+    published.notified().await;
+    caller.abort();
+    assert!(caller.await.unwrap_err().is_cancelled());
+    let stopping = tokio::spawn({
+        let gateway = gateway.clone();
+        async move { gateway.stop().await }
+    });
+    tokio::task::yield_now().await;
+    assert!(
+        !stopping.is_finished(),
+        "live supervisor custody must fence stop"
+    );
+    release.notify_one();
+    tokio::time::timeout(std::time::Duration::from_secs(5), stopping)
+        .await
+        .expect("actual supervisor join")
+        .unwrap()
+        .expect("stop after terminated panic");
+    assert!(!gateway.is_ready().await);
+    assert_eq!(stops.load(Ordering::SeqCst), 1);
+    gateway
+        .execute_selected_embedding_with_cancellation(
+            request,
+            target,
+            decision,
+            InferenceExecutionCancellationHandle::running(),
+        )
+        .await
+        .expect("selected call after drain");
+    assert_eq!(
+        gateway.embeddings(vec!["hello".into()], "").await.unwrap()[0]
+            .vector
+            .len(),
+        12
+    );
+    gateway.stop().await.unwrap();
 }
 
 async fn assert_resident(gateway: &InferenceGateway, stops: &AtomicUsize) {
@@ -140,6 +266,54 @@ async fn assert_resident(gateway: &InferenceGateway, stops: &AtomicUsize) {
             .len(),
         8
     );
+}
+
+#[tokio::test]
+async fn typed_model_name_mismatch_preserves_resident_before_replacement() {
+    let (_a, gateway, stops) = resident().await;
+    let (_b, mut request, target, decision) = crate::selected_embedding_execution::fixture(12);
+    for name in ["embedding/test/synthetic-bert-8", "synthetic-bert-12", " "] {
+        request.model_name = Some(name.into());
+        let error = gateway
+            .execute_selected_embedding_with_cancellation(
+                request.clone(),
+                target.clone(),
+                decision.clone(),
+                InferenceExecutionCancellationHandle::running(),
+            )
+            .await
+            .expect_err("conflicting typed name must not replace the resident");
+        assert!(
+            matches!(error, GatewayError::Backend(BackendError::Config(ref message))
+            if message.contains("model name"))
+        );
+        assert_resident(&gateway, &stops).await;
+    }
+    for name in [
+        None,
+        Some(String::new()),
+        Some(target.model_ref.model_id.clone()),
+        Some(format!("pumas://models/{}", target.model_ref.model_id)),
+    ] {
+        request.model_name = name;
+        let result = gateway
+            .execute_selected_embedding_with_cancellation(
+                request.clone(),
+                target.clone(),
+                decision.clone(),
+                InferenceExecutionCancellationHandle::running(),
+            )
+            .await
+            .expect("omitted, empty and exact names keep selected identity");
+        let InferenceExecutionResult::Embedding { embeddings, .. } = result else {
+            panic!("embedding result expected");
+        };
+        assert!(embeddings
+            .iter()
+            .all(|embedding| embedding.vector.len() == 12));
+    }
+    assert_eq!(stops.load(Ordering::SeqCst), 1);
+    gateway.stop().await.unwrap();
 }
 
 #[tokio::test]
