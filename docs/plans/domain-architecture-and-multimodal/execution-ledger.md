@@ -547,3 +547,17 @@ and nine no-build-download graphs. Initial import/snapshot/source fixture errors
 were corrected before these final passes. Native desktop/GPU/pretrained/ONNX
 qualification remains separate. Config `f0472ca1` and combined `1034daeb` review
 checkpoints remain frozen; parent owns PR/review/integration.
+
+## 2026-10-06 — Text repetition numeric successor
+
+Review reproduced float32 extreme overflow, fp16 overflow and ordinary fp16
+rounding divergence at frozen `2a6f7cf5`. The separate
+[numeric correction](reports/2026-10-06-text-repetition-numerics.md) promotes manual
+scores to float32 and rejects undefined repetition arithmetic at the native
+processor's original position, preserving defaults and masks. Scalar bounds are
+unchanged; operational overflow now explicitly refuses. Cached numeric refusal
+cannot fall back to a different history. Twenty-three actual CPU tests and 811
+portable inference checks pass; strict inference Clippy and affected quality
+gates pass. Frozen feature/evidence and independent image/main integration remain
+unchanged. Native desktop/GPU/pretrained/ONNX/SDAR loading remain unqualified;
+parent owns review and publication.

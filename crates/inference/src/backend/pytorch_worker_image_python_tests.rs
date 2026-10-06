@@ -47,8 +47,10 @@ block_diffusion._generate_dllm_masked_streaming = lambda *args, **kwargs: iter((
 sys.modules["block_diffusion"] = block_diffusion
 
 autoregressive = types.ModuleType("autoregressive")
+autoregressive.RepetitionPenaltyNumericsError = ValueError
 for attr in [
     "_generate_autoregressive",
+    "_generate_native_checked",
     "_continue_sdar_cached",
     "_generate_sdar_cached",
 ]:

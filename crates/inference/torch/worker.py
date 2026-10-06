@@ -38,6 +38,8 @@ if _self_path.parent.is_dir():
 
 from block_diffusion import _generate_dllm_masked, _generate_dllm_masked_streaming
 from autoregressive import (
+    RepetitionPenaltyNumericsError,
+    _generate_native_checked,
     _generate_autoregressive,
     _generate_autoregressive_streaming,
     _continue_sdar_cached,
@@ -186,6 +188,9 @@ def _generate_dllm_autoregressive_safe(formatted_prompt, max_tokens, temperature
                     "device": str(_device) if _device is not None else None,
                 }
                 return text
+            except RepetitionPenaltyNumericsError:
+                # Numeric refusal must not change the history through fresh retry.
+                raise
             except Exception as exc:
                 logger.warning("Live KV reuse failed; falling back to fresh decode: %s", exc)
                 _live_kv_state = None
@@ -215,7 +220,8 @@ def _generate_dllm_autoregressive_safe(formatted_prompt, max_tokens, temperature
         retry_kwargs["repetition_penalty"] = repetition_penalty
 
     with torch.no_grad():
-        outputs = _model.generate(
+        outputs = _generate_native_checked(
+            _model,
             **inputs,
             max_new_tokens=max_tokens,
             min_new_tokens=retry_min_new if retry_min_new > 0 else None,

@@ -4,13 +4,14 @@
 
 **Current phase:** M3 owner/client consumer source is implemented. Native CPU sampling and the supported inference/embedded host route are qualified separately; the desktop-authored dependent text-to-image graph and full review remain open.
 
-**Next slice:** Parent independently reviews the qualified
-[graph-authored text repetition penalty](reports/2026-10-06-workflow-text-repetition-penalty.md)
-using the existing selected PyTorch owner and typed generation option, after
-confirming prior text and image controls are already implemented. Omission keeps
-model defaults; malformed values fail before effects. The branch starts at
-reviewed correctness `13d24e89`. Config fixture correction `f0472ca1` and combined
-image-controls candidate `1034daeb` stay frozen for the parent's separate reviews.
+**Next slice:** Parent independently reviews the bounded
+[text repetition numeric correction](reports/2026-10-06-text-repetition-numerics.md)
+on a separate successor of frozen feature `2a6f7cf5`. Manual decoding promotes
+logits to float32, matching native Transformers; both reject undefined repetition
+arithmetic at the operation before selection or downstream sanitizers. The scalar
+range and model-default omission contract are unchanged; operational overflow is
+an explicit refusal. Frozen feature/evidence and independent image/main
+integration `a4656371` remain unchanged.
 Parent owns PR/review/merge actions. Preserve full peaks, custody, uncertainty,
 known zero, source/instance fencing and the approved no-download contract.
 

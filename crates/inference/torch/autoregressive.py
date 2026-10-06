@@ -4,11 +4,82 @@ Provides non-streaming and streaming generation using the standard
 HuggingFace generate API and manual token-by-token sampling.
 """
 
+import copy
 import math
+from types import MethodType
 
 import torch
 from transformers.cache_utils import DynamicCache
 from transformers.generation.logits_process import RepetitionPenaltyLogitsProcessor
+
+
+class RepetitionPenaltyNumericsError(ValueError):
+    """The requested repetition operation cannot produce usable f32 scores."""
+
+
+class _CheckedRepetitionPenalty:
+    """Apply the official operation in f32, preserving only existing -Inf masks."""
+
+    def __init__(self, processor):
+        self.processor = processor
+        self.calls = 0
+
+    def __call__(self, input_ids, scores):
+        masked = torch.isneginf(scores)
+        scores = scores.float()
+        if torch.any(~torch.isfinite(scores) & ~masked):
+            raise RepetitionPenaltyNumericsError(
+                "repetition_penalty requires finite float32 logits or existing -inf masks")
+        adjusted = self.processor(input_ids, scores)
+        if (torch.any(~torch.isfinite(adjusted) & ~masked)
+                or torch.any(masked & ~torch.isneginf(adjusted))):
+            raise RepetitionPenaltyNumericsError(
+                "repetition_penalty produced non-finite float32 logits")
+        if torch.any(~torch.isfinite(adjusted).any(dim=-1)):
+            raise RepetitionPenaltyNumericsError(
+                "repetition_penalty has no finite selectable logits")
+        self.calls += 1
+        return adjusted
+
+
+def _generate_native_checked(model, **kwargs):
+    """Guard native repetition in place without changing resident model state.
+
+    Public custom processors run after sanitizers and masks in Transformers.
+    A request-local shallow copy instead wraps the resolved built-in processor
+    at its original position, retaining generation defaults and processor order.
+    Weights remain shared. Custom generation that bypasses this builder is
+    unsupported and fails closed rather than returning unchecked output.
+    """
+    penalty = _resolve_repetition_penalty(model, kwargs.get("repetition_penalty"))
+    request_model = copy.copy(model)
+    if request_model is model or not callable(getattr(request_model, "_get_logits_processor", None)):
+        raise RepetitionPenaltyNumericsError(
+            "native repetition checking requires the Transformers logits processor builder")
+    build_processors = request_model._get_logits_processor
+    checked = []
+    built = False
+
+    def build_checked(_self, *args, **builder_kwargs):
+        nonlocal built
+        processors = build_processors(*args, **builder_kwargs)
+        for index, processor in enumerate(processors):
+            if type(processor) is RepetitionPenaltyLogitsProcessor:
+                guard = _CheckedRepetitionPenalty(processor)
+                checked.append(guard)
+                processors[index] = guard
+        if penalty != 1.0 and not checked:
+            raise RepetitionPenaltyNumericsError(
+                "native generation did not provide its repetition processor")
+        built = True
+        return processors
+
+    request_model._get_logits_processor = MethodType(build_checked, request_model)
+    outputs = request_model.generate(**kwargs)
+    if not built or (penalty != 1.0 and not any(guard.calls for guard in checked)):
+        raise RepetitionPenaltyNumericsError(
+            "native generation bypassed repetition checking")
+    return outputs
 
 
 def _resolve_repetition_penalty(model, repetition_penalty):
@@ -85,8 +156,8 @@ def _generate_sdar_cached(model, tokenizer, device, formatted_prompt,
     prompt_len = input_ids.shape[1]
     eos_ids = _eos_ids(tokenizer)
     resolved_top_k = _resolve_top_k(model, top_k)
-    penalty_processor = RepetitionPenaltyLogitsProcessor(
-        _resolve_repetition_penalty(model, repetition_penalty))
+    penalty_processor = _CheckedRepetitionPenalty(RepetitionPenaltyLogitsProcessor(
+        _resolve_repetition_penalty(model, repetition_penalty)))
     token_history = input_ids
 
     past_key_values = DynamicCache()
@@ -153,8 +224,8 @@ def _continue_sdar_cached(model, tokenizer, device, formatted_prompt,
         raise RuntimeError("Live KV cache does not support crop-based replay")
 
     resolved_top_k = _resolve_top_k(model, top_k)
-    penalty_processor = RepetitionPenaltyLogitsProcessor(
-        _resolve_repetition_penalty(model, repetition_penalty))
+    penalty_processor = _CheckedRepetitionPenalty(RepetitionPenaltyLogitsProcessor(
+        _resolve_repetition_penalty(model, repetition_penalty)))
     eos_ids = _eos_ids(tokenizer)
     full_sequence = [int(token_id) for token_id in cached_token_ids]
     cur_pos = len(full_sequence)
@@ -257,7 +328,7 @@ def _generate_autoregressive(model, tokenizer, device, formatted_prompt,
             gen_kwargs["top_k"] = resolved_top_k
         if repetition_penalty is not None:
             gen_kwargs["repetition_penalty"] = resolved_penalty
-        outputs = model.generate(**inputs, **gen_kwargs)
+        outputs = _generate_native_checked(model, **inputs, **gen_kwargs)
 
     input_len = inputs["input_ids"].shape[1]
     generated = outputs[0][input_len:]
@@ -284,8 +355,8 @@ def _generate_autoregressive_streaming(model, tokenizer, device,
     inputs = tokenizer(formatted_prompt, return_tensors="pt").to(device)
     input_ids = inputs["input_ids"]
     resolved_top_k = _resolve_top_k(model, top_k)
-    penalty_processor = RepetitionPenaltyLogitsProcessor(
-        _resolve_repetition_penalty(model, repetition_penalty))
+    penalty_processor = _CheckedRepetitionPenalty(RepetitionPenaltyLogitsProcessor(
+        _resolve_repetition_penalty(model, repetition_penalty)))
 
     for _ in range(max_tokens):
         with torch.no_grad():

@@ -13,7 +13,7 @@ import torch
 from transformers import BatchEncoding, GenerationConfig, GenerationMixin, PretrainedConfig
 from transformers.modeling_outputs import CausalLMOutputWithPast
 from transformers.generation.logits_process import (
-    RepetitionPenaltyLogitsProcessor, TopKLogitsWarper, TopPLogitsWarper,
+    LogitsProcessorList, RepetitionPenaltyLogitsProcessor, TopKLogitsWarper, TopPLogitsWarper,
 )
 
 
@@ -42,6 +42,8 @@ def worker_text_functions():
                                if isinstance(node, ast.FunctionDef) and node.name in names],
                           type_ignores=[])
     namespace = {"torch": torch, "json": json, "logger": logging.getLogger(__name__),
+                 "RepetitionPenaltyNumericsError": autoregressive.RepetitionPenaltyNumericsError,
+                 "_generate_native_checked": autoregressive._generate_native_checked,
                  "_model": object(), "_model_type": "text-generation", "_live_kv_state": None,
                  "_tokenizer": TokenizerFixture(), "_device": "cpu", "_model_path": None,
                  "_format_prompt": mock.Mock(return_value="formatted prompt"),
@@ -69,21 +71,37 @@ class TokenizerFixture:
         return ",".join(str(int(token)) for token in token_ids)
 
 
+class OnlyTokenOneTokenizer(TokenizerFixture):
+    def __call__(self, _prompt, **_kwargs):
+        return BatchEncoding({"input_ids": torch.tensor([[1]])})
+
+
 class LogitsModelFixture:
     def __init__(self, default_top_k=2):
         self.generation_config = SimpleNamespace(top_k=default_top_k)
-        self.generate_kwargs = None
+        self.generate_calls = []
+
+    @property
+    def generate_kwargs(self):
+        return self.generate_calls[-1] if self.generate_calls else None
+
+    def _get_logits_processor(self, penalty):
+        return LogitsProcessorList(
+            [RepetitionPenaltyLogitsProcessor(penalty)] if penalty != 1 else [])
 
     def __call__(self, input_ids):
         logits = torch.tensor([[[0.0, 1.0, 2.0, 3.0]]])
         return SimpleNamespace(logits=logits.expand(1, input_ids.shape[1], 4))
 
     def generate(self, **kwargs):
-        self.generate_kwargs = kwargs
+        self.generate_calls.append(kwargs)
+        penalty = kwargs.get("repetition_penalty", getattr(
+            self.generation_config, "repetition_penalty", 1.0))
+        self._get_logits_processor(penalty)(kwargs["input_ids"], torch.zeros((1, 4)))
         return torch.cat([kwargs["input_ids"], torch.tensor([[2]])], dim=-1)
 
 
-class TinyGenerationModel(GenerationMixin):
+class TinyGenerationModel(torch.nn.Module, GenerationMixin):
     """Real Transformers generation on fixed logits; no weights or Hub access."""
 
     main_input_name = "input_ids"
@@ -92,6 +110,7 @@ class TinyGenerationModel(GenerationMixin):
     device = torch.device("cpu")
 
     def __init__(self):
+        super().__init__()
         self.config = PretrainedConfig(is_encoder_decoder=False)
         self.generation_config = GenerationConfig(
             use_cache=False, pad_token_id=0, bos_token_id=0, eos_token_id=None,
@@ -111,10 +130,223 @@ class TinyGenerationModel(GenerationMixin):
             logits=self.logits.expand(1, input_ids.shape[1], 4),
         )
 
-    __call__ = forward
-
-
 class AutoregressiveSamplingTests(unittest.TestCase):
+    def test_native_and_manual_half_logits_use_float32_repetition(self):
+        for dtype in [torch.float16, torch.bfloat16, torch.float32]:
+            for values, penalty in [([1, 1.2, 0, 0], 1.2), ([10, 20, 2, 1], 0.0001)]:
+                for temperature in [0.0, 0.8]:
+                    with self.subTest(dtype=dtype, values=values, temperature=temperature):
+                        model = TinyGenerationModel()
+                        model.logits = torch.tensor(values, dtype=dtype)
+                        tokenizer = OnlyTokenOneTokenizer() if penalty == 1.2 else TokenizerFixture()
+                        expected_scores = RepetitionPenaltyLogitsProcessor(penalty)(
+                            tokenizer("prompt")["input_ids"], model.logits.float().unsqueeze(0))
+                        expected = str(int(expected_scores.argmax(-1).item()))
+                        results = []
+                        for streaming in [False, True]:
+                            with torch.random.fork_rng(devices=[]):
+                                torch.manual_seed(7)
+                                args = (model, tokenizer, "cpu", "prompt", 1,
+                                        temperature, 1.0)
+                                if streaming:
+                                    chunks = autoregressive._generate_autoregressive_streaming(
+                                        *args, top_k=0, repetition_penalty=penalty)
+                                    results.append(",".join(chunk["text"] for chunk in chunks))
+                                else:
+                                    results.append(autoregressive._generate_autoregressive(
+                                        *args, top_k=0, repetition_penalty=penalty))
+                        self.assertEqual(results[0], results[1])
+                        if temperature == 0:
+                            self.assertEqual(results[0], expected)
+                            self.assertEqual(expected, "0" if penalty == 1.2 and dtype == torch.float32
+                                             else "1")
+
+    def test_extreme_penalties_refuse_overflow_before_sampling_or_native_sanitizing(self):
+        for values, penalty in [([2, 4, 1, 0], 2 ** -149),
+                                ([-2, -4, -1, 0], torch.finfo(torch.float32).max)]:
+            for temperature in [0.0, 0.8]:
+                for streaming in [False, True]:
+                    with self.subTest(values=values, temperature=temperature, streaming=streaming):
+                        model = TinyGenerationModel()
+                        model.logits = torch.tensor(values, dtype=torch.float32)
+                        model.generation_config.remove_invalid_values = True
+                        # A late guard would see sanitized/masked finite scores.
+                        model.generation_config.suppress_tokens = [0, 1]
+                        args = (model, TokenizerFixture(), "cpu", "prompt", 1, temperature, 1.0)
+                        with mock.patch.object(torch, "multinomial") as sample:
+                            with self.assertRaisesRegex(autoregressive.RepetitionPenaltyNumericsError,
+                                                        "produced non-finite"):
+                                if streaming:
+                                    list(autoregressive._generate_autoregressive_streaming(
+                                        *args, repetition_penalty=penalty))
+                                else:
+                                    autoregressive._generate_autoregressive(
+                                        *args, repetition_penalty=penalty)
+                            sample.assert_not_called()
+
+    def test_extreme_scalar_values_remain_accepted_when_computation_is_defined(self):
+        for penalty in [2 ** -149, torch.finfo(torch.float32).max]:
+            model = TinyGenerationModel()
+            model.logits = torch.tensor([0, 0, 1, 0], dtype=torch.float32)
+            for streaming in [False, True]:
+                args = (model, TokenizerFixture(), "cpu", "prompt", 1, 0.0, 1.0)
+                if streaming:
+                    result = list(autoregressive._generate_autoregressive_streaming(
+                        *args, repetition_penalty=penalty))
+                    self.assertEqual(result[0]["text"], "2")
+                else:
+                    self.assertEqual(autoregressive._generate_autoregressive(
+                        *args, repetition_penalty=penalty), "2")
+
+    def test_checked_processor_preserves_masks_but_refuses_invalid_input_or_all_masks(self):
+        guard = autoregressive._CheckedRepetitionPenalty(RepetitionPenaltyLogitsProcessor(2.0))
+        scores = torch.tensor([[-float("inf"), 4, 3, 2]])
+        adjusted = guard(torch.tensor([[0, 1]]), scores)
+        torch.testing.assert_close(adjusted, torch.tensor([[-float("inf"), 2, 3, 2]]))
+        for scores in [torch.full((1, 4), -float("inf")),
+                       torch.tensor([[float("nan"), 0, 1, 2]]),
+                       torch.tensor([[float("inf"), 0, 1, 2]]),
+                       torch.tensor([[-1e300, 0, 1, 2]], dtype=torch.float64)]:
+            with self.assertRaises(autoregressive.RepetitionPenaltyNumericsError):
+                guard(torch.tensor([[0, 1]]), scores)
+
+    def test_existing_masks_must_remain_negative_infinity(self):
+        # Model defaults are Python floats and can underflow during f32 math.
+        # An existing -Inf mask cannot authorize a NaN from -Inf * zero.
+        guard = autoregressive._CheckedRepetitionPenalty(
+            RepetitionPenaltyLogitsProcessor(1e-300))
+        with self.assertRaisesRegex(autoregressive.RepetitionPenaltyNumericsError,
+                                    "produced non-finite"):
+            guard(torch.tensor([[0]]), torch.tensor([[-float("inf"), 1, 0, 0]]))
+
+    def test_native_processor_order_and_resident_state_are_preserved(self):
+        model = TinyGenerationModel()
+        model.logits = torch.tensor([0, 4, 3, 2], dtype=torch.float16)
+        model.generation_config.repetition_penalty = 2.0
+        model.generation_config.sequence_bias = {(1,): 2.0}
+        model.generation_config.remove_invalid_values = True
+        model.generation_config.suppress_tokens = [3]
+        model.register_parameter("copy_probe", torch.nn.Parameter(torch.zeros(1)))
+        original_state = dict(model.__dict__)
+        original_builder = model._get_logits_processor
+        lists = []
+        original_method = TinyGenerationModel._get_logits_processor
+
+        def recording_builder(instance, *args, **kwargs):
+            processors = original_method(instance, *args, **kwargs)
+            lists.append((instance, processors, list(processors)))
+            return processors
+
+        with mock.patch.object(TinyGenerationModel, "_get_logits_processor", recording_builder):
+            text = autoregressive._generate_autoregressive(
+                model, TokenizerFixture(), "cpu", "prompt", 1, 0, 1)
+        self.assertEqual(text, "1")  # sequence bias BEFORE repetition: (4+2)/2 ties 3
+        copied, guarded, prepared = lists[0]
+        self.assertIsNot(copied, model)
+        self.assertIs(copied.logits, model.logits)
+        self.assertIs(copied.copy_probe, model.copy_probe)
+        self.assertIs(copied.generation_config, model.generation_config)
+        self.assertEqual([type(p).__name__ for p in prepared], [
+            "SequenceBiasLogitsProcessor", "RepetitionPenaltyLogitsProcessor",
+            "InfNanRemoveLogitsProcessor", "SuppressTokensLogitsProcessor"])
+        self.assertIsInstance(guarded[1], autoregressive._CheckedRepetitionPenalty)
+        for index in [0, 2, 3]:
+            self.assertIs(guarded[index], prepared[index])
+        self.assertEqual(model.__dict__, original_state)
+        self.assertEqual(model._get_logits_processor, original_builder)
+        model.logits = torch.tensor([2, 4, 1, 0], dtype=torch.float32)
+        model.generation_config.repetition_penalty = 2 ** -149
+        state_before_failure = dict(model.__dict__)
+        with self.assertRaises(autoregressive.RepetitionPenaltyNumericsError):
+            autoregressive._generate_autoregressive(
+                model, TokenizerFixture(), "cpu", "prompt", 1, 0, 1)
+        self.assertEqual(model.__dict__, state_before_failure)
+        self.assertEqual(model._get_logits_processor, original_builder)
+
+    def test_native_generation_bypassing_standard_builder_fails_closed(self):
+        class BypassModel(TinyGenerationModel):
+            def generate(self, **kwargs):
+                return kwargs["input_ids"]
+
+        with self.assertRaisesRegex(autoregressive.RepetitionPenaltyNumericsError, "bypassed"):
+            autoregressive._generate_autoregressive(
+                BypassModel(), TokenizerFixture(), "cpu", "prompt", 1, 0, 1,
+                repetition_penalty=2.0)
+
+    def test_sdar_numeric_refusal_does_not_fall_back_to_different_history(self):
+        worker = worker_text_functions()
+        worker["_live_kv_state"] = {"token_ids": [0, 1], "cache": object()}
+        worker["_continue_sdar_cached"].side_effect = autoregressive.RepetitionPenaltyNumericsError(
+            "repetition_penalty produced non-finite float32 logits")
+        with self.assertRaises(autoregressive.RepetitionPenaltyNumericsError):
+            worker["_generate_dllm_autoregressive_safe"]("prompt", 1, 0, 1, repetition_penalty=2 ** -149)
+        worker["_generate_sdar_cached"].assert_not_called()
+
+    def test_actual_worker_envelopes_report_numeric_refusal_without_generated_text(self):
+        for streaming in [False, True]:
+            worker = worker_text_functions()
+            model = TinyGenerationModel()
+            model.logits = torch.tensor([2, 4, 1, 0], dtype=torch.float32)
+            worker["_model"] = model
+            worker["_generate_autoregressive"] = autoregressive._generate_autoregressive
+            worker["_generate_autoregressive_streaming"] = autoregressive._generate_autoregressive_streaming
+            operation = "generate_text_stream" if streaming else "generate_text"
+            envelope = {"contract_version": 1, "request_id": "numeric-refusal",
+                        "operation": operation, "payload": {"prompt": "prompt", "max_tokens": 1,
+                        "transformers_kwargs": {"repetition_penalty": 2 ** -149}}}
+            if streaming:
+                with self.assertRaisesRegex(autoregressive.RepetitionPenaltyNumericsError,
+                                            "produced non-finite"):
+                    next(worker["generate_text_stream_from_envelope"](envelope))
+            else:
+                result = json.loads(worker["generate_text_from_envelope"](envelope))
+                self.assertEqual(result["status"], "error")
+                self.assertEqual(result["error"]["kind"], "invalid_request")
+                self.assertIn("produced non-finite", result["error"]["message"])
+
+    def test_sdar_fresh_suffix_replay_and_empty_retry_use_numeric_policy(self):
+        class SDARModel(TinyGenerationModel):
+            def __call__(self, input_ids, **_kwargs):
+                return self.forward(input_ids)
+
+        class Cache:
+            def crop(self, _length):
+                pass
+
+        class EmptyTokenizer(TokenizerFixture):
+            def __call__(self, _prompt, **_kwargs):
+                return BatchEncoding({"input_ids": torch.empty((1, 0), dtype=torch.long)})
+
+        for values, penalty, expected in [([1, 1.2, 0, 0], 1.2, "1"),
+                                           ([10, 20, 2, 1], 0.0001, "1"),
+                                           ([2, 4, 1, 0], 2 ** -149, None),
+                                           ([-2, -4, -1, 0], torch.finfo(torch.float32).max, None)]:
+            for temperature in [0, 0.8]:
+                model = SDARModel()
+                model.logits = torch.tensor(values, dtype=torch.float16)
+                args = (model, TokenizerFixture(), "cpu", "prompt", 1, temperature, 1)
+                operations = [
+                    lambda: autoregressive._generate_sdar_cached(*args, repetition_penalty=penalty)[0],
+                    lambda: autoregressive._continue_sdar_cached(
+                        *args, [0, 1], Cache(), repetition_penalty=penalty)[0],
+                    lambda: autoregressive._continue_sdar_cached(
+                        model, EmptyTokenizer(), "cpu", "", 1, temperature, 1,
+                        [0, 1], Cache(), repetition_penalty=penalty)[0],
+                ]
+                worker = worker_text_functions()
+                worker["_model"] = model
+                worker["_generate_sdar_cached"].return_value = ("", [0, 1], Cache())
+                operations.append(lambda: worker["_generate_dllm_autoregressive_safe"](
+                    "prompt", 1, temperature, 1, repetition_penalty=penalty))
+                for operation in operations:
+                    if expected is None:
+                        with self.assertRaises(autoregressive.RepetitionPenaltyNumericsError):
+                            operation()
+                    elif temperature == 0:
+                        self.assertEqual(operation(), expected)
+                    else:
+                        self.assertIn(operation(), ["0", "1", "2", "3"])
+
     def test_actual_worker_entries_propagate_and_refuse_before_inference(self):
         for model_type in ["text-generation", "sherry", "dllm"]:
             for streaming in [False, True]:
