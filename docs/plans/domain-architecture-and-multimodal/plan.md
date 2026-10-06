@@ -7,11 +7,16 @@
 **Next slice:** The isolated [canonical CPU embedding graph successor](reports/2026-10-06-workflow-cpu-embedding-graphs.md)
 is implemented from freshly fetched main `c75fa237`. Typed embedding/JSON ports,
 the existing selected Candle owner, sequential envelope execution and the bounded
-vector sink now compose through a saved public scheduler graph. Independent
-source review has no remaining substantive finding. Local qualification and
-separate candidate publication are recorded in the report; live Pumas,
+vector sink now compose through a saved public scheduler graph. Later independent
+review found an explicit requested-revision projection gap in frozen `2961b148`.
+The [isolated revision successor](reports/2026-10-06-workflow-cpu-embedding-graphs.md#explicit-requested-revision-successor)
+reproduces it with actual Candle CPU output, requires requested/selected revision
+agreement before resolution and preserves the original typed request constraint.
+Parent verification remains pending. Local qualification and separate candidate
+publication are recorded in the report; live Pumas,
 pretrained-quality, GPU and desktop execution remain separate. Preserve accepted
-stop-string `19119837`/PR60 and every frozen seed/precision/repair/paused history.
+stop-string source `19119837`, PR60's separate `e570302d` successor and every
+frozen seed/precision/repair/paused history.
 Do not resume ranking or resident-accounting work as part of this feature.
 
 **Prior seed slice:** Graph-authored text seed is implemented in frozen candidate

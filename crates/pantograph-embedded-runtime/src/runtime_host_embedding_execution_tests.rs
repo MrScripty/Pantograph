@@ -132,6 +132,68 @@ impl crate::runtime_host_media_artifact_sink::RuntimeHostMediaArtifactSink for U
     }
 }
 
+fn with_requested_revision(
+    request: RuntimeHostExecutionRequest,
+    revision: Option<&str>,
+) -> RuntimeHostExecutionRequest {
+    let mut value = serde_json::to_value(request).unwrap();
+    for pointer in [
+        "/handoff/task_intent/model_ref",
+        "/handoff/dispatch_decision/task_intent/model_ref",
+        "/handoff/readiness_proof/preflight_result/identity_key/model_ref",
+        "/handoff/dispatch_decision/readiness_proof/preflight_result/identity_key/model_ref",
+    ] {
+        let reference = value.pointer_mut(pointer).unwrap().as_object_mut().unwrap();
+        if let Some(revision) = revision {
+            reference.insert("revision".into(), serde_json::json!(revision));
+        } else {
+            reference.remove("revision");
+        }
+    }
+    let request: RuntimeHostExecutionRequest = serde_json::from_value(value).unwrap();
+    request.validate().unwrap();
+    request
+}
+
+#[tokio::test]
+async fn host_embedding_rejects_requested_revision_despite_agreeing_selected_package_target() {
+    let (_directory, request, package, target) = fixture(8);
+    let request = with_requested_revision(request, Some("requested-other-revision"));
+    assert_eq!(
+        request
+            .handoff
+            .dispatch_decision
+            .as_ref()
+            .unwrap()
+            .selected_model_ref
+            .revision
+            .as_deref(),
+        Some("untrained-seed-179")
+    );
+    let gateway = Arc::new(inference::InferenceGateway::with_backend(
+        Box::new(inference::backend::candle::CandleBackend::new()),
+        "Candle",
+    ));
+    let port = crate::runtime_host_execution_port::EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
+        Arc::new(Target(serde_json::from_value(serde_json::to_value(target).unwrap()).unwrap())),
+        Arc::new(Package(package)), Arc::new(UnusedMediaSink), gateway.clone());
+    let cancellation =
+        RuntimeHostExecutionCancellationHandle::running(request.cancellation_context.clone());
+    let response = port
+        .execute_runtime_host_request(request, cancellation)
+        .await
+        .unwrap();
+    response.validate().unwrap();
+    assert_eq!(
+        response.state,
+        RuntimeHostExecutionState::Rejected,
+        "an explicit requested revision must not produce selected-owner output: {:?}",
+        response.outputs
+    );
+    assert!(response.outputs.is_empty());
+    assert!(!gateway.is_ready().await);
+}
+
 #[tokio::test]
 async fn host_embedding_returns_actual_candle_vectors_and_replaces_model_identity() {
     let gateway = Arc::new(inference::InferenceGateway::with_backend(
@@ -431,6 +493,168 @@ impl crate::runtime_host_package_facts::RuntimeHostPackageFactsResolver for Neve
     > {
         panic!("invalid or pre-cancelled embedding must reject before package resolution")
     }
+}
+
+fn with_revision_fault(
+    request: RuntimeHostExecutionRequest,
+    missing_selected: bool,
+) -> RuntimeHostExecutionRequest {
+    let mut request = if missing_selected {
+        request
+    } else {
+        with_requested_revision(request, Some("requested-other-revision"))
+    };
+    if missing_selected {
+        request
+            .handoff
+            .dispatch_decision
+            .as_mut()
+            .unwrap()
+            .selected_model_ref
+            .revision = None;
+    }
+    request.validate().unwrap();
+    request
+}
+
+#[tokio::test]
+async fn host_embedding_revision_mismatch_or_missing_selection_rejects_before_resolvers() {
+    for missing_selected in [false, true] {
+        let (_directory, request, _package, _target) = fixture(8);
+        let request = with_revision_fault(request, missing_selected);
+        let gateway = Arc::new(inference::InferenceGateway::with_backend(
+            Box::new(inference::backend::candle::CandleBackend::new()),
+            "Candle",
+        ));
+        let port = crate::runtime_host_execution_port::EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
+            Arc::new(NeverResolve), Arc::new(NeverResolve), Arc::new(UnusedMediaSink), gateway.clone());
+        let cancellation =
+            RuntimeHostExecutionCancellationHandle::running(request.cancellation_context.clone());
+        let response = port
+            .execute_runtime_host_request(request, cancellation)
+            .await
+            .unwrap();
+        assert_eq!(response.state, RuntimeHostExecutionState::Rejected);
+        response.validate().unwrap();
+        assert!(response.outputs.is_empty());
+        assert!(response
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.message.contains("explicit requested revision")));
+        assert!(!gateway.is_ready().await);
+    }
+}
+
+#[tokio::test]
+async fn embedding_host_envelope_revision_faults_reject_before_resolvers() {
+    use pantograph_runtime_host_contracts::{
+        RuntimeHostBatchExecutionMemberState, RuntimeHostBatchExecutionPort,
+        RuntimeHostBatchExecutionState,
+    };
+    for missing_selected in [false, true] {
+        let (_directory, request, _package, _target) = fixture(8);
+        let batch = embedding_batch_request(with_revision_fault(request, missing_selected));
+        let gateway = Arc::new(inference::InferenceGateway::with_backend(
+            Box::new(inference::backend::candle::CandleBackend::new()),
+            "Candle",
+        ));
+        let port = crate::runtime_host_execution_port::EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
+            Arc::new(NeverResolve), Arc::new(NeverResolve), Arc::new(UnusedMediaSink), gateway.clone());
+        let cancellation =
+            RuntimeHostExecutionCancellationHandle::running(batch.cancellation_context.clone());
+        let response = port
+            .execute_runtime_host_batch_request(batch, cancellation)
+            .await
+            .unwrap();
+        assert_eq!(response.state, RuntimeHostBatchExecutionState::Rejected);
+        response.validate().unwrap();
+        assert_eq!(response.members.len(), 2);
+        assert!(response.members.iter().all(|member| member.state
+            == RuntimeHostBatchExecutionMemberState::Rejected
+            && member.outputs.is_empty()
+            && member
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.message.contains("explicit requested revision"))));
+        assert!(!gateway.is_ready().await);
+    }
+}
+
+#[tokio::test]
+async fn host_embedding_omitted_request_revision_preserves_owner_refinement_and_cpu_golden() {
+    let (_directory, request, package, target) = fixture(8);
+    let request = with_requested_revision(request, None);
+    let selected = request
+        .handoff
+        .dispatch_decision
+        .as_ref()
+        .unwrap()
+        .selected_model_ref
+        .clone();
+    let validated = ValidatedRuntimeHostExecutionRequest::try_from(request.clone()).unwrap();
+    let projection =
+        project_runtime_host_embedding(&validated, package.clone(), target.clone()).unwrap();
+    assert_eq!(
+        projection.request.model_ref.as_ref().unwrap().revision,
+        None
+    );
+    assert_eq!(
+        projection
+            .decision
+            .selected_model_ref
+            .as_ref()
+            .unwrap()
+            .revision
+            .as_deref(),
+        Some("untrained-seed-179")
+    );
+    let gateway = Arc::new(inference::InferenceGateway::with_backend(
+        Box::new(inference::backend::candle::CandleBackend::new()),
+        "Candle",
+    ));
+    let port = crate::runtime_host_execution_port::EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
+        Arc::new(Target(serde_json::from_value(serde_json::to_value(target).unwrap()).unwrap())),
+        Arc::new(Package(package)), Arc::new(UnusedMediaSink), gateway.clone());
+    let cancellation =
+        RuntimeHostExecutionCancellationHandle::running(request.cancellation_context.clone());
+    let response = port
+        .execute_runtime_host_request(request, cancellation)
+        .await
+        .unwrap();
+    assert_eq!(
+        response.state,
+        RuntimeHostExecutionState::Completed,
+        "{:?}",
+        response.diagnostics
+    );
+    response.validate().unwrap();
+    let RuntimeHostExecutionOutputValue::Json(vector) = &response.outputs[0].value else {
+        panic!("CPU vector")
+    };
+    let golden: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../inference/tests/fixtures/candle_bert/bert-8/golden.json"),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    for (actual, expected) in vector
+        .as_array()
+        .unwrap()
+        .iter()
+        .zip(golden["single_vectors"][0].as_array().unwrap())
+    {
+        assert!((actual.as_f64().unwrap() - expected.as_f64().unwrap()).abs() < 1e-5);
+    }
+    let RuntimeHostExecutionOutputValue::Json(metadata) = &response.outputs[1].value else {
+        panic!("CPU metadata")
+    };
+    assert_eq!(
+        metadata["model_ref"],
+        serde_json::to_value(selected).unwrap()
+    );
+    gateway.stop().await.unwrap();
 }
 
 #[tokio::test]

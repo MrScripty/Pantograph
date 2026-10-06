@@ -136,3 +136,60 @@ path are unavailable here; the existing repository authority and preserved plan
 instructions govern this bounded change. Existing disjoint implementation and
 independent-review agents were reused. Session billing/rate telemetry is
 unavailable, so complete API cost remains unknown rather than inferred.
+
+## Explicit requested revision successor
+
+Independent read-only review found that a structurally valid handoff could carry
+an explicit requested revision different from the selected/package/target
+revision. The old host projected both the typed request and selected decision
+from `selected_model_ref`, erasing the original request's revision before the
+gateway's existing revision checks. This inherited projection gap blocks the
+new public embedding graph's requested-identity acceptance.
+
+The user-authorized narrow successor is isolated on
+`fix/workflow-embedding-requested-revision` from frozen source
+`2961b1480c103ec242c6359a45ceee6bb5d999f1`, tree
+`fff2f10bb15d396c698e88ce01de283f6ad4b3b6`. Normal Git fetch confirms that
+source and main `c75fa2379a730833709ea8976075bf17a117040f`, tree
+`6c8c4bb1cbed0527b58c1048ebf49fa0e243d56b`. PR60's separate successor and
+the embedding evidence publication are not merged into this source. Frozen
+implementation, original evidence archive, seed/stop and resident histories stay
+preserved; this change does not add a generic scheduler revision policy.
+
+Acceptance requires reproducing the reviewer's exact four requested-identity
+JSON changes with the actual width-8 Candle host fixture while leaving selected
+model/package/target at `untrained-seed-179`. A mismatch or missing selected
+revision must reject before package/target resolution, loading or inference on
+both single and envelope routes. Matching explicit revisions remain valid;
+omitted requested revisions permit selected-owner refinement and actual CPU
+golden output. The typed request must preserve the original requested revision,
+including omission, while the selected decision retains its own revision.
+
+The embedding-specific host validator enforces explicit requested/selected
+revision agreement before its resolvers. Projection preserves the requested
+revision in the typed request while retaining the already-validated selected
+model/artifact identity and selected decision. Existing gateway checks separately
+constrain package/target revisions. Model-ID and authored artifact constraints
+retain the existing handoff validation; unrelated text/image/scheduler paths are
+unchanged. Envelope members reuse that same validation and selected owner.
+
+The exact original case reproduces as `Completed` with actual width-8 CPU vector
+and `untrained-seed-179` metadata where `Rejected` is required; the failing log
+is retained. The final five-package suite passes 2,469 non-doctest tests and one
+doctest, including 534 embedded-runtime tests (four new revision methods), the
+public saved/reopened CPU graph and retained matching-revision/member cases.
+Six existing optional cases remain ignored. Strict all-target Clippy, Rust
+format, critical anti-patterns and scheduler-boundary checks pass. An initial
+enclosing command reported exit 1 despite all test groups passing; the deciding
+rerun records the child Cargo exit status explicitly as 0. Frontend interfaces
+are unchanged; original frontend qualification is not rerun or promoted to new
+desktop evidence.
+
+The [revision successor evidence](../evidence/workflow-cpu-embedding-revision/README.md)
+binds the failing native reproduction and final source hashes separately from
+the frozen embedding archive. All CPU fixtures remain synthetic/untrained;
+Pumas/descriptor/readiness/dispatch facts are controlled. Production loader,
+live Pumas, pretrained semantic quality, GPU, throughput and desktop execution
+remain unqualified. Parent independent verification and new hosted qualification
+remain separate. No external weights, ONNX/ORT binaries, privilege or
+authentication changes, main mutation, PR creation or merge are performed.

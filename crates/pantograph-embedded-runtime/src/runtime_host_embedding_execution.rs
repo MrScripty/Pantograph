@@ -40,6 +40,16 @@ pub(crate) fn validate_runtime_host_embedding_request(
         .dispatch_decision
         .as_ref()
         .ok_or(RuntimeHostEmbeddingProjectionError::UnsupportedSelection)?;
+    if request
+        .handoff
+        .task_intent
+        .model_ref
+        .revision
+        .as_ref()
+        .is_some_and(|revision| selected.selected_model_ref.revision.as_ref() != Some(revision))
+    {
+        return Err(RuntimeHostEmbeddingProjectionError::RequestedRevisionMismatch);
+    }
     if selected.selected_runtime_id.as_str() != "candle"
         || selected
             .selected_runtime_variant_id
@@ -69,6 +79,10 @@ pub(crate) fn project_runtime_host_embedding(
         .ok_or(RuntimeHostEmbeddingProjectionError::UnsupportedSelection)?;
     let model_ref =
         super::runtime_host_text_execution::project_model_ref(&selected.selected_model_ref);
+    // Preserve the original request's revision constraint (including omission)
+    // instead of replacing it with owner refinement before gateway validation.
+    let mut requested_model_ref = model_ref.clone();
+    requested_model_ref.revision = request.handoff.task_intent.model_ref.revision.clone();
     let device = InferenceDeviceId::parse("cpu")
         .map_err(|_| RuntimeHostEmbeddingProjectionError::UnsupportedSelection)?;
     let runtime = RuntimeVariantId::parse("candle.cpu")
@@ -96,7 +110,7 @@ pub(crate) fn project_runtime_host_embedding(
         request: InferenceExecutionRequest {
             request_id: Some(request.execution_request_id.clone()),
             task_id: InferenceTaskId::Embedding,
-            model_ref: Some(model_ref),
+            model_ref: Some(requested_model_ref),
             model_name: None,
             resolved_model_package_facts: Some(package),
             input: InferenceExecutionInput::Embedding { texts: vec![text] },
@@ -171,6 +185,10 @@ pub(crate) enum RuntimeHostEmbeddingProjectionError {
     InvalidInput,
     #[error("runtime-host embedding requires scheduler-selected candle/candle.cpu on cpu")]
     UnsupportedSelection,
+    #[error(
+        "runtime-host embedding selected revision must preserve the explicit requested revision"
+    )]
+    RequestedRevisionMismatch,
     #[error("runtime-host embedding requires one indexed finite vector of 1 to 4096 values with token usage")]
     InvalidResult,
 }
