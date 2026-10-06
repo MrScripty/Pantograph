@@ -1,0 +1,1107 @@
+[
+  {
+    "captured_at": "2026-10-06T22:36:19.2070619Z",
+    "intent": {
+      "action": "resolve",
+      "contract_version": 1,
+      "graph_revision": "d0f7a8eb92be581d",
+      "graph_session_id": "86e8de0d-2868-4dac-8c1a-b741432d5745",
+      "target_node_id": "deps",
+      "validation_session_id": "validation.session.84f98c9e-7778-4356-9c4a-b209e2d196dc"
+    },
+    "phase": "graph_action_provider_result",
+    "request": {
+      "action": "resolve",
+      "contract_version": 1,
+      "dependency_requirements_id": "dependency-requirements-blake3:5106e42ce62356f6f12adcc0419aa6407f44b2a04b443ba559834ec4b6bef01d",
+      "identity_key": {
+        "model_ref": {
+          "model_id": "embedding/qualification/synthetic-bert-8",
+          "selected_artifact_id": "main"
+        },
+        "platform_context": {
+          "platform_key": "linux-x86_64"
+        },
+        "scheduler_intent": {
+          "requested_device_id": "cpu",
+          "requested_runtime_id": "candle"
+        },
+        "task_id": "embedding",
+        "task_type": "embedding"
+      },
+      "planning_request": {
+        "caller_context": {
+          "node_id": "infer",
+          "source_node_type": "llm-inference"
+        },
+        "model_ref": {
+          "model_id": "embedding/qualification/synthetic-bert-8",
+          "selected_artifact_id": "main"
+        },
+        "platform_context": {
+          "platform_key": "linux-x86_64"
+        },
+        "scheduler_intent": {
+          "requested_device_id": "cpu",
+          "requested_runtime_id": "candle"
+        },
+        "task_id": "embedding",
+        "task_type": "embedding"
+      }
+    },
+    "result": {
+      "action": "resolve",
+      "contract_version": 1,
+      "dependency_requirements_id": "dependency-requirements-blake3:5106e42ce62356f6f12adcc0419aa6407f44b2a04b443ba559834ec4b6bef01d",
+      "diagnostics": [
+        {
+          "code": "internal_error",
+          "device_id": "cpu",
+          "field_path": "dependency_environment.snapshot",
+          "message": "No fresh dependency readiness snapshot matches the request.",
+          "model_id": "embedding/qualification/synthetic-bert-8",
+          "runtime_id": "candle",
+          "severity": "error"
+        }
+      ],
+      "failure_state": "requirements_unavailable",
+      "identity_key": {
+        "model_ref": {
+          "model_id": "embedding/qualification/synthetic-bert-8",
+          "selected_artifact_id": "main"
+        },
+        "platform_context": {
+          "platform_key": "linux-x86_64"
+        },
+        "scheduler_intent": {
+          "requested_device_id": "cpu",
+          "requested_runtime_id": "candle"
+        },
+        "task_id": "embedding",
+        "task_type": "embedding"
+      },
+      "install_state": "not_requested",
+      "operation": {
+        "state": "blocked"
+      },
+      "readiness_state": "missing",
+      "validation_state": "unavailable"
+    }
+  },
+  {
+    "captured_at": "2026-10-06T22:36:19.3233547Z",
+    "phase": "pre_dispatch_progress_started",
+    "session_id": "888388ff-8f2d-48e2-83c8-67bb266e69a1",
+    "workflow_run_id": "run_59565fd2-4505-4517-8194-d2341bf7f9a0"
+  },
+  {
+    "captured_at": "2026-10-06T22:36:19.3243103Z",
+    "phase": "pre_dispatch_progress_completed",
+    "session_id": "888388ff-8f2d-48e2-83c8-67bb266e69a1",
+    "workflow_run_id": "run_59565fd2-4505-4517-8194-d2341bf7f9a0"
+  },
+  {
+    "captured_at": "2026-10-06T22:36:19.3261419Z",
+    "phase": "requirements_seed_rejected",
+    "registry_error": "InvalidRequest(\"dependency requirements registry seed failed: dependency requirements source result field is invalid: dependency_environment_result.readiness_state: requirements payloads may only be seeded from resolved or ready dependency environment results\")",
+    "request": {
+      "contract_version": 1,
+      "execution_context": {
+        "contract_version": 1,
+        "correlation_id": "run_59565fd2-4505-4517-8194-d2341bf7f9a0-infer-v2",
+        "dependency_override_fingerprint": "dependency-overrides-blake3:a2b0d5b19a2a1154486c3b418763311aa5527416e85751b0b29fa19bfc93a764",
+        "dependency_requirements_id": "dependency-requirements-blake3:5106e42ce62356f6f12adcc0419aa6407f44b2a04b443ba559834ec4b6bef01d",
+        "descriptor_fingerprint": "iface.60ef264b7095a8c966cafd3e2a601a86accb3161bac18b62c6f4400b24837cef",
+        "graph_revision": "d0f7a8eb92be581d",
+        "node_id": "infer",
+        "scheduler_task_id": "infer",
+        "validation_session_id": "validation.session.84f98c9e-7778-4356-9c4a-b209e2d196dc",
+        "validation_snapshot_id": "wfvalsnap_be468116-51ae-4126-a465-38a46d8aa551",
+        "workflow_id": "Synthetic-CPU-Embedding-Qualification",
+        "workflow_run_id": "run_59565fd2-4505-4517-8194-d2341bf7f9a0"
+      },
+      "readiness_request": {
+        "contract_version": 1,
+        "identity_key": {
+          "model_ref": {
+            "model_id": "embedding/qualification/synthetic-bert-8",
+            "selected_artifact_id": "main"
+          },
+          "platform_context": {
+            "platform_key": "linux-x86_64"
+          },
+          "scheduler_intent": {
+            "requested_device_id": "cpu",
+            "requested_runtime_id": "candle"
+          },
+          "task_id": "embedding",
+          "task_type": "embedding"
+        },
+        "planning_request": {
+          "caller_context": {
+            "node_id": "infer",
+            "run_id": "run_59565fd2-4505-4517-8194-d2341bf7f9a0",
+            "source_node_type": "llm-inference",
+            "workflow_id": "Synthetic-CPU-Embedding-Qualification"
+          },
+          "model_ref": {
+            "model_id": "embedding/qualification/synthetic-bert-8",
+            "selected_artifact_id": "main"
+          },
+          "platform_context": {
+            "platform_key": "linux-x86_64"
+          },
+          "scheduler_intent": {
+            "requested_device_id": "cpu",
+            "requested_runtime_id": "candle"
+          },
+          "task_id": "embedding",
+          "task_type": "embedding"
+        },
+        "policy": "check_only"
+      }
+    },
+    "result": {
+      "action": "resolve",
+      "contract_version": 1,
+      "dependency_requirements_id": "dependency-requirements-blake3:5106e42ce62356f6f12adcc0419aa6407f44b2a04b443ba559834ec4b6bef01d",
+      "diagnostics": [
+        {
+          "code": "internal_error",
+          "device_id": "cpu",
+          "field_path": "dependency_environment.snapshot",
+          "message": "No fresh dependency readiness snapshot matches the request.",
+          "model_id": "embedding/qualification/synthetic-bert-8",
+          "runtime_id": "candle",
+          "severity": "error"
+        }
+      ],
+      "failure_state": "requirements_unavailable",
+      "identity_key": {
+        "model_ref": {
+          "model_id": "embedding/qualification/synthetic-bert-8",
+          "selected_artifact_id": "main"
+        },
+        "platform_context": {
+          "platform_key": "linux-x86_64"
+        },
+        "scheduler_intent": {
+          "requested_device_id": "cpu",
+          "requested_runtime_id": "candle"
+        },
+        "task_id": "embedding",
+        "task_type": "embedding"
+      },
+      "install_state": "not_requested",
+      "operation": {
+        "state": "blocked"
+      },
+      "readiness_state": "missing",
+      "validation_state": "unavailable"
+    },
+    "session_id": "888388ff-8f2d-48e2-83c8-67bb266e69a1",
+    "task_id": "infer",
+    "workflow_run_id": "run_59565fd2-4505-4517-8194-d2341bf7f9a0"
+  },
+  {
+    "captured_at": "2026-10-06T22:36:19.3276297Z",
+    "phase": "task_deferred_and_probe_queued",
+    "session_id": "888388ff-8f2d-48e2-83c8-67bb266e69a1",
+    "task_id": "infer",
+    "task_state": "paused_deferred",
+    "task_state_version": 3,
+    "work_queue_len": 1,
+    "workflow_run_id": "run_59565fd2-4505-4517-8194-d2341bf7f9a0"
+  },
+  {
+    "captured_at": "2026-10-06T22:36:19.3279715Z",
+    "admitted_task_ids": [],
+    "all_tasks_completed": false,
+    "deferred_task_ids": [
+      "infer"
+    ],
+    "next_ready_task_id": null,
+    "phase": "pre_dispatch_readiness_observed",
+    "session_id": "888388ff-8f2d-48e2-83c8-67bb266e69a1",
+    "workflow_run_id": "run_59565fd2-4505-4517-8194-d2341bf7f9a0"
+  },
+  {
+    "captured_at": "2026-10-06T22:36:29.2250770Z",
+    "phase": "pre_dispatch_progress_started",
+    "session_id": "888388ff-8f2d-48e2-83c8-67bb266e69a1",
+    "workflow_run_id": "run_59565fd2-4505-4517-8194-d2341bf7f9a0"
+  },
+  {
+    "captured_at": "2026-10-06T22:36:29.2253291Z",
+    "phase": "pre_dispatch_progress_completed",
+    "session_id": "888388ff-8f2d-48e2-83c8-67bb266e69a1",
+    "workflow_run_id": "run_59565fd2-4505-4517-8194-d2341bf7f9a0"
+  },
+  {
+    "captured_at": "2026-10-06T22:36:29.2270948Z",
+    "phase": "requirements_seed_rejected",
+    "registry_error": "InvalidRequest(\"dependency requirements registry seed failed: dependency requirements source result field is invalid: dependency_environment_result.readiness_state: requirements payloads may only be seeded from resolved or ready dependency environment results\")",
+    "request": {
+      "contract_version": 1,
+      "execution_context": {
+        "contract_version": 1,
+        "correlation_id": "run_59565fd2-4505-4517-8194-d2341bf7f9a0-infer-v4",
+        "dependency_override_fingerprint": "dependency-overrides-blake3:a2b0d5b19a2a1154486c3b418763311aa5527416e85751b0b29fa19bfc93a764",
+        "dependency_requirements_id": "dependency-requirements-blake3:5106e42ce62356f6f12adcc0419aa6407f44b2a04b443ba559834ec4b6bef01d",
+        "descriptor_fingerprint": "iface.60ef264b7095a8c966cafd3e2a601a86accb3161bac18b62c6f4400b24837cef",
+        "graph_revision": "d0f7a8eb92be581d",
+        "node_id": "infer",
+        "scheduler_task_id": "infer",
+        "validation_session_id": "validation.session.84f98c9e-7778-4356-9c4a-b209e2d196dc",
+        "validation_snapshot_id": "wfvalsnap_be468116-51ae-4126-a465-38a46d8aa551",
+        "workflow_id": "Synthetic-CPU-Embedding-Qualification",
+        "workflow_run_id": "run_59565fd2-4505-4517-8194-d2341bf7f9a0"
+      },
+      "readiness_request": {
+        "contract_version": 1,
+        "identity_key": {
+          "model_ref": {
+            "model_id": "embedding/qualification/synthetic-bert-8",
+            "selected_artifact_id": "main"
+          },
+          "platform_context": {
+            "platform_key": "linux-x86_64"
+          },
+          "scheduler_intent": {
+            "requested_device_id": "cpu",
+            "requested_runtime_id": "candle"
+          },
+          "task_id": "embedding",
+          "task_type": "embedding"
+        },
+        "planning_request": {
+          "caller_context": {
+            "node_id": "infer",
+            "run_id": "run_59565fd2-4505-4517-8194-d2341bf7f9a0",
+            "source_node_type": "llm-inference",
+            "workflow_id": "Synthetic-CPU-Embedding-Qualification"
+          },
+          "model_ref": {
+            "model_id": "embedding/qualification/synthetic-bert-8",
+            "selected_artifact_id": "main"
+          },
+          "platform_context": {
+            "platform_key": "linux-x86_64"
+          },
+          "scheduler_intent": {
+            "requested_device_id": "cpu",
+            "requested_runtime_id": "candle"
+          },
+          "task_id": "embedding",
+          "task_type": "embedding"
+        },
+        "policy": "check_only"
+      }
+    },
+    "result": {
+      "action": "resolve",
+      "contract_version": 1,
+      "dependency_requirements_id": "dependency-requirements-blake3:5106e42ce62356f6f12adcc0419aa6407f44b2a04b443ba559834ec4b6bef01d",
+      "diagnostics": [
+        {
+          "code": "internal_error",
+          "device_id": "cpu",
+          "field_path": "dependency_environment.snapshot",
+          "message": "No fresh dependency readiness snapshot matches the request.",
+          "model_id": "embedding/qualification/synthetic-bert-8",
+          "runtime_id": "candle",
+          "severity": "error"
+        }
+      ],
+      "failure_state": "requirements_unavailable",
+      "identity_key": {
+        "model_ref": {
+          "model_id": "embedding/qualification/synthetic-bert-8",
+          "selected_artifact_id": "main"
+        },
+        "platform_context": {
+          "platform_key": "linux-x86_64"
+        },
+        "scheduler_intent": {
+          "requested_device_id": "cpu",
+          "requested_runtime_id": "candle"
+        },
+        "task_id": "embedding",
+        "task_type": "embedding"
+      },
+      "install_state": "not_requested",
+      "operation": {
+        "state": "blocked"
+      },
+      "readiness_state": "missing",
+      "validation_state": "unavailable"
+    },
+    "session_id": "888388ff-8f2d-48e2-83c8-67bb266e69a1",
+    "task_id": "infer",
+    "workflow_run_id": "run_59565fd2-4505-4517-8194-d2341bf7f9a0"
+  },
+  {
+    "captured_at": "2026-10-06T22:36:29.2279924Z",
+    "phase": "task_deferred_and_probe_queued",
+    "session_id": "888388ff-8f2d-48e2-83c8-67bb266e69a1",
+    "task_id": "infer",
+    "task_state": "paused_deferred",
+    "task_state_version": 5,
+    "work_queue_len": 1,
+    "workflow_run_id": "run_59565fd2-4505-4517-8194-d2341bf7f9a0"
+  },
+  {
+    "captured_at": "2026-10-06T22:36:29.2282039Z",
+    "admitted_task_ids": [],
+    "all_tasks_completed": false,
+    "deferred_task_ids": [
+      "infer"
+    ],
+    "next_ready_task_id": null,
+    "phase": "pre_dispatch_readiness_observed",
+    "session_id": "888388ff-8f2d-48e2-83c8-67bb266e69a1",
+    "workflow_run_id": "run_59565fd2-4505-4517-8194-d2341bf7f9a0"
+  },
+  {
+    "captured_at": "2026-10-06T22:36:44.2250001Z",
+    "phase": "pre_dispatch_progress_started",
+    "session_id": "888388ff-8f2d-48e2-83c8-67bb266e69a1",
+    "workflow_run_id": "run_59565fd2-4505-4517-8194-d2341bf7f9a0"
+  },
+  {
+    "captured_at": "2026-10-06T22:36:44.2251753Z",
+    "phase": "pre_dispatch_progress_completed",
+    "session_id": "888388ff-8f2d-48e2-83c8-67bb266e69a1",
+    "workflow_run_id": "run_59565fd2-4505-4517-8194-d2341bf7f9a0"
+  },
+  {
+    "captured_at": "2026-10-06T22:36:44.2266028Z",
+    "phase": "requirements_seed_rejected",
+    "registry_error": "InvalidRequest(\"dependency requirements registry seed failed: dependency requirements source result field is invalid: dependency_environment_result.readiness_state: requirements payloads may only be seeded from resolved or ready dependency environment results\")",
+    "request": {
+      "contract_version": 1,
+      "execution_context": {
+        "contract_version": 1,
+        "correlation_id": "run_59565fd2-4505-4517-8194-d2341bf7f9a0-infer-v6",
+        "dependency_override_fingerprint": "dependency-overrides-blake3:a2b0d5b19a2a1154486c3b418763311aa5527416e85751b0b29fa19bfc93a764",
+        "dependency_requirements_id": "dependency-requirements-blake3:5106e42ce62356f6f12adcc0419aa6407f44b2a04b443ba559834ec4b6bef01d",
+        "descriptor_fingerprint": "iface.60ef264b7095a8c966cafd3e2a601a86accb3161bac18b62c6f4400b24837cef",
+        "graph_revision": "d0f7a8eb92be581d",
+        "node_id": "infer",
+        "scheduler_task_id": "infer",
+        "validation_session_id": "validation.session.84f98c9e-7778-4356-9c4a-b209e2d196dc",
+        "validation_snapshot_id": "wfvalsnap_be468116-51ae-4126-a465-38a46d8aa551",
+        "workflow_id": "Synthetic-CPU-Embedding-Qualification",
+        "workflow_run_id": "run_59565fd2-4505-4517-8194-d2341bf7f9a0"
+      },
+      "readiness_request": {
+        "contract_version": 1,
+        "identity_key": {
+          "model_ref": {
+            "model_id": "embedding/qualification/synthetic-bert-8",
+            "selected_artifact_id": "main"
+          },
+          "platform_context": {
+            "platform_key": "linux-x86_64"
+          },
+          "scheduler_intent": {
+            "requested_device_id": "cpu",
+            "requested_runtime_id": "candle"
+          },
+          "task_id": "embedding",
+          "task_type": "embedding"
+        },
+        "planning_request": {
+          "caller_context": {
+            "node_id": "infer",
+            "run_id": "run_59565fd2-4505-4517-8194-d2341bf7f9a0",
+            "source_node_type": "llm-inference",
+            "workflow_id": "Synthetic-CPU-Embedding-Qualification"
+          },
+          "model_ref": {
+            "model_id": "embedding/qualification/synthetic-bert-8",
+            "selected_artifact_id": "main"
+          },
+          "platform_context": {
+            "platform_key": "linux-x86_64"
+          },
+          "scheduler_intent": {
+            "requested_device_id": "cpu",
+            "requested_runtime_id": "candle"
+          },
+          "task_id": "embedding",
+          "task_type": "embedding"
+        },
+        "policy": "check_only"
+      }
+    },
+    "result": {
+      "action": "resolve",
+      "contract_version": 1,
+      "dependency_requirements_id": "dependency-requirements-blake3:5106e42ce62356f6f12adcc0419aa6407f44b2a04b443ba559834ec4b6bef01d",
+      "diagnostics": [
+        {
+          "code": "internal_error",
+          "device_id": "cpu",
+          "field_path": "dependency_environment.snapshot",
+          "message": "No fresh dependency readiness snapshot matches the request.",
+          "model_id": "embedding/qualification/synthetic-bert-8",
+          "runtime_id": "candle",
+          "severity": "error"
+        }
+      ],
+      "failure_state": "requirements_unavailable",
+      "identity_key": {
+        "model_ref": {
+          "model_id": "embedding/qualification/synthetic-bert-8",
+          "selected_artifact_id": "main"
+        },
+        "platform_context": {
+          "platform_key": "linux-x86_64"
+        },
+        "scheduler_intent": {
+          "requested_device_id": "cpu",
+          "requested_runtime_id": "candle"
+        },
+        "task_id": "embedding",
+        "task_type": "embedding"
+      },
+      "install_state": "not_requested",
+      "operation": {
+        "state": "blocked"
+      },
+      "readiness_state": "missing",
+      "validation_state": "unavailable"
+    },
+    "session_id": "888388ff-8f2d-48e2-83c8-67bb266e69a1",
+    "task_id": "infer",
+    "workflow_run_id": "run_59565fd2-4505-4517-8194-d2341bf7f9a0"
+  },
+  {
+    "captured_at": "2026-10-06T22:36:44.2274840Z",
+    "phase": "task_deferred_and_probe_queued",
+    "session_id": "888388ff-8f2d-48e2-83c8-67bb266e69a1",
+    "task_id": "infer",
+    "task_state": "paused_deferred",
+    "task_state_version": 7,
+    "work_queue_len": 1,
+    "workflow_run_id": "run_59565fd2-4505-4517-8194-d2341bf7f9a0"
+  },
+  {
+    "captured_at": "2026-10-06T22:36:44.2277110Z",
+    "admitted_task_ids": [],
+    "all_tasks_completed": false,
+    "deferred_task_ids": [
+      "infer"
+    ],
+    "next_ready_task_id": null,
+    "phase": "pre_dispatch_readiness_observed",
+    "session_id": "888388ff-8f2d-48e2-83c8-67bb266e69a1",
+    "workflow_run_id": "run_59565fd2-4505-4517-8194-d2341bf7f9a0"
+  },
+  {
+    "captured_at": "2026-10-06T22:36:59.2253613Z",
+    "phase": "pre_dispatch_progress_started",
+    "session_id": "888388ff-8f2d-48e2-83c8-67bb266e69a1",
+    "workflow_run_id": "run_59565fd2-4505-4517-8194-d2341bf7f9a0"
+  },
+  {
+    "captured_at": "2026-10-06T22:36:59.2255451Z",
+    "phase": "pre_dispatch_progress_completed",
+    "session_id": "888388ff-8f2d-48e2-83c8-67bb266e69a1",
+    "workflow_run_id": "run_59565fd2-4505-4517-8194-d2341bf7f9a0"
+  },
+  {
+    "captured_at": "2026-10-06T22:36:59.2273289Z",
+    "phase": "requirements_seed_rejected",
+    "registry_error": "InvalidRequest(\"dependency requirements registry seed failed: dependency requirements source result field is invalid: dependency_environment_result.readiness_state: requirements payloads may only be seeded from resolved or ready dependency environment results\")",
+    "request": {
+      "contract_version": 1,
+      "execution_context": {
+        "contract_version": 1,
+        "correlation_id": "run_59565fd2-4505-4517-8194-d2341bf7f9a0-infer-v8",
+        "dependency_override_fingerprint": "dependency-overrides-blake3:a2b0d5b19a2a1154486c3b418763311aa5527416e85751b0b29fa19bfc93a764",
+        "dependency_requirements_id": "dependency-requirements-blake3:5106e42ce62356f6f12adcc0419aa6407f44b2a04b443ba559834ec4b6bef01d",
+        "descriptor_fingerprint": "iface.60ef264b7095a8c966cafd3e2a601a86accb3161bac18b62c6f4400b24837cef",
+        "graph_revision": "d0f7a8eb92be581d",
+        "node_id": "infer",
+        "scheduler_task_id": "infer",
+        "validation_session_id": "validation.session.84f98c9e-7778-4356-9c4a-b209e2d196dc",
+        "validation_snapshot_id": "wfvalsnap_be468116-51ae-4126-a465-38a46d8aa551",
+        "workflow_id": "Synthetic-CPU-Embedding-Qualification",
+        "workflow_run_id": "run_59565fd2-4505-4517-8194-d2341bf7f9a0"
+      },
+      "readiness_request": {
+        "contract_version": 1,
+        "identity_key": {
+          "model_ref": {
+            "model_id": "embedding/qualification/synthetic-bert-8",
+            "selected_artifact_id": "main"
+          },
+          "platform_context": {
+            "platform_key": "linux-x86_64"
+          },
+          "scheduler_intent": {
+            "requested_device_id": "cpu",
+            "requested_runtime_id": "candle"
+          },
+          "task_id": "embedding",
+          "task_type": "embedding"
+        },
+        "planning_request": {
+          "caller_context": {
+            "node_id": "infer",
+            "run_id": "run_59565fd2-4505-4517-8194-d2341bf7f9a0",
+            "source_node_type": "llm-inference",
+            "workflow_id": "Synthetic-CPU-Embedding-Qualification"
+          },
+          "model_ref": {
+            "model_id": "embedding/qualification/synthetic-bert-8",
+            "selected_artifact_id": "main"
+          },
+          "platform_context": {
+            "platform_key": "linux-x86_64"
+          },
+          "scheduler_intent": {
+            "requested_device_id": "cpu",
+            "requested_runtime_id": "candle"
+          },
+          "task_id": "embedding",
+          "task_type": "embedding"
+        },
+        "policy": "check_only"
+      }
+    },
+    "result": {
+      "action": "resolve",
+      "contract_version": 1,
+      "dependency_requirements_id": "dependency-requirements-blake3:5106e42ce62356f6f12adcc0419aa6407f44b2a04b443ba559834ec4b6bef01d",
+      "diagnostics": [
+        {
+          "code": "internal_error",
+          "device_id": "cpu",
+          "field_path": "dependency_environment.snapshot",
+          "message": "No fresh dependency readiness snapshot matches the request.",
+          "model_id": "embedding/qualification/synthetic-bert-8",
+          "runtime_id": "candle",
+          "severity": "error"
+        }
+      ],
+      "failure_state": "requirements_unavailable",
+      "identity_key": {
+        "model_ref": {
+          "model_id": "embedding/qualification/synthetic-bert-8",
+          "selected_artifact_id": "main"
+        },
+        "platform_context": {
+          "platform_key": "linux-x86_64"
+        },
+        "scheduler_intent": {
+          "requested_device_id": "cpu",
+          "requested_runtime_id": "candle"
+        },
+        "task_id": "embedding",
+        "task_type": "embedding"
+      },
+      "install_state": "not_requested",
+      "operation": {
+        "state": "blocked"
+      },
+      "readiness_state": "missing",
+      "validation_state": "unavailable"
+    },
+    "session_id": "888388ff-8f2d-48e2-83c8-67bb266e69a1",
+    "task_id": "infer",
+    "workflow_run_id": "run_59565fd2-4505-4517-8194-d2341bf7f9a0"
+  },
+  {
+    "captured_at": "2026-10-06T22:36:59.2282381Z",
+    "phase": "task_deferred_and_probe_queued",
+    "session_id": "888388ff-8f2d-48e2-83c8-67bb266e69a1",
+    "task_id": "infer",
+    "task_state": "paused_deferred",
+    "task_state_version": 9,
+    "work_queue_len": 1,
+    "workflow_run_id": "run_59565fd2-4505-4517-8194-d2341bf7f9a0"
+  },
+  {
+    "captured_at": "2026-10-06T22:36:59.2284463Z",
+    "admitted_task_ids": [],
+    "all_tasks_completed": false,
+    "deferred_task_ids": [
+      "infer"
+    ],
+    "next_ready_task_id": null,
+    "phase": "pre_dispatch_readiness_observed",
+    "session_id": "888388ff-8f2d-48e2-83c8-67bb266e69a1",
+    "workflow_run_id": "run_59565fd2-4505-4517-8194-d2341bf7f9a0"
+  },
+  {
+    "captured_at": "2026-10-06T22:37:14.2247689Z",
+    "phase": "pre_dispatch_progress_started",
+    "session_id": "888388ff-8f2d-48e2-83c8-67bb266e69a1",
+    "workflow_run_id": "run_59565fd2-4505-4517-8194-d2341bf7f9a0"
+  },
+  {
+    "captured_at": "2026-10-06T22:37:14.2250324Z",
+    "phase": "pre_dispatch_progress_completed",
+    "session_id": "888388ff-8f2d-48e2-83c8-67bb266e69a1",
+    "workflow_run_id": "run_59565fd2-4505-4517-8194-d2341bf7f9a0"
+  },
+  {
+    "captured_at": "2026-10-06T22:37:14.2270507Z",
+    "phase": "requirements_seed_rejected",
+    "registry_error": "InvalidRequest(\"dependency requirements registry seed failed: dependency requirements source result field is invalid: dependency_environment_result.readiness_state: requirements payloads may only be seeded from resolved or ready dependency environment results\")",
+    "request": {
+      "contract_version": 1,
+      "execution_context": {
+        "contract_version": 1,
+        "correlation_id": "run_59565fd2-4505-4517-8194-d2341bf7f9a0-infer-v10",
+        "dependency_override_fingerprint": "dependency-overrides-blake3:a2b0d5b19a2a1154486c3b418763311aa5527416e85751b0b29fa19bfc93a764",
+        "dependency_requirements_id": "dependency-requirements-blake3:5106e42ce62356f6f12adcc0419aa6407f44b2a04b443ba559834ec4b6bef01d",
+        "descriptor_fingerprint": "iface.60ef264b7095a8c966cafd3e2a601a86accb3161bac18b62c6f4400b24837cef",
+        "graph_revision": "d0f7a8eb92be581d",
+        "node_id": "infer",
+        "scheduler_task_id": "infer",
+        "validation_session_id": "validation.session.84f98c9e-7778-4356-9c4a-b209e2d196dc",
+        "validation_snapshot_id": "wfvalsnap_be468116-51ae-4126-a465-38a46d8aa551",
+        "workflow_id": "Synthetic-CPU-Embedding-Qualification",
+        "workflow_run_id": "run_59565fd2-4505-4517-8194-d2341bf7f9a0"
+      },
+      "readiness_request": {
+        "contract_version": 1,
+        "identity_key": {
+          "model_ref": {
+            "model_id": "embedding/qualification/synthetic-bert-8",
+            "selected_artifact_id": "main"
+          },
+          "platform_context": {
+            "platform_key": "linux-x86_64"
+          },
+          "scheduler_intent": {
+            "requested_device_id": "cpu",
+            "requested_runtime_id": "candle"
+          },
+          "task_id": "embedding",
+          "task_type": "embedding"
+        },
+        "planning_request": {
+          "caller_context": {
+            "node_id": "infer",
+            "run_id": "run_59565fd2-4505-4517-8194-d2341bf7f9a0",
+            "source_node_type": "llm-inference",
+            "workflow_id": "Synthetic-CPU-Embedding-Qualification"
+          },
+          "model_ref": {
+            "model_id": "embedding/qualification/synthetic-bert-8",
+            "selected_artifact_id": "main"
+          },
+          "platform_context": {
+            "platform_key": "linux-x86_64"
+          },
+          "scheduler_intent": {
+            "requested_device_id": "cpu",
+            "requested_runtime_id": "candle"
+          },
+          "task_id": "embedding",
+          "task_type": "embedding"
+        },
+        "policy": "check_only"
+      }
+    },
+    "result": {
+      "action": "resolve",
+      "contract_version": 1,
+      "dependency_requirements_id": "dependency-requirements-blake3:5106e42ce62356f6f12adcc0419aa6407f44b2a04b443ba559834ec4b6bef01d",
+      "diagnostics": [
+        {
+          "code": "internal_error",
+          "device_id": "cpu",
+          "field_path": "dependency_environment.snapshot",
+          "message": "No fresh dependency readiness snapshot matches the request.",
+          "model_id": "embedding/qualification/synthetic-bert-8",
+          "runtime_id": "candle",
+          "severity": "error"
+        }
+      ],
+      "failure_state": "requirements_unavailable",
+      "identity_key": {
+        "model_ref": {
+          "model_id": "embedding/qualification/synthetic-bert-8",
+          "selected_artifact_id": "main"
+        },
+        "platform_context": {
+          "platform_key": "linux-x86_64"
+        },
+        "scheduler_intent": {
+          "requested_device_id": "cpu",
+          "requested_runtime_id": "candle"
+        },
+        "task_id": "embedding",
+        "task_type": "embedding"
+      },
+      "install_state": "not_requested",
+      "operation": {
+        "state": "blocked"
+      },
+      "readiness_state": "missing",
+      "validation_state": "unavailable"
+    },
+    "session_id": "888388ff-8f2d-48e2-83c8-67bb266e69a1",
+    "task_id": "infer",
+    "workflow_run_id": "run_59565fd2-4505-4517-8194-d2341bf7f9a0"
+  },
+  {
+    "captured_at": "2026-10-06T22:37:14.2279807Z",
+    "phase": "task_deferred_and_probe_queued",
+    "session_id": "888388ff-8f2d-48e2-83c8-67bb266e69a1",
+    "task_id": "infer",
+    "task_state": "paused_deferred",
+    "task_state_version": 11,
+    "work_queue_len": 1,
+    "workflow_run_id": "run_59565fd2-4505-4517-8194-d2341bf7f9a0"
+  },
+  {
+    "captured_at": "2026-10-06T22:37:14.2282036Z",
+    "admitted_task_ids": [],
+    "all_tasks_completed": false,
+    "deferred_task_ids": [
+      "infer"
+    ],
+    "next_ready_task_id": null,
+    "phase": "pre_dispatch_readiness_observed",
+    "session_id": "888388ff-8f2d-48e2-83c8-67bb266e69a1",
+    "workflow_run_id": "run_59565fd2-4505-4517-8194-d2341bf7f9a0"
+  },
+  {
+    "captured_at": "2026-10-06T22:37:14.2400696Z",
+    "phase": "pumas_requirements_resolved",
+    "request": {
+      "action": "check",
+      "contract_version": 1,
+      "dependency_requirements_id": "dependency-requirements-blake3:5106e42ce62356f6f12adcc0419aa6407f44b2a04b443ba559834ec4b6bef01d",
+      "identity_key": {
+        "model_ref": {
+          "model_id": "embedding/qualification/synthetic-bert-8",
+          "selected_artifact_id": "main"
+        },
+        "platform_context": {
+          "platform_key": "linux-x86_64"
+        },
+        "scheduler_intent": {
+          "requested_device_id": "cpu",
+          "requested_runtime_id": "candle"
+        },
+        "task_id": "embedding",
+        "task_type": "embedding"
+      },
+      "planning_request": {
+        "caller_context": {
+          "node_id": "infer",
+          "run_id": "run_59565fd2-4505-4517-8194-d2341bf7f9a0",
+          "source_node_type": "llm-inference",
+          "workflow_id": "Synthetic-CPU-Embedding-Qualification"
+        },
+        "model_ref": {
+          "model_id": "embedding/qualification/synthetic-bert-8",
+          "selected_artifact_id": "main"
+        },
+        "platform_context": {
+          "platform_key": "linux-x86_64"
+        },
+        "scheduler_intent": {
+          "requested_device_id": "cpu",
+          "requested_runtime_id": "candle"
+        },
+        "task_id": "embedding",
+        "task_type": "embedding"
+      }
+    },
+    "resolution": {
+      "backend_key": "candle",
+      "bindings": [],
+      "dependency_contract_version": 1,
+      "model_id": "embedding/qualification/synthetic-bert-8",
+      "platform_key": "linux-x86_64",
+      "validation_errors": [],
+      "validation_state": "resolved"
+    }
+  },
+  {
+    "captured_at": "2026-10-06T22:37:14.2485311Z",
+    "phase": "pumas_requirements_resolved",
+    "request": {
+      "action": "check",
+      "contract_version": 1,
+      "dependency_requirements_id": "dependency-requirements-blake3:5106e42ce62356f6f12adcc0419aa6407f44b2a04b443ba559834ec4b6bef01d",
+      "identity_key": {
+        "model_ref": {
+          "model_id": "embedding/qualification/synthetic-bert-8",
+          "selected_artifact_id": "main"
+        },
+        "platform_context": {
+          "platform_key": "linux-x86_64"
+        },
+        "scheduler_intent": {
+          "requested_device_id": "cpu",
+          "requested_runtime_id": "candle"
+        },
+        "task_id": "embedding",
+        "task_type": "embedding"
+      },
+      "planning_request": {
+        "caller_context": {
+          "node_id": "infer",
+          "run_id": "run_59565fd2-4505-4517-8194-d2341bf7f9a0",
+          "source_node_type": "llm-inference",
+          "workflow_id": "Synthetic-CPU-Embedding-Qualification"
+        },
+        "model_ref": {
+          "model_id": "embedding/qualification/synthetic-bert-8",
+          "selected_artifact_id": "main"
+        },
+        "platform_context": {
+          "platform_key": "linux-x86_64"
+        },
+        "scheduler_intent": {
+          "requested_device_id": "cpu",
+          "requested_runtime_id": "candle"
+        },
+        "task_id": "embedding",
+        "task_type": "embedding"
+      }
+    },
+    "resolution": {
+      "backend_key": "candle",
+      "bindings": [],
+      "dependency_contract_version": 1,
+      "model_id": "embedding/qualification/synthetic-bert-8",
+      "platform_key": "linux-x86_64",
+      "validation_errors": [],
+      "validation_state": "resolved"
+    }
+  },
+  {
+    "captured_at": "2026-10-06T22:37:29.2250913Z",
+    "phase": "pre_dispatch_progress_started",
+    "session_id": "888388ff-8f2d-48e2-83c8-67bb266e69a1",
+    "workflow_run_id": "run_59565fd2-4505-4517-8194-d2341bf7f9a0"
+  },
+  {
+    "captured_at": "2026-10-06T22:37:29.2252622Z",
+    "phase": "pre_dispatch_progress_completed",
+    "session_id": "888388ff-8f2d-48e2-83c8-67bb266e69a1",
+    "workflow_run_id": "run_59565fd2-4505-4517-8194-d2341bf7f9a0"
+  },
+  {
+    "captured_at": "2026-10-06T22:37:29.2266348Z",
+    "phase": "requirements_seed_stored",
+    "request": {
+      "contract_version": 1,
+      "execution_context": {
+        "contract_version": 1,
+        "correlation_id": "run_59565fd2-4505-4517-8194-d2341bf7f9a0-infer-v12",
+        "dependency_override_fingerprint": "dependency-overrides-blake3:a2b0d5b19a2a1154486c3b418763311aa5527416e85751b0b29fa19bfc93a764",
+        "dependency_requirements_id": "dependency-requirements-blake3:5106e42ce62356f6f12adcc0419aa6407f44b2a04b443ba559834ec4b6bef01d",
+        "descriptor_fingerprint": "iface.60ef264b7095a8c966cafd3e2a601a86accb3161bac18b62c6f4400b24837cef",
+        "graph_revision": "d0f7a8eb92be581d",
+        "node_id": "infer",
+        "scheduler_task_id": "infer",
+        "validation_session_id": "validation.session.84f98c9e-7778-4356-9c4a-b209e2d196dc",
+        "validation_snapshot_id": "wfvalsnap_be468116-51ae-4126-a465-38a46d8aa551",
+        "workflow_id": "Synthetic-CPU-Embedding-Qualification",
+        "workflow_run_id": "run_59565fd2-4505-4517-8194-d2341bf7f9a0"
+      },
+      "readiness_request": {
+        "contract_version": 1,
+        "identity_key": {
+          "model_ref": {
+            "model_id": "embedding/qualification/synthetic-bert-8",
+            "selected_artifact_id": "main"
+          },
+          "platform_context": {
+            "platform_key": "linux-x86_64"
+          },
+          "scheduler_intent": {
+            "requested_device_id": "cpu",
+            "requested_runtime_id": "candle"
+          },
+          "task_id": "embedding",
+          "task_type": "embedding"
+        },
+        "planning_request": {
+          "caller_context": {
+            "node_id": "infer",
+            "run_id": "run_59565fd2-4505-4517-8194-d2341bf7f9a0",
+            "source_node_type": "llm-inference",
+            "workflow_id": "Synthetic-CPU-Embedding-Qualification"
+          },
+          "model_ref": {
+            "model_id": "embedding/qualification/synthetic-bert-8",
+            "selected_artifact_id": "main"
+          },
+          "platform_context": {
+            "platform_key": "linux-x86_64"
+          },
+          "scheduler_intent": {
+            "requested_device_id": "cpu",
+            "requested_runtime_id": "candle"
+          },
+          "task_id": "embedding",
+          "task_type": "embedding"
+        },
+        "policy": "check_only"
+      }
+    },
+    "result": {
+      "action": "resolve",
+      "contract_version": 1,
+      "dependency_requirements_id": "dependency-requirements-blake3:5106e42ce62356f6f12adcc0419aa6407f44b2a04b443ba559834ec4b6bef01d",
+      "identity_key": {
+        "model_ref": {
+          "model_id": "embedding/qualification/synthetic-bert-8",
+          "selected_artifact_id": "main"
+        },
+        "platform_context": {
+          "platform_key": "linux-x86_64"
+        },
+        "scheduler_intent": {
+          "requested_device_id": "cpu",
+          "requested_runtime_id": "candle"
+        },
+        "task_id": "embedding",
+        "task_type": "embedding"
+      },
+      "install_state": "not_requested",
+      "readiness_state": "resolved",
+      "validation_state": "valid"
+    },
+    "session_id": "888388ff-8f2d-48e2-83c8-67bb266e69a1",
+    "task_id": "infer",
+    "workflow_run_id": "run_59565fd2-4505-4517-8194-d2341bf7f9a0"
+  },
+  {
+    "captured_at": "2026-10-06T22:37:29.2278716Z",
+    "phase": "readiness_proof_resolved",
+    "proof": {
+      "contract_version": 1,
+      "execution_context": {
+        "contract_version": 1,
+        "correlation_id": "run_59565fd2-4505-4517-8194-d2341bf7f9a0-infer-v12",
+        "dependency_override_fingerprint": "dependency-overrides-blake3:a2b0d5b19a2a1154486c3b418763311aa5527416e85751b0b29fa19bfc93a764",
+        "dependency_requirements_id": "dependency-requirements-blake3:5106e42ce62356f6f12adcc0419aa6407f44b2a04b443ba559834ec4b6bef01d",
+        "descriptor_fingerprint": "iface.60ef264b7095a8c966cafd3e2a601a86accb3161bac18b62c6f4400b24837cef",
+        "graph_revision": "d0f7a8eb92be581d",
+        "node_id": "infer",
+        "scheduler_task_id": "infer",
+        "validation_session_id": "validation.session.84f98c9e-7778-4356-9c4a-b209e2d196dc",
+        "validation_snapshot_id": "wfvalsnap_be468116-51ae-4126-a465-38a46d8aa551",
+        "workflow_id": "Synthetic-CPU-Embedding-Qualification",
+        "workflow_run_id": "run_59565fd2-4505-4517-8194-d2341bf7f9a0"
+      },
+      "preflight_result": {
+        "contract_version": 1,
+        "dependency_requirements_id": "dependency-requirements-blake3:5106e42ce62356f6f12adcc0419aa6407f44b2a04b443ba559834ec4b6bef01d",
+        "environment_ref": {
+          "environment_id": "python:default-host"
+        },
+        "identity_key": {
+          "model_ref": {
+            "model_id": "embedding/qualification/synthetic-bert-8",
+            "selected_artifact_id": "main"
+          },
+          "platform_context": {
+            "platform_key": "linux-x86_64"
+          },
+          "scheduler_intent": {
+            "requested_device_id": "cpu",
+            "requested_runtime_id": "candle"
+          },
+          "task_id": "embedding",
+          "task_type": "embedding"
+        },
+        "readiness_state": "ready"
+      },
+      "readiness_proof_id": "run_59565fd2-4505-4517-8194-d2341bf7f9a0-infer-v12-proof",
+      "readiness_proof_version": 1
+    },
+    "session_id": "888388ff-8f2d-48e2-83c8-67bb266e69a1",
+    "task_id": "infer",
+    "workflow_run_id": "run_59565fd2-4505-4517-8194-d2341bf7f9a0"
+  },
+  {
+    "captured_at": "2026-10-06T22:37:29.2284435Z",
+    "phase": "readiness_task_admitted",
+    "session_id": "888388ff-8f2d-48e2-83c8-67bb266e69a1",
+    "task_id": "infer",
+    "task_state": "ready",
+    "task_state_version": 13,
+    "workflow_run_id": "run_59565fd2-4505-4517-8194-d2341bf7f9a0"
+  },
+  {
+    "captured_at": "2026-10-06T22:37:29.2286780Z",
+    "admitted_task_ids": [
+      "infer"
+    ],
+    "all_tasks_completed": false,
+    "deferred_task_ids": [],
+    "next_ready_task_id": "infer",
+    "phase": "pre_dispatch_readiness_observed",
+    "session_id": "888388ff-8f2d-48e2-83c8-67bb266e69a1",
+    "workflow_run_id": "run_59565fd2-4505-4517-8194-d2341bf7f9a0"
+  },
+  {
+    "captured_at": "2026-10-06T22:37:29.2288782Z",
+    "phase": "runtime_dispatch_selection_started",
+    "session_id": "888388ff-8f2d-48e2-83c8-67bb266e69a1",
+    "task_id": "infer",
+    "workflow_run_id": "run_59565fd2-4505-4517-8194-d2341bf7f9a0"
+  },
+  {
+    "captured_at": "2026-10-06T22:37:29.2374338Z",
+    "phase": "runtime_dispatch_selection_prepared",
+    "session_id": "888388ff-8f2d-48e2-83c8-67bb266e69a1",
+    "task_id": "infer",
+    "workflow_run_id": "run_59565fd2-4505-4517-8194-d2341bf7f9a0"
+  },
+  {
+    "captured_at": "2026-10-06T22:37:29.2491654Z",
+    "attempt_id": "scheduler-task-attempt.37228f79-d22e-4df8-8742-fdf17e22ae6f",
+    "diagnostics": [
+      {
+        "code": "runtime_host.execution_failed",
+        "message": "embedded runtime-host embedding gateway execution failed: Backend error: Configuration error: selected embedding: Pumas executable target must be an existing absolute directory",
+        "severity": "error"
+      }
+    ],
+    "output_count": 0,
+    "phase": "runtime_task_result_received",
+    "status": "failed",
+    "task_id": "infer",
+    "workflow_run_id": "run_59565fd2-4505-4517-8194-d2341bf7f9a0"
+  },
+  {
+    "captured_at": "2026-10-06T22:37:29.2496636Z",
+    "event_payload": {
+      "duration_ms": 12,
+      "ended_at_ms": 1791326249249,
+      "error_summary": "embedded runtime-host embedding gateway execution failed: Backend error: Configuration error: selected embedding: Pumas executable target must be an existing absolute directory",
+      "execution_class": "runtime",
+      "payload_type": "scheduler_task_attempt_lifecycle_changed",
+      "reason": "scheduler runtime task result failed",
+      "reservation_id": "runtime-registry.1",
+      "scheduler_attempt_id": "scheduler-task-attempt.37228f79-d22e-4df8-8742-fdf17e22ae6f",
+      "scheduler_task_id": "infer",
+      "selected_device_class": null,
+      "selected_device_id": "cpu",
+      "selected_network_node_id": null,
+      "selected_runtime_id": "candle",
+      "selected_runtime_variant_id": "candle.cpu",
+      "started_at_ms": 1791326249237,
+      "transition": "failed"
+    },
+    "phase": "scheduler_task_attempt_terminal_event_produced",
+    "task_id": "infer",
+    "workflow_run_id": "run_59565fd2-4505-4517-8194-d2341bf7f9a0"
+  }
+]

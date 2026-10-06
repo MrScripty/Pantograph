@@ -789,3 +789,25 @@ c9da6e341316da8a9e79e8ec2776a178249a31d38d38d8805a1e657d99ca981e.
 Current candidate preserves all prior source/evidence ancestry. Main and the eight
 protected checkout heads/clean or paused bytes remain unchanged. No PR or merge.
 Full production-loader, GPU and pretrained qualification remain incomplete.
+
+
+## Exact runtime result cause after successful selection
+
+[Diagnostic run 37540492030](https://github.com/MrScripty/Pantograph/actions/runs/37540492030)
+executes c8dbe4003e54185aa21a8cf7a1c98cc78cfbb8cc, tree
+882f8e2b91253ceb9fad162881278733590f7a70. Qualification-only capture
+identifies a Failed task result and matching terminal attempt error_summary:
+embedded runtime-host embedding gateway execution failed: Backend error:
+Configuration error: selected embedding: Pumas executable target must be an
+existing absolute directory. The actual attempt records candle/candle.cpu/cpu.
+Selection succeeded; the embedding target contract rejects execution. This is
+not a proved selection failure, nor evidence of successful model loading.
+The generic completion error obscured the returned task-result diagnostic.
+
+The [complete nineteenth-attempt evidence](../evidence/native-desktop-cpu/cold-typed-discovery/dispatch-cause/native-attempt/README.md)
+preserves all 23 original members, 38 owner records and full masked log. Artifact
+11449071055 SHA256 is
+6faf1e81edbb2bbbfed36f909e240a2d47eafdec30c3fca2eea64726177e7e2e.
+All 61 observations retain zero outputs. Preserve this failure and inspect the
+actual producer path classification before repairing the target contract;
+fixture metadata and proof validation remain unchanged.

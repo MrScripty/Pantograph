@@ -1,0 +1,67 @@
+{
+  "qualification": "FAILED: actual embedding executable-target directory contract rejection",
+  "run_id": 37540492030,
+  "job_id": 112532027836,
+  "executed_head": "c8dbe4003e54185aa21a8cf7a1c98cc78cfbb8cc",
+  "executed_tree": "882f8e2b91253ceb9fad162881278733590f7a70",
+  "artifact_id": 11449071055,
+  "artifact_zip_size": 448484,
+  "artifact_zip_sha256": "6faf1e81edbb2bbbfed36f909e240a2d47eafdec30c3fca2eea64726177e7e2e",
+  "original_member_count": 23,
+  "owner_record_count": 38,
+  "observations": 61,
+  "task_result": {
+    "captured_at": "2026-10-06T22:37:29.2491654Z",
+    "attempt_id": "scheduler-task-attempt.37228f79-d22e-4df8-8742-fdf17e22ae6f",
+    "diagnostics": [
+      {
+        "code": "runtime_host.execution_failed",
+        "message": "embedded runtime-host embedding gateway execution failed: Backend error: Configuration error: selected embedding: Pumas executable target must be an existing absolute directory",
+        "severity": "error"
+      }
+    ],
+    "output_count": 0,
+    "phase": "runtime_task_result_received",
+    "status": "failed",
+    "task_id": "infer",
+    "workflow_run_id": "run_59565fd2-4505-4517-8194-d2341bf7f9a0"
+  },
+  "terminal_attempt_event": {
+    "captured_at": "2026-10-06T22:37:29.2496636Z",
+    "event_payload": {
+      "duration_ms": 12,
+      "ended_at_ms": 1791326249249,
+      "error_summary": "embedded runtime-host embedding gateway execution failed: Backend error: Configuration error: selected embedding: Pumas executable target must be an existing absolute directory",
+      "execution_class": "runtime",
+      "payload_type": "scheduler_task_attempt_lifecycle_changed",
+      "reason": "scheduler runtime task result failed",
+      "reservation_id": "runtime-registry.1",
+      "scheduler_attempt_id": "scheduler-task-attempt.37228f79-d22e-4df8-8742-fdf17e22ae6f",
+      "scheduler_task_id": "infer",
+      "selected_device_class": null,
+      "selected_device_id": "cpu",
+      "selected_network_node_id": null,
+      "selected_runtime_id": "candle",
+      "selected_runtime_variant_id": "candle.cpu",
+      "started_at_ms": 1791326249237,
+      "transition": "failed"
+    },
+    "phase": "scheduler_task_attempt_terminal_event_produced",
+    "task_id": "infer",
+    "workflow_run_id": "run_59565fd2-4505-4517-8194-d2341bf7f9a0"
+  },
+  "retained_artifacts": 0,
+  "cause": "selected embedding: Pumas executable target must be an existing absolute directory",
+  "chain": [
+    "embedded runtime-host embedding gateway execution failed",
+    "Backend error",
+    "Configuration error",
+    "Pumas executable target directory contract rejected"
+  ],
+  "limits": [
+    "Selection succeeded; output failed",
+    "Target physical file/directory classification still requires producer inspection",
+    "No model/fixture alteration",
+    "No successful CPU, GPU, pretrained or broad loader qualification"
+  ]
+}
