@@ -36,7 +36,8 @@ two stale-KV failures; repaired streaming and nonstreaming paths start fresh.
 Acceptance evidence is in the [hashed archive](../evidence/pr58-omitted-controls/README.md):
 
 - All 40 actual Python CPU methods pass, including eight new compatibility/lifecycle
-  methods. Six exact-main comparison methods also pass on the final source.
+  methods. A six-method regression suite passes; two methods compare against exact main,
+  and four check repair invariants.
 - Inference library with `backend-pytorch` passes 747 tests; strict all-target
   inference Clippy passes with `-D warnings`.
 - Rust format, critical anti-pattern, scheduler public boundary, diff whitespace
