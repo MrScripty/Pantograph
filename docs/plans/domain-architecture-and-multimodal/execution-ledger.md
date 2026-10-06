@@ -501,3 +501,18 @@ PyTorch shutdown must acknowledge cleanup even after failed load erased metadata
 Existing peak task claims/custody remain fully charged. Portable owner/config
 fixtures qualify the logical accounting; native GUI/GPU execution and other
 producers remain unqualified. No previous branch rewrite or PR/review creation.
+
+## 2026-10-06 — Graph-authored image guidance scale
+
+Parent froze green integration `ab7a1b4e` and authorized the next bounded planned
+capability on a separate successor. The [guidance control](reports/2026-10-06-workflow-image-guidance-scale.md)
+completes an explicitly deferred image input: descriptor and actual host now
+forward optional checked finite-f32 guidance to the existing planner/worker.
+Source `9486610d` passes 803 inference, 507 embedded, 22 interface and eight
+materialization tests, plus strict affected-package Clippy. An explicit real
+CPU Torch/Diffusers test passes six guidance cases using a tiny random UNet and
+an exact conditional-noise oracle; controlled public workflow sessions qualify
+graph materialization and lifecycle separately. No pretrained-image, GPU or
+desktop claim follows. Full-peak accounting, ownership and unknown facts remain
+unchanged; no dependency/download changes or PR actions. Parent owns review and
+publication. Execution cost was not measured; no estimate is invented.
