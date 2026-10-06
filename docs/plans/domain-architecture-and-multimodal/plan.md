@@ -4,15 +4,16 @@
 
 **Current phase:** M3 owner/client consumer source is implemented. Native CPU sampling and the supported inference/embedded host route are qualified separately; the desktop-authored dependent text-to-image graph and full review remain open.
 
-**Next slice:** Qualify the separate normal-history image-controls integration
-candidate joining frozen scheduler `af4174a4` (which already contains guidance
-`14dfd4a7` and image count `3fe88472`) with reviewed correctness `13d24e89`.
-Use an isolated build target and verify combined public-session execution, omitted
-controls, malformed input refusal, and worker/runtime boundaries. Both publication
-branches stay frozen; parent owns independent review and integration/PR actions.
-Preserve full peaks, custody, unknown/known-zero semantics, generation fences and
-the approved no-download dependency contract. Native desktop/GPU/model acceptance
-remains separate.
+**Next slice:** Parent independently reviews the separate
+[image-controls integration candidate](reports/2026-10-06-image-controls-integration-candidate.md)
+joining frozen scheduler `af4174a4` (guidance `14dfd4a7` and count `3fe88472`
+already in its history) with reviewed correctness `13d24e89` through normal merge
+`a894ec69`. Test source `12728772` passes isolated combined public sessions,
+omitted/default behavior, malformed parameter refusal and worker/runtime guards.
+Both publication branches remain frozen; parent owns PR56 and final integration
+or merge actions. Full peaks, custody, unknown/known-zero semantics, generation
+fences and the approved no-download contract are preserved. Native desktop/GPU/
+pretrained-model acceptance remains separate.
 
 **Prior native qualification:** Parent reviews frozen text-control source `a8c6970f` and its separate [exact-head native qualification route](reports/2026-10-05-text-control-native-qualification-route.md). Earlier local native host/workflow attempts failed before execution: the pinned ONNX dependency download returned HTTP 403, and no-download builds lacked linker symbols. Subsequent [hosted run 37360010163, job 111931961024](https://github.com/MrScripty/Pantograph/actions/runs/37360010163/job/111931961024) at exact head `815bceffbb0d877644184b71be6584f586be2e6e` passed 145 Rust tests across eight groups and six actual CPU sampler tests; all individual quality checks and all three workflows passed at that head. The focused native host/workflow qualification is complete for that head. Next qualify current owner-produced Pumas identities/facts/load targets/devices and the desktop-authored dependent text-to-image graph (DA-03). Frozen temperature `e0293ebf`, CI correction `fddae90d`, fixture `174c1950`, top-k `3bf3eb45` and composition `60197971` remain unchanged with their stated qualification requirements. Parent holds publication for owner confirmation and integrates review corrections without rewriting history. Current Pumas pin: `26a84e323cae566a46a8f76bef48fa1010aed48b`. DA-03/DA-07 remain open.
 

@@ -573,3 +573,18 @@ Final source qualification passes 806 inference, 503 embedded and 142 registry
 checks with strict all-target mixed-backend Clippy. Config/frontend source remains
 unchanged from its passing qualification. The independent repair branch is
 published normally; the parent alone updates PR56 and replies/resolves reviews.
+
+## 2026-10-06 — Separate image-controls integration candidate
+
+Parent requested a normal-history successor combining scheduler `af4174a4` with
+reviewed correctness `13d24e89`. Guidance/count are already ancestors, so merge
+`a894ec69` adds correctness once and preserves both parents. Only plan/ledger
+conflicts required resolution. Test successor `12728772` adds combined controls
+through public sessions and worker envelopes, and checks each malformed parameter
+amidst other valid controls. The [integration report](reports/2026-10-06-image-controls-integration-candidate.md)
+records isolated-target qualification: 812 inference, 512 embedded, 142 registry,
+14 config, 75 contract, 916 service and 661 frontend passes, plus three actual
+CPU Diffusers checks. Strict seven-package Clippy and all required gates pass. The final checkpoint
+changes documentation only and is published as a separate review candidate.
+PR56 and all frozen feature/correctness refs remain untouched. Parent owns review
+and publication after gates; native GTK/GPU/pretrained-model limits remain open.
