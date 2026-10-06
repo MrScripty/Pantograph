@@ -4,11 +4,11 @@
 
 **Current phase:** M3 owner/client consumer source is implemented. Native CPU sampling and the supported inference/embedded host route are qualified separately; the desktop-authored dependent text-to-image graph and full review remain open.
 
-**Next slice:** Complete exact disposition of the five PR56 correctness review
-comments before another integration push. The [isolated repair checkpoint](reports/2026-10-06-pr56-correctness-review-checkpoint.md)
+**Next slice:** Parent independently reviews the isolated five-comment PR56 repair
+branch before coordinating integration and review replies. The [isolated repair checkpoint](reports/2026-10-06-pr56-correctness-review-checkpoint.md)
 qualifies four reproducible repairs and pinned Tokio child-lifecycle counterevidence.
-Full comment reads returned Forbidden; exact disposal remains blocked on supplied
-bodies. Image scheduler work stays paused on its separate local feature checkpoint.
+The parent supplied the full comment record after Forbidden reads; exact code
+dispositions now include supervised Candle allocations and VRAM-only task claims. Image scheduler work stays paused on its separate local feature checkpoint.
 Parent owns PR/review/merge actions. Preserve full peaks, custody, uncertainty,
 known zero, source/instance fencing and the approved no-download dependency contract.
 

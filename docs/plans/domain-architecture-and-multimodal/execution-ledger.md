@@ -516,3 +516,16 @@ Test successor `a92f67ff` passes all affected suites: 805 inference, 503 embedde
 Clippy and no-download/gate checks pass. The first combined run exposed six
 zero-probe fixture assumptions, corrected without weakening uncertainty checks.
 No native desktop/GPU/model execution claim is added.
+
+The parent subsequently supplied all five original full review bodies. Exact
+validation found two missing cases in the summary-based recovery checkpoint:
+Candle supervised publication still reused its counter value, and an explicit
+VRAM-only task still failed on unknown RAM residency. Source `4f877149` closes both
+with deterministic regressions against actual owner publication and all four
+registry admission paths. The pinned Tokio InvalidInput allegation is incorrect;
+Unix native child tests and the exact dependency implementation support rejecting
+it without changing production shutdown. No review CLI or denied fetch is used.
+Final source qualification passes 806 inference, 503 embedded and 142 registry
+checks with strict all-target mixed-backend Clippy. Config/frontend source remains
+unchanged from its passing qualification. The independent repair branch is
+published normally; the parent alone updates PR56 and replies/resolves reviews.
