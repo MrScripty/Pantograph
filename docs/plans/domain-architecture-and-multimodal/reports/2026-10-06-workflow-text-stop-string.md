@@ -109,3 +109,55 @@ AST because full audio dependencies are unavailable. Production loading, pretrai
 or custom models, GPU, full worker import, ONNX execution and complete Tauri/desktop
 execution remain unqualified. Parent candidate review/publication and hosted CI
 remain separate; this slice does not close DA-03 or DA-07.
+
+## PR60 held-text rewrite successor
+
+The user-authorized narrow repair starts from frozen PR60 source
+`1911983715155fc3927d0ebdfd0b94b851a58536`, tree
+`ffc25587ce0cf84f6565e08e36f050355aaa2b9c`, after a normal Git fetch confirmed
+that exact remote PR branch. Fetched main remains
+`c75fa2379a730833709ea8976075bf17a117040f`, tree
+`6c8c4bb1cbed0527b58c1048ebf49fa0e243d56b`; it is not newly merged here.
+Implementation uses isolated `fix/pr60-held-text-rewrite`, updating the existing
+PR60 remote branch by an ordinary fast-forward. Frozen source, original evidence,
+embedding `2961b148` and other feature histories are preserved. Chat graph work
+is paused for this prioritized repair; no unpublished feature is combined here.
+
+[CodeRabbit's finding](https://github.com/MrScripty/Pantograph/pull/60#discussion_r4195245527)
+is reproduced through the actual CPU streaming sampler before the repair:
+markers `abc` and `xy`, cumulative decode `ax` then `ab`, emit `a` then
+incorrectly attempt to hold two characters, retracting the emitted prefix.
+The repair bounds possible-marker holdback to the un-emitted suffix. Only held
+text can be rewritten; the final emitted-prefix guard is retained unchanged.
+No complete marker or its trailing token text becomes newly emitted. If a later
+decode completes a marker beginning inside already emitted text (`abc` after
+`ax` then `ab`), streaming refuses rather than retracting `a` or emitting `bc`.
+Earlier emitted characters cannot be retroactively hidden. An unmatched held
+prefix still flushes at EOS or budget, preserving the existing final semantics.
+Minimum-token, EOS, native generation and no-marker semantics are unchanged.
+
+Five added streaming regressions cover successful `ax → ab → ab!` with no output
+on the second observation, crossing-boundary complete-marker refusal, a marker
+after the boundary with its tail withheld, EOS/budget flush after `ab`, and both
+changed and shortened emitted-prefix refusal. They run real Torch CPU forwards
+with controlled fixed logits and a controlled cumulative tokenizer, not a
+pretrained model. All 78 Python methods pass (73 retained plus five new).
+All five selected packages pass 2,457 Rust non-doctest tests plus one doctest,
+with six existing optional cases ignored. Strict five-package all-target Clippy,
+Rust format, Python compilation, critical anti-patterns and scheduler-boundary
+checks pass. Frontend/product interfaces are unchanged by this narrow repair;
+their original results remain historical qualification at `19119837`.
+The parent reviewer's original 50,000 randomized matcher checks used monotonic
+cumulative concatenation and did not cover held-suffix rewrites; that evidence
+does not establish support for arbitrary tokenizer rewrites.
+
+The [successor evidence](../evidence/workflow-text-stop-string/held-rewrite/README.md)
+binds the changed source and deciding logs separately from the original frozen
+archive. The complete effective Cargo graph is inspected before this successor's
+builds: current Pumas `26a84e32`, dynamic ORT/disabled linking, no
+`download-binaries`. Locked offline builds also set `ORT_SKIP_DOWNLOAD=1`.
+No external weights, binary downloads, privilege or authentication changes occur.
+Production loader, pretrained quality, GPU, full worker import and desktop
+qualification limits remain unchanged. Independent parent verification and new
+hosted CI are pending; the existing PR remains draft, with no thread resolution,
+extra CodeRabbit request or merge performed by this repair.

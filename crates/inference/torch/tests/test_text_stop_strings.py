@@ -223,6 +223,73 @@ class StopStringTests(unittest.TestCase):
         with self.assertRaisesRegex(ar.StopStringError, 'cannot retract'):
             list(stream)
 
+    def test_held_rewrite_can_extend_marker_prefix_across_immutable_emitted_boundary(self):
+        class RewritingTokenizer(TextTokenizer):
+            def decode(self, ids, **kwargs):
+                return ('ax', 'ab', 'ab!')[len(ids) - 1]
+
+        model = SequenceModel((2, 3, 4))
+        stream = self.stream(model, markers=['abc', 'xy'], budget=3,
+                             tokenizer=RewritingTokenizer())
+        self.assertEqual(next(stream), {'mode': 'append', 'text': 'a'})
+        self.assertEqual(model.forward_lengths, [2])
+        self.assertEqual(next(stream), {'mode': 'append', 'text': 'b!'})
+        # The second observation emits nothing; the third releases the held b.
+        self.assertEqual(model.forward_lengths, [2, 3, 4])
+        self.assertEqual(list(stream), [])
+
+    def test_held_rewrite_completed_marker_inside_emitted_text_still_refuses(self):
+        class RewritingTokenizer(TextTokenizer):
+            def decode(self, ids, **kwargs):
+                return ('ax', 'ab', 'abc')[len(ids) - 1]
+
+        model = SequenceModel((2, 3, 4, 6))
+        stream = self.stream(model, markers=['abc', 'xy'], budget=4,
+                             tokenizer=RewritingTokenizer())
+        self.assertEqual(next(stream), {'mode': 'append', 'text': 'a'})
+        with self.assertRaisesRegex(ar.StopStringError, 'cannot retract'):
+            next(stream)
+        # No b, c, marker tail, or further model forward escapes the refusal.
+        self.assertEqual(model.forward_lengths, [2, 3, 4])
+
+    def test_held_rewrite_marker_after_emitted_text_withholds_marker_and_tail(self):
+        class RewritingTokenizer(TextTokenizer):
+            def decode(self, ids, **kwargs):
+                return ('ax', 'ab', 'abxyTAIL')[len(ids) - 1]
+
+        model = SequenceModel((2, 3, 4, 6))
+        self.assertEqual(list(self.stream(model, markers=['abc', 'xy'], budget=4,
+                                         tokenizer=RewritingTokenizer())),
+                         [{'mode': 'append', 'text': 'a'}, {'mode': 'append', 'text': 'b'}])
+        self.assertEqual(model.forward_lengths, [2, 3, 4])
+
+    def test_held_rewrite_unmatched_prefix_flushes_at_eos_and_budget(self):
+        class RewritingTokenizer(TextTokenizer):
+            def decode(self, ids, **kwargs):
+                return ('ax', 'ab')[len(ids) - 1]
+
+        for tokens, budget, lengths in [((2, 3, 7), 8, [2, 3, 4]),
+                                        ((2, 3), 2, [2, 3])]:
+            with self.subTest(tokens=tokens, budget=budget):
+                model = SequenceModel(tokens)
+                self.assertEqual(list(self.stream(model, markers=['abc', 'xy'], budget=budget,
+                                                 tokenizer=RewritingTokenizer())),
+                                 [{'mode': 'append', 'text': 'a'}, {'mode': 'append', 'text': 'b'}])
+                self.assertEqual(model.forward_lengths, lengths)
+
+    def test_held_rewrite_cannot_change_or_shorten_emitted_prefix(self):
+        for rewritten in ['xb', '']:
+            class RewritingTokenizer(TextTokenizer):
+                def decode(self, ids, **kwargs):
+                    return 'ax' if len(ids) == 1 else rewritten
+
+            with self.subTest(rewritten=rewritten):
+                stream = self.stream(SequenceModel((2, 3)), markers=['abc', 'xy'], budget=2,
+                                     tokenizer=RewritingTokenizer())
+                self.assertEqual(next(stream), {'mode': 'append', 'text': 'a'})
+                with self.assertRaisesRegex(ar.StopStringError, 'cannot retract'):
+                    next(stream)
+
     def test_native_custom_beam_multiple_sequence_and_dict_routes_refuse_before_forward(self):
         for changes in [{'num_beams': 2}, {'num_return_sequences': 2, 'do_sample': True},
                         {'return_dict_in_generate': True}]:

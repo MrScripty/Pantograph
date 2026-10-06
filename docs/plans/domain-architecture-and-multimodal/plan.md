@@ -14,6 +14,12 @@ CPU and public graph/host checks plus independent medium review decide this
 bounded slice; it extends M2 descriptor/validation work and was not an explicit
 numbered post-seed milestone. Parent candidate review/publication remains separate.
 
+PR60's held-text rewrite finding is repaired in a narrow successor of frozen
+`19119837`; the [same report](reports/2026-10-06-workflow-text-stop-string.md#pr60-held-text-rewrite-successor)
+defines immutable emitted-prefix and suffix-only rewrite semantics, including
+crossing-boundary marker refusal and EOS/budget flushing. Parent verification and
+fresh hosted CI remain separate; chat graph work is paused for this priority.
+
 Graph-authored text seed is implemented in frozen candidate
 `6cf549dd`; see the [seed report](reports/2026-10-06-workflow-text-seed.md). Its
 separate [desktop precision successor](reports/2026-10-06-text-seed-desktop-precision.md)

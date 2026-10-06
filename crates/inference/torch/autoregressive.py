@@ -94,6 +94,10 @@ class _GeneratedTextStop:
             hold = max((size for marker in self.markers
                         for size in range(1, min(len(marker), len(text) + 1))
                         if text.endswith(marker[:size])), default=0)
+            # A held-only rewrite can move a possible marker prefix into text
+            # already emitted. Withhold only the remaining suffix; a complete
+            # marker crossing that boundary still fails the retraction guard.
+            hold = min(hold, max(0, len(text) - len(self.emitted)))
             if hold:
                 text = text[:-hold]
         if not text.startswith(self.emitted):

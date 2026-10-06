@@ -43,6 +43,13 @@ models and desktop remain open; JavaScript number entry may round seeds above
 
 ## 2026-10-06 — Graph-authored text stop-string candidate
 
+PR60 review found that a held-suffix rewrite could grow a marker prefix across
+already emitted text and falsely refuse before a complete marker existed.
+The [narrow successor](reports/2026-10-06-workflow-text-stop-string.md#pr60-held-text-rewrite-successor)
+bounds holdback to the un-emitted suffix and retains complete-marker/retraction
+refusal. Five actual CPU streaming regressions pass; independent parent review
+and fresh hosted CI remain pending. Original source/evidence stay frozen.
+
 The [bounded stop-string successor](reports/2026-10-06-workflow-text-stop-string.md)
 connects the existing typed stop option to the canonical text graph and PyTorch
 AR routes. Exact text/omission, scope defaults, marker withholding and authored
