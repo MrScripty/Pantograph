@@ -1,0 +1,4 @@
+Verified hosted artifact ZIP SHA256 and exact source/parent/tree.
+Verified hosted fixture hashes against committed source bytes and graph typed edges.
+Verified complete all-target desktop Candle/custom-protocol feature graph: ort load-dynamic; ort-sys disable-linking; no forbidden download features; current Pumas 26a84e323cae566a46a8f76bef48fa1010aed48b.
+No local or hosted native build/launch executed.

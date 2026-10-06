@@ -1,0 +1,29 @@
+{
+  "platform": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.39",
+  "commands": {
+    "pkg-config": "/usr/bin/pkg-config",
+    "WebKitWebDriver": null,
+    "Xvfb": "/usr/bin/Xvfb",
+    "xvfb-run": "/usr/bin/xvfb-run",
+    "tauri-driver": null,
+    "protoc": null
+  },
+  "libraries": {
+    "gtk+-3.0": null,
+    "webkit2gtk-4.1": null,
+    "javascriptcoregtk-4.1": null,
+    "libsoup-3.0": null
+  },
+  "missing": [
+    "WebKitWebDriver",
+    "tauri-driver",
+    "protoc",
+    "gtk+-3.0",
+    "webkit2gtk-4.1",
+    "javascriptcoregtk-4.1",
+    "libsoup-3.0"
+  ],
+  "admitted": false,
+  "policy": "pre-existing native prerequisites only; no privilege elevation or access-denial workaround",
+  "qualification": "not run; availability probe is not desktop/CPU graph acceptance"
+}

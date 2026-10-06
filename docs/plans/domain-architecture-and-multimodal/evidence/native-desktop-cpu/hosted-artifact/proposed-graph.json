@@ -1,0 +1,122 @@
+{
+  "nodes": [
+    {
+      "id": "prompt",
+      "node_type": "text-input",
+      "position": {
+        "x": 0,
+        "y": 100
+      },
+      "data": {
+        "text": "hello world",
+        "label": "Synthetic input: hello world"
+      }
+    },
+    {
+      "id": "infer",
+      "node_type": "llm-inference",
+      "position": {
+        "x": 300,
+        "y": 100
+      },
+      "data": {
+        "label": "Synthetic CPU embedding",
+        "task_kind": "embedding",
+        "runtime": "candle",
+        "device": "cpu",
+        "pumas_model_ref": {
+          "model_id": "embedding/qualification/Synthetic-BERT-8",
+          "selected_artifact_id": "main"
+        },
+        "inference_interface_snapshot": {
+          "contract_version": 1,
+          "descriptor_fingerprint": "iface.test.cpu_embedding.v1",
+          "task_kind": "embedding",
+          "inputs": [
+            {
+              "port_id": "text",
+              "label": "Text",
+              "direction": "input",
+              "requirement": "required",
+              "value_type": {
+                "category": "scalar",
+                "kind": "string"
+              },
+              "availability": {
+                "status": "available"
+              }
+            }
+          ],
+          "outputs": [
+            {
+              "port_id": "embedding",
+              "label": "Embedding",
+              "direction": "output",
+              "requirement": "required",
+              "value_type": {
+                "category": "structured",
+                "kind": "embedding"
+              },
+              "availability": {
+                "status": "available"
+              }
+            },
+            {
+              "port_id": "metadata",
+              "label": "Metadata",
+              "direction": "output",
+              "requirement": "required",
+              "value_type": {
+                "category": "structured",
+                "kind": "json"
+              },
+              "availability": {
+                "status": "available"
+              }
+            },
+            {
+              "port_id": "usage",
+              "label": "Usage",
+              "direction": "output",
+              "requirement": "optional",
+              "value_type": {
+                "category": "structured",
+                "kind": "json"
+              },
+              "availability": {
+                "status": "available"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "vectors",
+      "node_type": "vector-output",
+      "position": {
+        "x": 600,
+        "y": 100
+      },
+      "data": {
+        "label": "Synthetic vector output"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "text-to-embedding",
+      "source": "prompt",
+      "source_handle": "text",
+      "target": "infer",
+      "target_handle": "text"
+    },
+    {
+      "id": "embedding-to-vector",
+      "source": "infer",
+      "source_handle": "embedding",
+      "target": "vectors",
+      "target_handle": "vector"
+    }
+  ]
+}

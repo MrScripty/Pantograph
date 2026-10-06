@@ -64,10 +64,33 @@ The local read-only probe exits 2: GTK, WebKit/JavaScriptCore/libsoup developmen
 metadata, WebKitWebDriver, Xvfb, tauri-driver and a normal protoc command are
 unavailable. Therefore no local native build, app launch or desktop screenshot
 was attempted. Script syntax, fixture hash/copy/graph-port checks and complete
-desktop Cargo feature inspection pass. The hosted job is the decisive check of
-whether normal repository cloud permissions provide the required native setup;
-its artifacts must distinguish admission failure from native runtime/visual
-evidence.
+desktop Cargo feature inspection pass. Five existing native launcher tests and
+the root critical/a11y/traceability gates also pass; these preparation checks do
+not exercise the new native application path.
+
+[Hosted run 37480189945, job 112325975969](https://github.com/MrScripty/Pantograph/actions/runs/37480189945/job/112325975969)
+executed exact candidate `ecc4194adbcd5a198fb97cf47198427e3002773e`, tree
+`53c60a1d27a713d6b2cc3dcd04415859a1c8b953`, with frozen chat `0d7d573f` as
+its direct parent. It verified source ancestry and unchanged committed synthetic
+fixture bytes, then failed native admission with exit 2. Ubuntu 24.04 runner
+image `20260927.320.1` has Xvfb, but lacks WebKitWebDriver, tauri-driver, protoc,
+and pkg-config metadata for gtk+-3.0, webkit2gtk-4.1,
+javascriptcoregtk-4.1 and libsoup-3.0. Ordinary dependency installation, Cargo
+policy/build steps and actual native Tauri execution were skipped. The always-run
+evidence upload succeeded. No retry, privileged installation or sandbox change
+was attempted.
+
+The [committed evidence](../evidence/native-desktop-cpu/README.md) preserves the
+downloaded artifact, job steps/log, local checks, exact source binding and hashes.
+Artifact ZIP `11420323376` has SHA256
+`d32a972650be65365b7a4c30931f924c7e72cc5a1d5c3d031a69a9d1d9d3fbfc`.
+Its proposed graph and expected synthetic vector are preparation inputs; no
+workflow was saved/reopened in the app and no actual native output or screenshot
+was produced. Qualification is blocked pending a cloud-owned environment with
+the native prerequisites available within the authorized permissions. The new
+driver remains unqualified beyond syntax and fixture checks. A later docs-only
+evidence commit preserves this executed source; the branch path filter avoids
+repeating the known blocked run for evidence updates.
 
 Real Pumas discovery, pretrained quality, GPU, post-start cancellation, broad
 production loading and full release/desktop acceptance remain unqualified.

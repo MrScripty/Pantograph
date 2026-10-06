@@ -7,8 +7,11 @@
 **Next slice:** Cloud-owned native Tauri CPU graph qualification is prepared on
 isolated `qual/native-desktop-cpu-graph` from frozen accepted chat `0d7d573f`.
 The [native qualification report](reports/2026-10-06-native-desktop-cpu-qualification.md)
-records real saved/reopened editor/public-scheduler acceptance and the read-only
-prerequisite blocker. No privileged dependency installation, user-desktop access,
+records the intended real saved/reopened editor/public-scheduler acceptance and
+verified hosted run `37480189945` prerequisite blocker at source `ecc4194a`.
+Native build, app execution, output and screenshots were not run. Resume only
+with a cloud-owned environment providing the required native prerequisites.
+No privileged dependency installation, user-desktop access,
 browser-mock desktop claim or frozen-feature/PR mutation is authorized.
 
 **Prior chat slice:** The user-selected single-prompt canonical `chat_completion`

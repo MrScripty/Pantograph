@@ -1,0 +1,366 @@
+﻿2026-10-06T14:35:11.1700591Z Current runner version: '2.337.0'
+2026-10-06T14:35:11.1720675Z ##[group]Runner Image Provisioner
+2026-10-06T14:35:11.1721332Z Hosted Compute Agent
+2026-10-06T14:35:11.1721739Z Version: 20260901.588
+2026-10-06T14:35:11.1722226Z Commit: f88ec8081b781fac6c440065ac7ff9e710ce3d0b
+2026-10-06T14:35:11.1722737Z Build Date: 2026-09-01T19:56:44Z
+2026-10-06T14:35:11.1723211Z Worker ID: {3e2cd1b3-48e1-4fa2-9408-9ce2464af74f}
+2026-10-06T14:35:11.1723707Z Azure Region: centralus
+2026-10-06T14:35:11.1724118Z ##[endgroup]
+2026-10-06T14:35:11.1725755Z ##[group]Operating System
+2026-10-06T14:35:11.1726207Z Ubuntu
+2026-10-06T14:35:11.1726554Z 24.04.5
+2026-10-06T14:35:11.1726938Z LTS
+2026-10-06T14:35:11.1727297Z ##[endgroup]
+2026-10-06T14:35:11.1727708Z ##[group]Runner Image
+2026-10-06T14:35:11.1728120Z Image: ubuntu-24.04
+2026-10-06T14:35:11.1728543Z Version: 20260927.320.1
+2026-10-06T14:35:11.1729445Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20260927.320/images/ubuntu/Ubuntu2404-Readme.md
+2026-10-06T14:35:11.1730485Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20260927.320
+2026-10-06T14:35:11.1731148Z ##[endgroup]
+2026-10-06T14:35:11.1731950Z ##[group]GITHUB_TOKEN Permissions
+2026-10-06T14:35:11.1733518Z Contents: read
+2026-10-06T14:35:11.1733894Z Metadata: read
+2026-10-06T14:35:11.1734319Z ##[endgroup]
+2026-10-06T14:35:11.1735970Z Secret source: Actions
+2026-10-06T14:35:11.1736647Z Cache mode: write
+2026-10-06T14:35:11.1737152Z Prepare workflow directory
+2026-10-06T14:35:11.2138172Z Prepare all required actions
+2026-10-06T14:35:11.2175618Z Getting action download info
+2026-10-06T14:35:11.4785045Z Download action repository 'actions/checkout@v4' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+2026-10-06T14:35:11.5637222Z Download action repository 'actions/setup-node@v4' (SHA:49933ea5288caeca8642d1e84afbd3f7d6820020)
+2026-10-06T14:35:11.6856744Z Download action repository 'dtolnay/rust-toolchain@1.92.0' (SHA:1e7c0e2ba8d6443512f43fe0c99104527001da2e)
+2026-10-06T14:35:11.8920138Z Download action repository 'actions/upload-artifact@v4' (SHA:ea165f8d65b6e75b540449e92b4886f43607fa02)
+2026-10-06T14:35:12.1217221Z Complete job name: Native Tauri CPU graph (synthetic fixtures)
+2026-10-06T14:35:12.1783915Z ##[group]Run actions/checkout@v4
+2026-10-06T14:35:12.1784796Z with:
+2026-10-06T14:35:12.1785292Z   fetch-depth: 0
+2026-10-06T14:35:12.1785735Z   repository: MrScripty/Pantograph
+2026-10-06T14:35:12.1788699Z   token: ***
+2026-10-06T14:35:12.1789133Z   ssh-strict: true
+2026-10-06T14:35:12.1789538Z   ssh-user: git
+2026-10-06T14:35:12.1789964Z   persist-credentials: true
+2026-10-06T14:35:12.1790464Z   clean: true
+2026-10-06T14:35:12.1790866Z   sparse-checkout-cone-mode: true
+2026-10-06T14:35:12.1791424Z   fetch-tags: false
+2026-10-06T14:35:12.1791839Z   show-progress: true
+2026-10-06T14:35:12.1792259Z   lfs: false
+2026-10-06T14:35:12.1792653Z   submodules: false
+2026-10-06T14:35:12.1793057Z   set-safe-directory: true
+2026-10-06T14:35:12.1793574Z   allow-unsafe-pr-checkout: false
+2026-10-06T14:35:12.1794219Z env:
+2026-10-06T14:35:12.1794834Z   ORT_SKIP_DOWNLOAD: 1
+2026-10-06T14:35:12.1795585Z   HF_HUB_OFFLINE: 1
+2026-10-06T14:35:12.1796005Z   TRANSFORMERS_OFFLINE: 1
+2026-10-06T14:35:12.1796829Z   PANTOGRAPH_NATIVE_CPU_EVIDENCE_DIR: /home/runner/work/Pantograph/Pantograph/native-cpu-evidence
+2026-10-06T14:35:12.1797598Z ##[endgroup]
+2026-10-06T14:35:12.2645100Z Syncing repository: MrScripty/Pantograph
+2026-10-06T14:35:12.2647472Z ##[group]Getting Git version info
+2026-10-06T14:35:12.2648411Z Working directory is '/home/runner/work/Pantograph/Pantograph'
+2026-10-06T14:35:12.2649572Z [command]/usr/bin/git version
+2026-10-06T14:35:12.2750593Z git version 2.55.0
+2026-10-06T14:35:12.2770217Z ##[endgroup]
+2026-10-06T14:35:12.2782438Z Temporarily overriding HOME='/home/runner/work/_temp/2092a970-28db-4991-91d1-7888b6a8860b' before making global git config changes
+2026-10-06T14:35:12.2783698Z Adding repository directory to the temporary git global config as a safe directory
+2026-10-06T14:35:12.2789028Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/Pantograph/Pantograph
+2026-10-06T14:35:12.2836899Z Deleting the contents of '/home/runner/work/Pantograph/Pantograph'
+2026-10-06T14:35:12.2840772Z ##[group]Initializing the repository
+2026-10-06T14:35:12.2844887Z [command]/usr/bin/git init /home/runner/work/Pantograph/Pantograph
+2026-10-06T14:35:12.2937446Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-10-06T14:35:12.2938918Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-10-06T14:35:12.2940243Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-10-06T14:35:12.2940992Z hint: call:
+2026-10-06T14:35:12.2941493Z hint:
+2026-10-06T14:35:12.2942121Z hint: 	git config --global init.defaultBranch <name>
+2026-10-06T14:35:12.2942753Z hint:
+2026-10-06T14:35:12.2943350Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-10-06T14:35:12.2944200Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-10-06T14:35:12.2945283Z hint:
+2026-10-06T14:35:12.2945981Z hint: 	git branch -m <name>
+2026-10-06T14:35:12.2946499Z hint:
+2026-10-06T14:35:12.2947213Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-10-06T14:35:12.2948062Z Initialized empty Git repository in /home/runner/work/Pantograph/Pantograph/.git/
+2026-10-06T14:35:12.2949511Z [command]/usr/bin/git remote add origin https://github.com/MrScripty/Pantograph
+2026-10-06T14:35:12.2992718Z ##[endgroup]
+2026-10-06T14:35:12.2993406Z ##[group]Disabling automatic garbage collection
+2026-10-06T14:35:12.2996290Z [command]/usr/bin/git config --local gc.auto 0
+2026-10-06T14:35:12.3022975Z ##[endgroup]
+2026-10-06T14:35:12.3024400Z ##[group]Setting up auth
+2026-10-06T14:35:12.3029279Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-10-06T14:35:12.3059864Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-10-06T14:35:12.3368062Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-10-06T14:35:12.3390464Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-10-06T14:35:12.3547645Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-10-06T14:35:12.3572949Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-10-06T14:35:12.3729447Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-10-06T14:35:12.3780334Z ##[endgroup]
+2026-10-06T14:35:12.3781352Z ##[group]Fetching the repository
+2026-10-06T14:35:12.3791568Z [command]/usr/bin/git -c protocol.version=2 fetch --prune --no-recurse-submodules origin +refs/heads/*:refs/remotes/origin/* +refs/tags/*:refs/tags/*
+2026-10-06T14:35:15.8669289Z From https://github.com/MrScripty/Pantograph
+2026-10-06T14:35:15.8671480Z  * [new branch]        codex/artifact-retention-reopen -> origin/codex/artifact-retention-reopen
+2026-10-06T14:35:15.8673896Z  * [new branch]        codex/pantograph-rpc-workflow-2026-09-26 -> origin/codex/pantograph-rpc-workflow-2026-09-26
+2026-10-06T14:35:15.8676926Z  * [new branch]        codex/production-dispatch-identity -> origin/codex/production-dispatch-identity
+2026-10-06T14:35:15.8679516Z  * [new branch]        docs/pytorch-trust-policy-2026-10-03 -> origin/docs/pytorch-trust-policy-2026-10-03
+2026-10-06T14:35:15.8682474Z  * [new branch]        docs/research-source-index-2026-10-02 -> origin/docs/research-source-index-2026-10-02
+2026-10-06T14:35:15.8685672Z  * [new branch]        evidence/text-controls-main-qualification -> origin/evidence/text-controls-main-qualification
+2026-10-06T14:35:15.8688930Z  * [new branch]        evidence/workflow-cpu-embedding-graphs -> origin/evidence/workflow-cpu-embedding-graphs
+2026-10-06T14:35:15.8691257Z  * [new branch]        feat/llamacpp-owned-resident-estimates -> origin/feat/llamacpp-owned-resident-estimates
+2026-10-06T14:35:15.8693897Z  * [new branch]        feat/runtime-exact-service-timings -> origin/feat/runtime-exact-service-timings
+2026-10-06T14:35:15.8696241Z  * [new branch]        feat/runtime-host-observations -> origin/feat/runtime-host-observations
+2026-10-06T14:35:15.8698485Z  * [new branch]        feat/runtime-owned-cpu-device-candidates -> origin/feat/runtime-owned-cpu-device-candidates
+2026-10-06T14:35:15.8700976Z  * [new branch]        feat/runtime-owned-cuda-device-facts -> origin/feat/runtime-owned-cuda-device-facts
+2026-10-06T14:35:15.8703247Z  * [new branch]        feat/runtime-owned-host-ram-ceilings -> origin/feat/runtime-owned-host-ram-ceilings
+2026-10-06T14:35:15.8706297Z  * [new branch]        feat/runtime-producer-resident-estimates -> origin/feat/runtime-producer-resident-estimates
+2026-10-06T14:35:15.8709966Z  * [new branch]        feat/runtime-reservation-evaluation -> origin/feat/runtime-reservation-evaluation
+2026-10-06T14:35:15.8713013Z  * [new branch]        feat/scheduler-image-output -> origin/feat/scheduler-image-output
+2026-10-06T14:35:15.8715996Z  * [new branch]        feat/scheduler-json-filter -> origin/feat/scheduler-json-filter
+2026-10-06T14:35:15.8719063Z  * [new branch]        feat/scheduler-resident-resource-accounting -> origin/feat/scheduler-resident-resource-accounting
+2026-10-06T14:35:15.8722511Z  * [new branch]        feat/scheduler-selected-reservation -> origin/feat/scheduler-selected-reservation
+2026-10-06T14:35:15.8726049Z  * [new branch]        feat/scheduler-shared-resource-admission -> origin/feat/scheduler-shared-resource-admission
+2026-10-06T14:35:15.8728645Z  * [new branch]        feat/scheduler-shared-resource-composition -> origin/feat/scheduler-shared-resource-composition
+2026-10-06T14:35:15.8731049Z  * [new branch]        feat/scheduler-text-merge -> origin/feat/scheduler-text-merge
+2026-10-06T14:35:15.8733658Z  * [new branch]        feat/workflow-chat-completion -> origin/feat/workflow-chat-completion
+2026-10-06T14:35:15.8736011Z  * [new branch]        feat/workflow-cpu-embedding-graphs -> origin/feat/workflow-cpu-embedding-graphs
+2026-10-06T14:35:15.8738398Z  * [new branch]        feat/workflow-image-controls -> origin/feat/workflow-image-controls
+2026-10-06T14:35:15.8741124Z  * [new branch]        feat/workflow-image-count -> origin/feat/workflow-image-count
+2026-10-06T14:35:15.8744332Z  * [new branch]        feat/workflow-image-guidance-scale -> origin/feat/workflow-image-guidance-scale
+2026-10-06T14:35:15.8747714Z  * [new branch]        feat/workflow-image-scheduler -> origin/feat/workflow-image-scheduler
+2026-10-06T14:35:15.8750378Z  * [new branch]        feat/workflow-system-prompt -> origin/feat/workflow-system-prompt
+2026-10-06T14:35:15.8753268Z  * [new branch]        feat/workflow-text-min-new-tokens -> origin/feat/workflow-text-min-new-tokens
+2026-10-06T14:35:15.8756591Z  * [new branch]        feat/workflow-text-repetition-penalty -> origin/feat/workflow-text-repetition-penalty
+2026-10-06T14:35:15.8759750Z  * [new branch]        feat/workflow-text-seed-on-pr58-repair -> origin/feat/workflow-text-seed-on-pr58-repair
+2026-10-06T14:35:15.8762569Z  * [new branch]        feat/workflow-text-stop-string -> origin/feat/workflow-text-stop-string
+2026-10-06T14:35:15.8764911Z  * [new branch]        feat/workflow-text-temperature -> origin/feat/workflow-text-temperature
+2026-10-06T14:35:15.8767415Z  * [new branch]        feat/workflow-text-token-limit -> origin/feat/workflow-text-token-limit
+2026-10-06T14:35:15.8769403Z  * [new branch]        feat/workflow-text-top-k -> origin/feat/workflow-text-top-k
+2026-10-06T14:35:15.8771206Z  * [new branch]        feat/workflow-text-top-p -> origin/feat/workflow-text-top-p
+2026-10-06T14:35:15.8773213Z  * [new branch]        feature/candle-bert-cpu-embeddings -> origin/feature/candle-bert-cpu-embeddings
+2026-10-06T14:35:15.8776076Z  * [new branch]        feature/candle-workflow-embedding-output -> origin/feature/candle-workflow-embedding-output
+2026-10-06T14:35:15.8778556Z  * [new branch]        feature/pumas-configured-owner-client -> origin/feature/pumas-configured-owner-client
+2026-10-06T14:35:15.8780962Z  * [new branch]        feature/pumas-full-facts-consumer -> origin/feature/pumas-full-facts-consumer
+2026-10-06T14:35:15.8783482Z  * [new branch]        fix/a11y-structured-element-checks-2026-10-03 -> origin/fix/a11y-structured-element-checks-2026-10-03
+2026-10-06T14:35:15.8786330Z  * [new branch]        fix/artifact-download-lifecycle-2026-10-03 -> origin/fix/artifact-download-lifecycle-2026-10-03
+2026-10-06T14:35:15.8789149Z  * [new branch]        fix/artifact-preview-a11y-limitations-2026-10-03 -> origin/fix/artifact-preview-a11y-limitations-2026-10-03
+2026-10-06T14:35:15.8791746Z  * [new branch]        fix/beam-smoke-export-stubs-2026-10-03 -> origin/fix/beam-smoke-export-stubs-2026-10-03
+2026-10-06T14:35:15.8795267Z  * [new branch]        fix/candle-pooling-include-prompt-default -> origin/fix/candle-pooling-include-prompt-default
+2026-10-06T14:35:15.8798572Z  * [new branch]        fix/ci-build-prerequisites-2026-10-02 -> origin/fix/ci-build-prerequisites-2026-10-02
+2026-10-06T14:35:15.8802080Z  * [new branch]        fix/clippy-redundant-borrow-annotations-2026-10-03 -> origin/fix/clippy-redundant-borrow-annotations-2026-10-03
+2026-10-06T14:35:15.8805849Z  * [new branch]        fix/cpu-sampler-ci-failure-propagation -> origin/fix/cpu-sampler-ci-failure-propagation
+2026-10-06T14:35:15.8808528Z  * [new branch]        fix/decision-traceability-ownership-2026-10-02 -> origin/fix/decision-traceability-ownership-2026-10-02
+2026-10-06T14:35:15.8811569Z  * [new branch]        fix/diffusers-native-parallel-isolation -> origin/fix/diffusers-native-parallel-isolation
+2026-10-06T14:35:15.8814108Z  * [new branch]        fix/embedded-runtime-ci-contracts-2026-10-03 -> origin/fix/embedded-runtime-ci-contracts-2026-10-03
+2026-10-06T14:35:15.8817020Z  * [new branch]        fix/frontend-security-cohort-20261003 -> origin/fix/frontend-security-cohort-20261003
+2026-10-06T14:35:15.8819435Z  * [new branch]        fix/gateway-private-contexts-2026-10-03 -> origin/fix/gateway-private-contexts-2026-10-03
+2026-10-06T14:35:15.8822748Z  * [new branch]        fix/generated-component-validation-admission -> origin/fix/generated-component-validation-admission
+2026-10-06T14:35:15.8826543Z  * [new branch]        fix/headless-integration-contracts-2026-10-03 -> origin/fix/headless-integration-contracts-2026-10-03
+2026-10-06T14:35:15.8829500Z  * [new branch]        fix/http-adapter-transport-contracts-2026-10-03 -> origin/fix/http-adapter-transport-contracts-2026-10-03
+2026-10-06T14:35:15.8832377Z  * [new branch]        fix/inference-error-boundaries-2026-10-03 -> origin/fix/inference-error-boundaries-2026-10-03
+2026-10-06T14:35:15.8834840Z  * [new branch]        fix/inference-lint-basics-2026-10-03 -> origin/fix/inference-lint-basics-2026-10-03
+2026-10-06T14:35:15.8837198Z  * [new branch]        fix/inference-payload-layout-2026-10-03 -> origin/fix/inference-payload-layout-2026-10-03
+2026-10-06T14:35:15.8839662Z  * [new branch]        fix/ledger-artifact-payload-layout-2026-10-03 -> origin/fix/ledger-artifact-payload-layout-2026-10-03
+2026-10-06T14:35:15.8842257Z  * [new branch]        fix/ledger-inference-payload-layout-2026-10-03 -> origin/fix/ledger-inference-payload-layout-2026-10-03
+2026-10-06T14:35:15.8845058Z  * [new branch]        fix/ledger-private-projection-input-2026-10-03 -> origin/fix/ledger-private-projection-input-2026-10-03
+2026-10-06T14:35:15.8847639Z  * [new branch]        fix/llama-settings-input-2026-10-03 -> origin/fix/llama-settings-input-2026-10-03
+2026-10-06T14:35:15.8850013Z  * [new branch]        fix/media-conversion-result-input-2026-10-03 -> origin/fix/media-conversion-result-input-2026-10-03
+2026-10-06T14:35:15.8852373Z  * [new branch]        fix/node-validation-context-2026-10-03 -> origin/fix/node-validation-context-2026-10-03
+2026-10-06T14:35:15.8855282Z  * [new branch]        fix/orchestrator-selection-error-layout-2026-10-03 -> origin/fix/orchestrator-selection-error-layout-2026-10-03
+2026-10-06T14:35:15.8857672Z  * [new branch]        fix/pr49-candle-canonical-root -> origin/fix/pr49-candle-canonical-root
+2026-10-06T14:35:15.8859618Z  * [new branch]        fix/pr49-candle-review-repairs -> origin/fix/pr49-candle-review-repairs
+2026-10-06T14:35:15.8861501Z  * [new branch]        fix/pr49-current-pumas-pin-doc -> origin/fix/pr49-current-pumas-pin-doc
+2026-10-06T14:35:15.8863507Z  * [new branch]        fix/pr49-embedding-identity-custody -> origin/fix/pr49-embedding-identity-custody
+2026-10-06T14:35:15.8865754Z  * [new branch]        fix/pr49-pumas-composed-source-pin -> origin/fix/pr49-pumas-composed-source-pin
+2026-10-06T14:35:15.8867903Z  * [new branch]        fix/pr49-replacement-supervisor-panic -> origin/fix/pr49-replacement-supervisor-panic
+2026-10-06T14:35:15.8869987Z  * [new branch]        fix/pr49-summary-cache-fixture -> origin/fix/pr49-summary-cache-fixture
+2026-10-06T14:35:15.8871925Z  * [new branch]        fix/pr54-session-output-discovery -> origin/fix/pr54-session-output-discovery
+2026-10-06T14:35:15.8873870Z  * [new branch]        fix/pr56-config-fixture-contract -> origin/fix/pr56-config-fixture-contract
+2026-10-06T14:35:15.8875916Z  * [new branch]        fix/pr56-reviewed-correctness -> origin/fix/pr56-reviewed-correctness
+2026-10-06T14:35:15.8877844Z  * [new branch]        fix/pr56-unused-desktop-imports -> origin/fix/pr56-unused-desktop-imports
+2026-10-06T14:35:15.8879885Z  * [new branch]        fix/pr58-omitted-generation-controls -> origin/fix/pr58-omitted-generation-controls
+2026-10-06T14:35:15.8882202Z  * [new branch]        fix/pumas-public-auth-freshness-assertions -> origin/fix/pumas-public-auth-freshness-assertions
+2026-10-06T14:35:15.8884718Z  * [new branch]        fix/pumas-public-owner-client-test-fixture -> origin/fix/pumas-public-owner-client-test-fixture
+2026-10-06T14:35:15.8887126Z  * [new branch]        fix/pumas-selected-identity-diagnostics -> origin/fix/pumas-selected-identity-diagnostics
+2026-10-06T14:35:15.8889592Z  * [new branch]        fix/pytorch-text-generation-request-2026-10-03 -> origin/fix/pytorch-text-generation-request-2026-10-03
+2026-10-06T14:35:15.8892029Z  * [new branch]        fix/runtime-host-asref-contracts-2026-10-03 -> origin/fix/runtime-host-asref-contracts-2026-10-03
+2026-10-06T14:35:15.8894184Z  * [new branch]        fix/runtime-host-ram-review-findings -> origin/fix/runtime-host-ram-review-findings
+2026-10-06T14:35:15.8896536Z  * [new branch]        fix/runtime-producer-resident-correctness -> origin/fix/runtime-producer-resident-correctness
+2026-10-06T14:35:15.8899679Z  * [new branch]        fix/runtime-registry-diagnostic-errors-2026-10-03 -> origin/fix/runtime-registry-diagnostic-errors-2026-10-03
+2026-10-06T14:35:15.8902037Z  * [new branch]        fix/runtime-service-timing-correlation -> origin/fix/runtime-service-timing-correlation
+2026-10-06T14:35:15.8904164Z  * [new branch]        fix/rustfmt-repair-stack-2026-10-03 -> origin/fix/rustfmt-repair-stack-2026-10-03
+2026-10-06T14:35:15.8906422Z  * [new branch]        fix/scheduler-asref-contracts-2026-10-03 -> origin/fix/scheduler-asref-contracts-2026-10-03
+2026-10-06T14:35:15.8908480Z  * [new branch]        fix/scheduler-reservation-custody -> origin/fix/scheduler-reservation-custody
+2026-10-06T14:35:15.8910765Z  * [new branch]        fix/scheduler-runtime-intent-layout-2026-10-03 -> origin/fix/scheduler-runtime-intent-layout-2026-10-03
+2026-10-06T14:35:15.8913012Z  * [new branch]        fix/selector-derived-state-2026-10-03 -> origin/fix/selector-derived-state-2026-10-03
+2026-10-06T14:35:15.8915360Z  * [new branch]        fix/session-capacity-observability-2026-10-02 -> origin/fix/session-capacity-observability-2026-10-02
+2026-10-06T14:35:15.8917442Z  * [new branch]        fix/text-repetition-kv-refusal -> origin/fix/text-repetition-kv-refusal
+2026-10-06T14:35:15.8919246Z  * [new branch]        fix/text-repetition-numerics -> origin/fix/text-repetition-numerics
+2026-10-06T14:35:15.8921053Z  * [new branch]        fix/text-seed-desktop-precision -> origin/fix/text-seed-desktop-precision
+2026-10-06T14:35:15.8923289Z  * [new branch]        fix/uniffi-capability-estimate-fixture-2026-10-03 -> origin/fix/uniffi-capability-estimate-fixture-2026-10-03
+2026-10-06T14:35:15.8925914Z  * [new branch]        fix/uniffi-missing-runtime-fixture-2026-10-03 -> origin/fix/uniffi-missing-runtime-fixture-2026-10-03
+2026-10-06T14:35:15.8928162Z  * [new branch]        fix/uniffi-selector-contracts-2026-10-03 -> origin/fix/uniffi-selector-contracts-2026-10-03
+2026-10-06T14:35:15.8930234Z  * [new branch]        fix/uniffi-shutdown-result-2026-10-03 -> origin/fix/uniffi-shutdown-result-2026-10-03
+2026-10-06T14:35:15.8932609Z  * [new branch]        fix/uniffi-validation-publication-bridge-2026-10-03 -> origin/fix/uniffi-validation-publication-bridge-2026-10-03
+2026-10-06T14:35:15.8935229Z  * [new branch]        fix/workflow-contract-fixtures-2026-10-02 -> origin/fix/workflow-contract-fixtures-2026-10-02
+2026-10-06T14:35:15.8937515Z  * [new branch]        fix/workflow-embedding-requested-revision -> origin/fix/workflow-embedding-requested-revision
+2026-10-06T14:35:15.8939738Z  * [new branch]        fix/workflow-embedding-test-identities -> origin/fix/workflow-embedding-test-identities
+2026-10-06T14:35:15.8941750Z  * [new branch]        fix/workflow-lint-basics-2026-10-03 -> origin/fix/workflow-lint-basics-2026-10-03
+2026-10-06T14:35:15.8943933Z  * [new branch]        fix/workflow-private-payload-layout-2026-10-03 -> origin/fix/workflow-private-payload-layout-2026-10-03
+2026-10-06T14:35:15.8946326Z  * [new branch]        fix/workflow-top-k-vocabulary-bound -> origin/fix/workflow-top-k-vocabulary-bound
+2026-10-06T14:35:15.8948429Z  * [new branch]        integration/image-controls-main-successor -> origin/integration/image-controls-main-successor
+2026-10-06T14:35:15.8950794Z  * [new branch]        integration/image-controls-reviewed-candidate -> origin/integration/image-controls-reviewed-candidate
+2026-10-06T14:35:15.8953213Z  * [new branch]        integration/pumas-canonical-runtime-residency -> origin/integration/pumas-canonical-runtime-residency
+2026-10-06T14:35:15.8955720Z  * [new branch]        integration/pumas-explicit-runtime-residency -> origin/integration/pumas-explicit-runtime-residency
+2026-10-06T14:35:15.8957860Z  * [new branch]        integration/quality-gates-2026-10-04 -> origin/integration/quality-gates-2026-10-04
+2026-10-06T14:35:15.8959987Z  * [new branch]        integration/resident-lifecycle-main-2026-10-05 -> origin/integration/resident-lifecycle-main-2026-10-05
+2026-10-06T14:35:15.8962211Z  * [new branch]        integration/runtime-owner-qualified-main -> origin/integration/runtime-owner-qualified-main
+2026-10-06T14:35:15.8964378Z  * [new branch]        integration/scheduler-graph-functionality -> origin/integration/scheduler-graph-functionality
+2026-10-06T14:35:15.8966745Z  * [new branch]        integration/scheduler-observations-graph -> origin/integration/scheduler-observations-graph
+2026-10-06T14:35:15.8968875Z  * [new branch]        integration/text-controls-main-successor -> origin/integration/text-controls-main-successor
+2026-10-06T14:35:15.8970899Z  * [new branch]        integration/workflow-controls-pr50-52 -> origin/integration/workflow-controls-pr50-52
+2026-10-06T14:35:15.8972450Z  * [new branch]        main       -> origin/main
+2026-10-06T14:35:15.8973765Z  * [new branch]        qual/native-desktop-cpu-graph -> origin/qual/native-desktop-cpu-graph
+2026-10-06T14:35:15.8975931Z  * [new branch]        qualification/all-source-accepted-candidate -> origin/qualification/all-source-accepted-candidate
+2026-10-06T14:35:15.8978146Z  * [new branch]        qualification/frontend-accepted-composition -> origin/qualification/frontend-accepted-composition
+2026-10-06T14:35:15.8980152Z  * [new branch]        qualification/pr44-native-workflow -> origin/qualification/pr44-native-workflow
+2026-10-06T14:35:15.8982292Z  * [new branch]        qualification/pr49-reviewed-consumer-candle -> origin/qualification/pr49-reviewed-consumer-candle
+2026-10-06T14:35:15.8984455Z  * [new branch]        qualification/pr55-explicit-ort-final-pin -> origin/qualification/pr55-explicit-ort-final-pin
+2026-10-06T14:35:15.8986742Z  * [new branch]        qualification/pr55-explicit-ort-runtime -> origin/qualification/pr55-explicit-ort-runtime
+2026-10-06T14:35:15.8988808Z  * [new branch]        qualification/pretrained-bert-evidence -> origin/qualification/pretrained-bert-evidence
+2026-10-06T14:35:15.8991374Z  * [new branch]        qualification/resident-lifecycle-qualified -> origin/qualification/resident-lifecycle-qualified
+2026-10-06T14:35:15.8993590Z  * [new branch]        qualification/resident-lifecycle-repair -> origin/qualification/resident-lifecycle-repair
+2026-10-06T14:35:15.8995795Z  * [new branch]        qualification/shared-resource-app-config -> origin/qualification/shared-resource-app-config
+2026-10-06T14:35:15.8997878Z  * [new branch]        qualification/text-control-composition -> origin/qualification/text-control-composition
+2026-10-06T14:35:15.8999931Z  * [new branch]        qualification/workflow-text-controls-native -> origin/qualification/workflow-text-controls-native
+2026-10-06T14:35:15.9001871Z  * [new branch]        repair/device-config-lifecycle -> origin/repair/device-config-lifecycle
+2026-10-06T14:35:15.9003716Z  * [new branch]        repair/pr47-snippet-name-resolution -> origin/repair/pr47-snippet-name-resolution
+2026-10-06T14:35:15.9005759Z  * [new branch]        repair/undo-persistence-validation -> origin/repair/undo-persistence-validation
+2026-10-06T14:35:15.9007583Z  * [new branch]        repair/view-animation-lifecycle -> origin/repair/view-animation-lifecycle
+2026-10-06T14:35:15.9009268Z  * [new branch]        repair/view-record-validation -> origin/repair/view-record-validation
+2026-10-06T14:35:15.9011054Z  * [new branch]        repair/workflow-graph-mount-lifecycle -> origin/repair/workflow-graph-mount-lifecycle
+2026-10-06T14:35:15.9012934Z  * [new branch]        review/quality-part1-2026-10-04 -> origin/review/quality-part1-2026-10-04
+2026-10-06T14:35:15.9014959Z  * [new branch]        review/quality-part2-2026-10-04 -> origin/review/quality-part2-2026-10-04
+2026-10-06T14:35:15.9016673Z  * [new branch]        review/quality-part3-2026-10-04 -> origin/review/quality-part3-2026-10-04
+2026-10-06T14:35:15.9018476Z  * [new branch]        test/cpu-sampler-hosted-qualification -> origin/test/cpu-sampler-hosted-qualification
+2026-10-06T14:35:15.9021421Z [command]/usr/bin/git branch --list --remote origin/qual/native-desktop-cpu-graph
+2026-10-06T14:35:15.9022694Z   origin/qual/native-desktop-cpu-graph
+2026-10-06T14:35:15.9025039Z [command]/usr/bin/git rev-parse refs/remotes/origin/qual/native-desktop-cpu-graph
+2026-10-06T14:35:15.9026291Z ecc4194adbcd5a198fb97cf47198427e3002773e
+2026-10-06T14:35:15.9028549Z ##[endgroup]
+2026-10-06T14:35:15.9029689Z ##[group]Determining the checkout info
+2026-10-06T14:35:15.9030969Z ##[endgroup]
+2026-10-06T14:35:15.9031724Z [command]/usr/bin/git sparse-checkout disable
+2026-10-06T14:35:15.9033803Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-10-06T14:35:15.9036472Z ##[group]Checking out the ref
+2026-10-06T14:35:15.9038090Z [command]/usr/bin/git checkout --progress --force -B qual/native-desktop-cpu-graph refs/remotes/origin/qual/native-desktop-cpu-graph
+2026-10-06T14:35:16.0133428Z Switched to a new branch 'qual/native-desktop-cpu-graph'
+2026-10-06T14:35:16.0135664Z branch 'qual/native-desktop-cpu-graph' set up to track 'origin/qual/native-desktop-cpu-graph'.
+2026-10-06T14:35:16.0138852Z ##[endgroup]
+2026-10-06T14:35:16.0169142Z [command]/usr/bin/git log -1 --format=%H
+2026-10-06T14:35:16.0187528Z ecc4194adbcd5a198fb97cf47198427e3002773e
+2026-10-06T14:35:16.0366939Z ##[group]Run set -euo pipefail
+2026-10-06T14:35:16.0367883Z [36;1mset -euo pipefail[0m
+2026-10-06T14:35:16.0368831Z [36;1mmkdir -p "$PANTOGRAPH_NATIVE_CPU_EVIDENCE_DIR"[0m
+2026-10-06T14:35:16.0370344Z [36;1mgit merge-base --is-ancestor 0d7d573f36d8f25f3ae5c8adb25ab86c42e1dd8c HEAD[0m
+2026-10-06T14:35:16.0371899Z [36;1mgit show -s --format='%H%n%T%n%P' HEAD > "$PANTOGRAPH_NATIVE_CPU_EVIDENCE_DIR/source.txt"[0m
+2026-10-06T14:35:16.0537304Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-10-06T14:35:16.0538416Z env:
+2026-10-06T14:35:16.0539136Z   ORT_SKIP_DOWNLOAD: 1
+2026-10-06T14:35:16.0539838Z   HF_HUB_OFFLINE: 1
+2026-10-06T14:35:16.0540590Z   TRANSFORMERS_OFFLINE: 1
+2026-10-06T14:35:16.0541801Z   PANTOGRAPH_NATIVE_CPU_EVIDENCE_DIR: /home/runner/work/Pantograph/Pantograph/native-cpu-evidence
+2026-10-06T14:35:16.0543123Z ##[endgroup]
+2026-10-06T14:35:16.0711311Z ##[group]Run set -euo pipefail
+2026-10-06T14:35:16.0712211Z [36;1mset -euo pipefail[0m
+2026-10-06T14:35:16.0713914Z [36;1mpython3 scripts/prepare-native-desktop-cpu-fixture.py "$RUNNER_TEMP/native-cpu-fixture" > "$PANTOGRAPH_NATIVE_CPU_EVIDENCE_DIR/fixture.json"[0m
+2026-10-06T14:35:16.0716490Z [36;1mcp "$RUNNER_TEMP/native-cpu-fixture/graph.json" "$PANTOGRAPH_NATIVE_CPU_EVIDENCE_DIR/proposed-graph.json"[0m
+2026-10-06T14:35:16.0748171Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-10-06T14:35:16.0749537Z env:
+2026-10-06T14:35:16.0750221Z   ORT_SKIP_DOWNLOAD: 1
+2026-10-06T14:35:16.0750937Z   HF_HUB_OFFLINE: 1
+2026-10-06T14:35:16.0751669Z   TRANSFORMERS_OFFLINE: 1
+2026-10-06T14:35:16.0752909Z   PANTOGRAPH_NATIVE_CPU_EVIDENCE_DIR: /home/runner/work/Pantograph/Pantograph/native-cpu-evidence
+2026-10-06T14:35:16.0754204Z ##[endgroup]
+2026-10-06T14:35:16.1130078Z ##[group]Run python3 scripts/check-native-desktop-cpu-prerequisites.py
+2026-10-06T14:35:16.1131474Z [36;1mpython3 scripts/check-native-desktop-cpu-prerequisites.py[0m
+2026-10-06T14:35:16.1163641Z shell: /usr/bin/bash -e {0}
+2026-10-06T14:35:16.1164423Z env:
+2026-10-06T14:35:16.1165243Z   ORT_SKIP_DOWNLOAD: 1
+2026-10-06T14:35:16.1165995Z   HF_HUB_OFFLINE: 1
+2026-10-06T14:35:16.1166713Z   TRANSFORMERS_OFFLINE: 1
+2026-10-06T14:35:16.1167962Z   PANTOGRAPH_NATIVE_CPU_EVIDENCE_DIR: /home/runner/work/Pantograph/Pantograph/native-cpu-evidence
+2026-10-06T14:35:16.1169239Z ##[endgroup]
+2026-10-06T14:35:16.1627149Z {
+2026-10-06T14:35:16.1628548Z   "platform": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.39",
+2026-10-06T14:35:16.1629811Z   "commands": {
+2026-10-06T14:35:16.1630820Z     "pkg-config": "/usr/bin/pkg-config",
+2026-10-06T14:35:16.1631996Z     "WebKitWebDriver": null,
+2026-10-06T14:35:16.1633039Z     "Xvfb": "/usr/bin/Xvfb",
+2026-10-06T14:35:16.1634223Z     "xvfb-run": "/usr/bin/xvfb-run",
+2026-10-06T14:35:16.1635605Z     "tauri-driver": null,
+2026-10-06T14:35:16.1636668Z     "protoc": null
+2026-10-06T14:35:16.1637741Z   },
+2026-10-06T14:35:16.1638726Z   "libraries": {
+2026-10-06T14:35:16.1639713Z     "gtk+-3.0": null,
+2026-10-06T14:35:16.1640638Z     "webkit2gtk-4.1": null,
+2026-10-06T14:35:16.1641756Z     "javascriptcoregtk-4.1": null,
+2026-10-06T14:35:16.1642926Z     "libsoup-3.0": null
+2026-10-06T14:35:16.1643996Z   },
+2026-10-06T14:35:16.1645009Z   "missing": [
+2026-10-06T14:35:16.1646108Z     "WebKitWebDriver",
+2026-10-06T14:35:16.1647138Z     "tauri-driver",
+2026-10-06T14:35:16.1648044Z     "protoc",
+2026-10-06T14:35:16.1648975Z     "gtk+-3.0",
+2026-10-06T14:35:16.1649805Z     "webkit2gtk-4.1",
+2026-10-06T14:35:16.1650719Z     "javascriptcoregtk-4.1",
+2026-10-06T14:35:16.1651737Z     "libsoup-3.0"
+2026-10-06T14:35:16.1652614Z   ],
+2026-10-06T14:35:16.1653438Z   "admitted": false,
+2026-10-06T14:35:16.1655378Z   "policy": "pre-existing native prerequisites only; no privilege elevation or access-denial workaround",
+2026-10-06T14:35:16.1657796Z   "qualification": "not run; availability probe is not desktop/CPU graph acceptance"
+2026-10-06T14:35:16.1659737Z }
+2026-10-06T14:35:16.1686163Z ##[error]Process completed with exit code 2.
+2026-10-06T14:35:16.1843506Z ##[group]Run actions/upload-artifact@v4
+2026-10-06T14:35:16.1844396Z with:
+2026-10-06T14:35:16.1845465Z   name: native-desktop-cpu-ecc4194adbcd5a198fb97cf47198427e3002773e
+2026-10-06T14:35:16.1846715Z   path: native-cpu-evidence
+2026-10-06T14:35:16.1847461Z   if-no-files-found: error
+2026-10-06T14:35:16.1848168Z   retention-days: 14
+2026-10-06T14:35:16.1848896Z   compression-level: 6
+2026-10-06T14:35:16.1849591Z   overwrite: false
+2026-10-06T14:35:16.1850271Z   include-hidden-files: false
+2026-10-06T14:35:16.1851003Z env:
+2026-10-06T14:35:16.1851612Z   ORT_SKIP_DOWNLOAD: 1
+2026-10-06T14:35:16.1852315Z   HF_HUB_OFFLINE: 1
+2026-10-06T14:35:16.1853006Z   TRANSFORMERS_OFFLINE: 1
+2026-10-06T14:35:16.1854164Z   PANTOGRAPH_NATIVE_CPU_EVIDENCE_DIR: /home/runner/work/Pantograph/Pantograph/native-cpu-evidence
+2026-10-06T14:35:16.1855562Z ##[endgroup]
+2026-10-06T14:35:16.3101538Z (node:2108) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-10-06T14:35:16.3103379Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-10-06T14:35:16.3154493Z With the provided path, there will be 4 files uploaded
+2026-10-06T14:35:16.3156948Z Artifact name is valid!
+2026-10-06T14:35:16.3166506Z Root directory input is valid!
+2026-10-06T14:35:16.6194410Z Beginning upload of artifact content to blob storage
+2026-10-06T14:35:16.6350503Z (node:2108) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-10-06T14:35:16.7827774Z Uploaded bytes 2349
+2026-10-06T14:35:16.8255143Z Finished uploading artifact content to blob storage!
+2026-10-06T14:35:16.8256179Z SHA256 digest of uploaded artifact zip is d32a972650be65365b7a4c30931f924c7e72cc5a1d5c3d031a69a9d1d9d3fbfc
+2026-10-06T14:35:16.8257078Z Finalizing artifact upload
+2026-10-06T14:35:17.0952635Z Artifact native-desktop-cpu-ecc4194adbcd5a198fb97cf47198427e3002773e.zip successfully finalized. Artifact ID 11420323376
+2026-10-06T14:35:17.0953969Z Artifact native-desktop-cpu-ecc4194adbcd5a198fb97cf47198427e3002773e has been successfully uploaded! Final size is 2349 bytes. Artifact ID is 11420323376
+2026-10-06T14:35:17.0959676Z Artifact download URL: https://github.com/MrScripty/Pantograph/actions/runs/37480189945/artifacts/11420323376
+2026-10-06T14:35:17.1147908Z Post job cleanup.
+2026-10-06T14:35:17.1757284Z [command]/usr/bin/git version
+2026-10-06T14:35:17.1788668Z git version 2.55.0
+2026-10-06T14:35:17.1819126Z Temporarily overriding HOME='/home/runner/work/_temp/61656538-94aa-4b28-9b82-83b528fe72a5' before making global git config changes
+2026-10-06T14:35:17.1820158Z Adding repository directory to the temporary git global config as a safe directory
+2026-10-06T14:35:17.1823890Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/Pantograph/Pantograph
+2026-10-06T14:35:17.1852971Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-10-06T14:35:17.1878244Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-10-06T14:35:17.2049917Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-10-06T14:35:17.2069572Z http.https://github.com/.extraheader
+2026-10-06T14:35:17.2077674Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-10-06T14:35:17.2103156Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-10-06T14:35:17.2273733Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-10-06T14:35:17.2304311Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-10-06T14:35:17.2565801Z Cleaning up orphan processes
+2026-10-06T14:35:17.2777886Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/upload-artifact@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+

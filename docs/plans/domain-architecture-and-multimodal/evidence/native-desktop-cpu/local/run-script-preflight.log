@@ -1,0 +1,31 @@
+{
+  "platform": "Linux-6.18.44-x86_64-with-glibc2.41",
+  "commands": {
+    "pkg-config": "/usr/bin/pkg-config",
+    "WebKitWebDriver": null,
+    "Xvfb": null,
+    "xvfb-run": null,
+    "tauri-driver": null,
+    "protoc": null
+  },
+  "libraries": {
+    "gtk+-3.0": null,
+    "webkit2gtk-4.1": null,
+    "javascriptcoregtk-4.1": null,
+    "libsoup-3.0": null
+  },
+  "missing": [
+    "WebKitWebDriver",
+    "Xvfb",
+    "xvfb-run",
+    "tauri-driver",
+    "protoc",
+    "gtk+-3.0",
+    "webkit2gtk-4.1",
+    "javascriptcoregtk-4.1",
+    "libsoup-3.0"
+  ],
+  "admitted": false,
+  "policy": "pre-existing native prerequisites only; no privilege elevation or access-denial workaround",
+  "qualification": "not run; availability probe is not desktop/CPU graph acceptance"
+}

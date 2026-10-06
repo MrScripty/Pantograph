@@ -1,0 +1,13 @@
+✔ GUI smoke wrapper cleans its isolated project after success (56.730919ms)
+✔ GUI smoke wrapper cleans its isolated project after child failure (50.381074ms)
+✔ GUI smoke wrapper forwards INT, reaps the child, and cleans up (55.426189ms)
+✔ GUI smoke wrapper forwards TERM, reaps the child, and cleans up (51.577145ms)
+✔ GUI smoke wrapper preserves default INT handling during startup (20.793397ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 300.433393
