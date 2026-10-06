@@ -1,0 +1,22 @@
+{
+  "run_id": 37493778399,
+  "job_id": 112372970750,
+  "head": "218423c6a314f5cf8ecdbcee1afb7ed20edfd360",
+  "tree": "3eb266c8885626ab60318ea3635178e32755068c",
+  "artifact_id": 11426653550,
+  "artifact_zip_sha256": "3bb3173979735162ddf6b8624c7baff545d94737d64c4e45a2021b50f999abcc",
+  "conclusion": "failure",
+  "native_wires_visible": true,
+  "native_canonical_validation_current": true,
+  "native_interface_update_applied": true,
+  "native_owner_diagnostic_codes": [
+    "invalid_runtime_constraint",
+    "invalid_device_constraint"
+  ],
+  "native_submission": false,
+  "native_cpu_output": false,
+  "limitations": [
+    "Controlled synthetic model files do not establish runtime readiness",
+    "No pretrained, GPU, full selected-model loader or user-library qualification"
+  ]
+}

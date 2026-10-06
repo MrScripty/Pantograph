@@ -1,0 +1,235 @@
+{
+  "response": {
+    "summary": {
+      "validation_session_id": "validation.session.2f4d71f2-6e67-4bb0-a70f-e0397dba093f",
+      "graph_session_id": "089c6ea5-17ba-4118-9085-e63f5c177a9c",
+      "requested_graph_revision": "80fbe18c51d2f00f",
+      "summary": {
+        "status": "blocked",
+        "diagnostics_count": 2,
+        "executable": false,
+        "enqueue_disabled_reasons": [
+          "descriptor_unavailable",
+          "invalid_runtime_constraint",
+          "invalid_device_constraint",
+          "blocking_diagnostics"
+        ],
+        "blocking_diagnostics_count": 2
+      },
+      "submit_gate": {
+        "allowed": false,
+        "reason_code": "descriptor_unavailable",
+        "message": "Inference descriptor is unavailable"
+      },
+      "current_graph_revision": "80fbe18c51d2f00f",
+      "state": "invalid",
+      "diagnostics": [
+        {
+          "code": "invalid_runtime_constraint",
+          "severity": "error",
+          "hint": "No alternative runtime is currently available",
+          "message": "The explicit runtime constraint cannot execute this inference interface"
+        },
+        {
+          "code": "invalid_device_constraint",
+          "severity": "error",
+          "hint": "No alternative device is currently available",
+          "message": "The explicit device constraint is not available for this inference interface"
+        }
+      ]
+    },
+    "node_projections": [
+      {
+        "runtime_source_context": {
+          "operation_type": "embedding.text",
+          "cancellation_mode": "run_scoped",
+          "context_shape_key": "embedding.one-text"
+        },
+        "authored_snapshot": {
+          "outputs": [
+            {
+              "value_type": {
+                "category": "structured",
+                "kind": "embedding"
+              },
+              "direction": "output",
+              "label": "Embedding",
+              "requirement": "required",
+              "availability": {
+                "status": "available"
+              },
+              "port_id": "embedding"
+            },
+            {
+              "value_type": {
+                "category": "structured",
+                "kind": "json"
+              },
+              "direction": "output",
+              "label": "Metadata",
+              "requirement": "required",
+              "availability": {
+                "status": "available"
+              },
+              "port_id": "metadata"
+            },
+            {
+              "value_type": {
+                "category": "structured",
+                "kind": "json"
+              },
+              "direction": "output",
+              "label": "Usage",
+              "requirement": "optional",
+              "availability": {
+                "status": "available"
+              },
+              "port_id": "usage"
+            }
+          ],
+          "descriptor_fingerprint": "iface.4cfa895bda1cf3620b958fcfd263833b88120b97faf6e498c9896129af3823ab",
+          "task_kind": "embedding",
+          "inputs": [
+            {
+              "value_type": {
+                "category": "scalar",
+                "kind": "string"
+              },
+              "direction": "input",
+              "label": "Text",
+              "requirement": "required",
+              "availability": {
+                "status": "available"
+              },
+              "port_id": "text"
+            }
+          ],
+          "contract_version": 1
+        },
+        "node_id": "infer",
+        "validation_summary": {
+          "status": "blocked",
+          "diagnostics_count": 2,
+          "executable": false,
+          "enqueue_disabled_reasons": [
+            "descriptor_unavailable",
+            "invalid_runtime_constraint",
+            "invalid_device_constraint",
+            "blocking_diagnostics"
+          ],
+          "blocking_diagnostics_count": 2
+        },
+        "device_constraint": "cpu",
+        "descriptor": {
+          "task_kind": "embedding",
+          "model_ref": {
+            "model_id": "embedding/qualification/synthetic-bert-8",
+            "selected_artifact_id": "main"
+          },
+          "descriptor_fingerprint": "iface.4cfa895bda1cf3620b958fcfd263833b88120b97faf6e498c9896129af3823ab",
+          "contract_version": 1,
+          "outputs": [
+            {
+              "value_type": {
+                "category": "structured",
+                "kind": "embedding"
+              },
+              "direction": "output",
+              "label": "Embedding",
+              "requirement": "required",
+              "options": {
+                "kind": "none"
+              },
+              "availability": {
+                "status": "available"
+              },
+              "port_id": "embedding"
+            },
+            {
+              "value_type": {
+                "category": "structured",
+                "kind": "json"
+              },
+              "direction": "output",
+              "label": "Metadata",
+              "requirement": "required",
+              "options": {
+                "kind": "none"
+              },
+              "availability": {
+                "status": "available"
+              },
+              "port_id": "metadata"
+            },
+            {
+              "value_type": {
+                "category": "structured",
+                "kind": "json"
+              },
+              "direction": "output",
+              "label": "Usage",
+              "requirement": "optional",
+              "options": {
+                "kind": "none"
+              },
+              "availability": {
+                "status": "available"
+              },
+              "port_id": "usage"
+            }
+          ],
+          "inputs": [
+            {
+              "value_type": {
+                "category": "scalar",
+                "kind": "string"
+              },
+              "direction": "input",
+              "label": "Text",
+              "requirement": "required",
+              "options": {
+                "kind": "none"
+              },
+              "availability": {
+                "status": "available"
+              },
+              "port_id": "text"
+            }
+          ],
+          "availability": {
+            "status": "unavailable",
+            "reasons": [
+              "explicit_runtime_invalid",
+              "explicit_device_invalid"
+            ]
+          },
+          "diagnostics": [
+            {
+              "code": "invalid_runtime_constraint",
+              "severity": "error",
+              "hint": "No alternative runtime is currently available",
+              "message": "The explicit runtime constraint cannot execute this inference interface"
+            },
+            {
+              "code": "invalid_device_constraint",
+              "severity": "error",
+              "hint": "No alternative device is currently available",
+              "message": "The explicit device constraint is not available for this inference interface"
+            }
+          ]
+        },
+        "runtime_constraint": "candle",
+        "estimate_hints": [
+          {
+            "value": 536895107,
+            "kind": "peak_ram_bytes"
+          },
+          {
+            "value": 536895107,
+            "kind": "peak_vram_bytes"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -244,3 +244,37 @@ Tauri's official `invoke` is read-only, so the attempted capture produced empty
 arrays. The successor harness instead subscribes to the supported validation
 lifecycle event and reads the exact session/revision's current projection through
 real IPC. It changes no validation result, runtime registry or submission gate.
+
+## Exact owner diagnostics and CPU readiness repair
+
+Run `37493778399` at `218423c6a314f5cf8ecdbcee1afb7ed20edfd360`, tree
+`3eb266c8885626ab60318ea3635178e32755068c`, captures the real active-session
+projection. The normal interface Apply/Save completes, and requested/current
+revisions both equal `80fbe18c51d2f00f`. The owner returns exactly
+`invalid_runtime_constraint` and `invalid_device_constraint`, with no available
+runtime/device satisfying Candle/CPU. Typed model/port facts resolve; no public
+submission or CPU output occurs. The [sixth attempt's complete artifact](../evidence/native-desktop-cpu/descriptor-availability/README.md)
+preserves these responses, lifecycle events and unchanged screenshots.
+
+Installing synthetic model files did not initialize a runtime. The successor
+fixture uses existing native configuration, backend switch and embedding startup
+commands to load the actual isolated Candle model, and requires the real registry
+to report ready before graph validation. It does not invent runtime readiness.
+That normal Candle startup path incorrectly forwarded a llama.cpp device selector
+to a backend that owns its fixed CPU device. A backend-aware request builder now
+accepts explicit CPU/zero GPU layers for Candle, passes its model path and omits
+the foreign device intent. Unsupported device/GPU-layer requests still fail;
+other backends retain their existing request builder. Targeted startup tests will
+run in the actual native build environment before the GUI test.
+
+The descriptor provider independently discarded every owner-advertised device
+by publishing an empty device list. The new regression fails on that source with
+`[]` instead of `[cpu]`; the repaired bridge preserves and deterministically
+orders the validated owner device IDs. It leaves runtime lifecycle status and
+missing-evidence gates intact. Nine provider tests pass, and the broader affected
+runtime suite passes 545 tests with one optional test ignored. Strict all-target
+Clippy and formatting pass. An initial broader-suite launch failed to find the
+already installed Python shared library; a command-local library path allowed the
+same source/binary to run successfully, and the initial failure remains recorded.
+Native CPU submission/output still requires the fresh successor; pretrained,
+GPU, real-user discovery and full production-loader qualification remain absent.

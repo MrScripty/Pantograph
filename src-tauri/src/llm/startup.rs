@@ -75,6 +75,29 @@ pub(crate) fn build_configured_embedding_request(
     )
 }
 
+pub(crate) fn build_configured_embedding_request_for_backend(
+    config: &AppConfig,
+    backend_name: &str,
+) -> Result<EmbeddingStartRequest, String> {
+    if inference::backend::canonical_backend_key(backend_name) != "candle" {
+        return build_configured_embedding_request(config);
+    }
+    if config.device.device != "cpu" || config.device.gpu_layers != 0 {
+        return Err("Candle embedding startup requires explicit CPU and zero GPU layers".into());
+    }
+    // Candle owns its fixed CPU device. A llama.cpp selector is not a Candle intent.
+    Ok(EmbeddingStartRequest {
+        gguf_model_path: None,
+        candle_model_path: config
+            .models
+            .candle_embedding_model_path
+            .as_ref()
+            .map(PathBuf::from),
+        device: None,
+        gpu_layers: None,
+    })
+}
+
 pub(crate) fn require_configured_embedding_startup_devices(
     devices: Result<Vec<DeviceInfo>, String>,
 ) -> Result<Vec<DeviceInfo>, String> {
@@ -105,11 +128,56 @@ mod tests {
     use crate::config::{AppConfig, DeviceConfig, ModelConfig};
 
     use super::{
-        build_configured_embedding_request, build_configured_inference_request,
-        build_external_inference_request, build_resolved_embedding_request,
-        require_configured_embedding_startup_devices, resolve_configured_embedding_model_path,
-        validate_external_server_url,
+        build_configured_embedding_request, build_configured_embedding_request_for_backend,
+        build_configured_inference_request, build_external_inference_request,
+        build_resolved_embedding_request, require_configured_embedding_startup_devices,
+        resolve_configured_embedding_model_path, validate_external_server_url,
     };
+
+    #[test]
+    fn configured_candle_cpu_startup_uses_its_owned_device_and_model() {
+        let config = AppConfig {
+            models: ModelConfig {
+                candle_embedding_model_path: Some("/models/candle".into()),
+                ..ModelConfig::default()
+            },
+            device: DeviceConfig {
+                device: "cpu".into(),
+                gpu_layers: 0,
+            },
+            ..AppConfig::default()
+        };
+        let request = build_configured_embedding_request_for_backend(&config, "Candle").unwrap();
+        assert_eq!(
+            request.candle_model_path,
+            Some(PathBuf::from("/models/candle"))
+        );
+        assert!(request.gguf_model_path.is_none());
+        assert!(request.device.is_none());
+        assert!(request.gpu_layers.is_none());
+        let llama = build_configured_embedding_request_for_backend(&config, "llama.cpp").unwrap();
+        assert!(llama.device.is_some());
+    }
+
+    #[test]
+    fn configured_candle_startup_rejects_non_cpu_or_gpu_layer_intent() {
+        for device in [
+            DeviceConfig {
+                device: "Vulkan0".into(),
+                gpu_layers: 0,
+            },
+            DeviceConfig {
+                device: "cpu".into(),
+                gpu_layers: 1,
+            },
+        ] {
+            let config = AppConfig {
+                device,
+                ..AppConfig::default()
+            };
+            assert!(build_configured_embedding_request_for_backend(&config, "Candle").is_err());
+        }
+    }
 
     #[test]
     fn validates_external_server_urls() {

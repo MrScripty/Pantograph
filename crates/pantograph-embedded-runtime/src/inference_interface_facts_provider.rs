@@ -213,7 +213,13 @@ fn runtime_availability_fact(
     Some(InferenceRuntimeAvailabilityFact {
         runtime_id: RuntimeIntentId::parse(&runtime.runtime_id).ok()?,
         state: runtime_availability_state(runtime.status),
-        device_ids: Vec::new(),
+        device_ids: runtime
+            .automatic_device_candidates
+            .iter()
+            .filter_map(|candidate| candidate.device_id.as_str().parse().ok())
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect(),
     })
 }
 
@@ -841,6 +847,86 @@ mod tests {
         assert_ne!(
             descriptor.descriptor_fingerprint,
             tensor_descriptor.descriptor_fingerprint
+        );
+    }
+
+    fn candle_runtime_fact(
+        status: RuntimeRegistryStatus,
+        advertises_cpu: bool,
+    ) -> RuntimeDispatchRuntimeCapabilityFacts {
+        RuntimeDispatchRuntimeCapabilityFacts {
+            runtime_id: "candle".into(),
+            backend_keys: vec!["candle".into()],
+            runtime_family: "candle".into(),
+            runtime_residency_key: "candle.cpu".into(),
+            status,
+            runtime_instance_id: None,
+            loaded_model_ids: Vec::new(),
+            active_reservation_ids: Vec::new(),
+            has_admission_budget: false,
+            automatic_device_candidates: if advertises_cpu {
+                vec![inference::gateway::RuntimeOwnedDeviceCandidate {
+                    backend_key: "candle".into(),
+                    runtime_variant_id: "candle.cpu".parse().unwrap(),
+                    device_id: "cpu".parse().unwrap(),
+                }]
+            } else {
+                Vec::new()
+            },
+        }
+    }
+
+    #[test]
+    fn ready_candle_descriptor_preserves_owner_cpu_device_evidence() {
+        use pantograph_inference_interface_contracts::ResolveInferenceInterfaceRequest;
+        use pantograph_workflow_service::graph::resolve_inference_interface_from_facts;
+        let runtime =
+            runtime_availability_fact(&candle_runtime_fact(RuntimeRegistryStatus::Ready, true))
+                .unwrap();
+        assert_eq!(runtime.device_ids, vec!["cpu".parse().unwrap()]);
+        let mut package = projected_package_facts();
+        package.task = TaskEvidence {
+            pipeline_tag: Some("feature-extraction".into()),
+            task_type_primary: Some("embedding".into()),
+            input_modalities: vec!["text".into()],
+            output_modalities: vec!["embedding".into()],
+        };
+        let capability = capability_facts(&package, std::slice::from_ref(&runtime)).unwrap();
+        let request: ResolveInferenceInterfaceRequest = serde_json::from_value(serde_json::json!({
+            "model_ref": {"model_id":"embedding/qualification/synthetic-bert-8","selected_artifact_id":"main"},
+            "task_kind":"embedding","runtime_constraint":"candle","device_constraint":"cpu",
+        })).unwrap();
+        let descriptor = resolve_inference_interface_from_facts(
+            request,
+            InferenceInterfaceResolverFacts {
+                model: InferenceModelResolutionFacts {
+                    state: InferenceModelResolutionState::Ready,
+                },
+                capability: Some(capability),
+                runtimes: vec![runtime],
+                estimate_hints: Vec::new(),
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            descriptor.availability.status,
+            pantograph_inference_interface_contracts::InferenceAvailabilityStatus::Available
+        );
+        assert!(descriptor.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn device_projection_requires_owner_evidence_and_preserves_stopped_runtime_gate() {
+        let ready =
+            runtime_availability_fact(&candle_runtime_fact(RuntimeRegistryStatus::Ready, false))
+                .unwrap();
+        assert!(ready.device_ids.is_empty());
+        let stopped =
+            runtime_availability_fact(&candle_runtime_fact(RuntimeRegistryStatus::Stopped, true))
+                .unwrap();
+        assert_eq!(
+            stopped.state,
+            InferenceRuntimeAvailabilityState::NotInstalled
         );
     }
 

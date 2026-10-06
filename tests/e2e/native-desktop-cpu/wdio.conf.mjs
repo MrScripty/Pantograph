@@ -45,6 +45,10 @@ export const config = {
     if (!audit.stdout.includes('26a84e323cae566a46a8f76bef48fa1010aed48b') || audit.stdout.includes('2243a2b')) throw new Error('Unexpected Pumas source');
     const build = spawnSync('npm', ['run', 'build:desktop', '--', '--ci', '--debug', '--no-bundle', '--features', 'backend-candle', '--', '--no-default-features', '--locked'], { cwd: root, stdio: 'inherit', shell: false });
     if (build.status !== 0 || !existsSync(binary)) throw new Error(`Actual desktop build failed: ${build.status}`);
+    const startupTests = spawnSync('cargo', ['test', '--locked', '--offline', ...scope,
+      '--bin', 'pantograph', 'llm::startup::tests'], { cwd: root, encoding: 'utf8' });
+    writeFileSync(path.join(evidence, 'native-startup-tests.log'), `${startupTests.stdout || ''}\n${startupTests.stderr || ''}`);
+    if (startupTests.status !== 0) throw new Error(`Native startup regression tests failed: ${startupTests.status}`);
     writeFileSync(launcher, `#!/usr/bin/env bash\nset -euo pipefail\nexport PANTOGRAPH_PROJECT_ROOT=${quote(project)}\nexec ${quote(binary)} "$@"\n`, { mode: 0o700 });
     chmodSync(launcher, 0o700);
   },

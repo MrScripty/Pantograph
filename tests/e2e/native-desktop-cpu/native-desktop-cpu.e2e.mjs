@@ -52,6 +52,18 @@ describe('actual native Tauri saved CPU embedding graph', () => {
     });
     await invoke('plugin:event|listen', { event: 'workflow://graph-validation/lifecycle-event',
       target: { kind: 'Any' }, handler: validationHandler });
+    // Files alone do not establish runtime readiness. Use the ordinary native
+    // configuration/startup commands to load the actual isolated CPU model.
+    const appConfig = await invoke('get_app_config');
+    const modelPath = path.join(fixture.library_root, 'shared-resources/models', fixture.model_id);
+    await invoke('set_model_config', { models: { ...appConfig.models, candle_embedding_model_path: modelPath } });
+    await invoke('set_device_config', { device: { device: 'cpu', gpu_layers: 0 } });
+    await invoke('switch_backend', { backendName: 'candle' });
+    const started = await invoke('start_sidecar_embedding');
+    const registry = await invoke('get_runtime_registry_snapshot');
+    writeFileSync(path.join(evidence, 'native-candle-startup.json'), JSON.stringify({ modelPath, started, registry }, null, 2));
+    assert.ok(registry.runtimes.some((runtime) => runtime.backend_keys.includes('candle') && runtime.status === 'ready'),
+      'The real Candle owner must report readiness before graph validation');
     const savedPath = await invoke('save_workflow', { name: 'Synthetic CPU Embedding Qualification', graph });
     const restored = await invoke('load_workflow', { path: savedPath });
     assert.deepEqual(restored.graph.nodes, graph.nodes);

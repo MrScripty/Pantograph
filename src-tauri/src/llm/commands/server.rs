@@ -5,7 +5,7 @@ use super::shared::{synced_server_mode_info, SharedAppConfig};
 use crate::agent::rag::SharedRagManager;
 use crate::config::{EmbeddingMemoryMode, ServerModeInfo};
 use crate::llm::startup::{
-    build_configured_embedding_request, build_configured_inference_request,
+    build_configured_embedding_request_for_backend, build_configured_inference_request,
     build_external_inference_request, require_configured_embedding_startup_devices,
 };
 use crate::llm::{sync_rag_embedding_url_from_gateway, SharedGateway, SharedRuntimeRegistry};
@@ -160,7 +160,9 @@ pub async fn start_sidecar_embedding(
     config: State<'_, SharedAppConfig>,
 ) -> Result<ServerModeInfo, String> {
     let config_guard = config.read().await;
-    let embedding_request = build_configured_embedding_request(&config_guard)?;
+    let backend_name = gateway.current_backend_name().await;
+    let embedding_request =
+        build_configured_embedding_request_for_backend(&config_guard, &backend_name)?;
     drop(config_guard);
 
     let backend_config = gateway
