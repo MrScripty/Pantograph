@@ -49,6 +49,8 @@ sys.modules["block_diffusion"] = block_diffusion
 autoregressive = types.ModuleType("autoregressive")
 autoregressive.RepetitionPenaltyNumericsError = ValueError
 autoregressive.MinimumNewTokensError = ValueError
+autoregressive.SeedSamplingError = ValueError
+autoregressive._seeded_sampling = lambda seed: None if seed is None else types.SimpleNamespace(seed=seed)
 autoregressive._resolve_min_new_tokens = lambda model, authored, maximum: authored or 0
 for attr in [
     "_generate_autoregressive",

@@ -4,18 +4,21 @@
 
 **Current phase:** M3 owner/client consumer source is implemented. Native CPU sampling and the supported inference/embedded host route are qualified separately; the desktop-authored dependent text-to-image graph and full review remain open.
 
-**Next slice:** Parent reviews frozen text-controls composition `9e8cd64c` and its
-separate [native parallel test repair](reports/2026-10-06-diffusers-native-parallel-isolation.md).
-Exact original qualification evidence is published separately at `fdb2bf2b`.
-The original parallel invocation now passes with deterministic foreign-thread
-coverage, without scheduler class mutation or reduced parallel coverage. Parent
-reports scoped independent acceptance of repetition/KV source `59992b9b` and
-minimum-token source `64b81b0b`; frozen sources/evidence remain unchanged. The next
-bounded inference capability is existing typed text sampling seed, on its separate
-branch after this qualified publication gate. Parent owns PR/review/merge and
-fresh hosted CI. Preserve full peaks, custody, uncertainty, known zero,
-source/instance fences and the no-build-download contract. Native desktop,
-GPU and pretrained/custom-model acceptance remain separate.
+**Next slice:** Graph-authored text seed is implemented in frozen candidate
+`6cf549dd`; see the [seed report](reports/2026-10-06-workflow-text-seed.md). Its
+separate [desktop precision successor](reports/2026-10-06-text-seed-desktop-precision.md)
+validates authored seeds before numeric persistence and blocks unsafe execution,
+retaining raw text and a visible error. Direct desktop NumberInput seed edges support 0 through
+`2^53 - 1`; typed Rust/API routes retain full u64. Local component/save/load/replay,
+frontend and Rust wire checks pass after independent medium review. PR58 merged
+at `d61b86fc` with the exact `d0c9788c` repair tree and is incorporated normally.
+Parent publication and fresh hosted CI remain release dependencies. Frozen
+composition `9e8cd64c`, evidence `fdb2bf2b`, harness successor `1b9fd0bd`, repair
+line, seed candidate, paused seed work and their histories remain preserved.
+Preserve full peaks, custody, uncertainty, known zero, source/instance fences and
+the no-build-download contract. Native desktop, GPU, pretrained/custom models
+and full desktop execution remain separate qualification. Full-u64 desktop
+NumberInput entry is explicitly unsupported by this bounded contract.
 
 **Prior native qualification:** Parent reviews frozen text-control source `a8c6970f` and its separate [exact-head native qualification route](reports/2026-10-05-text-control-native-qualification-route.md). Earlier local native host/workflow attempts failed before execution: the pinned ONNX dependency download returned HTTP 403, and no-download builds lacked linker symbols. Subsequent [hosted run 37360010163, job 111931961024](https://github.com/MrScripty/Pantograph/actions/runs/37360010163/job/111931961024) at exact head `815bceffbb0d877644184b71be6584f586be2e6e` passed 145 Rust tests across eight groups and six actual CPU sampler tests; all individual quality checks and all three workflows passed at that head. The focused native host/workflow qualification is complete for that head. Next qualify current owner-produced Pumas identities/facts/load targets/devices and the desktop-authored dependent text-to-image graph (DA-03). Frozen temperature `e0293ebf`, CI correction `fddae90d`, fixture `174c1950`, top-k `3bf3eb45` and composition `60197971` remain unchanged with their stated qualification requirements. Parent holds publication for owner confirmation and integrates review corrections without rewriting history. Current Pumas pin: `26a84e323cae566a46a8f76bef48fa1010aed48b`. DA-03/DA-07 remain open.
 

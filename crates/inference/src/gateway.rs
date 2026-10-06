@@ -3006,6 +3006,7 @@ fn typed_text_generation_to_chat_request(
         top_k: generation_options.and_then(|options| options.sampling.top_k),
         repetition_penalty: generation_options
             .and_then(|options| options.sampling.repetition_penalty),
+        seed: generation_options.and_then(|options| options.sampling.seed),
     }
 }
 
@@ -3071,6 +3072,19 @@ fn typed_text_generation_option_diagnostics(
             state: if backend_key == Some("pytorch") { OptionSupportState::Mapped } else { OptionSupportState::RequiresBackendSupport },
             backend_key: backend_key.map(ToOwned::to_owned),
             message: Some("chat repetition_penalty is honored by the PyTorch autoregressive owner; other backends require support".to_string()),
+        });
+    }
+    if options.sampling.seed.is_some() {
+        mapped_paths.push("sampling.seed");
+        diagnostics.push(OptionCompatibilityDiagnostic {
+            option_path: "sampling.seed".to_string(),
+            state: if backend_key == Some("pytorch") {
+                OptionSupportState::Mapped
+            } else {
+                OptionSupportState::RequiresBackendSupport
+            },
+            backend_key: backend_key.map(ToOwned::to_owned),
+            message: Some("chat seed is forwarded to request-scoped PyTorch sampling; worker validates route/device support".to_string()),
         });
     }
     push_chat_cache_use_diagnostic(

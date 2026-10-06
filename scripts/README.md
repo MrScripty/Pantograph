@@ -10,6 +10,7 @@ main app entrypoint.
 | ----------- | ----------- |
 | `check-runtime-redistributables-smoke.sh` | Verifies a built Pantograph release artifact exists, then runs the bounded release contract smoke that covers managed-runtime view projection, runtime diagnostics projection, current image workflow shape, Pumas resolution, stale graph diagnostics, and image artifact retention. |
 | `check-current-image-workflow-smoke.mjs` | Validates the bundled current image workflow template and tracked Juggernaut workflow still use canonical `puma-lib -> llm-inference -> image-output` graph shape without retired executable inference nodes. |
+| `check-desktop-seed-precision-browser.mjs` | Runs the actual NumberInput component and seed guards in installed Chromium with a controlled graph store/node shell; verifies exact safe seeds, raw invalid-text persistence and blocked replay. Requires Node 24, existing frontend dependencies and `chromium` (or `CHROMIUM_BINARY`); downloads nothing. |
 | `check-decision-traceability.sh` | Runs the decision-to-guide traceability gate over explicit Git snapshots using the reviewed impact map. |
 | `check-decision-traceability.mjs` | Validates mapped decision impacts, canonical guides, and local ADR references without per-directory documentation rules. |
 | `check-decision-traceability.test.mjs` | Exercises Git snapshot isolation, impact ownership, missing inputs, broken references, and path transitions. |
@@ -103,6 +104,7 @@ npm run format:check
 npm run release:sbom -- 0.1.0
 TRACEABILITY_STAGED_ONLY=1 ./scripts/check-decision-traceability.sh
 node --test scripts/check-decision-traceability.test.mjs
+node scripts/check-desktop-seed-precision-browser.mjs
 ./scripts/check-no-python-linkage.sh
 ./scripts/check-scheduler-only-workflow-execution.sh
 ./scripts/check-rustler-beam-smoke.sh

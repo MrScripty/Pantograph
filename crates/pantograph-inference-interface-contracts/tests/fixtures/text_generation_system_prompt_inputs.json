@@ -93,5 +93,14 @@
   "availability": {
     "status": "available"
   }
+},
+{
+  "port_id": "seed",
+  "label": "Seed",
+  "direction": "input",
+  "requirement": "optional",
+  "value_type": { "category": "scalar", "kind": "u64" },
+  "options": { "kind": "none" },
+  "availability": { "status": "available" }
 }
 ]

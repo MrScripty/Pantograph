@@ -42,7 +42,8 @@ fn text_system_prompt_is_optional_string_without_changing_token_limit_or_default
             "temperature",
             "top_p",
             "repetition_penalty",
-            "min_new_tokens"
+            "min_new_tokens",
+            "seed"
         ]
     );
     assert_eq!(ports[0].requirement, InferencePortRequirement::Required);
@@ -794,5 +795,31 @@ fn connection_surface_non_current_requires_diagnostics_and_is_not_executable() {
             field: "connection_surface.validation_summary",
             reason: "non-current surfaces must not be executable"
         }
+    );
+}
+
+#[test]
+fn text_seed_is_optional_u64_without_a_floating_point_range_or_default() {
+    let ports: Vec<InferencePortDescriptor> = serde_json::from_str(include_str!(
+        "fixtures/text_generation_system_prompt_inputs.json"
+    ))
+    .unwrap();
+    let seed = ports
+        .iter()
+        .find(|port| port.port_id.as_str() == "seed")
+        .unwrap();
+    assert_eq!(
+        seed.value_type,
+        InferenceValueType::Scalar(InferenceScalarType::U64)
+    );
+    assert_eq!(seed.requirement, InferencePortRequirement::Optional);
+    assert_eq!(seed.options, InferencePortOptions::None);
+    assert!(seed.default.is_none());
+    seed.validate().unwrap();
+    let wire = serde_json::to_value(seed).unwrap();
+    assert!(wire.get("default").is_none());
+    assert_eq!(
+        serde_json::from_value::<InferencePortDescriptor>(wire).unwrap(),
+        *seed
     );
 }

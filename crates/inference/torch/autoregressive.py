@@ -6,9 +6,11 @@ HuggingFace generate API and manual token-by-token sampling.
 
 import copy
 import math
-from types import MethodType
+from types import FunctionType, MethodType
 
 import torch
+from transformers import GenerationConfig, GenerationMixin
+from transformers.generation.configuration_utils import GenerationMode
 from transformers.cache_utils import DynamicCache
 from transformers.generation.logits_process import (
     MinNewTokensLengthLogitsProcessor, RepetitionPenaltyLogitsProcessor,
@@ -21,6 +23,77 @@ class RepetitionPenaltyNumericsError(ValueError):
 
 class MinimumNewTokensError(ValueError):
     """The minimum length has no eligible non-EOS token to select."""
+
+
+class SeedSamplingError(ValueError):
+    """The requested seed cannot be isolated on this sampling route."""
+
+
+class _SeededSampling:
+    """One generator per request, created on the actual sampling device.
+
+    The seed covers token selection, including retries, but not randomness in
+    arbitrary model forwards/processors. KV state does not own this RNG.
+    """
+
+    def __init__(self, seed):
+        if isinstance(seed, bool) or not isinstance(seed, int) or not 0 <= seed < 1 << 64:
+            raise SeedSamplingError("seed must be a non-negative u64 integer")
+        self.seed = seed
+        self.generator = None
+        self.calls = 0
+
+    def multinomial(self, probabilities, *args, **kwargs):
+        device = probabilities.device
+        if device.type not in ("cpu", "cuda"):
+            raise SeedSamplingError(f"seed sampling does not support device {device}")
+        if self.generator is None:
+            try:
+                self.generator = torch.Generator(device=device).manual_seed(self.seed)
+            except (RuntimeError, TypeError) as exc:
+                raise SeedSamplingError(f"seed generator is unavailable on {device}") from exc
+        if self.generator.device != device:
+            raise SeedSamplingError("seed sampling changed device within a request")
+        self.calls += 1
+        return torch.multinomial(probabilities, *args, generator=self.generator, **kwargs)
+
+    def __getattr__(self, name):
+        # Native _sample keeps the installed Transformers implementation. Only
+        # its multinomial draw changes; neither torch nor the resident model does.
+        return getattr(torch, name)
+
+
+def _seeded_sampling(seed):
+    return None if seed is None else _SeededSampling(seed)
+
+
+def _prepare_seeded_native(request_model, sampling, kwargs):
+    for name in ("generate", "_sample", "_prepare_generation_config"):
+        if getattr(getattr(request_model, name, None), "__func__", None) is not getattr(GenerationMixin, name):
+            raise SeedSamplingError(f"seed requires canonical Transformers {name}")
+    if type(request_model.generation_config) is not GenerationConfig:
+        raise SeedSamplingError("seed requires the standard Transformers GenerationConfig")
+    # The native resolver also handles legacy model.config defaults. Resolve on
+    # the request copy, then pass that exact configuration back to generate.
+    request_model.generation_config = copy.deepcopy(request_model.generation_config)
+    config, model_kwargs = request_model._prepare_generation_config(None, **kwargs)
+    mode = config.get_generation_mode()
+    if mode not in (GenerationMode.SAMPLE, GenerationMode.GREEDY_SEARCH):
+        raise SeedSamplingError(f"seed does not support native generation mode {mode}")
+    function = GenerationMixin._sample
+    if function.__closure__ is not None or "multinomial" not in function.__code__.co_names:
+        raise SeedSamplingError("seed does not support this Transformers sampling implementation")
+    native_globals = dict(function.__globals__, torch=sampling)
+    native_sample = FunctionType(function.__code__, native_globals, function.__name__, function.__defaults__)
+    native_sample.__kwdefaults__ = function.__kwdefaults__
+    entered = []
+
+    def sample(_self, *args, **sample_kwargs):
+        entered.append(True)
+        return native_sample(_self, *args, **sample_kwargs)
+
+    request_model._sample = MethodType(sample, request_model)
+    return {**model_kwargs, "generation_config": config, "use_model_defaults": False}, entered, mode
 
 
 class _CheckedMinimumNewTokens:
@@ -79,7 +152,7 @@ class _CheckedRepetitionPenalty:
         return adjusted
 
 
-def _generate_native_checked(model, *, minimum_to_enforce=None, **kwargs):
+def _generate_native_checked(model, *, minimum_to_enforce=None, sampling=None, **kwargs):
     """Guard native repetition in place without changing resident model state.
 
     Public custom processors run after sanitizers and masks in Transformers.
@@ -97,6 +170,11 @@ def _generate_native_checked(model, *, minimum_to_enforce=None, **kwargs):
     if request_model is model or not callable(getattr(request_model, "_get_logits_processor", None)):
         raise RepetitionPenaltyNumericsError(
             "native repetition checking requires the Transformers logits processor builder")
+    entered = None
+    if sampling is not None:
+        kwargs, entered, mode = _prepare_seeded_native(request_model, sampling, kwargs)
+        penalty = _resolve_repetition_penalty(request_model, kwargs["generation_config"].repetition_penalty)
+        draws_before = sampling.calls
     build_processors = request_model._get_logits_processor
     checked = []
     built = False
@@ -122,6 +200,8 @@ def _generate_native_checked(model, *, minimum_to_enforce=None, **kwargs):
 
     request_model._get_logits_processor = MethodType(build_checked, request_model)
     outputs = request_model.generate(**kwargs)
+    if entered is not None and (not entered or (mode == GenerationMode.SAMPLE and sampling.calls == draws_before)):
+        raise SeedSamplingError("native generation bypassed isolated seed sampling")
     if not built or (penalty != 1.0 and not any(guard.calls for guard in checked)):
         raise RepetitionPenaltyNumericsError(
             "native generation bypassed repetition checking")
@@ -191,7 +271,7 @@ def _apply_minimum(processor, history, scores):
     return scores if processor is None else processor(history, scores)
 
 
-def _sample_next_token(logits, temperature, top_p, top_k=0):
+def _sample_next_token(logits, temperature, top_p, top_k=0, sampling=None):
     """Sample one token from logits with temperature + top-k + top-p."""
     if temperature <= 0:
         return logits.argmax(dim=-1, keepdim=True)
@@ -212,7 +292,7 @@ def _sample_next_token(logits, temperature, top_p, top_k=0):
         logits = logits.masked_fill(scatter_mask, float("-inf"))
 
     probs = torch.softmax(logits, dim=-1)
-    return torch.multinomial(probs, num_samples=1)
+    return (torch if sampling is None else sampling).multinomial(probs, num_samples=1)
 
 
 def _eos_ids(tokenizer, model=None):
@@ -230,7 +310,7 @@ def _eos_ids(tokenizer, model=None):
 
 def _generate_sdar_cached(model, tokenizer, device, formatted_prompt,
                           max_tokens, temperature, top_p, top_k=None, repetition_penalty=None,
-                          min_new_tokens=None):
+                          min_new_tokens=None, sampling=None):
     """TraDo/SDAR decode loop with explicit store_kv=True cache updates."""
     floor = _resolve_min_new_tokens(model, min_new_tokens, max_tokens)
     inputs = tokenizer(formatted_prompt, return_tensors="pt").to(device)
@@ -266,7 +346,7 @@ def _generate_sdar_cached(model, tokenizer, device, formatted_prompt,
     for _ in range(max_tokens):
         next_token = _sample_next_token(_apply_minimum(
             minimum_processor, token_history, penalty_processor(token_history, logits)),
-                                        temperature, top_p, resolved_top_k)
+                                        temperature, top_p, resolved_top_k, sampling)
         token_id = int(next_token.item())
         if token_id in eos_ids:
             break
@@ -296,7 +376,7 @@ def _generate_sdar_cached(model, tokenizer, device, formatted_prompt,
 def _continue_sdar_cached(model, tokenizer, device, formatted_prompt,
                           max_tokens, temperature, top_p,
                           cached_token_ids, past_key_values, top_k=None, repetition_penalty=None,
-                          min_new_tokens=None):
+                          min_new_tokens=None, sampling=None):
     """Continue SDAR/TraDo decoding from a previously captured KV cache.
 
     `formatted_prompt` is treated as a suffix to append to the existing cached
@@ -361,7 +441,7 @@ def _continue_sdar_cached(model, tokenizer, device, formatted_prompt,
         token_history = torch.tensor([full_sequence], device=logits.device, dtype=torch.long)
         next_token = _sample_next_token(_apply_minimum(
             minimum_processor, token_history, penalty_processor(token_history, logits)),
-                                        temperature, top_p, resolved_top_k)
+                                        temperature, top_p, resolved_top_k, sampling)
         token_id = int(next_token.item())
         if token_id in eos_ids:
             break
@@ -386,7 +466,7 @@ def _continue_sdar_cached(model, tokenizer, device, formatted_prompt,
 
 def _generate_autoregressive(model, tokenizer, device, formatted_prompt,
                              max_tokens, temperature, top_p, top_k=None, repetition_penalty=None,
-                             min_new_tokens=None):
+                             min_new_tokens=None, sampling=None):
     """Generate a complete response using standard autoregressive decoding.
 
     Args:
@@ -423,7 +503,7 @@ def _generate_autoregressive(model, tokenizer, device, formatted_prompt,
             gen_kwargs["repetition_penalty"] = resolved_penalty
         if min_new_tokens is not None:
             gen_kwargs["min_new_tokens"] = min_new_tokens
-        outputs = _generate_native_checked(model, **inputs, **gen_kwargs)
+        outputs = _generate_native_checked(model, sampling=sampling, **inputs, **gen_kwargs)
 
     input_len = inputs["input_ids"].shape[1]
     generated = outputs[0][input_len:]
@@ -433,7 +513,7 @@ def _generate_autoregressive(model, tokenizer, device, formatted_prompt,
 def _generate_autoregressive_streaming(model, tokenizer, device,
                                        formatted_prompt, max_tokens,
                                        temperature, top_p, top_k=None, repetition_penalty=None,
-                                       min_new_tokens=None):
+                                       min_new_tokens=None, sampling=None):
     """Generate tokens one at a time for streaming output.
 
     Args:
@@ -465,7 +545,7 @@ def _generate_autoregressive_streaming(model, tokenizer, device,
 
             next_token = _sample_next_token(_apply_minimum(
                 minimum_processor, input_ids, penalty_processor(input_ids, logits)),
-                                            temperature, top_p, resolved_top_k)
+                                            temperature, top_p, resolved_top_k, sampling)
 
         if next_token.item() in eos_ids:
             break

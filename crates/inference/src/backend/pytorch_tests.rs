@@ -78,6 +78,8 @@ sys.modules["block_diffusion"] = block_diffusion
 autoregressive = types.ModuleType("autoregressive")
 autoregressive.RepetitionPenaltyNumericsError = ValueError
 autoregressive.MinimumNewTokensError = ValueError
+autoregressive.SeedSamplingError = ValueError
+autoregressive._seeded_sampling = lambda seed: None if seed is None else types.SimpleNamespace(seed=seed)
 autoregressive._resolve_min_new_tokens = lambda model, authored, maximum: authored or 0
 for attr in [
     "_generate_autoregressive",
@@ -2683,6 +2685,7 @@ fn test_pytorch_temperature_keeps_zero_and_finite_f32_range_in_worker_envelopes(
                     top_p: 1.0,
                     top_k: Some(0),
                     repetition_penalty: None,
+                    seed: None,
                     masked_prompt_json: None,
                 },
             );
@@ -2737,6 +2740,7 @@ fn test_pytorch_top_p_preserves_unit_interval_in_generate_and_stream_envelopes()
                         top_p,
                         top_k: Some(0),
                         repetition_penalty: None,
+                        seed: None,
                         masked_prompt_json: None,
                     },
                 );
@@ -2791,6 +2795,7 @@ fn test_pytorch_repetition_penalty_preserves_positive_values_in_generate_and_str
                         top_p: 0.7,
                         top_k: Some(0),
                         repetition_penalty: Some(repetition_penalty),
+                        seed: None,
                         masked_prompt_json: None,
                     },
                 );
@@ -2843,6 +2848,7 @@ fn test_pytorch_generate_text_request_threads_top_k_as_transformers_kwarg() {
         top_p: 0.9,
         top_k: Some(20),
         repetition_penalty: None,
+        seed: None,
         masked_prompt_json: None,
     });
 
@@ -2865,6 +2871,7 @@ fn test_pytorch_generate_text_envelopes_thread_top_k_for_generate_and_stream() {
             top_p: 0.9,
             top_k: Some(33),
             repetition_penalty: None,
+            seed: None,
             masked_prompt_json: None,
         },
     );
@@ -2880,6 +2887,7 @@ fn test_pytorch_generate_text_envelopes_thread_top_k_for_generate_and_stream() {
             top_p: 0.9,
             top_k: Some(33),
             repetition_penalty: None,
+            seed: None,
             masked_prompt_json: None,
         },
     );
@@ -2917,6 +2925,7 @@ fn test_pytorch_generate_text_top_k_keeps_zero_and_u32_max_in_worker_envelopes()
                     top_p: 0.9,
                     top_k: Some(top_k),
                     repetition_penalty: None,
+                    seed: None,
                     masked_prompt_json: None,
                 },
             );
@@ -2956,6 +2965,7 @@ fn test_pytorch_generate_text_envelope_rejects_unscoped_transformers_kwargs() {
             top_p: 0.9,
             top_k: None,
             repetition_penalty: None,
+            seed: None,
             masked_prompt_json: None,
         },
     );
@@ -2987,6 +2997,7 @@ fn test_pytorch_generate_text_stream_envelope_rejects_policy_transformers_kwargs
             top_p: 0.9,
             top_k: None,
             repetition_penalty: None,
+            seed: None,
             masked_prompt_json: None,
         },
     );
@@ -3043,6 +3054,7 @@ fn test_pytorch_generate_text_request_omits_absent_top_k_kwarg() {
         top_p: 0.9,
         top_k: None,
         repetition_penalty: None,
+        seed: None,
         masked_prompt_json: None,
     });
 
@@ -5858,8 +5870,7 @@ fn test_pytorch_generation_options_map_to_transformers_kwargs_and_diagnostics() 
             && diagnostic.state == OptionSupportState::Honored
     }));
     assert!(mapping.diagnostics.iter().any(|diagnostic| {
-        diagnostic.option_path == "sampling.seed"
-            && diagnostic.state == OptionSupportState::Unsupported
+        diagnostic.option_path == "sampling.seed" && diagnostic.state == OptionSupportState::Mapped
     }));
     assert!(mapping.diagnostics.iter().any(|diagnostic| {
         diagnostic.option_path == "stopping.eos_token_ids"
@@ -6180,6 +6191,11 @@ async fn production_text_iterator_drains_before_successful_load_and_unload() {
             load_worker_module_with_stubbed_dependencies(py);
             py.run(c"import sys, types
 sys.modules['torch'].no_grad = lambda: (lambda f: f)\nsys.modules['torch.nn'] = types.SimpleNamespace(functional=types.SimpleNamespace())
+# Import-only placeholders: lifecycle tests replace worker execution below.
+sys.modules['transformers'] = types.ModuleType('transformers')
+sys.modules['transformers'].GenerationConfig = type('GenerationConfig', (), {})
+sys.modules['transformers'].GenerationMixin = type('GenerationMixin', (), {})
+sys.modules['transformers.generation.configuration_utils'] = types.SimpleNamespace(GenerationMode=types.SimpleNamespace(SAMPLE='sample', GREEDY_SEARCH='greedy_search'))
 sys.modules['transformers.cache_utils'] = types.SimpleNamespace(DynamicCache=type('DynamicCache', (), {}))
 sys.modules['transformers.generation.logits_process'] = types.SimpleNamespace(RepetitionPenaltyLogitsProcessor=object, MinNewTokensLengthLogitsProcessor=object)", None, None).unwrap();
             let worker = super::pytorch_worker::worker_module(py).unwrap();
@@ -6559,6 +6575,11 @@ async fn selected_text_production_loader_and_worker_retain_selection_until_termi
             py.run(c"import sys, types
 sys.modules['torch'].no_grad = lambda: (lambda f: f)
 sys.modules['torch.nn'] = types.SimpleNamespace(functional=types.SimpleNamespace())
+# Import-only placeholders: lifecycle tests replace worker execution below.
+sys.modules['transformers'] = types.ModuleType('transformers')
+sys.modules['transformers'].GenerationConfig = type('GenerationConfig', (), {})
+sys.modules['transformers'].GenerationMixin = type('GenerationMixin', (), {})
+sys.modules['transformers.generation.configuration_utils'] = types.SimpleNamespace(GenerationMode=types.SimpleNamespace(SAMPLE='sample', GREEDY_SEARCH='greedy_search'))
 sys.modules['transformers.cache_utils'] = types.SimpleNamespace(DynamicCache=type('DynamicCache', (), {}))
 sys.modules['transformers.generation.logits_process'] = types.SimpleNamespace(RepetitionPenaltyLogitsProcessor=object, MinNewTokensLengthLogitsProcessor=object)", None, None).unwrap();
             let worker = super::pytorch_worker::worker_module(py).unwrap();
@@ -6743,6 +6764,7 @@ fn named_text_request(prompt: &str) -> crate::PyTorchTextGenerationRequest {
         top_p: 0.95,
         top_k: Some(40),
         repetition_penalty: None,
+        seed: None,
         masked_prompt_json: Some("{\"prompt\":\"masked\"}".to_string()),
     }
 }
@@ -6986,5 +7008,123 @@ async fn test_pytorch_chat_min_new_tokens_malformed_or_over_budget_refuses_befor
             Ok(_) => panic!("invalid minimum must refuse before a Python stream is returned"),
         };
         assert!(error.to_string().contains("min_new_tokens"), "{error}");
+    }
+}
+
+#[test]
+fn test_pytorch_seed_preserves_omission_and_u64_boundaries_in_both_worker_operations() {
+    for seed in [None, Some(0), Some(u64::MAX)] {
+        for operation in [
+            PyTorchWorkerOperation::GenerateText,
+            PyTorchWorkerOperation::GenerateTextStream,
+        ] {
+            let envelope = PyTorchBackend::generate_text_envelope(
+                "req-seed",
+                operation,
+                PyTorchTextGenerationRequest {
+                    prompt: "Explain seeds.".into(),
+                    system_prompt: None,
+                    max_tokens: 3,
+                    min_new_tokens: None,
+                    temperature: 0.7,
+                    top_p: 1.0,
+                    top_k: None,
+                    repetition_penalty: None,
+                    seed,
+                    masked_prompt_json: None,
+                },
+            );
+            PyTorchBackend::validate_generate_text_envelope_operation(&envelope, operation)
+                .unwrap();
+            assert_eq!(
+                envelope.payload.transformers_kwargs.get("seed"),
+                seed.map(serde_json::Value::from).as_ref()
+            );
+            let encoded = serde_json::to_value(&envelope).unwrap();
+            assert_eq!(
+                encoded["payload"]
+                    .get("transformers_kwargs")
+                    .and_then(|kwargs| kwargs.get("seed")),
+                seed.map(serde_json::Value::from).as_ref()
+            );
+            let options = GenerationOptions {
+                sampling: SamplingGenerationOptions {
+                    seed,
+                    ..Default::default()
+                },
+                ..Default::default()
+            };
+            let mapping = PyTorchBackend::transformers_generation_option_mapping(&options);
+            assert_eq!(
+                mapping.kwargs.get("seed"),
+                seed.map(serde_json::Value::from).as_ref()
+            );
+            assert_eq!(
+                mapping
+                    .diagnostics
+                    .iter()
+                    .any(|diagnostic| diagnostic.option_path == "sampling.seed"
+                        && diagnostic.state == OptionSupportState::Mapped),
+                seed.is_some()
+            );
+        }
+    }
+}
+
+#[test]
+fn test_pytorch_worker_envelope_refuses_invalid_authored_seed() {
+    for invalid in [
+        serde_json::json!(-1),
+        serde_json::json!(1.5),
+        serde_json::json!(true),
+        serde_json::Value::Null,
+        serde_json::json!("42"),
+    ] {
+        for operation in [
+            PyTorchWorkerOperation::GenerateText,
+            PyTorchWorkerOperation::GenerateTextStream,
+        ] {
+            let mut request = named_text_request("Explain seeds.");
+            request.masked_prompt_json = None;
+            let mut envelope =
+                PyTorchBackend::generate_text_envelope("req-invalid-seed", operation, request);
+            envelope
+                .payload
+                .transformers_kwargs
+                .insert("seed".into(), invalid.clone());
+            let error =
+                PyTorchBackend::validate_generate_text_envelope_operation(&envelope, operation)
+                    .unwrap_err();
+            assert!(
+                error.to_string().contains("seed must be an integer"),
+                "{error}"
+            );
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_pytorch_chat_refuses_invalid_authored_seed_before_worker_dispatch() {
+    let mut backend = PyTorchBackend::new();
+    backend.ready = true;
+    for invalid in [
+        serde_json::json!(-1),
+        serde_json::json!(1.5),
+        serde_json::json!(true),
+        serde_json::Value::Null,
+        serde_json::json!("42"),
+    ] {
+        let request = serde_json::json!({
+            "messages": [{"role": "user", "content": "Hi"}],
+            "seed": invalid
+        });
+        let error = match backend.chat_completion_stream(request.to_string()).await {
+            Err(error) => error,
+            Ok(_) => panic!("invalid seed must fail before dispatch"),
+        };
+        assert!(
+            error.to_string().contains("seed must be an integer"),
+            "{error}"
+        );
     }
 }

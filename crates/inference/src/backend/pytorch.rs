@@ -75,7 +75,7 @@ mod pytorch_worker_image_contract;
 mod pytorch_text_job;
 
 const ALLOWED_TRANSFORMERS_GENERATE_KWARGS: &[&str] =
-    &["top_k", "repetition_penalty", "min_new_tokens"];
+    &["top_k", "repetition_penalty", "min_new_tokens", "seed"];
 
 #[path = "pytorch_cuda_inventory.rs"]
 mod cuda_inventory;
@@ -120,6 +120,7 @@ pub struct PyTorchTextGenerationRequest {
     pub top_p: f64,
     pub top_k: Option<u32>,
     pub repetition_penalty: Option<f32>,
+    pub seed: Option<u64>,
     pub masked_prompt_json: Option<String>,
 }
 
@@ -1987,6 +1988,16 @@ impl PyTorchBackend {
                 ));
             }
         }
+        if envelope
+            .payload
+            .transformers_kwargs
+            .get("seed")
+            .is_some_and(|value| value.as_u64().is_none())
+        {
+            return Err(BackendError::Config(
+                "seed must be an integer between 0 and 18446744073709551615".into(),
+            ));
+        }
         if let Some(value) = envelope.payload.transformers_kwargs.get("min_new_tokens") {
             let minimum = value
                 .as_u64()
@@ -2167,6 +2178,9 @@ impl PyTorchBackend {
                 "repetition_penalty".to_string(),
                 serde_json::json!(repetition_penalty),
             );
+        }
+        if let Some(seed) = request.seed {
+            transformers_kwargs.insert("seed".to_string(), serde_json::json!(seed));
         }
         PyTorchGenerateTextRequest {
             prompt: request.prompt,
@@ -2352,12 +2366,11 @@ impl PyTorchBackend {
         );
 
         if let Some(seed) = options.sampling.seed {
+            kwargs.insert("seed".to_string(), serde_json::json!(seed));
             diagnostics.push(Self::generation_option_diagnostic(
                 "sampling.seed",
-                OptionSupportState::Unsupported,
-                Some(format!(
-                    "PyTorch/Transformers seed handling is not wired into the worker yet ({seed})"
-                )),
+                OptionSupportState::Mapped,
+                Some("seed is consumed by Pantograph token sampling, not Transformers GenerationConfig".to_string()),
             ));
         }
         if !options.stopping.stop_strings.is_empty() {
@@ -2551,6 +2564,7 @@ impl PyTorchBackend {
             top_p,
             top_k: None,
             repetition_penalty: None,
+            seed: None,
             masked_prompt_json,
         })
         .await
@@ -2650,6 +2664,7 @@ impl PyTorchBackend {
             top_p,
             top_k: None,
             repetition_penalty: None,
+            seed: None,
             masked_prompt_json,
         })
     }
@@ -2947,6 +2962,17 @@ impl InferenceBackend for PyTorchBackend {
             .and_then(|value| value.as_u64())
             .and_then(|value| u32::try_from(value).ok());
 
+        let seed = request
+            .get("seed")
+            .map(|value| {
+                value.as_u64().ok_or_else(|| {
+                    BackendError::Config(
+                        "seed must be an integer between 0 and 18446744073709551615".into(),
+                    )
+                })
+            })
+            .transpose()?;
+
         let repetition_penalty: Option<f32> = serde_json::from_value(
             request
                 .get("repetition_penalty")
@@ -2970,6 +2996,7 @@ impl InferenceBackend for PyTorchBackend {
                 top_p,
                 top_k,
                 repetition_penalty,
+                seed,
                 masked_prompt_json: None,
             }),
         )

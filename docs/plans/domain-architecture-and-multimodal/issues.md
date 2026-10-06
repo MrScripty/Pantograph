@@ -30,3 +30,13 @@ Tokenizer EOS stopping and native inherited minimum/forced-EOS behavior are rest
 authored minimum validation and SDAR safeguards remain. Eight new CPU regression
 methods and independent medium review pass. This candidate does not imply PR58
 integration, hosted CI, real models or completed seed qualification.
+
+## 2026-10-06 — Text seed candidate and remaining qualification
+
+The [text seed candidate](reports/2026-10-06-workflow-text-seed.md) closes the
+missing graph/host/chat/worker token-sampling route on the reviewed PR58 repair
+line. CPU replay/isolation, scope forwarding, zero/omission and seeded PR58
+compatibility pass with independent medium review. Release still depends on
+PR58's main merge and parent publication/hosted CI. Real loaders/GPU/pretrained
+models and desktop remain open; JavaScript number entry may round seeds above
+`2^53 - 1`, despite exact Rust/JSON u64 transport. No UI precision claim is added.
