@@ -39,6 +39,12 @@ monitor aggregates and llama.cpp selectors cannot become physical backing facts.
 Automatic GPU admission and completion ranking remain pending authoritative owner
 placement, shared backing/capacity and comparable timing evidence.
 
+The [bounded integration checkpoint](reports/2026-10-06-runtime-owner-integration-readiness.md)
+combines both owner successors with approved main through ordinary merges. The
+full suites retain the alias-selection fixture and warmup-timeout failures; the
+descriptor repair arrives from main. Review, failure disposition and any PR action
+remain with the parent. Work stops after this checkpoint.
+
 **Acceptance status:** `blocked`
 
 **Independent scheduler slice:** The parent authorized continued feature delivery
