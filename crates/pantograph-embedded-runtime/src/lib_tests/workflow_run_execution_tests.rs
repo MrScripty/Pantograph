@@ -106,6 +106,17 @@ async fn run_workflow_through_scheduler_with_override(
 
 #[tokio::test]
 async fn workflow_execution_session_dispatches_through_production_embedded_image_runtime_host() {
+    production_embedded_image_workflow(None).await;
+}
+
+#[tokio::test]
+async fn graph_authored_image_guidance_flows_through_public_session_and_pumas_host() {
+    for guidance in [0.0, 1.0, 7.5] {
+        production_embedded_image_workflow(Some(guidance)).await;
+    }
+}
+
+async fn production_embedded_image_workflow(guidance: Option<f64>) {
     const MODEL_ID: &str = "image/example/tiny-diffusion";
     const SELECTED_ARTIFACT_ID: &str = "diffusers-bundle";
 
@@ -134,6 +145,7 @@ async fn workflow_execution_session_dispatches_through_production_embedded_image
         .await
         .expect("seed package facts");
     let pumas_access = Arc::new(workflow_nodes::setup::PumasSelectorAccess::Owner(pumas_api));
+    let recorded_guidance = Arc::new(Mutex::new(Vec::new()));
     let runtime_host_port = Arc::new(EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
         Arc::new(RuntimeHostPumasLoadTargetResolver::new(
             pumas_access.clone(),
@@ -143,7 +155,9 @@ async fn workflow_execution_session_dispatches_through_production_embedded_image
             artifact_writer,
         )),
         Arc::new(inference::InferenceGateway::with_backend(
-            Box::new(TestImageBackend),
+            Box::new(TestImageBackend {
+                recorded_guidance: recorded_guidance.clone(),
+            }),
             "PyTorch",
         )),
     ));
@@ -161,7 +175,50 @@ async fn workflow_execution_session_dispatches_through_production_embedded_image
     );
     let workflow_id = "wf-production-embedded-image-runtime-host";
     let workflow_semantic_version = "1.2.3";
-    let graph = image_runtime_session_graph(MODEL_ID, SELECTED_ARTIFACT_ID);
+    let mut graph = image_runtime_session_graph(MODEL_ID, SELECTED_ARTIFACT_ID);
+    if guidance.is_some() {
+        graph.nodes.push(GraphNode {
+            id: "guidance".into(),
+            node_type: "selection-input".into(),
+            position: Position { x: 0.0, y: 100.0 },
+            data: serde_json::json!({}),
+        });
+        graph.edges.push(GraphEdge {
+            id: "guidance-to-infer".into(),
+            source: "guidance".into(),
+            source_handle: "value".into(),
+            target: "infer".into(),
+            target_handle: "guidance_scale".into(),
+        });
+        let ports: Vec<pantograph_inference_interface_contracts::InferencePortDescriptor> = serde_json::from_str(include_str!(
+            "../../../pantograph-inference-interface-contracts/tests/fixtures/image_generation_basic_inputs.json"
+        )).unwrap();
+        let control = ports
+            .into_iter()
+            .find(|port| port.port_id.as_str() == "guidance_scale")
+            .unwrap();
+        let control = serde_json::to_value(
+            pantograph_inference_interface_contracts::AuthoredInferencePortSnapshot {
+                port_id: control.port_id,
+                label: control.label,
+                direction: control.direction,
+                requirement: control.requirement,
+                value_type: control.value_type,
+                default: control.default,
+                availability: control.availability,
+            },
+        )
+        .unwrap();
+        graph
+            .nodes
+            .iter_mut()
+            .find(|node| node.id == "infer")
+            .unwrap()
+            .data["inference_interface_snapshot"]["inputs"]
+            .as_array_mut()
+            .unwrap()
+            .push(control);
+    }
     let version = service
         .resolve_workflow_graph_version(workflow_id, workflow_semantic_version, &graph)
         .expect("resolve workflow version");
@@ -198,6 +255,18 @@ async fn workflow_execution_session_dispatches_through_production_embedded_image
         )
         .await
         .expect("create session");
+    let mut inputs = vec![WorkflowPortBinding {
+        node_id: "prompt".into(),
+        port_id: "text".into(),
+        value: serde_json::json!("paint a red cube"),
+    }];
+    if let Some(value) = guidance {
+        inputs.push(WorkflowPortBinding {
+            node_id: "guidance".into(),
+            port_id: "value".into(),
+            value: serde_json::json!(value),
+        });
+    }
     let response = pantograph_workflow_service::workflow::WorkflowSessionExecutionRuntime::from_shared_service(
         service.clone(),
         host.clone(),
@@ -206,11 +275,7 @@ async fn workflow_execution_session_dispatches_through_production_embedded_image
             WorkflowExecutionSessionRunRequest {
                 session_id: created.session_id.clone(),
                 workflow_semantic_version: workflow_semantic_version.to_string(),
-                inputs: vec![WorkflowPortBinding {
-                    node_id: "prompt".to_string(),
-                    port_id: "text".to_string(),
-                    value: serde_json::json!("paint a red cube"),
-                }],
+                inputs,
                 output_targets: Some(vec![WorkflowOutputTarget {
                     node_id: "infer".to_string(),
                     port_id: "image".to_string(),
@@ -223,6 +288,11 @@ async fn workflow_execution_session_dispatches_through_production_embedded_image
         .await
         .expect("production embedded image runtime host should complete");
 
+    assert_eq!(
+        *recorded_guidance.lock().unwrap(),
+        vec![guidance.map(|v| v as f32)],
+        "graph-authored value must reach the backend once"
+    );
     assert_eq!(response.outputs.len(), 1);
     assert_eq!(response.outputs[0].node_id, "infer");
     assert_eq!(response.outputs[0].port_id, "image");
@@ -989,21 +1059,38 @@ impl WorkflowHost for ImageRuntimeSessionHost {
         &self,
         _workflow_id: &str,
     ) -> Result<WorkflowIoResponse, WorkflowServiceError> {
-        Ok(WorkflowIoResponse {
-            inputs: vec![WorkflowIoNode {
-                node_id: "prompt".to_string(),
-                node_type: "text-input".to_string(),
+        let mut inputs = vec![WorkflowIoNode {
+            node_id: "prompt".to_string(),
+            node_type: "text-input".to_string(),
+            name: None,
+            description: None,
+            ports: vec![WorkflowIoPort {
+                port_id: "text".to_string(),
+                name: None,
+                description: None,
+                data_type: Some("string".to_string()),
+                required: Some(true),
+                multiple: Some(false),
+            }],
+        }];
+        if self.graph.nodes.iter().any(|node| node.id == "guidance") {
+            inputs.push(WorkflowIoNode {
+                node_id: "guidance".into(),
+                node_type: "selection-input".into(),
                 name: None,
                 description: None,
                 ports: vec![WorkflowIoPort {
-                    port_id: "text".to_string(),
+                    port_id: "value".into(),
                     name: None,
                     description: None,
-                    data_type: Some("string".to_string()),
+                    data_type: Some("any".into()),
                     required: Some(true),
                     multiple: Some(false),
                 }],
-            }],
+            });
+        }
+        Ok(WorkflowIoResponse {
+            inputs,
             outputs: self
                 .graph
                 .nodes
@@ -1078,7 +1165,9 @@ impl WorkflowHost for ImageRuntimeSessionHost {
     }
 }
 
-struct TestImageBackend;
+struct TestImageBackend {
+    recorded_guidance: Arc<Mutex<Vec<Option<f32>>>>,
+}
 
 #[async_trait]
 impl InferenceBackend for TestImageBackend {
@@ -1155,6 +1244,10 @@ impl InferenceBackend for TestImageBackend {
         plan: ImageGenerationExecutionPlan,
         _context: BackendExecutionContext,
     ) -> Result<ImageGenerationResult, BackendError> {
+        self.recorded_guidance
+            .lock()
+            .unwrap()
+            .push(plan.guidance_scale);
         Ok(ImageGenerationResult {
             images: vec![EncodedImage {
                 data_base64: "aGVsbG8=".to_string(),
@@ -1175,20 +1268,26 @@ impl InferenceBackend for TestImageBackend {
         let members = request
             .members
             .into_iter()
-            .map(|member| ImageGenerationBatchExecutionMemberResponse {
-                member_id: member.member_id,
-                state: ImageGenerationBatchMemberExecutionState::Completed,
-                result: Some(ImageGenerationResult {
-                    images: vec![EncodedImage {
-                        data_base64: "aGVsbG8=".to_string(),
-                        mime_type: "image/png".to_string(),
-                        width: member.plan.width,
-                        height: member.plan.height,
-                    }],
-                    seed_used: member.plan.seed,
-                    metadata: serde_json::Value::Null,
-                }),
-                diagnostics: Vec::new(),
+            .map(|member| {
+                self.recorded_guidance
+                    .lock()
+                    .unwrap()
+                    .push(member.plan.guidance_scale);
+                ImageGenerationBatchExecutionMemberResponse {
+                    member_id: member.member_id,
+                    state: ImageGenerationBatchMemberExecutionState::Completed,
+                    result: Some(ImageGenerationResult {
+                        images: vec![EncodedImage {
+                            data_base64: "aGVsbG8=".to_string(),
+                            mime_type: "image/png".to_string(),
+                            width: member.plan.width,
+                            height: member.plan.height,
+                        }],
+                        seed_used: member.plan.seed,
+                        metadata: serde_json::Value::Null,
+                    }),
+                    diagnostics: Vec::new(),
+                }
             })
             .collect();
         Ok(ImageGenerationBatchExecutionResponse {

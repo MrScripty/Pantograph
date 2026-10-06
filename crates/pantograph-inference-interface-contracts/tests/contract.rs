@@ -178,7 +178,8 @@ fn basic_image_inputs_keep_optional_controls_and_backend_defaults_on_the_wire() 
             "width",
             "height",
             "num_inference_steps",
-            "seed"
+            "seed",
+            "guidance_scale"
         ]
     );
     assert_eq!(ports[0].requirement, InferencePortRequirement::Required);
@@ -220,6 +221,17 @@ fn basic_image_numeric_controls_preserve_u32_bounds_without_rounding_u64_seed() 
         InferenceValueType::Scalar(InferenceScalarType::U64)
     );
     assert_eq!(ports[5].options, InferencePortOptions::None);
+    assert_eq!(
+        ports[6].value_type,
+        InferenceValueType::Scalar(InferenceScalarType::F64)
+    );
+    let InferencePortOptions::NumericRange { range } = &ports[6].options else {
+        panic!("guidance scale must declare its finite f32 representation bounds");
+    };
+    assert_eq!(range.min, f64::from(f32::MIN));
+    assert_eq!(range.max, f64::from(f32::MAX));
+    assert_eq!(range.step, None);
+    assert_eq!(range.default, None);
 }
 
 #[test]

@@ -52,5 +52,14 @@
     "value_type": { "category": "scalar", "kind": "u64" },
     "options": { "kind": "none" },
     "availability": { "status": "available" }
+  },
+  {
+    "port_id": "guidance_scale",
+    "label": "Guidance scale",
+    "direction": "input",
+    "requirement": "optional",
+    "value_type": { "category": "scalar", "kind": "f64" },
+    "options": { "kind": "numeric_range", "range": { "min": -3.4028234663852886e38, "max": 3.4028234663852886e38 } },
+    "availability": { "status": "available" }
   }
 ]

@@ -75,7 +75,13 @@ fn materializes_numeric_node_results_without_truncating_or_coercing_integer_port
         let result = WorkflowSchedulerTaskResultValue::from_node_json(node_value);
         // A float sent to an integer target stays a float; that target's host
         // validator must reject it instead of materialization truncating it.
-        for port_id in ["temperature", "top_p", "top_k", "max_new_tokens"] {
+        for port_id in [
+            "temperature",
+            "top_p",
+            "top_k",
+            "max_new_tokens",
+            "guidance_scale",
+        ] {
             let task = runtime_task(vec![input_binding("source", "value", port_id)]);
             let inputs = materialize_runtime_host_inputs(
                 &task,

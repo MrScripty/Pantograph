@@ -276,6 +276,58 @@ fn test_python_worker_generate_image_from_envelope_returns_worker_response() {
 }
 
 #[test]
+fn graph_guidance_option_reaches_actual_worker_pipeline_call_without_default_override() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
+    Python::with_gil(|py| {
+        let module = load_worker_module_with_image_stubs(py);
+        attach_stub_diffusion_pipeline(&module);
+        for guidance in [None, Some(-1.0), Some(0.0), Some(1.0), Some(7.5)] {
+            let mut envelope: serde_json::Value = serde_json::from_str(include_str!(
+                "../../tests/fixtures/pytorch_worker_contract/generate_image_request.json"
+            ))
+            .unwrap();
+            match guidance {
+                Some(value) => envelope["payload"]["guidance_scale"] = serde_json::json!(value),
+                None => {
+                    envelope["payload"]
+                        .as_object_mut()
+                        .unwrap()
+                        .remove("guidance_scale");
+                }
+            }
+            let response: String = module
+                .call_method1("generate_image_from_envelope", (envelope.to_string(),))
+                .unwrap()
+                .extract()
+                .unwrap();
+            assert!(
+                matches!(
+                    serde_json::from_str::<PyTorchWorkerResponse<PyTorchGenerateImageResult>>(
+                        &response
+                    )
+                    .unwrap(),
+                    PyTorchWorkerResponse::Ok(_)
+                ),
+                "{response}"
+            );
+            let kwargs = module
+                .getattr("_diffusion_pipeline")
+                .unwrap()
+                .getattr("last_kwargs")
+                .unwrap();
+            let actual: Option<f64> = kwargs
+                .get_item("guidance_scale")
+                .ok()
+                .map(|v| v.extract().unwrap());
+            assert_eq!(
+                actual, guidance,
+                "worker must omit absent guidance and preserve explicit values"
+            );
+        }
+    });
+}
+
+#[test]
 fn test_python_worker_generate_image_from_envelope_reports_cuda_peak_vram() {
     let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {

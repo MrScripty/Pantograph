@@ -2367,6 +2367,105 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn graph_image_guidance_reaches_gateway_batch_without_defaults_or_precision_loss() {
+        use pantograph_runtime_host_contracts::{
+            RuntimeHostExecutionInput, RuntimeHostExecutionInputValue,
+        };
+        for guidance in [None, Some(-1.0), Some(0.0), Some(1.0), Some(7.5)] {
+            let mut request = runtime_host_batch_request_fixture();
+            for member in &mut request.members {
+                if let Some(value) = guidance {
+                    member.materialized_inputs.push(RuntimeHostExecutionInput {
+                        port_id: "guidance_scale".into(),
+                        value: RuntimeHostExecutionInputValue::F64(
+                            serde_json::Number::from_f64(value).unwrap(),
+                        ),
+                    });
+                }
+            }
+            let cancellation = runtime_host_batch_cancellation(&request);
+            let backend = RecordingBatchImageBackend::default();
+            let recorded = backend.recorded_batches.clone();
+            let port = EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
+                Arc::new(ReadyLoadTargetResolver),
+                Arc::new(FixturePackageFactsResolver),
+                Arc::new(RecordingMediaArtifactSink::default()),
+                Arc::new(inference::InferenceGateway::with_backend(
+                    Box::new(backend),
+                    "PyTorch",
+                )),
+            );
+            let response = port
+                .execute_runtime_host_batch_request(request, cancellation)
+                .await
+                .unwrap();
+            assert_eq!(
+                response.state,
+                RuntimeHostBatchExecutionState::Completed,
+                "{response:?}"
+            );
+            let recorded = recorded.lock().unwrap();
+            assert_eq!(recorded.len(), 1);
+            for member in &recorded[0].members {
+                assert_eq!(member.request.guidance_scale, guidance.map(|v| v as f32));
+                assert_eq!(member.plan.guidance_scale, guidance.map(|v| v as f32));
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn invalid_graph_image_guidance_is_rejected_before_gateway_dispatch() {
+        use pantograph_runtime_host_contracts::{
+            RuntimeHostExecutionInput, RuntimeHostExecutionInputValue,
+        };
+        for value in [
+            RuntimeHostExecutionInputValue::String("7.5".into()),
+            RuntimeHostExecutionInputValue::U64(u64::MAX),
+            RuntimeHostExecutionInputValue::F64(serde_json::Number::from_f64(f64::MAX).unwrap()),
+            RuntimeHostExecutionInputValue::F64(serde_json::Number::from_f64(1e-300).unwrap()),
+            RuntimeHostExecutionInputValue::F64(
+                serde_json::Number::from_f64(1.0000000000000002).unwrap(),
+            ),
+        ] {
+            let mut request = runtime_host_batch_request_fixture();
+            request.members[0]
+                .materialized_inputs
+                .push(RuntimeHostExecutionInput {
+                    port_id: "guidance_scale".into(),
+                    value,
+                });
+            let cancellation = runtime_host_batch_cancellation(&request);
+            let backend = RecordingBatchImageBackend::default();
+            let recorded = backend.recorded_batches.clone();
+            let media_sink = Arc::new(RecordingMediaArtifactSink::default());
+            let port = EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
+                Arc::new(ReadyLoadTargetResolver),
+                Arc::new(FixturePackageFactsResolver),
+                media_sink.clone(),
+                Arc::new(inference::InferenceGateway::with_backend(
+                    Box::new(backend),
+                    "PyTorch",
+                )),
+            );
+            let response = port
+                .execute_runtime_host_batch_request(request, cancellation)
+                .await
+                .unwrap();
+            assert_eq!(
+                response.state,
+                RuntimeHostBatchExecutionState::Rejected,
+                "{response:?}"
+            );
+            assert!(response
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.message.contains("guidance_scale")));
+            assert!(recorded.lock().unwrap().is_empty());
+            assert!(media_sink.writes.lock().unwrap().is_empty());
+        }
+    }
+
+    #[tokio::test]
     async fn batch_port_rejects_incompatible_members_before_gateway_dispatch() {
         let mut request = runtime_host_batch_request_fixture();
         let incompatible_variant = "diffusers-pytorch.other"

@@ -282,6 +282,7 @@ fn input_ports(task_entry: &TaskRegistryEntry) -> Vec<InferencePortDescriptor> {
                 InferencePortRequirement::Optional,
                 InferenceValueType::Scalar(InferenceScalarType::U64),
             ),
+            guidance_scale_input_port(),
         ],
         InferenceTaskId::ChatCompletion | InferenceTaskId::MultimodalGeneration => vec![port(
             "prompt",
@@ -292,6 +293,25 @@ fn input_ports(task_entry: &TaskRegistryEntry) -> Vec<InferencePortDescriptor> {
         )],
         _ => Vec::new(),
     }
+}
+
+fn guidance_scale_input_port() -> InferencePortDescriptor {
+    let mut descriptor = port(
+        image::GUIDANCE_SCALE_PORT,
+        "Guidance scale",
+        InferencePortDirection::Input,
+        InferencePortRequirement::Optional,
+        InferenceValueType::Scalar(InferenceScalarType::F64),
+    );
+    descriptor.options = InferencePortOptions::NumericRange {
+        range: InferenceNumericRange {
+            min: f64::from(f32::MIN),
+            max: f64::from(f32::MAX),
+            step: None,
+            default: None,
+        },
+    };
+    descriptor
 }
 
 fn positive_u32_input_port(port_id: &str, label: &str) -> InferencePortDescriptor {
