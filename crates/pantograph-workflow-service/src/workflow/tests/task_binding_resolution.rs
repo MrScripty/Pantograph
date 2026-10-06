@@ -425,6 +425,13 @@ fn sidecar_association_is_not_materialized_as_scheduler_input() {
         &inference_projection(),
     )
     .expect("scheduler task graph");
+    assert!(
+        !graph
+            .tasks
+            .iter()
+            .any(|task| task.task_id.as_str() == "dep-env"),
+        "the dependency control is resolved by workflow-service, not dispatched as a task"
+    );
     let inference_task = graph
         .tasks
         .iter()

@@ -411,3 +411,38 @@ An initial ESLint invocation failed because the repository configuration does
 not declare harness globals; both that log and the successful explicit-globals
 check are retained. The next native run must still establish scheduler execution
 and actual retained synthetic CPU output.
+
+## Snapshot publication clears; scheduler rejects the control node
+
+[Run 37511768640](https://github.com/MrScripty/Pantograph/actions/runs/37511768640)
+executes `62e3371b0c947fbf088853f9128404a547c36990`, tree
+`b77ff948c9a5d7ed5990ca5d9677ea2f13d0be56`. Actual typed Resolve
+succeeds for the current revision/session, and GUI Submit passes publication.
+The owner records scoped queued run `run_e8ac33d3-60c0-45c9-aba8-8355830157bd`.
+The scheduler then rejects `deps` from `Invalid`. This run has no selected
+runtime/device, no start/completion timestamp and zero retained output artifacts.
+CPU execution/output are not established; this is not evidence of loader failure.
+The [complete eleventh-attempt evidence](../evidence/native-desktop-cpu/cold-typed-discovery/typed-proof-successor/scheduler-control/README.md)
+preserves all twenty-two members, original images/JSON and masked job log.
+Artifact `11435774716` SHA256 is
+`d8162747417705965ab6a666bbef3bedcb95ef353d72dc955d0192a503b772d4`.
+
+The task projection already excludes dependency association edges from runtime
+input bindings, but still emits the dependency control as an unsupported task.
+Its descriptor explicitly assigns dependency actions to workflow-service and
+retires embedded node execution. The repair omits only that canonical control
+type from scheduler tasks. It preserves the authored graph, execution fingerprint,
+association, actual Resolve producer and every proof/readiness/dispatch guard.
+Ordinary unsupported nodes continue to project and fail normally. The old-source
+regression reproduces the missing omission; separate classification coverage
+checks that the repair preserves unsupported and materialization tasks.
+
+All 926 workflow-service tests pass with the repair, together with strict
+all-target selected-crate Clippy, formatting and critical/a11y gates. Default
+dependency compilation retains an existing inference dead-code warning; no
+unrelated warning repair is included. Exact complete all-target Cargo graphs
+are inspected before both test and Clippy builds, using current Pumas and
+dynamic ORT with `ORT_SKIP_DOWNLOAD=1`. The isolated qualification workflow's
+path filter now includes this exact projection source so its repair triggers
+the same native route; permissions, checks and deadlines remain unchanged.
+Native CPU execution/output still requires the subsequent source-bound run.

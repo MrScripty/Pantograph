@@ -26,6 +26,7 @@ use crate::graph::{workflow_executable_topology, WorkflowGraph, WorkflowRuntimeS
 
 const PORT_TEXT: &str = "text";
 const PORT_VALUE: &str = "value";
+const NODE_TYPE_DEPENDENCY_ENVIRONMENT: &str = "dependency-environment";
 const NODE_TYPE_BOOLEAN_INPUT: &str = "boolean-input";
 const NODE_TYPE_NUMBER_INPUT: &str = "number-input";
 const NODE_TYPE_TEXT_INPUT: &str = "text-input";
@@ -146,6 +147,11 @@ pub fn workflow_scheduler_task_graph_with_inference_projections(
 
     let mut tasks = Vec::with_capacity(topology.nodes.len());
     for node in &topology.nodes {
+        // Dependency controls are resolved by workflow-service's typed action
+        // owner. Their associations are not executable scheduler tasks.
+        if node.node_type == NODE_TYPE_DEPENDENCY_ENVIRONMENT {
+            continue;
+        }
         let node_id = scheduler_node_id(&node.node_id)?;
         let task_id = scheduler_task_id(&node.node_id)?;
         let input_bindings = input_bindings(node.node_id.as_str(), &incoming_edges)?;

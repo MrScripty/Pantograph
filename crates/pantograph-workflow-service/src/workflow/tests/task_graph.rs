@@ -614,6 +614,12 @@ fn scheduler_task_graph_classifies_materialization_and_unsupported_tasks() {
         position: Position { x: 100.0, y: 200.0 },
         data: json!({}),
     });
+    graph.nodes.push(GraphNode {
+        id: "deps".to_string(),
+        node_type: "dependency-environment".to_string(),
+        position: Position { x: 100.0, y: 300.0 },
+        data: json!({"mode":"manual"}),
+    });
 
     let task_graph = workflow_scheduler_task_graph_with_inference_projections(
         &workflow_id(),
@@ -622,6 +628,10 @@ fn scheduler_task_graph_classifies_materialization_and_unsupported_tasks() {
         &inference_projection(),
     )
     .expect("graph");
+    assert!(!task_graph
+        .tasks
+        .iter()
+        .any(|task| task.node_id.as_str() == "deps"));
 
     let model_task = task_graph
         .tasks

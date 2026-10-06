@@ -8,6 +8,7 @@ on:
       - .github/workflows/native-desktop-cpu-qualification.yml
       - scripts/*native-desktop-cpu*
       - tests/e2e/native-desktop-cpu/**
+      - crates/pantograph-workflow-service/src/workflow/task_graph.rs
 
 permissions:
   contents: read

@@ -1,0 +1,18 @@
+{
+  "run_id": 37511768640,
+  "job_id": 112434455106,
+  "source_head": "62e3371b0c947fbf088853f9128404a547c36990",
+  "source_tree": "b77ff948c9a5d7ed5990ca5d9677ea2f13d0be56",
+  "artifact_id": 11435774716,
+  "artifact_sha256": "d8162747417705965ab6a666bbef3bedcb95ef353d72dc955d0192a503b772d4",
+  "artifact_members": 22,
+  "conclusion": "failure",
+  "dependency_resolve_status": "request_ready",
+  "gui_submit_clicked": true,
+  "scoped_run_id": "run_e8ac33d3-60c0-45c9-aba8-8355830157bd",
+  "scoped_run_status": "queued",
+  "retained_output_count": 0,
+  "failure": "Internal error: capability_violation: runtime scheduler task deps cannot continue from Invalid",
+  "cpu_execution_established": false,
+  "cpu_output_established": false
+}
