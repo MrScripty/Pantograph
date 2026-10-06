@@ -3,7 +3,7 @@ use inference::{
     InferenceDeviceClass, InferenceDeviceId, InferenceDevicePolicy, InferenceExecutionInput,
     InferenceExecutionRequest, InferenceExecutionResult, InferenceTaskId, LengthGenerationOptions,
     ModelRefMigrationDiagnostic, PumasArtifactLoadTarget, PumasModelRef, ResolvedModelPackageFacts,
-    RuntimeVariantId, SamplingGenerationOptions,
+    RuntimeVariantId, SamplingGenerationOptions, StoppingGenerationOptions,
 };
 use pantograph_runtime_host_contracts::{
     RuntimeHostExecutionInputValue, RuntimeHostExecutionRequest,
@@ -22,6 +22,7 @@ pub(crate) const TOP_P_PORT: &str = "top_p";
 pub(crate) const REPETITION_PENALTY_PORT: &str = "repetition_penalty";
 pub(crate) const MIN_NEW_TOKENS_PORT: &str = "min_new_tokens";
 pub(crate) const SEED_PORT: &str = "seed";
+pub(crate) const STOP_PORT: &str = "stop";
 pub(crate) const MAX_TEXT_BYTES: usize = 1024;
 
 /// Owned inputs for the canonical selected-text inference call.
@@ -69,6 +70,7 @@ pub(crate) fn validate_runtime_host_text_generation_request(
     optional_top_p(request)?;
     optional_repetition_penalty(request)?;
     optional_seed(request)?;
+    optional_stop(request)?;
     optional_system_prompt(request)?;
     let prompt = required_prompt(request)?;
     if prompt.trim().is_empty() {
@@ -313,6 +315,7 @@ fn validate_supported_inputs(
             REPETITION_PENALTY_PORT,
             MIN_NEW_TOKENS_PORT,
             SEED_PORT,
+            STOP_PORT,
         ]
         .contains(&input.port_id.as_str())
         {
@@ -499,6 +502,29 @@ fn optional_seed(
         .transpose()
 }
 
+fn optional_stop(
+    request: &RuntimeHostExecutionRequest,
+) -> Result<Option<&str>, RuntimeHostTextGenerationProjectionError> {
+    request
+        .materialized_inputs
+        .iter()
+        .find(|input| input.port_id == STOP_PORT)
+        .map(|input| match &input.value {
+            RuntimeHostExecutionInputValue::String(value) if value.is_empty() => {
+                Err(RuntimeHostTextGenerationProjectionError::EmptyStopString)
+            }
+            RuntimeHostExecutionInputValue::String(value) if value.len() > MAX_TEXT_BYTES => {
+                Err(RuntimeHostTextGenerationProjectionError::InputTooLong { bytes: value.len() })
+            }
+            RuntimeHostExecutionInputValue::String(value) => Ok(value.as_str()),
+            _ => Err(RuntimeHostTextGenerationProjectionError::InvalidInputType {
+                port_id: STOP_PORT,
+                expected: "string",
+            }),
+        })
+        .transpose()
+}
+
 fn optional_generation_options(
     request: &RuntimeHostExecutionRequest,
 ) -> Result<Option<GenerationOptions>, RuntimeHostTextGenerationProjectionError> {
@@ -509,6 +535,7 @@ fn optional_generation_options(
     let top_p = optional_top_p(request)?;
     let repetition_penalty = optional_repetition_penalty(request)?;
     let seed = optional_seed(request)?;
+    let stop = optional_stop(request)?;
     if max_new_tokens.is_none()
         && min_new_tokens.is_none()
         && top_k.is_none()
@@ -516,6 +543,7 @@ fn optional_generation_options(
         && top_p.is_none()
         && repetition_penalty.is_none()
         && seed.is_none()
+        && stop.is_none()
     {
         return Ok(None);
     }
@@ -531,6 +559,10 @@ fn optional_generation_options(
             top_p,
             repetition_penalty,
             seed,
+        },
+        stopping: StoppingGenerationOptions {
+            stop_strings: stop.map(|value| vec![value.to_owned()]).unwrap_or_default(),
+            ..Default::default()
         },
         ..GenerationOptions::default()
     }))
@@ -578,6 +610,8 @@ pub(crate) enum RuntimeHostTextGenerationProjectionError {
     InvalidTopK,
     #[error("runtime-host text input 'seed' must be a non-negative u64 integer")]
     InvalidSeed,
+    #[error("runtime-host text input 'stop' must not be empty")]
+    EmptyStopString,
     #[error("runtime-host text input 'temperature' must be a nonnegative finite number representable by the generation f32 contract without losing authored precision")]
     InvalidTemperature,
     #[error("runtime-host text input 'top_p' must be between 0 and 1, retaining authored precision in the generation f32 contract")]
@@ -3074,5 +3108,173 @@ mod tests {
             assert!(calls.lock().unwrap().is_empty());
             assert!(recorded.lock().unwrap().is_empty());
         }
+    }
+    #[tokio::test]
+    async fn stop_string_reaches_actual_host_gateway_exactly_with_omission_and_byte_boundary() {
+        for stop in [
+            None,
+            Some("終わり🛑".to_owned()),
+            Some("  END\n".to_owned()),
+            Some(" ".to_owned()),
+            Some("é".repeat(MAX_TEXT_BYTES / 2)),
+        ] {
+            let mut request = text_request_fixture();
+            if let Some(value) = &stop {
+                request.materialized_inputs.push(RuntimeHostExecutionInput {
+                    port_id: STOP_PORT.into(),
+                    value: RuntimeHostExecutionInputValue::String(value.clone()),
+                });
+            }
+            // Exercise existing request JSON save/load without a new wire type.
+            let request: RuntimeHostExecutionRequest =
+                serde_json::from_str(&serde_json::to_string(&request).unwrap()).unwrap();
+            let validated =
+                ValidatedRuntimeHostExecutionRequest::try_from(request.clone()).unwrap();
+            let package_facts = text_package_facts(&validated);
+            let directory = tempfile::tempdir().unwrap();
+            let target = text_load_target(&package_facts, &directory);
+            let projection = project_runtime_host_text_generation(
+                &validated,
+                package_facts.clone(),
+                target.clone(),
+            )
+            .unwrap();
+            assert_eq!(
+                projection.request().generation_options.is_some(),
+                stop.is_some()
+            );
+            assert_eq!(
+                projection
+                    .request()
+                    .generation_options
+                    .as_ref()
+                    .map(|options| &options.stopping.stop_strings),
+                stop.as_ref().map(|value| vec![value.clone()]).as_ref()
+            );
+            let backend = TextBackend::default();
+            let recorded = backend.requests.clone();
+            let port = crate::runtime_host_execution_port::EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
+                Arc::new(TextLoadTargetResolver { target }), Arc::new(TextPackageFactsResolver { package_facts }),
+                Arc::new(UnusedTextMediaSink), Arc::new(inference::InferenceGateway::with_backend(Box::new(backend), "PyTorch")),
+            );
+            let cancellation =
+                pantograph_runtime_host_contracts::RuntimeHostExecutionCancellationHandle::running(
+                    request.cancellation_context.clone(),
+                );
+            let response = port
+                .execute_runtime_host_request(request, cancellation)
+                .await
+                .unwrap();
+            assert_eq!(response.state, RuntimeHostExecutionState::Completed);
+            let recorded = recorded.lock().unwrap();
+            assert_eq!(recorded.len(), 1);
+            assert_eq!(
+                recorded[0].get("stop"),
+                stop.as_ref()
+                    .map(|value| serde_json::json!([value]))
+                    .as_ref()
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn invalid_stop_string_fails_host_before_backend_effects() {
+        for (value, expected) in [
+            (
+                RuntimeHostExecutionInputValue::String(String::new()),
+                "stop' must not be empty",
+            ),
+            (
+                RuntimeHostExecutionInputValue::U64(42),
+                "stop' must be string",
+            ),
+            (
+                RuntimeHostExecutionInputValue::Bool(true),
+                "stop' must be string",
+            ),
+            (
+                RuntimeHostExecutionInputValue::F64(serde_json::Number::from_f64(1.0).unwrap()),
+                "stop' must be string",
+            ),
+        ] {
+            let mut request = text_request_fixture();
+            request.materialized_inputs.push(RuntimeHostExecutionInput {
+                port_id: STOP_PORT.into(),
+                value,
+            });
+            let validated =
+                ValidatedRuntimeHostExecutionRequest::try_from(request.clone()).unwrap();
+            let package_facts = text_package_facts(&validated);
+            let directory = tempfile::tempdir().unwrap();
+            let target = text_load_target(&package_facts, &directory);
+            let backend = TextBackend::default();
+            let calls = backend.calls.clone();
+            let recorded = backend.requests.clone();
+            let port = crate::runtime_host_execution_port::EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
+                Arc::new(TextLoadTargetResolver { target }), Arc::new(TextPackageFactsResolver { package_facts }),
+                Arc::new(UnusedTextMediaSink), Arc::new(inference::InferenceGateway::with_backend(Box::new(backend), "PyTorch")),
+            );
+            let cancellation =
+                pantograph_runtime_host_contracts::RuntimeHostExecutionCancellationHandle::running(
+                    request.cancellation_context.clone(),
+                );
+            let response = port
+                .execute_runtime_host_request(request, cancellation)
+                .await
+                .unwrap();
+            assert_eq!(response.state, RuntimeHostExecutionState::Rejected);
+            assert!(response.outputs.is_empty());
+            assert!(
+                response
+                    .diagnostics
+                    .iter()
+                    .any(|diagnostic| diagnostic.message.contains(expected)),
+                "{:?}",
+                response.diagnostics
+            );
+            assert!(calls.lock().unwrap().is_empty());
+            assert!(recorded.lock().unwrap().is_empty());
+        }
+    }
+    #[tokio::test]
+    async fn oversized_stop_string_fails_generic_host_contract_before_backend_effects() {
+        let mut request = text_request_fixture();
+        let valid_baseline =
+            ValidatedRuntimeHostExecutionRequest::try_from(request.clone()).unwrap();
+        let package_facts = text_package_facts(&valid_baseline);
+        let directory = tempfile::tempdir().unwrap();
+        let target = text_load_target(&package_facts, &directory);
+        request.materialized_inputs.push(RuntimeHostExecutionInput {
+            port_id: STOP_PORT.into(),
+            value: RuntimeHostExecutionInputValue::String("é".repeat(MAX_TEXT_BYTES / 2 + 1)),
+        });
+        // The generic materialized-input contract rejects oversized strings
+        // before the task-specific text projection can run.
+        assert_eq!(
+            ValidatedRuntimeHostExecutionRequest::try_from(request.clone()).unwrap_err(),
+            pantograph_runtime_host_contracts::RuntimeHostExecutionContractError::FieldTooLong {
+                field: "input.string",
+                max_len: MAX_TEXT_BYTES,
+            }
+        );
+        let backend = TextBackend::default();
+        let calls = backend.calls.clone();
+        let recorded = backend.requests.clone();
+        let port = crate::runtime_host_execution_port::EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
+            Arc::new(TextLoadTargetResolver { target }), Arc::new(TextPackageFactsResolver { package_facts }),
+            Arc::new(UnusedTextMediaSink), Arc::new(inference::InferenceGateway::with_backend(Box::new(backend), "PyTorch")),
+        );
+        let cancellation =
+            pantograph_runtime_host_contracts::RuntimeHostExecutionCancellationHandle::running(
+                request.cancellation_context.clone(),
+            );
+        let error = port
+            .execute_runtime_host_request(request, cancellation)
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("input.string"), "{error}");
+        assert!(error.to_string().contains("max 1024 bytes"), "{error}");
+        assert!(calls.lock().unwrap().is_empty());
+        assert!(recorded.lock().unwrap().is_empty());
     }
 }

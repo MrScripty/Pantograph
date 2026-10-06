@@ -15,6 +15,7 @@ from transformers.cache_utils import DynamicCache
 from transformers.generation.logits_process import (
     MinNewTokensLengthLogitsProcessor, RepetitionPenaltyLogitsProcessor,
 )
+from transformers.generation.stopping_criteria import StoppingCriteria, StoppingCriteriaList
 
 
 class RepetitionPenaltyNumericsError(ValueError):
@@ -27,6 +28,129 @@ class MinimumNewTokensError(ValueError):
 
 class SeedSamplingError(ValueError):
     """The requested seed cannot be isolated on this sampling route."""
+
+
+class StopStringError(ValueError):
+    """Stop text is invalid or cannot be honored on this decoding route."""
+
+
+def _validate_stop_strings(value, *, inherited=False):
+    if value is None:
+        return ()
+    if inherited and value == []:
+        return ()
+    if inherited and isinstance(value, str):
+        value = [value]
+    if (not isinstance(value, (list, tuple)) or not value
+            or any(not isinstance(marker, str) or not marker for marker in value)):
+        raise StopStringError("stop_strings must be a non-empty list of non-empty strings")
+    return tuple(value)
+
+
+def _resolve_stop_strings(model, stop_strings):
+    if stop_strings is not None:
+        return _validate_stop_strings(stop_strings)
+    config = getattr(model, "generation_config", None)
+    # Mirror the installed native resolver's legacy-refresh conditions without
+    # changing the resident config. An edited generation config owns its defaults,
+    # including an explicit None; an untouched legacy config can refresh [] too.
+    model_config = getattr(model, "config", None)
+    non_defaults = getattr(model_config, "_get_non_default_generation_parameters", None)
+    if (type(config) is GenerationConfig and config._from_model_config
+            and config._original_object_hash == hash(config)
+            and callable(non_defaults) and non_defaults()):
+        config = GenerationConfig.from_model_config(model_config)
+    inherited = getattr(config, "stop_strings", None)
+    return _validate_stop_strings(inherited, inherited=True)
+
+
+class _GeneratedTextStop:
+    """Match cumulative new-token decode, withholding possible marker prefixes."""
+
+    def __init__(self, tokenizer, markers, floor):
+        self.tokenizer = tokenizer
+        self.markers = tuple(markers)
+        self.floor = floor
+        self.text = ""
+        self.emitted = ""
+        self.stopped = False
+
+    def observe(self, token_ids):
+        self.text = self.tokenizer.decode(token_ids, skip_special_tokens=True)
+        if not isinstance(self.text, str):
+            raise StopStringError("stop string decoding must return text")
+        matches = [index for marker in self.markers
+                   if (index := self.text.find(marker)) >= 0]
+        if matches:
+            if len(token_ids) < self.floor:
+                raise MinimumNewTokensError("stop string conflicts with min_new_tokens")
+            self.text = self.text[:min(matches)]
+            self.stopped = True
+        return self.stopped
+
+    def take(self, *, final=False):
+        text = self.text
+        if not self.stopped and not final:
+            hold = max((size for marker in self.markers
+                        for size in range(1, min(len(marker), len(text) + 1))
+                        if text.endswith(marker[:size])), default=0)
+            # A held-only rewrite can move a possible marker prefix into text
+            # already emitted. Withhold only the remaining suffix; a complete
+            # marker crossing that boundary still fails the retraction guard.
+            hold = min(hold, max(0, len(text) - len(self.emitted)))
+            if hold:
+                text = text[:-hold]
+        if not text.startswith(self.emitted):
+            raise StopStringError("stop string streaming cannot retract emitted decoded text")
+        chunk = text[len(self.emitted):]
+        self.emitted = text
+        return chunk
+
+
+class _GeneratedTextStopCriteria(StoppingCriteria):
+    def __init__(self, matcher, prompt_length):
+        self.matcher = matcher
+        self.prompt_length = prompt_length
+        self.calls = 0
+
+    def __call__(self, input_ids, scores, **kwargs):
+        if input_ids.shape[0] != 1:
+            raise StopStringError("stop strings require one generated sequence")
+        self.calls += 1
+        matched = self.matcher.observe(input_ids[0, self.prompt_length:].tolist())
+        return torch.tensor([matched], device=input_ids.device, dtype=torch.bool)
+
+
+def _prepare_native_stop(request_model, tokenizer, stop_strings, kwargs, floor):
+    for name in ("generate", "_prepare_generation_config", "_sample", "_get_stopping_criteria"):
+        if getattr(getattr(request_model, name, None), "__func__", None) is not getattr(GenerationMixin, name):
+            raise StopStringError(f"stop strings require canonical Transformers {name}")
+    if type(request_model.generation_config) is not GenerationConfig:
+        raise StopStringError("stop strings require standard Transformers GenerationConfig")
+    request_model.generation_config = copy.deepcopy(request_model.generation_config)
+    provided = kwargs.pop("generation_config", None)
+    if stop_strings is not None:
+        kwargs["stop_strings"] = list(stop_strings)
+    try:
+        config, model_kwargs = request_model._prepare_generation_config(provided, **kwargs)
+    except ValueError as exc:
+        raise StopStringError(f"stop strings cannot use this generation configuration: {exc}") from exc
+    config = copy.deepcopy(config)
+    markers = _validate_stop_strings(config.stop_strings, inherited=True)
+    if not markers:
+        return {**model_kwargs, "generation_config": config, "use_model_defaults": False}, None
+    if (config.get_generation_mode() not in (GenerationMode.SAMPLE, GenerationMode.GREEDY_SEARCH)
+            or config.num_return_sequences != 1 or config.return_dict_in_generate
+            or model_kwargs["input_ids"].shape[0] != 1):
+        raise StopStringError("stop strings support single-sequence greedy/sampling generation only")
+    # Our generated-only criterion owns matching; the HF tokenizer-wide default
+    # would also match prompt/generated boundaries and duplicate stop semantics.
+    config.stop_strings = None
+    matcher = _GeneratedTextStop(tokenizer, markers, floor or 0)
+    criterion = _GeneratedTextStopCriteria(matcher, model_kwargs["input_ids"].shape[-1])
+    existing = model_kwargs.pop("stopping_criteria", [])
+    return {**model_kwargs, "generation_config": config, "use_model_defaults": False,
+            "stopping_criteria": StoppingCriteriaList([*existing, criterion])}, criterion
 
 
 class _SeededSampling:
@@ -76,7 +200,8 @@ def _prepare_seeded_native(request_model, sampling, kwargs):
     # The native resolver also handles legacy model.config defaults. Resolve on
     # the request copy, then pass that exact configuration back to generate.
     request_model.generation_config = copy.deepcopy(request_model.generation_config)
-    config, model_kwargs = request_model._prepare_generation_config(None, **kwargs)
+    provided = kwargs.pop("generation_config", None)
+    config, model_kwargs = request_model._prepare_generation_config(provided, **kwargs)
     mode = config.get_generation_mode()
     if mode not in (GenerationMode.SAMPLE, GenerationMode.GREEDY_SEARCH):
         raise SeedSamplingError(f"seed does not support native generation mode {mode}")
@@ -152,7 +277,8 @@ class _CheckedRepetitionPenalty:
         return adjusted
 
 
-def _generate_native_checked(model, *, minimum_to_enforce=None, sampling=None, **kwargs):
+def _generate_native_checked(model, *, minimum_to_enforce=None, sampling=None,
+                             stop_tokenizer=None, stop_strings=None, stop_result=None, **kwargs):
     """Guard native repetition in place without changing resident model state.
 
     Public custom processors run after sanitizers and masks in Transformers.
@@ -170,6 +296,11 @@ def _generate_native_checked(model, *, minimum_to_enforce=None, sampling=None, *
     if request_model is model or not callable(getattr(request_model, "_get_logits_processor", None)):
         raise RepetitionPenaltyNumericsError(
             "native repetition checking requires the Transformers logits processor builder")
+    stop_criterion = None
+    if stop_tokenizer is not None and _resolve_stop_strings(model, stop_strings):
+        kwargs, stop_criterion = _prepare_native_stop(
+            request_model, stop_tokenizer, stop_strings, kwargs, minimum_to_enforce)
+        penalty = _resolve_repetition_penalty(request_model, kwargs["generation_config"].repetition_penalty)
     entered = None
     if sampling is not None:
         kwargs, entered, mode = _prepare_seeded_native(request_model, sampling, kwargs)
@@ -205,6 +336,10 @@ def _generate_native_checked(model, *, minimum_to_enforce=None, sampling=None, *
     if not built or (penalty != 1.0 and not any(guard.calls for guard in checked)):
         raise RepetitionPenaltyNumericsError(
             "native generation bypassed repetition checking")
+    if stop_criterion is not None and not stop_criterion.calls:
+        raise StopStringError("native generation bypassed stop string checking")
+    if stop_criterion is not None and stop_result is not None:
+        stop_result.append(stop_criterion.matcher)
     return outputs
 
 
@@ -466,7 +601,7 @@ def _continue_sdar_cached(model, tokenizer, device, formatted_prompt,
 
 def _generate_autoregressive(model, tokenizer, device, formatted_prompt,
                              max_tokens, temperature, top_p, top_k=None, repetition_penalty=None,
-                             min_new_tokens=None, sampling=None):
+                             min_new_tokens=None, sampling=None, stop_strings=None):
     """Generate a complete response using standard autoregressive decoding.
 
     Args:
@@ -483,6 +618,7 @@ def _generate_autoregressive(model, tokenizer, device, formatted_prompt,
     """
     if min_new_tokens is not None:
         _resolve_min_new_tokens(model, min_new_tokens, max_tokens)
+    _resolve_stop_strings(model, stop_strings)
     inputs = tokenizer(formatted_prompt, return_tensors="pt").to(device)
 
     resolved_top_k = _resolve_top_k(model, top_k)
@@ -503,17 +639,23 @@ def _generate_autoregressive(model, tokenizer, device, formatted_prompt,
             gen_kwargs["repetition_penalty"] = resolved_penalty
         if min_new_tokens is not None:
             gen_kwargs["min_new_tokens"] = min_new_tokens
-        outputs = _generate_native_checked(model, sampling=sampling, **inputs, **gen_kwargs)
+        stop_result = []
+        outputs = _generate_native_checked(model, sampling=sampling, stop_tokenizer=tokenizer,
+                                           stop_strings=stop_strings, stop_result=stop_result,
+                                           **inputs, **gen_kwargs)
 
     input_len = inputs["input_ids"].shape[1]
     generated = outputs[0][input_len:]
-    return tokenizer.decode(generated, skip_special_tokens=True)
+    text = tokenizer.decode(generated, skip_special_tokens=True)
+    # Use the matcher from the exact resolved request configuration, including
+    # legacy native defaults, rather than resolving the resident defaults again.
+    return stop_result[0].text if stop_result else text
 
 
 def _generate_autoregressive_streaming(model, tokenizer, device,
                                        formatted_prompt, max_tokens,
                                        temperature, top_p, top_k=None, repetition_penalty=None,
-                                       min_new_tokens=None, sampling=None):
+                                       min_new_tokens=None, sampling=None, stop_strings=None):
     """Generate tokens one at a time for streaming output.
 
     Args:
@@ -529,6 +671,8 @@ def _generate_autoregressive_streaming(model, tokenizer, device,
         Dicts with {"mode": "append", "text": ...} for each token.
     """
     floor = _resolve_min_new_tokens(model, min_new_tokens, max_tokens)
+    markers = _resolve_stop_strings(model, stop_strings)
+    matcher = _GeneratedTextStop(tokenizer, markers, floor) if markers else None
     inputs = tokenizer(formatted_prompt, return_tensors="pt").to(device)
     input_ids = inputs["input_ids"]
     eos_ids = _eos_ids(tokenizer)
@@ -538,6 +682,7 @@ def _generate_autoregressive_streaming(model, tokenizer, device,
     penalty_processor = _CheckedRepetitionPenalty(RepetitionPenaltyLogitsProcessor(
         _resolve_repetition_penalty(model, repetition_penalty)))
 
+    generated_ids = []
     for _ in range(max_tokens):
         with torch.no_grad():
             outputs = model(input_ids)
@@ -550,7 +695,20 @@ def _generate_autoregressive_streaming(model, tokenizer, device,
         if next_token.item() in eos_ids:
             break
 
-        token_str = tokenizer.decode(next_token[0], skip_special_tokens=True)
-        yield {"mode": "append", "text": token_str}
+        if matcher is None:
+            token_str = tokenizer.decode(next_token[0], skip_special_tokens=True)
+            yield {"mode": "append", "text": token_str}
+        else:
+            generated_ids.append(int(next_token.item()))
+            matcher.observe(generated_ids)
+            chunk = matcher.take()
+            if chunk:
+                yield {"mode": "append", "text": chunk}
+            if matcher.stopped:
+                return
 
         input_ids = torch.cat([input_ids, next_token], dim=-1)
+    if matcher is not None:
+        chunk = matcher.take(final=True)
+        if chunk:
+            yield {"mode": "append", "text": chunk}

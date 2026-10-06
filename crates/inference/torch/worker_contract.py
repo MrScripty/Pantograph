@@ -18,7 +18,7 @@ CLEAR_KV_CACHE_OPERATION = "clear_kv_cache"
 SAVE_KV_CACHE_OPERATION = "save_kv_cache"
 RESTORE_KV_CACHE_OPERATION = "restore_kv_cache"
 TRUNCATE_KV_CACHE_OPERATION = "truncate_kv_cache"
-ALLOWED_TRANSFORMERS_GENERATE_KWARGS = {"top_k", "repetition_penalty", "min_new_tokens", "seed"}
+ALLOWED_TRANSFORMERS_GENERATE_KWARGS = {"top_k", "repetition_penalty", "min_new_tokens", "seed", "stop_strings"}
 CAUSAL_LM_LOADER = "causal_lm"
 AUTOMATIC_SPEECH_RECOGNITION_LOADER = "automatic_speech_recognition"
 SUPPORTED_TRANSFORMERS_LOADERS = {
@@ -236,6 +236,12 @@ def generate_text_kwargs_from_envelope(envelope, expected_operation=GENERATE_TEX
         raise ValueError(
             f"PyTorch worker generate_text transformers_kwargs contains unsupported key(s): {joined}"
         )
+
+    if "stop_strings" in transformers_kwargs:
+        markers = transformers_kwargs["stop_strings"]
+        if (not isinstance(markers, list) or not markers
+                or any(not isinstance(marker, str) or not marker for marker in markers)):
+            raise ValueError("stop_strings must be a non-empty list of non-empty strings")
 
     if "seed" in transformers_kwargs:
         seed = transformers_kwargs["seed"]

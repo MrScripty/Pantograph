@@ -102,5 +102,14 @@
   "value_type": { "category": "scalar", "kind": "u64" },
   "options": { "kind": "none" },
   "availability": { "status": "available" }
+},
+{
+  "port_id": "stop",
+  "label": "Stop string",
+  "direction": "input",
+  "requirement": "optional",
+  "value_type": { "category": "scalar", "kind": "string" },
+  "options": { "kind": "none" },
+  "availability": { "status": "available" }
 }
 ]
