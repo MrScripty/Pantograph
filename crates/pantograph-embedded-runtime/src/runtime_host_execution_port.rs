@@ -2428,6 +2428,18 @@ mod tests {
             ),
         ] {
             let mut request = runtime_host_batch_request_fixture();
+            for member in &mut request.members {
+                member.materialized_inputs.extend([
+                    RuntimeHostExecutionInput {
+                        port_id: "num_images_per_prompt".into(),
+                        value: RuntimeHostExecutionInputValue::U64(3),
+                    },
+                    RuntimeHostExecutionInput {
+                        port_id: "denoising_scheduler".into(),
+                        value: RuntimeHostExecutionInputValue::String("euler".into()),
+                    },
+                ]);
+            }
             request.members[0]
                 .materialized_inputs
                 .push(RuntimeHostExecutionInput {
@@ -2478,6 +2490,20 @@ mod tests {
             RuntimeHostExecutionInputValue::F64(serde_json::Number::from_f64(3.0).unwrap()),
         ] {
             let mut request = runtime_host_batch_request_fixture();
+            for member in &mut request.members {
+                member.materialized_inputs.extend([
+                    RuntimeHostExecutionInput {
+                        port_id: "guidance_scale".into(),
+                        value: RuntimeHostExecutionInputValue::F64(
+                            serde_json::Number::from_f64(7.5).unwrap(),
+                        ),
+                    },
+                    RuntimeHostExecutionInput {
+                        port_id: "denoising_scheduler".into(),
+                        value: RuntimeHostExecutionInputValue::String("euler".into()),
+                    },
+                ]);
+            }
             request.members[0]
                 .materialized_inputs
                 .push(RuntimeHostExecutionInput {
@@ -2526,6 +2552,20 @@ mod tests {
             RuntimeHostExecutionInputValue::U64(3),
         ] {
             let mut request = runtime_host_batch_request_fixture();
+            for member in &mut request.members {
+                member.materialized_inputs.extend([
+                    RuntimeHostExecutionInput {
+                        port_id: "guidance_scale".into(),
+                        value: RuntimeHostExecutionInputValue::F64(
+                            serde_json::Number::from_f64(7.5).unwrap(),
+                        ),
+                    },
+                    RuntimeHostExecutionInput {
+                        port_id: "num_images_per_prompt".into(),
+                        value: RuntimeHostExecutionInputValue::U64(3),
+                    },
+                ]);
+            }
             request.members[0]
                 .materialized_inputs
                 .push(RuntimeHostExecutionInput {

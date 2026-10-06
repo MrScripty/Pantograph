@@ -613,9 +613,13 @@ fn scheduler_worker_envelopes_use_closed_choices_and_preserve_resident_default()
                 if batch {
                     for member in envelope["payload"]["members"].as_array_mut().unwrap() {
                         member["request"]["denoising_scheduler"] = value.clone();
+                        member["request"]["guidance_scale"] = serde_json::json!(7.5);
+                        member["request"]["num_images_per_prompt"] = serde_json::json!(3);
                     }
                 } else {
                     envelope["payload"]["denoising_scheduler"] = value;
+                    envelope["payload"]["guidance_scale"] = serde_json::json!(7.5);
+                    envelope["payload"]["num_images_per_prompt"] = serde_json::json!(3);
                 }
                 let operation = if batch {
                     "generate_image_batch_from_envelope"
@@ -635,6 +639,23 @@ fn scheduler_worker_envelopes_use_closed_choices_and_preserve_resident_default()
                 assert_eq!(
                     last.get_item(0).unwrap().extract::<String>().unwrap(),
                     expected
+                );
+                let kwargs = last.get_item(1).unwrap();
+                assert_eq!(
+                    kwargs
+                        .get_item("guidance_scale")
+                        .unwrap()
+                        .extract::<f64>()
+                        .unwrap(),
+                    7.5
+                );
+                assert_eq!(
+                    kwargs
+                        .get_item("num_images_per_prompt")
+                        .unwrap()
+                        .extract::<u32>()
+                        .unwrap(),
+                    3
                 );
             }
         }

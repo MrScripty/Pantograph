@@ -130,6 +130,13 @@ async fn graph_authored_image_scheduler_flows_through_public_session_and_pumas_h
     }
 }
 
+#[tokio::test]
+async fn combined_image_controls_flow_through_public_session_with_reviewed_runtime_owner() {
+    for (guidance, scheduler) in [(0.0, "ddim"), (7.5, "euler")] {
+        production_embedded_image_workflow(Some(guidance), Some(3), Some(scheduler)).await;
+    }
+}
+
 async fn production_embedded_image_workflow(
     guidance: Option<f64>,
     image_count: Option<u32>,
