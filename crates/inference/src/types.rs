@@ -59,6 +59,8 @@ pub struct ChatRequest {
     pub repetition_penalty: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub seed: Option<u64>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub stop: Vec<String>,
 }
 
 /// Canonical task execution request consumed by future typed backend paths.
@@ -99,6 +101,7 @@ impl InferenceExecutionRequest {
             || request.top_k.is_some()
             || request.repetition_penalty.is_some()
             || request.seed.is_some()
+            || !request.stop.is_empty()
         {
             Some(GenerationOptions {
                 length: crate::model_contracts::LengthGenerationOptions {
@@ -112,6 +115,10 @@ impl InferenceExecutionRequest {
                     top_k: request.top_k,
                     repetition_penalty: request.repetition_penalty,
                     seed: request.seed,
+                },
+                stopping: crate::model_contracts::StoppingGenerationOptions {
+                    stop_strings: request.stop,
+                    ..Default::default()
                 },
                 ..Default::default()
             })
@@ -2406,6 +2413,28 @@ mod tests {
     }
 
     #[test]
+    fn chat_stop_maps_exact_strings_and_preserves_omission() {
+        for stop in [
+            Vec::new(),
+            vec!["終わり🛑".to_owned()],
+            vec!["  END\n".to_owned(), " ".to_owned()],
+        ] {
+            let mut wire = serde_json::json!({"model": "stop-chat", "messages": [{"role": "user", "content": [{"type": "text", "text": "Hi"}]}], "stream": true});
+            if !stop.is_empty() {
+                wire["stop"] = serde_json::json!(stop);
+            }
+            let chat: ChatRequest = serde_json::from_str(&wire.to_string()).unwrap();
+            assert_eq!(chat.stop, stop);
+            assert_eq!(serde_json::to_value(&chat).unwrap(), wire);
+            let typed = InferenceExecutionRequest::from_openai_chat_request(None, chat);
+            assert_eq!(typed.generation_options.is_some(), !stop.is_empty());
+            if let Some(options) = typed.generation_options {
+                assert_eq!(options.stopping.stop_strings, stop);
+            }
+        }
+    }
+
+    #[test]
     fn typed_execution_request_maps_openai_chat_at_edge_and_validates() {
         let request = ChatRequest {
             model: "tiny-chat".to_string(),
@@ -2423,6 +2452,7 @@ mod tests {
             top_k: Some(40),
             repetition_penalty: Some(1.2),
             seed: Some(42),
+            stop: Vec::new(),
         };
 
         let typed = InferenceExecutionRequest::from_openai_chat_request(

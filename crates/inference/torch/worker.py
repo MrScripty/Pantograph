@@ -40,6 +40,8 @@ from block_diffusion import _generate_dllm_masked, _generate_dllm_masked_streami
 from autoregressive import (
     MinimumNewTokensError,
     SeedSamplingError,
+    StopStringError,
+    _resolve_stop_strings,
     _seeded_sampling,
     RepetitionPenaltyNumericsError,
     _generate_native_checked,
@@ -1856,6 +1858,10 @@ def generate(prompt, system_prompt=None, max_tokens=512, temperature=0.7, top_p=
         raise RuntimeError("No model loaded. Call load_model() first.")
 
     sampling = _seeded_sampling(kwargs.get("seed"))
+    stops = _resolve_stop_strings(_model, kwargs.get("stop_strings"))
+    if stops and _model_type == "dllm":
+        raise StopStringError("stop strings do not support SDAR or masked block-diffusion generation")
+    stop_kwargs = {"stop_strings": kwargs["stop_strings"]} if "stop_strings" in kwargs else {}
 
     # Masked prompt routing for dLLM models
     if masked_prompt_json is not None and _model_type == "dllm":
@@ -1896,6 +1902,7 @@ def generate(prompt, system_prompt=None, max_tokens=512, temperature=0.7, top_p=
         _model, _tokenizer, _device, formatted, max_tokens, temperature, top_p,
         top_k=top_k, repetition_penalty=repetition_penalty, min_new_tokens=min_new_tokens,
         sampling=sampling,
+        **stop_kwargs,
     )
 
 
@@ -1913,6 +1920,10 @@ def generate_tokens(prompt, system_prompt=None, max_tokens=512, temperature=0.7,
         raise RuntimeError("No model loaded. Call load_model() first.")
 
     sampling = _seeded_sampling(kwargs.get("seed"))
+    stops = _resolve_stop_strings(_model, kwargs.get("stop_strings"))
+    if stops and _model_type == "dllm":
+        raise StopStringError("stop strings do not support SDAR or masked block-diffusion generation")
+    stop_kwargs = {"stop_strings": kwargs["stop_strings"]} if "stop_strings" in kwargs else {}
 
     # Masked prompt streaming routing for dLLM models
     if masked_prompt_json is not None and _model_type == "dllm":
@@ -1954,6 +1965,7 @@ def generate_tokens(prompt, system_prompt=None, max_tokens=512, temperature=0.7,
             _model, _tokenizer, _device, formatted, max_tokens, temperature, top_p,
             top_k=top_k, repetition_penalty=repetition_penalty, min_new_tokens=min_new_tokens,
             sampling=sampling,
+            **stop_kwargs,
         )
 
 

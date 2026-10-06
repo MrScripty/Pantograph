@@ -50,6 +50,8 @@ autoregressive = types.ModuleType("autoregressive")
 autoregressive.RepetitionPenaltyNumericsError = ValueError
 autoregressive.MinimumNewTokensError = ValueError
 autoregressive.SeedSamplingError = ValueError
+autoregressive.StopStringError = ValueError
+autoregressive._resolve_stop_strings = lambda model, authored: authored or []
 autoregressive._seeded_sampling = lambda seed: None if seed is None else types.SimpleNamespace(seed=seed)
 autoregressive._resolve_min_new_tokens = lambda model, authored, maximum: authored or 0
 for attr in [

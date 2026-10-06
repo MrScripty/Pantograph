@@ -79,6 +79,8 @@ autoregressive = types.ModuleType("autoregressive")
 autoregressive.RepetitionPenaltyNumericsError = ValueError
 autoregressive.MinimumNewTokensError = ValueError
 autoregressive.SeedSamplingError = ValueError
+autoregressive.StopStringError = ValueError
+autoregressive._resolve_stop_strings = lambda model, authored: authored or []
 autoregressive._seeded_sampling = lambda seed: None if seed is None else types.SimpleNamespace(seed=seed)
 autoregressive._resolve_min_new_tokens = lambda model, authored, maximum: authored or 0
 for attr in [
@@ -2686,6 +2688,7 @@ fn test_pytorch_temperature_keeps_zero_and_finite_f32_range_in_worker_envelopes(
                     top_k: Some(0),
                     repetition_penalty: None,
                     seed: None,
+                    stop_strings: Vec::new(),
                     masked_prompt_json: None,
                 },
             );
@@ -2741,6 +2744,7 @@ fn test_pytorch_top_p_preserves_unit_interval_in_generate_and_stream_envelopes()
                         top_k: Some(0),
                         repetition_penalty: None,
                         seed: None,
+                        stop_strings: Vec::new(),
                         masked_prompt_json: None,
                     },
                 );
@@ -2796,6 +2800,7 @@ fn test_pytorch_repetition_penalty_preserves_positive_values_in_generate_and_str
                         top_k: Some(0),
                         repetition_penalty: Some(repetition_penalty),
                         seed: None,
+                        stop_strings: Vec::new(),
                         masked_prompt_json: None,
                     },
                 );
@@ -2849,6 +2854,7 @@ fn test_pytorch_generate_text_request_threads_top_k_as_transformers_kwarg() {
         top_k: Some(20),
         repetition_penalty: None,
         seed: None,
+        stop_strings: Vec::new(),
         masked_prompt_json: None,
     });
 
@@ -2872,6 +2878,7 @@ fn test_pytorch_generate_text_envelopes_thread_top_k_for_generate_and_stream() {
             top_k: Some(33),
             repetition_penalty: None,
             seed: None,
+            stop_strings: Vec::new(),
             masked_prompt_json: None,
         },
     );
@@ -2888,6 +2895,7 @@ fn test_pytorch_generate_text_envelopes_thread_top_k_for_generate_and_stream() {
             top_k: Some(33),
             repetition_penalty: None,
             seed: None,
+            stop_strings: Vec::new(),
             masked_prompt_json: None,
         },
     );
@@ -2926,6 +2934,7 @@ fn test_pytorch_generate_text_top_k_keeps_zero_and_u32_max_in_worker_envelopes()
                     top_k: Some(top_k),
                     repetition_penalty: None,
                     seed: None,
+                    stop_strings: Vec::new(),
                     masked_prompt_json: None,
                 },
             );
@@ -2966,6 +2975,7 @@ fn test_pytorch_generate_text_envelope_rejects_unscoped_transformers_kwargs() {
             top_k: None,
             repetition_penalty: None,
             seed: None,
+            stop_strings: Vec::new(),
             masked_prompt_json: None,
         },
     );
@@ -2998,6 +3008,7 @@ fn test_pytorch_generate_text_stream_envelope_rejects_policy_transformers_kwargs
             top_k: None,
             repetition_penalty: None,
             seed: None,
+            stop_strings: Vec::new(),
             masked_prompt_json: None,
         },
     );
@@ -3055,6 +3066,7 @@ fn test_pytorch_generate_text_request_omits_absent_top_k_kwarg() {
         top_k: None,
         repetition_penalty: None,
         seed: None,
+        stop_strings: Vec::new(),
         masked_prompt_json: None,
     });
 
@@ -6196,6 +6208,7 @@ sys.modules['transformers'] = types.ModuleType('transformers')
 sys.modules['transformers'].GenerationConfig = type('GenerationConfig', (), {})
 sys.modules['transformers'].GenerationMixin = type('GenerationMixin', (), {})
 sys.modules['transformers.generation.configuration_utils'] = types.SimpleNamespace(GenerationMode=types.SimpleNamespace(SAMPLE='sample', GREEDY_SEARCH='greedy_search'))
+sys.modules['transformers.generation.stopping_criteria'] = types.SimpleNamespace(StoppingCriteria=object, StoppingCriteriaList=list)
 sys.modules['transformers.cache_utils'] = types.SimpleNamespace(DynamicCache=type('DynamicCache', (), {}))
 sys.modules['transformers.generation.logits_process'] = types.SimpleNamespace(RepetitionPenaltyLogitsProcessor=object, MinNewTokensLengthLogitsProcessor=object)", None, None).unwrap();
             let worker = super::pytorch_worker::worker_module(py).unwrap();
@@ -6580,6 +6593,7 @@ sys.modules['transformers'] = types.ModuleType('transformers')
 sys.modules['transformers'].GenerationConfig = type('GenerationConfig', (), {})
 sys.modules['transformers'].GenerationMixin = type('GenerationMixin', (), {})
 sys.modules['transformers.generation.configuration_utils'] = types.SimpleNamespace(GenerationMode=types.SimpleNamespace(SAMPLE='sample', GREEDY_SEARCH='greedy_search'))
+sys.modules['transformers.generation.stopping_criteria'] = types.SimpleNamespace(StoppingCriteria=object, StoppingCriteriaList=list)
 sys.modules['transformers.cache_utils'] = types.SimpleNamespace(DynamicCache=type('DynamicCache', (), {}))
 sys.modules['transformers.generation.logits_process'] = types.SimpleNamespace(RepetitionPenaltyLogitsProcessor=object, MinNewTokensLengthLogitsProcessor=object)", None, None).unwrap();
             let worker = super::pytorch_worker::worker_module(py).unwrap();
@@ -6765,6 +6779,7 @@ fn named_text_request(prompt: &str) -> crate::PyTorchTextGenerationRequest {
         top_k: Some(40),
         repetition_penalty: None,
         seed: None,
+        stop_strings: Vec::new(),
         masked_prompt_json: Some("{\"prompt\":\"masked\"}".to_string()),
     }
 }
@@ -7031,6 +7046,7 @@ fn test_pytorch_seed_preserves_omission_and_u64_boundaries_in_both_worker_operat
                     top_k: None,
                     repetition_penalty: None,
                     seed,
+                    stop_strings: Vec::new(),
                     masked_prompt_json: None,
                 },
             );
@@ -7126,5 +7142,90 @@ async fn test_pytorch_chat_refuses_invalid_authored_seed_before_worker_dispatch(
             error.to_string().contains("seed must be an integer"),
             "{error}"
         );
+    }
+}
+
+#[test]
+fn test_pytorch_stop_strings_forward_exactly_and_omit_empty_options_for_both_operations() {
+    for stop_strings in [
+        Vec::new(),
+        vec!["終わり🛑".to_owned()],
+        vec!["  END\n".to_owned(), " ".to_owned()],
+    ] {
+        for operation in [
+            PyTorchWorkerOperation::GenerateText,
+            PyTorchWorkerOperation::GenerateTextStream,
+        ] {
+            let mut request = named_text_request("Explain stops.");
+            request.masked_prompt_json = None;
+            request.stop_strings = stop_strings.clone();
+            let envelope = PyTorchBackend::generate_text_envelope("req-stop", operation, request);
+            PyTorchBackend::validate_generate_text_envelope_operation(&envelope, operation)
+                .unwrap();
+            let expected = (!stop_strings.is_empty()).then(|| serde_json::json!(stop_strings));
+            assert_eq!(
+                envelope.payload.transformers_kwargs.get("stop_strings"),
+                expected.as_ref()
+            );
+            let encoded = serde_json::to_value(&envelope).unwrap();
+            assert_eq!(
+                encoded["payload"]["transformers_kwargs"].get("stop_strings"),
+                expected.as_ref()
+            );
+            let options = GenerationOptions {
+                stopping: StoppingGenerationOptions {
+                    stop_strings: stop_strings.clone(),
+                    ..Default::default()
+                },
+                ..Default::default()
+            };
+            let mapping = PyTorchBackend::transformers_generation_option_mapping(&options);
+            assert_eq!(mapping.kwargs.get("stop_strings"), expected.as_ref());
+            assert_eq!(
+                mapping
+                    .diagnostics
+                    .iter()
+                    .any(
+                        |diagnostic| diagnostic.option_path == "stopping.stop_strings"
+                            && diagnostic.state == OptionSupportState::Mapped
+                    ),
+                !stop_strings.is_empty()
+            );
+        }
+    }
+}
+
+#[test]
+fn test_pytorch_stop_strings_envelope_refuses_invalid_list_before_worker_dispatch() {
+    for invalid in [
+        serde_json::json!("END"),
+        serde_json::json!([]),
+        serde_json::json!([""]),
+        serde_json::json!([1]),
+        serde_json::json!(true),
+        serde_json::Value::Null,
+    ] {
+        for operation in [
+            PyTorchWorkerOperation::GenerateText,
+            PyTorchWorkerOperation::GenerateTextStream,
+        ] {
+            let mut request = named_text_request("Explain stops.");
+            request.masked_prompt_json = None;
+            let mut envelope =
+                PyTorchBackend::generate_text_envelope("req-invalid-stop", operation, request);
+            envelope
+                .payload
+                .transformers_kwargs
+                .insert("stop_strings".into(), invalid.clone());
+            let error =
+                PyTorchBackend::validate_generate_text_envelope_operation(&envelope, operation)
+                    .unwrap_err();
+            assert!(
+                error
+                    .to_string()
+                    .contains("stop_strings must be a nonempty list of nonempty strings"),
+                "{error}"
+            );
+        }
     }
 }

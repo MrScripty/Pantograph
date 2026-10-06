@@ -269,6 +269,13 @@ fn input_ports(task_entry: &TaskRegistryEntry) -> Vec<InferencePortDescriptor> {
                     InferencePortRequirement::Optional,
                     InferenceValueType::Scalar(InferenceScalarType::U64),
                 ),
+                port(
+                    crate::runtime_host_text_execution::STOP_PORT,
+                    "Stop string",
+                    InferencePortDirection::Input,
+                    InferencePortRequirement::Optional,
+                    InferenceValueType::Scalar(InferenceScalarType::String),
+                ),
             ]
         }
         InferenceTaskId::ImageGeneration => vec![
@@ -578,6 +585,7 @@ mod tests {
                 "repetition_penalty",
                 "min_new_tokens",
                 "seed",
+                "stop",
             ]
         );
         for (port_id, scalar_type, min, max, step) in [

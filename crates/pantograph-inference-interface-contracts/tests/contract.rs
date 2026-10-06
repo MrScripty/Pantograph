@@ -43,7 +43,8 @@ fn text_system_prompt_is_optional_string_without_changing_token_limit_or_default
             "top_p",
             "repetition_penalty",
             "min_new_tokens",
-            "seed"
+            "seed",
+            "stop"
         ]
     );
     assert_eq!(ports[0].requirement, InferencePortRequirement::Required);
@@ -918,4 +919,28 @@ fn structured_value_types_are_additive_to_existing_wire_categories() {
         serde_json::json!({"category": "structured", "kind": "tensor"})
     )
     .is_err());
+}
+
+#[test]
+fn text_stop_is_optional_scalar_string_without_a_default_or_new_wire_type() {
+    let ports: Vec<InferencePortDescriptor> = serde_json::from_str(include_str!(
+        "fixtures/text_generation_system_prompt_inputs.json"
+    ))
+    .unwrap();
+    let stop = ports
+        .iter()
+        .find(|port| port.port_id.as_str() == "stop")
+        .unwrap();
+    assert_eq!(stop.label, "Stop string");
+    assert_eq!(
+        stop.value_type,
+        InferenceValueType::Scalar(InferenceScalarType::String)
+    );
+    assert_eq!(stop.requirement, InferencePortRequirement::Optional);
+    assert_eq!(stop.options, InferencePortOptions::None);
+    assert!(stop.default.is_none());
+    stop.validate().unwrap();
+    let decoded: InferencePortDescriptor =
+        serde_json::from_str(&serde_json::to_string(stop).unwrap()).unwrap();
+    assert_eq!(&decoded, stop);
 }
