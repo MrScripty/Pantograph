@@ -1,5 +1,16 @@
 # Execution Ledger
 
+## 2026-10-06 — Canonical single-prompt chat successor
+
+Fresh main `c75fa237` is explicitly composed with separate stop `e570302d` and
+embedding-revision `7be490d7` candidates on `feat/workflow-chat-completion`.
+The [chat report](reports/2026-10-06-workflow-chat-completion.md) records exact
+composition, canonical task/revision constraints, actual local synthetic CPU
+worker and saved public graph qualification, and precancellation/scope limits.
+Independent review, parent publication, live Pumas, pretrained/GPU/desktop and
+post-start native cancellation remain separate. Prior candidates stay preserved;
+no resident/ranking work or PR mutation is included.
+
 ## 2026-09-08 — Plan prepared
 
 - User priorities: coherent maintainable domain architecture, complete current-standards review/remediation, and functional text/image model workflows; execution by GPT-6 Astra medium.

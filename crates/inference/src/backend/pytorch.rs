@@ -1065,6 +1065,11 @@ impl PyTorchBackend {
                         vec![InferenceModality::Text],
                     ),
                     BackendTaskCapability::stable(
+                        InferenceTaskId::ChatCompletion,
+                        vec![InferenceModality::Text],
+                        vec![InferenceModality::Text],
+                    ),
+                    BackendTaskCapability::stable(
                         InferenceTaskId::AudioTranscription,
                         vec![InferenceModality::Audio],
                         vec![InferenceModality::Text],
