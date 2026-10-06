@@ -328,20 +328,16 @@ pub(crate) fn domain_observations(
         })
         .try_fold(Vec::new(), |mut observations, domain| {
             let requested_bytes = claim_bytes(domain, runtime_id, claim)?;
-            let explicitly_zero = domain
-                .bindings
-                .iter()
-                .filter(|binding| binding.runtime_id == runtime_id)
-                .all(|binding| match binding.resource_kind {
-                    RuntimeAdmissionResourceKind::RamBytes => claim.ram_bytes == Some(0),
-                    RuntimeAdmissionResourceKind::VramBytes => claim.vram_bytes == Some(0),
-                });
+            // In an explicit task envelope, omitted kinds carry no task charge.
+            // Resident declarations still distinguish absent estimates from zero.
+            let uncharged =
+                requested_bytes == 0 && (claim.ram_bytes.is_some() || claim.vram_bytes.is_some());
             let reserved_bytes = match reserved_bytes(state, domain, excluded, true) {
                 Ok(bytes) => bytes,
                 Err(RuntimeRegistryError::ModelResidencyResourcesUnavailable { .. })
-                    if explicitly_zero =>
+                    if uncharged =>
                 {
-                    // Zero is authoritative for this request, not for the pool.
+                    // No task charge is authoritative for this request, not the pool.
                     // Omit unavailable totals rather than fabricating free capacity.
                     return Ok(observations);
                 }

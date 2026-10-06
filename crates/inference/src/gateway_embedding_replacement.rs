@@ -147,10 +147,7 @@ impl InferenceGateway {
                 *external = false;
                 *lifecycle = RuntimeLifecycleSnapshot {
                     runtime_id: Some("candle".into()),
-                    runtime_instance_id: Some(format!(
-                        "candle-{}",
-                        sequence.fetch_add(1, Ordering::Relaxed)
-                    )),
+                    runtime_instance_id: Some(allocate_runtime_instance_id(&sequence, "candle")),
                     runtime_reused: outcome.runtime_reused,
                     lifecycle_decision_reason: outcome.lifecycle_decision_reason,
                     active: backend.is_ready(),

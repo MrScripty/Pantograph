@@ -4941,6 +4941,14 @@ impl InferenceBackend for SelectedTextBackend {
             .push(format!("finish:{cancel}"));
         Ok(())
     }
+    async fn load_selected_embedding(
+        &mut self,
+        _: &InferenceExecutionRequest,
+        _: &PumasArtifactLoadTarget,
+        _: &BackendExecutionDecision,
+    ) -> Result<BackendStartOutcome, BackendError> {
+        Ok(BackendStartOutcome::default())
+    }
     async fn chat_completion_stream(
         &self,
         request: String,
@@ -5348,6 +5356,42 @@ async fn ordinary_and_selected_text_loads_never_reuse_an_allocation_generation()
             .as_deref(),
         Some(selected.as_str()),
         "a proved reuse retains the same generation"
+    );
+}
+
+#[tokio::test]
+async fn embedding_replacement_supervisor_cannot_duplicate_a_previous_candle_generation() {
+    let (_directory, request, target, decision) = crate::selected_text_execution::fixture();
+    let mut gateway =
+        InferenceGateway::with_backend(Box::new(SelectedTextBackend::default()), "PyTorch");
+    gateway.registry.register(
+        "candle",
+        Box::new(SelectedTextFactory(SelectedTextBackend::default())),
+    );
+    let previous = gateway.allocate_runtime_instance_id("candle");
+    let backend = gateway.backend.clone().write_owned().await;
+    // Controlled candidate loading isolates the actual supervised retirement/publication
+    // path. This does not execute Candle or validate an embedding model package.
+    let backend = gateway
+        .replace_selected_embedding(
+            backend,
+            request,
+            target,
+            decision,
+            InferenceExecutionCancellationHandle::running(),
+            BackendConfig::default(),
+        )
+        .await
+        .unwrap();
+    drop(backend);
+    let replaced = gateway
+        .runtime_lifecycle_snapshot()
+        .await
+        .runtime_instance_id
+        .unwrap();
+    assert_ne!(
+        previous, replaced,
+        "supervised allocations share the generation rule"
     );
 }
 

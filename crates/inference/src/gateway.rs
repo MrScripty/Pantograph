@@ -64,6 +64,14 @@ mod embedding_replacement;
 const IMAGE_GENERATION_BYTES_PER_RGBA_PIXEL: u64 = 4;
 const MAX_LIFECYCLE_COMPATIBILITY_ISSUES: usize = 32;
 
+fn allocate_runtime_instance_id(sequence: &AtomicU64, runtime_id: &str) -> String {
+    format!(
+        "{}-{}",
+        runtime_id.replace([' ', '.'], "-"),
+        sequence.fetch_add(1, Ordering::Relaxed) + 1
+    )
+}
+
 /// A canonical device candidate advertised by an available backend owner.
 /// This is capability evidence, not a device reservation or a loaded runtime.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -791,13 +799,7 @@ impl InferenceGateway {
     }
 
     fn allocate_runtime_instance_id(&self, runtime_id: &str) -> String {
-        format!(
-            "{}-{}",
-            runtime_id.replace([' ', '.'], "-"),
-            self.runtime_instance_sequence
-                .fetch_add(1, Ordering::Relaxed)
-                + 1
-        )
+        allocate_runtime_instance_id(&self.runtime_instance_sequence, runtime_id)
     }
 
     async fn record_start_result(
