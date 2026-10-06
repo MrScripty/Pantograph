@@ -29,7 +29,7 @@ use crate::scheduler::{
 
 use super::runtime_branch_run_finalization::{
     completed_scheduler_run_response, finalize_started_runtime_task_dispatch,
-    scheduler_task_attempt_terminal_diagnostic_event,
+    log_native_runtime_dispatch_error, scheduler_task_attempt_terminal_diagnostic_event,
     WorkflowRuntimeTaskDispatchFinalizationOutcome,
     WorkflowSchedulerTaskAttemptDiagnosticAttribution,
     WorkflowSchedulerTaskAttemptTerminalDiagnosticRequest,
@@ -948,6 +948,25 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
             let mut preselection = match preselection {
                 Ok(preselection) => preselection,
                 Err(error) => {
+                    if let Some(scheduler_error) = error.scheduler_selection_error() {
+                        log_native_runtime_dispatch_error(
+                            "runtime_dispatch_selection_failed",
+                            &started_runtime_task,
+                            scheduler_error,
+                        );
+                    } else if std::env::var_os("PANTOGRAPH_NATIVE_CPU_EVIDENCE_DIR").is_some() {
+                        log::warn!(
+                            "dependency_bootstrap_diagnostic {}",
+                            serde_json::json!({
+                                "phase": "runtime_dispatch_selection_failed",
+                                "workflow_run_id": workflow_run_id,
+                                "task_id": task_id,
+                                "attempt_id": started_runtime_task.attempt_id().as_str(),
+                                "error_message": error.to_string(),
+                                "typed_error": format!("{error:?}"),
+                            })
+                        );
+                    }
                     let Some(scheduler_error) = error.scheduler_selection_error() else {
                         return Err(runtime_dispatch_preselection_invalid_request(error));
                     };

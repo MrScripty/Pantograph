@@ -133,6 +133,20 @@ pub(super) async fn finalize_started_runtime_task_dispatch(
 ) -> Result<WorkflowRuntimeTaskDispatchFinalizationOutcome, WorkflowServiceError> {
     match dispatch_result {
         Ok(result) => {
+            if std::env::var_os("PANTOGRAPH_NATIVE_CPU_EVIDENCE_DIR").is_some() {
+                log::info!(
+                    "dependency_bootstrap_diagnostic {}",
+                    serde_json::json!({
+                        "phase": "runtime_task_result_received",
+                        "workflow_run_id": workflow_run_id,
+                        "task_id": started_runtime_task.task().task_id,
+                        "attempt_id": started_runtime_task.attempt_id().as_str(),
+                        "status": result.status,
+                        "diagnostics": result.diagnostics,
+                        "output_count": result.outputs.len(),
+                    })
+                );
+            }
             let terminal_mutation = {
                 let mut store = service.session_store_guard()?;
                 service
@@ -181,6 +195,11 @@ pub(super) async fn finalize_started_runtime_task_dispatch(
             Ok(WorkflowRuntimeTaskDispatchFinalizationOutcome::Completed)
         }
         Err(error) => {
+            log_native_runtime_dispatch_error(
+                "runtime_dispatch_failed",
+                started_runtime_task,
+                &error,
+            );
             if let WorkflowSchedulerTaskOrchestratorError::RuntimeTaskSupervisorCancelled {
                 message,
             } = &error
@@ -390,7 +409,7 @@ pub(super) fn record_scheduler_task_attempt_terminal(
     } = input;
     let attribution =
         scheduler_task_attempt_diagnostic_attribution(service, task.workflow_run_id.as_str())?;
-    service.workflow_diagnostic_event_record(scheduler_task_attempt_terminal_diagnostic_event(
+    let event = scheduler_task_attempt_terminal_diagnostic_event(
         WorkflowSchedulerTaskAttemptTerminalDiagnosticRequest {
             task,
             attempt_id,
@@ -402,7 +421,19 @@ pub(super) fn record_scheduler_task_attempt_terminal(
             terminal_mutation,
             attribution,
         },
-    )?)?;
+    )?;
+    if std::env::var_os("PANTOGRAPH_NATIVE_CPU_EVIDENCE_DIR").is_some() {
+        log::info!(
+            "dependency_bootstrap_diagnostic {}",
+            serde_json::json!({
+                "phase": "scheduler_task_attempt_terminal_event_produced",
+                "workflow_run_id": task.workflow_run_id,
+                "task_id": task.task_id,
+                "event_payload": event.payload,
+            })
+        );
+    }
+    service.workflow_diagnostic_event_record(event)?;
     Ok(())
 }
 
@@ -471,6 +502,41 @@ fn active_run_scheduler_task_state_required(
                 workflow_run_id
             ))
         })
+}
+
+// Qualification-only diagnostics: retain typed error details without logging
+// runtime requests, task inputs/outputs, or selection task intents/trait values.
+pub(super) fn log_native_runtime_dispatch_error(
+    phase: &str,
+    started: &StartedRuntimeTaskExecution,
+    error: &WorkflowSchedulerTaskOrchestratorError,
+) {
+    if std::env::var_os("PANTOGRAPH_NATIVE_CPU_EVIDENCE_DIR").is_none() {
+        return;
+    }
+    let detail = match error {
+        WorkflowSchedulerTaskOrchestratorError::RuntimeDispatchSelectionNoSelection(selection) => {
+            serde_json::json!({"selection_state": selection.state, "diagnostics": selection.diagnostics})
+        }
+        _ => serde_json::json!({"typed_error": format!("{error:?}")}),
+    };
+    let mut source_chain = Vec::new();
+    let mut source: Option<&dyn std::error::Error> = Some(error);
+    while let Some(cause) = source {
+        source_chain.push(cause.to_string());
+        source = cause.source();
+    }
+    log::warn!(
+        "dependency_bootstrap_diagnostic {}",
+        serde_json::json!({
+            "phase": phase,
+            "workflow_run_id": started.task().workflow_run_id,
+            "task_id": started.task().task_id,
+            "attempt_id": started.attempt_id().as_str(),
+            "source_chain": source_chain,
+            "detail": detail,
+        })
+    );
 }
 
 fn ensure_all_scheduler_tasks_completed(
