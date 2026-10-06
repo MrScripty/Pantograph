@@ -41,9 +41,13 @@ placement, shared backing/capacity and comparable timing evidence.
 
 The [bounded integration checkpoint](reports/2026-10-06-runtime-owner-integration-readiness.md)
 combines both owner successors with approved main through ordinary merges. The
-full suites retain the alias-selection fixture and warmup-timeout failures; the
-descriptor repair arrives from main. Review, failure disposition and any PR action
-remain with the parent. Work stops after this checkpoint.
+historical checkpoint records its two suite failures; the descriptor repair
+arrives from main. Owner-authorized resumption produced the
+[tested integration successor and draft review packet](reports/2026-10-06-runtime-owner-integration-successor.md):
+canonical backend registration and real-owner abandoned warmup cleanup now pass
+all affected library/host suites. The unrelated retired Pumas wire fixture remains
+reported. Parent coordinates PR publication, review and merge; native GPU,
+exact-model and GTK qualification limits remain unchanged.
 
 **Acceptance status:** `blocked`
 
