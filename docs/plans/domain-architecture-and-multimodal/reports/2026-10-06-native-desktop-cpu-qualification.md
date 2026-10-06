@@ -692,3 +692,27 @@ device/resource and loader decisions remain with their existing owners. Native
 acceptance is still pending one actual saved/reopened GUI submission, automatic
 resume of that same scoped run, and retained CPU output. Pending alone cannot
 pass; no GPU, pretrained or broad production-loader claim is made.
+
+## Native authoritative resolution captured; output still blocked
+
+[Run 37530472028](https://github.com/MrScripty/Pantograph/actions/runs/37530472028)
+executes `fffe5342a29f903136186f79de67c99cd32d7711`, tree
+`5adc052e54363307373dc43e915cc21055ea1c8a`. App build and eight startup
+tests pass. At 21:10:44.529Z/537Z the actual Pumas owner returns valid resolved
+empty bindings for the same candle/linux-x86_64 model scope. The authoritative
+resolution route is now exercised; post-resolution seed/admission is not yet
+captured. The same queued run remains dependency_readiness_pending with zero
+outputs in 61 observations over 120 seconds.
+
+The harness also has a concrete response-shape error: the inspection DTO does
+not contain io_artifacts. Rows require the public workflow_io_artifact_query.
+Its final failure is Cannot read properties of undefined (reading 'some').
+That test error is preserved and does not explain or erase zero actual output.
+Correct the harness and capture the post-resolution seed/admission transition
+before proposing another production repair. The [complete sixteenth-attempt
+evidence](../evidence/native-desktop-cpu/cold-typed-discovery/pumas-bootstrap-repair/native-attempt/README.md)
+preserves all 23 members, full masked job log and 13 actual records. Artifact
+11445275701 SHA256 is
+235b9d8ad91030c375eccf1b6124f9a031907664be2cef379148a44f07e53d3a.
+Native CPU output, GPU, pretrained models and broad loader qualification remain
+unqualified.

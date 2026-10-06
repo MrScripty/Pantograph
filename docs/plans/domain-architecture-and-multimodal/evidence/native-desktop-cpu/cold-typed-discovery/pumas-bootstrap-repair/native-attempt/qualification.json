@@ -1,0 +1,15 @@
+{
+  "executed_head": "fffe5342a29f903136186f79de67c99cd32d7711",
+  "executed_tree": "5adc052e54363307373dc43e915cc21055ea1c8a",
+  "run_id": 37530472028,
+  "job_id": 112498248639,
+  "artifact_id": 11445275701,
+  "artifact_sha256": "235b9d8ad91030c375eccf1b6124f9a031907664be2cef379148a44f07e53d3a",
+  "native_build": "passed",
+  "startup_tests_passed": 8,
+  "native_owner_requirements_resolution": "resolved_empty",
+  "post_resolution_admission": "uncaptured",
+  "retained_output_count": 0,
+  "gui_test": "failed_inspection_dto_has_no_io_artifacts",
+  "cpu_output_qualification": "incomplete"
+}
