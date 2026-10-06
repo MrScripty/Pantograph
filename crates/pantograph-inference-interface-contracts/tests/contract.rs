@@ -40,7 +40,9 @@ fn text_system_prompt_is_optional_string_without_changing_token_limit_or_default
             "system_prompt",
             "top_k",
             "temperature",
-            "top_p"
+            "top_p",
+            "repetition_penalty",
+            "min_new_tokens"
         ]
     );
     assert_eq!(ports[0].requirement, InferencePortRequirement::Required);
@@ -161,6 +163,70 @@ fn text_top_p_is_optional_zero_inclusive_unit_interval_without_a_default() {
     );
     assert!(top_p.default.is_none());
     top_p.validate().unwrap();
+}
+#[test]
+fn text_repetition_penalty_is_optional_positive_finite_without_a_default() {
+    let ports: Vec<InferencePortDescriptor> = serde_json::from_str(include_str!(
+        "fixtures/text_generation_system_prompt_inputs.json"
+    ))
+    .unwrap();
+    let repetition_penalty = ports
+        .iter()
+        .find(|port| port.port_id.as_str() == "repetition_penalty")
+        .unwrap();
+    assert_eq!(repetition_penalty.direction, InferencePortDirection::Input);
+    assert_eq!(
+        repetition_penalty.requirement,
+        InferencePortRequirement::Optional
+    );
+    assert_eq!(
+        repetition_penalty.value_type,
+        InferenceValueType::Scalar(InferenceScalarType::F64)
+    );
+    assert_eq!(
+        repetition_penalty.options,
+        InferencePortOptions::NumericRange {
+            range: pantograph_inference_interface_contracts::InferenceNumericRange {
+                min: f64::from(f32::from_bits(1)),
+                max: f64::from(f32::MAX),
+                step: None,
+                default: None,
+            },
+        }
+    );
+    assert!(repetition_penalty.default.is_none());
+    repetition_penalty.validate().unwrap();
+}
+
+#[test]
+fn text_min_new_tokens_is_optional_zero_inclusive_u32_without_a_default() {
+    let ports: Vec<InferencePortDescriptor> = serde_json::from_str(include_str!(
+        "fixtures/text_generation_system_prompt_inputs.json"
+    ))
+    .unwrap();
+    let minimum = ports
+        .iter()
+        .find(|port| port.port_id.as_str() == "min_new_tokens")
+        .unwrap();
+    assert_eq!(minimum.direction, InferencePortDirection::Input);
+    assert_eq!(minimum.requirement, InferencePortRequirement::Optional);
+    assert_eq!(
+        minimum.value_type,
+        InferenceValueType::Scalar(InferenceScalarType::U64)
+    );
+    assert_eq!(
+        minimum.options,
+        InferencePortOptions::NumericRange {
+            range: pantograph_inference_interface_contracts::InferenceNumericRange {
+                min: 0.0,
+                max: f64::from(u32::MAX),
+                step: Some(1.0),
+                default: None,
+            },
+        }
+    );
+    assert!(minimum.default.is_none());
+    minimum.validate().unwrap();
 }
 
 #[test]

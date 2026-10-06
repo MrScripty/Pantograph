@@ -36,6 +36,9 @@ impl<'a> SelectedTextLoad<'a> {
         request
             .validate()
             .map_err(|error| invalid(error.to_string()))?;
+        request
+            .validate_text_min_new_tokens_budget(crate::constants::pytorch::DEFAULT_MAX_NEW_TOKENS)
+            .map_err(|error| invalid(error.to_string()))?;
         if request
             .request_id
             .as_deref()

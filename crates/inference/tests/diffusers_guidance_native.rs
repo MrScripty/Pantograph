@@ -78,8 +78,10 @@ print(f"native_guidance_torch={torch.__version__}; diffusers={diffusers.__versio
 "#,
         )
         .unwrap();
-        py.run(&source, None, None)
-            .expect("actual CPU denoising must preserve guidance semantics");
+        if let Err(error) = py.run(&source, None, None) {
+            error.print(py);
+            panic!("actual CPU denoising must preserve guidance semantics");
+        }
     });
 }
 
@@ -130,8 +132,10 @@ for count in [1, 3]:
     assert not torch.equal(result.images[0], result.images[count])
 print(f'native_image_count_torch={torch.__version__}; diffusers={diffusers.__version__}; device=cpu; counts=1,3; pretrained_models=0', flush=True)
 "#).unwrap();
-        py.run(&source, Some(&locals), Some(&locals))
-            .expect("actual worker kwargs and CPU pipeline preserve image count and seed order");
+        if let Err(error) = py.run(&source, Some(&locals), Some(&locals)) {
+            error.print(py);
+            panic!("actual worker kwargs and CPU pipeline preserve image count and seed order");
+        }
     });
 }
 
@@ -156,6 +160,9 @@ fn actual_cpu_diffusers_scheduler_override_matches_explicit_pipeline_without_res
             .unwrap();
         let source = CString::new(r#"
 import copy
+import sys
+import threading
+from concurrent.futures import ThreadPoolExecutor
 import torch
 import diffusers
 from diffusers import DDIMScheduler, EulerDiscreteScheduler, StableDiffusionPipeline, UNet2DConditionModel
@@ -173,26 +180,55 @@ original_config = dict(pipeline.config)
 outputs = {}
 for choice, scheduler_type in [('ddim', DDIMScheduler), ('euler', EulerDiscreteScheduler)]:
     seen = []
-    original_step = scheduler_type.step
-    def observed_step(self, *args, **kwargs):
-        seen.append(type(self).__name__)
-        return original_step(self, *args, **kwargs)
-    scheduler_type.step = observed_step
+    owned_schedulers = []
+    foreign_calls = []
+    step_code = scheduler_type.step.__code__
+    owner_thread = threading.get_ident()
+    def foreign_steps():
+        scheduler = scheduler_type.from_config(original.config)
+        scheduler.set_timesteps(2)
+        sample = torch.ones(1,4,4,4)
+        calls = 0
+        for timestep in scheduler.timesteps:
+            scheduler.scale_model_input(sample, timestep)
+            sample = scheduler.step(torch.zeros_like(sample), timestep, sample).prev_sample
+            calls += 1
+        assert torch.isfinite(sample).all()
+        return threading.get_ident(), calls
+    def observe_step(frame, event, arg):
+        if event == 'call' and frame.f_code is step_code:
+            scheduler = frame.f_locals.get('self')
+            if type(scheduler) is scheduler_type:
+                assert threading.get_ident() == owner_thread
+                assert scheduler is not original
+                seen.append(type(scheduler).__name__)
+                owned_schedulers.append(scheduler)
+                if len(seen) == 1:
+                    # Finish actual same-class steps in another thread while
+                    # observation is installed. A class patch would count them.
+                    with ThreadPoolExecutor(max_workers=1) as executor:
+                        foreign_calls.append(executor.submit(foreign_steps).result())
+    previous_profile = sys.getprofile()
+    kwargs = dict(prompt_embeds=torch.ones(2,2,4), latents=torch.ones(4,4,4,4), num_images_per_prompt=2,
+        num_inference_steps=2, guidance_scale=1.0, output_type='latent')
+    sys.setprofile(observe_step)
     try:
-        kwargs = dict(prompt_embeds=torch.ones(2,2,4), latents=torch.ones(4,4,4,4), num_images_per_prompt=2,
-            num_inference_steps=2, guidance_scale=1.0, output_type='latent')
         actual = call_diffusion_pipeline(pipeline, kwargs, choice)
-        assert seen == [scheduler_type.__name__]*2
-        assert pipeline.scheduler is original and dict(pipeline.config) == original_config
-        oracle = copy.copy(pipeline)
-        oracle.scheduler = scheduler_type.from_config(original.config)
-        assert oracle.unet is pipeline.unet
-        expected = oracle(**kwargs)
-        torch.testing.assert_close(actual.images, expected.images, rtol=0, atol=0)
-        assert torch.isfinite(actual.images).all()
-        outputs[choice] = actual.images
     finally:
-        scheduler_type.step = original_step
+        sys.setprofile(previous_profile)
+    assert sys.getprofile() is previous_profile
+    assert seen == [scheduler_type.__name__]*2
+    assert len(foreign_calls) == 1 and foreign_calls[0][0] != owner_thread
+    assert foreign_calls[0][1] == 2
+    assert owned_schedulers[0] is owned_schedulers[1]
+    assert pipeline.scheduler is original and dict(pipeline.config) == original_config
+    oracle = copy.copy(pipeline)
+    oracle.scheduler = scheduler_type.from_config(original.config)
+    assert oracle.unet is pipeline.unet
+    expected = oracle(**kwargs)
+    torch.testing.assert_close(actual.images, expected.images, rtol=0, atol=0)
+    assert torch.isfinite(actual.images).all()
+    outputs[choice] = actual.images
 assert not torch.equal(outputs['ddim'], outputs['euler'])
 kwargs = dict(prompt_embeds=torch.ones(1,2,4), latents=torch.ones(1,4,4,4),
     num_inference_steps=2, guidance_scale=1.0, output_type='latent')
@@ -211,8 +247,11 @@ else: raise AssertionError('invalid pipeline call unexpectedly succeeded')
 assert pipeline.scheduler is original and dict(pipeline.config) == original_config
 print(f'native_scheduler_torch={torch.__version__}; diffusers={diffusers.__version__}; choices=ddim,euler; device=cpu; pretrained_models=0', flush=True)
 "#).unwrap();
-        py.run(&source, Some(&locals), Some(&locals)).expect(
-            "actual scheduler override preserves resident defaults and equals the native oracle",
-        );
+        if let Err(error) = py.run(&source, Some(&locals), Some(&locals)) {
+            error.print(py);
+            panic!(
+                "actual scheduler override preserves resident defaults and equals the native oracle"
+            );
+        }
     });
 }

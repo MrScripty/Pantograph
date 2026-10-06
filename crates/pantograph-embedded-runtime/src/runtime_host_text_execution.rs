@@ -19,6 +19,8 @@ pub(crate) const SYSTEM_PROMPT_PORT: &str = "system_prompt";
 pub(crate) const TOP_K_PORT: &str = "top_k";
 pub(crate) const TEMPERATURE_PORT: &str = "temperature";
 pub(crate) const TOP_P_PORT: &str = "top_p";
+pub(crate) const REPETITION_PENALTY_PORT: &str = "repetition_penalty";
+pub(crate) const MIN_NEW_TOKENS_PORT: &str = "min_new_tokens";
 pub(crate) const MAX_TEXT_BYTES: usize = 1024;
 
 /// Owned inputs for the canonical selected-text inference call.
@@ -60,10 +62,11 @@ pub(crate) fn validate_runtime_host_text_generation_request(
         .as_ref()
         .ok_or(RuntimeHostTextGenerationProjectionError::MissingDispatchDecision)?;
     validate_supported_inputs(request)?;
-    optional_max_new_tokens(request)?;
+    validate_min_new_tokens_budget(request)?;
     optional_top_k(request)?;
     optional_temperature(request)?;
     optional_top_p(request)?;
+    optional_repetition_penalty(request)?;
     optional_system_prompt(request)?;
     let prompt = required_prompt(request)?;
     if prompt.trim().is_empty() {
@@ -305,6 +308,8 @@ fn validate_supported_inputs(
             TOP_K_PORT,
             TEMPERATURE_PORT,
             TOP_P_PORT,
+            REPETITION_PENALTY_PORT,
+            MIN_NEW_TOKENS_PORT,
         ]
         .contains(&input.port_id.as_str())
         {
@@ -366,6 +371,47 @@ fn optional_top_k(
         .transpose()
 }
 
+fn optional_min_new_tokens(
+    request: &RuntimeHostExecutionRequest,
+) -> Result<Option<u32>, RuntimeHostTextGenerationProjectionError> {
+    request
+        .materialized_inputs
+        .iter()
+        .find(|input| input.port_id == MIN_NEW_TOKENS_PORT)
+        .map(|input| {
+            match input.value {
+                RuntimeHostExecutionInputValue::U64(value) => u32::try_from(value).ok(),
+                RuntimeHostExecutionInputValue::I64(value) => u32::try_from(value).ok(),
+                _ => {
+                    return Err(RuntimeHostTextGenerationProjectionError::InvalidInputType {
+                        port_id: MIN_NEW_TOKENS_PORT,
+                        expected: "integer",
+                    })
+                }
+            }
+            .ok_or(RuntimeHostTextGenerationProjectionError::InvalidMinNewTokens)
+        })
+        .transpose()
+}
+
+fn validate_min_new_tokens_budget(
+    request: &RuntimeHostExecutionRequest,
+) -> Result<(), RuntimeHostTextGenerationProjectionError> {
+    let maximum = optional_max_new_tokens(request)?
+        .unwrap_or(inference::constants::pytorch::DEFAULT_MAX_NEW_TOKENS);
+    if let Some(minimum) = optional_min_new_tokens(request)? {
+        if minimum > maximum {
+            return Err(
+                RuntimeHostTextGenerationProjectionError::MinNewTokensExceedsBudget {
+                    minimum,
+                    maximum,
+                },
+            );
+        }
+    }
+    Ok(())
+}
+
 fn optional_temperature(
     request: &RuntimeHostExecutionRequest,
 ) -> Result<Option<f32>, RuntimeHostTextGenerationProjectionError> {
@@ -385,6 +431,17 @@ fn optional_top_p(
         TOP_P_PORT,
         0.0..=1.0,
         RuntimeHostTextGenerationProjectionError::InvalidTopP,
+    )
+}
+
+fn optional_repetition_penalty(
+    request: &RuntimeHostExecutionRequest,
+) -> Result<Option<f32>, RuntimeHostTextGenerationProjectionError> {
+    optional_sampling_number(
+        request,
+        REPETITION_PENALTY_PORT,
+        f32::from_bits(1)..=f32::MAX,
+        RuntimeHostTextGenerationProjectionError::InvalidRepetitionPenalty,
     )
 }
 
@@ -424,21 +481,31 @@ fn optional_generation_options(
     request: &RuntimeHostExecutionRequest,
 ) -> Result<Option<GenerationOptions>, RuntimeHostTextGenerationProjectionError> {
     let max_new_tokens = optional_max_new_tokens(request)?;
+    let min_new_tokens = optional_min_new_tokens(request)?;
     let top_k = optional_top_k(request)?;
     let temperature = optional_temperature(request)?;
     let top_p = optional_top_p(request)?;
-    if max_new_tokens.is_none() && top_k.is_none() && temperature.is_none() && top_p.is_none() {
+    let repetition_penalty = optional_repetition_penalty(request)?;
+    if max_new_tokens.is_none()
+        && min_new_tokens.is_none()
+        && top_k.is_none()
+        && temperature.is_none()
+        && top_p.is_none()
+        && repetition_penalty.is_none()
+    {
         return Ok(None);
     }
     Ok(Some(GenerationOptions {
         length: LengthGenerationOptions {
             max_new_tokens,
+            min_new_tokens,
             ..LengthGenerationOptions::default()
         },
         sampling: SamplingGenerationOptions {
             top_k,
             temperature,
             top_p,
+            repetition_penalty,
             ..SamplingGenerationOptions::default()
         },
         ..GenerationOptions::default()
@@ -477,12 +544,20 @@ pub(crate) enum RuntimeHostTextGenerationProjectionError {
     MissingRequiredInput { port_id: &'static str },
     #[error("runtime-host text input 'max_new_tokens' must be between 1 and 4294967295")]
     InvalidMaxNewTokens,
+    #[error("runtime-host text input 'min_new_tokens' must be between 0 and 4294967295")]
+    InvalidMinNewTokens,
+    #[error(
+        "runtime-host text min_new_tokens {minimum} exceeds effective max_new_tokens {maximum}"
+    )]
+    MinNewTokensExceedsBudget { minimum: u32, maximum: u32 },
     #[error("runtime-host text input 'top_k' must be between 0 and 4294967295")]
     InvalidTopK,
     #[error("runtime-host text input 'temperature' must be a nonnegative finite number representable by the generation f32 contract without losing authored precision")]
     InvalidTemperature,
     #[error("runtime-host text input 'top_p' must be between 0 and 1, retaining authored precision in the generation f32 contract")]
     InvalidTopP,
+    #[error("runtime-host text input 'repetition_penalty' must be positive and finite, retaining authored precision in the generation f32 contract")]
+    InvalidRepetitionPenalty,
     #[error("runtime-host text execution prompt must not be blank")]
     BlankPrompt,
     #[error("runtime-host text input '{port_id}' must be {expected}")]
@@ -1068,6 +1143,252 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn invalid_repetition_penalty_fails_host_execution_before_recording_gateway_calls() {
+        for (value, expected) in [
+            (
+                RuntimeHostExecutionInputValue::I64(-1),
+                "repetition_penalty' must be positive and finite",
+            ),
+            (
+                RuntimeHostExecutionInputValue::F64(
+                    serde_json::Number::from_f64(f64::MAX).unwrap(),
+                ),
+                "repetition_penalty' must be positive and finite",
+            ),
+            (
+                RuntimeHostExecutionInputValue::F64(serde_json::Number::from_f64(1e-100).unwrap()),
+                "repetition_penalty' must be positive and finite",
+            ),
+            (
+                RuntimeHostExecutionInputValue::F64(
+                    serde_json::Number::from_f64(0.7000000000000001).unwrap(),
+                ),
+                "repetition_penalty' must be positive and finite",
+            ),
+            (
+                RuntimeHostExecutionInputValue::F64(serde_json::Number::from_f64(0.0).unwrap()),
+                "repetition_penalty' must be positive and finite",
+            ),
+            (
+                RuntimeHostExecutionInputValue::String("40".into()),
+                "repetition_penalty' must be finite number",
+            ),
+            (
+                RuntimeHostExecutionInputValue::Bool(true),
+                "repetition_penalty' must be finite number",
+            ),
+        ] {
+            let mut request = text_request_fixture();
+            request.materialized_inputs.push(RuntimeHostExecutionInput {
+                port_id: REPETITION_PENALTY_PORT.into(),
+                value,
+            });
+            let validated =
+                ValidatedRuntimeHostExecutionRequest::try_from(request.clone()).unwrap();
+            let package_facts = text_package_facts(&validated);
+            let directory = tempfile::tempdir().unwrap();
+            let target = text_load_target(&package_facts, &directory);
+            let backend = TextBackend::default();
+            let calls = backend.calls.clone();
+            let recorded = backend.requests.clone();
+            let port = crate::runtime_host_execution_port::EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
+                Arc::new(TextLoadTargetResolver { target }),
+                Arc::new(TextPackageFactsResolver { package_facts }),
+                Arc::new(UnusedTextMediaSink),
+                Arc::new(inference::InferenceGateway::with_backend(Box::new(backend), "PyTorch")),
+            );
+            let cancellation =
+                pantograph_runtime_host_contracts::RuntimeHostExecutionCancellationHandle::running(
+                    request.cancellation_context.clone(),
+                );
+            let response = port
+                .execute_runtime_host_request(request, cancellation)
+                .await
+                .unwrap();
+            assert_eq!(response.state, RuntimeHostExecutionState::Rejected);
+            assert!(response.outputs.is_empty());
+            assert!(
+                response
+                    .diagnostics
+                    .iter()
+                    .any(|diagnostic| diagnostic.message.contains(expected)),
+                "{:?}",
+                response.diagnostics
+            );
+            assert!(calls.lock().unwrap().is_empty());
+            assert!(recorded.lock().unwrap().is_empty());
+        }
+    }
+
+    #[tokio::test]
+    async fn min_new_tokens_reaches_actual_host_gateway_with_zero_omission_and_budget_boundary() {
+        for (minimum, maximum) in [
+            (None, None),
+            (Some(0), None),
+            (Some(3), Some(3)),
+            (
+                Some(inference::constants::pytorch::DEFAULT_MAX_NEW_TOKENS),
+                None,
+            ),
+            (Some(u32::MAX), Some(u32::MAX)),
+        ] {
+            let mut request = text_request_fixture();
+            for (port_id, value) in [
+                (MIN_NEW_TOKENS_PORT, minimum),
+                (MAX_NEW_TOKENS_PORT, maximum),
+            ] {
+                if let Some(value) = value {
+                    request.materialized_inputs.push(RuntimeHostExecutionInput {
+                        port_id: port_id.into(),
+                        value: RuntimeHostExecutionInputValue::U64(u64::from(value)),
+                    });
+                }
+            }
+            request.materialized_inputs.push(RuntimeHostExecutionInput {
+                port_id: TEMPERATURE_PORT.into(),
+                value: RuntimeHostExecutionInputValue::I64(0),
+            });
+            let validated =
+                ValidatedRuntimeHostExecutionRequest::try_from(request.clone()).unwrap();
+            let package_facts = text_package_facts(&validated);
+            let directory = tempfile::tempdir().unwrap();
+            let target = text_load_target(&package_facts, &directory);
+            let projection = project_runtime_host_text_generation(
+                &validated,
+                package_facts.clone(),
+                target.clone(),
+            )
+            .unwrap();
+            assert_eq!(
+                projection
+                    .request()
+                    .generation_options
+                    .as_ref()
+                    .unwrap()
+                    .length
+                    .min_new_tokens,
+                minimum
+            );
+            let backend = TextBackend::default();
+            let recorded = backend.requests.clone();
+            let port = crate::runtime_host_execution_port::EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
+                Arc::new(TextLoadTargetResolver { target }), Arc::new(TextPackageFactsResolver { package_facts }),
+                Arc::new(UnusedTextMediaSink), Arc::new(inference::InferenceGateway::with_backend(Box::new(backend), "PyTorch")),
+            );
+            let cancellation =
+                pantograph_runtime_host_contracts::RuntimeHostExecutionCancellationHandle::running(
+                    request.cancellation_context.clone(),
+                );
+            let response = port
+                .execute_runtime_host_request(request, cancellation)
+                .await
+                .unwrap();
+            assert_eq!(response.state, RuntimeHostExecutionState::Completed);
+            let recorded = recorded.lock().unwrap();
+            assert_eq!(recorded.len(), 1);
+            assert_eq!(
+                recorded[0].get("min_new_tokens"),
+                minimum.map(serde_json::Value::from).as_ref()
+            );
+            assert_eq!(
+                recorded[0].get("max_tokens"),
+                maximum.map(serde_json::Value::from).as_ref()
+            );
+            assert_eq!(recorded[0]["temperature"], serde_json::json!(0.0));
+        }
+    }
+
+    #[tokio::test]
+    async fn min_new_tokens_invalid_shape_or_budget_refuses_host_before_backend_effects() {
+        for (value, maximum, expected) in [
+            (
+                RuntimeHostExecutionInputValue::I64(-1),
+                None,
+                "must be between 0",
+            ),
+            (
+                RuntimeHostExecutionInputValue::U64(u64::from(u32::MAX) + 1),
+                None,
+                "must be between 0",
+            ),
+            (
+                RuntimeHostExecutionInputValue::String("3".into()),
+                None,
+                "must be integer",
+            ),
+            (
+                RuntimeHostExecutionInputValue::Bool(true),
+                None,
+                "must be integer",
+            ),
+            (
+                RuntimeHostExecutionInputValue::F64(serde_json::Number::from_f64(3.0).unwrap()),
+                None,
+                "must be integer",
+            ),
+            (
+                RuntimeHostExecutionInputValue::U64(513),
+                None,
+                "exceeds effective max_new_tokens 512",
+            ),
+            (
+                RuntimeHostExecutionInputValue::I64(9),
+                Some(8),
+                "exceeds effective max_new_tokens 8",
+            ),
+            (
+                RuntimeHostExecutionInputValue::U64(0),
+                Some(0),
+                "must be between 1",
+            ),
+        ] {
+            let mut request = text_request_fixture();
+            request.materialized_inputs.push(RuntimeHostExecutionInput {
+                port_id: MIN_NEW_TOKENS_PORT.into(),
+                value,
+            });
+            if let Some(maximum) = maximum {
+                request.materialized_inputs.push(RuntimeHostExecutionInput {
+                    port_id: MAX_NEW_TOKENS_PORT.into(),
+                    value: RuntimeHostExecutionInputValue::U64(maximum),
+                });
+            }
+            let validated =
+                ValidatedRuntimeHostExecutionRequest::try_from(request.clone()).unwrap();
+            let package_facts = text_package_facts(&validated);
+            let directory = tempfile::tempdir().unwrap();
+            let target = text_load_target(&package_facts, &directory);
+            let backend = TextBackend::default();
+            let calls = backend.calls.clone();
+            let recorded = backend.requests.clone();
+            let port = crate::runtime_host_execution_port::EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
+                Arc::new(TextLoadTargetResolver { target }), Arc::new(TextPackageFactsResolver { package_facts }),
+                Arc::new(UnusedTextMediaSink), Arc::new(inference::InferenceGateway::with_backend(Box::new(backend), "PyTorch")),
+            );
+            let cancellation =
+                pantograph_runtime_host_contracts::RuntimeHostExecutionCancellationHandle::running(
+                    request.cancellation_context.clone(),
+                );
+            let response = port
+                .execute_runtime_host_request(request, cancellation)
+                .await
+                .unwrap();
+            assert_eq!(response.state, RuntimeHostExecutionState::Rejected);
+            assert!(response.outputs.is_empty());
+            assert!(
+                response
+                    .diagnostics
+                    .iter()
+                    .any(|diagnostic| diagnostic.message.contains(expected)),
+                "{:?}",
+                response.diagnostics
+            );
+            assert!(calls.lock().unwrap().is_empty());
+            assert!(recorded.lock().unwrap().is_empty());
+        }
+    }
+
+    #[tokio::test]
     async fn temperature_reaches_recording_gateway_with_optional_existing_controls() {
         for temperature in [None, Some(0.0), Some(0.7), Some(2.0), Some(f32::MAX)] {
             for companion_controls in [false, true] {
@@ -1235,6 +1556,117 @@ mod tests {
                 assert_eq!(
                     json.get("top_p"),
                     top_p
+                        .map(|value| serde_json::from_str::<serde_json::Value>(
+                            &serde_json::to_string(&value).unwrap()
+                        )
+                        .unwrap())
+                        .as_ref()
+                );
+                assert_eq!(
+                    json.get("temperature"),
+                    companion_controls
+                        .then_some(serde_json::json!(0.0))
+                        .as_ref()
+                );
+                assert_eq!(
+                    json.get("top_k"),
+                    companion_controls.then_some(serde_json::json!(0)).as_ref()
+                );
+                assert_eq!(
+                    json.get("max_tokens"),
+                    companion_controls
+                        .then_some(serde_json::json!(128))
+                        .as_ref()
+                );
+                if companion_controls {
+                    assert_eq!(
+                        json["messages"][0]["content"][0]["text"],
+                        "  image prompt\n"
+                    );
+                }
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn repetition_penalty_reaches_recording_gateway_with_optional_existing_controls() {
+        for repetition_penalty in [None, Some(0.5), Some(1.0), Some(1.2), Some(f32::MAX)] {
+            for companion_controls in [false, true] {
+                let mut request = text_request_fixture();
+                if let Some(value) = repetition_penalty {
+                    request.materialized_inputs.push(RuntimeHostExecutionInput {
+                        port_id: REPETITION_PENALTY_PORT.into(),
+                        value: RuntimeHostExecutionInputValue::F64(
+                            serde_json::Number::from_f64(f64::from(value)).unwrap(),
+                        ),
+                    });
+                }
+                if companion_controls {
+                    request.materialized_inputs.extend([
+                        RuntimeHostExecutionInput {
+                            port_id: TEMPERATURE_PORT.into(),
+                            value: RuntimeHostExecutionInputValue::F64(
+                                serde_json::Number::from_f64(0.0).unwrap(),
+                            ),
+                        },
+                        RuntimeHostExecutionInput {
+                            port_id: TOP_K_PORT.into(),
+                            value: RuntimeHostExecutionInputValue::U64(0),
+                        },
+                        RuntimeHostExecutionInput {
+                            port_id: MAX_NEW_TOKENS_PORT.into(),
+                            value: RuntimeHostExecutionInputValue::U64(128),
+                        },
+                        RuntimeHostExecutionInput {
+                            port_id: SYSTEM_PROMPT_PORT.into(),
+                            value: RuntimeHostExecutionInputValue::String(
+                                "  image prompt\n".into(),
+                            ),
+                        },
+                    ]);
+                }
+                let validated =
+                    ValidatedRuntimeHostExecutionRequest::try_from(request.clone()).unwrap();
+                let package_facts = text_package_facts(&validated);
+                let directory = tempfile::tempdir().unwrap();
+                let target = text_load_target(&package_facts, &directory);
+                let projection = project_runtime_host_text_generation(
+                    &validated,
+                    package_facts.clone(),
+                    target.clone(),
+                )
+                .unwrap();
+                let options = projection.request().generation_options.as_ref();
+                assert_eq!(
+                    options.is_some(),
+                    repetition_penalty.is_some() || companion_controls
+                );
+                assert_eq!(
+                    options.and_then(|options| options.sampling.repetition_penalty),
+                    repetition_penalty
+                );
+                assert_eq!(
+                    options.and_then(|options| options.sampling.temperature),
+                    companion_controls.then_some(0.0)
+                );
+                let backend = TextBackend::default();
+                let recorded = backend.requests.clone();
+                let port = crate::runtime_host_execution_port::EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
+                    Arc::new(TextLoadTargetResolver { target }), Arc::new(TextPackageFactsResolver { package_facts }),
+                    Arc::new(UnusedTextMediaSink), Arc::new(inference::InferenceGateway::with_backend(Box::new(backend), "PyTorch")),
+                );
+                let cancellation = pantograph_runtime_host_contracts::RuntimeHostExecutionCancellationHandle::running(request.cancellation_context.clone());
+                let response = port
+                    .execute_runtime_host_request(request, cancellation)
+                    .await
+                    .unwrap();
+                assert_eq!(response.state, RuntimeHostExecutionState::Completed);
+                let recorded = recorded.lock().unwrap();
+                assert_eq!(recorded.len(), 1);
+                let json = &recorded[0];
+                assert_eq!(
+                    json.get("repetition_penalty"),
+                    repetition_penalty
                         .map(|value| serde_json::from_str::<serde_json::Value>(
                             &serde_json::to_string(&value).unwrap()
                         )

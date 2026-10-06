@@ -1,0 +1,31 @@
+   Compiling pantograph-managed-dependencies v0.1.0 (/workspace/Pantograph-text-main-composition/crates/pantograph-managed-dependencies)
+   Compiling pantograph-runtime-registry v0.1.0 (/workspace/Pantograph-text-main-composition/crates/pantograph-runtime-registry)
+   Compiling pantograph-media-conversion v0.1.0 (/workspace/Pantograph-text-main-composition/crates/pantograph-media-conversion)
+   Compiling pantograph-dependency-planning v0.1.0 (/workspace/Pantograph-text-main-composition/crates/pantograph-dependency-planning)
+   Compiling pantograph-timing-contracts v0.1.0 (/workspace/Pantograph-text-main-composition/crates/pantograph-timing-contracts)
+   Compiling inference v0.1.0 (/workspace/Pantograph-text-main-composition/crates/inference)
+    Finished `test` profile [unoptimized] target(s) in 14.82s
+     Running tests/diffusers_guidance_native.rs (/workspace/pantograph-cache/text-main-composition-target/debug/deps/diffusers_guidance_native-17a7cde6231728a2)
+
+running 3 tests
+test actual_cpu_diffusers_scheduler_override_matches_explicit_pipeline_without_resident_mutation ... FAILED
+native_image_count_torch=2.14.1+cpu; diffusers=0.39.0; device=cpu; counts=1,3; pretrained_models=0
+test actual_cpu_diffusers_multiple_images_match_worker_batch_shape_and_seed_order ... ok
+native_guidance_torch=2.14.1+cpu; diffusers=0.39.0; device=cpu; cases=6; pretrained_models=0
+test actual_cpu_diffusers_guidance_matches_conditional_noise_oracle ... ok
+
+failures:
+
+---- actual_cpu_diffusers_scheduler_override_matches_explicit_pipeline_without_resident_mutation stdout ----
+
+thread 'actual_cpu_diffusers_scheduler_override_matches_explicit_pipeline_without_resident_mutation' (186291) panicked at crates/inference/tests/diffusers_guidance_native.rs:214:55:
+actual scheduler override preserves resident defaults and equals the native oracle: PyErr { type: <class 'AssertionError'>, value: AssertionError(), traceback: Some(<traceback object at 0x7f989b522040>) }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    actual_cpu_diffusers_scheduler_override_matches_explicit_pipeline_without_resident_mutation
+
+test result: FAILED. 2 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.75s
+
+error: test failed, to rerun pass `-p inference --test diffusers_guidance_native`

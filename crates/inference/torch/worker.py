@@ -38,6 +38,10 @@ if _self_path.parent.is_dir():
 
 from block_diffusion import _generate_dllm_masked, _generate_dllm_masked_streaming
 from autoregressive import (
+    MinimumNewTokensError,
+    RepetitionPenaltyNumericsError,
+    _generate_native_checked,
+    _resolve_min_new_tokens,
     _generate_autoregressive,
     _generate_autoregressive_streaming,
     _continue_sdar_cached,
@@ -151,7 +155,8 @@ def shutdown_worker_from_envelope(envelope):
         )
 
 
-def _generate_dllm_autoregressive_safe(formatted_prompt, max_tokens, temperature, top_p, top_k=None):
+def _generate_dllm_autoregressive_safe(formatted_prompt, max_tokens, temperature, top_p,
+                                      top_k=None, repetition_penalty=None, min_new_tokens=None):
     """Generate for TraDo/SDAR via native generate(), with empty-output retry.
 
     Some SDAR exports include chat delimiters in generation_config.eos_token_id,
@@ -159,6 +164,7 @@ def _generate_dllm_autoregressive_safe(formatted_prompt, max_tokens, temperature
     single EOS and a small min_new_tokens floor when that happens.
     """
     global _live_kv_state
+    resolved_minimum = _resolve_min_new_tokens(_model, min_new_tokens, max_tokens)
     if _live_kv_state is not None:
         cached_token_ids = _live_kv_state.get("token_ids")
         cached_cache = _live_kv_state.get("cache")
@@ -175,6 +181,8 @@ def _generate_dllm_autoregressive_safe(formatted_prompt, max_tokens, temperature
                     cached_token_ids,
                     cached_cache,
                     top_k=top_k,
+                    repetition_penalty=repetition_penalty,
+                    min_new_tokens=min_new_tokens,
                 )
                 _live_kv_state = {
                     "token_ids": token_ids,
@@ -184,12 +192,18 @@ def _generate_dllm_autoregressive_safe(formatted_prompt, max_tokens, temperature
                     "device": str(_device) if _device is not None else None,
                 }
                 return text
+            except (RepetitionPenaltyNumericsError, MinimumNewTokensError):
+                # Continuation mutates KV before publishing its matching history.
+                # Drop that uncommitted snapshot, and refuse without fresh retry.
+                clear_live_kv_cache()
+                raise
             except Exception as exc:
                 logger.warning("Live KV reuse failed; falling back to fresh decode: %s", exc)
                 _live_kv_state = None
 
     text, token_ids, cache = _generate_sdar_cached(
-        _model, _tokenizer, _device, formatted_prompt, max_tokens, temperature, top_p, top_k=top_k,
+        _model, _tokenizer, _device, formatted_prompt, max_tokens, temperature, top_p,
+        top_k=top_k, repetition_penalty=repetition_penalty, min_new_tokens=min_new_tokens,
     )
     _live_kv_state = {
         "token_ids": token_ids,
@@ -201,15 +215,25 @@ def _generate_dllm_autoregressive_safe(formatted_prompt, max_tokens, temperature
     if text and text.strip():
         return text
 
+    # The empty SDAR snapshot cannot represent either a failed or native retry.
+    # Clear it before any retry setup/processor can refuse the request.
+    _live_kv_state = None
     logger.warning("Empty dllm decode on SDAR path; retrying with stricter EOS settings")
 
     inputs = _tokenizer(formatted_prompt, return_tensors="pt").to(_device)
     retry_min_new = min(max_tokens, 24)
+    if min_new_tokens is not None:
+        retry_min_new = max(retry_min_new, resolved_minimum)
     eos_id = getattr(_tokenizer, "eos_token_id", None)
     pad_id = getattr(_tokenizer, "pad_token_id", eos_id)
+    retry_kwargs = {}
+    if repetition_penalty is not None:
+        retry_kwargs["repetition_penalty"] = repetition_penalty
 
     with torch.no_grad():
-        outputs = _model.generate(
+        outputs = _generate_native_checked(
+            _model,
+            minimum_to_enforce=min_new_tokens or 0,
             **inputs,
             max_new_tokens=max_tokens,
             min_new_tokens=retry_min_new if retry_min_new > 0 else None,
@@ -219,11 +243,11 @@ def _generate_dllm_autoregressive_safe(formatted_prompt, max_tokens, temperature
             do_sample=temperature > 0,
             eos_token_id=eos_id,
             pad_token_id=pad_id,
+            **retry_kwargs,
         )
 
     input_len = inputs["input_ids"].shape[1]
     generated = outputs[0][input_len:]
-    _live_kv_state = None
     decoded = _tokenizer.decode(generated, skip_special_tokens=True)
     if decoded and decoded.strip():
         return decoded
@@ -1828,6 +1852,10 @@ def generate(prompt, system_prompt=None, max_tokens=512, temperature=0.7, top_p=
 
     # Masked prompt routing for dLLM models
     if masked_prompt_json is not None and _model_type == "dllm":
+        if kwargs.get("repetition_penalty") is not None:
+            raise ValueError("Masked block-diffusion generation does not support repetition_penalty")
+        if kwargs.get("min_new_tokens") is not None:
+            raise ValueError("Masked block-diffusion generation does not support min_new_tokens")
         clear_live_kv_cache()
         mp = json.loads(masked_prompt_json)
         segments = mp.get("segments", [])
@@ -1837,8 +1865,12 @@ def generate(prompt, system_prompt=None, max_tokens=512, temperature=0.7, top_p=
             denoising_steps=denoising_steps, block_length=block_length,
         )
 
+    min_new_tokens = kwargs.get("min_new_tokens")
+    if min_new_tokens is not None:
+        _resolve_min_new_tokens(_model, min_new_tokens, max_tokens)
     formatted = _format_prompt(prompt, system_prompt)
     top_k = kwargs.get("top_k")
+    repetition_penalty = kwargs.get("repetition_penalty")
 
     if _model_type == "dllm":
         # For TraDo/SDAR instruct models in Pantograph, the model's native
@@ -1846,10 +1878,13 @@ def generate(prompt, system_prompt=None, max_tokens=512, temperature=0.7, top_p=
         # experimental custom block-diffusion decode path.
         return _generate_dllm_autoregressive_safe(
             formatted, max_tokens, temperature, top_p, top_k=top_k,
+            repetition_penalty=repetition_penalty,
+            min_new_tokens=min_new_tokens,
         )
     clear_live_kv_cache()
     return _generate_autoregressive(
-        _model, _tokenizer, _device, formatted, max_tokens, temperature, top_p, top_k=top_k,
+        _model, _tokenizer, _device, formatted, max_tokens, temperature, top_p,
+        top_k=top_k, repetition_penalty=repetition_penalty, min_new_tokens=min_new_tokens,
     )
 
 
@@ -1868,6 +1903,10 @@ def generate_tokens(prompt, system_prompt=None, max_tokens=512, temperature=0.7,
 
     # Masked prompt streaming routing for dLLM models
     if masked_prompt_json is not None and _model_type == "dllm":
+        if kwargs.get("repetition_penalty") is not None:
+            raise ValueError("Masked block-diffusion generation does not support repetition_penalty")
+        if kwargs.get("min_new_tokens") is not None:
+            raise ValueError("Masked block-diffusion generation does not support min_new_tokens")
         clear_live_kv_cache()
         mp = json.loads(masked_prompt_json)
         segments = mp.get("segments", [])
@@ -1878,19 +1917,26 @@ def generate_tokens(prompt, system_prompt=None, max_tokens=512, temperature=0.7,
         )
         return
 
+    min_new_tokens = kwargs.get("min_new_tokens")
+    if min_new_tokens is not None:
+        _resolve_min_new_tokens(_model, min_new_tokens, max_tokens)
     formatted = _format_prompt(prompt, system_prompt)
     top_k = kwargs.get("top_k")
+    repetition_penalty = kwargs.get("repetition_penalty")
 
     if _model_type == "dllm":
         # Stream a single final replacement for stability on TraDo/SDAR.
         final_text = _generate_dllm_autoregressive_safe(
             formatted, max_tokens, temperature, top_p, top_k=top_k,
+            repetition_penalty=repetition_penalty,
+            min_new_tokens=min_new_tokens,
         )
         yield {"mode": "replace", "text": final_text}
     else:
         clear_live_kv_cache()
         yield from _generate_autoregressive_streaming(
-            _model, _tokenizer, _device, formatted, max_tokens, temperature, top_p, top_k=top_k,
+            _model, _tokenizer, _device, formatted, max_tokens, temperature, top_p,
+            top_k=top_k, repetition_penalty=repetition_penalty, min_new_tokens=min_new_tokens,
         )
 
 

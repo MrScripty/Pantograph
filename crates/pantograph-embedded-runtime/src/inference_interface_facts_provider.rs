@@ -255,6 +255,12 @@ fn input_ports(task_entry: &TaskRegistryEntry) -> Vec<InferencePortDescriptor> {
                 u32_input_port(crate::runtime_host_text_execution::TOP_K_PORT, "Top k", 0),
                 temperature_input_port(),
                 top_p_input_port(),
+                repetition_penalty_input_port(),
+                u32_input_port(
+                    crate::runtime_host_text_execution::MIN_NEW_TOKENS_PORT,
+                    "Min new tokens",
+                    0,
+                ),
             ]
         }
         InferenceTaskId::ImageGeneration => vec![
@@ -395,6 +401,18 @@ fn top_p_input_port() -> InferencePortDescriptor {
     sampling_number_input_port(crate::runtime_host_text_execution::TOP_P_PORT, "Top p", 1.0)
 }
 
+fn repetition_penalty_input_port() -> InferencePortDescriptor {
+    let mut descriptor = sampling_number_input_port(
+        crate::runtime_host_text_execution::REPETITION_PENALTY_PORT,
+        "Repetition penalty",
+        f64::from(f32::MAX),
+    );
+    if let InferencePortOptions::NumericRange { range } = &mut descriptor.options {
+        range.min = f64::from(f32::from_bits(1));
+    }
+    descriptor
+}
+
 fn sampling_number_input_port(port_id: &str, label: &str, max: f64) -> InferencePortDescriptor {
     let mut descriptor = port(
         port_id,
@@ -519,6 +537,8 @@ mod tests {
                 "top_k",
                 "temperature",
                 "top_p",
+                "repetition_penalty",
+                "min_new_tokens",
             ]
         );
         for (port_id, scalar_type, min, max, step) in [
@@ -544,6 +564,20 @@ mod tests {
                 None,
             ),
             ("top_p", InferenceScalarType::F64, 0.0, 1.0, None),
+            (
+                "repetition_penalty",
+                InferenceScalarType::F64,
+                f64::from(f32::from_bits(1)),
+                f64::from(f32::MAX),
+                None,
+            ),
+            (
+                "min_new_tokens",
+                InferenceScalarType::U64,
+                0.0,
+                f64::from(u32::MAX),
+                Some(1.0),
+            ),
         ] {
             let control = inputs
                 .iter()
