@@ -479,3 +479,40 @@ waits for that actual success destination, verifies the owner-retained run/outpu
 then opens I/O Inspector using normal workbench navigation. Production routing
 is unchanged. Actual native scheduler CPU execution/output still requires the
 subsequent source-bound run.
+
+## Current result: readiness identity boundary remains blocked
+
+[Run 37517106108](https://github.com/MrScripty/Pantograph/actions/runs/37517106108)
+executes `ce6b7bc6e3c88c9c59f66a899a203c1715363ce9`, tree
+`a8571236894c4bba3135d309559aa61fffc03bd9`. Native build/startup tests,
+cold-owner assertions, save/reopen, three visible wires, typed Resolve and GUI
+Submit clear their earlier boundaries. Authored text ingress advances the run
+to dependency readiness admission. The actual GUI reports:
+`scheduler dependency readiness admission failed: workflow service operation failed`.
+Scoped run `run_5dda0631-cb25-4504-89ea-c6913f76e6d5` is queued with
+execution-session resume state `dependency_readiness_pending`, no selected
+runtime/device, no start/completion timestamp and zero retained outputs.
+Actual native CPU execution/output remains unqualified. No loader failure,
+GPU, pretrained-model or full production-loader qualification is inferred.
+
+The [complete thirteenth-attempt evidence](../evidence/native-desktop-cpu/cold-typed-discovery/typed-proof-successor/readiness-admission/README.md)
+preserves all twenty-two members, original images/JSON and masked job log.
+Artifact `11438650692` has SHA256
+`8575ede33b077dde517a0c8dfa77aa0883442b443cdd9f383cfdd11a0f89b080`.
+The native wrapper obscures its inner workflow-service error. A separate local
+diagnostic confirms an existing canonical identity mismatch: graph production
+uses `task_type: None` and `platform_context: Some(host OS/arch)`, while readiness
+reconstruction uses `task_type: Some(task kind)` and `platform_context: None`.
+Both fields participate in the requirements hash. The actual public producer
+and readiness lifecycle reject that reconstruction because its requirements ID
+does not match the saved validation proof. This is a focused local reproduction
+and source comparison, not an observed native inner-error capture.
+
+The diagnostic passes by observing the retained rejection guard. Its exact patch,
+complete audited Cargo graph and log are preserved; the temporary diagnostic
+test is removed from production source. No readiness receipt or proof is
+fabricated. Carrying the producer-owned canonical planning identity through
+snapshot publication into readiness admission remains the next unresolved
+integration boundary. No further hosted successor is active. The candidate's
+926 workflow-service tests and 675 frontend tests remain green, while native
+acceptance is explicitly blocked at this later boundary.

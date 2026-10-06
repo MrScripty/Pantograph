@@ -1,0 +1,22 @@
+{
+  "run_id": 37517106108,
+  "job_id": 112452761988,
+  "source_head": "ce6b7bc6e3c88c9c59f66a899a203c1715363ce9",
+  "source_tree": "a8571236894c4bba3135d309559aa61fffc03bd9",
+  "artifact_id": 11438650692,
+  "artifact_sha256": "8575ede33b077dde517a0c8dfa77aa0883442b443cdd9f383cfdd11a0f89b080",
+  "artifact_members": 22,
+  "conclusion": "failure",
+  "dependency_resolve_status": "request_ready",
+  "gui_submit_clicked": true,
+  "scoped_run_id": "run_5dda0631-cb25-4504-89ea-c6913f76e6d5",
+  "scoped_run_status": "queued",
+  "execution_session_resume_state": "dependency_readiness_pending",
+  "retained_output_count": 0,
+  "failure": "Internal error: invalid_request: scheduler dependency readiness admission failed: workflow service operation failed",
+  "cpu_execution_established": false,
+  "cpu_output_established": false,
+  "local_diagnostic": "graph producer task_type None + host platform differs from scheduler task_type Some + platform None; guard rejects reconstructed requirements identity",
+  "local_diagnostic_is_native_inner_error_capture": false,
+  "temporary_diagnostic_source_retained_in_candidate": false
+}
