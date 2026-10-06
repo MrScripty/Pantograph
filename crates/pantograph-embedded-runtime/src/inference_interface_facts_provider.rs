@@ -282,6 +282,9 @@ fn input_ports(task_entry: &TaskRegistryEntry) -> Vec<InferencePortDescriptor> {
                 InferencePortRequirement::Optional,
                 InferenceValueType::Scalar(InferenceScalarType::U64),
             ),
+            guidance_scale_input_port(),
+            image_count_input_port(),
+            denoising_scheduler_input_port(),
         ],
         InferenceTaskId::ChatCompletion | InferenceTaskId::MultimodalGeneration => vec![port(
             "prompt",
@@ -292,6 +295,69 @@ fn input_ports(task_entry: &TaskRegistryEntry) -> Vec<InferencePortDescriptor> {
         )],
         _ => Vec::new(),
     }
+}
+
+fn denoising_scheduler_input_port() -> InferencePortDescriptor {
+    let mut descriptor = port(
+        image::DENOISING_SCHEDULER_PORT,
+        "Denoising scheduler",
+        InferencePortDirection::Input,
+        InferencePortRequirement::Optional,
+        InferenceValueType::Scalar(InferenceScalarType::String),
+    );
+    descriptor.options = InferencePortOptions::Enum {
+        values: inference::STABLE_DIFFUSION_DENOISING_SCHEDULERS
+            .iter()
+            .map(
+                |id| pantograph_inference_interface_contracts::InferenceOptionValue {
+                    option_id: pantograph_inference_interface_contracts::InferenceOptionId::parse(
+                        id,
+                    )
+                    .expect("static scheduler id"),
+                    label: match *id {
+                        "ddim" => "DDIM",
+                        "euler" => "Euler",
+                        _ => unreachable!("closed scheduler choices"),
+                    }
+                    .into(),
+                    value: pantograph_inference_interface_contracts::InferenceOptionScalar::String(
+                        (*id).into(),
+                    ),
+                    availability: InferenceAvailability::available(),
+                    diagnostics: Vec::new(),
+                },
+            )
+            .collect(),
+    };
+    descriptor
+}
+
+fn image_count_input_port() -> InferencePortDescriptor {
+    let mut descriptor = positive_u32_input_port(image::NUM_IMAGES_PORT, "Images per prompt");
+    let InferencePortOptions::NumericRange { range } = &mut descriptor.options else {
+        unreachable!("integer port has numeric bounds");
+    };
+    range.max = pantograph_runtime_host_contracts::MAX_RUNTIME_HOST_OUTPUTS as f64;
+    descriptor
+}
+
+fn guidance_scale_input_port() -> InferencePortDescriptor {
+    let mut descriptor = port(
+        image::GUIDANCE_SCALE_PORT,
+        "Guidance scale",
+        InferencePortDirection::Input,
+        InferencePortRequirement::Optional,
+        InferenceValueType::Scalar(InferenceScalarType::F64),
+    );
+    descriptor.options = InferencePortOptions::NumericRange {
+        range: InferenceNumericRange {
+            min: f64::from(f32::MIN),
+            max: f64::from(f32::MAX),
+            step: None,
+            default: None,
+        },
+    };
+    descriptor
 }
 
 fn positive_u32_input_port(port_id: &str, label: &str) -> InferencePortDescriptor {

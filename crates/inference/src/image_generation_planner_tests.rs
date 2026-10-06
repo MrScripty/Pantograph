@@ -559,10 +559,10 @@ fn planner_rejects_invalid_denoising_scheduler_option_id() {
 }
 
 #[test]
-fn planner_rejects_explicit_denoising_scheduler_until_family_support_exists() {
+fn planner_rejects_scheduler_outside_the_closed_stable_diffusion_choices() {
     let facts = package_fixture("diffusers_sd_text_to_image_package_facts.json");
     let request = ImageGenerationRequest {
-        denoising_scheduler: Some("euler".to_string()),
+        denoising_scheduler: Some("flow_match_euler".to_string()),
         ..image_request()
     };
     let decision = backend_decision("pytorch");
@@ -579,6 +579,34 @@ fn planner_rejects_explicit_denoising_scheduler_until_family_support_exists() {
         diagnostic.code == ImageGenerationPlannerDiagnosticCode::UnsupportedOption
             && diagnostic.field_path == "request.denoising_scheduler"
     }));
+}
+
+#[test]
+fn planner_preserves_each_admitted_stable_diffusion_scheduler_choice() {
+    for scheduler in crate::STABLE_DIFFUSION_DENOISING_SCHEDULERS {
+        let facts = package_fixture("diffusers_sd_text_to_image_package_facts.json");
+        let request = ImageGenerationRequest {
+            denoising_scheduler: Some((*scheduler).into()),
+            ..image_request()
+        };
+        let decision = backend_decision("pytorch");
+        let ImageGenerationPlanningOutcome::Planned { plan } =
+            plan_image_generation_execution(ImageGenerationPlanningInput {
+                request: &request,
+                package_facts: &facts,
+                artifact_load_target: &artifact_load_target(&facts),
+                backend_decision: &decision,
+            })
+        else {
+            panic!("admitted scheduler must plan")
+        };
+        assert_eq!(
+            plan.denoising_scheduler
+                .as_ref()
+                .map(DenoisingSchedulerOptionId::as_str),
+            Some(*scheduler)
+        );
+    }
 }
 
 #[test]

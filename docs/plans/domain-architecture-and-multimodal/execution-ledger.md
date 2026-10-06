@@ -502,6 +502,50 @@ Existing peak task claims/custody remain fully charged. Portable owner/config
 fixtures qualify the logical accounting; native GUI/GPU execution and other
 producers remain unqualified. No previous branch rewrite or PR/review creation.
 
+## 2026-10-06 — Graph-authored image guidance scale
+
+Parent froze green integration `ab7a1b4e` and authorized the next bounded planned
+capability on a separate successor. The [guidance control](reports/2026-10-06-workflow-image-guidance-scale.md)
+completes an explicitly deferred image input: descriptor and actual host now
+forward optional checked finite-f32 guidance to the existing planner/worker.
+Source `9486610d` passes 803 inference, 507 embedded, 22 interface and eight
+materialization tests, plus strict affected-package Clippy. An explicit real
+CPU Torch/Diffusers test passes six guidance cases using a tiny random UNet and
+an exact conditional-noise oracle; controlled public workflow sessions qualify
+graph materialization and lifecycle separately. No pretrained-image, GPU or
+desktop claim follows. Full-peak accounting, ownership and unknown facts remain
+unchanged; no dependency/download changes or PR actions. Parent owns review and
+publication. Execution cost was not measured; no estimate is invented.
+
+## 2026-10-06 — Multiple-image workflow generation
+
+The [image-count successor](reports/2026-10-06-workflow-image-count.md) continues
+from frozen guidance `14dfd4a7`. Optional count is bounded by the existing
+64-output host contract; compatible PyTorch batches preserve per-member image
+order and advancing seeded streams. Terminal workflow projection keeps singleton
+shape and returns an ordered artifact-reference array for multiple images.
+Source `994463e1` passes 805 inference, 509 embedded, 916 workflow-service and
+74 contract tests. Explicit native CPU guidance/count tests pass on actual
+Diffusers 0.39.0 and production-loader-admitted 0.37.0 with a tiny random UNet.
+No pretrained model, GPU or desktop qualification follows. Strict affected-package
+Clippy and repository gates pass. PR56 import repair remains independently based
+on `ab7a1b4e`; parent owns reviews/publication. Cost was not measured.
+
+## 2026-10-06 — Resumed graph-authored denoising scheduler feature
+
+Parent froze the PR56 correctness repair for independent publication review and
+resumed the separate scheduler checkpoint `69e7a3b9`. The
+[scheduler control report](reports/2026-10-06-workflow-image-scheduler.md) records
+closed DDIM/Euler selection, real public-session/Pumas host routing and CPU native
+oracles without pretrained weights. Correctness repairs change no required public
+interface, so no commits from their frozen branch were mixed into this feature.
+A misleading shared Cargo cache run was excluded; a private target cleaned of all
+workspace artifacts passes 808 inference, 511 embedded, 75 contract and 916 service
+checks. The isolated native rerun passes all three actual CPU checks, strict five-package
+Clippy passes without suppression, and all nine no-download graphs pass. The
+resumption manifest preserves the cache diagnosis; the final manifest records
+actual completion and remote identities. No service-limit failure occurred. Parent owns independent review and integration.
+
 ## 2026-10-06 — Isolated PR56 correctness review checkpoint
 
 Parent paused unrelated image scheduler work for five PR56 review findings.
@@ -529,6 +573,21 @@ Final source qualification passes 806 inference, 503 embedded and 142 registry
 checks with strict all-target mixed-backend Clippy. Config/frontend source remains
 unchanged from its passing qualification. The independent repair branch is
 published normally; the parent alone updates PR56 and replies/resolves reviews.
+
+## 2026-10-06 — Separate image-controls integration candidate
+
+Parent requested a normal-history successor combining scheduler `af4174a4` with
+reviewed correctness `13d24e89`. Guidance/count are already ancestors, so merge
+`a894ec69` adds correctness once and preserves both parents. Only plan/ledger
+conflicts required resolution. Test successor `12728772` adds combined controls
+through public sessions and worker envelopes, and checks each malformed parameter
+amidst other valid controls. The [integration report](reports/2026-10-06-image-controls-integration-candidate.md)
+records isolated-target qualification: 812 inference, 512 embedded, 142 registry,
+14 config, 75 contract, 916 service and 661 frontend passes, plus three actual
+CPU Diffusers checks. Strict seven-package Clippy and all required gates pass. The final checkpoint
+changes documentation only and is published as a separate review candidate.
+PR56 and all frozen feature/correctness refs remain untouched. Parent owns review
+and publication after gates; native GTK/GPU/pretrained-model limits remain open.
 
 ## 2026-10-06 — PR56 config fixture contract correction
 

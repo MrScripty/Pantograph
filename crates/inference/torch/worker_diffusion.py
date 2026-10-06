@@ -183,3 +183,19 @@ def construct_diffusion_pipeline(admission, torch_dtype, variant=None):
         raise
     except Exception as exc:
         raise DiffusionLoadError("model_load_failed", "Failed to load local safetensors diffusion bundle") from exc
+
+
+def call_diffusion_pipeline(pipeline, call_kwargs, denoising_scheduler=None):
+    """Apply only closed built-in scheduler choices without changing residency."""
+    if denoising_scheduler is None:
+        return pipeline(**call_kwargs)
+    if denoising_scheduler not in ("ddim", "euler"):
+        raise ValueError("Unsupported denoising_scheduler; expected ddim or euler")
+    import copy
+    from diffusers import DDIMScheduler, EulerDiscreteScheduler
+
+    scheduler_type = {"ddim": DDIMScheduler, "euler": EulerDiscreteScheduler}[denoising_scheduler]
+    # Share loaded components, but keep scheduler/config and per-call state local.
+    execution_pipeline = copy.copy(pipeline)
+    execution_pipeline.scheduler = scheduler_type.from_config(pipeline.scheduler.config)
+    return execution_pipeline(**call_kwargs)

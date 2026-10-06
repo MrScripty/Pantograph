@@ -1,6 +1,9 @@
 use crate::model_contracts::{DiffusersComponentRole, ImageGenerationFamilyLabel};
 use crate::types::ImageGenerationRequest;
 
+/// Closed scheduler choices supported by the Stable Diffusion execution owner.
+pub const STABLE_DIFFUSION_DENOISING_SCHEDULERS: &[&str] = &["ddim", "euler"];
+
 const STABLE_DIFFUSION_REQUIRED_COMPONENTS: &[DiffusersComponentRole] = &[
     DiffusersComponentRole::PipelineIndex,
     DiffusersComponentRole::Scheduler,
@@ -20,7 +23,7 @@ const STABLE_DIFFUSION_OPTION_RULES: ImageGenerationFamilyOptionRules =
         supports_guidance_scale: true,
         supports_seed: true,
         supports_num_images_per_prompt: true,
-        supports_denoising_scheduler_override: false,
+        supports_denoising_scheduler_override: true,
         supports_init_image: false,
         supports_mask_image: false,
         supports_strength: false,
@@ -88,9 +91,16 @@ impl ImageGenerationFamilyRules {
             &mut unsupported,
         );
         push_unsupported(
-            has_valid_denoising_scheduler && !self.options.supports_denoising_scheduler_override,
+            has_valid_denoising_scheduler
+                && (!self.options.supports_denoising_scheduler_override
+                    || !request
+                        .denoising_scheduler
+                        .as_deref()
+                        .is_some_and(|scheduler| {
+                            STABLE_DIFFUSION_DENOISING_SCHEDULERS.contains(&scheduler)
+                        })),
             "request.denoising_scheduler",
-            "explicit denoising_scheduler changes require family/runtime support and are not supported by this planner slice",
+            "denoising_scheduler must be an admitted Stable Diffusion choice: ddim or euler",
             &mut unsupported,
         );
         push_unsupported(
@@ -232,7 +242,7 @@ mod tests {
         let rules =
             image_generation_family_rules(ImageGenerationFamilyLabel::StableDiffusion).unwrap();
         let request = ImageGenerationRequest {
-            denoising_scheduler: Some("euler".to_string()),
+            denoising_scheduler: Some("flow_match_euler".to_string()),
             init_image: Some(EncodedImage {
                 data_base64: "aW1hZ2U=".to_string(),
                 mime_type: "image/png".to_string(),

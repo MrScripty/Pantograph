@@ -18,8 +18,9 @@ pub(crate) const WIDTH_PORT: &str = "width";
 pub(crate) const HEIGHT_PORT: &str = "height";
 pub(crate) const STEPS_PORT: &str = "num_inference_steps";
 pub(crate) const SEED_PORT: &str = "seed";
-const NUM_IMAGES_PORT: &str = "num_images_per_prompt";
-const DENOISING_SCHEDULER_PORT: &str = "denoising_scheduler";
+pub(crate) const GUIDANCE_SCALE_PORT: &str = "guidance_scale";
+pub(crate) const NUM_IMAGES_PORT: &str = "num_images_per_prompt";
+pub(crate) const DENOISING_SCHEDULER_PORT: &str = "denoising_scheduler";
 const PYTORCH_BACKEND_ID: &str = "pytorch";
 const PYTORCH_RUNTIME_ID: &str = "pytorch";
 const DIFFUSERS_PYTORCH_RUNTIME_ID: &str = "diffusers-pytorch";
@@ -94,10 +95,10 @@ fn image_generation_request(
         width: optional_u32_input(request, WIDTH_PORT)?,
         height: optional_u32_input(request, HEIGHT_PORT)?,
         num_inference_steps: optional_u32_input(request, STEPS_PORT)?,
-        guidance_scale: None,
+        guidance_scale: optional_guidance_scale(request)?,
         seed: optional_u64_input(request, SEED_PORT)?,
         denoising_scheduler: denoising_scheduler(request, dispatch_decision)?,
-        num_images_per_prompt: optional_u32_input(request, NUM_IMAGES_PORT)?,
+        num_images_per_prompt: optional_image_count(request)?,
         init_image: None,
         mask_image: None,
         strength: None,
@@ -331,6 +332,38 @@ fn optional_u32_input(
         .transpose()
 }
 
+fn optional_image_count(
+    request: &pantograph_runtime_host_contracts::RuntimeHostExecutionRequest,
+) -> Result<Option<u32>, RuntimeHostImageGenerationProjectionError> {
+    let count = optional_u32_input(request, NUM_IMAGES_PORT)?;
+    if count.is_some_and(|count| {
+        count == 0 || count as usize > pantograph_runtime_host_contracts::MAX_RUNTIME_HOST_OUTPUTS
+    }) {
+        return Err(RuntimeHostImageGenerationProjectionError::InvalidImageCount);
+    }
+    Ok(count)
+}
+
+fn optional_guidance_scale(
+    request: &pantograph_runtime_host_contracts::RuntimeHostExecutionRequest,
+) -> Result<Option<f32>, RuntimeHostImageGenerationProjectionError> {
+    optional_input(request, GUIDANCE_SCALE_PORT)
+        .map(|value| match value {
+            RuntimeHostExecutionInputValue::F64(_)
+            | RuntimeHostExecutionInputValue::I64(_)
+            | RuntimeHostExecutionInputValue::U64(_) => value
+                .try_as_f32()
+                .map_err(|_| RuntimeHostImageGenerationProjectionError::InvalidGuidanceScale),
+            _ => Err(
+                RuntimeHostImageGenerationProjectionError::InvalidInputType {
+                    port_id: GUIDANCE_SCALE_PORT,
+                    expected: "finite number",
+                },
+            ),
+        })
+        .transpose()
+}
+
 fn optional_input<'a>(
     request: &'a pantograph_runtime_host_contracts::RuntimeHostExecutionRequest,
     port_id: &str,
@@ -354,6 +387,7 @@ fn validate_supported_inputs(
                 | HEIGHT_PORT
                 | STEPS_PORT
                 | SEED_PORT
+                | GUIDANCE_SCALE_PORT
                 | NUM_IMAGES_PORT
                 | DENOISING_SCHEDULER_PORT
         ) {
@@ -466,6 +500,12 @@ pub(crate) enum RuntimeHostImageGenerationProjectionError {
     UnsupportedInputPort { port_id: String },
     #[error("runtime-host image input '{port_id}' value {value} exceeds u32")]
     IntegerInputOutOfRange { port_id: &'static str, value: u64 },
+    #[error(
+        "runtime-host image input 'guidance_scale' must retain authored precision in finite f32"
+    )]
+    InvalidGuidanceScale,
+    #[error("runtime-host image input 'num_images_per_prompt' exceeds the positive per-task output limit")]
+    InvalidImageCount,
     #[error("runtime-host image trait '{trait_id}' must be {expected}")]
     InvalidTraitValue {
         trait_id: &'static str,
@@ -558,6 +598,9 @@ mod tests {
                 RuntimeHostExecutionInputValue::U64(768),
                 RuntimeHostExecutionInputValue::U64(12),
                 RuntimeHostExecutionInputValue::U64(u64::MAX),
+                RuntimeHostExecutionInputValue::F64(serde_json::Number::from_f64(7.5).unwrap()),
+                RuntimeHostExecutionInputValue::U64(3),
+                RuntimeHostExecutionInputValue::String("euler".into()),
             ])
             .map(|(port, value)| input(port.port_id.as_str(), value))
             .collect();
@@ -576,6 +619,61 @@ mod tests {
         assert_eq!(plan.height, Some(768));
         assert_eq!(plan.num_inference_steps, Some(12));
         assert_eq!(plan.seed, Some(u64::MAX));
+        assert_eq!(plan.guidance_scale, Some(7.5));
+        assert_eq!(plan.num_images_per_prompt, Some(3));
+        assert_eq!(plan.denoising_scheduler.unwrap().as_str(), "euler");
+    }
+
+    #[test]
+    fn image_guidance_preserves_existing_finite_f32_semantics_without_clamping() {
+        for expected in [f32::MIN, -1.0, 0.0, 1.0, 7.5, f32::MAX] {
+            let mut request = runtime_host_request_fixture();
+            request.materialized_inputs.push(input(
+                GUIDANCE_SCALE_PORT,
+                RuntimeHostExecutionInputValue::F64(
+                    serde_json::Number::from_f64(f64::from(expected)).unwrap(),
+                ),
+            ));
+            assert_eq!(optional_guidance_scale(&request).unwrap(), Some(expected));
+        }
+        for value in [
+            RuntimeHostExecutionInputValue::I64(-1),
+            RuntimeHostExecutionInputValue::U64(1),
+        ] {
+            let mut request = runtime_host_request_fixture();
+            request
+                .materialized_inputs
+                .push(input(GUIDANCE_SCALE_PORT, value.clone()));
+            assert_eq!(
+                optional_guidance_scale(&request).unwrap(),
+                Some(value.try_as_f32().unwrap())
+            );
+        }
+        for value in [f64::MAX, 1e-300, 1.0000000000000002] {
+            let mut request = runtime_host_request_fixture();
+            request.materialized_inputs.push(input(
+                GUIDANCE_SCALE_PORT,
+                RuntimeHostExecutionInputValue::F64(serde_json::Number::from_f64(value).unwrap()),
+            ));
+            assert_eq!(
+                optional_guidance_scale(&request),
+                Err(RuntimeHostImageGenerationProjectionError::InvalidGuidanceScale)
+            );
+        }
+        let mut request = runtime_host_request_fixture();
+        request.materialized_inputs.push(input(
+            GUIDANCE_SCALE_PORT,
+            RuntimeHostExecutionInputValue::String("7.5".into()),
+        ));
+        assert!(matches!(
+            optional_guidance_scale(&request),
+            Err(
+                RuntimeHostImageGenerationProjectionError::InvalidInputType {
+                    port_id: GUIDANCE_SCALE_PORT,
+                    ..
+                }
+            )
+        ));
     }
 
     #[test]
@@ -594,6 +692,7 @@ mod tests {
         assert_eq!(image.height, None);
         assert_eq!(image.num_inference_steps, None);
         assert_eq!(image.seed, None);
+        assert_eq!(image.guidance_scale, None);
     }
 
     #[test]
@@ -716,7 +815,7 @@ mod tests {
     fn rejects_unsupported_materialized_inputs_instead_of_ignoring_them() {
         let mut request = runtime_host_request_fixture();
         request.materialized_inputs.push(input(
-            "guidance_scale",
+            "guidance_rescale",
             RuntimeHostExecutionInputValue::String("7.5".to_string()),
         ));
         let request = ValidatedRuntimeHostExecutionRequest::try_from(request)
@@ -732,7 +831,7 @@ mod tests {
         assert!(matches!(
             error,
             RuntimeHostImageGenerationProjectionError::UnsupportedInputPort { port_id }
-                if port_id == "guidance_scale"
+                if port_id == "guidance_rescale"
         ));
     }
 

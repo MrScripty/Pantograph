@@ -3377,8 +3377,18 @@ fn typed_image_generation_option_diagnostics(
         backend_key,
         "image.denoising_scheduler",
         request.denoising_scheduler.is_some(),
-        OptionSupportState::Unsupported,
-        "planned image generation rejects explicit denoising_scheduler until family/runtime support can apply it",
+        if request
+            .denoising_scheduler
+            .as_deref()
+            .is_some_and(|scheduler| {
+                crate::STABLE_DIFFUSION_DENOISING_SCHEDULERS.contains(&scheduler)
+            })
+        {
+            OptionSupportState::Honored
+        } else {
+            OptionSupportState::Unsupported
+        },
+        "canonical image planning validates the closed family scheduler choices",
     );
     push_image_option_diagnostic(
         &mut diagnostics,

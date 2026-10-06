@@ -4,13 +4,16 @@
 
 **Current phase:** M3 owner/client consumer source is implemented. Native CPU sampling and the supported inference/embedded host route are qualified separately; the desktop-authored dependent text-to-image graph and full review remain open.
 
-**Next slice:** Parent independently reviews the isolated five-comment PR56 repair
-branch before coordinating integration and review replies. The [isolated repair checkpoint](reports/2026-10-06-pr56-correctness-review-checkpoint.md)
-qualifies four reproducible repairs and pinned Tokio child-lifecycle counterevidence.
-The parent supplied the full comment record after Forbidden reads; exact code
-dispositions now include supervised Candle allocations and VRAM-only task claims. Image scheduler work stays paused on its separate local feature checkpoint.
-Parent owns PR/review/merge actions. Preserve full peaks, custody, uncertainty,
-known zero, source/instance fencing and the approved no-download dependency contract.
+**Next slice:** Parent publishes the history-preserving image-controls integration
+successor of independently reviewed `1034daeb` and merged main `1b898d11`. PR56 is
+merged with reviewed config fixture `f0472ca1`; its corrected startup-config test
+and documentation are retained alongside the image-controls history. The frozen
+[image-controls candidate](reports/2026-10-06-image-controls-integration-candidate.md)
+remains unchanged. Only necessary composition and focused affected qualification
+are included; repetition-penalty feature `2a6f7cf5` remains separate. Parent owns
+draft publication, fresh hosted CI, review and merge. Full peaks, custody,
+unknown/known-zero semantics, generation fences and no-build-download policy
+remain unchanged. Native desktop/GPU/pretrained-model acceptance remains separate.
 
 **Prior native qualification:** Parent reviews frozen text-control source `a8c6970f` and its separate [exact-head native qualification route](reports/2026-10-05-text-control-native-qualification-route.md). Earlier local native host/workflow attempts failed before execution: the pinned ONNX dependency download returned HTTP 403, and no-download builds lacked linker symbols. Subsequent [hosted run 37360010163, job 111931961024](https://github.com/MrScripty/Pantograph/actions/runs/37360010163/job/111931961024) at exact head `815bceffbb0d877644184b71be6584f586be2e6e` passed 145 Rust tests across eight groups and six actual CPU sampler tests; all individual quality checks and all three workflows passed at that head. The focused native host/workflow qualification is complete for that head. Next qualify current owner-produced Pumas identities/facts/load targets/devices and the desktop-authored dependent text-to-image graph (DA-03). Frozen temperature `e0293ebf`, CI correction `fddae90d`, fixture `174c1950`, top-k `3bf3eb45` and composition `60197971` remain unchanged with their stated qualification requirements. Parent holds publication for owner confirmation and integrates review corrections without rewriting history. Current Pumas pin: `26a84e323cae566a46a8f76bef48fa1010aed48b`. DA-03/DA-07 remain open.
 

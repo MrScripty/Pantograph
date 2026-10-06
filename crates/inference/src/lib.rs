@@ -133,6 +133,7 @@ pub use image_generation_batch::{
     IMAGE_GENERATION_BATCH_ID_MAX_LEN, IMAGE_GENERATION_BATCH_MAX_DIAGNOSTICS,
     IMAGE_GENERATION_BATCH_MAX_MEMBERS, IMAGE_GENERATION_BATCH_MEMBER_ID_MAX_LEN,
 };
+pub use image_generation_family_rules::STABLE_DIFFUSION_DENOISING_SCHEDULERS;
 pub use image_generation_planner::{
     plan_image_generation_execution, DenoisingSchedulerOptionId, DenoisingSchedulerOptionIdError,
     ImageGenerationExecutionPlan, ImageGenerationPlannerDiagnostic,

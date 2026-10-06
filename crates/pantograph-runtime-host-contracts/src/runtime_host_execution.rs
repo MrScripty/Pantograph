@@ -13,7 +13,8 @@ const MAX_TEXT_LEN: usize = 1024;
 pub const RUNTIME_HOST_STRUCTURED_OUTPUT_MAX_BYTES: usize = 64 * 1024;
 
 const MAX_RUNTIME_HOST_INPUTS: usize = 128;
-const MAX_RUNTIME_HOST_OUTPUTS: usize = 64;
+/// Maximum output values carried by one runtime task or batch member.
+pub const MAX_RUNTIME_HOST_OUTPUTS: usize = 64;
 const MAX_RUNTIME_HOST_DIAGNOSTICS: usize = 64;
 const MAX_RUNTIME_HOST_BATCH_MEMBERS: usize = 32;
 

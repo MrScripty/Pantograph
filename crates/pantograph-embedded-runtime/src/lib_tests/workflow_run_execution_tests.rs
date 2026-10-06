@@ -106,6 +106,42 @@ async fn run_workflow_through_scheduler_with_override(
 
 #[tokio::test]
 async fn workflow_execution_session_dispatches_through_production_embedded_image_runtime_host() {
+    production_embedded_image_workflow(None, None, None).await;
+}
+
+#[tokio::test]
+async fn graph_authored_image_guidance_flows_through_public_session_and_pumas_host() {
+    for guidance in [0.0, 1.0, 7.5] {
+        production_embedded_image_workflow(Some(guidance), None, None).await;
+    }
+}
+
+#[tokio::test]
+async fn graph_authored_image_count_returns_every_retained_image_through_public_session() {
+    for count in [1, 3, 64] {
+        production_embedded_image_workflow(None, Some(count), None).await;
+    }
+}
+
+#[tokio::test]
+async fn graph_authored_image_scheduler_flows_through_public_session_and_pumas_host() {
+    for scheduler in ["ddim", "euler"] {
+        production_embedded_image_workflow(None, Some(3), Some(scheduler)).await;
+    }
+}
+
+#[tokio::test]
+async fn combined_image_controls_flow_through_public_session_with_reviewed_runtime_owner() {
+    for (guidance, scheduler) in [(0.0, "ddim"), (7.5, "euler")] {
+        production_embedded_image_workflow(Some(guidance), Some(3), Some(scheduler)).await;
+    }
+}
+
+async fn production_embedded_image_workflow(
+    guidance: Option<f64>,
+    image_count: Option<u32>,
+    scheduler: Option<&str>,
+) {
     const MODEL_ID: &str = "image/example/tiny-diffusion";
     const SELECTED_ARTIFACT_ID: &str = "diffusers-bundle";
 
@@ -134,6 +170,9 @@ async fn workflow_execution_session_dispatches_through_production_embedded_image
         .await
         .expect("seed package facts");
     let pumas_access = Arc::new(workflow_nodes::setup::PumasSelectorAccess::Owner(pumas_api));
+    let recorded_guidance = Arc::new(Mutex::new(Vec::new()));
+    let recorded_counts = Arc::new(Mutex::new(Vec::new()));
+    let recorded_schedulers = Arc::new(Mutex::new(Vec::new()));
     let runtime_host_port = Arc::new(EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
         Arc::new(RuntimeHostPumasLoadTargetResolver::new(
             pumas_access.clone(),
@@ -143,7 +182,11 @@ async fn workflow_execution_session_dispatches_through_production_embedded_image
             artifact_writer,
         )),
         Arc::new(inference::InferenceGateway::with_backend(
-            Box::new(TestImageBackend),
+            Box::new(TestImageBackend {
+                recorded_guidance: recorded_guidance.clone(),
+                recorded_counts: recorded_counts.clone(),
+                recorded_schedulers: recorded_schedulers.clone(),
+            }),
             "PyTorch",
         )),
     ));
@@ -161,7 +204,57 @@ async fn workflow_execution_session_dispatches_through_production_embedded_image
     );
     let workflow_id = "wf-production-embedded-image-runtime-host";
     let workflow_semantic_version = "1.2.3";
-    let graph = image_runtime_session_graph(MODEL_ID, SELECTED_ARTIFACT_ID);
+    let mut graph = image_runtime_session_graph(MODEL_ID, SELECTED_ARTIFACT_ID);
+    for (node_id, port_id, present) in [
+        ("guidance", "guidance_scale", guidance.is_some()),
+        ("count", "num_images_per_prompt", image_count.is_some()),
+        ("scheduler", "denoising_scheduler", scheduler.is_some()),
+    ] {
+        if !present {
+            continue;
+        }
+        graph.nodes.push(GraphNode {
+            id: node_id.into(),
+            node_type: "selection-input".into(),
+            position: Position { x: 0.0, y: 100.0 },
+            data: serde_json::json!({}),
+        });
+        graph.edges.push(GraphEdge {
+            id: format!("{node_id}-to-infer"),
+            source: node_id.into(),
+            source_handle: "value".into(),
+            target: "infer".into(),
+            target_handle: port_id.into(),
+        });
+        let ports: Vec<pantograph_inference_interface_contracts::InferencePortDescriptor> = serde_json::from_str(include_str!(
+            "../../../pantograph-inference-interface-contracts/tests/fixtures/image_generation_basic_inputs.json"
+        )).unwrap();
+        let control = ports
+            .into_iter()
+            .find(|port| port.port_id.as_str() == port_id)
+            .unwrap();
+        let control = serde_json::to_value(
+            pantograph_inference_interface_contracts::AuthoredInferencePortSnapshot {
+                port_id: control.port_id,
+                label: control.label,
+                direction: control.direction,
+                requirement: control.requirement,
+                value_type: control.value_type,
+                default: control.default,
+                availability: control.availability,
+            },
+        )
+        .unwrap();
+        graph
+            .nodes
+            .iter_mut()
+            .find(|node| node.id == "infer")
+            .unwrap()
+            .data["inference_interface_snapshot"]["inputs"]
+            .as_array_mut()
+            .unwrap()
+            .push(control);
+    }
     let version = service
         .resolve_workflow_graph_version(workflow_id, workflow_semantic_version, &graph)
         .expect("resolve workflow version");
@@ -198,6 +291,32 @@ async fn workflow_execution_session_dispatches_through_production_embedded_image
         )
         .await
         .expect("create session");
+    let mut inputs = vec![WorkflowPortBinding {
+        node_id: "prompt".into(),
+        port_id: "text".into(),
+        value: serde_json::json!("paint a red cube"),
+    }];
+    if let Some(value) = guidance {
+        inputs.push(WorkflowPortBinding {
+            node_id: "guidance".into(),
+            port_id: "value".into(),
+            value: serde_json::json!(value),
+        });
+    }
+    if let Some(value) = image_count {
+        inputs.push(WorkflowPortBinding {
+            node_id: "count".into(),
+            port_id: "value".into(),
+            value: serde_json::json!(value),
+        });
+    }
+    if let Some(value) = scheduler {
+        inputs.push(WorkflowPortBinding {
+            node_id: "scheduler".into(),
+            port_id: "value".into(),
+            value: serde_json::json!(value),
+        });
+    }
     let response = pantograph_workflow_service::workflow::WorkflowSessionExecutionRuntime::from_shared_service(
         service.clone(),
         host.clone(),
@@ -206,11 +325,7 @@ async fn workflow_execution_session_dispatches_through_production_embedded_image
             WorkflowExecutionSessionRunRequest {
                 session_id: created.session_id.clone(),
                 workflow_semantic_version: workflow_semantic_version.to_string(),
-                inputs: vec![WorkflowPortBinding {
-                    node_id: "prompt".to_string(),
-                    port_id: "text".to_string(),
-                    value: serde_json::json!("paint a red cube"),
-                }],
+                inputs,
                 output_targets: Some(vec![WorkflowOutputTarget {
                     node_id: "infer".to_string(),
                     port_id: "image".to_string(),
@@ -223,24 +338,44 @@ async fn workflow_execution_session_dispatches_through_production_embedded_image
         .await
         .expect("production embedded image runtime host should complete");
 
+    assert_eq!(
+        *recorded_guidance.lock().unwrap(),
+        vec![guidance.map(|v| v as f32)],
+        "graph-authored value must reach the backend once"
+    );
+    assert_eq!(*recorded_counts.lock().unwrap(), vec![image_count]);
+    assert_eq!(
+        *recorded_schedulers.lock().unwrap(),
+        vec![scheduler.map(str::to_string)]
+    );
     assert_eq!(response.outputs.len(), 1);
-    assert_eq!(response.outputs[0].node_id, "infer");
-    assert_eq!(response.outputs[0].port_id, "image");
-    let artifact_id = response.outputs[0]
-        .value
-        .get("artifact_id")
-        .and_then(serde_json::Value::as_str)
-        .expect("path-free artifact id output");
-    assert!(!artifact_id.contains('/'));
-    let body = service
-        .read_artifact_body(ArtifactReadRequest {
-            artifact_id: artifact_id.to_string(),
-            byte_range_start: None,
-            byte_range_end_exclusive: None,
-        })
-        .expect("image artifact retained");
-    assert_eq!(body.body, b"hello");
-    assert_eq!(body.response.media_type, "image/png");
+    let output = &response.outputs[0];
+    let images = if let Some(images) = output.value.as_array() {
+        images.clone()
+    } else {
+        vec![output.value.clone()]
+    };
+    assert_eq!(images.len(), image_count.unwrap_or(1) as usize);
+    let mut artifact_ids = std::collections::BTreeSet::new();
+    for image in &images {
+        assert_eq!(output.node_id, "infer");
+        assert_eq!(output.port_id, "image");
+        let artifact_id = image
+            .get("artifact_id")
+            .and_then(serde_json::Value::as_str)
+            .expect("path-free artifact id output");
+        assert!(!artifact_id.contains('/'));
+        assert!(artifact_ids.insert(artifact_id));
+        let body = service
+            .read_artifact_body(ArtifactReadRequest {
+                artifact_id: artifact_id.into(),
+                byte_range_start: None,
+                byte_range_end_exclusive: None,
+            })
+            .expect("each image retained");
+        assert_eq!(body.body, b"hello");
+        assert_eq!(body.response.media_type, "image/png");
+    }
     assert_eq!(dependency_readiness_work_queue.len(), 1);
     assert_eq!(source_refresher.model_refs(), vec![MODEL_ID.to_string()]);
     let lifecycle_events = reservation_lifecycle_port.events();
@@ -989,21 +1124,41 @@ impl WorkflowHost for ImageRuntimeSessionHost {
         &self,
         _workflow_id: &str,
     ) -> Result<WorkflowIoResponse, WorkflowServiceError> {
-        Ok(WorkflowIoResponse {
-            inputs: vec![WorkflowIoNode {
-                node_id: "prompt".to_string(),
-                node_type: "text-input".to_string(),
+        let mut inputs = vec![WorkflowIoNode {
+            node_id: "prompt".to_string(),
+            node_type: "text-input".to_string(),
+            name: None,
+            description: None,
+            ports: vec![WorkflowIoPort {
+                port_id: "text".to_string(),
+                name: None,
+                description: None,
+                data_type: Some("string".to_string()),
+                required: Some(true),
+                multiple: Some(false),
+            }],
+        }];
+        for node_id in ["guidance", "count", "scheduler"] {
+            if !self.graph.nodes.iter().any(|node| node.id == node_id) {
+                continue;
+            }
+            inputs.push(WorkflowIoNode {
+                node_id: node_id.into(),
+                node_type: "selection-input".into(),
                 name: None,
                 description: None,
                 ports: vec![WorkflowIoPort {
-                    port_id: "text".to_string(),
+                    port_id: "value".into(),
                     name: None,
                     description: None,
-                    data_type: Some("string".to_string()),
+                    data_type: Some("any".into()),
                     required: Some(true),
                     multiple: Some(false),
                 }],
-            }],
+            });
+        }
+        Ok(WorkflowIoResponse {
+            inputs,
             outputs: self
                 .graph
                 .nodes
@@ -1078,7 +1233,11 @@ impl WorkflowHost for ImageRuntimeSessionHost {
     }
 }
 
-struct TestImageBackend;
+struct TestImageBackend {
+    recorded_guidance: Arc<Mutex<Vec<Option<f32>>>>,
+    recorded_counts: Arc<Mutex<Vec<Option<u32>>>>,
+    recorded_schedulers: Arc<Mutex<Vec<Option<String>>>>,
+}
 
 #[async_trait]
 impl InferenceBackend for TestImageBackend {
@@ -1155,13 +1314,28 @@ impl InferenceBackend for TestImageBackend {
         plan: ImageGenerationExecutionPlan,
         _context: BackendExecutionContext,
     ) -> Result<ImageGenerationResult, BackendError> {
+        self.recorded_guidance
+            .lock()
+            .unwrap()
+            .push(plan.guidance_scale);
+        self.recorded_counts
+            .lock()
+            .unwrap()
+            .push(plan.num_images_per_prompt);
+        self.recorded_schedulers
+            .lock()
+            .unwrap()
+            .push(plan.denoising_scheduler.as_ref().map(ToString::to_string));
         Ok(ImageGenerationResult {
-            images: vec![EncodedImage {
-                data_base64: "aGVsbG8=".to_string(),
-                mime_type: "image/png".to_string(),
-                width: plan.width,
-                height: plan.height,
-            }],
+            images: vec![
+                EncodedImage {
+                    data_base64: "aGVsbG8=".to_string(),
+                    mime_type: "image/png".to_string(),
+                    width: plan.width,
+                    height: plan.height,
+                };
+                plan.num_images_per_prompt.unwrap_or(1) as usize
+            ],
             seed_used: plan.seed,
             metadata: serde_json::Value::Null,
         })
@@ -1175,20 +1349,40 @@ impl InferenceBackend for TestImageBackend {
         let members = request
             .members
             .into_iter()
-            .map(|member| ImageGenerationBatchExecutionMemberResponse {
-                member_id: member.member_id,
-                state: ImageGenerationBatchMemberExecutionState::Completed,
-                result: Some(ImageGenerationResult {
-                    images: vec![EncodedImage {
-                        data_base64: "aGVsbG8=".to_string(),
-                        mime_type: "image/png".to_string(),
-                        width: member.plan.width,
-                        height: member.plan.height,
-                    }],
-                    seed_used: member.plan.seed,
-                    metadata: serde_json::Value::Null,
-                }),
-                diagnostics: Vec::new(),
+            .map(|member| {
+                self.recorded_guidance
+                    .lock()
+                    .unwrap()
+                    .push(member.plan.guidance_scale);
+                self.recorded_counts
+                    .lock()
+                    .unwrap()
+                    .push(member.plan.num_images_per_prompt);
+                self.recorded_schedulers.lock().unwrap().push(
+                    member
+                        .plan
+                        .denoising_scheduler
+                        .as_ref()
+                        .map(ToString::to_string),
+                );
+                ImageGenerationBatchExecutionMemberResponse {
+                    member_id: member.member_id,
+                    state: ImageGenerationBatchMemberExecutionState::Completed,
+                    result: Some(ImageGenerationResult {
+                        images: vec![
+                            EncodedImage {
+                                data_base64: "aGVsbG8=".to_string(),
+                                mime_type: "image/png".to_string(),
+                                width: member.plan.width,
+                                height: member.plan.height,
+                            };
+                            member.plan.num_images_per_prompt.unwrap_or(1) as usize
+                        ],
+                        seed_used: member.plan.seed,
+                        metadata: serde_json::Value::Null,
+                    }),
+                    diagnostics: Vec::new(),
+                }
             })
             .collect();
         Ok(ImageGenerationBatchExecutionResponse {
