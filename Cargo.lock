@@ -7559,6 +7559,7 @@ dependencies = [
  "blake3",
  "chrono",
  "futures-util",
+ "log",
  "node-engine",
  "pantograph-dependency-environment-service",
  "pantograph-dependency-planning",

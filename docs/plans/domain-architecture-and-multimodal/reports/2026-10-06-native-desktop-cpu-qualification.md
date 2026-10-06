@@ -602,3 +602,26 @@ local tests and completed CI evidence are preserved without restarting or
 duplicating work. No successor run is active. Main, PR 62 and protected worktrees
 remain untouched. The shared identity repair is complete; the distinct native
 readiness bootstrap/provider boundary remains blocked.
+
+## Provider/bootstrap diagnostic successor
+
+Continue from preserved `e6ec81121344901ba0e9f8a00ca2cb136276f08b` with a
+bounded diagnostic capture before proposing another repair. Actual-owner warning
+records include the graph provider DTO, scheduler requirements-seed result and
+registry rejection, the queued/deferred task transition and producer registry
+lookup failure. No result, proof, snapshot or execution policy changes. The GUI
+harness retains its original failure and reads the same run for 70 seconds through
+public scheduler/run/inspection queries, covering the normal producer poll.
+
+A correction to the preceding source hypothesis: the deferral helper does enqueue
+work after rejected requirements seeding. Actual diagnostics must distinguish
+payload seed rejection from the subsequent registry lookup; queue creation is
+not itself absent. Previous failure records remain unchanged as historical evidence.
+
+Local verification passes: 928 workflow-service unit + 60 integration tests,
+strict selected-crate all-target Clippy, 537 embedded default-feature tests,
+affected harness ESLint, formatting and critical gate. Effective Cargo graphs
+are inspected before builds with dynamic ORT, no download capabilities and
+`ORT_SKIP_DOWNLOAD=1`. The [diagnostic candidate evidence](../evidence/native-desktop-cpu/cold-typed-discovery/bootstrap-diagnostics/README.md)
+preserves those checks. No new readiness repair or native CPU qualification is
+claimed before actual provider/bootstrap results are captured.

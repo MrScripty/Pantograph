@@ -619,11 +619,22 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                     continue;
                 }
             };
-            if self
+            if let Err(error) = self
                 .service
                 .store_dependency_requirements_payload_from_result(&seed_result)
-                .is_err()
             {
+                log::warn!(
+                    "dependency_bootstrap_diagnostic {}",
+                    serde_json::json!({
+                        "phase": "requirements_seed_rejected",
+                        "session_id": session_id,
+                        "workflow_run_id": workflow_run_id,
+                        "task_id": task_id,
+                        "request": request.as_envelope(),
+                        "result": seed_result.as_result(),
+                        "registry_error": format!("{error:?}"),
+                    })
+                );
                 self.defer_runtime_dependency_readiness(
                     &lifecycle,
                     session_id,
@@ -743,7 +754,7 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
             .dependency_readiness_work_queue
             .enqueue(work_item);
         let mut store = self.service.session_store_guard()?;
-        lifecycle
+        let record = lifecycle
             .admit_active_runtime_task(
                 &mut store,
                 session_id,
@@ -753,6 +764,18 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                 None,
             )
             .map_err(dependency_readiness_error)?;
+        log::warn!(
+            "dependency_bootstrap_diagnostic {}",
+            serde_json::json!({
+                "phase": "task_deferred_and_probe_queued",
+                "session_id": session_id,
+                "workflow_run_id": workflow_run_id,
+                "task_id": task_id,
+                "task_state": record.state.kind(),
+                "task_state_version": record.state_version,
+                "work_queue_len": self.service.dependency_readiness_work_queue.len(),
+            })
+        );
         Ok(())
     }
 

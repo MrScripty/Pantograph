@@ -352,7 +352,21 @@ impl GraphSessionStore {
             .dependency_environment_service
             .handle(&environment_request)
         {
-            Ok(_result) => Ok(request_ready_dependency_environment_action_result(&intent)),
+            Ok(result) => {
+                let raw = result.as_result();
+                if !matches!(raw.readiness_state,
+                    pantograph_dependency_planning::DependencyEnvironmentReadinessState::Ready
+                        | pantograph_dependency_planning::DependencyEnvironmentReadinessState::Resolved)
+                {
+                    log::warn!("dependency_bootstrap_diagnostic {}", serde_json::json!({
+                        "phase": "graph_action_provider_result",
+                        "intent": intent,
+                        "request": environment_request.as_request(),
+                        "result": raw,
+                    }));
+                }
+                Ok(request_ready_dependency_environment_action_result(&intent))
+            }
             Err(error) => Ok(blocked_dependency_environment_action_result(
                 &intent,
                 InferenceDiagnosticCode::DependencySidecarDescriptorInvalid,

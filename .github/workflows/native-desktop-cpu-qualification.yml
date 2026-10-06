@@ -12,6 +12,9 @@ on:
       - crates/pantograph-workflow-service/src/inference_dependency_planning.rs
       - crates/pantograph-workflow-service/src/graph/inference_validation_state.rs
       - crates/pantograph-workflow-service/src/scheduler/readiness_lifecycle.rs
+      - crates/pantograph-workflow-service/src/workflow/session_scheduler_runner.rs
+      - crates/pantograph-workflow-service/src/graph/session.rs
+      - crates/pantograph-embedded-runtime/src/dependency_readiness_lifecycle.rs
 
 permissions:
   contents: read

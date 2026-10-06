@@ -166,6 +166,26 @@ describe('actual native Tauri saved CPU embedding graph', () => {
       const body = await browser.execute(() => document.body.innerText);
       writeFileSync(path.join(evidence, 'native-submission-failure.json'), JSON.stringify({ submissionError,
         error: String(error), runs, body }, null, 2));
+      // Retain the original failure, then observe the real producer's 60-second
+      // poll without resubmitting or manufacturing a readiness result.
+      if (submissionError?.includes('runtime dependency readiness is pending') && runs.runs?.length === 1) {
+        const run = runs.runs[0];
+        const samples = [];
+        for (const delay of [0, 35000, 35000]) {
+          if (delay) await browser.pause(delay);
+          samples.push({
+            capturedAt: new Date().toISOString(),
+            runs: await invoke('workflow_run_list_query', { request: { workflow_id: workflowId, limit: 8 } }),
+            scheduler: await invoke('workflow_get_scheduler_snapshot', {
+              request: { session_id: run.workflow_execution_session_id },
+            }).catch((readError) => ({ error: String(readError) })),
+            inspection: await invoke('workflow_run_inspection_query', {
+              request: { workflow_run_id: run.workflow_run_id, artifact_limit: 64 },
+            }).catch((readError) => ({ error: String(readError) })),
+          });
+          writeFileSync(path.join(evidence, 'native-bootstrap-observation.json'), JSON.stringify(samples, null, 2));
+        }
+      }
       throw error;
     }
     const runs = await invoke('workflow_run_list_query', { request: { workflow_id: workflowId, limit: 8 } });

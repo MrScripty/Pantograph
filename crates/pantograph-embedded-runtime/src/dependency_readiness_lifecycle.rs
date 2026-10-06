@@ -109,6 +109,11 @@ impl EmbeddedDependencyReadinessSnapshotProducer {
                                     .await
                                 }
                                 Err(error) => {
+                                    log::warn!("dependency_bootstrap_diagnostic {}", serde_json::json!({
+                                        "phase": "probe_requirements_lookup_rejected",
+                                        "request": item.request.as_request(),
+                                        "registry_error": format!("{error:?}"),
+                                    }));
                                     DependencyEnvironmentReadinessSnapshot::unavailable_for_work_item_registry_error(
                                         &item,
                                         &error,
