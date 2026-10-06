@@ -326,13 +326,32 @@ pub(crate) fn domain_observations(
                 .iter()
                 .any(|binding| binding.runtime_id == runtime_id)
         })
-        .map(|domain| {
-            let reserved_bytes = reserved_bytes(state, domain, excluded, true)?;
+        .try_fold(Vec::new(), |mut observations, domain| {
+            let requested_bytes = claim_bytes(domain, runtime_id, claim)?;
+            let explicitly_zero = domain
+                .bindings
+                .iter()
+                .filter(|binding| binding.runtime_id == runtime_id)
+                .all(|binding| match binding.resource_kind {
+                    RuntimeAdmissionResourceKind::RamBytes => claim.ram_bytes == Some(0),
+                    RuntimeAdmissionResourceKind::VramBytes => claim.vram_bytes == Some(0),
+                });
+            let reserved_bytes = match reserved_bytes(state, domain, excluded, true) {
+                Ok(bytes) => bytes,
+                Err(RuntimeRegistryError::ModelResidencyResourcesUnavailable { .. })
+                    if explicitly_zero =>
+                {
+                    // Zero is authoritative for this request, not for the pool.
+                    // Omit unavailable totals rather than fabricating free capacity.
+                    return Ok(observations);
+                }
+                Err(error) => return Err(error),
+            };
             let (total_bytes, owner_capacity_ceiling_bytes, host_ram_capacity_source_bound) =
                 capacity(state, domain);
-            Ok(RuntimeResourceDomainObservation {
+            observations.push(RuntimeResourceDomainObservation {
                 domain_id: domain.domain_id.clone(),
-                requested_bytes: claim_bytes(domain, runtime_id, claim)?,
+                requested_bytes,
                 reserved_bytes,
                 resident_bytes: resident_domain_bytes(state, domain, true)?,
                 total_bytes,
@@ -343,9 +362,9 @@ pub(crate) fn domain_observations(
                 available_bytes: total_bytes
                     .saturating_sub(domain.safety_margin_bytes)
                     .saturating_sub(reserved_bytes),
-            })
+            });
+            Ok(observations)
         })
-        .collect()
 }
 
 pub(crate) fn validate_domain_admission(

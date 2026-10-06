@@ -790,6 +790,16 @@ impl InferenceGateway {
         .await
     }
 
+    fn allocate_runtime_instance_id(&self, runtime_id: &str) -> String {
+        format!(
+            "{}-{}",
+            runtime_id.replace([' ', '.'], "-"),
+            self.runtime_instance_sequence
+                .fetch_add(1, Ordering::Relaxed)
+                + 1
+        )
+    }
+
     async fn record_start_result(
         &self,
         context: RuntimeWarmupStartContext<'_>,
@@ -812,23 +822,10 @@ impl InferenceGateway {
                     .runtime_reused
                     .unwrap_or(previous_runtime_instance_id.is_some());
                 let runtime_instance_id = if runtime_reused {
-                    previous_runtime_instance_id.unwrap_or_else(|| {
-                        format!(
-                            "{}-{}",
-                            runtime_id.replace([' ', '.'], "-"),
-                            self.runtime_instance_sequence
-                                .fetch_add(1, Ordering::Relaxed)
-                                + 1
-                        )
-                    })
+                    previous_runtime_instance_id
+                        .unwrap_or_else(|| self.allocate_runtime_instance_id(&runtime_id))
                 } else {
-                    format!(
-                        "{}-{}",
-                        runtime_id.replace([' ', '.'], "-"),
-                        self.runtime_instance_sequence
-                            .fetch_add(1, Ordering::Relaxed)
-                            + 1
-                    )
+                    self.allocate_runtime_instance_id(&runtime_id)
                 };
                 let mut lifecycle = self.runtime_lifecycle.write().await;
                 lifecycle.runtime_id = Some(runtime_id);
@@ -1463,11 +1460,7 @@ impl InferenceGateway {
         *self.external_mode.write().await = false;
         *self.runtime_lifecycle.write().await = RuntimeLifecycleSnapshot {
             runtime_id: Some("pytorch".into()),
-            runtime_instance_id: Some(format!(
-                "pytorch-{}",
-                self.runtime_instance_sequence
-                    .fetch_add(1, Ordering::Relaxed)
-            )),
+            runtime_instance_id: Some(self.allocate_runtime_instance_id("pytorch")),
             runtime_reused: Some(false),
             lifecycle_decision_reason: Some("scheduler_selected_text_package_loaded".into()),
             active: backend.is_ready(),
@@ -1597,13 +1590,7 @@ impl InferenceGateway {
             } else {
                 None
             }
-            .unwrap_or_else(|| {
-                format!(
-                    "candle-{}",
-                    self.runtime_instance_sequence
-                        .fetch_add(1, Ordering::Relaxed)
-                )
-            });
+            .unwrap_or_else(|| self.allocate_runtime_instance_id("candle"));
             *lifecycle = RuntimeLifecycleSnapshot {
                 runtime_id: Some("candle".into()),
                 runtime_instance_id: Some(runtime_instance_id),

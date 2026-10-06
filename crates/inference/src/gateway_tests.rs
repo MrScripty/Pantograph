@@ -5310,6 +5310,48 @@ async fn selected_text_preserves_top_p_boundaries_with_optional_length_and_syste
 }
 
 #[tokio::test]
+async fn ordinary_and_selected_text_loads_never_reuse_an_allocation_generation() {
+    let (_directory, request, target, decision) = crate::selected_text_execution::fixture();
+    let gateway =
+        InferenceGateway::with_backend(Box::new(SelectedTextBackend::default()), "PyTorch");
+    gateway.set_spawner(Arc::new(MockProcessSpawner)).await;
+    gateway.start(&BackendConfig::default()).await.unwrap();
+    let first = gateway
+        .runtime_lifecycle_snapshot()
+        .await
+        .runtime_instance_id
+        .unwrap();
+    gateway
+        .execute_selected_text_with_cancellation(
+            request,
+            target,
+            decision,
+            InferenceExecutionCancellationHandle::running(),
+        )
+        .await
+        .unwrap();
+    let selected = gateway
+        .runtime_lifecycle_snapshot()
+        .await
+        .runtime_instance_id
+        .unwrap();
+    assert_ne!(
+        first, selected,
+        "a newly loaded allocation must not inherit an earlier generation"
+    );
+    gateway.start(&BackendConfig::default()).await.unwrap();
+    assert_eq!(
+        gateway
+            .runtime_lifecycle_snapshot()
+            .await
+            .runtime_instance_id
+            .as_deref(),
+        Some(selected.as_str()),
+        "a proved reuse retains the same generation"
+    );
+}
+
+#[tokio::test]
 async fn selected_text_switches_to_requested_target_and_requires_terminal_output() {
     for terminal in [0, 1, 2] {
         let (_directory, request, target, decision) = crate::selected_text_execution::fixture();

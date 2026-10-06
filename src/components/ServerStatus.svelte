@@ -32,6 +32,7 @@
   let externalUrl = $state('http://localhost:1234');
   let apiKey = $state('');
   let isConnecting = $state(false);
+  let configReady = $state(false);
   let showHealthDetails = $state(false);
 
   onMount(async () => {
@@ -66,6 +67,7 @@
 
     try {
       await ConfigService.loadConfig();
+      configReady = ConfigService.getState().error === null;
       await ConfigService.refreshServerMode();
     } catch {
       // Errors are surfaced by the services themselves.
@@ -88,7 +90,7 @@
   });
 
   async function connectExternal() {
-    if (!externalUrl.trim()) {
+    if (!configReady || configState.isLoading || !externalUrl.trim()) {
       return;
     }
 
@@ -195,6 +197,7 @@
           bind:externalUrl
           bind:apiKey
           {isConnecting}
+          canConnect={configReady && !configState.isLoading}
           isConnected={llmState.status.ready && llmState.status.mode === 'external'}
           onConnect={connectExternal}
           onDisconnect={disconnectExternal}

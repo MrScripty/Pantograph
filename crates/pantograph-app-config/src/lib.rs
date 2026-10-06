@@ -259,9 +259,28 @@ impl AppConfig {
         config.scrub_retired_fields();
         let contents = serde_json::to_string_pretty(&config).map_err(ConfigError::Serialize)?;
 
-        fs::write(&config_path, contents)
-            .await
-            .map_err(ConfigError::Io)?;
+        let directory = app_data_dir.clone();
+        let destination = config_path.clone();
+        tokio::task::spawn_blocking(move || -> Result<(), std::io::Error> {
+            use std::io::Write;
+            let permissions = match std::fs::metadata(&destination) {
+                Ok(metadata) => Some(metadata.permissions()),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+                Err(error) => return Err(error),
+            };
+            let mut staged = tempfile::NamedTempFile::new_in(directory)?;
+            if let Some(permissions) = permissions {
+                // Atomic replacement must preserve the existing settings mode.
+                staged.as_file().set_permissions(permissions)?;
+            }
+            staged.write_all(contents.as_bytes())?;
+            staged.as_file().sync_all()?;
+            staged.persist(destination).map_err(|error| error.error)?;
+            Ok(())
+        })
+        .await
+        .map_err(|error| ConfigError::Io(std::io::Error::other(error)))?
+        .map_err(ConfigError::Io)?;
 
         log::info!("Configuration saved to {:?}", config_path);
         Ok(())
