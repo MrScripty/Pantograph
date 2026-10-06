@@ -27,7 +27,7 @@ def inspect():
         missing.append("existing Linux native-driver platform")
     return {"platform": platform.platform(), "commands": commands, "libraries": libraries,
             "missing": missing, "admitted": not missing,
-            "policy": "pre-existing native prerequisites only; no privilege elevation or access-denial workaround",
+            "policy": "authorized official runner dependency setup allowed; no security changes or access-denial workaround",
             "qualification": "not run; availability probe is not desktop/CPU graph acceptance"}
 
 

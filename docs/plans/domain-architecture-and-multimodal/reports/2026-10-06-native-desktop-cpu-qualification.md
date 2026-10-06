@@ -20,16 +20,17 @@ screenshots, saved graph, scoped run/artifacts and selected `candle.cpu`/`cpu`
 metadata. A missing native prerequisite or blocked submit gate is a failure with
 evidence, never a browser-mock pass.
 
-The new branch-specific hosted workflow has only `contents: read` and a bounded
+The first branch-specific hosted workflow had only `contents: read` and a bounded
 30-minute timeout. Existing workflow permissions, checks and timeouts are
-preserved. It verifies committed fixture hashes, records the proposed graph and
-performs read-only native prerequisite admission **before any install or build**.
-It never invokes sudo, apt installation, sandbox disabling, privileged displays
+preserved. It verified committed fixture hashes, recorded the proposed graph and
+performed read-only native prerequisite admission **before any install or build**.
+It did not invoke sudo, apt installation, sandbox disabling, privileged displays
 or access-denial workarounds. The expected normal Linux prerequisites include
 GTK/WebKit development libraries, WebKitWebDriver, Xvfb and tauri-driver. Official
 [Tauri CI instructions](https://v2.tauri.app/develop/tests/webdriver/ci/) use sudo
 to install system packages; that installation route conflicts with this task's
-no-privilege constraint and is deliberately not invoked.
+first attempt's no-privilege constraint and was not invoked. The authorized
+setup successor below supersedes that dependency-installation constraint.
 
 ## Prepared route and honest scope
 
@@ -58,7 +59,7 @@ features, and always sets `ORT_SKIP_DOWNLOAD=1`. No denied binary download is
 retried. Normal Node/Rust dependencies are installed only after native admission;
 existing no-build-download policy checks are also retained.
 
-## Current result
+## Preserved first attempt
 
 The local read-only probe exits 2: GTK, WebKit/JavaScriptCore/libsoup development
 metadata, WebKitWebDriver, Xvfb, tauri-driver and a normal protoc command are
@@ -96,3 +97,26 @@ Real Pumas discovery, pretrained quality, GPU, post-start cancellation, broad
 production loading and full release/desktop acceptance remain unqualified.
 The accepted feature's controlled CPU/source qualification is preserved and does
 not substitute for this native qualification.
+
+## Authorized setup successor
+
+After the first attempt, the owner confirmed that all agents may install needed
+dependencies and explicitly authorized the repository's normal hosted Ubuntu
+package-manager setup. The earlier no-install admission policy is superseded
+for this isolated cloud runner; the failed run and its artifact remain intact.
+The successor reuses `scripts/install-ubuntu-build-dependencies.sh` unchanged,
+adds official Ubuntu `webkit2gtk-driver`/`xvfb`, and installs official
+`tauri-driver` exactly `2.1.0` with `--locked`, using unchanged Rust `1.92.0`.
+The upstream release tag points to
+`447fa9f3f993fe77724189e355078b38ce20baea` and declares Rust minimum `1.90`.
+Driver versions are independent of the app version in
+[Tauri's CI guidance](https://v2.tauri.app/develop/tests/webdriver/ci/).
+
+The complete driver graph is recorded before its compile/install and must have
+no ONNX owner. Existing repository no-download checks and the effective desktop
+feature audit still precede the application build, with `ORT_SKIP_DOWNLOAD=1`.
+Existing contents-read permission, checks, action/toolchain pins and 30-minute
+job timeout are preserved. The existing Cargo cache action is reused. No
+security/sandbox/credential settings or user desktop are changed. Installation
+logs and subsequent actual native evidence or runner failure will be retained
+in the new exact-source artifact. This successor has not yet run.
