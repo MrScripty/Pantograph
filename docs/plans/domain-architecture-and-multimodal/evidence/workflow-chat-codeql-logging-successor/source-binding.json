@@ -1,0 +1,15 @@
+{
+  "frozen_predecessor": "e04a10610ec838c0bff8ddfff1a2126592fcafc1",
+  "frozen_predecessor_tree": "b60fae63778a8fa5a1d6d8ef9ce9747c05fd4cd3",
+  "tested_source": "dbd59248cd193f80da483fa96a37c4e86e2a369b",
+  "tested_tree": "67b92853a53576e2bfbbd0f158fc2a50891a1c67",
+  "delta_paths": [
+    "crates/pantograph-embedded-runtime/src/lib_tests/cpu_chat_graph_tests.rs"
+  ],
+  "repair": "Retain exact output.value == case[\"text\"] boolean equality in assert!; failure message contains only fixed fixture model/case identifiers. Remove output Debug and assert_eq automatic value printing.",
+  "alert": 31,
+  "thread": "https://github.com/MrScripty/Pantograph/pull/62#discussion_r4198327326",
+  "no_suppression_or_manual_resolution": true,
+  "ORT_SKIP_DOWNLOAD": "1",
+  "download_binaries_effective": false
+}
