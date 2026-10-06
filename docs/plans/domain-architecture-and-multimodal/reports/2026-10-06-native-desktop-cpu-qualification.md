@@ -625,3 +625,31 @@ are inspected before builds with dynamic ORT, no download capabilities and
 `ORT_SKIP_DOWNLOAD=1`. The [diagnostic candidate evidence](../evidence/native-desktop-cpu/cold-typed-discovery/bootstrap-diagnostics/README.md)
 preserves those checks. No new readiness repair or native CPU qualification is
 claimed before actual provider/bootstrap results are captured.
+
+## Actual first blocking transition captured
+
+[Run 37526479578](https://github.com/MrScripty/Pantograph/actions/runs/37526479578)
+executes `7ec336032a4e9910a26f65ef2e34d930a786d0bb`, tree
+`adc9932f9215cbf5d6b9b7a81f8e3b850b8f250b`. App build and all eight native
+startup tests pass. The first actual blocked transition is graph Resolve's
+provider result: `missing` / `unavailable`, failure `requirements_unavailable`,
+with “No fresh dependency readiness snapshot matches the request.” It contains
+no requirements/bindings, although request derivation returns `request_ready`.
+Scheduler retains the same requirements ID, descriptor, graph revision,
+validation session and saved snapshot `wfvalsnap_211237cd-4b7d-4488-92cd-55fb36f94665`.
+The seed guard rejects the actual Missing result because only Resolved/Ready
+results may seed payloads. Task `infer` becomes `paused_deferred`, state version
+3, and queues one probe. The normal producer poll then reports `MissingPayload`
+for the same requirements ID. Actual automatic retries reach deferred versions
+5/7/9/11 with the same snapshot and identity; three read-only samples over 70
+seconds retain queued `run_845edcb4-8b01-4cbf-b14b-6438fb4922da` with
+`dependency_readiness_pending` and zero output artifacts.
+
+The [complete fifteenth-attempt evidence](../evidence/native-desktop-cpu/cold-typed-discovery/bootstrap-diagnostics/native-attempt/README.md)
+preserves all 23 members, complete masked job log and 12 extracted actual-owner
+diagnostic records. Artifact `11443605285` SHA256 is
+`50163fcaf05389a2e1a55bb459988150a9587902631eaefa35eea15cd677cf89`.
+This establishes the cold requirements seed/snapshot circular dependency and
+corrects the earlier source-only queue hypothesis. CPU execution/output remains
+unqualified. No loader, GPU, pretrained model or broad production qualification
+is inferred. No repair or synthesized readiness is present in this run.

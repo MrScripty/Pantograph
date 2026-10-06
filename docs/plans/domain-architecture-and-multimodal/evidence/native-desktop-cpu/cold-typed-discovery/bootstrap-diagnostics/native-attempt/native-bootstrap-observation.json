@@ -1,0 +1,2675 @@
+[
+  {
+    "capturedAt": "2026-10-06T20:35:32.876Z",
+    "runs": {
+      "projection_state": {
+        "status": "current",
+        "last_applied_event_seq": 4,
+        "projection_version": 10,
+        "rebuilt_at_ms": null,
+        "projection_name": "run_list",
+        "updated_at_ms": 1791318932745
+      },
+      "runs": [
+        {
+          "output_artifact_count": 0,
+          "estimate_confidence": "low",
+          "workflow_execution_session_id": "419b2a61-50d4-4bd3-a1c2-c6da1b6bd612",
+          "latest_error_severity": null,
+          "workflow_id": "Synthetic-CPU-Embedding-Qualification",
+          "selected_device_id": null,
+          "selected_network_node_id": null,
+          "enqueued_at_ms": 1791318932715,
+          "scheduler_queue_position": 0,
+          "observed_peak_ram_bytes": null,
+          "status": "queued",
+          "last_event_seq": 4,
+          "latest_error_event_id": null,
+          "selected_device_class": null,
+          "latest_error_code": null,
+          "workflow_version_id": "wfver_cee7d9dd-86a7-4ed9-b84d-5a00d837a0b4",
+          "selected_runtime_variant_id": null,
+          "workflow_execution_session_resume_state": "dependency_readiness_pending",
+          "warning_count": 0,
+          "selected_model_id": null,
+          "client_id": "client_002601c7-6c3b-4e21-947c-f9f2fd64b2e1",
+          "selected_backend_key": null,
+          "selected_task_id": null,
+          "client_session_id": "session_722b8766-03ea-4e47-b5f1-4389fd8cfc73",
+          "started_at_ms": null,
+          "latest_error_phase": null,
+          "model_cache_state": "unknown",
+          "output_artifact_total_size_bytes": 0,
+          "estimated_queue_wait_ms": null,
+          "memory_failure_kind": null,
+          "scheduler_reason": "next admission candidate pending runtime readiness",
+          "duration_ms": null,
+          "completed_at_ms": null,
+          "bucket_id": "bucket_10333d4f-846b-45f3-a32d-9c05202cb028",
+          "selected_runtime_id": null,
+          "observed_peak_vram_bytes": null,
+          "scheduler_policy_id": "priority_then_fifo",
+          "estimated_duration_ms": null,
+          "latest_error_message": null,
+          "error_count": 0,
+          "fatal_error_event_id": null,
+          "last_updated_at_ms": 1791318932715,
+          "workflow_semantic_version": "0.1.0",
+          "retention_policy_id": "ephemeral",
+          "accepted_at_ms": 1791318932699,
+          "scheduler_priority": 0,
+          "workflow_run_id": "run_845edcb4-8b01-4cbf-b14b-6438fb4922da"
+        }
+      ],
+      "facets": [
+        {
+          "facet_value": "0.1.0",
+          "run_count": 1,
+          "facet_kind": "workflow_version"
+        },
+        {
+          "facet_value": "queued",
+          "run_count": 1,
+          "facet_kind": "status"
+        },
+        {
+          "facet_value": "priority_then_fifo",
+          "run_count": 1,
+          "facet_kind": "scheduler_policy"
+        },
+        {
+          "facet_value": "ephemeral",
+          "run_count": 1,
+          "facet_kind": "retention_policy"
+        },
+        {
+          "facet_value": "Unassigned",
+          "run_count": 1,
+          "facet_kind": "selected_runtime"
+        },
+        {
+          "facet_value": "Unassigned",
+          "run_count": 1,
+          "facet_kind": "selected_runtime_variant"
+        },
+        {
+          "facet_value": "Unassigned",
+          "run_count": 1,
+          "facet_kind": "selected_backend"
+        },
+        {
+          "facet_value": "Unassigned",
+          "run_count": 1,
+          "facet_kind": "selected_device_class"
+        },
+        {
+          "facet_value": "Unassigned",
+          "run_count": 1,
+          "facet_kind": "selected_device"
+        },
+        {
+          "facet_value": "Unassigned",
+          "run_count": 1,
+          "facet_kind": "selected_network_node"
+        }
+      ]
+    },
+    "scheduler": {
+      "session_id": "419b2a61-50d4-4bd3-a1c2-c6da1b6bd612",
+      "items": [
+        {
+          "status": "running",
+          "dequeued_at_ms": 1791318932716,
+          "scheduler_decision_reason": "cold_start_required",
+          "scheduler_admission_outcome": "admitted",
+          "queue_position": 0,
+          "priority": 0,
+          "enqueued_at_ms": 1791318932715,
+          "workflow_run_id": "run_845edcb4-8b01-4cbf-b14b-6438fb4922da"
+        }
+      ],
+      "workflow_id": "Synthetic-CPU-Embedding-Qualification",
+      "session": {
+        "session_id": "419b2a61-50d4-4bd3-a1c2-c6da1b6bd612",
+        "workflow_id": "Synthetic-CPU-Embedding-Qualification",
+        "usage_profile": null,
+        "session_kind": "workflow",
+        "keep_alive": false,
+        "run_count": 0,
+        "state": "running",
+        "queued_runs": 0,
+        "attribution": {
+          "client_session_id": "session_722b8766-03ea-4e47-b5f1-4389fd8cfc73",
+          "bucket_id": "bucket_10333d4f-846b-45f3-a32d-9c05202cb028",
+          "client_id": "client_002601c7-6c3b-4e21-947c-f9f2fd64b2e1"
+        }
+      },
+      "diagnostics": {
+        "runtime_capacity_pressure": "available",
+        "max_loaded_sessions": 8,
+        "runtime_registry": {
+          "target_runtime_id": "llama_cpp"
+        },
+        "loaded_session_count": 0,
+        "reclaimable_loaded_session_count": 0,
+        "active_run_blocks_admission": true
+      },
+      "workflow_run_id": "run_845edcb4-8b01-4cbf-b14b-6438fb4922da"
+    },
+    "inspection": {
+      "run_graph": {
+        "workflow_run_id": "run_845edcb4-8b01-4cbf-b14b-6438fb4922da",
+        "executable_topology": {
+          "edges": [
+            {
+              "source_node_id": "deps",
+              "target_node_id": "infer",
+              "target_port_id": "dependency_environment_sidecar",
+              "source_port_id": "dependency_environment_sidecar"
+            },
+            {
+              "source_node_id": "infer",
+              "target_node_id": "vectors",
+              "target_port_id": "vector",
+              "source_port_id": "embedding"
+            },
+            {
+              "source_node_id": "prompt",
+              "target_node_id": "infer",
+              "target_port_id": "text",
+              "source_port_id": "text"
+            }
+          ],
+          "schema_version": 1,
+          "nodes": [
+            {
+              "contract_version": "1.0.0",
+              "behavior_digest": "contract-blake3:08fbfac18cb3816cb31343a41d8e7ea5cc99aa0f3edfb523bb76f67b035d39e4",
+              "node_id": "deps",
+              "node_type": "dependency-environment"
+            },
+            {
+              "contract_version": "1.0.0",
+              "behavior_digest": "contract-blake3:059015bad11c4fd0527fbddd562db0d349eff68b3234905d997718ee80da685e",
+              "node_id": "infer",
+              "node_type": "llm-inference"
+            },
+            {
+              "contract_version": "1.0.0",
+              "behavior_digest": "contract-blake3:d0b126e802f0e57f639cb6f3e9cc4d4ea716cab048dbc632a15e9bec9af7218e",
+              "node_id": "prompt",
+              "node_type": "text-input"
+            },
+            {
+              "contract_version": "1.0.0",
+              "behavior_digest": "contract-blake3:e71b58e85682d533e9159c1deb21266d0065ca1ef217afe6dc376f43dc8078b2",
+              "node_id": "vectors",
+              "node_type": "vector-output"
+            }
+          ]
+        },
+        "presentation_revision_created_at_ms": 1791318932695,
+        "workflow_id": "Synthetic-CPU-Embedding-Qualification",
+        "workflow_execution_fingerprint": "workflow-exec-blake3:0b4cb7f1fc4e1757a481afa5251f69c2d0cbc70c6ab7403fd66fa55631cd2e20",
+        "presentation_metadata": {
+          "edges": [
+            {
+              "edge_id": "deps-to-infer",
+              "source_node_id": "deps",
+              "target_node_id": "infer",
+              "target_port_id": "dependency_environment_sidecar",
+              "source_port_id": "dependency_environment_sidecar"
+            },
+            {
+              "edge_id": "embedding-to-vector",
+              "source_node_id": "infer",
+              "target_node_id": "vectors",
+              "target_port_id": "vector",
+              "source_port_id": "embedding"
+            },
+            {
+              "edge_id": "text-to-embedding",
+              "source_node_id": "prompt",
+              "target_node_id": "infer",
+              "target_port_id": "text",
+              "source_port_id": "text"
+            }
+          ],
+          "schema_version": 1,
+          "nodes": [
+            {
+              "node_id": "deps",
+              "position": {
+                "x": 300,
+                "y": 450
+              }
+            },
+            {
+              "node_id": "infer",
+              "position": {
+                "x": 300,
+                "y": 100
+              }
+            },
+            {
+              "node_id": "prompt",
+              "position": {
+                "x": 0,
+                "y": 100
+              }
+            },
+            {
+              "node_id": "vectors",
+              "position": {
+                "x": 600,
+                "y": 100
+              }
+            }
+          ]
+        },
+        "workflow_version_id": "wfver_cee7d9dd-86a7-4ed9-b84d-5a00d837a0b4",
+        "snapshot_created_at_ms": 1791318932699,
+        "workflow_semantic_version": "0.1.0",
+        "workflow_version_created_at_ms": 1791318932644,
+        "graph_settings": {
+          "schema_version": 1,
+          "nodes": [
+            {
+              "data": {
+                "label": "Typed dependency control",
+                "definition": {
+                  "description": "Controls dependency environment readiness for one associated inference node",
+                  "io_binding_origin": "integrated",
+                  "category": "control",
+                  "node_type": "dependency-environment",
+                  "label": "Dependency Environment",
+                  "outputs": [
+                    {
+                      "data_type": "dependency_environment_sidecar",
+                      "label": "Dependency Environment",
+                      "required": false,
+                      "id": "dependency_environment_sidecar",
+                      "multiple": false
+                    }
+                  ],
+                  "inputs": [
+                    {
+                      "data_type": "json",
+                      "label": "Selected Bindings",
+                      "required": false,
+                      "id": "selected_binding_ids",
+                      "multiple": false
+                    },
+                    {
+                      "data_type": "string",
+                      "label": "Mode",
+                      "required": false,
+                      "id": "mode",
+                      "multiple": false
+                    },
+                    {
+                      "data_type": "json",
+                      "label": "Manual Overrides",
+                      "required": false,
+                      "id": "manual_overrides",
+                      "multiple": false
+                    }
+                  ],
+                  "execution_mode": "manual"
+                },
+                "mode": "manual"
+              },
+              "node_id": "deps",
+              "node_type": "dependency-environment"
+            },
+            {
+              "data": {
+                "runtime": "candle",
+                "emit_metadata": false,
+                "pumas_model_ref": {
+                  "model_id": "embedding/qualification/synthetic-bert-8",
+                  "selected_artifact_id": "main"
+                },
+                "inference_interface_snapshot": {
+                  "outputs": [
+                    {
+                      "value_type": {
+                        "category": "structured",
+                        "kind": "embedding"
+                      },
+                      "direction": "output",
+                      "label": "Embedding",
+                      "requirement": "required",
+                      "availability": {
+                        "status": "available"
+                      },
+                      "port_id": "embedding"
+                    },
+                    {
+                      "value_type": {
+                        "category": "structured",
+                        "kind": "json"
+                      },
+                      "direction": "output",
+                      "label": "Metadata",
+                      "requirement": "required",
+                      "availability": {
+                        "status": "available"
+                      },
+                      "port_id": "metadata"
+                    },
+                    {
+                      "value_type": {
+                        "category": "structured",
+                        "kind": "json"
+                      },
+                      "direction": "output",
+                      "label": "Usage",
+                      "requirement": "optional",
+                      "availability": {
+                        "status": "available"
+                      },
+                      "port_id": "usage"
+                    }
+                  ],
+                  "descriptor_fingerprint": "iface.60ef264b7095a8c966cafd3e2a601a86accb3161bac18b62c6f4400b24837cef",
+                  "task_kind": "embedding",
+                  "inputs": [
+                    {
+                      "value_type": {
+                        "category": "scalar",
+                        "kind": "string"
+                      },
+                      "direction": "input",
+                      "label": "Text",
+                      "requirement": "required",
+                      "availability": {
+                        "status": "available"
+                      },
+                      "port_id": "text"
+                    }
+                  ],
+                  "contract_version": 1
+                },
+                "device": "cpu",
+                "task_kind": "embedding",
+                "label": "Synthetic CPU embedding",
+                "definition": {
+                  "description": "Schedules a model-specific inference task through backend descriptor resolution",
+                  "io_binding_origin": "integrated",
+                  "category": "processing",
+                  "node_type": "llm-inference",
+                  "label": "LLM Inference",
+                  "outputs": [
+                    {
+                      "data_type": "embedding",
+                      "label": "Embedding",
+                      "required": true,
+                      "id": "embedding",
+                      "multiple": false
+                    },
+                    {
+                      "data_type": "json",
+                      "label": "Metadata",
+                      "required": true,
+                      "id": "metadata",
+                      "multiple": false
+                    },
+                    {
+                      "data_type": "json",
+                      "label": "Usage",
+                      "required": false,
+                      "id": "usage",
+                      "multiple": false
+                    }
+                  ],
+                  "inputs": [
+                    {
+                      "data_type": "string",
+                      "label": "Text",
+                      "required": true,
+                      "id": "text",
+                      "multiple": false
+                    },
+                    {
+                      "data_type": "dependency_environment_sidecar",
+                      "label": "Dependency Environment",
+                      "required": false,
+                      "id": "dependency_environment_sidecar",
+                      "multiple": false
+                    }
+                  ],
+                  "execution_mode": "stream"
+                },
+                "runtime_source_context": {
+                  "operation_type": "embedding.text",
+                  "cancellation_mode": "run_scoped",
+                  "context_shape_key": "embedding.one-text"
+                }
+              },
+              "node_id": "infer",
+              "node_type": "llm-inference"
+            },
+            {
+              "data": {
+                "label": "Synthetic input: hello world",
+                "definition": {
+                  "description": "Provides text input to the workflow",
+                  "io_binding_origin": "client_session",
+                  "category": "input",
+                  "node_type": "text-input",
+                  "label": "Text Input",
+                  "outputs": [
+                    {
+                      "data_type": "string",
+                      "label": "Text",
+                      "required": false,
+                      "id": "text",
+                      "multiple": false
+                    }
+                  ],
+                  "inputs": [
+                    {
+                      "data_type": "string",
+                      "label": "Text",
+                      "required": false,
+                      "id": "text",
+                      "multiple": false
+                    }
+                  ],
+                  "execution_mode": "reactive"
+                },
+                "text": "hello world"
+              },
+              "node_id": "prompt",
+              "node_type": "text-input"
+            },
+            {
+              "data": {
+                "label": "Synthetic vector output",
+                "definition": {
+                  "description": "Displays vector output from the workflow",
+                  "io_binding_origin": "client_session",
+                  "category": "output",
+                  "node_type": "vector-output",
+                  "label": "Vector Output",
+                  "outputs": [
+                    {
+                      "data_type": "embedding",
+                      "label": "Vector",
+                      "required": false,
+                      "id": "vector",
+                      "multiple": false
+                    }
+                  ],
+                  "inputs": [
+                    {
+                      "data_type": "embedding",
+                      "label": "Vector",
+                      "required": false,
+                      "id": "vector",
+                      "multiple": false
+                    }
+                  ],
+                  "execution_mode": "reactive"
+                }
+              },
+              "node_id": "vectors",
+              "node_type": "vector-output"
+            }
+          ]
+        },
+        "workflow_presentation_revision_id": "wfpres_9f2214e8-1166-4e79-83e4-902c7ccc4716",
+        "graph": {
+          "edges": [
+            {
+              "target_handle": "dependency_environment_sidecar",
+              "source_handle": "dependency_environment_sidecar",
+              "source": "deps",
+              "id": "deps-to-infer",
+              "target": "infer"
+            },
+            {
+              "target_handle": "vector",
+              "source_handle": "embedding",
+              "source": "infer",
+              "id": "embedding-to-vector",
+              "target": "vectors"
+            },
+            {
+              "target_handle": "text",
+              "source_handle": "text",
+              "source": "prompt",
+              "id": "text-to-embedding",
+              "target": "infer"
+            }
+          ],
+          "nodes": [
+            {
+              "data": {
+                "label": "Typed dependency control",
+                "definition": {
+                  "description": "Controls dependency environment readiness for one associated inference node",
+                  "io_binding_origin": "integrated",
+                  "category": "control",
+                  "node_type": "dependency-environment",
+                  "label": "Dependency Environment",
+                  "outputs": [
+                    {
+                      "data_type": "dependency_environment_sidecar",
+                      "label": "Dependency Environment",
+                      "required": false,
+                      "id": "dependency_environment_sidecar",
+                      "multiple": false
+                    }
+                  ],
+                  "inputs": [
+                    {
+                      "data_type": "json",
+                      "label": "Selected Bindings",
+                      "required": false,
+                      "id": "selected_binding_ids",
+                      "multiple": false
+                    },
+                    {
+                      "data_type": "string",
+                      "label": "Mode",
+                      "required": false,
+                      "id": "mode",
+                      "multiple": false
+                    },
+                    {
+                      "data_type": "json",
+                      "label": "Manual Overrides",
+                      "required": false,
+                      "id": "manual_overrides",
+                      "multiple": false
+                    }
+                  ],
+                  "execution_mode": "manual"
+                },
+                "mode": "manual"
+              },
+              "id": "deps",
+              "node_type": "dependency-environment",
+              "position": {
+                "x": 300,
+                "y": 450
+              }
+            },
+            {
+              "data": {
+                "runtime": "candle",
+                "emit_metadata": false,
+                "pumas_model_ref": {
+                  "model_id": "embedding/qualification/synthetic-bert-8",
+                  "selected_artifact_id": "main"
+                },
+                "inference_interface_snapshot": {
+                  "outputs": [
+                    {
+                      "value_type": {
+                        "category": "structured",
+                        "kind": "embedding"
+                      },
+                      "direction": "output",
+                      "label": "Embedding",
+                      "requirement": "required",
+                      "availability": {
+                        "status": "available"
+                      },
+                      "port_id": "embedding"
+                    },
+                    {
+                      "value_type": {
+                        "category": "structured",
+                        "kind": "json"
+                      },
+                      "direction": "output",
+                      "label": "Metadata",
+                      "requirement": "required",
+                      "availability": {
+                        "status": "available"
+                      },
+                      "port_id": "metadata"
+                    },
+                    {
+                      "value_type": {
+                        "category": "structured",
+                        "kind": "json"
+                      },
+                      "direction": "output",
+                      "label": "Usage",
+                      "requirement": "optional",
+                      "availability": {
+                        "status": "available"
+                      },
+                      "port_id": "usage"
+                    }
+                  ],
+                  "descriptor_fingerprint": "iface.60ef264b7095a8c966cafd3e2a601a86accb3161bac18b62c6f4400b24837cef",
+                  "task_kind": "embedding",
+                  "inputs": [
+                    {
+                      "value_type": {
+                        "category": "scalar",
+                        "kind": "string"
+                      },
+                      "direction": "input",
+                      "label": "Text",
+                      "requirement": "required",
+                      "availability": {
+                        "status": "available"
+                      },
+                      "port_id": "text"
+                    }
+                  ],
+                  "contract_version": 1
+                },
+                "device": "cpu",
+                "task_kind": "embedding",
+                "label": "Synthetic CPU embedding",
+                "definition": {
+                  "description": "Schedules a model-specific inference task through backend descriptor resolution",
+                  "io_binding_origin": "integrated",
+                  "category": "processing",
+                  "node_type": "llm-inference",
+                  "label": "LLM Inference",
+                  "outputs": [
+                    {
+                      "data_type": "embedding",
+                      "label": "Embedding",
+                      "required": true,
+                      "id": "embedding",
+                      "multiple": false
+                    },
+                    {
+                      "data_type": "json",
+                      "label": "Metadata",
+                      "required": true,
+                      "id": "metadata",
+                      "multiple": false
+                    },
+                    {
+                      "data_type": "json",
+                      "label": "Usage",
+                      "required": false,
+                      "id": "usage",
+                      "multiple": false
+                    }
+                  ],
+                  "inputs": [
+                    {
+                      "data_type": "string",
+                      "label": "Text",
+                      "required": true,
+                      "id": "text",
+                      "multiple": false
+                    },
+                    {
+                      "data_type": "dependency_environment_sidecar",
+                      "label": "Dependency Environment",
+                      "required": false,
+                      "id": "dependency_environment_sidecar",
+                      "multiple": false
+                    }
+                  ],
+                  "execution_mode": "stream"
+                },
+                "runtime_source_context": {
+                  "operation_type": "embedding.text",
+                  "cancellation_mode": "run_scoped",
+                  "context_shape_key": "embedding.one-text"
+                }
+              },
+              "id": "infer",
+              "node_type": "llm-inference",
+              "position": {
+                "x": 300,
+                "y": 100
+              }
+            },
+            {
+              "data": {
+                "label": "Synthetic input: hello world",
+                "definition": {
+                  "description": "Provides text input to the workflow",
+                  "io_binding_origin": "client_session",
+                  "category": "input",
+                  "node_type": "text-input",
+                  "label": "Text Input",
+                  "outputs": [
+                    {
+                      "data_type": "string",
+                      "label": "Text",
+                      "required": false,
+                      "id": "text",
+                      "multiple": false
+                    }
+                  ],
+                  "inputs": [
+                    {
+                      "data_type": "string",
+                      "label": "Text",
+                      "required": false,
+                      "id": "text",
+                      "multiple": false
+                    }
+                  ],
+                  "execution_mode": "reactive"
+                },
+                "text": "hello world"
+              },
+              "id": "prompt",
+              "node_type": "text-input",
+              "position": {
+                "x": 0,
+                "y": 100
+              }
+            },
+            {
+              "data": {
+                "label": "Synthetic vector output",
+                "definition": {
+                  "description": "Displays vector output from the workflow",
+                  "io_binding_origin": "client_session",
+                  "category": "output",
+                  "node_type": "vector-output",
+                  "label": "Vector Output",
+                  "outputs": [
+                    {
+                      "data_type": "embedding",
+                      "label": "Vector",
+                      "required": false,
+                      "id": "vector",
+                      "multiple": false
+                    }
+                  ],
+                  "inputs": [
+                    {
+                      "data_type": "embedding",
+                      "label": "Vector",
+                      "required": false,
+                      "id": "vector",
+                      "multiple": false
+                    }
+                  ],
+                  "execution_mode": "reactive"
+                }
+              },
+              "id": "vectors",
+              "node_type": "vector-output",
+              "position": {
+                "x": 600,
+                "y": 100
+              }
+            }
+          ]
+        }
+      },
+      "run": {
+        "workflow_run_snapshot_id": "runsnap_28bdea99-e29a-438d-a745-5eba24fc771a",
+        "latest_error_severity": null,
+        "workflow_execution_session_id": "419b2a61-50d4-4bd3-a1c2-c6da1b6bd612",
+        "terminal_payload_json": null,
+        "workflow_id": "Synthetic-CPU-Embedding-Qualification",
+        "selected_network_node_id": null,
+        "enqueued_at_ms": 1791318932715,
+        "scheduler_queue_position": 0,
+        "observed_peak_ram_bytes": null,
+        "status": "queued",
+        "latest_error_event_id": null,
+        "latest_error_code": null,
+        "started_payload_json": null,
+        "selected_runtime_variant_id": null,
+        "workflow_execution_session_resume_state": "dependency_readiness_pending",
+        "client_session_id": "session_722b8766-03ea-4e47-b5f1-4389fd8cfc73",
+        "model_cache_state": "unknown",
+        "started_at_ms": null,
+        "scheduler_reason": "next admission candidate pending runtime readiness",
+        "estimated_queue_wait_ms": null,
+        "memory_failure_kind": null,
+        "error_count": 0,
+        "bucket_id": "bucket_10333d4f-846b-45f3-a32d-9c05202cb028",
+        "workflow_semantic_version": "0.1.0",
+        "accepted_at_ms": 1791318932699,
+        "scheduler_priority": 0,
+        "timeline_event_count": 3,
+        "output_artifact_count": 0,
+        "estimate_confidence": "low",
+        "selected_device_id": null,
+        "latest_queue_placement_json": "{\"payload_type\":\"scheduler_queue_placement\",\"queue_position\":0,\"priority\":0,\"scheduler_policy_id\":\"priority_then_fifo\"}",
+        "last_event_seq": 4,
+        "selected_device_class": null,
+        "workflow_version_id": "wfver_cee7d9dd-86a7-4ed9-b84d-5a00d837a0b4",
+        "warning_count": 0,
+        "selected_model_id": null,
+        "client_id": "client_002601c7-6c3b-4e21-947c-f9f2fd64b2e1",
+        "selected_backend_key": null,
+        "selected_task_id": null,
+        "latest_error_phase": null,
+        "fatal_error_event_id": null,
+        "output_artifact_total_size_bytes": 0,
+        "duration_ms": null,
+        "completed_at_ms": null,
+        "latest_estimate_json": "{\"payload_type\":\"scheduler_estimate_produced\",\"estimate_version\":\"session-scheduler-v1\",\"confidence\":\"low\",\"estimated_queue_wait_ms\":null,\"estimated_duration_ms\":null,\"model_cache_state\":\"unknown\",\"blocking_conditions\":[\"runtime_admission_pending\",\"model_cache_unknown\"],\"missing_asset_ids\":[],\"candidate_runtime_ids\":[\"candle\"],\"candidate_device_ids\":[],\"candidate_network_node_ids\":[],\"reasons\":[\"next admission candidate pending runtime readiness\",\"requires backend(s): candle\",\"requires model(s): embedding/qualification/synthetic-bert-8\",\"requires extension(s): inference_gateway, model_dependency_resolver, pumas_api\",\"candidate runtime(s): candle\"]}",
+        "latest_error_message": null,
+        "selected_runtime_id": null,
+        "observed_peak_vram_bytes": null,
+        "scheduler_policy_id": "priority_then_fifo",
+        "terminal_error": null,
+        "estimated_duration_ms": null,
+        "last_updated_at_ms": 1791318932715,
+        "retention_policy_id": "ephemeral",
+        "workflow_presentation_revision_id": "wfpres_9f2214e8-1166-4e79-83e4-902c7ccc4716",
+        "workflow_run_id": "run_845edcb4-8b01-4cbf-b14b-6438fb4922da"
+      },
+      "run_projection_state": {
+        "status": "current",
+        "last_applied_event_seq": 4,
+        "projection_version": 9,
+        "rebuilt_at_ms": null,
+        "projection_name": "run_detail",
+        "updated_at_ms": 1791318932746
+      },
+      "io_projection_state": {
+        "status": "current",
+        "last_applied_event_seq": 0,
+        "projection_version": 6,
+        "rebuilt_at_ms": null,
+        "projection_name": "io_artifact",
+        "updated_at_ms": 1791318928249
+      },
+      "node_projection_state": {
+        "status": "current",
+        "last_applied_event_seq": 0,
+        "projection_version": 6,
+        "rebuilt_at_ms": null,
+        "projection_name": "node_status",
+        "updated_at_ms": 1791318928249
+      }
+    }
+  },
+  {
+    "capturedAt": "2026-10-06T20:36:07.944Z",
+    "runs": {
+      "projection_state": {
+        "status": "current",
+        "last_applied_event_seq": 4,
+        "projection_version": 10,
+        "rebuilt_at_ms": null,
+        "projection_name": "run_list",
+        "updated_at_ms": 1791318932745
+      },
+      "runs": [
+        {
+          "output_artifact_count": 0,
+          "estimate_confidence": "low",
+          "workflow_execution_session_id": "419b2a61-50d4-4bd3-a1c2-c6da1b6bd612",
+          "latest_error_severity": null,
+          "workflow_id": "Synthetic-CPU-Embedding-Qualification",
+          "selected_device_id": null,
+          "selected_network_node_id": null,
+          "enqueued_at_ms": 1791318932715,
+          "scheduler_queue_position": 0,
+          "observed_peak_ram_bytes": null,
+          "status": "queued",
+          "last_event_seq": 4,
+          "latest_error_event_id": null,
+          "selected_device_class": null,
+          "latest_error_code": null,
+          "workflow_version_id": "wfver_cee7d9dd-86a7-4ed9-b84d-5a00d837a0b4",
+          "selected_runtime_variant_id": null,
+          "workflow_execution_session_resume_state": "dependency_readiness_pending",
+          "warning_count": 0,
+          "selected_model_id": null,
+          "client_id": "client_002601c7-6c3b-4e21-947c-f9f2fd64b2e1",
+          "selected_backend_key": null,
+          "selected_task_id": null,
+          "client_session_id": "session_722b8766-03ea-4e47-b5f1-4389fd8cfc73",
+          "started_at_ms": null,
+          "latest_error_phase": null,
+          "model_cache_state": "unknown",
+          "output_artifact_total_size_bytes": 0,
+          "estimated_queue_wait_ms": null,
+          "memory_failure_kind": null,
+          "scheduler_reason": "next admission candidate pending runtime readiness",
+          "duration_ms": null,
+          "completed_at_ms": null,
+          "bucket_id": "bucket_10333d4f-846b-45f3-a32d-9c05202cb028",
+          "selected_runtime_id": null,
+          "observed_peak_vram_bytes": null,
+          "scheduler_policy_id": "priority_then_fifo",
+          "estimated_duration_ms": null,
+          "latest_error_message": null,
+          "error_count": 0,
+          "fatal_error_event_id": null,
+          "last_updated_at_ms": 1791318932715,
+          "workflow_semantic_version": "0.1.0",
+          "retention_policy_id": "ephemeral",
+          "accepted_at_ms": 1791318932699,
+          "scheduler_priority": 0,
+          "workflow_run_id": "run_845edcb4-8b01-4cbf-b14b-6438fb4922da"
+        }
+      ],
+      "facets": [
+        {
+          "facet_value": "0.1.0",
+          "run_count": 1,
+          "facet_kind": "workflow_version"
+        },
+        {
+          "facet_value": "queued",
+          "run_count": 1,
+          "facet_kind": "status"
+        },
+        {
+          "facet_value": "priority_then_fifo",
+          "run_count": 1,
+          "facet_kind": "scheduler_policy"
+        },
+        {
+          "facet_value": "ephemeral",
+          "run_count": 1,
+          "facet_kind": "retention_policy"
+        },
+        {
+          "facet_value": "Unassigned",
+          "run_count": 1,
+          "facet_kind": "selected_runtime"
+        },
+        {
+          "facet_value": "Unassigned",
+          "run_count": 1,
+          "facet_kind": "selected_runtime_variant"
+        },
+        {
+          "facet_value": "Unassigned",
+          "run_count": 1,
+          "facet_kind": "selected_backend"
+        },
+        {
+          "facet_value": "Unassigned",
+          "run_count": 1,
+          "facet_kind": "selected_device_class"
+        },
+        {
+          "facet_value": "Unassigned",
+          "run_count": 1,
+          "facet_kind": "selected_device"
+        },
+        {
+          "facet_value": "Unassigned",
+          "run_count": 1,
+          "facet_kind": "selected_network_node"
+        }
+      ]
+    },
+    "scheduler": {
+      "session_id": "419b2a61-50d4-4bd3-a1c2-c6da1b6bd612",
+      "items": [
+        {
+          "status": "running",
+          "dequeued_at_ms": 1791318932716,
+          "scheduler_decision_reason": "cold_start_required",
+          "scheduler_admission_outcome": "admitted",
+          "queue_position": 0,
+          "priority": 0,
+          "enqueued_at_ms": 1791318932715,
+          "workflow_run_id": "run_845edcb4-8b01-4cbf-b14b-6438fb4922da"
+        }
+      ],
+      "workflow_id": "Synthetic-CPU-Embedding-Qualification",
+      "session": {
+        "session_id": "419b2a61-50d4-4bd3-a1c2-c6da1b6bd612",
+        "workflow_id": "Synthetic-CPU-Embedding-Qualification",
+        "usage_profile": null,
+        "session_kind": "workflow",
+        "keep_alive": false,
+        "run_count": 0,
+        "state": "running",
+        "queued_runs": 0,
+        "attribution": {
+          "client_session_id": "session_722b8766-03ea-4e47-b5f1-4389fd8cfc73",
+          "bucket_id": "bucket_10333d4f-846b-45f3-a32d-9c05202cb028",
+          "client_id": "client_002601c7-6c3b-4e21-947c-f9f2fd64b2e1"
+        }
+      },
+      "diagnostics": {
+        "runtime_capacity_pressure": "available",
+        "max_loaded_sessions": 8,
+        "runtime_registry": {
+          "target_runtime_id": "llama_cpp"
+        },
+        "loaded_session_count": 0,
+        "reclaimable_loaded_session_count": 0,
+        "active_run_blocks_admission": true
+      },
+      "workflow_run_id": "run_845edcb4-8b01-4cbf-b14b-6438fb4922da"
+    },
+    "inspection": {
+      "run_graph": {
+        "workflow_run_id": "run_845edcb4-8b01-4cbf-b14b-6438fb4922da",
+        "executable_topology": {
+          "edges": [
+            {
+              "source_node_id": "deps",
+              "target_node_id": "infer",
+              "target_port_id": "dependency_environment_sidecar",
+              "source_port_id": "dependency_environment_sidecar"
+            },
+            {
+              "source_node_id": "infer",
+              "target_node_id": "vectors",
+              "target_port_id": "vector",
+              "source_port_id": "embedding"
+            },
+            {
+              "source_node_id": "prompt",
+              "target_node_id": "infer",
+              "target_port_id": "text",
+              "source_port_id": "text"
+            }
+          ],
+          "schema_version": 1,
+          "nodes": [
+            {
+              "contract_version": "1.0.0",
+              "behavior_digest": "contract-blake3:08fbfac18cb3816cb31343a41d8e7ea5cc99aa0f3edfb523bb76f67b035d39e4",
+              "node_id": "deps",
+              "node_type": "dependency-environment"
+            },
+            {
+              "contract_version": "1.0.0",
+              "behavior_digest": "contract-blake3:059015bad11c4fd0527fbddd562db0d349eff68b3234905d997718ee80da685e",
+              "node_id": "infer",
+              "node_type": "llm-inference"
+            },
+            {
+              "contract_version": "1.0.0",
+              "behavior_digest": "contract-blake3:d0b126e802f0e57f639cb6f3e9cc4d4ea716cab048dbc632a15e9bec9af7218e",
+              "node_id": "prompt",
+              "node_type": "text-input"
+            },
+            {
+              "contract_version": "1.0.0",
+              "behavior_digest": "contract-blake3:e71b58e85682d533e9159c1deb21266d0065ca1ef217afe6dc376f43dc8078b2",
+              "node_id": "vectors",
+              "node_type": "vector-output"
+            }
+          ]
+        },
+        "presentation_revision_created_at_ms": 1791318932695,
+        "workflow_id": "Synthetic-CPU-Embedding-Qualification",
+        "workflow_execution_fingerprint": "workflow-exec-blake3:0b4cb7f1fc4e1757a481afa5251f69c2d0cbc70c6ab7403fd66fa55631cd2e20",
+        "presentation_metadata": {
+          "edges": [
+            {
+              "edge_id": "deps-to-infer",
+              "source_node_id": "deps",
+              "target_node_id": "infer",
+              "target_port_id": "dependency_environment_sidecar",
+              "source_port_id": "dependency_environment_sidecar"
+            },
+            {
+              "edge_id": "embedding-to-vector",
+              "source_node_id": "infer",
+              "target_node_id": "vectors",
+              "target_port_id": "vector",
+              "source_port_id": "embedding"
+            },
+            {
+              "edge_id": "text-to-embedding",
+              "source_node_id": "prompt",
+              "target_node_id": "infer",
+              "target_port_id": "text",
+              "source_port_id": "text"
+            }
+          ],
+          "schema_version": 1,
+          "nodes": [
+            {
+              "node_id": "deps",
+              "position": {
+                "x": 300,
+                "y": 450
+              }
+            },
+            {
+              "node_id": "infer",
+              "position": {
+                "x": 300,
+                "y": 100
+              }
+            },
+            {
+              "node_id": "prompt",
+              "position": {
+                "x": 0,
+                "y": 100
+              }
+            },
+            {
+              "node_id": "vectors",
+              "position": {
+                "x": 600,
+                "y": 100
+              }
+            }
+          ]
+        },
+        "workflow_version_id": "wfver_cee7d9dd-86a7-4ed9-b84d-5a00d837a0b4",
+        "snapshot_created_at_ms": 1791318932699,
+        "workflow_semantic_version": "0.1.0",
+        "workflow_version_created_at_ms": 1791318932644,
+        "graph_settings": {
+          "schema_version": 1,
+          "nodes": [
+            {
+              "data": {
+                "label": "Typed dependency control",
+                "definition": {
+                  "description": "Controls dependency environment readiness for one associated inference node",
+                  "io_binding_origin": "integrated",
+                  "category": "control",
+                  "node_type": "dependency-environment",
+                  "label": "Dependency Environment",
+                  "outputs": [
+                    {
+                      "data_type": "dependency_environment_sidecar",
+                      "label": "Dependency Environment",
+                      "required": false,
+                      "id": "dependency_environment_sidecar",
+                      "multiple": false
+                    }
+                  ],
+                  "inputs": [
+                    {
+                      "data_type": "json",
+                      "label": "Selected Bindings",
+                      "required": false,
+                      "id": "selected_binding_ids",
+                      "multiple": false
+                    },
+                    {
+                      "data_type": "string",
+                      "label": "Mode",
+                      "required": false,
+                      "id": "mode",
+                      "multiple": false
+                    },
+                    {
+                      "data_type": "json",
+                      "label": "Manual Overrides",
+                      "required": false,
+                      "id": "manual_overrides",
+                      "multiple": false
+                    }
+                  ],
+                  "execution_mode": "manual"
+                },
+                "mode": "manual"
+              },
+              "node_id": "deps",
+              "node_type": "dependency-environment"
+            },
+            {
+              "data": {
+                "runtime": "candle",
+                "emit_metadata": false,
+                "pumas_model_ref": {
+                  "model_id": "embedding/qualification/synthetic-bert-8",
+                  "selected_artifact_id": "main"
+                },
+                "inference_interface_snapshot": {
+                  "outputs": [
+                    {
+                      "value_type": {
+                        "category": "structured",
+                        "kind": "embedding"
+                      },
+                      "direction": "output",
+                      "label": "Embedding",
+                      "requirement": "required",
+                      "availability": {
+                        "status": "available"
+                      },
+                      "port_id": "embedding"
+                    },
+                    {
+                      "value_type": {
+                        "category": "structured",
+                        "kind": "json"
+                      },
+                      "direction": "output",
+                      "label": "Metadata",
+                      "requirement": "required",
+                      "availability": {
+                        "status": "available"
+                      },
+                      "port_id": "metadata"
+                    },
+                    {
+                      "value_type": {
+                        "category": "structured",
+                        "kind": "json"
+                      },
+                      "direction": "output",
+                      "label": "Usage",
+                      "requirement": "optional",
+                      "availability": {
+                        "status": "available"
+                      },
+                      "port_id": "usage"
+                    }
+                  ],
+                  "descriptor_fingerprint": "iface.60ef264b7095a8c966cafd3e2a601a86accb3161bac18b62c6f4400b24837cef",
+                  "task_kind": "embedding",
+                  "inputs": [
+                    {
+                      "value_type": {
+                        "category": "scalar",
+                        "kind": "string"
+                      },
+                      "direction": "input",
+                      "label": "Text",
+                      "requirement": "required",
+                      "availability": {
+                        "status": "available"
+                      },
+                      "port_id": "text"
+                    }
+                  ],
+                  "contract_version": 1
+                },
+                "device": "cpu",
+                "task_kind": "embedding",
+                "label": "Synthetic CPU embedding",
+                "definition": {
+                  "description": "Schedules a model-specific inference task through backend descriptor resolution",
+                  "io_binding_origin": "integrated",
+                  "category": "processing",
+                  "node_type": "llm-inference",
+                  "label": "LLM Inference",
+                  "outputs": [
+                    {
+                      "data_type": "embedding",
+                      "label": "Embedding",
+                      "required": true,
+                      "id": "embedding",
+                      "multiple": false
+                    },
+                    {
+                      "data_type": "json",
+                      "label": "Metadata",
+                      "required": true,
+                      "id": "metadata",
+                      "multiple": false
+                    },
+                    {
+                      "data_type": "json",
+                      "label": "Usage",
+                      "required": false,
+                      "id": "usage",
+                      "multiple": false
+                    }
+                  ],
+                  "inputs": [
+                    {
+                      "data_type": "string",
+                      "label": "Text",
+                      "required": true,
+                      "id": "text",
+                      "multiple": false
+                    },
+                    {
+                      "data_type": "dependency_environment_sidecar",
+                      "label": "Dependency Environment",
+                      "required": false,
+                      "id": "dependency_environment_sidecar",
+                      "multiple": false
+                    }
+                  ],
+                  "execution_mode": "stream"
+                },
+                "runtime_source_context": {
+                  "operation_type": "embedding.text",
+                  "cancellation_mode": "run_scoped",
+                  "context_shape_key": "embedding.one-text"
+                }
+              },
+              "node_id": "infer",
+              "node_type": "llm-inference"
+            },
+            {
+              "data": {
+                "label": "Synthetic input: hello world",
+                "definition": {
+                  "description": "Provides text input to the workflow",
+                  "io_binding_origin": "client_session",
+                  "category": "input",
+                  "node_type": "text-input",
+                  "label": "Text Input",
+                  "outputs": [
+                    {
+                      "data_type": "string",
+                      "label": "Text",
+                      "required": false,
+                      "id": "text",
+                      "multiple": false
+                    }
+                  ],
+                  "inputs": [
+                    {
+                      "data_type": "string",
+                      "label": "Text",
+                      "required": false,
+                      "id": "text",
+                      "multiple": false
+                    }
+                  ],
+                  "execution_mode": "reactive"
+                },
+                "text": "hello world"
+              },
+              "node_id": "prompt",
+              "node_type": "text-input"
+            },
+            {
+              "data": {
+                "label": "Synthetic vector output",
+                "definition": {
+                  "description": "Displays vector output from the workflow",
+                  "io_binding_origin": "client_session",
+                  "category": "output",
+                  "node_type": "vector-output",
+                  "label": "Vector Output",
+                  "outputs": [
+                    {
+                      "data_type": "embedding",
+                      "label": "Vector",
+                      "required": false,
+                      "id": "vector",
+                      "multiple": false
+                    }
+                  ],
+                  "inputs": [
+                    {
+                      "data_type": "embedding",
+                      "label": "Vector",
+                      "required": false,
+                      "id": "vector",
+                      "multiple": false
+                    }
+                  ],
+                  "execution_mode": "reactive"
+                }
+              },
+              "node_id": "vectors",
+              "node_type": "vector-output"
+            }
+          ]
+        },
+        "workflow_presentation_revision_id": "wfpres_9f2214e8-1166-4e79-83e4-902c7ccc4716",
+        "graph": {
+          "edges": [
+            {
+              "target_handle": "dependency_environment_sidecar",
+              "source_handle": "dependency_environment_sidecar",
+              "source": "deps",
+              "id": "deps-to-infer",
+              "target": "infer"
+            },
+            {
+              "target_handle": "vector",
+              "source_handle": "embedding",
+              "source": "infer",
+              "id": "embedding-to-vector",
+              "target": "vectors"
+            },
+            {
+              "target_handle": "text",
+              "source_handle": "text",
+              "source": "prompt",
+              "id": "text-to-embedding",
+              "target": "infer"
+            }
+          ],
+          "nodes": [
+            {
+              "data": {
+                "label": "Typed dependency control",
+                "definition": {
+                  "description": "Controls dependency environment readiness for one associated inference node",
+                  "io_binding_origin": "integrated",
+                  "category": "control",
+                  "node_type": "dependency-environment",
+                  "label": "Dependency Environment",
+                  "outputs": [
+                    {
+                      "data_type": "dependency_environment_sidecar",
+                      "label": "Dependency Environment",
+                      "required": false,
+                      "id": "dependency_environment_sidecar",
+                      "multiple": false
+                    }
+                  ],
+                  "inputs": [
+                    {
+                      "data_type": "json",
+                      "label": "Selected Bindings",
+                      "required": false,
+                      "id": "selected_binding_ids",
+                      "multiple": false
+                    },
+                    {
+                      "data_type": "string",
+                      "label": "Mode",
+                      "required": false,
+                      "id": "mode",
+                      "multiple": false
+                    },
+                    {
+                      "data_type": "json",
+                      "label": "Manual Overrides",
+                      "required": false,
+                      "id": "manual_overrides",
+                      "multiple": false
+                    }
+                  ],
+                  "execution_mode": "manual"
+                },
+                "mode": "manual"
+              },
+              "id": "deps",
+              "node_type": "dependency-environment",
+              "position": {
+                "x": 300,
+                "y": 450
+              }
+            },
+            {
+              "data": {
+                "runtime": "candle",
+                "emit_metadata": false,
+                "pumas_model_ref": {
+                  "model_id": "embedding/qualification/synthetic-bert-8",
+                  "selected_artifact_id": "main"
+                },
+                "inference_interface_snapshot": {
+                  "outputs": [
+                    {
+                      "value_type": {
+                        "category": "structured",
+                        "kind": "embedding"
+                      },
+                      "direction": "output",
+                      "label": "Embedding",
+                      "requirement": "required",
+                      "availability": {
+                        "status": "available"
+                      },
+                      "port_id": "embedding"
+                    },
+                    {
+                      "value_type": {
+                        "category": "structured",
+                        "kind": "json"
+                      },
+                      "direction": "output",
+                      "label": "Metadata",
+                      "requirement": "required",
+                      "availability": {
+                        "status": "available"
+                      },
+                      "port_id": "metadata"
+                    },
+                    {
+                      "value_type": {
+                        "category": "structured",
+                        "kind": "json"
+                      },
+                      "direction": "output",
+                      "label": "Usage",
+                      "requirement": "optional",
+                      "availability": {
+                        "status": "available"
+                      },
+                      "port_id": "usage"
+                    }
+                  ],
+                  "descriptor_fingerprint": "iface.60ef264b7095a8c966cafd3e2a601a86accb3161bac18b62c6f4400b24837cef",
+                  "task_kind": "embedding",
+                  "inputs": [
+                    {
+                      "value_type": {
+                        "category": "scalar",
+                        "kind": "string"
+                      },
+                      "direction": "input",
+                      "label": "Text",
+                      "requirement": "required",
+                      "availability": {
+                        "status": "available"
+                      },
+                      "port_id": "text"
+                    }
+                  ],
+                  "contract_version": 1
+                },
+                "device": "cpu",
+                "task_kind": "embedding",
+                "label": "Synthetic CPU embedding",
+                "definition": {
+                  "description": "Schedules a model-specific inference task through backend descriptor resolution",
+                  "io_binding_origin": "integrated",
+                  "category": "processing",
+                  "node_type": "llm-inference",
+                  "label": "LLM Inference",
+                  "outputs": [
+                    {
+                      "data_type": "embedding",
+                      "label": "Embedding",
+                      "required": true,
+                      "id": "embedding",
+                      "multiple": false
+                    },
+                    {
+                      "data_type": "json",
+                      "label": "Metadata",
+                      "required": true,
+                      "id": "metadata",
+                      "multiple": false
+                    },
+                    {
+                      "data_type": "json",
+                      "label": "Usage",
+                      "required": false,
+                      "id": "usage",
+                      "multiple": false
+                    }
+                  ],
+                  "inputs": [
+                    {
+                      "data_type": "string",
+                      "label": "Text",
+                      "required": true,
+                      "id": "text",
+                      "multiple": false
+                    },
+                    {
+                      "data_type": "dependency_environment_sidecar",
+                      "label": "Dependency Environment",
+                      "required": false,
+                      "id": "dependency_environment_sidecar",
+                      "multiple": false
+                    }
+                  ],
+                  "execution_mode": "stream"
+                },
+                "runtime_source_context": {
+                  "operation_type": "embedding.text",
+                  "cancellation_mode": "run_scoped",
+                  "context_shape_key": "embedding.one-text"
+                }
+              },
+              "id": "infer",
+              "node_type": "llm-inference",
+              "position": {
+                "x": 300,
+                "y": 100
+              }
+            },
+            {
+              "data": {
+                "label": "Synthetic input: hello world",
+                "definition": {
+                  "description": "Provides text input to the workflow",
+                  "io_binding_origin": "client_session",
+                  "category": "input",
+                  "node_type": "text-input",
+                  "label": "Text Input",
+                  "outputs": [
+                    {
+                      "data_type": "string",
+                      "label": "Text",
+                      "required": false,
+                      "id": "text",
+                      "multiple": false
+                    }
+                  ],
+                  "inputs": [
+                    {
+                      "data_type": "string",
+                      "label": "Text",
+                      "required": false,
+                      "id": "text",
+                      "multiple": false
+                    }
+                  ],
+                  "execution_mode": "reactive"
+                },
+                "text": "hello world"
+              },
+              "id": "prompt",
+              "node_type": "text-input",
+              "position": {
+                "x": 0,
+                "y": 100
+              }
+            },
+            {
+              "data": {
+                "label": "Synthetic vector output",
+                "definition": {
+                  "description": "Displays vector output from the workflow",
+                  "io_binding_origin": "client_session",
+                  "category": "output",
+                  "node_type": "vector-output",
+                  "label": "Vector Output",
+                  "outputs": [
+                    {
+                      "data_type": "embedding",
+                      "label": "Vector",
+                      "required": false,
+                      "id": "vector",
+                      "multiple": false
+                    }
+                  ],
+                  "inputs": [
+                    {
+                      "data_type": "embedding",
+                      "label": "Vector",
+                      "required": false,
+                      "id": "vector",
+                      "multiple": false
+                    }
+                  ],
+                  "execution_mode": "reactive"
+                }
+              },
+              "id": "vectors",
+              "node_type": "vector-output",
+              "position": {
+                "x": 600,
+                "y": 100
+              }
+            }
+          ]
+        }
+      },
+      "run": {
+        "workflow_run_snapshot_id": "runsnap_28bdea99-e29a-438d-a745-5eba24fc771a",
+        "latest_error_severity": null,
+        "workflow_execution_session_id": "419b2a61-50d4-4bd3-a1c2-c6da1b6bd612",
+        "terminal_payload_json": null,
+        "workflow_id": "Synthetic-CPU-Embedding-Qualification",
+        "selected_network_node_id": null,
+        "enqueued_at_ms": 1791318932715,
+        "scheduler_queue_position": 0,
+        "observed_peak_ram_bytes": null,
+        "status": "queued",
+        "latest_error_event_id": null,
+        "latest_error_code": null,
+        "started_payload_json": null,
+        "selected_runtime_variant_id": null,
+        "workflow_execution_session_resume_state": "dependency_readiness_pending",
+        "client_session_id": "session_722b8766-03ea-4e47-b5f1-4389fd8cfc73",
+        "model_cache_state": "unknown",
+        "started_at_ms": null,
+        "scheduler_reason": "next admission candidate pending runtime readiness",
+        "estimated_queue_wait_ms": null,
+        "memory_failure_kind": null,
+        "error_count": 0,
+        "bucket_id": "bucket_10333d4f-846b-45f3-a32d-9c05202cb028",
+        "workflow_semantic_version": "0.1.0",
+        "accepted_at_ms": 1791318932699,
+        "scheduler_priority": 0,
+        "timeline_event_count": 3,
+        "output_artifact_count": 0,
+        "estimate_confidence": "low",
+        "selected_device_id": null,
+        "latest_queue_placement_json": "{\"payload_type\":\"scheduler_queue_placement\",\"queue_position\":0,\"priority\":0,\"scheduler_policy_id\":\"priority_then_fifo\"}",
+        "last_event_seq": 4,
+        "selected_device_class": null,
+        "workflow_version_id": "wfver_cee7d9dd-86a7-4ed9-b84d-5a00d837a0b4",
+        "warning_count": 0,
+        "selected_model_id": null,
+        "client_id": "client_002601c7-6c3b-4e21-947c-f9f2fd64b2e1",
+        "selected_backend_key": null,
+        "selected_task_id": null,
+        "latest_error_phase": null,
+        "fatal_error_event_id": null,
+        "output_artifact_total_size_bytes": 0,
+        "duration_ms": null,
+        "completed_at_ms": null,
+        "latest_estimate_json": "{\"payload_type\":\"scheduler_estimate_produced\",\"estimate_version\":\"session-scheduler-v1\",\"confidence\":\"low\",\"estimated_queue_wait_ms\":null,\"estimated_duration_ms\":null,\"model_cache_state\":\"unknown\",\"blocking_conditions\":[\"runtime_admission_pending\",\"model_cache_unknown\"],\"missing_asset_ids\":[],\"candidate_runtime_ids\":[\"candle\"],\"candidate_device_ids\":[],\"candidate_network_node_ids\":[],\"reasons\":[\"next admission candidate pending runtime readiness\",\"requires backend(s): candle\",\"requires model(s): embedding/qualification/synthetic-bert-8\",\"requires extension(s): inference_gateway, model_dependency_resolver, pumas_api\",\"candidate runtime(s): candle\"]}",
+        "latest_error_message": null,
+        "selected_runtime_id": null,
+        "observed_peak_vram_bytes": null,
+        "scheduler_policy_id": "priority_then_fifo",
+        "terminal_error": null,
+        "estimated_duration_ms": null,
+        "last_updated_at_ms": 1791318932715,
+        "retention_policy_id": "ephemeral",
+        "workflow_presentation_revision_id": "wfpres_9f2214e8-1166-4e79-83e4-902c7ccc4716",
+        "workflow_run_id": "run_845edcb4-8b01-4cbf-b14b-6438fb4922da"
+      },
+      "run_projection_state": {
+        "status": "current",
+        "last_applied_event_seq": 4,
+        "projection_version": 9,
+        "rebuilt_at_ms": null,
+        "projection_name": "run_detail",
+        "updated_at_ms": 1791318932746
+      },
+      "io_projection_state": {
+        "status": "current",
+        "last_applied_event_seq": 0,
+        "projection_version": 6,
+        "rebuilt_at_ms": null,
+        "projection_name": "io_artifact",
+        "updated_at_ms": 1791318928249
+      },
+      "node_projection_state": {
+        "status": "current",
+        "last_applied_event_seq": 0,
+        "projection_version": 6,
+        "rebuilt_at_ms": null,
+        "projection_name": "node_status",
+        "updated_at_ms": 1791318928249
+      }
+    }
+  },
+  {
+    "capturedAt": "2026-10-06T20:36:43.036Z",
+    "runs": {
+      "projection_state": {
+        "status": "current",
+        "last_applied_event_seq": 4,
+        "projection_version": 10,
+        "rebuilt_at_ms": null,
+        "projection_name": "run_list",
+        "updated_at_ms": 1791318932745
+      },
+      "runs": [
+        {
+          "output_artifact_count": 0,
+          "estimate_confidence": "low",
+          "workflow_execution_session_id": "419b2a61-50d4-4bd3-a1c2-c6da1b6bd612",
+          "latest_error_severity": null,
+          "workflow_id": "Synthetic-CPU-Embedding-Qualification",
+          "selected_device_id": null,
+          "selected_network_node_id": null,
+          "enqueued_at_ms": 1791318932715,
+          "scheduler_queue_position": 0,
+          "observed_peak_ram_bytes": null,
+          "status": "queued",
+          "last_event_seq": 4,
+          "latest_error_event_id": null,
+          "selected_device_class": null,
+          "latest_error_code": null,
+          "workflow_version_id": "wfver_cee7d9dd-86a7-4ed9-b84d-5a00d837a0b4",
+          "selected_runtime_variant_id": null,
+          "workflow_execution_session_resume_state": "dependency_readiness_pending",
+          "warning_count": 0,
+          "selected_model_id": null,
+          "client_id": "client_002601c7-6c3b-4e21-947c-f9f2fd64b2e1",
+          "selected_backend_key": null,
+          "selected_task_id": null,
+          "client_session_id": "session_722b8766-03ea-4e47-b5f1-4389fd8cfc73",
+          "started_at_ms": null,
+          "latest_error_phase": null,
+          "model_cache_state": "unknown",
+          "output_artifact_total_size_bytes": 0,
+          "estimated_queue_wait_ms": null,
+          "memory_failure_kind": null,
+          "scheduler_reason": "next admission candidate pending runtime readiness",
+          "duration_ms": null,
+          "completed_at_ms": null,
+          "bucket_id": "bucket_10333d4f-846b-45f3-a32d-9c05202cb028",
+          "selected_runtime_id": null,
+          "observed_peak_vram_bytes": null,
+          "scheduler_policy_id": "priority_then_fifo",
+          "estimated_duration_ms": null,
+          "latest_error_message": null,
+          "error_count": 0,
+          "fatal_error_event_id": null,
+          "last_updated_at_ms": 1791318932715,
+          "workflow_semantic_version": "0.1.0",
+          "retention_policy_id": "ephemeral",
+          "accepted_at_ms": 1791318932699,
+          "scheduler_priority": 0,
+          "workflow_run_id": "run_845edcb4-8b01-4cbf-b14b-6438fb4922da"
+        }
+      ],
+      "facets": [
+        {
+          "facet_value": "0.1.0",
+          "run_count": 1,
+          "facet_kind": "workflow_version"
+        },
+        {
+          "facet_value": "queued",
+          "run_count": 1,
+          "facet_kind": "status"
+        },
+        {
+          "facet_value": "priority_then_fifo",
+          "run_count": 1,
+          "facet_kind": "scheduler_policy"
+        },
+        {
+          "facet_value": "ephemeral",
+          "run_count": 1,
+          "facet_kind": "retention_policy"
+        },
+        {
+          "facet_value": "Unassigned",
+          "run_count": 1,
+          "facet_kind": "selected_runtime"
+        },
+        {
+          "facet_value": "Unassigned",
+          "run_count": 1,
+          "facet_kind": "selected_runtime_variant"
+        },
+        {
+          "facet_value": "Unassigned",
+          "run_count": 1,
+          "facet_kind": "selected_backend"
+        },
+        {
+          "facet_value": "Unassigned",
+          "run_count": 1,
+          "facet_kind": "selected_device_class"
+        },
+        {
+          "facet_value": "Unassigned",
+          "run_count": 1,
+          "facet_kind": "selected_device"
+        },
+        {
+          "facet_value": "Unassigned",
+          "run_count": 1,
+          "facet_kind": "selected_network_node"
+        }
+      ]
+    },
+    "scheduler": {
+      "session_id": "419b2a61-50d4-4bd3-a1c2-c6da1b6bd612",
+      "items": [
+        {
+          "status": "running",
+          "dequeued_at_ms": 1791318932716,
+          "scheduler_decision_reason": "cold_start_required",
+          "scheduler_admission_outcome": "admitted",
+          "queue_position": 0,
+          "priority": 0,
+          "enqueued_at_ms": 1791318932715,
+          "workflow_run_id": "run_845edcb4-8b01-4cbf-b14b-6438fb4922da"
+        }
+      ],
+      "workflow_id": "Synthetic-CPU-Embedding-Qualification",
+      "session": {
+        "session_id": "419b2a61-50d4-4bd3-a1c2-c6da1b6bd612",
+        "workflow_id": "Synthetic-CPU-Embedding-Qualification",
+        "usage_profile": null,
+        "session_kind": "workflow",
+        "keep_alive": false,
+        "run_count": 0,
+        "state": "running",
+        "queued_runs": 0,
+        "attribution": {
+          "client_session_id": "session_722b8766-03ea-4e47-b5f1-4389fd8cfc73",
+          "bucket_id": "bucket_10333d4f-846b-45f3-a32d-9c05202cb028",
+          "client_id": "client_002601c7-6c3b-4e21-947c-f9f2fd64b2e1"
+        }
+      },
+      "diagnostics": {
+        "runtime_capacity_pressure": "available",
+        "max_loaded_sessions": 8,
+        "runtime_registry": {
+          "target_runtime_id": "llama_cpp"
+        },
+        "loaded_session_count": 0,
+        "reclaimable_loaded_session_count": 0,
+        "active_run_blocks_admission": true
+      },
+      "workflow_run_id": "run_845edcb4-8b01-4cbf-b14b-6438fb4922da"
+    },
+    "inspection": {
+      "run_graph": {
+        "workflow_run_id": "run_845edcb4-8b01-4cbf-b14b-6438fb4922da",
+        "executable_topology": {
+          "edges": [
+            {
+              "source_node_id": "deps",
+              "target_node_id": "infer",
+              "target_port_id": "dependency_environment_sidecar",
+              "source_port_id": "dependency_environment_sidecar"
+            },
+            {
+              "source_node_id": "infer",
+              "target_node_id": "vectors",
+              "target_port_id": "vector",
+              "source_port_id": "embedding"
+            },
+            {
+              "source_node_id": "prompt",
+              "target_node_id": "infer",
+              "target_port_id": "text",
+              "source_port_id": "text"
+            }
+          ],
+          "schema_version": 1,
+          "nodes": [
+            {
+              "contract_version": "1.0.0",
+              "behavior_digest": "contract-blake3:08fbfac18cb3816cb31343a41d8e7ea5cc99aa0f3edfb523bb76f67b035d39e4",
+              "node_id": "deps",
+              "node_type": "dependency-environment"
+            },
+            {
+              "contract_version": "1.0.0",
+              "behavior_digest": "contract-blake3:059015bad11c4fd0527fbddd562db0d349eff68b3234905d997718ee80da685e",
+              "node_id": "infer",
+              "node_type": "llm-inference"
+            },
+            {
+              "contract_version": "1.0.0",
+              "behavior_digest": "contract-blake3:d0b126e802f0e57f639cb6f3e9cc4d4ea716cab048dbc632a15e9bec9af7218e",
+              "node_id": "prompt",
+              "node_type": "text-input"
+            },
+            {
+              "contract_version": "1.0.0",
+              "behavior_digest": "contract-blake3:e71b58e85682d533e9159c1deb21266d0065ca1ef217afe6dc376f43dc8078b2",
+              "node_id": "vectors",
+              "node_type": "vector-output"
+            }
+          ]
+        },
+        "presentation_revision_created_at_ms": 1791318932695,
+        "workflow_id": "Synthetic-CPU-Embedding-Qualification",
+        "workflow_execution_fingerprint": "workflow-exec-blake3:0b4cb7f1fc4e1757a481afa5251f69c2d0cbc70c6ab7403fd66fa55631cd2e20",
+        "presentation_metadata": {
+          "edges": [
+            {
+              "edge_id": "deps-to-infer",
+              "source_node_id": "deps",
+              "target_node_id": "infer",
+              "target_port_id": "dependency_environment_sidecar",
+              "source_port_id": "dependency_environment_sidecar"
+            },
+            {
+              "edge_id": "embedding-to-vector",
+              "source_node_id": "infer",
+              "target_node_id": "vectors",
+              "target_port_id": "vector",
+              "source_port_id": "embedding"
+            },
+            {
+              "edge_id": "text-to-embedding",
+              "source_node_id": "prompt",
+              "target_node_id": "infer",
+              "target_port_id": "text",
+              "source_port_id": "text"
+            }
+          ],
+          "schema_version": 1,
+          "nodes": [
+            {
+              "node_id": "deps",
+              "position": {
+                "x": 300,
+                "y": 450
+              }
+            },
+            {
+              "node_id": "infer",
+              "position": {
+                "x": 300,
+                "y": 100
+              }
+            },
+            {
+              "node_id": "prompt",
+              "position": {
+                "x": 0,
+                "y": 100
+              }
+            },
+            {
+              "node_id": "vectors",
+              "position": {
+                "x": 600,
+                "y": 100
+              }
+            }
+          ]
+        },
+        "workflow_version_id": "wfver_cee7d9dd-86a7-4ed9-b84d-5a00d837a0b4",
+        "snapshot_created_at_ms": 1791318932699,
+        "workflow_semantic_version": "0.1.0",
+        "workflow_version_created_at_ms": 1791318932644,
+        "graph_settings": {
+          "schema_version": 1,
+          "nodes": [
+            {
+              "data": {
+                "label": "Typed dependency control",
+                "definition": {
+                  "description": "Controls dependency environment readiness for one associated inference node",
+                  "io_binding_origin": "integrated",
+                  "category": "control",
+                  "node_type": "dependency-environment",
+                  "label": "Dependency Environment",
+                  "outputs": [
+                    {
+                      "data_type": "dependency_environment_sidecar",
+                      "label": "Dependency Environment",
+                      "required": false,
+                      "id": "dependency_environment_sidecar",
+                      "multiple": false
+                    }
+                  ],
+                  "inputs": [
+                    {
+                      "data_type": "json",
+                      "label": "Selected Bindings",
+                      "required": false,
+                      "id": "selected_binding_ids",
+                      "multiple": false
+                    },
+                    {
+                      "data_type": "string",
+                      "label": "Mode",
+                      "required": false,
+                      "id": "mode",
+                      "multiple": false
+                    },
+                    {
+                      "data_type": "json",
+                      "label": "Manual Overrides",
+                      "required": false,
+                      "id": "manual_overrides",
+                      "multiple": false
+                    }
+                  ],
+                  "execution_mode": "manual"
+                },
+                "mode": "manual"
+              },
+              "node_id": "deps",
+              "node_type": "dependency-environment"
+            },
+            {
+              "data": {
+                "runtime": "candle",
+                "emit_metadata": false,
+                "pumas_model_ref": {
+                  "model_id": "embedding/qualification/synthetic-bert-8",
+                  "selected_artifact_id": "main"
+                },
+                "inference_interface_snapshot": {
+                  "outputs": [
+                    {
+                      "value_type": {
+                        "category": "structured",
+                        "kind": "embedding"
+                      },
+                      "direction": "output",
+                      "label": "Embedding",
+                      "requirement": "required",
+                      "availability": {
+                        "status": "available"
+                      },
+                      "port_id": "embedding"
+                    },
+                    {
+                      "value_type": {
+                        "category": "structured",
+                        "kind": "json"
+                      },
+                      "direction": "output",
+                      "label": "Metadata",
+                      "requirement": "required",
+                      "availability": {
+                        "status": "available"
+                      },
+                      "port_id": "metadata"
+                    },
+                    {
+                      "value_type": {
+                        "category": "structured",
+                        "kind": "json"
+                      },
+                      "direction": "output",
+                      "label": "Usage",
+                      "requirement": "optional",
+                      "availability": {
+                        "status": "available"
+                      },
+                      "port_id": "usage"
+                    }
+                  ],
+                  "descriptor_fingerprint": "iface.60ef264b7095a8c966cafd3e2a601a86accb3161bac18b62c6f4400b24837cef",
+                  "task_kind": "embedding",
+                  "inputs": [
+                    {
+                      "value_type": {
+                        "category": "scalar",
+                        "kind": "string"
+                      },
+                      "direction": "input",
+                      "label": "Text",
+                      "requirement": "required",
+                      "availability": {
+                        "status": "available"
+                      },
+                      "port_id": "text"
+                    }
+                  ],
+                  "contract_version": 1
+                },
+                "device": "cpu",
+                "task_kind": "embedding",
+                "label": "Synthetic CPU embedding",
+                "definition": {
+                  "description": "Schedules a model-specific inference task through backend descriptor resolution",
+                  "io_binding_origin": "integrated",
+                  "category": "processing",
+                  "node_type": "llm-inference",
+                  "label": "LLM Inference",
+                  "outputs": [
+                    {
+                      "data_type": "embedding",
+                      "label": "Embedding",
+                      "required": true,
+                      "id": "embedding",
+                      "multiple": false
+                    },
+                    {
+                      "data_type": "json",
+                      "label": "Metadata",
+                      "required": true,
+                      "id": "metadata",
+                      "multiple": false
+                    },
+                    {
+                      "data_type": "json",
+                      "label": "Usage",
+                      "required": false,
+                      "id": "usage",
+                      "multiple": false
+                    }
+                  ],
+                  "inputs": [
+                    {
+                      "data_type": "string",
+                      "label": "Text",
+                      "required": true,
+                      "id": "text",
+                      "multiple": false
+                    },
+                    {
+                      "data_type": "dependency_environment_sidecar",
+                      "label": "Dependency Environment",
+                      "required": false,
+                      "id": "dependency_environment_sidecar",
+                      "multiple": false
+                    }
+                  ],
+                  "execution_mode": "stream"
+                },
+                "runtime_source_context": {
+                  "operation_type": "embedding.text",
+                  "cancellation_mode": "run_scoped",
+                  "context_shape_key": "embedding.one-text"
+                }
+              },
+              "node_id": "infer",
+              "node_type": "llm-inference"
+            },
+            {
+              "data": {
+                "label": "Synthetic input: hello world",
+                "definition": {
+                  "description": "Provides text input to the workflow",
+                  "io_binding_origin": "client_session",
+                  "category": "input",
+                  "node_type": "text-input",
+                  "label": "Text Input",
+                  "outputs": [
+                    {
+                      "data_type": "string",
+                      "label": "Text",
+                      "required": false,
+                      "id": "text",
+                      "multiple": false
+                    }
+                  ],
+                  "inputs": [
+                    {
+                      "data_type": "string",
+                      "label": "Text",
+                      "required": false,
+                      "id": "text",
+                      "multiple": false
+                    }
+                  ],
+                  "execution_mode": "reactive"
+                },
+                "text": "hello world"
+              },
+              "node_id": "prompt",
+              "node_type": "text-input"
+            },
+            {
+              "data": {
+                "label": "Synthetic vector output",
+                "definition": {
+                  "description": "Displays vector output from the workflow",
+                  "io_binding_origin": "client_session",
+                  "category": "output",
+                  "node_type": "vector-output",
+                  "label": "Vector Output",
+                  "outputs": [
+                    {
+                      "data_type": "embedding",
+                      "label": "Vector",
+                      "required": false,
+                      "id": "vector",
+                      "multiple": false
+                    }
+                  ],
+                  "inputs": [
+                    {
+                      "data_type": "embedding",
+                      "label": "Vector",
+                      "required": false,
+                      "id": "vector",
+                      "multiple": false
+                    }
+                  ],
+                  "execution_mode": "reactive"
+                }
+              },
+              "node_id": "vectors",
+              "node_type": "vector-output"
+            }
+          ]
+        },
+        "workflow_presentation_revision_id": "wfpres_9f2214e8-1166-4e79-83e4-902c7ccc4716",
+        "graph": {
+          "edges": [
+            {
+              "target_handle": "dependency_environment_sidecar",
+              "source_handle": "dependency_environment_sidecar",
+              "source": "deps",
+              "id": "deps-to-infer",
+              "target": "infer"
+            },
+            {
+              "target_handle": "vector",
+              "source_handle": "embedding",
+              "source": "infer",
+              "id": "embedding-to-vector",
+              "target": "vectors"
+            },
+            {
+              "target_handle": "text",
+              "source_handle": "text",
+              "source": "prompt",
+              "id": "text-to-embedding",
+              "target": "infer"
+            }
+          ],
+          "nodes": [
+            {
+              "data": {
+                "label": "Typed dependency control",
+                "definition": {
+                  "description": "Controls dependency environment readiness for one associated inference node",
+                  "io_binding_origin": "integrated",
+                  "category": "control",
+                  "node_type": "dependency-environment",
+                  "label": "Dependency Environment",
+                  "outputs": [
+                    {
+                      "data_type": "dependency_environment_sidecar",
+                      "label": "Dependency Environment",
+                      "required": false,
+                      "id": "dependency_environment_sidecar",
+                      "multiple": false
+                    }
+                  ],
+                  "inputs": [
+                    {
+                      "data_type": "json",
+                      "label": "Selected Bindings",
+                      "required": false,
+                      "id": "selected_binding_ids",
+                      "multiple": false
+                    },
+                    {
+                      "data_type": "string",
+                      "label": "Mode",
+                      "required": false,
+                      "id": "mode",
+                      "multiple": false
+                    },
+                    {
+                      "data_type": "json",
+                      "label": "Manual Overrides",
+                      "required": false,
+                      "id": "manual_overrides",
+                      "multiple": false
+                    }
+                  ],
+                  "execution_mode": "manual"
+                },
+                "mode": "manual"
+              },
+              "id": "deps",
+              "node_type": "dependency-environment",
+              "position": {
+                "x": 300,
+                "y": 450
+              }
+            },
+            {
+              "data": {
+                "runtime": "candle",
+                "emit_metadata": false,
+                "pumas_model_ref": {
+                  "model_id": "embedding/qualification/synthetic-bert-8",
+                  "selected_artifact_id": "main"
+                },
+                "inference_interface_snapshot": {
+                  "outputs": [
+                    {
+                      "value_type": {
+                        "category": "structured",
+                        "kind": "embedding"
+                      },
+                      "direction": "output",
+                      "label": "Embedding",
+                      "requirement": "required",
+                      "availability": {
+                        "status": "available"
+                      },
+                      "port_id": "embedding"
+                    },
+                    {
+                      "value_type": {
+                        "category": "structured",
+                        "kind": "json"
+                      },
+                      "direction": "output",
+                      "label": "Metadata",
+                      "requirement": "required",
+                      "availability": {
+                        "status": "available"
+                      },
+                      "port_id": "metadata"
+                    },
+                    {
+                      "value_type": {
+                        "category": "structured",
+                        "kind": "json"
+                      },
+                      "direction": "output",
+                      "label": "Usage",
+                      "requirement": "optional",
+                      "availability": {
+                        "status": "available"
+                      },
+                      "port_id": "usage"
+                    }
+                  ],
+                  "descriptor_fingerprint": "iface.60ef264b7095a8c966cafd3e2a601a86accb3161bac18b62c6f4400b24837cef",
+                  "task_kind": "embedding",
+                  "inputs": [
+                    {
+                      "value_type": {
+                        "category": "scalar",
+                        "kind": "string"
+                      },
+                      "direction": "input",
+                      "label": "Text",
+                      "requirement": "required",
+                      "availability": {
+                        "status": "available"
+                      },
+                      "port_id": "text"
+                    }
+                  ],
+                  "contract_version": 1
+                },
+                "device": "cpu",
+                "task_kind": "embedding",
+                "label": "Synthetic CPU embedding",
+                "definition": {
+                  "description": "Schedules a model-specific inference task through backend descriptor resolution",
+                  "io_binding_origin": "integrated",
+                  "category": "processing",
+                  "node_type": "llm-inference",
+                  "label": "LLM Inference",
+                  "outputs": [
+                    {
+                      "data_type": "embedding",
+                      "label": "Embedding",
+                      "required": true,
+                      "id": "embedding",
+                      "multiple": false
+                    },
+                    {
+                      "data_type": "json",
+                      "label": "Metadata",
+                      "required": true,
+                      "id": "metadata",
+                      "multiple": false
+                    },
+                    {
+                      "data_type": "json",
+                      "label": "Usage",
+                      "required": false,
+                      "id": "usage",
+                      "multiple": false
+                    }
+                  ],
+                  "inputs": [
+                    {
+                      "data_type": "string",
+                      "label": "Text",
+                      "required": true,
+                      "id": "text",
+                      "multiple": false
+                    },
+                    {
+                      "data_type": "dependency_environment_sidecar",
+                      "label": "Dependency Environment",
+                      "required": false,
+                      "id": "dependency_environment_sidecar",
+                      "multiple": false
+                    }
+                  ],
+                  "execution_mode": "stream"
+                },
+                "runtime_source_context": {
+                  "operation_type": "embedding.text",
+                  "cancellation_mode": "run_scoped",
+                  "context_shape_key": "embedding.one-text"
+                }
+              },
+              "id": "infer",
+              "node_type": "llm-inference",
+              "position": {
+                "x": 300,
+                "y": 100
+              }
+            },
+            {
+              "data": {
+                "label": "Synthetic input: hello world",
+                "definition": {
+                  "description": "Provides text input to the workflow",
+                  "io_binding_origin": "client_session",
+                  "category": "input",
+                  "node_type": "text-input",
+                  "label": "Text Input",
+                  "outputs": [
+                    {
+                      "data_type": "string",
+                      "label": "Text",
+                      "required": false,
+                      "id": "text",
+                      "multiple": false
+                    }
+                  ],
+                  "inputs": [
+                    {
+                      "data_type": "string",
+                      "label": "Text",
+                      "required": false,
+                      "id": "text",
+                      "multiple": false
+                    }
+                  ],
+                  "execution_mode": "reactive"
+                },
+                "text": "hello world"
+              },
+              "id": "prompt",
+              "node_type": "text-input",
+              "position": {
+                "x": 0,
+                "y": 100
+              }
+            },
+            {
+              "data": {
+                "label": "Synthetic vector output",
+                "definition": {
+                  "description": "Displays vector output from the workflow",
+                  "io_binding_origin": "client_session",
+                  "category": "output",
+                  "node_type": "vector-output",
+                  "label": "Vector Output",
+                  "outputs": [
+                    {
+                      "data_type": "embedding",
+                      "label": "Vector",
+                      "required": false,
+                      "id": "vector",
+                      "multiple": false
+                    }
+                  ],
+                  "inputs": [
+                    {
+                      "data_type": "embedding",
+                      "label": "Vector",
+                      "required": false,
+                      "id": "vector",
+                      "multiple": false
+                    }
+                  ],
+                  "execution_mode": "reactive"
+                }
+              },
+              "id": "vectors",
+              "node_type": "vector-output",
+              "position": {
+                "x": 600,
+                "y": 100
+              }
+            }
+          ]
+        }
+      },
+      "run": {
+        "workflow_run_snapshot_id": "runsnap_28bdea99-e29a-438d-a745-5eba24fc771a",
+        "latest_error_severity": null,
+        "workflow_execution_session_id": "419b2a61-50d4-4bd3-a1c2-c6da1b6bd612",
+        "terminal_payload_json": null,
+        "workflow_id": "Synthetic-CPU-Embedding-Qualification",
+        "selected_network_node_id": null,
+        "enqueued_at_ms": 1791318932715,
+        "scheduler_queue_position": 0,
+        "observed_peak_ram_bytes": null,
+        "status": "queued",
+        "latest_error_event_id": null,
+        "latest_error_code": null,
+        "started_payload_json": null,
+        "selected_runtime_variant_id": null,
+        "workflow_execution_session_resume_state": "dependency_readiness_pending",
+        "client_session_id": "session_722b8766-03ea-4e47-b5f1-4389fd8cfc73",
+        "model_cache_state": "unknown",
+        "started_at_ms": null,
+        "scheduler_reason": "next admission candidate pending runtime readiness",
+        "estimated_queue_wait_ms": null,
+        "memory_failure_kind": null,
+        "error_count": 0,
+        "bucket_id": "bucket_10333d4f-846b-45f3-a32d-9c05202cb028",
+        "workflow_semantic_version": "0.1.0",
+        "accepted_at_ms": 1791318932699,
+        "scheduler_priority": 0,
+        "timeline_event_count": 3,
+        "output_artifact_count": 0,
+        "estimate_confidence": "low",
+        "selected_device_id": null,
+        "latest_queue_placement_json": "{\"payload_type\":\"scheduler_queue_placement\",\"queue_position\":0,\"priority\":0,\"scheduler_policy_id\":\"priority_then_fifo\"}",
+        "last_event_seq": 4,
+        "selected_device_class": null,
+        "workflow_version_id": "wfver_cee7d9dd-86a7-4ed9-b84d-5a00d837a0b4",
+        "warning_count": 0,
+        "selected_model_id": null,
+        "client_id": "client_002601c7-6c3b-4e21-947c-f9f2fd64b2e1",
+        "selected_backend_key": null,
+        "selected_task_id": null,
+        "latest_error_phase": null,
+        "fatal_error_event_id": null,
+        "output_artifact_total_size_bytes": 0,
+        "duration_ms": null,
+        "completed_at_ms": null,
+        "latest_estimate_json": "{\"payload_type\":\"scheduler_estimate_produced\",\"estimate_version\":\"session-scheduler-v1\",\"confidence\":\"low\",\"estimated_queue_wait_ms\":null,\"estimated_duration_ms\":null,\"model_cache_state\":\"unknown\",\"blocking_conditions\":[\"runtime_admission_pending\",\"model_cache_unknown\"],\"missing_asset_ids\":[],\"candidate_runtime_ids\":[\"candle\"],\"candidate_device_ids\":[],\"candidate_network_node_ids\":[],\"reasons\":[\"next admission candidate pending runtime readiness\",\"requires backend(s): candle\",\"requires model(s): embedding/qualification/synthetic-bert-8\",\"requires extension(s): inference_gateway, model_dependency_resolver, pumas_api\",\"candidate runtime(s): candle\"]}",
+        "latest_error_message": null,
+        "selected_runtime_id": null,
+        "observed_peak_vram_bytes": null,
+        "scheduler_policy_id": "priority_then_fifo",
+        "terminal_error": null,
+        "estimated_duration_ms": null,
+        "last_updated_at_ms": 1791318932715,
+        "retention_policy_id": "ephemeral",
+        "workflow_presentation_revision_id": "wfpres_9f2214e8-1166-4e79-83e4-902c7ccc4716",
+        "workflow_run_id": "run_845edcb4-8b01-4cbf-b14b-6438fb4922da"
+      },
+      "run_projection_state": {
+        "status": "current",
+        "last_applied_event_seq": 4,
+        "projection_version": 9,
+        "rebuilt_at_ms": null,
+        "projection_name": "run_detail",
+        "updated_at_ms": 1791318932746
+      },
+      "io_projection_state": {
+        "status": "current",
+        "last_applied_event_seq": 0,
+        "projection_version": 6,
+        "rebuilt_at_ms": null,
+        "projection_name": "io_artifact",
+        "updated_at_ms": 1791318928249
+      },
+      "node_projection_state": {
+        "status": "current",
+        "last_applied_event_seq": 0,
+        "projection_version": 6,
+        "rebuilt_at_ms": null,
+        "projection_name": "node_status",
+        "updated_at_ms": 1791318928249
+      }
+    }
+  }
+]

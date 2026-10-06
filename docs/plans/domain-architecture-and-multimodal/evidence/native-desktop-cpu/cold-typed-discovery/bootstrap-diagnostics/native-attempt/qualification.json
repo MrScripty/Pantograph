@@ -1,0 +1,30 @@
+{
+  "run_id": 37526479578,
+  "job_id": 112484658436,
+  "source_head": "7ec336032a4e9910a26f65ef2e34d930a786d0bb",
+  "source_tree": "adc9932f9215cbf5d6b9b7a81f8e3b850b8f250b",
+  "artifact_id": 11443605285,
+  "artifact_sha256": "50163fcaf05389a2e1a55bb459988150a9587902631eaefa35eea15cd677cf89",
+  "artifact_members": 23,
+  "conclusion": "failure",
+  "native_startup_tests_passed": 8,
+  "first_blocking_transition": "graph Resolve provider returns missing/unavailable with requirements_unavailable and no fresh matching readiness snapshot",
+  "dependency_requirements_id": "dependency-requirements-blake3:5106e42ce62356f6f12adcc0419aa6407f44b2a04b443ba559834ec4b6bef01d",
+  "scoped_run_id": "run_845edcb4-8b01-4cbf-b14b-6438fb4922da",
+  "seed_error": "InvalidResultState: requirements payloads may only be seeded from resolved or ready environment results",
+  "task_state": "paused_deferred",
+  "task_state_versions": [
+    3,
+    5,
+    7,
+    9,
+    11
+  ],
+  "work_queue_len": 1,
+  "producer_registry_error": "MissingPayload",
+  "automatic_retry_observed": true,
+  "observation_duration_seconds": 70,
+  "retained_output_count": 0,
+  "cpu_execution_established": false,
+  "cpu_output_established": false
+}
