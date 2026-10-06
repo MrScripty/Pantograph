@@ -1,0 +1,77 @@
+name: Native desktop CPU qualification
+
+on:
+  push:
+    branches:
+      - qual/native-desktop-cpu-graph
+    paths:
+      - .github/workflows/native-desktop-cpu-qualification.yml
+      - scripts/*native-desktop-cpu*
+      - tests/e2e/native-desktop-cpu/**
+
+permissions:
+  contents: read
+
+jobs:
+  native-desktop-cpu:
+    name: Native Tauri CPU graph (synthetic fixtures)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      ORT_SKIP_DOWNLOAD: '1'
+      HF_HUB_OFFLINE: '1'
+      TRANSFORMERS_OFFLINE: '1'
+      PANTOGRAPH_NATIVE_CPU_EVIDENCE_DIR: ${{ github.workspace }}/native-cpu-evidence
+    steps:
+      - name: Checkout isolated qualification candidate
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Record exact source and require frozen accepted graph ancestor
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$PANTOGRAPH_NATIVE_CPU_EVIDENCE_DIR"
+          git merge-base --is-ancestor 0d7d573f36d8f25f3ae5c8adb25ab86c42e1dd8c HEAD
+          git show -s --format='%H%n%T%n%P' HEAD > "$PANTOGRAPH_NATIVE_CPU_EVIDENCE_DIR/source.txt"
+
+      - name: Verify committed synthetic fixture and record proposed graph
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/prepare-native-desktop-cpu-fixture.py "$RUNNER_TEMP/native-cpu-fixture" > "$PANTOGRAPH_NATIVE_CPU_EVIDENCE_DIR/fixture.json"
+          cp "$RUNNER_TEMP/native-cpu-fixture/graph.json" "$PANTOGRAPH_NATIVE_CPU_EVIDENCE_DIR/proposed-graph.json"
+
+      - name: Admit only pre-existing native prerequisites
+        run: python3 scripts/check-native-desktop-cpu-prerequisites.py
+
+      - name: Install ordinary Node toolchain
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Install ordinary npm dependencies
+        run: npm ci --include=optional
+
+      - name: Install ordinary Rust toolchain
+        uses: dtolnay/rust-toolchain@1.92.0
+
+      - name: Verify no ONNX build-download feature
+        run: python3 scripts/check-onnx-no-build-download.py
+
+      - name: Run actual native Tauri saved CPU graph
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/run-native-desktop-cpu-qualification.sh 2>&1 | tee "$PANTOGRAPH_NATIVE_CPU_EVIDENCE_DIR/native-runtime.log"
+
+      - name: Preserve runtime, visual evidence or verified prerequisite blocker
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-desktop-cpu-${{ github.sha }}
+          path: native-cpu-evidence
+          if-no-files-found: error
+          retention-days: 14

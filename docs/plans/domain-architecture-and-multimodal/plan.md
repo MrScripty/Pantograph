@@ -4,7 +4,14 @@
 
 **Current phase:** M3 owner/client consumer source is implemented. Native CPU sampling and the supported inference/embedded host route are qualified separately; the desktop-authored dependent text-to-image graph and full review remain open.
 
-**Next slice:** The user-selected single-prompt canonical `chat_completion`
+**Next slice:** Cloud-owned native Tauri CPU graph qualification is prepared on
+isolated `qual/native-desktop-cpu-graph` from frozen accepted chat `0d7d573f`.
+The [native qualification report](reports/2026-10-06-native-desktop-cpu-qualification.md)
+records real saved/reopened editor/public-scheduler acceptance and the read-only
+prerequisite blocker. No privileged dependency installation, user-desktop access,
+browser-mock desktop claim or frozen-feature/PR mutation is authorized.
+
+**Prior chat slice:** The user-selected single-prompt canonical `chat_completion`
 graph feature is implemented and locally qualified on isolated
 `feat/workflow-chat-completion`; see the [chat report](reports/2026-10-06-workflow-chat-completion.md). Source is
 fresh main `c75fa237` with explicit ordinary composition of stop successor
