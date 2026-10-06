@@ -725,3 +725,18 @@ found no substantive issue. Dynamic ORT/no-download checks preceded builds; no
 manifest, lockfile, main or old resident-accounting changes are included. PR58 main
 merge and parent publication/hosted CI remain release dependencies. GPU, real
 models/loaders, desktop and full-u64 desktop entry remain unqualified.
+
+## 2026-10-06 — Desktop text-seed precision successor
+
+Parent review reproduced JavaScript rounding before Rust validation in frozen
+`6cf549dd`. The [precision repair](reports/2026-10-06-text-seed-desktop-precision.md)
+limits direct desktop NumberInput seed entry to safe nonnegative integers, retains
+invalid raw text through save/load, shows an error and guards scheduler submission.
+Generic floats and full-u64 typed API routes remain unchanged. Fourteen controlled
+Chromium component groups, 669 frontend tests and the expanded Rust wire test
+pass with affected gates. Independent medium review closed the browser number
+field sanitization finding. Verified main `d61b86fc` is incorporated normally
+with the exact prior repair tree; frozen seed/repair histories remain unchanged.
+No RNG implementation, resident-accounting or dependency/download change is
+included. Full desktop execution, production loader/GPU/pretrained qualification
+and parent publication/hosted CI remain separate.

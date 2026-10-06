@@ -2365,7 +2365,14 @@ mod tests {
 
     #[test]
     fn chat_seed_maps_alone_without_changing_omitted_options() {
-        for seed in [None, Some(0), Some(u64::MAX)] {
+        for seed in [
+            None,
+            Some(0),
+            Some((1 << 53) - 1),
+            Some(1 << 53),
+            Some((1 << 53) + 1),
+            Some(u64::MAX),
+        ] {
             let mut encoded = serde_json::json!({
                 "model": "seed-chat",
                 "messages": [{"role": "user", "content": [{"type": "text", "text": "Hi"}]}],
@@ -2374,7 +2381,7 @@ mod tests {
             if let Some(seed) = seed {
                 encoded["seed"] = serde_json::json!(seed);
             }
-            let chat: ChatRequest = serde_json::from_value(encoded.clone()).unwrap();
+            let chat: ChatRequest = serde_json::from_str(&encoded.to_string()).unwrap();
             assert_eq!(chat.seed, seed);
             assert_eq!(serde_json::to_value(&chat).unwrap(), encoded);
             let typed = InferenceExecutionRequest::from_openai_chat_request(None, chat);

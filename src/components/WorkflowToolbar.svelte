@@ -37,6 +37,7 @@
   } from '../stores/workbenchStore';
   import { formatWorkflowCommandError } from './workbench/workflowErrorPresenters';
   import WorkflowPersistenceControls from './WorkflowPersistenceControls.svelte';
+  import { assertDesktopSeedInputs, desktopSeedInputError } from './nodes/workflow/primitiveInputMetadata';
   import {
     applyWorkflowToolbarEvent,
     isCurrentWorkflowSubmitFailure,
@@ -84,7 +85,7 @@
       hasWorkflowId: Boolean($currentGraphId),
       semanticVersionInvalid: workflowSemanticVersionInvalid,
       submitGate: currentValidationSummary?.submit_gate ?? null,
-    }),
+    }) ?? desktopSeedInputError($workflowGraph),
   );
   let submitDisabled = $derived(submitDisabledReason !== null);
   let submitTitle = $derived(submitDisabledReason ?? 'Submit workflow to the scheduler');
@@ -283,6 +284,7 @@
       if ($isReadOnly) {
         throw new Error('Read-only graphs cannot be submitted');
       }
+      assertDesktopSeedInputs($workflowGraph);
       if ($isDirty) {
         throw new Error('Save workflow changes before submitting');
       }
