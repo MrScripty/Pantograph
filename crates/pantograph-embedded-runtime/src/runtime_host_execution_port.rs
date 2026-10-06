@@ -23,6 +23,9 @@ use pantograph_runtime_host_contracts::{
     RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
 };
 
+use crate::runtime_host_embedding_execution::{
+    validate_runtime_host_embedding_request, EMBEDDING_TASK,
+};
 use crate::runtime_host_image_execution::{
     project_runtime_host_image_generation, RuntimeHostImageGenerationProjectionError,
 };
@@ -606,7 +609,7 @@ impl EmbeddedRuntimeHostExecutionPort {
 }
 
 impl EmbeddedRuntimeHostExecutionPort {
-    async fn execute_runtime_host_text_batch_request(
+    async fn execute_runtime_host_sequential_batch_request(
         &self,
         request: &RuntimeHostBatchExecutionRequest,
         member_requests: Vec<ValidatedRuntimeHostExecutionRequest>,
@@ -615,9 +618,15 @@ impl EmbeddedRuntimeHostExecutionPort {
         let validation_errors = member_requests
             .iter()
             .map(|member| {
-                validate_runtime_host_text_generation_request(member.as_ref())
-                    .err()
-                    .map(|error| error.to_string())
+                if member.as_ref().handoff.task_intent.task_type.as_str() == EMBEDDING_TASK {
+                    validate_runtime_host_embedding_request(member.as_ref())
+                        .err()
+                        .map(|error| error.to_string())
+                } else {
+                    validate_runtime_host_text_generation_request(member.as_ref())
+                        .err()
+                        .map(|error| error.to_string())
+                }
             })
             .collect::<Vec<_>>();
         let mut members = Vec::with_capacity(member_requests.len());
@@ -638,24 +647,50 @@ impl EmbeddedRuntimeHostExecutionPort {
                     Vec::new(),
                     vec![runtime_host_diagnostic(
                         RuntimeHostExecutionDiagnosticCode::ExecutionFailed,
-                        &format!("embedded runtime-host text projection failed: {error}"),
-                        TEXT_PROJECTION_FAILED_HINT,
+                        &format!(
+                            "embedded runtime-host sequential member projection failed: {error}"
+                        ),
+                        if member_request
+                            .as_ref()
+                            .handoff
+                            .task_intent
+                            .task_type
+                            .as_str()
+                            == EMBEDDING_TASK
+                        {
+                            "embedded_runtime_host_execution_port.embedding_projection_failed"
+                        } else {
+                            TEXT_PROJECTION_FAILED_HINT
+                        },
                     )],
                 ));
                 continue;
             }
 
             if let Some(response) =
-                text_batch_member_cancellation_response(member, request, &cancellation)?
+                sequential_batch_member_cancellation_response(member, request, &cancellation)?
             {
                 members.push(response);
                 continue;
             }
 
-            let response = self
-                .execute_runtime_host_text_request(&member_request, cancellation.clone())
-                .await?;
-            members.push(text_batch_member_response(member, response));
+            // These envelope members reuse the selected single-request owner sequentially.
+            // This does not advertise backend-native embedding or text batching.
+            let response = if member_request
+                .as_ref()
+                .handoff
+                .task_intent
+                .task_type
+                .as_str()
+                == EMBEDDING_TASK
+            {
+                self.execute_runtime_host_embedding_request(&member_request, cancellation.clone())
+                    .await?
+            } else {
+                self.execute_runtime_host_text_request(&member_request, cancellation.clone())
+                    .await?
+            };
+            members.push(sequential_batch_member_response(member, response));
         }
 
         let state = runtime_host_batch_state_from_members(&members);
@@ -671,8 +706,8 @@ impl EmbeddedRuntimeHostExecutionPort {
         {
             diagnostics.push(runtime_host_diagnostic(
                 RuntimeHostExecutionDiagnosticCode::ExecutionFailed,
-                "embedded runtime-host text batch execution ended without a completed member",
-                TEXT_GATEWAY_EXECUTION_FAILED_HINT,
+                "embedded runtime-host sequential batch execution ended without a completed member",
+                BATCH_GATEWAY_EXECUTION_FAILED_HINT,
             ));
         }
 
@@ -713,10 +748,17 @@ impl RuntimeHostBatchExecutionPort for EmbeddedRuntimeHostExecutionPort {
             ));
         }
         if member_requests.iter().all(|member| {
-            member.as_ref().handoff.task_intent.task_type.as_str() == TEXT_GENERATION_TASK
+            matches!(
+                member.as_ref().handoff.task_intent.task_type.as_str(),
+                TEXT_GENERATION_TASK | EMBEDDING_TASK
+            )
         }) {
             return self
-                .execute_runtime_host_text_batch_request(request, member_requests, cancellation)
+                .execute_runtime_host_sequential_batch_request(
+                    request,
+                    member_requests,
+                    cancellation,
+                )
                 .await;
         }
 
@@ -941,7 +983,7 @@ fn shared_batch_runtime_context_error(
     };
     if !matches!(
         first_decision.task_intent.task_type.as_str(),
-        "image_generation" | TEXT_GENERATION_TASK
+        "image_generation" | TEXT_GENERATION_TASK | EMBEDDING_TASK
     ) {
         return Some(format!(
             "embedded runtime-host batch task type '{}' is unsupported",
@@ -1398,7 +1440,7 @@ fn batch_member_response(
     }
 }
 
-fn text_batch_member_response(
+fn sequential_batch_member_response(
     member: &RuntimeHostBatchExecutionMemberRequest,
     response: RuntimeHostExecutionResponse,
 ) -> RuntimeHostBatchExecutionMemberResponse {
@@ -1447,14 +1489,14 @@ fn text_batch_member_response(
     if diagnostics.is_empty() {
         diagnostics.push(runtime_host_diagnostic(
             RuntimeHostExecutionDiagnosticCode::ExecutionFailed,
-            "embedded runtime-host text batch member returned no terminal diagnostic",
-            TEXT_GATEWAY_EXECUTION_FAILED_HINT,
+            "embedded runtime-host sequential batch member returned no terminal diagnostic",
+            BATCH_GATEWAY_EXECUTION_FAILED_HINT,
         ));
     }
     batch_member_response(member, state, outputs, diagnostics)
 }
 
-fn text_batch_member_cancellation_response(
+fn sequential_batch_member_cancellation_response(
     member: &RuntimeHostBatchExecutionMemberRequest,
     request: &RuntimeHostBatchExecutionRequest,
     cancellation: &RuntimeHostExecutionCancellationHandle,
@@ -1483,7 +1525,7 @@ fn text_batch_member_cancellation_response(
             RuntimeHostBatchExecutionMemberState::Cancelled,
             RuntimeHostExecutionDiagnosticCode::CancellationRequested,
             format!(
-                "embedded runtime-host text batch member cancelled before completion: {reason}"
+                "embedded runtime-host sequential batch member cancelled before completion: {reason}"
             ),
             CANCELLATION_REQUESTED_HINT,
         ),
@@ -1491,14 +1533,14 @@ fn text_batch_member_cancellation_response(
             RuntimeHostBatchExecutionMemberState::Cancelled,
             RuntimeHostExecutionDiagnosticCode::ShutdownRequested,
             format!(
-                "embedded runtime-host text batch member stopped for workflow-service shutdown: {reason}"
+                "embedded runtime-host sequential batch member stopped for workflow-service shutdown: {reason}"
             ),
             SHUTDOWN_REQUESTED_HINT,
         ),
         _ => (
             RuntimeHostBatchExecutionMemberState::Failed,
             RuntimeHostExecutionDiagnosticCode::ExecutionFailed,
-            "embedded runtime-host text batch member observed an unknown cancellation state"
+            "embedded runtime-host sequential batch member observed an unknown cancellation state"
                 .to_string(),
             UNKNOWN_CANCELLATION_STATE_HINT,
         ),

@@ -740,3 +740,23 @@ with the exact prior repair tree; frozen seed/repair histories remain unchanged.
 No RNG implementation, resident-accounting or dependency/download change is
 included. Full desktop execution, production loader/GPU/pretrained qualification
 and parent publication/hosted CI remain separate.
+
+## 2026-10-06 — Canonical CPU embedding graph successor
+
+The parent selected the canonical embedding graph after fresh main inspection.
+The [embedding report](reports/2026-10-06-workflow-cpu-embedding-graphs.md) records
+the isolated `c75fa237` base, typed embedding/JSON ports and connections, sequential
+selected-owner envelope execution and bounded exact-JSON vector output. Public
+save/load and scheduler execution compare both committed actual Candle CPU
+fixtures, selected identity, metadata and usage. Focused tests cover scoped
+source lookup, malformed vectors/results, cancellation and member identities.
+Independent source review found no remaining substantive issue. The first
+combined run rejected two new test fixtures whose nested readiness/dispatch
+identities had not followed their distinct members; only the fixtures were
+corrected, with failure evidence retained. Final qualification is recorded in
+the report. The complete effective dynamic-ORT feature graph preceded builds,
+with `ORT_SKIP_DOWNLOAD=1` and no binary downloads or dependency changes.
+Accepted stop-string/PR60 and all seed/precision/repair/paused histories remain
+separate. Controlled package/readiness/dispatch/session facts and untrained CPU
+models do not qualify live Pumas, pretrained quality, GPU, desktop or native
+batching/throughput. Full plan acceptance and parent publication remain separate.

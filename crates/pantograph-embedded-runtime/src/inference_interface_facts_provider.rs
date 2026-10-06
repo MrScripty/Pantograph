@@ -6,7 +6,8 @@ use inference::{BackendHintLabel, InferenceTaskId, ModelValidationState, TaskReg
 use pantograph_inference_interface_contracts::{
     InferenceArtifactType, InferenceAvailability, InferenceNumericRange, InferencePortDescriptor,
     InferencePortDirection, InferencePortId, InferencePortOptions, InferencePortRequirement,
-    InferenceScalarType, InferenceTaskKind, InferenceValueType, RuntimeIntentId,
+    InferenceScalarType, InferenceStructuredType, InferenceTaskKind, InferenceValueType,
+    RuntimeIntentId,
 };
 use pantograph_runtime_registry::RuntimeRegistryStatus;
 use pantograph_workflow_service::graph::{
@@ -306,6 +307,13 @@ fn input_ports(task_entry: &TaskRegistryEntry) -> Vec<InferencePortDescriptor> {
             image_count_input_port(),
             denoising_scheduler_input_port(),
         ],
+        InferenceTaskId::Embedding => vec![port(
+            "text",
+            "Text",
+            InferencePortDirection::Input,
+            InferencePortRequirement::Required,
+            InferenceValueType::Scalar(InferenceScalarType::String),
+        )],
         InferenceTaskId::ChatCompletion | InferenceTaskId::MultimodalGeneration => vec![port(
             "prompt",
             "Prompt",
@@ -448,6 +456,29 @@ fn sampling_number_input_port(port_id: &str, label: &str, max: f64) -> Inference
 
 fn output_ports(task_entry: &TaskRegistryEntry) -> Vec<InferencePortDescriptor> {
     match task_entry.task_id {
+        InferenceTaskId::Embedding => vec![
+            port(
+                "embedding",
+                "Embedding",
+                InferencePortDirection::Output,
+                InferencePortRequirement::Required,
+                InferenceValueType::Structured(InferenceStructuredType::Embedding),
+            ),
+            port(
+                "metadata",
+                "Metadata",
+                InferencePortDirection::Output,
+                InferencePortRequirement::Required,
+                InferenceValueType::Structured(InferenceStructuredType::Json),
+            ),
+            port(
+                "usage",
+                "Usage",
+                InferencePortDirection::Output,
+                InferencePortRequirement::Optional,
+                InferenceValueType::Structured(InferenceStructuredType::Json),
+            ),
+        ],
         InferenceTaskId::ImageGeneration => vec![port(
             "image",
             "Image",
@@ -747,6 +778,68 @@ mod tests {
         assert!(facts.capability.is_none());
         assert!(facts.runtimes.is_empty());
         assert!(facts.estimate_hints.is_empty());
+    }
+
+    #[test]
+    fn embedding_descriptor_types_have_stable_fingerprints_and_saved_snapshots() {
+        use pantograph_inference_interface_contracts::ResolveInferenceInterfaceRequest;
+        use pantograph_workflow_service::graph::{
+            authored_snapshot_from_descriptor, resolve_inference_interface_from_facts,
+        };
+        let mut package = projected_package_facts();
+        package.task = TaskEvidence {
+            pipeline_tag: Some("feature-extraction".into()),
+            task_type_primary: Some("embedding".into()),
+            input_modalities: vec!["text".into()],
+            output_modalities: vec!["embedding".into()],
+        };
+        let runtime = InferenceRuntimeAvailabilityFact {
+            runtime_id: "candle".parse().unwrap(),
+            state: InferenceRuntimeAvailabilityState::Available,
+            device_ids: vec!["cpu".parse().unwrap()],
+        };
+        let capability = capability_facts(&package, std::slice::from_ref(&runtime)).unwrap();
+        assert_eq!(capability.task_kind.as_str(), "embedding");
+        let fixture: pantograph_inference_interface_contracts::InferenceInterfaceDescriptor = serde_json::from_str(include_str!("../../pantograph-inference-interface-contracts/tests/fixtures/descriptor_embedding_ready.json")).unwrap();
+        assert_eq!(capability.inputs, fixture.inputs);
+        assert_eq!(capability.outputs, fixture.outputs);
+        let request: ResolveInferenceInterfaceRequest = serde_json::from_value(serde_json::json!({
+            "model_ref": {"model_id": "embedding/example/tiny-cpu", "selected_artifact_id": "candle-safetensors"},
+            "task_kind": "embedding", "runtime_constraint": "candle", "device_constraint": "cpu",
+        })).unwrap();
+        let facts = InferenceInterfaceResolverFacts {
+            model: InferenceModelResolutionFacts {
+                state: InferenceModelResolutionState::Ready,
+            },
+            capability: Some(capability),
+            runtimes: vec![runtime],
+            estimate_hints: Vec::new(),
+        };
+        let descriptor =
+            resolve_inference_interface_from_facts(request.clone(), facts.clone()).unwrap();
+        let repeated =
+            resolve_inference_interface_from_facts(request.clone(), facts.clone()).unwrap();
+        assert_eq!(
+            descriptor.descriptor_fingerprint,
+            repeated.descriptor_fingerprint
+        );
+        let snapshot = authored_snapshot_from_descriptor(&descriptor).unwrap();
+        let restored: pantograph_inference_interface_contracts::AuthoredInferenceInterfaceSnapshot =
+            serde_json::from_str(&serde_json::to_string(&snapshot).unwrap()).unwrap();
+        assert_eq!(restored, snapshot);
+        assert_eq!(
+            restored.descriptor_fingerprint,
+            descriptor.descriptor_fingerprint
+        );
+        let mut tensor_facts = facts;
+        tensor_facts.capability.as_mut().unwrap().outputs[0].value_type =
+            InferenceValueType::Artifact(InferenceArtifactType::Tensor);
+        let tensor_descriptor =
+            resolve_inference_interface_from_facts(request, tensor_facts).unwrap();
+        assert_ne!(
+            descriptor.descriptor_fingerprint,
+            tensor_descriptor.descriptor_fingerprint
+        );
     }
 
     fn projected_package_facts() -> PumasDispatchPackageFactsProjection {

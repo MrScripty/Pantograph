@@ -15,6 +15,18 @@ use super::task_result_contracts::{
 };
 
 const PORT_TEXT: &str = "text";
+const PORT_VECTOR: &str = "vector";
+const VECTOR_EXPECTED: &str = "a finite numeric JSON vector of 1..4096 elements, at most 64 KiB";
+
+pub(crate) fn is_bounded_vector_json(value: &Value) -> bool {
+    value.as_array().is_some_and(|values| {
+        (1..=4096).contains(&values.len())
+            && values.iter().all(|value| value.as_f64().is_some_and(f64::is_finite))
+            && serde_json::to_vec(value).is_ok_and(|bytes| {
+                bytes.len() <= pantograph_runtime_host_contracts::RUNTIME_HOST_STRUCTURED_OUTPUT_MAX_BYTES
+            })
+    })
+}
 
 pub(crate) async fn execute_non_runtime_scheduler_task(
     task: &WorkflowSchedulerTask,
@@ -33,17 +45,30 @@ pub(crate) async fn execute_non_runtime_scheduler_task(
             task_id: task.task_id.as_str().to_string(),
         }
     })?;
-    let inputs = node_engine_inputs(task, template, materialized_results)?;
-    let request = NodeEngineSingleTaskRequest::try_new(
-        task.task_id.as_str(),
-        task.node_type.as_str(),
-        inputs,
-    )
-    .map_err(WorkflowSchedulerNonRuntimeTaskAdapterError::NodeEngine)?;
-    let response = node_engine::execute_core_task_once(request)
-        .await
+    let mut inputs = node_engine_inputs(task, template, materialized_results)?;
+    let outputs = if matches!(
+        template,
+        WorkflowSchedulerNonRuntimeTaskTemplate::VectorOutput
+    ) {
+        // The generic core vector sink normalizes through f64. The scheduler
+        // boundary instead retains the already validated host JSON exactly.
+        let node_outputs = HashMap::from([(
+            PORT_VECTOR.to_string(),
+            inputs.remove(PORT_VECTOR).unwrap_or(Value::Null),
+        )]);
+        scheduler_outputs(template, &node_outputs)?
+    } else {
+        let request = NodeEngineSingleTaskRequest::try_new(
+            task.task_id.as_str(),
+            task.node_type.as_str(),
+            inputs,
+        )
         .map_err(WorkflowSchedulerNonRuntimeTaskAdapterError::NodeEngine)?;
-    let outputs = scheduler_outputs(template, response.outputs())?;
+        let response = node_engine::execute_core_task_once(request)
+            .await
+            .map_err(WorkflowSchedulerNonRuntimeTaskAdapterError::NodeEngine)?;
+        scheduler_outputs(template, response.outputs())?
+    };
     let result = WorkflowSchedulerTaskResult {
         schema_version: WORKFLOW_SCHEDULER_TASK_RESULT_SCHEMA_VERSION,
         workflow_id: task.workflow_id.as_str().to_string(),
@@ -68,6 +93,44 @@ fn node_engine_inputs(
 ) -> Result<HashMap<String, Value>, WorkflowSchedulerNonRuntimeTaskAdapterError> {
     let mut inputs = HashMap::new();
     match template {
+        WorkflowSchedulerNonRuntimeTaskTemplate::VectorOutput => {
+            if task.node_type != "vector-output"
+                || task.input_bindings.len() > 1
+                || task
+                    .input_bindings
+                    .iter()
+                    .any(|binding| binding.target_port_id != PORT_VECTOR)
+            {
+                return Err(
+                    WorkflowSchedulerNonRuntimeTaskAdapterError::InvalidVectorBinding {
+                        task_id: task.task_id.as_str().to_string(),
+                    },
+                );
+            }
+            if let Some(binding) = task.input_bindings.first() {
+                let WorkflowSchedulerTaskResultValue::Json(value) =
+                    materialized_output(task, binding, materialized_results)?
+                else {
+                    return Err(
+                        WorkflowSchedulerNonRuntimeTaskAdapterError::WrongMaterializedInputType {
+                            source_task_id: binding.source_task_id.as_str().to_string(),
+                            source_port_id: binding.source_port_id.clone(),
+                            expected: VECTOR_EXPECTED,
+                        },
+                    );
+                };
+                if !is_bounded_vector_json(value) {
+                    return Err(
+                        WorkflowSchedulerNonRuntimeTaskAdapterError::WrongMaterializedInputType {
+                            source_task_id: binding.source_task_id.as_str().to_string(),
+                            source_port_id: binding.source_port_id.clone(),
+                            expected: VECTOR_EXPECTED,
+                        },
+                    );
+                }
+                inputs.insert(PORT_VECTOR.to_string(), value.clone());
+            }
+        }
         WorkflowSchedulerNonRuntimeTaskTemplate::ImageOutput => {
             let binding = task
                 .input_bindings
@@ -152,6 +215,21 @@ fn scheduler_outputs(
     outputs: &HashMap<String, Value>,
 ) -> Result<Vec<WorkflowSchedulerTaskResultOutput>, WorkflowSchedulerNonRuntimeTaskAdapterError> {
     match template {
+        WorkflowSchedulerNonRuntimeTaskTemplate::VectorOutput => {
+            let value = outputs
+                .get(PORT_VECTOR)
+                .filter(|value| value.is_null() || is_bounded_vector_json(value))
+                .ok_or_else(|| {
+                    WorkflowSchedulerNonRuntimeTaskAdapterError::InvalidNodeEngineOutput {
+                        port_id: PORT_VECTOR.to_string(),
+                        expected: VECTOR_EXPECTED,
+                    }
+                })?;
+            Ok(vec![WorkflowSchedulerTaskResultOutput {
+                port_id: PORT_VECTOR.to_string(),
+                value: WorkflowSchedulerTaskResultValue::Json(value.clone()),
+            }])
+        }
         WorkflowSchedulerNonRuntimeTaskTemplate::ImageOutput => {
             let value = outputs
                 .get("image")
@@ -282,6 +360,11 @@ fn materialized_output<'a>(
         .find(|result| {
             result.task_id == binding.source_task_id.as_str()
                 && result.node_id == binding.source_node_id.as_str()
+                && (!matches!(
+                    task.non_runtime_task_template,
+                    Some(WorkflowSchedulerNonRuntimeTaskTemplate::VectorOutput)
+                ) || (result.workflow_id == task.workflow_id.as_str()
+                    && result.workflow_run_id == task.workflow_run_id.as_str()))
         })
         .ok_or_else(
             || WorkflowSchedulerNonRuntimeTaskAdapterError::MissingMaterializedInput {
@@ -333,6 +416,8 @@ pub(crate) enum WorkflowSchedulerNonRuntimeTaskAdapterError {
     UnsupportedExecutionClass { node_type: String },
     #[error("scheduler task '{task_id}' is missing a typed non-runtime task template")]
     MissingTaskTemplate { task_id: String },
+    #[error("scheduler vector-output task '{task_id}' requires its own template and at most one vector input binding")]
+    InvalidVectorBinding { task_id: String },
     #[error("scheduler task '{task_id}' is missing an input binding for '{target_port_id}'")]
     MissingInputBinding {
         task_id: String,
@@ -449,6 +534,132 @@ mod tests {
             source_task_id: SchedulerTaskId::parse(source_task_id).expect("task id"),
             source_port_id: PORT_TEXT.to_string(),
             target_port_id: PORT_TEXT.to_string(),
+        }
+    }
+
+    fn vector_task(connected: bool) -> WorkflowSchedulerTask {
+        let mut binding = text_binding("embed");
+        binding.source_port_id = PORT_VECTOR.to_string();
+        binding.target_port_id = PORT_VECTOR.to_string();
+        task(
+            "vector-out",
+            "vector-output",
+            Some(WorkflowSchedulerNonRuntimeTaskTemplate::VectorOutput),
+            if connected { vec![binding] } else { Vec::new() },
+        )
+    }
+
+    #[test]
+    fn vector_json_enforces_exact_structured_output_byte_boundary() {
+        let mut values = vec![Value::from(999_999_999_999_999_u64); 4096];
+        values[4095] = Value::from(99_999_999_999_999_u64);
+        let at_limit = Value::Array(values.clone());
+        assert_eq!(serde_json::to_vec(&at_limit).unwrap().len(), 64 * 1024);
+        assert!(is_bounded_vector_json(&at_limit));
+        values[4095] = Value::from(999_999_999_999_999_u64);
+        let over_limit = Value::Array(values);
+        assert_eq!(
+            serde_json::to_vec(&over_limit).unwrap().len(),
+            64 * 1024 + 1
+        );
+        assert!(!is_bounded_vector_json(&over_limit));
+    }
+
+    #[tokio::test]
+    async fn vector_adapter_preserves_exact_json_and_sink_identity() {
+        for vector in [
+            serde_json::json!([0, -1, 0.125, -0.0, u64::MAX]),
+            serde_json::json!(vec![0.25; 4096]),
+        ] {
+            let task = vector_task(true);
+            let upstream = completed_result(
+                "embed",
+                PORT_VECTOR,
+                WorkflowSchedulerTaskResultValue::Json(vector.clone()),
+            );
+            let encoded = serde_json::to_string(&vector).unwrap();
+            let result = execute_non_runtime_scheduler_task(&task, &[upstream])
+                .await
+                .unwrap();
+            assert_eq!(result.workflow_id, task.workflow_id.as_str());
+            assert_eq!(result.workflow_run_id, task.workflow_run_id.as_str());
+            assert_eq!(result.task_id, task.task_id.as_str());
+            assert_eq!(result.node_id, task.node_id.as_str());
+            assert_eq!(result.status, WorkflowSchedulerTaskResultStatus::Completed);
+            assert_eq!(result.outputs[0].port_id, PORT_VECTOR);
+            assert_eq!(
+                result.outputs[0].value,
+                WorkflowSchedulerTaskResultValue::Json(vector.clone())
+            );
+            assert_eq!(
+                serde_json::to_string(&result.outputs[0].value.node_json().unwrap()).unwrap(),
+                encoded
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn vector_adapter_retains_optional_unconnected_null_only() {
+        let result = execute_non_runtime_scheduler_task(&vector_task(false), &[])
+            .await
+            .unwrap();
+        assert_eq!(
+            result.outputs[0].value,
+            WorkflowSchedulerTaskResultValue::Json(Value::Null)
+        );
+        assert!(matches!(
+            execute_non_runtime_scheduler_task(&vector_task(true), &[]).await,
+            Err(WorkflowSchedulerNonRuntimeTaskAdapterError::MissingMaterializedInput { .. })
+        ));
+    }
+
+    #[tokio::test]
+    async fn vector_adapter_refuses_connected_invalid_vectors_without_coercion() {
+        for value in [
+            WorkflowSchedulerTaskResultValue::Json(serde_json::json!([])),
+            WorkflowSchedulerTaskResultValue::Json(Value::Null),
+            WorkflowSchedulerTaskResultValue::Json(serde_json::json!(["0.5"])),
+            WorkflowSchedulerTaskResultValue::Json(serde_json::json!([true])),
+            WorkflowSchedulerTaskResultValue::Json(serde_json::json!([[0.5]])),
+            WorkflowSchedulerTaskResultValue::Json(serde_json::json!([null])),
+            WorkflowSchedulerTaskResultValue::Json(serde_json::json!(vec![0; 4097])),
+            WorkflowSchedulerTaskResultValue::Json(serde_json::json!(vec![u64::MAX; 4096])),
+            WorkflowSchedulerTaskResultValue::String("[0.5]".into()),
+            WorkflowSchedulerTaskResultValue::Bool(true),
+        ] {
+            let upstream = completed_result("embed", PORT_VECTOR, value);
+            assert!(
+                execute_non_runtime_scheduler_task(&vector_task(true), &[upstream])
+                    .await
+                    .is_err()
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn vector_adapter_requires_same_workflow_run_and_source_identity() {
+        for field in ["workflow_id", "workflow_run_id", "node_id", "task_id"] {
+            let mut upstream = completed_result(
+                "embed",
+                PORT_VECTOR,
+                WorkflowSchedulerTaskResultValue::Json(serde_json::json!([0.5])),
+            );
+            match field {
+                "workflow_id" => upstream.workflow_id = "other-workflow".into(),
+                "workflow_run_id" => upstream.workflow_run_id = "other-run".into(),
+                "node_id" => upstream.node_id = "other-node".into(),
+                "task_id" => upstream.task_id = "other-task".into(),
+                _ => unreachable!(),
+            }
+            assert!(
+                matches!(
+                    execute_non_runtime_scheduler_task(&vector_task(true), &[upstream]).await,
+                    Err(
+                        WorkflowSchedulerNonRuntimeTaskAdapterError::MissingMaterializedInput { .. }
+                    )
+                ),
+                "{field}"
+            );
         }
     }
 

@@ -4,7 +4,17 @@
 
 **Current phase:** M3 owner/client consumer source is implemented. Native CPU sampling and the supported inference/embedded host route are qualified separately; the desktop-authored dependent text-to-image graph and full review remain open.
 
-**Next slice:** The user-authorized bounded M2 text stop-string successor is
+**Next slice:** The user-selected single-prompt canonical `chat_completion`
+graph feature is active on isolated `feat/workflow-chat-completion`. Source is
+fresh main `c75fa237` with explicit ordinary composition of stop successor
+`e570302d` and embedding revision successor `7be490d7`; those frozen candidates
+remain separate and their review/publication belongs to the parent. Acceptance
+requires exact canonical task/requested revision constraints and an offline
+synthetic causal LM through saved/reopened public scheduler graphs, cancellation,
+isolation and retained text-generation controls. No pretrained/GPU/desktop or
+resident-accounting qualification is implied.
+
+**Prior stop slice:** The user-authorized bounded M2 text stop-string successor is
 implemented on `feat/workflow-text-stop-string` from accepted seed/precision
 `fae339bdb1eb681a01ea983f1abe0f2f48916349`, which includes main `d61b86fc`.
 The [stop-string report](reports/2026-10-06-workflow-text-stop-string.md) records
@@ -18,9 +28,24 @@ PR60's held-text rewrite finding is repaired in a narrow successor of frozen
 `19119837`; the [same report](reports/2026-10-06-workflow-text-stop-string.md#pr60-held-text-rewrite-successor)
 defines immutable emitted-prefix and suffix-only rewrite semantics, including
 crossing-boundary marker refusal and EOS/budget flushing. Parent verification and
-fresh hosted CI remain separate; chat graph work is paused for this priority.
+fresh hosted CI remain separate; chat graph work resumes on its own candidate.
 
-Graph-authored text seed is implemented in frozen candidate
+**Prior embedding slice:** The isolated [canonical CPU embedding graph successor](reports/2026-10-06-workflow-cpu-embedding-graphs.md)
+is implemented from freshly fetched main `c75fa237`. Typed embedding/JSON ports,
+the existing selected Candle owner, sequential envelope execution and the bounded
+vector sink now compose through a saved public scheduler graph. Later independent
+review found an explicit requested-revision projection gap in frozen `2961b148`.
+The [isolated revision successor](reports/2026-10-06-workflow-cpu-embedding-graphs.md#explicit-requested-revision-successor)
+reproduces it with actual Candle CPU output, requires requested/selected revision
+agreement before resolution and preserves the original typed request constraint.
+Parent verification remains pending. Local qualification and separate candidate
+publication are recorded in the report; live Pumas,
+pretrained-quality, GPU and desktop execution remain separate. Preserve frozen
+stop-string source `19119837`, PR60's separate `e570302d` successor and every
+frozen seed/precision/repair/paused history.
+Do not resume ranking or resident-accounting work as part of this feature.
+
+**Prior seed slice:** Graph-authored text seed is implemented in frozen candidate
 `6cf549dd`; see the [seed report](reports/2026-10-06-workflow-text-seed.md). Its
 separate [desktop precision successor](reports/2026-10-06-text-seed-desktop-precision.md)
 validates authored seeds before numeric persistence and blocks unsafe execution,

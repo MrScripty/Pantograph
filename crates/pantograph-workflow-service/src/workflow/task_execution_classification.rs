@@ -8,6 +8,7 @@ const NODE_TYPE_BOOLEAN_INPUT: &str = "boolean-input";
 const NODE_TYPE_NUMBER_INPUT: &str = "number-input";
 const NODE_TYPE_TEXT_INPUT: &str = "text-input";
 const NODE_TYPE_TEXT_OUTPUT: &str = "text-output";
+const NODE_TYPE_VECTOR_OUTPUT: &str = "vector-output";
 const NODE_TYPE_IMAGE_OUTPUT: &str = "image-output";
 const NODE_TYPE_MERGE: &str = "merge";
 const NODE_TYPE_JSON_FILTER: &str = "json-filter";
@@ -61,7 +62,11 @@ fn is_source_input_task(node_type: &str) -> bool {
 fn is_first_stage_node_engine_task(node_type: &str) -> bool {
     matches!(
         node_type,
-        NODE_TYPE_TEXT_OUTPUT | NODE_TYPE_IMAGE_OUTPUT | NODE_TYPE_MERGE | NODE_TYPE_JSON_FILTER
+        NODE_TYPE_TEXT_OUTPUT
+            | NODE_TYPE_VECTOR_OUTPUT
+            | NODE_TYPE_IMAGE_OUTPUT
+            | NODE_TYPE_MERGE
+            | NODE_TYPE_JSON_FILTER
     )
 }
 
@@ -107,7 +112,13 @@ mod tests {
 
     #[test]
     fn classifier_marks_first_stage_output_as_non_runtime_node_engine() {
-        for node_type in ["text-output", "image-output", "merge", "json-filter"] {
+        for node_type in [
+            "text-output",
+            "vector-output",
+            "image-output",
+            "merge",
+            "json-filter",
+        ] {
             let contract = contract(node_type);
             assert_eq!(
                 classify_workflow_scheduler_task(node_type, Some(&contract)),

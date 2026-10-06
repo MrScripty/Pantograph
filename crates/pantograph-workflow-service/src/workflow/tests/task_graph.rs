@@ -32,6 +32,66 @@ fn workflow_run_id() -> WorkflowRunId {
     WorkflowRunId::try_from("run-task-graph".to_string()).expect("workflow run id")
 }
 
+#[test]
+fn vector_output_lowers_to_optional_typed_scheduler_template() {
+    for connected in [false, true] {
+        let graph = WorkflowGraph {
+            nodes: vec![
+                GraphNode {
+                    id: "source".into(),
+                    node_type: "selection-input".into(),
+                    position: Position { x: 0.0, y: 0.0 },
+                    data: json!({}),
+                },
+                GraphNode {
+                    id: "vector-out".into(),
+                    node_type: "vector-output".into(),
+                    position: Position { x: 200.0, y: 0.0 },
+                    data: json!({"vector": "inert display data"}),
+                },
+            ],
+            edges: if connected {
+                vec![GraphEdge {
+                    id: "source-vector".into(),
+                    source: "source".into(),
+                    target: "vector-out".into(),
+                    source_handle: "value".into(),
+                    target_handle: "vector".into(),
+                }]
+            } else {
+                Vec::new()
+            },
+            derived_graph: None,
+        };
+        let tasks =
+            workflow_scheduler_task_graph(&workflow_id(), &workflow_run_id(), &graph).unwrap();
+        let sink = tasks
+            .tasks
+            .iter()
+            .find(|task| task.node_id.as_str() == "vector-out")
+            .unwrap();
+        assert_eq!(
+            sink.execution_class,
+            WorkflowSchedulerTaskExecutionClass::NonRuntimeNodeEngine
+        );
+        assert_eq!(
+            sink.non_runtime_task_template,
+            Some(WorkflowSchedulerNonRuntimeTaskTemplate::VectorOutput)
+        );
+        assert!(sink.diagnostics.is_empty());
+        assert_eq!(sink.input_bindings.len(), usize::from(connected));
+        if connected {
+            assert_eq!(sink.input_bindings[0].source_node_id.as_str(), "source");
+            assert_eq!(sink.input_bindings[0].source_port_id, "value");
+            assert_eq!(sink.input_bindings[0].target_port_id, "vector");
+        }
+        let encoded = serde_json::to_value(&tasks).unwrap();
+        let decoded: crate::workflow::WorkflowSchedulerTaskGraph =
+            serde_json::from_value(encoded).unwrap();
+        assert_eq!(decoded, tasks);
+    }
+}
+
 fn inference_projection() -> WorkflowSchedulerInferenceTaskProjections {
     ready_inference_projection(resource_estimate_hints())
 }

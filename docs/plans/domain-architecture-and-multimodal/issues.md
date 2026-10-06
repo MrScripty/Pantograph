@@ -1,5 +1,16 @@
 # Issues
 
+## 2026-10-06 — Embedding requested revision finding
+
+Independent review found that frozen `2961b148` erased an explicit requested
+revision during host projection. The exact four-pointer counterexample passes
+structural request validation and produced actual Candle CPU vectors/metadata for
+the different selected revision. The [separate narrow successor](reports/2026-10-06-workflow-cpu-embedding-graphs.md#explicit-requested-revision-successor)
+rejects mismatched or missing selected revisions before resolvers and retains
+omitted-request refinement. Single/batch resolver sentinels and actual CPU
+goldens decide this scope; parent review/hosted qualification remain separate.
+Generic scheduler policy and quarantined resident histories are unchanged.
+
 | ID | Issue | Owner | Disposition / next evidence |
 | --- | --- | --- | --- |
 | DA-I01 | “Text and images” may mean dependent text-to-image generation, vision inputs, or both. | Product contract / M0 | Initial assumption is text-model output feeding image inference; incorporate user selection before fixture admission. |

@@ -157,6 +157,7 @@ pub enum InferencePortRequirement {
 pub enum InferenceValueType {
     Scalar(InferenceScalarType),
     Artifact(InferenceArtifactType),
+    Structured(InferenceStructuredType),
     Reference(InferenceReferenceType),
     Constraint(InferenceConstraintType),
 }
@@ -170,6 +171,15 @@ pub enum InferenceScalarType {
     I64,
     U64,
     F64,
+}
+
+/// Bounded structured values carried in the existing JSON transport.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum InferenceStructuredType {
+    Embedding,
+    Json,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]

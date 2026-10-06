@@ -30,6 +30,7 @@ const NODE_TYPE_BOOLEAN_INPUT: &str = "boolean-input";
 const NODE_TYPE_NUMBER_INPUT: &str = "number-input";
 const NODE_TYPE_TEXT_INPUT: &str = "text-input";
 const NODE_TYPE_TEXT_OUTPUT: &str = "text-output";
+const NODE_TYPE_VECTOR_OUTPUT: &str = "vector-output";
 const NODE_TYPE_IMAGE_OUTPUT: &str = "image-output";
 const NODE_TYPE_MERGE: &str = "merge";
 const NODE_TYPE_JSON_FILTER: &str = "json-filter";
@@ -381,6 +382,30 @@ fn non_runtime_task_template_for_node(
 
     match node_type {
         NODE_TYPE_TEXT_OUTPUT => text_output_template(node_id, input_bindings),
+        NODE_TYPE_VECTOR_OUTPUT => {
+            // The registered vector sink is optional. A connected sink accepts
+            // exactly one vector; an unconnected sink retains its null output.
+            if input_bindings.len() <= 1
+                && input_bindings
+                    .iter()
+                    .all(|binding| binding.target_port_id == "vector")
+            {
+                (
+                    Some(WorkflowSchedulerNonRuntimeTaskTemplate::VectorOutput),
+                    Vec::new(),
+                )
+            } else {
+                (
+                    None,
+                    vec![diagnostic(
+                    node_id,
+                    Some("vector"),
+                    WorkflowSchedulerTaskProjectionDiagnosticCode::InvalidNonRuntimeTemplateValue,
+                    "vector-output accepts at most one materialized vector input",
+                )],
+                )
+            }
+        }
         NODE_TYPE_IMAGE_OUTPUT => {
             if input_bindings.len() == 1 && input_bindings[0].target_port_id == "image" {
                 (
