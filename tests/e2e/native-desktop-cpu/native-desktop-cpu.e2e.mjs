@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { defaultVectorArtifact, completedCpuAttempt } from './native-output-contract.mjs';
 
 const evidence = process.env.PANTOGRAPH_NATIVE_CPU_EVIDENCE_DIR;
 const fixtureRoot = process.env.PANTOGRAPH_NATIVE_CPU_FIXTURE_ROOT;
@@ -213,24 +214,28 @@ describe('actual native Tauri saved CPU embedding graph', () => {
       const scheduler = await invoke('workflow_get_scheduler_snapshot', { request: { session_id: run.workflow_execution_session_id } });
       samples.push({ capturedAt: new Date().toISOString(), runs: current, scheduler, inspection, artifactQuery });
       writeFileSync(path.join(evidence, 'native-bootstrap-observation.json'), JSON.stringify(samples, null, 2));
-      return artifactQuery.artifacts.some((item) => item.producer_node_id === 'infer' && item.producer_port_id === 'embedding')
-        && artifactQuery.artifacts.some((item) => item.producer_node_id === 'infer' && item.producer_port_id === 'metadata');
+      return inspection.run.status === 'completed'
+        && Boolean(defaultVectorArtifact(artifactQuery.artifacts, runId));
     }, { timeout: 120000, interval: 2000, timeoutMsg: 'The same native submitted run did not retain CPU output after automatic dependency bootstrap' });
-    const embedding = artifactQuery.artifacts.find((item) => item.producer_node_id === 'infer' && item.producer_port_id === 'embedding');
-    const metadata = artifactQuery.artifacts.find((item) => item.producer_node_id === 'infer' && item.producer_port_id === 'metadata');
-    assert.ok(embedding && metadata, 'Actual native owner must retain scoped vector and selection metadata');
-    assert.equal(embedding.workflow_run_id, runId);
-    const output = await readJsonArtifact(embedding);
-    const selected = await readJsonArtifact(metadata);
+    const vectorArtifact = defaultVectorArtifact(artifactQuery.artifacts, runId);
+    assert.ok(vectorArtifact, 'Actual default GUI output must retain its scoped vector sink');
+    const output = await readJsonArtifact(vectorArtifact);
+    writeFileSync(path.join(evidence, 'native-vector-body.json'), JSON.stringify({ runId, vectorArtifact, output }, null, 2));
     assert.ok(Array.isArray(output) && output.length === 8);
     output.forEach((value, index) => {
       assert.ok(Number.isFinite(value));
       assert.ok(Math.abs(value - fixture.expected_vector[index]) <= 1e-5, `Native CPU oracle mismatch at ${index}`);
     });
-    assert.equal(selected.runtime_variant_id, 'candle.cpu');
-    assert.deepEqual(selected.device_ids, ['cpu']);
-    assert.equal(selected.model_ref.model_id, fixture.model_id);
-    writeFileSync(path.join(evidence, 'native-output.json'), JSON.stringify({ synthetic_untrained: true, discovery: fixture.discovery, runId, output, selected, inspection, artifactQuery }, null, 2));
+    const timeline = await invoke('workflow_scheduler_timeline_query', { request: { workflow_run_id: runId, limit: 64 } });
+    const selectionAttempt = completedCpuAttempt(timeline.events, runId);
+    assert.ok(selectionAttempt, 'The same run must contain an actual completed Candle CPU runtime attempt');
+    const boundModelRef = inspection.run_graph.graph.nodes.find((node) => node.id === 'infer').data.pumas_model_ref;
+    assert.equal(boundModelRef.model_id, fixture.model_id);
+    writeFileSync(path.join(evidence, 'native-output.json'), JSON.stringify({ synthetic_untrained: true,
+      discovery: fixture.discovery, runId, output, vectorArtifact, selectionAttempt, timeline,
+      bound_model_ref: boundModelRef, model_ref_source: 'saved executable graph; host selection/loader identity checks apply',
+      internal_inference_metadata_exported: artifactQuery.artifacts.some((item) => item.producer_node_id === 'infer' && item.producer_port_id === 'metadata'),
+      inspection, artifactQuery }, null, 2));
     await $(selector('workbench-nav-io_inspector')).click();
     await $(selector('io-inspector-page')).waitForDisplayed({ timeout: 30000 });
     const cards = await $$(selector('io-artifact-card'));

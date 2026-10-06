@@ -905,3 +905,18 @@ The [complete twenty-first-attempt evidence](../evidence/native-desktop-cpu/cold
 preserves all 23 original members, full masked job log and 38 owner records.
 Artifact 11450853556 SHA256 is
 1f223e064f087db553a65f6be237668da1540ae11d89553b6ab3c624a30a2250.
+
+## Native harness follows actual default workflow output
+
+The harness now requires the same completed run’s retained vectors.vector
+workflow output, reads its actual body and checks the eight-value synthetic CPU
+oracle. Actual Candle CPU selection is checked through the scoped public
+scheduler timeline. The saved model reference is labelled as graph data; default
+submission does not export the internal inference metadata body. Three focused
+contract tests pass using captured native artifact rows and negative scope cases.
+ESLint with the real harness globals, syntax, critical and whitespace checks pass.
+[Harness contract evidence](../evidence/native-desktop-cpu/cold-typed-discovery/default-output-contract/README.md)
+preserves those results and the initial lint configuration errors. No production
+source, fixture, metadata, weight or output-default changes were made for this
+correction, and no Cargo build was repeated. Numerical native qualification still
+requires the successor’s actual GUI vector body and CPU timeline.
