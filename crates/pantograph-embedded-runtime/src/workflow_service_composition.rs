@@ -922,7 +922,9 @@ mod tests {
             Some(1),
             1_000,
         )
-        .with_workflow_service(workflow_service_with_artifact_store(&temp_dir));
+        .with_workflow_service(workflow_service_with_artifact_and_attribution_store(
+            &temp_dir,
+        ));
         let service = EmbeddedWorkflowServiceComposition::resource_backed_hosted(input).unwrap();
         let graph: WorkflowGraph = serde_json::from_value(serde_json::json!({
             "nodes":[{"id":"infer", "node_type":"llm-inference",
@@ -931,7 +933,10 @@ mod tests {
                     "pumas_model_ref":{"model_id":model_id,"selected_artifact_id":"main"},
                     "runtime_source_context":{"operation_type":"embedding.text",
                         "context_shape_key":"embedding.one-text", "cancellation_mode":"run_scoped"}
-                }}], "edges":[]
+                }}, {"id":"deps", "node_type":"dependency-environment",
+                    "position":{"x":0,"y":200}, "data":{"mode":"manual"}}], "edges":[{"id":"deps-to-infer","source":"deps",
+                "source_handle":"dependency_environment_sidecar", "target":"infer",
+                "target_handle":"dependency_environment_sidecar"}]
         }))
         .unwrap();
         let session = service
@@ -944,7 +949,7 @@ mod tests {
         let validation = service
             .workflow_graph_refresh_current_validation_summary(
                 WorkflowGraphCurrentValidationRefreshRequest {
-                    graph_session_id: session.session_id,
+                    graph_session_id: session.session_id.clone(),
                     graph_revision: session.graph_revision.parse().unwrap(),
                 },
             )
@@ -958,6 +963,50 @@ mod tests {
         );
         assert_eq!(descriptor.task_kind.as_str(), "embedding");
         assert!(descriptor.diagnostics.is_empty());
+        let validation_session_id = validation.summary.validation_session_id.clone().unwrap();
+        let publication = WorkflowGraphSessionExecutableValidationSnapshotPublishRequest {
+            workflow_id: "cold-candle-owner".into(),
+            workflow_semantic_version: "1.0.0".into(),
+            graph_session_id: session.session_id.clone(),
+            validation_session_id: Some(validation_session_id.clone()),
+            validation_snapshot_id: None,
+        };
+        let missing = service
+            .publish_graph_session_executable_validation_snapshot(publication.clone())
+            .await
+            .expect_err("descriptor readiness alone must not fabricate a requirements proof");
+        assert!(missing
+            .to_string()
+            .contains("dependency requirements proof is missing"));
+        let resolved = service
+            .workflow_graph_resolve_dependency_environment_action_intent(
+                DependencyEnvironmentActionIntent {
+                    contract_version: 1,
+                    graph_session_id: session.session_id.parse().unwrap(),
+                    graph_revision: session.graph_revision.parse().unwrap(),
+                    validation_session_id: Some(validation_session_id.clone()),
+                    target_node_id: "deps".parse().unwrap(),
+                    action: DependencyEnvironmentAction::Resolve,
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            resolved.status,
+            DependencyEnvironmentActionIntentStatus::RequestReady,
+            "actual dependency producer: {:?}",
+            resolved.diagnostics
+        );
+        let published = service
+            .publish_graph_session_executable_validation_snapshot(publication)
+            .await
+            .expect("the producer-scoped proof must authorize snapshot publication");
+        assert_eq!(
+            published.as_record().validation_session_id,
+            validation_session_id
+        );
+        assert_eq!(published.as_record().nodes.len(), 1);
+        assert_eq!(published.as_record().nodes[0].node_id.as_str(), "infer");
         let snapshot = registry.snapshot();
         let candle = snapshot
             .runtimes

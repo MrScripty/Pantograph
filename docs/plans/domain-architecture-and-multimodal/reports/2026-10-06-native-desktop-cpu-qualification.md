@@ -335,3 +335,54 @@ capture. Public execution outcome and native CPU output remain unobserved.
 The current successor uses a 30-second inspector/error wait, preserves the global
 deadline, records the exact real pre-submit projection, and captures GUI errors
 and scoped run state on failure. It changes no production selection or gate.
+
+## Missing proof and existing typed producer
+
+[Run 37505022667](https://github.com/MrScripty/Pantograph/actions/runs/37505022667)
+executes `7d89d84892d9265185c53a8bfb8f8fb27b6485c5`, tree
+`6768d46f912af7c5cd2ef0afbcb0dc952b40d903`. Native setup/build,
+all eight startup tests, cold-owner assertions, save/reopen and wire checks pass.
+The actual pre-submit owner projection is current/executable, with matching
+revision `aac0d972d0845775`, zero diagnostics and `submit_gate.allowed: true`.
+The GUI rejects snapshot publication because the dependency requirements proof
+is missing for `infer`. Its scoped run query returns no runs. There is no
+scheduler execution or CPU output. The [complete ninth-attempt evidence](../evidence/native-desktop-cpu/cold-typed-discovery/submission-proof/README.md)
+preserves all twenty-one artifact members, original screenshots/JSON and masked
+job log. Artifact `11431084506` has SHA256
+`26ea52a606c8eb0be1dcca82899e43fbad50bde2f221a43bb7c69bb6dc391898`.
+
+The existing requirements-proof producer is the graph-associated typed dependency
+Resolve action. The qualification fixture now authors its existing
+`dependency-environment` sidecar and association edge: four authored nodes and
+three edges, comprising the original three executable pipeline nodes plus a
+dependency control. After normal interface Apply/Save, the harness calls that
+public Resolve command with the real current graph revision and validation
+session before clicking GUI Submit. It neither supplies a proof nor creates a
+readiness receipt. Publication and execution guards remain unchanged. This does
+not repair automatic submission of a graph without the sidecar; that graph's
+missing-proof failure remains documented.
+
+The inference definition overlay previously replaced every schema input with
+model payload inputs, hiding the dependency association handle. It now preserves
+only that schema-owned control after the payload interface. A regression fails
+on the previous source and passes with the repair; other legacy inputs remain
+excluded. Actual native visibility of all three saved edges remains required.
+
+A real-Pumas hosted-composition regression first observes publication rejecting
+the missing proof, calls the existing typed Resolve action, then publishes the
+same scoped snapshot successfully. Candle remains stopped with no model,
+instance or reservation. Both targeted tests and strict all-target runtime Clippy
+pass. All 673 frontend tests, TypeScript checking, the frontend build, affected
+ESLint, critical/a11y gates and formatting pass. These tests do not establish a
+native scheduler run, actual CPU output, GPU, pretrained-model or full loader
+qualification. The next source-bound hosted run must supply that evidence.
+
+The first verification commands mistakenly used root `npm test`/`npm run check`,
+whose aliases also execute Rust tests. Both passed (261 node-engine tests with
+one ignored and 168 workflow-node tests), but those invocations lacked the
+requested defensive `ORT_SKIP_DOWNLOAD=1`. No denied download was retried or
+observed. The previously inspected affected-runtime graph covered their
+dependencies; an exact default-scope graph is preserved afterward rather than
+represented as a pre-build audit. Explicit frontend scripts were then used with
+the defensive setting. The effective graphs contain no prohibited ORT download
+features or historical Pumas source.

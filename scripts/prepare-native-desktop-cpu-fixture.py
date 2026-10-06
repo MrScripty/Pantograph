@@ -59,10 +59,14 @@ def prepare(destination):
                   "pumas_model_ref": {"model_id": MODEL_ID, "selected_artifact_id": "main"},
                   "inference_interface_snapshot": snapshot}},
         {"id": "vectors", "node_type": "vector-output", "position": {"x": 600, "y": 100},
-         "data": {"label": "Synthetic vector output"}}],
+         "data": {"label": "Synthetic vector output"}},
+        {"id": "deps", "node_type": "dependency-environment", "position": {"x": 300, "y": 450},
+         "data": {"label": "Typed dependency control", "mode": "manual"}}],
         "edges": [
             {"id": "text-to-embedding", "source": "prompt", "source_handle": "text", "target": "infer", "target_handle": "text"},
-            {"id": "embedding-to-vector", "source": "infer", "source_handle": "embedding", "target": "vectors", "target_handle": "vector"}]}
+            {"id": "embedding-to-vector", "source": "infer", "source_handle": "embedding", "target": "vectors", "target_handle": "vector"},
+            {"id": "deps-to-infer", "source": "deps", "source_handle": "dependency_environment_sidecar",
+             "target": "infer", "target_handle": "dependency_environment_sidecar"}]}
     (destination / "graph.json").write_text(json.dumps(graph, indent=2) + "\n")
     golden = json.loads((source / "golden.json").read_text())
     record = {"synthetic_untrained": True, "discovery": "controlled metadata seeded into isolated Pumas library; not real-user discovery acceptance",

@@ -190,3 +190,19 @@ test('saved embedding descriptor ports retain embedding and JSON types in the gr
   assert.equal(resolved.outputs[0].data_type, 'embedding');
   assert.notEqual(resolved.outputs[0].data_type, 'tensor');
 });
+
+test('inference payload overlay retains the schema-owned dependency sidecar handle', () => {
+  const sidecar = { id: 'dependency_environment_sidecar', label: 'Dependencies',
+    data_type: 'dependency_environment_sidecar' as const, required: false, multiple: false };
+  const definition: NodeDefinition = { node_type: 'llm-inference', category: 'processing',
+    label: 'Inference', description: 'Run inference', io_binding_origin: 'integrated',
+    inputs: [sidecar, { id: 'runtime', label: 'Runtime', data_type: 'string', required: false, multiple: false }],
+    outputs: [], execution_mode: 'manual' };
+  const resolved = resolveNodeDefinitionOverlay('llm-inference', {
+    inference_interface_snapshot: { inputs: [{ port_id: 'text', label: 'Text', direction: 'input',
+      requirement: 'required', value_type: { category: 'scalar', kind: 'string' } }], outputs: [] },
+  }, [definition]);
+  assert.deepEqual(resolved?.inputs.map((port) => port.id), ['text', 'dependency_environment_sidecar']);
+  assert.deepEqual(resolved?.inputs[1], sidecar);
+  assert.deepEqual(definition.inputs.map((port) => port.id), ['dependency_environment_sidecar', 'runtime']);
+});

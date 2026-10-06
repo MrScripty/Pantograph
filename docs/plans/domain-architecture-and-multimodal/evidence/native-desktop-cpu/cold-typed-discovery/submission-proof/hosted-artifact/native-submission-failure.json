@@ -1,0 +1,17 @@
+{
+  "submissionError": "",
+  "error": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n\n'' !== null\n",
+  "runs": {
+    "projection_state": {
+      "status": "current",
+      "last_applied_event_seq": 0,
+      "projection_version": 10,
+      "rebuilt_at_ms": null,
+      "projection_name": "run_list",
+      "updated_at_ms": 1791308962342
+    },
+    "runs": [],
+    "facets": []
+  },
+  "body": "\nPANTOGRAPH\nGraph\nACTIVE RUN\nNo run selected\n\n[WF]\nSynthetic CPU Embedding Qualification\nNew\nSave\nDelete\nClear\nVersion \n+patch\n Submit\nWorkflow submit failed: Invalid request: dependency requirements proof is missing for executable node infer\nNodes\n\n\n\n[?]\nControl\n5\n[+]\n\n[ ]\nInput\n12\n[-]\nHuman Input\n4:1\nAudio Input\n1:1\nModel Provider\n2:3\nNumber Input\n1:1\nPuma-Lib\n0:2\nVector Input\n1:1\nMasked Text Input\n1:1\nImage Input\n2:2\nBoolean Input\n1:1\nSelection Input\n1:1\nText Input\n1:1\nLinked Input\n0:1\n\n[>]\nOutput\n6\n[-]\nAudio Output\n2:1\nText Output\n2:1\nComponent Preview\n2:1\nVector Output\n1:1\nPoint Cloud Output\n2:0\nImage Output\n2:1\n\n[~]\nProcessing\n5\n[-]\nJSON Filter\n1:2\nValidator\n2:3\nLLM Inference\n5:1\nUnload Model\n1:2\nProcess\n6:4\n\n[#]\nTool\n6\n[+]\nDrag or double-click to add\nSynthetic input: hello world\nText\nText\nText\n\nSynthetic CPU embedding\nText\nEmbedding\nMetadata\nUsage\nIdle\nModel:\nLocal LLM\nSynthetic vector output\nVector\nVector\nNo vector yet\nSvelte Flow\n\n\n\n\n\n"
+}

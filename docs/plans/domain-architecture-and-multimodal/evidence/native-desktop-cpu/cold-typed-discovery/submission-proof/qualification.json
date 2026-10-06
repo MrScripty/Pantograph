@@ -1,0 +1,29 @@
+{
+  "run_id": 37505022667,
+  "job_id": 112411365590,
+  "head": "7d89d84892d9265185c53a8bfb8f8fb27b6485c5",
+  "tree": "6768d46f912af7c5cd2ef0afbcb0dc952b40d903",
+  "artifact_id": 11431084506,
+  "artifact_zip_sha256": "26ea52a606c8eb0be1dcca82899e43fbad50bde2f221a43bb7c69bb6dc391898",
+  "artifact_members": 21,
+  "conclusion": "failure",
+  "native_app_session_opened": true,
+  "native_startup_tests_passed": 8,
+  "native_cold_candle_status": "stopped",
+  "native_save_reopen": true,
+  "native_wires_visible": true,
+  "graph_session_id": "e0230695-9bc8-4594-b1ae-68dd6b1faa9f",
+  "requested_graph_revision": "aac0d972d0845775",
+  "current_graph_revision": "aac0d972d0845775",
+  "native_validation_state": "current",
+  "native_validation_status": "executable",
+  "native_diagnostics_count": 0,
+  "native_submit_gate_allowed": true,
+  "native_gui_submission_error": "Invalid request: dependency requirements proof is missing for executable node infer",
+  "scoped_runs": 0,
+  "native_cpu_output": false,
+  "limitations": [
+    "No public scheduler run or CPU execution occurred",
+    "Controlled untrained fixture; no pretrained/GPU/user-library/full-loader qualification"
+  ]
+}

@@ -86,7 +86,8 @@ describe('actual native Tauri saved CPU embedding graph', () => {
     writeFileSync(path.join(evidence, 'native-rendered-edges.json'), JSON.stringify(renderedEdges, null, 2));
     assert.deepEqual(renderedEdges.map((edge) => edge.id).sort(), graph.edges.map((edge) => edge.id).sort());
     for (const edge of renderedEdges) {
-      assert.ok(edge.length > 0 && edge.width > 0 && edge.height === 0, 'Aligned fixture edges must exercise zero-height geometry');
+      assert.ok(edge.length > 0 && edge.width > 0, 'Every saved edge must have visible geometry');
+      if (edge.id !== 'deps-to-infer') assert.equal(edge.height, 0, 'Aligned pipeline edges must exercise zero-height geometry');
       assert.notEqual(edge.stroke, 'none');
       assert.match(edge.filter, /^drop-shadow\(/, 'Glow must avoid a zero-height objectBoundingBox filter region');
     }
@@ -125,6 +126,18 @@ describe('actual native Tauri saved CPU embedding graph', () => {
         graph_session_id: activeValidation.graph_session_id, graph_revision: activeValidation.graph_revision,
       } });
       writeFileSync(path.join(evidence, 'native-submission-validation.json'), JSON.stringify({ projection, submissionEvents }, null, 2));
+      // Resolve through the existing graph-associated producer; its owner records
+      // the revision/session/model-scoped proof required by snapshot publication.
+      const resolved = await invoke('resolve_dependency_environment_action_intent', { request: {
+        contract_version: 1, graph_session_id: activeValidation.graph_session_id,
+        graph_revision: activeValidation.graph_revision,
+        validation_session_id: projection.summary.validation_session_id,
+        target_node_id: 'deps', action: 'resolve',
+      } });
+      writeFileSync(path.join(evidence, 'native-dependency-resolution.json'), JSON.stringify(resolved, null, 2));
+      assert.equal(resolved.status, 'request_ready', JSON.stringify(resolved));
+      assert.deepEqual(resolved.diagnostics, []);
+
     }
     await $(selector('workflow-submit-button')).click();
     let submissionError = null;
@@ -132,8 +145,8 @@ describe('actual native Tauri saved CPU embedding graph', () => {
       await browser.waitUntil(async () => {
         const error = await $(selector('workflow-submit-error'));
         if (await error.isExisting()) {
-          submissionError = await error.getText();
-          return true;
+          submissionError = await error.getAttribute('title') || await error.getText();
+          return Boolean(submissionError);
         }
         const inspector = await $(selector('io-inspector-page'));
         return await inspector.isExisting() && await inspector.isDisplayed();

@@ -1,0 +1,189 @@
+{
+  "response": {
+    "summary": {
+      "validation_session_id": "validation.session.71884db9-bebe-455b-8331-c6e899e06339",
+      "graph_session_id": "e0230695-9bc8-4594-b1ae-68dd6b1faa9f",
+      "requested_graph_revision": "aac0d972d0845775",
+      "summary": {
+        "status": "executable",
+        "diagnostics_count": 0,
+        "executable": true,
+        "blocking_diagnostics_count": 0
+      },
+      "submit_gate": {
+        "allowed": true
+      },
+      "current_graph_revision": "aac0d972d0845775",
+      "state": "current"
+    },
+    "node_projections": [
+      {
+        "runtime_source_context": {
+          "operation_type": "embedding.text",
+          "cancellation_mode": "run_scoped",
+          "context_shape_key": "embedding.one-text"
+        },
+        "authored_snapshot": {
+          "outputs": [
+            {
+              "value_type": {
+                "category": "structured",
+                "kind": "embedding"
+              },
+              "direction": "output",
+              "label": "Embedding",
+              "requirement": "required",
+              "availability": {
+                "status": "available"
+              },
+              "port_id": "embedding"
+            },
+            {
+              "value_type": {
+                "category": "structured",
+                "kind": "json"
+              },
+              "direction": "output",
+              "label": "Metadata",
+              "requirement": "required",
+              "availability": {
+                "status": "available"
+              },
+              "port_id": "metadata"
+            },
+            {
+              "value_type": {
+                "category": "structured",
+                "kind": "json"
+              },
+              "direction": "output",
+              "label": "Usage",
+              "requirement": "optional",
+              "availability": {
+                "status": "available"
+              },
+              "port_id": "usage"
+            }
+          ],
+          "descriptor_fingerprint": "iface.60ef264b7095a8c966cafd3e2a601a86accb3161bac18b62c6f4400b24837cef",
+          "task_kind": "embedding",
+          "inputs": [
+            {
+              "value_type": {
+                "category": "scalar",
+                "kind": "string"
+              },
+              "direction": "input",
+              "label": "Text",
+              "requirement": "required",
+              "availability": {
+                "status": "available"
+              },
+              "port_id": "text"
+            }
+          ],
+          "contract_version": 1
+        },
+        "node_id": "infer",
+        "validation_summary": {
+          "status": "executable",
+          "diagnostics_count": 0,
+          "executable": true,
+          "blocking_diagnostics_count": 0
+        },
+        "device_constraint": "cpu",
+        "descriptor": {
+          "task_kind": "embedding",
+          "model_ref": {
+            "model_id": "embedding/qualification/synthetic-bert-8",
+            "selected_artifact_id": "main"
+          },
+          "descriptor_fingerprint": "iface.60ef264b7095a8c966cafd3e2a601a86accb3161bac18b62c6f4400b24837cef",
+          "contract_version": 1,
+          "outputs": [
+            {
+              "value_type": {
+                "category": "structured",
+                "kind": "embedding"
+              },
+              "direction": "output",
+              "label": "Embedding",
+              "requirement": "required",
+              "options": {
+                "kind": "none"
+              },
+              "availability": {
+                "status": "available"
+              },
+              "port_id": "embedding"
+            },
+            {
+              "value_type": {
+                "category": "structured",
+                "kind": "json"
+              },
+              "direction": "output",
+              "label": "Metadata",
+              "requirement": "required",
+              "options": {
+                "kind": "none"
+              },
+              "availability": {
+                "status": "available"
+              },
+              "port_id": "metadata"
+            },
+            {
+              "value_type": {
+                "category": "structured",
+                "kind": "json"
+              },
+              "direction": "output",
+              "label": "Usage",
+              "requirement": "optional",
+              "options": {
+                "kind": "none"
+              },
+              "availability": {
+                "status": "available"
+              },
+              "port_id": "usage"
+            }
+          ],
+          "inputs": [
+            {
+              "value_type": {
+                "category": "scalar",
+                "kind": "string"
+              },
+              "direction": "input",
+              "label": "Text",
+              "requirement": "required",
+              "options": {
+                "kind": "none"
+              },
+              "availability": {
+                "status": "available"
+              },
+              "port_id": "text"
+            }
+          ],
+          "availability": {
+            "status": "available"
+          }
+        },
+        "runtime_constraint": "candle",
+        "estimate_hints": [
+          {
+            "value": 536895107,
+            "kind": "peak_ram_bytes"
+          },
+          {
+            "value": 536895107,
+            "kind": "peak_vram_bytes"
+          }
+        ]
+      }
+    ]
+  }
+}
