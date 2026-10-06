@@ -188,7 +188,6 @@ async fn terminal_cold_load_retains_residency_without_an_admission_window() {
         application.state,
         ReservationLifecycleApplicationState::Applied
     );
-    assert!(controller.probed_after_release.load(Ordering::SeqCst));
     assert_eq!(controller.stop_count.load(Ordering::SeqCst), 0);
     let snapshot = registry.snapshot();
     assert_eq!(snapshot.reservations.len(), 1);
@@ -208,9 +207,47 @@ async fn terminal_cold_load_retains_residency_without_an_admission_window() {
         ),
         (40, 90, 10)
     );
+    assert!(controller.probed_after_release.load(Ordering::SeqCst));
     assert!(registry
         .acquire_reservation(task("candle", "competing", 20))
         .is_err());
+}
+
+#[tokio::test]
+async fn ordinary_reclaim_reaches_failed_inactive_owner_without_terminal_cleanup() {
+    let registry = registry();
+    let controller = ResidentController::new(registry.clone(), ResidentAllocationState::Unknown);
+    controller.stop_acknowledged.store(false, Ordering::SeqCst);
+    crate::runtime_registry::sync_runtime_registry(&controller, &registry).await;
+    let failed = registry
+        .eviction_candidates()
+        .into_iter()
+        .find(|runtime| runtime.runtime_id == "pytorch")
+        .expect("failed uncertain allocation must be ordinarily reclaimable");
+    assert_eq!(
+        failed.status,
+        pantograph_runtime_registry::RuntimeRegistryStatus::Failed
+    );
+    assert!(failed.resident_resources_uncertain);
+    assert!(!controller.lifecycle().active);
+
+    let reclaim = reclaim_runtime_and_reconcile_runtime_registry(&controller, &registry, "pytorch")
+        .await
+        .expect("ordinary reclaim reaches inactive owner");
+    assert_eq!(reclaim.action, RuntimeReclaimAction::StopProducer);
+    assert_eq!(controller.stop_count.load(Ordering::SeqCst), 1);
+    assert!(registry
+        .acquire_reservation(task("candle", "unacknowledged", 1))
+        .is_err());
+
+    controller.stop_acknowledged.store(true, Ordering::SeqCst);
+    reclaim_runtime_and_reconcile_runtime_registry(&controller, &registry, "pytorch")
+        .await
+        .expect("acknowledged owner shutdown");
+    assert_eq!(controller.stop_count.load(Ordering::SeqCst), 2);
+    registry
+        .acquire_reservation(task("candle", "acknowledged", 100))
+        .unwrap();
 }
 
 #[tokio::test]

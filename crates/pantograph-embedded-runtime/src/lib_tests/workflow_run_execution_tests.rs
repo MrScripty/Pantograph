@@ -1967,18 +1967,72 @@ async fn selected_text_workflow_retains_completed_output_through_canonical_batch
     let reservation_lifecycle_port = Arc::new(TestReservationLifecyclePort::default());
     let target_directory = temp.path().join("selected-model");
     std::fs::create_dir_all(&target_directory).unwrap();
+    // Real selected-text execution cold-loads this target without publishing
+    // residency. Keep two full peak leases until its terminal host event.
+    use pantograph_runtime_registry::{
+        RuntimeAdmissionResourceKind, RuntimeModelResidentEstimate, RuntimeRegistration,
+        RuntimeRegistry, RuntimeReservationRequest, RuntimeReservationRequirements,
+        RuntimeReservationResourceClaim, RuntimeResourceDomain, RuntimeResourceDomainBinding,
+        RuntimeRetentionHint,
+    };
+    let registry = Arc::new(RuntimeRegistry::new());
+    registry.register_runtime(RuntimeRegistration::new("pytorch", "PyTorch"));
+    registry.register_runtime(RuntimeRegistration::new("candle", "Candle"));
+    registry
+        .configure_resource_domain(RuntimeResourceDomain {
+            domain_id: "selected-text-pool".into(),
+            total_bytes: 100,
+            safety_margin_bytes: 0,
+            bindings: ["pytorch", "candle"]
+                .into_iter()
+                .map(|runtime| RuntimeResourceDomainBinding {
+                    runtime_id: runtime.into(),
+                    resource_kind: RuntimeAdmissionResourceKind::RamBytes,
+                })
+                .collect(),
+        })
+        .unwrap();
+    let requirements = |bytes| {
+        RuntimeReservationRequirements::from_claims(vec![
+            RuntimeReservationResourceClaim::ram_bytes(bytes),
+        ])
+    };
+    registry
+        .configure_model_resident_estimates(vec![RuntimeModelResidentEstimate {
+            runtime_id: "pytorch".into(),
+            model_id: target_directory.display().to_string(),
+            requirements: requirements(40),
+        }])
+        .unwrap();
+    let task = |runtime: &str, owner: &str, bytes| RuntimeReservationRequest {
+        runtime_id: runtime.into(),
+        workflow_id: "wf-selected-text-runtime-host".into(),
+        reservation_owner_id: Some(owner.into()),
+        model_id: Some(MODEL_ID.into()),
+        usage_profile: None,
+        pin_runtime: false,
+        requirements: Some(requirements(bytes)),
+        retention_hint: RuntimeRetentionHint::Ephemeral,
+    };
+    let first = registry
+        .acquire_reservation(task("pytorch", "first", 50))
+        .unwrap();
+    let second = registry
+        .acquire_reservation(task("pytorch", "second", 50))
+        .unwrap();
     let resolver = Arc::new(SelectedTextResolver(target_directory));
     let prompts = Arc::new(Mutex::new(Vec::new()));
+    let gateway = Arc::new(inference::InferenceGateway::with_backend(
+        Box::new(SelectedWorkflowTextBackend(prompts.clone())),
+        "PyTorch",
+    ));
     let runtime_host_port = Arc::new(EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
         resolver.clone(),
         resolver,
         Arc::new(WorkflowServiceRuntimeHostMediaArtifactSink::new(
             artifact_writer,
         )),
-        Arc::new(inference::InferenceGateway::with_backend(
-            Box::new(SelectedWorkflowTextBackend(prompts.clone())),
-            "PyTorch",
-        )),
+        gateway.clone(),
     ));
     let service = Arc::new(
         workflow_service
@@ -2170,6 +2224,51 @@ async fn selected_text_workflow_retains_completed_output_through_canonical_batch
             expected.as_bytes()
         );
     }
+    assert!(registry
+        .snapshot()
+        .runtimes
+        .iter()
+        .all(|runtime| runtime.model_resource_residency.is_none()));
+    let resident = gateway.resident_lifecycle_snapshot().await.unwrap();
+    assert_eq!(
+        resident.allocation_state,
+        inference::resident_lifecycle::ResidentAllocationState::Resident
+    );
+    let mut terminal = reservation_lifecycle_port
+        .events()
+        .into_iter()
+        .find(|event| event.outcome == ReservationLifecycleOutcome::RuntimeHostCompleted)
+        .expect("actual selected-text host completion event");
+    terminal.reservation_lease_id =
+        SchedulerReservationLeaseId::parse(format!("runtime-registry.{}", first.reservation_id))
+            .unwrap();
+    let real_port = crate::reservation_lifecycle::EmbeddedReservationLifecyclePort::new(
+        registry.clone(),
+        gateway,
+    );
+    real_port
+        .apply_reservation_lifecycle(terminal)
+        .await
+        .unwrap();
+    assert_eq!(
+        registry.snapshot().reservations[0].reservation_id,
+        second.reservation_id
+    );
+    let probe = registry
+        .evaluate_reservation(task("candle", "probe", 0))
+        .unwrap();
+    let pool = &probe.observation().resource_domains[0];
+    assert_eq!(
+        (
+            pool.resident_bytes,
+            pool.reserved_bytes,
+            pool.available_bytes
+        ),
+        (40, 90, 10)
+    );
+    assert!(registry
+        .acquire_reservation(task("candle", "competing", 20))
+        .is_err());
     assert_eq!(host.runtime_load_attempts.load(Ordering::SeqCst), 0);
     assert_eq!(host.run_attempts.load(Ordering::SeqCst), 0);
 }

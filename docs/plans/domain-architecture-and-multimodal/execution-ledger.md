@@ -501,3 +501,18 @@ PyTorch shutdown must acknowledge cleanup even after failed load erased metadata
 Existing peak task claims/custody remain fully charged. Portable owner/config
 fixtures qualify the logical accounting; native GUI/GPU execution and other
 producers remain unqualified. No previous branch rewrite or PR/review creation.
+
+
+## 2026-10-06 — Resident publication and failed-owner reclaim correctness
+
+The [bounded successor](reports/2026-10-06-resident-correctness-successor.md)
+preserves frozen `7c57a744` and existing unpublished correctness commits. Terminal
+host cleanup establishes resident or unknown coverage before releasing custody and
+retries on Retain as well as Evict. Failed uncertain allocations reach ordinary
+owned shutdown despite inactive readiness; only acknowledged release clears their
+charge. Deterministic host-port and ordinary-reclaim regressions cover these paths.
+717 portable/controlled-owner tests pass; the registry regression fails on the
+frozen source. Host tests compile with downloads disabled but cannot execute due
+to the pinned ONNX download's HTTP 403. A broader PyTorch inference run separately
+records 704 passed / one fixture failure. Native GTK/ONNX/model execution and full
+host regression execution remain unqualified. Parent retains PR/review/merge.

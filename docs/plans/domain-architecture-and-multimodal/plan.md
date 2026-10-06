@@ -36,7 +36,12 @@ the [producer bridge](reports/2026-10-05-runtime-producer-resident-estimates.md)
 now publishes explicitly configured estimates from the active PyTorch lifecycle
 owner with ordered-generation and known-zero handling. Other producers, a proven
 resident/transient split and native execution remain separate gaps. Frozen
-`eabbcc83` and `254aef1` are unchanged.
+`eabbcc83` and `254aef1` are unchanged. The [correctness successor](reports/2026-10-06-resident-correctness-successor.md)
+establishes resident coverage before terminal custody release and allows ordinary
+reclaim of failed uncertain allocations through their inactive lifecycle owner.
+Portable qualification passes; new host regressions are compiler-checked, with
+execution blocked by the pinned ONNX download returning HTTP 403. Parent review
+and supported-environment host execution remain required.
 
 **Execution ledger:** [execution-ledger.md](execution-ledger.md)
 
