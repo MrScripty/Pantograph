@@ -5,12 +5,12 @@ use pantograph_inference_interface_contracts::{
     DraftGraphValidationStatus, DraftGraphValidationSummary, InferenceAvailabilityStatus,
     InferenceConnectionSurface, InferenceConnectionSurfaceStatus, InferenceDiagnosticCode,
     InferenceDiagnosticSeverity, InferenceInterfaceContractError, InferenceInterfaceDescriptor,
-    InferenceInterfaceDiagnostic, InferenceInterfaceDriftReport, InferencePortDescriptor,
-    InferencePortDirection, InferencePortOptions, InferencePortRequirement, InferenceScalarType,
-    InferenceValueType, ValidatedAuthoredInferenceInterfaceSnapshot,
-    ValidatedDependencyEnvironmentActionIntent, ValidatedDependencyEnvironmentActionIntentResult,
-    ValidatedDraftGraphValidationSummary, ValidatedInferenceConnectionSurface,
-    ValidatedInferenceInterfaceDescriptor,
+    InferenceInterfaceDiagnostic, InferenceInterfaceDriftReport, InferenceOptionScalar,
+    InferencePortDescriptor, InferencePortDirection, InferencePortOptions,
+    InferencePortRequirement, InferenceScalarType, InferenceValueType,
+    ValidatedAuthoredInferenceInterfaceSnapshot, ValidatedDependencyEnvironmentActionIntent,
+    ValidatedDependencyEnvironmentActionIntentResult, ValidatedDraftGraphValidationSummary,
+    ValidatedInferenceConnectionSurface, ValidatedInferenceInterfaceDescriptor,
 };
 
 const DESCRIPTOR: &str = include_str!("fixtures/descriptor_image_generation_ready.json");
@@ -180,7 +180,8 @@ fn basic_image_inputs_keep_optional_controls_and_backend_defaults_on_the_wire() 
             "num_inference_steps",
             "seed",
             "guidance_scale",
-            "num_images_per_prompt"
+            "num_images_per_prompt",
+            "denoising_scheduler"
         ]
     );
     assert_eq!(ports[0].requirement, InferencePortRequirement::Required);
@@ -244,6 +245,33 @@ fn basic_image_numeric_controls_preserve_u32_bounds_without_rounding_u64_seed() 
         (range.min, range.max, range.step, range.default),
         (1.0, 64.0, Some(1.0), None)
     );
+}
+
+#[test]
+fn image_scheduler_options_are_closed_primitive_ids_without_an_invented_default() {
+    let ports: Vec<InferencePortDescriptor> = serde_json::from_str(IMAGE_BASIC_INPUTS).unwrap();
+    let port = &ports[8];
+    assert_eq!(
+        port.value_type,
+        InferenceValueType::Scalar(InferenceScalarType::String)
+    );
+    let InferencePortOptions::Enum { values } = &port.options else {
+        panic!("scheduler has choices")
+    };
+    assert_eq!(
+        values
+            .iter()
+            .map(|value| value.option_id.as_str())
+            .collect::<Vec<_>>(),
+        ["ddim", "euler"]
+    );
+    for value in values {
+        assert_eq!(
+            value.value,
+            InferenceOptionScalar::String(value.option_id.as_str().into())
+        );
+    }
+    assert!(port.default.is_none());
 }
 
 #[test]

@@ -284,6 +284,7 @@ fn input_ports(task_entry: &TaskRegistryEntry) -> Vec<InferencePortDescriptor> {
             ),
             guidance_scale_input_port(),
             image_count_input_port(),
+            denoising_scheduler_input_port(),
         ],
         InferenceTaskId::ChatCompletion | InferenceTaskId::MultimodalGeneration => vec![port(
             "prompt",
@@ -294,6 +295,41 @@ fn input_ports(task_entry: &TaskRegistryEntry) -> Vec<InferencePortDescriptor> {
         )],
         _ => Vec::new(),
     }
+}
+
+fn denoising_scheduler_input_port() -> InferencePortDescriptor {
+    let mut descriptor = port(
+        image::DENOISING_SCHEDULER_PORT,
+        "Denoising scheduler",
+        InferencePortDirection::Input,
+        InferencePortRequirement::Optional,
+        InferenceValueType::Scalar(InferenceScalarType::String),
+    );
+    descriptor.options = InferencePortOptions::Enum {
+        values: inference::STABLE_DIFFUSION_DENOISING_SCHEDULERS
+            .iter()
+            .map(
+                |id| pantograph_inference_interface_contracts::InferenceOptionValue {
+                    option_id: pantograph_inference_interface_contracts::InferenceOptionId::parse(
+                        id,
+                    )
+                    .expect("static scheduler id"),
+                    label: match *id {
+                        "ddim" => "DDIM",
+                        "euler" => "Euler",
+                        _ => unreachable!("closed scheduler choices"),
+                    }
+                    .into(),
+                    value: pantograph_inference_interface_contracts::InferenceOptionScalar::String(
+                        (*id).into(),
+                    ),
+                    availability: InferenceAvailability::available(),
+                    diagnostics: Vec::new(),
+                },
+            )
+            .collect(),
+    };
+    descriptor
 }
 
 fn image_count_input_port() -> InferencePortDescriptor {

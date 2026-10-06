@@ -132,13 +132,27 @@ class _Image:
     height = 512
 
 class _Pipeline:
+    calls = []
+    scheduler = types.SimpleNamespace(config={"prediction_type": "epsilon"})
     def __call__(self, **kwargs):
+        self.calls.append((type(self.scheduler).__name__, kwargs))
         self.last_kwargs = kwargs
         prompt = kwargs.get("prompt")
         count = len(prompt) if isinstance(prompt, list) else 1
         return types.SimpleNamespace(images=[_Image() for _ in range(count * kwargs.get("num_images_per_prompt", 1))])
 
 pipeline = _Pipeline()
+class _Scheduler:
+    @classmethod
+    def from_config(cls, config):
+        instance = cls()
+        instance.config = dict(config)
+        return instance
+import sys
+sys.modules['diffusers'] = types.SimpleNamespace(
+    DDIMScheduler=type('DDIMScheduler', (_Scheduler,), {}),
+    EulerDiscreteScheduler=type('EulerDiscreteScheduler', (_Scheduler,), {}),
+)
 def load_diffusion_model(path, device=None, torch_dtype=None):
     return None
 "#,
@@ -574,6 +588,60 @@ worker._diffusion_pipeline = _FailingPipeline()
 }
 
 #[test]
+fn scheduler_worker_envelopes_use_closed_choices_and_preserve_resident_default() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
+    Python::with_gil(|py| {
+        let module = load_worker_module_with_image_stubs(py);
+        attach_stub_diffusion_pipeline(&module);
+        let pipeline = module.getattr("_diffusion_pipeline").unwrap();
+        let original = pipeline.getattr("scheduler").unwrap();
+        for (scheduler, expected) in [
+            (Some("ddim"), "DDIMScheduler"),
+            (Some("euler"), "EulerDiscreteScheduler"),
+            (None, "SimpleNamespace"),
+        ] {
+            for batch in [false, true] {
+                let fixture = if batch {
+                    include_str!("../../tests/fixtures/pytorch_worker_contract/generate_image_batch_request.json")
+                } else {
+                    include_str!(
+                        "../../tests/fixtures/pytorch_worker_contract/generate_image_request.json"
+                    )
+                };
+                let mut envelope: serde_json::Value = serde_json::from_str(fixture).unwrap();
+                let value = serde_json::json!(scheduler);
+                if batch {
+                    for member in envelope["payload"]["members"].as_array_mut().unwrap() {
+                        member["request"]["denoising_scheduler"] = value.clone();
+                    }
+                } else {
+                    envelope["payload"]["denoising_scheduler"] = value;
+                }
+                let operation = if batch {
+                    "generate_image_batch_from_envelope"
+                } else {
+                    "generate_image_from_envelope"
+                };
+                let response: String = module
+                    .call_method1(operation, (envelope.to_string(),))
+                    .unwrap()
+                    .extract()
+                    .unwrap();
+                let response: serde_json::Value = serde_json::from_str(&response).unwrap();
+                assert_eq!(response["status"], "ok", "{response}");
+                assert!(pipeline.getattr("scheduler").unwrap().is(&original));
+                let calls = pipeline.getattr("calls").unwrap();
+                let last = calls.get_item(calls.len().unwrap() - 1).unwrap();
+                assert_eq!(
+                    last.get_item(0).unwrap().extract::<String>().unwrap(),
+                    expected
+                );
+            }
+        }
+    });
+}
+
+#[test]
 fn test_python_worker_generate_image_from_envelope_rejects_unsupported_denoising_scheduler() {
     let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
@@ -583,7 +651,7 @@ fn test_python_worker_generate_image_from_envelope_rejects_unsupported_denoising
             "../../tests/fixtures/pytorch_worker_contract/generate_image_request.json"
         ))
         .expect("decode image request fixture");
-        envelope["payload"]["denoising_scheduler"] = serde_json::json!("euler");
+        envelope["payload"]["denoising_scheduler"] = serde_json::json!("flow_match_euler");
 
         let response_json: String = module
             .call_method1("generate_image_from_envelope", (envelope.to_string(),))
@@ -600,7 +668,9 @@ fn test_python_worker_generate_image_from_envelope_rejects_unsupported_denoising
             error.canonical_code.as_deref(),
             Some("pytorch_worker_invalid_generate_image_request")
         );
-        assert!(error.message.contains("denoising_scheduler changes yet"));
+        assert!(error
+            .message
+            .contains("denoising_scheduler must be ddim or euler"));
     });
 }
 

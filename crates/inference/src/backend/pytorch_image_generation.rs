@@ -532,15 +532,16 @@ fn pytorch_batch_compatibility_error(
                 .to_string(),
         );
     }
-    if request
-        .members
-        .iter()
-        .any(|member| member.plan.denoising_scheduler.is_some())
-    {
-        return Some(
-            "PyTorch image batch execution does not support explicit denoising_scheduler changes"
-                .to_string(),
-        );
+    if request.members.iter().any(|member| {
+        member
+            .plan
+            .denoising_scheduler
+            .as_ref()
+            .is_some_and(|scheduler| {
+                !crate::STABLE_DIFFUSION_DENOISING_SCHEDULERS.contains(&scheduler.as_str())
+            })
+    }) {
+        return Some("PyTorch image batch requires an admitted denoising_scheduler choice".into());
     }
     for member in request.members.iter().skip(1) {
         let plan = &member.plan;

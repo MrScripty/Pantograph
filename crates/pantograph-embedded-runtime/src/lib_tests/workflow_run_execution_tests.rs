@@ -106,24 +106,35 @@ async fn run_workflow_through_scheduler_with_override(
 
 #[tokio::test]
 async fn workflow_execution_session_dispatches_through_production_embedded_image_runtime_host() {
-    production_embedded_image_workflow(None, None).await;
+    production_embedded_image_workflow(None, None, None).await;
 }
 
 #[tokio::test]
 async fn graph_authored_image_guidance_flows_through_public_session_and_pumas_host() {
     for guidance in [0.0, 1.0, 7.5] {
-        production_embedded_image_workflow(Some(guidance), None).await;
+        production_embedded_image_workflow(Some(guidance), None, None).await;
     }
 }
 
 #[tokio::test]
 async fn graph_authored_image_count_returns_every_retained_image_through_public_session() {
     for count in [1, 3, 64] {
-        production_embedded_image_workflow(None, Some(count)).await;
+        production_embedded_image_workflow(None, Some(count), None).await;
     }
 }
 
-async fn production_embedded_image_workflow(guidance: Option<f64>, image_count: Option<u32>) {
+#[tokio::test]
+async fn graph_authored_image_scheduler_flows_through_public_session_and_pumas_host() {
+    for scheduler in ["ddim", "euler"] {
+        production_embedded_image_workflow(None, Some(3), Some(scheduler)).await;
+    }
+}
+
+async fn production_embedded_image_workflow(
+    guidance: Option<f64>,
+    image_count: Option<u32>,
+    scheduler: Option<&str>,
+) {
     const MODEL_ID: &str = "image/example/tiny-diffusion";
     const SELECTED_ARTIFACT_ID: &str = "diffusers-bundle";
 
@@ -154,6 +165,7 @@ async fn production_embedded_image_workflow(guidance: Option<f64>, image_count: 
     let pumas_access = Arc::new(workflow_nodes::setup::PumasSelectorAccess::Owner(pumas_api));
     let recorded_guidance = Arc::new(Mutex::new(Vec::new()));
     let recorded_counts = Arc::new(Mutex::new(Vec::new()));
+    let recorded_schedulers = Arc::new(Mutex::new(Vec::new()));
     let runtime_host_port = Arc::new(EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
         Arc::new(RuntimeHostPumasLoadTargetResolver::new(
             pumas_access.clone(),
@@ -166,6 +178,7 @@ async fn production_embedded_image_workflow(guidance: Option<f64>, image_count: 
             Box::new(TestImageBackend {
                 recorded_guidance: recorded_guidance.clone(),
                 recorded_counts: recorded_counts.clone(),
+                recorded_schedulers: recorded_schedulers.clone(),
             }),
             "PyTorch",
         )),
@@ -188,6 +201,7 @@ async fn production_embedded_image_workflow(guidance: Option<f64>, image_count: 
     for (node_id, port_id, present) in [
         ("guidance", "guidance_scale", guidance.is_some()),
         ("count", "num_images_per_prompt", image_count.is_some()),
+        ("scheduler", "denoising_scheduler", scheduler.is_some()),
     ] {
         if !present {
             continue;
@@ -289,6 +303,13 @@ async fn production_embedded_image_workflow(guidance: Option<f64>, image_count: 
             value: serde_json::json!(value),
         });
     }
+    if let Some(value) = scheduler {
+        inputs.push(WorkflowPortBinding {
+            node_id: "scheduler".into(),
+            port_id: "value".into(),
+            value: serde_json::json!(value),
+        });
+    }
     let response = pantograph_workflow_service::workflow::WorkflowSessionExecutionRuntime::from_shared_service(
         service.clone(),
         host.clone(),
@@ -316,6 +337,10 @@ async fn production_embedded_image_workflow(guidance: Option<f64>, image_count: 
         "graph-authored value must reach the backend once"
     );
     assert_eq!(*recorded_counts.lock().unwrap(), vec![image_count]);
+    assert_eq!(
+        *recorded_schedulers.lock().unwrap(),
+        vec![scheduler.map(str::to_string)]
+    );
     assert_eq!(response.outputs.len(), 1);
     let output = &response.outputs[0];
     let images = if let Some(images) = output.value.as_array() {
@@ -1106,7 +1131,7 @@ impl WorkflowHost for ImageRuntimeSessionHost {
                 multiple: Some(false),
             }],
         }];
-        for node_id in ["guidance", "count"] {
+        for node_id in ["guidance", "count", "scheduler"] {
             if !self.graph.nodes.iter().any(|node| node.id == node_id) {
                 continue;
             }
@@ -1204,6 +1229,7 @@ impl WorkflowHost for ImageRuntimeSessionHost {
 struct TestImageBackend {
     recorded_guidance: Arc<Mutex<Vec<Option<f32>>>>,
     recorded_counts: Arc<Mutex<Vec<Option<u32>>>>,
+    recorded_schedulers: Arc<Mutex<Vec<Option<String>>>>,
 }
 
 #[async_trait]
@@ -1289,6 +1315,10 @@ impl InferenceBackend for TestImageBackend {
             .lock()
             .unwrap()
             .push(plan.num_images_per_prompt);
+        self.recorded_schedulers
+            .lock()
+            .unwrap()
+            .push(plan.denoising_scheduler.as_ref().map(ToString::to_string));
         Ok(ImageGenerationResult {
             images: vec![
                 EncodedImage {
@@ -1321,6 +1351,13 @@ impl InferenceBackend for TestImageBackend {
                     .lock()
                     .unwrap()
                     .push(member.plan.num_images_per_prompt);
+                self.recorded_schedulers.lock().unwrap().push(
+                    member
+                        .plan
+                        .denoising_scheduler
+                        .as_ref()
+                        .map(ToString::to_string),
+                );
                 ImageGenerationBatchExecutionMemberResponse {
                     member_id: member.member_id,
                     state: ImageGenerationBatchMemberExecutionState::Completed,

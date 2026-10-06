@@ -134,3 +134,85 @@ print(f'native_image_count_torch={torch.__version__}; diffusers={diffusers.__ver
             .expect("actual worker kwargs and CPU pipeline preserve image count and seed order");
     });
 }
+
+#[test]
+#[ignore = "explicit native qualification requires real CPU Torch and Diffusers"]
+fn actual_cpu_diffusers_scheduler_override_matches_explicit_pipeline_without_resident_mutation() {
+    Python::with_gil(|py| {
+        let module_source = CString::new(include_str!("../torch/worker_diffusion.py")).unwrap();
+        let module = pyo3::types::PyModule::from_code(
+            py,
+            &module_source,
+            c"worker_diffusion_native.py",
+            c"worker_diffusion_native",
+        )
+        .unwrap();
+        let locals = pyo3::types::PyDict::new(py);
+        locals
+            .set_item(
+                "call_diffusion_pipeline",
+                module.getattr("call_diffusion_pipeline").unwrap(),
+            )
+            .unwrap();
+        let source = CString::new(r#"
+import copy
+import torch
+import diffusers
+from diffusers import DDIMScheduler, EulerDiscreteScheduler, StableDiffusionPipeline, UNet2DConditionModel
+torch.set_num_threads(1)
+torch.manual_seed(42)
+unet = UNet2DConditionModel(sample_size=4, in_channels=4, out_channels=4, layers_per_block=1,
+    block_out_channels=(4,), down_block_types=('CrossAttnDownBlock2D',), up_block_types=('CrossAttnUpBlock2D',),
+    cross_attention_dim=4, attention_head_dim=2, norm_num_groups=1)
+pipeline = StableDiffusionPipeline(vae=None, text_encoder=None, tokenizer=None, unet=unet,
+    scheduler=DDIMScheduler(num_train_timesteps=10, steps_offset=1, clip_sample=False),
+    safety_checker=None, feature_extractor=None, requires_safety_checker=False)
+pipeline.set_progress_bar_config(disable=True)
+original = pipeline.scheduler
+original_config = dict(pipeline.config)
+outputs = {}
+for choice, scheduler_type in [('ddim', DDIMScheduler), ('euler', EulerDiscreteScheduler)]:
+    seen = []
+    original_step = scheduler_type.step
+    def observed_step(self, *args, **kwargs):
+        seen.append(type(self).__name__)
+        return original_step(self, *args, **kwargs)
+    scheduler_type.step = observed_step
+    try:
+        kwargs = dict(prompt_embeds=torch.ones(2,2,4), latents=torch.ones(4,4,4,4), num_images_per_prompt=2,
+            num_inference_steps=2, guidance_scale=1.0, output_type='latent')
+        actual = call_diffusion_pipeline(pipeline, kwargs, choice)
+        assert seen == [scheduler_type.__name__]*2
+        assert pipeline.scheduler is original and dict(pipeline.config) == original_config
+        oracle = copy.copy(pipeline)
+        oracle.scheduler = scheduler_type.from_config(original.config)
+        assert oracle.unet is pipeline.unet
+        expected = oracle(**kwargs)
+        torch.testing.assert_close(actual.images, expected.images, rtol=0, atol=0)
+        assert torch.isfinite(actual.images).all()
+        outputs[choice] = actual.images
+    finally:
+        scheduler_type.step = original_step
+assert not torch.equal(outputs['ddim'], outputs['euler'])
+kwargs = dict(prompt_embeds=torch.ones(1,2,4), latents=torch.ones(1,4,4,4),
+    num_inference_steps=2, guidance_scale=1.0, output_type='latent')
+implicit = call_diffusion_pipeline(pipeline, kwargs)
+explicit_default = pipeline(**kwargs)
+torch.testing.assert_close(implicit.images, explicit_default.images, rtol=0, atol=0)
+assert pipeline.scheduler is original and dict(pipeline.config) == original_config
+for choice in ['flow_match_euler', 'EulerDiscreteScheduler', 'diffusers.EulerDiscreteScheduler', '']:
+    try: call_diffusion_pipeline(pipeline, kwargs, choice)
+    except ValueError: pass
+    else: raise AssertionError('unsupported scheduler accepted')
+    assert pipeline.scheduler is original and dict(pipeline.config) == original_config
+try: call_diffusion_pipeline(pipeline, {}, 'euler')
+except (ValueError, TypeError): pass
+else: raise AssertionError('invalid pipeline call unexpectedly succeeded')
+assert pipeline.scheduler is original and dict(pipeline.config) == original_config
+print(f'native_scheduler_torch={torch.__version__}; diffusers={diffusers.__version__}; choices=ddim,euler; device=cpu; pretrained_models=0', flush=True)
+"#).unwrap();
+        py.run(&source, Some(&locals), Some(&locals)).expect(
+            "actual scheduler override preserves resident defaults and equals the native oracle",
+        );
+    });
+}

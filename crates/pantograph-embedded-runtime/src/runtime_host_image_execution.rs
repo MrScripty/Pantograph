@@ -20,7 +20,7 @@ pub(crate) const STEPS_PORT: &str = "num_inference_steps";
 pub(crate) const SEED_PORT: &str = "seed";
 pub(crate) const GUIDANCE_SCALE_PORT: &str = "guidance_scale";
 pub(crate) const NUM_IMAGES_PORT: &str = "num_images_per_prompt";
-const DENOISING_SCHEDULER_PORT: &str = "denoising_scheduler";
+pub(crate) const DENOISING_SCHEDULER_PORT: &str = "denoising_scheduler";
 const PYTORCH_BACKEND_ID: &str = "pytorch";
 const PYTORCH_RUNTIME_ID: &str = "pytorch";
 const DIFFUSERS_PYTORCH_RUNTIME_ID: &str = "diffusers-pytorch";
@@ -600,6 +600,7 @@ mod tests {
                 RuntimeHostExecutionInputValue::U64(u64::MAX),
                 RuntimeHostExecutionInputValue::F64(serde_json::Number::from_f64(7.5).unwrap()),
                 RuntimeHostExecutionInputValue::U64(3),
+                RuntimeHostExecutionInputValue::String("euler".into()),
             ])
             .map(|(port, value)| input(port.port_id.as_str(), value))
             .collect();
@@ -620,6 +621,7 @@ mod tests {
         assert_eq!(plan.seed, Some(u64::MAX));
         assert_eq!(plan.guidance_scale, Some(7.5));
         assert_eq!(plan.num_images_per_prompt, Some(3));
+        assert_eq!(plan.denoising_scheduler.unwrap().as_str(), "euler");
     }
 
     #[test]

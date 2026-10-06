@@ -74,7 +74,7 @@ from worker_contract import (
     worker_success_response_json,
 )
 from worker_diffusion import (
-    DiffusionLoadError, admit_diffusion_bundle, construct_diffusion_pipeline,
+    DiffusionLoadError, admit_diffusion_bundle, construct_diffusion_pipeline, call_diffusion_pipeline,
 )
 from worker_image_contract import generate_image_kwargs_from_envelope
 from worker_image_contract import generate_image_batch_kwargs_from_envelope
@@ -1450,12 +1450,6 @@ def generate_image(
     **kwargs,
 ):
     """Generate one or more images from the loaded diffusion pipeline."""
-    if denoising_scheduler is not None:
-        raise ValueError(
-            "PyTorch worker image generation does not support explicit "
-            "denoising_scheduler changes yet"
-        )
-
     if _diffusion_pipeline is None:
         raise RuntimeError("No diffusion pipeline loaded. Call load_diffusion_model() first.")
 
@@ -1489,7 +1483,7 @@ def generate_image(
 
     _attach_diffusion_preview_callback(call_kwargs, resolved_steps, emit_stream)
 
-    result = _diffusion_pipeline(**call_kwargs)
+    result = call_diffusion_pipeline(_diffusion_pipeline, call_kwargs, denoising_scheduler)
     images = getattr(result, "images", None)
     if not images:
         raise RuntimeError("Diffusion pipeline returned no images")
@@ -1541,15 +1535,7 @@ def _batch_pipeline_call_kwargs(planned_members):
             "PyTorch worker generate_image_batch requires a positive image count per member"
         )
 
-    denoising_scheduler = _batch_shared_generation_value(
-        planned_members, "denoising_scheduler"
-    )
-    if denoising_scheduler is not None:
-        raise ValueError(
-            "PyTorch worker image batch generation does not support explicit "
-            "denoising_scheduler changes yet"
-        )
-
+    _batch_shared_generation_value(planned_members, "denoising_scheduler")
     call_kwargs = {
         "prompt": [
             member["planned"]["generation_kwargs"]["prompt"]
@@ -1660,7 +1646,10 @@ def generate_image_batch_from_envelope(envelope):
         )
 
         call_kwargs = _batch_pipeline_call_kwargs(planned_members)
-        result = _diffusion_pipeline(**call_kwargs)
+        result = call_diffusion_pipeline(
+            _diffusion_pipeline, call_kwargs,
+            _batch_shared_generation_value(planned_members, "denoising_scheduler"),
+        )
         images = getattr(result, "images", None)
         image_count = call_kwargs["num_images_per_prompt"]
         expected_images = len(planned_members) * image_count

@@ -135,6 +135,26 @@ fn test_image_generation_batch_response_from_worker_response_maps_members() {
 }
 
 #[test]
+fn image_batch_requires_matching_admitted_scheduler_choices() {
+    let mut request = image_batch_request();
+    for scheduler in crate::STABLE_DIFFUSION_DENOISING_SCHEDULERS {
+        for member in &mut request.members {
+            member.plan.denoising_scheduler =
+                Some(DenoisingSchedulerOptionId::parse(scheduler).unwrap());
+        }
+        assert!(reject_incompatible_pytorch_batch(&request).is_none());
+    }
+    request.members[1].plan.denoising_scheduler =
+        Some(DenoisingSchedulerOptionId::parse("ddim").unwrap());
+    assert!(reject_incompatible_pytorch_batch(&request).is_some());
+    for member in &mut request.members {
+        member.plan.denoising_scheduler =
+            Some(DenoisingSchedulerOptionId::parse("flow_match_euler").unwrap());
+    }
+    assert!(reject_incompatible_pytorch_batch(&request).is_some());
+}
+
+#[test]
 fn image_batch_accepts_equal_counts_and_rejects_mismatched_counts() {
     let mut request = image_batch_request();
     for member in &mut request.members {

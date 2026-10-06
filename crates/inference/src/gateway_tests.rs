@@ -3326,7 +3326,7 @@ async fn test_execute_typed_with_lifecycle_records_planned_boundary_failure() {
     }));
     assert!(events[7].option_diagnostics.iter().any(|diagnostic| {
         diagnostic.option_path == "image.denoising_scheduler"
-            && diagnostic.state == OptionSupportState::Unsupported
+            && diagnostic.state == OptionSupportState::Honored
             && diagnostic.backend_key.as_deref() == Some("mock")
     }));
     assert!(events[7].option_diagnostics.iter().any(|diagnostic| {

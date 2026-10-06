@@ -72,4 +72,17 @@
     "options": { "kind": "numeric_range", "range": { "min": 1.0, "max": 64.0, "step": 1.0 } },
     "availability": { "status": "available" }
   }
+,
+  {
+    "port_id": "denoising_scheduler",
+    "label": "Denoising scheduler",
+    "direction": "input",
+    "requirement": "optional",
+    "value_type": { "category": "scalar", "kind": "string" },
+    "options": { "kind": "enum", "values": [
+      { "option_id": "ddim", "label": "DDIM", "value": { "kind": "string", "value": "ddim" }, "availability": { "status": "available" } },
+      { "option_id": "euler", "label": "Euler", "value": { "kind": "string", "value": "euler" }, "availability": { "status": "available" } }
+    ] },
+    "availability": { "status": "available" }
+  }
 ]
