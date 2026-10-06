@@ -39,3 +39,8 @@ Submit, automatic scheduling, actual dispatch, retained finite 8-value CPU vecto
 within 1e-5 of the deterministic fixture oracle and candle.cpu/cpu selection
 metadata. Preserve every failure before further repair; do not infer loader,
 GPU, pretrained or broad production qualification from controlled tests.
+
+Actual native run 37536948833 now confirms requirements seed storage and Ready
+Check admission, followed by dispatch preparation and TerminalFailed with zero
+outputs. Build and eight startup tests pass. See [the complete native failure](native-attempt/README.md).
+The next selection/runtime cause is not captured; no further repair follows.

@@ -757,3 +757,35 @@ b8970532236ac1460a1405a9dd604518fd0a2ee271dd38d09a666a77e77b53ea.
 Preserve this failure before the bounded action correction: Resolve for seed,
 Check for readiness, retaining missing/non-ready/mismatched result rejection.
 CPU output and all broader loader/GPU/pretrained claims remain unqualified.
+
+
+## Bounded Check repair and remaining dispatch failure
+
+The readiness adapter now queries Check; the requirements seed adapter still
+queries Resolve. A saved-graph producer/consumer regression fails on the previous
+adapter and passes with separate Resolved/Ready operation snapshots. Resolve Ready
+alone, stale Check and another model's Check cannot admit the task; existing
+package/revision/artifact/runtime/device proof negatives remain. Controlled session
+fixtures now publish both operations; their preceding failures are preserved.
+All 989 workflow and 537 embedded tests pass, including real Pumas cold bootstrap,
+as do strict selected-crate all-target Clippy, formatting, critical and traceability
+checks. Every Rust build follows complete effective feature inspection, current
+Pumas 26a84e32, dynamic ORT and ORT_SKIP_DOWNLOAD=1, with no download features.
+
+[Native run 37536948833](https://github.com/MrScripty/Pantograph/actions/runs/37536948833)
+executes c2c7e09925dd4eab09de540918c6f2e894a9e554, tree
+1173ee2a01d657b6a573dc48ef1001e5c10baa6a. Build and eight startup tests pass.
+The normal seed is stored; Check produces Ready and infer reaches Ready version
+13, followed by dispatch preparation. The same run then terminal-fails with
+scheduler task infer did not complete; final state was TerminalFailed. The
+captured artifact does not identify the subsequent selection/runtime cause.
+61 observations retain zero outputs, so CPU vector/metadata acceptance fails.
+Do not infer successful loading or perform unrelated dispatch/loader hardening.
+
+The [complete eighteenth-attempt evidence](../evidence/native-desktop-cpu/cold-typed-discovery/pumas-bootstrap-repair/readiness-action/native-attempt/README.md)
+preserves all 23 original members, full masked job log and 36 owner records.
+Artifact 11447377417 SHA256 is
+c9da6e341316da8a9e79e8ec2776a178249a31d38d38d8805a1e657d99ca981e.
+Current candidate preserves all prior source/evidence ancestry. Main and the eight
+protected checkout heads/clean or paused bytes remain unchanged. No PR or merge.
+Full production-loader, GPU and pretrained qualification remain incomplete.

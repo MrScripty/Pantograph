@@ -1,0 +1,41 @@
+{
+  "qualification": "FAILED: native CPU output absent after successful bootstrap/readiness",
+  "run_id": 37536948833,
+  "job_id": 112520274608,
+  "run_url": "https://github.com/MrScripty/Pantograph/actions/runs/37536948833",
+  "executed_head": "c2c7e09925dd4eab09de540918c6f2e894a9e554",
+  "executed_tree": "1173ee2a01d657b6a573dc48ef1001e5c10baa6a",
+  "artifact_id": 11447377417,
+  "artifact_zip_size": 442422,
+  "artifact_zip_sha256": "c9da6e341316da8a9e79e8ec2776a178249a31d38d38d8805a1e657d99ca981e",
+  "original_member_count": 23,
+  "actual_owner_record_count": 36,
+  "observations": 61,
+  "first_observation": "2026-10-06T22:10:56.847Z",
+  "last_observation": "2026-10-06T22:12:56.933Z",
+  "workflow_run_id": "run_0b2be885-bf6c-4a94-b96a-87712ecd0cc4",
+  "execution_session_id": "3602d50f-a3fb-4675-8bb7-ea056e1e16ab",
+  "saved_validation_snapshot_id": "wfvalsnap_9d9fe56c-3ecb-4d12-b95f-43cdbf24c985",
+  "requirements_id": "dependency-requirements-blake3:5106e42ce62356f6f12adcc0419aa6407f44b2a04b443ba559834ec4b6bef01d",
+  "native_build": "PASS",
+  "native_startup_tests": "8 passed",
+  "requirements_seed_stored": "observed",
+  "readiness_state": "ready",
+  "admitted_state_version": 13,
+  "dispatch_selection_prepared": "observed",
+  "final_run_status": "failed",
+  "terminal_payload": {
+    "payload_type": "run_terminal",
+    "status": "failed",
+    "duration_ms": null,
+    "error": "invalid_request: scheduler task 'infer' did not complete; final state was TerminalFailed"
+  },
+  "retained_artifacts": 0,
+  "next_blocker": "TerminalFailed after dispatch preparation; exact selection/runtime cause not captured",
+  "limits": [
+    "No CPU output/oracle or selection-metadata acceptance",
+    "No inference of successful model load",
+    "No GPU/pretrained/broad production-loader qualification",
+    "No repair beyond demonstrated bootstrap boundary"
+  ]
+}
