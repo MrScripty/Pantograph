@@ -1,0 +1,326 @@
+{
+  "recorded_utc": "2026-10-06T08:19:50.852605+00:00",
+  "repository": "MrScripty/Pantograph",
+  "worktree": "/workspace/Pantograph-text-main-composition",
+  "branch": "integration/text-controls-main-successor",
+  "commit": "9e8cd64cc64fa7ccb8dfd6cd85d37bff2282dfb6",
+  "tree": "10b3b11a064823055a3a8da9987a67ec3aabb88f",
+  "ordered_parents": [
+    "763e8d4b13ba311ff245c75a370e56dafb417d8e",
+    "64b81b0b773064dc7cb6df70789e8f44fa91430b"
+  ],
+  "tested_tree_before_commit": "10b3b11a064823055a3a8da9987a67ec3aabb88f",
+  "production_or_test_source_changed_after_checks": false,
+  "author": "MrScripty <TheEnvironmentGuy@protonmail.com>",
+  "committer": "MrScripty <TheEnvironmentGuy@protonmail.com>",
+  "status": "clean; normal merge/push; remote head and frozen checkpoints verified",
+  "environment": {
+    "python": "3.12.3",
+    "torch": "2.14.1+cpu",
+    "transformers": "4.53.3",
+    "diffusers": "0.39.0",
+    "rust": "1.92.0",
+    "node": "24.12.0",
+    "target": "/workspace/pantograph-cache/text-main-composition-target",
+    "registry_db": "/workspace/qualification-evidence/text-main-composition-registry.db",
+    "model_network": "HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1"
+  },
+  "checks_executed": [
+    {
+      "command": "cargo test --locked --offline -p inference -p pantograph-embedded-runtime -p pantograph-runtime-registry -p pantograph-app-config -p pantograph-inference-interface-contracts -p pantograph-runtime-host-contracts --no-default-features --features backend-llamacpp,backend-pytorch",
+      "passed": {
+        "inference": 821,
+        "inference_doctest": 1,
+        "embedded_runtime": 517,
+        "runtime_registry": 142,
+        "app_config": 14,
+        "inference_interface_contracts": 25,
+        "runtime_host_contracts": 52
+      },
+      "ignored": {
+        "inference_native_and_doctest": 6,
+        "app_config_outer_subprocess_helper": 1
+      },
+      "failed": 0
+    },
+    {
+      "command": "cargo test --locked --offline -p pantograph-workflow-service --lib",
+      "passed": 916,
+      "failed": 0
+    },
+    {
+      "command": "cargo clippy --locked --offline -p inference -p pantograph-embedded-runtime -p pantograph-runtime-registry -p pantograph-app-config -p pantograph-inference-interface-contracts -p pantograph-runtime-host-contracts -p pantograph-workflow-service --all-targets --no-default-features --features backend-llamacpp,backend-pytorch -- -D warnings",
+      "passed": true
+    },
+    {
+      "command": "python -m unittest discover -s crates/inference/torch/tests -p test_autoregressive.py -v",
+      "passed_methods": 32,
+      "scope": "actual CPU Torch/Transformers samplers with controlled model forwards, actual DynamicCache; AST-selected actual worker functions, not full worker import"
+    },
+    {
+      "command": "cargo test --locked --offline -p inference --no-default-features --features backend-llamacpp,backend-pytorch --test diffusers_guidance_native -- --ignored",
+      "passed": 2,
+      "failed": 1,
+      "qualified": false,
+      "failed_case": "actual_cpu_diffusers_scheduler_override_matches_explicit_pipeline_without_resident_mutation",
+      "source_supported_inference": "shared scheduler class-method patches can interfere across parallel test cases"
+    },
+    {
+      "command": "cargo test --locked --offline -p inference --no-default-features --features backend-llamacpp,backend-pytorch --test diffusers_guidance_native -- --ignored --test-threads=1",
+      "passed": 3,
+      "failed": 0,
+      "scope": "actual CPU Diffusers guidance/count/scheduler arithmetic via tiny random UNet, supplied embeddings, zero pretrained models; parallel harness is not qualified"
+    },
+    {
+      "command": "npm run test:frontend",
+      "passed": 662,
+      "failed": 0
+    },
+    {
+      "command": "npm run typecheck",
+      "passed": true
+    },
+    {
+      "command": "npm run format:check",
+      "passed": true
+    },
+    {
+      "command": "cargo fmt --all -- --check",
+      "passed": true
+    },
+    {
+      "command": "npm run lint",
+      "passed": true
+    },
+    {
+      "command": "npm run lint:critical",
+      "passed": true
+    },
+    {
+      "command": "npm run lint:a11y",
+      "passed": true
+    },
+    {
+      "command": "npm run test:scheduler-only-workflow",
+      "passed": true
+    },
+    {
+      "command": "python3 scripts/check-onnx-no-build-download.py (nine target/feature graphs)",
+      "passed": true
+    },
+    {
+      "command": "python -m py_compile (four text-worker Python files)",
+      "passed": true
+    },
+    {
+      "command": "TRACEABILITY_STAGED_ONLY=1 npm run traceability",
+      "passed": true
+    },
+    {
+      "command": "TRACEABILITY_MODE=range TRACEABILITY_BASE_REF=763e8d4b13ba311ff245c75a370e56dafb417d8e TRACEABILITY_HEAD_REF=HEAD npm run traceability",
+      "passed": true
+    },
+    {
+      "command": "git diff --check",
+      "passed": true
+    }
+  ],
+  "composition_review": {
+    "read_only": true,
+    "reviewer": "config_contract_audit",
+    "reviewer_executed_tests": false,
+    "result": "both parents shared worker/gateway routes, text/image descriptors and indices, fixture arrays and Python import sentinels retained; no consequential semantic conflict found",
+    "manual_conflict_paths": [
+      "docs/plans/domain-architecture-and-multimodal/plan.md",
+      "docs/plans/domain-architecture-and-multimodal/execution-ledger.md"
+    ]
+  },
+  "source_preservation_checks": {
+    "ordered_merge_parents": [
+      "763e8d4b13ba311ff245c75a370e56dafb417d8e",
+      "64b81b0b773064dc7cb6df70789e8f44fa91430b"
+    ],
+    "read_only_parent_preservation_checks": [
+      {
+        "parent": "763e8d4b13ba311ff245c75a370e56dafb417d8e",
+        "path": "crates/inference/src/backend/pytorch_image_generation.rs",
+        "sha256": "ad0327b43021cc2bfe6486d002ecf08cc6e2f0a4d597ffb5bcd69999208a3b3b",
+        "matches_parent_exactly": true
+      },
+      {
+        "parent": "763e8d4b13ba311ff245c75a370e56dafb417d8e",
+        "path": "crates/inference/src/backend/pytorch_image_generation_tests.rs",
+        "sha256": "52f1b662d6f3a1541fe523e330a060c72db9eae27b360ba34a14cc516b977fbb",
+        "matches_parent_exactly": true
+      },
+      {
+        "parent": "763e8d4b13ba311ff245c75a370e56dafb417d8e",
+        "path": "crates/inference/torch/worker_diffusion.py",
+        "sha256": "0cf8f55beade03dd7a323862b194f303259e024d728576fc709a28d08aff64cc",
+        "matches_parent_exactly": true
+      },
+      {
+        "parent": "763e8d4b13ba311ff245c75a370e56dafb417d8e",
+        "path": "crates/pantograph-embedded-runtime/src/runtime_host_image_execution.rs",
+        "sha256": "c7c0e2b8af75b44979a46470313b1cbe9285ddc0c15117f9ca6b791e9b5ca593",
+        "matches_parent_exactly": true
+      },
+      {
+        "parent": "763e8d4b13ba311ff245c75a370e56dafb417d8e",
+        "path": "crates/pantograph-inference-interface-contracts/tests/fixtures/image_generation_basic_inputs.json",
+        "sha256": "82c57f93bc078cb768b0cd49b758ad4daac4b6b2a5e7877fa0f0c86b88da6bba",
+        "matches_parent_exactly": true
+      },
+      {
+        "parent": "763e8d4b13ba311ff245c75a370e56dafb417d8e",
+        "path": "src/components/serverStatusConfigLoad.test.ts",
+        "sha256": "9af6e43b4585a9148ea2e7714fcb1b70994a8a4baa0c09336d73eaf8429d1365",
+        "matches_parent_exactly": true
+      },
+      {
+        "parent": "64b81b0b773064dc7cb6df70789e8f44fa91430b",
+        "path": "crates/inference/torch/autoregressive.py",
+        "sha256": "28e827c94ba7f5413acd3291ed97f9d1bd7e7b7193e7bdaa962a6b0bec01a055",
+        "matches_parent_exactly": true
+      },
+      {
+        "parent": "64b81b0b773064dc7cb6df70789e8f44fa91430b",
+        "path": "crates/inference/torch/tests/test_autoregressive.py",
+        "sha256": "646ef2591cdbbc16e9477a091f821ff6628d9a6ea28497b613fe77ebf03bdc8e",
+        "matches_parent_exactly": true
+      },
+      {
+        "parent": "64b81b0b773064dc7cb6df70789e8f44fa91430b",
+        "path": "crates/pantograph-embedded-runtime/src/runtime_host_text_execution.rs",
+        "sha256": "7cc82f8a1e3e83c01650cbf805a4aefa8ef9f49f51e69dfbe646f9bb6eb2075f",
+        "matches_parent_exactly": true
+      },
+      {
+        "parent": "64b81b0b773064dc7cb6df70789e8f44fa91430b",
+        "path": "crates/pantograph-inference-interface-contracts/tests/fixtures/text_generation_system_prompt_inputs.json",
+        "sha256": "f19cf9866b88000d21dd45925ac3a07f7258284fb549495fc00c4389b87802d4",
+        "matches_parent_exactly": true
+      }
+    ],
+    "peer_review": "Both descriptor arrays, shared gateway/worker paths and import sentinels preserve both parents; no semantic composition conflict found; reviewer executed no tests."
+  },
+  "remote_refs_verified": {
+    "refs/heads/feat/workflow-text-min-new-tokens": "64b81b0b773064dc7cb6df70789e8f44fa91430b",
+    "refs/heads/feat/workflow-text-repetition-penalty": "2a6f7cf56bd7e6230f8feab1472efb237eec7431",
+    "refs/heads/fix/text-repetition-kv-refusal": "59992b9b32a11ab522f3b0816b99240d65c1d458",
+    "refs/heads/fix/text-repetition-numerics": "12980c2f004950cf6434e0e325f3406d0863e4fc",
+    "refs/heads/integration/image-controls-main-successor": "a465637133bc8b10f68b3b06cf303d1437b514f2",
+    "refs/heads/integration/text-controls-main-successor": "9e8cd64cc64fa7ccb8dfd6cd85d37bff2282dfb6",
+    "refs/heads/main": "763e8d4b13ba311ff245c75a370e56dafb417d8e"
+  },
+  "logs": {
+    "text-main-composition-rust.log": {
+      "path": "/workspace/qualification-evidence/text-main-composition-rust.log",
+      "sha256": "e68faf257ce808af72253aae30c0917cb6c8cc313d9ff71271fde2a90dcdf73c"
+    },
+    "text-main-composition-service.log": {
+      "path": "/workspace/qualification-evidence/text-main-composition-service.log",
+      "sha256": "19f83862cd7b880339538a2f4847ab1cf5888da7d1bbc06e69a79f80db2e5b66"
+    },
+    "text-main-composition-clippy.log": {
+      "path": "/workspace/qualification-evidence/text-main-composition-clippy.log",
+      "sha256": "81c538a68a81b03b34b7eeba765958552c41613782f86b55c350d8ebadde160b"
+    },
+    "text-main-composition-python.log": {
+      "path": "/workspace/qualification-evidence/text-main-composition-python.log",
+      "sha256": "425fd1d4e3a334c8123817467ff3289760df62b5dfbc058bffc8e85f9bc877f0"
+    },
+    "text-main-composition-native-diffusers.log": {
+      "path": "/workspace/qualification-evidence/text-main-composition-native-diffusers.log",
+      "sha256": "4d3b949b69dcc159bdce1292d5ecd02650b2e758e613b6512208d6af0a7a38cf"
+    },
+    "text-main-composition-native-diffusers-serial.log": {
+      "path": "/workspace/qualification-evidence/text-main-composition-native-diffusers-serial.log",
+      "sha256": "66684aa4e85cce7c176480e1c367e1ab8f197d3947e7706ab7b3b538704fa1a4"
+    },
+    "text-main-composition-frontend.log": {
+      "path": "/workspace/qualification-evidence/text-main-composition-frontend.log",
+      "sha256": "ba340b7623ef0827031bc746469722f31ea5c7bc1f9277db9de03f804dade919"
+    },
+    "text-main-composition-typecheck.log": {
+      "path": "/workspace/qualification-evidence/text-main-composition-typecheck.log",
+      "sha256": "9e9314aac43de5eb30ddb912d28ff8675089e105838efab5a9d4ede3b05b5875"
+    },
+    "text-main-composition-format.log": {
+      "path": "/workspace/qualification-evidence/text-main-composition-format.log",
+      "sha256": "fc83deb8308ed65e1d3587980225b8081e85f051e12f22aed86452fd71b642d4"
+    },
+    "text-main-composition-rust-format.log": {
+      "path": "/workspace/qualification-evidence/text-main-composition-rust-format.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "text-main-composition-lint.log": {
+      "path": "/workspace/qualification-evidence/text-main-composition-lint.log",
+      "sha256": "4be0032fc0c4b22bd27d8cd774a79b57dbacea00b3e715bc4d6cd0bd3a09a696"
+    },
+    "text-main-composition-critical.log": {
+      "path": "/workspace/qualification-evidence/text-main-composition-critical.log",
+      "sha256": "d687c1c384d6d83a4205a971484fb3e4bc10531817897478b8dbfd6803ac512d"
+    },
+    "text-main-composition-a11y.log": {
+      "path": "/workspace/qualification-evidence/text-main-composition-a11y.log",
+      "sha256": "eda683cbcb7c557345960932bc2bc88f981bde7e2496baa93b909dc30cb27fc0"
+    },
+    "text-main-composition-boundary.log": {
+      "path": "/workspace/qualification-evidence/text-main-composition-boundary.log",
+      "sha256": "1b2837bf7369923cf10a423a2fce3e8372671f038df83f83a6f2aeb8534186a2"
+    },
+    "text-main-composition-onnx-policy.log": {
+      "path": "/workspace/qualification-evidence/text-main-composition-onnx-policy.log",
+      "sha256": "8b9b682790690e494eca36123519d4d44ca37a2bbaef8719678b8fcbfc77d8db"
+    },
+    "text-main-composition-traceability-staged.log": {
+      "path": "/workspace/qualification-evidence/text-main-composition-traceability-staged.log",
+      "sha256": "255f970995a642edd740d89b6b38fc5070da892474334718bff12594c1d9905d"
+    },
+    "text-main-composition-traceability-range.log": {
+      "path": "/workspace/qualification-evidence/text-main-composition-traceability-range.log",
+      "sha256": "9f8df24293129fc56274236cc588c6be7538134d3f3fa30a52b915761d748734"
+    },
+    "text-main-composition-python-environment.log": {
+      "path": "/workspace/qualification-evidence/text-main-composition-python-environment.log",
+      "sha256": "f2ed16d5c6d82b5110a9f6b36652e0ebe3bffa2b58906177797b5e030a115476"
+    },
+    "text-main-composition-desktop-prerequisites.log": {
+      "path": "/workspace/qualification-evidence/text-main-composition-desktop-prerequisites.log",
+      "sha256": "3bfb005383e8f610421e607ad20de62faa40999b6980901d4e68f9dd5c29977b"
+    },
+    "text-main-composition-cache-preparation.log": {
+      "path": "/workspace/qualification-evidence/text-main-composition-cache-preparation.log",
+      "sha256": "40101ae8bc8935e1a574ca87490835aa755cd0dd936aa29ff59fae3f2d95b377"
+    },
+    "text-main-composition-remotes-before.log": {
+      "path": "/workspace/qualification-evidence/text-main-composition-remotes-before.log",
+      "sha256": "c8a986296c532b86bfef8c035ca0bee59883cf0892942cac69d951305420da5c"
+    },
+    "text-main-composition-remotes-after.log": {
+      "path": "/workspace/qualification-evidence/text-main-composition-remotes-after.log",
+      "sha256": "aa954a69015a642cc7d0cbbc22d8972749395140c1551a567956ea7a52bd95e6"
+    },
+    "text-main-composition-source-preservation.json": {
+      "path": "/workspace/qualification-evidence/text-main-composition-source-preservation.json",
+      "sha256": "88095a92f95e2ec867dfe76c89e0cda4f80ea21ae5272d2a3b5269e26d65348c"
+    }
+  },
+  "remaining_limits": [
+    "native GTK/WebKit pkg-config prerequisites absent",
+    "soundfile absent; full worker dependency import unqualified",
+    "GPU execution unavailable/unqualified",
+    "pretrained/custom model generation unqualified",
+    "ONNX execution unqualified; no-build-time-download contract passed",
+    "parallel optional Diffusers harness unqualified; three explicit serial tests passed",
+    "external standards directory unavailable; no fresh Core/Router claim"
+  ],
+  "seed_followup": {
+    "worktree": "/workspace/Pantograph-text-seed",
+    "branch": "feat/workflow-text-seed",
+    "head": "64b81b0b773064dc7cb6df70789e8f44fa91430b",
+    "status": "clean; only design/read-only inspection occurred; no seed source edits or publication"
+  },
+  "parent_ownership": "PR/review/merge/hosted CI; no PR54/55 actions or history rewrites."
+}
