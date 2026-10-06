@@ -21,3 +21,12 @@
 | COV-05 | Workflow-service broad tests and warning-deny static gate have existing failures. | Repository standards review / M4 | EX-04 final run has 852 passes and the same 20 library failures as the five-file HEAD baseline (graph validation, technical fit, classification and session capacity). Current Clippy reports 134 library / 149 test diagnostics with no changed-line hits or identified introduced consequence. Preserve these obligations; focused EX acceptance is not full-crate compliance. |
 | COV-06 | Embedded-runtime baseline has 27 test failures and existing static diagnostics. | Repository standards review / M4 | EX-04 final embedded run: 420 passed, same 27 baseline failure identities. Clippy reports 11 lib / 38 test diagnostics with no changed-line hits. Preserve full repository acceptance obligation; no unrelated repairs or suppressions. |
 | EX-04 | Canonical session execution cannot continue between dependent runtime tasks: all-Ready admission rejects downstream AwaitingInputs, event claim does not select the scheduler-ready task, and one completed runtime member finalizes the whole run. | Workflow execution / M2 | Closed by 7941e428 after independent medium review: scheduler-ready/proof-gated exact task claims, supervised responder continuation, all-complete finalization and composed downstream readiness recovery without upstream replay. Five canonical dependent tests pass, including retained text→image and pending caller. Real-model/desktop acceptance remains outstanding. |
+
+## 2026-10-06 — PR58 compatibility findings
+
+The earlier model-default parity claim is narrowed by the reproduced omitted-control
+regressions and [separate repair](reports/2026-10-06-pr58-omitted-controls-repair.md).
+Tokenizer EOS stopping and native inherited minimum/forced-EOS behavior are restored;
+authored minimum validation and SDAR safeguards remain. Eight new CPU regression
+methods and independent medium review pass. This candidate does not imply PR58
+integration, hosted CI, real models or completed seed qualification.

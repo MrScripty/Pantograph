@@ -215,10 +215,15 @@ def _generate_dllm_autoregressive_safe(formatted_prompt, max_tokens, temperature
     if text and text.strip():
         return text
 
+    # The empty SDAR snapshot cannot represent either a failed or native retry.
+    # Clear it before any retry setup/processor can refuse the request.
+    _live_kv_state = None
     logger.warning("Empty dllm decode on SDAR path; retrying with stricter EOS settings")
 
     inputs = _tokenizer(formatted_prompt, return_tensors="pt").to(_device)
-    retry_min_new = max(min(max_tokens, 24), resolved_minimum)
+    retry_min_new = min(max_tokens, 24)
+    if min_new_tokens is not None:
+        retry_min_new = max(retry_min_new, resolved_minimum)
     eos_id = getattr(_tokenizer, "eos_token_id", None)
     pad_id = getattr(_tokenizer, "pad_token_id", eos_id)
     retry_kwargs = {}
@@ -228,6 +233,7 @@ def _generate_dllm_autoregressive_safe(formatted_prompt, max_tokens, temperature
     with torch.no_grad():
         outputs = _generate_native_checked(
             _model,
+            minimum_to_enforce=min_new_tokens or 0,
             **inputs,
             max_new_tokens=max_tokens,
             min_new_tokens=retry_min_new if retry_min_new > 0 else None,
@@ -242,7 +248,6 @@ def _generate_dllm_autoregressive_safe(formatted_prompt, max_tokens, temperature
 
     input_len = inputs["input_ids"].shape[1]
     generated = outputs[0][input_len:]
-    _live_kv_state = None
     decoded = _tokenizer.decode(generated, skip_special_tokens=True)
     if decoded and decoded.strip():
         return decoded
@@ -1861,7 +1866,8 @@ def generate(prompt, system_prompt=None, max_tokens=512, temperature=0.7, top_p=
         )
 
     min_new_tokens = kwargs.get("min_new_tokens")
-    _resolve_min_new_tokens(_model, min_new_tokens, max_tokens)
+    if min_new_tokens is not None:
+        _resolve_min_new_tokens(_model, min_new_tokens, max_tokens)
     formatted = _format_prompt(prompt, system_prompt)
     top_k = kwargs.get("top_k")
     repetition_penalty = kwargs.get("repetition_penalty")
@@ -1912,7 +1918,8 @@ def generate_tokens(prompt, system_prompt=None, max_tokens=512, temperature=0.7,
         return
 
     min_new_tokens = kwargs.get("min_new_tokens")
-    _resolve_min_new_tokens(_model, min_new_tokens, max_tokens)
+    if min_new_tokens is not None:
+        _resolve_min_new_tokens(_model, min_new_tokens, max_tokens)
     formatted = _format_prompt(prompt, system_prompt)
     top_k = kwargs.get("top_k")
     repetition_penalty = kwargs.get("repetition_penalty")

@@ -24,12 +24,14 @@ class MinimumNewTokensError(ValueError):
 
 
 class _CheckedMinimumNewTokens:
-    def __init__(self, processor):
+    def __init__(self, processor, floor=None):
         self.processor = processor
+        self.floor = processor.min_new_tokens if floor is None else floor
 
     def __call__(self, input_ids, scores):
         adjusted = self.processor(input_ids, scores)
-        if torch.any(~torch.isfinite(adjusted).any(dim=-1)):
+        active = input_ids.shape[-1] - self.processor.prompt_length_to_skip < self.floor
+        if active and torch.any(~torch.isfinite(adjusted).any(dim=-1)):
             raise MinimumNewTokensError("min_new_tokens leaves no finite eligible token")
         return adjusted
 
@@ -37,11 +39,12 @@ class _CheckedMinimumNewTokens:
 class _MinimumSelectionGuard:
     """Refuse when later native processors invalidate an active EOS floor."""
 
-    def __init__(self, processor):
+    def __init__(self, processor, floor=None):
         self.processor = processor
+        self.floor = processor.min_new_tokens if floor is None else floor
 
     def __call__(self, input_ids, scores):
-        if input_ids.shape[-1] - self.processor.prompt_length_to_skip < self.processor.min_new_tokens:
+        if input_ids.shape[-1] - self.processor.prompt_length_to_skip < self.floor:
             eos_mask = torch.isin(torch.arange(scores.shape[-1], device=scores.device),
                                   self.processor.eos_token_id.to(scores.device))
             if (torch.any(~torch.isfinite(scores).any(dim=-1))
@@ -76,7 +79,7 @@ class _CheckedRepetitionPenalty:
         return adjusted
 
 
-def _generate_native_checked(model, **kwargs):
+def _generate_native_checked(model, *, minimum_to_enforce=None, **kwargs):
     """Guard native repetition in place without changing resident model state.
 
     Public custom processors run after sanitizers and masks in Transformers.
@@ -85,6 +88,10 @@ def _generate_native_checked(model, **kwargs):
     Weights remain shared. Custom generation that bypasses this builder is
     unsupported and fails closed rather than returning unchecked output.
     """
+    # Inherited native floors retain Transformers' warning/forced-EOS semantics.
+    # SDAR retries supply an internal floor and explicitly preserve authorship.
+    if minimum_to_enforce is None:
+        minimum_to_enforce = kwargs.get("min_new_tokens")
     penalty = _resolve_repetition_penalty(model, kwargs.get("repetition_penalty"))
     request_model = copy.copy(model)
     if request_model is model or not callable(getattr(request_model, "_get_logits_processor", None)):
@@ -103,9 +110,9 @@ def _generate_native_checked(model, **kwargs):
                 guard = _CheckedRepetitionPenalty(processor)
                 checked.append(guard)
                 processors[index] = guard
-            elif type(processor) is MinNewTokensLengthLogitsProcessor:
-                processors[index] = _CheckedMinimumNewTokens(processor)
-                minimum_guards.append(_MinimumSelectionGuard(processor))
+            elif minimum_to_enforce and type(processor) is MinNewTokensLengthLogitsProcessor:
+                processors[index] = _CheckedMinimumNewTokens(processor, minimum_to_enforce)
+                minimum_guards.append(_MinimumSelectionGuard(processor, minimum_to_enforce))
         if penalty != 1.0 and not checked:
             raise RepetitionPenaltyNumericsError(
                 "native generation did not provide its repetition processor")
@@ -167,9 +174,10 @@ def _resolve_min_new_tokens(model, min_new_tokens, max_tokens):
         if (isinstance(max_tokens, bool) or not isinstance(max_tokens, int)
                 or not 0 < max_tokens <= (1 << 32) - 1):
             raise ValueError("max_tokens must be a positive u32 integer for min_new_tokens")
-    if min_new_tokens > max_tokens:
+    if authored and min_new_tokens > max_tokens:
         raise ValueError("min_new_tokens must not exceed max_tokens")
-    return min_new_tokens
+    # Manual loops stop at the request budget even for a larger model default.
+    return min(min_new_tokens, max_tokens)
 
 
 def _minimum_processor(prompt_length, floor, eos_ids, device):
@@ -228,8 +236,9 @@ def _generate_sdar_cached(model, tokenizer, device, formatted_prompt,
     inputs = tokenizer(formatted_prompt, return_tensors="pt").to(device)
     input_ids = inputs["input_ids"]
     prompt_len = input_ids.shape[1]
-    eos_ids = _eos_ids(tokenizer, model)
-    minimum_processor = _minimum_processor(prompt_len, floor, eos_ids, device)
+    eos_ids = _eos_ids(tokenizer)
+    minimum_processor = _minimum_processor(
+        prompt_len, floor, eos_ids | _eos_ids(tokenizer, model), device)
     resolved_top_k = _resolve_top_k(model, top_k)
     penalty_processor = _CheckedRepetitionPenalty(RepetitionPenaltyLogitsProcessor(
         _resolve_repetition_penalty(model, repetition_penalty)))
@@ -304,7 +313,7 @@ def _continue_sdar_cached(model, tokenizer, device, formatted_prompt,
     resolved_top_k = _resolve_top_k(model, top_k)
     penalty_processor = _CheckedRepetitionPenalty(RepetitionPenaltyLogitsProcessor(
         _resolve_repetition_penalty(model, repetition_penalty)))
-    eos_ids = _eos_ids(tokenizer, model)
+    eos_ids = _eos_ids(tokenizer)
     full_sequence = [int(token_id) for token_id in cached_token_ids]
     cur_pos = len(full_sequence)
 
@@ -345,7 +354,8 @@ def _continue_sdar_cached(model, tokenizer, device, formatted_prompt,
             )
             logits = outputs.logits[:, -1, :]
 
-    minimum_processor = _minimum_processor(len(full_sequence), floor, eos_ids, logits.device)
+    minimum_processor = _minimum_processor(
+        len(full_sequence), floor, eos_ids | _eos_ids(tokenizer, model), logits.device)
     generated_ids = []
     for _ in range(max_tokens):
         token_history = torch.tensor([full_sequence], device=logits.device, dtype=torch.long)
@@ -391,7 +401,8 @@ def _generate_autoregressive(model, tokenizer, device, formatted_prompt,
     Returns:
         Decoded string of generated text.
     """
-    _resolve_min_new_tokens(model, min_new_tokens, max_tokens)
+    if min_new_tokens is not None:
+        _resolve_min_new_tokens(model, min_new_tokens, max_tokens)
     inputs = tokenizer(formatted_prompt, return_tensors="pt").to(device)
 
     resolved_top_k = _resolve_top_k(model, top_k)
@@ -440,8 +451,9 @@ def _generate_autoregressive_streaming(model, tokenizer, device,
     floor = _resolve_min_new_tokens(model, min_new_tokens, max_tokens)
     inputs = tokenizer(formatted_prompt, return_tensors="pt").to(device)
     input_ids = inputs["input_ids"]
-    eos_ids = _eos_ids(tokenizer, model)
-    minimum_processor = _minimum_processor(input_ids.shape[-1], floor, eos_ids, device)
+    eos_ids = _eos_ids(tokenizer)
+    minimum_processor = _minimum_processor(
+        input_ids.shape[-1], floor, eos_ids | _eos_ids(tokenizer, model), device)
     resolved_top_k = _resolve_top_k(model, top_k)
     penalty_processor = _CheckedRepetitionPenalty(RepetitionPenaltyLogitsProcessor(
         _resolve_repetition_penalty(model, repetition_penalty)))

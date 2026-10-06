@@ -145,6 +145,7 @@ class AutoregressiveSamplingTests(unittest.TestCase):
         for eos_ids in [[3], [2, 3], [0, 3]]:
             tokenizer = EOSTokenizer()
             tokenizer.eos_ids = eos_ids
+            tokenizer.eos_token_id = eos_ids
             for authored in [None, 0, 1, 2, 4]:
                 for temperature in [0, 0.8]:
                     with self.subTest(eos=eos_ids, floor=authored, temperature=temperature):
@@ -256,7 +257,7 @@ class AutoregressiveSamplingTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "positive u32"):
                     autoregressive._resolve_min_new_tokens(TinyGenerationModel(), 0, maximum)
 
-    def test_sdar_empty_retry_preserves_large_authored_or_model_minimum(self):
+    def test_sdar_empty_retry_preserves_authored_floor_and_omitted_safeguard(self):
         class EOSTokenizer(TokenizerFixture):
             eos_token_id = 3
 
@@ -273,7 +274,7 @@ class AutoregressiveSamplingTests(unittest.TestCase):
             worker["_generate_sdar_cached"].return_value = ("", [0, 1], object())
             result = worker["_generate_dllm_autoregressive_safe"](
                 "prompt", 32, 0, 1, min_new_tokens=authored)
-            self.assertEqual(result, ",".join(["2"] * 30))
+            self.assertEqual(result, ",".join(["2"] * (24 if authored is None else 30)))
             self.assertIsNone(worker["_live_kv_state"])
 
     def test_minimum_without_any_eligible_non_eos_token_refuses_before_sampling(self):
@@ -294,7 +295,7 @@ class AutoregressiveSamplingTests(unittest.TestCase):
 
     def test_native_minimum_refuses_later_suppression_or_forced_eos_conflicts(self):
         for temperature in [0, 0.8]:
-            for authored in [None, 2]:
+            for authored in [2]:
                 with self.subTest(temperature=temperature, minimum=authored):
                     model = TinyGenerationModel()
                     model.generation_config.eos_token_id = 0

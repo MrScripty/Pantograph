@@ -692,3 +692,19 @@ doctest; strict all-target inference Clippy and affected gates pass. No producti
 file changes or broader model/GPU/full-worker qualification are claimed. Frozen
 sources and original evidence remain unchanged; seed may resume separately after
 this bounded publication gate. Parent owns review/PR/merge and hosted CI.
+
+## 2026-10-06 — PR58 omitted-control compatibility repair
+
+Parent paused the separate text-seed work and prioritized two validated PR58
+findings. The [repair report](reports/2026-10-06-pr58-omitted-controls-repair.md)
+records exact main/PR58 comparison, restored tokenizer EOS stopping, native
+inherited minimum/forced-EOS semantics, strict authored minima and existing SDAR
+retry delimiter safeguards. The retry guard enforces the authored floor rather
+than its internal heuristic, and refused retries discard KV before setup. Original
+failing logs and final passes remain distinct in a hashed evidence archive. Forty
+actual Python CPU methods, six exact-main comparison methods, 747 inference
+library tests and strict all-target inference Clippy pass with affected gates.
+Independent medium review found no remaining blocker. No ONNX build download,
+manifest/lockfile, seed, resident-accounting or main changes are included. Seed
+hashes remain unchanged; loader/GPU/pretrained/desktop qualification and parent
+PR58 integration/hosted CI remain outstanding.
