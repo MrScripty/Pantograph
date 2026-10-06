@@ -3007,6 +3007,9 @@ fn typed_text_generation_to_chat_request(
         repetition_penalty: generation_options
             .and_then(|options| options.sampling.repetition_penalty),
         seed: generation_options.and_then(|options| options.sampling.seed),
+        stop: generation_options
+            .map(|options| options.stopping.stop_strings.clone())
+            .unwrap_or_default(),
     }
 }
 
@@ -3085,6 +3088,19 @@ fn typed_text_generation_option_diagnostics(
             },
             backend_key: backend_key.map(ToOwned::to_owned),
             message: Some("chat seed is forwarded to request-scoped PyTorch sampling; worker validates route/device support".to_string()),
+        });
+    }
+    if !options.stopping.stop_strings.is_empty() {
+        mapped_paths.push("stopping.stop_strings");
+        diagnostics.push(OptionCompatibilityDiagnostic {
+            option_path: "stopping.stop_strings".to_string(),
+            state: if backend_key == Some("pytorch") {
+                OptionSupportState::Mapped
+            } else {
+                OptionSupportState::RequiresBackendSupport
+            },
+            backend_key: backend_key.map(ToOwned::to_owned),
+            message: Some("chat stop strings are forwarded to PyTorch text stopping; worker validates route support".to_string()),
         });
     }
     push_chat_cache_use_diagnostic(

@@ -74,8 +74,13 @@ mod pytorch_worker_image_contract;
 #[path = "pytorch_text_job.rs"]
 mod pytorch_text_job;
 
-const ALLOWED_TRANSFORMERS_GENERATE_KWARGS: &[&str] =
-    &["top_k", "repetition_penalty", "min_new_tokens", "seed"];
+const ALLOWED_TRANSFORMERS_GENERATE_KWARGS: &[&str] = &[
+    "top_k",
+    "repetition_penalty",
+    "min_new_tokens",
+    "seed",
+    "stop_strings",
+];
 
 #[path = "pytorch_cuda_inventory.rs"]
 mod cuda_inventory;
@@ -121,6 +126,7 @@ pub struct PyTorchTextGenerationRequest {
     pub top_k: Option<u32>,
     pub repetition_penalty: Option<f32>,
     pub seed: Option<u64>,
+    pub stop_strings: Vec<String>,
     pub masked_prompt_json: Option<String>,
 }
 
@@ -1998,6 +2004,18 @@ impl PyTorchBackend {
                 "seed must be an integer between 0 and 18446744073709551615".into(),
             ));
         }
+        if let Some(value) = envelope.payload.transformers_kwargs.get("stop_strings") {
+            if !value.as_array().is_some_and(|values| {
+                !values.is_empty()
+                    && values
+                        .iter()
+                        .all(|value| value.as_str().is_some_and(|value| !value.is_empty()))
+            }) {
+                return Err(BackendError::Config(
+                    "stop_strings must be a nonempty list of nonempty strings".into(),
+                ));
+            }
+        }
         if let Some(value) = envelope.payload.transformers_kwargs.get("min_new_tokens") {
             let minimum = value
                 .as_u64()
@@ -2181,6 +2199,12 @@ impl PyTorchBackend {
         }
         if let Some(seed) = request.seed {
             transformers_kwargs.insert("seed".to_string(), serde_json::json!(seed));
+        }
+        if !request.stop_strings.is_empty() {
+            transformers_kwargs.insert(
+                "stop_strings".to_string(),
+                serde_json::json!(request.stop_strings),
+            );
         }
         PyTorchGenerateTextRequest {
             prompt: request.prompt,
@@ -2373,13 +2397,14 @@ impl PyTorchBackend {
                 Some("seed is consumed by Pantograph token sampling, not Transformers GenerationConfig".to_string()),
             ));
         }
-        if !options.stopping.stop_strings.is_empty() {
-            diagnostics.push(Self::generation_option_diagnostic(
-                "stopping.stop_strings",
-                OptionSupportState::Unsupported,
-                Some("stop string criteria are not wired into the PyTorch worker yet".to_string()),
-            ));
-        }
+        Self::map_generation_option(
+            &mut kwargs,
+            &mut diagnostics,
+            "stopping.stop_strings",
+            "stop_strings",
+            (!options.stopping.stop_strings.is_empty()).then_some(&options.stopping.stop_strings),
+            OptionSupportState::Mapped,
+        );
         if !options.stopping.eos_token_ids.is_empty() {
             kwargs.insert(
                 "eos_token_id".to_string(),
@@ -2565,6 +2590,7 @@ impl PyTorchBackend {
             top_k: None,
             repetition_penalty: None,
             seed: None,
+            stop_strings: Vec::new(),
             masked_prompt_json,
         })
         .await
@@ -2665,6 +2691,7 @@ impl PyTorchBackend {
             top_k: None,
             repetition_penalty: None,
             seed: None,
+            stop_strings: Vec::new(),
             masked_prompt_json,
         })
     }
@@ -2973,6 +3000,13 @@ impl InferenceBackend for PyTorchBackend {
             })
             .transpose()?;
 
+        let stop_strings = request
+            .get("stop")
+            .map(|value| serde_json::from_value::<Vec<String>>(value.clone()))
+            .transpose()
+            .map_err(|error| BackendError::Config(format!("Invalid stop strings: {error}")))?
+            .unwrap_or_default();
+
         let repetition_penalty: Option<f32> = serde_json::from_value(
             request
                 .get("repetition_penalty")
@@ -2997,6 +3031,7 @@ impl InferenceBackend for PyTorchBackend {
                 top_k,
                 repetition_penalty,
                 seed,
+                stop_strings,
                 masked_prompt_json: None,
             }),
         )

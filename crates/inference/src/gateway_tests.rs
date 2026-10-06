@@ -2507,7 +2507,7 @@ async fn test_execute_typed_text_reports_generation_option_diagnostics() {
             }));
             assert!(option_diagnostics.iter().any(|diagnostic| {
                 diagnostic.option_path == "stopping.stop_strings"
-                    && diagnostic.state == OptionSupportState::Unsupported
+                    && diagnostic.state == OptionSupportState::RequiresBackendSupport
             }));
             assert!(option_diagnostics.iter().any(|diagnostic| {
                 diagnostic.option_path == "cache.use_cache"
@@ -6270,5 +6270,132 @@ async fn selected_text_seed_dispatch_preserves_caller_resolved_default_precedenc
         let requests = requests.lock().unwrap();
         assert_eq!(requests.len(), 1);
         assert_eq!(requests[0]["seed"].as_u64(), Some(expected_seed));
+    }
+}
+
+#[test]
+fn stop_strings_mapping_requires_other_backend_support() {
+    let options = GenerationOptions {
+        stopping: crate::model_contracts::StoppingGenerationOptions {
+            stop_strings: vec!["END".into()],
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    for backend in [
+        None,
+        Some("llamacpp"),
+        Some("external"),
+        Some("candle"),
+        Some("pytorch"),
+    ] {
+        let diagnostics = typed_text_generation_option_diagnostics(Some(&options), backend);
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(diagnostics[0].option_path, "stopping.stop_strings");
+        assert_eq!(
+            diagnostics[0].state,
+            if backend == Some("pytorch") {
+                OptionSupportState::Mapped
+            } else {
+                OptionSupportState::RequiresBackendSupport
+            }
+        );
+    }
+}
+
+#[tokio::test]
+async fn selected_text_stop_dispatch_preserves_caller_resolved_default_precedence() {
+    use crate::model_contracts::{GenerationOptionSource, StoppingGenerationOptions};
+    let model_defaults = serde_json::json!({"stop_strings": ["model END"]});
+    for (workflow_stop, preset_stop, request_stop, expected_stop, expected_source) in [
+        (
+            None,
+            None,
+            None,
+            "model END",
+            GenerationOptionSource::ModelDefaults,
+        ),
+        (
+            Some("workflow END"),
+            None,
+            None,
+            "workflow END",
+            GenerationOptionSource::WorkflowDefaults,
+        ),
+        (
+            Some("workflow END"),
+            Some("preset END"),
+            None,
+            "preset END",
+            GenerationOptionSource::RuntimePreset,
+        ),
+        (
+            Some("workflow END"),
+            Some("preset END"),
+            Some("  終わり🛑\n"),
+            "  終わり🛑\n",
+            GenerationOptionSource::RequestOverride,
+        ),
+    ] {
+        let layer = |stop: Option<&str>| GenerationOptions {
+            stopping: StoppingGenerationOptions {
+                stop_strings: stop.map(|value| vec![value.to_owned()]).unwrap_or_default(),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let workflow = layer(workflow_stop);
+        let preset = layer(preset_stop);
+        let overrides = layer(request_stop);
+        let resolved = GenerationOptions::resolve_precedence(
+            Some(&model_defaults),
+            Some(&workflow),
+            Some(&preset),
+            Some(&overrides),
+        );
+        assert_eq!(resolved.options.stopping.stop_strings, [expected_stop]);
+        let source = resolved
+            .diagnostics
+            .iter()
+            .rfind(|diagnostic| diagnostic.option_path == "stopping.stop_strings")
+            .unwrap();
+        assert_eq!(source.source, expected_source);
+        assert_eq!(
+            source.state,
+            if request_stop.is_some() {
+                OptionSupportState::Honored
+            } else {
+                OptionSupportState::Defaulted
+            }
+        );
+        let (_directory, mut request, target, decision) = crate::selected_text_execution::fixture();
+        request.generation_options = Some(resolved.options);
+        let backend = SelectedTextBackend::default();
+        let requests = backend.requests.clone();
+        let gateway = InferenceGateway::with_backend(Box::new(backend), "PyTorch");
+        let result = gateway
+            .execute_selected_text_with_cancellation(
+                request,
+                target,
+                decision,
+                InferenceExecutionCancellationHandle::running(),
+            )
+            .await
+            .unwrap();
+        let InferenceExecutionResult::TextGeneration {
+            option_diagnostics, ..
+        } = result
+        else {
+            panic!("text result expected")
+        };
+        let requests = requests.lock().unwrap();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0]["stop"], serde_json::json!([expected_stop]));
+        assert!(option_diagnostics
+            .iter()
+            .any(
+                |diagnostic| diagnostic.option_path == "stopping.stop_strings"
+                    && diagnostic.state == OptionSupportState::Mapped
+            ));
     }
 }

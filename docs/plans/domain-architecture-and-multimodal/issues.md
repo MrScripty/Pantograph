@@ -40,3 +40,15 @@ compatibility pass with independent medium review. Release still depends on
 PR58's main merge and parent publication/hosted CI. Real loaders/GPU/pretrained
 models and desktop remain open; JavaScript number entry may round seeds above
 `2^53 - 1`, despite exact Rust/JSON u64 transport. No UI precision claim is added.
+
+## 2026-10-06 — Graph-authored text stop-string candidate
+
+The [bounded stop-string successor](reports/2026-10-06-workflow-text-stop-string.md)
+connects the existing typed stop option to the canonical text graph and PyTorch
+AR routes. Exact text/omission, scope defaults, marker withholding and authored
+minimum priority are qualified with controlled CPU and public graph/host tests.
+Independent review's legacy-default layering finding is closed; incompatible
+SDAR/masked/custom routes explicitly refuse. Parent candidate review/publication
+and real model/loader/GPU/full desktop qualification remain separate. The accepted
+seed/precision histories are preserved; this entry does not close DA-03/DA-07 or
+authorize the historical resident-accounting next-slice text.
