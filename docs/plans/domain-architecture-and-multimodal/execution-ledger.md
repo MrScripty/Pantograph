@@ -516,3 +516,17 @@ graph materialization and lifecycle separately. No pretrained-image, GPU or
 desktop claim follows. Full-peak accounting, ownership and unknown facts remain
 unchanged; no dependency/download changes or PR actions. Parent owns review and
 publication. Execution cost was not measured; no estimate is invented.
+
+## 2026-10-06 — Multiple-image workflow generation
+
+The [image-count successor](reports/2026-10-06-workflow-image-count.md) continues
+from frozen guidance `14dfd4a7`. Optional count is bounded by the existing
+64-output host contract; compatible PyTorch batches preserve per-member image
+order and advancing seeded streams. Terminal workflow projection keeps singleton
+shape and returns an ordered artifact-reference array for multiple images.
+Source `994463e1` passes 805 inference, 509 embedded, 916 workflow-service and
+74 contract tests. Explicit native CPU guidance/count tests pass on actual
+Diffusers 0.39.0 and production-loader-admitted 0.37.0 with a tiny random UNet.
+No pretrained model, GPU or desktop qualification follows. Strict affected-package
+Clippy and repository gates pass. PR56 import repair remains independently based
+on `ab7a1b4e`; parent owns reviews/publication. Cost was not measured.
