@@ -884,3 +884,24 @@ Clippy, formatting, critical patterns and staged traceability. Each build follow
 its complete effective graph audit with ORT_SKIP_DOWNLOAD=1 and no download feature.
 Inference source remains at the preceding passing repair; fixture metadata,
 Pumas pin, source ancestry and the complete native failure chain remain intact.
+
+## Graph now completes; harness expects internal inference artifacts
+
+[Run 37545703782](https://github.com/MrScripty/Pantograph/actions/runs/37545703782)
+executes 6a7d9b1aaa866371695a1b68596c8495faf48880, tree
+20cfa27b46d7405f870af5193651dcba4fab5fc3. Build and eight startup tests pass;
+save/reopen/Resolve/single Submit reaches Completed for both the embedding task
+and whole graph. The actual public artifact query retains vectors.vector as the
+workflow output and node output, with the prompt input also retained. No terminal
+error remains. The harness wrongly waits for infer.embedding and infer.metadata.
+The GUI submits output_targets:null, so default host workflow I/O exports the
+vector sink rather than internal inference ports. Correct that test expectation;
+do not change production output defaults or add fabricated metadata artifacts.
+Numerical acceptance still requires an actual vector body read, with actual CPU
+selection obtained from the scoped public scheduler-attempt timeline. Default GUI
+submission does not qualify retention of the internal inference metadata body.
+
+The [complete twenty-first-attempt evidence](../evidence/native-desktop-cpu/cold-typed-discovery/post-runtime-progress/native-attempt/README.md)
+preserves all 23 original members, full masked job log and 38 owner records.
+Artifact 11450853556 SHA256 is
+1f223e064f087db553a65f6be237668da1540ae11d89553b6ab3c624a30a2250.

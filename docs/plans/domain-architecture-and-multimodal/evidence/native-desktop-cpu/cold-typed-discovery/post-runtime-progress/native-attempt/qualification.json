@@ -1,0 +1,61 @@
+{
+  "run_id": 37545703782,
+  "job_id": 112549066558,
+  "executed_head": "6a7d9b1aaa866371695a1b68596c8495faf48880",
+  "executed_tree": "20cfa27b46d7405f870af5193651dcba4fab5fc3",
+  "artifact_zip_size": 495563,
+  "artifact_zip_sha256": "1f223e064f087db553a65f6be237668da1540ae11d89553b6ab3c624a30a2250",
+  "original_member_count": 23,
+  "owner_record_count": 38,
+  "task_results": [
+    {
+      "attempt_id": "scheduler-task-attempt.16ebd260-a692-4e74-994a-cb79a244883c",
+      "diagnostics": [
+        {
+          "code": "runtime_host.execution_completed",
+          "message": "embedded runtime-host embedding execution completed",
+          "severity": "info"
+        }
+      ],
+      "output_count": 3,
+      "phase": "runtime_task_result_received",
+      "status": "completed",
+      "task_id": "infer",
+      "workflow_run_id": "run_f800b123-2571-44f8-a503-c27812b1b66b",
+      "captured_at": "2026-10-06T23:26:43.3799659Z"
+    }
+  ],
+  "terminal_attempt_events": [
+    {
+      "event_payload": {
+        "duration_ms": 13,
+        "ended_at_ms": 1791329203379,
+        "execution_class": "runtime",
+        "payload_type": "scheduler_task_attempt_lifecycle_changed",
+        "reason": "scheduler runtime task attempt completed",
+        "reservation_id": "runtime-registry.1",
+        "scheduler_attempt_id": "scheduler-task-attempt.16ebd260-a692-4e74-994a-cb79a244883c",
+        "scheduler_task_id": "infer",
+        "selected_device_class": null,
+        "selected_device_id": "cpu",
+        "selected_network_node_id": null,
+        "selected_runtime_id": "candle",
+        "selected_runtime_variant_id": "candle.cpu",
+        "started_at_ms": 1791329203366,
+        "transition": "completed"
+      },
+      "phase": "scheduler_task_attempt_terminal_event_produced",
+      "task_id": "infer",
+      "workflow_run_id": "run_f800b123-2571-44f8-a503-c27812b1b66b",
+      "captured_at": "2026-10-06T23:26:43.3802748Z"
+    }
+  ],
+  "artifact_id": 11450853556,
+  "qualification": "HARNESS FAILED: actual graph completed, default vectors.vector retained; internal inference artifacts were not requested",
+  "observations": 61,
+  "run_status": "completed",
+  "terminal_error": null,
+  "retained_artifact_rows": 3,
+  "vector_payload_bytes": 160,
+  "numerical_body_verified": false
+}
