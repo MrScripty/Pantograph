@@ -1,0 +1,18 @@
+{
+  "reviewed_source": "0d7d573f36d8f25f3ae5c8adb25ab86c42e1dd8c",
+  "reviewed_tree": "4f8b991baa72b537d6cb1a96c7450c019aec1577",
+  "merge_candidate": "bd99b620d479a96c6c6d0bc093e7e56b8bdd8eac",
+  "merge_candidate_tree": "3779e55bf32613871944cc7f14b9b7bbcfee4c74",
+  "conflict_resolutions": {
+    "crates/pantograph-inference-interface-contracts/tests/contract.rs": "Identical stop test exists in both parents in different positions. Preserve main position; no contract semantics changed.",
+    "docs/plans/domain-architecture-and-multimodal/plan.md": "Preserve chat record plus PR60/61 main records."
+  },
+  "source_vs_frozen": "Only those two files differ; application source, fixtures and frozen evidence remain byte-identical.",
+  "independent_review": "Frozen source independently reviewed as provided by parent. Fresh external/integration review remains parent-owned.",
+  "native_desktop": "Separate worker owns validation/edge repairs; no unpublished changes incorporated and no native-desktop pass claimed.",
+  "github_access": "Cloud gh REST and GraphQL calls returned Forbidden; existing authorized GitHub connector read succeeded. No credentials or permissions changed.",
+  "historical_evidence_whitespace": "git diff --check reports whitespace only inside preserved frozen log/source.patch files; application/source check passes. Frozen packet remains checksum-identical.",
+  "main_seed_baseline": "Exact main archive reproduces the same failing mock seed assertion (cargo exit 101). Main-only node-engine/inference-nodes run; fixture and diagnostic code are byte-identical in candidate.",
+  "resolved_environment_failure": "Initial affected suite had 31 read-only platform registry failures; XDG_CONFIG_HOME and XDG_CACHE_HOME redirected to workspace test cache. Deciding affected and expanded runs have no registry failures.",
+  "runner_diagnostic": "An in-flight wrapper edit interrupted initial affected exit-status bookkeeping; that log is retained without inventing a recorded status. Immutable run-qualified-check.sh records deciding statuses."
+}

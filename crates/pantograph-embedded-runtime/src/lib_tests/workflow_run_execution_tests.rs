@@ -1020,7 +1020,10 @@ impl WorkflowRuntimeDispatchCandidateProvider for TestRuntimeDispatchCandidatePr
             selected_runtime_variant_id: Some(
                 if intent.task_type.as_str() == "embedding" {
                     "candle.cpu"
-                } else if intent.task_type.as_str() == "text_generation" {
+                } else if matches!(
+                    intent.task_type.as_str(),
+                    "text_generation" | "chat_completion"
+                ) {
                     "pytorch.cpu"
                 } else {
                     "pytorch.diffusers"
@@ -1204,7 +1207,10 @@ impl WorkflowHost for ImageRuntimeSessionHost {
                             .collect(),
                         };
                     }
-                    let text = node.data["task_kind"] == "text_generation";
+                    let text = matches!(
+                        node.data["task_kind"].as_str(),
+                        Some("text_generation" | "chat_completion")
+                    );
                     WorkflowIoNode {
                         node_id: node.id.clone(),
                         node_type: node.node_type.clone(),
@@ -3832,3 +3838,7 @@ impl InferenceBackend for SelectedWorkflowTextBackend {
 #[cfg(feature = "backend-candle")]
 #[path = "cpu_embedding_graph_tests.rs"]
 mod cpu_embedding_graph_tests;
+
+#[cfg(feature = "backend-pytorch")]
+#[path = "cpu_chat_graph_tests.rs"]
+mod cpu_chat_graph_tests;

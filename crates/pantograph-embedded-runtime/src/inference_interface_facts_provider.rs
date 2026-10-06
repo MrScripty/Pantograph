@@ -233,7 +233,7 @@ fn runtime_availability_state(status: RuntimeRegistryStatus) -> InferenceRuntime
 
 fn input_ports(task_entry: &TaskRegistryEntry) -> Vec<InferencePortDescriptor> {
     match task_entry.task_id {
-        InferenceTaskId::TextGeneration => {
+        InferenceTaskId::TextGeneration | InferenceTaskId::ChatCompletion => {
             vec![
                 port(
                     "prompt",
@@ -314,7 +314,7 @@ fn input_ports(task_entry: &TaskRegistryEntry) -> Vec<InferencePortDescriptor> {
             InferencePortRequirement::Required,
             InferenceValueType::Scalar(InferenceScalarType::String),
         )],
-        InferenceTaskId::ChatCompletion | InferenceTaskId::MultimodalGeneration => vec![port(
+        InferenceTaskId::MultimodalGeneration => vec![port(
             "prompt",
             "Prompt",
             InferencePortDirection::Input,
@@ -661,7 +661,7 @@ mod tests {
             control.validate().expect("numeric control port contract");
         }
         let chat = inference::resolve_task_registry_entry("chat_completion").expect("chat task");
-        assert_eq!(input_ports(&chat).len(), 1);
+        assert_eq!(input_ports(&chat), input_ports(&task));
     }
 
     #[test]
@@ -671,6 +671,8 @@ mod tests {
             "../../pantograph-inference-interface-contracts/tests/fixtures/text_generation_system_prompt_inputs.json"
         )).unwrap();
         assert_eq!(input_ports(&task), expected);
+        let chat = inference::resolve_task_registry_entry("chat_completion").unwrap();
+        assert_eq!(input_ports(&chat), expected);
     }
 
     #[test]

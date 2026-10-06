@@ -13,6 +13,19 @@ use pantograph_scheduler::SchedulerDispatchDecision;
 use thiserror::Error;
 
 pub(crate) const TEXT_GENERATION_TASK: &str = "text_generation";
+pub(crate) const CHAT_COMPLETION_TASK: &str = "chat_completion";
+
+fn canonical_text_task(
+    task: &str,
+) -> Result<InferenceTaskId, RuntimeHostTextGenerationProjectionError> {
+    match task {
+        TEXT_GENERATION_TASK => Ok(InferenceTaskId::TextGeneration),
+        CHAT_COMPLETION_TASK => Ok(InferenceTaskId::ChatCompletion),
+        _ => Err(RuntimeHostTextGenerationProjectionError::UnsupportedTask {
+            task_type: task.to_string(),
+        }),
+    }
+}
 pub(crate) const PROMPT_PORT: &str = "prompt";
 pub(crate) const MAX_NEW_TOKENS_PORT: &str = "max_new_tokens";
 pub(crate) const SYSTEM_PROMPT_PORT: &str = "system_prompt";
@@ -53,16 +66,24 @@ impl RuntimeHostTextGenerationProjection {
 pub(crate) fn validate_runtime_host_text_generation_request(
     request: &RuntimeHostExecutionRequest,
 ) -> Result<(), RuntimeHostTextGenerationProjectionError> {
-    if request.handoff.task_intent.task_type.as_str() != TEXT_GENERATION_TASK {
-        return Err(RuntimeHostTextGenerationProjectionError::UnsupportedTask {
-            task_type: request.handoff.task_intent.task_type.as_str().to_string(),
-        });
-    }
+    canonical_text_task(request.handoff.task_intent.task_type.as_str())?;
     let dispatch_decision = request
         .handoff
         .dispatch_decision
         .as_ref()
         .ok_or(RuntimeHostTextGenerationProjectionError::MissingDispatchDecision)?;
+    if request
+        .handoff
+        .task_intent
+        .model_ref
+        .revision
+        .as_ref()
+        .is_some_and(|revision| {
+            dispatch_decision.selected_model_ref.revision.as_ref() != Some(revision)
+        })
+    {
+        return Err(RuntimeHostTextGenerationProjectionError::RequestedRevisionMismatch);
+    }
     validate_supported_inputs(request)?;
     validate_min_new_tokens_budget(request)?;
     optional_top_k(request)?;
@@ -101,10 +122,12 @@ pub(crate) fn project_runtime_host_text_generation(
     let backend_decision = text_backend_decision(dispatch_decision)?;
     let artifact_load_target =
         crate::runtime_host_image_execution::project_pumas_artifact_load_target(load_target);
+    let mut requested_model_ref = project_model_ref(&dispatch_decision.selected_model_ref);
+    requested_model_ref.revision = request.handoff.task_intent.model_ref.revision.clone();
     let inference_request = InferenceExecutionRequest {
         request_id: Some(request.execution_request_id.clone()),
-        task_id: InferenceTaskId::TextGeneration,
-        model_ref: Some(project_model_ref(&dispatch_decision.selected_model_ref)),
+        task_id: canonical_text_task(request.handoff.task_intent.task_type.as_str())?,
+        model_ref: Some(requested_model_ref),
         model_name: Some(dispatch_decision.selected_model_ref.model_id.clone()),
         resolved_model_package_facts: Some(package_facts),
         input: InferenceExecutionInput::TextGeneration {
@@ -185,7 +208,9 @@ fn text_backend_decision(
         selected_device_class,
         selected_device_id: Some(selected_device_id),
         device_decision,
-        selected_task_id: Some(InferenceTaskId::TextGeneration),
+        selected_task_id: Some(canonical_text_task(
+            decision.task_intent.task_type.as_str(),
+        )?),
         selected_model_ref: Some(project_model_ref(&decision.selected_model_ref)),
         diagnostics: Vec::new(),
         dependency_readiness: Vec::new(),
@@ -592,7 +617,11 @@ fn optional_system_prompt(
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub(crate) enum RuntimeHostTextGenerationProjectionError {
-    #[error("runtime-host text execution supports text_generation only, got {task_type}")]
+    #[error("runtime-host text selected revision must preserve the explicit requested revision")]
+    RequestedRevisionMismatch,
+    #[error(
+        "runtime-host text execution supports text_generation or chat_completion, got {task_type}"
+    )]
     UnsupportedTask { task_type: String },
     #[error("runtime-host text execution requires a scheduler dispatch decision")]
     MissingDispatchDecision,

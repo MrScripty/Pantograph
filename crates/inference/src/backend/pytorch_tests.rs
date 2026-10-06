@@ -240,6 +240,7 @@ fn test_capabilities() {
     assert!(caps.streaming);
     assert!(!caps.tool_calling);
     assert!(caps.supports_task(InferenceTaskId::TextGeneration));
+    assert!(caps.supports_task(InferenceTaskId::ChatCompletion));
     assert!(caps.supports_task(InferenceTaskId::AudioTranscription));
     assert!(caps.supports_task(InferenceTaskId::ImageGeneration));
     assert!(!caps.supports_task(InferenceTaskId::Embedding));

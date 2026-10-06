@@ -1,0 +1,74 @@
+   Compiling pantograph-dependency-planning v0.1.0 (/workspace/Pantograph-chat-completion/crates/pantograph-dependency-planning)
+   Compiling pantograph-managed-dependencies v0.1.0 (/workspace/Pantograph-chat-completion/crates/pantograph-managed-dependencies)
+   Compiling pantograph-runtime-identity v0.1.0 (/workspace/Pantograph-chat-completion/crates/pantograph-runtime-identity)
+   Compiling pantograph-runtime-registry v0.1.0 (/workspace/Pantograph-chat-completion/crates/pantograph-runtime-registry)
+   Compiling pantograph-media-conversion v0.1.0 (/workspace/Pantograph-chat-completion/crates/pantograph-media-conversion)
+   Compiling pantograph-timing-contracts v0.1.0 (/workspace/Pantograph-chat-completion/crates/pantograph-timing-contracts)
+   Compiling pantograph-path-security v0.1.0 (/workspace/Pantograph-chat-completion/crates/pantograph-path-security)
+   Compiling pantograph-scheduler v0.1.0 (/workspace/Pantograph-chat-completion/crates/pantograph-scheduler)
+   Compiling inference v0.1.0 (/workspace/Pantograph-chat-completion/crates/inference)
+   Compiling pantograph-runtime-host-contracts v0.1.0 (/workspace/Pantograph-chat-completion/crates/pantograph-runtime-host-contracts)
+   Compiling pantograph-inference-interface-contracts v0.1.0 (/workspace/Pantograph-chat-completion/crates/pantograph-inference-interface-contracts)
+   Compiling pantograph-runtime-attribution v0.1.0 (/workspace/Pantograph-chat-completion/crates/pantograph-runtime-attribution)
+   Compiling pantograph-node-contracts v0.1.0 (/workspace/Pantograph-chat-completion/crates/pantograph-node-contracts)
+   Compiling pantograph-diagnostics-ledger v0.1.0 (/workspace/Pantograph-chat-completion/crates/pantograph-diagnostics-ledger)
+   Compiling node-engine v0.1.0 (/workspace/Pantograph-chat-completion/crates/node-engine)
+   Compiling pantograph-dependency-environment-service v0.1.0 (/workspace/Pantograph-chat-completion/crates/pantograph-dependency-environment-service)
+   Compiling workflow-nodes v0.1.0 (/workspace/Pantograph-chat-completion/crates/workflow-nodes)
+   Compiling pantograph-workflow-service v0.1.0 (/workspace/Pantograph-chat-completion/crates/pantograph-workflow-service)
+   Compiling pantograph-embedded-runtime v0.1.0 (/workspace/Pantograph-chat-completion/crates/pantograph-embedded-runtime)
+error[E0412]: cannot find type `ResolvedModelPackageFacts` in this scope
+  --> crates/pantograph-embedded-runtime/src/lib_tests/cpu_chat_graph_tests.rs:24:16
+   |
+24 | struct Package(ResolvedModelPackageFacts);
+   |                ^^^^^^^^^^^^^^^^^^^^^^^^^ not found in this scope
+   |
+   = note: struct `crate::runtime_host_text_execution::tests::ResolvedModelPackageFacts` exists but is inaccessible
+help: consider importing one of these structs
+   |
+ 1 + use inference::ResolvedModelPackageFacts;
+   |
+ 1 + use pumas_library::models::ResolvedModelPackageFacts;
+   |
+
+error[E0412]: cannot find type `ResolvedModelPackageFacts` in this scope
+  --> crates/pantograph-embedded-runtime/src/lib_tests/cpu_chat_graph_tests.rs:31:9
+   |
+31 |         ResolvedModelPackageFacts,
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^ not found in this scope
+   |
+   = note: struct `crate::runtime_host_text_execution::tests::ResolvedModelPackageFacts` exists but is inaccessible
+help: consider importing one of these structs
+   |
+ 1 + use inference::ResolvedModelPackageFacts;
+   |
+ 1 + use pumas_library::models::ResolvedModelPackageFacts;
+   |
+
+error[E0433]: failed to resolve: use of undeclared type `RuntimeHostExecutionInputValue`
+   --> crates/pantograph-embedded-runtime/src/lib_tests/cpu_chat_graph_tests.rs:545:17
+    |
+545 |                 RuntimeHostExecutionInputValue::String(text.into());
+    |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ use of undeclared type `RuntimeHostExecutionInputValue`
+    |
+    = note: enum `crate::runtime_host_text_execution::tests::RuntimeHostExecutionInputValue` exists but is inaccessible
+help: an enum with a similar name exists
+    |
+545 -                 RuntimeHostExecutionInputValue::String(text.into());
+545 +                 RuntimeHostExecutionState::String(text.into());
+    |
+help: consider importing this enum
+    |
+  1 + use pantograph_runtime_host_contracts::RuntimeHostExecutionInputValue;
+    |
+
+error[E0599]: no variant or associated item named `Cancelled` found for enum `pantograph_runtime_host_contracts::RuntimeHostExecutionState` in the current scope
+   --> crates/pantograph-embedded-runtime/src/lib_tests/cpu_chat_graph_tests.rs:438:44
+    |
+438 |                 RuntimeHostExecutionState::Cancelled
+    |                                            ^^^^^^^^^ variant or associated item not found in `pantograph_runtime_host_contracts::RuntimeHostExecutionState`
+
+Some errors have detailed explanations: E0412, E0433, E0599.
+For more information about an error, try `rustc --explain E0412`.
+error: could not compile `pantograph-embedded-runtime` (lib test) due to 4 previous errors
+warning: build failed, waiting for other jobs to finish...

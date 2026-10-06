@@ -43,7 +43,7 @@ use crate::runtime_host_package_facts::{
 use crate::runtime_host_text_execution::{
     project_runtime_host_text_generation, text_from_inference_result,
     validate_runtime_host_text_generation_request, RuntimeHostTextGenerationProjectionError,
-    TEXT_GENERATION_TASK,
+    CHAT_COMPLETION_TASK, TEXT_GENERATION_TASK,
 };
 
 const MISSING_LOAD_TARGET_RESOLVER_HINT: &str =
@@ -160,14 +160,15 @@ impl RuntimeHostExecutionPort for EmbeddedRuntimeHostExecutionPort {
             return Ok(response);
         }
 
-        if validated_request
-            .as_ref()
-            .handoff
-            .task_intent
-            .task_type
-            .as_str()
-            == TEXT_GENERATION_TASK
-        {
+        if matches!(
+            validated_request
+                .as_ref()
+                .handoff
+                .task_intent
+                .task_type
+                .as_str(),
+            TEXT_GENERATION_TASK | CHAT_COMPLETION_TASK
+        ) {
             return self
                 .execute_runtime_host_text_request(&validated_request, cancellation)
                 .await;
@@ -750,7 +751,7 @@ impl RuntimeHostBatchExecutionPort for EmbeddedRuntimeHostExecutionPort {
         if member_requests.iter().all(|member| {
             matches!(
                 member.as_ref().handoff.task_intent.task_type.as_str(),
-                TEXT_GENERATION_TASK | EMBEDDING_TASK
+                TEXT_GENERATION_TASK | CHAT_COMPLETION_TASK | EMBEDDING_TASK
             )
         }) {
             return self
@@ -983,7 +984,7 @@ fn shared_batch_runtime_context_error(
     };
     if !matches!(
         first_decision.task_intent.task_type.as_str(),
-        "image_generation" | TEXT_GENERATION_TASK | EMBEDDING_TASK
+        "image_generation" | TEXT_GENERATION_TASK | CHAT_COMPLETION_TASK | EMBEDDING_TASK
     ) {
         return Some(format!(
             "embedded runtime-host batch task type '{}' is unsupported",
