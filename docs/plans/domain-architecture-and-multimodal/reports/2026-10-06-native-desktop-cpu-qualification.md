@@ -566,3 +566,39 @@ contains the before-repair regression, complete effective graphs, test/Clippy lo
 and gate checks. The native workflow path filter includes the actual repaired
 owner sources so publishing this isolated successor triggers qualification;
 permissions and deadlines are unchanged.
+
+## Current result: identity repaired; native dependency readiness remains pending
+
+[Run 37522366379](https://github.com/MrScripty/Pantograph/actions/runs/37522366379)
+executes `5a629f7affd43fd2884899d3a2ed3feb5c3d42ff`, tree
+`70651013a1c8c5c50447a860eec6035536330f51`, parent preserved `3b9e731a`.
+Actual native build and all eight startup tests pass. Cold-owner, save/reopen,
+three visible wires, executable current validation, typed Resolve and GUI Submit
+are exercised. The saved-proof identity rejection is cleared. The actual GUI now
+reports `Runtime not ready: runtime dependency readiness is pending for scheduler
+task(s): infer`. Scoped run `run_370d45c5-335d-4858-9817-4dac3e9f331a` is queued
+with resume state `dependency_readiness_pending`, no selected runtime/device,
+no start/completion timestamp and zero retained outputs. Actual CPU execution
+and output remain unqualified; no loader failure, GPU, pretrained model or full
+production-loader qualification is inferred.
+
+The [complete fourteenth-attempt evidence](../evidence/native-desktop-cpu/cold-typed-discovery/shared-planning-identity/native-attempt/README.md)
+preserves all twenty-two members, original JSON/PNG and complete masked job log.
+Artifact `11440194325` has SHA256
+`d6c0723c0271deffefc83cd4aa9fb04a19410f9694806b69732ff2d76c4ae22d`.
+The GUI test fails on the initial pending response after 9.3 seconds; it does not
+capture the provider seed/snapshot result or observe readiness after the default
+60-second producer poll. Source review identifies the next cold bootstrap seam:
+hosted Resolve reads snapshots, but scheduler dispatch needs a valid requirements
+payload before enqueueing snapshot work. The provider starts empty and its
+missing-snapshot result carries no requirements/bindings. Hosted inventory also
+defaults to Python probing, with other provider kinds not implemented in this
+build scope. These are source findings, not native provider-result diagnostics;
+exact pending cause and eventual readiness are still unqualified. No ready
+receipt, requirements payload or snapshot is fabricated.
+
+The same executor remains accessible following the disconnect callback. Source,
+local tests and completed CI evidence are preserved without restarting or
+duplicating work. No successor run is active. Main, PR 62 and protected worktrees
+remain untouched. The shared identity repair is complete; the distinct native
+readiness bootstrap/provider boundary remains blocked.

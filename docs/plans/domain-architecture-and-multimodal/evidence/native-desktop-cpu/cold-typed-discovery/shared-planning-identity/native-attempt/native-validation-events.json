@@ -1,0 +1,78 @@
+[
+  {
+    "graph_revision": "157f87306e2aa806",
+    "validation_session_id": "validation.session.9ec8451f-6fbf-4edb-8e64-de6924e9f9d9",
+    "sequence": 0,
+    "graph_session_id": "ba8c6df5-814a-4732-a83c-13ff36585923",
+    "kind": {
+      "kind": "validation_pending"
+    }
+  },
+  {
+    "graph_revision": "157f87306e2aa806",
+    "validation_session_id": "validation.session.6dd27772-dbe7-45f0-8f4e-f537fb5c5097",
+    "sequence": 1,
+    "graph_session_id": "ba8c6df5-814a-4732-a83c-13ff36585923",
+    "kind": {
+      "superseded_validation_session_id": "validation.session.9ec8451f-6fbf-4edb-8e64-de6924e9f9d9",
+      "kind": "validation_superseded"
+    }
+  },
+  {
+    "graph_revision": "157f87306e2aa806",
+    "validation_session_id": "validation.session.6dd27772-dbe7-45f0-8f4e-f537fb5c5097",
+    "sequence": 2,
+    "graph_session_id": "ba8c6df5-814a-4732-a83c-13ff36585923",
+    "kind": {
+      "kind": "publication_accepted"
+    }
+  },
+  {
+    "graph_revision": "157f87306e2aa806",
+    "validation_session_id": "validation.session.6dd27772-dbe7-45f0-8f4e-f537fb5c5097",
+    "sequence": 3,
+    "graph_session_id": "ba8c6df5-814a-4732-a83c-13ff36585923",
+    "kind": {
+      "reason": "graph_revision_changed",
+      "kind": "validation_cancelled"
+    }
+  },
+  {
+    "graph_revision": "d0f7a8eb92be581d",
+    "validation_session_id": "validation.session.4fe348d1-0c7e-4f0a-89b1-8b12ecc878b5",
+    "sequence": 4,
+    "graph_session_id": "ba8c6df5-814a-4732-a83c-13ff36585923",
+    "kind": {
+      "kind": "validation_pending"
+    }
+  },
+  {
+    "graph_revision": "d0f7a8eb92be581d",
+    "validation_session_id": "validation.session.35b5e630-b76c-44b6-92bb-1ce70b3658d5",
+    "sequence": 5,
+    "graph_session_id": "ba8c6df5-814a-4732-a83c-13ff36585923",
+    "kind": {
+      "superseded_validation_session_id": "validation.session.4fe348d1-0c7e-4f0a-89b1-8b12ecc878b5",
+      "kind": "validation_superseded"
+    }
+  },
+  {
+    "graph_revision": "d0f7a8eb92be581d",
+    "validation_session_id": "validation.session.d704ef5a-8eca-4582-936c-9f4265b94da1",
+    "sequence": 6,
+    "graph_session_id": "ba8c6df5-814a-4732-a83c-13ff36585923",
+    "kind": {
+      "superseded_validation_session_id": "validation.session.35b5e630-b76c-44b6-92bb-1ce70b3658d5",
+      "kind": "validation_superseded"
+    }
+  },
+  {
+    "graph_revision": "d0f7a8eb92be581d",
+    "validation_session_id": "validation.session.d704ef5a-8eca-4582-936c-9f4265b94da1",
+    "sequence": 7,
+    "graph_session_id": "ba8c6df5-814a-4732-a83c-13ff36585923",
+    "kind": {
+      "kind": "publication_accepted"
+    }
+  }
+]
