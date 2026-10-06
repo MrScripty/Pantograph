@@ -174,7 +174,8 @@ fn task(runtime: &str, bytes: u64) -> RuntimeReservationRequest {
 
 fn available(registry: &RuntimeRegistry) -> Result<u64, RuntimeRegistryError> {
     registry
-        .evaluate_reservation(task("candle", 0))
+        // A zero claim does not need uncertain totals; inspect them with a charge.
+        .evaluate_reservation(task("candle", 1))
         .map(|evaluation| evaluation.observation().resource_domains[0].available_bytes)
 }
 

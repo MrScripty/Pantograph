@@ -6,11 +6,13 @@ use pantograph_app_config::AppConfig;
 #[tokio::test]
 async fn failed_config_save_preserves_the_complete_previous_capacity_configuration() {
     let directory = tempfile::TempDir::new().unwrap();
-    let mut config = AppConfig::default();
-    config.runtime_resources = serde_json::from_str(include_str!(
-        "../../pantograph-runtime-registry/tests/fixtures/startup_shared_resource_config.json"
-    ))
-    .unwrap();
+    let config = AppConfig {
+        runtime_resources: serde_json::from_str(include_str!(
+            "../../pantograph-runtime-registry/tests/fixtures/startup_shared_resource_config.json"
+        ))
+        .unwrap(),
+        ..Default::default()
+    };
     config.save(&directory.path().to_path_buf()).await.unwrap();
     let config_path = directory.path().join("config.json");
     let previous = std::fs::read(&config_path).unwrap();
