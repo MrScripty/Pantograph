@@ -2503,7 +2503,7 @@ async fn test_execute_typed_text_reports_generation_option_diagnostics() {
             }));
             assert!(option_diagnostics.iter().any(|diagnostic| {
                 diagnostic.option_path == "sampling.seed"
-                    && diagnostic.state == OptionSupportState::Unsupported
+                    && diagnostic.state == OptionSupportState::RequiresBackendSupport
             }));
             assert!(option_diagnostics.iter().any(|diagnostic| {
                 diagnostic.option_path == "stopping.stop_strings"
@@ -2611,7 +2611,7 @@ async fn test_execute_typed_text_reports_generation_option_diagnostics() {
         .option_diagnostics
         .iter()
         .any(|diagnostic| diagnostic.option_path == "sampling.seed"
-            && diagnostic.state == OptionSupportState::Unsupported));
+            && diagnostic.state == OptionSupportState::RequiresBackendSupport));
     assert!(completed_validation_event
         .option_diagnostics
         .iter()
@@ -2637,7 +2637,7 @@ async fn test_execute_typed_text_reports_generation_option_diagnostics() {
         .option_diagnostics
         .iter()
         .any(|diagnostic| diagnostic.option_path == "sampling.seed"
-            && diagnostic.state == OptionSupportState::Unsupported));
+            && diagnostic.state == OptionSupportState::RequiresBackendSupport));
     assert!(completed_backend_event
         .option_diagnostics
         .iter()
@@ -6108,5 +6108,167 @@ fn min_new_tokens_mapping_does_not_claim_other_backend_support() {
             diagnostics[0].state,
             OptionSupportState::RequiresBackendSupport
         );
+    }
+}
+
+#[test]
+fn seed_mapping_does_not_claim_other_backend_support() {
+    let options = GenerationOptions {
+        sampling: SamplingGenerationOptions {
+            seed: Some(0),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    for backend in [
+        None,
+        Some("llamacpp"),
+        Some("external"),
+        Some("candle"),
+        Some("pytorch"),
+    ] {
+        let diagnostics = typed_text_generation_option_diagnostics(Some(&options), backend);
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(diagnostics[0].option_path, "sampling.seed");
+        assert_eq!(
+            diagnostics[0].state,
+            if backend == Some("pytorch") {
+                OptionSupportState::Mapped
+            } else {
+                OptionSupportState::RequiresBackendSupport
+            }
+        );
+    }
+}
+
+#[tokio::test]
+async fn selected_text_seed_preserves_omission_zero_and_u64_max_at_chat_dispatch() {
+    for seed in [None, Some(0), Some(u64::MAX)] {
+        let (_directory, mut request, target, decision) = crate::selected_text_execution::fixture();
+        request.generation_options = Some(GenerationOptions {
+            sampling: SamplingGenerationOptions {
+                seed,
+                ..Default::default()
+            },
+            ..Default::default()
+        });
+        let backend = SelectedTextBackend::default();
+        let requests = backend.requests.clone();
+        let gateway = InferenceGateway::with_backend(Box::new(backend), "PyTorch");
+        let result = gateway
+            .execute_selected_text_with_cancellation(
+                request,
+                target,
+                decision,
+                InferenceExecutionCancellationHandle::running(),
+            )
+            .await
+            .unwrap();
+        let InferenceExecutionResult::TextGeneration {
+            option_diagnostics, ..
+        } = result
+        else {
+            panic!("text result expected")
+        };
+        let requests = requests.lock().unwrap();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(
+            requests[0].get("seed"),
+            seed.map(serde_json::Value::from).as_ref()
+        );
+        assert_eq!(
+            option_diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.option_path == "sampling.seed"
+                    && diagnostic.state == OptionSupportState::Mapped),
+            seed.is_some()
+        );
+    }
+}
+
+#[tokio::test]
+async fn selected_text_seed_dispatch_preserves_caller_resolved_default_precedence() {
+    use crate::model_contracts::GenerationOptionSource;
+
+    let model_defaults = serde_json::json!({"seed": 7});
+    for (workflow_seed, preset_seed, request_seed, expected_seed, expected_source) in [
+        (None, None, None, 7, GenerationOptionSource::ModelDefaults),
+        (
+            Some(11),
+            None,
+            None,
+            11,
+            GenerationOptionSource::WorkflowDefaults,
+        ),
+        (
+            Some(11),
+            Some(13),
+            None,
+            13,
+            GenerationOptionSource::RuntimePreset,
+        ),
+        (
+            Some(11),
+            Some(13),
+            Some(0),
+            0,
+            GenerationOptionSource::RequestOverride,
+        ),
+    ] {
+        let layer = |seed| GenerationOptions {
+            sampling: SamplingGenerationOptions {
+                seed,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let workflow = layer(workflow_seed);
+        let preset = layer(preset_seed);
+        let overrides = layer(request_seed);
+        // Resolution belongs to the caller. Missing fields in later scopes
+        // retain inherited values; an authored zero overrides every default.
+        let resolved = GenerationOptions::resolve_precedence(
+            Some(&model_defaults),
+            Some(&workflow),
+            Some(&preset),
+            Some(&overrides),
+        );
+        assert_eq!(resolved.options.sampling.seed, Some(expected_seed));
+        let source = resolved
+            .diagnostics
+            .iter()
+            .rfind(|diagnostic| diagnostic.option_path == "sampling.seed")
+            .unwrap();
+        assert_eq!(source.source, expected_source);
+        assert_eq!(
+            source.state,
+            if request_seed.is_some() {
+                OptionSupportState::Honored
+            } else {
+                OptionSupportState::Defaulted
+            }
+        );
+
+        let (_directory, mut request, target, decision) = crate::selected_text_execution::fixture();
+        request.generation_options = Some(resolved.options);
+        let backend = SelectedTextBackend::default();
+        let requests = backend.requests.clone();
+        let gateway = InferenceGateway::with_backend(Box::new(backend), "PyTorch");
+        let result = gateway
+            .execute_selected_text_with_cancellation(
+                request,
+                target,
+                decision,
+                InferenceExecutionCancellationHandle::running(),
+            )
+            .await
+            .unwrap();
+        assert!(matches!(
+            result,
+            InferenceExecutionResult::TextGeneration { .. }
+        ));
+        let requests = requests.lock().unwrap();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0]["seed"].as_u64(), Some(expected_seed));
     }
 }

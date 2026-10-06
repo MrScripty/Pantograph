@@ -21,6 +21,7 @@ pub(crate) const TEMPERATURE_PORT: &str = "temperature";
 pub(crate) const TOP_P_PORT: &str = "top_p";
 pub(crate) const REPETITION_PENALTY_PORT: &str = "repetition_penalty";
 pub(crate) const MIN_NEW_TOKENS_PORT: &str = "min_new_tokens";
+pub(crate) const SEED_PORT: &str = "seed";
 pub(crate) const MAX_TEXT_BYTES: usize = 1024;
 
 /// Owned inputs for the canonical selected-text inference call.
@@ -67,6 +68,7 @@ pub(crate) fn validate_runtime_host_text_generation_request(
     optional_temperature(request)?;
     optional_top_p(request)?;
     optional_repetition_penalty(request)?;
+    optional_seed(request)?;
     optional_system_prompt(request)?;
     let prompt = required_prompt(request)?;
     if prompt.trim().is_empty() {
@@ -310,6 +312,7 @@ fn validate_supported_inputs(
             TOP_P_PORT,
             REPETITION_PENALTY_PORT,
             MIN_NEW_TOKENS_PORT,
+            SEED_PORT,
         ]
         .contains(&input.port_id.as_str())
         {
@@ -477,6 +480,25 @@ fn optional_sampling_number(
         .transpose()
 }
 
+fn optional_seed(
+    request: &RuntimeHostExecutionRequest,
+) -> Result<Option<u64>, RuntimeHostTextGenerationProjectionError> {
+    request
+        .materialized_inputs
+        .iter()
+        .find(|input| input.port_id == SEED_PORT)
+        .map(|input| match input.value {
+            RuntimeHostExecutionInputValue::U64(value) => Ok(value),
+            RuntimeHostExecutionInputValue::I64(value) => u64::try_from(value)
+                .map_err(|_| RuntimeHostTextGenerationProjectionError::InvalidSeed),
+            _ => Err(RuntimeHostTextGenerationProjectionError::InvalidInputType {
+                port_id: SEED_PORT,
+                expected: "non-negative integer",
+            }),
+        })
+        .transpose()
+}
+
 fn optional_generation_options(
     request: &RuntimeHostExecutionRequest,
 ) -> Result<Option<GenerationOptions>, RuntimeHostTextGenerationProjectionError> {
@@ -486,12 +508,14 @@ fn optional_generation_options(
     let temperature = optional_temperature(request)?;
     let top_p = optional_top_p(request)?;
     let repetition_penalty = optional_repetition_penalty(request)?;
+    let seed = optional_seed(request)?;
     if max_new_tokens.is_none()
         && min_new_tokens.is_none()
         && top_k.is_none()
         && temperature.is_none()
         && top_p.is_none()
         && repetition_penalty.is_none()
+        && seed.is_none()
     {
         return Ok(None);
     }
@@ -506,7 +530,7 @@ fn optional_generation_options(
             temperature,
             top_p,
             repetition_penalty,
-            ..SamplingGenerationOptions::default()
+            seed,
         },
         ..GenerationOptions::default()
     }))
@@ -552,6 +576,8 @@ pub(crate) enum RuntimeHostTextGenerationProjectionError {
     MinNewTokensExceedsBudget { minimum: u32, maximum: u32 },
     #[error("runtime-host text input 'top_k' must be between 0 and 4294967295")]
     InvalidTopK,
+    #[error("runtime-host text input 'seed' must be a non-negative u64 integer")]
+    InvalidSeed,
     #[error("runtime-host text input 'temperature' must be a nonnegative finite number representable by the generation f32 contract without losing authored precision")]
     InvalidTemperature,
     #[error("runtime-host text input 'top_p' must be between 0 and 1, retaining authored precision in the generation f32 contract")]
@@ -2904,6 +2930,149 @@ mod tests {
             }
             let _validated =
                 ValidatedRuntimeHostBatchExecutionResponse::try_from(response).unwrap();
+        }
+    }
+    #[test]
+    fn seed_accepts_nonnegative_signed_inputs_without_inventing_an_omitted_seed() {
+        assert!(optional_generation_options(&text_request_fixture())
+            .unwrap()
+            .is_none());
+        for value in [0, i64::MAX] {
+            let mut request = text_request_fixture();
+            request.materialized_inputs.push(RuntimeHostExecutionInput {
+                port_id: SEED_PORT.into(),
+                value: RuntimeHostExecutionInputValue::I64(value),
+            });
+            assert_eq!(
+                optional_generation_options(&request)
+                    .unwrap()
+                    .unwrap()
+                    .sampling
+                    .seed,
+                Some(value as u64)
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn seed_reaches_actual_host_gateway_with_u64_boundaries_and_omission() {
+        for seed in [None, Some(0), Some(42), Some(u64::MAX)] {
+            let mut request = text_request_fixture();
+            if let Some(value) = seed {
+                request.materialized_inputs.push(RuntimeHostExecutionInput {
+                    port_id: SEED_PORT.into(),
+                    value: RuntimeHostExecutionInputValue::U64(value),
+                });
+            }
+            request.materialized_inputs.push(RuntimeHostExecutionInput {
+                port_id: TEMPERATURE_PORT.into(),
+                value: RuntimeHostExecutionInputValue::I64(0),
+            });
+            let validated =
+                ValidatedRuntimeHostExecutionRequest::try_from(request.clone()).unwrap();
+            let package_facts = text_package_facts(&validated);
+            let directory = tempfile::tempdir().unwrap();
+            let target = text_load_target(&package_facts, &directory);
+            let projection = project_runtime_host_text_generation(
+                &validated,
+                package_facts.clone(),
+                target.clone(),
+            )
+            .unwrap();
+            assert_eq!(
+                projection
+                    .request()
+                    .generation_options
+                    .as_ref()
+                    .unwrap()
+                    .sampling
+                    .seed,
+                seed
+            );
+            let backend = TextBackend::default();
+            let recorded = backend.requests.clone();
+            let port = crate::runtime_host_execution_port::EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
+                Arc::new(TextLoadTargetResolver { target }), Arc::new(TextPackageFactsResolver { package_facts }),
+                Arc::new(UnusedTextMediaSink), Arc::new(inference::InferenceGateway::with_backend(Box::new(backend), "PyTorch")),
+            );
+            let cancellation =
+                pantograph_runtime_host_contracts::RuntimeHostExecutionCancellationHandle::running(
+                    request.cancellation_context.clone(),
+                );
+            let response = port
+                .execute_runtime_host_request(request, cancellation)
+                .await
+                .unwrap();
+            assert_eq!(response.state, RuntimeHostExecutionState::Completed);
+            let recorded = recorded.lock().unwrap();
+            assert_eq!(recorded.len(), 1);
+            assert_eq!(
+                recorded[0].get("seed"),
+                seed.map(serde_json::Value::from).as_ref()
+            );
+            assert_eq!(recorded[0]["temperature"], serde_json::json!(0.0));
+        }
+    }
+
+    #[tokio::test]
+    async fn invalid_seed_fails_host_before_backend_effects() {
+        for (value, expected) in [
+            (
+                RuntimeHostExecutionInputValue::I64(-1),
+                "seed' must be a non-negative u64 integer",
+            ),
+            (
+                RuntimeHostExecutionInputValue::F64(serde_json::Number::from_f64(1.0).unwrap()),
+                "seed' must be non-negative integer",
+            ),
+            (
+                RuntimeHostExecutionInputValue::String("42".into()),
+                "seed' must be non-negative integer",
+            ),
+            (
+                RuntimeHostExecutionInputValue::Bool(true),
+                "seed' must be non-negative integer",
+            ),
+        ] {
+            let mut request = text_request_fixture();
+            request.materialized_inputs.push(RuntimeHostExecutionInput {
+                port_id: SEED_PORT.into(),
+                value,
+            });
+            let validated =
+                ValidatedRuntimeHostExecutionRequest::try_from(request.clone()).unwrap();
+            let package_facts = text_package_facts(&validated);
+            let directory = tempfile::tempdir().unwrap();
+            let target = text_load_target(&package_facts, &directory);
+            let backend = TextBackend::default();
+            let calls = backend.calls.clone();
+            let recorded = backend.requests.clone();
+            let port = crate::runtime_host_execution_port::EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
+                Arc::new(TextLoadTargetResolver { target }),
+                Arc::new(TextPackageFactsResolver { package_facts }),
+                Arc::new(UnusedTextMediaSink),
+                Arc::new(inference::InferenceGateway::with_backend(Box::new(backend), "PyTorch")),
+            );
+            let cancellation =
+                pantograph_runtime_host_contracts::RuntimeHostExecutionCancellationHandle::running(
+                    request.cancellation_context.clone(),
+                );
+            let response = port
+                .execute_runtime_host_request(request, cancellation)
+                .await
+                .unwrap();
+            assert_eq!(response.state, RuntimeHostExecutionState::Rejected);
+            assert!(response.outputs.is_empty());
+            assert!(
+                response
+                    .diagnostics
+                    .iter()
+                    .any(|diagnostic| diagnostic.message.contains(expected)),
+                "{:?}",
+                response.diagnostics
+            );
+            assert!(calls.lock().unwrap().is_empty());
+            assert!(recorded.lock().unwrap().is_empty());
         }
     }
 }

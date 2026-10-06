@@ -46,6 +46,8 @@ def worker_text_functions():
     namespace = {"torch": torch, "json": json, "logger": logging.getLogger(__name__),
                  "RepetitionPenaltyNumericsError": autoregressive.RepetitionPenaltyNumericsError,
                  "MinimumNewTokensError": autoregressive.MinimumNewTokensError,
+                 "SeedSamplingError": autoregressive.SeedSamplingError,
+                 "_seeded_sampling": autoregressive._seeded_sampling,
                  "_generate_native_checked": autoregressive._generate_native_checked,
                  "_resolve_min_new_tokens": autoregressive._resolve_min_new_tokens,
                  "_model": object(), "_model_type": "text-generation", "_live_kv_state": None,

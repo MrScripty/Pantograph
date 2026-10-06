@@ -57,6 +57,8 @@ pub struct ChatRequest {
     pub top_k: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub repetition_penalty: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub seed: Option<u64>,
 }
 
 /// Canonical task execution request consumed by future typed backend paths.
@@ -96,6 +98,7 @@ impl InferenceExecutionRequest {
             || request.top_p.is_some()
             || request.top_k.is_some()
             || request.repetition_penalty.is_some()
+            || request.seed.is_some()
         {
             Some(GenerationOptions {
                 length: crate::model_contracts::LengthGenerationOptions {
@@ -108,7 +111,7 @@ impl InferenceExecutionRequest {
                     top_p: request.top_p,
                     top_k: request.top_k,
                     repetition_penalty: request.repetition_penalty,
-                    ..Default::default()
+                    seed: request.seed,
                 },
                 ..Default::default()
             })
@@ -2361,6 +2364,41 @@ mod tests {
     }
 
     #[test]
+    fn chat_seed_maps_alone_without_changing_omitted_options() {
+        for seed in [None, Some(0), Some(u64::MAX)] {
+            let mut encoded = serde_json::json!({
+                "model": "seed-chat",
+                "messages": [{"role": "user", "content": [{"type": "text", "text": "Hi"}]}],
+                "stream": true
+            });
+            if let Some(seed) = seed {
+                encoded["seed"] = serde_json::json!(seed);
+            }
+            let chat: ChatRequest = serde_json::from_value(encoded.clone()).unwrap();
+            assert_eq!(chat.seed, seed);
+            assert_eq!(serde_json::to_value(&chat).unwrap(), encoded);
+            let typed = InferenceExecutionRequest::from_openai_chat_request(None, chat);
+            typed.validate().unwrap();
+            assert_eq!(typed.generation_options.is_some(), seed.is_some());
+            if let Some(options) = typed.generation_options {
+                assert_eq!(options.sampling.seed, seed);
+                assert_eq!(options.requested_option_paths(), ["sampling.seed"]);
+            }
+        }
+        for seed in [
+            serde_json::json!(-1),
+            serde_json::json!(1.5),
+            serde_json::json!(true),
+            serde_json::json!("42"),
+        ] {
+            assert!(serde_json::from_value::<ChatRequest>(serde_json::json!({
+                "model": "seed-chat", "messages": [], "stream": true, "seed": seed
+            }))
+            .is_err());
+        }
+    }
+
+    #[test]
     fn typed_execution_request_maps_openai_chat_at_edge_and_validates() {
         let request = ChatRequest {
             model: "tiny-chat".to_string(),
@@ -2377,6 +2415,7 @@ mod tests {
             top_p: Some(0.9),
             top_k: Some(40),
             repetition_penalty: Some(1.2),
+            seed: Some(42),
         };
 
         let typed = InferenceExecutionRequest::from_openai_chat_request(

@@ -708,3 +708,20 @@ Independent medium review found no remaining blocker. No ONNX build download,
 manifest/lockfile, seed, resident-accounting or main changes are included. Seed
 hashes remain unchanged; loader/GPU/pretrained/desktop qualification and parent
 PR58 integration/hosted CI remain outstanding.
+
+## 2026-10-06 — Graph-authored text seed on the PR58 repair line
+
+Parent paused seed for the bounded PR58 repair, closed its source blockers at
+`796d84cd`, and resumed seed using that integration base. The documentation-only
+repair successor `d0c9788c` was pushed separately and incorporated normally; both
+remain ancestors, and frozen seed/repair evidence is preserved. The [seed report](reports/2026-10-06-workflow-text-seed.md)
+records optional u64 graph input, actual host/chat/worker forwarding, caller-owned
+scope defaults, private token RNG/replay/omission semantics and explicit unsupported
+route refusals. Seeded minimum/EOS/retry tests preserve the accepted PR58 behavior.
+Fifty-nine actual Python methods, 795 inference library plus 74 integration tests
+and one doctest, 524 embedded, 78 interface/host contract tests, 976 workflow tests
+and 662 frontend tests pass with affected static gates. Independent medium review
+found no substantive issue. Dynamic ORT/no-download checks preceded builds; no
+manifest, lockfile, main or old resident-accounting changes are included. PR58 main
+merge and parent publication/hosted CI remain release dependencies. GPU, real
+models/loaders, desktop and full-u64 desktop entry remain unqualified.

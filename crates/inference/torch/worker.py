@@ -39,6 +39,8 @@ if _self_path.parent.is_dir():
 from block_diffusion import _generate_dllm_masked, _generate_dllm_masked_streaming
 from autoregressive import (
     MinimumNewTokensError,
+    SeedSamplingError,
+    _seeded_sampling,
     RepetitionPenaltyNumericsError,
     _generate_native_checked,
     _resolve_min_new_tokens,
@@ -156,7 +158,7 @@ def shutdown_worker_from_envelope(envelope):
 
 
 def _generate_dllm_autoregressive_safe(formatted_prompt, max_tokens, temperature, top_p,
-                                      top_k=None, repetition_penalty=None, min_new_tokens=None):
+                                      top_k=None, repetition_penalty=None, min_new_tokens=None, sampling=None):
     """Generate for TraDo/SDAR via native generate(), with empty-output retry.
 
     Some SDAR exports include chat delimiters in generation_config.eos_token_id,
@@ -183,6 +185,7 @@ def _generate_dllm_autoregressive_safe(formatted_prompt, max_tokens, temperature
                     top_k=top_k,
                     repetition_penalty=repetition_penalty,
                     min_new_tokens=min_new_tokens,
+                    sampling=sampling,
                 )
                 _live_kv_state = {
                     "token_ids": token_ids,
@@ -192,7 +195,7 @@ def _generate_dllm_autoregressive_safe(formatted_prompt, max_tokens, temperature
                     "device": str(_device) if _device is not None else None,
                 }
                 return text
-            except (RepetitionPenaltyNumericsError, MinimumNewTokensError):
+            except (RepetitionPenaltyNumericsError, MinimumNewTokensError, SeedSamplingError):
                 # Continuation mutates KV before publishing its matching history.
                 # Drop that uncommitted snapshot, and refuse without fresh retry.
                 clear_live_kv_cache()
@@ -204,6 +207,7 @@ def _generate_dllm_autoregressive_safe(formatted_prompt, max_tokens, temperature
     text, token_ids, cache = _generate_sdar_cached(
         _model, _tokenizer, _device, formatted_prompt, max_tokens, temperature, top_p,
         top_k=top_k, repetition_penalty=repetition_penalty, min_new_tokens=min_new_tokens,
+        sampling=sampling,
     )
     _live_kv_state = {
         "token_ids": token_ids,
@@ -234,6 +238,7 @@ def _generate_dllm_autoregressive_safe(formatted_prompt, max_tokens, temperature
         outputs = _generate_native_checked(
             _model,
             minimum_to_enforce=min_new_tokens or 0,
+            sampling=sampling,
             **inputs,
             max_new_tokens=max_tokens,
             min_new_tokens=retry_min_new if retry_min_new > 0 else None,
@@ -1850,8 +1855,12 @@ def generate(prompt, system_prompt=None, max_tokens=512, temperature=0.7, top_p=
     if _model is None:
         raise RuntimeError("No model loaded. Call load_model() first.")
 
+    sampling = _seeded_sampling(kwargs.get("seed"))
+
     # Masked prompt routing for dLLM models
     if masked_prompt_json is not None and _model_type == "dllm":
+        if sampling is not None:
+            raise SeedSamplingError("Masked block-diffusion generation does not support seed")
         if kwargs.get("repetition_penalty") is not None:
             raise ValueError("Masked block-diffusion generation does not support repetition_penalty")
         if kwargs.get("min_new_tokens") is not None:
@@ -1880,11 +1889,13 @@ def generate(prompt, system_prompt=None, max_tokens=512, temperature=0.7, top_p=
             formatted, max_tokens, temperature, top_p, top_k=top_k,
             repetition_penalty=repetition_penalty,
             min_new_tokens=min_new_tokens,
+            sampling=sampling,
         )
     clear_live_kv_cache()
     return _generate_autoregressive(
         _model, _tokenizer, _device, formatted, max_tokens, temperature, top_p,
         top_k=top_k, repetition_penalty=repetition_penalty, min_new_tokens=min_new_tokens,
+        sampling=sampling,
     )
 
 
@@ -1901,8 +1912,12 @@ def generate_tokens(prompt, system_prompt=None, max_tokens=512, temperature=0.7,
     if _model is None:
         raise RuntimeError("No model loaded. Call load_model() first.")
 
+    sampling = _seeded_sampling(kwargs.get("seed"))
+
     # Masked prompt streaming routing for dLLM models
     if masked_prompt_json is not None and _model_type == "dllm":
+        if sampling is not None:
+            raise SeedSamplingError("Masked block-diffusion generation does not support seed")
         if kwargs.get("repetition_penalty") is not None:
             raise ValueError("Masked block-diffusion generation does not support repetition_penalty")
         if kwargs.get("min_new_tokens") is not None:
@@ -1930,6 +1945,7 @@ def generate_tokens(prompt, system_prompt=None, max_tokens=512, temperature=0.7,
             formatted, max_tokens, temperature, top_p, top_k=top_k,
             repetition_penalty=repetition_penalty,
             min_new_tokens=min_new_tokens,
+            sampling=sampling,
         )
         yield {"mode": "replace", "text": final_text}
     else:
@@ -1937,6 +1953,7 @@ def generate_tokens(prompt, system_prompt=None, max_tokens=512, temperature=0.7,
         yield from _generate_autoregressive_streaming(
             _model, _tokenizer, _device, formatted, max_tokens, temperature, top_p,
             top_k=top_k, repetition_penalty=repetition_penalty, min_new_tokens=min_new_tokens,
+            sampling=sampling,
         )
 
 

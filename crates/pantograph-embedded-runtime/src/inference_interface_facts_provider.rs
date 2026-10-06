@@ -261,6 +261,13 @@ fn input_ports(task_entry: &TaskRegistryEntry) -> Vec<InferencePortDescriptor> {
                     "Min new tokens",
                     0,
                 ),
+                port(
+                    crate::runtime_host_text_execution::SEED_PORT,
+                    "Seed",
+                    InferencePortDirection::Input,
+                    InferencePortRequirement::Optional,
+                    InferenceValueType::Scalar(InferenceScalarType::U64),
+                ),
             ]
         }
         InferenceTaskId::ImageGeneration => vec![
@@ -539,6 +546,7 @@ mod tests {
                 "top_p",
                 "repetition_penalty",
                 "min_new_tokens",
+                "seed",
             ]
         );
         for (port_id, scalar_type, min, max, step) in [
