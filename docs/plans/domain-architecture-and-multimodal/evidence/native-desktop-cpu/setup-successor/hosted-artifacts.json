@@ -1,0 +1,23 @@
+{
+  "artifacts": [
+    {
+      "id": 11423130630,
+      "name": "native-desktop-cpu-df6498274c0c49670765c5a01d8536c416465201",
+      "size_in_bytes": 423560,
+      "url": "https://api.github.com/repos/MrScripty/Pantograph/actions/artifacts/11423130630",
+      "archive_download_url": "https://api.github.com/repos/MrScripty/Pantograph/actions/artifacts/11423130630/zip",
+      "expired": false,
+      "created_at": "2026-10-06T15:07:12Z",
+      "expires_at": "2026-10-20T15:07:11Z",
+      "updated_at": "2026-10-06T15:07:12Z",
+      "digest": "sha256:fb338ae8e3f386ecd96238e959823750bfae88b2c8e8fb84a4ea7b1623523bcf",
+      "workflow_run": {
+        "id": 37482087035,
+        "repository_id": 1133193034,
+        "head_repository_id": 1133193034,
+        "head_branch": "qual/native-desktop-cpu-graph",
+        "head_sha": "df6498274c0c49670765c5a01d8536c416465201"
+      }
+    }
+  ]
+}

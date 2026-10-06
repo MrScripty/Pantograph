@@ -1,0 +1,26 @@
+{
+  "synthetic_untrained": true,
+  "discovery": "controlled metadata seeded into isolated Pumas library; not real-user discovery acceptance",
+  "model_id": "embedding/qualification/Synthetic-BERT-8",
+  "project_root": "/home/runner/work/_temp/native-cpu-fixture/project",
+  "library_root": "/home/runner/work/_temp/native-cpu-fixture/synthetic-library",
+  "expected_vector": [
+    0.13531813025474548,
+    -0.5401950478553772,
+    0.3139018416404724,
+    0.4897967278957367,
+    -0.14633087813854218,
+    0.25764963030815125,
+    0.003314525820314884,
+    -0.5134549736976624
+  ],
+  "fixture_sha256": {
+    "1_Pooling/config.json": "f3471ef375e135a24ebbc10fb48ae1d4a0c8271f75ad9f2c566f391b6bde3892",
+    "config.json": "379d188d421d6eb8a5429fc8241b7006495d316bf51955425679975f580a2308",
+    "golden.json": "903e306675f766e9835375931b96efebb94097b80275220e3c80a76af04daa9c",
+    "model.safetensors": "549cf713305780cd5af92cf397e6be34ada0e3650f967bb9772fa08ba9cedd44",
+    "modules.json": "21ddb3037a55ebf4549eb5c1dc44c3f28f10b56ec7f1335c92fd90e5b30d88ac",
+    "sentence_bert_config.json": "1a8ca78fce4e36626d2b3eef2336842e8b2a502c963cd01ef271d44da0a741df",
+    "tokenizer.json": "36baeedee0eb6001cd65282d64683b33a17e9a9491f80720ab5d9d85eb55e719"
+  }
+}

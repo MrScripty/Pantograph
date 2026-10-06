@@ -119,4 +119,39 @@ Existing contents-read permission, checks, action/toolchain pins and 30-minute
 job timeout are preserved. The existing Cargo cache action is reused. No
 security/sandbox/credential settings or user desktop are changed. Installation
 logs and subsequent actual native evidence or runner failure will be retained
-in the new exact-source artifact. This successor has not yet run.
+in the new exact-source artifact.
+
+## Actual native successor result
+
+[Run 37482087035, job 112332549762](https://github.com/MrScripty/Pantograph/actions/runs/37482087035/job/112332549762)
+executed `df6498274c0c49670765c5a01d8536c416465201`, tree
+`1883fe84310d8c11b64029a02506344134393a8a`. Official package installation,
+Rust/Node setup, repository no-download checks, complete driver feature audit,
+driver installation and native prerequisite admission all passed. Recorded
+versions are GTK 3.24.41, WebKit/JavaScriptCore 2.52.6, libsoup 3.4.4 and
+tauri-driver 2.1.0. The actual Tauri application built and launched using native
+WebKitWebDriver on the cloud-owned Xvfb display with protections unchanged.
+
+Real `save_workflow` and `load_workflow` round trips preserved all three nodes
+and both encoded edges. The actual editor displayed Text, Embedding and Vector
+ports and produced [native graph screenshot](../evidence/native-desktop-cpu/setup-successor/hosted-artifact/native-configured-graph.png)
+and [failure screenshot](../evidence/native-desktop-cpu/setup-successor/hosted-artifact/native-failure.png).
+The captured screenshot does not show connection wires despite the two saved
+edges. Submission remained disabled for 120 seconds with exactly
+“Inference validation is stale for the current graph”; the normal interface
+update control was not applied. The test failed at this gate, before public
+scheduler submission or actual CPU output. No accepted feature code or gate was
+modified. The owner logged `NonCanonicalLayout` for the controlled synthetic
+library path; this evidence does not establish the stale-validation root cause.
+
+The [successor evidence](../evidence/native-desktop-cpu/setup-successor/README.md)
+preserves the complete 15-member artifact, source binding, feature graphs,
+installation/runtime logs, saved/reopened JSON, screenshots and gate reason.
+Artifact `11423130630` ZIP SHA256 is
+`fb338ae8e3f386ecd96238e959823750bfae88b2c8e8fb84a4ea7b1623523bcf`.
+The original failed run `37480189945` remains preserved separately. Native build,
+launch, saved/reopened data and node/port display are now evidenced; native
+public scheduler execution and CPU output remain blocked and unqualified.
+Real Pumas discovery, pretrained quality, GPU and post-start cancellation remain
+unqualified. PR61 current-main integration is a separate worktree/task and is
+not mixed into this candidate.

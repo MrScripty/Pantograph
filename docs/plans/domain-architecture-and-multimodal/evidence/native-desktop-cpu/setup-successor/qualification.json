@@ -1,0 +1,63 @@
+{
+  "qualification": "partial native UI proof; submission blocked",
+  "executed_head": "df6498274c0c49670765c5a01d8536c416465201",
+  "executed_tree": "1883fe84310d8c11b64029a02506344134393a8a",
+  "parent": "1af2d7376d460aea33d10f0b40f59805551f2ac0",
+  "branch": "qual/native-desktop-cpu-graph",
+  "run_id": 37482087035,
+  "job_id": 112332549762,
+  "artifact_id": 11423130630,
+  "artifact_zip_sha256": "fb338ae8e3f386ecd96238e959823750bfae88b2c8e8fb84a4ea7b1623523bcf",
+  "run_url": "https://github.com/MrScripty/Pantograph/actions/runs/37482087035",
+  "official_dependency_install": "passed",
+  "tauri_driver_version": "2.1.0",
+  "native_prerequisites": {
+    "platform": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.39",
+    "commands": {
+      "pkg-config": "/usr/bin/pkg-config",
+      "WebKitWebDriver": "/usr/bin/WebKitWebDriver",
+      "Xvfb": "/usr/bin/Xvfb",
+      "xvfb-run": "/usr/bin/xvfb-run",
+      "tauri-driver": "/home/runner/.cargo/bin/tauri-driver",
+      "protoc": "/usr/bin/protoc"
+    },
+    "libraries": {
+      "gtk+-3.0": "3.24.41",
+      "webkit2gtk-4.1": "2.52.6",
+      "javascriptcoregtk-4.1": "2.52.6",
+      "libsoup-3.0": "3.4.4"
+    },
+    "missing": [],
+    "admitted": true,
+    "policy": "authorized official runner dependency setup allowed; no security changes or access-denial workaround",
+    "qualification": "not run; availability probe is not desktop/CPU graph acceptance"
+  },
+  "native_build": "passed",
+  "native_launch": "passed (wry 0.53.5 / WebKitWebDriver / Tauri on hosted Xvfb)",
+  "actual_save_reopen": "passed; nodes and two encoded edges preserved",
+  "visible_nodes_and_typed_ports": "passed; actual screenshot inspected",
+  "visual_edges": "connections are encoded in saved graph; wires are not visible in captured screenshot",
+  "submit_gate": {
+    "lastReason": "Submit unavailable: Inference validation is stale for the current graph",
+    "applied": false
+  },
+  "actual_cpu_output": "not run; submit remained disabled",
+  "native_pass": false,
+  "screenshots": [
+    "hosted-artifact/native-configured-graph.png",
+    "hosted-artifact/native-failure.png"
+  ],
+  "synthetic_weights": true,
+  "controlled_discovery": true,
+  "owner_warning": "NonCanonicalLayout for synthetic library path; root cause of stale validation not established",
+  "ort_downloads": "none; ORT_SKIP_DOWNLOAD=1; complete repository/desktop and driver graphs checked before builds",
+  "unqualified": [
+    "native public scheduler execution and CPU output",
+    "real Pumas discovery",
+    "pretrained quality",
+    "GPU",
+    "post-start cancellation",
+    "broad production loading",
+    "release desktop acceptance"
+  ]
+}

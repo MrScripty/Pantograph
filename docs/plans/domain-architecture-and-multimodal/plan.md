@@ -16,6 +16,12 @@ reuses the shared Ubuntu installer and pinned official Tauri driver; existing
 permissions, checks and timeouts remain intact. No security changes, user-desktop access,
 browser-mock desktop claim or frozen-feature/PR mutation is authorized.
 
+Hosted successor `37482087035` at `df649827` installed official dependencies and
+built/launched real Tauri, saved/reopened the graph and captured native node/port
+screenshots. It failed before submission because inference validation remained
+stale. Actual public scheduler CPU output and full native qualification remain
+open; the report binds both attempts separately.
+
 **Prior chat slice:** The user-selected single-prompt canonical `chat_completion`
 graph feature is implemented and locally qualified on isolated
 `feat/workflow-chat-completion`; see the [chat report](reports/2026-10-06-workflow-chat-completion.md). Source is
