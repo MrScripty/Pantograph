@@ -1,6 +1,7 @@
 # Local chat qualification evidence
 
-The separate evidence commit binds the tested implementation head/tree and its
+Tested implementation: `2189046a6a0a418b54444308028b1af27323bf5a`, tree
+`738e25da47f9cf04ba8be0cea2a476aaf44da327`. The separate evidence commit binds this source and its
 exact delta from composition `fff03a153ff26b5a38c01be8a3cc65ddb28be07e` in
 `source-binding.json` and `source.patch`. `manifest.sha256.json` checks every
 packet member. The final candidate may add only these evidence files after that
