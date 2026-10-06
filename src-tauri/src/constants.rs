@@ -13,11 +13,6 @@ pub mod ports {
     pub const ALTERNATE_RANGE: u16 = 100;
 }
 
-/// Default values for inference configuration
-pub mod defaults {
-    pub use pantograph_app_config::defaults::{DEVICE, GPU_LAYERS};
-}
-
 /// Data storage paths
 pub mod paths {
     /// Directory for downloaded/generated data (svelte docs, vector embeddings, etc.)
