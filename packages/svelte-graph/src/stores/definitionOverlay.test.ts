@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 import type { NodeDefinition } from '../types/workflow.ts';
 import { resolveNodeDefinitionOverlay } from './definitionOverlay.ts';
@@ -163,4 +164,29 @@ test('resolveNodeDefinitionOverlay ignores retired inference definition overlays
     ['pumas_model_ref'],
   );
   assert.deepEqual(resolved.outputs, []);
+});
+
+test('saved embedding descriptor ports retain embedding and JSON types in the graph overlay', () => {
+  const snapshot = JSON.parse(readFileSync(new URL(
+    '../../../../crates/pantograph-inference-interface-contracts/tests/fixtures/authored_snapshot_embedding.json',
+    import.meta.url,
+  ), 'utf8'));
+  const definitions: NodeDefinition[] = [{
+    node_type: 'llm-inference', category: 'processing', label: 'Inference',
+    description: 'Run inference', io_binding_origin: 'integrated',
+    inputs: [], outputs: [], execution_mode: 'manual',
+  }];
+  const resolved = resolveNodeDefinitionOverlay('llm-inference', {
+    inference_interface_snapshot: JSON.parse(JSON.stringify(snapshot)),
+  }, definitions);
+  assert.ok(resolved);
+  assert.deepEqual(resolved.inputs.map(port => [port.id, port.data_type, port.required]), [
+    ['text', 'string', true],
+  ]);
+  assert.equal('default_value' in resolved.inputs[0], false);
+  assert.deepEqual(resolved.outputs.map(port => [port.id, port.data_type, port.required]), [
+    ['embedding', 'embedding', true], ['metadata', 'json', true], ['usage', 'json', false],
+  ]);
+  assert.equal(resolved.outputs[0].data_type, 'embedding');
+  assert.notEqual(resolved.outputs[0].data_type, 'tensor');
 });

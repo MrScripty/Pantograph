@@ -1,0 +1,61 @@
+{
+  "contract_version": 1,
+  "descriptor_fingerprint": "iface.test.cpu_embedding.v1",
+  "task_kind": "embedding",
+  "inputs": [
+    {
+      "port_id": "text",
+      "label": "Text",
+      "direction": "input",
+      "requirement": "required",
+      "value_type": {
+        "category": "scalar",
+        "kind": "string"
+      },
+      "availability": {
+        "status": "available"
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "port_id": "embedding",
+      "label": "Embedding",
+      "direction": "output",
+      "requirement": "required",
+      "value_type": {
+        "category": "structured",
+        "kind": "embedding"
+      },
+      "availability": {
+        "status": "available"
+      }
+    },
+    {
+      "port_id": "metadata",
+      "label": "Metadata",
+      "direction": "output",
+      "requirement": "required",
+      "value_type": {
+        "category": "structured",
+        "kind": "json"
+      },
+      "availability": {
+        "status": "available"
+      }
+    },
+    {
+      "port_id": "usage",
+      "label": "Usage",
+      "direction": "output",
+      "requirement": "optional",
+      "value_type": {
+        "category": "structured",
+        "kind": "json"
+      },
+      "availability": {
+        "status": "available"
+      }
+    }
+  ]
+}

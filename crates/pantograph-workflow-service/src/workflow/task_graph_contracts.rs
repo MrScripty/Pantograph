@@ -110,6 +110,7 @@ pub struct WorkflowSchedulerDependencyReadinessSource {
 #[non_exhaustive]
 pub enum WorkflowSchedulerNonRuntimeTaskTemplate {
     TextOutput,
+    VectorOutput,
     ImageOutput,
     Merge,
     JsonFilter { path: String },

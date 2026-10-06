@@ -3080,6 +3080,128 @@ fn text_output_task() -> WorkflowSchedulerTask {
     }
 }
 
+fn vector_output_task(connected: bool) -> WorkflowSchedulerTask {
+    let mut task = text_output_task();
+    task.node_type = "vector-output".into();
+    task.non_runtime_task_template = Some(WorkflowSchedulerNonRuntimeTaskTemplate::VectorOutput);
+    task.input_bindings.clear();
+    task.dependency_task_ids.clear();
+    if connected {
+        let mut binding = text_binding("embed", "vector-output");
+        binding.source_port_id = "vector".into();
+        binding.target_port_id = "vector".into();
+        task.dependency_task_ids
+            .push(binding.source_task_id.clone());
+        task.input_bindings.push(binding);
+    }
+    task
+}
+
+fn vector_result(value: serde_json::Value) -> WorkflowSchedulerTaskResult {
+    let mut result = task_result(
+        "embed",
+        WorkflowSchedulerTaskResultStatus::Completed,
+        WorkflowSchedulerTaskResultValue::Json(value),
+    );
+    result.outputs[0].port_id = "vector".into();
+    result
+}
+
+#[test]
+fn vector_readiness_distinguishes_optional_pending_missing_and_invalid() {
+    use super::NonRuntimeInputReadiness;
+    let task = vector_output_task(true);
+    assert!(matches!(
+        super::non_runtime_input_readiness(&vector_output_task(false), &[]),
+        NonRuntimeInputReadiness::Ready
+    ));
+    assert!(matches!(
+        super::non_runtime_input_readiness(&task, &[]),
+        NonRuntimeInputReadiness::Blocked
+    ));
+    for value in [json!([0.5]), json!(vec![0.25; 4096])] {
+        assert!(matches!(
+            super::non_runtime_input_readiness(&task, &[vector_result(value)]),
+            NonRuntimeInputReadiness::Ready
+        ));
+    }
+    let mut missing = vector_result(json!([0.5]));
+    missing.outputs.clear();
+    assert!(
+        matches!(super::non_runtime_input_readiness(&task, &[missing]),
+        NonRuntimeInputReadiness::InputUnavailable(diagnostic) if diagnostic.code == SchedulerTaskStateDiagnosticCode::InputUnavailable)
+    );
+    for value in [
+        json!(null),
+        json!([]),
+        json!(["0.5"]),
+        json!([true]),
+        json!([[0.5]]),
+        json!([null]),
+        json!(vec![0; 4097]),
+        json!(vec![u64::MAX; 4096]),
+    ] {
+        assert!(
+            matches!(super::non_runtime_input_readiness(&task, &[vector_result(value)]),
+            NonRuntimeInputReadiness::Invalid(diagnostic) if diagnostic.code == SchedulerTaskStateDiagnosticCode::InvalidTask)
+        );
+    }
+    let mut string = vector_result(json!([0.5]));
+    string.outputs[0].value = WorkflowSchedulerTaskResultValue::String("[0.5]".into());
+    assert!(matches!(
+        super::non_runtime_input_readiness(&task, &[string]),
+        NonRuntimeInputReadiness::Invalid(_)
+    ));
+}
+
+#[test]
+fn vector_readiness_preserves_source_identity_and_failure_states() {
+    use super::NonRuntimeInputReadiness;
+    let task = vector_output_task(true);
+    for field in ["workflow_id", "workflow_run_id", "node_id", "task_id"] {
+        let mut other = vector_result(json!([0.5]));
+        match field {
+            "workflow_id" => other.workflow_id = "other-workflow".into(),
+            "workflow_run_id" => other.workflow_run_id = "other-run".into(),
+            "node_id" => other.node_id = "other-node".into(),
+            "task_id" => other.task_id = "other-task".into(),
+            _ => unreachable!(),
+        }
+        assert!(
+            matches!(
+                super::non_runtime_input_readiness(&task, &[other]),
+                NonRuntimeInputReadiness::Blocked
+            ),
+            "{field}"
+        );
+    }
+    let mut unavailable = vector_result(json!([0.5]));
+    unavailable.status = WorkflowSchedulerTaskResultStatus::Unavailable;
+    assert!(matches!(
+        super::non_runtime_input_readiness(&task, &[unavailable]),
+        NonRuntimeInputReadiness::InputUnavailable(_)
+    ));
+    for status in [
+        WorkflowSchedulerTaskResultStatus::Failed,
+        WorkflowSchedulerTaskResultStatus::Invalid,
+    ] {
+        let mut failed = vector_result(json!([0.5]));
+        failed.status = status;
+        assert!(matches!(
+            super::non_runtime_input_readiness(&task, &[failed]),
+            NonRuntimeInputReadiness::Invalid(_)
+        ));
+    }
+    let mut invalid_binding = vector_output_task(false);
+    let mut binding = text_binding("embed", "vector-output");
+    binding.target_port_id = "text".into();
+    invalid_binding.input_bindings.push(binding);
+    assert!(matches!(
+        super::non_runtime_input_readiness(&invalid_binding, &[]),
+        NonRuntimeInputReadiness::Invalid(_)
+    ));
+}
+
 fn text_binding(source_task_id: &str, _target_task_id: &str) -> WorkflowSchedulerTaskInputBinding {
     WorkflowSchedulerTaskInputBinding {
         source_node_id: SchedulerNodeId::parse(source_task_id).expect("source node id"),

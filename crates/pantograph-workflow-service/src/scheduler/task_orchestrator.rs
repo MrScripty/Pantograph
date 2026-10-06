@@ -42,13 +42,14 @@ use pantograph_scheduler::{
 use thiserror::Error;
 
 use crate::workflow::{
-    execute_non_runtime_scheduler_task, materialize_external_workflow_inputs,
-    materialize_runtime_host_inputs, runtime_host_batch_member_response_to_task_result,
-    runtime_host_response_to_task_result, WorkflowExternalInputMaterializationError,
-    WorkflowPortBinding, WorkflowRuntimeHostTaskInputMappingError,
-    WorkflowRuntimeHostTaskResultMappingError, WorkflowSchedulerNonRuntimeTaskAdapterError,
-    WorkflowSchedulerNonRuntimeTaskTemplate, WorkflowSchedulerSourceInputTemplate,
-    WorkflowSchedulerTask, WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskGraph,
+    execute_non_runtime_scheduler_task, is_bounded_vector_json,
+    materialize_external_workflow_inputs, materialize_runtime_host_inputs,
+    runtime_host_batch_member_response_to_task_result, runtime_host_response_to_task_result,
+    WorkflowExternalInputMaterializationError, WorkflowPortBinding,
+    WorkflowRuntimeHostTaskInputMappingError, WorkflowRuntimeHostTaskResultMappingError,
+    WorkflowSchedulerNonRuntimeTaskAdapterError, WorkflowSchedulerNonRuntimeTaskTemplate,
+    WorkflowSchedulerSourceInputTemplate, WorkflowSchedulerTask,
+    WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskGraph,
     WorkflowSchedulerTaskInputBinding, WorkflowSchedulerTaskProjectionDiagnostic,
     WorkflowSchedulerTaskProjectionDiagnosticSeverity, WorkflowSchedulerTaskResult,
     WorkflowSchedulerTaskResultStatus, WorkflowSchedulerTaskResultValue, WorkflowServiceError,
@@ -3594,6 +3595,9 @@ fn non_runtime_input_readiness(
     };
 
     match template {
+        WorkflowSchedulerNonRuntimeTaskTemplate::VectorOutput => {
+            vector_output_input_readiness(task, results)
+        }
         WorkflowSchedulerNonRuntimeTaskTemplate::ImageOutput => {
             match materialized_binding_value(task, results, "image") {
                 MaterializedBindingValue::Ready(
@@ -3681,6 +3685,50 @@ fn non_runtime_input_readiness(
                 }
             }
         }
+    }
+}
+
+fn vector_output_input_readiness(
+    task: &WorkflowSchedulerTask,
+    results: &[WorkflowSchedulerTaskResult],
+) -> NonRuntimeInputReadiness {
+    if task.node_type != "vector-output"
+        || task.input_bindings.len() > 1
+        || task
+            .input_bindings
+            .iter()
+            .any(|binding| binding.target_port_id != "vector")
+    {
+        return NonRuntimeInputReadiness::Invalid(scheduler_input_diagnostic(
+            SchedulerTaskStateDiagnosticCode::InvalidTask,
+            "vector-output accepts at most one vector input binding",
+        ));
+    }
+    let Some(binding) = task.input_bindings.first() else {
+        // The registered input is optional: an unconnected sink emits null.
+        return NonRuntimeInputReadiness::Ready;
+    };
+    let Some(result) = results.iter().find(|result| {
+        result.workflow_id == task.workflow_id.as_str()
+            && result.workflow_run_id == task.workflow_run_id.as_str()
+            && result.task_id == binding.source_task_id.as_str()
+            && result.node_id == binding.source_node_id.as_str()
+    }) else {
+        return NonRuntimeInputReadiness::Blocked;
+    };
+    match materialized_bound_output(task, std::slice::from_ref(result), binding) {
+        MaterializedBindingValue::Ready(WorkflowSchedulerTaskResultValue::Json(value))
+            if is_bounded_vector_json(value) => NonRuntimeInputReadiness::Ready,
+        MaterializedBindingValue::Ready(_) => NonRuntimeInputReadiness::Invalid(scheduler_input_diagnostic(
+            SchedulerTaskStateDiagnosticCode::InvalidTask,
+            "vector-output input must be a finite numeric JSON array of 1..4096 elements, at most 64 KiB",
+        )),
+        MaterializedBindingValue::Blocked => NonRuntimeInputReadiness::InputUnavailable(scheduler_input_diagnostic(
+            SchedulerTaskStateDiagnosticCode::InputUnavailable,
+            format!("completed upstream task '{}' did not produce vector port '{}'", result.task_id, binding.source_port_id),
+        )),
+        MaterializedBindingValue::Unavailable(diagnostic) => NonRuntimeInputReadiness::InputUnavailable(diagnostic),
+        MaterializedBindingValue::Invalid(diagnostic) => NonRuntimeInputReadiness::Invalid(diagnostic),
     }
 }
 

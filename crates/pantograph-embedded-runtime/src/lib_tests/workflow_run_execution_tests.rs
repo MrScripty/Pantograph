@@ -1018,7 +1018,9 @@ impl WorkflowRuntimeDispatchCandidateProvider for TestRuntimeDispatchCandidatePr
             })?,
             selected_runtime_id,
             selected_runtime_variant_id: Some(
-                if intent.task_type.as_str() == "text_generation" {
+                if intent.task_type.as_str() == "embedding" {
+                    "candle.cpu"
+                } else if intent.task_type.as_str() == "text_generation" {
                     "pytorch.cpu"
                 } else {
                     "pytorch.diffusers"
@@ -1026,7 +1028,12 @@ impl WorkflowRuntimeDispatchCandidateProvider for TestRuntimeDispatchCandidatePr
                 .parse()
                 .unwrap(),
             ),
-            selected_backend_key: "pytorch".to_string(),
+            selected_backend_key: if intent.task_type.as_str() == "embedding" {
+                "candle"
+            } else {
+                "pytorch"
+            }
+            .to_string(),
             runtime_family: "test-runtime".to_string(),
             resolved_load_target: format!("test:{}", intent.model_ref.model_id),
             runtime_residency_key: format!("test-runtime:{}", intent.model_ref.model_id),
@@ -1168,8 +1175,35 @@ impl WorkflowHost for ImageRuntimeSessionHost {
                 .graph
                 .nodes
                 .iter()
-                .filter(|node| node.node_type == "llm-inference")
+                .filter(|node| matches!(node.node_type.as_str(), "llm-inference" | "vector-output"))
                 .map(|node| {
+                    if node.node_type == "vector-output" || node.data["task_kind"] == "embedding" {
+                        return WorkflowIoNode {
+                            node_id: node.id.clone(),
+                            node_type: node.node_type.clone(),
+                            name: None,
+                            description: None,
+                            ports: if node.node_type == "vector-output" {
+                                vec![("vector", "embedding")]
+                            } else {
+                                vec![
+                                    ("embedding", "embedding"),
+                                    ("metadata", "json"),
+                                    ("usage", "json"),
+                                ]
+                            }
+                            .into_iter()
+                            .map(|(port_id, data_type)| WorkflowIoPort {
+                                port_id: port_id.into(),
+                                name: None,
+                                description: None,
+                                data_type: Some(data_type.into()),
+                                required: Some(false),
+                                multiple: Some(false),
+                            })
+                            .collect(),
+                        };
+                    }
                     let text = node.data["task_kind"] == "text_generation";
                     WorkflowIoNode {
                         node_id: node.id.clone(),
@@ -3794,3 +3828,7 @@ impl InferenceBackend for SelectedWorkflowTextBackend {
         Err(BackendError::NotReady)
     }
 }
+
+#[cfg(feature = "backend-candle")]
+#[path = "cpu_embedding_graph_tests.rs"]
+mod cpu_embedding_graph_tests;
