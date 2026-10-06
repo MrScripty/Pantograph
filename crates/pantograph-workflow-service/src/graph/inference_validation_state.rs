@@ -2316,6 +2316,19 @@ mod tests {
         ValidatedDependencyPlanningRequest,
         crate::scheduler::WorkflowDependencyReadinessLifecycleError,
     > {
+        cpu_readiness_request_and_admission(tasks, None).map(|(request, _)| request)
+    }
+
+    fn cpu_readiness_request_and_admission(
+        tasks: crate::workflow::WorkflowSchedulerTaskGraph,
+        provider: Option<&dyn crate::scheduler::WorkflowDependencyReadinessProvider>,
+    ) -> Result<
+        (
+            ValidatedDependencyPlanningRequest,
+            Option<pantograph_scheduler::SchedulerTaskStateKind>,
+        ),
+        crate::scheduler::WorkflowDependencyReadinessLifecycleError,
+    > {
         use pantograph_runtime_host_contracts::{
             RuntimeHostExecutionCancellationHandle, RuntimeHostExecutionPort,
             RuntimeHostExecutionPortError, RuntimeHostExecutionRequest,
@@ -2374,14 +2387,174 @@ mod tests {
             &task_id,
             pantograph_dependency_planning::DependencyReadinessPolicy::CheckOnly,
         )?;
-        Ok(ValidatedDependencyPlanningRequest::try_from(
+        let planning = ValidatedDependencyPlanningRequest::try_from(
             request
                 .as_envelope()
                 .readiness_request
                 .planning_request
                 .clone(),
         )
-        .unwrap())
+        .unwrap();
+        let state = provider
+            .map(|provider| {
+                let seed = provider
+                    .resolve_dependency_requirements_seed(&request)
+                    .unwrap()
+                    .unwrap();
+                assert_eq!(
+                    seed.as_result().action,
+                    DependencyEnvironmentAction::Resolve
+                );
+                lifecycle
+                    .resolve_and_admit_active_runtime_task(
+                        &mut store,
+                        provider,
+                        &session,
+                        &run,
+                        &task_id,
+                        pantograph_dependency_planning::DependencyReadinessPolicy::CheckOnly,
+                    )
+                    .map(|record| record.state.kind())
+            })
+            .transpose()?;
+        Ok((planning, state))
+    }
+
+    #[tokio::test]
+    async fn graph_saved_cpu_admission_checks_readiness_separately_from_resolve() {
+        use pantograph_dependency_environment_service::{
+            DependencyEnvironmentReadinessSnapshot, DependencyEnvironmentReadinessSnapshotProvider,
+            DependencyEnvironmentReadinessSnapshotStatus, DependencyEnvironmentService,
+        };
+        use pantograph_dependency_planning::{
+            dependency_environment_result_from_inventory_observations,
+            DependencyEnvironmentInstallState, DependencyEnvironmentReadinessState,
+            DependencyInventoryObservationProjection,
+            ValidatedDependencyInventoryObservationProjection,
+        };
+        let tasks = resolved_cpu_task_graph().await;
+        let planning = cpu_readiness_request(tasks.clone()).unwrap();
+        let proof = produce_dependency_requirements_proof(&planning, None).unwrap();
+        let request =
+            ValidatedDependencyEnvironmentRequest::try_from(DependencyEnvironmentRequest {
+                contract_version: 1,
+                action: DependencyEnvironmentAction::Check,
+                identity_key: proof.identity_key.clone(),
+                planning_request: planning.as_request().clone(),
+                dependency_requirements_id: Some(proof.dependency_requirements_id),
+                environment_ref: None,
+            })
+            .unwrap();
+        // Controlled no-dependency inventory projection. The real Pumas producer
+        // is covered by embedded-runtime and the native qualification; this
+        // regression exercises its action split through the saved graph consumer.
+        let checked = dependency_environment_result_from_inventory_observations(
+            &ValidatedDependencyInventoryObservationProjection::try_from(
+                DependencyInventoryObservationProjection {
+                    contract_version: 1,
+                    action: DependencyEnvironmentAction::Check,
+                    identity_key: request.as_request().identity_key.clone(),
+                    dependency_requirements_id: request
+                        .as_request()
+                        .dependency_requirements_id
+                        .clone(),
+                    environment_ref: Some(
+                        pantograph_dependency_planning::DependencyEnvironmentRef {
+                            environment_id: "controlled.cpu-inventory".parse().unwrap(),
+                            manifest_id: None,
+                        },
+                    ),
+                    requirements: vec![],
+                    bindings: vec![],
+                    selected_binding_ids: vec![],
+                    observations: vec![],
+                    diagnostics: vec![],
+                },
+            )
+            .unwrap(),
+        )
+        .unwrap()
+        .into_inner();
+        assert_eq!(
+            checked.readiness_state,
+            DependencyEnvironmentReadinessState::Ready
+        );
+        for scenario in [
+            "resolved-and-ready",
+            "resolve-ready-only",
+            "stale-check",
+            "other-model-check",
+        ] {
+            let snapshots = DependencyEnvironmentReadinessSnapshotProvider::new();
+            let mut resolve_request = request.as_request().clone();
+            resolve_request.action = DependencyEnvironmentAction::Resolve;
+            let resolve_request =
+                ValidatedDependencyEnvironmentRequest::try_from(resolve_request).unwrap();
+            let mut resolved = checked.clone();
+            resolved.action = DependencyEnvironmentAction::Resolve;
+            if scenario == "resolved-and-ready" {
+                resolved.readiness_state = DependencyEnvironmentReadinessState::Resolved;
+                resolved.install_state = DependencyEnvironmentInstallState::NotRequested;
+                resolved.operation = None;
+                resolved.environment_ref = None;
+            }
+            snapshots
+                .insert_snapshot(
+                    DependencyEnvironmentReadinessSnapshot::for_request(
+                        &resolve_request,
+                        resolved,
+                        DependencyEnvironmentReadinessSnapshotStatus::Fresh,
+                    )
+                    .unwrap(),
+                )
+                .unwrap();
+            if scenario != "resolve-ready-only" {
+                let mut check_request = request.as_request().clone();
+                let mut check_result = checked.clone();
+                if scenario == "other-model-check" {
+                    check_request.planning_request.model_ref.model_id =
+                        "embedding/qualification/other-bert".into();
+                    let other = produce_dependency_requirements_proof(
+                        &ValidatedDependencyPlanningRequest::try_from(
+                            check_request.planning_request.clone(),
+                        )
+                        .unwrap(),
+                        None,
+                    )
+                    .unwrap();
+                    check_request.identity_key = other.identity_key;
+                    check_request.dependency_requirements_id =
+                        Some(other.dependency_requirements_id);
+                    check_result.identity_key = check_request.identity_key.clone();
+                    check_result.dependency_requirements_id =
+                        check_request.dependency_requirements_id.clone();
+                }
+                let check_request =
+                    ValidatedDependencyEnvironmentRequest::try_from(check_request).unwrap();
+                snapshots
+                    .insert_snapshot(
+                        DependencyEnvironmentReadinessSnapshot::for_request(
+                            &check_request,
+                            check_result,
+                            if scenario == "stale-check" {
+                                DependencyEnvironmentReadinessSnapshotStatus::Stale
+                            } else {
+                                DependencyEnvironmentReadinessSnapshotStatus::Fresh
+                            },
+                        )
+                        .unwrap(),
+                    )
+                    .unwrap();
+            }
+            let provider = DependencyEnvironmentService::new(snapshots);
+            let (_, state) =
+                cpu_readiness_request_and_admission(tasks.clone(), Some(&provider)).unwrap();
+            assert_eq!(
+                state == Some(pantograph_scheduler::SchedulerTaskStateKind::Ready),
+                scenario == "resolved-and-ready",
+                "{scenario}: {state:?}"
+            );
+        }
     }
 
     #[tokio::test]

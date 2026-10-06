@@ -97,7 +97,7 @@ fn install_embedding_readiness(
     node.dependency_override_fingerprint = proof.dependency_override_fingerprint.clone();
     let request = ValidatedDependencyEnvironmentRequest::try_from(DependencyEnvironmentRequest {
         contract_version: 1,
-        action: DependencyEnvironmentAction::Resolve,
+        action: DependencyEnvironmentAction::Check,
         identity_key: proof.identity_key,
         planning_request: planning,
         dependency_requirements_id: Some(proof.dependency_requirements_id),
@@ -113,16 +113,7 @@ fn install_embedding_readiness(
         "binding_id": "candle-embedding", "requirement_name": "candle-embedding", "environment_kind": "runtime_feature",
         "runtime_feature": {"runtime_id": "candle", "feature_id": "embedding", "runtime_variant_id": "candle.cpu"}
     }])).unwrap();
-    provider
-        .insert_snapshot(
-            DependencyEnvironmentReadinessSnapshot::for_request(
-                &request,
-                result,
-                DependencyEnvironmentReadinessSnapshotStatus::Fresh,
-            )
-            .unwrap(),
-        )
-        .unwrap();
+    insert_resolved_requirements_and_checked_readiness(provider, &request, result);
     service
         .store_workflow_executable_validation_snapshot(snapshot)
         .unwrap();

@@ -853,16 +853,10 @@ async fn workflow_execution_session_ready_runtime_task_fails_closed_without_disp
         ))
         .expect("store executable validation snapshot");
     let dependency_request = runtime_dependency_environment_request(&version);
-    dependency_readiness_provider
-        .insert_snapshot(
-            DependencyEnvironmentReadinessSnapshot::for_request(
-                &dependency_request,
-                ready_dependency_environment_result(&dependency_request),
-                DependencyEnvironmentReadinessSnapshotStatus::Fresh,
-            )
-            .expect("dependency readiness snapshot should validate"),
-        )
-        .expect("store dependency readiness snapshot");
+    insert_resolved_requirements_and_checked_readiness(
+        &dependency_readiness_provider,
+        &dependency_request,
+    );
 
     let created = service
         .create_workflow_execution_session(
@@ -992,16 +986,10 @@ async fn workflow_execution_session_dispatches_ready_runtime_task_through_schedu
         ))
         .expect("store executable validation snapshot");
     let dependency_request = runtime_dependency_environment_request(&version);
-    dependency_readiness_provider
-        .insert_snapshot(
-            DependencyEnvironmentReadinessSnapshot::for_request(
-                &dependency_request,
-                ready_dependency_environment_result(&dependency_request),
-                DependencyEnvironmentReadinessSnapshotStatus::Fresh,
-            )
-            .expect("dependency readiness snapshot should validate"),
-        )
-        .expect("store dependency readiness snapshot");
+    insert_resolved_requirements_and_checked_readiness(
+        &dependency_readiness_provider,
+        &dependency_request,
+    );
 
     let first_created = service
         .create_workflow_execution_session(
@@ -1343,16 +1331,10 @@ async fn workflow_execution_session_resume_consumes_fresh_dependency_readiness_s
         .expect("initial dependency-readiness work item");
 
     let dependency_request = runtime_dependency_environment_request(&version);
-    dependency_readiness_provider
-        .insert_snapshot(
-            DependencyEnvironmentReadinessSnapshot::for_request(
-                &dependency_request,
-                ready_dependency_environment_result(&dependency_request),
-                DependencyEnvironmentReadinessSnapshotStatus::Fresh,
-            )
-            .expect("dependency readiness snapshot should validate"),
-        )
-        .expect("store dependency readiness snapshot");
+    insert_resolved_requirements_and_checked_readiness(
+        &dependency_readiness_provider,
+        &dependency_request,
+    );
 
     let response = service
         .resume_workflow_execution_session_runtime_dependency_readiness(
@@ -1637,16 +1619,10 @@ async fn workflow_execution_session_bootstrap_recovery_applies_dependency_readin
         .expect("second dependency-readiness work item");
 
     let dependency_request = runtime_dependency_environment_request(&version);
-    dependency_readiness_provider
-        .insert_snapshot(
-            DependencyEnvironmentReadinessSnapshot::for_request(
-                &dependency_request,
-                ready_dependency_environment_result(&dependency_request),
-                DependencyEnvironmentReadinessSnapshotStatus::Fresh,
-            )
-            .expect("dependency readiness snapshot should validate"),
-        )
-        .expect("store dependency readiness snapshot");
+    insert_resolved_requirements_and_checked_readiness(
+        &dependency_readiness_provider,
+        &dependency_request,
+    );
 
     let recovery_result = runtime
         .recover_workflow_execution_session_bootstrap()
@@ -1826,16 +1802,10 @@ async fn workflow_execution_session_bootstrap_recovery_applies_progress_loop_bef
     }));
 
     let dependency_request = runtime_dependency_environment_request(&version);
-    dependency_readiness_provider
-        .insert_snapshot(
-            DependencyEnvironmentReadinessSnapshot::for_request(
-                &dependency_request,
-                ready_dependency_environment_result(&dependency_request),
-                DependencyEnvironmentReadinessSnapshotStatus::Fresh,
-            )
-            .expect("dependency readiness snapshot should validate"),
-        )
-        .expect("store dependency readiness snapshot");
+    insert_resolved_requirements_and_checked_readiness(
+        &dependency_readiness_provider,
+        &dependency_request,
+    );
 
     let recovery_result = runtime
         .recover_workflow_execution_session_bootstrap()
@@ -1945,16 +1915,10 @@ async fn workflow_execution_session_bootstrap_recovery_redispatches_ready_runtim
     let first_request = run_request(first_session_id.clone(), "paint a red cube");
     let second_request = run_request(second_session_id.clone(), "paint a blue cube");
     let dependency_request = runtime_dependency_environment_request(&version);
-    dependency_readiness_provider
-        .insert_snapshot(
-            DependencyEnvironmentReadinessSnapshot::for_request(
-                &dependency_request,
-                ready_dependency_environment_result(&dependency_request),
-                DependencyEnvironmentReadinessSnapshotStatus::Fresh,
-            )
-            .expect("dependency readiness snapshot should validate"),
-        )
-        .expect("store dependency readiness snapshot");
+    insert_resolved_requirements_and_checked_readiness(
+        &dependency_readiness_provider,
+        &dependency_request,
+    );
 
     let prepare_ready_recovery_run =
         |session_id: &str, request: &WorkflowExecutionSessionRunRequest| {
@@ -2278,16 +2242,10 @@ async fn workflow_execution_session_records_failed_runtime_host_result_as_termin
         ))
         .expect("store executable validation snapshot");
     let dependency_request = runtime_dependency_environment_request(&version);
-    dependency_readiness_provider
-        .insert_snapshot(
-            DependencyEnvironmentReadinessSnapshot::for_request(
-                &dependency_request,
-                ready_dependency_environment_result(&dependency_request),
-                DependencyEnvironmentReadinessSnapshotStatus::Fresh,
-            )
-            .expect("dependency readiness snapshot should validate"),
-        )
-        .expect("store dependency readiness snapshot");
+    insert_resolved_requirements_and_checked_readiness(
+        &dependency_readiness_provider,
+        &dependency_request,
+    );
 
     let first_created = service
         .create_workflow_execution_session(
@@ -2405,16 +2363,10 @@ async fn workflow_execution_session_records_runtime_batch_dispatch_rejection_as_
         ))
         .expect("store executable validation snapshot");
     let dependency_request = runtime_dependency_environment_request(&version);
-    dependency_readiness_provider
-        .insert_snapshot(
-            DependencyEnvironmentReadinessSnapshot::for_request(
-                &dependency_request,
-                ready_dependency_environment_result(&dependency_request),
-                DependencyEnvironmentReadinessSnapshotStatus::Fresh,
-            )
-            .expect("dependency readiness snapshot should validate"),
-        )
-        .expect("store dependency readiness snapshot");
+    insert_resolved_requirements_and_checked_readiness(
+        &dependency_readiness_provider,
+        &dependency_request,
+    );
 
     let first_created = service
         .create_workflow_execution_session(
@@ -2526,16 +2478,10 @@ async fn workflow_shutdown_cancels_blocked_runtime_batch_dispatch() {
         ))
         .expect("store executable validation snapshot");
     let dependency_request = runtime_dependency_environment_request(&version);
-    dependency_readiness_provider
-        .insert_snapshot(
-            DependencyEnvironmentReadinessSnapshot::for_request(
-                &dependency_request,
-                ready_dependency_environment_result(&dependency_request),
-                DependencyEnvironmentReadinessSnapshotStatus::Fresh,
-            )
-            .expect("dependency readiness snapshot should validate"),
-        )
-        .expect("store dependency readiness snapshot");
+    insert_resolved_requirements_and_checked_readiness(
+        &dependency_readiness_provider,
+        &dependency_request,
+    );
 
     let first_created = service
         .create_workflow_execution_session(
@@ -2688,16 +2634,10 @@ async fn workflow_execution_session_fails_closed_when_reservation_lifecycle_port
         ))
         .expect("store executable validation snapshot");
     let dependency_request = runtime_dependency_environment_request(&version);
-    dependency_readiness_provider
-        .insert_snapshot(
-            DependencyEnvironmentReadinessSnapshot::for_request(
-                &dependency_request,
-                ready_dependency_environment_result(&dependency_request),
-                DependencyEnvironmentReadinessSnapshotStatus::Fresh,
-            )
-            .expect("dependency readiness snapshot should validate"),
-        )
-        .expect("store dependency readiness snapshot");
+    insert_resolved_requirements_and_checked_readiness(
+        &dependency_readiness_provider,
+        &dependency_request,
+    );
 
     let first_created = service
         .create_workflow_execution_session(
@@ -2761,6 +2701,40 @@ async fn workflow_execution_session_fails_closed_when_reservation_lifecycle_port
     assert!(runtime_host_batch_port.requests().is_empty());
     assert_eq!(host.runtime_load_attempts.load(Ordering::SeqCst), 0);
     assert_eq!(host.run_attempts.load(Ordering::SeqCst), 0);
+}
+
+// Controlled provider fixture: requirements resolution and inventory checking
+// are distinct operations, as in the actual embedded producer.
+fn insert_resolved_requirements_and_checked_readiness(
+    provider: &DependencyEnvironmentReadinessSnapshotProvider,
+    request: &ValidatedDependencyEnvironmentRequest,
+) {
+    assert_eq!(
+        request.as_request().action,
+        DependencyEnvironmentAction::Check
+    );
+    let mut resolve_request = request.as_request().clone();
+    resolve_request.action = DependencyEnvironmentAction::Resolve;
+    let resolve_request = ValidatedDependencyEnvironmentRequest::try_from(resolve_request).unwrap();
+    let mut resolved = ready_dependency_environment_result(&resolve_request);
+    resolved.readiness_state = DependencyEnvironmentReadinessState::Resolved;
+    resolved.install_state = DependencyEnvironmentInstallState::NotRequested;
+    resolved.environment_ref = None;
+    for (request, result) in [
+        (&resolve_request, resolved),
+        (request, ready_dependency_environment_result(request)),
+    ] {
+        provider
+            .insert_snapshot(
+                DependencyEnvironmentReadinessSnapshot::for_request(
+                    request,
+                    result,
+                    DependencyEnvironmentReadinessSnapshotStatus::Fresh,
+                )
+                .expect("scoped dependency snapshot should validate"),
+            )
+            .expect("store dependency snapshot");
+    }
 }
 
 fn ready_dependency_environment_result(
@@ -5218,7 +5192,7 @@ fn runtime_dependency_environment_request(
         .expect("dependency requirements proof");
     ValidatedDependencyEnvironmentRequest::try_from(DependencyEnvironmentRequest {
         contract_version: 1,
-        action: DependencyEnvironmentAction::Resolve,
+        action: DependencyEnvironmentAction::Check,
         identity_key,
         planning_request,
         dependency_requirements_id: Some(dependency_proof.dependency_requirements_id),

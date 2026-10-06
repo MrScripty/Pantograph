@@ -69,7 +69,7 @@ where
     ) -> Result<Option<DependencyPreflightResult>, WorkflowDependencyReadinessProviderError> {
         let environment_request = dependency_environment_request_from_readiness_request(
             request,
-            DependencyEnvironmentAction::Resolve,
+            DependencyEnvironmentAction::Check,
         )?;
         let environment_result = self.handle(&environment_request).map_err(|error| {
             WorkflowDependencyReadinessProviderError::Failed {

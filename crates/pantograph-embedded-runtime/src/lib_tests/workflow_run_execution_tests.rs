@@ -268,16 +268,11 @@ async fn production_embedded_image_workflow(
         .expect("store validation snapshot");
     let dependency_request =
         image_runtime_dependency_environment_request(&version, MODEL_ID, SELECTED_ARTIFACT_ID);
-    dependency_readiness_provider
-        .insert_snapshot(
-            DependencyEnvironmentReadinessSnapshot::for_request(
-                &dependency_request,
-                ready_image_dependency_environment_result(&dependency_request),
-                DependencyEnvironmentReadinessSnapshotStatus::Fresh,
-            )
-            .expect("valid dependency readiness snapshot"),
-        )
-        .expect("insert readiness snapshot");
+    insert_resolved_requirements_and_checked_readiness(
+        &dependency_readiness_provider,
+        &dependency_request,
+        ready_image_dependency_environment_result(&dependency_request),
+    );
 
     let host = Arc::new(ImageRuntimeSessionHost::new(graph));
     let created = service
@@ -684,7 +679,7 @@ fn image_runtime_dependency_environment_request(
         .expect("dependency requirements proof");
     ValidatedDependencyEnvironmentRequest::try_from(DependencyEnvironmentRequest {
         contract_version: 1,
-        action: DependencyEnvironmentAction::Resolve,
+        action: DependencyEnvironmentAction::Check,
         identity_key,
         planning_request,
         dependency_requirements_id: Some(dependency_proof.dependency_requirements_id),
@@ -730,6 +725,39 @@ fn image_runtime_dependency_planning_request(
             port_id: None,
             run_id: None,
         },
+    }
+}
+
+// Controlled provider evidence follows the actual producer's operation split.
+fn insert_resolved_requirements_and_checked_readiness(
+    provider: &DependencyEnvironmentReadinessSnapshotProvider,
+    request: &ValidatedDependencyEnvironmentRequest,
+    checked: DependencyEnvironmentResult,
+) {
+    assert_eq!(
+        request.as_request().action,
+        DependencyEnvironmentAction::Check
+    );
+    let mut resolve_request = request.as_request().clone();
+    resolve_request.action = DependencyEnvironmentAction::Resolve;
+    let resolve_request = ValidatedDependencyEnvironmentRequest::try_from(resolve_request).unwrap();
+    let mut resolved = checked.clone();
+    resolved.action = DependencyEnvironmentAction::Resolve;
+    resolved.readiness_state = DependencyEnvironmentReadinessState::Resolved;
+    resolved.install_state = DependencyEnvironmentInstallState::NotRequested;
+    resolved.environment_ref = None;
+    resolved.operation = None;
+    for (request, result) in [(&resolve_request, resolved), (request, checked)] {
+        provider
+            .insert_snapshot(
+                DependencyEnvironmentReadinessSnapshot::for_request(
+                    request,
+                    result,
+                    DependencyEnvironmentReadinessSnapshotStatus::Fresh,
+                )
+                .expect("scoped dependency snapshot should validate"),
+            )
+            .expect("store dependency snapshot");
     }
 }
 
@@ -817,7 +845,7 @@ fn runtime_dependency_environment_request(
         .expect("dependency requirements proof");
     ValidatedDependencyEnvironmentRequest::try_from(DependencyEnvironmentRequest {
         contract_version: 1,
-        action: DependencyEnvironmentAction::Resolve,
+        action: DependencyEnvironmentAction::Check,
         identity_key: dependency_proof.identity_key,
         planning_request: planning,
         dependency_requirements_id: Some(dependency_proof.dependency_requirements_id),
@@ -2397,7 +2425,7 @@ async fn run_selected_text_workflow_with_text_controls(
         let dependency_request =
             ValidatedDependencyEnvironmentRequest::try_from(DependencyEnvironmentRequest {
                 contract_version: 1,
-                action: DependencyEnvironmentAction::Resolve,
+                action: DependencyEnvironmentAction::Check,
                 identity_key: proof.identity_key,
                 planning_request: planning,
                 dependency_requirements_id: Some(proof.dependency_requirements_id),
@@ -2410,16 +2438,11 @@ async fn run_selected_text_workflow_with_text_controls(
         for binding in &mut result.bindings {
             binding.requirement_name = DependencyRequirementName::parse("transformers").unwrap();
         }
-        dependency_readiness_provider
-            .insert_snapshot(
-                DependencyEnvironmentReadinessSnapshot::for_request(
-                    &dependency_request,
-                    result,
-                    DependencyEnvironmentReadinessSnapshotStatus::Fresh,
-                )
-                .unwrap(),
-            )
-            .unwrap();
+        insert_resolved_requirements_and_checked_readiness(
+            &dependency_readiness_provider,
+            &dependency_request,
+            result,
+        );
         snapshot.nodes.push(node);
     }
     service
@@ -2648,16 +2671,11 @@ async fn selected_text_workflow_retains_outputs_and_materializes_dependent_edge(
             "torch-transformers",
             "cpu",
         );
-        dependency_readiness_provider
-            .insert_snapshot(
-                DependencyEnvironmentReadinessSnapshot::for_request(
-                    &dependency_request,
-                    ready_dependency_environment_result(&dependency_request, "transformers"),
-                    DependencyEnvironmentReadinessSnapshotStatus::Fresh,
-                )
-                .unwrap(),
-            )
-            .unwrap();
+        insert_resolved_requirements_and_checked_readiness(
+            &dependency_readiness_provider,
+            &dependency_request,
+            ready_dependency_environment_result(&dependency_request, "transformers"),
+        );
         snapshot.nodes.push(node);
     }
     service
@@ -3076,6 +3094,15 @@ async fn dependent_text_to_image_keeps_original_response_pending_until_downstrea
 async fn dependent_text_to_image_resumes_only_downstream_after_readiness_proof_arrives() {
     let fixture = DependentTextImageFixture::new(false).await;
     let mut stale = fixture.image_readiness_snapshot.clone();
+    // Withhold the requirements seed. A stale Check observation is terminal
+    // under the existing scheduler policy, whereas a missing/stale seed defers
+    // bootstrap until the producer publishes the current requirements proof.
+    stale.action = DependencyEnvironmentAction::Resolve;
+    stale.result.action = DependencyEnvironmentAction::Resolve;
+    stale.result.readiness_state = DependencyEnvironmentReadinessState::Resolved;
+    stale.result.install_state = DependencyEnvironmentInstallState::NotRequested;
+    stale.result.environment_ref = None;
+    stale.result.operation = None;
     stale.status = DependencyEnvironmentReadinessSnapshotStatus::Stale;
     fixture
         .dependency_readiness_provider
@@ -3115,10 +3142,21 @@ async fn dependent_text_to_image_resumes_only_downstream_after_readiness_proof_a
     assert_eq!(downstream.decision_kind,
         pantograph_workflow_service::WorkflowExecutionSessionBootstrapRecoveryDecisionKind::ResumeRuntimeDependencyReadiness);
 
-    fixture
-        .dependency_readiness_provider
-        .insert_snapshot(fixture.image_readiness_snapshot.clone())
-        .expect("admit downstream readiness proof");
+    let current = &fixture.image_readiness_snapshot;
+    let request = ValidatedDependencyEnvironmentRequest::try_from(DependencyEnvironmentRequest {
+        contract_version: 1,
+        action: current.action,
+        identity_key: current.identity_key.clone(),
+        planning_request: current.planning_request.clone(),
+        dependency_requirements_id: current.dependency_requirements_id.clone(),
+        environment_ref: current.request_environment_ref.clone(),
+    })
+    .unwrap();
+    insert_resolved_requirements_and_checked_readiness(
+        &fixture.dependency_readiness_provider,
+        &request,
+        current.result.clone(),
+    );
     let recovered = fixture
         .runtime
         .recover_workflow_execution_session_bootstrap()
@@ -3308,16 +3346,11 @@ impl DependentTextImageFixture {
             (&text_request, "transformers"),
             (&image_request, "diffusers"),
         ] {
-            dependency_readiness_provider
-                .insert_snapshot(
-                    DependencyEnvironmentReadinessSnapshot::for_request(
-                        request,
-                        ready_dependency_environment_result(request, requirement_name),
-                        DependencyEnvironmentReadinessSnapshotStatus::Fresh,
-                    )
-                    .expect("valid dependency readiness snapshot"),
-                )
-                .expect("insert readiness snapshot");
+            insert_resolved_requirements_and_checked_readiness(
+                &dependency_readiness_provider,
+                request,
+                ready_dependency_environment_result(request, requirement_name),
+            );
         }
         let image_readiness_snapshot = DependencyEnvironmentReadinessSnapshot::for_request(
             &image_request,
