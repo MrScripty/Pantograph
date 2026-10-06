@@ -438,30 +438,81 @@ mod tests {
     use super::*;
 
     #[test]
-    fn text_generation_descriptor_exposes_optional_integer_limit_without_a_default() {
+    fn text_generation_descriptor_exposes_optional_numeric_controls_without_defaults() {
         let task = inference::resolve_task_registry_entry("text_generation").expect("task entry");
         let inputs = input_ports(&task);
-        assert_eq!(inputs.len(), 4);
-        let limit = &inputs[1];
-        assert_eq!(limit.port_id.as_str(), "max_new_tokens");
-        assert_eq!(limit.requirement, InferencePortRequirement::Optional);
         assert_eq!(
-            limit.value_type,
-            InferenceValueType::Scalar(InferenceScalarType::U64)
+            inputs
+                .iter()
+                .map(|input| input.port_id.as_str())
+                .collect::<Vec<_>>(),
+            [
+                "prompt",
+                "max_new_tokens",
+                "system_prompt",
+                "top_k",
+                "temperature",
+                "top_p",
+            ]
         );
-        assert!(limit.default.is_none());
-        assert_eq!(
-            limit.options,
-            InferencePortOptions::NumericRange {
-                range: InferenceNumericRange {
-                    min: 1.0,
-                    max: f64::from(u32::MAX),
-                    step: Some(1.0),
-                    default: None,
+        for (port_id, scalar_type, min, max, step) in [
+            (
+                "max_new_tokens",
+                InferenceScalarType::U64,
+                1.0,
+                f64::from(u32::MAX),
+                Some(1.0),
+            ),
+            (
+                "top_k",
+                InferenceScalarType::U64,
+                0.0,
+                f64::from(u32::MAX),
+                Some(1.0),
+            ),
+            (
+                "temperature",
+                InferenceScalarType::F64,
+                0.0,
+                f64::from(f32::MAX),
+                None,
+            ),
+            ("top_p", InferenceScalarType::F64, 0.0, 1.0, None),
+        ] {
+            let control = inputs
+                .iter()
+                .find(|input| input.port_id.as_str() == port_id)
+                .expect("numeric control port");
+            assert_eq!(
+                control.direction,
+                InferencePortDirection::Input,
+                "{port_id}"
+            );
+            assert_eq!(
+                control.requirement,
+                InferencePortRequirement::Optional,
+                "{port_id}"
+            );
+            assert_eq!(
+                control.value_type,
+                InferenceValueType::Scalar(scalar_type),
+                "{port_id}"
+            );
+            assert!(control.default.is_none(), "{port_id} must have no default");
+            assert_eq!(
+                control.options,
+                InferencePortOptions::NumericRange {
+                    range: InferenceNumericRange {
+                        min,
+                        max,
+                        step,
+                        default: None,
+                    },
                 },
-            }
-        );
-        limit.validate().expect("limit port contract");
+                "{port_id}"
+            );
+            control.validate().expect("numeric control port contract");
+        }
         let chat = inference::resolve_task_registry_entry("chat_completion").expect("chat task");
         assert_eq!(input_ports(&chat).len(), 1);
     }
