@@ -1,0 +1,52 @@
+   Compiling tokio v1.49.0
+   Compiling native-tls v0.2.14
+   Compiling pantograph-dependency-planning v0.1.0 (/workspace/Pantograph-embedding-graphs/crates/pantograph-dependency-planning)
+   Compiling axum-core v0.4.5
+   Compiling tokio-util v0.7.18
+   Compiling tokio-stream v0.1.18
+   Compiling h2 v0.4.13
+   Compiling tower v0.5.3
+   Compiling tokio-native-tls v0.3.1
+   Compiling tower-http v0.6.8
+   Compiling sqlx-core v0.8.6
+   Compiling hyper v1.8.1
+   Compiling sqlx-postgres v0.8.6
+   Compiling hyper-util v0.1.19
+   Compiling hyper-tls v0.6.0
+   Compiling reqwest v0.12.28
+   Compiling pantograph-managed-dependencies v0.1.0 (/workspace/Pantograph-embedding-graphs/crates/pantograph-managed-dependencies)
+   Compiling pantograph-runtime-identity v0.1.0 (/workspace/Pantograph-embedding-graphs/crates/pantograph-runtime-identity)
+   Compiling zip v2.4.2
+   Compiling pantograph-media-conversion v0.1.0 (/workspace/Pantograph-embedding-graphs/crates/pantograph-media-conversion)
+   Compiling tokenizers v0.20.4
+   Compiling axum v0.7.9
+   Compiling pantograph-runtime-registry v0.1.0 (/workspace/Pantograph-embedding-graphs/crates/pantograph-runtime-registry)
+   Compiling candle-transformers v0.9.2-alpha.2 (https://github.com/huggingface/candle?branch=main#88ed7911)
+   Compiling sqlx v0.8.6
+   Compiling pantograph-timing-contracts v0.1.0 (/workspace/Pantograph-embedding-graphs/crates/pantograph-timing-contracts)
+   Compiling pantograph-path-security v0.1.0 (/workspace/Pantograph-embedding-graphs/crates/pantograph-path-security)
+   Compiling tokenizers v0.23.1
+   Compiling ort v2.0.0-rc.12
+   Compiling graph-flow v0.2.3
+   Compiling notify v7.0.0
+   Compiling pumas-library v0.7.0 (https://github.com/MrScripty/Pumas-Library.git?rev=26a84e323cae566a46a8f76bef48fa1010aed48b#26a84e32)
+   Compiling inference v0.1.0 (/workspace/Pantograph-embedding-graphs/crates/inference)
+   Compiling node-engine v0.1.0 (/workspace/Pantograph-embedding-graphs/crates/node-engine)
+   Compiling pantograph-runtime-attribution v0.1.0 (/workspace/Pantograph-embedding-graphs/crates/pantograph-runtime-attribution)
+   Compiling pantograph-scheduler v0.1.0 (/workspace/Pantograph-embedding-graphs/crates/pantograph-scheduler)
+   Compiling pantograph-node-contracts v0.1.0 (/workspace/Pantograph-embedding-graphs/crates/pantograph-node-contracts)
+   Compiling pantograph-runtime-host-contracts v0.1.0 (/workspace/Pantograph-embedding-graphs/crates/pantograph-runtime-host-contracts)
+   Compiling pantograph-diagnostics-ledger v0.1.0 (/workspace/Pantograph-embedding-graphs/crates/pantograph-diagnostics-ledger)
+   Compiling pantograph-dependency-environment-service v0.1.0 (/workspace/Pantograph-embedding-graphs/crates/pantograph-dependency-environment-service)
+   Compiling pantograph-inference-interface-contracts v0.1.0 (/workspace/Pantograph-embedding-graphs/crates/pantograph-inference-interface-contracts)
+   Compiling workflow-nodes v0.1.0 (/workspace/Pantograph-embedding-graphs/crates/workflow-nodes)
+   Compiling pantograph-workflow-service v0.1.0 (/workspace/Pantograph-embedding-graphs/crates/pantograph-workflow-service)
+   Compiling pantograph-embedded-runtime v0.1.0 (/workspace/Pantograph-embedding-graphs/crates/pantograph-embedded-runtime)
+    Finished `test` profile [unoptimized] target(s) in 2m 33s
+     Running unittests src/lib.rs (/workspace/pantograph-cache/target/debug/deps/pantograph_embedded_runtime-e00b2f35d6f8e794)
+
+running 1 test
+test tests::workflow_run_execution_tests::cpu_embedding_graph_tests::saved_cpu_embedding_graph_runs_public_scheduler_and_preserves_vectors_metadata_usage ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 529 filtered out; finished in 0.12s
+

@@ -1,0 +1,6 @@
+
+> Pantograph@0.0.0 traceability
+> ./scripts/check-decision-traceability.sh
+
+Decision traceability input: staged c75fa2379a730833709ea8976075bf17a117040f -> 1edf2a6fe9c2d559311fd4993ca28a029a408e97; map scripts/decision-traceability-map.json
+Decision traceability passed: 27 changed path(s), 0 mapped impact(s). Semantic contract review remains required.

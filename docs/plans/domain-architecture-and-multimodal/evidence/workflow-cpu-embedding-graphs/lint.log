@@ -1,0 +1,4 @@
+
+> Pantograph@0.0.0 lint
+> eslint scripts eslint.config.mjs vite.config.ts --max-warnings 0
+

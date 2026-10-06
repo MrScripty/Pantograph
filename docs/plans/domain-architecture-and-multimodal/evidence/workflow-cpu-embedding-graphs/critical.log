@@ -1,0 +1,5 @@
+
+> Pantograph@0.0.0 lint:critical
+> node scripts/check-critical-antipatterns.mjs
+
+critical anti-pattern gate passed

@@ -1,0 +1,5 @@
+
+> Pantograph@0.0.0 test:scheduler-only-workflow
+> ./scripts/check-scheduler-only-workflow-execution.sh
+
+Verified scheduler-only workflow execution public surfaces.

@@ -1,0 +1,40 @@
+
+> Pantograph@0.0.0 lint:a11y
+> node --test scripts/svelte-role-button-check.test.mjs && node scripts/check-svelte-a11y.mjs
+
+✔ arrow callbacks do not hide later keyboard and name attributes (16.497658ms)
+✔ quoted greater-than signs and legacy event directives retain complete attributes (1.621797ms)
+✔ missing keyboard activation remains a violation after an arrow callback (1.035286ms)
+✔ all required attributes are checked independently with exact location (5.517932ms)
+✔ comments and script strings are not rendered elements (2.186302ms)
+✔ nested control-flow elements are inspected and native controls remain exempt (1.478182ms)
+✔ malformed Svelte fails closed instead of silently skipping checks (1.40585ms)
+✔ visible descendant text supplies a name, but handler expressions do not (1.326207ms)
+✔ an unused snippet declaration is not rendered name evidence (1.115951ms)
+✔ render-only content requires independent name evidence: empty local snippet (1.399808ms)
+✔ render-only content requires independent name evidence: whitespace and comments (0.6567ms)
+✔ render-only content requires independent name evidence: nonempty local snippet (2.537316ms)
+✔ render-only content requires independent name evidence: nested unused snippet (0.695228ms)
+✔ render-only content requires independent name evidence: nested render call (0.712457ms)
+✔ render-only content requires independent name evidence: shadowed local snippet (0.71678ms)
+✔ render-only content requires independent name evidence: snippet parameter (0.582352ms)
+✔ render-only content requires independent name evidence: self recursion (0.439729ms)
+✔ render-only content requires independent name evidence: mutual recursion (0.586709ms)
+✔ render-only content requires independent name evidence: unknown snippet (0.28766ms)
+✔ render-only content requires independent name evidence: optional snippet (0.56323ms)
+✔ render-only content requires independent name evidence: member call (0.394159ms)
+✔ explicit aria-label="Select" supports render-only content (3.997409ms)
+✔ explicit aria-labelledby="label" supports render-only content (3.465325ms)
+✔ adjacent rendered evidence remains accepted: Select (9.562734ms)
+✔ adjacent rendered evidence remains accepted: <span>Select</span> (3.765527ms)
+✔ adjacent rendered evidence remains accepted: {label} (14.49884ms)
+✔ adjacent rendered evidence remains accepted: <span>{label}</span> (4.18627ms)
+ℹ tests 27
+ℹ suites 0
+ℹ pass 27
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 531.520256
+svelte accessibility gate passed

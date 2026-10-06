@@ -1,0 +1,9 @@
+x86_64-unknown-linux-gnu ['--workspace']: ONNX no-build-download contract passed
+x86_64-unknown-linux-gnu ['--workspace', '--all-features']: ONNX no-build-download contract passed
+x86_64-unknown-linux-gnu ['-p', 'pantograph-embedded-runtime', '--no-default-features', '--features', 'backend-llamacpp,backend-pytorch']: ONNX no-build-download contract passed
+x86_64-pc-windows-msvc ['--workspace']: ONNX no-build-download contract passed
+x86_64-pc-windows-msvc ['--workspace', '--all-features']: ONNX no-build-download contract passed
+x86_64-pc-windows-msvc ['-p', 'pantograph-embedded-runtime', '--no-default-features', '--features', 'backend-llamacpp,backend-pytorch']: ONNX no-build-download contract passed
+aarch64-apple-darwin ['--workspace']: ONNX no-build-download contract passed
+aarch64-apple-darwin ['--workspace', '--all-features']: ONNX no-build-download contract passed
+aarch64-apple-darwin ['-p', 'pantograph-embedded-runtime', '--no-default-features', '--features', 'backend-llamacpp,backend-pytorch']: ONNX no-build-download contract passed
