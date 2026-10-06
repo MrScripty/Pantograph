@@ -1,0 +1,9 @@
+{
+  "status": "request_ready",
+  "validation_session_id": "validation.session.a91ee966-c9f3-451f-8bfc-c2ec02dad311",
+  "action": "resolve",
+  "graph_session_id": "1043db3b-811c-4b74-b524-e1b407dfc8d9",
+  "contract_version": 1,
+  "graph_revision": "d0f7a8eb92be581d",
+  "target_node_id": "deps"
+}

@@ -846,3 +846,21 @@ inference Candle/PyTorch enabled, formatting, critical patterns and staged
 traceability pass. [Selected-entry evidence](../evidence/native-desktop-cpu/cold-typed-discovery/selected-weight-target/README.md)
 preserves failed and passing producer/consumer runs, complete effective feature
 graphs and final suite logs. Actual native GUI output is pending at this repair.
+
+## Native embedding completes; downstream output remains blocked
+
+[Run 37543486549](https://github.com/MrScripty/Pantograph/actions/runs/37543486549)
+executes 55e6d076571a683a3c5b87b3b48f813e72c8f60a, tree
+d914f4bafec81c900cf9319246851b647057d05d. Build and eight startup tests pass.
+After real save/reopen/Resolve/single Submit, the actual runtime task returns
+Completed with three outputs and its candle/candle.cpu/cpu terminal attempt
+records Completed. The executable-target repair progresses past the previous
+failure. The run then fails because vectors remains AwaitingInputs; all 61
+artifact queries over 120 seconds remain empty. Native vector/metadata body
+verification and graph completion remain unqualified. The next output propagation
+or finalization cause requires inspection before another source repair.
+
+The [complete twentieth-attempt evidence](../evidence/native-desktop-cpu/cold-typed-discovery/selected-weight-target/native-attempt/README.md)
+preserves all 23 original members, full masked job log and 38 owner records.
+Artifact 11450490195 SHA256 is
+a8f1decbc40f1427e84038fee4faea589186f68b3d5fa3360be155ce9c655507.

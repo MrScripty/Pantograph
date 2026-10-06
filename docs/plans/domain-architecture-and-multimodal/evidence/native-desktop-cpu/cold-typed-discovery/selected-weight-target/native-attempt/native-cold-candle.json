@@ -1,0 +1,34 @@
+{
+  "reservations": [],
+  "runtimes": [
+    {
+      "runtime_id": "candle",
+      "runtime_family": "candle",
+      "runtime_residency_key": "candle.cpu",
+      "last_transition_at_ms": 1791327925648,
+      "runtime_instance_id": null,
+      "status": "stopped",
+      "models": [],
+      "display_name": "Candle",
+      "last_error": null,
+      "backend_keys": [
+        "candle"
+      ],
+      "active_reservation_ids": []
+    },
+    {
+      "runtime_id": "llama_cpp",
+      "status": "stopped",
+      "last_error": null,
+      "last_transition_at_ms": 1791327925648,
+      "runtime_instance_id": null,
+      "models": [],
+      "display_name": "llama.cpp",
+      "backend_keys": [
+        "llama_cpp"
+      ],
+      "active_reservation_ids": []
+    }
+  ],
+  "generated_at_ms": 1791327925648
+}

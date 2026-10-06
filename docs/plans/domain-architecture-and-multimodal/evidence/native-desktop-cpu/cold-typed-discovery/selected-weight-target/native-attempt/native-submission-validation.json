@@ -1,0 +1,267 @@
+{
+  "projection": {
+    "summary": {
+      "validation_session_id": "validation.session.a91ee966-c9f3-451f-8bfc-c2ec02dad311",
+      "graph_session_id": "1043db3b-811c-4b74-b524-e1b407dfc8d9",
+      "requested_graph_revision": "d0f7a8eb92be581d",
+      "summary": {
+        "status": "executable",
+        "diagnostics_count": 0,
+        "executable": true,
+        "blocking_diagnostics_count": 0
+      },
+      "submit_gate": {
+        "allowed": true
+      },
+      "current_graph_revision": "d0f7a8eb92be581d",
+      "state": "current"
+    },
+    "node_projections": [
+      {
+        "runtime_source_context": {
+          "operation_type": "embedding.text",
+          "cancellation_mode": "run_scoped",
+          "context_shape_key": "embedding.one-text"
+        },
+        "authored_snapshot": {
+          "outputs": [
+            {
+              "value_type": {
+                "category": "structured",
+                "kind": "embedding"
+              },
+              "direction": "output",
+              "label": "Embedding",
+              "requirement": "required",
+              "availability": {
+                "status": "available"
+              },
+              "port_id": "embedding"
+            },
+            {
+              "value_type": {
+                "category": "structured",
+                "kind": "json"
+              },
+              "direction": "output",
+              "label": "Metadata",
+              "requirement": "required",
+              "availability": {
+                "status": "available"
+              },
+              "port_id": "metadata"
+            },
+            {
+              "value_type": {
+                "category": "structured",
+                "kind": "json"
+              },
+              "direction": "output",
+              "label": "Usage",
+              "requirement": "optional",
+              "availability": {
+                "status": "available"
+              },
+              "port_id": "usage"
+            }
+          ],
+          "descriptor_fingerprint": "iface.60ef264b7095a8c966cafd3e2a601a86accb3161bac18b62c6f4400b24837cef",
+          "task_kind": "embedding",
+          "inputs": [
+            {
+              "value_type": {
+                "category": "scalar",
+                "kind": "string"
+              },
+              "direction": "input",
+              "label": "Text",
+              "requirement": "required",
+              "availability": {
+                "status": "available"
+              },
+              "port_id": "text"
+            }
+          ],
+          "contract_version": 1
+        },
+        "node_id": "infer",
+        "validation_summary": {
+          "status": "executable",
+          "diagnostics_count": 0,
+          "executable": true,
+          "blocking_diagnostics_count": 0
+        },
+        "device_constraint": "cpu",
+        "descriptor": {
+          "task_kind": "embedding",
+          "model_ref": {
+            "model_id": "embedding/qualification/synthetic-bert-8",
+            "selected_artifact_id": "main"
+          },
+          "descriptor_fingerprint": "iface.60ef264b7095a8c966cafd3e2a601a86accb3161bac18b62c6f4400b24837cef",
+          "contract_version": 1,
+          "outputs": [
+            {
+              "value_type": {
+                "category": "structured",
+                "kind": "embedding"
+              },
+              "direction": "output",
+              "label": "Embedding",
+              "requirement": "required",
+              "options": {
+                "kind": "none"
+              },
+              "availability": {
+                "status": "available"
+              },
+              "port_id": "embedding"
+            },
+            {
+              "value_type": {
+                "category": "structured",
+                "kind": "json"
+              },
+              "direction": "output",
+              "label": "Metadata",
+              "requirement": "required",
+              "options": {
+                "kind": "none"
+              },
+              "availability": {
+                "status": "available"
+              },
+              "port_id": "metadata"
+            },
+            {
+              "value_type": {
+                "category": "structured",
+                "kind": "json"
+              },
+              "direction": "output",
+              "label": "Usage",
+              "requirement": "optional",
+              "options": {
+                "kind": "none"
+              },
+              "availability": {
+                "status": "available"
+              },
+              "port_id": "usage"
+            }
+          ],
+          "inputs": [
+            {
+              "value_type": {
+                "category": "scalar",
+                "kind": "string"
+              },
+              "direction": "input",
+              "label": "Text",
+              "requirement": "required",
+              "options": {
+                "kind": "none"
+              },
+              "availability": {
+                "status": "available"
+              },
+              "port_id": "text"
+            }
+          ],
+          "availability": {
+            "status": "available"
+          }
+        },
+        "runtime_constraint": "candle",
+        "estimate_hints": [
+          {
+            "value": 536895107,
+            "kind": "peak_ram_bytes"
+          },
+          {
+            "value": 536895107,
+            "kind": "peak_vram_bytes"
+          }
+        ]
+      }
+    ]
+  },
+  "submissionEvents": [
+    {
+      "graph_revision": "157f87306e2aa806",
+      "validation_session_id": "validation.session.aa12691e-3d21-482b-89c6-3c6516a41647",
+      "sequence": 0,
+      "graph_session_id": "1043db3b-811c-4b74-b524-e1b407dfc8d9",
+      "kind": {
+        "kind": "validation_pending"
+      }
+    },
+    {
+      "graph_revision": "157f87306e2aa806",
+      "validation_session_id": "validation.session.e35d2ff0-a8d3-478b-86e2-d18458a5da25",
+      "sequence": 1,
+      "graph_session_id": "1043db3b-811c-4b74-b524-e1b407dfc8d9",
+      "kind": {
+        "superseded_validation_session_id": "validation.session.aa12691e-3d21-482b-89c6-3c6516a41647",
+        "kind": "validation_superseded"
+      }
+    },
+    {
+      "graph_revision": "157f87306e2aa806",
+      "validation_session_id": "validation.session.e35d2ff0-a8d3-478b-86e2-d18458a5da25",
+      "sequence": 2,
+      "graph_session_id": "1043db3b-811c-4b74-b524-e1b407dfc8d9",
+      "kind": {
+        "kind": "publication_accepted"
+      }
+    },
+    {
+      "graph_revision": "157f87306e2aa806",
+      "validation_session_id": "validation.session.e35d2ff0-a8d3-478b-86e2-d18458a5da25",
+      "sequence": 3,
+      "graph_session_id": "1043db3b-811c-4b74-b524-e1b407dfc8d9",
+      "kind": {
+        "reason": "graph_revision_changed",
+        "kind": "validation_cancelled"
+      }
+    },
+    {
+      "graph_revision": "d0f7a8eb92be581d",
+      "validation_session_id": "validation.session.954b8e35-48d7-4acb-b488-bcf593b7bcc5",
+      "sequence": 4,
+      "graph_session_id": "1043db3b-811c-4b74-b524-e1b407dfc8d9",
+      "kind": {
+        "kind": "validation_pending"
+      }
+    },
+    {
+      "graph_revision": "d0f7a8eb92be581d",
+      "validation_session_id": "validation.session.e39c3eaf-fd7a-47b4-ba94-919d90555fd1",
+      "sequence": 5,
+      "graph_session_id": "1043db3b-811c-4b74-b524-e1b407dfc8d9",
+      "kind": {
+        "superseded_validation_session_id": "validation.session.954b8e35-48d7-4acb-b488-bcf593b7bcc5",
+        "kind": "validation_superseded"
+      }
+    },
+    {
+      "graph_revision": "d0f7a8eb92be581d",
+      "validation_session_id": "validation.session.a91ee966-c9f3-451f-8bfc-c2ec02dad311",
+      "sequence": 6,
+      "graph_session_id": "1043db3b-811c-4b74-b524-e1b407dfc8d9",
+      "kind": {
+        "superseded_validation_session_id": "validation.session.e39c3eaf-fd7a-47b4-ba94-919d90555fd1",
+        "kind": "validation_superseded"
+      }
+    },
+    {
+      "graph_revision": "d0f7a8eb92be581d",
+      "validation_session_id": "validation.session.a91ee966-c9f3-451f-8bfc-c2ec02dad311",
+      "sequence": 7,
+      "graph_session_id": "1043db3b-811c-4b74-b524-e1b407dfc8d9",
+      "kind": {
+        "kind": "publication_accepted"
+      }
+    }
+  ]
+}

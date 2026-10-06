@@ -1,0 +1,117 @@
+[
+  {
+    "original_member": "fixture.json",
+    "original_sha256": "38ca4bf31ccc36d63da3f0aeb4669bfa29121d0c632c360078881d72c9ce421d",
+    "stored_file": "fixture.json"
+  },
+  {
+    "original_member": "desktop-features.txt",
+    "original_sha256": "9a594b05996e156e1b2b669098748b39be33a3f35989935ad4e4502955c4d8b9",
+    "stored_file": "desktop-features.txt.gz"
+  },
+  {
+    "original_member": "native-bootstrap-observation.json",
+    "original_sha256": "d5e85624b9a5399171f7cd284f4500d70d9cd4dda1645147a22cae13ef750f14",
+    "stored_file": "native-bootstrap-observation.json"
+  },
+  {
+    "original_member": "native-cold-candle.json",
+    "original_sha256": "5b3338017aad6842cc37d6cd2ce7941c7e86f6c68c3a44f6f778b63ac35e6d91",
+    "stored_file": "native-cold-candle.json"
+  },
+  {
+    "original_member": "native-configured-graph.png",
+    "original_sha256": "98aded020458f99f737a54a16914ad3d39aac403846bde9e6f341b5e614ad4fc",
+    "stored_file": "native-configured-graph.png"
+  },
+  {
+    "original_member": "native-dependency-install.log",
+    "original_sha256": "81ff35b0caf0d60191a71e0e6b0f90357bbbf9df50078d819c2313dbeee016fb",
+    "stored_file": "native-dependency-install.log.gz"
+  },
+  {
+    "original_member": "native-failure.html",
+    "original_sha256": "7383d4a534032dec029d5162d6093da60ce10c5b9921f9748cff7500a0fc708f",
+    "stored_file": "native-failure.html.gz"
+  },
+  {
+    "original_member": "native-dependency-resolution.json",
+    "original_sha256": "81a9f8921de1376e4ed3b112065da6a7d1bb707ffa37e3a2b3db3081fe5ef2f9",
+    "stored_file": "native-dependency-resolution.json"
+  },
+  {
+    "original_member": "native-failure.png",
+    "original_sha256": "8d18fcadc0d73ba15a653e28873db494e0c8a8b71bb82dc183f2d3e2f22475fa",
+    "stored_file": "native-failure.png"
+  },
+  {
+    "original_member": "native-initial-submission.json",
+    "original_sha256": "14c18e1afb3eb795c9a8d948dfec9038dfd19e2871e236f79ca1f6c1e4dfb133",
+    "stored_file": "native-initial-submission.json"
+  },
+  {
+    "original_member": "native-prerequisites.json",
+    "original_sha256": "d1d542a906a46a6415f61ec5e0fdcaaf4966e55eb5eded972d151d24eec4a97e",
+    "stored_file": "native-prerequisites.json"
+  },
+  {
+    "original_member": "native-owner-validation.json",
+    "original_sha256": "e78e2d78eb845f16d0df37ffae969e2bb355b7807a788160e37d1cb44b0dab1e",
+    "stored_file": "native-owner-validation.json"
+  },
+  {
+    "original_member": "native-rendered-edges.json",
+    "original_sha256": "dcfd247578e27a68acd5b8014f2159edd7542f5ea650c3ca37a0cae583286fda",
+    "stored_file": "native-rendered-edges.json"
+  },
+  {
+    "original_member": "native-runtime.log",
+    "original_sha256": "78e624f279eeb21dccd2467a3b858b02021152e9d5528451c10a795fc8867a84",
+    "stored_file": "native-runtime.log.gz"
+  },
+  {
+    "original_member": "native-save-reopen.json",
+    "original_sha256": "4290906b08164f8c2d90cf8ba836dd512f4ad80288789b694f68eca63dc142c9",
+    "stored_file": "native-save-reopen.json"
+  },
+  {
+    "original_member": "native-startup-tests.log",
+    "original_sha256": "2f44cd0f5849a9a7209b93d5377b82674d64ad8f3c22aabc490e557ca6ee40ea",
+    "stored_file": "native-startup-tests.log.gz"
+  },
+  {
+    "original_member": "native-submission-validation.json",
+    "original_sha256": "43da2a80c1a4f278abc82586970c7a322b0f3da1ee110e88cbb1d6ba70169a01",
+    "stored_file": "native-submission-validation.json"
+  },
+  {
+    "original_member": "native-validation-events.json",
+    "original_sha256": "92f4d45ea05f2b65450b41a6ce654717dc4e80e7592f58ce2f6ab5fcb68fceec",
+    "stored_file": "native-validation-events.json"
+  },
+  {
+    "original_member": "proposed-graph.json",
+    "original_sha256": "6ec6fc90fd8b624f0a58e0647731424897ff1ad52fb2d2908e94d5082fd40000",
+    "stored_file": "proposed-graph.json"
+  },
+  {
+    "original_member": "provisioning.json",
+    "original_sha256": "fe5ac358277451f4a45df2f29d362830f1a6fa5be4f8869cb35bc0fc56cccf2a",
+    "stored_file": "provisioning.json"
+  },
+  {
+    "original_member": "tauri-driver-features.txt",
+    "original_sha256": "8ed63a0773077802830a28a31ad0e4f0094ba5b12a6f16df5a4698ea5c4733a4",
+    "stored_file": "tauri-driver-features.txt.gz"
+  },
+  {
+    "original_member": "source.txt",
+    "original_sha256": "b831cffea58dd611f2ab9f3cf4e04f7a551f11bc7c7ca1d71058ced1845b0ba3",
+    "stored_file": "source.txt.gz"
+  },
+  {
+    "original_member": "tauri-driver-install.log",
+    "original_sha256": "bf5ac6e53dece6931137529978a322c3ed0e74ee4a7a4ac71fb54234408e54ff",
+    "stored_file": "tauri-driver-install.log.gz"
+  }
+]

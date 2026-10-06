@@ -1,0 +1,58 @@
+{
+  "run_id": 37543486549,
+  "job_id": 112541805258,
+  "executed_head": "55e6d076571a683a3c5b87b3b48f813e72c8f60a",
+  "executed_tree": "d914f4bafec81c900cf9319246851b647057d05d",
+  "artifact_zip_size": 446033,
+  "artifact_zip_sha256": "a8f1decbc40f1427e84038fee4faea589186f68b3d5fa3360be155ce9c655507",
+  "original_member_count": 23,
+  "owner_record_count": 38,
+  "task_results": [
+    {
+      "attempt_id": "scheduler-task-attempt.75d4228c-cf3b-4651-b8d7-c298c8c4aadb",
+      "diagnostics": [
+        {
+          "code": "runtime_host.execution_completed",
+          "message": "embedded runtime-host embedding execution completed",
+          "severity": "info"
+        }
+      ],
+      "output_count": 3,
+      "phase": "runtime_task_result_received",
+      "status": "completed",
+      "task_id": "infer",
+      "workflow_run_id": "run_5d8a5b11-bbaa-4cfa-b96f-f6a7df14e80c",
+      "captured_at": "2026-10-06T23:06:39.2892277Z"
+    }
+  ],
+  "terminal_attempt_events": [
+    {
+      "event_payload": {
+        "duration_ms": 101,
+        "ended_at_ms": 1791327999289,
+        "execution_class": "runtime",
+        "payload_type": "scheduler_task_attempt_lifecycle_changed",
+        "reason": "scheduler runtime task attempt completed",
+        "reservation_id": "runtime-registry.1",
+        "scheduler_attempt_id": "scheduler-task-attempt.75d4228c-cf3b-4651-b8d7-c298c8c4aadb",
+        "scheduler_task_id": "infer",
+        "selected_device_class": null,
+        "selected_device_id": "cpu",
+        "selected_network_node_id": null,
+        "selected_runtime_id": "candle",
+        "selected_runtime_variant_id": "candle.cpu",
+        "started_at_ms": 1791327999188,
+        "transition": "completed"
+      },
+      "phase": "scheduler_task_attempt_terminal_event_produced",
+      "task_id": "infer",
+      "workflow_run_id": "run_5d8a5b11-bbaa-4cfa-b96f-f6a7df14e80c",
+      "captured_at": "2026-10-06T23:06:39.2899343Z"
+    }
+  ],
+  "artifact_id": 11450490195,
+  "qualification": "FAILED: embedding task Completed, downstream vectors AwaitingInputs; no retained CPU output",
+  "observations": 61,
+  "retained_artifacts": 0,
+  "terminal_error": "invalid_request: scheduler task 'vectors' did not complete; final state was AwaitingInputs"
+}

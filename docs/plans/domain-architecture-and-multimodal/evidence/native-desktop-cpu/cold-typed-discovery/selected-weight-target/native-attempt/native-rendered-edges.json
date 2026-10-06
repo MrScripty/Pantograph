@@ -1,0 +1,26 @@
+[
+  {
+    "length": 14,
+    "stroke": "url(\"#edge-gradient-text-to-embedding\")",
+    "width": 14,
+    "height": 0,
+    "id": "text-to-embedding",
+    "filter": "drop-shadow(rgb(255, 255, 255) 0px 0px 2px)"
+  },
+  {
+    "length": 35.835693359375,
+    "stroke": "url(\"#edge-gradient-embedding-to-vector\")",
+    "width": 24.9178466796875,
+    "height": 0,
+    "id": "embedding-to-vector",
+    "filter": "drop-shadow(rgb(255, 255, 255) 0px 0px 2px)"
+  },
+  {
+    "length": 565.8468017578125,
+    "stroke": "url(\"#edge-gradient-deps-to-infer\")",
+    "width": 416.82794189453125,
+    "height": 330,
+    "id": "deps-to-infer",
+    "filter": "drop-shadow(rgb(255, 255, 255) 0px 0px 2px)"
+  }
+]
