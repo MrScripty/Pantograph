@@ -115,14 +115,6 @@
       <stop offset="88%" stop-color="#ffffff" />
       <stop offset="100%" stop-color={targetColor} />
     </linearGradient>
-    <filter id="{gradientId}-glow" x="-100%" y="-100%" width="300%" height="300%">
-      <feGaussianBlur in="SourceGraphic" stdDeviation="2" result="blur" />
-      <feMerge>
-        <feMergeNode in="blur" />
-        <feMergeNode in="blur" />
-        <feMergeNode in="SourceGraphic" />
-      </feMerge>
-    </filter>
   </defs>
 </svg>
 
@@ -135,7 +127,7 @@
   stroke-width={selected ? 1.5 : 1}
   fill="none"
   stroke-linecap="round"
-  filter="url(#{gradientId}-glow)"
+  style="filter: drop-shadow(0 0 2px white)"
 />
 
 <!-- Invisible wider path for interaction -->

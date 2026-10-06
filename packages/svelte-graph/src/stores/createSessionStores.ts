@@ -5,6 +5,7 @@
  */
 import { writable, derived, get } from 'svelte/store';
 import type {
+  WorkflowGraph,
   WorkflowMetadata,
   WorkflowSessionHandle,
   WorkflowSessionKind,
@@ -168,10 +169,24 @@ export function createSessionStores(
         return false;
       }
 
+      // The edit owner canonicalizes authored semantics and owns the revision
+      // used by validation. A persisted file may have no derived revision.
+      let sessionGraph: WorkflowGraph;
+      try {
+        sessionGraph = await backend.getExecutionGraph(session.session_id);
+      } catch (error) {
+        await closeSessionById(session.session_id);
+        throw error;
+      }
+      if (!isCurrentSessionTransition(transitionId)) {
+        await closeSessionById(session.session_id);
+        return false;
+      }
+
       currentGraphId.set(workflowId);
       currentGraphType.set('workflow');
       currentGraphName.set(workflowName);
-      workflowStores.loadWorkflow(file.graph, file.metadata);
+      workflowStores.loadWorkflow(sessionGraph, file.metadata);
       await replaceSessionHandle(session);
 
       // Call optional hook for consumer-specific post-load behavior

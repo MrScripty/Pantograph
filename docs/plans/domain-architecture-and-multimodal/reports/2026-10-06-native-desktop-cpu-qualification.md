@@ -155,3 +155,39 @@ public scheduler execution and CPU output remain blocked and unqualified.
 Real Pumas discovery, pretrained quality, GPU and post-start cancellation remain
 unqualified. PR61 current-main integration is a separate worktree/task and is
 not mixed into this candidate.
+
+## Confirmed reopened-graph defects and repair
+
+The real native gate exposed a production session-load defect. After creating an
+edit session, `createSessionStores.loadWorkflowByName` rendered the persisted file
+instead of fetching that session's canonical graph. Files without derived data
+therefore used the frontend's topology-only `v1` fingerprint; the Rust validation
+owner uses `semantic-graph-v2`, including authored data. Refresh requests were
+correctly rejected as stale. The targeted reopening test fails on the old source
+with the backend revision missing and passes when the loader fetches and applies
+the canonical session snapshot. Failed/superseded snapshot loads retain existing
+session transition fencing; no validation or submission check is loosened.
+
+Both edge paths were present in the captured native DOM with valid nonzero lengths
+and constant Y coordinates, e.g. `M282,153 C289,153 289,153 296,153`. Their SVG
+glow filter used the default objectBoundingBox region, whose height is zero for
+those paths. The [filter region specification](https://www.w3.org/TR/filter-effects-1/#FilterElement)
+explains the clipping behavior. CSS drop-shadow replaces that bounding-box filter
+while retaining endpoint gradients and reconnect controls. The native test now
+records both aligned edges' geometry and computed paint, and its screenshot will
+decide actual wire visibility.
+
+The first verified local result is 11 passing session-store tests, including
+mandatory owner revision, snapshot failure, and superseded snapshot cases;
+the full frontend suite passes 672 tests. Native painting, refreshed validation,
+submission and CPU output still require the fresh hosted run. Both failed attempts
+and their original screenshots remain unchanged. PR61 `6d720149` and all frozen
+chat/source candidates are preserved separately.
+
+The controlled fixture also used uppercase `Synthetic-BERT-8` as its storage
+component. Current Pumas explicitly requires the normalized artifact slug at
+that depth, explaining its independent `NonCanonicalLayout` warning. The new
+temporary fixture uses lowercase `synthetic-bert-8` consistently in path and
+model identity; its display label and every committed weight/reference byte are
+unchanged. This fixture correction is separate from the confirmed production
+revision-loss and edge-paint defects, and does not qualify real-user discovery.

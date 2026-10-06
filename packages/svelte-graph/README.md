@@ -30,6 +30,16 @@ become an implicit dependency of a package-local command.
 
 ## Source Reference
 
+Saved workflow reopening reads the canonical edit-session graph after creating
+the session. The backend owns its semantic revision, including authored data;
+file-only or topology-only fallback revisions cannot authorize validation or
+submission. A failed or superseded snapshot load does not publish a stale graph
+or session handle. Workflow metadata remains the saved file's metadata.
+
+Reconnectable edges use CSS drop-shadow for their glow. Horizontal and vertical
+paths can have zero-area geometry bounds; an SVG filter region based on those
+bounds clips away the line. Endpoint gradients and reconnect controls are retained.
+
 Implementation lives under `packages/svelte-graph/src/`. Repository-level
 development and verification guidance is in
 [`docs/development.md`](../../docs/development.md).

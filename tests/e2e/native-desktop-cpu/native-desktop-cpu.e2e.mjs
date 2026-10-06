@@ -57,6 +57,20 @@ describe('actual native Tauri saved CPU embedding graph', () => {
     const vector = await $('[data-id="vectors"]');
     await vector.waitForDisplayed({ timeout: 30000 });
     await vector.$('[data-handleid="vector"]').waitForDisplayed({ timeout: 30000 });
+    const renderedEdges = await browser.execute(() =>
+      Array.from(document.querySelectorAll('.svelte-flow__edge path[id]')).map((edge) => {
+        const bounds = edge.getBBox();
+        const style = getComputedStyle(edge);
+        return { id: edge.id, length: edge.getTotalLength(), width: bounds.width,
+          height: bounds.height, stroke: style.stroke, filter: style.filter };
+      }));
+    assert.deepEqual(renderedEdges.map((edge) => edge.id).sort(), graph.edges.map((edge) => edge.id).sort());
+    for (const edge of renderedEdges) {
+      assert.ok(edge.length > 0 && edge.width > 0 && edge.height === 0, 'Aligned fixture edges must exercise zero-height geometry');
+      assert.notEqual(edge.stroke, 'none');
+      assert.match(edge.filter, /^drop-shadow\(/, 'Glow must avoid a zero-height objectBoundingBox filter region');
+    }
+    writeFileSync(path.join(evidence, 'native-rendered-edges.json'), JSON.stringify(renderedEdges, null, 2));
     await browser.saveScreenshot(path.join(evidence, 'native-configured-graph.png'));
 
     // A seeded authored descriptor may require the normal visible update review

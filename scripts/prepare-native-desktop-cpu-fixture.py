@@ -7,7 +7,7 @@ import shutil
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-MODEL_ID = "embedding/qualification/Synthetic-BERT-8"
+MODEL_ID = "embedding/qualification/synthetic-bert-8"
 
 
 def prepare(destination):
@@ -32,7 +32,7 @@ def prepare(destination):
     shutil.copytree(source, model)
     metadata = {"schema_version": 2, "model_id": MODEL_ID, "family": "qualification",
                 "model_type": "embedding", "official_name": "Synthetic-BERT-8",
-                "cleaned_name": "Synthetic-BERT-8", "source_path": str(model),
+                "cleaned_name": "synthetic-bert-8", "source_path": str(model),
                 "entry_path": str(model), "storage_kind": "library_owned",
                 "selected_artifact_id": "main", "selected_artifact_files": ["model.safetensors"],
                 "import_state": "ready", "validation_state": "valid",

@@ -34,6 +34,7 @@ function createDeferred<T>(): Deferred<T> {
 function createBackendStub(overrides: Partial<WorkflowBackend> = {}): WorkflowBackend {
   let sessionCounter = 0;
   const definitions: NodeDefinition[] = [];
+  const sessionGraphs = new Map<string, WorkflowGraph>();
 
   const backend: WorkflowBackend = {
     async getNodeDefinitions() {
@@ -92,8 +93,10 @@ function createBackendStub(overrides: Partial<WorkflowBackend> = {}): WorkflowBa
     async updateNodePosition() {
       return { graph: { nodes: [], edges: [] } };
     },
-    async getExecutionGraph() {
-      throw new Error('not implemented');
+    async getExecutionGraph(sessionId) {
+      const graph = sessionGraphs.get(sessionId);
+      if (!graph) throw new Error('session not found');
+      return structuredClone(graph);
     },
     async getUndoRedoState() {
       return { canUndo: false, canRedo: false, undoCount: 0 };
@@ -135,7 +138,14 @@ function createBackendStub(overrides: Partial<WorkflowBackend> = {}): WorkflowBa
       return () => {};
     },
   };
-  return { ...backend, ...overrides };
+  const configured = { ...backend, ...overrides };
+  const createSession = configured.createSession.bind(configured);
+  configured.createSession = async (graph, workflowId) => {
+    const session = await createSession(graph, workflowId);
+    sessionGraphs.set(session.session_id, structuredClone(graph));
+    return session;
+  };
+  return configured;
 }
 
 function createWorkflowStoresStub(
@@ -171,7 +181,7 @@ test('createSessionStores tracks edit session kind for editor-owned sessions', a
   assert.match(get(sessionStores.currentSessionId) ?? '', /^stub-session-/);
 });
 
-test('loadWorkflowByName renders the loaded file graph after creating an edit session', async () => {
+test('loadWorkflowByName renders the canonical session graph and backend revision after reopening a file', async () => {
   const loadedGraph = {
     nodes: [
       {
@@ -183,6 +193,10 @@ test('loadWorkflowByName renders the loaded file graph after creating an edit se
     ],
     edges: [],
   } satisfies WorkflowGraph;
+  const canonicalGraph: WorkflowGraph = {
+    ...loadedGraph,
+    derived_graph: { schema_version: 1, graph_fingerprint: 'semantic-backend-revision', consumer_count_map: {} },
+  };
   let renderedGraph: WorkflowGraph | null = null;
   let createdSessionWorkflowId: string | null | undefined;
   const backend = createBackendStub({
@@ -206,8 +220,9 @@ test('loadWorkflowByName renders the loaded file graph after creating an edit se
         graph: loadedGraph,
       };
     },
-    async getExecutionGraph() {
-      throw new Error('session graph refresh should not block initial render');
+    async getExecutionGraph(sessionId) {
+      assert.equal(sessionId, 'stub-session-1');
+      return canonicalGraph;
     },
   });
   const workflowStores = createWorkflowStoresStub((graph) => {
@@ -219,11 +234,52 @@ test('loadWorkflowByName renders the loaded file graph after creating an edit se
 
   assert.equal(loaded, true);
   assert.equal(get(sessionStores.graphSessionError), null);
-  assert.deepEqual(renderedGraph, loadedGraph);
+  assert.deepEqual(renderedGraph, canonicalGraph);
   assert.equal(createdSessionWorkflowId, 'saved-flow');
   assert.equal(get(sessionStores.currentGraphId), 'saved-flow');
   assert.equal(get(sessionStores.currentGraphName), 'Saved Flow');
   assert.match(get(sessionStores.currentSessionId) ?? '', /^stub-session-/);
+});
+
+test('loadWorkflowByName does not fall back to a file revision when the owner snapshot fails', async () => {
+  const closed: string[] = [];
+  let rendered = false;
+  const backend = createBackendStub({
+    async getExecutionGraph() { throw new Error('canonical snapshot unavailable'); },
+    async removeSession(id) { closed.push(id); },
+  });
+  const stores = createSessionStores(backend, createWorkflowStoresStub(() => { rendered = true; }), createViewStoresStub());
+  assert.equal(await stores.loadWorkflowByName('saved'), false);
+  assert.match(get(stores.graphSessionError) ?? '', /canonical snapshot unavailable/);
+  assert.equal(get(stores.currentSessionId), null);
+  assert.equal(rendered, false);
+  assert.deepEqual(closed, ['stub-session-1']);
+});
+
+test('loadWorkflowByName discards a canonical snapshot superseded by another load', async () => {
+  const firstSnapshot = createDeferred<WorkflowGraph>();
+  const closed: string[] = [];
+  const current: WorkflowGraph = { nodes: [], edges: [],
+    derived_graph: { schema_version: 1, graph_fingerprint: 'second-owner-revision', consumer_count_map: {} } };
+  let rendered: WorkflowGraph | null = null;
+  let firstRead: () => void = () => {};
+  const reading = new Promise<void>((resolve) => { firstRead = resolve; });
+  const backend = createBackendStub({
+    async getExecutionGraph(id) {
+      if (id === 'stub-session-1') { firstRead(); return firstSnapshot.promise; }
+      return current;
+    },
+    async removeSession(id) { closed.push(id); },
+  });
+  const stores = createSessionStores(backend, createWorkflowStoresStub((graph) => { rendered = graph; }), createViewStoresStub());
+  const first = stores.loadWorkflowByName('first');
+  await reading;
+  assert.equal(await stores.loadWorkflowByName('second'), true);
+  firstSnapshot.resolve({ nodes: [], edges: [] });
+  assert.equal(await first, false);
+  assert.deepEqual(rendered, current);
+  assert.equal(get(stores.currentSessionId), 'stub-session-2');
+  assert.deepEqual(closed, ['stub-session-1']);
 });
 
 test('loadWorkflowByName uses loaded metadata id for session identity', async () => {
