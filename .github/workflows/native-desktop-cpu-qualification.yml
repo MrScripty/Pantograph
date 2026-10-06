@@ -15,6 +15,10 @@ on:
       - crates/pantograph-workflow-service/src/workflow/session_scheduler_runner.rs
       - crates/pantograph-workflow-service/src/graph/session.rs
       - crates/pantograph-embedded-runtime/src/dependency_readiness_lifecycle.rs
+      - crates/inference/src/selected_embedding_execution.rs
+      - crates/inference/src/backend/candle.rs
+      - crates/inference/src/gateway.rs
+      - crates/pantograph-embedded-runtime/src/runtime_host_embedding_execution_tests.rs
 
 permissions:
   contents: read

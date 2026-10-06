@@ -1529,7 +1529,7 @@ impl InferenceGateway {
         )
         .await?;
         let config = BackendConfig {
-            model_path: Some(PathBuf::from(&selected.target.local_load_path)),
+            model_path: Some(selected.model_directory.to_path_buf()),
             model_name: Some(selected.package.model_ref.model_id.clone()),
             embedding_mode: true,
             device: Some(BackendStartupDeviceIntent::CanonicalDevice(

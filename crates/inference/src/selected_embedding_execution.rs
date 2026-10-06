@@ -11,7 +11,7 @@ use crate::{
 
 pub(crate) struct SelectedEmbeddingLoad<'a> {
     pub(crate) package: &'a ResolvedModelPackageFacts,
-    pub(crate) target: &'a PumasArtifactLoadTarget,
+    pub(crate) model_directory: &'a Path,
     pub(crate) device: &'a InferenceDeviceId,
 }
 
@@ -219,17 +219,55 @@ impl<'a> SelectedEmbeddingLoad<'a> {
                 "a valid matching local Transformers artifact is required",
             ));
         }
-        if target.load_path_kind != PumasArtifactLoadPathKind::Directory
-            || !Path::new(&target.local_load_path).is_absolute()
-            || !tokio::fs::metadata(&target.local_load_path)
-                .await
-                .map_err(|error| invalid(format!("cannot inspect executable target: {error}")))?
-                .is_dir()
-        {
+        let path = Path::new(&target.local_load_path);
+        if target.load_path_kind != PumasArtifactLoadPathKind::Directory || !path.is_absolute() {
             return Err(invalid(
-                "Pumas executable target must be an existing absolute directory",
+                "Pumas executable target must declare an absolute Transformers directory",
             ));
         }
+        let metadata = tokio::fs::metadata(path)
+            .await
+            .map_err(|error| invalid(format!("cannot inspect executable target: {error}")))?;
+        let model_directory = if metadata.is_dir() {
+            path
+        } else if metadata.is_file()
+            && path.file_name().and_then(|name| name.to_str()) == Some("model.safetensors")
+            && package
+                .artifact
+                .selected_files
+                .iter()
+                .any(|name| name == "model.safetensors")
+            && package
+                .components
+                .iter()
+                .find(|component| {
+                    component.kind == crate::ProcessorComponentKind::Weights
+                        && component.status == crate::PackageFactStatus::Present
+                })
+                .and_then(|component| component.relative_path.as_deref())
+                == Some("model.safetensors")
+        {
+            // Current Pumas identifies an HF directory artifact by its selected
+            // primary weight entry. Load sibling components from that entry's
+            // parent, without replacing its identity or choosing another weight.
+            let directory = path
+                .parent()
+                .ok_or_else(|| invalid("weight target has no parent"))?;
+            let canonical_directory = tokio::fs::canonicalize(directory)
+                .await
+                .map_err(|error| invalid(format!("cannot inspect weight parent: {error}")))?;
+            let canonical_weight = tokio::fs::canonicalize(path)
+                .await
+                .map_err(|error| invalid(format!("cannot inspect selected weight: {error}")))?;
+            if canonical_weight.parent() != Some(canonical_directory.as_path()) {
+                return Err(invalid(
+                    "selected weight resolves outside its Transformers directory",
+                ));
+            }
+            directory
+        } else {
+            return Err(invalid("Pumas target must be an existing Transformers directory or its selected model.safetensors entry"));
+        };
         if package.custom_code.requires_custom_code {
             return Err(invalid("custom Transformers code is denied"));
         }
@@ -265,7 +303,7 @@ impl<'a> SelectedEmbeddingLoad<'a> {
         }
         Ok(Self {
             package,
-            target,
+            model_directory,
             device,
         })
     }
@@ -274,6 +312,104 @@ impl<'a> SelectedEmbeddingLoad<'a> {
 #[cfg(all(test, feature = "backend-candle"))]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn selected_weight_entry_preserves_artifact_runtime_and_path_guards() {
+        for rejection in [
+            "none",
+            "file_kind",
+            "relative",
+            "missing",
+            "other_weight",
+            "unselected",
+            "component",
+            "model",
+            "artifact",
+            "runtime",
+            "device",
+            "custom_code",
+        ] {
+            let (directory, mut request, mut target, mut decision) = fixture(8);
+            target.local_load_path = directory
+                .path()
+                .join("model.safetensors")
+                .to_str()
+                .unwrap()
+                .into();
+            match rejection {
+                "none" => {}
+                "file_kind" => target.load_path_kind = PumasArtifactLoadPathKind::File,
+                "relative" => target.local_load_path = "model.safetensors".into(),
+                "missing" => std::fs::remove_file(&target.local_load_path).unwrap(),
+                "other_weight" => {
+                    let path = directory.path().join("other.safetensors");
+                    std::fs::copy(&target.local_load_path, &path).unwrap();
+                    target.local_load_path = path.to_str().unwrap().into();
+                }
+                "unselected" => request
+                    .resolved_model_package_facts
+                    .as_mut()
+                    .unwrap()
+                    .artifact
+                    .selected_files
+                    .clear(),
+                "component" => {
+                    request
+                        .resolved_model_package_facts
+                        .as_mut()
+                        .unwrap()
+                        .components
+                        .iter_mut()
+                        .find(|component| component.kind == crate::ProcessorComponentKind::Weights)
+                        .unwrap()
+                        .relative_path = Some("other.safetensors".into())
+                }
+                "model" => target.model_ref.model_id = "another/model".into(),
+                "artifact" => target.model_ref.selected_artifact_id = Some("other".into()),
+                "runtime" => {
+                    decision.selected_runtime_variant_id =
+                        crate::RuntimeVariantId::parse("candle.cuda").unwrap()
+                }
+                "device" => {
+                    decision.selected_device_id = Some(InferenceDeviceId::parse("cuda:0").unwrap())
+                }
+                "custom_code" => {
+                    request
+                        .resolved_model_package_facts
+                        .as_mut()
+                        .unwrap()
+                        .custom_code
+                        .requires_custom_code = true
+                }
+                _ => unreachable!(),
+            }
+            let result = SelectedEmbeddingLoad::validate(&request, &target, &decision).await;
+            assert_eq!(result.is_ok(), rejection == "none", "{rejection}");
+            if let Ok(selected) = result {
+                assert_eq!(selected.model_directory, directory.path());
+            }
+        }
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn selected_weight_entry_cannot_resolve_outside_component_directory() {
+        let (directory, request, target, decision) = fixture(8);
+        let outside = tempfile::tempdir().unwrap();
+        let weights = directory.path().join("model.safetensors");
+        let other = outside.path().join("model.safetensors");
+        std::fs::rename(&weights, &other).unwrap();
+        std::os::unix::fs::symlink(&other, &weights).unwrap();
+        let mut target = target;
+        target.local_load_path = weights.to_str().unwrap().into();
+        let error = SelectedEmbeddingLoad::validate(&request, &target, &decision)
+            .await
+            .err()
+            .unwrap();
+        assert!(error
+            .to_string()
+            .contains("selected weight resolves outside"));
+    }
 
     #[tokio::test]
     async fn optional_request_revisions_preserve_required_producer_evidence() {

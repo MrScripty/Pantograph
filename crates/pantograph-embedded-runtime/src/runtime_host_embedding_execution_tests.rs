@@ -156,6 +156,149 @@ fn with_requested_revision(
 }
 
 #[tokio::test]
+async fn real_pumas_selected_weight_target_reaches_candle_embedding_output() {
+    use crate::runtime_host_load_target::{
+        RuntimeHostLoadTargetResolver, RuntimeHostPumasLoadTargetResolver,
+    };
+    use crate::runtime_host_package_facts::{
+        RuntimeHostPackageFactsResolver, RuntimeHostPumasPackageFactsResolver,
+    };
+
+    let (fixture_dir, request, _, _) = fixture(8);
+    let library = tempfile::tempdir().unwrap();
+    for name in [
+        "launcher-data/metadata",
+        "launcher-data/cache",
+        "launcher-data/logs",
+        "shared-resources/models",
+    ] {
+        std::fs::create_dir_all(library.path().join(name)).unwrap();
+    }
+    let model_id = "embedding/qualification/synthetic-bert-8";
+    let model_dir = library
+        .path()
+        .join("shared-resources/models")
+        .join(model_id);
+    fn copy(source: &Path, destination: &Path) {
+        std::fs::create_dir_all(destination).unwrap();
+        for entry in std::fs::read_dir(source).unwrap() {
+            let entry = entry.unwrap();
+            if entry.file_type().unwrap().is_dir() {
+                copy(&entry.path(), &destination.join(entry.file_name()));
+            } else {
+                std::fs::copy(entry.path(), destination.join(entry.file_name())).unwrap();
+            }
+        }
+    }
+    copy(fixture_dir.path(), &model_dir);
+    // Same selected-file metadata as the native qualification. Neither the
+    // executable target nor full package facts are supplied by this test.
+    std::fs::write(
+        model_dir.join("metadata.json"),
+        serde_json::to_vec(&serde_json::json!({
+            "schema_version":2, "model_id":model_id, "family":"qualification",
+            "model_type":"embedding", "official_name":"Synthetic-BERT-8",
+            "cleaned_name":"synthetic-bert-8", "source_path":model_dir,
+            "entry_path":model_dir, "storage_kind":"library_owned",
+            "selected_artifact_id":"main", "selected_artifact_files":["model.safetensors"],
+            "import_state":"ready", "validation_state":"valid",
+            "pipeline_tag":"feature-extraction", "task_type_primary":"embedding",
+            "input_modalities":["text"], "output_modalities":["embedding"],
+            "task_classification_source":"synthetic-native-qualification",
+            "task_classification_confidence":1.0,
+            "recommended_backend":"candle", "runtime_engine_hints":["candle"]
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+    let api = Arc::new(
+        crate::pumas_test_support::builder(library.path())
+            .with_hf_client(false)
+            .with_process_manager(false)
+            .build()
+            .await
+            .unwrap(),
+    );
+    api.rebuild_model_index().await.unwrap();
+    let access = Arc::new(workflow_nodes::setup::PumasSelectorAccess::Owner(api));
+    let mut request = serde_json::to_value(request).unwrap();
+    for pointer in [
+        "/handoff/task_intent/model_ref",
+        "/handoff/dispatch_decision/task_intent/model_ref",
+        "/handoff/readiness_proof/preflight_result/identity_key/model_ref",
+        "/handoff/dispatch_decision/readiness_proof/preflight_result/identity_key/model_ref",
+        "/handoff/dispatch_decision/selected_model_ref",
+    ] {
+        *request.pointer_mut(pointer).unwrap() =
+            serde_json::json!({"model_id":model_id,"selected_artifact_id":"main"});
+    }
+    let request: RuntimeHostExecutionRequest = serde_json::from_value(request).unwrap();
+    let validated = ValidatedRuntimeHostExecutionRequest::try_from(request.clone()).unwrap();
+    let target_resolver = Arc::new(RuntimeHostPumasLoadTargetResolver::new(access.clone()));
+    let package_resolver = Arc::new(RuntimeHostPumasPackageFactsResolver::new(access));
+    // Native descriptor discovery collects package facts before dispatch.
+    // Exercise that actual owner operation before asking for its load target.
+    let package = package_resolver.resolve(&validated).await.unwrap();
+    let target = target_resolver.resolve(&validated).await.unwrap();
+    assert_eq!(
+        target.artifact_kind,
+        pumas_library::models::PackageArtifactKind::HfCompatibleDirectory
+    );
+    assert_eq!(
+        target.load_path_kind,
+        pumas_library::models::PumasArtifactLoadPathKind::Directory
+    );
+    assert_eq!(
+        Path::new(&target.local_load_path),
+        model_dir.join("model.safetensors").canonicalize().unwrap()
+    );
+    assert!(Path::new(&target.local_load_path).is_absolute());
+    assert!(Path::new(&target.local_load_path).is_file());
+    assert!(package
+        .artifact
+        .selected_files
+        .iter()
+        .any(|name| name == "model.safetensors"));
+    eprintln!("actual Pumas producer: hf_compatible_directory, declared Directory, existing absolute model.safetensors FILE");
+    let gateway = Arc::new(inference::InferenceGateway::with_backend(
+        Box::new(inference::backend::candle::CandleBackend::new()),
+        "Candle",
+    ));
+    let port = crate::runtime_host_execution_port::EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
+        target_resolver, package_resolver, Arc::new(UnusedMediaSink), gateway.clone());
+    let cancellation =
+        RuntimeHostExecutionCancellationHandle::running(request.cancellation_context.clone());
+    let response = port
+        .execute_runtime_host_request(request, cancellation)
+        .await
+        .unwrap();
+    assert_eq!(
+        response.state,
+        RuntimeHostExecutionState::Completed,
+        "actual producer to consumer: {:?}",
+        response.diagnostics
+    );
+    let response = ValidatedRuntimeHostExecutionResponse::try_from(response)
+        .unwrap()
+        .into_inner();
+    let RuntimeHostExecutionOutputValue::Json(vector) = &response.outputs[0].value else {
+        panic!("structured vector")
+    };
+    let golden: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(model_dir.join("golden.json")).unwrap()).unwrap();
+    assert_eq!(vector.as_array().unwrap().len(), 8);
+    for (actual, expected) in vector
+        .as_array()
+        .unwrap()
+        .iter()
+        .zip(golden["single_vectors"][0].as_array().unwrap())
+    {
+        assert!((actual.as_f64().unwrap() - expected.as_f64().unwrap()).abs() < 1e-5);
+    }
+    gateway.stop().await.unwrap();
+}
+
+#[tokio::test]
 async fn host_embedding_rejects_requested_revision_despite_agreeing_selected_package_target() {
     let (_directory, request, package, target) = fixture(8);
     let request = with_requested_revision(request, Some("requested-other-revision"));

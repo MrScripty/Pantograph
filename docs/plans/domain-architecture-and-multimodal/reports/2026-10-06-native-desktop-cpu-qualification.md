@@ -811,3 +811,38 @@ preserves all 23 original members, 38 owner records and full masked log. Artifac
 All 61 observations retain zero outputs. Preserve this failure and inspect the
 actual producer path classification before repairing the target contract;
 fixture metadata and proof validation remain unchanged.
+
+## Selected-weight entry boundary
+
+The candidate starts from fetched 066946e797fa64d69eeabf92ac51894dd3355701,
+tree 1b7394f6d343b938eb688c9bde1ccdd13deeafdc. A real current-pin Pumas
+producer regression uses the unchanged native selected-file metadata and normal
+owner-fresh runtime-host resolvers. Descriptor-style package-facts collection
+must precede load-target resolution; the first cold-only attempt's NeedsDetail
+failure is retained. The resulting target is HfCompatibleDirectory, declares
+Directory, and physically names the existing absolute model.safetensors file.
+The normal embedding consumer reproduces the native directory-requirement error
+before any cause-specific source repair.
+
+The bounded repair derives the sibling-component directory only for the selected
+model.safetensors entry, with matching selected-file and first present weight
+component evidence and an in-directory canonical weight. The original Pumas
+target remains the model/reuse identity. Existing directory targets and all
+model/revision/artifact/task/runtime/device/custom-code checks remain in place.
+Other weight names and unselected, missing, relative, mismatched or out-of-directory
+targets remain unsupported. Pumas pin, native fixture metadata and saved proofs
+are unchanged.
+
+Acceptance requires the real producer regression to return the committed golden
+CPU vector, negative target/scope tests and affected suites to pass, then the
+actual native GUI to save/reopen its wired graph, Resolve, submit once and expose
+the real vector and metadata through canonical artifact reads. Local controlled
+CPU tests alone do not qualify the native GUI, production loaders, pretrained
+models or GPU execution.
+
+All 597 inference unit/integration tests and one runnable doc test, 538 embedded
+tests and 989 workflow tests pass. Strict affected-crate all-target Clippy with
+inference Candle/PyTorch enabled, formatting, critical patterns and staged
+traceability pass. [Selected-entry evidence](../evidence/native-desktop-cpu/cold-typed-discovery/selected-weight-target/README.md)
+preserves failed and passing producer/consumer runs, complete effective feature
+graphs and final suite logs. Actual native GUI output is pending at this repair.

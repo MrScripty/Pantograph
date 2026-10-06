@@ -575,7 +575,7 @@ impl InferenceBackend for CandleBackend {
         )
         .await?;
         let mut package = selected.package.clone();
-        package.artifact.entry_path = selected.target.local_load_path.clone();
+        package.artifact.entry_path = selected.model_directory.to_string_lossy().into_owned();
         let device = selected.device.as_str().to_owned();
         let target = target.clone();
         let previous = self.model.clone();
