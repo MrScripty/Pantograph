@@ -211,3 +211,11 @@ preserving its insert-preview/drift overlays and reconnect controls. The native
 harness records real owner validation responses unchanged to diagnose the new
 blocking gate; it also saves edge geometry before assertions. A fresh native run
 must establish painting, successful validation, submission and actual CPU output.
+
+Inspection of the existing resolution owner also confirms that the authored
+fixture omitted mandatory `runtime_source_context`; it returns
+`missing_runtime_source_context` before resolving an interface. The fixture now
+supplies `embedding.text`, `embedding.one-text` and `run_scoped`, using the
+controlled embedding test's operation/shape and the existing canonical
+cancellation mode. This changes fixture authorship only; no validation rule is
+weakened and native owner results still decide acceptance.
