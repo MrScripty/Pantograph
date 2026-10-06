@@ -1,0 +1,18 @@
+[
+  {
+    "length": 14,
+    "stroke": "url(\"#edge-gradient-text-to-embedding\")",
+    "width": 14,
+    "height": 0,
+    "id": "text-to-embedding",
+    "filter": "drop-shadow(rgb(255, 255, 255) 0px 0px 2px)"
+  },
+  {
+    "length": 10,
+    "stroke": "url(\"#edge-gradient-embedding-to-vector\")",
+    "width": 10,
+    "height": 0,
+    "id": "embedding-to-vector",
+    "filter": "drop-shadow(rgb(255, 255, 255) 0px 0px 2px)"
+  }
+]

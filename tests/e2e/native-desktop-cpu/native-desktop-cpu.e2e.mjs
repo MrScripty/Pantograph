@@ -118,8 +118,35 @@ describe('actual native Tauri saved CPU embedding graph', () => {
 
     // The existing production GUI publishes validation and invokes
     // workflow_run_execution_session; no qualification executor is substituted.
+    const submissionEvents = await browser.execute(() => window.__nativeCpuValidationEvents || []);
+    const activeValidation = submissionEvents.at(-1);
+    if (activeValidation) {
+      const projection = await invoke('current_graph_validation_projection', { request: {
+        graph_session_id: activeValidation.graph_session_id, graph_revision: activeValidation.graph_revision,
+      } });
+      writeFileSync(path.join(evidence, 'native-submission-validation.json'), JSON.stringify({ projection, submissionEvents }, null, 2));
+    }
     await $(selector('workflow-submit-button')).click();
-    await $(selector('io-inspector-page')).waitForDisplayed({ timeout: 300000 });
+    let submissionError = null;
+    try {
+      await browser.waitUntil(async () => {
+        const error = await $(selector('workflow-submit-error'));
+        if (await error.isExisting()) {
+          submissionError = await error.getText();
+          return true;
+        }
+        const inspector = await $(selector('io-inspector-page'));
+        return await inspector.isExisting() && await inspector.isDisplayed();
+      }, { timeout: 30000, timeoutMsg: 'Native submission did not report success or its GUI error' });
+      assert.equal(submissionError, null, submissionError);
+    } catch (error) {
+      const runs = await invoke('workflow_run_list_query', { request: { workflow_id: workflowId, limit: 8 } })
+        .catch((readError) => ({ error: String(readError) }));
+      const body = await browser.execute(() => document.body.innerText);
+      writeFileSync(path.join(evidence, 'native-submission-failure.json'), JSON.stringify({ submissionError,
+        error: String(error), runs, body }, null, 2));
+      throw error;
+    }
     const runs = await invoke('workflow_run_list_query', { request: { workflow_id: workflowId, limit: 8 } });
     assert.equal(runs.runs.length, 1, 'One isolated native submission must produce one scoped run');
     const run = runs.runs[0];

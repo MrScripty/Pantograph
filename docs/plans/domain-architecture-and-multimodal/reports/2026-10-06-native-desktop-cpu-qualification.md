@@ -315,3 +315,23 @@ stopped, with no model, instance or reservation. Cold and ready descriptor cases
 missing/failed/stopping owner gates, existing failed registrations and the public
 compiled-owner fact bridge are covered. These controlled tests qualify cold
 discovery integration, not actual native GUI scheduler execution or broad loaders.
+
+
+## Actual cold-owner native result and submission capture
+
+[Run 37502222511](https://github.com/MrScripty/Pantograph/actions/runs/37502222511)
+executes `42155032ef88c009f5fcd7680a3f10ea89c0bbd1`, tree
+`39ac261c877d0f66b9e4bda3b49a8ec5611e802f`. Native build, all eight
+startup tests, actual app launch, cold-owner assertions, save/reopen and wire
+checks pass. The real registry reports Candle stopped, with no instance,
+model or lease. Normal interface Apply/Save reaches an enabled Submit control;
+the GUI click is recorded at 17:29:18.924 UTC.
+
+The [complete eighth-attempt evidence](../evidence/native-desktop-cpu/cold-typed-discovery/hosted-attempt/README.md)
+preserves all fifteen artifact members and source-bound logs. IO Inspector never
+appears before the four-minute Mocha timeout. A fixture defect put a five-minute
+inner inspector wait inside that deadline, so the session dies before failure
+capture. Public execution outcome and native CPU output remain unobserved.
+The current successor uses a 30-second inspector/error wait, preserves the global
+deadline, records the exact real pre-submit projection, and captures GUI errors
+and scoped run state on failure. It changes no production selection or gate.
