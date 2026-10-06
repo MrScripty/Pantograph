@@ -5,13 +5,15 @@
 **Current phase:** M3 owner/client consumer source is implemented. Native CPU sampling and the supported inference/embedded host route are qualified separately; the desktop-authored dependent text-to-image graph and full review remain open.
 
 **Next slice:** The user-selected single-prompt canonical `chat_completion`
-graph feature is active on isolated `feat/workflow-chat-completion`. Source is
+graph feature is implemented and locally qualified on isolated
+`feat/workflow-chat-completion`; see the [chat report](reports/2026-10-06-workflow-chat-completion.md). Source is
 fresh main `c75fa237` with explicit ordinary composition of stop successor
 `e570302d` and embedding revision successor `7be490d7`; those frozen candidates
 remain separate and their review/publication belongs to the parent. Acceptance
 requires exact canonical task/requested revision constraints and an offline
-synthetic causal LM through saved/reopened public scheduler graphs, cancellation,
-isolation and retained text-generation controls. No pretrained/GPU/desktop or
+synthetic causal LM through saved/reopened public scheduler graphs, precancellation,
+isolation and retained text-generation controls. Independent review and parent
+publication remain separate. No pretrained/GPU/desktop or
 resident-accounting qualification is implied.
 
 **Prior stop slice:** The user-authorized bounded M2 text stop-string successor is
