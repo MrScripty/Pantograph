@@ -19,7 +19,7 @@ pub(crate) const HEIGHT_PORT: &str = "height";
 pub(crate) const STEPS_PORT: &str = "num_inference_steps";
 pub(crate) const SEED_PORT: &str = "seed";
 pub(crate) const GUIDANCE_SCALE_PORT: &str = "guidance_scale";
-const NUM_IMAGES_PORT: &str = "num_images_per_prompt";
+pub(crate) const NUM_IMAGES_PORT: &str = "num_images_per_prompt";
 const DENOISING_SCHEDULER_PORT: &str = "denoising_scheduler";
 const PYTORCH_BACKEND_ID: &str = "pytorch";
 const PYTORCH_RUNTIME_ID: &str = "pytorch";
@@ -98,7 +98,7 @@ fn image_generation_request(
         guidance_scale: optional_guidance_scale(request)?,
         seed: optional_u64_input(request, SEED_PORT)?,
         denoising_scheduler: denoising_scheduler(request, dispatch_decision)?,
-        num_images_per_prompt: optional_u32_input(request, NUM_IMAGES_PORT)?,
+        num_images_per_prompt: optional_image_count(request)?,
         init_image: None,
         mask_image: None,
         strength: None,
@@ -332,6 +332,18 @@ fn optional_u32_input(
         .transpose()
 }
 
+fn optional_image_count(
+    request: &pantograph_runtime_host_contracts::RuntimeHostExecutionRequest,
+) -> Result<Option<u32>, RuntimeHostImageGenerationProjectionError> {
+    let count = optional_u32_input(request, NUM_IMAGES_PORT)?;
+    if count.is_some_and(|count| {
+        count == 0 || count as usize > pantograph_runtime_host_contracts::MAX_RUNTIME_HOST_OUTPUTS
+    }) {
+        return Err(RuntimeHostImageGenerationProjectionError::InvalidImageCount);
+    }
+    Ok(count)
+}
+
 fn optional_guidance_scale(
     request: &pantograph_runtime_host_contracts::RuntimeHostExecutionRequest,
 ) -> Result<Option<f32>, RuntimeHostImageGenerationProjectionError> {
@@ -492,6 +504,8 @@ pub(crate) enum RuntimeHostImageGenerationProjectionError {
         "runtime-host image input 'guidance_scale' must retain authored precision in finite f32"
     )]
     InvalidGuidanceScale,
+    #[error("runtime-host image input 'num_images_per_prompt' exceeds the positive per-task output limit")]
+    InvalidImageCount,
     #[error("runtime-host image trait '{trait_id}' must be {expected}")]
     InvalidTraitValue {
         trait_id: &'static str,
@@ -585,6 +599,7 @@ mod tests {
                 RuntimeHostExecutionInputValue::U64(12),
                 RuntimeHostExecutionInputValue::U64(u64::MAX),
                 RuntimeHostExecutionInputValue::F64(serde_json::Number::from_f64(7.5).unwrap()),
+                RuntimeHostExecutionInputValue::U64(3),
             ])
             .map(|(port, value)| input(port.port_id.as_str(), value))
             .collect();
@@ -604,6 +619,7 @@ mod tests {
         assert_eq!(plan.num_inference_steps, Some(12));
         assert_eq!(plan.seed, Some(u64::MAX));
         assert_eq!(plan.guidance_scale, Some(7.5));
+        assert_eq!(plan.num_images_per_prompt, Some(3));
     }
 
     #[test]

@@ -62,4 +62,14 @@
     "options": { "kind": "numeric_range", "range": { "min": -3.4028234663852886e38, "max": 3.4028234663852886e38 } },
     "availability": { "status": "available" }
   }
+,
+  {
+    "port_id": "num_images_per_prompt",
+    "label": "Images per prompt",
+    "direction": "input",
+    "requirement": "optional",
+    "value_type": { "category": "scalar", "kind": "u64" },
+    "options": { "kind": "numeric_range", "range": { "min": 1.0, "max": 64.0, "step": 1.0 } },
+    "availability": { "status": "available" }
+  }
 ]

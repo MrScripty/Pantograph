@@ -1536,9 +1536,9 @@ def _batch_pipeline_call_kwargs(planned_members):
     )
     if image_count is None:
         image_count = 1
-    if int(image_count) != 1:
+    if int(image_count) < 1:
         raise ValueError(
-            "PyTorch worker generate_image_batch supports exactly one image per member"
+            "PyTorch worker generate_image_batch requires a positive image count per member"
         )
 
     denoising_scheduler = _batch_shared_generation_value(
@@ -1561,7 +1561,7 @@ def _batch_pipeline_call_kwargs(planned_members):
             )
             or 30
         ),
-        "num_images_per_prompt": 1,
+        "num_images_per_prompt": int(image_count),
     }
     negative_prompts = [
         member["planned"]["generation_kwargs"].get("negative_prompt")
@@ -1594,10 +1594,12 @@ def _batch_pipeline_call_kwargs(planned_members):
                 "PyTorch worker generate_image_batch requires all members to provide "
                 "seeds when any member is seeded"
             )
-        call_kwargs["generator"] = [
-            torch.Generator(device="cpu").manual_seed(int(seed))
-            for seed in seeds
-        ]
+        generators = []
+        for seed in seeds:
+            generator = torch.Generator(device="cpu").manual_seed(int(seed))
+            # Each member owns one advancing RNG stream, as in solo generation.
+            generators.extend([generator] * int(image_count))
+        call_kwargs["generator"] = generators
 
     return call_kwargs
 
@@ -1660,12 +1662,13 @@ def generate_image_batch_from_envelope(envelope):
         call_kwargs = _batch_pipeline_call_kwargs(planned_members)
         result = _diffusion_pipeline(**call_kwargs)
         images = getattr(result, "images", None)
-        expected_images = len(planned_members)
+        image_count = call_kwargs["num_images_per_prompt"]
+        expected_images = len(planned_members) * image_count
         if not images or len(images) != expected_images:
             raise RuntimeError(
                 "Diffusion pipeline returned "
                 f"{0 if not images else len(images)} images for {expected_images} "
-                "batch members"
+                "expected batch images"
             )
 
         encoded_images = [_encode_image(image) for image in images]
@@ -1679,12 +1682,12 @@ def generate_image_batch_from_envelope(envelope):
                         "member_id": member["member_id"],
                         "status": "succeeded",
                         "result": {
-                            "images": [encoded],
+                            "images": encoded_images[index * image_count:(index + 1) * image_count],
                             "seed_used": member["planned"]["generation_kwargs"].get("seed"),
                             "metadata": _batch_member_metadata(member["planned"]),
                         },
                     }
-                    for member, encoded in zip(planned_members, encoded_images)
+                    for index, member in enumerate(planned_members)
                 ],
             },
             resource_observation=resource_observation,

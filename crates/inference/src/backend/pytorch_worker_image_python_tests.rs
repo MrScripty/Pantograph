@@ -136,7 +136,7 @@ class _Pipeline:
         self.last_kwargs = kwargs
         prompt = kwargs.get("prompt")
         count = len(prompt) if isinstance(prompt, list) else 1
-        return types.SimpleNamespace(images=[_Image() for _ in range(count)])
+        return types.SimpleNamespace(images=[_Image() for _ in range(count * kwargs.get("num_images_per_prompt", 1))])
 
 pipeline = _Pipeline()
 def load_diffusion_model(path, device=None, torch_dtype=None):
@@ -236,6 +236,92 @@ fn test_python_worker_generate_image_batch_from_envelope_returns_worker_response
                 "a second compact test image".to_string()
             ]
         );
+    });
+}
+
+#[test]
+fn image_count_batch_partitions_images_and_expands_seed_generators_in_member_order() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
+    Python::with_gil(|py| {
+        let module = load_worker_module_with_image_stubs(py);
+        attach_stub_diffusion_pipeline(&module);
+        let mut envelope: serde_json::Value = serde_json::from_str(include_str!(
+            "../../tests/fixtures/pytorch_worker_contract/generate_image_batch_request.json"
+        ))
+        .unwrap();
+        for member in envelope["payload"]["members"].as_array_mut().unwrap() {
+            member["request"]["num_images_per_prompt"] = serde_json::json!(3);
+        }
+        let setup = CString::new(r#"
+import types
+def marked_images(self, **kwargs):
+    self.last_kwargs = kwargs
+    count = len(kwargs['prompt']) * kwargs['num_images_per_prompt']
+    return types.SimpleNamespace(images=[types.SimpleNamespace(width=512+i, height=512) for i in range(count)])
+worker._diffusion_pipeline.__class__.__call__ = marked_images
+"#).unwrap();
+        let locals = PyDict::new(py);
+        locals.set_item("worker", &module).unwrap();
+        py.run(&setup, Some(&locals), Some(&locals)).unwrap();
+        let response: String = module
+            .call_method1(
+                "generate_image_batch_from_envelope",
+                (envelope.to_string(),),
+            )
+            .unwrap()
+            .extract()
+            .unwrap();
+        let PyTorchWorkerResponse::Ok(success) = serde_json::from_str::<
+            PyTorchWorkerResponse<PyTorchGenerateImageBatchResult>,
+        >(&response)
+        .unwrap() else {
+            panic!("{response}")
+        };
+        assert_eq!(success.result.members.len(), 2);
+        for member in &success.result.members {
+            assert_eq!(member.result.as_ref().unwrap().images.len(), 3);
+        }
+        for (index, member) in success.result.members.iter().enumerate() {
+            let widths: Vec<_> = member
+                .result
+                .as_ref()
+                .unwrap()
+                .images
+                .iter()
+                .map(|image| image.width.unwrap())
+                .collect();
+            assert_eq!(
+                widths,
+                (512 + index as u32 * 3..515 + index as u32 * 3).collect::<Vec<_>>()
+            );
+        }
+        let kwargs = module
+            .getattr("_diffusion_pipeline")
+            .unwrap()
+            .getattr("last_kwargs")
+            .unwrap();
+        assert_eq!(
+            kwargs
+                .get_item("num_images_per_prompt")
+                .unwrap()
+                .extract::<u32>()
+                .unwrap(),
+            3
+        );
+        let generators = kwargs.get_item("generator").unwrap();
+        let seeds: Vec<u64> = generators
+            .try_iter()
+            .unwrap()
+            .map(|generator| {
+                generator
+                    .unwrap()
+                    .getattr("seed")
+                    .unwrap()
+                    .extract()
+                    .unwrap()
+            })
+            .collect();
+        assert_eq!(seeds, [42, 42, 42, 43, 43, 43]);
     });
 }
 

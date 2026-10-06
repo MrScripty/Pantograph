@@ -73,26 +73,31 @@ fn project_output_target(
         .validate()
         .map_err(WorkflowSchedulerTaskOutputProjectionError::InvalidTaskResult)?;
 
-    let output = result
+    let mut values = result
         .outputs
         .iter()
-        .find(|output| output.port_id == target.port_id)
-        .ok_or_else(
-            || WorkflowSchedulerTaskOutputProjectionError::MissingOutput {
-                node_id: target.node_id.clone(),
-                port_id: target.port_id.clone(),
-            },
-        )?;
+        .filter(|output| output.port_id == target.port_id)
+        .map(|output| {
+            task_result_value_to_workflow_output(&output.value).map_err(|kind| {
+                WorkflowSchedulerTaskOutputProjectionError::UnsupportedOutputValue {
+                    node_id: target.node_id.clone(),
+                    port_id: target.port_id.clone(),
+                    value_kind: kind,
+                }
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    // A workflow response has one binding per target. Preserve every repeated
+    // task output in order, while existing singleton ports keep their shape.
+    let value = if values.len() == 1 {
+        values.remove(0)
+    } else {
+        Value::Array(values)
+    };
     Ok(WorkflowPortBinding {
         node_id: target.node_id.clone(),
         port_id: target.port_id.clone(),
-        value: task_result_value_to_workflow_output(&output.value).map_err(|kind| {
-            WorkflowSchedulerTaskOutputProjectionError::UnsupportedOutputValue {
-                node_id: target.node_id.clone(),
-                port_id: target.port_id.clone(),
-                value_kind: kind,
-            }
-        })?,
+        value,
     })
 }
 

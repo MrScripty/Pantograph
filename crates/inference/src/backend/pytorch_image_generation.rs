@@ -518,16 +518,6 @@ fn pytorch_batch_compatibility_error(
     request: &ImageGenerationBatchExecutionRequest,
 ) -> Option<String> {
     let anchor = request.members.first()?.plan.clone();
-    if request
-        .members
-        .iter()
-        .any(|member| member.plan.num_images_per_prompt.unwrap_or(1) != 1)
-    {
-        return Some(
-            "PyTorch image batch execution currently supports exactly one image per member"
-                .to_string(),
-        );
-    }
     let has_seed = request
         .members
         .iter()
@@ -579,7 +569,8 @@ fn pytorch_batch_compatibility_error(
                 "PyTorch image batch members must use the same selected device".to_string(),
             );
         }
-        if plan.width != anchor.width
+        if plan.num_images_per_prompt.unwrap_or(1) != anchor.num_images_per_prompt.unwrap_or(1)
+            || plan.width != anchor.width
             || plan.height != anchor.height
             || plan.num_inference_steps != anchor.num_inference_steps
             || plan.guidance_scale != anchor.guidance_scale

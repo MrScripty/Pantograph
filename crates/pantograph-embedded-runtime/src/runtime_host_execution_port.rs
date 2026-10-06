@@ -2466,6 +2466,56 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn invalid_graph_image_count_is_rejected_before_gateway_dispatch() {
+        use pantograph_runtime_host_contracts::{
+            RuntimeHostExecutionInput, RuntimeHostExecutionInputValue,
+        };
+        for value in [
+            RuntimeHostExecutionInputValue::U64(0),
+            RuntimeHostExecutionInputValue::U64(65),
+            RuntimeHostExecutionInputValue::U64(u64::MAX),
+            RuntimeHostExecutionInputValue::String("3".into()),
+            RuntimeHostExecutionInputValue::F64(serde_json::Number::from_f64(3.0).unwrap()),
+        ] {
+            let mut request = runtime_host_batch_request_fixture();
+            request.members[0]
+                .materialized_inputs
+                .push(RuntimeHostExecutionInput {
+                    port_id: "num_images_per_prompt".into(),
+                    value,
+                });
+            let cancellation = runtime_host_batch_cancellation(&request);
+            let backend = RecordingBatchImageBackend::default();
+            let recorded = backend.recorded_batches.clone();
+            let media_sink = Arc::new(RecordingMediaArtifactSink::default());
+            let port = EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
+                Arc::new(ReadyLoadTargetResolver),
+                Arc::new(FixturePackageFactsResolver),
+                media_sink.clone(),
+                Arc::new(inference::InferenceGateway::with_backend(
+                    Box::new(backend),
+                    "PyTorch",
+                )),
+            );
+            let response = port
+                .execute_runtime_host_batch_request(request, cancellation)
+                .await
+                .unwrap();
+            assert_eq!(
+                response.state,
+                RuntimeHostBatchExecutionState::Rejected,
+                "{response:?}"
+            );
+            assert!(response
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.message.contains("num_images_per_prompt")));
+            assert!(recorded.lock().unwrap().is_empty());
+            assert!(media_sink.writes.lock().unwrap().is_empty());
+        }
+    }
+
+    #[tokio::test]
     async fn batch_port_rejects_incompatible_members_before_gateway_dispatch() {
         let mut request = runtime_host_batch_request_fixture();
         let incompatible_variant = "diffusers-pytorch.other"

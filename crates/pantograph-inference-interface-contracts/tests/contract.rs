@@ -179,7 +179,8 @@ fn basic_image_inputs_keep_optional_controls_and_backend_defaults_on_the_wire() 
             "height",
             "num_inference_steps",
             "seed",
-            "guidance_scale"
+            "guidance_scale",
+            "num_images_per_prompt"
         ]
     );
     assert_eq!(ports[0].requirement, InferencePortRequirement::Required);
@@ -232,6 +233,17 @@ fn basic_image_numeric_controls_preserve_u32_bounds_without_rounding_u64_seed() 
     assert_eq!(range.max, f64::from(f32::MAX));
     assert_eq!(range.step, None);
     assert_eq!(range.default, None);
+    assert_eq!(
+        ports[7].value_type,
+        InferenceValueType::Scalar(InferenceScalarType::U64)
+    );
+    let InferencePortOptions::NumericRange { range } = &ports[7].options else {
+        panic!("image count has bounds")
+    };
+    assert_eq!(
+        (range.min, range.max, range.step, range.default),
+        (1.0, 64.0, Some(1.0), None)
+    );
 }
 
 #[test]

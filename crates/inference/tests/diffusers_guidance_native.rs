@@ -82,3 +82,55 @@ print(f"native_guidance_torch={torch.__version__}; diffusers={diffusers.__versio
             .expect("actual CPU denoising must preserve guidance semantics");
     });
 }
+
+#[test]
+#[ignore = "explicit native qualification requires real CPU Torch and Diffusers"]
+fn actual_cpu_diffusers_multiple_images_match_worker_batch_shape_and_seed_order() {
+    Python::with_gil(|py| {
+        let locals = pyo3::types::PyDict::new(py);
+        locals
+            .set_item("worker_source", include_str!("../torch/worker.py"))
+            .unwrap();
+        let source = CString::new(r#"
+import ast
+import torch
+import diffusers
+from diffusers import DDIMScheduler, StableDiffusionPipeline, UNet2DConditionModel
+functions = {'_batch_shared_generation_value', '_batch_pipeline_call_kwargs'}
+module = ast.parse(worker_source)
+module.body = [node for node in module.body if isinstance(node, ast.FunctionDef) and node.name in functions]
+exec(compile(module, '<actual-worker-batch-kwargs>', 'exec'))
+torch.set_num_threads(1)
+torch.manual_seed(42)
+unet = UNet2DConditionModel(sample_size=4, in_channels=4, out_channels=4, layers_per_block=1,
+    block_out_channels=(4,), down_block_types=('CrossAttnDownBlock2D',), up_block_types=('CrossAttnUpBlock2D',),
+    cross_attention_dim=4, attention_head_dim=2, norm_num_groups=1)
+pipeline = StableDiffusionPipeline(vae=None, text_encoder=None, tokenizer=None, unet=unet,
+    scheduler=DDIMScheduler(num_train_timesteps=10, steps_offset=1, clip_sample=False),
+    safety_checker=None, feature_extractor=None, requires_safety_checker=False)
+pipeline.set_progress_bar_config(disable=True)
+for count in [1, 3]:
+    members = [{'planned': {'generation_kwargs': {'prompt': str(seed), 'seed': seed,
+        'num_images_per_prompt': count, 'num_inference_steps': 1, 'guidance_scale': 1.0}}} for seed in [42,43]]
+    kwargs = _batch_pipeline_call_kwargs(members)
+    generators = kwargs.pop('generator')
+    assert [generator.initial_seed() for generator in generators] == [42]*count+[43]*count
+    kwargs.pop('prompt')
+    # Supplied embeddings avoid all tokenizer, text-model and weight dependencies.
+    result = pipeline(prompt_embeds=torch.ones(2,2,4), generator=generators, output_type='latent', **kwargs)
+    assert result.images.shape == (2*count,4,4,4)
+    assert torch.isfinite(result.images).all()
+    for group, seed in enumerate([42,43]):
+        assert all(generators[group*count] is generator for generator in generators[group*count:(group+1)*count])
+        solo = pipeline(prompt_embeds=torch.ones(1,2,4), generator=torch.Generator(device='cpu').manual_seed(seed),
+            num_images_per_prompt=count, num_inference_steps=1, guidance_scale=1.0, output_type='latent')
+        torch.testing.assert_close(result.images[group*count:(group+1)*count], solo.images, rtol=1e-5, atol=1e-6)
+        if count > 1:
+            assert not torch.equal(result.images[group*count], result.images[group*count+1])
+    assert not torch.equal(result.images[0], result.images[count])
+print(f'native_image_count_torch={torch.__version__}; diffusers={diffusers.__version__}; device=cpu; counts=1,3; pretrained_models=0', flush=True)
+"#).unwrap();
+        py.run(&source, Some(&locals), Some(&locals))
+            .expect("actual worker kwargs and CPU pipeline preserve image count and seed order");
+    });
+}

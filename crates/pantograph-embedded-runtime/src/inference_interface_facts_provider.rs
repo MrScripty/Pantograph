@@ -283,6 +283,7 @@ fn input_ports(task_entry: &TaskRegistryEntry) -> Vec<InferencePortDescriptor> {
                 InferenceValueType::Scalar(InferenceScalarType::U64),
             ),
             guidance_scale_input_port(),
+            image_count_input_port(),
         ],
         InferenceTaskId::ChatCompletion | InferenceTaskId::MultimodalGeneration => vec![port(
             "prompt",
@@ -293,6 +294,15 @@ fn input_ports(task_entry: &TaskRegistryEntry) -> Vec<InferencePortDescriptor> {
         )],
         _ => Vec::new(),
     }
+}
+
+fn image_count_input_port() -> InferencePortDescriptor {
+    let mut descriptor = positive_u32_input_port(image::NUM_IMAGES_PORT, "Images per prompt");
+    let InferencePortOptions::NumericRange { range } = &mut descriptor.options else {
+        unreachable!("integer port has numeric bounds");
+    };
+    range.max = pantograph_runtime_host_contracts::MAX_RUNTIME_HOST_OUTPUTS as f64;
+    descriptor
 }
 
 fn guidance_scale_input_port() -> InferencePortDescriptor {

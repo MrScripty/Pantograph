@@ -135,6 +135,17 @@ fn test_image_generation_batch_response_from_worker_response_maps_members() {
 }
 
 #[test]
+fn image_batch_accepts_equal_counts_and_rejects_mismatched_counts() {
+    let mut request = image_batch_request();
+    for member in &mut request.members {
+        member.plan.num_images_per_prompt = Some(3);
+    }
+    assert!(reject_incompatible_pytorch_batch(&request).is_none());
+    request.members[1].plan.num_images_per_prompt = Some(2);
+    assert!(reject_incompatible_pytorch_batch(&request).is_some());
+}
+
+#[test]
 fn test_pytorch_batch_compatibility_rejects_mismatched_dimensions() {
     let mut request = image_batch_request();
     request.members[1].plan.width = Some(768);
