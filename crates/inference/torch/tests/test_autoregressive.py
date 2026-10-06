@@ -5,6 +5,7 @@ import importlib.util
 import json
 import logging
 from pathlib import Path
+import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest import mock
@@ -37,7 +38,8 @@ def worker_text_functions():
     tree = ast.parse((Path(__file__).parents[1] / "worker.py").read_text())
     names = {"generate", "generate_tokens", "generate_text_from_envelope",
              "generate_text_stream_from_envelope", "generate_text_stream_setup_from_envelope",
-             "_generate_dllm_autoregressive_safe", "clear_live_kv_cache"}
+             "_generate_dllm_autoregressive_safe", "clear_live_kv_cache",
+             "get_live_kv_info", "_require_live_kv_state", "save_live_kv_cache"}
     selected = ast.Module(body=[node for node in tree.body
                                if isinstance(node, ast.FunctionDef) and node.name in names],
                           type_ignores=[])
@@ -281,6 +283,91 @@ class AutoregressiveSamplingTests(unittest.TestCase):
         with self.assertRaises(autoregressive.RepetitionPenaltyNumericsError):
             worker["_generate_dllm_autoregressive_safe"]("prompt", 1, 0, 1, repetition_penalty=2 ** -149)
         worker["_generate_sdar_cached"].assert_not_called()
+
+    def test_sdar_numeric_refusal_invalidates_mutated_cache_before_reuse_or_export(self):
+        class SuffixTokenizer(TokenizerFixture):
+            def __call__(self, prompt, **_kwargs):
+                tokens = {"suffix": [2, 3], "generated": [2], "replay": [], "fresh": [2]}[prompt]
+                return BatchEncoding({"input_ids": torch.tensor([tokens], dtype=torch.long)})
+
+        class MutatingModel:
+            generation_config = SimpleNamespace(top_k=0, repetition_penalty=1.0)
+
+            def __init__(self):
+                self.safe = False
+                self.calls = []
+
+            def __call__(self, input_ids, past_key_values, **_kwargs):
+                tokens = input_ids[0].tolist()
+                self.calls.append((tokens, past_key_values))
+                keys = input_ids.float().view(1, 1, -1, 1)
+                past_key_values.update(keys, keys, 0)
+                # Token 2 allows a generated token 3 before the next forward
+                # overflows. Suffix/replay also mutate KV before refusal.
+                logits = [0, 0, 0, 1] if self.safe or tokens[-1] == 2 else [2, 4, 1, 0]
+                return SimpleNamespace(logits=torch.tensor([[logits]], dtype=torch.float32))
+
+        for route in ["suffix", "generated", "replay"]:
+            with self.subTest(route=route), tempfile.TemporaryDirectory() as directory:
+                worker = worker_text_functions()
+                worker["_model"] = model = MutatingModel()
+                worker["_tokenizer"] = SuffixTokenizer()
+                worker["_continue_sdar_cached"] = mock.Mock(wraps=autoregressive._continue_sdar_cached)
+                worker["_generate_sdar_cached"] = mock.Mock(wraps=autoregressive._generate_sdar_cached)
+                cache = autoregressive.DynamicCache()
+                keys = torch.tensor([0, 1], dtype=torch.float32).view(1, 1, 2, 1)
+                cache.update(keys, keys, 0)
+                history = [0, 1]
+                worker["_live_kv_state"] = {"token_ids": history, "cache": cache}
+
+                with self.assertRaises(autoregressive.RepetitionPenaltyNumericsError):
+                    worker["_generate_dllm_autoregressive_safe"](
+                        route, 2, 0, 1, repetition_penalty=2 ** -149)
+                self.assertEqual(history, [0, 1])  # success-only history was never published
+                self.assertEqual(cache.get_seq_length(), 2 if route == "replay" else 4)
+                self.assertTrue(model.calls)
+                self.assertTrue(all(used_cache is cache for _, used_cache in model.calls))
+                worker["_generate_sdar_cached"].assert_not_called()  # no automatic fresh retry
+                self.assertIsNone(worker["_live_kv_state"])
+                self.assertIsNone(worker["get_live_kv_info"]())
+                refused_path = Path(directory) / "refused.pt"
+                with self.assertRaisesRegex(RuntimeError, "No live KV cache captured"):
+                    worker["save_live_kv_cache"](refused_path)
+                self.assertFalse(refused_path.exists())
+
+                # A later request can explicitly establish a new consistent
+                # history/cache, without touching the rejected continuation.
+                model.safe = True
+                model.calls.clear()
+                text = worker["_generate_dllm_autoregressive_safe"](
+                    "fresh", 1, 0, 1, repetition_penalty=1.0)
+                self.assertEqual(text, "3")
+                worker["_continue_sdar_cached"].assert_called_once()
+                worker["_generate_sdar_cached"].assert_called_once()
+                state = worker["_live_kv_state"]
+                self.assertIsNot(state["cache"], cache)
+                self.assertEqual(state["token_ids"], [2, 3])
+                self.assertEqual(state["cache"].get_seq_length(), len(state["token_ids"]))
+                self.assertTrue(all(used_cache is state["cache"] for _, used_cache in model.calls))
+                fresh_cache = state["cache"]
+                # Subsequent continuation reuses only the newly committed cache.
+                self.assertEqual(worker["_generate_dllm_autoregressive_safe"](
+                    "generated", 1, 0, 1, repetition_penalty=1.0), "3")
+                self.assertEqual(worker["_continue_sdar_cached"].call_count, 2)
+                worker["_generate_sdar_cached"].assert_called_once()
+                reused = worker["_live_kv_state"]
+                self.assertIs(reused["cache"], fresh_cache)
+                self.assertEqual(reused["token_ids"], [2, 3, 2, 3])
+                self.assertEqual(reused["cache"].get_seq_length(), 4)
+                self.assertEqual(cache.get_seq_length(), 2 if route == "replay" else 4)
+                saved_path = Path(directory) / "reused.pt"
+                self.assertEqual(worker["save_live_kv_cache"](saved_path)["token_count"], 4)
+                # Inspect our own controlled exported DynamicCache payload.
+                exported = torch.load(saved_path, weights_only=False)
+                self.assertEqual(exported["token_ids"], [2, 3, 2, 3])
+                self.assertEqual(exported["cache"].get_seq_length(), 4)
+                torch.testing.assert_close(exported["cache"].key_cache[0],
+                                           torch.tensor([2, 3, 2, 3], dtype=torch.float32).view(1, 1, 4, 1))
 
     def test_actual_worker_envelopes_report_numeric_refusal_without_generated_text(self):
         for streaming in [False, True]:

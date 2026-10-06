@@ -189,7 +189,9 @@ def _generate_dllm_autoregressive_safe(formatted_prompt, max_tokens, temperature
                 }
                 return text
             except RepetitionPenaltyNumericsError:
-                # Numeric refusal must not change the history through fresh retry.
+                # Continuation mutates KV before publishing its matching history.
+                # Drop that uncommitted snapshot, and refuse without fresh retry.
+                clear_live_kv_cache()
                 raise
             except Exception as exc:
                 logger.warning("Live KV reuse failed; falling back to fresh decode: %s", exc)

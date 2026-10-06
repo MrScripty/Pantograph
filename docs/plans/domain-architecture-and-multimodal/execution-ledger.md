@@ -561,3 +561,17 @@ portable inference checks pass; strict inference Clippy and affected quality
 gates pass. Frozen feature/evidence and independent image/main integration remain
 unchanged. Native desktop/GPU/pretrained/ONNX/SDAR loading remain unqualified;
 parent owns review and publication.
+
+## 2026-10-06 — Cached numeric refusal clears live KV
+
+Review accepted numeric checkpoint `12980c2f` but reproduced old token history
+beside a mutated cache after refusal. The separate
+[KV refusal correction](reports/2026-10-06-text-repetition-kv-refusal.md) clears
+the live snapshot before rethrowing without fresh retry. A real DynamicCache
+regression fails on the old catch for suffix/generated/replay mutations and
+passes with refusal of export, later fresh capture, subsequent reuse and matching
+exported cache/history. Twenty-four actual CPU and 811 portable inference checks,
+strict inference Clippy and affected gates pass. Existing numeric/source evidence
+remains frozen; model resident custody and resource accounting are unchanged.
+Native desktop/GPU/pretrained/ONNX qualification remains separate. Parent owns
+PR/review/merge; merged PR57 image controls are not part of this successor.
