@@ -19,6 +19,7 @@ pub(crate) const SYSTEM_PROMPT_PORT: &str = "system_prompt";
 pub(crate) const TOP_K_PORT: &str = "top_k";
 pub(crate) const TEMPERATURE_PORT: &str = "temperature";
 pub(crate) const TOP_P_PORT: &str = "top_p";
+pub(crate) const REPETITION_PENALTY_PORT: &str = "repetition_penalty";
 pub(crate) const MAX_TEXT_BYTES: usize = 1024;
 
 /// Owned inputs for the canonical selected-text inference call.
@@ -64,6 +65,7 @@ pub(crate) fn validate_runtime_host_text_generation_request(
     optional_top_k(request)?;
     optional_temperature(request)?;
     optional_top_p(request)?;
+    optional_repetition_penalty(request)?;
     optional_system_prompt(request)?;
     let prompt = required_prompt(request)?;
     if prompt.trim().is_empty() {
@@ -305,6 +307,7 @@ fn validate_supported_inputs(
             TOP_K_PORT,
             TEMPERATURE_PORT,
             TOP_P_PORT,
+            REPETITION_PENALTY_PORT,
         ]
         .contains(&input.port_id.as_str())
         {
@@ -388,6 +391,17 @@ fn optional_top_p(
     )
 }
 
+fn optional_repetition_penalty(
+    request: &RuntimeHostExecutionRequest,
+) -> Result<Option<f32>, RuntimeHostTextGenerationProjectionError> {
+    optional_sampling_number(
+        request,
+        REPETITION_PENALTY_PORT,
+        f32::from_bits(1)..=f32::MAX,
+        RuntimeHostTextGenerationProjectionError::InvalidRepetitionPenalty,
+    )
+}
+
 fn optional_sampling_number(
     request: &RuntimeHostExecutionRequest,
     port_id: &'static str,
@@ -427,7 +441,13 @@ fn optional_generation_options(
     let top_k = optional_top_k(request)?;
     let temperature = optional_temperature(request)?;
     let top_p = optional_top_p(request)?;
-    if max_new_tokens.is_none() && top_k.is_none() && temperature.is_none() && top_p.is_none() {
+    let repetition_penalty = optional_repetition_penalty(request)?;
+    if max_new_tokens.is_none()
+        && top_k.is_none()
+        && temperature.is_none()
+        && top_p.is_none()
+        && repetition_penalty.is_none()
+    {
         return Ok(None);
     }
     Ok(Some(GenerationOptions {
@@ -439,6 +459,7 @@ fn optional_generation_options(
             top_k,
             temperature,
             top_p,
+            repetition_penalty,
             ..SamplingGenerationOptions::default()
         },
         ..GenerationOptions::default()
@@ -483,6 +504,8 @@ pub(crate) enum RuntimeHostTextGenerationProjectionError {
     InvalidTemperature,
     #[error("runtime-host text input 'top_p' must be between 0 and 1, retaining authored precision in the generation f32 contract")]
     InvalidTopP,
+    #[error("runtime-host text input 'repetition_penalty' must be positive and finite, retaining authored precision in the generation f32 contract")]
+    InvalidRepetitionPenalty,
     #[error("runtime-host text execution prompt must not be blank")]
     BlankPrompt,
     #[error("runtime-host text input '{port_id}' must be {expected}")]
@@ -1068,6 +1091,84 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn invalid_repetition_penalty_fails_host_execution_before_recording_gateway_calls() {
+        for (value, expected) in [
+            (
+                RuntimeHostExecutionInputValue::I64(-1),
+                "repetition_penalty' must be positive and finite",
+            ),
+            (
+                RuntimeHostExecutionInputValue::F64(
+                    serde_json::Number::from_f64(f64::MAX).unwrap(),
+                ),
+                "repetition_penalty' must be positive and finite",
+            ),
+            (
+                RuntimeHostExecutionInputValue::F64(serde_json::Number::from_f64(1e-100).unwrap()),
+                "repetition_penalty' must be positive and finite",
+            ),
+            (
+                RuntimeHostExecutionInputValue::F64(
+                    serde_json::Number::from_f64(0.7000000000000001).unwrap(),
+                ),
+                "repetition_penalty' must be positive and finite",
+            ),
+            (
+                RuntimeHostExecutionInputValue::F64(serde_json::Number::from_f64(0.0).unwrap()),
+                "repetition_penalty' must be positive and finite",
+            ),
+            (
+                RuntimeHostExecutionInputValue::String("40".into()),
+                "repetition_penalty' must be finite number",
+            ),
+            (
+                RuntimeHostExecutionInputValue::Bool(true),
+                "repetition_penalty' must be finite number",
+            ),
+        ] {
+            let mut request = text_request_fixture();
+            request.materialized_inputs.push(RuntimeHostExecutionInput {
+                port_id: REPETITION_PENALTY_PORT.into(),
+                value,
+            });
+            let validated =
+                ValidatedRuntimeHostExecutionRequest::try_from(request.clone()).unwrap();
+            let package_facts = text_package_facts(&validated);
+            let directory = tempfile::tempdir().unwrap();
+            let target = text_load_target(&package_facts, &directory);
+            let backend = TextBackend::default();
+            let calls = backend.calls.clone();
+            let recorded = backend.requests.clone();
+            let port = crate::runtime_host_execution_port::EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
+                Arc::new(TextLoadTargetResolver { target }),
+                Arc::new(TextPackageFactsResolver { package_facts }),
+                Arc::new(UnusedTextMediaSink),
+                Arc::new(inference::InferenceGateway::with_backend(Box::new(backend), "PyTorch")),
+            );
+            let cancellation =
+                pantograph_runtime_host_contracts::RuntimeHostExecutionCancellationHandle::running(
+                    request.cancellation_context.clone(),
+                );
+            let response = port
+                .execute_runtime_host_request(request, cancellation)
+                .await
+                .unwrap();
+            assert_eq!(response.state, RuntimeHostExecutionState::Rejected);
+            assert!(response.outputs.is_empty());
+            assert!(
+                response
+                    .diagnostics
+                    .iter()
+                    .any(|diagnostic| diagnostic.message.contains(expected)),
+                "{:?}",
+                response.diagnostics
+            );
+            assert!(calls.lock().unwrap().is_empty());
+            assert!(recorded.lock().unwrap().is_empty());
+        }
+    }
+
+    #[tokio::test]
     async fn temperature_reaches_recording_gateway_with_optional_existing_controls() {
         for temperature in [None, Some(0.0), Some(0.7), Some(2.0), Some(f32::MAX)] {
             for companion_controls in [false, true] {
@@ -1235,6 +1336,117 @@ mod tests {
                 assert_eq!(
                     json.get("top_p"),
                     top_p
+                        .map(|value| serde_json::from_str::<serde_json::Value>(
+                            &serde_json::to_string(&value).unwrap()
+                        )
+                        .unwrap())
+                        .as_ref()
+                );
+                assert_eq!(
+                    json.get("temperature"),
+                    companion_controls
+                        .then_some(serde_json::json!(0.0))
+                        .as_ref()
+                );
+                assert_eq!(
+                    json.get("top_k"),
+                    companion_controls.then_some(serde_json::json!(0)).as_ref()
+                );
+                assert_eq!(
+                    json.get("max_tokens"),
+                    companion_controls
+                        .then_some(serde_json::json!(128))
+                        .as_ref()
+                );
+                if companion_controls {
+                    assert_eq!(
+                        json["messages"][0]["content"][0]["text"],
+                        "  image prompt\n"
+                    );
+                }
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn repetition_penalty_reaches_recording_gateway_with_optional_existing_controls() {
+        for repetition_penalty in [None, Some(0.5), Some(1.0), Some(1.2), Some(f32::MAX)] {
+            for companion_controls in [false, true] {
+                let mut request = text_request_fixture();
+                if let Some(value) = repetition_penalty {
+                    request.materialized_inputs.push(RuntimeHostExecutionInput {
+                        port_id: REPETITION_PENALTY_PORT.into(),
+                        value: RuntimeHostExecutionInputValue::F64(
+                            serde_json::Number::from_f64(f64::from(value)).unwrap(),
+                        ),
+                    });
+                }
+                if companion_controls {
+                    request.materialized_inputs.extend([
+                        RuntimeHostExecutionInput {
+                            port_id: TEMPERATURE_PORT.into(),
+                            value: RuntimeHostExecutionInputValue::F64(
+                                serde_json::Number::from_f64(0.0).unwrap(),
+                            ),
+                        },
+                        RuntimeHostExecutionInput {
+                            port_id: TOP_K_PORT.into(),
+                            value: RuntimeHostExecutionInputValue::U64(0),
+                        },
+                        RuntimeHostExecutionInput {
+                            port_id: MAX_NEW_TOKENS_PORT.into(),
+                            value: RuntimeHostExecutionInputValue::U64(128),
+                        },
+                        RuntimeHostExecutionInput {
+                            port_id: SYSTEM_PROMPT_PORT.into(),
+                            value: RuntimeHostExecutionInputValue::String(
+                                "  image prompt\n".into(),
+                            ),
+                        },
+                    ]);
+                }
+                let validated =
+                    ValidatedRuntimeHostExecutionRequest::try_from(request.clone()).unwrap();
+                let package_facts = text_package_facts(&validated);
+                let directory = tempfile::tempdir().unwrap();
+                let target = text_load_target(&package_facts, &directory);
+                let projection = project_runtime_host_text_generation(
+                    &validated,
+                    package_facts.clone(),
+                    target.clone(),
+                )
+                .unwrap();
+                let options = projection.request().generation_options.as_ref();
+                assert_eq!(
+                    options.is_some(),
+                    repetition_penalty.is_some() || companion_controls
+                );
+                assert_eq!(
+                    options.and_then(|options| options.sampling.repetition_penalty),
+                    repetition_penalty
+                );
+                assert_eq!(
+                    options.and_then(|options| options.sampling.temperature),
+                    companion_controls.then_some(0.0)
+                );
+                let backend = TextBackend::default();
+                let recorded = backend.requests.clone();
+                let port = crate::runtime_host_execution_port::EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
+                    Arc::new(TextLoadTargetResolver { target }), Arc::new(TextPackageFactsResolver { package_facts }),
+                    Arc::new(UnusedTextMediaSink), Arc::new(inference::InferenceGateway::with_backend(Box::new(backend), "PyTorch")),
+                );
+                let cancellation = pantograph_runtime_host_contracts::RuntimeHostExecutionCancellationHandle::running(request.cancellation_context.clone());
+                let response = port
+                    .execute_runtime_host_request(request, cancellation)
+                    .await
+                    .unwrap();
+                assert_eq!(response.state, RuntimeHostExecutionState::Completed);
+                let recorded = recorded.lock().unwrap();
+                assert_eq!(recorded.len(), 1);
+                let json = &recorded[0];
+                assert_eq!(
+                    json.get("repetition_penalty"),
+                    repetition_penalty
                         .map(|value| serde_json::from_str::<serde_json::Value>(
                             &serde_json::to_string(&value).unwrap()
                         )

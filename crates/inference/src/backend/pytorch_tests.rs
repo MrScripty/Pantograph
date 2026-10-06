@@ -2677,6 +2677,7 @@ fn test_pytorch_temperature_keeps_zero_and_finite_f32_range_in_worker_envelopes(
                     temperature,
                     top_p: 1.0,
                     top_k: Some(0),
+                    repetition_penalty: None,
                     masked_prompt_json: None,
                 },
             );
@@ -2729,6 +2730,7 @@ fn test_pytorch_top_p_preserves_unit_interval_in_generate_and_stream_envelopes()
                         temperature,
                         top_p,
                         top_k: Some(0),
+                        repetition_penalty: None,
                         masked_prompt_json: None,
                     },
                 );
@@ -2763,18 +2765,78 @@ fn test_pytorch_top_p_preserves_unit_interval_in_generate_and_stream_envelopes()
         }
     }
 }
+#[test]
+fn test_pytorch_repetition_penalty_preserves_positive_values_in_generate_and_stream_envelopes() {
+    for repetition_penalty in [0.5_f32, 1.0, 1.2] {
+        for temperature in [0.0, 0.7] {
+            for operation in [
+                PyTorchWorkerOperation::GenerateText,
+                PyTorchWorkerOperation::GenerateTextStream,
+            ] {
+                let envelope = PyTorchBackend::generate_text_envelope(
+                    "req-top-p",
+                    operation,
+                    PyTorchTextGenerationRequest {
+                        prompt: "Explain adapters.".into(),
+                        system_prompt: None,
+                        max_tokens: 2,
+                        temperature,
+                        top_p: 0.7,
+                        top_k: Some(0),
+                        repetition_penalty: Some(repetition_penalty),
+                        masked_prompt_json: None,
+                    },
+                );
+                match operation {
+                    PyTorchWorkerOperation::GenerateText => {
+                        PyTorchBackend::validate_generate_text_envelope(&envelope).unwrap()
+                    }
+                    PyTorchWorkerOperation::GenerateTextStream => {
+                        PyTorchBackend::validate_generate_text_stream_envelope(&envelope).unwrap()
+                    }
+                    _ => unreachable!(),
+                }
+                assert_eq!(
+                    envelope.payload.transformers_kwargs["repetition_penalty"],
+                    serde_json::json!(repetition_penalty)
+                );
+                assert_eq!(
+                    serde_json::to_value(&envelope).unwrap()["payload"]["transformers_kwargs"]
+                        ["repetition_penalty"],
+                    serde_json::json!(repetition_penalty)
+                );
+                let options = GenerationOptions {
+                    sampling: SamplingGenerationOptions {
+                        repetition_penalty: Some(repetition_penalty),
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                };
+                let mapping = PyTorchBackend::transformers_generation_option_mapping(&options);
+                assert!(mapping
+                    .diagnostics
+                    .iter()
+                    .any(
+                        |diagnostic| diagnostic.option_path == "sampling.repetition_penalty"
+                            && diagnostic.state == OptionSupportState::Honored
+                    ));
+            }
+        }
+    }
+}
 
 #[test]
 fn test_pytorch_generate_text_request_threads_top_k_as_transformers_kwarg() {
-    let request = PyTorchBackend::generate_text_request(
-        "Explain adapters.".to_string(),
-        Some("Be precise.".to_string()),
-        48,
-        0.3,
-        0.9,
-        Some(20),
-        None,
-    );
+    let request = PyTorchBackend::generate_text_request(PyTorchTextGenerationRequest {
+        prompt: "Explain adapters.".to_string(),
+        system_prompt: Some("Be precise.".to_string()),
+        max_tokens: 48,
+        temperature: 0.3,
+        top_p: 0.9,
+        top_k: Some(20),
+        repetition_penalty: None,
+        masked_prompt_json: None,
+    });
 
     assert_eq!(request.transformers_kwargs["top_k"], serde_json::json!(20));
     assert_eq!(request.prompt, "Explain adapters.");
@@ -2793,6 +2855,7 @@ fn test_pytorch_generate_text_envelopes_thread_top_k_for_generate_and_stream() {
             temperature: 0.3,
             top_p: 0.9,
             top_k: Some(33),
+            repetition_penalty: None,
             masked_prompt_json: None,
         },
     );
@@ -2806,6 +2869,7 @@ fn test_pytorch_generate_text_envelopes_thread_top_k_for_generate_and_stream() {
             temperature: 0.3,
             top_p: 0.9,
             top_k: Some(33),
+            repetition_penalty: None,
             masked_prompt_json: None,
         },
     );
@@ -2841,6 +2905,7 @@ fn test_pytorch_generate_text_top_k_keeps_zero_and_u32_max_in_worker_envelopes()
                     temperature: 0.3,
                     top_p: 0.9,
                     top_k: Some(top_k),
+                    repetition_penalty: None,
                     masked_prompt_json: None,
                 },
             );
@@ -2878,6 +2943,7 @@ fn test_pytorch_generate_text_envelope_rejects_unscoped_transformers_kwargs() {
             temperature: 0.3,
             top_p: 0.9,
             top_k: None,
+            repetition_penalty: None,
             masked_prompt_json: None,
         },
     );
@@ -2907,6 +2973,7 @@ fn test_pytorch_generate_text_stream_envelope_rejects_policy_transformers_kwargs
             temperature: 0.3,
             top_p: 0.9,
             top_k: None,
+            repetition_penalty: None,
             masked_prompt_json: None,
         },
     );
@@ -2954,15 +3021,16 @@ fn test_python_worker_contract_rejects_additive_backend_kwargs() {
 
 #[test]
 fn test_pytorch_generate_text_request_omits_absent_top_k_kwarg() {
-    let request = PyTorchBackend::generate_text_request(
-        "Explain adapters.".to_string(),
-        None,
-        48,
-        0.3,
-        0.9,
-        None,
-        None,
-    );
+    let request = PyTorchBackend::generate_text_request(PyTorchTextGenerationRequest {
+        prompt: "Explain adapters.".to_string(),
+        system_prompt: None,
+        max_tokens: 48,
+        temperature: 0.3,
+        top_p: 0.9,
+        top_k: None,
+        repetition_penalty: None,
+        masked_prompt_json: None,
+    });
 
     assert!(request.transformers_kwargs.is_empty());
 }
@@ -6098,7 +6166,8 @@ async fn production_text_iterator_drains_before_successful_load_and_unload() {
             load_worker_module_with_stubbed_dependencies(py);
             py.run(c"import sys, types
 sys.modules['torch'].no_grad = lambda: (lambda f: f)\nsys.modules['torch.nn'] = types.SimpleNamespace(functional=types.SimpleNamespace())
-sys.modules['transformers.cache_utils'] = types.SimpleNamespace(DynamicCache=type('DynamicCache', (), {}))", None, None).unwrap();
+sys.modules['transformers.cache_utils'] = types.SimpleNamespace(DynamicCache=type('DynamicCache', (), {}))
+sys.modules['transformers.generation.logits_process'] = types.SimpleNamespace(RepetitionPenaltyLogitsProcessor=object)", None, None).unwrap();
             let worker = super::pytorch_worker::worker_module(py).unwrap();
             let names = [
                 "generate_text_stream_setup_from_envelope",
@@ -6476,7 +6545,8 @@ async fn selected_text_production_loader_and_worker_retain_selection_until_termi
             py.run(c"import sys, types
 sys.modules['torch'].no_grad = lambda: (lambda f: f)
 sys.modules['torch.nn'] = types.SimpleNamespace(functional=types.SimpleNamespace())
-sys.modules['transformers.cache_utils'] = types.SimpleNamespace(DynamicCache=type('DynamicCache', (), {}))", None, None).unwrap();
+sys.modules['transformers.cache_utils'] = types.SimpleNamespace(DynamicCache=type('DynamicCache', (), {}))
+sys.modules['transformers.generation.logits_process'] = types.SimpleNamespace(RepetitionPenaltyLogitsProcessor=object)", None, None).unwrap();
             let worker = super::pytorch_worker::worker_module(py).unwrap();
             let saved = [
                 "generate_text_stream_setup_from_envelope",
@@ -6657,6 +6727,7 @@ fn named_text_request(prompt: &str) -> crate::PyTorchTextGenerationRequest {
         temperature: 0.2,
         top_p: 0.95,
         top_k: Some(40),
+        repetition_penalty: None,
         masked_prompt_json: Some("{\"prompt\":\"masked\"}".to_string()),
     }
 }
@@ -6762,4 +6833,35 @@ async fn pytorch_named_text_request_preserves_legacy_validation_paths() {
             .expect("named stream closes")
             .is_none()
     );
+}
+
+#[test]
+fn test_pytorch_repetition_penalty_rejects_invalid_worker_values() {
+    for operation in [
+        PyTorchWorkerOperation::GenerateText,
+        PyTorchWorkerOperation::GenerateTextStream,
+    ] {
+        for value in [
+            serde_json::json!(0),
+            serde_json::json!(-1),
+            serde_json::json!(true),
+            serde_json::json!("1.2"),
+            serde_json::Value::Null,
+        ] {
+            let mut request = named_text_request("hello");
+            request.repetition_penalty = Some(1.2);
+            let mut envelope =
+                PyTorchBackend::generate_text_envelope("req-repeat-invalid", operation, request);
+            envelope
+                .payload
+                .transformers_kwargs
+                .insert("repetition_penalty".into(), value);
+            assert!(PyTorchBackend::validate_generate_text_envelope_operation(
+                &envelope, operation
+            )
+            .unwrap_err()
+            .to_string()
+            .contains("repetition_penalty must be positive and finite"));
+        }
+    }
 }

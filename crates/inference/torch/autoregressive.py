@@ -4,8 +4,27 @@ Provides non-streaming and streaming generation using the standard
 HuggingFace generate API and manual token-by-token sampling.
 """
 
+import math
+
 import torch
 from transformers.cache_utils import DynamicCache
+from transformers.generation.logits_process import RepetitionPenaltyLogitsProcessor
+
+
+def _resolve_repetition_penalty(model, repetition_penalty):
+    """Use the model's generation default only when the request omits it."""
+    if repetition_penalty is None:
+        repetition_penalty = getattr(getattr(model, "generation_config", None),
+                                     "repetition_penalty", 1.0)
+    if isinstance(repetition_penalty, bool) or not isinstance(repetition_penalty, (int, float)):
+        raise ValueError("repetition_penalty must be a finite positive number")
+    try:
+        penalty = float(repetition_penalty)
+    except OverflowError as exc:
+        raise ValueError("repetition_penalty must be a finite positive number") from exc
+    if not math.isfinite(penalty) or penalty <= 0:
+        raise ValueError("repetition_penalty must be a finite positive number")
+    return penalty
 
 
 def _resolve_top_k(model, top_k):
@@ -59,13 +78,16 @@ def _eos_ids(tokenizer):
 
 
 def _generate_sdar_cached(model, tokenizer, device, formatted_prompt,
-                          max_tokens, temperature, top_p, top_k=None):
+                          max_tokens, temperature, top_p, top_k=None, repetition_penalty=None):
     """TraDo/SDAR decode loop with explicit store_kv=True cache updates."""
     inputs = tokenizer(formatted_prompt, return_tensors="pt").to(device)
     input_ids = inputs["input_ids"]
     prompt_len = input_ids.shape[1]
     eos_ids = _eos_ids(tokenizer)
     resolved_top_k = _resolve_top_k(model, top_k)
+    penalty_processor = RepetitionPenaltyLogitsProcessor(
+        _resolve_repetition_penalty(model, repetition_penalty))
+    token_history = input_ids
 
     past_key_values = DynamicCache()
     position_ids = torch.arange(prompt_len, device=device).unsqueeze(0)
@@ -87,11 +109,13 @@ def _generate_sdar_cached(model, tokenizer, device, formatted_prompt,
     cur_pos = prompt_len
 
     for _ in range(max_tokens):
-        next_token = _sample_next_token(logits, temperature, top_p, resolved_top_k)
+        next_token = _sample_next_token(penalty_processor(token_history, logits),
+                                        temperature, top_p, resolved_top_k)
         token_id = int(next_token.item())
         if token_id in eos_ids:
             break
         generated_ids.append(token_id)
+        token_history = torch.cat([token_history, next_token], dim=-1)
 
         with torch.no_grad():
             outputs = model(
@@ -115,7 +139,7 @@ def _generate_sdar_cached(model, tokenizer, device, formatted_prompt,
 
 def _continue_sdar_cached(model, tokenizer, device, formatted_prompt,
                           max_tokens, temperature, top_p,
-                          cached_token_ids, past_key_values, top_k=None):
+                          cached_token_ids, past_key_values, top_k=None, repetition_penalty=None):
     """Continue SDAR/TraDo decoding from a previously captured KV cache.
 
     `formatted_prompt` is treated as a suffix to append to the existing cached
@@ -129,6 +153,8 @@ def _continue_sdar_cached(model, tokenizer, device, formatted_prompt,
         raise RuntimeError("Live KV cache does not support crop-based replay")
 
     resolved_top_k = _resolve_top_k(model, top_k)
+    penalty_processor = RepetitionPenaltyLogitsProcessor(
+        _resolve_repetition_penalty(model, repetition_penalty))
     eos_ids = _eos_ids(tokenizer)
     full_sequence = [int(token_id) for token_id in cached_token_ids]
     cur_pos = len(full_sequence)
@@ -172,7 +198,9 @@ def _continue_sdar_cached(model, tokenizer, device, formatted_prompt,
 
     generated_ids = []
     for _ in range(max_tokens):
-        next_token = _sample_next_token(logits, temperature, top_p, resolved_top_k)
+        token_history = torch.tensor([full_sequence], device=logits.device, dtype=torch.long)
+        next_token = _sample_next_token(penalty_processor(token_history, logits),
+                                        temperature, top_p, resolved_top_k)
         token_id = int(next_token.item())
         if token_id in eos_ids:
             break
@@ -196,7 +224,7 @@ def _continue_sdar_cached(model, tokenizer, device, formatted_prompt,
 
 
 def _generate_autoregressive(model, tokenizer, device, formatted_prompt,
-                             max_tokens, temperature, top_p, top_k=None):
+                             max_tokens, temperature, top_p, top_k=None, repetition_penalty=None):
     """Generate a complete response using standard autoregressive decoding.
 
     Args:
@@ -214,6 +242,9 @@ def _generate_autoregressive(model, tokenizer, device, formatted_prompt,
     inputs = tokenizer(formatted_prompt, return_tensors="pt").to(device)
 
     resolved_top_k = _resolve_top_k(model, top_k)
+    # Validation also covers direct worker calls; omitted kwargs leave the
+    # Transformers generation_config default in charge.
+    resolved_penalty = _resolve_repetition_penalty(model, repetition_penalty)
 
     with torch.no_grad():
         gen_kwargs = {
@@ -224,6 +255,8 @@ def _generate_autoregressive(model, tokenizer, device, formatted_prompt,
         }
         if top_k is not None or resolved_top_k > 0:
             gen_kwargs["top_k"] = resolved_top_k
+        if repetition_penalty is not None:
+            gen_kwargs["repetition_penalty"] = resolved_penalty
         outputs = model.generate(**inputs, **gen_kwargs)
 
     input_len = inputs["input_ids"].shape[1]
@@ -233,7 +266,7 @@ def _generate_autoregressive(model, tokenizer, device, formatted_prompt,
 
 def _generate_autoregressive_streaming(model, tokenizer, device,
                                        formatted_prompt, max_tokens,
-                                       temperature, top_p, top_k=None):
+                                       temperature, top_p, top_k=None, repetition_penalty=None):
     """Generate tokens one at a time for streaming output.
 
     Args:
@@ -251,13 +284,16 @@ def _generate_autoregressive_streaming(model, tokenizer, device,
     inputs = tokenizer(formatted_prompt, return_tensors="pt").to(device)
     input_ids = inputs["input_ids"]
     resolved_top_k = _resolve_top_k(model, top_k)
+    penalty_processor = RepetitionPenaltyLogitsProcessor(
+        _resolve_repetition_penalty(model, repetition_penalty))
 
     for _ in range(max_tokens):
         with torch.no_grad():
             outputs = model(input_ids)
             logits = outputs.logits[:, -1, :]
 
-            next_token = _sample_next_token(logits, temperature, top_p, resolved_top_k)
+            next_token = _sample_next_token(penalty_processor(input_ids, logits),
+                                            temperature, top_p, resolved_top_k)
 
         if next_token.item() == tokenizer.eos_token_id:
             break

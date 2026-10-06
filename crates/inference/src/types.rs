@@ -53,6 +53,8 @@ pub struct ChatRequest {
     pub top_p: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub top_k: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub repetition_penalty: Option<f32>,
 }
 
 /// Canonical task execution request consumed by future typed backend paths.
@@ -90,6 +92,7 @@ impl InferenceExecutionRequest {
             || request.temperature.is_some()
             || request.top_p.is_some()
             || request.top_k.is_some()
+            || request.repetition_penalty.is_some()
         {
             Some(GenerationOptions {
                 length: crate::model_contracts::LengthGenerationOptions {
@@ -100,6 +103,7 @@ impl InferenceExecutionRequest {
                     temperature: request.temperature,
                     top_p: request.top_p,
                     top_k: request.top_k,
+                    repetition_penalty: request.repetition_penalty,
                     ..Default::default()
                 },
                 ..Default::default()
@@ -178,6 +182,14 @@ impl InferenceExecutionRequest {
             InferenceExecutionInput::TextGeneration {
                 prompt, messages, ..
             } => {
+                if self
+                    .generation_options
+                    .as_ref()
+                    .and_then(|options| options.sampling.repetition_penalty)
+                    .is_some_and(|value| !value.is_finite() || value <= 0.0)
+                {
+                    return Err(InferenceExecutionRequestValidationError::InvalidRepetitionPenalty);
+                }
                 if prompt
                     .as_deref()
                     .is_none_or(|value| value.trim().is_empty())
@@ -237,6 +249,8 @@ impl InferenceExecutionRequest {
 pub enum InferenceExecutionRequestValidationError {
     #[error("text generation requires a prompt or chat messages")]
     MissingTextInput,
+    #[error("text repetition_penalty must be positive and finite")]
+    InvalidRepetitionPenalty,
     #[error("embedding execution requires at least one text input")]
     EmptyEmbeddingTexts,
     #[error("embedding text at index {index} must not be blank")]
@@ -2311,6 +2325,7 @@ mod tests {
             temperature: Some(0.4),
             top_p: Some(0.9),
             top_k: Some(40),
+            repetition_penalty: Some(1.2),
         };
 
         let typed = InferenceExecutionRequest::from_openai_chat_request(
@@ -2320,6 +2335,15 @@ mod tests {
 
         typed.validate().expect("mapped chat request is valid");
         assert_eq!(typed.task_id, InferenceTaskId::ChatCompletion);
+        assert_eq!(
+            typed
+                .generation_options
+                .as_ref()
+                .unwrap()
+                .sampling
+                .repetition_penalty,
+            Some(1.2)
+        );
         assert_eq!(typed.model_name.as_deref(), Some("tiny-chat"));
         assert_eq!(
             typed

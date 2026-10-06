@@ -2994,6 +2994,8 @@ fn typed_text_generation_to_chat_request(
         temperature: generation_options.and_then(|options| options.sampling.temperature),
         top_p: generation_options.and_then(|options| options.sampling.top_p),
         top_k: generation_options.and_then(|options| options.sampling.top_k),
+        repetition_penalty: generation_options
+            .and_then(|options| options.sampling.repetition_penalty),
     }
 }
 
@@ -3039,6 +3041,15 @@ fn typed_text_generation_option_diagnostics(
         options.sampling.top_k.is_some(),
         "mapped to chat top_k",
     );
+    if options.sampling.repetition_penalty.is_some() {
+        mapped_paths.push("sampling.repetition_penalty");
+        diagnostics.push(OptionCompatibilityDiagnostic {
+            option_path: "sampling.repetition_penalty".to_string(),
+            state: if backend_key == Some("pytorch") { OptionSupportState::Mapped } else { OptionSupportState::RequiresBackendSupport },
+            backend_key: backend_key.map(ToOwned::to_owned),
+            message: Some("chat repetition_penalty is honored by the PyTorch autoregressive owner; other backends require support".to_string()),
+        });
+    }
     push_chat_cache_use_diagnostic(
         &mut diagnostics,
         &mut mapped_paths,

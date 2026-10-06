@@ -151,7 +151,8 @@ def shutdown_worker_from_envelope(envelope):
         )
 
 
-def _generate_dllm_autoregressive_safe(formatted_prompt, max_tokens, temperature, top_p, top_k=None):
+def _generate_dllm_autoregressive_safe(formatted_prompt, max_tokens, temperature, top_p,
+                                      top_k=None, repetition_penalty=None):
     """Generate for TraDo/SDAR via native generate(), with empty-output retry.
 
     Some SDAR exports include chat delimiters in generation_config.eos_token_id,
@@ -175,6 +176,7 @@ def _generate_dllm_autoregressive_safe(formatted_prompt, max_tokens, temperature
                     cached_token_ids,
                     cached_cache,
                     top_k=top_k,
+                    repetition_penalty=repetition_penalty,
                 )
                 _live_kv_state = {
                     "token_ids": token_ids,
@@ -189,7 +191,8 @@ def _generate_dllm_autoregressive_safe(formatted_prompt, max_tokens, temperature
                 _live_kv_state = None
 
     text, token_ids, cache = _generate_sdar_cached(
-        _model, _tokenizer, _device, formatted_prompt, max_tokens, temperature, top_p, top_k=top_k,
+        _model, _tokenizer, _device, formatted_prompt, max_tokens, temperature, top_p,
+        top_k=top_k, repetition_penalty=repetition_penalty,
     )
     _live_kv_state = {
         "token_ids": token_ids,
@@ -207,6 +210,9 @@ def _generate_dllm_autoregressive_safe(formatted_prompt, max_tokens, temperature
     retry_min_new = min(max_tokens, 24)
     eos_id = getattr(_tokenizer, "eos_token_id", None)
     pad_id = getattr(_tokenizer, "pad_token_id", eos_id)
+    retry_kwargs = {}
+    if repetition_penalty is not None:
+        retry_kwargs["repetition_penalty"] = repetition_penalty
 
     with torch.no_grad():
         outputs = _model.generate(
@@ -219,6 +225,7 @@ def _generate_dllm_autoregressive_safe(formatted_prompt, max_tokens, temperature
             do_sample=temperature > 0,
             eos_token_id=eos_id,
             pad_token_id=pad_id,
+            **retry_kwargs,
         )
 
     input_len = inputs["input_ids"].shape[1]
@@ -1836,6 +1843,8 @@ def generate(prompt, system_prompt=None, max_tokens=512, temperature=0.7, top_p=
 
     # Masked prompt routing for dLLM models
     if masked_prompt_json is not None and _model_type == "dllm":
+        if kwargs.get("repetition_penalty") is not None:
+            raise ValueError("Masked block-diffusion generation does not support repetition_penalty")
         clear_live_kv_cache()
         mp = json.loads(masked_prompt_json)
         segments = mp.get("segments", [])
@@ -1847,6 +1856,7 @@ def generate(prompt, system_prompt=None, max_tokens=512, temperature=0.7, top_p=
 
     formatted = _format_prompt(prompt, system_prompt)
     top_k = kwargs.get("top_k")
+    repetition_penalty = kwargs.get("repetition_penalty")
 
     if _model_type == "dllm":
         # For TraDo/SDAR instruct models in Pantograph, the model's native
@@ -1854,10 +1864,12 @@ def generate(prompt, system_prompt=None, max_tokens=512, temperature=0.7, top_p=
         # experimental custom block-diffusion decode path.
         return _generate_dllm_autoregressive_safe(
             formatted, max_tokens, temperature, top_p, top_k=top_k,
+            repetition_penalty=repetition_penalty,
         )
     clear_live_kv_cache()
     return _generate_autoregressive(
-        _model, _tokenizer, _device, formatted, max_tokens, temperature, top_p, top_k=top_k,
+        _model, _tokenizer, _device, formatted, max_tokens, temperature, top_p,
+        top_k=top_k, repetition_penalty=repetition_penalty,
     )
 
 
@@ -1876,6 +1888,8 @@ def generate_tokens(prompt, system_prompt=None, max_tokens=512, temperature=0.7,
 
     # Masked prompt streaming routing for dLLM models
     if masked_prompt_json is not None and _model_type == "dllm":
+        if kwargs.get("repetition_penalty") is not None:
+            raise ValueError("Masked block-diffusion generation does not support repetition_penalty")
         clear_live_kv_cache()
         mp = json.loads(masked_prompt_json)
         segments = mp.get("segments", [])
@@ -1888,17 +1902,20 @@ def generate_tokens(prompt, system_prompt=None, max_tokens=512, temperature=0.7,
 
     formatted = _format_prompt(prompt, system_prompt)
     top_k = kwargs.get("top_k")
+    repetition_penalty = kwargs.get("repetition_penalty")
 
     if _model_type == "dllm":
         # Stream a single final replacement for stability on TraDo/SDAR.
         final_text = _generate_dllm_autoregressive_safe(
             formatted, max_tokens, temperature, top_p, top_k=top_k,
+            repetition_penalty=repetition_penalty,
         )
         yield {"mode": "replace", "text": final_text}
     else:
         clear_live_kv_cache()
         yield from _generate_autoregressive_streaming(
-            _model, _tokenizer, _device, formatted, max_tokens, temperature, top_p, top_k=top_k,
+            _model, _tokenizer, _device, formatted, max_tokens, temperature, top_p,
+            top_k=top_k, repetition_penalty=repetition_penalty,
         )
 
 

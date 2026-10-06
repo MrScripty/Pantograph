@@ -1950,6 +1950,12 @@ fn assert_retired_onnx_graph_rejected(error: &WorkflowServiceError) {
 
 #[tokio::test]
 async fn selected_text_workflow_retains_completed_output_through_canonical_batch_host() {
+    for repetition_penalty in [None, Some(1.2)] {
+        run_selected_text_workflow_with_repetition_penalty(repetition_penalty).await;
+    }
+}
+
+async fn run_selected_text_workflow_with_repetition_penalty(repetition_penalty: Option<f32>) {
     const MODEL_ID: &str = "llm/example/tiny-transformers";
     const SELECTED_ARTIFACT_ID: &str = "text-bundle";
 
@@ -1976,7 +1982,10 @@ async fn selected_text_workflow_retains_completed_output_through_canonical_batch
             artifact_writer,
         )),
         Arc::new(inference::InferenceGateway::with_backend(
-            Box::new(SelectedWorkflowTextBackend(prompts.clone())),
+            Box::new(SelectedWorkflowTextBackend(
+                prompts.clone(),
+                repetition_penalty,
+            )),
             "PyTorch",
         )),
     ));
@@ -1998,12 +2007,39 @@ async fn selected_text_workflow_retains_completed_output_through_canonical_batch
     let infer = &mut graph.nodes[1];
     infer.data["task_kind"] = serde_json::json!("text_generation");
     infer.data["device"] = serde_json::json!("cpu");
-    let mut interface = image_runtime_inference_interface_snapshot_json();
-    interface["task_kind"] = serde_json::json!("text_generation");
-    interface["outputs"][0]["port_id"] = serde_json::json!("text");
-    interface["outputs"][0]["value_type"] =
-        serde_json::json!({"category": "scalar", "kind": "string"});
-    infer.data["inference_interface_snapshot"] = interface;
+    let interface = text_runtime_inference_interface_snapshot_json();
+    let inputs: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../pantograph-inference-interface-contracts/tests/fixtures/text_generation_system_prompt_inputs.json"
+    )).unwrap();
+    let mut outputs = interface["outputs"].clone();
+    for output in outputs.as_array_mut().unwrap() {
+        output["options"] = serde_json::json!({ "kind": "none" });
+    }
+    let descriptor: pantograph_inference_interface_contracts::InferenceInterfaceDescriptor = serde_json::from_value(serde_json::json!({
+        "contract_version": INFERENCE_INTERFACE_CONTRACT_VERSION,
+        "model_ref": { "model_id": MODEL_ID, "revision": "main", "selected_artifact_id": SELECTED_ARTIFACT_ID },
+        "task_kind": "text_generation", "descriptor_fingerprint": interface["descriptor_fingerprint"],
+        "inputs": inputs, "outputs": outputs, "availability": { "status": "available" }
+    })).unwrap();
+    infer.data["inference_interface_snapshot"] = serde_json::to_value(
+        pantograph_workflow_service::graph::authored_snapshot_from_descriptor(&descriptor).unwrap(),
+    )
+    .unwrap();
+    if repetition_penalty.is_some() {
+        graph.nodes.push(GraphNode {
+            id: "penalty".into(),
+            node_type: "selection-input".into(),
+            position: Position { x: 0.0, y: 100.0 },
+            data: serde_json::json!({}),
+        });
+        graph.edges.push(GraphEdge {
+            id: "penalty-to-infer".into(),
+            source: "penalty".into(),
+            source_handle: "value".into(),
+            target: "infer".into(),
+            target_handle: "repetition_penalty".into(),
+        });
+    }
     let version = service
         .resolve_workflow_graph_version(workflow_id, workflow_semantic_version, &graph)
         .unwrap();
@@ -2078,6 +2114,18 @@ async fn selected_text_workflow_retains_completed_output_through_canonical_batch
         )
         .await
         .expect("create session");
+    let mut inputs = vec![WorkflowPortBinding {
+        node_id: "prompt".into(),
+        port_id: "text".into(),
+        value: serde_json::json!("  paint a red cube\n"),
+    }];
+    if let Some(value) = repetition_penalty {
+        inputs.push(WorkflowPortBinding {
+            node_id: "penalty".into(),
+            port_id: "value".into(),
+            value: serde_json::from_str(&serde_json::to_string(&value).unwrap()).unwrap(),
+        });
+    }
     let response = pantograph_workflow_service::workflow::WorkflowSessionExecutionRuntime::from_shared_service(
         service.clone(),
         host.clone(),
@@ -2086,11 +2134,7 @@ async fn selected_text_workflow_retains_completed_output_through_canonical_batch
             WorkflowExecutionSessionRunRequest {
                 session_id: created.session_id.clone(),
                 workflow_semantic_version: workflow_semantic_version.to_string(),
-                inputs: vec![WorkflowPortBinding {
-                    node_id: "prompt".to_string(),
-                    port_id: "text".to_string(),
-                    value: serde_json::json!("  paint a red cube\n"),
-                }],
+                inputs,
                 output_targets: Some(vec![WorkflowOutputTarget {
                     node_id: "infer".to_string(),
                     port_id: "text".to_string(),
@@ -2202,7 +2246,7 @@ async fn selected_text_workflow_retains_outputs_and_materializes_dependent_edge(
             artifact_writer,
         )),
         Arc::new(inference::InferenceGateway::with_backend(
-            Box::new(SelectedWorkflowTextBackend(prompts.clone())),
+            Box::new(SelectedWorkflowTextBackend(prompts.clone(), None)),
             "PyTorch",
         )),
     ));
@@ -3336,7 +3380,7 @@ impl crate::runtime_host_load_target::RuntimeHostLoadTargetResolver for Selected
         })
     }
 }
-struct SelectedWorkflowTextBackend(Arc<Mutex<Vec<String>>>);
+struct SelectedWorkflowTextBackend(Arc<Mutex<Vec<String>>>, Option<f32>);
 #[async_trait]
 impl InferenceBackend for SelectedWorkflowTextBackend {
     fn name(&self) -> &'static str {
@@ -3391,6 +3435,15 @@ impl InferenceBackend for SelectedWorkflowTextBackend {
         BackendError,
     > {
         let request: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(
+            request.get("repetition_penalty"),
+            self.1
+                .map(|value| serde_json::from_str::<serde_json::Value>(
+                    &serde_json::to_string(&value).unwrap()
+                )
+                .unwrap())
+                .as_ref()
+        );
         let prompt = request["messages"][0]["content"][0]["text"]
             .as_str()
             .unwrap()

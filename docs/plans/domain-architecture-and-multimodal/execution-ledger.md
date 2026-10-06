@@ -529,3 +529,21 @@ Final source qualification passes 806 inference, 503 embedded and 142 registry
 checks with strict all-target mixed-backend Clippy. Config/frontend source remains
 unchanged from its passing qualification. The independent repair branch is
 published normally; the parent alone updates PR56 and replies/resolves reviews.
+
+
+## 2026-10-06 — Graph-authored text repetition penalty
+
+The independent successor of reviewed correctness `13d24e89` exposes the existing
+text sampling option through the descriptor, selected host/gateway and PyTorch
+worker owner. Omission preserves model defaults; explicit one is neutral.
+Validation refuses non-positive/non-finite values before effects, including the
+NaN-to-JSON-null typed API case. Full token history is used for native Transformers,
+manual streaming and SDAR cache/replay; masked block diffusion rejects the option.
+The actual public session connects a Selection Input source and retains generated
+text. The [feature report](reports/2026-10-06-workflow-text-repetition-penalty.md)
+records 811 inference, 505 embedded, 23 interface and 661 frontend passes, 13 actual
+CPU tests, strict Clippy, type/format/critical/accessibility/traceability checks
+and nine no-build-download graphs. Initial import/snapshot/source fixture errors
+were corrected before these final passes. Native desktop/GPU/pretrained/ONNX
+qualification remains separate. Config `f0472ca1` and combined `1034daeb` review
+checkpoints remain frozen; parent owns PR/review/integration.

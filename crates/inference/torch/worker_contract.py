@@ -1,6 +1,7 @@
 """Worker envelope validation helpers that do not import torch."""
 
 import json
+import math
 
 WORKER_CONTRACT_VERSION = 1
 INIT_WORKER_OPERATION = "init_worker"
@@ -17,7 +18,7 @@ CLEAR_KV_CACHE_OPERATION = "clear_kv_cache"
 SAVE_KV_CACHE_OPERATION = "save_kv_cache"
 RESTORE_KV_CACHE_OPERATION = "restore_kv_cache"
 TRUNCATE_KV_CACHE_OPERATION = "truncate_kv_cache"
-ALLOWED_TRANSFORMERS_GENERATE_KWARGS = {"top_k"}
+ALLOWED_TRANSFORMERS_GENERATE_KWARGS = {"top_k", "repetition_penalty"}
 CAUSAL_LM_LOADER = "causal_lm"
 AUTOMATIC_SPEECH_RECOGNITION_LOADER = "automatic_speech_recognition"
 SUPPORTED_TRANSFORMERS_LOADERS = {
@@ -235,6 +236,17 @@ def generate_text_kwargs_from_envelope(envelope, expected_operation=GENERATE_TEX
         raise ValueError(
             f"PyTorch worker generate_text transformers_kwargs contains unsupported key(s): {joined}"
         )
+
+    if "repetition_penalty" in transformers_kwargs:
+        penalty = transformers_kwargs["repetition_penalty"]
+        if isinstance(penalty, bool) or not isinstance(penalty, (int, float)):
+            raise ValueError("repetition_penalty must be a finite positive number")
+        try:
+            penalty = float(penalty)
+        except OverflowError as exc:
+            raise ValueError("repetition_penalty must be a finite positive number") from exc
+        if not math.isfinite(penalty) or penalty <= 0:
+            raise ValueError("repetition_penalty must be a finite positive number")
 
     kwargs = {
         "prompt": prompt,

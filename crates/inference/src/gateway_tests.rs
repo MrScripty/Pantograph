@@ -5316,6 +5316,96 @@ async fn selected_text_preserves_top_p_boundaries_with_optional_length_and_syste
         }
     }
 }
+#[tokio::test]
+async fn selected_text_preserves_repetition_penalty_boundaries_with_optional_length_and_system() {
+    for repetition_penalty in [None, Some(0.5), Some(1.0), Some(1.2)] {
+        for max_new_tokens in [None, Some(128)] {
+            for system in [None, Some("  Return an image prompt only.\n".to_string())] {
+                let (_directory, mut request, target, decision) =
+                    crate::selected_text_execution::fixture();
+                let InferenceExecutionInput::TextGeneration { system_prompt, .. } =
+                    &mut request.input
+                else {
+                    panic!("text fixture expected");
+                };
+                *system_prompt = system.clone();
+                request.generation_options =
+                    if repetition_penalty.is_some() || max_new_tokens.is_some() {
+                        Some(GenerationOptions {
+                            sampling: SamplingGenerationOptions {
+                                repetition_penalty,
+                                ..Default::default()
+                            },
+                            length: LengthGenerationOptions {
+                                max_new_tokens,
+                                ..Default::default()
+                            },
+                            ..Default::default()
+                        })
+                    } else {
+                        None
+                    };
+                let selected = SelectedTextBackend {
+                    expected_system_prompt: system,
+                    ..Default::default()
+                };
+                let requests = selected.requests.clone();
+                let effects = selected.effects.clone();
+                let gateway = InferenceGateway::with_backend(Box::new(selected), "PyTorch");
+                let result = gateway
+                    .execute_selected_text_with_cancellation(
+                        request,
+                        target.clone(),
+                        decision,
+                        InferenceExecutionCancellationHandle::running(),
+                    )
+                    .await
+                    .unwrap();
+                let InferenceExecutionResult::TextGeneration {
+                    text,
+                    option_diagnostics,
+                    ..
+                } = result
+                else {
+                    panic!("text result expected");
+                };
+                assert_eq!(text, "exact text");
+                let requests = requests.lock().unwrap();
+                assert_eq!(requests.len(), 1);
+                assert_eq!(
+                    requests[0].get("repetition_penalty"),
+                    repetition_penalty
+                        .map(|value| serde_json::from_str::<serde_json::Value>(
+                            &serde_json::to_string(&value).unwrap()
+                        )
+                        .unwrap())
+                        .as_ref()
+                );
+                assert_eq!(
+                    requests[0].get("max_tokens"),
+                    max_new_tokens.map(serde_json::Value::from).as_ref()
+                );
+                assert_eq!(
+                    option_diagnostics
+                        .iter()
+                        .any(
+                            |diagnostic| diagnostic.option_path == "sampling.repetition_penalty"
+                                && diagnostic.state == OptionSupportState::Mapped
+                        ),
+                    repetition_penalty.is_some()
+                );
+                assert_eq!(
+                    *effects.lock().unwrap(),
+                    [
+                        format!("load:{}:cpu", target.local_load_path),
+                        "stream".into(),
+                        "finish:false".into()
+                    ]
+                );
+            }
+        }
+    }
+}
 
 #[tokio::test]
 async fn ordinary_and_selected_text_loads_never_reuse_an_allocation_generation() {
@@ -5787,3 +5877,58 @@ fn private_lifecycle_context_preserves_complete_attribution_and_absence() {
 #[cfg(feature = "backend-candle")]
 #[path = "gateway_embedding_replacement_tests.rs"]
 mod embedding_replacement;
+
+#[tokio::test]
+async fn selected_text_invalid_repetition_penalty_fails_before_load_or_serialization() {
+    for repetition_penalty in [0.0, -1.0, f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+        let (_directory, mut request, target, decision) = crate::selected_text_execution::fixture();
+        request.generation_options = Some(GenerationOptions {
+            sampling: SamplingGenerationOptions {
+                repetition_penalty: Some(repetition_penalty),
+                ..Default::default()
+            },
+            ..Default::default()
+        });
+        let backend = SelectedTextBackend::default();
+        let effects = backend.effects.clone();
+        let requests = backend.requests.clone();
+        let gateway = InferenceGateway::with_backend(Box::new(backend), "PyTorch");
+        let error = gateway
+            .execute_selected_text_with_cancellation(
+                request,
+                target,
+                decision,
+                InferenceExecutionCancellationHandle::running(),
+            )
+            .await
+            .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("repetition_penalty must be positive and finite"),
+            "{error}"
+        );
+        assert!(effects.lock().unwrap().is_empty());
+        assert!(requests.lock().unwrap().is_empty());
+    }
+}
+
+#[test]
+fn repetition_penalty_mapping_does_not_claim_other_backend_support() {
+    let options = GenerationOptions {
+        sampling: SamplingGenerationOptions {
+            repetition_penalty: Some(1.2),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    for backend in [None, Some("llamacpp"), Some("external"), Some("candle")] {
+        let diagnostics = typed_text_generation_option_diagnostics(Some(&options), backend);
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(diagnostics[0].option_path, "sampling.repetition_penalty");
+        assert_eq!(
+            diagnostics[0].state,
+            OptionSupportState::RequiresBackendSupport
+        );
+    }
+}

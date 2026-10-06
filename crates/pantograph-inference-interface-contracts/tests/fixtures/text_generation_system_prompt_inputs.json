@@ -52,5 +52,25 @@
     "value_type": { "category": "scalar", "kind": "f64" },
     "options": { "kind": "numeric_range", "range": { "min": 0.0, "max": 1.0 } },
     "availability": { "status": "available" }
+  },
+{
+  "port_id": "repetition_penalty",
+  "label": "Repetition penalty",
+  "direction": "input",
+  "requirement": "optional",
+  "value_type": {
+    "category": "scalar",
+    "kind": "f64"
+  },
+  "options": {
+    "kind": "numeric_range",
+    "range": {
+      "min": 1.401298464324817e-45,
+      "max": 3.4028234663852886e+38
+    }
+  },
+  "availability": {
+    "status": "available"
   }
+}
 ]
