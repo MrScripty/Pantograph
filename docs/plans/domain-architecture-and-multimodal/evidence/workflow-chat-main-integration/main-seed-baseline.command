@@ -1,0 +1,1 @@
+cargo test --locked --offline -p node-engine --features inference-nodes --lib core_executor::tests::inference_tests::test_execute_llm_inference_non_streaming_uses_typed_gateway_boundary -- --exact --nocapture 
