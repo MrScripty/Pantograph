@@ -1,0 +1,2356 @@
+diff --git a/crates/pantograph-embedded-runtime/src/inference_interface_facts_provider.rs b/crates/pantograph-embedded-runtime/src/inference_interface_facts_provider.rs
+index 0145232c..e72cbc52 100644
+--- a/crates/pantograph-embedded-runtime/src/inference_interface_facts_provider.rs
++++ b/crates/pantograph-embedded-runtime/src/inference_interface_facts_provider.rs
+@@ -6,7 +6,8 @@ use inference::{BackendHintLabel, InferenceTaskId, ModelValidationState, TaskReg
+ use pantograph_inference_interface_contracts::{
+     InferenceArtifactType, InferenceAvailability, InferenceNumericRange, InferencePortDescriptor,
+     InferencePortDirection, InferencePortId, InferencePortOptions, InferencePortRequirement,
+-    InferenceScalarType, InferenceTaskKind, InferenceValueType, RuntimeIntentId,
++    InferenceScalarType, InferenceStructuredType, InferenceTaskKind, InferenceValueType,
++    RuntimeIntentId,
+ };
+ use pantograph_runtime_registry::RuntimeRegistryStatus;
+ use pantograph_workflow_service::graph::{
+@@ -299,6 +300,13 @@ fn input_ports(task_entry: &TaskRegistryEntry) -> Vec<InferencePortDescriptor> {
+             image_count_input_port(),
+             denoising_scheduler_input_port(),
+         ],
++        InferenceTaskId::Embedding => vec![port(
++            "text",
++            "Text",
++            InferencePortDirection::Input,
++            InferencePortRequirement::Required,
++            InferenceValueType::Scalar(InferenceScalarType::String),
++        )],
+         InferenceTaskId::ChatCompletion | InferenceTaskId::MultimodalGeneration => vec![port(
+             "prompt",
+             "Prompt",
+@@ -441,6 +449,29 @@ fn sampling_number_input_port(port_id: &str, label: &str, max: f64) -> Inference
+ 
+ fn output_ports(task_entry: &TaskRegistryEntry) -> Vec<InferencePortDescriptor> {
+     match task_entry.task_id {
++        InferenceTaskId::Embedding => vec![
++            port(
++                "embedding",
++                "Embedding",
++                InferencePortDirection::Output,
++                InferencePortRequirement::Required,
++                InferenceValueType::Structured(InferenceStructuredType::Embedding),
++            ),
++            port(
++                "metadata",
++                "Metadata",
++                InferencePortDirection::Output,
++                InferencePortRequirement::Required,
++                InferenceValueType::Structured(InferenceStructuredType::Json),
++            ),
++            port(
++                "usage",
++                "Usage",
++                InferencePortDirection::Output,
++                InferencePortRequirement::Optional,
++                InferenceValueType::Structured(InferenceStructuredType::Json),
++            ),
++        ],
+         InferenceTaskId::ImageGeneration => vec![port(
+             "image",
+             "Image",
+@@ -741,6 +772,68 @@ mod tests {
+         assert!(facts.estimate_hints.is_empty());
+     }
+ 
++    #[test]
++    fn embedding_descriptor_types_have_stable_fingerprints_and_saved_snapshots() {
++        use pantograph_inference_interface_contracts::ResolveInferenceInterfaceRequest;
++        use pantograph_workflow_service::graph::{
++            authored_snapshot_from_descriptor, resolve_inference_interface_from_facts,
++        };
++        let mut package = projected_package_facts();
++        package.task = TaskEvidence {
++            pipeline_tag: Some("feature-extraction".into()),
++            task_type_primary: Some("embedding".into()),
++            input_modalities: vec!["text".into()],
++            output_modalities: vec!["embedding".into()],
++        };
++        let runtime = InferenceRuntimeAvailabilityFact {
++            runtime_id: "candle".parse().unwrap(),
++            state: InferenceRuntimeAvailabilityState::Available,
++            device_ids: vec!["cpu".parse().unwrap()],
++        };
++        let capability = capability_facts(&package, std::slice::from_ref(&runtime)).unwrap();
++        assert_eq!(capability.task_kind.as_str(), "embedding");
++        let fixture: pantograph_inference_interface_contracts::InferenceInterfaceDescriptor = serde_json::from_str(include_str!("../../pantograph-inference-interface-contracts/tests/fixtures/descriptor_embedding_ready.json")).unwrap();
++        assert_eq!(capability.inputs, fixture.inputs);
++        assert_eq!(capability.outputs, fixture.outputs);
++        let request: ResolveInferenceInterfaceRequest = serde_json::from_value(serde_json::json!({
++            "model_ref": {"model_id": "embedding/example/tiny-cpu", "selected_artifact_id": "candle-safetensors"},
++            "task_kind": "embedding", "runtime_constraint": "candle", "device_constraint": "cpu",
++        })).unwrap();
++        let facts = InferenceInterfaceResolverFacts {
++            model: InferenceModelResolutionFacts {
++                state: InferenceModelResolutionState::Ready,
++            },
++            capability: Some(capability),
++            runtimes: vec![runtime],
++            estimate_hints: Vec::new(),
++        };
++        let descriptor =
++            resolve_inference_interface_from_facts(request.clone(), facts.clone()).unwrap();
++        let repeated =
++            resolve_inference_interface_from_facts(request.clone(), facts.clone()).unwrap();
++        assert_eq!(
++            descriptor.descriptor_fingerprint,
++            repeated.descriptor_fingerprint
++        );
++        let snapshot = authored_snapshot_from_descriptor(&descriptor).unwrap();
++        let restored: pantograph_inference_interface_contracts::AuthoredInferenceInterfaceSnapshot =
++            serde_json::from_str(&serde_json::to_string(&snapshot).unwrap()).unwrap();
++        assert_eq!(restored, snapshot);
++        assert_eq!(
++            restored.descriptor_fingerprint,
++            descriptor.descriptor_fingerprint
++        );
++        let mut tensor_facts = facts;
++        tensor_facts.capability.as_mut().unwrap().outputs[0].value_type =
++            InferenceValueType::Artifact(InferenceArtifactType::Tensor);
++        let tensor_descriptor =
++            resolve_inference_interface_from_facts(request, tensor_facts).unwrap();
++        assert_ne!(
++            descriptor.descriptor_fingerprint,
++            tensor_descriptor.descriptor_fingerprint
++        );
++    }
++
+     fn projected_package_facts() -> PumasDispatchPackageFactsProjection {
+         PumasDispatchPackageFactsProjection {
+             model_ref: PumasModelRef {
+diff --git a/crates/pantograph-embedded-runtime/src/lib_tests/cpu_embedding_graph_tests.rs b/crates/pantograph-embedded-runtime/src/lib_tests/cpu_embedding_graph_tests.rs
+new file mode 100644
+index 00000000..aefe158a
+--- /dev/null
++++ b/crates/pantograph-embedded-runtime/src/lib_tests/cpu_embedding_graph_tests.rs
+@@ -0,0 +1,272 @@
++use super::*;
++use crate::runtime_host_embedding_execution::tests::{fixture, Package, Target, UnusedMediaSink};
++use pantograph_inference_interface_contracts::InferenceInterfaceDescriptor;
++use pantograph_workflow_service::{
++    FileSystemWorkflowGraphStore, WorkflowGraphLoadRequest, WorkflowGraphSaveRequest,
++};
++
++fn embedding_graph(model_ref: &PumasModelRef) -> WorkflowGraph {
++    let mut descriptor: InferenceInterfaceDescriptor = serde_json::from_str(include_str!(
++        "../../../pantograph-inference-interface-contracts/tests/fixtures/descriptor_embedding_ready.json"
++    ))
++    .unwrap();
++    descriptor.model_ref = model_ref.clone();
++    let snapshot =
++        pantograph_workflow_service::graph::authored_snapshot_from_descriptor(&descriptor).unwrap();
++    WorkflowGraph {
++        nodes: vec![
++            GraphNode {
++                id: "prompt".into(),
++                node_type: "text-input".into(),
++                position: Position { x: 0.0, y: 0.0 },
++                data: serde_json::json!({}),
++            },
++            GraphNode {
++                id: "infer".into(),
++                node_type: "llm-inference".into(),
++                position: Position { x: 200.0, y: 0.0 },
++                data: serde_json::json!({
++                    "task_kind": "embedding", "runtime": "candle", "device": "cpu",
++                    "pumas_model_ref": model_ref, "inference_interface_snapshot": snapshot,
++                }),
++            },
++            GraphNode {
++                id: "vectors".into(),
++                node_type: "vector-output".into(),
++                position: Position { x: 400.0, y: 0.0 },
++                data: serde_json::json!({}),
++            },
++        ],
++        edges: vec![
++            GraphEdge {
++                id: "text-to-embedding".into(),
++                source: "prompt".into(),
++                source_handle: "text".into(),
++                target: "infer".into(),
++                target_handle: "text".into(),
++            },
++            GraphEdge {
++                id: "embedding-to-vector".into(),
++                source: "infer".into(),
++                source_handle: "embedding".into(),
++                target: "vectors".into(),
++                target_handle: "vector".into(),
++            },
++        ],
++        derived_graph: None,
++    }
++}
++
++fn install_embedding_readiness(
++    service: &WorkflowService,
++    provider: &DependencyEnvironmentReadinessSnapshotProvider,
++    graph: &WorkflowGraph,
++    version: &WorkflowVersionRecord,
++    model_ref: &PumasModelRef,
++) {
++    // Only package/readiness/dispatch facts are controlled. Inference below uses
++    // the production selected-model owner and the committed actual Candle model.
++    let mut snapshot =
++        image_runtime_validation_snapshot(version, graph, &model_ref.model_id, "fixture");
++    let node = &mut snapshot.nodes[0];
++    node.task_kind = InferenceTaskKind::parse("embedding").unwrap();
++    node.model_ref = model_ref.clone();
++    node.descriptor_fingerprint =
++        InferenceInterfaceFingerprint::parse("iface.test.cpu_embedding.v1").unwrap();
++    node.constraints.requested_runtime_id = Some(RuntimeIntentId::parse("candle").unwrap());
++    node.constraints.requested_device_id = Some(DeviceIntentId::parse("cpu").unwrap());
++    node.runtime_source_context.operation_type = "embedding.text".into();
++    node.runtime_source_context.context_shape_key = "embedding.one-text".into();
++    let mut planning = image_runtime_dependency_planning_request(
++        version,
++        model_ref,
++        vec![DependencyBindingId::parse("candle-embedding").unwrap()],
++    );
++    planning.task_id = DependencyTaskId::parse("embedding").unwrap();
++    planning.task_type = Some(planning.task_id.clone());
++    planning.scheduler_intent.requested_runtime_id =
++        Some(RuntimeIntentId::parse("candle").unwrap());
++    planning.scheduler_intent.requested_device_id = Some(DeviceIntentId::parse("cpu").unwrap());
++    let proof = produce_dependency_requirements_proof(
++        &ValidatedDependencyPlanningRequest::try_from(planning.clone()).unwrap(),
++        None,
++    )
++    .unwrap();
++    node.dependency_requirements_id = proof.dependency_requirements_id.clone();
++    node.selected_binding_ids = proof.identity_key.selected_binding_ids.clone();
++    node.dependency_override_fingerprint = proof.dependency_override_fingerprint.clone();
++    let request = ValidatedDependencyEnvironmentRequest::try_from(DependencyEnvironmentRequest {
++        contract_version: 1,
++        action: DependencyEnvironmentAction::Resolve,
++        identity_key: proof.identity_key,
++        planning_request: planning,
++        dependency_requirements_id: Some(proof.dependency_requirements_id),
++        environment_ref: None,
++    })
++    .unwrap();
++    let mut result = ready_image_dependency_environment_result(&request);
++    result.requirements = serde_json::from_value(serde_json::json!([{
++        "name": "candle-embedding", "kind": "runtime_feature",
++        "runtime_feature": {"runtime_id": "candle", "feature_id": "embedding", "runtime_variant_id": "candle.cpu"}
++    }])).unwrap();
++    result.bindings = serde_json::from_value(serde_json::json!([{
++        "binding_id": "candle-embedding", "requirement_name": "candle-embedding", "environment_kind": "runtime_feature",
++        "runtime_feature": {"runtime_id": "candle", "feature_id": "embedding", "runtime_variant_id": "candle.cpu"}
++    }])).unwrap();
++    provider
++        .insert_snapshot(
++            DependencyEnvironmentReadinessSnapshot::for_request(
++                &request,
++                result,
++                DependencyEnvironmentReadinessSnapshotStatus::Fresh,
++            )
++            .unwrap(),
++        )
++        .unwrap();
++    service
++        .store_workflow_executable_validation_snapshot(snapshot)
++        .unwrap();
++}
++
++#[tokio::test]
++async fn saved_cpu_embedding_graph_runs_public_scheduler_and_preserves_vectors_metadata_usage() {
++    let gateway = Arc::new(inference::InferenceGateway::with_backend(
++        Box::new(inference::backend::candle::CandleBackend::new()),
++        "Candle",
++    ));
++    for width in [8, 12] {
++        let (directory, request, package, target) = fixture(width);
++        let model_ref = request
++            .handoff
++            .dispatch_decision
++            .as_ref()
++            .unwrap()
++            .selected_model_ref
++            .clone();
++        let artifact_root = TempDir::new().unwrap();
++        let provider = DependencyEnvironmentReadinessSnapshotProvider::new();
++        let lifecycle = Arc::new(TestReservationLifecyclePort::default());
++        let port = Arc::new(EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
++            Arc::new(Target(
++                serde_json::from_value(serde_json::to_value(target).unwrap()).unwrap(),
++            )),
++            Arc::new(Package(package)),
++            Arc::new(UnusedMediaSink),
++            gateway.clone(),
++        ));
++        let service = Arc::new(
++            WorkflowService::with_ephemeral_attribution_store()
++                .unwrap()
++                .with_artifact_writer(test_artifact_writer(&artifact_root))
++                .with_diagnostics_ledger(
++                    pantograph_workflow_service::SqliteDiagnosticsLedger::open_in_memory().unwrap(),
++                )
++                .with_dependency_environment_provider(Arc::new(provider.clone()))
++                .with_dependency_readiness_work_queue(Arc::new(DependencyReadinessWorkQueue::new()))
++                .with_runtime_dispatch_source_refresher(Arc::new(
++                    TestRuntimeDispatchSourceRefresher::default(),
++                ))
++                .with_runtime_dispatch_candidate_provider(Arc::new(
++                    TestRuntimeDispatchCandidateProvider,
++                ))
++                .with_runtime_host_execution_port(port.clone())
++                .with_runtime_host_batch_execution_port(port)
++                .with_reservation_lifecycle_port(lifecycle.clone()),
++        );
++        let store = FileSystemWorkflowGraphStore::new(directory.path());
++        let graph = embedding_graph(&model_ref);
++        let saved = service
++            .workflow_graph_save(
++                &store,
++                WorkflowGraphSaveRequest {
++                    name: "CPU Embedding Fixture".into(),
++                    graph: graph.clone(),
++                },
++            )
++            .unwrap();
++        let restored = service
++            .workflow_graph_load(&store, WorkflowGraphLoadRequest { path: saved.path })
++            .unwrap()
++            .graph;
++        assert_eq!(restored.compute_fingerprint(), graph.compute_fingerprint());
++        assert_eq!(
++            restored.nodes[1].data["inference_interface_snapshot"],
++            graph.nodes[1].data["inference_interface_snapshot"]
++        );
++        let workflow_id = "wf-cpu-embedding-fixture";
++        let version = service
++            .resolve_workflow_graph_version(workflow_id, "1.0.0", &restored)
++            .unwrap();
++        install_embedding_readiness(&service, &provider, &restored, &version, &model_ref);
++        let host = Arc::new(ImageRuntimeSessionHost::new(restored));
++        let created = service
++            .create_workflow_execution_session(
++                host.as_ref(),
++                WorkflowExecutionSessionCreateRequest {
++                    workflow_id: workflow_id.into(),
++                    usage_profile: None,
++                    keep_alive: false,
++                },
++            )
++            .await
++            .unwrap();
++        let response = pantograph_workflow_service::workflow::WorkflowSessionExecutionRuntime::from_shared_service(service.clone(), host.clone())
++            .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
++                session_id: created.session_id, workflow_semantic_version: "1.0.0".into(),
++                inputs: vec![WorkflowPortBinding { node_id: "prompt".into(), port_id: "text".into(), value: serde_json::json!("hello world") }],
++                output_targets: Some(vec![
++                    WorkflowOutputTarget { node_id: "vectors".into(), port_id: "vector".into() },
++                    WorkflowOutputTarget { node_id: "infer".into(), port_id: "embedding".into() },
++                    WorkflowOutputTarget { node_id: "infer".into(), port_id: "metadata".into() },
++                    WorkflowOutputTarget { node_id: "infer".into(), port_id: "usage".into() },
++                ]), override_selection: None, timeout_ms: None, priority: None,
++            }).await.expect("actual Candle embedding graph through public scheduler");
++        let output = |node: &str, port: &str| {
++            &response
++                .outputs
++                .iter()
++                .find(|item| item.node_id == node && item.port_id == port)
++                .unwrap()
++                .value
++        };
++        let vector = output("vectors", "vector");
++        assert_eq!(vector, output("infer", "embedding"));
++        assert_eq!(vector.as_array().unwrap().len(), width);
++        let golden: serde_json::Value = serde_json::from_slice(
++            &std::fs::read(
++                std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(format!(
++                    "../inference/tests/fixtures/candle_bert/bert-{width}/golden.json"
++                )),
++            )
++            .unwrap(),
++        )
++        .unwrap();
++        for (actual, expected) in vector
++            .as_array()
++            .unwrap()
++            .iter()
++            .zip(golden["single_vectors"][0].as_array().unwrap())
++        {
++            assert!((actual.as_f64().unwrap() - expected.as_f64().unwrap()).abs() < 1e-5);
++        }
++        let metadata = output("infer", "metadata");
++        assert_eq!(
++            metadata["model_ref"],
++            serde_json::to_value(&model_ref).unwrap()
++        );
++        assert_eq!(metadata["vector_length"], width);
++        assert_eq!(metadata["index"], 0);
++        assert_eq!(metadata["token_count"], 4);
++        assert_eq!(metadata["runtime_variant_id"], "candle.cpu");
++        assert_eq!(metadata["device_ids"], serde_json::json!(["cpu"]));
++        assert_eq!(output("infer", "usage")["prompt_tokens"], 4);
++        assert_eq!(output("infer", "usage")["total_tokens"], 4);
++        assert!(lifecycle
++            .events()
++            .iter()
++            .all(|event| event.workflow_run_id.as_str() == response.workflow_run_id));
++        assert_eq!(host.runtime_load_attempts.load(Ordering::SeqCst), 0);
++        assert_eq!(host.run_attempts.load(Ordering::SeqCst), 0);
++    }
++    gateway.stop().await.unwrap();
++}
+diff --git a/crates/pantograph-embedded-runtime/src/lib_tests/workflow_run_execution_tests.rs b/crates/pantograph-embedded-runtime/src/lib_tests/workflow_run_execution_tests.rs
+index 0a7f7708..ed24c4a4 100644
+--- a/crates/pantograph-embedded-runtime/src/lib_tests/workflow_run_execution_tests.rs
++++ b/crates/pantograph-embedded-runtime/src/lib_tests/workflow_run_execution_tests.rs
+@@ -1018,7 +1018,9 @@ impl WorkflowRuntimeDispatchCandidateProvider for TestRuntimeDispatchCandidatePr
+             })?,
+             selected_runtime_id,
+             selected_runtime_variant_id: Some(
+-                if intent.task_type.as_str() == "text_generation" {
++                if intent.task_type.as_str() == "embedding" {
++                    "candle.cpu"
++                } else if intent.task_type.as_str() == "text_generation" {
+                     "pytorch.cpu"
+                 } else {
+                     "pytorch.diffusers"
+@@ -1026,7 +1028,12 @@ impl WorkflowRuntimeDispatchCandidateProvider for TestRuntimeDispatchCandidatePr
+                 .parse()
+                 .unwrap(),
+             ),
+-            selected_backend_key: "pytorch".to_string(),
++            selected_backend_key: if intent.task_type.as_str() == "embedding" {
++                "candle"
++            } else {
++                "pytorch"
++            }
++            .to_string(),
+             runtime_family: "test-runtime".to_string(),
+             resolved_load_target: format!("test:{}", intent.model_ref.model_id),
+             runtime_residency_key: format!("test-runtime:{}", intent.model_ref.model_id),
+@@ -1163,8 +1170,35 @@ impl WorkflowHost for ImageRuntimeSessionHost {
+                 .graph
+                 .nodes
+                 .iter()
+-                .filter(|node| node.node_type == "llm-inference")
++                .filter(|node| matches!(node.node_type.as_str(), "llm-inference" | "vector-output"))
+                 .map(|node| {
++                    if node.node_type == "vector-output" || node.data["task_kind"] == "embedding" {
++                        return WorkflowIoNode {
++                            node_id: node.id.clone(),
++                            node_type: node.node_type.clone(),
++                            name: None,
++                            description: None,
++                            ports: if node.node_type == "vector-output" {
++                                vec![("vector", "embedding")]
++                            } else {
++                                vec![
++                                    ("embedding", "embedding"),
++                                    ("metadata", "json"),
++                                    ("usage", "json"),
++                                ]
++                            }
++                            .into_iter()
++                            .map(|(port_id, data_type)| WorkflowIoPort {
++                                port_id: port_id.into(),
++                                name: None,
++                                description: None,
++                                data_type: Some(data_type.into()),
++                                required: Some(false),
++                                multiple: Some(false),
++                            })
++                            .collect(),
++                        };
++                    }
+                     let text = node.data["task_kind"] == "text_generation";
+                     WorkflowIoNode {
+                         node_id: node.id.clone(),
+@@ -3746,3 +3780,7 @@ impl InferenceBackend for SelectedWorkflowTextBackend {
+         Err(BackendError::NotReady)
+     }
+ }
++
++#[cfg(feature = "backend-candle")]
++#[path = "cpu_embedding_graph_tests.rs"]
++mod cpu_embedding_graph_tests;
+diff --git a/crates/pantograph-embedded-runtime/src/runtime_host_embedding_execution.rs b/crates/pantograph-embedded-runtime/src/runtime_host_embedding_execution.rs
+index 9cd3c0b4..2677d9dc 100644
+--- a/crates/pantograph-embedded-runtime/src/runtime_host_embedding_execution.rs
++++ b/crates/pantograph-embedded-runtime/src/runtime_host_embedding_execution.rs
+@@ -177,4 +177,4 @@ pub(crate) enum RuntimeHostEmbeddingProjectionError {
+ 
+ #[cfg(all(test, feature = "backend-candle"))]
+ #[path = "runtime_host_embedding_execution_tests.rs"]
+-mod tests;
++pub(crate) mod tests;
+diff --git a/crates/pantograph-embedded-runtime/src/runtime_host_embedding_execution_tests.rs b/crates/pantograph-embedded-runtime/src/runtime_host_embedding_execution_tests.rs
+index 76a0ba18..5494e202 100644
+--- a/crates/pantograph-embedded-runtime/src/runtime_host_embedding_execution_tests.rs
++++ b/crates/pantograph-embedded-runtime/src/runtime_host_embedding_execution_tests.rs
+@@ -6,7 +6,7 @@ use pantograph_runtime_host_contracts::{
+ };
+ use std::{path::Path, sync::Arc};
+ 
+-fn fixture(
++pub(crate) fn fixture(
+     width: usize,
+ ) -> (
+     tempfile::TempDir,
+@@ -93,7 +93,7 @@ fn fixture(
+     )
+ }
+ 
+-struct Target(pumas_library::models::PumasArtifactLoadTarget);
++pub(crate) struct Target(pub(crate) pumas_library::models::PumasArtifactLoadTarget);
+ #[async_trait]
+ impl crate::runtime_host_load_target::RuntimeHostLoadTargetResolver for Target {
+     async fn resolve(
+@@ -106,7 +106,7 @@ impl crate::runtime_host_load_target::RuntimeHostLoadTargetResolver for Target {
+         Ok(self.0.clone())
+     }
+ }
+-struct Package(ResolvedModelPackageFacts);
++pub(crate) struct Package(pub(crate) ResolvedModelPackageFacts);
+ #[async_trait]
+ impl crate::runtime_host_package_facts::RuntimeHostPackageFactsResolver for Package {
+     async fn resolve(
+@@ -119,7 +119,7 @@ impl crate::runtime_host_package_facts::RuntimeHostPackageFactsResolver for Pack
+         Ok(self.0.clone())
+     }
+ }
+-struct UnusedMediaSink;
++pub(crate) struct UnusedMediaSink;
+ impl crate::runtime_host_media_artifact_sink::RuntimeHostMediaArtifactSink for UnusedMediaSink {
+     fn write_image_output(
+         &self,
+@@ -242,3 +242,382 @@ impl pantograph_runtime_host_contracts::RuntimeHostExecutionCancellationSignal f
+         }
+     }
+ }
++
++fn embedding_batch_request(
++    request: RuntimeHostExecutionRequest,
++) -> pantograph_runtime_host_contracts::RuntimeHostBatchExecutionRequest {
++    use pantograph_runtime_host_contracts::{
++        RuntimeHostBatchExecutionMemberRequest, RuntimeHostBatchExecutionRequest,
++        RuntimeHostBatchMemberFailurePolicy, RuntimeHostBatchMemberReservationPolicy,
++    };
++    let members = ["hello world", "hello"]
++        .into_iter()
++        .enumerate()
++        .map(|(index, text)| {
++            let mut request = request.clone();
++            request.execution_request_id = format!("embedding.execution.{index}");
++            request.handoff.workflow_id = format!("workflow.embedding.{index}").parse().unwrap();
++            request.handoff.workflow_run_id = format!("run.embedding.{index}").parse().unwrap();
++            request.handoff.node_id = format!("node.embedding.{index}").parse().unwrap();
++            request.handoff.task_id = format!("task.embedding.{index}").parse().unwrap();
++            request.handoff.task_intent.workflow_id = request.handoff.workflow_id.clone();
++            request.handoff.task_intent.workflow_run_id = request.handoff.workflow_run_id.clone();
++            request.handoff.task_intent.node_id = request.handoff.node_id.clone();
++            request.handoff.task_intent.task_id = request.handoff.task_id.clone();
++            let context = &mut request.handoff.readiness_proof.execution_context;
++            context.workflow_id = request.handoff.workflow_id.as_str().parse().unwrap();
++            context.workflow_run_id = request.handoff.workflow_run_id.as_str().parse().unwrap();
++            context.node_id = request.handoff.node_id.as_str().parse().unwrap();
++            context.scheduler_task_id = request.handoff.task_id.as_str().parse().unwrap();
++            let decision = request.handoff.dispatch_decision.as_mut().unwrap();
++            decision.workflow_id = request.handoff.workflow_id.clone();
++            decision.workflow_run_id = request.handoff.workflow_run_id.clone();
++            decision.node_id = request.handoff.node_id.clone();
++            decision.task_id = request.handoff.task_id.clone();
++            decision.task_intent = request.handoff.task_intent.clone();
++            decision.readiness_proof = request.handoff.readiness_proof.clone();
++            for reservation in &mut decision.reservations {
++                reservation.workflow_run_id = decision.workflow_run_id.clone();
++                reservation.task_id = decision.task_id.clone();
++            }
++            request.materialized_inputs[0].value =
++                RuntimeHostExecutionInputValue::String(text.into());
++            RuntimeHostBatchExecutionMemberRequest {
++                execution_request_id: request.execution_request_id,
++                assignment_id: format!("assignment.embedding.{index}"),
++                handoff: request.handoff,
++                materialized_inputs: request.materialized_inputs,
++                timeout_ms: None,
++                failure_policy: RuntimeHostBatchMemberFailurePolicy::TerminalOnly,
++                reservation_policy: RuntimeHostBatchMemberReservationPolicy::ReleaseOnTerminal,
++            }
++        })
++        .collect();
++    let batch = RuntimeHostBatchExecutionRequest {
++        contract_version: pantograph_runtime_host_contracts::RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
++        batch_execution_request_id: "embedding.batch.001".into(), anchor_execution_request_id: "embedding.execution.0".into(),
++        cancellation_context: pantograph_runtime_host_contracts::RuntimeHostExecutionCancellationContext::workflow_service("embedding.batch.001"),
++        members,
++    };
++    batch.validate().unwrap();
++    batch
++}
++
++#[tokio::test]
++async fn embedding_host_envelope_returns_per_member_candle_cpu_goldens_and_identity() {
++    use pantograph_runtime_host_contracts::{
++        RuntimeHostBatchExecutionMemberState, RuntimeHostBatchExecutionPort,
++        RuntimeHostBatchExecutionState,
++    };
++    let gateway = Arc::new(inference::InferenceGateway::with_backend(
++        Box::new(inference::backend::candle::CandleBackend::new()),
++        "Candle",
++    ));
++    for width in [8, 12] {
++        let (_directory, request, package, target) = fixture(width);
++        let batch = embedding_batch_request(request);
++        let expected = batch.members.clone();
++        let port = crate::runtime_host_execution_port::EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
++            Arc::new(Target(serde_json::from_value(serde_json::to_value(target).unwrap()).unwrap())),
++            Arc::new(Package(package)), Arc::new(UnusedMediaSink), gateway.clone());
++        let cancellation =
++            RuntimeHostExecutionCancellationHandle::running(batch.cancellation_context.clone());
++        let response = port
++            .execute_runtime_host_batch_request(batch, cancellation)
++            .await
++            .unwrap();
++        assert_eq!(
++            response.state,
++            RuntimeHostBatchExecutionState::Completed,
++            "{:?}",
++            response.diagnostics
++        );
++        response.validate().unwrap();
++        assert_eq!(response.batch_execution_request_id, "embedding.batch.001");
++        assert_eq!(response.members.len(), 2);
++        let golden: serde_json::Value = serde_json::from_slice(
++            &std::fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join(format!(
++                "../inference/tests/fixtures/candle_bert/bert-{width}/golden.json"
++            )))
++            .unwrap(),
++        )
++        .unwrap();
++        for (index, (member, expected)) in response.members.iter().zip(&expected).enumerate() {
++            assert_eq!(
++                member.state,
++                RuntimeHostBatchExecutionMemberState::Completed,
++                "{:?}",
++                member.diagnostics
++            );
++            assert_eq!(member.execution_request_id, expected.execution_request_id);
++            assert_eq!(member.assignment_id, expected.assignment_id);
++            assert_eq!(member.workflow_id, expected.handoff.workflow_id);
++            assert_eq!(member.workflow_run_id, expected.handoff.workflow_run_id);
++            assert_eq!(member.node_id, expected.handoff.node_id);
++            assert_eq!(member.task_id, expected.handoff.task_id);
++            assert_eq!(
++                member
++                    .outputs
++                    .iter()
++                    .map(|output| output.port_id.as_str())
++                    .collect::<Vec<_>>(),
++                ["embedding", "metadata", "usage"]
++            );
++            let RuntimeHostExecutionOutputValue::Json(vector) = &member.outputs[0].value else {
++                panic!("embedding JSON vector")
++            };
++            let values = vector.as_array().unwrap();
++            assert_eq!(values.len(), width);
++            for (actual, reference) in values
++                .iter()
++                .zip(golden["single_vectors"][index].as_array().unwrap())
++            {
++                assert!((actual.as_f64().unwrap() - reference.as_f64().unwrap()).abs() < 1e-5);
++            }
++            let token_count = if index == 0 { 4 } else { 3 };
++            let RuntimeHostExecutionOutputValue::Json(metadata) = &member.outputs[1].value else {
++                panic!("embedding metadata JSON")
++            };
++            assert_eq!(
++                metadata["model_ref"],
++                serde_json::to_value(
++                    &expected
++                        .handoff
++                        .dispatch_decision
++                        .as_ref()
++                        .unwrap()
++                        .selected_model_ref
++                )
++                .unwrap()
++            );
++            assert_eq!(metadata["vector_length"], width);
++            assert_eq!(metadata["index"], 0);
++            assert_eq!(metadata["token_count"], token_count);
++            assert_eq!(metadata["runtime_variant_id"], "candle.cpu");
++            assert_eq!(metadata["device_ids"], serde_json::json!(["cpu"]));
++            let RuntimeHostExecutionOutputValue::Json(usage) = &member.outputs[2].value else {
++                panic!("embedding usage JSON")
++            };
++            assert_eq!(
++                *usage,
++                serde_json::json!({"prompt_tokens": token_count, "total_tokens": token_count})
++            );
++        }
++    }
++    gateway.stop().await.unwrap();
++}
++
++struct NeverResolve;
++#[async_trait]
++impl crate::runtime_host_load_target::RuntimeHostLoadTargetResolver for NeverResolve {
++    async fn resolve(
++        &self,
++        _: &ValidatedRuntimeHostExecutionRequest,
++    ) -> Result<
++        pumas_library::models::PumasArtifactLoadTarget,
++        crate::runtime_host_load_target::RuntimeHostPumasLoadTargetError,
++    > {
++        panic!("invalid or pre-cancelled embedding must reject before target resolution")
++    }
++}
++#[async_trait]
++impl crate::runtime_host_package_facts::RuntimeHostPackageFactsResolver for NeverResolve {
++    async fn resolve(
++        &self,
++        _: &ValidatedRuntimeHostExecutionRequest,
++    ) -> Result<
++        ResolvedModelPackageFacts,
++        crate::runtime_host_package_facts::RuntimeHostPumasPackageFactsError,
++    > {
++        panic!("invalid or pre-cancelled embedding must reject before package resolution")
++    }
++}
++
++#[tokio::test]
++async fn embedding_host_envelope_rejects_invalid_shape_and_precancellation_before_resolvers() {
++    use pantograph_runtime_host_contracts::{
++        RuntimeHostBatchExecutionMemberState, RuntimeHostBatchExecutionPort,
++        RuntimeHostBatchExecutionState, RuntimeHostExecutionInput,
++    };
++    for fault in ["cancel", "blank", "wrong_port", "wrong_type", "extra_input"] {
++        let (_directory, request, _package, _target) = fixture(8);
++        let mut batch = embedding_batch_request(request);
++        for member in &mut batch.members {
++            match fault {
++                "blank" => {
++                    member.materialized_inputs[0].value =
++                        RuntimeHostExecutionInputValue::String(" \n".into())
++                }
++                "wrong_port" => member.materialized_inputs[0].port_id = "prompt".into(),
++                "wrong_type" => {
++                    member.materialized_inputs[0].value = RuntimeHostExecutionInputValue::U64(8)
++                }
++                "extra_input" => member.materialized_inputs.push(RuntimeHostExecutionInput {
++                    port_id: "seed".into(),
++                    value: RuntimeHostExecutionInputValue::U64(42),
++                }),
++                _ => {}
++            }
++        }
++        let cancellation = if fault == "cancel" {
++            RuntimeHostExecutionCancellationHandle::with_signal(Arc::new(Cancelled(
++                batch.cancellation_context.cancellation_context_id.clone(),
++            )))
++        } else {
++            RuntimeHostExecutionCancellationHandle::running(batch.cancellation_context.clone())
++        };
++        let gateway = Arc::new(inference::InferenceGateway::with_backend(
++            Box::new(inference::backend::candle::CandleBackend::new()),
++            "Candle",
++        ));
++        let port = crate::runtime_host_execution_port::EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(Arc::new(NeverResolve), Arc::new(NeverResolve), Arc::new(UnusedMediaSink), gateway.clone());
++        let response = port
++            .execute_runtime_host_batch_request(batch, cancellation)
++            .await
++            .unwrap();
++        let (batch_state, member_state) = if fault == "cancel" {
++            (
++                RuntimeHostBatchExecutionState::Cancelled,
++                RuntimeHostBatchExecutionMemberState::Cancelled,
++            )
++        } else {
++            (
++                RuntimeHostBatchExecutionState::Rejected,
++                RuntimeHostBatchExecutionMemberState::Rejected,
++            )
++        };
++        assert_eq!(
++            response.state, batch_state,
++            "{fault}: {:?}",
++            response.diagnostics
++        );
++        response.validate().unwrap();
++        assert_eq!(response.members.len(), 2);
++        assert!(response
++            .members
++            .iter()
++            .all(|member| member.state == member_state && member.outputs.is_empty()));
++        assert!(!gateway.is_ready().await);
++    }
++}
++
++#[test]
++fn embedding_output_projector_rejects_invalid_result_shape_without_outputs() {
++    use inference::InferenceEmbeddingResult;
++    let (_directory, request, _package, _target) = fixture(8);
++    let valid = InferenceEmbeddingResult {
++        vector: vec![0.25, -0.5],
++        token_count: Some(4),
++        index: Some(0),
++    };
++    for fault in [
++        "missing",
++        "multiple",
++        "missing_index",
++        "wrong_index",
++        "missing_tokens",
++        "empty",
++        "oversized",
++        "nan",
++        "infinity",
++        "negative_infinity",
++    ] {
++        let mut embedding = valid.clone();
++        match fault {
++            "missing_index" => embedding.index = None,
++            "wrong_index" => embedding.index = Some(1),
++            "missing_tokens" => embedding.token_count = None,
++            "empty" => embedding.vector.clear(),
++            "oversized" => embedding.vector = vec![0.0; 4097],
++            "nan" => embedding.vector[0] = f32::NAN,
++            "infinity" => embedding.vector[0] = f32::INFINITY,
++            "negative_infinity" => embedding.vector[0] = f32::NEG_INFINITY,
++            _ => {}
++        }
++        let embeddings = match fault {
++            "missing" => vec![],
++            "multiple" => vec![embedding.clone(), embedding],
++            _ => vec![embedding],
++        };
++        let result = InferenceExecutionResult::Embedding {
++            embeddings,
++            usage: None,
++            option_diagnostics: Vec::new(),
++        };
++        assert!(
++            matches!(
++                embedding_outputs(&request, result),
++                Err(RuntimeHostEmbeddingProjectionError::InvalidResult)
++            ),
++            "{fault}"
++        );
++    }
++    let wrong_kind = InferenceExecutionResult::TextGeneration {
++        text: "not an embedding".into(),
++        usage: None,
++        cache_handle_id: None,
++        option_diagnostics: Vec::new(),
++    };
++    assert!(matches!(
++        embedding_outputs(&request, wrong_kind),
++        Err(RuntimeHostEmbeddingProjectionError::InvalidResult)
++    ));
++}
++
++#[test]
++fn embedding_output_projector_preserves_one_finite_vector_metadata_and_optional_usage() {
++    use inference::{InferenceEmbeddingResult, InferenceUsage};
++    let (_directory, request, _package, _target) = fixture(8);
++    for usage in [
++        None,
++        Some(InferenceUsage {
++            prompt_tokens: Some(4),
++            completion_tokens: None,
++            total_tokens: Some(4),
++        }),
++    ] {
++        let result = InferenceExecutionResult::Embedding {
++            embeddings: vec![InferenceEmbeddingResult {
++                vector: vec![0.25, -0.5],
++                token_count: Some(4),
++                index: Some(0),
++            }],
++            usage: usage.clone(),
++            option_diagnostics: Vec::new(),
++        };
++        let outputs = embedding_outputs(&request, result).unwrap();
++        assert_eq!(outputs.len(), if usage.is_some() { 3 } else { 2 });
++        assert_eq!(outputs[0].port_id, "embedding");
++        assert_eq!(
++            outputs[0].value,
++            RuntimeHostExecutionOutputValue::Json(serde_json::json!([0.25, -0.5]))
++        );
++        let RuntimeHostExecutionOutputValue::Json(metadata) = &outputs[1].value else {
++            panic!("structured metadata")
++        };
++        assert_eq!(
++            metadata["model_ref"],
++            serde_json::to_value(
++                &request
++                    .handoff
++                    .dispatch_decision
++                    .as_ref()
++                    .unwrap()
++                    .selected_model_ref
++            )
++            .unwrap()
++        );
++        assert_eq!(metadata["vector_length"], 2);
++        assert_eq!(metadata["index"], 0);
++        assert_eq!(metadata["token_count"], 4);
++        assert_eq!(metadata["runtime_variant_id"], "candle.cpu");
++        assert_eq!(metadata["device_ids"], serde_json::json!(["cpu"]));
++        if let Some(usage) = usage {
++            assert_eq!(outputs[2].port_id, "usage");
++            assert_eq!(
++                outputs[2].value,
++                RuntimeHostExecutionOutputValue::Json(serde_json::to_value(usage).unwrap())
++            );
++        }
++    }
++}
+diff --git a/crates/pantograph-embedded-runtime/src/runtime_host_execution_port.rs b/crates/pantograph-embedded-runtime/src/runtime_host_execution_port.rs
+index 49602b31..8bdf7e84 100644
+--- a/crates/pantograph-embedded-runtime/src/runtime_host_execution_port.rs
++++ b/crates/pantograph-embedded-runtime/src/runtime_host_execution_port.rs
+@@ -23,6 +23,9 @@ use pantograph_runtime_host_contracts::{
+     RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
+ };
+ 
++use crate::runtime_host_embedding_execution::{
++    validate_runtime_host_embedding_request, EMBEDDING_TASK,
++};
+ use crate::runtime_host_image_execution::{
+     project_runtime_host_image_generation, RuntimeHostImageGenerationProjectionError,
+ };
+@@ -606,7 +609,7 @@ impl EmbeddedRuntimeHostExecutionPort {
+ }
+ 
+ impl EmbeddedRuntimeHostExecutionPort {
+-    async fn execute_runtime_host_text_batch_request(
++    async fn execute_runtime_host_sequential_batch_request(
+         &self,
+         request: &RuntimeHostBatchExecutionRequest,
+         member_requests: Vec<ValidatedRuntimeHostExecutionRequest>,
+@@ -615,9 +618,15 @@ impl EmbeddedRuntimeHostExecutionPort {
+         let validation_errors = member_requests
+             .iter()
+             .map(|member| {
+-                validate_runtime_host_text_generation_request(member.as_ref())
+-                    .err()
+-                    .map(|error| error.to_string())
++                if member.as_ref().handoff.task_intent.task_type.as_str() == EMBEDDING_TASK {
++                    validate_runtime_host_embedding_request(member.as_ref())
++                        .err()
++                        .map(|error| error.to_string())
++                } else {
++                    validate_runtime_host_text_generation_request(member.as_ref())
++                        .err()
++                        .map(|error| error.to_string())
++                }
+             })
+             .collect::<Vec<_>>();
+         let mut members = Vec::with_capacity(member_requests.len());
+@@ -638,24 +647,50 @@ impl EmbeddedRuntimeHostExecutionPort {
+                     Vec::new(),
+                     vec![runtime_host_diagnostic(
+                         RuntimeHostExecutionDiagnosticCode::ExecutionFailed,
+-                        &format!("embedded runtime-host text projection failed: {error}"),
+-                        TEXT_PROJECTION_FAILED_HINT,
++                        &format!(
++                            "embedded runtime-host sequential member projection failed: {error}"
++                        ),
++                        if member_request
++                            .as_ref()
++                            .handoff
++                            .task_intent
++                            .task_type
++                            .as_str()
++                            == EMBEDDING_TASK
++                        {
++                            "embedded_runtime_host_execution_port.embedding_projection_failed"
++                        } else {
++                            TEXT_PROJECTION_FAILED_HINT
++                        },
+                     )],
+                 ));
+                 continue;
+             }
+ 
+             if let Some(response) =
+-                text_batch_member_cancellation_response(member, request, &cancellation)?
++                sequential_batch_member_cancellation_response(member, request, &cancellation)?
+             {
+                 members.push(response);
+                 continue;
+             }
+ 
+-            let response = self
+-                .execute_runtime_host_text_request(&member_request, cancellation.clone())
+-                .await?;
+-            members.push(text_batch_member_response(member, response));
++            // These envelope members reuse the selected single-request owner sequentially.
++            // This does not advertise backend-native embedding or text batching.
++            let response = if member_request
++                .as_ref()
++                .handoff
++                .task_intent
++                .task_type
++                .as_str()
++                == EMBEDDING_TASK
++            {
++                self.execute_runtime_host_embedding_request(&member_request, cancellation.clone())
++                    .await?
++            } else {
++                self.execute_runtime_host_text_request(&member_request, cancellation.clone())
++                    .await?
++            };
++            members.push(sequential_batch_member_response(member, response));
+         }
+ 
+         let state = runtime_host_batch_state_from_members(&members);
+@@ -671,8 +706,8 @@ impl EmbeddedRuntimeHostExecutionPort {
+         {
+             diagnostics.push(runtime_host_diagnostic(
+                 RuntimeHostExecutionDiagnosticCode::ExecutionFailed,
+-                "embedded runtime-host text batch execution ended without a completed member",
+-                TEXT_GATEWAY_EXECUTION_FAILED_HINT,
++                "embedded runtime-host sequential batch execution ended without a completed member",
++                BATCH_GATEWAY_EXECUTION_FAILED_HINT,
+             ));
+         }
+ 
+@@ -713,10 +748,17 @@ impl RuntimeHostBatchExecutionPort for EmbeddedRuntimeHostExecutionPort {
+             ));
+         }
+         if member_requests.iter().all(|member| {
+-            member.as_ref().handoff.task_intent.task_type.as_str() == TEXT_GENERATION_TASK
++            matches!(
++                member.as_ref().handoff.task_intent.task_type.as_str(),
++                TEXT_GENERATION_TASK | EMBEDDING_TASK
++            )
+         }) {
+             return self
+-                .execute_runtime_host_text_batch_request(request, member_requests, cancellation)
++                .execute_runtime_host_sequential_batch_request(
++                    request,
++                    member_requests,
++                    cancellation,
++                )
+                 .await;
+         }
+ 
+@@ -941,7 +983,7 @@ fn shared_batch_runtime_context_error(
+     };
+     if !matches!(
+         first_decision.task_intent.task_type.as_str(),
+-        "image_generation" | TEXT_GENERATION_TASK
++        "image_generation" | TEXT_GENERATION_TASK | EMBEDDING_TASK
+     ) {
+         return Some(format!(
+             "embedded runtime-host batch task type '{}' is unsupported",
+@@ -1398,7 +1440,7 @@ fn batch_member_response(
+     }
+ }
+ 
+-fn text_batch_member_response(
++fn sequential_batch_member_response(
+     member: &RuntimeHostBatchExecutionMemberRequest,
+     response: RuntimeHostExecutionResponse,
+ ) -> RuntimeHostBatchExecutionMemberResponse {
+@@ -1447,14 +1489,14 @@ fn text_batch_member_response(
+     if diagnostics.is_empty() {
+         diagnostics.push(runtime_host_diagnostic(
+             RuntimeHostExecutionDiagnosticCode::ExecutionFailed,
+-            "embedded runtime-host text batch member returned no terminal diagnostic",
+-            TEXT_GATEWAY_EXECUTION_FAILED_HINT,
++            "embedded runtime-host sequential batch member returned no terminal diagnostic",
++            BATCH_GATEWAY_EXECUTION_FAILED_HINT,
+         ));
+     }
+     batch_member_response(member, state, outputs, diagnostics)
+ }
+ 
+-fn text_batch_member_cancellation_response(
++fn sequential_batch_member_cancellation_response(
+     member: &RuntimeHostBatchExecutionMemberRequest,
+     request: &RuntimeHostBatchExecutionRequest,
+     cancellation: &RuntimeHostExecutionCancellationHandle,
+@@ -1483,7 +1525,7 @@ fn text_batch_member_cancellation_response(
+             RuntimeHostBatchExecutionMemberState::Cancelled,
+             RuntimeHostExecutionDiagnosticCode::CancellationRequested,
+             format!(
+-                "embedded runtime-host text batch member cancelled before completion: {reason}"
++                "embedded runtime-host sequential batch member cancelled before completion: {reason}"
+             ),
+             CANCELLATION_REQUESTED_HINT,
+         ),
+@@ -1491,14 +1533,14 @@ fn text_batch_member_cancellation_response(
+             RuntimeHostBatchExecutionMemberState::Cancelled,
+             RuntimeHostExecutionDiagnosticCode::ShutdownRequested,
+             format!(
+-                "embedded runtime-host text batch member stopped for workflow-service shutdown: {reason}"
++                "embedded runtime-host sequential batch member stopped for workflow-service shutdown: {reason}"
+             ),
+             SHUTDOWN_REQUESTED_HINT,
+         ),
+         _ => (
+             RuntimeHostBatchExecutionMemberState::Failed,
+             RuntimeHostExecutionDiagnosticCode::ExecutionFailed,
+-            "embedded runtime-host text batch member observed an unknown cancellation state"
++            "embedded runtime-host sequential batch member observed an unknown cancellation state"
+                 .to_string(),
+             UNKNOWN_CANCELLATION_STATE_HINT,
+         ),
+diff --git a/crates/pantograph-inference-interface-contracts/src/lib.rs b/crates/pantograph-inference-interface-contracts/src/lib.rs
+index f4e05cf9..63f2d4c4 100644
+--- a/crates/pantograph-inference-interface-contracts/src/lib.rs
++++ b/crates/pantograph-inference-interface-contracts/src/lib.rs
+@@ -157,6 +157,7 @@ pub enum InferencePortRequirement {
+ pub enum InferenceValueType {
+     Scalar(InferenceScalarType),
+     Artifact(InferenceArtifactType),
++    Structured(InferenceStructuredType),
+     Reference(InferenceReferenceType),
+     Constraint(InferenceConstraintType),
+ }
+@@ -172,6 +173,15 @@ pub enum InferenceScalarType {
+     F64,
+ }
+ 
++/// Bounded structured values carried in the existing JSON transport.
++#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
++#[serde(rename_all = "snake_case")]
++#[non_exhaustive]
++pub enum InferenceStructuredType {
++    Embedding,
++    Json,
++}
++
+ #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+ #[serde(rename_all = "snake_case")]
+ #[non_exhaustive]
+diff --git a/crates/pantograph-inference-interface-contracts/tests/contract.rs b/crates/pantograph-inference-interface-contracts/tests/contract.rs
+index 06bbb17e..6f2334cf 100644
+--- a/crates/pantograph-inference-interface-contracts/tests/contract.rs
++++ b/crates/pantograph-inference-interface-contracts/tests/contract.rs
+@@ -823,3 +823,99 @@ fn text_seed_is_optional_u64_without_a_floating_point_range_or_default() {
+         *seed
+     );
+ }
++
++#[test]
++fn embedding_descriptor_and_saved_snapshot_preserve_structured_types_and_requirements() {
++    use pantograph_inference_interface_contracts::InferenceStructuredType;
++    let descriptor: InferenceInterfaceDescriptor =
++        serde_json::from_str(include_str!("fixtures/descriptor_embedding_ready.json")).unwrap();
++    descriptor.validate().unwrap();
++    assert_eq!(descriptor.inputs.len(), 1);
++    assert_eq!(descriptor.inputs[0].port_id.as_str(), "text");
++    assert_eq!(
++        descriptor.inputs[0].value_type,
++        InferenceValueType::Scalar(InferenceScalarType::String)
++    );
++    assert_eq!(
++        descriptor.inputs[0].requirement,
++        InferencePortRequirement::Required
++    );
++    assert!(descriptor.inputs[0].default.is_none());
++    assert_eq!(
++        descriptor
++            .outputs
++            .iter()
++            .map(|port| port.port_id.as_str())
++            .collect::<Vec<_>>(),
++        ["embedding", "metadata", "usage"]
++    );
++    assert_eq!(
++        descriptor.outputs[0].value_type,
++        InferenceValueType::Structured(InferenceStructuredType::Embedding)
++    );
++    for index in [1, 2] {
++        assert_eq!(
++            descriptor.outputs[index].value_type,
++            InferenceValueType::Structured(InferenceStructuredType::Json)
++        );
++    }
++    assert_eq!(
++        descriptor.outputs[0].requirement,
++        InferencePortRequirement::Required
++    );
++    assert_eq!(
++        descriptor.outputs[1].requirement,
++        InferencePortRequirement::Required
++    );
++    assert_eq!(
++        descriptor.outputs[2].requirement,
++        InferencePortRequirement::Optional
++    );
++    assert!(descriptor.outputs.iter().all(|port| port.default.is_none()));
++    let wire = serde_json::to_value(&descriptor).unwrap();
++    assert_eq!(
++        wire["outputs"][0]["value_type"],
++        serde_json::json!({"category": "structured", "kind": "embedding"})
++    );
++    let decoded: InferenceInterfaceDescriptor =
++        serde_json::from_str(&serde_json::to_string(&descriptor).unwrap()).unwrap();
++    assert_eq!(decoded, descriptor);
++    let snapshot: AuthoredInferenceInterfaceSnapshot =
++        serde_json::from_str(include_str!("fixtures/authored_snapshot_embedding.json")).unwrap();
++    snapshot.validate().unwrap();
++    let restored: AuthoredInferenceInterfaceSnapshot =
++        serde_json::from_str(&serde_json::to_string(&snapshot).unwrap()).unwrap();
++    assert_eq!(restored, snapshot);
++    assert_eq!(
++        snapshot.descriptor_fingerprint,
++        descriptor.descriptor_fingerprint
++    );
++    assert_eq!(
++        snapshot.outputs[0].value_type,
++        descriptor.outputs[0].value_type
++    );
++    assert_eq!(
++        snapshot.outputs[2].requirement,
++        InferencePortRequirement::Optional
++    );
++}
++
++#[test]
++fn structured_value_types_are_additive_to_existing_wire_categories() {
++    for (category, kind) in [
++        ("scalar", "string"),
++        ("artifact", "tensor"),
++        ("reference", "media_artifact"),
++        ("constraint", "device"),
++        ("structured", "embedding"),
++        ("structured", "json"),
++    ] {
++        let wire = serde_json::json!({"category": category, "kind": kind});
++        let value: InferenceValueType = serde_json::from_value(wire.clone()).unwrap();
++        assert_eq!(serde_json::to_value(value).unwrap(), wire);
++    }
++    assert!(serde_json::from_value::<InferenceValueType>(
++        serde_json::json!({"category": "structured", "kind": "tensor"})
++    )
++    .is_err());
++}
+diff --git a/crates/pantograph-inference-interface-contracts/tests/fixtures/authored_snapshot_embedding.json b/crates/pantograph-inference-interface-contracts/tests/fixtures/authored_snapshot_embedding.json
+new file mode 100644
+index 00000000..f56b8a56
+--- /dev/null
++++ b/crates/pantograph-inference-interface-contracts/tests/fixtures/authored_snapshot_embedding.json
+@@ -0,0 +1,61 @@
++{
++  "contract_version": 1,
++  "descriptor_fingerprint": "iface.test.cpu_embedding.v1",
++  "task_kind": "embedding",
++  "inputs": [
++    {
++      "port_id": "text",
++      "label": "Text",
++      "direction": "input",
++      "requirement": "required",
++      "value_type": {
++        "category": "scalar",
++        "kind": "string"
++      },
++      "availability": {
++        "status": "available"
++      }
++    }
++  ],
++  "outputs": [
++    {
++      "port_id": "embedding",
++      "label": "Embedding",
++      "direction": "output",
++      "requirement": "required",
++      "value_type": {
++        "category": "structured",
++        "kind": "embedding"
++      },
++      "availability": {
++        "status": "available"
++      }
++    },
++    {
++      "port_id": "metadata",
++      "label": "Metadata",
++      "direction": "output",
++      "requirement": "required",
++      "value_type": {
++        "category": "structured",
++        "kind": "json"
++      },
++      "availability": {
++        "status": "available"
++      }
++    },
++    {
++      "port_id": "usage",
++      "label": "Usage",
++      "direction": "output",
++      "requirement": "optional",
++      "value_type": {
++        "category": "structured",
++        "kind": "json"
++      },
++      "availability": {
++        "status": "available"
++      }
++    }
++  ]
++}
+diff --git a/crates/pantograph-inference-interface-contracts/tests/fixtures/descriptor_embedding_ready.json b/crates/pantograph-inference-interface-contracts/tests/fixtures/descriptor_embedding_ready.json
+new file mode 100644
+index 00000000..71048814
+--- /dev/null
++++ b/crates/pantograph-inference-interface-contracts/tests/fixtures/descriptor_embedding_ready.json
+@@ -0,0 +1,80 @@
++{
++  "contract_version": 1,
++  "model_ref": {
++    "model_id": "embedding/example/tiny-cpu",
++    "selected_artifact_id": "candle-safetensors"
++  },
++  "task_kind": "embedding",
++  "descriptor_fingerprint": "iface.test.cpu_embedding.v1",
++  "inputs": [
++    {
++      "port_id": "text",
++      "label": "Text",
++      "direction": "input",
++      "requirement": "required",
++      "value_type": {
++        "category": "scalar",
++        "kind": "string"
++      },
++      "options": {
++        "kind": "none"
++      },
++      "availability": {
++        "status": "available"
++      }
++    }
++  ],
++  "outputs": [
++    {
++      "port_id": "embedding",
++      "label": "Embedding",
++      "direction": "output",
++      "requirement": "required",
++      "value_type": {
++        "category": "structured",
++        "kind": "embedding"
++      },
++      "options": {
++        "kind": "none"
++      },
++      "availability": {
++        "status": "available"
++      }
++    },
++    {
++      "port_id": "metadata",
++      "label": "Metadata",
++      "direction": "output",
++      "requirement": "required",
++      "value_type": {
++        "category": "structured",
++        "kind": "json"
++      },
++      "options": {
++        "kind": "none"
++      },
++      "availability": {
++        "status": "available"
++      }
++    },
++    {
++      "port_id": "usage",
++      "label": "Usage",
++      "direction": "output",
++      "requirement": "optional",
++      "value_type": {
++        "category": "structured",
++        "kind": "json"
++      },
++      "options": {
++        "kind": "none"
++      },
++      "availability": {
++        "status": "available"
++      }
++    }
++  ],
++  "availability": {
++    "status": "available"
++  }
++}
+diff --git a/crates/pantograph-workflow-service/src/graph/connection_intent.rs b/crates/pantograph-workflow-service/src/graph/connection_intent.rs
+index 379f8e3f..1360f02c 100644
+--- a/crates/pantograph-workflow-service/src/graph/connection_intent.rs
++++ b/crates/pantograph-workflow-service/src/graph/connection_intent.rs
+@@ -3,7 +3,7 @@ use std::collections::{HashSet, VecDeque};
+ use pantograph_inference_interface_contracts::{
+     InferenceArtifactType, InferenceConnectionSurface, InferenceConnectionSurfaceStatus,
+     InferenceConstraintType, InferencePortDescriptor, InferencePortRequirement,
+-    InferenceReferenceType, InferenceScalarType, InferenceValueType,
++    InferenceReferenceType, InferenceScalarType, InferenceStructuredType, InferenceValueType,
+ };
+ 
+ use super::effective_definition::{effective_node_definition, EffectiveDefinitionError};
+@@ -167,6 +167,12 @@ fn inference_value_type_to_port_data_type(
+         InferenceValueType::Scalar(
+             InferenceScalarType::I64 | InferenceScalarType::U64 | InferenceScalarType::F64,
+         ) => super::types::PortDataType::Number,
++        InferenceValueType::Structured(InferenceStructuredType::Embedding) => {
++            super::types::PortDataType::Embedding
++        }
++        InferenceValueType::Structured(InferenceStructuredType::Json) => {
++            super::types::PortDataType::Json
++        }
+         InferenceValueType::Artifact(InferenceArtifactType::Image) => {
+             super::types::PortDataType::Image
+         }
+@@ -761,6 +767,73 @@ mod tests {
+         .expect("current descriptor-backed image output should connect to image output node");
+     }
+ 
++    #[test]
++    fn current_embedding_connection_surface_accepts_vector_output_and_rejects_tensor_alias() {
++        let registry = NodeRegistry::new();
++        let descriptor: pantograph_inference_interface_contracts::InferenceInterfaceDescriptor = serde_json::from_str(include_str!("../../../pantograph-inference-interface-contracts/tests/fixtures/descriptor_embedding_ready.json")).unwrap();
++        let mut surface = current_connection_surface();
++        surface.descriptor_fingerprint = Some(descriptor.descriptor_fingerprint);
++        surface.inputs = descriptor.inputs;
++        surface.outputs = descriptor.outputs;
++        let mut graph = descriptor_backed_inference_graph();
++        graph.nodes[2].id = "vector-output".into();
++        graph.nodes[2].node_type = "vector-output".into();
++        let revision = graph.compute_fingerprint();
++        let source = ConnectionAnchor {
++            node_id: "inference-node-1".into(),
++            port_id: "embedding".into(),
++        };
++        let target = ConnectionAnchor {
++            node_id: "vector-output".into(),
++            port_id: "vector".into(),
++        };
++        let surfaces = InferenceConnectionSurfaceView::new(std::slice::from_ref(&surface));
++        commit_connection_with_surfaces(&graph, &registry, surfaces, &revision, &source, &target)
++            .unwrap();
++        commit_connection_with_surfaces(
++            &graph,
++            &registry,
++            surfaces,
++            &revision,
++            &ConnectionAnchor {
++                node_id: "source".into(),
++                port_id: "text".into(),
++            },
++            &ConnectionAnchor {
++                node_id: "inference-node-1".into(),
++                port_id: "text".into(),
++            },
++        )
++        .unwrap();
++        let candidates =
++            connection_candidates_with_surfaces(&graph, &registry, surfaces, source.clone(), None)
++                .unwrap();
++        assert!(candidates
++            .compatible_nodes
++            .iter()
++            .any(|node| node.node_id == "vector-output"
++                && node.anchors.iter().any(|anchor| anchor.port_id == "vector")));
++        assert_eq!(
++            inference_value_type_to_port_data_type(&surface.outputs[1].value_type).unwrap(),
++            super::super::types::PortDataType::Json
++        );
++        assert_eq!(
++            inference_value_type_to_port_data_type(&surface.outputs[2].value_type).unwrap(),
++            super::super::types::PortDataType::Json
++        );
++        surface.outputs[0].value_type = InferenceValueType::Artifact(InferenceArtifactType::Tensor);
++        let error = commit_connection_with_surfaces(
++            &graph,
++            &registry,
++            InferenceConnectionSurfaceView::new(std::slice::from_ref(&surface)),
++            &revision,
++            &source,
++            &target,
++        )
++        .unwrap_err();
++        assert_eq!(error.reason, ConnectionRejectionReason::IncompatibleTypes);
++    }
++
+     #[test]
+     fn commit_connection_rejects_incompatible_types_with_contract_diagnostic() {
+         let registry = NodeRegistry::new();
+diff --git a/crates/pantograph-workflow-service/src/graph/effective_definition.rs b/crates/pantograph-workflow-service/src/graph/effective_definition.rs
+index 300c5fba..b29fd6e8 100644
+--- a/crates/pantograph-workflow-service/src/graph/effective_definition.rs
++++ b/crates/pantograph-workflow-service/src/graph/effective_definition.rs
+@@ -3,7 +3,7 @@ use serde_json::Value;
+ use pantograph_inference_interface_contracts::{
+     AuthoredInferenceInterfaceSnapshot, AuthoredInferencePortSnapshot, InferenceArtifactType,
+     InferenceConstraintType, InferencePortDirection, InferencePortRequirement,
+-    InferenceReferenceType, InferenceScalarType, InferenceValueType,
++    InferenceReferenceType, InferenceScalarType, InferenceStructuredType, InferenceValueType,
+     ValidatedAuthoredInferenceInterfaceSnapshot,
+ };
+ use pantograph_node_contracts::{
+@@ -229,6 +229,10 @@ fn inference_value_type_to_port_value_type(
+         InferenceValueType::Scalar(
+             InferenceScalarType::I64 | InferenceScalarType::U64 | InferenceScalarType::F64,
+         ) => PortValueType::Number,
++        InferenceValueType::Structured(InferenceStructuredType::Embedding) => {
++            PortValueType::Embedding
++        }
++        InferenceValueType::Structured(InferenceStructuredType::Json) => PortValueType::Json,
+         InferenceValueType::Artifact(InferenceArtifactType::Image) => PortValueType::Image,
+         InferenceValueType::Artifact(InferenceArtifactType::Audio) => PortValueType::Audio,
+         InferenceValueType::Artifact(InferenceArtifactType::Tensor) => PortValueType::Tensor,
+diff --git a/crates/pantograph-workflow-service/src/graph/effective_definition_tests.rs b/crates/pantograph-workflow-service/src/graph/effective_definition_tests.rs
+index c4304618..678711ff 100644
+--- a/crates/pantograph-workflow-service/src/graph/effective_definition_tests.rs
++++ b/crates/pantograph-workflow-service/src/graph/effective_definition_tests.rs
+@@ -356,3 +356,79 @@ fn authored_snapshot_json() -> serde_json::Value {
+         ]
+     })
+ }
++
++#[test]
++fn saved_embedding_snapshot_projects_vector_output_compatible_embedding_and_json_ports() {
++    use pantograph_node_contracts::PortValueType;
++    let registry = NodeRegistry::new();
++    let snapshot: serde_json::Value = serde_json::from_str(include_str!("../../../pantograph-inference-interface-contracts/tests/fixtures/authored_snapshot_embedding.json")).unwrap();
++    let node = GraphNode {
++        id: "embed".into(),
++        node_type: "llm-inference".into(),
++        position: Position::default(),
++        data: json!({"inference_interface_snapshot": snapshot}),
++    };
++    let node: GraphNode = serde_json::from_str(&serde_json::to_string(&node).unwrap()).unwrap();
++    let definition = effective_node_definition(&node, &registry).unwrap();
++    assert_eq!(
++        definition
++            .inputs
++            .iter()
++            .find(|port| port.id == "text")
++            .unwrap()
++            .data_type,
++        PortDataType::String
++    );
++    let embedding = definition
++        .outputs
++        .iter()
++        .find(|port| port.id == "embedding")
++        .unwrap();
++    assert_eq!(embedding.data_type, PortDataType::Embedding);
++    assert!(embedding.required);
++    for id in ["metadata", "usage"] {
++        assert_eq!(
++            definition
++                .outputs
++                .iter()
++                .find(|port| port.id == id)
++                .unwrap()
++                .data_type,
++            PortDataType::Json
++        );
++    }
++    assert!(
++        definition
++            .outputs
++            .iter()
++            .find(|port| port.id == "metadata")
++            .unwrap()
++            .required
++    );
++    assert!(
++        !definition
++            .outputs
++            .iter()
++            .find(|port| port.id == "usage")
++            .unwrap()
++            .required
++    );
++    let effective = effective_node_contract(&node, &registry).unwrap();
++    let output_type = effective
++        .outputs
++        .iter()
++        .find(|port| port.base.id.as_str() == "embedding")
++        .unwrap()
++        .base
++        .value_type;
++    assert_eq!(output_type, PortValueType::Embedding);
++    let vector_output = registry.get_contract("vector-output").unwrap();
++    let target_type = vector_output
++        .inputs
++        .iter()
++        .find(|port| port.id.as_str() == "vector")
++        .unwrap()
++        .value_type;
++    assert!(output_type.is_compatible_with(target_type));
++    assert!(!PortValueType::Tensor.is_compatible_with(target_type));
++}
+diff --git a/crates/pantograph-workflow-service/src/scheduler/task_orchestrator.rs b/crates/pantograph-workflow-service/src/scheduler/task_orchestrator.rs
+index e182bd9d..96da8f4d 100644
+--- a/crates/pantograph-workflow-service/src/scheduler/task_orchestrator.rs
++++ b/crates/pantograph-workflow-service/src/scheduler/task_orchestrator.rs
+@@ -42,13 +42,14 @@ use pantograph_scheduler::{
+ use thiserror::Error;
+ 
+ use crate::workflow::{
+-    execute_non_runtime_scheduler_task, materialize_external_workflow_inputs,
+-    materialize_runtime_host_inputs, runtime_host_batch_member_response_to_task_result,
+-    runtime_host_response_to_task_result, WorkflowExternalInputMaterializationError,
+-    WorkflowPortBinding, WorkflowRuntimeHostTaskInputMappingError,
+-    WorkflowRuntimeHostTaskResultMappingError, WorkflowSchedulerNonRuntimeTaskAdapterError,
+-    WorkflowSchedulerNonRuntimeTaskTemplate, WorkflowSchedulerSourceInputTemplate,
+-    WorkflowSchedulerTask, WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskGraph,
++    execute_non_runtime_scheduler_task, is_bounded_vector_json,
++    materialize_external_workflow_inputs, materialize_runtime_host_inputs,
++    runtime_host_batch_member_response_to_task_result, runtime_host_response_to_task_result,
++    WorkflowExternalInputMaterializationError, WorkflowPortBinding,
++    WorkflowRuntimeHostTaskInputMappingError, WorkflowRuntimeHostTaskResultMappingError,
++    WorkflowSchedulerNonRuntimeTaskAdapterError, WorkflowSchedulerNonRuntimeTaskTemplate,
++    WorkflowSchedulerSourceInputTemplate, WorkflowSchedulerTask,
++    WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskGraph,
+     WorkflowSchedulerTaskInputBinding, WorkflowSchedulerTaskProjectionDiagnostic,
+     WorkflowSchedulerTaskProjectionDiagnosticSeverity, WorkflowSchedulerTaskResult,
+     WorkflowSchedulerTaskResultStatus, WorkflowSchedulerTaskResultValue, WorkflowServiceError,
+@@ -3594,6 +3595,9 @@ fn non_runtime_input_readiness(
+     };
+ 
+     match template {
++        WorkflowSchedulerNonRuntimeTaskTemplate::VectorOutput => {
++            vector_output_input_readiness(task, results)
++        }
+         WorkflowSchedulerNonRuntimeTaskTemplate::ImageOutput => {
+             match materialized_binding_value(task, results, "image") {
+                 MaterializedBindingValue::Ready(
+@@ -3684,6 +3688,50 @@ fn non_runtime_input_readiness(
+     }
+ }
+ 
++fn vector_output_input_readiness(
++    task: &WorkflowSchedulerTask,
++    results: &[WorkflowSchedulerTaskResult],
++) -> NonRuntimeInputReadiness {
++    if task.node_type != "vector-output"
++        || task.input_bindings.len() > 1
++        || task
++            .input_bindings
++            .iter()
++            .any(|binding| binding.target_port_id != "vector")
++    {
++        return NonRuntimeInputReadiness::Invalid(scheduler_input_diagnostic(
++            SchedulerTaskStateDiagnosticCode::InvalidTask,
++            "vector-output accepts at most one vector input binding",
++        ));
++    }
++    let Some(binding) = task.input_bindings.first() else {
++        // The registered input is optional: an unconnected sink emits null.
++        return NonRuntimeInputReadiness::Ready;
++    };
++    let Some(result) = results.iter().find(|result| {
++        result.workflow_id == task.workflow_id.as_str()
++            && result.workflow_run_id == task.workflow_run_id.as_str()
++            && result.task_id == binding.source_task_id.as_str()
++            && result.node_id == binding.source_node_id.as_str()
++    }) else {
++        return NonRuntimeInputReadiness::Blocked;
++    };
++    match materialized_bound_output(task, std::slice::from_ref(result), binding) {
++        MaterializedBindingValue::Ready(WorkflowSchedulerTaskResultValue::Json(value))
++            if is_bounded_vector_json(value) => NonRuntimeInputReadiness::Ready,
++        MaterializedBindingValue::Ready(_) => NonRuntimeInputReadiness::Invalid(scheduler_input_diagnostic(
++            SchedulerTaskStateDiagnosticCode::InvalidTask,
++            "vector-output input must be a finite numeric JSON array of 1..4096 elements, at most 64 KiB",
++        )),
++        MaterializedBindingValue::Blocked => NonRuntimeInputReadiness::InputUnavailable(scheduler_input_diagnostic(
++            SchedulerTaskStateDiagnosticCode::InputUnavailable,
++            format!("completed upstream task '{}' did not produce vector port '{}'", result.task_id, binding.source_port_id),
++        )),
++        MaterializedBindingValue::Unavailable(diagnostic) => NonRuntimeInputReadiness::InputUnavailable(diagnostic),
++        MaterializedBindingValue::Invalid(diagnostic) => NonRuntimeInputReadiness::Invalid(diagnostic),
++    }
++}
++
+ fn runtime_execution_intent(
+     task: &WorkflowSchedulerTask,
+ ) -> Result<SchedulerTaskExecutionIntent, WorkflowSchedulerTaskOrchestratorError> {
+diff --git a/crates/pantograph-workflow-service/src/scheduler/task_orchestrator_tests.rs b/crates/pantograph-workflow-service/src/scheduler/task_orchestrator_tests.rs
+index 2f426e6a..cdd88d42 100644
+--- a/crates/pantograph-workflow-service/src/scheduler/task_orchestrator_tests.rs
++++ b/crates/pantograph-workflow-service/src/scheduler/task_orchestrator_tests.rs
+@@ -3080,6 +3080,128 @@ fn text_output_task() -> WorkflowSchedulerTask {
+     }
+ }
+ 
++fn vector_output_task(connected: bool) -> WorkflowSchedulerTask {
++    let mut task = text_output_task();
++    task.node_type = "vector-output".into();
++    task.non_runtime_task_template = Some(WorkflowSchedulerNonRuntimeTaskTemplate::VectorOutput);
++    task.input_bindings.clear();
++    task.dependency_task_ids.clear();
++    if connected {
++        let mut binding = text_binding("embed", "vector-output");
++        binding.source_port_id = "vector".into();
++        binding.target_port_id = "vector".into();
++        task.dependency_task_ids
++            .push(binding.source_task_id.clone());
++        task.input_bindings.push(binding);
++    }
++    task
++}
++
++fn vector_result(value: serde_json::Value) -> WorkflowSchedulerTaskResult {
++    let mut result = task_result(
++        "embed",
++        WorkflowSchedulerTaskResultStatus::Completed,
++        WorkflowSchedulerTaskResultValue::Json(value),
++    );
++    result.outputs[0].port_id = "vector".into();
++    result
++}
++
++#[test]
++fn vector_readiness_distinguishes_optional_pending_missing_and_invalid() {
++    use super::NonRuntimeInputReadiness;
++    let task = vector_output_task(true);
++    assert!(matches!(
++        super::non_runtime_input_readiness(&vector_output_task(false), &[]),
++        NonRuntimeInputReadiness::Ready
++    ));
++    assert!(matches!(
++        super::non_runtime_input_readiness(&task, &[]),
++        NonRuntimeInputReadiness::Blocked
++    ));
++    for value in [json!([0.5]), json!(vec![0.25; 4096])] {
++        assert!(matches!(
++            super::non_runtime_input_readiness(&task, &[vector_result(value)]),
++            NonRuntimeInputReadiness::Ready
++        ));
++    }
++    let mut missing = vector_result(json!([0.5]));
++    missing.outputs.clear();
++    assert!(
++        matches!(super::non_runtime_input_readiness(&task, &[missing]),
++        NonRuntimeInputReadiness::InputUnavailable(diagnostic) if diagnostic.code == SchedulerTaskStateDiagnosticCode::InputUnavailable)
++    );
++    for value in [
++        json!(null),
++        json!([]),
++        json!(["0.5"]),
++        json!([true]),
++        json!([[0.5]]),
++        json!([null]),
++        json!(vec![0; 4097]),
++        json!(vec![u64::MAX; 4096]),
++    ] {
++        assert!(
++            matches!(super::non_runtime_input_readiness(&task, &[vector_result(value)]),
++            NonRuntimeInputReadiness::Invalid(diagnostic) if diagnostic.code == SchedulerTaskStateDiagnosticCode::InvalidTask)
++        );
++    }
++    let mut string = vector_result(json!([0.5]));
++    string.outputs[0].value = WorkflowSchedulerTaskResultValue::String("[0.5]".into());
++    assert!(matches!(
++        super::non_runtime_input_readiness(&task, &[string]),
++        NonRuntimeInputReadiness::Invalid(_)
++    ));
++}
++
++#[test]
++fn vector_readiness_preserves_source_identity_and_failure_states() {
++    use super::NonRuntimeInputReadiness;
++    let task = vector_output_task(true);
++    for field in ["workflow_id", "workflow_run_id", "node_id", "task_id"] {
++        let mut other = vector_result(json!([0.5]));
++        match field {
++            "workflow_id" => other.workflow_id = "other-workflow".into(),
++            "workflow_run_id" => other.workflow_run_id = "other-run".into(),
++            "node_id" => other.node_id = "other-node".into(),
++            "task_id" => other.task_id = "other-task".into(),
++            _ => unreachable!(),
++        }
++        assert!(
++            matches!(
++                super::non_runtime_input_readiness(&task, &[other]),
++                NonRuntimeInputReadiness::Blocked
++            ),
++            "{field}"
++        );
++    }
++    let mut unavailable = vector_result(json!([0.5]));
++    unavailable.status = WorkflowSchedulerTaskResultStatus::Unavailable;
++    assert!(matches!(
++        super::non_runtime_input_readiness(&task, &[unavailable]),
++        NonRuntimeInputReadiness::InputUnavailable(_)
++    ));
++    for status in [
++        WorkflowSchedulerTaskResultStatus::Failed,
++        WorkflowSchedulerTaskResultStatus::Invalid,
++    ] {
++        let mut failed = vector_result(json!([0.5]));
++        failed.status = status;
++        assert!(matches!(
++            super::non_runtime_input_readiness(&task, &[failed]),
++            NonRuntimeInputReadiness::Invalid(_)
++        ));
++    }
++    let mut invalid_binding = vector_output_task(false);
++    let mut binding = text_binding("embed", "vector-output");
++    binding.target_port_id = "text".into();
++    invalid_binding.input_bindings.push(binding);
++    assert!(matches!(
++        super::non_runtime_input_readiness(&invalid_binding, &[]),
++        NonRuntimeInputReadiness::Invalid(_)
++    ));
++}
++
+ fn text_binding(source_task_id: &str, _target_task_id: &str) -> WorkflowSchedulerTaskInputBinding {
+     WorkflowSchedulerTaskInputBinding {
+         source_node_id: SchedulerNodeId::parse(source_task_id).expect("source node id"),
+diff --git a/crates/pantograph-workflow-service/src/workflow.rs b/crates/pantograph-workflow-service/src/workflow.rs
+index ef5ed092..cc7bf8e8 100644
+--- a/crates/pantograph-workflow-service/src/workflow.rs
++++ b/crates/pantograph-workflow-service/src/workflow.rs
+@@ -157,7 +157,8 @@ pub use self::host::{
+ pub use self::identity::{WorkflowIdentity, WorkflowIdentityError};
+ pub use self::media_capability_contracts::*;
+ pub(crate) use self::non_runtime_task_adapter::{
+-    execute_non_runtime_scheduler_task, WorkflowSchedulerNonRuntimeTaskAdapterError,
++    execute_non_runtime_scheduler_task, is_bounded_vector_json,
++    WorkflowSchedulerNonRuntimeTaskAdapterError,
+ };
+ pub(crate) use self::runtime_dispatch_selection::{
+     NoRuntimeDispatchCandidatesProvider, NoRuntimeDispatchSourceRefresher,
+diff --git a/crates/pantograph-workflow-service/src/workflow/non_runtime_task_adapter.rs b/crates/pantograph-workflow-service/src/workflow/non_runtime_task_adapter.rs
+index 1276096e..eeb280c9 100644
+--- a/crates/pantograph-workflow-service/src/workflow/non_runtime_task_adapter.rs
++++ b/crates/pantograph-workflow-service/src/workflow/non_runtime_task_adapter.rs
+@@ -15,6 +15,18 @@ use super::task_result_contracts::{
+ };
+ 
+ const PORT_TEXT: &str = "text";
++const PORT_VECTOR: &str = "vector";
++const VECTOR_EXPECTED: &str = "a finite numeric JSON vector of 1..4096 elements, at most 64 KiB";
++
++pub(crate) fn is_bounded_vector_json(value: &Value) -> bool {
++    value.as_array().is_some_and(|values| {
++        (1..=4096).contains(&values.len())
++            && values.iter().all(|value| value.as_f64().is_some_and(f64::is_finite))
++            && serde_json::to_vec(value).is_ok_and(|bytes| {
++                bytes.len() <= pantograph_runtime_host_contracts::RUNTIME_HOST_STRUCTURED_OUTPUT_MAX_BYTES
++            })
++    })
++}
+ 
+ pub(crate) async fn execute_non_runtime_scheduler_task(
+     task: &WorkflowSchedulerTask,
+@@ -33,17 +45,30 @@ pub(crate) async fn execute_non_runtime_scheduler_task(
+             task_id: task.task_id.as_str().to_string(),
+         }
+     })?;
+-    let inputs = node_engine_inputs(task, template, materialized_results)?;
+-    let request = NodeEngineSingleTaskRequest::try_new(
+-        task.task_id.as_str(),
+-        task.node_type.as_str(),
+-        inputs,
+-    )
+-    .map_err(WorkflowSchedulerNonRuntimeTaskAdapterError::NodeEngine)?;
+-    let response = node_engine::execute_core_task_once(request)
+-        .await
++    let mut inputs = node_engine_inputs(task, template, materialized_results)?;
++    let outputs = if matches!(
++        template,
++        WorkflowSchedulerNonRuntimeTaskTemplate::VectorOutput
++    ) {
++        // The generic core vector sink normalizes through f64. The scheduler
++        // boundary instead retains the already validated host JSON exactly.
++        let node_outputs = HashMap::from([(
++            PORT_VECTOR.to_string(),
++            inputs.remove(PORT_VECTOR).unwrap_or(Value::Null),
++        )]);
++        scheduler_outputs(template, &node_outputs)?
++    } else {
++        let request = NodeEngineSingleTaskRequest::try_new(
++            task.task_id.as_str(),
++            task.node_type.as_str(),
++            inputs,
++        )
+         .map_err(WorkflowSchedulerNonRuntimeTaskAdapterError::NodeEngine)?;
+-    let outputs = scheduler_outputs(template, response.outputs())?;
++        let response = node_engine::execute_core_task_once(request)
++            .await
++            .map_err(WorkflowSchedulerNonRuntimeTaskAdapterError::NodeEngine)?;
++        scheduler_outputs(template, response.outputs())?
++    };
+     let result = WorkflowSchedulerTaskResult {
+         schema_version: WORKFLOW_SCHEDULER_TASK_RESULT_SCHEMA_VERSION,
+         workflow_id: task.workflow_id.as_str().to_string(),
+@@ -68,6 +93,44 @@ fn node_engine_inputs(
+ ) -> Result<HashMap<String, Value>, WorkflowSchedulerNonRuntimeTaskAdapterError> {
+     let mut inputs = HashMap::new();
+     match template {
++        WorkflowSchedulerNonRuntimeTaskTemplate::VectorOutput => {
++            if task.node_type != "vector-output"
++                || task.input_bindings.len() > 1
++                || task
++                    .input_bindings
++                    .iter()
++                    .any(|binding| binding.target_port_id != PORT_VECTOR)
++            {
++                return Err(
++                    WorkflowSchedulerNonRuntimeTaskAdapterError::InvalidVectorBinding {
++                        task_id: task.task_id.as_str().to_string(),
++                    },
++                );
++            }
++            if let Some(binding) = task.input_bindings.first() {
++                let WorkflowSchedulerTaskResultValue::Json(value) =
++                    materialized_output(task, binding, materialized_results)?
++                else {
++                    return Err(
++                        WorkflowSchedulerNonRuntimeTaskAdapterError::WrongMaterializedInputType {
++                            source_task_id: binding.source_task_id.as_str().to_string(),
++                            source_port_id: binding.source_port_id.clone(),
++                            expected: VECTOR_EXPECTED,
++                        },
++                    );
++                };
++                if !is_bounded_vector_json(value) {
++                    return Err(
++                        WorkflowSchedulerNonRuntimeTaskAdapterError::WrongMaterializedInputType {
++                            source_task_id: binding.source_task_id.as_str().to_string(),
++                            source_port_id: binding.source_port_id.clone(),
++                            expected: VECTOR_EXPECTED,
++                        },
++                    );
++                }
++                inputs.insert(PORT_VECTOR.to_string(), value.clone());
++            }
++        }
+         WorkflowSchedulerNonRuntimeTaskTemplate::ImageOutput => {
+             let binding = task
+                 .input_bindings
+@@ -152,6 +215,21 @@ fn scheduler_outputs(
+     outputs: &HashMap<String, Value>,
+ ) -> Result<Vec<WorkflowSchedulerTaskResultOutput>, WorkflowSchedulerNonRuntimeTaskAdapterError> {
+     match template {
++        WorkflowSchedulerNonRuntimeTaskTemplate::VectorOutput => {
++            let value = outputs
++                .get(PORT_VECTOR)
++                .filter(|value| value.is_null() || is_bounded_vector_json(value))
++                .ok_or_else(|| {
++                    WorkflowSchedulerNonRuntimeTaskAdapterError::InvalidNodeEngineOutput {
++                        port_id: PORT_VECTOR.to_string(),
++                        expected: VECTOR_EXPECTED,
++                    }
++                })?;
++            Ok(vec![WorkflowSchedulerTaskResultOutput {
++                port_id: PORT_VECTOR.to_string(),
++                value: WorkflowSchedulerTaskResultValue::Json(value.clone()),
++            }])
++        }
+         WorkflowSchedulerNonRuntimeTaskTemplate::ImageOutput => {
+             let value = outputs
+                 .get("image")
+@@ -282,6 +360,11 @@ fn materialized_output<'a>(
+         .find(|result| {
+             result.task_id == binding.source_task_id.as_str()
+                 && result.node_id == binding.source_node_id.as_str()
++                && (!matches!(
++                    task.non_runtime_task_template,
++                    Some(WorkflowSchedulerNonRuntimeTaskTemplate::VectorOutput)
++                ) || (result.workflow_id == task.workflow_id.as_str()
++                    && result.workflow_run_id == task.workflow_run_id.as_str()))
+         })
+         .ok_or_else(
+             || WorkflowSchedulerNonRuntimeTaskAdapterError::MissingMaterializedInput {
+@@ -333,6 +416,8 @@ pub(crate) enum WorkflowSchedulerNonRuntimeTaskAdapterError {
+     UnsupportedExecutionClass { node_type: String },
+     #[error("scheduler task '{task_id}' is missing a typed non-runtime task template")]
+     MissingTaskTemplate { task_id: String },
++    #[error("scheduler vector-output task '{task_id}' requires its own template and at most one vector input binding")]
++    InvalidVectorBinding { task_id: String },
+     #[error("scheduler task '{task_id}' is missing an input binding for '{target_port_id}'")]
+     MissingInputBinding {
+         task_id: String,
+@@ -452,6 +537,132 @@ mod tests {
+         }
+     }
+ 
++    fn vector_task(connected: bool) -> WorkflowSchedulerTask {
++        let mut binding = text_binding("embed");
++        binding.source_port_id = PORT_VECTOR.to_string();
++        binding.target_port_id = PORT_VECTOR.to_string();
++        task(
++            "vector-out",
++            "vector-output",
++            Some(WorkflowSchedulerNonRuntimeTaskTemplate::VectorOutput),
++            if connected { vec![binding] } else { Vec::new() },
++        )
++    }
++
++    #[test]
++    fn vector_json_enforces_exact_structured_output_byte_boundary() {
++        let mut values = vec![Value::from(999_999_999_999_999_u64); 4096];
++        values[4095] = Value::from(99_999_999_999_999_u64);
++        let at_limit = Value::Array(values.clone());
++        assert_eq!(serde_json::to_vec(&at_limit).unwrap().len(), 64 * 1024);
++        assert!(is_bounded_vector_json(&at_limit));
++        values[4095] = Value::from(999_999_999_999_999_u64);
++        let over_limit = Value::Array(values);
++        assert_eq!(
++            serde_json::to_vec(&over_limit).unwrap().len(),
++            64 * 1024 + 1
++        );
++        assert!(!is_bounded_vector_json(&over_limit));
++    }
++
++    #[tokio::test]
++    async fn vector_adapter_preserves_exact_json_and_sink_identity() {
++        for vector in [
++            serde_json::json!([0, -1, 0.125, -0.0, u64::MAX]),
++            serde_json::json!(vec![0.25; 4096]),
++        ] {
++            let task = vector_task(true);
++            let upstream = completed_result(
++                "embed",
++                PORT_VECTOR,
++                WorkflowSchedulerTaskResultValue::Json(vector.clone()),
++            );
++            let encoded = serde_json::to_string(&vector).unwrap();
++            let result = execute_non_runtime_scheduler_task(&task, &[upstream])
++                .await
++                .unwrap();
++            assert_eq!(result.workflow_id, task.workflow_id.as_str());
++            assert_eq!(result.workflow_run_id, task.workflow_run_id.as_str());
++            assert_eq!(result.task_id, task.task_id.as_str());
++            assert_eq!(result.node_id, task.node_id.as_str());
++            assert_eq!(result.status, WorkflowSchedulerTaskResultStatus::Completed);
++            assert_eq!(result.outputs[0].port_id, PORT_VECTOR);
++            assert_eq!(
++                result.outputs[0].value,
++                WorkflowSchedulerTaskResultValue::Json(vector.clone())
++            );
++            assert_eq!(
++                serde_json::to_string(&result.outputs[0].value.node_json().unwrap()).unwrap(),
++                encoded
++            );
++        }
++    }
++
++    #[tokio::test]
++    async fn vector_adapter_retains_optional_unconnected_null_only() {
++        let result = execute_non_runtime_scheduler_task(&vector_task(false), &[])
++            .await
++            .unwrap();
++        assert_eq!(
++            result.outputs[0].value,
++            WorkflowSchedulerTaskResultValue::Json(Value::Null)
++        );
++        assert!(matches!(
++            execute_non_runtime_scheduler_task(&vector_task(true), &[]).await,
++            Err(WorkflowSchedulerNonRuntimeTaskAdapterError::MissingMaterializedInput { .. })
++        ));
++    }
++
++    #[tokio::test]
++    async fn vector_adapter_refuses_connected_invalid_vectors_without_coercion() {
++        for value in [
++            WorkflowSchedulerTaskResultValue::Json(serde_json::json!([])),
++            WorkflowSchedulerTaskResultValue::Json(Value::Null),
++            WorkflowSchedulerTaskResultValue::Json(serde_json::json!(["0.5"])),
++            WorkflowSchedulerTaskResultValue::Json(serde_json::json!([true])),
++            WorkflowSchedulerTaskResultValue::Json(serde_json::json!([[0.5]])),
++            WorkflowSchedulerTaskResultValue::Json(serde_json::json!([null])),
++            WorkflowSchedulerTaskResultValue::Json(serde_json::json!(vec![0; 4097])),
++            WorkflowSchedulerTaskResultValue::Json(serde_json::json!(vec![u64::MAX; 4096])),
++            WorkflowSchedulerTaskResultValue::String("[0.5]".into()),
++            WorkflowSchedulerTaskResultValue::Bool(true),
++        ] {
++            let upstream = completed_result("embed", PORT_VECTOR, value);
++            assert!(
++                execute_non_runtime_scheduler_task(&vector_task(true), &[upstream])
++                    .await
++                    .is_err()
++            );
++        }
++    }
++
++    #[tokio::test]
++    async fn vector_adapter_requires_same_workflow_run_and_source_identity() {
++        for field in ["workflow_id", "workflow_run_id", "node_id", "task_id"] {
++            let mut upstream = completed_result(
++                "embed",
++                PORT_VECTOR,
++                WorkflowSchedulerTaskResultValue::Json(serde_json::json!([0.5])),
++            );
++            match field {
++                "workflow_id" => upstream.workflow_id = "other-workflow".into(),
++                "workflow_run_id" => upstream.workflow_run_id = "other-run".into(),
++                "node_id" => upstream.node_id = "other-node".into(),
++                "task_id" => upstream.task_id = "other-task".into(),
++                _ => unreachable!(),
++            }
++            assert!(
++                matches!(
++                    execute_non_runtime_scheduler_task(&vector_task(true), &[upstream]).await,
++                    Err(
++                        WorkflowSchedulerNonRuntimeTaskAdapterError::MissingMaterializedInput { .. }
++                    )
++                ),
++                "{field}"
++            );
++        }
++    }
++
+     #[tokio::test]
+     async fn adapter_rejects_source_input_task_before_node_engine() {
+         let mut task = task("prompt", "text-input", None, Vec::new());
+diff --git a/crates/pantograph-workflow-service/src/workflow/task_execution_classification.rs b/crates/pantograph-workflow-service/src/workflow/task_execution_classification.rs
+index b72210fa..9e142464 100644
+--- a/crates/pantograph-workflow-service/src/workflow/task_execution_classification.rs
++++ b/crates/pantograph-workflow-service/src/workflow/task_execution_classification.rs
+@@ -8,6 +8,7 @@ const NODE_TYPE_BOOLEAN_INPUT: &str = "boolean-input";
+ const NODE_TYPE_NUMBER_INPUT: &str = "number-input";
+ const NODE_TYPE_TEXT_INPUT: &str = "text-input";
+ const NODE_TYPE_TEXT_OUTPUT: &str = "text-output";
++const NODE_TYPE_VECTOR_OUTPUT: &str = "vector-output";
+ const NODE_TYPE_IMAGE_OUTPUT: &str = "image-output";
+ const NODE_TYPE_MERGE: &str = "merge";
+ const NODE_TYPE_JSON_FILTER: &str = "json-filter";
+@@ -61,7 +62,11 @@ fn is_source_input_task(node_type: &str) -> bool {
+ fn is_first_stage_node_engine_task(node_type: &str) -> bool {
+     matches!(
+         node_type,
+-        NODE_TYPE_TEXT_OUTPUT | NODE_TYPE_IMAGE_OUTPUT | NODE_TYPE_MERGE | NODE_TYPE_JSON_FILTER
++        NODE_TYPE_TEXT_OUTPUT
++            | NODE_TYPE_VECTOR_OUTPUT
++            | NODE_TYPE_IMAGE_OUTPUT
++            | NODE_TYPE_MERGE
++            | NODE_TYPE_JSON_FILTER
+     )
+ }
+ 
+@@ -107,7 +112,13 @@ mod tests {
+ 
+     #[test]
+     fn classifier_marks_first_stage_output_as_non_runtime_node_engine() {
+-        for node_type in ["text-output", "image-output", "merge", "json-filter"] {
++        for node_type in [
++            "text-output",
++            "vector-output",
++            "image-output",
++            "merge",
++            "json-filter",
++        ] {
+             let contract = contract(node_type);
+             assert_eq!(
+                 classify_workflow_scheduler_task(node_type, Some(&contract)),
+diff --git a/crates/pantograph-workflow-service/src/workflow/task_graph.rs b/crates/pantograph-workflow-service/src/workflow/task_graph.rs
+index 35dfdfd0..c6497a52 100644
+--- a/crates/pantograph-workflow-service/src/workflow/task_graph.rs
++++ b/crates/pantograph-workflow-service/src/workflow/task_graph.rs
+@@ -30,6 +30,7 @@ const NODE_TYPE_BOOLEAN_INPUT: &str = "boolean-input";
+ const NODE_TYPE_NUMBER_INPUT: &str = "number-input";
+ const NODE_TYPE_TEXT_INPUT: &str = "text-input";
+ const NODE_TYPE_TEXT_OUTPUT: &str = "text-output";
++const NODE_TYPE_VECTOR_OUTPUT: &str = "vector-output";
+ const NODE_TYPE_IMAGE_OUTPUT: &str = "image-output";
+ const NODE_TYPE_MERGE: &str = "merge";
+ const NODE_TYPE_JSON_FILTER: &str = "json-filter";
+@@ -381,6 +382,30 @@ fn non_runtime_task_template_for_node(
+ 
+     match node_type {
+         NODE_TYPE_TEXT_OUTPUT => text_output_template(node_id, input_bindings),
++        NODE_TYPE_VECTOR_OUTPUT => {
++            // The registered vector sink is optional. A connected sink accepts
++            // exactly one vector; an unconnected sink retains its null output.
++            if input_bindings.len() <= 1
++                && input_bindings
++                    .iter()
++                    .all(|binding| binding.target_port_id == "vector")
++            {
++                (
++                    Some(WorkflowSchedulerNonRuntimeTaskTemplate::VectorOutput),
++                    Vec::new(),
++                )
++            } else {
++                (
++                    None,
++                    vec![diagnostic(
++                    node_id,
++                    Some("vector"),
++                    WorkflowSchedulerTaskProjectionDiagnosticCode::InvalidNonRuntimeTemplateValue,
++                    "vector-output accepts at most one materialized vector input",
++                )],
++                )
++            }
++        }
+         NODE_TYPE_IMAGE_OUTPUT => {
+             if input_bindings.len() == 1 && input_bindings[0].target_port_id == "image" {
+                 (
+diff --git a/crates/pantograph-workflow-service/src/workflow/task_graph_contracts.rs b/crates/pantograph-workflow-service/src/workflow/task_graph_contracts.rs
+index 565695df..9e02a794 100644
+--- a/crates/pantograph-workflow-service/src/workflow/task_graph_contracts.rs
++++ b/crates/pantograph-workflow-service/src/workflow/task_graph_contracts.rs
+@@ -110,6 +110,7 @@ pub struct WorkflowSchedulerDependencyReadinessSource {
+ #[non_exhaustive]
+ pub enum WorkflowSchedulerNonRuntimeTaskTemplate {
+     TextOutput,
++    VectorOutput,
+     ImageOutput,
+     Merge,
+     JsonFilter { path: String },
+diff --git a/crates/pantograph-workflow-service/src/workflow/tests/task_graph.rs b/crates/pantograph-workflow-service/src/workflow/tests/task_graph.rs
+index b9fd562a..9b4baec1 100644
+--- a/crates/pantograph-workflow-service/src/workflow/tests/task_graph.rs
++++ b/crates/pantograph-workflow-service/src/workflow/tests/task_graph.rs
+@@ -32,6 +32,66 @@ fn workflow_run_id() -> WorkflowRunId {
+     WorkflowRunId::try_from("run-task-graph".to_string()).expect("workflow run id")
+ }
+ 
++#[test]
++fn vector_output_lowers_to_optional_typed_scheduler_template() {
++    for connected in [false, true] {
++        let graph = WorkflowGraph {
++            nodes: vec![
++                GraphNode {
++                    id: "source".into(),
++                    node_type: "selection-input".into(),
++                    position: Position { x: 0.0, y: 0.0 },
++                    data: json!({}),
++                },
++                GraphNode {
++                    id: "vector-out".into(),
++                    node_type: "vector-output".into(),
++                    position: Position { x: 200.0, y: 0.0 },
++                    data: json!({"vector": "inert display data"}),
++                },
++            ],
++            edges: if connected {
++                vec![GraphEdge {
++                    id: "source-vector".into(),
++                    source: "source".into(),
++                    target: "vector-out".into(),
++                    source_handle: "value".into(),
++                    target_handle: "vector".into(),
++                }]
++            } else {
++                Vec::new()
++            },
++            derived_graph: None,
++        };
++        let tasks =
++            workflow_scheduler_task_graph(&workflow_id(), &workflow_run_id(), &graph).unwrap();
++        let sink = tasks
++            .tasks
++            .iter()
++            .find(|task| task.node_id.as_str() == "vector-out")
++            .unwrap();
++        assert_eq!(
++            sink.execution_class,
++            WorkflowSchedulerTaskExecutionClass::NonRuntimeNodeEngine
++        );
++        assert_eq!(
++            sink.non_runtime_task_template,
++            Some(WorkflowSchedulerNonRuntimeTaskTemplate::VectorOutput)
++        );
++        assert!(sink.diagnostics.is_empty());
++        assert_eq!(sink.input_bindings.len(), usize::from(connected));
++        if connected {
++            assert_eq!(sink.input_bindings[0].source_node_id.as_str(), "source");
++            assert_eq!(sink.input_bindings[0].source_port_id, "value");
++            assert_eq!(sink.input_bindings[0].target_port_id, "vector");
++        }
++        let encoded = serde_json::to_value(&tasks).unwrap();
++        let decoded: crate::workflow::WorkflowSchedulerTaskGraph =
++            serde_json::from_value(encoded).unwrap();
++        assert_eq!(decoded, tasks);
++    }
++}
++
+ fn inference_projection() -> WorkflowSchedulerInferenceTaskProjections {
+     ready_inference_projection(resource_estimate_hints())
+ }
+diff --git a/packages/svelte-graph/src/stores/definitionOverlay.test.ts b/packages/svelte-graph/src/stores/definitionOverlay.test.ts
+index da41e55c..5f01cf15 100644
+--- a/packages/svelte-graph/src/stores/definitionOverlay.test.ts
++++ b/packages/svelte-graph/src/stores/definitionOverlay.test.ts
+@@ -1,5 +1,6 @@
+ import test from 'node:test';
+ import assert from 'node:assert/strict';
++import { readFileSync } from 'node:fs';
+ 
+ import type { NodeDefinition } from '../types/workflow.ts';
+ import { resolveNodeDefinitionOverlay } from './definitionOverlay.ts';
+@@ -164,3 +165,28 @@ test('resolveNodeDefinitionOverlay ignores retired inference definition overlays
+   );
+   assert.deepEqual(resolved.outputs, []);
+ });
++
++test('saved embedding descriptor ports retain embedding and JSON types in the graph overlay', () => {
++  const snapshot = JSON.parse(readFileSync(new URL(
++    '../../../../crates/pantograph-inference-interface-contracts/tests/fixtures/authored_snapshot_embedding.json',
++    import.meta.url,
++  ), 'utf8'));
++  const definitions: NodeDefinition[] = [{
++    node_type: 'llm-inference', category: 'processing', label: 'Inference',
++    description: 'Run inference', io_binding_origin: 'integrated',
++    inputs: [], outputs: [], execution_mode: 'manual',
++  }];
++  const resolved = resolveNodeDefinitionOverlay('llm-inference', {
++    inference_interface_snapshot: JSON.parse(JSON.stringify(snapshot)),
++  }, definitions);
++  assert.ok(resolved);
++  assert.deepEqual(resolved.inputs.map(port => [port.id, port.data_type, port.required]), [
++    ['text', 'string', true],
++  ]);
++  assert.equal('default_value' in resolved.inputs[0], false);
++  assert.deepEqual(resolved.outputs.map(port => [port.id, port.data_type, port.required]), [
++    ['embedding', 'embedding', true], ['metadata', 'json', true], ['usage', 'json', false],
++  ]);
++  assert.equal(resolved.outputs[0].data_type, 'embedding');
++  assert.notEqual(resolved.outputs[0].data_type, 'tensor');
++});
+diff --git a/packages/svelte-graph/src/stores/definitionOverlay.ts b/packages/svelte-graph/src/stores/definitionOverlay.ts
+index 42ef5cd6..61592722 100644
+--- a/packages/svelte-graph/src/stores/definitionOverlay.ts
++++ b/packages/svelte-graph/src/stores/definitionOverlay.ts
+@@ -118,6 +118,8 @@ function inferenceValueTypeToPortDataType(value: unknown): PortDataType {
+   switch (record.category) {
+     case 'scalar':
+       return scalarInferenceTypeToPortDataType(record.kind);
++    case 'structured':
++      return record.kind === 'embedding' ? 'embedding' : 'json';
+     case 'artifact':
+       return artifactInferenceTypeToPortDataType(record.kind);
+     case 'reference':
+diff --git a/src/services/workflow/types.ts b/src/services/workflow/types.ts
+index 5743dbbc..fc8d99d9 100644
+--- a/src/services/workflow/types.ts
++++ b/src/services/workflow/types.ts
+@@ -1033,6 +1033,7 @@ export interface InferenceAvailability {
+ export type InferencePortDirection = 'input' | 'output';
+ export type InferencePortRequirement = 'required' | 'optional';
+ export type InferenceScalarType = 'string' | 'bool' | 'i64' | 'u64' | 'f64';
++export type InferenceStructuredType = 'embedding' | 'json';
+ export type InferenceArtifactType = 'image' | 'audio' | 'video' | 'tensor' | 'document' | 'media';
+ export type InferenceReferenceType =
+   | 'pumas_model'
+@@ -1044,6 +1045,7 @@ export type InferenceConstraintType = 'runtime' | 'device' | 'denoising_schedule
+ export type InferenceValueType =
+   | { category: 'scalar'; kind: InferenceScalarType }
+   | { category: 'artifact'; kind: InferenceArtifactType }
++  | { category: 'structured'; kind: InferenceStructuredType }
+   | { category: 'reference'; kind: InferenceReferenceType }
+   | { category: 'constraint'; kind: InferenceConstraintType };
+ 

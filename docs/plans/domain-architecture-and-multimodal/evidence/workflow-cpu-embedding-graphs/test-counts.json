@@ -1,0 +1,184 @@
+[
+  {
+    "target": "Running unittests src/lib.rs (/workspace/pantograph-cache/target/debug/deps/inference-0e884a3b0e08ce43)",
+    "result": "ok",
+    "passed": 795,
+    "failed": 0,
+    "ignored": 0
+  },
+  {
+    "target": "Running tests/device_contracts.rs (/workspace/pantograph-cache/target/debug/deps/device_contracts-89f65e61977435c3)",
+    "result": "ok",
+    "passed": 7,
+    "failed": 0,
+    "ignored": 0
+  },
+  {
+    "target": "Running tests/diffusers_guidance_native.rs (/workspace/pantograph-cache/target/debug/deps/diffusers_guidance_native-015ee6208ed33bb4)",
+    "result": "ok",
+    "passed": 0,
+    "failed": 0,
+    "ignored": 3
+  },
+  {
+    "target": "Running tests/managed_media_dependencies.rs (/workspace/pantograph-cache/target/debug/deps/managed_media_dependencies-6925e2576b4e8201)",
+    "result": "ok",
+    "passed": 10,
+    "failed": 0,
+    "ignored": 0
+  },
+  {
+    "target": "Running tests/managed_redistributables.rs (/workspace/pantograph-cache/target/debug/deps/managed_redistributables-d7f9b29d815ff1aa)",
+    "result": "ok",
+    "passed": 12,
+    "failed": 0,
+    "ignored": 0
+  },
+  {
+    "target": "Running tests/model_contracts.rs (/workspace/pantograph-cache/target/debug/deps/model_contracts-cbaa36c28b8bf979)",
+    "result": "ok",
+    "passed": 42,
+    "failed": 0,
+    "ignored": 0
+  },
+  {
+    "target": "Running tests/process_termination.rs (/workspace/pantograph-cache/target/debug/deps/process_termination-f65754eff89e4096)",
+    "result": "ok",
+    "passed": 2,
+    "failed": 0,
+    "ignored": 0
+  },
+  {
+    "target": "Running tests/pytorch_cuda_inventory_native.rs (/workspace/pantograph-cache/target/debug/deps/pytorch_cuda_inventory_native-647490b9279122bd)",
+    "result": "ok",
+    "passed": 0,
+    "failed": 0,
+    "ignored": 1
+  },
+  {
+    "target": "Running tests/runtime_load_contracts.rs (/workspace/pantograph-cache/target/debug/deps/runtime_load_contracts-26fd5df526848606)",
+    "result": "ok",
+    "passed": 1,
+    "failed": 0,
+    "ignored": 0
+  },
+  {
+    "target": "Running unittests src/lib.rs (/workspace/pantograph-cache/target/debug/deps/pantograph_embedded_runtime-e304b5d1155c8b12)",
+    "result": "ok",
+    "passed": 530,
+    "failed": 0,
+    "ignored": 0
+  },
+  {
+    "target": "Running unittests src/lib.rs (/workspace/pantograph-cache/target/debug/deps/pantograph_inference_interface_contracts-4239f14ff2369217)",
+    "result": "ok",
+    "passed": 0,
+    "failed": 0,
+    "ignored": 0
+  },
+  {
+    "target": "Running tests/contract.rs (/workspace/pantograph-cache/target/debug/deps/contract-6a938acb9ba33cd5)",
+    "result": "ok",
+    "passed": 28,
+    "failed": 0,
+    "ignored": 0
+  },
+  {
+    "target": "Running unittests src/lib.rs (/workspace/pantograph-cache/target/debug/deps/pantograph_runtime_host_contracts-e18a0cd9efe5f9f2)",
+    "result": "ok",
+    "passed": 45,
+    "failed": 0,
+    "ignored": 0
+  },
+  {
+    "target": "Running tests/as_ref_compatibility.rs (/workspace/pantograph-cache/target/debug/deps/as_ref_compatibility-d7549bf6656776e8)",
+    "result": "ok",
+    "passed": 7,
+    "failed": 0,
+    "ignored": 0
+  },
+  {
+    "target": "Running unittests src/lib.rs (/workspace/pantograph-cache/target/debug/deps/pantograph_workflow_service-612182e3c8af21ca)",
+    "result": "ok",
+    "passed": 926,
+    "failed": 0,
+    "ignored": 0
+  },
+  {
+    "target": "Running tests/artifact_contract.rs (/workspace/pantograph-cache/target/debug/deps/artifact_contract-7d90a39ade99e861)",
+    "result": "ok",
+    "passed": 7,
+    "failed": 0,
+    "ignored": 0
+  },
+  {
+    "target": "Running tests/artifact_format_settings.rs (/workspace/pantograph-cache/target/debug/deps/artifact_format_settings-71a039260630a799)",
+    "result": "ok",
+    "passed": 4,
+    "failed": 0,
+    "ignored": 0
+  },
+  {
+    "target": "Running tests/artifact_store.rs (/workspace/pantograph-cache/target/debug/deps/artifact_store-a7a4b68f464234d3)",
+    "result": "ok",
+    "passed": 13,
+    "failed": 0,
+    "ignored": 0
+  },
+  {
+    "target": "Running tests/artifact_store_policy.rs (/workspace/pantograph-cache/target/debug/deps/artifact_store_policy-3e1826c9c173c1c0)",
+    "result": "ok",
+    "passed": 2,
+    "failed": 0,
+    "ignored": 0
+  },
+  {
+    "target": "Running tests/contract.rs (/workspace/pantograph-cache/target/debug/deps/contract-f203ca1df48ae326)",
+    "result": "ok",
+    "passed": 31,
+    "failed": 0,
+    "ignored": 0
+  },
+  {
+    "target": "Running tests/dependency_requirements_registry.rs (/workspace/pantograph-cache/target/debug/deps/dependency_requirements_registry-064b367b2088fa61)",
+    "result": "ok",
+    "passed": 3,
+    "failed": 0,
+    "ignored": 0
+  },
+  {
+    "target": "Doc-tests inference",
+    "result": "ok",
+    "passed": 1,
+    "failed": 0,
+    "ignored": 2
+  },
+  {
+    "target": "Doc-tests pantograph_embedded_runtime",
+    "result": "ok",
+    "passed": 0,
+    "failed": 0,
+    "ignored": 0
+  },
+  {
+    "target": "Doc-tests pantograph_inference_interface_contracts",
+    "result": "ok",
+    "passed": 0,
+    "failed": 0,
+    "ignored": 0
+  },
+  {
+    "target": "Doc-tests pantograph_runtime_host_contracts",
+    "result": "ok",
+    "passed": 0,
+    "failed": 0,
+    "ignored": 0
+  },
+  {
+    "target": "Doc-tests pantograph_workflow_service",
+    "result": "ok",
+    "passed": 0,
+    "failed": 0,
+    "ignored": 0
+  }
+]

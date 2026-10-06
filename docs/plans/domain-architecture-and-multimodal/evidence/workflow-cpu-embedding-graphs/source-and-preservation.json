@@ -1,0 +1,58 @@
+{
+  "base_head": "c75fa2379a730833709ea8976075bf17a117040f",
+  "base_tree": "6c8c4bb1cbed0527b58c1048ebf49fa0e243d56b",
+  "branch": "feat/workflow-cpu-embedding-graphs",
+  "no_build_download": true,
+  "ort_skip_download": "1",
+  "pumas_revision": "26a84e323cae566a46a8f76bef48fa1010aed48b",
+  "candle_revision": "88ed7911de9e88196b1f55b199145d22647f415e",
+  "preserved_worktrees": [
+    {
+      "path": "/workspace/Pantograph-text-stop-string",
+      "head": "1911983715155fc3927d0ebdfd0b94b851a58536",
+      "tree": "ffc25587ce0cf84f6565e08e36f050355aaa2b9c",
+      "status": []
+    },
+    {
+      "path": "/workspace/Pantograph-seed-precision",
+      "head": "fae339bdb1eb681a01ea983f1abe0f2f48916349",
+      "tree": "6c8c4bb1cbed0527b58c1048ebf49fa0e243d56b",
+      "status": []
+    },
+    {
+      "path": "/workspace/Pantograph-text-seed-current",
+      "head": "6cf549dd04933bd49a15b4527732d6a5db6e3c71",
+      "tree": "790791fba8cfc904664cc79f65f0672293332cff",
+      "status": []
+    },
+    {
+      "path": "/workspace/Pantograph-pr58-repair",
+      "head": "d0c9788c5d5ba11ebdfe548f360f1c270e41acab",
+      "tree": "e714ccb9508797268964a3c42190280d57b7b043",
+      "status": []
+    },
+    {
+      "path": "/workspace/Pantograph-text-seed",
+      "head": "1b9fd0bdaf201c92a54165ffab08cc6c6863a640",
+      "tree": "c9124b2f1b9cba9f0db8b9d736f35a95212abb99",
+      "status": [
+        " M crates/inference/src/backend/pytorch.rs",
+        " M crates/inference/src/backend/pytorch_tests.rs",
+        " M crates/inference/src/backend/pytorch_worker_image_python_tests.rs",
+        " M crates/inference/src/gateway.rs",
+        " M crates/inference/src/gateway_tests.rs",
+        " M crates/inference/src/types.rs",
+        " M crates/inference/torch/autoregressive.py",
+        " M crates/inference/torch/tests/test_autoregressive.py",
+        " M crates/inference/torch/worker.py",
+        " M crates/inference/torch/worker_contract.py",
+        " M crates/pantograph-embedded-runtime/src/inference_interface_facts_provider.rs",
+        " M crates/pantograph-embedded-runtime/src/lib_tests/workflow_run_execution_tests.rs",
+        " M crates/pantograph-embedded-runtime/src/runtime_host_text_execution.rs",
+        " M crates/pantograph-inference-interface-contracts/tests/contract.rs",
+        " M crates/pantograph-inference-interface-contracts/tests/fixtures/text_generation_system_prompt_inputs.json",
+        "?? crates/inference/torch/tests/test_text_seed.py"
+      ]
+    }
+  ]
+}
