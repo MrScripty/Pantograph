@@ -499,6 +499,42 @@ mod tests {
     };
 
     #[test]
+    fn versioned_pumas_load_target_wire_projects_without_losing_consumer_facts() {
+        let wire: serde_json::Value = serde_json::from_str(include_str!(
+            "../../inference/tests/fixtures/runtime_load/pumas_artifact_load_target_wire.json"
+        ))
+        .expect("producer wire fixture");
+        // Decode with the actual pinned producer DTO, never the strict consumer
+        // mirror. This also catches fixture drift against producer serialization.
+        let producer: pumas_library::models::PumasArtifactLoadTarget =
+            serde_json::from_value(wire.clone()).expect("pinned Pumas wire must decode");
+        assert_eq!(
+            producer.model_ref.model_ref_contract_version,
+            pumas_library::models::PUMAS_MODEL_REF_CONTRACT_VERSION
+        );
+        assert_eq!(serde_json::to_value(&producer).unwrap(), wire);
+        assert!(serde_json::from_value::<PumasArtifactLoadTarget>(wire).is_err());
+
+        let projected = project_pumas_artifact_load_target(producer);
+        projected
+            .validate_for_handoff()
+            .expect("handoff must validate");
+        let expected: serde_json::Value = serde_json::from_str(include_str!(
+            "../../inference/tests/fixtures/runtime_load/pantograph_artifact_load_target_projected.json"
+        ))
+        .expect("consumer projection fixture");
+        assert_eq!(
+            serde_json::to_value(&projected).unwrap(),
+            expected,
+            "the real host adapter preserves every declared consumer fact"
+        );
+        assert_eq!(
+            serde_json::from_value::<PumasArtifactLoadTarget>(expected).unwrap(),
+            projected
+        );
+    }
+
+    #[test]
     fn advertised_basic_image_controls_reach_canonical_planning_without_loss() {
         let ports: Vec<pantograph_inference_interface_contracts::InferencePortDescriptor> =
             serde_json::from_str(include_str!(
