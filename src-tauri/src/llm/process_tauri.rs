@@ -52,21 +52,19 @@ impl ProcessHandle for TauriProcessHandle {
     }
 
     fn kill(&self) -> Result<(), String> {
-        let child = {
-            let mut guard = self
-                .child
-                .lock()
-                .map_err(|e| format!("Failed to acquire process lock: {}", e))?;
-            guard.take()
-        };
-
-        if let Some(mut child) = child {
+        let mut guard = self
+            .child
+            .lock()
+            .map_err(|e| format!("Failed to acquire process lock: {}", e))?;
+        if let Some(child) = guard.as_mut() {
             child
                 .start_kill()
                 .map_err(|e| format!("Failed to kill process: {}", e))?;
         }
-        self.abort_auxiliary_tasks();
-
+        // Keep the child and monitor alive until try_wait emits Terminated.
+        // Signal acceptance does not prove release, and kill failure must
+        // retain the same generation for a later retry. Normal shutdown drops
+        // this handle after the LlamaServer owner consumes acknowledgment.
         Ok(())
     }
 }

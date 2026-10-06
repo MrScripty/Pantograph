@@ -1,14 +1,25 @@
 mod admission;
+mod model_resources;
+mod producer_resources;
+pub use model_resources::RuntimeModelResourceResidency;
+pub use producer_resources::{
+    RuntimeModelResidentEstimate, RuntimeProducerAllocationState, RuntimeProducerObservation,
+};
 mod observation;
 mod reclaim;
 mod registry_queries;
 mod reservation;
 mod reservation_custody;
 mod reservation_evaluation;
+mod resource_domain;
 use reservation_custody::{
     check_observed_runtime_identity, prospective_reservation, PendingReservation,
 };
 pub use reservation_custody::{RuntimeReservationCustody, RuntimeReservationPublicationError};
+pub use resource_domain::{
+    RuntimeHostRamCapacitySource, RuntimeResourceDomain, RuntimeResourceDomainBinding,
+    RuntimeResourceDomainConfig, RuntimeResourceDomainObservation,
+};
 mod retention;
 mod runtime_selection_policy;
 mod snapshot;
@@ -74,6 +85,37 @@ pub type SharedRuntimeRegistry = Arc<RuntimeRegistry>;
 
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum RuntimeRegistryError {
+    #[error("runtime '{0}' model/producer identity changed before resident resource publication")]
+    ModelResidencyObservationChanged(String),
+
+    #[error("runtime '{runtime_id}' model '{model_id}' has no declared resident {resource_kind} estimate")]
+    ModelResidencyResourcesUnavailable {
+        runtime_id: String,
+        model_id: String,
+        resource_kind: &'static str,
+    },
+
+    #[error("runtime '{runtime_id}' resident resource declaration is invalid: {reason}")]
+    InvalidModelResidencyResources {
+        runtime_id: String,
+        reason: &'static str,
+    },
+    #[error("resource domain '{domain_id}' is invalid: {reason}")]
+    InvalidResourceDomain {
+        domain_id: String,
+        reason: &'static str,
+    },
+
+    #[error("resource domain '{domain_id}' byte accounting overflowed")]
+    ResourceDomainAccountingOverflow { domain_id: String },
+
+    #[error("runtime '{runtime_id}' cannot reserve {requested_bytes} bytes in resource domain '{domain_id}': {available_bytes} bytes available")]
+    ResourceDomainAdmissionRejected {
+        runtime_id: String,
+        domain_id: String,
+        requested_bytes: u64,
+        available_bytes: u64,
+    },
     #[error("runtime '{0}' is not registered")]
     RuntimeNotFound(String),
 
@@ -169,6 +211,10 @@ impl RuntimeRegistration {
 
 #[derive(Debug, Default)]
 struct RuntimeRegistryState {
+    resource_domains: BTreeMap<String, RuntimeResourceDomain>,
+    host_ram_capacity_source: Option<Arc<dyn RuntimeHostRamCapacitySource>>,
+    resident_estimates: BTreeMap<(String, String), RuntimeReservationRequirements>,
+    producer_observations: BTreeMap<String, (String, u64)>,
     runtimes: BTreeMap<String, RuntimeRegistryRecord>,
     reservations: BTreeMap<u64, RuntimeReservationRecord>,
     pending_reservations: BTreeMap<u64, PendingReservation>,
@@ -228,6 +274,32 @@ impl RuntimeRegistry {
             .state
             .lock()
             .expect("runtime registry state lock poisoned");
+        if guard.producer_observations.contains_key(&runtime_id) {
+            let current_instance = guard
+                .runtimes
+                .get(&runtime_id)
+                .and_then(|record| record.runtime_instance_id.as_ref());
+            let changes_identity = match &transition {
+                Transition::Stopped => true,
+                Transition::WarmupStarted {
+                    runtime_instance_id,
+                }
+                | Transition::Ready {
+                    runtime_instance_id,
+                }
+                | Transition::Busy {
+                    runtime_instance_id,
+                } => runtime_instance_id
+                    .as_ref()
+                    .is_some_and(|instance| Some(instance) != current_instance),
+                _ => false,
+            };
+            if changes_identity {
+                return Err(RuntimeRegistryError::ModelResidencyObservationChanged(
+                    runtime_id,
+                ));
+            }
+        }
         let record = guard
             .runtimes
             .get_mut(&runtime_id)
@@ -255,6 +327,13 @@ impl RuntimeRegistry {
                 runtime_instance_id,
             } => {
                 if let Some(runtime_instance_id) = runtime_instance_id {
+                    if let Some(resident) = record.model_resource_residency.as_mut() {
+                        if resident.runtime_instance_id.as_ref() != Some(&runtime_instance_id) {
+                            resident.runtime_instance_id = Some(runtime_instance_id.clone());
+                            resident.requirements = None;
+                            record.models.clear();
+                        }
+                    }
                     record.runtime_instance_id = Some(runtime_instance_id);
                 }
                 if !matches!(
@@ -271,6 +350,8 @@ impl RuntimeRegistry {
             Transition::Stopped => {
                 record.runtime_instance_id = None;
                 record.last_error = None;
+                record.models.clear();
+                record.model_resource_residency = None;
             }
         }
 
@@ -465,9 +546,32 @@ impl RuntimeRegistry {
             apply_runtime_observation(&mut guard, observation, now_ms);
         }
 
+        let bound_runtime_ids = guard
+            .resource_domains
+            .values()
+            .flat_map(|domain| {
+                domain
+                    .bindings
+                    .iter()
+                    .map(|binding| binding.runtime_id.clone())
+            })
+            .collect::<BTreeSet<_>>();
+        let owned_runtime_ids = guard
+            .producer_observations
+            .keys()
+            .cloned()
+            .collect::<BTreeSet<_>>();
         for record in guard.runtimes.values_mut() {
-            if observed_runtime_ids.contains(&record.runtime_id)
+            if owned_runtime_ids.contains(&record.runtime_id)
+                || observed_runtime_ids.contains(&record.runtime_id)
                 || !record.active_reservations.is_empty()
+                || record
+                    .model_resource_residency
+                    .as_ref()
+                    .is_some_and(|resident| {
+                        resident.requirements.is_some()
+                            || bound_runtime_ids.contains(&record.runtime_id)
+                    })
             {
                 continue;
             }
@@ -476,6 +580,7 @@ impl RuntimeRegistry {
             record.runtime_instance_id = None;
             record.last_error = None;
             record.models.clear();
+            record.model_resource_residency = None;
             record.last_transition_at_ms = now_ms;
         }
 
@@ -629,7 +734,10 @@ fn runtime_reclaim(
         ));
     }
 
-    if producer_active {
+    if producer_active
+        || (state.producer_observations.contains_key(&runtime_id)
+            && (record.model_resource_residency.is_some() || record.resident_resources_uncertain))
+    {
         if record.status != RuntimeRegistryStatus::Stopping {
             record.status = RuntimeRegistryStatus::Stopping;
             record.last_transition_at_ms = now_ms;
@@ -646,6 +754,7 @@ fn runtime_reclaim(
         record.runtime_instance_id = None;
         record.last_error = None;
         record.models.clear();
+        record.model_resource_residency = None;
         record.last_transition_at_ms = now_ms;
     }
 
@@ -687,7 +796,7 @@ fn admission_failure(
     if let Some(requested_ram_bytes) = claim.ram_bytes {
         let resource_kind = RuntimeAdmissionResourceKind::RamBytes.resource_label();
         let reserved_ram_bytes = total_reserved_resource_bytes(
-            &record.runtime_id,
+            record,
             resource_kind,
             reservations,
             excluded_reservation_id,
@@ -718,7 +827,7 @@ fn admission_failure(
     if let Some(requested_vram_bytes) = claim.vram_bytes {
         let resource_kind = RuntimeAdmissionResourceKind::VramBytes.resource_label();
         let reserved_vram_bytes = total_reserved_resource_bytes(
-            &record.runtime_id,
+            record,
             resource_kind,
             reservations,
             excluded_reservation_id,
@@ -778,8 +887,7 @@ fn validate_reservation_request(
             failure,
         });
     }
-
-    Ok(())
+    resource_domain::validate_domain_admission(state, runtime_id, claim, existing_reservation_id)
 }
 
 fn reservation_claim_from_requirements(
@@ -831,7 +939,7 @@ fn add_optional_resource_claim_bytes(
 }
 
 fn total_reserved_resource_bytes<F>(
-    runtime_id: &str,
+    record: &RuntimeRegistryRecord,
     resource_kind: &'static str,
     reservations: &BTreeMap<u64, RuntimeReservationRecord>,
     excluded_reservation_id: Option<u64>,
@@ -840,12 +948,22 @@ fn total_reserved_resource_bytes<F>(
 where
     F: Fn(&RuntimeReservationRecord) -> Option<u64>,
 {
+    let runtime_id = record.runtime_id.as_str();
+    let resident_bytes = model_resources::resident_bytes(
+        record,
+        match resource_kind {
+            "ram_bytes" => RuntimeAdmissionResourceKind::RamBytes,
+            "vram_bytes" => RuntimeAdmissionResourceKind::VramBytes,
+            _ => unreachable!("known resource kind"),
+        },
+        false,
+    )?;
     reservations
         .values()
         .filter(|reservation| reservation.runtime_id == runtime_id)
         .filter(|reservation| Some(reservation.reservation_id) != excluded_reservation_id)
         .filter_map(claim_bytes)
-        .try_fold(0_u64, |total, claim_bytes| {
+        .try_fold(resident_bytes, |total, claim_bytes| {
             total.checked_add(claim_bytes).ok_or_else(|| {
                 RuntimeRegistryError::ResourceAccountingOverflow {
                     runtime_id: runtime_id.to_string(),
@@ -891,9 +1009,41 @@ fn apply_runtime_observation(
     now_ms: u64,
 ) {
     let runtime_id = canonical_runtime_id(&observation.runtime_id);
+    if state.producer_observations.contains_key(&runtime_id) {
+        // Matching health assessments may make dispatch less permissive, but
+        // unsequenced projections never replace identity or release allocation.
+        if let Some(record) = state.runtimes.get_mut(&runtime_id) {
+            if matches!(
+                observation.status,
+                RuntimeRegistryStatus::Unhealthy | RuntimeRegistryStatus::Failed
+            ) && observation.runtime_instance_id.is_some()
+                && observation.runtime_instance_id == record.runtime_instance_id
+                && observation.model_id.as_ref()
+                    == record
+                        .model_resource_residency
+                        .as_ref()
+                        .map(|resident| &resident.model_id)
+            {
+                record.status = observation.status;
+                record.last_error = observation.last_error;
+            }
+        }
+        return;
+    }
+    apply_producer_runtime_observation(state, observation, now_ms);
+}
+
+fn apply_producer_runtime_observation(
+    state: &mut RuntimeRegistryState,
+    observation: RuntimeObservation,
+    now_ms: u64,
+) {
+    let runtime_id = canonical_runtime_id(&observation.runtime_id);
     let record = state.runtimes.entry(runtime_id.clone()).or_insert_with(|| {
         RuntimeRegistryRecord::new(&runtime_id, &observation.display_name, now_ms)
     });
+
+    model_resources::observe_model_resources(record, &observation);
 
     record.runtime_id = runtime_id;
     record.display_name = observation.display_name;

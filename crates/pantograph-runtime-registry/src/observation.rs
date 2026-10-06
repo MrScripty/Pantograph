@@ -17,6 +17,12 @@ pub fn observed_runtime_status_from_lifecycle(
     warmup_completed_at_ms: Option<u64>,
     has_error: bool,
 ) -> RuntimeRegistryStatus {
+    // An effectful start is not active until it completes. Its unfinished
+    // marker still represents an owned transition, including an abandoned
+    // caller; do not let reconciliation authorize another start.
+    if warmup_started_at_ms.is_some() && warmup_completed_at_ms.is_none() && !has_error {
+        return RuntimeRegistryStatus::Warming;
+    }
     if active {
         if warmup_started_at_ms.is_some() && warmup_completed_at_ms.is_none() {
             return RuntimeRegistryStatus::Warming;
@@ -35,6 +41,18 @@ pub fn observed_runtime_status_from_lifecycle(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn observed_runtime_status_marks_inactive_unfinished_warmup_as_warming() {
+        assert_eq!(
+            observed_runtime_status_from_lifecycle(false, Some(10), None, false),
+            RuntimeRegistryStatus::Warming
+        );
+        assert_eq!(
+            observed_runtime_status_from_lifecycle(false, Some(10), None, true),
+            RuntimeRegistryStatus::Failed
+        );
+    }
 
     #[test]
     fn observed_runtime_status_marks_active_warmup_as_warming() {

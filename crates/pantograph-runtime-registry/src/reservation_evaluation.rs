@@ -21,6 +21,8 @@ pub struct RuntimeReservationAdmissionObservation {
     /// An existing same-owner lease excluded while evaluating its replacement.
     pub replaces_reservation_id: Option<u64>,
     pub resources: Vec<RuntimeReservationResourceObservation>,
+    /// Explicit shared backing capacities, in addition to runtime-local budgets.
+    pub resource_domains: Vec<crate::RuntimeResourceDomainObservation>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -28,6 +30,8 @@ pub struct RuntimeReservationResourceObservation {
     pub kind: RuntimeAdmissionResourceKind,
     pub requested_bytes: u64,
     pub reserved_bytes: u64,
+    /// Separately declared resident envelope included in reserved_bytes.
+    pub resident_bytes: u64,
     /// Missing capacity is unknown, never a measurement of unlimited memory.
     pub capacity_bytes: Option<u64>,
     pub safety_margin_bytes: u64,
@@ -119,7 +123,7 @@ impl RuntimeRegistry {
                 continue;
             };
             let reserved_bytes = total_reserved_resource_bytes(
-                &runtime_id,
+                record,
                 kind.resource_label(),
                 &guard.reservations,
                 replaces_reservation_id,
@@ -147,11 +151,18 @@ impl RuntimeRegistry {
                 kind,
                 requested_bytes,
                 reserved_bytes,
+                resident_bytes: crate::model_resources::resident_bytes(record, kind, false)?,
                 capacity_bytes,
                 safety_margin_bytes: budget.map(|budget| budget.safety_margin_bytes).unwrap_or(0),
                 available_bytes,
             });
         }
+        let resource_domains = crate::resource_domain::domain_observations(
+            &guard,
+            &runtime_id,
+            claim,
+            replaces_reservation_id,
+        )?;
         Ok(RuntimeReservationEvaluation {
             registry: self,
             request,
@@ -162,6 +173,7 @@ impl RuntimeRegistry {
                 observed_at_ms: crate::unix_timestamp_ms(),
                 replaces_reservation_id,
                 resources,
+                resource_domains,
             },
         })
     }

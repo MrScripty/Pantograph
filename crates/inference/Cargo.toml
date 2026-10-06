@@ -32,6 +32,7 @@ backend-pytorch = ["dep:pyo3", "dep:tokio-stream"]  # In-process PyTorch via PyO
 std-process = []
 
 [dependencies]
+pantograph-runtime-registry = { path = "../pantograph-runtime-registry" }
 pantograph-managed-dependencies = { path = "../pantograph-managed-dependencies" }
 pantograph-dependency-planning = { path = "../pantograph-dependency-planning" }
 pantograph-media-conversion = { path = "../pantograph-media-conversion" }
@@ -42,6 +43,7 @@ serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
 async-trait.workspace = true
+blake3.workspace = true
 thiserror.workspace = true
 log.workspace = true
 futures-util.workspace = true

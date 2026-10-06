@@ -357,6 +357,11 @@ impl EmbeddedWorkflowServiceComposition {
                 )));
             }
         };
+        input
+            .runtime_registry
+            .bind_host_ram_capacity_source(Arc::new(
+                inference::resource_monitor::host_ram::NativeHostRamCapacitySource,
+            ));
         let artifact_writer = input.workflow_service.artifact_writer()?;
         let runtime_host_execution_port =
             Arc::new(EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
@@ -378,7 +383,8 @@ impl EmbeddedWorkflowServiceComposition {
         let pumas_selector_access = input.pumas_selector_access;
         let dispatch_dependencies = EmbeddedWorkflowServiceDispatchDependencies::resource_backed(
             PumasDispatchPackageFactsSource::new(Some(pumas_selector_access.clone())),
-            RuntimeDispatchCapabilityFactsSource::new(input.runtime_registry.clone()),
+            RuntimeDispatchCapabilityFactsSource::new(input.runtime_registry.clone())
+                .with_gateway(input.gateway.clone()),
             RuntimeDispatchLoadTargetFactsSource::new(Some(pumas_selector_access.clone())),
             RuntimeDispatchResourceFactsSource::new(input.runtime_registry.clone()),
             input.max_dispatch_source_snapshot_age_ms,
@@ -393,7 +399,8 @@ impl EmbeddedWorkflowServiceComposition {
         let inference_interface_facts_provider =
             Arc::new(EmbeddedInferenceInterfaceFactsProvider::new(
                 PumasDispatchPackageFactsSource::new(Some(pumas_selector_access)),
-                RuntimeDispatchCapabilityFactsSource::new(input.runtime_registry),
+                RuntimeDispatchCapabilityFactsSource::new(input.runtime_registry)
+                    .with_gateway(input.gateway.clone()),
             ));
         Self::new()
             .with_runtime_dispatch_dependencies(dispatch_dependencies)
@@ -427,6 +434,11 @@ impl EmbeddedWorkflowServiceComposition {
         let dependency_readiness_runtime_handle = input.dependency_readiness_runtime_handle;
         let dependency_readiness_producer_config = input.dependency_readiness_producer_config;
         let factory_input = input.factory_input;
+        factory_input
+            .runtime_registry
+            .bind_host_ram_capacity_source(Arc::new(
+                inference::resource_monitor::host_ram::NativeHostRamCapacitySource,
+            ));
         let artifact_writer =
             factory_input
                 .workflow_service
@@ -454,7 +466,8 @@ impl EmbeddedWorkflowServiceComposition {
         let pumas_selector_access = factory_input.pumas_selector_access;
         let dispatch_dependencies = EmbeddedWorkflowServiceDispatchDependencies::resource_backed(
             PumasDispatchPackageFactsSource::new(Some(pumas_selector_access.clone())),
-            RuntimeDispatchCapabilityFactsSource::new(factory_input.runtime_registry.clone()),
+            RuntimeDispatchCapabilityFactsSource::new(factory_input.runtime_registry.clone())
+                .with_gateway(factory_input.gateway.clone()),
             RuntimeDispatchLoadTargetFactsSource::new(Some(pumas_selector_access.clone())),
             RuntimeDispatchResourceFactsSource::new(factory_input.runtime_registry.clone()),
             factory_input.max_dispatch_source_snapshot_age_ms,
@@ -463,13 +476,14 @@ impl EmbeddedWorkflowServiceComposition {
         );
         let scheduler_diagnostics_provider =
             Arc::new(EmbeddedWorkflowSchedulerDiagnosticsProvider::new(
-                factory_input.gateway,
+                factory_input.gateway.clone(),
                 factory_input.runtime_registry.clone(),
             ));
         let inference_interface_facts_provider =
             Arc::new(EmbeddedInferenceInterfaceFactsProvider::new(
                 PumasDispatchPackageFactsSource::new(Some(pumas_selector_access)),
-                RuntimeDispatchCapabilityFactsSource::new(factory_input.runtime_registry),
+                RuntimeDispatchCapabilityFactsSource::new(factory_input.runtime_registry)
+                    .with_gateway(factory_input.gateway),
             ));
         let composition = Self::new()
             .with_runtime_dispatch_dependencies(dispatch_dependencies)

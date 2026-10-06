@@ -1259,6 +1259,14 @@ pub trait InferenceBackend: Send + Sync {
         ))
     }
 
+    /// Fresh exact configuration/device facts for optional service observations.
+    /// Returning None preserves unknown provenance; selected labels or requested
+    /// defaults are insufficient. This is called only when timing is enabled.
+    /// Implementations must be bounded and must not reenter the gateway.
+    fn runtime_service_timing_owner_facts(&self) -> Option<crate::RuntimeServiceTimingOwnerFacts> {
+        None
+    }
+
     /// Describe the active runtime semantics that govern whether one KV artifact
     /// may be reused by this backend.
     async fn kv_cache_runtime_fingerprint(

@@ -1532,6 +1532,446 @@ mod tests {
             .any(|call| call == "system:  Return an image prompt only.\n"));
     }
 
+    #[cfg(feature = "backend-pytorch")]
+    #[tokio::test]
+    async fn unconstrained_owned_cpu_candidate_reaches_selected_text_host_with_full_peak_lease() {
+        exercise_owned_cpu_selected_text_host(false, false, false).await;
+    }
+
+    #[cfg(feature = "backend-pytorch")]
+    #[tokio::test]
+    async fn host_ram_ceiling_gates_actual_cpu_selection_and_preserves_execution_custody() {
+        exercise_owned_cpu_selected_text_host(true, false, false).await;
+    }
+
+    #[cfg(feature = "backend-pytorch")]
+    #[tokio::test]
+    async fn host_ram_shrink_does_not_starve_unrelated_vram_owner_publication() {
+        exercise_owned_cpu_selected_text_host(true, true, false).await;
+    }
+
+    #[cfg(feature = "backend-pytorch")]
+    #[tokio::test]
+    async fn service_timing_capture_reaches_actual_selected_text_host_with_peak_custody() {
+        exercise_owned_cpu_selected_text_host(false, false, true).await;
+    }
+
+    #[cfg(feature = "backend-pytorch")]
+    async fn exercise_owned_cpu_selected_text_host(
+        clamp_capacity: bool,
+        unrelated_vram_owner: bool,
+        record_timing: bool,
+    ) {
+        use crate::pumas_dispatch_package_facts::{
+            PumasDispatchPackageFactsBridgeOutcome, PumasDispatchPackageFactsProjection,
+        };
+        use crate::runtime_dispatch_candidate_provider::EmbeddedRuntimeDispatchCandidateProvider;
+        use crate::runtime_dispatch_capability_facts::RuntimeDispatchCapabilityFactsSource;
+        use crate::runtime_dispatch_load_target_facts::{
+            RuntimeDispatchLoadTargetFact, RuntimeDispatchLoadTargetFactsOutcome,
+            RuntimeDispatchLoadTargetFactsProjection,
+        };
+        use crate::runtime_dispatch_resource_facts::RuntimeDispatchResourceFactsSource;
+        use crate::runtime_dispatch_source_snapshot::EmbeddedRuntimeDispatchCandidateSourceSnapshot;
+        use pantograph_runtime_registry::{
+            RuntimeAdmissionBudget, RuntimeAdmissionResourceBudget, RuntimeDispatchIdentity,
+            RuntimeRegistration, RuntimeRegistry, RuntimeTransition,
+        };
+        use pantograph_scheduler::{
+            SchedulerDispatchSelectionRequest, SchedulerTaskExecutionIntent, SchedulerTaskState,
+            SchedulerTaskStateRecord, ValidatedSchedulerDispatchSelectionRequest,
+        };
+        use pantograph_workflow_service::workflow::WorkflowRuntimeDispatchCandidateProvider;
+        use pantograph_workflow_service::{
+            WorkflowSchedulerTask, WorkflowSchedulerTaskExecutionClass,
+        };
+
+        const PEAK_BYTES: u64 = 3 * 1024 * 1024;
+        let mut request = text_request_fixture();
+        let timing_request_id = if record_timing {
+            request.execution_request_id = format!(
+                "{}host-padded-timing-id{}",
+                " ".repeat(512 * 1024),
+                " ".repeat(512 * 1024)
+            );
+            Some(request.execution_request_id.clone())
+        } else {
+            None
+        };
+        request.handoff.task_intent.constraints.requested_device_id = None;
+        request.handoff.task_intent.estimate_hints =
+            vec![pantograph_scheduler::SchedulerEstimateHint {
+                kind: pantograph_scheduler::SchedulerEstimateHintKind::PeakRamBytes,
+                value: PEAK_BYTES,
+            }];
+        request
+            .handoff
+            .readiness_proof
+            .preflight_result
+            .identity_key
+            .scheduler_intent
+            .requested_device_id = None;
+        let intent = request.handoff.task_intent.clone();
+        let proof = request.handoff.readiness_proof.clone();
+        // Keep the reusable package fixture valid while preparing a new selection.
+        let previous = request.handoff.dispatch_decision.as_mut().unwrap();
+        previous.task_intent = intent.clone();
+        previous.readiness_proof = proof.clone();
+        let validated = ValidatedRuntimeHostExecutionRequest::try_from(request.clone()).unwrap();
+        let package = text_package_facts(&validated);
+        let directory = tempfile::tempdir().unwrap();
+        let mut target = text_load_target(&package, &directory);
+        let mut backend = TextBackend::default();
+        if record_timing {
+            target.content_fingerprint = Some("controlled-host-content-v1".into());
+            backend.timing_facts = Some(inference::RuntimeServiceTimingOwnerFacts {
+                implementation_fingerprint: "controlled-host-implementation-v1".into(),
+                effective_configuration_fingerprint: "controlled-host-config-v1".into(),
+                physical_device_fingerprint: "controlled-host-device-v1".into(),
+                device_id: "cpu".parse().unwrap(),
+            });
+        }
+        let timing_rows = Arc::new(Mutex::new(Vec::new()));
+        struct HostTimingRecorder(Arc<Mutex<Vec<inference::RuntimeServiceTimingAttempt>>>);
+        impl inference::RuntimeServiceTimingRecorder for HostTimingRecorder {
+            fn try_record(&self, attempt: inference::RuntimeServiceTimingAttempt) -> bool {
+                let Ok(mut rows) = self.0.try_lock() else {
+                    return false;
+                };
+                if rows.len() == 4 {
+                    return false;
+                }
+                rows.push(attempt);
+                true
+            }
+        }
+        let calls = backend.calls.clone();
+        let mut gateway = inference::InferenceGateway::with_backend(Box::new(backend), "PyTorch");
+        if record_timing {
+            gateway = gateway.with_runtime_service_timing_recorder(Arc::new(HostTimingRecorder(
+                timing_rows.clone(),
+            )));
+        }
+        let gateway = Arc::new(gateway);
+        let registry = Arc::new(RuntimeRegistry::new());
+        registry.register_runtime(
+            RuntimeRegistration::new("pytorch", "PyTorch")
+                .with_backend_keys(vec!["pytorch".into(), "transformers".into()])
+                .with_dispatch_identity(
+                    RuntimeDispatchIdentity::new(
+                        "transformers",
+                        "runtime.transformers.pytorch.shared",
+                    )
+                    .unwrap(),
+                )
+                .with_admission_budget(RuntimeAdmissionBudget::from_resources(vec![
+                    RuntimeAdmissionResourceBudget::ram_bytes(Some(8 * 1024 * 1024)),
+                ])),
+        );
+        registry
+            .transition_runtime(
+                "pytorch",
+                RuntimeTransition::Ready {
+                    runtime_instance_id: Some("runtime.pytorch.cpu.001".into()),
+                },
+            )
+            .unwrap();
+        #[derive(Debug)]
+        struct ControlledCapacity(std::sync::atomic::AtomicU64);
+        impl pantograph_runtime_registry::RuntimeHostRamCapacitySource for ControlledCapacity {
+            fn capacity_ceiling_bytes(&self) -> Option<u64> {
+                Some(self.0.load(std::sync::atomic::Ordering::SeqCst))
+            }
+        }
+        let capacity = Arc::new(ControlledCapacity(std::sync::atomic::AtomicU64::new(
+            PEAK_BYTES - 1,
+        )));
+        if clamp_capacity {
+            registry
+                .configure_resource_domain(pantograph_runtime_registry::RuntimeResourceDomain {
+                    domain_id: "host.ram".into(),
+                    total_bytes: 8 * 1024 * 1024,
+                    safety_margin_bytes: 0,
+                    bindings: vec![pantograph_runtime_registry::RuntimeResourceDomainBinding {
+                        runtime_id: "pytorch".into(),
+                        resource_kind:
+                            pantograph_runtime_registry::RuntimeAdmissionResourceKind::RamBytes,
+                    }],
+                })
+                .unwrap();
+            registry.bind_host_ram_capacity_source(capacity.clone());
+        }
+        let capabilities = RuntimeDispatchCapabilityFactsSource::new(registry.clone())
+            .with_gateway(gateway.clone())
+            .collect();
+        assert!(
+            registry.snapshot().reservations.is_empty(),
+            "capability reads acquire no custody"
+        );
+        let snapshot = EmbeddedRuntimeDispatchCandidateSourceSnapshot {
+            runtime_capability_facts: Some(capabilities),
+            pumas_package_facts: Some(PumasDispatchPackageFactsBridgeOutcome::Projected {
+                facts: Box::new(PumasDispatchPackageFactsProjection {
+                    model_ref: intent.model_ref.clone(),
+                    artifact_kind: package.artifact.artifact_kind.clone(),
+                    validation_state: package.artifact.validation_state.clone(),
+                    task: package.task.clone(),
+                    backend_hints: package.backend_hints.clone(),
+                    requires_custom_code: false,
+                    logical_size: inference::PackageLogicalSizeFacts {
+                        total_size_bytes: Some(4096),
+                        value_source: inference::PackageFactValueSource::FilesystemMetadata,
+                        files: Vec::new(),
+                        diagnostics: Vec::new(),
+                    },
+                    diffusers: None,
+                }),
+                diagnostics: Vec::new(),
+            }),
+            pumas_load_target_facts: Some(RuntimeDispatchLoadTargetFactsOutcome::Projected {
+                facts: RuntimeDispatchLoadTargetFactsProjection {
+                    load_targets: vec![RuntimeDispatchLoadTargetFact {
+                        runtime_family: "transformers".into(),
+                        resolved_load_target: target.local_load_path.clone(),
+                        model_ref: intent.model_ref.clone(),
+                        artifact_kind: "HfCompatibleDirectory".into(),
+                        load_path_kind: "Directory".into(),
+                        library_root_id: target.library_root_id.clone(),
+                        storage_kind: "LibraryOwned".into(),
+                        validation_state: "Valid".into(),
+                        content_fingerprint: None,
+                        package_facts_contract_version: Some(
+                            package.package_facts_contract_version,
+                        ),
+                    }],
+                },
+                diagnostics: Vec::new(),
+            }),
+            ..Default::default()
+        };
+        let provider = EmbeddedRuntimeDispatchCandidateProvider::with_source_snapshot(snapshot)
+            .with_resource_facts_source(RuntimeDispatchResourceFactsSource::new(registry.clone()));
+        let task = WorkflowSchedulerTask {
+            workflow_id: intent.workflow_id.clone(),
+            workflow_run_id: intent.workflow_run_id.clone(),
+            node_id: intent.node_id.clone(),
+            task_id: intent.task_id.clone(),
+            node_type: "inference".into(),
+            execution_class: WorkflowSchedulerTaskExecutionClass::RuntimeInference,
+            dependency_task_ids: Vec::new(),
+            input_bindings: Vec::new(),
+            schedulable_intent: Some(intent.clone()),
+            schedulable_intent_template: None,
+            non_runtime_task_template: None,
+            source_input_task_template: None,
+            inference_descriptor_fingerprint: None,
+            runtime_source_context: None,
+            diagnostics: Vec::new(),
+        };
+        let ready = SchedulerTaskStateRecord {
+            contract_version: 1,
+            workflow_id: intent.workflow_id.clone(),
+            workflow_run_id: intent.workflow_run_id.clone(),
+            node_id: intent.node_id.clone(),
+            task_id: intent.task_id.clone(),
+            state: SchedulerTaskState::Ready {
+                execution_intent: SchedulerTaskExecutionIntent::runtime(intent.clone()),
+            },
+            state_version: 1,
+            last_transition_id: "transition.ready.cpu".parse().unwrap(),
+        };
+        if clamp_capacity {
+            let blocked = provider
+                .runtime_dispatch_candidates(&task, &ready, &proof)
+                .unwrap();
+            assert!(blocked.candidates.is_empty(), "{:?}", blocked.diagnostics);
+            assert!(registry.snapshot().reservations.is_empty());
+            assert!(
+                calls.lock().unwrap().is_empty(),
+                "insufficient RAM cannot load a backend"
+            );
+            capacity
+                .0
+                .store(PEAK_BYTES, std::sync::atomic::Ordering::SeqCst);
+        }
+        let result = provider
+            .runtime_dispatch_candidates(&task, &ready, &proof)
+            .unwrap();
+        assert_eq!(result.candidates.len(), 1, "{:?}", result.diagnostics);
+        let candidate = &result.candidates[0];
+        assert_eq!(candidate.selected_device_ids[0].as_str(), "cpu");
+        assert_eq!(
+            candidate
+                .selected_runtime_variant_id
+                .as_ref()
+                .unwrap()
+                .as_str(),
+            "pytorch.cpu"
+        );
+        assert_eq!(
+            candidate
+                .reservations
+                .iter()
+                .map(|claim| claim.reserved_bytes)
+                .sum::<u64>(),
+            PEAK_BYTES
+        );
+        assert_eq!(registry.snapshot().reservations.len(), 1);
+        let selected_request = ValidatedSchedulerDispatchSelectionRequest::try_from(
+            SchedulerDispatchSelectionRequest {
+                contract_version: 1,
+                task_intent: intent,
+                readiness_proof: proof.clone(),
+                environment_ref: proof.preflight_result.environment_ref.clone().unwrap(),
+                candidates: result.candidates.clone(),
+                diagnostics: result.diagnostics.clone(),
+            },
+        )
+        .unwrap();
+        request.handoff.dispatch_decision =
+            pantograph_scheduler::select_scheduler_dispatch(selected_request)
+                .unwrap()
+                .into_inner()
+                .dispatch_decision;
+        assert!(request.handoff.dispatch_decision.is_some());
+        let port = crate::runtime_host_execution_port::EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(Arc::new(TextLoadTargetResolver { target }), Arc::new(TextPackageFactsResolver { package_facts: package }), Arc::new(UnusedTextMediaSink), gateway);
+        let cancellation =
+            pantograph_runtime_host_contracts::RuntimeHostExecutionCancellationHandle::running(
+                request.cancellation_context.clone(),
+            );
+        let response = port
+            .execute_runtime_host_request(request, cancellation)
+            .await
+            .unwrap();
+        assert_eq!(
+            response.state,
+            RuntimeHostExecutionState::Completed,
+            "{:?}",
+            response.diagnostics
+        );
+        assert_eq!(
+            response.outputs[0].value,
+            RuntimeHostExecutionOutputValue::String("generated text".into())
+        );
+        assert!(calls
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|call| call.starts_with("load:") && call.ends_with(":cpu")));
+        assert_eq!(
+            registry.snapshot().reservations.len(),
+            1,
+            "execution cannot silently drop provisional peak coverage"
+        );
+        if record_timing {
+            let rows = timing_rows.lock().unwrap();
+            assert_eq!(rows.len(), 1);
+            assert_eq!(
+                &response.execution_request_id,
+                timing_request_id.as_ref().unwrap()
+            );
+            assert_eq!(
+                rows[0].execution_request_id_digest.as_ref().unwrap().len(),
+                64
+            );
+            assert!(serde_json::to_string(&rows[0]).unwrap().len() < 4096);
+            let inference::RuntimeServiceTimingIdentity::Exact { profile } = &rows[0].identity
+            else {
+                panic!("{:?}", rows[0].identity);
+            };
+            assert_eq!(
+                rows[0].outcome,
+                inference::RuntimeServiceTimingOutcome::Completed
+            );
+            for phase in [
+                inference::RuntimeServiceTimingPhase::GatewayCustodyWait,
+                inference::RuntimeServiceTimingPhase::SelectedModelLoad,
+                inference::RuntimeServiceTimingPhase::TextExecution,
+                inference::RuntimeServiceTimingPhase::WorkerCleanup,
+            ] {
+                assert!(rows[0].observed_completed_ns(profile, phase).is_some());
+            }
+            assert_eq!(
+                registry.snapshot().runtimes[0].active_reservation_claims[0].claims[0].bytes,
+                PEAK_BYTES
+            );
+        }
+        if clamp_capacity {
+            capacity.0.store(1, std::sync::atomic::Ordering::SeqCst);
+            if unrelated_vram_owner {
+                registry.register_runtime(RuntimeRegistration::new("candle", "Candle"));
+                registry.configure_resource_domain(pantograph_runtime_registry::RuntimeResourceDomain {
+                    domain_id: "controlled.candle.vram".into(), total_bytes: 100, safety_margin_bytes: 0,
+                    bindings: vec![pantograph_runtime_registry::RuntimeResourceDomainBinding {
+                        runtime_id: "candle".into(), resource_kind: pantograph_runtime_registry::RuntimeAdmissionResourceKind::VramBytes,
+                    }],
+                }).unwrap();
+                registry.observe_runtime(pantograph_runtime_registry::RuntimeObservation {
+                    runtime_id: "candle".into(),
+                    display_name: "Candle".into(),
+                    backend_keys: vec!["candle".into()],
+                    model_id: Some("controlled-candle-model".into()),
+                    runtime_instance_id: Some("controlled-candle-generation".into()),
+                    status: pantograph_runtime_registry::RuntimeRegistryStatus::Ready,
+                    last_error: None,
+                });
+                registry.declare_model_residency_resources("candle", "controlled-candle-model", "controlled-candle-generation", pantograph_runtime_registry::RuntimeReservationRequirements::from_claims(vec![pantograph_runtime_registry::RuntimeReservationResourceClaim::vram_bytes(10)])).unwrap();
+                let vram_request = pantograph_runtime_registry::RuntimeReservationRequest {
+                    runtime_id: "candle".into(), workflow_id: "controlled-vram".into(), reservation_owner_id: Some("controlled-candle-task".into()),
+                    usage_profile: None, model_id: None, pin_runtime: false, retention_hint: pantograph_runtime_registry::RuntimeRetentionHint::Ephemeral,
+                    requirements: Some(pantograph_runtime_registry::RuntimeReservationRequirements::from_claims(vec![pantograph_runtime_registry::RuntimeReservationResourceClaim::vram_bytes(20)])),
+                };
+                let observation = registry.evaluate_reservation(vram_request.clone()).unwrap();
+                let pool = &observation.observation().resource_domains[0];
+                assert_eq!(
+                    (
+                        pool.resident_bytes,
+                        pool.reserved_bytes,
+                        pool.available_bytes
+                    ),
+                    (10, 10, 90)
+                );
+                let vram_lease = registry.acquire_reservation(vram_request).unwrap();
+                assert_eq!(registry.snapshot().reservations.len(), 2);
+                registry
+                    .release_reservation(vram_lease.reservation_id)
+                    .unwrap();
+            }
+            let probe = pantograph_runtime_registry::RuntimeReservationRequest {
+                runtime_id: "pytorch".into(),
+                workflow_id: "probe".into(),
+                reservation_owner_id: Some("another-task".into()),
+                usage_profile: None,
+                model_id: None,
+                pin_runtime: false,
+                retention_hint: pantograph_runtime_registry::RuntimeRetentionHint::Ephemeral,
+                requirements: Some(
+                    pantograph_runtime_registry::RuntimeReservationRequirements::from_claims(vec![
+                        pantograph_runtime_registry::RuntimeReservationResourceClaim::ram_bytes(1),
+                    ]),
+                ),
+            };
+            assert!(registry.evaluate_reservation(probe).is_err());
+            assert_eq!(
+                registry
+                    .snapshot()
+                    .runtimes
+                    .iter()
+                    .find(|runtime| runtime.runtime_id == "pytorch")
+                    .unwrap()
+                    .active_reservation_claims[0]
+                    .claims[0]
+                    .bytes,
+                PEAK_BYTES
+            );
+        }
+        drop(result);
+        assert!(
+            registry.snapshot().reservations.is_empty(),
+            "untransferred test custody rolls back"
+        );
+    }
+
     fn text_request_fixture() -> RuntimeHostExecutionRequest {
         let mut request: RuntimeHostExecutionRequest = serde_json::from_str(include_str!(
             "../../pantograph-runtime-host-contracts/tests/fixtures/runtime_host_execution_request_dispatch_selected.json"
@@ -1691,10 +2131,16 @@ mod tests {
         requests: Arc<Mutex<Vec<serde_json::Value>>>,
         cancel: Option<Arc<std::sync::atomic::AtomicBool>>,
         fail_completion: bool,
+        timing_facts: Option<inference::RuntimeServiceTimingOwnerFacts>,
     }
 
     #[async_trait]
     impl InferenceBackend for TextBackend {
+        fn runtime_service_timing_owner_facts(
+            &self,
+        ) -> Option<inference::RuntimeServiceTimingOwnerFacts> {
+            self.timing_facts.clone()
+        }
         fn name(&self) -> &'static str {
             "PyTorch"
         }

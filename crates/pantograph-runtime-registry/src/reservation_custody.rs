@@ -144,6 +144,13 @@ impl RuntimeRegistry {
                 },
             ));
         }
+        crate::resource_domain::validate_domain_admission(
+            &state,
+            &held.runtime_id,
+            held.claim,
+            previous.as_ref().map(|record| record.reservation_id),
+        )
+        .map_err(RuntimeReservationPublicationError::Registry)?;
         let output = validate(&committed.clone().into_lease())
             .map_err(RuntimeReservationPublicationError::Validation)?;
         state

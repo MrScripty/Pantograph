@@ -7,7 +7,7 @@
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::pin::Pin;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
@@ -22,7 +22,9 @@ use crate::backend::{
     BackendRegistry, BackendStartupDeviceIntent, ChatChunk, EmbeddingResult, InferenceBackend,
 };
 use crate::config::EmbeddingMemoryMode;
-use crate::device_contracts::{InferenceDeviceClass, InferenceDeviceId, InferenceDevicePolicy};
+use crate::device_contracts::{
+    InferenceDeviceClass, InferenceDeviceId, InferenceDevicePolicy, RuntimeVariantId,
+};
 use crate::image_generation_batch::{
     ImageGenerationBatchContractError, ImageGenerationBatchDiagnostic,
     ImageGenerationBatchDiagnosticCode, ImageGenerationBatchDiagnosticSeverity,
@@ -61,6 +63,54 @@ mod embedding_replacement;
 
 const IMAGE_GENERATION_BYTES_PER_RGBA_PIXEL: u64 = 4;
 const MAX_LIFECYCLE_COMPATIBILITY_ISSUES: usize = 32;
+
+fn allocate_runtime_instance_id(sequence: &AtomicU64, runtime_id: &str) -> String {
+    format!(
+        "{}-{}",
+        runtime_id.replace([' ', '.'], "-"),
+        sequence.fetch_add(1, Ordering::Relaxed) + 1
+    )
+}
+
+/// A canonical device candidate advertised by an available backend owner.
+/// This is capability evidence, not a device reservation or a loaded runtime.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuntimeOwnedDeviceCandidate {
+    /// Canonical backend that advertised this capability.
+    pub backend_key: String,
+    /// Owner-declared available CPU execution variant.
+    pub runtime_variant_id: RuntimeVariantId,
+    /// Canonical host CPU device; this carries no reservation authority.
+    pub device_id: InferenceDeviceId,
+}
+
+fn cpu_device_candidates(backends: Vec<BackendInfo>) -> Vec<RuntimeOwnedDeviceCandidate> {
+    backends
+        .into_iter()
+        .filter(|backend| backend.available)
+        .flat_map(|backend| {
+            let backend_key = canonical_backend_key(&backend.backend_key);
+            let expected_variant_id = format!("{backend_key}.cpu");
+            backend
+                .capabilities
+                .facts
+                .runtime_variants
+                .into_iter()
+                .filter(move |variant| {
+                    // CPU is one canonical device. GPU class facts do not identify
+                    // physical devices and must never be turned into guessed IDs.
+                    variant.available
+                        && variant.device_class == InferenceDeviceClass::Cpu
+                        && variant.runtime_variant_id.as_str() == expected_variant_id
+                })
+                .map(move |variant| RuntimeOwnedDeviceCandidate {
+                    backend_key: backend_key.clone(),
+                    runtime_variant_id: variant.runtime_variant_id,
+                    device_id: InferenceDeviceId::parse("cpu").expect("canonical CPU device"),
+                })
+        })
+        .collect()
+}
 
 #[cfg(feature = "backend-llamacpp")]
 use crate::backend::LlamaCppBackend;
@@ -158,6 +208,15 @@ pub struct InferenceGateway {
     runtime_lifecycle: Arc<RwLock<RuntimeLifecycleSnapshot>>,
     /// Monotonic instance counter for runtime instance IDs.
     runtime_instance_sequence: Arc<AtomicU64>,
+    /// Observation metadata only; backend start/stop remain the lifecycle owner.
+    resident_source_id: String,
+    resident_observation_sequence: AtomicU64,
+    pytorch_release_confirmed: Arc<AtomicBool>,
+    pytorch_ever_owned: Arc<AtomicBool>,
+    llamacpp_release_confirmed: Arc<AtomicBool>,
+    llamacpp_ever_owned: Arc<AtomicBool>,
+    /// Disabled by default; no phase clocks, identity hashing or recording work.
+    service_timing: Option<crate::service_timing::ServiceTimingInstrumentation>,
 }
 
 struct RuntimeWarmupStartContext<'a> {
@@ -251,6 +310,13 @@ impl InferenceGateway {
                 ..RuntimeLifecycleSnapshot::default()
             })),
             runtime_instance_sequence: Arc::new(AtomicU64::new(0)),
+            resident_source_id: uuid::Uuid::new_v4().to_string(),
+            resident_observation_sequence: AtomicU64::new(0),
+            pytorch_release_confirmed: Arc::new(AtomicBool::new(false)),
+            pytorch_ever_owned: Arc::new(AtomicBool::new(false)),
+            llamacpp_release_confirmed: Arc::new(AtomicBool::new(true)),
+            llamacpp_ever_owned: Arc::new(AtomicBool::new(false)),
+            service_timing: None,
         }
     }
 
@@ -273,7 +339,27 @@ impl InferenceGateway {
                 ..RuntimeLifecycleSnapshot::default()
             })),
             runtime_instance_sequence: Arc::new(AtomicU64::new(0)),
+            resident_source_id: uuid::Uuid::new_v4().to_string(),
+            resident_observation_sequence: AtomicU64::new(0),
+            pytorch_release_confirmed: Arc::new(AtomicBool::new(false)),
+            pytorch_ever_owned: Arc::new(AtomicBool::new(false)),
+            llamacpp_release_confirmed: Arc::new(AtomicBool::new(false)),
+            llamacpp_ever_owned: Arc::new(AtomicBool::new(false)),
+            service_timing: None,
         }
+    }
+
+    /// Opt into bounded selected-text phase observations. The backend and target
+    /// owners must supply exact facts before samples have a comparable identity.
+    #[must_use]
+    pub fn with_runtime_service_timing_recorder(
+        mut self,
+        recorder: Arc<dyn crate::RuntimeServiceTimingRecorder>,
+    ) -> Self {
+        self.service_timing = Some(crate::service_timing::ServiceTimingInstrumentation::new(
+            recorder,
+        ));
+        self
     }
 
     /// Set the process spawner
@@ -527,11 +613,17 @@ impl InferenceGateway {
             self.runtime_lifecycle.write().await.last_error = Some(error.to_string());
             return Err(GatewayError::Backend(error));
         }
+        self.record_resident_release(
+            &runtime_id_for_backend_name(&self.current_backend_name().await),
+            true,
+        );
         let new_backend = self
             .registry
             .create(name)
             .map_err(|e| GatewayError::SwitchFailed(e.to_string()))?;
         let canonical_backend_name = new_backend.name().to_string();
+        // Factory creation establishes a fresh, unstarted logical owner.
+        self.record_resident_release(&runtime_id_for_backend_name(&canonical_backend_name), true);
         *guard = new_backend;
 
         // Update current backend name
@@ -562,6 +654,22 @@ impl InferenceGateway {
     /// List all available backends with their info
     pub fn available_backends(&self) -> Vec<BackendInfo> {
         self.registry.list()
+    }
+
+    /// Read owner-advertised CPU device capabilities without starting a backend
+    /// or acquiring custody. Dependency readiness and admission remain separate.
+    pub fn runtime_owned_device_candidates(&self) -> Vec<RuntimeOwnedDeviceCandidate> {
+        cpu_device_candidates(self.available_backends())
+    }
+
+    /// Explicitly observe the embedded PyTorch owner's CUDA device namespace.
+    /// This does not load a model, reserve capacity or advertise GPU candidates.
+    /// UUIDs are runtime-observed device identities, not backing-pool mappings.
+    #[cfg(feature = "backend-pytorch")]
+    pub async fn observe_pytorch_cuda_inventory(
+        &self,
+    ) -> crate::backend::pytorch::PyTorchCudaInventory {
+        crate::backend::pytorch::PyTorchBackend::observe_cuda_inventory().await
     }
 
     /// Describe the currently active backend instance.
@@ -634,6 +742,8 @@ impl InferenceGateway {
         }
 
         let runtime_id = runtime_id_for_backend_name(&self.current_backend_name().await);
+        // A failed effectful load does not acknowledge release.
+        self.record_resident_release(&runtime_id, false);
         let warmup_started_at_ms = unix_timestamp_ms();
         let previous_runtime_instance_id = {
             let lifecycle = self.runtime_lifecycle.read().await;
@@ -688,6 +798,10 @@ impl InferenceGateway {
         .await
     }
 
+    fn allocate_runtime_instance_id(&self, runtime_id: &str) -> String {
+        allocate_runtime_instance_id(&self.runtime_instance_sequence, runtime_id)
+    }
+
     async fn record_start_result(
         &self,
         context: RuntimeWarmupStartContext<'_>,
@@ -710,23 +824,10 @@ impl InferenceGateway {
                     .runtime_reused
                     .unwrap_or(previous_runtime_instance_id.is_some());
                 let runtime_instance_id = if runtime_reused {
-                    previous_runtime_instance_id.unwrap_or_else(|| {
-                        format!(
-                            "{}-{}",
-                            runtime_id.replace([' ', '.'], "-"),
-                            self.runtime_instance_sequence
-                                .fetch_add(1, Ordering::Relaxed)
-                                + 1
-                        )
-                    })
+                    previous_runtime_instance_id
+                        .unwrap_or_else(|| self.allocate_runtime_instance_id(&runtime_id))
                 } else {
-                    format!(
-                        "{}-{}",
-                        runtime_id.replace([' ', '.'], "-"),
-                        self.runtime_instance_sequence
-                            .fetch_add(1, Ordering::Relaxed)
-                            + 1
-                    )
+                    self.allocate_runtime_instance_id(&runtime_id)
                 };
                 let mut lifecycle = self.runtime_lifecycle.write().await;
                 lifecycle.runtime_id = Some(runtime_id);
@@ -798,6 +899,10 @@ impl InferenceGateway {
             self.runtime_lifecycle.write().await.last_error = Some(error.to_string());
             return Err(GatewayError::Backend(error));
         }
+        self.record_resident_release(
+            &runtime_id_for_backend_name(&self.current_backend_name().await),
+            true,
+        );
         // Reset embedding mode
         let mut mode = self.embedding_mode.write().await;
         *mode = false;
@@ -809,6 +914,14 @@ impl InferenceGateway {
         *current_runtime_config = None;
         let mut lifecycle = self.runtime_lifecycle.write().await;
         lifecycle.active = false;
+        if lifecycle.warmup_completed_at_ms.is_none() {
+            // Acknowledged shutdown ends an abandoned start. Do not leave an
+            // unfinished marker that reconciliation could resurrect as warming,
+            // or invent a successful warmup duration for the cancelled attempt.
+            lifecycle.warmup_started_at_ms = None;
+            lifecycle.warmup_timing_attempt_id = None;
+            lifecycle.warmup_duration_ms = None;
+        }
         if lifecycle.last_error.is_none() {
             lifecycle.lifecycle_decision_reason = Some("runtime_stopped".to_string());
         }
@@ -883,6 +996,122 @@ impl InferenceGateway {
             self.start(&config).await?;
         }
         Ok(())
+    }
+
+    fn record_resident_release(&self, runtime_id: &str, confirmed: bool) {
+        let flags = match runtime_id {
+            "pytorch" => Some((&self.pytorch_ever_owned, &self.pytorch_release_confirmed)),
+            "llama_cpp" => Some((&self.llamacpp_ever_owned, &self.llamacpp_release_confirmed)),
+            _ => None,
+        };
+        if let Some((owned, release)) = flags {
+            owned.store(true, Ordering::Relaxed);
+            release.store(confirmed, Ordering::Relaxed);
+        }
+    }
+
+    /// Legacy single-owner observation. Host reconciliation uses the batch
+    /// so acknowledged retirement survives a switch between producer kinds.
+    pub async fn resident_lifecycle_snapshot(
+        &self,
+    ) -> Option<crate::resident_lifecycle::ResidentLifecycleSnapshot> {
+        let snapshots = self.resident_lifecycle_snapshots().await;
+        snapshots
+            .iter()
+            .find(|snapshot| snapshot.lifecycle.runtime_id.as_deref() == Some("pytorch"))
+            .cloned()
+            .or_else(|| snapshots.into_iter().next())
+    }
+
+    /// Sample configured-estimate producer evidence under the existing owner
+    /// lock. Readiness loss is uncertainty; only acknowledged stop or a fresh
+    /// empty owner proves release. Sequence precedes delivery, protecting a
+    /// newer generation against delayed release observations.
+    pub async fn resident_lifecycle_snapshots(
+        &self,
+    ) -> Vec<crate::resident_lifecycle::ResidentLifecycleSnapshot> {
+        use crate::resident_lifecycle::{ResidentAllocationState, ResidentLifecycleSnapshot};
+        let backend = self.backend.read().await;
+        let runtime_id = runtime_id_for_backend_name(&self.current_backend_name().await);
+        self.record_resident_release_if_first_observation(&runtime_id);
+        let config = self.current_runtime_config.read().await;
+        let model_target = config.as_ref().and_then(config_model_target);
+        let external = config
+            .as_ref()
+            .is_some_and(|config| config.external_url.is_some());
+        let lifecycle = self.runtime_lifecycle.read().await.clone();
+        let mut snapshots = Vec::new();
+        for (id, owned, released) in [
+            (
+                "pytorch",
+                &self.pytorch_ever_owned,
+                &self.pytorch_release_confirmed,
+            ),
+            (
+                "llama_cpp",
+                &self.llamacpp_ever_owned,
+                &self.llamacpp_release_confirmed,
+            ),
+        ] {
+            if !owned.load(Ordering::Relaxed) {
+                continue;
+            }
+            let current = runtime_id == id;
+            let mut evidence = if current {
+                lifecycle.clone()
+            } else {
+                RuntimeLifecycleSnapshot {
+                    runtime_id: Some(id.into()),
+                    ..Default::default()
+                }
+            };
+            let state = if current && backend.is_ready() && external && id == "llama_cpp" {
+                // connect_external confirms retirement before attaching to an
+                // externally owned process. Its allocation is not ours.
+                evidence.active = false;
+                ResidentAllocationState::Released
+            } else if current
+                && backend.is_ready()
+                && model_target.is_some()
+                && evidence.runtime_instance_id.is_some()
+            {
+                ResidentAllocationState::Resident
+            } else if released.load(Ordering::Relaxed) && (!current || !backend.is_ready()) {
+                evidence.active = false;
+                ResidentAllocationState::Released
+            } else {
+                ResidentAllocationState::Unknown
+            };
+            let snapshot = ResidentLifecycleSnapshot {
+                source_id: self.resident_source_id.clone(),
+                sequence: self
+                    .resident_observation_sequence
+                    .fetch_add(1, Ordering::Relaxed)
+                    + 1,
+                allocation_state: state,
+                model_target: if current && state != ResidentAllocationState::Released {
+                    model_target.clone()
+                } else {
+                    None
+                },
+                lifecycle: evidence,
+            };
+            if current {
+                snapshots.insert(0, snapshot);
+            } else {
+                snapshots.push(snapshot);
+            }
+        }
+        snapshots
+    }
+
+    fn record_resident_release_if_first_observation(&self, runtime_id: &str) {
+        // Sampling a custom or failed owner must never manufacture release.
+        match runtime_id {
+            "pytorch" => self.pytorch_ever_owned.store(true, Ordering::Relaxed),
+            "llama_cpp" => self.llamacpp_ever_owned.store(true, Ordering::Relaxed),
+            _ => {}
+        }
     }
 
     /// Get server mode info (for legacy compatibility)
@@ -1120,6 +1349,41 @@ impl InferenceGateway {
         backend_decision: crate::BackendExecutionDecision,
         cancellation: InferenceExecutionCancellationHandle,
     ) -> Result<InferenceExecutionResult, GatewayError> {
+        let mut timing = self.service_timing.as_ref().map(|instrumentation| {
+            crate::service_timing::SelectedTextServiceTimingAttempt::new(
+                instrumentation,
+                &self.resident_source_id,
+                &request,
+                &artifact_load_target,
+                &backend_decision,
+            )
+        });
+        let result = self
+            .execute_selected_text_inner(
+                request,
+                artifact_load_target,
+                backend_decision,
+                cancellation,
+                timing.as_mut(),
+            )
+            .await;
+        if let Some(timing) = timing.as_mut() {
+            timing.finish(result.is_ok());
+        }
+        result
+    }
+
+    async fn execute_selected_text_inner(
+        &self,
+        request: InferenceExecutionRequest,
+        artifact_load_target: crate::PumasArtifactLoadTarget,
+        backend_decision: crate::BackendExecutionDecision,
+        cancellation: InferenceExecutionCancellationHandle,
+        mut timing: Option<&mut crate::service_timing::SelectedTextServiceTimingAttempt<'_>>,
+    ) -> Result<InferenceExecutionResult, GatewayError> {
+        use pantograph_timing_contracts::{
+            RuntimeServiceTimingOutcome as Outcome, RuntimeServiceTimingPhase as Phase,
+        };
         crate::selected_text_execution::SelectedTextLoad::validate(
             &request,
             &artifact_load_target,
@@ -1129,8 +1393,14 @@ impl InferenceGateway {
         let option_diagnostics = typed_request_option_diagnostics(&request, Some("pytorch"));
         let request_json = typed_text_generation_stream_request_json(request.clone())?;
         reject_cancelled_execution_handle("selected text", &cancellation)?;
+        if let Some(timing) = timing.as_deref_mut() {
+            timing.begin(Phase::GatewayCustodyWait);
+        }
         self.embedding_replacement.drain().await?;
         let mut backend = self.backend.write().await;
+        if let Some(timing) = timing.as_deref_mut() {
+            timing.end(Outcome::Completed);
+        }
         reject_cancelled_execution_handle("selected text", &cancellation)?;
         if canonical_backend_key(backend.name()) != "pytorch" {
             let replacement = self.registry.create("pytorch")?;
@@ -1138,6 +1408,7 @@ impl InferenceGateway {
                 self.runtime_lifecycle.write().await.last_error = Some(error.to_string());
                 return Err(error.into());
             }
+            self.record_resident_release(&canonical_runtime_id(backend.name()), true);
             *backend = replacement;
             *self.current_backend_name.write().await = backend.name().to_owned();
             *self.runtime_lifecycle.write().await = RuntimeLifecycleSnapshot {
@@ -1146,9 +1417,22 @@ impl InferenceGateway {
             };
             *self.current_runtime_config.write().await = None;
         }
+        self.pytorch_ever_owned.store(true, Ordering::Relaxed);
+        self.pytorch_release_confirmed
+            .store(false, Ordering::Relaxed);
+        if let Some(timing) = timing.as_deref_mut() {
+            timing.begin(Phase::SelectedModelLoad);
+        }
         let outcome = backend
             .load_selected_text(&request, &artifact_load_target, &backend_decision)
             .await;
+        if let Some(timing) = timing.as_deref_mut() {
+            timing.end(if outcome.is_ok() {
+                Outcome::Completed
+            } else {
+                Outcome::Failed
+            });
+        }
         if let Err(error) = outcome {
             let ready = backend.is_ready();
             if !ready {
@@ -1178,17 +1462,27 @@ impl InferenceGateway {
         *self.external_mode.write().await = false;
         *self.runtime_lifecycle.write().await = RuntimeLifecycleSnapshot {
             runtime_id: Some("pytorch".into()),
-            runtime_instance_id: Some(format!(
-                "pytorch-{}",
-                self.runtime_instance_sequence
-                    .fetch_add(1, Ordering::Relaxed)
-            )),
+            runtime_instance_id: Some(self.allocate_runtime_instance_id("pytorch")),
             runtime_reused: Some(false),
             lifecycle_decision_reason: Some("scheduler_selected_text_package_loaded".into()),
             active: backend.is_ready(),
             ..Default::default()
         };
+        if let Some(timing) = timing.as_deref_mut() {
+            let lifecycle = self.runtime_lifecycle.read().await;
+            timing.bind_owner(
+                if lifecycle.active {
+                    lifecycle.runtime_instance_id.as_deref()
+                } else {
+                    None
+                },
+                backend.runtime_service_timing_owner_facts(),
+            );
+        }
         reject_cancelled_execution_handle("selected text", &cancellation)?;
+        if let Some(timing) = timing.as_deref_mut() {
+            timing.begin(Phase::TextExecution);
+        }
         let result = collect_selected_text(
             backend.as_ref(),
             request_json,
@@ -1196,9 +1490,24 @@ impl InferenceGateway {
             option_diagnostics,
         )
         .await;
+        if let Some(timing) = timing.as_deref_mut() {
+            timing.end(if result.is_ok() {
+                Outcome::Completed
+            } else {
+                Outcome::Failed
+            });
+            timing.begin(Phase::WorkerCleanup);
+        }
         // Collector drop requests cooperative cancellation; the backend retains
         // the producer join until this drain observes its actual termination.
         let cleanup = backend.finish_selected_text(result.is_err()).await;
+        if let Some(timing) = timing {
+            timing.end(if cleanup.is_ok() {
+                Outcome::Completed
+            } else {
+                Outcome::Failed
+            });
+        }
         cleanup?;
         reject_cancelled_execution_handle("selected text", &cancellation)?;
         result
@@ -1283,13 +1592,7 @@ impl InferenceGateway {
             } else {
                 None
             }
-            .unwrap_or_else(|| {
-                format!(
-                    "candle-{}",
-                    self.runtime_instance_sequence
-                        .fetch_add(1, Ordering::Relaxed)
-                )
-            });
+            .unwrap_or_else(|| self.allocate_runtime_instance_id("candle"));
             *lifecycle = RuntimeLifecycleSnapshot {
                 runtime_id: Some("candle".into()),
                 runtime_instance_id: Some(runtime_instance_id),

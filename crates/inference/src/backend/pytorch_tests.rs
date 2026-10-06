@@ -6128,6 +6128,7 @@ sys.modules['transformers.cache_utils'] = types.SimpleNamespace(DynamicCache=typ
 _rt03_effects = []
 _rt03_fail_text = False
 _rt03_fail_load = False
+_rt03_fail_stop = False
 def _rt03_success(envelope, result):
     request = json.loads(envelope)
     return json.dumps({'status': 'ok', 'request_id': request['request_id'], 'result': result})
@@ -6149,6 +6150,8 @@ def unload_model_from_envelope(envelope):
     return _rt03_success(envelope, {'unloaded': True})
 def shutdown_worker_from_envelope(envelope):
     _rt03_effects.append('stop')
+    if _rt03_fail_stop:
+        raise RuntimeError('controlled unacknowledged shutdown')
     return _rt03_success(envelope, {'shutdown': True})
 "#).unwrap();
             py.run(&source, Some(&worker.dict()), None).unwrap();
@@ -6374,6 +6377,59 @@ async fn assert_effectful_load_failure_clears_residency(backend: PyTorchBackend)
             .extract::<Vec<String>>()
             .unwrap();
         assert_eq!(effects, vec!["load", "load"]);
+    });
+    assert_eq!(
+        gateway
+            .resident_lifecycle_snapshot()
+            .await
+            .unwrap()
+            .allocation_state,
+        crate::resident_lifecycle::ResidentAllocationState::Unknown
+    );
+    Python::with_gil(|py| {
+        super::pytorch_worker::worker_module(py)
+            .unwrap()
+            .setattr("_rt03_fail_stop", true)
+            .unwrap();
+    });
+    assert!(gateway.stop().await.is_err());
+    assert_eq!(
+        gateway
+            .resident_lifecycle_snapshot()
+            .await
+            .unwrap()
+            .allocation_state,
+        crate::resident_lifecycle::ResidentAllocationState::Unknown
+    );
+    Python::with_gil(|py| {
+        super::pytorch_worker::worker_module(py)
+            .unwrap()
+            .setattr("_rt03_fail_stop", false)
+            .unwrap();
+    });
+    gateway.stop().await.unwrap();
+    assert_eq!(
+        gateway
+            .resident_lifecycle_snapshot()
+            .await
+            .unwrap()
+            .allocation_state,
+        crate::resident_lifecycle::ResidentAllocationState::Released
+    );
+    Python::with_gil(|py| {
+        let effects = super::pytorch_worker::worker_module(py)
+            .unwrap()
+            .getattr("_rt03_effects")
+            .unwrap()
+            .extract::<Vec<String>>()
+            .unwrap();
+        assert_eq!(
+            effects
+                .iter()
+                .filter(|effect| effect.as_str() == "stop")
+                .count(),
+            2
+        );
     });
 }
 

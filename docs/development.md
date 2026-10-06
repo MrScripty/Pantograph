@@ -66,6 +66,13 @@ Use targeted `cargo test -p <crate>` commands for affected Rust owners and the
 specialized scripts under `scripts/` for binding, runtime, GUI, and packaging
 paths.
 
+`cargo test --locked -p pantograph-app-config` executes the production persisted
+AppConfig loader, save/restore, and startup registry composition used by desktop
+setup. These tests need no GTK/WebKit or inference runtime. They exercise real
+filesystem failures and shared admission, but do not qualify Tauri setup, IPC,
+or a running desktop process. Desktop build prerequisites remain required for
+those checks.
+
 There is no single green command that currently proves repository-wide
 standards compliance. The [current audit baseline](audits/2026-09-03-current-standards/04-verification-and-tooling.md)
 records which checks pass, which fail, and where test discovery is incomplete.

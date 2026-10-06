@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+    "crates/pantograph-app-config",
     "crates/inference",
     "crates/node-engine",
     "crates/pantograph-diagnostics-ledger",
@@ -26,6 +27,7 @@ members = [
     "src-tauri",
 ]
 default-members = [
+    "crates/pantograph-app-config",
     "crates/inference",
     "crates/node-engine",
     "crates/pantograph-diagnostics-ledger",

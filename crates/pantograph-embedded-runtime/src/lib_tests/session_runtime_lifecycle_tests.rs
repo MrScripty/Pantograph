@@ -42,9 +42,12 @@ fn llama_runtime_capability() -> WorkflowRuntimeCapability {
     }
 }
 
+#[derive(Default)]
 struct RecordingLlamaBackend {
     ready: bool,
     starts: Arc<Mutex<Vec<BackendConfig>>>,
+    start_entered: Option<Arc<tokio::sync::Notify>>,
+    stops: Arc<std::sync::atomic::AtomicUsize>,
 }
 
 #[async_trait::async_trait]
@@ -73,6 +76,10 @@ impl InferenceBackend for RecordingLlamaBackend {
             .lock()
             .expect("starts lock")
             .push(config.clone());
+        if let Some(entered) = &self.start_entered {
+            entered.notify_one();
+            std::future::pending::<()>().await;
+        }
         self.ready = true;
         Ok(BackendStartOutcome {
             runtime_reused: Some(false),
@@ -81,6 +88,7 @@ impl InferenceBackend for RecordingLlamaBackend {
     }
 
     async fn stop(&mut self) -> Result<(), BackendError> {
+        self.stops.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         self.ready = false;
         Ok(())
     }
@@ -202,6 +210,7 @@ async fn session_runtime_load_blocks_llamacpp_model_without_device_decision() {
         Box::new(RecordingLlamaBackend {
             ready: false,
             starts: starts.clone(),
+            ..Default::default()
         }),
         "llama.cpp",
     ));
@@ -261,6 +270,7 @@ async fn session_runtime_load_consumes_backend_owned_llamacpp_load_proof() {
         Box::new(RecordingLlamaBackend {
             ready: false,
             starts,
+            ..Default::default()
         }),
         "llama.cpp",
     ));
@@ -796,16 +806,38 @@ async fn test_session_runtime_load_releases_reservation_after_warmup_timeout() {
     std::fs::create_dir_all(&app_data_dir).expect("app data dir");
     install_fake_default_runtime(&app_data_dir);
 
+    let entered = Arc::new(tokio::sync::Notify::new());
+    let stops = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let gateway = Arc::new(inference::InferenceGateway::with_backend(
+        Box::new(RecordingLlamaBackend {
+            start_entered: Some(entered.clone()),
+            stops: stops.clone(),
+            ..Default::default()
+        }),
+        "llama.cpp",
+    ));
+    gateway.set_spawner(Arc::new(MockProcessSpawner)).await;
+    let starting_gateway = gateway.clone();
+    let start =
+        tokio::spawn(async move { starting_gateway.start(&BackendConfig::default()).await });
+    entered.notified().await;
+    // An abandoned effectful start leaves a genuine unfinished owner warmup.
+    // Drop its write guard so the host can observe that state and time it out.
+    start.abort();
+    assert!(start
+        .await
+        .expect_err("start must be cancelled")
+        .is_cancelled());
+    let lifecycle = gateway.runtime_lifecycle_snapshot().await;
+    assert!(lifecycle.warmup_started_at_ms.is_some());
+    assert!(lifecycle.warmup_completed_at_ms.is_none());
+    assert!(!lifecycle.active);
     let runtime_registry = Arc::new(RuntimeRegistry::new());
-    runtime_registry.register_runtime(RuntimeRegistration::new("llama.cpp", "llama.cpp"));
-    runtime_registry
-        .transition_runtime(
-            "llama.cpp",
-            RuntimeTransition::WarmupStarted {
-                runtime_instance_id: Some("llama-timeout".to_string()),
-            },
-        )
-        .expect("runtime should enter warming");
+    runtime_registry::sync_runtime_registry(gateway.as_ref(), runtime_registry.as_ref()).await;
+    assert_eq!(
+        runtime_registry.snapshot().runtimes[0].status,
+        RuntimeRegistryStatus::Warming
+    );
 
     let runtime = EmbeddedRuntime::with_default_python_runtime(
         EmbeddedRuntimeConfig {
@@ -814,7 +846,7 @@ async fn test_session_runtime_load_releases_reservation_after_warmup_timeout() {
             workflow_roots: vec![temp.path().join(".pantograph").join("workflows")],
             max_loaded_sessions: None,
         },
-        Arc::new(inference::InferenceGateway::new()),
+        gateway,
         Arc::new(RwLock::new(ExecutorExtensions::new())),
         Arc::new(WorkflowService::new()),
         None,
@@ -839,6 +871,15 @@ async fn test_session_runtime_load_releases_reservation_after_warmup_timeout() {
         .runtimes
         .iter()
         .all(|runtime| runtime.active_reservation_ids.is_empty()));
+    assert_eq!(
+        stops.load(std::sync::atomic::Ordering::SeqCst),
+        1,
+        "timeout cleanup must reach acknowledged owned shutdown"
+    );
+    let stopped = runtime.gateway().runtime_lifecycle_snapshot().await;
+    assert!(stopped.warmup_started_at_ms.is_none());
+    assert!(stopped.warmup_completed_at_ms.is_none());
+    assert!(stopped.warmup_duration_ms.is_none());
     assert_eq!(snapshot.runtimes[0].status, RuntimeRegistryStatus::Stopped);
 }
 

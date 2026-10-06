@@ -34,6 +34,10 @@ pub struct RuntimeRegistryRuntimeSnapshot {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub admission_budget: Option<RuntimeAdmissionBudget>,
     pub models: Vec<RuntimeModelResidencyRecord>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub resident_resources_uncertain: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_resource_residency: Option<crate::RuntimeModelResourceResidency>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -42,4 +46,8 @@ pub struct RuntimeActiveReservationClaim {
     pub reservation_id: u64,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub claims: Vec<RuntimeReservationResourceClaim>,
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
 }

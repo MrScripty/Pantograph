@@ -94,6 +94,10 @@ impl InferenceGateway {
         let external = self.external_mode.clone();
         let lifecycle = self.runtime_lifecycle.clone();
         let sequence = self.runtime_instance_sequence.clone();
+        let pytorch_release_confirmed = self.pytorch_release_confirmed.clone();
+        let pytorch_ever_owned = self.pytorch_ever_owned.clone();
+        let llamacpp_release_confirmed = self.llamacpp_release_confirmed.clone();
+        let llamacpp_ever_owned = self.llamacpp_ever_owned.clone();
         #[cfg(test)]
         let after_publication = self
             .embedding_replacement
@@ -127,6 +131,14 @@ impl InferenceGateway {
                 // Retirement and publication are supervised to completion, even if the
                 // caller disappears or the host cancels after this admission point.
                 backend.stop().await?;
+                if canonical_backend_key(backend.name()) == "pytorch" {
+                    pytorch_ever_owned.store(true, Ordering::Relaxed);
+                    pytorch_release_confirmed.store(true, Ordering::Relaxed);
+                }
+                if canonical_backend_key(backend.name()) == "llama_cpp" {
+                    llamacpp_ever_owned.store(true, Ordering::Relaxed);
+                    llamacpp_release_confirmed.store(true, Ordering::Relaxed);
+                }
                 std::mem::swap(&mut *backend, &mut candidate);
                 *name = backend.name().to_owned();
                 *current_config = Some(config);
@@ -135,10 +147,7 @@ impl InferenceGateway {
                 *external = false;
                 *lifecycle = RuntimeLifecycleSnapshot {
                     runtime_id: Some("candle".into()),
-                    runtime_instance_id: Some(format!(
-                        "candle-{}",
-                        sequence.fetch_add(1, Ordering::Relaxed)
-                    )),
+                    runtime_instance_id: Some(allocate_runtime_instance_id(&sequence, "candle")),
                     runtime_reused: outcome.runtime_reused,
                     lifecycle_decision_reason: outcome.lifecycle_decision_reason,
                     active: backend.is_ready(),

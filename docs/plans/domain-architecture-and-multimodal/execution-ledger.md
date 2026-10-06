@@ -425,3 +425,119 @@ controlled statuses do not count as native execution. Shared serialization
 passes 74 tests. Parent retains hosted/native qualification and publication;
 next planned feature is DA-03's desktop-authored dependent real text-to-image
 workflow after owner identity/target/device and desktop prerequisites.
+
+## 2026-10-05 — Shared backing resource admission candidate
+
+Continued independent scheduler delivery from frozen qualification `6aa6b717`
+on `feat/scheduler-shared-resource-admission`. Research and current registry
+inspection identify per-runtime capacity as the bounded prerequisite: two runtime
+claims can spend one backing pool independently. The
+[candidate](reports/2026-10-05-shared-resource-admission.md) adds explicit shared
+RAM/VRAM domains to existing evaluation, authoritative admission and provisional
+custody. Eleven public tests exercise actual contention, unified-memory sums,
+replacement rollback/transfer, margins and configuration. Full portable suites
+pass 106 registry plus 133 scheduler tests. Production physical bindings and
+desktop activation remain open; native sampling qualification stays blocked.
+Parent retains review/PR/hosted execution; old milestones remain frozen.
+
+## 2026-10-05 — Explicit shared-resource startup composition candidate
+
+The parent froze `27af8aa3` and authorized connecting its shared admission API
+through the application. The [successor](reports/2026-10-05-shared-resource-composition.md)
+adds optional domains to existing AppConfig/config.json and uses the registry's
+portable factory in actual desktop setup before gateway/workflow startup. No
+backing topology is inferred from device selection. Empty/absent configuration
+retains the previous empty registry; malformed declarations fail startup, and
+live domain edits require restart. Eight actual portable composition tests cover
+persisted declarations, shared contention, unified memory and rollback/transfer.
+Native AppConfig tests are authored but unexecuted because GTK/WebKit prerequisites
+are absent. Parent retains desktop/native qualification and review; frozen
+sampling source and PR54 diagnostics remain unchanged.
+
+## 2026-10-05 — AppConfig filesystem repair and production composition qualification
+
+Continued separately from frozen `73211ddc` on
+`qualification/shared-resource-app-config`. Peer review found `Path::exists`
+discarded permission/metadata failures and broken symlinks as apparent absence.
+The [repair and qualification](reports/2026-10-05-app-config-startup-qualification.md)
+uses a fallible read and confirms genuine absence, preserving other filesystem,
+JSON and domain errors. The actual AppConfig implementation now lives in a
+production crate consumed by Tauri setup, so full settings, persistence and
+startup registry composition execute without unrelated GUI/inference dependencies.
+Ten AppConfig tests and the existing 114 registry/133 scheduler tests pass;
+the exact frozen loader fails three new filesystem regressions. No native
+runtime is simulated. Official APT update was attempted with owner authorization
+but returned OS permission denial; desktop compilation fails at missing
+`glib-2.0.pc`. Tauri setup/IPC and desktop-process qualification stay blocked.
+Parent retains review/publication; old source milestones and PR54 remain frozen.
+
+## 2026-10-05 — Explicit retained model resource accounting
+
+Parent froze `eabbcc83` and authorized the next independent scheduler capability.
+Source inspection confirms shared domains sum task leases only; model residency
+metadata and candidate loaded-memory estimates do not keep an idle producer's
+allocations charged. The [successor](reports/2026-10-05-resident-resource-accounting.md)
+adds explicit model/instance resident declarations at the registry owner, counts
+them in local/shared admission, and preserves envelopes after task cleanup.
+Unknown loaded shared-pool members fail admission with typed unavailable
+diagnostics instead of exposing free capacity. Fifteen new portable tests cover
+lifecycle, identity freshness, real contention, unified kinds, overflow and
+provisional replacement. Current host producers still need a bridge publishing
+per-kind estimates; peak task envelopes remain conservatively charged in full.
+No hardware measurements, native execution or pin changes are claimed. Parent
+retains review/publication; frozen qualifications and PR54 remain unchanged.
+
+
+## 2026-10-05 — Ordered PyTorch producer resident estimates
+
+Continued from frozen `254aef1` on `feat/runtime-producer-resident-estimates`.
+The [producer bridge](reports/2026-10-05-runtime-producer-resident-estimates.md)
+uses explicit startup estimates for the exact observed model target, publishing
+coherent source/sequence/model/instance facts from the existing gateway owner.
+Old stops and loads cannot replace newer allocation facts; explicit zero and
+missing per-kind estimates remain distinct. Effectful load failure retains the
+previous envelope and blocks shared admission until owner evidence resolves it.
+PyTorch shutdown must acknowledge cleanup even after failed load erased metadata.
+Existing peak task claims/custody remain fully charged. Portable owner/config
+fixtures qualify the logical accounting; native GUI/GPU execution and other
+producers remain unqualified. No previous branch rewrite or PR/review creation.
+
+## 2026-10-06 — Isolated PR56 correctness review checkpoint
+
+Parent paused unrelated image scheduler work for five PR56 review findings.
+The [saved repair checkpoint](reports/2026-10-06-pr56-correctness-review-checkpoint.md)
+records four reproducible correctness defects and actual child-process evidence
+contradicting the reaped-child summary. Source `5da09171` is based on the published
+import-only integration `b3c58756`; feature histories remain separate. Full comment
+body reads were Forbidden, with no credential or access-route changes. Exact
+comment disposal and integration publication remain blocked on those bodies.
+Test successor `a92f67ff` passes all affected suites: 805 inference, 503 embedded,
+141 registry and 14 config, plus all 661 frontend assertions. Strict all-target
+Clippy and no-download/gate checks pass. The first combined run exposed six
+zero-probe fixture assumptions, corrected without weakening uncertainty checks.
+No native desktop/GPU/model execution claim is added.
+
+The parent subsequently supplied all five original full review bodies. Exact
+validation found two missing cases in the summary-based recovery checkpoint:
+Candle supervised publication still reused its counter value, and an explicit
+VRAM-only task still failed on unknown RAM residency. Source `4f877149` closes both
+with deterministic regressions against actual owner publication and all four
+registry admission paths. The pinned Tokio InvalidInput allegation is incorrect;
+Unix native child tests and the exact dependency implementation support rejecting
+it without changing production shutdown. No review CLI or denied fetch is used.
+Final source qualification passes 806 inference, 503 embedded and 142 registry
+checks with strict all-target mixed-backend Clippy. Config/frontend source remains
+unchanged from its passing qualification. The independent repair branch is
+published normally; the parent alone updates PR56 and replies/resolves reviews.
+
+## 2026-10-06 — PR56 config fixture contract correction
+
+The parent's re-review record 4191994790 identifies malformed startup-domain keys
+and incomplete AppConfig fields in the controlled handler regression. The
+isolated successor of `13d24e8` uses the actual registry startup JSON and a strict
+complete-payload save expectation. A new rejection regression fails against the
+old mock and passes after repair; all three focused handler tests, TypeScript,
+formatting, critical/accessibility gates, lint and traceability pass. Production
+code is unchanged. Parent retains PR56 advancement; the combined image-controls
+candidate is preserved independently. See the existing
+[checkpoint report](reports/2026-10-06-pr56-correctness-review-checkpoint.md).

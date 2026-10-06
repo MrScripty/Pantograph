@@ -1,5 +1,45 @@
 use super::*;
+
+#[test]
+fn owned_cpu_candidates_require_available_matching_owner_facts_and_never_guess_gpu_ids() {
+    let mut info = BackendInfo {
+        name: "PyTorch".into(),
+        backend_key: "pytorch".into(),
+        description: String::new(),
+        capabilities: BackendCapabilities::default(),
+        default_start_mode: BackendDefaultStartMode::Inference,
+        active: false,
+        available: true,
+        unavailable_reason: None,
+        can_install: false,
+        runtime_binary_id: None,
+    };
+    let variant =
+        |id: &str, device_class, available| crate::device_contracts::RuntimeVariantCapability {
+            runtime_variant_id: id.parse().unwrap(),
+            device_class,
+            available,
+            diagnostics: Vec::new(),
+        };
+    info.capabilities.facts.runtime_variants = vec![
+        variant("pytorch.cpu", InferenceDeviceClass::Cpu, true),
+        variant("pytorch.cuda", InferenceDeviceClass::Cuda, true),
+        variant("other.cpu", InferenceDeviceClass::Cpu, true),
+    ];
+    let candidates = cpu_device_candidates(vec![info.clone()]);
+    assert_eq!(candidates.len(), 1);
+    assert_eq!(candidates[0].backend_key, "pytorch");
+    assert_eq!(candidates[0].device_id.as_str(), "cpu");
+    assert_eq!(candidates[0].runtime_variant_id.as_str(), "pytorch.cpu");
+    info.available = false;
+    assert!(cpu_device_candidates(vec![info.clone()]).is_empty());
+    info.available = true;
+    info.capabilities.facts.runtime_variants[0].available = false;
+    assert!(cpu_device_candidates(vec![info]).is_empty());
+}
 use std::path::PathBuf;
+#[path = "gateway_tests/service_timing.rs"]
+mod service_timing;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -52,6 +92,9 @@ use crate::{
     InferenceExecutionCancellationSnapshot, InferenceExecutionCancellationState,
     InferenceExecutionTelemetryError, RuntimeNativeTelemetryProvider,
 };
+
+#[path = "gateway_tests/resident_lifecycle.rs"]
+mod resident_lifecycle;
 
 #[path = "gateway_tests/start_config.rs"]
 mod start_config;
@@ -4898,6 +4941,14 @@ impl InferenceBackend for SelectedTextBackend {
             .push(format!("finish:{cancel}"));
         Ok(())
     }
+    async fn load_selected_embedding(
+        &mut self,
+        _: &InferenceExecutionRequest,
+        _: &PumasArtifactLoadTarget,
+        _: &BackendExecutionDecision,
+    ) -> Result<BackendStartOutcome, BackendError> {
+        Ok(BackendStartOutcome::default())
+    }
     async fn chat_completion_stream(
         &self,
         request: String,
@@ -5264,6 +5315,84 @@ async fn selected_text_preserves_top_p_boundaries_with_optional_length_and_syste
             }
         }
     }
+}
+
+#[tokio::test]
+async fn ordinary_and_selected_text_loads_never_reuse_an_allocation_generation() {
+    let (_directory, request, target, decision) = crate::selected_text_execution::fixture();
+    let gateway =
+        InferenceGateway::with_backend(Box::new(SelectedTextBackend::default()), "PyTorch");
+    gateway.set_spawner(Arc::new(MockProcessSpawner)).await;
+    gateway.start(&BackendConfig::default()).await.unwrap();
+    let first = gateway
+        .runtime_lifecycle_snapshot()
+        .await
+        .runtime_instance_id
+        .unwrap();
+    gateway
+        .execute_selected_text_with_cancellation(
+            request,
+            target,
+            decision,
+            InferenceExecutionCancellationHandle::running(),
+        )
+        .await
+        .unwrap();
+    let selected = gateway
+        .runtime_lifecycle_snapshot()
+        .await
+        .runtime_instance_id
+        .unwrap();
+    assert_ne!(
+        first, selected,
+        "a newly loaded allocation must not inherit an earlier generation"
+    );
+    gateway.start(&BackendConfig::default()).await.unwrap();
+    assert_eq!(
+        gateway
+            .runtime_lifecycle_snapshot()
+            .await
+            .runtime_instance_id
+            .as_deref(),
+        Some(selected.as_str()),
+        "a proved reuse retains the same generation"
+    );
+}
+
+#[tokio::test]
+async fn embedding_replacement_supervisor_cannot_duplicate_a_previous_candle_generation() {
+    let (_directory, request, target, decision) = crate::selected_text_execution::fixture();
+    let mut gateway =
+        InferenceGateway::with_backend(Box::new(SelectedTextBackend::default()), "PyTorch");
+    gateway.registry.register(
+        "candle",
+        Box::new(SelectedTextFactory(SelectedTextBackend::default())),
+    );
+    let previous = gateway.allocate_runtime_instance_id("candle");
+    let backend = gateway.backend.clone().write_owned().await;
+    // Controlled candidate loading isolates the actual supervised retirement/publication
+    // path. This does not execute Candle or validate an embedding model package.
+    let backend = gateway
+        .replace_selected_embedding(
+            backend,
+            request,
+            target,
+            decision,
+            InferenceExecutionCancellationHandle::running(),
+            BackendConfig::default(),
+        )
+        .await
+        .unwrap();
+    drop(backend);
+    let replaced = gateway
+        .runtime_lifecycle_snapshot()
+        .await
+        .runtime_instance_id
+        .unwrap();
+    assert_ne!(
+        previous, replaced,
+        "supervised allocations share the generation rule"
+    );
 }
 
 #[tokio::test]

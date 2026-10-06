@@ -1,0 +1,344 @@
+//! Application configuration storage
+//!
+//! Handles persistent storage of model paths and connection settings.
+
+use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
+use tokio::fs;
+
+/// Device request defaults; topology and physical capacities are explicit inputs.
+pub mod defaults {
+    pub const GPU_LAYERS: i32 = -1;
+    pub const DEVICE: &str = "auto";
+}
+
+/// Model configuration for the application
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ModelConfig {
+    /// Path to the VLM model file (e.g., Qwen3-VL-4B)
+    pub vlm_model_path: Option<String>,
+    /// Path to the mmproj file for vision models
+    pub vlm_mmproj_path: Option<String>,
+    /// Path to the embedding model file (GGUF format for llama.cpp, e.g., Qwen3-Embedding-0.6B)
+    pub embedding_model_path: Option<String>,
+    /// Path to the Candle embedding model directory (SafeTensors format, e.g., bge-small-en-v1.5/)
+    /// This is separate from embedding_model_path because Candle uses a different model format.
+    pub candle_embedding_model_path: Option<String>,
+}
+
+impl ModelConfig {
+    /// Remove fields that belonged to retired backend surfaces.
+    pub fn scrub_retired_fields(&mut self) {}
+}
+
+/// Device configuration for inference
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeviceConfig {
+    /// Device identifier (e.g., "Vulkan0", "Vulkan1", "none" for CPU-only)
+    pub device: String,
+    /// Number of layers to offload to GPU (-1 = all layers)
+    pub gpu_layers: i32,
+}
+
+impl Default for DeviceConfig {
+    fn default() -> Self {
+        Self {
+            device: defaults::DEVICE.to_string(),
+            gpu_layers: defaults::GPU_LAYERS,
+        }
+    }
+}
+
+/// Information about an available compute device
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeviceInfo {
+    /// Device identifier used with --device flag (e.g., "Vulkan0", "none")
+    pub id: String,
+    /// Human-readable device name (e.g., "NVIDIA GeForce RTX 4060 Laptop GPU")
+    pub name: String,
+    /// Total VRAM in MB (0 for CPU)
+    pub total_vram_mb: u64,
+    /// Free VRAM in MB (0 for CPU)
+    pub free_vram_mb: u64,
+}
+
+/// Connection mode preference
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[serde(tag = "type")]
+pub enum ConnectionMode {
+    /// No connection configured
+    #[default]
+    None,
+    /// Connect to external server (remote API or local server like LM Studio)
+    External { url: String },
+    /// Use built-in llama.cpp sidecar
+    Sidecar,
+}
+
+/// Memory management mode for embedding model
+/// Controls how the embedding model is loaded relative to the main LLM
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum EmbeddingMemoryMode {
+    /// Embedding model runs on CPU (RAM), LLM on GPU (VRAM)
+    /// Best for machines with limited VRAM but plenty of RAM
+    /// This is the recommended default for most users
+    #[default]
+    CpuParallel,
+    /// Both models run on GPU (VRAM) simultaneously
+    /// Requires ~800MB+ additional VRAM for embedding model
+    /// Fastest option but needs sufficient VRAM
+    GpuParallel,
+    /// Only one model in memory at a time, swap as needed
+    /// Lowest memory usage but adds ~2-5s latency per search
+    /// Best for very limited memory systems
+    Sequential,
+}
+
+/// Import validation mode for generated Svelte components
+/// Controls how imports are validated before the component is loaded
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum ImportValidationMode {
+    /// No import validation (current behavior, fastest)
+    /// Errors only surface when Vite tries to bundle at runtime
+    #[default]
+    None,
+    /// Parse imports and check against package.json dependencies
+    /// Fast and catches most errors (typos in package names)
+    ImportResolve,
+    /// Use Vite's module resolution to validate imports
+    /// Most accurate but requires Vite dev server
+    ViteIntegration,
+    /// Use esbuild to attempt bundling the script block
+    /// Catches all bundler errors but slowest option
+    EsbuildBundle,
+}
+
+/// Sandbox configuration for component validation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SandboxConfig {
+    /// How to validate imports in generated components
+    #[serde(default)]
+    pub import_validation_mode: ImportValidationMode,
+    /// Timeout for validation scripts in milliseconds
+    #[serde(default = "default_validation_timeout")]
+    pub validation_timeout_ms: u64,
+    /// Additional packages to allow beyond package.json dependencies
+    #[serde(default)]
+    pub allowed_packages: Vec<String>,
+    /// Enable ESLint validation for generated components
+    /// Catches code quality issues like explicit undefined usage, unused variables, etc.
+    #[serde(default)]
+    pub lint_enabled: bool,
+}
+
+fn default_validation_timeout() -> u64 {
+    5000
+}
+
+impl Default for SandboxConfig {
+    fn default() -> Self {
+        Self {
+            import_validation_mode: ImportValidationMode::default(),
+            validation_timeout_ms: default_validation_timeout(),
+            allowed_packages: Vec::new(),
+            lint_enabled: false,
+        }
+    }
+}
+
+/// Workflow runtime coordination configuration.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct WorkflowConfig {
+    /// Optional limit on how many session runtimes may remain loaded at once.
+    ///
+    /// `None` preserves the workflow-service default, which currently matches
+    /// workflow execution session capacity.
+    #[serde(default)]
+    pub max_loaded_sessions: Option<usize>,
+}
+
+/// Full application configuration
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct AppConfig {
+    /// Explicit shared backing capacities applied at startup, independent of device selection.
+    #[serde(flatten)]
+    pub runtime_resources: pantograph_runtime_registry::RuntimeResourceDomainConfig,
+    /// Model paths for sidecar mode
+    pub models: ModelConfig,
+    /// Device configuration for inference
+    #[serde(default)]
+    pub device: DeviceConfig,
+    /// Last used connection mode
+    pub connection_mode: ConnectionMode,
+    /// External server URL (if using external mode)
+    pub external_url: Option<String>,
+    /// API key for external providers (OpenAI, Anthropic, etc.)
+    pub api_key: Option<String>,
+    /// Memory management mode for embedding model
+    #[serde(default)]
+    pub embedding_memory_mode: EmbeddingMemoryMode,
+    /// Sandbox configuration for component validation
+    #[serde(default)]
+    pub sandbox: SandboxConfig,
+    /// Workflow runtime coordination settings
+    #[serde(default)]
+    pub workflow: WorkflowConfig,
+}
+
+impl AppConfig {
+    /// Load actual persisted app settings and compose their shared registry before
+    /// consumers are created. Missing files retain defaults; parse, I/O and domain
+    /// errors are returned without falling back to an unconfigured registry.
+    pub async fn load_with_runtime_registry(
+        app_data_dir: &Path,
+    ) -> Result<(Self, pantograph_runtime_registry::RuntimeRegistry), ConfigError> {
+        let config = Self::load(app_data_dir).await?;
+        let registry = config
+            .runtime_resources
+            .compose_registry()
+            .map_err(ConfigError::RuntimeResourceDomains)?;
+        Ok((config, registry))
+    }
+
+    /// Normalize persisted compatibility fields that must not affect runtime
+    /// behavior after backend retirement.
+    pub fn scrub_retired_fields(&mut self) {
+        self.models.scrub_retired_fields();
+    }
+
+    /// Load configuration from disk
+    pub async fn load(app_data_dir: &Path) -> Result<Self, ConfigError> {
+        let config_path = app_data_dir.join("config.json");
+
+        let contents = match fs::read_to_string(&config_path).await {
+            Ok(contents) => contents,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                // Confirm absence without hiding a dangling config or ancestor
+                // symlink. Walk missing ancestors until a readable entry exists.
+                let mut missing_path = config_path.as_path();
+                loop {
+                    match fs::symlink_metadata(missing_path).await {
+                        Ok(_) if missing_path == config_path => {
+                            return Err(ConfigError::Io(error));
+                        }
+                        Ok(_) => {
+                            fs::metadata(missing_path).await.map_err(ConfigError::Io)?;
+                            return Ok(Self::default());
+                        }
+                        Err(metadata_error)
+                            if metadata_error.kind() == std::io::ErrorKind::NotFound =>
+                        {
+                            let Some(parent) = missing_path.parent() else {
+                                return Ok(Self::default());
+                            };
+                            missing_path = parent;
+                        }
+                        Err(metadata_error) => return Err(ConfigError::Io(metadata_error)),
+                    }
+                }
+            }
+            Err(error) => return Err(ConfigError::Io(error)),
+        };
+
+        let mut config = serde_json::from_str::<Self>(&contents).map_err(ConfigError::Parse)?;
+        config.scrub_retired_fields();
+        Ok(config)
+    }
+
+    /// Save configuration to disk
+    pub async fn save(&self, app_data_dir: &PathBuf) -> Result<(), ConfigError> {
+        // Ensure directory exists
+        fs::create_dir_all(app_data_dir)
+            .await
+            .map_err(ConfigError::Io)?;
+
+        let config_path = app_data_dir.join("config.json");
+        let mut config = self.clone();
+        config.scrub_retired_fields();
+        let contents = serde_json::to_string_pretty(&config).map_err(ConfigError::Serialize)?;
+
+        let directory = app_data_dir.clone();
+        let destination = config_path.clone();
+        tokio::task::spawn_blocking(move || -> Result<(), std::io::Error> {
+            use std::io::Write;
+            let permissions = match std::fs::metadata(&destination) {
+                Ok(metadata) => Some(metadata.permissions()),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+                Err(error) => return Err(error),
+            };
+            let mut staged = tempfile::NamedTempFile::new_in(directory)?;
+            if let Some(permissions) = permissions {
+                // Atomic replacement must preserve the existing settings mode.
+                staged.as_file().set_permissions(permissions)?;
+            }
+            staged.write_all(contents.as_bytes())?;
+            staged.as_file().sync_all()?;
+            staged.persist(destination).map_err(|error| error.error)?;
+            Ok(())
+        })
+        .await
+        .map_err(|error| ConfigError::Io(std::io::Error::other(error)))?
+        .map_err(ConfigError::Io)?;
+
+        log::info!("Configuration saved to {:?}", config_path);
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{AppConfig, ModelConfig};
+
+    #[test]
+    fn app_config_round_trip_preserves_flattened_startup_resource_domains() {
+        let source = include_str!(
+            "../../pantograph-runtime-registry/tests/fixtures/startup_shared_resource_config.json"
+        );
+        let config: AppConfig = serde_json::from_str(source).expect("startup fixture must decode");
+        assert_eq!(config.runtime_resources.runtime_resource_domains.len(), 1);
+        let value = serde_json::to_value(&config).expect("app config must serialize");
+        assert!(value.get("runtime_resource_domains").is_some());
+        assert!(value.get("runtime_resources").is_none());
+        let restored: AppConfig = serde_json::from_value(value).expect("app config must restore");
+        assert_eq!(restored.runtime_resources, config.runtime_resources);
+    }
+
+    #[test]
+    fn old_app_config_defaults_to_no_shared_domains() {
+        let config: AppConfig =
+            serde_json::from_str(r#"{"models":{},"connection_mode":{"type":"None"}}"#)
+                .expect("legacy app config must decode");
+        assert!(config.runtime_resources.runtime_resource_domains.is_empty());
+    }
+
+    #[test]
+    fn model_config_ignores_unknown_retired_fields() {
+        let config = serde_json::from_str::<ModelConfig>(
+            r#"{
+                "vlm_model_path": "/models/qwen.gguf",
+                "vlm_mmproj_path": null,
+                "embedding_model_path": null,
+                "candle_embedding_model_path": null,
+                "ollama_vlm_model": "llava:13b"
+            }"#,
+        )
+        .expect("unknown retired field should deserialize");
+
+        assert_eq!(config.vlm_model_path.as_deref(), Some("/models/qwen.gguf"));
+    }
+}
+
+/// Configuration errors
+#[derive(Debug, thiserror::Error)]
+pub enum ConfigError {
+    #[error("Failed to compose runtime resource domains: {0}")]
+    RuntimeResourceDomains(pantograph_runtime_registry::RuntimeRegistryError),
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
+    #[error("Failed to parse config: {0}")]
+    Parse(serde_json::Error),
+    #[error("Failed to serialize config: {0}")]
+    Serialize(serde_json::Error),
+}
