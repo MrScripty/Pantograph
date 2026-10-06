@@ -871,7 +871,6 @@ async fn test_session_runtime_load_releases_reservation_after_warmup_timeout() {
         .runtimes
         .iter()
         .all(|runtime| runtime.active_reservation_ids.is_empty()));
-    assert_eq!(snapshot.runtimes[0].status, RuntimeRegistryStatus::Stopped);
     assert_eq!(
         stops.load(std::sync::atomic::Ordering::SeqCst),
         1,
@@ -881,6 +880,7 @@ async fn test_session_runtime_load_releases_reservation_after_warmup_timeout() {
     assert!(stopped.warmup_started_at_ms.is_none());
     assert!(stopped.warmup_completed_at_ms.is_none());
     assert!(stopped.warmup_duration_ms.is_none());
+    assert_eq!(snapshot.runtimes[0].status, RuntimeRegistryStatus::Stopped);
 }
 
 #[tokio::test]
