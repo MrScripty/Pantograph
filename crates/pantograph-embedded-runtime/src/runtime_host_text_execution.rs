@@ -1588,6 +1588,16 @@ mod tests {
 
         const PEAK_BYTES: u64 = 3 * 1024 * 1024;
         let mut request = text_request_fixture();
+        let timing_request_id = if record_timing {
+            request.execution_request_id = format!(
+                "{}host-padded-timing-id{}",
+                " ".repeat(512 * 1024),
+                " ".repeat(512 * 1024)
+            );
+            Some(request.execution_request_id.clone())
+        } else {
+            None
+        };
         request.handoff.task_intent.constraints.requested_device_id = None;
         request.handoff.task_intent.estimate_hints =
             vec![pantograph_scheduler::SchedulerEstimateHint {
@@ -1856,6 +1866,15 @@ mod tests {
         if record_timing {
             let rows = timing_rows.lock().unwrap();
             assert_eq!(rows.len(), 1);
+            assert_eq!(
+                &response.execution_request_id,
+                timing_request_id.as_ref().unwrap()
+            );
+            assert_eq!(
+                rows[0].execution_request_id_digest.as_ref().unwrap().len(),
+                64
+            );
+            assert!(serde_json::to_string(&rows[0]).unwrap().len() < 4096);
             let inference::RuntimeServiceTimingIdentity::Exact { profile } = &rows[0].identity
             else {
                 panic!("{:?}", rows[0].identity);

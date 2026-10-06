@@ -134,7 +134,10 @@ pub struct RuntimeServiceTimingPhaseEvidence {
 #[serde(deny_unknown_fields)]
 pub struct RuntimeServiceTimingAttempt {
     pub attempt_id: String,
-    pub execution_request_id: String,
+    /// Optional lowercase BLAKE3 hex digest of the original request-id bytes.
+    /// Capture emits exactly 64 characters when supplied, including for rejected
+    /// calls. This is correlation evidence, never the actual execution identity.
+    pub execution_request_id_digest: Option<String>,
     pub identity: RuntimeServiceTimingIdentity,
     pub outcome: RuntimeServiceTimingOutcome,
     pub phases: Vec<RuntimeServiceTimingPhaseEvidence>,
@@ -207,7 +210,7 @@ mod tests {
     fn service_matching_excludes_other_identity_estimates_partial_and_duplicate_phases() {
         let mut attempt = RuntimeServiceTimingAttempt {
             attempt_id: "attempt".into(),
-            execution_request_id: "request".into(),
+            execution_request_id_digest: Some("c".repeat(64)),
             identity: RuntimeServiceTimingIdentity::Exact { profile: profile() },
             outcome: RuntimeServiceTimingOutcome::Completed,
             phases: vec![RuntimeServiceTimingPhaseEvidence {

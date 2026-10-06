@@ -69,6 +69,7 @@ struct Backend {
     rewind_load_clock: bool,
     fail_cleanup: bool,
     load_started: Option<Arc<tokio::sync::Notify>>,
+    load_request_ids: Arc<Mutex<Vec<Option<String>>>>,
 }
 impl Backend {
     fn new(clock: Arc<Clock>) -> Self {
@@ -82,6 +83,7 @@ impl Backend {
             rewind_load_clock: false,
             fail_cleanup: false,
             load_started: None,
+            load_request_ids: Arc::new(Mutex::new(Vec::new())),
         }
     }
 }
@@ -138,6 +140,10 @@ impl InferenceBackend for Backend {
         target: &PumasArtifactLoadTarget,
         decision: &BackendExecutionDecision,
     ) -> Result<BackendStartOutcome, BackendError> {
+        self.load_request_ids
+            .lock()
+            .unwrap()
+            .push(request.request_id.clone());
         self.clock.advance(11);
         if self.rewind_load_clock {
             self.clock.value.store(0, Ordering::SeqCst);
@@ -241,7 +247,12 @@ async fn service_timing_measures_distinct_owner_bound_phases_and_runtime_generat
 
 #[tokio::test]
 async fn service_timing_disabled_defaults_do_not_read_phase_clock_or_owner_facts() {
-    let (_directory, request, target, decision) = crate::selected_text_execution::fixture();
+    let (_directory, mut request, target, decision) = crate::selected_text_execution::fixture();
+    request.request_id = Some(format!(
+        "{}disabled-id{}",
+        " ".repeat(512 * 1024),
+        " ".repeat(512 * 1024)
+    ));
     let clock = Arc::new(Clock::default());
     let backend = Backend::new(clock.clone());
     let reads = backend.owner_reads.clone();
@@ -493,4 +504,90 @@ async fn service_timing_clock_discontinuity_is_unknown_instead_of_observed_zero(
         rows[0].observed_completed_ns(&exact_profile(&rows[0]), Phase::SelectedModelLoad),
         None
     );
+}
+
+#[tokio::test]
+async fn service_timing_bounds_retained_request_correlation_without_changing_execution_identity() {
+    for original_id in [
+        "small-id".to_string(),
+        format!(
+            "{}padded-id{}",
+            " ".repeat(512 * 1024),
+            " ".repeat(512 * 1024)
+        ),
+        "oversized-id-payload".repeat(64 * 1024),
+    ] {
+        let (_directory, mut request, target, decision) = crate::selected_text_execution::fixture();
+        request.request_id = Some(original_id.clone());
+        let clock = Arc::new(Clock::default());
+        let recorder = Arc::new(Recorder::default());
+        let backend = Backend::new(clock.clone());
+        let observed_ids = backend.load_request_ids.clone();
+        let gateway = instrument(backend, recorder.clone(), clock);
+        execute(&gateway, request, target, decision).await.unwrap();
+        assert_eq!(
+            observed_ids.lock().unwrap()[0].as_deref(),
+            Some(original_id.as_str())
+        );
+        let rows = recorder.rows.lock().unwrap();
+        let serialized = serde_json::to_string(&rows[0]).unwrap();
+        assert!(
+            serialized.len() < 4096,
+            "retained timing row was {} bytes",
+            serialized.len()
+        );
+        assert_eq!(
+            rows[0].execution_request_id_digest.as_deref(),
+            Some(blake3::hash(original_id.as_bytes()).to_hex().as_str())
+        );
+        assert!(!serialized.contains(original_id.trim()));
+    }
+}
+
+#[tokio::test]
+async fn service_timing_rejected_calls_bound_correlation_before_validation() {
+    for original_id in [
+        None,
+        Some(" ".repeat(1024 * 1024)),
+        Some("rejected-caller-payload".repeat(64 * 1024)),
+        Some(format!(
+            "{}rejected-padded-id{}",
+            " ".repeat(512 * 1024),
+            " ".repeat(512 * 1024)
+        )),
+    ] {
+        let (_directory, mut request, target, decision) = crate::selected_text_execution::fixture();
+        request.request_id = original_id.clone();
+        request.resolved_model_package_facts = None;
+        let clock = Arc::new(Clock::default());
+        let recorder = Arc::new(Recorder::default());
+        let backend = Backend::new(clock.clone());
+        let observed_ids = backend.load_request_ids.clone();
+        let gateway = instrument(backend, recorder.clone(), clock.clone());
+        assert!(execute(&gateway, request, target, decision).await.is_err());
+        assert!(observed_ids.lock().unwrap().is_empty());
+        assert_eq!(clock.reads.load(Ordering::SeqCst), 0);
+        let rows = recorder.rows.lock().unwrap();
+        assert_eq!(rows[0].outcome, Outcome::Failed);
+        assert!(rows[0].phases.iter().all(|phase| matches!(
+            phase.value,
+            Value::Unknown {
+                reason: Unknown::PhaseNotReached
+            }
+        )));
+        assert_eq!(
+            rows[0].execution_request_id_digest,
+            original_id
+                .as_ref()
+                .map(|id| blake3::hash(id.as_bytes()).to_hex().to_string())
+        );
+        let serialized = serde_json::to_string(&rows[0]).unwrap();
+        assert!(
+            serialized.len() < 4096,
+            "retained rejected timing row was {} bytes",
+            serialized.len()
+        );
+        assert!(!serialized.contains("rejected-caller-payload"));
+        assert!(!serialized.contains("rejected-padded-id"));
+    }
 }

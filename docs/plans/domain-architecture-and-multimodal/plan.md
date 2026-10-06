@@ -21,6 +21,14 @@ without immutable content and loaded implementation/configuration/device facts
 remain unknown; controlled tests do not qualify real model latency. Ranking and
 calibration remain separate until comparable native owner evidence is available.
 
+Independent review accepted RAM repair `43f0a777`. The
+[service timing retention repair](reports/2026-10-06-service-timing-correlation-review-repair.md)
+replaces raw caller ID retention with bounded correlation digests, preserving
+actual IDs through direct gateway and host execution, including rejected calls.
+Frozen timing and device checkpoints remain separate. Parent coordinates normal
+history-preserving integration with approved main `4153772634269e342a8b0cca797f1cd6716f18a5`;
+its prior descriptor/sampler repairs will not be duplicated on feature ancestry.
+
 **Acceptance status:** `blocked`
 
 **Independent scheduler slice:** The parent authorized continued feature delivery

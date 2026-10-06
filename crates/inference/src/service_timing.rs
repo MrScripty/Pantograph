@@ -104,7 +104,12 @@ impl<'a> SelectedTextServiceTimingAttempt<'a> {
             pending: None,
             record: Some(RuntimeServiceTimingAttempt {
                 attempt_id: uuid::Uuid::new_v4().to_string(),
-                execution_request_id: request.request_id.clone().unwrap_or_default(),
+                // Validation may reject the call after this guard is created.
+                // Never retain or normalize arbitrary caller identity payloads.
+                execution_request_id_digest: request
+                    .request_id
+                    .as_ref()
+                    .map(|id| blake3::hash(id.as_bytes()).to_hex().to_string()),
                 identity: RuntimeServiceTimingIdentity::Unknown { reason },
                 outcome: RuntimeServiceTimingOutcome::Abandoned,
                 phases: [
