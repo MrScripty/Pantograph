@@ -530,3 +530,18 @@ Diffusers 0.39.0 and production-loader-admitted 0.37.0 with a tiny random UNet.
 No pretrained model, GPU or desktop qualification follows. Strict affected-package
 Clippy and repository gates pass. PR56 import repair remains independently based
 on `ab7a1b4e`; parent owns reviews/publication. Cost was not measured.
+
+## 2026-10-06 — Resumed graph-authored denoising scheduler feature
+
+Parent froze the PR56 correctness repair for independent publication review and
+resumed the separate scheduler checkpoint `69e7a3b9`. The
+[scheduler control report](reports/2026-10-06-workflow-image-scheduler.md) records
+closed DDIM/Euler selection, real public-session/Pumas host routing and CPU native
+oracles without pretrained weights. Correctness repairs change no required public
+interface, so no commits from their frozen branch were mixed into this feature.
+A misleading shared Cargo cache run was excluded; a private target cleaned of all
+workspace artifacts passes 808 inference, 511 embedded, 75 contract and 916 service
+checks. The isolated native rerun passes all three actual CPU checks, strict five-package
+Clippy passes without suppression, and all nine no-download graphs pass. The
+resumption manifest preserves the cache diagnosis; the final manifest records
+actual completion and remote identities. No service-limit failure occurred. Parent owns independent review and integration.
