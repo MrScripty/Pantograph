@@ -191,3 +191,23 @@ temporary fixture uses lowercase `synthetic-bert-8` consistently in path and
 model identity; its display label and every committed weight/reference byte are
 unchanged. This fixture correction is separate from the confirmed production
 revision-loss and edge-paint defects, and does not qualify real-user discovery.
+
+## First repair's actual native result and desktop renderer correction
+
+[Run 37488222631](https://github.com/MrScripty/Pantograph/actions/runs/37488222631)
+executed repair source `0f8f8ed2f324f00f8238cabb3243389a547a7d47`, tree
+`eed585640386f2d4ac63a0018f0a1e55125433e5`. Official setup, feature audits and
+real native build/launch/save/reopen passed. Its screenshot no longer reports
+stale validation; it reports blocking diagnostics. The new edge assertion fails
+because the desktop canvas registers a second edge component under `src/`,
+which still has the old filter. This was an incomplete desktop repair, not a
+stale source/build. The assertion correctly stops before submission or output.
+
+The [third attempt's complete evidence](../evidence/native-desktop-cpu/reopened-graph-repair/README.md)
+preserves all 13 artifact members, masked job log, unchanged native screenshot,
+source patch, failing old-source regression and local passing checks. The desktop
+component now receives the same drop-shadow fix as the reusable package,
+preserving its insert-preview/drift overlays and reconnect controls. The native
+harness records real owner validation responses unchanged to diagnose the new
+blocking gate; it also saves edge geometry before assertions. A fresh native run
+must establish painting, successful validation, submission and actual CPU output.

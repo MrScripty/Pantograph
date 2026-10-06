@@ -54,6 +54,10 @@ export const config = {
     driver.on('exit', (code) => { if (!closing) throw new Error(`Native driver exited early: ${code}`); });
   },
   afterTest: async function (_test, _context, { passed }) {
+    if (evidence && globalThis.browser) {
+      writeFileSync(path.join(evidence, 'native-owner-validation.json'),
+        JSON.stringify(await browser.execute(() => window.__nativeCpuOwnerObservations || []), null, 2));
+    }
     if (!passed && evidence && globalThis.browser) {
       await browser.saveScreenshot(path.join(evidence, 'native-failure.png'));
       writeFileSync(path.join(evidence, 'native-failure.html'), await browser.getPageSource());

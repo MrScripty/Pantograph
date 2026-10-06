@@ -42,6 +42,26 @@ describe('actual native Tauri saved CPU embedding graph', () => {
     const fixture = JSON.parse(readFileSync(path.join(fixtureRoot, 'fixture.json'), 'utf8'));
     const graph = JSON.parse(readFileSync(path.join(fixtureRoot, 'graph.json'), 'utf8'));
     await $(selector('workbench-nav-graph')).waitForDisplayed({ timeout: 30000 });
+    // Observe the real owner responses without replacing commands, results or gates.
+    await browser.execute(() => {
+      const native = window.__TAURI_INTERNALS__;
+      const original = native.invoke.bind(native);
+      const commands = new Set(['get_execution_graph', 'current_graph_validation_summary',
+        'current_graph_validation_projection', 'refresh_current_graph_validation_summary',
+        'start_current_graph_validation_task']);
+      window.__nativeCpuOwnerObservations = [];
+      native.invoke = (command, args, ...rest) => {
+        const pending = original(command, args, ...rest);
+        if (!commands.has(command)) return pending;
+        return pending.then((response) => {
+          window.__nativeCpuOwnerObservations.push({ command, args, response });
+          return response;
+        }, (error) => {
+          window.__nativeCpuOwnerObservations.push({ command, args, error: String(error) });
+          throw error;
+        });
+      };
+    });
     const savedPath = await invoke('save_workflow', { name: 'Synthetic CPU Embedding Qualification', graph });
     const restored = await invoke('load_workflow', { path: savedPath });
     assert.deepEqual(restored.graph.nodes, graph.nodes);
@@ -64,13 +84,13 @@ describe('actual native Tauri saved CPU embedding graph', () => {
         return { id: edge.id, length: edge.getTotalLength(), width: bounds.width,
           height: bounds.height, stroke: style.stroke, filter: style.filter };
       }));
+    writeFileSync(path.join(evidence, 'native-rendered-edges.json'), JSON.stringify(renderedEdges, null, 2));
     assert.deepEqual(renderedEdges.map((edge) => edge.id).sort(), graph.edges.map((edge) => edge.id).sort());
     for (const edge of renderedEdges) {
       assert.ok(edge.length > 0 && edge.width > 0 && edge.height === 0, 'Aligned fixture edges must exercise zero-height geometry');
       assert.notEqual(edge.stroke, 'none');
       assert.match(edge.filter, /^drop-shadow\(/, 'Glow must avoid a zero-height objectBoundingBox filter region');
     }
-    writeFileSync(path.join(evidence, 'native-rendered-edges.json'), JSON.stringify(renderedEdges, null, 2));
     await browser.saveScreenshot(path.join(evidence, 'native-configured-graph.png'));
 
     // A seeded authored descriptor may require the normal visible update review

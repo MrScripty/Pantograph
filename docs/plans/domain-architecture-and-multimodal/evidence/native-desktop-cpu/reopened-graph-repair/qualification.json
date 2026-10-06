@@ -1,0 +1,21 @@
+{
+  "run_id": 37488222631,
+  "job_id": 112353753950,
+  "head": "0f8f8ed2f324f00f8238cabb3243389a547a7d47",
+  "tree": "eed585640386f2d4ac63a0018f0a1e55125433e5",
+  "artifact_id": 11424721900,
+  "artifact_zip_sha256": "e2d90ae07b9c0fc6fcfddcdcef3a24eec5c1463519768f4f44612f4c9b6011ab",
+  "conclusion": "failure",
+  "local_session_tests": 11,
+  "local_frontend_tests": 672,
+  "native_saved_reopened": true,
+  "native_rendered_wires": false,
+  "native_submit_gate": "Inference validation has blocking diagnostics",
+  "native_submission": false,
+  "native_cpu_output": false,
+  "cause": "Desktop canvas registers src/components/edges/ReconnectableEdge.svelte; repaired reusable package edge component is not its renderer. Native filter assertion correctly rejects unchanged desktop component.",
+  "limitations": [
+    "No native CPU output",
+    "No pretrained, GPU, real-user discovery or full production qualification"
+  ]
+}
