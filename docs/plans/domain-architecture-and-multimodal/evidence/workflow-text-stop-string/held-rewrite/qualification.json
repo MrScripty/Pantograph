@@ -1,0 +1,77 @@
+{
+  "local_branch": "fix/pr60-held-text-rewrite",
+  "publication_branch": "feat/workflow-text-stop-string",
+  "base_head": "1911983715155fc3927d0ebdfd0b94b851a58536",
+  "base_tree": "ffc25587ce0cf84f6565e08e36f050355aaa2b9c",
+  "fetched_main_head": "c75fa2379a730833709ea8976075bf17a117040f",
+  "fetched_main_tree": "6c8c4bb1cbed0527b58c1048ebf49fa0e243d56b",
+  "changed_source_sha256": {
+    "crates/inference/torch/autoregressive.py": "c1cd2d03ea1dce356858818020bfa4c70f74882fd995dbb6a7d404ddad3903e8",
+    "crates/inference/torch/tests/test_text_stop_strings.py": "43ab147ea523cc71e8d528a1ce0a8f955b3c8fe2d45806ca6aadd8a159b36d55"
+  },
+  "source_patch_sha256": "3a0f5e2af139f24e53afdf31d844b8805a2be9cd8bc04375e56812af8929263f",
+  "unchanged_cargo_sha256": {
+    "Cargo.toml": "c89d5d390b21f020c3c40586d06a7293f5703c324fed325724e69a4dc7b0987c",
+    "Cargo.lock": "79c6930a69db2dab90592058c092b4b86845dc988682c7f45ce19c9283733fe0"
+  },
+  "versions": {
+    "python": "3.12.3",
+    "torch": "2.14.1+cpu",
+    "transformers": "4.53.3"
+  },
+  "cargo_packages": [
+    "inference",
+    "pantograph-embedded-runtime",
+    "pantograph-inference-interface-contracts",
+    "pantograph-runtime-host-contracts",
+    "pantograph-workflow-service"
+  ],
+  "cargo_features": "inference/backend-pytorch,inference/backend-candle,inference/std-process,pantograph-embedded-runtime/backend-pytorch",
+  "environment": {
+    "ORT_SKIP_DOWNLOAD": "1",
+    "HF_HUB_OFFLINE": "1",
+    "TRANSFORMERS_OFFLINE": "1",
+    "cargo": "--locked --offline",
+    "LD_LIBRARY_PATH": "installed Python LIBDIR",
+    "XDG_CONFIG_HOME": "isolated writable test directory"
+  },
+  "effective_graph": {
+    "all_target_lines": 4705,
+    "inspected_before_build": true,
+    "ort": "load-dynamic",
+    "ort_sys": "disable-linking",
+    "download_binaries": false,
+    "pumas_revision": "26a84e323cae566a46a8f76bef48fa1010aed48b"
+  },
+  "results": {
+    "python_methods": 78,
+    "new_streaming_methods": 5,
+    "rust_non_doctest": 2457,
+    "rust_doctest": 1,
+    "existing_ignored": 6,
+    "strict_five_package_all_target_clippy": "pass",
+    "rust_format": "pass",
+    "python_compile": "pass",
+    "critical_antipatterns": "pass",
+    "scheduler_boundary": "pass",
+    "frontend": "unchanged; original 19119837 results historical, not rerun"
+  },
+  "review": {
+    "finding": "PR60 discussion_r4195245527 independently reproduced at frozen source",
+    "parent_verification": "pending",
+    "fresh_hosted_ci": "pending",
+    "earlier_randomized_scope": "50000 monotonic cumulative concatenation checks; held-suffix rewrites not covered"
+  },
+  "limits": [
+    "controlled fixed Torch CPU forwards and controlled cumulative tokenizer",
+    "worker entry tests select actual functions through AST; no full worker import",
+    "public graph and host tests retain controlled backend output",
+    "no production loader, pretrained quality, GPU, ONNX execution or desktop qualification"
+  ],
+  "preserved_source": {
+    "embedding": "2961b1480c103ec242c6359a45ceee6bb5d999f1",
+    "frozen_stop": "1911983715155fc3927d0ebdfd0b94b851a58536",
+    "original_stop_evidence_files_verified_unchanged": 8
+  },
+  "source_patch_file": "source.patch.gz (SHA-256 applies to decompressed patch)"
+}

@@ -4,7 +4,23 @@
 
 **Current phase:** M3 owner/client consumer source is implemented. Native CPU sampling and the supported inference/embedded host route are qualified separately; the desktop-authored dependent text-to-image graph and full review remain open.
 
-**Next slice:** Graph-authored text seed is implemented in frozen candidate
+**Next slice:** The user-authorized bounded M2 text stop-string successor is
+implemented on `feat/workflow-text-stop-string` from accepted seed/precision
+`fae339bdb1eb681a01ea983f1abe0f2f48916349`, which includes main `d61b86fc`.
+The [stop-string report](reports/2026-10-06-workflow-text-stop-string.md) records
+exact graph text, omission/default layering, generated-only matching, marker
+withholding, authored-minimum refusal and conditional backend support. Controlled
+CPU and public graph/host checks plus independent medium review decide this
+bounded slice; it extends M2 descriptor/validation work and was not an explicit
+numbered post-seed milestone. Parent candidate review/publication remains separate.
+
+PR60's held-text rewrite finding is repaired in a narrow successor of frozen
+`19119837`; the [same report](reports/2026-10-06-workflow-text-stop-string.md#pr60-held-text-rewrite-successor)
+defines immutable emitted-prefix and suffix-only rewrite semantics, including
+crossing-boundary marker refusal and EOS/budget flushing. Parent verification and
+fresh hosted CI remain separate; chat graph work is paused for this priority.
+
+Graph-authored text seed is implemented in frozen candidate
 `6cf549dd`; see the [seed report](reports/2026-10-06-workflow-text-seed.md). Its
 separate [desktop precision successor](reports/2026-10-06-text-seed-desktop-precision.md)
 validates authored seeds before numeric persistence and blocks unsafe execution,

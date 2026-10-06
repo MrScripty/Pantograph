@@ -47,6 +47,8 @@ def worker_text_functions():
                  "RepetitionPenaltyNumericsError": autoregressive.RepetitionPenaltyNumericsError,
                  "MinimumNewTokensError": autoregressive.MinimumNewTokensError,
                  "SeedSamplingError": autoregressive.SeedSamplingError,
+                 "StopStringError": autoregressive.StopStringError,
+                 "_resolve_stop_strings": autoregressive._resolve_stop_strings,
                  "_seeded_sampling": autoregressive._seeded_sampling,
                  "_generate_native_checked": autoregressive._generate_native_checked,
                  "_resolve_min_new_tokens": autoregressive._resolve_min_new_tokens,
