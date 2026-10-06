@@ -45,9 +45,12 @@ historical checkpoint records its two suite failures; the descriptor repair
 arrives from main. Owner-authorized resumption produced the
 [tested integration successor and draft review packet](reports/2026-10-06-runtime-owner-integration-successor.md):
 canonical backend registration and real-owner abandoned warmup cleanup now pass
-all affected library/host suites. The unrelated retired Pumas wire fixture remains
-reported. Parent coordinates PR publication, review and merge; native GPU,
-exact-model and GTK qualification limits remain unchanged.
+all affected library/host suites. The remaining model-contract failure is closed
+by the [Pumas wire/projection qualification](reports/2026-10-06-pumas-wire-projection-qualification.md).
+The producer version field remains current; the stale test had bypassed the
+existing typed host adapter. Full mixed-backend inference and embedded suites now
+pass. Parent coordinates PR publication, review and merge; native GPU, exact-model
+and GTK qualification limits remain unchanged.
 
 **Acceptance status:** `blocked`
 
