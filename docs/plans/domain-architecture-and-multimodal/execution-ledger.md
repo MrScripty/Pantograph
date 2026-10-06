@@ -529,3 +529,15 @@ Final source qualification passes 806 inference, 503 embedded and 142 registry
 checks with strict all-target mixed-backend Clippy. Config/frontend source remains
 unchanged from its passing qualification. The independent repair branch is
 published normally; the parent alone updates PR56 and replies/resolves reviews.
+
+## 2026-10-06 — PR56 config fixture contract correction
+
+The parent's re-review record 4191994790 identifies malformed startup-domain keys
+and incomplete AppConfig fields in the controlled handler regression. The
+isolated successor of `13d24e8` uses the actual registry startup JSON and a strict
+complete-payload save expectation. A new rejection regression fails against the
+old mock and passes after repair; all three focused handler tests, TypeScript,
+formatting, critical/accessibility gates, lint and traceability pass. Production
+code is unchanged. Parent retains PR56 advancement; the combined image-controls
+candidate is preserved independently. See the existing
+[checkpoint report](reports/2026-10-06-pr56-correctness-review-checkpoint.md).

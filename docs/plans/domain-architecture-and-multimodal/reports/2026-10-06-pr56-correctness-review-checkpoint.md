@@ -70,6 +70,25 @@ VRAM-only can-acquire was rejected by unknown Candle RAM. Their repaired runs
 pass in the full suites. This extends the recovery checkpoint rather than
 claiming that its narrower tests had covered these cases.
 
+## Config fixture re-review correction
+
+Comment 4191994790 correctly identifies invalid startup-domain keys and an
+incomplete config in the controlled external-connect regression. The isolated
+successor of `13d24e898abd4175eb799ed310d1d275537880e9` reads the registry's actual
+`startup_shared_resource_config.json`, supplies the frontend-required AppConfig
+fields, and compares the complete save payload before recording success. The
+mock expects preserved loaded settings plus the requested connection changes;
+it does not implement or claim full Rust deserialization validation.
+
+A new regression fails against the old permissive mock with “Missing expected
+rejection.” The corrected boundary rejects the original `id`/`capacity_bytes`
+domain shape and omission of each required frontend config field. All three
+focused actual-handler tests pass. TypeScript checking, Rust formatting, the
+critical gate, Svelte accessibility with 27 tests, lint and source-range
+traceability pass. This test-only correction does not rerun or expand native
+GTK/ONNX qualification. The branch is published separately for the parent's
+PR56 coordination; the combined image-controls candidate remains preserved.
+
 Raw evidence and preserved patches are under `/workspace/qualification-evidence/`
 with prefix `pr56-review-`. No pretrained-model, GPU, GTK/WebKit, native ONNX model
 execution or cross-platform child/config qualification is claimed. The actual
