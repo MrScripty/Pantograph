@@ -1,0 +1,17 @@
+{
+  "run_id": 37490528758,
+  "job_id": 112361755315,
+  "head": "6eb84e949986799d70c5e7949a470cfb3bf86a52",
+  "tree": "41d750d5dd9419519e4ab68a34b95ff539c8a78c",
+  "artifact_id": 11425847888,
+  "artifact_zip_sha256": "7847a9060a1b9ec4bc1e74b9e3cdb1866596be9fb323d5f93b3f6260484b9a33",
+  "conclusion": "failure",
+  "native_launch": true,
+  "native_save_reopen": true,
+  "native_wires_visible": true,
+  "native_edge_assertions_passed": true,
+  "native_validation_reason": "Inference validation has blocking diagnostics",
+  "native_submission": false,
+  "native_cpu_output": false,
+  "owner_observation_capture": "empty; attempted invoke replacement ineffective because official Tauri invoke is read-only"
+}

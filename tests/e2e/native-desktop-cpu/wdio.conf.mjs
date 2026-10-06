@@ -55,8 +55,16 @@ export const config = {
   },
   afterTest: async function (_test, _context, { passed }) {
     if (evidence && globalThis.browser) {
-      writeFileSync(path.join(evidence, 'native-owner-validation.json'),
-        JSON.stringify(await browser.execute(() => window.__nativeCpuOwnerObservations || []), null, 2));
+      const events = await browser.execute(() => window.__nativeCpuValidationEvents || []);
+      writeFileSync(path.join(evidence, 'native-validation-events.json'), JSON.stringify(events, null, 2));
+      const active = events.at(-1);
+      if (active) {
+        const projection = await browser.executeAsync((request, done) => {
+          window.__TAURI_INTERNALS__.invoke('current_graph_validation_projection', { request })
+            .then((response) => done({ response })).catch((error) => done({ error: String(error) }));
+        }, { graph_session_id: active.graph_session_id, graph_revision: active.graph_revision });
+        writeFileSync(path.join(evidence, 'native-owner-validation.json'), JSON.stringify(projection, null, 2));
+      }
     }
     if (!passed && evidence && globalThis.browser) {
       await browser.saveScreenshot(path.join(evidence, 'native-failure.png'));

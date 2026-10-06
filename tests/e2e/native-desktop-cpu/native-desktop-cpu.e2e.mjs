@@ -42,26 +42,16 @@ describe('actual native Tauri saved CPU embedding graph', () => {
     const fixture = JSON.parse(readFileSync(path.join(fixtureRoot, 'fixture.json'), 'utf8'));
     const graph = JSON.parse(readFileSync(path.join(fixtureRoot, 'graph.json'), 'utf8'));
     await $(selector('workbench-nav-graph')).waitForDisplayed({ timeout: 30000 });
-    // Observe the real owner responses without replacing commands, results or gates.
-    await browser.execute(() => {
+    // Subscribe through the supported native event API; invoke is read-only.
+    const validationHandler = await browser.execute(() => {
       const native = window.__TAURI_INTERNALS__;
-      const original = native.invoke.bind(native);
-      const commands = new Set(['get_execution_graph', 'current_graph_validation_summary',
-        'current_graph_validation_projection', 'refresh_current_graph_validation_summary',
-        'start_current_graph_validation_task']);
-      window.__nativeCpuOwnerObservations = [];
-      native.invoke = (command, args, ...rest) => {
-        const pending = original(command, args, ...rest);
-        if (!commands.has(command)) return pending;
-        return pending.then((response) => {
-          window.__nativeCpuOwnerObservations.push({ command, args, response });
-          return response;
-        }, (error) => {
-          window.__nativeCpuOwnerObservations.push({ command, args, error: String(error) });
-          throw error;
-        });
-      };
+      window.__nativeCpuValidationEvents = [];
+      return native.transformCallback((event) => {
+        window.__nativeCpuValidationEvents.push(event.payload.event);
+      });
     });
+    await invoke('plugin:event|listen', { event: 'workflow://graph-validation/lifecycle-event',
+      target: { kind: 'Any' }, handler: validationHandler });
     const savedPath = await invoke('save_workflow', { name: 'Synthetic CPU Embedding Qualification', graph });
     const restored = await invoke('load_workflow', { path: savedPath });
     assert.deepEqual(restored.graph.nodes, graph.nodes);

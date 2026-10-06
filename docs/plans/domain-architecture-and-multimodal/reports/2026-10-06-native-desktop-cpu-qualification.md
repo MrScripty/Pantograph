@@ -219,3 +219,28 @@ supplies `embedding.text`, `embedding.one-text` and `run_scoped`, using the
 controlled embedding test's operation/shape and the existing canonical
 cancellation mode. This changes fixture authorship only; no validation rule is
 weakened and native owner results still decide acceptance.
+
+## Native wire result and descriptor availability checkpoint
+
+Run `37490528758` at `6eb84e949986799d70c5e7949a470cfb3bf86a52` visibly paints
+both native wires and passes their zero-height geometry/drop-shadow assertions.
+Submission remains blocked by the old fixture's missing runtime context. The
+bounded production resolution check reproduces exactly that diagnostic and
+accepts the corrected fixture request, with no resolution diagnostics.
+
+Run `37490714747` at `ef2d0df6b0c78adf8aa884637efec9e8d08b4381`, tree
+`9eb99c5b45c81ff9e84592e08e50986b0aeb6038`, passes native setup, build, launch,
+save/reopen and edge assertions, then fails the actual Submit gate with
+“Inference descriptor is unavailable.” No scheduler submission or CPU output is
+qualified. The [complete fourth/fifth attempt evidence](../evidence/native-desktop-cpu/desktop-edge-context/README.md)
+preserves both 17-member artifacts, original screenshots, source identities,
+masked logs and bounded diagnostics.
+
+The real Pumas owner probe on the same isolated fixture reports a valid HF
+directory, selected artifact `main`, embedding task evidence and accepted Candle
+backend hints; it does not indicate missing or invalid model setup. Further
+descriptor availability diagnosis is required at the native owner boundary.
+Tauri's official `invoke` is read-only, so the attempted capture produced empty
+arrays. The successor harness instead subscribes to the supported validation
+lifecycle event and reads the exact session/revision's current projection through
+real IPC. It changes no validation result, runtime registry or submission gate.

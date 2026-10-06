@@ -1,0 +1,17 @@
+{
+  "run_id": 37490714747,
+  "job_id": 112362401585,
+  "head": "ef2d0df6b0c78adf8aa884637efec9e8d08b4381",
+  "tree": "9eb99c5b45c81ff9e84592e08e50986b0aeb6038",
+  "artifact_id": 11426082322,
+  "artifact_zip_sha256": "6aa84f4f339e754bb9c9d27fc72612beb1158406022a949c430ec5882c32244f",
+  "conclusion": "failure",
+  "native_launch": true,
+  "native_save_reopen": true,
+  "native_wires_visible": true,
+  "native_edge_assertions_passed": true,
+  "native_validation_reason": "Inference descriptor is unavailable",
+  "native_submission": false,
+  "native_cpu_output": false,
+  "owner_observation_capture": "empty; attempted invoke replacement ineffective because official Tauri invoke is read-only"
+}

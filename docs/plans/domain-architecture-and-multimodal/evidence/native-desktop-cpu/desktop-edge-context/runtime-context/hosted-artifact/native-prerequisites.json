@@ -1,0 +1,21 @@
+{
+  "platform": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.39",
+  "commands": {
+    "pkg-config": "/usr/bin/pkg-config",
+    "WebKitWebDriver": "/usr/bin/WebKitWebDriver",
+    "Xvfb": "/usr/bin/Xvfb",
+    "xvfb-run": "/usr/bin/xvfb-run",
+    "tauri-driver": "/home/runner/.cargo/bin/tauri-driver",
+    "protoc": "/usr/bin/protoc"
+  },
+  "libraries": {
+    "gtk+-3.0": "3.24.41",
+    "webkit2gtk-4.1": "2.52.6",
+    "javascriptcoregtk-4.1": "2.52.6",
+    "libsoup-3.0": "3.4.4"
+  },
+  "missing": [],
+  "admitted": true,
+  "policy": "authorized official runner dependency setup allowed; no security changes or access-denial workaround",
+  "qualification": "not run; availability probe is not desktop/CPU graph acceptance"
+}
