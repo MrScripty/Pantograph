@@ -1,0 +1,27 @@
+{
+  "frozen_pr_head": "6eceb28997fe4c8d0ef6400e598f093d2bffa252",
+  "frozen_pr_tree": "5e16ca5f33f21fd2b46d8c51067fe8da54418423",
+  "tested_successor": "91d2657a57a5226448507c1b5e8b205dc1112a9c",
+  "tested_successor_tree": "14dae3e1c9f5c5da8e75abe314640016a51caa5c",
+  "contract": "Seed forwarded on public chat edge; PyTorch mapped, mock/other requires_backend_support. Correct stale mock test only; assert forwarded seed 42 and backend key mock.",
+  "implementation_delta": [
+    "crates/node-engine/src/core_executor/inference_tests.rs",
+    ".github/workflows/quality-gates.yml"
+  ],
+  "contract_evidence": [
+    "crates/inference/src/gateway.rs:3009",
+    "crates/inference/src/gateway.rs:3080",
+    "crates/inference/src/gateway_tests.rs:2504",
+    "crates/inference/src/gateway_tests.rs:6115",
+    "docs/plans/domain-architecture-and-multimodal/reports/2026-10-06-workflow-text-seed.md"
+  ],
+  "accepted_contract_history": "6cf549dd04933bd49a15b4527732d6a5db6e3c71",
+  "parent_independent_confirmation": "Parent reports independent reviewer confirms the same contract and exact narrow assertions in this successor. Fresh final-head review remains parent-owned.",
+  "preserved_main_reproduction": "../workflow-chat-main-integration/main-seed-baseline.log.gz",
+  "preserved_expanded_failure": "../workflow-chat-main-integration/expanded-rust-tests-qualified.log.gz",
+  "ORT_SKIP_DOWNLOAD": "1",
+  "download_binaries_effective": false,
+  "test_assertion_commit": "cf1be8cee288968c1e67601d75458c4ef7720dcd",
+  "test_assertion_tree": "25ea23077a81a81d219d153bb2822d0fb7e9c7ad",
+  "ci_contract": "Add exact seed capture test to existing feature-enabled embedding capture loop. Keep exact-name discovery and exactly-one-passed guards for all three tests; no full-suite duplication. ORT_SKIP_DOWNLOAD=1 defensively set within this block. Permissions/pins unchanged."
+}
