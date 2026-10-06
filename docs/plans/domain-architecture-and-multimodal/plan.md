@@ -4,7 +4,13 @@
 
 **Current phase:** M3 owner/client consumer source is implemented. Native CPU sampling and the supported inference/embedded host route are qualified separately; the desktop-authored dependent text-to-image graph and full review remain open.
 
-**Next slice:** Qualify the bounded history-preserving integration of service timing repair `6bb96e26`, CUDA owner observations `4f189dd9`, and approved main `4153772634269e342a8b0cca797f1cd6716f18a5`. Preserve the approved Pumas pin, no-download ORT contract, full peak accounting and explicit unavailable native GPU/RAM facts. Parent owns review and PR actions; no subsequent feature is started.
+**Next slice:** Complete exact disposition of the five PR56 correctness review
+comments before another integration push. The [isolated repair checkpoint](reports/2026-10-06-pr56-correctness-review-checkpoint.md)
+qualifies four reproducible repairs and pinned Tokio child-lifecycle counterevidence.
+Full comment reads returned Forbidden; exact disposal remains blocked on supplied
+bodies. Image scheduler work stays paused on its separate local feature checkpoint.
+Parent owns PR/review/merge actions. Preserve full peaks, custody, uncertainty,
+known zero, source/instance fencing and the approved no-download dependency contract.
 
 **Prior native qualification:** Parent reviews frozen text-control source `a8c6970f` and its separate [exact-head native qualification route](reports/2026-10-05-text-control-native-qualification-route.md). Earlier local native host/workflow attempts failed before execution: the pinned ONNX dependency download returned HTTP 403, and no-download builds lacked linker symbols. Subsequent [hosted run 37360010163, job 111931961024](https://github.com/MrScripty/Pantograph/actions/runs/37360010163/job/111931961024) at exact head `815bceffbb0d877644184b71be6584f586be2e6e` passed 145 Rust tests across eight groups and six actual CPU sampler tests; all individual quality checks and all three workflows passed at that head. The focused native host/workflow qualification is complete for that head. Next qualify current owner-produced Pumas identities/facts/load targets/devices and the desktop-authored dependent text-to-image graph (DA-03). Frozen temperature `e0293ebf`, CI correction `fddae90d`, fixture `174c1950`, top-k `3bf3eb45` and composition `60197971` remain unchanged with their stated qualification requirements. Parent holds publication for owner confirmation and integrates review corrections without rewriting history. Current Pumas pin: `26a84e323cae566a46a8f76bef48fa1010aed48b`. DA-03/DA-07 remain open.
 

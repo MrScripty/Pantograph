@@ -501,3 +501,18 @@ PyTorch shutdown must acknowledge cleanup even after failed load erased metadata
 Existing peak task claims/custody remain fully charged. Portable owner/config
 fixtures qualify the logical accounting; native GUI/GPU execution and other
 producers remain unqualified. No previous branch rewrite or PR/review creation.
+
+## 2026-10-06 — Isolated PR56 correctness review checkpoint
+
+Parent paused unrelated image scheduler work for five PR56 review findings.
+The [saved repair checkpoint](reports/2026-10-06-pr56-correctness-review-checkpoint.md)
+records four reproducible correctness defects and actual child-process evidence
+contradicting the reaped-child summary. Source `5da09171` is based on the published
+import-only integration `b3c58756`; feature histories remain separate. Full comment
+body reads were Forbidden, with no credential or access-route changes. Exact
+comment disposal and integration publication remain blocked on those bodies.
+Test successor `a92f67ff` passes all affected suites: 805 inference, 503 embedded,
+141 registry and 14 config, plus all 661 frontend assertions. Strict all-target
+Clippy and no-download/gate checks pass. The first combined run exposed six
+zero-probe fixture assumptions, corrected without weakening uncertainty checks.
+No native desktop/GPU/model execution claim is added.
