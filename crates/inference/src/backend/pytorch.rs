@@ -74,7 +74,8 @@ mod pytorch_worker_image_contract;
 #[path = "pytorch_text_job.rs"]
 mod pytorch_text_job;
 
-const ALLOWED_TRANSFORMERS_GENERATE_KWARGS: &[&str] = &["top_k"];
+const ALLOWED_TRANSFORMERS_GENERATE_KWARGS: &[&str] =
+    &["top_k", "repetition_penalty", "min_new_tokens"];
 
 #[path = "pytorch_cuda_inventory.rs"]
 mod cuda_inventory;
@@ -114,9 +115,11 @@ pub struct PyTorchTextGenerationRequest {
     pub prompt: String,
     pub system_prompt: Option<String>,
     pub max_tokens: i64,
+    pub min_new_tokens: Option<u32>,
     pub temperature: f64,
     pub top_p: f64,
     pub top_k: Option<u32>,
+    pub repetition_penalty: Option<f32>,
     pub masked_prompt_json: Option<String>,
 }
 
@@ -1970,6 +1973,43 @@ impl PyTorchBackend {
                 "PyTorch worker generate_text envelope contains unsupported transformers_kwargs key '{unsupported_key}'"
             )));
         }
+        if let Some(value) = envelope
+            .payload
+            .transformers_kwargs
+            .get("repetition_penalty")
+        {
+            if !value
+                .as_f64()
+                .is_some_and(|value| value.is_finite() && value > 0.0)
+            {
+                return Err(BackendError::Config(
+                    "repetition_penalty must be positive and finite".to_string(),
+                ));
+            }
+        }
+        if let Some(value) = envelope.payload.transformers_kwargs.get("min_new_tokens") {
+            let minimum = value
+                .as_u64()
+                .and_then(|value| u32::try_from(value).ok())
+                .ok_or_else(|| {
+                    BackendError::Config(
+                        "min_new_tokens must be an integer between 0 and 4294967295".into(),
+                    )
+                })?;
+            if u32::try_from(envelope.payload.max_tokens)
+                .ok()
+                .is_none_or(|maximum| maximum == 0)
+            {
+                return Err(BackendError::Config(
+                    "max_tokens must be a positive u32 when min_new_tokens is authored".into(),
+                ));
+            }
+            if i64::from(minimum) > envelope.payload.max_tokens {
+                return Err(BackendError::Config(
+                    "min_new_tokens exceeds effective max_new_tokens".into(),
+                ));
+            }
+        }
         Ok(())
     }
 
@@ -2111,25 +2151,33 @@ impl PyTorchBackend {
         Ok(envelope)
     }
 
-    fn generate_text_request(
-        prompt: String,
-        system_prompt: Option<String>,
-        max_tokens: i64,
-        temperature: f64,
-        top_p: f64,
-        top_k: Option<u32>,
-        masked_prompt_json: Option<String>,
-    ) -> PyTorchGenerateTextRequest {
+    fn generate_text_request(request: PyTorchTextGenerationRequest) -> PyTorchGenerateTextRequest {
+        let mut transformers_kwargs = BTreeMap::new();
+        if let Some(min_new_tokens) = request.min_new_tokens {
+            transformers_kwargs.insert(
+                "min_new_tokens".to_string(),
+                serde_json::json!(min_new_tokens),
+            );
+        }
+        if let Some(top_k) = request.top_k {
+            transformers_kwargs.insert("top_k".to_string(), serde_json::json!(top_k));
+        }
+        if let Some(repetition_penalty) = request.repetition_penalty {
+            transformers_kwargs.insert(
+                "repetition_penalty".to_string(),
+                serde_json::json!(repetition_penalty),
+            );
+        }
         PyTorchGenerateTextRequest {
-            prompt,
-            system_prompt,
-            max_tokens,
-            temperature,
-            top_p,
-            masked_prompt_json,
+            prompt: request.prompt,
+            system_prompt: request.system_prompt,
+            max_tokens: request.max_tokens,
+            temperature: request.temperature,
+            top_p: request.top_p,
+            masked_prompt_json: request.masked_prompt_json,
             denoising_steps: None,
             block_length: None,
-            transformers_kwargs: Self::generate_text_transformers_kwargs(top_k),
+            transformers_kwargs,
         }
     }
 
@@ -2138,27 +2186,7 @@ impl PyTorchBackend {
         operation: PyTorchWorkerOperation,
         request: PyTorchTextGenerationRequest,
     ) -> PyTorchWorkerEnvelope<PyTorchGenerateTextRequest> {
-        PyTorchWorkerEnvelope::new(
-            request_id,
-            operation,
-            Self::generate_text_request(
-                request.prompt,
-                request.system_prompt,
-                request.max_tokens,
-                request.temperature,
-                request.top_p,
-                request.top_k,
-                request.masked_prompt_json,
-            ),
-        )
-    }
-
-    fn generate_text_transformers_kwargs(top_k: Option<u32>) -> BTreeMap<String, Value> {
-        let mut kwargs = BTreeMap::new();
-        if let Some(top_k) = top_k {
-            kwargs.insert("top_k".to_string(), serde_json::json!(top_k));
-        }
-        kwargs
+        PyTorchWorkerEnvelope::new(request_id, operation, Self::generate_text_request(request))
     }
 
     #[cfg(test)]
@@ -2518,9 +2546,11 @@ impl PyTorchBackend {
             prompt,
             system_prompt,
             max_tokens,
+            min_new_tokens: None,
             temperature,
             top_p,
             top_k: None,
+            repetition_penalty: None,
             masked_prompt_json,
         })
         .await
@@ -2615,9 +2645,11 @@ impl PyTorchBackend {
             prompt,
             system_prompt,
             max_tokens,
+            min_new_tokens: None,
             temperature,
             top_p,
             top_k: None,
+            repetition_penalty: None,
             masked_prompt_json,
         })
     }
@@ -2875,7 +2907,36 @@ impl InferenceBackend for PyTorchBackend {
         let max_tokens = request
             .get("max_tokens")
             .and_then(|v| v.as_i64())
-            .unwrap_or(512);
+            .unwrap_or(i64::from(crate::constants::pytorch::DEFAULT_MAX_NEW_TOKENS));
+        let min_new_tokens = request
+            .get("min_new_tokens")
+            .map(|value| {
+                value
+                    .as_u64()
+                    .and_then(|value| u32::try_from(value).ok())
+                    .ok_or_else(|| {
+                        BackendError::Config(
+                            "min_new_tokens must be an integer between 0 and 4294967295".into(),
+                        )
+                    })
+            })
+            .transpose()?;
+        if min_new_tokens.is_some_and(|minimum| i64::from(minimum) > max_tokens) {
+            return Err(BackendError::Config(
+                "min_new_tokens exceeds effective max_new_tokens".into(),
+            ));
+        }
+        if min_new_tokens.is_some()
+            && request.get("max_tokens").is_some_and(|value| {
+                !value
+                    .as_u64()
+                    .is_some_and(|maximum| maximum > 0 && maximum <= u64::from(u32::MAX))
+            })
+        {
+            return Err(BackendError::Config(
+                "max_tokens must be a positive u32 when min_new_tokens is authored".into(),
+            ));
+        }
         let temperature = request
             .get("temperature")
             .and_then(|v| v.as_f64())
@@ -2886,14 +2947,29 @@ impl InferenceBackend for PyTorchBackend {
             .and_then(|value| value.as_u64())
             .and_then(|value| u32::try_from(value).ok());
 
+        let repetition_penalty: Option<f32> = serde_json::from_value(
+            request
+                .get("repetition_penalty")
+                .cloned()
+                .unwrap_or(Value::Null),
+        )
+        .map_err(|error| BackendError::Config(format!("Invalid repetition_penalty: {error}")))?;
+        if repetition_penalty.is_some_and(|value| !value.is_finite() || value <= 0.0) {
+            return Err(BackendError::Config(
+                "repetition_penalty must be positive and finite".to_string(),
+            ));
+        }
+
         Ok(
             self.generate_stream_with_top_k(PyTorchTextGenerationRequest {
                 prompt,
                 system_prompt,
                 max_tokens,
+                min_new_tokens,
                 temperature,
                 top_p,
                 top_k,
+                repetition_penalty,
                 masked_prompt_json: None,
             }),
         )

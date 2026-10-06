@@ -76,8 +76,12 @@ block_diffusion._generate_dllm_masked_streaming = lambda *args, **kwargs: iter((
 sys.modules["block_diffusion"] = block_diffusion
 
 autoregressive = types.ModuleType("autoregressive")
+autoregressive.RepetitionPenaltyNumericsError = ValueError
+autoregressive.MinimumNewTokensError = ValueError
+autoregressive._resolve_min_new_tokens = lambda model, authored, maximum: authored or 0
 for attr in [
     "_generate_autoregressive",
+    "_generate_native_checked",
     "_continue_sdar_cached",
     "_generate_sdar_cached",
 ]:
@@ -2674,9 +2678,11 @@ fn test_pytorch_temperature_keeps_zero_and_finite_f32_range_in_worker_envelopes(
                     prompt: "Explain adapters.".into(),
                     system_prompt: None,
                     max_tokens: 3,
+                    min_new_tokens: None,
                     temperature,
                     top_p: 1.0,
                     top_k: Some(0),
+                    repetition_penalty: None,
                     masked_prompt_json: None,
                 },
             );
@@ -2726,9 +2732,11 @@ fn test_pytorch_top_p_preserves_unit_interval_in_generate_and_stream_envelopes()
                         prompt: "Explain adapters.".into(),
                         system_prompt: None,
                         max_tokens: 2,
+                        min_new_tokens: None,
                         temperature,
                         top_p,
                         top_k: Some(0),
+                        repetition_penalty: None,
                         masked_prompt_json: None,
                     },
                 );
@@ -2763,18 +2771,80 @@ fn test_pytorch_top_p_preserves_unit_interval_in_generate_and_stream_envelopes()
         }
     }
 }
+#[test]
+fn test_pytorch_repetition_penalty_preserves_positive_values_in_generate_and_stream_envelopes() {
+    for repetition_penalty in [0.5_f32, 1.0, 1.2] {
+        for temperature in [0.0, 0.7] {
+            for operation in [
+                PyTorchWorkerOperation::GenerateText,
+                PyTorchWorkerOperation::GenerateTextStream,
+            ] {
+                let envelope = PyTorchBackend::generate_text_envelope(
+                    "req-top-p",
+                    operation,
+                    PyTorchTextGenerationRequest {
+                        prompt: "Explain adapters.".into(),
+                        system_prompt: None,
+                        max_tokens: 2,
+                        min_new_tokens: None,
+                        temperature,
+                        top_p: 0.7,
+                        top_k: Some(0),
+                        repetition_penalty: Some(repetition_penalty),
+                        masked_prompt_json: None,
+                    },
+                );
+                match operation {
+                    PyTorchWorkerOperation::GenerateText => {
+                        PyTorchBackend::validate_generate_text_envelope(&envelope).unwrap()
+                    }
+                    PyTorchWorkerOperation::GenerateTextStream => {
+                        PyTorchBackend::validate_generate_text_stream_envelope(&envelope).unwrap()
+                    }
+                    _ => unreachable!(),
+                }
+                assert_eq!(
+                    envelope.payload.transformers_kwargs["repetition_penalty"],
+                    serde_json::json!(repetition_penalty)
+                );
+                assert_eq!(
+                    serde_json::to_value(&envelope).unwrap()["payload"]["transformers_kwargs"]
+                        ["repetition_penalty"],
+                    serde_json::json!(repetition_penalty)
+                );
+                let options = GenerationOptions {
+                    sampling: SamplingGenerationOptions {
+                        repetition_penalty: Some(repetition_penalty),
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                };
+                let mapping = PyTorchBackend::transformers_generation_option_mapping(&options);
+                assert!(mapping
+                    .diagnostics
+                    .iter()
+                    .any(
+                        |diagnostic| diagnostic.option_path == "sampling.repetition_penalty"
+                            && diagnostic.state == OptionSupportState::Honored
+                    ));
+            }
+        }
+    }
+}
 
 #[test]
 fn test_pytorch_generate_text_request_threads_top_k_as_transformers_kwarg() {
-    let request = PyTorchBackend::generate_text_request(
-        "Explain adapters.".to_string(),
-        Some("Be precise.".to_string()),
-        48,
-        0.3,
-        0.9,
-        Some(20),
-        None,
-    );
+    let request = PyTorchBackend::generate_text_request(PyTorchTextGenerationRequest {
+        prompt: "Explain adapters.".to_string(),
+        system_prompt: Some("Be precise.".to_string()),
+        max_tokens: 48,
+        min_new_tokens: None,
+        temperature: 0.3,
+        top_p: 0.9,
+        top_k: Some(20),
+        repetition_penalty: None,
+        masked_prompt_json: None,
+    });
 
     assert_eq!(request.transformers_kwargs["top_k"], serde_json::json!(20));
     assert_eq!(request.prompt, "Explain adapters.");
@@ -2790,9 +2860,11 @@ fn test_pytorch_generate_text_envelopes_thread_top_k_for_generate_and_stream() {
             prompt: "Explain adapters.".to_string(),
             system_prompt: Some("Be precise.".to_string()),
             max_tokens: 48,
+            min_new_tokens: None,
             temperature: 0.3,
             top_p: 0.9,
             top_k: Some(33),
+            repetition_penalty: None,
             masked_prompt_json: None,
         },
     );
@@ -2803,9 +2875,11 @@ fn test_pytorch_generate_text_envelopes_thread_top_k_for_generate_and_stream() {
             prompt: "Explain adapters.".to_string(),
             system_prompt: Some("Be precise.".to_string()),
             max_tokens: 48,
+            min_new_tokens: None,
             temperature: 0.3,
             top_p: 0.9,
             top_k: Some(33),
+            repetition_penalty: None,
             masked_prompt_json: None,
         },
     );
@@ -2838,9 +2912,11 @@ fn test_pytorch_generate_text_top_k_keeps_zero_and_u32_max_in_worker_envelopes()
                     prompt: "Explain adapters.".into(),
                     system_prompt: Some("Be precise.".into()),
                     max_tokens: 48,
+                    min_new_tokens: None,
                     temperature: 0.3,
                     top_p: 0.9,
                     top_k: Some(top_k),
+                    repetition_penalty: None,
                     masked_prompt_json: None,
                 },
             );
@@ -2875,9 +2951,11 @@ fn test_pytorch_generate_text_envelope_rejects_unscoped_transformers_kwargs() {
             prompt: "Explain adapters.".to_string(),
             system_prompt: None,
             max_tokens: 48,
+            min_new_tokens: None,
             temperature: 0.3,
             top_p: 0.9,
             top_k: None,
+            repetition_penalty: None,
             masked_prompt_json: None,
         },
     );
@@ -2904,9 +2982,11 @@ fn test_pytorch_generate_text_stream_envelope_rejects_policy_transformers_kwargs
             prompt: "Explain adapters.".to_string(),
             system_prompt: None,
             max_tokens: 48,
+            min_new_tokens: None,
             temperature: 0.3,
             top_p: 0.9,
             top_k: None,
+            repetition_penalty: None,
             masked_prompt_json: None,
         },
     );
@@ -2954,15 +3034,17 @@ fn test_python_worker_contract_rejects_additive_backend_kwargs() {
 
 #[test]
 fn test_pytorch_generate_text_request_omits_absent_top_k_kwarg() {
-    let request = PyTorchBackend::generate_text_request(
-        "Explain adapters.".to_string(),
-        None,
-        48,
-        0.3,
-        0.9,
-        None,
-        None,
-    );
+    let request = PyTorchBackend::generate_text_request(PyTorchTextGenerationRequest {
+        prompt: "Explain adapters.".to_string(),
+        system_prompt: None,
+        max_tokens: 48,
+        min_new_tokens: None,
+        temperature: 0.3,
+        top_p: 0.9,
+        top_k: None,
+        repetition_penalty: None,
+        masked_prompt_json: None,
+    });
 
     assert!(request.transformers_kwargs.is_empty());
 }
@@ -6098,7 +6180,8 @@ async fn production_text_iterator_drains_before_successful_load_and_unload() {
             load_worker_module_with_stubbed_dependencies(py);
             py.run(c"import sys, types
 sys.modules['torch'].no_grad = lambda: (lambda f: f)\nsys.modules['torch.nn'] = types.SimpleNamespace(functional=types.SimpleNamespace())
-sys.modules['transformers.cache_utils'] = types.SimpleNamespace(DynamicCache=type('DynamicCache', (), {}))", None, None).unwrap();
+sys.modules['transformers.cache_utils'] = types.SimpleNamespace(DynamicCache=type('DynamicCache', (), {}))
+sys.modules['transformers.generation.logits_process'] = types.SimpleNamespace(RepetitionPenaltyLogitsProcessor=object, MinNewTokensLengthLogitsProcessor=object)", None, None).unwrap();
             let worker = super::pytorch_worker::worker_module(py).unwrap();
             let names = [
                 "generate_text_stream_setup_from_envelope",
@@ -6476,7 +6559,8 @@ async fn selected_text_production_loader_and_worker_retain_selection_until_termi
             py.run(c"import sys, types
 sys.modules['torch'].no_grad = lambda: (lambda f: f)
 sys.modules['torch.nn'] = types.SimpleNamespace(functional=types.SimpleNamespace())
-sys.modules['transformers.cache_utils'] = types.SimpleNamespace(DynamicCache=type('DynamicCache', (), {}))", None, None).unwrap();
+sys.modules['transformers.cache_utils'] = types.SimpleNamespace(DynamicCache=type('DynamicCache', (), {}))
+sys.modules['transformers.generation.logits_process'] = types.SimpleNamespace(RepetitionPenaltyLogitsProcessor=object, MinNewTokensLengthLogitsProcessor=object)", None, None).unwrap();
             let worker = super::pytorch_worker::worker_module(py).unwrap();
             let saved = [
                 "generate_text_stream_setup_from_envelope",
@@ -6654,9 +6738,11 @@ fn named_text_request(prompt: &str) -> crate::PyTorchTextGenerationRequest {
         prompt: prompt.to_string(),
         system_prompt: Some("Be concise.".to_string()),
         max_tokens: 64,
+        min_new_tokens: None,
         temperature: 0.2,
         top_p: 0.95,
         top_k: Some(40),
+        repetition_penalty: None,
         masked_prompt_json: Some("{\"prompt\":\"masked\"}".to_string()),
     }
 }
@@ -6762,4 +6848,143 @@ async fn pytorch_named_text_request_preserves_legacy_validation_paths() {
             .expect("named stream closes")
             .is_none()
     );
+}
+
+#[test]
+fn test_pytorch_repetition_penalty_rejects_invalid_worker_values() {
+    for operation in [
+        PyTorchWorkerOperation::GenerateText,
+        PyTorchWorkerOperation::GenerateTextStream,
+    ] {
+        for value in [
+            serde_json::json!(0),
+            serde_json::json!(-1),
+            serde_json::json!(true),
+            serde_json::json!("1.2"),
+            serde_json::Value::Null,
+        ] {
+            let mut request = named_text_request("hello");
+            request.repetition_penalty = Some(1.2);
+            let mut envelope =
+                PyTorchBackend::generate_text_envelope("req-repeat-invalid", operation, request);
+            envelope
+                .payload
+                .transformers_kwargs
+                .insert("repetition_penalty".into(), value);
+            assert!(PyTorchBackend::validate_generate_text_envelope_operation(
+                &envelope, operation
+            )
+            .unwrap_err()
+            .to_string()
+            .contains("repetition_penalty must be positive and finite"));
+        }
+    }
+}
+
+#[test]
+fn test_pytorch_min_new_tokens_preserves_omission_zero_and_checked_budget_in_both_operations() {
+    for operation in [
+        PyTorchWorkerOperation::GenerateText,
+        PyTorchWorkerOperation::GenerateTextStream,
+    ] {
+        for (minimum, maximum) in [
+            (None, 512),
+            (Some(0), 512),
+            (Some(3), 3),
+            (Some(u32::MAX), i64::from(u32::MAX)),
+        ] {
+            let mut request = named_text_request("prompt");
+            request.min_new_tokens = minimum;
+            request.max_tokens = maximum;
+            request.repetition_penalty = Some(1.2);
+            let envelope =
+                PyTorchBackend::generate_text_envelope("min-envelope", operation, request);
+            PyTorchBackend::validate_generate_text_envelope_operation(&envelope, operation)
+                .unwrap();
+            assert_eq!(
+                envelope.payload.transformers_kwargs.get("min_new_tokens"),
+                minimum.map(serde_json::Value::from).as_ref()
+            );
+            let encoded = serde_json::to_value(&envelope).unwrap();
+            assert_eq!(
+                encoded["payload"]["transformers_kwargs"].get("min_new_tokens"),
+                minimum.map(serde_json::Value::from).as_ref()
+            );
+            assert_eq!(encoded["payload"]["max_tokens"], serde_json::json!(maximum));
+        }
+        for value in [
+            serde_json::json!(-1),
+            serde_json::json!(u64::from(u32::MAX) + 1),
+            serde_json::json!(3.0),
+            serde_json::json!(true),
+            serde_json::json!("3"),
+            serde_json::Value::Null,
+            serde_json::json!(513),
+        ] {
+            let mut request = named_text_request("prompt");
+            request.max_tokens = 512;
+            let mut envelope =
+                PyTorchBackend::generate_text_envelope("bad-min-envelope", operation, request);
+            envelope
+                .payload
+                .transformers_kwargs
+                .insert("min_new_tokens".into(), value);
+            assert!(PyTorchBackend::validate_generate_text_envelope_operation(
+                &envelope, operation
+            )
+            .unwrap_err()
+            .to_string()
+            .contains("min_new_tokens"));
+        }
+        for maximum in [0, -1, i64::from(u32::MAX) + 1, i64::MAX] {
+            let mut request = named_text_request("prompt");
+            request.min_new_tokens = Some(0);
+            request.max_tokens = maximum;
+            let envelope =
+                PyTorchBackend::generate_text_envelope("bad-max-envelope", operation, request);
+            assert!(PyTorchBackend::validate_generate_text_envelope_operation(
+                &envelope, operation
+            )
+            .unwrap_err()
+            .to_string()
+            .contains("max_tokens must be a positive u32"));
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_pytorch_chat_min_new_tokens_malformed_or_over_budget_refuses_before_python_job() {
+    let mut backend = PyTorchBackend::new();
+    backend.ready = true;
+    for (minimum, maximum) in [
+        (serde_json::json!(-1), None),
+        (serde_json::json!(u64::from(u32::MAX) + 1), None),
+        (serde_json::json!(3.0), None),
+        (serde_json::json!(true), None),
+        (serde_json::json!("3"), None),
+        (serde_json::Value::Null, None),
+        (serde_json::json!(513), None),
+        (serde_json::json!(9), Some(serde_json::json!(8))),
+        (serde_json::json!(3), Some(serde_json::json!("bad"))),
+        (serde_json::json!(3), Some(serde_json::json!(4.5))),
+        (serde_json::json!(0), Some(serde_json::json!(0))),
+        (serde_json::json!(0), Some(serde_json::Value::Null)),
+        (serde_json::json!(0), Some(serde_json::json!(true))),
+        (serde_json::json!(0), Some(serde_json::json!("3"))),
+        (serde_json::json!(0), Some(serde_json::json!(3.0))),
+        (
+            serde_json::json!(0),
+            Some(serde_json::json!(u64::from(u32::MAX) + 1)),
+        ),
+    ] {
+        let mut request = serde_json::json!({ "model": "local", "stream": true, "messages": [{ "role": "user", "content": [{ "type": "text", "text": "prompt" }] }], "min_new_tokens": minimum });
+        if let Some(maximum) = maximum {
+            request["max_tokens"] = maximum;
+        }
+        let error = match backend.chat_completion_stream(request.to_string()).await {
+            Err(error) => error,
+            Ok(_) => panic!("invalid minimum must refuse before a Python stream is returned"),
+        };
+        assert!(error.to_string().contains("min_new_tokens"), "{error}");
+    }
 }

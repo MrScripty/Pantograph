@@ -600,3 +600,80 @@ formatting, critical/accessibility gates, lint and traceability pass. Production
 code is unchanged. Parent retains PR56 advancement; the combined image-controls
 candidate is preserved independently. See the existing
 [checkpoint report](reports/2026-10-06-pr56-correctness-review-checkpoint.md).
+
+## 2026-10-06 — Graph-authored text repetition penalty
+
+The independent successor of reviewed correctness `13d24e89` exposes the existing
+text sampling option through the descriptor, selected host/gateway and PyTorch
+worker owner. Omission preserves model defaults; explicit one is neutral.
+Validation refuses non-positive/non-finite values before effects, including the
+NaN-to-JSON-null typed API case. Full token history is used for native Transformers,
+manual streaming and SDAR cache/replay; masked block diffusion rejects the option.
+The actual public session connects a Selection Input source and retains generated
+text. The [feature report](reports/2026-10-06-workflow-text-repetition-penalty.md)
+records 811 inference, 505 embedded, 23 interface and 661 frontend passes, 13 actual
+CPU tests, strict Clippy, type/format/critical/accessibility/traceability checks
+and nine no-build-download graphs. Initial import/snapshot/source fixture errors
+were corrected before these final passes. Native desktop/GPU/pretrained/ONNX
+qualification remains separate. Config `f0472ca1` and combined `1034daeb` review
+checkpoints remain frozen; parent owns PR/review/integration.
+
+## 2026-10-06 — Text repetition numeric successor
+
+Review reproduced float32 extreme overflow, fp16 overflow and ordinary fp16
+rounding divergence at frozen `2a6f7cf5`. The separate
+[numeric correction](reports/2026-10-06-text-repetition-numerics.md) promotes manual
+scores to float32 and rejects undefined repetition arithmetic at the native
+processor's original position, preserving defaults and masks. Scalar bounds are
+unchanged; operational overflow now explicitly refuses. Cached numeric refusal
+cannot fall back to a different history. Twenty-three actual CPU tests and 811
+portable inference checks pass; strict inference Clippy and affected quality
+gates pass. Frozen feature/evidence and independent image/main integration remain
+unchanged. Native desktop/GPU/pretrained/ONNX/SDAR loading remain unqualified;
+parent owns review and publication.
+
+## 2026-10-06 — Cached numeric refusal clears live KV
+
+Review accepted numeric checkpoint `12980c2f` but reproduced old token history
+beside a mutated cache after refusal. The separate
+[KV refusal correction](reports/2026-10-06-text-repetition-kv-refusal.md) clears
+the live snapshot before rethrowing without fresh retry. A real DynamicCache
+regression fails on the old catch for suffix/generated/replay mutations and
+passes with refusal of export, later fresh capture, subsequent reuse and matching
+exported cache/history. Twenty-four actual CPU and 811 portable inference checks,
+strict inference Clippy and affected gates pass. Existing numeric/source evidence
+remains frozen; model resident custody and resource accounting are unchanged.
+Native desktop/GPU/pretrained/ONNX qualification remains separate. Parent owns
+PR/review/merge; merged PR57 image controls are not part of this successor.
+
+## 2026-10-06 — Graph-authored minimum new tokens
+
+After verified local Git identity correction, the parent lifted the commit hold
+and authorized the next inference/scheduler capability. The successor of frozen
+KV refusal `59992b9b` exposes the existing typed minimum-new-token option through
+the descriptor, actual selected host/gateway, public scheduler and PyTorch worker.
+The [feature report](reports/2026-10-06-workflow-text-min-new-tokens.md) records
+budget validation before effects, official EOS suppression, model-default parity,
+suffix/replay counting and cached operational refusal without fresh retry.
+Thirty-two actual CPU methods, 815 inference checks plus one doctest, 508 embedded,
+24 interface and 661 frontend tests pass, alongside strict Clippy and quality
+gates. The initial full-disk link failure was recovered by cleaning generated
+workspace artifacts; frozen source/evidence remain unchanged. Native desktop,
+GPU, pretrained/custom generation and ONNX execution remain unqualified. Parent
+owns review/publication; PR54/55 and merged PR57 image controls are separate.
+
+## 2026-10-06 — Text controls composed onto current main
+
+Parent accepted repetition/KV and minimum-token source scopes, then prioritized
+their normal-history composition onto main `763e8d4b` before text-seed work.
+The [composition report](reports/2026-10-06-text-controls-main-composition.md)
+records preservation of both parents' text/image controls and startup fixture.
+Only plan/ledger conflicts required resolution. Fresh qualification passes 821
+inference checks plus one doctest, 517 embedded, 142 registry, 14 config, 77
+interface/host contracts, 916 service and 662 frontend tests, alongside 32 actual
+text CPU methods, strict Clippy and affected gates. Three actual CPU Diffusers
+checks pass serially on installed 0.39.0; the earlier parallel scheduler assertion
+failure remains recorded, with shared class-method patch interference inferred
+from source. No native GPU/pretrained/custom/full-worker/ONNX claim is added.
+Frozen source/evidence and PR54/55 remain unchanged. Seed inspection produced no
+source edits and is paused separately; parent owns PR/review/merge and hosted CI.

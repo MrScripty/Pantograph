@@ -1637,6 +1637,8 @@ impl InferenceGateway {
     ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, BackendError>> + Send>>, GatewayError>
     {
         request.validate()?;
+        let backend_key = canonical_backend_key(&self.current_backend_name().await);
+        validate_typed_text_backend_budget(&request, Some(&backend_key))?;
         let request_json = typed_text_generation_stream_request_json(request)?;
         self.chat_completion_stream(request_json).await
     }
@@ -1688,7 +1690,10 @@ impl InferenceGateway {
             None,
         );
 
-        let validation_result = request.validate().map_err(GatewayError::Validation);
+        let validation_result = request
+            .validate()
+            .map_err(GatewayError::Validation)
+            .and_then(|()| validate_typed_text_backend_budget(&request, backend_key.as_deref()));
         if let Err(error) = validation_result {
             let result = Err(error);
             record_non_streaming_lifecycle_phase_result(
@@ -2349,7 +2354,10 @@ impl InferenceGateway {
             None,
         );
 
-        let validation_result = request.validate().map_err(GatewayError::Validation);
+        let validation_result = request
+            .validate()
+            .map_err(GatewayError::Validation)
+            .and_then(|()| validate_typed_text_backend_budget(&request, backend_key.as_deref()));
         if let Err(error) = validation_result {
             let result = Err(error);
             record_non_streaming_lifecycle_phase_result_with_references(
@@ -2492,6 +2500,7 @@ impl InferenceGateway {
     ) -> Result<InferenceExecutionResult, GatewayError> {
         let model = typed_request_model_name(&request);
         let backend_key = canonical_backend_key(&self.current_backend_name().await);
+        validate_typed_text_backend_budget(&request, Some(&backend_key))?;
         let request_option_diagnostics =
             typed_request_option_diagnostics(&request, Some(&backend_key));
         let task_id = request.task_id.clone();
@@ -2991,9 +3000,12 @@ fn typed_text_generation_to_chat_request(
         messages,
         stream,
         max_tokens: generation_options.and_then(|options| options.length.max_new_tokens),
+        min_new_tokens: generation_options.and_then(|options| options.length.min_new_tokens),
         temperature: generation_options.and_then(|options| options.sampling.temperature),
         top_p: generation_options.and_then(|options| options.sampling.top_p),
         top_k: generation_options.and_then(|options| options.sampling.top_k),
+        repetition_penalty: generation_options
+            .and_then(|options| options.sampling.repetition_penalty),
     }
 }
 
@@ -3015,6 +3027,19 @@ fn typed_text_generation_option_diagnostics(
         options.length.max_new_tokens.is_some(),
         "mapped to chat max_tokens",
     );
+    if options.length.min_new_tokens.is_some() {
+        mapped_paths.push("length.min_new_tokens");
+        diagnostics.push(OptionCompatibilityDiagnostic {
+            option_path: "length.min_new_tokens".to_string(),
+            state: if backend_key == Some("pytorch") {
+                OptionSupportState::Mapped
+            } else {
+                OptionSupportState::RequiresBackendSupport
+            },
+            backend_key: backend_key.map(ToOwned::to_owned),
+            message: Some("chat min_new_tokens is honored by the PyTorch autoregressive owner; other backends require support".to_string()),
+        });
+    }
     push_chat_option_diagnostic(
         &mut diagnostics,
         &mut mapped_paths,
@@ -3039,6 +3064,15 @@ fn typed_text_generation_option_diagnostics(
         options.sampling.top_k.is_some(),
         "mapped to chat top_k",
     );
+    if options.sampling.repetition_penalty.is_some() {
+        mapped_paths.push("sampling.repetition_penalty");
+        diagnostics.push(OptionCompatibilityDiagnostic {
+            option_path: "sampling.repetition_penalty".to_string(),
+            state: if backend_key == Some("pytorch") { OptionSupportState::Mapped } else { OptionSupportState::RequiresBackendSupport },
+            backend_key: backend_key.map(ToOwned::to_owned),
+            message: Some("chat repetition_penalty is honored by the PyTorch autoregressive owner; other backends require support".to_string()),
+        });
+    }
     push_chat_cache_use_diagnostic(
         &mut diagnostics,
         &mut mapped_paths,
@@ -3568,6 +3602,18 @@ async fn collect_selected_text(
             });
         }
     }
+}
+
+fn validate_typed_text_backend_budget(
+    request: &InferenceExecutionRequest,
+    backend_key: Option<&str>,
+) -> Result<(), GatewayError> {
+    if backend_key == Some("pytorch") {
+        request.validate_text_min_new_tokens_budget(
+            crate::constants::pytorch::DEFAULT_MAX_NEW_TOKENS,
+        )?;
+    }
+    Ok(())
 }
 
 fn typed_text_generation_stream_request_json(
