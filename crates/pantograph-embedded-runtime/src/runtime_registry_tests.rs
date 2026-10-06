@@ -598,3 +598,63 @@ async fn release_reservation_and_reconcile_runtime_registry_reclaims_evicted_run
     assert_eq!(runtime.status, RuntimeRegistryStatus::Stopped);
     assert!(runtime.runtime_instance_id.is_none());
 }
+
+#[cfg(feature = "backend-candle")]
+#[test]
+fn compiled_candle_registration_reports_cold_owner_capability_without_readiness() {
+    let registry = Arc::new(RuntimeRegistry::new());
+    let gateway = Arc::new(inference::InferenceGateway::new());
+    register_scheduler_loadable_candle(&registry, &gateway);
+    let outcome =
+        crate::runtime_dispatch_capability_facts::RuntimeDispatchCapabilityFactsSource::new(
+            registry.clone(),
+        )
+        .with_gateway(gateway)
+        .collect();
+    let crate::runtime_dispatch_capability_facts::RuntimeDispatchCapabilityFactsOutcome::Projected {
+        facts, ..
+    } = outcome else { panic!("compiled Candle owner must be discoverable") };
+    let candle = facts
+        .runtimes
+        .iter()
+        .find(|runtime| runtime.runtime_id == "candle")
+        .unwrap();
+    assert_eq!(candle.status, RuntimeRegistryStatus::Stopped);
+    assert!(candle.runtime_instance_id.is_none());
+    assert!(candle.loaded_model_ids.is_empty());
+    assert!(candle.active_reservation_ids.is_empty());
+    assert_eq!(candle.runtime_family, "candle");
+    assert_eq!(candle.runtime_residency_key, "candle.cpu");
+    assert_eq!(candle.automatic_device_candidates.len(), 1);
+    assert_eq!(
+        candle.automatic_device_candidates[0]
+            .runtime_variant_id
+            .as_str(),
+        "candle.cpu"
+    );
+    assert_eq!(
+        candle.automatic_device_candidates[0].device_id.as_str(),
+        "cpu"
+    );
+}
+
+#[cfg(feature = "backend-candle")]
+#[test]
+fn compiled_candle_registration_preserves_an_existing_failed_owner() {
+    let registry = RuntimeRegistry::new();
+    registry.register_runtime(
+        RuntimeRegistration::new("candle", "Existing Candle")
+            .with_backend_keys(vec!["candle".into()]),
+    );
+    registry
+        .transition_runtime(
+            "candle",
+            pantograph_runtime_registry::RuntimeTransition::Failed {
+                message: "actual load failed".into(),
+            },
+        )
+        .unwrap();
+    let before = registry.snapshot().runtimes;
+    register_scheduler_loadable_candle(&registry, &inference::InferenceGateway::new());
+    assert_eq!(registry.snapshot().runtimes, before);
+}

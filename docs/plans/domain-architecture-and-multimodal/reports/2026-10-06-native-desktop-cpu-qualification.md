@@ -256,25 +256,62 @@ runtime/device satisfying Candle/CPU. Typed model/port facts resolve; no public
 submission or CPU output occurs. The [sixth attempt's complete artifact](../evidence/native-desktop-cpu/descriptor-availability/README.md)
 preserves these responses, lifecycle events and unchanged screenshots.
 
-Installing synthetic model files did not initialize a runtime. The successor
-fixture uses existing native configuration, backend switch and embedding startup
-commands to load the actual isolated Candle model, and requires the real registry
-to report ready before graph validation. It does not invent runtime readiness.
-That normal Candle startup path incorrectly forwarded a llama.cpp device selector
-to a backend that owns its fixed CPU device. A backend-aware request builder now
-accepts explicit CPU/zero GPU layers for Candle, passes its model path and omits
-the foreign device intent. Unsupported device/GPU-layer requests still fail;
-other backends retain their existing request builder. Targeted startup tests will
-run in the actual native build environment before the GUI test.
+The initial successor attempted generic native Candle configuration/startup.
+That proposal was incorrect: `CandleBackend::start` rejects untyped startup and
+requires scheduler-selected package and executable target. Field-builder tests
+did not validate that integration. The attempt and its rejection are preserved
+below; the generic startup changes are withdrawn in normal branch history.
 
 The descriptor provider independently discarded every owner-advertised device
 by publishing an empty device list. The new regression fails on that source with
 `[]` instead of `[cpu]`; the repaired bridge preserves and deterministically
 orders the validated owner device IDs. It leaves runtime lifecycle status and
-missing-evidence gates intact. Nine provider tests pass, and the broader affected
-runtime suite passes 545 tests with one optional test ignored. Strict all-target
+missing-evidence gates intact. At `7fcd990b`, nine provider tests and 545 affected-runtime tests pass with
+one optional test ignored. Strict all-target
 Clippy and formatting pass. An initial broader-suite launch failed to find the
 already installed Python shared library; a command-local library path allowed the
 same source/binary to run successfully, and the initial failure remains recorded.
 Native CPU submission/output still requires the fresh successor; pretrained,
 GPU, real-user discovery and full production-loader qualification remain absent.
+
+
+## Startup-regression failure and typed cold-load successor
+
+[Run 37498074275](https://github.com/MrScripty/Pantograph/actions/runs/37498074275)
+executes `7fcd990bf6800defcb4f1eae5e07a2d30cadd799`, tree
+`6e1a0b50d139886cd5a8f68d93a89801a25ded1b`. The native binary builds;
+startup tests compile/run with eight passes and one failure. The llama.cpp
+comparison mistakenly reused canonical `cpu`; its actual CPU selector is
+backend-local `none`. Production validation correctly rejected the fixture.
+Exit 101 precedes launcher creation. The missing WebDriver launcher is downstream;
+there is no native app session, scheduler submission or CPU output in this run.
+The [complete seventh-attempt evidence](../evidence/native-desktop-cpu/startup-regression/README.md)
+preserves all eleven members, inner test log, masked job log and source identity.
+
+The successor withdraws generic startup and exercises the actual selector
+contract with `none`, retaining rejection of canonical `cpu`. Existing selected
+embedding execution validates package, target and decision before loading Candle.
+Its scheduler evidence contract explicitly accepts `NotLoaded` without an
+instance. The missing production integration is cold discovery: only existing
+live registry records reached descriptor/dispatch sources, and stopped runtime
+status was treated as not installed.
+
+Hosted composition now enrolls a missing compiled Candle CPU owner only when
+the gateway advertises available `candle.cpu`/`cpu`. Registration reports
+`Stopped`, with no model, instance or lease; existing registrations are untouched.
+The descriptor bridge recognizes that specific cold capability while failed,
+unhealthy, stopping and missing-owner cases remain unavailable. This does not
+load a model or authorize a package. Pumas target checks, dependency readiness,
+resource admission, selected execution validation and actual typed loader remain
+responsible for execution. Other runtimes and resource accounting are unchanged.
+The native test records the real cold registry and uses the normal GUI/public
+scheduler to initiate loading. It does not call legacy startup or assert fabricated
+readiness. Final native output acceptance remains pending a source-bound run.
+
+The affected runtime suite passes 548 tests with one optional test ignored.
+Coverage includes a real Pumas owner over the committed fixture and hosted
+composition resolving an available embedding descriptor while Candle remains
+stopped, with no model, instance or reservation. Cold and ready descriptor cases,
+missing/failed/stopping owner gates, existing failed registrations and the public
+compiled-owner fact bridge are covered. These controlled tests qualify cold
+discovery integration, not actual native GUI scheduler execution or broad loaders.

@@ -20,14 +20,13 @@ use lossless timestamp-free gzip. Artifact `11426653550` ZIP SHA256 is
 The masked job log and source record bind this attempt. `SHA256SUMS` binds this
 folder. Every earlier failure remains preserved separately.
 
-The successor prepares actual Candle runtime readiness through normal native
-configuration/startup commands and fixes two production losses: the startup
-builder's foreign llama.cpp device intent, and the descriptor bridge's dropped
-owner CPU devices. Runtime status and missing-evidence gates remain unchanged.
-The failing CPU bridge regression, nine passing provider tests, 545 passing
-affected-runtime tests (one optional ignored), strict all-target Clippy, formatting,
-complete feature graphs and source patch are preserved here. The first broader
-suite could not launch until its installed Python library directory was supplied
-through the command-local loader path; that failure is preserved too. These local
-checks do not qualify native CPU submission or output. Native startup regression
-tests and the full saved/reopened fixture will run on the successor source.
+The attempted readiness successor at `7fcd990b` used generic native startup.
+Independent review identified its typed-contract rejection; that approach is
+withdrawn. Its [separate failure evidence](../startup-regression/README.md) records
+the actual upstream selector-test failure and absence of a native app session.
+The device bridge repair remains valid. The failing regression, nine passing
+provider tests, 545 passing affected-runtime tests (one optional ignored), strict
+Clippy, formatting, complete graphs and attempted source patch remain preserved.
+The initial missing-Python-library launch is preserved too. These checks do not
+qualify native CPU submission or output. The current successor uses compiled
+cold-owner registration and the existing typed scheduler loader; see the report.

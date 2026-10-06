@@ -1,0 +1,20 @@
+{
+  "run_id": 37498074275,
+  "job_id": 112387653708,
+  "head": "7fcd990bf6800defcb4f1eae5e07a2d30cadd799",
+  "tree": "6e1a0b50d139886cd5a8f68d93a89801a25ded1b",
+  "artifact_id": 11428389456,
+  "artifact_zip_sha256": "62b97222090a939b0b6671125d87c0c92a10d946f9354ef77b6b4a01c7b2590b",
+  "artifact_members": 11,
+  "conclusion": "failure",
+  "native_binary_built": true,
+  "native_startup_tests": {
+    "passed": 8,
+    "failed": 1,
+    "failure": "llama.cpp comparison fixture used canonical cpu instead of backend-local none"
+  },
+  "native_app_session_opened": false,
+  "native_submission": false,
+  "native_cpu_output": false,
+  "independent_source_blocker": "Generic CandleBackend::start rejects untyped startup; only scheduler-selected package and executable target can load Candle."
+}

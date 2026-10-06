@@ -212,7 +212,20 @@ fn runtime_availability_fact(
 ) -> Option<InferenceRuntimeAvailabilityFact> {
     Some(InferenceRuntimeAvailabilityFact {
         runtime_id: RuntimeIntentId::parse(&runtime.runtime_id).ok()?,
-        state: runtime_availability_state(runtime.status),
+        // Installation capability is distinct from a loaded runtime instance.
+        // Candle's typed scheduler path can load an owner-advertised CPU variant.
+        state: if runtime.status == RuntimeRegistryStatus::Stopped
+            && runtime.runtime_id == "candle"
+            && runtime.runtime_family == "candle"
+            && runtime.automatic_device_candidates.iter().any(|candidate| {
+                candidate.backend_key == "candle"
+                    && candidate.runtime_variant_id.as_str() == "candle.cpu"
+                    && candidate.device_id.as_str() == "cpu"
+            }) {
+            InferenceRuntimeAvailabilityState::Available
+        } else {
+            runtime_availability_state(runtime.status)
+        },
         device_ids: runtime
             .automatic_device_candidates
             .iter()
@@ -877,46 +890,46 @@ mod tests {
     }
 
     #[test]
-    fn ready_candle_descriptor_preserves_owner_cpu_device_evidence() {
+    fn ready_and_cold_candle_descriptors_preserve_owner_cpu_device_evidence() {
         use pantograph_inference_interface_contracts::ResolveInferenceInterfaceRequest;
         use pantograph_workflow_service::graph::resolve_inference_interface_from_facts;
-        let runtime =
-            runtime_availability_fact(&candle_runtime_fact(RuntimeRegistryStatus::Ready, true))
-                .unwrap();
-        assert_eq!(runtime.device_ids, vec!["cpu".parse().unwrap()]);
-        let mut package = projected_package_facts();
-        package.task = TaskEvidence {
-            pipeline_tag: Some("feature-extraction".into()),
-            task_type_primary: Some("embedding".into()),
-            input_modalities: vec!["text".into()],
-            output_modalities: vec!["embedding".into()],
-        };
-        let capability = capability_facts(&package, std::slice::from_ref(&runtime)).unwrap();
-        let request: ResolveInferenceInterfaceRequest = serde_json::from_value(serde_json::json!({
+        for status in [RuntimeRegistryStatus::Ready, RuntimeRegistryStatus::Stopped] {
+            let runtime = runtime_availability_fact(&candle_runtime_fact(status, true)).unwrap();
+            assert_eq!(runtime.device_ids, vec!["cpu".parse().unwrap()]);
+            let mut package = projected_package_facts();
+            package.task = TaskEvidence {
+                pipeline_tag: Some("feature-extraction".into()),
+                task_type_primary: Some("embedding".into()),
+                input_modalities: vec!["text".into()],
+                output_modalities: vec!["embedding".into()],
+            };
+            let capability = capability_facts(&package, std::slice::from_ref(&runtime)).unwrap();
+            let request: ResolveInferenceInterfaceRequest = serde_json::from_value(serde_json::json!({
             "model_ref": {"model_id":"embedding/qualification/synthetic-bert-8","selected_artifact_id":"main"},
             "task_kind":"embedding","runtime_constraint":"candle","device_constraint":"cpu",
         })).unwrap();
-        let descriptor = resolve_inference_interface_from_facts(
-            request,
-            InferenceInterfaceResolverFacts {
-                model: InferenceModelResolutionFacts {
-                    state: InferenceModelResolutionState::Ready,
+            let descriptor = resolve_inference_interface_from_facts(
+                request,
+                InferenceInterfaceResolverFacts {
+                    model: InferenceModelResolutionFacts {
+                        state: InferenceModelResolutionState::Ready,
+                    },
+                    capability: Some(capability),
+                    runtimes: vec![runtime],
+                    estimate_hints: Vec::new(),
                 },
-                capability: Some(capability),
-                runtimes: vec![runtime],
-                estimate_hints: Vec::new(),
-            },
-        )
-        .unwrap();
-        assert_eq!(
-            descriptor.availability.status,
-            pantograph_inference_interface_contracts::InferenceAvailabilityStatus::Available
-        );
-        assert!(descriptor.diagnostics.is_empty());
+            )
+            .unwrap();
+            assert_eq!(
+                descriptor.availability.status,
+                pantograph_inference_interface_contracts::InferenceAvailabilityStatus::Available
+            );
+            assert!(descriptor.diagnostics.is_empty());
+        }
     }
 
     #[test]
-    fn device_projection_requires_owner_evidence_and_preserves_stopped_runtime_gate() {
+    fn cold_candle_requires_owner_cpu_evidence_and_preserves_failure_gates() {
         let ready =
             runtime_availability_fact(&candle_runtime_fact(RuntimeRegistryStatus::Ready, false))
                 .unwrap();
@@ -924,8 +937,35 @@ mod tests {
         let stopped =
             runtime_availability_fact(&candle_runtime_fact(RuntimeRegistryStatus::Stopped, true))
                 .unwrap();
+        assert_eq!(stopped.state, InferenceRuntimeAvailabilityState::Available);
+        for status in [
+            RuntimeRegistryStatus::Stopped,
+            RuntimeRegistryStatus::Stopping,
+            RuntimeRegistryStatus::Unhealthy,
+            RuntimeRegistryStatus::Failed,
+        ] {
+            let without_owner =
+                runtime_availability_fact(&candle_runtime_fact(status, false)).unwrap();
+            assert_ne!(
+                without_owner.state,
+                InferenceRuntimeAvailabilityState::Available
+            );
+        }
+        for status in [
+            RuntimeRegistryStatus::Stopping,
+            RuntimeRegistryStatus::Unhealthy,
+            RuntimeRegistryStatus::Failed,
+        ] {
+            let advertised = runtime_availability_fact(&candle_runtime_fact(status, true)).unwrap();
+            assert_ne!(
+                advertised.state,
+                InferenceRuntimeAvailabilityState::Available
+            );
+        }
+        let mut mismatched = candle_runtime_fact(RuntimeRegistryStatus::Stopped, true);
+        mismatched.runtime_family = "foreign".into();
         assert_eq!(
-            stopped.state,
+            runtime_availability_fact(&mismatched).unwrap().state,
             InferenceRuntimeAvailabilityState::NotInstalled
         );
     }
