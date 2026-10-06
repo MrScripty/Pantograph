@@ -157,7 +157,8 @@ pub use self::host::{
 pub use self::identity::{WorkflowIdentity, WorkflowIdentityError};
 pub use self::media_capability_contracts::*;
 pub(crate) use self::non_runtime_task_adapter::{
-    execute_non_runtime_scheduler_task, WorkflowSchedulerNonRuntimeTaskAdapterError,
+    execute_non_runtime_scheduler_task, is_bounded_vector_json,
+    WorkflowSchedulerNonRuntimeTaskAdapterError,
 };
 pub(crate) use self::runtime_dispatch_selection::{
     NoRuntimeDispatchCandidatesProvider, NoRuntimeDispatchSourceRefresher,

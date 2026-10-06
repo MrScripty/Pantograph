@@ -1033,6 +1033,7 @@ export interface InferenceAvailability {
 export type InferencePortDirection = 'input' | 'output';
 export type InferencePortRequirement = 'required' | 'optional';
 export type InferenceScalarType = 'string' | 'bool' | 'i64' | 'u64' | 'f64';
+export type InferenceStructuredType = 'embedding' | 'json';
 export type InferenceArtifactType = 'image' | 'audio' | 'video' | 'tensor' | 'document' | 'media';
 export type InferenceReferenceType =
   | 'pumas_model'
@@ -1044,6 +1045,7 @@ export type InferenceConstraintType = 'runtime' | 'device' | 'denoising_schedule
 export type InferenceValueType =
   | { category: 'scalar'; kind: InferenceScalarType }
   | { category: 'artifact'; kind: InferenceArtifactType }
+  | { category: 'structured'; kind: InferenceStructuredType }
   | { category: 'reference'; kind: InferenceReferenceType }
   | { category: 'constraint'; kind: InferenceConstraintType };
 

@@ -177,4 +177,4 @@ pub(crate) enum RuntimeHostEmbeddingProjectionError {
 
 #[cfg(all(test, feature = "backend-candle"))]
 #[path = "runtime_host_embedding_execution_tests.rs"]
-mod tests;
+pub(crate) mod tests;

@@ -4,7 +4,17 @@
 
 **Current phase:** M3 owner/client consumer source is implemented. Native CPU sampling and the supported inference/embedded host route are qualified separately; the desktop-authored dependent text-to-image graph and full review remain open.
 
-**Next slice:** Graph-authored text seed is implemented in frozen candidate
+**Next slice:** The isolated [canonical CPU embedding graph successor](reports/2026-10-06-workflow-cpu-embedding-graphs.md)
+is implemented from freshly fetched main `c75fa237`. Typed embedding/JSON ports,
+the existing selected Candle owner, sequential envelope execution and the bounded
+vector sink now compose through a saved public scheduler graph. Independent
+source review has no remaining substantive finding. Local qualification and
+separate candidate publication are recorded in the report; live Pumas,
+pretrained-quality, GPU and desktop execution remain separate. Preserve accepted
+stop-string `19119837`/PR60 and every frozen seed/precision/repair/paused history.
+Do not resume ranking or resident-accounting work as part of this feature.
+
+**Prior seed slice:** Graph-authored text seed is implemented in frozen candidate
 `6cf549dd`; see the [seed report](reports/2026-10-06-workflow-text-seed.md). Its
 separate [desktop precision successor](reports/2026-10-06-text-seed-desktop-precision.md)
 validates authored seeds before numeric persistence and blocks unsafe execution,

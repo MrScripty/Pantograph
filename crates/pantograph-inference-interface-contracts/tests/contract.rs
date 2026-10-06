@@ -823,3 +823,99 @@ fn text_seed_is_optional_u64_without_a_floating_point_range_or_default() {
         *seed
     );
 }
+
+#[test]
+fn embedding_descriptor_and_saved_snapshot_preserve_structured_types_and_requirements() {
+    use pantograph_inference_interface_contracts::InferenceStructuredType;
+    let descriptor: InferenceInterfaceDescriptor =
+        serde_json::from_str(include_str!("fixtures/descriptor_embedding_ready.json")).unwrap();
+    descriptor.validate().unwrap();
+    assert_eq!(descriptor.inputs.len(), 1);
+    assert_eq!(descriptor.inputs[0].port_id.as_str(), "text");
+    assert_eq!(
+        descriptor.inputs[0].value_type,
+        InferenceValueType::Scalar(InferenceScalarType::String)
+    );
+    assert_eq!(
+        descriptor.inputs[0].requirement,
+        InferencePortRequirement::Required
+    );
+    assert!(descriptor.inputs[0].default.is_none());
+    assert_eq!(
+        descriptor
+            .outputs
+            .iter()
+            .map(|port| port.port_id.as_str())
+            .collect::<Vec<_>>(),
+        ["embedding", "metadata", "usage"]
+    );
+    assert_eq!(
+        descriptor.outputs[0].value_type,
+        InferenceValueType::Structured(InferenceStructuredType::Embedding)
+    );
+    for index in [1, 2] {
+        assert_eq!(
+            descriptor.outputs[index].value_type,
+            InferenceValueType::Structured(InferenceStructuredType::Json)
+        );
+    }
+    assert_eq!(
+        descriptor.outputs[0].requirement,
+        InferencePortRequirement::Required
+    );
+    assert_eq!(
+        descriptor.outputs[1].requirement,
+        InferencePortRequirement::Required
+    );
+    assert_eq!(
+        descriptor.outputs[2].requirement,
+        InferencePortRequirement::Optional
+    );
+    assert!(descriptor.outputs.iter().all(|port| port.default.is_none()));
+    let wire = serde_json::to_value(&descriptor).unwrap();
+    assert_eq!(
+        wire["outputs"][0]["value_type"],
+        serde_json::json!({"category": "structured", "kind": "embedding"})
+    );
+    let decoded: InferenceInterfaceDescriptor =
+        serde_json::from_str(&serde_json::to_string(&descriptor).unwrap()).unwrap();
+    assert_eq!(decoded, descriptor);
+    let snapshot: AuthoredInferenceInterfaceSnapshot =
+        serde_json::from_str(include_str!("fixtures/authored_snapshot_embedding.json")).unwrap();
+    snapshot.validate().unwrap();
+    let restored: AuthoredInferenceInterfaceSnapshot =
+        serde_json::from_str(&serde_json::to_string(&snapshot).unwrap()).unwrap();
+    assert_eq!(restored, snapshot);
+    assert_eq!(
+        snapshot.descriptor_fingerprint,
+        descriptor.descriptor_fingerprint
+    );
+    assert_eq!(
+        snapshot.outputs[0].value_type,
+        descriptor.outputs[0].value_type
+    );
+    assert_eq!(
+        snapshot.outputs[2].requirement,
+        InferencePortRequirement::Optional
+    );
+}
+
+#[test]
+fn structured_value_types_are_additive_to_existing_wire_categories() {
+    for (category, kind) in [
+        ("scalar", "string"),
+        ("artifact", "tensor"),
+        ("reference", "media_artifact"),
+        ("constraint", "device"),
+        ("structured", "embedding"),
+        ("structured", "json"),
+    ] {
+        let wire = serde_json::json!({"category": category, "kind": kind});
+        let value: InferenceValueType = serde_json::from_value(wire.clone()).unwrap();
+        assert_eq!(serde_json::to_value(value).unwrap(), wire);
+    }
+    assert!(serde_json::from_value::<InferenceValueType>(
+        serde_json::json!({"category": "structured", "kind": "tensor"})
+    )
+    .is_err());
+}

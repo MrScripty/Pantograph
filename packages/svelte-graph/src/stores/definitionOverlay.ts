@@ -118,6 +118,8 @@ function inferenceValueTypeToPortDataType(value: unknown): PortDataType {
   switch (record.category) {
     case 'scalar':
       return scalarInferenceTypeToPortDataType(record.kind);
+    case 'structured':
+      return record.kind === 'embedding' ? 'embedding' : 'json';
     case 'artifact':
       return artifactInferenceTypeToPortDataType(record.kind);
     case 'reference':
