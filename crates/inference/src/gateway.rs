@@ -915,6 +915,14 @@ impl InferenceGateway {
         *current_runtime_config = None;
         let mut lifecycle = self.runtime_lifecycle.write().await;
         lifecycle.active = false;
+        if lifecycle.warmup_completed_at_ms.is_none() {
+            // Acknowledged shutdown ends an abandoned start. Do not leave an
+            // unfinished marker that reconciliation could resurrect as warming,
+            // or invent a successful warmup duration for the cancelled attempt.
+            lifecycle.warmup_started_at_ms = None;
+            lifecycle.warmup_timing_attempt_id = None;
+            lifecycle.warmup_duration_ms = None;
+        }
         if lifecycle.last_error.is_none() {
             lifecycle.lifecycle_decision_reason = Some("runtime_stopped".to_string());
         }
