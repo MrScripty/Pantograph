@@ -29,6 +29,14 @@ Frozen timing and device checkpoints remain separate. Parent coordinates normal
 history-preserving integration with approved main `4153772634269e342a8b0cca797f1cd6716f18a5`;
 its prior descriptor/sampler repairs will not be duplicated on feature ancestry.
 
+The [runtime-owned CUDA fact slice](reports/2026-10-05-runtime-owned-cuda-device-facts.md)
+uses the existing embedded PyTorch owner for explicit UUID/property observations.
+The real CPU-only runtime qualifies the unavailable path; positive UUID tests are
+controlled and GPU execution/capacity remain unqualified. Configured labels, Pumas
+monitor aggregates and llama.cpp selectors cannot become physical backing facts.
+Automatic GPU admission and completion ranking remain pending authoritative owner
+placement, shared backing/capacity and comparable timing evidence.
+
 **Acceptance status:** `blocked`
 
 **Independent scheduler slice:** The parent authorized continued feature delivery

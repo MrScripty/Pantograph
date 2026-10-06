@@ -76,6 +76,13 @@ mod pytorch_text_job;
 
 const ALLOWED_TRANSFORMERS_GENERATE_KWARGS: &[&str] = &["top_k"];
 
+#[path = "pytorch_cuda_inventory.rs"]
+mod cuda_inventory;
+pub use cuda_inventory::{
+    PyTorchCudaDeviceFact, PyTorchCudaInventory, PyTorchCudaInventoryUnavailable,
+    PyTorchCudaPhysicalIdentity,
+};
+
 /// Host-observed PyTorch device probe facts.
 ///
 /// This contract is intentionally pure data. The caller owns how and when
