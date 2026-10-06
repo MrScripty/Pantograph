@@ -1092,6 +1092,7 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                 }
             }
         }
+        self.run_progress_loop(session_id, workflow_run_id).await?;
         completed_scheduler_run_response(
             self.service,
             host,

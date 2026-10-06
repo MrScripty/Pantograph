@@ -864,3 +864,23 @@ The [complete twentieth-attempt evidence](../evidence/native-desktop-cpu/cold-ty
 preserves all 23 original members, full masked job log and 38 owner records.
 Artifact 11450490195 SHA256 is
 a8f1decbc40f1427e84038fee4faea589186f68b3d5fa3360be155ce9c655507.
+
+## Bounded post-runtime progress repair
+
+The readiness-resume dispatch path omits the canonical downstream progress loop
+before checking whole-graph completion. A saved embedding graph regression with
+withheld readiness and actual Candle execution reproduces the exact vectors
+AwaitingInputs error before repair. The one-line call to the existing progress
+loop advances the normal scoped non-runtime vector consumer before finalization.
+Both widths 8 and 12 return their golden vector, metadata and usage; a wrong-run
+resume is rejected without consuming the paused run. Immediate-ready coverage,
+finite/bounded vector validation and proof/identity/reservation guards remain.
+[Progress-boundary evidence](../evidence/native-desktop-cpu/cold-typed-discovery/post-runtime-progress/README.md)
+preserves the failing and passing regression. Native body/output qualification
+remains pending the successor's actual GUI run.
+
+All 539 embedded and 989 workflow tests pass, as do strict affected-crate all-target
+Clippy, formatting, critical patterns and staged traceability. Each build follows
+its complete effective graph audit with ORT_SKIP_DOWNLOAD=1 and no download feature.
+Inference source remains at the preceding passing repair; fixture metadata,
+Pumas pin, source ancestry and the complete native failure chain remain intact.

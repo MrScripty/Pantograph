@@ -121,6 +121,15 @@ fn install_embedding_readiness(
 
 #[tokio::test]
 async fn saved_cpu_embedding_graph_runs_public_scheduler_and_preserves_vectors_metadata_usage() {
+    run_saved_cpu_embedding_graph(false).await;
+}
+
+#[tokio::test]
+async fn deferred_cpu_embedding_resume_advances_downstream_vector_and_retains_scoped_outputs() {
+    run_saved_cpu_embedding_graph(true).await;
+}
+
+async fn run_saved_cpu_embedding_graph(defer_readiness: bool) {
     let gateway = Arc::new(inference::InferenceGateway::with_backend(
         Box::new(inference::backend::candle::CandleBackend::new()),
         "Candle",
@@ -188,8 +197,13 @@ async fn saved_cpu_embedding_graph_runs_public_scheduler_and_preserves_vectors_m
         let version = service
             .resolve_workflow_graph_version(workflow_id, "1.0.0", &restored)
             .unwrap();
-        install_embedding_readiness(&service, &provider, &restored, &version, &model_ref);
-        let host = Arc::new(ImageRuntimeSessionHost::new(restored));
+        let initial_provider = if defer_readiness {
+            DependencyEnvironmentReadinessSnapshotProvider::new()
+        } else {
+            provider.clone()
+        };
+        install_embedding_readiness(&service, &initial_provider, &restored, &version, &model_ref);
+        let host = Arc::new(ImageRuntimeSessionHost::new(restored.clone()));
         let created = service
             .create_workflow_execution_session(
                 host.as_ref(),
@@ -201,9 +215,9 @@ async fn saved_cpu_embedding_graph_runs_public_scheduler_and_preserves_vectors_m
             )
             .await
             .unwrap();
-        let response = pantograph_workflow_service::workflow::WorkflowSessionExecutionRuntime::from_shared_service(service.clone(), host.clone())
+        let execution = pantograph_workflow_service::workflow::WorkflowSessionExecutionRuntime::from_shared_service(service.clone(), host.clone())
             .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
-                session_id: created.session_id, workflow_semantic_version: "1.0.0".into(),
+                session_id: created.session_id.clone(), workflow_semantic_version: "1.0.0".into(),
                 inputs: vec![WorkflowPortBinding { node_id: "prompt".into(), port_id: "text".into(), value: serde_json::json!("hello world") }],
                 output_targets: Some(vec![
                     WorkflowOutputTarget { node_id: "vectors".into(), port_id: "vector".into() },
@@ -211,7 +225,57 @@ async fn saved_cpu_embedding_graph_runs_public_scheduler_and_preserves_vectors_m
                     WorkflowOutputTarget { node_id: "infer".into(), port_id: "metadata".into() },
                     WorkflowOutputTarget { node_id: "infer".into(), port_id: "usage".into() },
                 ]), override_selection: None, timeout_ms: None, priority: None,
-            }).await.expect("actual Candle embedding graph through public scheduler");
+            }).await;
+        let response = if defer_readiness {
+            let error =
+                execution.expect_err("withheld scoped readiness must pause the same saved run");
+            assert_eq!(error.code(), WorkflowErrorCode::RuntimeNotReady);
+            let candidates = service
+                .workflow_execution_session_runtime_dependency_readiness_resume_candidates()
+                .unwrap();
+            assert_eq!(candidates.len(), 1);
+            assert_eq!(candidates[0].session_id, created.session_id);
+            let run_id = candidates[0].workflow_run_id.clone();
+            let wrong_run = service
+                .resume_workflow_execution_session_runtime_dependency_readiness(
+                    host.as_ref(),
+                    pantograph_workflow_service::WorkflowExecutionSessionResumeRequest {
+                        session_id: created.session_id.clone(),
+                        workflow_run_id: "run_other_scope".into(),
+                    },
+                )
+                .await;
+            assert!(
+                wrong_run.is_err(),
+                "another run must not consume this paused run's readiness/output"
+            );
+            assert_eq!(
+                service
+                    .workflow_execution_session_runtime_dependency_readiness_resume_candidates()
+                    .unwrap()
+                    .len(),
+                1
+            );
+            install_embedding_readiness(&service, &provider, &restored, &version, &model_ref);
+            let response = service
+                .resume_workflow_execution_session_runtime_dependency_readiness(
+                    host.as_ref(),
+                    pantograph_workflow_service::WorkflowExecutionSessionResumeRequest {
+                        session_id: created.session_id.clone(),
+                        workflow_run_id: run_id.clone(),
+                    },
+                )
+                .await
+                .expect("resumed actual Candle producer must advance its dependent vector sink");
+            assert_eq!(response.workflow_run_id, run_id);
+            assert!(service
+                .workflow_execution_session_runtime_dependency_readiness_resume_candidates()
+                .unwrap()
+                .is_empty());
+            response
+        } else {
+            execution.expect("actual Candle embedding graph through public scheduler")
+        };
         let output = |node: &str, port: &str| {
             &response
                 .outputs
