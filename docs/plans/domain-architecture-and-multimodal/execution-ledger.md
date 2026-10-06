@@ -588,3 +588,15 @@ CPU Diffusers checks. Strict seven-package Clippy and all required gates pass. T
 changes documentation only and is published as a separate review candidate.
 PR56 and all frozen feature/correctness refs remain untouched. Parent owns review
 and publication after gates; native GTK/GPU/pretrained-model limits remain open.
+
+## 2026-10-06 — PR56 config fixture contract correction
+
+The parent's re-review record 4191994790 identifies malformed startup-domain keys
+and incomplete AppConfig fields in the controlled handler regression. The
+isolated successor of `13d24e8` uses the actual registry startup JSON and a strict
+complete-payload save expectation. A new rejection regression fails against the
+old mock and passes after repair; all three focused handler tests, TypeScript,
+formatting, critical/accessibility gates, lint and traceability pass. Production
+code is unchanged. Parent retains PR56 advancement; the combined image-controls
+candidate is preserved independently. See the existing
+[checkpoint report](reports/2026-10-06-pr56-correctness-review-checkpoint.md).
