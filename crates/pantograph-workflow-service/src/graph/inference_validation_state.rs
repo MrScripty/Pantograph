@@ -4,12 +4,11 @@ use pantograph_dependency_planning::{
     produce_dependency_requirements_proof, DependencyBindingId, DependencyEnvironmentRequest,
     DependencyNodeTypeId, DependencyOverrideFingerprint, DependencyOverridePatchV1,
     DependencyPlanningCallerContext, DependencyPlanningDiagnostic, DependencyPlanningIdentityKey,
-    DependencyPlanningPlatformContext, DependencyPlanningRequest,
-    DependencyReadinessDescriptorFingerprint, DependencyReadinessGraphRevision,
-    DependencyReadinessValidationSessionId, DependencyRequirementsId, DependencyRequirementsProof,
-    DependencyRequirementsProofStatus, DependencyTaskId, DeviceIntentId, PumasModelRef,
-    RuntimeIntentId, SchedulerIntent, ValidatedDependencyEnvironmentRequest,
-    ValidatedDependencyPlanningRequest,
+    DependencyPlanningRequest, DependencyReadinessDescriptorFingerprint,
+    DependencyReadinessGraphRevision, DependencyReadinessValidationSessionId,
+    DependencyRequirementsId, DependencyRequirementsProof, DependencyRequirementsProofStatus,
+    DependencyTaskId, DeviceIntentId, PumasModelRef, RuntimeIntentId, SchedulerIntent,
+    ValidatedDependencyEnvironmentRequest, ValidatedDependencyPlanningRequest,
 };
 use pantograph_inference_interface_contracts::{
     DependencyEnvironmentAction, DependencyEnvironmentActionIntent,
@@ -36,6 +35,9 @@ use super::inference_interface_validation::{
     InferenceInterfaceValidationSessionError, WorkflowGraphInferenceValidationSession,
 };
 use super::InferenceInterfaceNodeProjectionRecord;
+use crate::inference_dependency_planning::{
+    inference_dependency_planning_request, InferenceDependencyPlanningInput,
+};
 use crate::workflow::{
     WorkflowSchedulerBlockedInferenceTaskProjection,
     WorkflowSchedulerBlockedInferenceTaskProjectionReason,
@@ -1587,19 +1589,13 @@ impl CurrentInferenceValidationNodeRecord {
         DependencyPlanningRequest,
         pantograph_dependency_planning::DependencyPlanningContractError,
     > {
-        Ok(DependencyPlanningRequest {
+        inference_dependency_planning_request(InferenceDependencyPlanningInput {
             model_ref: path_free_model_ref(&self.pumas_model_ref),
-            task_id: DependencyTaskId::parse(self.task_kind.as_str())?,
-            task_type: None,
-            expected_artifact_kind: None,
+            task_type: DependencyTaskId::parse(self.task_kind.as_str())?,
             scheduler_intent: SchedulerIntent {
                 requested_runtime_id: self.runtime_constraint.clone(),
                 requested_device_id: self.device_constraint.clone(),
             },
-            platform_context: Some(DependencyPlanningPlatformContext::from_os_arch(
-                std::env::consts::OS,
-                std::env::consts::ARCH,
-            )?),
             selected_binding_ids,
             dependency_override_patches,
             trait_intents: Vec::new(),
@@ -2193,6 +2189,245 @@ mod tests {
             result.status,
             DependencyEnvironmentActionIntentStatus::RequestReady
         );
+    }
+
+    // Exercise the actual graph proof producer, saved snapshot projection, and
+    // scheduler request owner. No requirements id or readiness receipt is forged.
+    async fn resolved_cpu_task_graph() -> crate::workflow::WorkflowSchedulerTaskGraph {
+        use crate::workflow::{
+            ValidatedWorkflowExecutableValidationSnapshotRecord,
+            WorkflowExecutableValidationSnapshotId, WorkflowExecutableValidationSnapshotRecord,
+        };
+        let store = CurrentInferenceValidationStateStore::new();
+        let mut projection = node_projection(DraftGraphValidationStatus::Executable);
+        projection.descriptor.model_ref.model_id =
+            "embedding/qualification/synthetic-bert-8".into();
+        projection.descriptor.model_ref.selected_artifact_id = Some("main".into());
+        projection.descriptor.task_kind = "embedding".parse().unwrap();
+        projection.authored_snapshot.task_kind = projection.descriptor.task_kind.clone();
+        projection.runtime_constraint = Some("candle".parse().unwrap());
+        projection.device_constraint = Some("cpu".parse().unwrap());
+        projection.runtime_source_context = crate::graph::WorkflowRuntimeSourceContext {
+            operation_type: "embedding.text".into(),
+            context_shape_key: "embedding.one-text".into(),
+            cancellation_mode: "run_scoped".into(),
+        };
+        store
+            .record_validation_publication(
+                "graph-session-1".parse().unwrap(),
+                validation_session(
+                    "aaaaaaaaaaaaaaaa",
+                    DraftGraphValidationStatus::Executable,
+                    true,
+                ),
+                vec![projection.clone()],
+            )
+            .await
+            .unwrap();
+        let resolution = store
+            .resolve_dependency_environment_action_request(state_request_with_validation_session(
+                "graph-session-1",
+                "aaaaaaaaaaaaaaaa",
+                "aaaaaaaaaaaaaaaa",
+                "validation.session.1",
+                "dependency-node-1",
+                true,
+            ))
+            .await;
+        assert!(matches!(
+            resolution,
+            DependencyEnvironmentActionIntentStateResolution::RequestReady { .. }
+        ));
+        assert!(
+            store
+                .current_executable_validation_snapshot_source(snapshot_source_request(
+                    "graph-session-1",
+                    "bbbbbbbbbbbbbbbb",
+                    Some("validation.session.1")
+                ))
+                .await
+                .is_err(),
+            "a resolved proof cannot authorize another graph revision"
+        );
+        let source = store
+            .current_executable_validation_snapshot_source(snapshot_source_request(
+                "graph-session-1",
+                "aaaaaaaaaaaaaaaa",
+                Some("validation.session.1"),
+            ))
+            .await
+            .unwrap();
+        let graph: crate::graph::WorkflowGraph = serde_json::from_value(serde_json::json!({
+            "nodes": [
+                {"id": "infer", "node_type": "llm-inference", "position": {"x": 0, "y": 0},
+                 "data": {"task_kind": "embedding", "pumas_model_ref": projection.descriptor.model_ref,
+                    "inference_interface_snapshot": projection.authored_snapshot,
+                    "runtime_source_context": projection.runtime_source_context}},
+                {"id": "deps", "node_type": "dependency-environment", "position": {"x": 0, "y": 100},
+                 "data": {"mode": "manual"}}
+            ], "edges": [{"id": "dependency", "source": "deps", "target": "infer",
+                "source_handle": "dependency_environment_sidecar", "target_handle": "dependency_environment_sidecar"}]
+        })).unwrap();
+        let version = pantograph_runtime_attribution::WorkflowVersionRecord {
+            workflow_id: "workflow.cpu-proof".parse().unwrap(),
+            workflow_version_id: "version.cpu-proof".parse().unwrap(),
+            semantic_version: "0.1.0".into(),
+            execution_fingerprint: crate::graph::workflow_execution_fingerprint(&graph).unwrap(),
+            executable_topology_json: serde_json::to_string(
+                &crate::graph::workflow_executable_topology(&graph).unwrap(),
+            )
+            .unwrap(),
+            created_at_ms: 0,
+        };
+        let snapshot = WorkflowExecutableValidationSnapshotRecord::from_snapshot_source(
+            &version,
+            WorkflowExecutableValidationSnapshotId::generate(),
+            &source,
+            &graph,
+        )
+        .unwrap();
+        // Round-trip the saved proof-bearing snapshot before scheduler projection.
+        let saved = serde_json::to_string(&snapshot).unwrap();
+        let snapshot = ValidatedWorkflowExecutableValidationSnapshotRecord::try_from(
+            serde_json::from_str::<WorkflowExecutableValidationSnapshotRecord>(&saved).unwrap(),
+        )
+        .unwrap();
+        let projections = snapshot
+            .scheduler_inference_task_projections(&graph)
+            .unwrap();
+        let tasks = crate::workflow::workflow_scheduler_task_graph_with_inference_projections(
+            &version.workflow_id,
+            &"run.cpu-proof".parse().unwrap(),
+            &graph,
+            &projections,
+        )
+        .unwrap();
+        assert_eq!(
+            tasks.tasks.len(),
+            1,
+            "dependency control must remain outside executable tasks"
+        );
+        tasks
+    }
+
+    fn cpu_readiness_request(
+        tasks: crate::workflow::WorkflowSchedulerTaskGraph,
+    ) -> Result<
+        ValidatedDependencyPlanningRequest,
+        crate::scheduler::WorkflowDependencyReadinessLifecycleError,
+    > {
+        use pantograph_runtime_host_contracts::{
+            RuntimeHostExecutionCancellationHandle, RuntimeHostExecutionPort,
+            RuntimeHostExecutionPortError, RuntimeHostExecutionRequest,
+            RuntimeHostExecutionResponse, SchedulerRuntimeHostDispatcher,
+        };
+        use std::sync::Arc;
+        struct UncalledHost;
+        #[async_trait::async_trait]
+        impl RuntimeHostExecutionPort for UncalledHost {
+            async fn execute_runtime_host_request(
+                &self,
+                _: RuntimeHostExecutionRequest,
+                _: RuntimeHostExecutionCancellationHandle,
+            ) -> Result<RuntimeHostExecutionResponse, RuntimeHostExecutionPortError> {
+                panic!("proof construction must not invoke runtime execution")
+            }
+        }
+        let orchestrator = crate::scheduler::WorkflowSchedulerTaskOrchestrator::new(
+            SchedulerRuntimeHostDispatcher::new(Arc::new(UncalledHost)),
+        );
+        let lifecycle =
+            crate::scheduler::WorkflowDependencyReadinessLifecycle::new(orchestrator.clone());
+        let mut store = crate::scheduler::WorkflowExecutionSessionStore::new(4, 2);
+        let session = store
+            .create_session(
+                tasks.workflow_id.as_str().into(),
+                None,
+                None,
+                vec![],
+                vec![],
+                true,
+            )
+            .unwrap();
+        let run = tasks.workflow_run_id.as_str().to_string();
+        let task_id = tasks.tasks[0].task_id.as_str().to_string();
+        let request = crate::workflow::WorkflowExecutionSessionRunRequest {
+            session_id: session.clone(),
+            workflow_semantic_version: "0.1.0".into(),
+            inputs: vec![],
+            output_targets: None,
+            override_selection: None,
+            timeout_ms: None,
+            priority: None,
+        };
+        store
+            .enqueue_run_with_id(&session, &request, run.clone())
+            .unwrap();
+        store.begin_queued_run(&session, &run).unwrap().unwrap();
+        orchestrator
+            .initialize_active_run_task_state(&mut store, &session, &run, tasks)
+            .unwrap();
+        let request = lifecycle.readiness_request_for_active_runtime_task(
+            &store,
+            &session,
+            &run,
+            &task_id,
+            pantograph_dependency_planning::DependencyReadinessPolicy::CheckOnly,
+        )?;
+        Ok(ValidatedDependencyPlanningRequest::try_from(
+            request
+                .as_envelope()
+                .readiness_request
+                .planning_request
+                .clone(),
+        )
+        .unwrap())
+    }
+
+    #[tokio::test]
+    async fn graph_resolve_saved_cpu_proof_reaches_scheduler_readiness() {
+        let tasks = resolved_cpu_task_graph().await;
+        let saved_id = tasks.tasks[0]
+            .schedulable_intent_template
+            .as_ref()
+            .unwrap()
+            .dependency_readiness_source
+            .dependency_requirements_id
+            .clone();
+        let request = cpu_readiness_request(tasks)
+            .expect("same package and target must preserve the graph producer identity");
+        let proof = produce_dependency_requirements_proof(&request, None).unwrap();
+        assert_eq!(proof.dependency_requirements_id, saved_id);
+    }
+
+    #[tokio::test]
+    async fn graph_resolve_saved_cpu_proof_rejects_changed_package_or_target() {
+        let original = resolved_cpu_task_graph().await;
+        for change in ["model", "revision", "artifact", "device", "runtime"] {
+            let mut tasks = original.clone();
+            let intent = tasks.tasks[0].schedulable_intent.as_mut().unwrap();
+            match change {
+                "model" => intent.model_ref.model_id = "embedding/qualification/other-bert".into(),
+                "revision" => intent.model_ref.revision = Some("other-revision".into()),
+                "artifact" => intent.model_ref.selected_artifact_id = Some("other-artifact".into()),
+                "device" => {
+                    intent.constraints.requested_device_id = Some("cuda.0".parse().unwrap())
+                }
+                "runtime" => {
+                    intent.constraints.requested_runtime_id = Some("pytorch".parse().unwrap())
+                }
+                _ => unreachable!(),
+            }
+            let error = cpu_readiness_request(tasks)
+                .expect_err("changed scope must retain proof rejection");
+            assert!(
+                matches!(error,
+                crate::scheduler::WorkflowDependencyReadinessLifecycleError::WorkflowService(
+                    crate::workflow::WorkflowServiceError::InvalidRequest(ref message))
+                    if message.contains("dependency requirements id does not match")),
+                "{change}: {error:?}"
+            );
+        }
     }
 
     #[tokio::test]

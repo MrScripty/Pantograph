@@ -5232,35 +5232,34 @@ fn runtime_dependency_planning_request(
     model_ref: &PumasModelRef,
     selected_binding_ids: Vec<pantograph_dependency_planning::DependencyBindingId>,
 ) -> DependencyPlanningRequest {
-    DependencyPlanningRequest {
-        model_ref: model_ref.clone(),
-        task_id: pantograph_dependency_planning::DependencyTaskId::parse("image_generation")
-            .expect("valid task id"),
-        task_type: Some(
-            pantograph_dependency_planning::DependencyTaskId::parse("image_generation")
+    crate::inference_dependency_planning::inference_dependency_planning_request(
+        crate::inference_dependency_planning::InferenceDependencyPlanningInput {
+            model_ref: model_ref.clone(),
+            task_type: pantograph_dependency_planning::DependencyTaskId::parse("image_generation")
                 .expect("valid task type"),
-        ),
-        expected_artifact_kind: None,
-        scheduler_intent: SchedulerIntent {
-            requested_runtime_id: Some(
-                RuntimeIntentId::parse("pytorch").expect("valid runtime id"),
-            ),
-            requested_device_id: Some(DeviceIntentId::parse("cuda:0").expect("valid device id")),
+            scheduler_intent: SchedulerIntent {
+                requested_runtime_id: Some(
+                    RuntimeIntentId::parse("pytorch").expect("valid runtime id"),
+                ),
+                requested_device_id: Some(
+                    DeviceIntentId::parse("cuda:0").expect("valid device id"),
+                ),
+            },
+            selected_binding_ids,
+            dependency_override_patches: Vec::new(),
+            trait_intents: Vec::new(),
+            caller_context: DependencyPlanningCallerContext {
+                source_node_type: Some(
+                    DependencyNodeTypeId::parse("llm-inference").expect("valid node type"),
+                ),
+                workflow_id: Some(version.workflow_id.as_str().to_string()),
+                node_id: Some("infer".to_string()),
+                port_id: None,
+                run_id: None,
+            },
         },
-        platform_context: None,
-        selected_binding_ids,
-        dependency_override_patches: Vec::new(),
-        trait_intents: Vec::new(),
-        caller_context: DependencyPlanningCallerContext {
-            source_node_type: Some(
-                DependencyNodeTypeId::parse("llm-inference").expect("valid node type"),
-            ),
-            workflow_id: Some(version.workflow_id.as_str().to_string()),
-            node_id: Some("infer".to_string()),
-            port_id: None,
-            run_id: None,
-        },
-    }
+    )
+    .expect("canonical workflow-service planning scope")
 }
 
 fn runtime_source_context() -> crate::graph::WorkflowRuntimeSourceContext {

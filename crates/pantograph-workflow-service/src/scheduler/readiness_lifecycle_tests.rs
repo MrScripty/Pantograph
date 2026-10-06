@@ -481,52 +481,52 @@ fn ready_preflight_result(task_intent: &SchedulableTaskIntent) -> DependencyPref
 fn dependency_planning_request_for_intent(
     task_intent: &SchedulableTaskIntent,
 ) -> DependencyPlanningRequest {
-    DependencyPlanningRequest {
-        model_ref: task_intent.model_ref.clone(),
-        task_id: task_intent.task_type.clone(),
-        task_type: Some(task_intent.task_type.clone()),
-        expected_artifact_kind: None,
-        scheduler_intent: SchedulerIntent {
-            requested_runtime_id: task_intent.constraints.requested_runtime_id.clone(),
-            requested_device_id: task_intent.constraints.requested_device_id.clone(),
+    crate::inference_dependency_planning::inference_dependency_planning_request(
+        crate::inference_dependency_planning::InferenceDependencyPlanningInput {
+            model_ref: task_intent.model_ref.clone(),
+            task_type: task_intent.task_type.clone(),
+            scheduler_intent: SchedulerIntent {
+                requested_runtime_id: task_intent.constraints.requested_runtime_id.clone(),
+                requested_device_id: task_intent.constraints.requested_device_id.clone(),
+            },
+            selected_binding_ids: Vec::new(),
+            dependency_override_patches: task_intent.dependency_override_patches.clone(),
+            trait_intents: task_intent
+                .trait_settings
+                .iter()
+                .map(|setting| DependencyTraitIntent {
+                    trait_id: DependencyTraitIntentId::parse(setting.trait_id.as_str())
+                        .expect("trait id"),
+                    value: match &setting.value {
+                        pantograph_scheduler::SchedulerTraitValue::String(value) => {
+                            DependencyTraitIntentValue::Text(value.clone())
+                        }
+                        pantograph_scheduler::SchedulerTraitValue::Bool(value) => {
+                            DependencyTraitIntentValue::Boolean(*value)
+                        }
+                        pantograph_scheduler::SchedulerTraitValue::I64(value) => {
+                            DependencyTraitIntentValue::Integer(*value)
+                        }
+                        pantograph_scheduler::SchedulerTraitValue::U64(value) => {
+                            DependencyTraitIntentValue::Integer(
+                                i64::try_from(*value).expect("trait value fits"),
+                            )
+                        }
+                    },
+                })
+                .collect(),
+            caller_context: DependencyPlanningCallerContext {
+                source_node_type: Some(
+                    DependencyNodeTypeId::parse("llm-inference").expect("node type"),
+                ),
+                workflow_id: Some(task_intent.workflow_id.as_str().to_string()),
+                node_id: Some(task_intent.node_id.as_str().to_string()),
+                port_id: None,
+                run_id: Some(task_intent.workflow_run_id.as_str().to_string()),
+            },
         },
-        platform_context: None,
-        selected_binding_ids: Vec::new(),
-        dependency_override_patches: task_intent.dependency_override_patches.clone(),
-        trait_intents: task_intent
-            .trait_settings
-            .iter()
-            .map(|setting| DependencyTraitIntent {
-                trait_id: DependencyTraitIntentId::parse(setting.trait_id.as_str())
-                    .expect("trait id"),
-                value: match &setting.value {
-                    pantograph_scheduler::SchedulerTraitValue::String(value) => {
-                        DependencyTraitIntentValue::Text(value.clone())
-                    }
-                    pantograph_scheduler::SchedulerTraitValue::Bool(value) => {
-                        DependencyTraitIntentValue::Boolean(*value)
-                    }
-                    pantograph_scheduler::SchedulerTraitValue::I64(value) => {
-                        DependencyTraitIntentValue::Integer(*value)
-                    }
-                    pantograph_scheduler::SchedulerTraitValue::U64(value) => {
-                        DependencyTraitIntentValue::Integer(
-                            i64::try_from(*value).expect("trait value fits"),
-                        )
-                    }
-                },
-            })
-            .collect(),
-        caller_context: DependencyPlanningCallerContext {
-            source_node_type: Some(
-                DependencyNodeTypeId::parse("llm-inference").expect("node type"),
-            ),
-            workflow_id: Some(task_intent.workflow_id.as_str().to_string()),
-            node_id: Some(task_intent.node_id.as_str().to_string()),
-            port_id: None,
-            run_id: Some(task_intent.workflow_run_id.as_str().to_string()),
-        },
-    }
+    )
+    .expect("canonical workflow-service planning scope")
 }
 
 fn orchestrator_without_runtime_host_response() -> WorkflowSchedulerTaskOrchestrator {

@@ -709,7 +709,15 @@ fn image_runtime_dependency_planning_request(
             ),
             requested_device_id: Some(DeviceIntentId::parse("cuda:0").expect("valid device id")),
         },
-        platform_context: None,
+        // Controlled provider evidence must describe the same explicit host
+        // target as workflow-service graph Resolve and scheduler admission.
+        platform_context: Some(
+            pantograph_dependency_planning::DependencyPlanningPlatformContext::from_os_arch(
+                std::env::consts::OS,
+                std::env::consts::ARCH,
+            )
+            .expect("host platform"),
+        ),
         selected_binding_ids,
         dependency_override_patches: Vec::new(),
         trait_intents: Vec::new(),

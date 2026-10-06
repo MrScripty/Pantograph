@@ -516,3 +516,53 @@ snapshot publication into readiness admission remains the next unresolved
 integration boundary. No further hosted successor is active. The candidate's
 926 workflow-service tests and 675 frontend tests remain green, while native
 acceptance is explicitly blocked at this later boundary.
+
+## Shared planning owner successor
+
+The preserved `3b9e731ac678b00463d4f1b48ceb78322a096c04` candidate is the
+parent of this repair. Its failed native evidence remains unchanged. The
+requirements producer hashes both optional `task_type` and `platform_context`;
+graph Resolve supplied only the host platform while scheduler reconstruction
+supplied only the task type. Equal model, artifact and CPU target therefore
+produced different requirements IDs. This is an owner construction mismatch,
+not evidence that proof validation should be relaxed.
+
+Workflow-service now owns one inference planning constructor used by both
+graph Resolve and scheduler readiness. It includes the explicit task kind and
+host OS/architecture in both requests while retaining caller attribution,
+model/revision/artifact, runtime/device, selected bindings, overrides and traits.
+The generic requirements hash, saved proof equality checks, dependency-control
+task exclusion and authored root-text forwarding are unchanged. Historical
+proofs made with the previous request shape require fresh validation and Resolve;
+no unlike historical identity is accepted as current.
+
+The regression runs the actual graph action request producer, round-trips its
+proof-bearing executable snapshot, projects actual scheduler tasks and asks the
+readiness lifecycle for its request. It uses the controlled CPU package identity
+and target, without manufacturing a requirements ID or readiness receipt. The
+unchanged package/target failed before repair with the exact saved-proof mismatch
+and passes after repair. Model, model revision, artifact, device and runtime
+changes still fail that guard; another graph revision cannot publish the proof.
+The dependency sidecar remains outside executable tasks. These local descriptor
+fixtures test the identity seam; the native attempt must separately establish
+actual Pumas authority, saved/reopened GUI submission and retained CPU output.
+
+The full workflow-service suite passes: 928 unit and 60 integration tests. Strict
+selected-crate all-target Clippy passes; existing dependency warnings remain in
+the retained logs. Complete Cargo feature graphs were inspected before builds,
+with current Pumas `26a84e323cae566a46a8f76bef48fa1010aed48b`, ORT `load-dynamic`,
+ORT-sys `disable-linking`, no binary download capabilities, and defensive
+`ORT_SKIP_DOWNLOAD=1`. Native qualification remains pending for this successor;
+no CPU output, GPU, pretrained model or full production-loader acceptance is
+inferred from these local checks.
+
+The established embedded default-feature suite passes all 537 tests, including
+real-Pumas cold Candle descriptor and typed-proof checks. A Candle-only embedded
+test attempt cannot compile existing tests that call the llama.cpp-gated
+`InferenceGateway::new`; its failure is retained without changing unrelated test
+constructors. This does not establish native CPU execution. The
+[local shared-owner evidence](../evidence/native-desktop-cpu/cold-typed-discovery/shared-planning-identity/README.md)
+contains the before-repair regression, complete effective graphs, test/Clippy logs
+and gate checks. The native workflow path filter includes the actual repaired
+owner sources so publishing this isolated successor triggers qualification;
+permissions and deadlines are unchanged.
