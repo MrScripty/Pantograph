@@ -904,9 +904,9 @@ async fn saved_cpu_chat_graph_runs_native_owner_with_template_controls_and_scope
             assert!(previous_runs.insert(response.workflow_run_id.clone()));
             assert_eq!(response.outputs.len(), 2);
             for output in &response.outputs {
-                assert_eq!(
-                    output.value, case["text"],
-                    "model={model_seed}, case={case_index}, output={output:?}"
+                assert!(
+                    output.value == case["text"],
+                    "model={model_seed}, case={case_index}"
                 );
             }
             assert!(lifecycle
