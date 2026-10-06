@@ -1,0 +1,16 @@
+{
+  "run_id": 37509685511,
+  "job_id": 112427297812,
+  "source_head": "77b9704920697ff01c9fa5b0bb49dd5b585c885f",
+  "source_tree": "fae84ac50e846f25928c73b3fc5bb40eba5589ed",
+  "artifact_id": 11434358121,
+  "artifact_sha256": "ebf7a5ee7f1eaef3d57fc791ff47064e414ae0b387acd8c6a226119897935f8c",
+  "artifact_members": 21,
+  "conclusion": "failure",
+  "native_startup_tests_passed": 8,
+  "dependency_resolve_status": "request_ready",
+  "failed_stage": "fixture assertion required an explicit empty diagnostics array; serde omits it",
+  "gui_submit_clicked": false,
+  "scheduler_run_established": false,
+  "cpu_output_established": false
+}

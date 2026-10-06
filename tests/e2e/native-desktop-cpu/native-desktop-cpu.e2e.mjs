@@ -136,7 +136,13 @@ describe('actual native Tauri saved CPU embedding graph', () => {
       } });
       writeFileSync(path.join(evidence, 'native-dependency-resolution.json'), JSON.stringify(resolved, null, 2));
       assert.equal(resolved.status, 'request_ready', JSON.stringify(resolved));
-      assert.deepEqual(resolved.diagnostics, []);
+      assert.equal(resolved.graph_session_id, activeValidation.graph_session_id);
+      assert.equal(resolved.graph_revision, activeValidation.graph_revision);
+      assert.equal(resolved.validation_session_id, projection.summary.validation_session_id);
+      assert.equal(resolved.target_node_id, 'deps');
+      assert.equal(resolved.action, 'resolve');
+      // The contract omits empty diagnostics during serialization.
+      assert.deepEqual(resolved.diagnostics ?? [], []);
 
     }
     await $(selector('workflow-submit-button')).click();

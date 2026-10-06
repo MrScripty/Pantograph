@@ -373,7 +373,8 @@ the missing proof, calls the existing typed Resolve action, then publishes the
 same scoped snapshot successfully. Candle remains stopped with no model,
 instance or reservation. Both targeted tests and strict all-target runtime Clippy
 pass. All 673 frontend tests, TypeScript checking, the frontend build, affected
-ESLint, critical/a11y gates and formatting pass. These tests do not establish a
+ESLint (with actual Node/browser/WebDriver globals declared for the harness),
+critical/a11y gates and formatting pass. These tests do not establish a
 native scheduler run, actual CPU output, GPU, pretrained-model or full loader
 qualification. The next source-bound hosted run must supply that evidence.
 
@@ -386,3 +387,27 @@ dependencies; an exact default-scope graph is preserved afterward rather than
 represented as a pre-build audit. Explicit frontend scripts were then used with
 the defensive setting. The effective graphs contain no prohibited ORT download
 features or historical Pumas source.
+
+## Native typed Resolve succeeds; serialized-empty assertion corrected
+
+[Run 37509685511](https://github.com/MrScripty/Pantograph/actions/runs/37509685511)
+executes `77b9704920697ff01c9fa5b0bb49dd5b585c885f`, tree
+`fae84ac50e846f25928c73b3fc5bb40eba5589ed`. Native build, all eight
+startup tests, cold-owner assertions, save/reopen and all three visible wires pass.
+The actual current-session Resolve producer returns `request_ready` with matching
+graph revision `d0f7a8eb92be581d` and validation session. The harness then fails
+because it expects an explicit empty diagnostics array. The Rust contract uses
+`skip_serializing_if = "Vec::is_empty"`, so its valid response omits that field.
+Submit is never clicked; no scheduler run or CPU output is established.
+
+The [complete tenth-attempt evidence](../evidence/native-desktop-cpu/cold-typed-discovery/typed-proof-successor/hosted-attempt/README.md)
+preserves all twenty-one members and source-bound logs. Artifact `11434358121`
+has SHA256 `ebf7a5ee7f1eaef3d57fc791ff47064e414ae0b387acd8c6a226119897935f8c`.
+The assertion successor accepts the contract's omitted-empty serialization and
+additionally requires exact graph/session/revision/target/action attribution.
+It changes no producer, proof, publication or runtime gate. Syntax and ESLint
+checks cover the fixture change; previous runtime/frontend checks remain valid.
+An initial ESLint invocation failed because the repository configuration does
+not declare harness globals; both that log and the successful explicit-globals
+check are retained. The next native run must still establish scheduler execution
+and actual retained synthetic CPU output.
