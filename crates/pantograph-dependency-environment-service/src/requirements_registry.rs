@@ -85,6 +85,15 @@ impl DependencyRequirementsPayload {
         self.identity_key
             .validate()
             .map_err(DependencyRequirementsRegistryError::InvalidContract)?;
+        // A resolved model may declare no dependencies. An empty, validated
+        // requirement set is distinct from an unavailable requirements result.
+        if self.requirements.is_empty()
+            && self.bindings.is_empty()
+            && self.selected_binding_ids.is_empty()
+            && self.identity_key.selected_binding_ids.is_empty()
+        {
+            return Ok(());
+        }
         if self.requirements.is_empty() {
             return Err(DependencyRequirementsRegistryError::InvalidPayload {
                 field: "dependency_requirements_payload.requirements",

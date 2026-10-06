@@ -653,3 +653,42 @@ This establishes the cold requirements seed/snapshot circular dependency and
 corrects the earlier source-only queue hypothesis. CPU execution/output remains
 unqualified. No loader, GPU, pretrained model or broad production qualification
 is inferred. No repair or synthesized readiness is present in this run.
+
+## Authoritative cold requirements bootstrap repair
+
+Ancestry inspection confirms clean `69e6b4163642349436373781cce730010d1536f6`,
+tree `c9384336fb4d5dd6f1bfa07e9e4d9df5b53339be`, contains only diagnostic
+instrumentation and preserved evidence after `e6ec8112`; no readiness repair.
+Supported Git fetch returns the same candidate. Continue from that preserved
+head without reset or history rewriting.
+
+The async embedded producer now receives the existing hosted Pumas access.
+On a genuine missing registry payload, it checks the canonical saved requirements
+identity, current host platform and actual selected package facts, then queries
+the current Pumas owner's dependency requirements API. A valid resolved empty
+declared-binding set produces a scoped Resolved snapshot for the normal seed
+consumer and an inventory Check snapshot. The registry accepts that complete
+empty validated set while retaining non-ready/invalid and partial-set rejection.
+Stale/mismatched entries, mismatched proofs, unavailable selected facts and
+unresolved declared bindings stay rejected. No registry insertion, fake ready
+receipt, altered qualification model metadata or alternate executor bypasses
+the existing consumer/admission guards.
+
+The [repair evidence](../evidence/native-desktop-cpu/cold-typed-discovery/pumas-bootstrap-repair/README.md)
+includes the real Pumas -> async producer -> saved-proof-scoped seed consumer
+regression and relevant negatives. Local checks pass: 21 environment tests,
+988 workflow-service tests, 537 embedded default-feature tests, strict all-target
+selected-crate Clippy for those three crates, harness ESLint, formatting and
+critical gate. Complete feature graphs are audited before each build and
+ORT_SKIP_DOWNLOAD=1 is set. Two focused setup failures are preserved: unwritable
+default XDG configuration and an invalid negative dependency profile fixture;
+their corrected final test and full suites pass. Production fixture metadata
+is unchanged.
+
+This first bootstrap supports the current Pumas owner's resolved absence of
+indexed declared bindings. Declared profiles/selected bindings/overrides/trait
+intents and cold local-client resolution remain unavailable. Runtime capability,
+device/resource and loader decisions remain with their existing owners. Native
+acceptance is still pending one actual saved/reopened GUI submission, automatic
+resume of that same scoped run, and retained CPU output. Pending alone cannot
+pass; no GPU, pretrained or broad production-loader claim is made.

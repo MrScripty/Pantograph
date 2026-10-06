@@ -205,6 +205,30 @@ impl PumasSelectorAccess {
         }
     }
 
+    pub async fn resolve_model_dependency_requirements(
+        &self,
+        model_id: &str,
+        platform_key: &str,
+        backend_key: Option<&str>,
+    ) -> pumas_library::Result<pumas_library::model_library::ModelDependencyRequirementsResolution>
+    {
+        let model_id = model_id.strip_prefix("pumas://models/").unwrap_or(model_id);
+        match self {
+            Self::Owner(api) => {
+                api.resolve_model_dependency_requirements(model_id, platform_key, backend_key)
+                    .await
+            }
+            Self::LocalClient(_) | Self::ReadOnly(_) => {
+                Err(pumas_library::PumasError::InvalidParams {
+                    message: format!(
+                        "{} Pumas access does not expose dependency requirements resolution",
+                        self.role_name()
+                    ),
+                })
+            }
+        }
+    }
+
     pub async fn resolve_model_artifact_load_target(
         &self,
         mut request: pumas_library::models::ResolveModelArtifactLoadTargetRequest,

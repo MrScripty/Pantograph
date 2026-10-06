@@ -489,7 +489,7 @@ impl EmbeddedWorkflowServiceComposition {
             ));
         let inference_interface_facts_provider =
             Arc::new(EmbeddedInferenceInterfaceFactsProvider::new(
-                PumasDispatchPackageFactsSource::new(Some(pumas_selector_access)),
+                PumasDispatchPackageFactsSource::new(Some(pumas_selector_access.clone())),
                 RuntimeDispatchCapabilityFactsSource::new(factory_input.runtime_registry)
                     .with_gateway(factory_input.gateway),
             ));
@@ -513,6 +513,7 @@ impl EmbeddedWorkflowServiceComposition {
                 dependency_readiness.requirements_registry(),
             )
             .with_config(dependency_readiness_producer_config)
+            .with_pumas_selector_access(pumas_selector_access)
             .spawn(dependency_readiness_runtime_handle)?;
         Ok(EmbeddedHostedWorkflowServiceCompositionOutput {
             workflow_service,
@@ -918,7 +919,7 @@ mod tests {
             registry.clone(),
             gateway.clone(),
             gateway,
-            Arc::new(PumasSelectorAccess::Owner(api)),
+            Arc::new(PumasSelectorAccess::Owner(api.clone())),
             Some(1),
             1_000,
         )
@@ -1007,6 +1008,273 @@ mod tests {
         );
         assert_eq!(published.as_record().nodes.len(), 1);
         assert_eq!(published.as_record().nodes[0].node_id.as_str(), "infer");
+        // Round-trip the actual graph-authored proof, then exercise the async
+        // Pumas producer and the same payload seed consumer used by admission.
+        let reopened: pantograph_workflow_service::workflow::WorkflowExecutableValidationSnapshotRecord =
+            serde_json::from_slice(&serde_json::to_vec(published.as_record()).unwrap()).unwrap();
+        let node = &reopened.nodes[0];
+        let planning: pantograph_dependency_planning::DependencyPlanningRequest =
+            serde_json::from_value(serde_json::json!({
+                "model_ref":node.model_ref, "task_id":node.task_kind, "task_type":node.task_kind,
+                "scheduler_intent":{"requested_runtime_id":"candle","requested_device_id":"cpu"},
+                "platform_context":{"platform_key":format!("{}-{}",std::env::consts::OS,std::env::consts::ARCH)},
+                "caller_context":{"source_node_type":"llm-inference","node_id":"infer"}
+            })).unwrap();
+        let request = pantograph_dependency_planning::ValidatedDependencyEnvironmentRequest::try_from(
+            pantograph_dependency_planning::DependencyEnvironmentRequest {
+                contract_version: 1, action: DependencyEnvironmentAction::Check,
+                identity_key: pantograph_dependency_planning::DependencyPlanningIdentityKey::from_planning_request(&planning).unwrap(),
+                planning_request: planning, dependency_requirements_id: Some(node.dependency_requirements_id.clone()),
+                environment_ref: None,
+            }
+        ).unwrap();
+        let access = Arc::new(PumasSelectorAccess::Owner(api.clone()));
+        let authoritative = access
+            .resolve_model_dependency_requirements(
+                model_id,
+                request
+                    .as_request()
+                    .identity_key
+                    .platform_context
+                    .as_ref()
+                    .unwrap()
+                    .platform_key
+                    .as_str(),
+                Some("candle"),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            authoritative.validation_state,
+            pumas_library::model_library::DependencyValidationState::Resolved
+        );
+        assert!(authoritative.bindings.is_empty());
+        assert!(authoritative.validation_errors.is_empty());
+        let components =
+            bootstrap_pumas_requirements_for_test(access.clone(), request.clone()).await;
+        let provider = pantograph_dependency_environment_service::DependencyEnvironmentService::new(
+            components.snapshot_provider(),
+        );
+        let mut resolve_request = request.as_request().clone();
+        resolve_request.action = DependencyEnvironmentAction::Resolve;
+        let resolved = provider
+            .handle(
+                &pantograph_dependency_planning::ValidatedDependencyEnvironmentRequest::try_from(
+                    resolve_request,
+                )
+                .unwrap(),
+            )
+            .unwrap();
+        assert_eq!(
+            resolved.as_result().readiness_state,
+            pantograph_dependency_planning::DependencyEnvironmentReadinessState::Resolved
+        );
+        assert!(
+            components.requirements_registry().is_empty(),
+            "producer must leave seed storage to its consumer"
+        );
+        components
+            .workflow_service()
+            .store_dependency_requirements_payload_from_result(&resolved)
+            .unwrap();
+        let payload =
+            pantograph_dependency_environment_service::resolve_dependency_requirements_payload(
+                components.requirements_registry().as_ref(),
+                &request,
+            )
+            .unwrap();
+        assert_eq!(
+            payload.dependency_requirements_id,
+            node.dependency_requirements_id
+        );
+        assert_eq!(payload.identity_key, request.as_request().identity_key);
+        let checked = provider.handle(&request).unwrap();
+        assert_eq!(
+            checked.as_result().readiness_state,
+            pantograph_dependency_planning::DependencyEnvironmentReadinessState::Ready
+        );
+        assert!(
+            pantograph_dependency_planning::dependency_preflight_result_from_environment_result(
+                &checked
+            )
+            .is_ok()
+        );
+
+        for mutation in [
+            "model",
+            "revision",
+            "artifact",
+            "runtime",
+            "device",
+            "requirements",
+        ] {
+            let mut altered = request.as_request().clone();
+            match mutation {
+                "model" => {
+                    altered.planning_request.model_ref.model_id =
+                        "embedding/qualification/missing".into()
+                }
+                "revision" => altered.planning_request.model_ref.revision = Some("changed".into()),
+                "artifact" => {
+                    altered.planning_request.model_ref.selected_artifact_id = Some("other".into())
+                }
+                "runtime" => {
+                    altered
+                        .planning_request
+                        .scheduler_intent
+                        .requested_runtime_id = Some("other".parse().unwrap())
+                }
+                "device" => {
+                    altered
+                        .planning_request
+                        .scheduler_intent
+                        .requested_device_id = Some("cuda:0".parse().unwrap())
+                }
+                _ => {
+                    altered.dependency_requirements_id =
+                        Some("unrelated-requirements".parse().unwrap())
+                }
+            }
+            altered.identity_key = pantograph_dependency_planning::DependencyPlanningIdentityKey::from_planning_request(&altered.planning_request).unwrap();
+            let altered =
+                pantograph_dependency_planning::ValidatedDependencyEnvironmentRequest::try_from(
+                    altered,
+                )
+                .unwrap();
+            let rejected =
+                bootstrap_pumas_requirements_for_test(access.clone(), altered.clone()).await;
+            assert_eq!(
+                pantograph_dependency_environment_service::DependencyEnvironmentProvider::check(
+                    rejected.snapshot_provider().as_ref(),
+                    &altered,
+                )
+                .readiness_state,
+                pantograph_dependency_planning::DependencyEnvironmentReadinessState::Unavailable,
+                "{mutation}"
+            );
+        }
+        for mutation in ["model", "revision", "artifact"] {
+            let mut altered = request.as_request().clone();
+            match mutation {
+                "model" => {
+                    altered.planning_request.model_ref.model_id =
+                        "embedding/qualification/missing".into()
+                }
+                "revision" => altered.planning_request.model_ref.revision = Some("changed".into()),
+                _ => altered.planning_request.model_ref.selected_artifact_id = Some("other".into()),
+            }
+            altered.identity_key = pantograph_dependency_planning::DependencyPlanningIdentityKey::from_planning_request(&altered.planning_request).unwrap();
+            altered.dependency_requirements_id = Some(
+                pantograph_dependency_planning::produce_dependency_requirements_proof(
+                    &pantograph_dependency_planning::ValidatedDependencyPlanningRequest::try_from(
+                        altered.planning_request.clone(),
+                    )
+                    .unwrap(),
+                    None,
+                )
+                .unwrap()
+                .dependency_requirements_id,
+            );
+            let altered =
+                pantograph_dependency_planning::ValidatedDependencyEnvironmentRequest::try_from(
+                    altered,
+                )
+                .unwrap();
+            let rejected =
+                bootstrap_pumas_requirements_for_test(access.clone(), altered.clone()).await;
+            assert_eq!(
+                pantograph_dependency_environment_service::DependencyEnvironmentProvider::check(
+                    rejected.snapshot_provider().as_ref(),
+                    &altered,
+                )
+                .readiness_state,
+                pantograph_dependency_planning::DependencyEnvironmentReadinessState::Unavailable,
+                "fresh proof for {mutation} still needs actual owner facts"
+            );
+        }
+        let read_only = Arc::new(PumasSelectorAccess::ReadOnly(Arc::new(
+            pumas_library::PumasReadOnlyLibrary::open(
+                temp_dir.path().join("shared-resources/models"),
+            )
+            .unwrap(),
+        )));
+        assert!(read_only
+            .resolve_model_dependency_requirements(model_id, "linux-x86_64", Some("candle"))
+            .await
+            .is_err());
+        let rejected = bootstrap_pumas_requirements_for_test(read_only, request.clone()).await;
+        assert_eq!(
+            pantograph_dependency_environment_service::DependencyEnvironmentProvider::check(
+                rejected.snapshot_provider().as_ref(),
+                &request,
+            )
+            .readiness_state,
+            pantograph_dependency_planning::DependencyEnvironmentReadinessState::Unavailable
+        );
+        // The same model with real indexed declared bindings must no longer
+        // bootstrap as an empty set, including unmatched backend contexts.
+        let now = chrono::Utc::now().to_rfc3339();
+        api.model_library()
+            .index()
+            .upsert_dependency_profile(&pumas_library::index::DependencyProfileRecord {
+                profile_id: "required-test".into(),
+                profile_version: 1,
+                profile_hash: None,
+                environment_kind: "python-venv".into(),
+                spec_json:
+                    serde_json::json!({"python_packages":[{"name":"torch","version":"==2.4.0"}]})
+                        .to_string(),
+                created_at: now.clone(),
+            })
+            .unwrap();
+        api.model_library()
+            .index()
+            .upsert_model_dependency_binding(&pumas_library::index::ModelDependencyBindingRecord {
+                binding_id: "required-binding".into(),
+                model_id: model_id.into(),
+                profile_id: "required-test".into(),
+                profile_version: 1,
+                binding_kind: "required_core".into(),
+                backend_key: Some("pytorch".into()),
+                platform_selector: None,
+                status: "active".into(),
+                priority: 100,
+                attached_by: Some("test".into()),
+                attached_at: now,
+                profile_hash: None,
+                environment_kind: None,
+                spec_json: None,
+            })
+            .unwrap();
+        let unresolved = access
+            .resolve_model_dependency_requirements(
+                model_id,
+                request
+                    .as_request()
+                    .identity_key
+                    .platform_context
+                    .as_ref()
+                    .unwrap()
+                    .platform_key
+                    .as_str(),
+                Some("candle"),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            unresolved.validation_state,
+            pumas_library::model_library::DependencyValidationState::UnknownProfile
+        );
+        assert!(unresolved.bindings.is_empty());
+        let rejected = bootstrap_pumas_requirements_for_test(access, request.clone()).await;
+        assert_eq!(
+            pantograph_dependency_environment_service::DependencyEnvironmentProvider::check(
+                rejected.snapshot_provider().as_ref(),
+                &request,
+            )
+            .readiness_state,
+            pantograph_dependency_planning::DependencyEnvironmentReadinessState::Unavailable
+        );
         let snapshot = registry.snapshot();
         let candle = snapshot
             .runtimes
@@ -1020,6 +1288,44 @@ mod tests {
         assert!(candle.runtime_instance_id.is_none());
         assert!(candle.models.is_empty());
         assert!(snapshot.reservations.is_empty());
+    }
+
+    #[cfg(feature = "backend-candle")]
+    async fn bootstrap_pumas_requirements_for_test(
+        access: Arc<PumasSelectorAccess>,
+        request: pantograph_dependency_planning::ValidatedDependencyEnvironmentRequest,
+    ) -> WorkflowDependencyReadinessComponents {
+        use pantograph_dependency_environment_service::*;
+        let components = WorkflowDependencyReadinessComponents::new();
+        let item = DependencyReadinessWorkItem::new(
+            DependencyReadinessWorkItemProvenance::new(
+                "bootstrap-session".parse().unwrap(),
+                "bootstrap-run".parse().unwrap(),
+                "infer".parse().unwrap(),
+            ),
+            request.clone(),
+        );
+        components.work_queue().enqueue(item);
+        let handle = EmbeddedDependencyReadinessSnapshotProducer::new(
+            components.snapshot_provider(),
+            components.work_queue(),
+            components.requirements_registry(),
+        )
+        .with_pumas_selector_access(access)
+        .with_config(EmbeddedDependencyReadinessSnapshotProducerConfig {
+            poll_interval: std::time::Duration::from_millis(5),
+        })
+        .spawn(tokio::runtime::Handle::current())
+        .unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            while components.snapshot_provider().snapshot_count() == 0 {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        handle.shutdown().await;
+        components
     }
 
     #[tokio::test]

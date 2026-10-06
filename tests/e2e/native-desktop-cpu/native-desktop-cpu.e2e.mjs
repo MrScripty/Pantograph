@@ -159,7 +159,9 @@ describe('actual native Tauri saved CPU embedding graph', () => {
         // Successful non-image runs use the existing Scheduler destination.
         return await $(selector('workbench-nav-scheduler')).getAttribute('aria-current') === 'page';
       }, { timeout: 30000, timeoutMsg: 'Native submission did not report success or its GUI error' });
-      assert.equal(submissionError, null, submissionError);
+      if (submissionError && !submissionError.includes('runtime dependency readiness is pending')) {
+        assert.fail(submissionError);
+      }
     } catch (error) {
       const runs = await invoke('workflow_run_list_query', { request: { workflow_id: workflowId, limit: 8 } })
         .catch((readError) => ({ error: String(readError) }));
@@ -193,7 +195,24 @@ describe('actual native Tauri saved CPU embedding graph', () => {
     const run = runs.runs[0];
     const runId = run.workflow_run_id;
     assert.equal(typeof runId, 'string');
-    const inspection = await invoke('workflow_run_inspection_query', { request: { workflow_run_id: runId, artifact_limit: 64 } });
+    if (submissionError) {
+      assert.equal(run.workflow_execution_session_resume_state, 'dependency_readiness_pending', 'Pending GUI response must refer to the real deferred run');
+      writeFileSync(path.join(evidence, 'native-initial-submission.json'), JSON.stringify({ submissionError, run }, null, 2));
+    }
+    let inspection;
+    const samples = [];
+    await browser.waitUntil(async () => {
+      const current = await invoke('workflow_run_list_query', { request: { workflow_id: workflowId, limit: 8 } });
+      assert.equal(current.runs.length, 1, 'Automatic bootstrap must preserve the single submitted run');
+      assert.equal(current.runs[0].workflow_run_id, runId);
+      assert.equal(current.runs[0].workflow_execution_session_id, run.workflow_execution_session_id);
+      inspection = await invoke('workflow_run_inspection_query', { request: { workflow_run_id: runId, artifact_limit: 64 } });
+      const scheduler = await invoke('workflow_get_scheduler_snapshot', { request: { session_id: run.workflow_execution_session_id } });
+      samples.push({ capturedAt: new Date().toISOString(), runs: current, scheduler, inspection });
+      writeFileSync(path.join(evidence, 'native-bootstrap-observation.json'), JSON.stringify(samples, null, 2));
+      return inspection.io_artifacts.some((item) => item.producer_node_id === 'infer' && item.producer_port_id === 'embedding')
+        && inspection.io_artifacts.some((item) => item.producer_node_id === 'infer' && item.producer_port_id === 'metadata');
+    }, { timeout: 120000, interval: 2000, timeoutMsg: 'The same native submitted run did not retain CPU output after automatic dependency bootstrap' });
     const embedding = inspection.io_artifacts.find((item) => item.producer_node_id === 'infer' && item.producer_port_id === 'embedding');
     const metadata = inspection.io_artifacts.find((item) => item.producer_node_id === 'infer' && item.producer_port_id === 'metadata');
     assert.ok(embedding && metadata, 'Actual native owner must retain scoped vector and selection metadata');

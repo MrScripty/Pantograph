@@ -205,6 +205,52 @@ fn payload_extraction_accepts_valid_resolved_result_state() {
     assert_eq!(payload.bindings.len(), 1);
 }
 
+#[test]
+fn resolved_empty_requirements_are_valid_but_unavailable_or_partial_sets_are_not() {
+    let mut result: DependencyEnvironmentResult = serde_json::from_str(READY_RESULT).unwrap();
+    result.readiness_state = DependencyEnvironmentReadinessState::Resolved;
+    result.requirements.clear();
+    result.bindings.clear();
+    result.selected_binding_ids.clear();
+    result.identity_key.selected_binding_ids.clear();
+    result.binding_statuses.clear();
+    let validated = ValidatedDependencyEnvironmentResult::try_from(result.clone()).unwrap();
+    let payload = DependencyRequirementsPayload::from_result(&validated).unwrap();
+    assert!(payload.requirements.is_empty());
+    let registry = InMemoryDependencyRequirementsRegistry::new();
+    registry.insert_payload(payload);
+    let mut request = validated_request_with_requirements().as_request().clone();
+    request.planning_request.selected_binding_ids.clear();
+    request.identity_key.selected_binding_ids.clear();
+    assert!(resolve_dependency_requirements_payload(
+        &registry,
+        &ValidatedDependencyEnvironmentRequest::try_from(request).unwrap()
+    )
+    .is_ok());
+
+    result.readiness_state = DependencyEnvironmentReadinessState::Unavailable;
+    result.validation_state = DependencyEnvironmentValidationState::Unavailable;
+    assert!(DependencyRequirementsPayload::from_result(
+        &ValidatedDependencyEnvironmentResult::try_from(result).unwrap()
+    )
+    .is_err());
+    let full = payload_from_ready_result();
+    for (requirements, bindings, selected) in [
+        (full.requirements.clone(), vec![], vec![]),
+        (vec![], full.bindings.clone(), vec![]),
+        (vec![], vec![], full.selected_binding_ids.clone()),
+    ] {
+        assert!(DependencyRequirementsPayload::new(
+            full.dependency_requirements_id.clone(),
+            full.identity_key.clone(),
+            requirements,
+            bindings,
+            selected,
+        )
+        .is_err());
+    }
+}
+
 fn payload_from_ready_result() -> DependencyRequirementsPayload {
     let result = validated_ready_result();
     DependencyRequirementsPayload::from_result(&result).expect("ready result should yield payload")
