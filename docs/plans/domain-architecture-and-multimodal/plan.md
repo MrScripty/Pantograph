@@ -4,16 +4,15 @@
 
 **Current phase:** M3 owner/client consumer source is implemented. Native CPU sampling and the supported inference/embedded host route are qualified separately; the desktop-authored dependent text-to-image graph and full review remain open.
 
-**Next slice:** Parent reviews the bounded
-[KV refusal correction](reports/2026-10-06-text-repetition-kv-refusal.md)
-on a separate successor of frozen numeric checkpoint `12980c2f`. Review accepted
-the dtype/overflow correction but found that cached refusal retained mutated KV
-beside unpublished token history. The worker now invalidates that live snapshot
-before rethrowing, without automatically retrying. Real DynamicCache regression
-coverage includes later fresh generation, subsequent reuse and consistent export.
-Frozen feature/numeric evidence and image integration source `a4656371` remain
-unchanged. Parent reports PR57 merged at main `763e8d4b`; this text correction is
-separate from those image controls.
+**Next slice:** Parent reviews graph-authored
+[minimum new tokens](reports/2026-10-06-workflow-text-min-new-tokens.md), an existing
+typed length option now exposed through the selected host, public scheduler and
+PyTorch worker. It suppresses EOS until the requested new-token floor and refuses
+an authored floor outside the effective token budget before effects. Native CPU
+sampling, continuation/refusal and supported host routes pass. Frozen KV refusal
+checkpoint `59992b9b` awaits its separate narrow review closure; feature/numeric
+evidence and image integration source `a4656371` remain unchanged. Parent reports
+PR57 merged at main `763e8d4b`; this text successor is separate from image controls.
 Parent owns PR/review/merge actions. Preserve full peaks, custody, uncertainty,
 known zero, source/instance fencing and the approved no-download contract.
 

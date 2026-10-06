@@ -48,6 +48,8 @@ sys.modules["block_diffusion"] = block_diffusion
 
 autoregressive = types.ModuleType("autoregressive")
 autoregressive.RepetitionPenaltyNumericsError = ValueError
+autoregressive.MinimumNewTokensError = ValueError
+autoregressive._resolve_min_new_tokens = lambda model, authored, maximum: authored or 0
 for attr in [
     "_generate_autoregressive",
     "_generate_native_checked",

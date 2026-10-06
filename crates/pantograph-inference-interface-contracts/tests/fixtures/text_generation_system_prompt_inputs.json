@@ -72,5 +72,26 @@
   "availability": {
     "status": "available"
   }
+},
+{
+  "port_id": "min_new_tokens",
+  "label": "Min new tokens",
+  "direction": "input",
+  "requirement": "optional",
+  "value_type": {
+    "category": "scalar",
+    "kind": "u64"
+  },
+  "options": {
+    "kind": "numeric_range",
+    "range": {
+      "min": 0.0,
+      "max": 4294967295.0,
+      "step": 1.0
+    }
+  },
+  "availability": {
+    "status": "available"
+  }
 }
 ]

@@ -45,7 +45,9 @@ def worker_text_functions():
                           type_ignores=[])
     namespace = {"torch": torch, "json": json, "logger": logging.getLogger(__name__),
                  "RepetitionPenaltyNumericsError": autoregressive.RepetitionPenaltyNumericsError,
+                 "MinimumNewTokensError": autoregressive.MinimumNewTokensError,
                  "_generate_native_checked": autoregressive._generate_native_checked,
+                 "_resolve_min_new_tokens": autoregressive._resolve_min_new_tokens,
                  "_model": object(), "_model_type": "text-generation", "_live_kv_state": None,
                  "_tokenizer": TokenizerFixture(), "_device": "cpu", "_model_path": None,
                  "_format_prompt": mock.Mock(return_value="formatted prompt"),
@@ -133,6 +135,215 @@ class TinyGenerationModel(torch.nn.Module, GenerationMixin):
         )
 
 class AutoregressiveSamplingTests(unittest.TestCase):
+    def test_minimum_new_tokens_matches_native_eos_suppression_and_defaults(self):
+        class EOSTokenizer(TokenizerFixture):
+            eos_token_id = 3
+
+            def decode(self, token_ids, **_kwargs):
+                return ",".join(str(int(token)) for token in token_ids if int(token) not in self.eos_ids)
+
+        for eos_ids in [[3], [2, 3], [0, 3]]:
+            tokenizer = EOSTokenizer()
+            tokenizer.eos_ids = eos_ids
+            for authored in [None, 0, 1, 2, 4]:
+                for temperature in [0, 0.8]:
+                    with self.subTest(eos=eos_ids, floor=authored, temperature=temperature):
+                        model = TinyGenerationModel()
+                        model.generation_config.eos_token_id = eos_ids
+                        model.generation_config.min_new_tokens = 2
+                        floor = 2 if authored is None else authored
+                        results = []
+                        for streaming in [False, True]:
+                            with torch.random.fork_rng(devices=[]):
+                                torch.manual_seed(19)
+                                args = (model, tokenizer, "cpu", "prompt", 4, temperature, 1)
+                                if streaming:
+                                    results.append(",".join(chunk["text"] for chunk in
+                                        autoregressive._generate_autoregressive_streaming(
+                                            *args, top_k=0, min_new_tokens=authored)))
+                                else:
+                                    results.append(autoregressive._generate_autoregressive(
+                                        *args, top_k=0, min_new_tokens=authored))
+                        self.assertEqual(results[0], results[1])
+                        tokens = [] if results[0] == "" else results[0].split(",")
+                        self.assertGreaterEqual(len(tokens), floor)
+                        self.assertLessEqual(len(tokens), 4)
+                        if temperature == 0:
+                            self.assertEqual(len(tokens), floor)
+
+    def test_sdar_minimum_counts_only_new_tokens_after_suffix_or_replay(self):
+        class EOSTokenizer(TokenizerFixture):
+            eos_token_id = 3
+
+        class EmptyTokenizer(EOSTokenizer):
+            def __call__(self, _prompt, **_kwargs):
+                return BatchEncoding({"input_ids": torch.empty((1, 0), dtype=torch.long)})
+
+        class SDARModel:
+            generation_config = SimpleNamespace(top_k=0, min_new_tokens=2, eos_token_id=[3])
+
+            def __call__(self, input_ids, **_kwargs):
+                return SimpleNamespace(logits=torch.tensor([[[0, 1, 2, 3]]], dtype=torch.float16))
+
+        class Cache:
+            def crop(self, _length):
+                pass
+
+        for authored in [None, 0, 2, 4]:
+            floor = 2 if authored is None else authored
+            args = (SDARModel(), EOSTokenizer(), "cpu", "prompt", 4, 0, 1)
+            text, ids, _ = autoregressive._generate_sdar_cached(*args, min_new_tokens=authored)
+            self.assertEqual(ids, [0, 1] + [2] * floor)
+            self.assertEqual(text, ",".join(["2"] * floor))
+            cached = [0, 1, 2, 2, 2]
+            for tokenizer, suffix in [(EOSTokenizer(), [0, 1]), (EmptyTokenizer(), [])]:
+                text, ids, _ = autoregressive._continue_sdar_cached(
+                    SDARModel(), tokenizer, "cpu", "suffix", 4, 0, 1,
+                    cached, Cache(), min_new_tokens=authored)
+                self.assertEqual(ids, cached + suffix + [2] * floor)
+                self.assertEqual(text, ",".join(["2"] * floor))
+
+    def test_minimum_validation_and_masked_refusal_precede_worker_effects(self):
+        for streaming in [False, True]:
+            for minimum in [True, -1, 1.2, "2", (1 << 32), 3]:
+                worker = worker_text_functions()
+                state = {"token_ids": [0, 1], "cache": object()}
+                worker["_live_kv_state"] = state
+                with self.assertRaisesRegex(ValueError, "min_new_tokens"):
+                    result = worker["generate_tokens" if streaming else "generate"](
+                        "prompt", max_tokens=2, min_new_tokens=minimum)
+                    if streaming:
+                        list(result)
+                self.assertIs(worker["_live_kv_state"], state)
+                worker["_format_prompt"].assert_not_called()
+                worker["_generate_autoregressive"].assert_not_called()
+                worker["_generate_autoregressive_streaming"].assert_not_called()
+            worker = worker_text_functions()
+            worker["_model_type"] = "dllm"
+            state = {"token_ids": [0, 1], "cache": object()}
+            worker["_live_kv_state"] = state
+            with self.assertRaisesRegex(ValueError, "Masked block-diffusion"):
+                result = worker["generate_tokens" if streaming else "generate"](
+                    "prompt", masked_prompt_json="{}", min_new_tokens=0)
+                if streaming:
+                    list(result)
+            self.assertIs(worker["_live_kv_state"], state)
+            worker["_format_prompt"].assert_not_called()
+
+    def test_minimum_worker_envelopes_and_u32_budget_boundaries(self):
+        for operation in ["generate_text", "generate_text_stream"]:
+            for minimum in [0, 1, 512, (1 << 32) - 1]:
+                envelope = {"contract_version": 1, "operation": operation,
+                            "payload": {"prompt": "prompt", "max_tokens": max(512, minimum),
+                            "transformers_kwargs": {"min_new_tokens": minimum}}}
+                kwargs = worker_contract.generate_text_kwargs_from_envelope(
+                    envelope, expected_operation=operation)
+                self.assertEqual(kwargs["min_new_tokens"], minimum)
+            for minimum in [None, True, -1, 1.2, "2", (1 << 32), 513]:
+                envelope = {"contract_version": 1, "operation": operation,
+                            "payload": {"prompt": "prompt", "transformers_kwargs": {
+                            "min_new_tokens": minimum}}}
+                with self.assertRaisesRegex(ValueError, "min_new_tokens"):
+                    worker_contract.generate_text_kwargs_from_envelope(
+                        envelope, expected_operation=operation)
+            for maximum in [None, True, False, "3", 3.5, 0, -1, 1 << 32]:
+                envelope = {"contract_version": 1, "operation": operation,
+                            "payload": {"prompt": "prompt", "max_tokens": maximum,
+                            "transformers_kwargs": {"min_new_tokens": 0}}}
+                with self.assertRaisesRegex(ValueError, "positive u32"):
+                    worker_contract.generate_text_kwargs_from_envelope(
+                        envelope, expected_operation=operation)
+                with self.assertRaisesRegex(ValueError, "positive u32"):
+                    autoregressive._resolve_min_new_tokens(TinyGenerationModel(), 0, maximum)
+
+    def test_sdar_empty_retry_preserves_large_authored_or_model_minimum(self):
+        class EOSTokenizer(TokenizerFixture):
+            eos_token_id = 3
+
+            def decode(self, token_ids, **_kwargs):
+                return ",".join(str(int(token)) for token in token_ids if int(token) != 3)
+
+        for authored in [None, 30]:
+            worker = worker_text_functions()
+            model = TinyGenerationModel()
+            model.generation_config.eos_token_id = 3
+            model.generation_config.min_new_tokens = 30 if authored is None else 0
+            worker["_model"] = model
+            worker["_tokenizer"] = EOSTokenizer()
+            worker["_generate_sdar_cached"].return_value = ("", [0, 1], object())
+            result = worker["_generate_dllm_autoregressive_safe"](
+                "prompt", 32, 0, 1, min_new_tokens=authored)
+            self.assertEqual(result, ",".join(["2"] * 30))
+            self.assertIsNone(worker["_live_kv_state"])
+
+    def test_minimum_without_any_eligible_non_eos_token_refuses_before_sampling(self):
+        model = TinyGenerationModel()
+        model.generation_config.eos_token_id = [0, 1, 2, 3]
+        for streaming in [False, True]:
+            for temperature in [0, 0.8]:
+                with mock.patch.object(torch, "multinomial") as sample:
+                    with self.assertRaisesRegex(autoregressive.MinimumNewTokensError,
+                                                "no finite eligible token"):
+                        args = (model, TokenizerFixture(), "cpu", "prompt", 4, temperature, 1)
+                        if streaming:
+                            list(autoregressive._generate_autoregressive_streaming(
+                                *args, min_new_tokens=2))
+                        else:
+                            autoregressive._generate_autoregressive(*args, min_new_tokens=2)
+                    sample.assert_not_called()
+
+    def test_native_minimum_refuses_later_suppression_or_forced_eos_conflicts(self):
+        for temperature in [0, 0.8]:
+            for authored in [None, 2]:
+                with self.subTest(temperature=temperature, minimum=authored):
+                    model = TinyGenerationModel()
+                    model.generation_config.eos_token_id = 0
+                    model.generation_config.min_new_tokens = 2
+                    model.generation_config.suppress_tokens = [1, 2, 3]
+                    with mock.patch.object(torch, "multinomial") as sample:
+                        with self.assertRaisesRegex(autoregressive.MinimumNewTokensError,
+                                                    "later processors"):
+                            autoregressive._generate_autoregressive(
+                                model, TokenizerFixture(), "cpu", "prompt", 4, temperature, 1,
+                                min_new_tokens=authored)
+                        sample.assert_not_called()
+            model = TinyGenerationModel()
+            model.generation_config.eos_token_id = 0
+            model.generation_config.forced_eos_token_id = 0
+            with self.assertRaisesRegex(autoregressive.MinimumNewTokensError, "later processors"):
+                autoregressive._generate_autoregressive(
+                    model, TokenizerFixture(), "cpu", "prompt", 4, temperature, 1,
+                    min_new_tokens=4)
+
+        model.generation_config.forced_eos_token_id = None
+        model.generation_config.suppress_tokens = [1, 2, 3]
+        self.assertEqual(autoregressive._generate_autoregressive(
+            model, TokenizerFixture(), "cpu", "prompt", 4, 0, 1, min_new_tokens=0), "0")
+
+    def test_cached_minimum_refusal_drops_mutated_kv_without_fresh_retry(self):
+        class SDARModel:
+            generation_config = SimpleNamespace(top_k=0, eos_token_id=[0, 1, 2, 3])
+
+            def __call__(self, input_ids, past_key_values, **_kwargs):
+                keys = input_ids.float().view(1, 1, -1, 1)
+                past_key_values.update(keys, keys, 0)
+                return SimpleNamespace(logits=torch.tensor([[[0, 1, 2, 3]]], dtype=torch.float32))
+
+        worker = worker_text_functions()
+        worker["_model"] = SDARModel()
+        worker["_continue_sdar_cached"] = autoregressive._continue_sdar_cached
+        cache = autoregressive.DynamicCache()
+        keys = torch.tensor([0, 1], dtype=torch.float32).view(1, 1, 2, 1)
+        cache.update(keys, keys, 0)
+        worker["_live_kv_state"] = {"token_ids": [0, 1], "cache": cache}
+        with self.assertRaises(autoregressive.MinimumNewTokensError):
+            worker["_generate_dllm_autoregressive_safe"]("suffix", 4, 0, 1, min_new_tokens=2)
+        self.assertEqual(cache.get_seq_length(), 4)
+        self.assertIsNone(worker["_live_kv_state"])
+        worker["_generate_sdar_cached"].assert_not_called()
+        with self.assertRaisesRegex(RuntimeError, "No live KV cache captured"):
+            worker["_require_live_kv_state"]()
+
     def test_native_and_manual_half_logits_use_float32_repetition(self):
         for dtype in [torch.float16, torch.bfloat16, torch.float32]:
             for values, penalty in [([1, 1.2, 0, 0], 1.2), ([10, 20, 2, 1], 0.0001)]:

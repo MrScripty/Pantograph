@@ -575,3 +575,19 @@ strict inference Clippy and affected gates pass. Existing numeric/source evidenc
 remains frozen; model resident custody and resource accounting are unchanged.
 Native desktop/GPU/pretrained/ONNX qualification remains separate. Parent owns
 PR/review/merge; merged PR57 image controls are not part of this successor.
+
+## 2026-10-06 — Graph-authored minimum new tokens
+
+After verified local Git identity correction, the parent lifted the commit hold
+and authorized the next inference/scheduler capability. The successor of frozen
+KV refusal `59992b9b` exposes the existing typed minimum-new-token option through
+the descriptor, actual selected host/gateway, public scheduler and PyTorch worker.
+The [feature report](reports/2026-10-06-workflow-text-min-new-tokens.md) records
+budget validation before effects, official EOS suppression, model-default parity,
+suffix/replay counting and cached operational refusal without fresh retry.
+Thirty-two actual CPU methods, 815 inference checks plus one doctest, 508 embedded,
+24 interface and 661 frontend tests pass, alongside strict Clippy and quality
+gates. The initial full-disk link failure was recovered by cleaning generated
+workspace artifacts; frozen source/evidence remain unchanged. Native desktop,
+GPU, pretrained/custom generation and ONNX execution remain unqualified. Parent
+owns review/publication; PR54/55 and merged PR57 image controls are separate.

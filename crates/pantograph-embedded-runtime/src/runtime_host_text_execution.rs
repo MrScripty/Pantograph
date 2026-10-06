@@ -20,6 +20,7 @@ pub(crate) const TOP_K_PORT: &str = "top_k";
 pub(crate) const TEMPERATURE_PORT: &str = "temperature";
 pub(crate) const TOP_P_PORT: &str = "top_p";
 pub(crate) const REPETITION_PENALTY_PORT: &str = "repetition_penalty";
+pub(crate) const MIN_NEW_TOKENS_PORT: &str = "min_new_tokens";
 pub(crate) const MAX_TEXT_BYTES: usize = 1024;
 
 /// Owned inputs for the canonical selected-text inference call.
@@ -61,7 +62,7 @@ pub(crate) fn validate_runtime_host_text_generation_request(
         .as_ref()
         .ok_or(RuntimeHostTextGenerationProjectionError::MissingDispatchDecision)?;
     validate_supported_inputs(request)?;
-    optional_max_new_tokens(request)?;
+    validate_min_new_tokens_budget(request)?;
     optional_top_k(request)?;
     optional_temperature(request)?;
     optional_top_p(request)?;
@@ -308,6 +309,7 @@ fn validate_supported_inputs(
             TEMPERATURE_PORT,
             TOP_P_PORT,
             REPETITION_PENALTY_PORT,
+            MIN_NEW_TOKENS_PORT,
         ]
         .contains(&input.port_id.as_str())
         {
@@ -367,6 +369,47 @@ fn optional_top_k(
             .ok_or(RuntimeHostTextGenerationProjectionError::InvalidTopK)
         })
         .transpose()
+}
+
+fn optional_min_new_tokens(
+    request: &RuntimeHostExecutionRequest,
+) -> Result<Option<u32>, RuntimeHostTextGenerationProjectionError> {
+    request
+        .materialized_inputs
+        .iter()
+        .find(|input| input.port_id == MIN_NEW_TOKENS_PORT)
+        .map(|input| {
+            match input.value {
+                RuntimeHostExecutionInputValue::U64(value) => u32::try_from(value).ok(),
+                RuntimeHostExecutionInputValue::I64(value) => u32::try_from(value).ok(),
+                _ => {
+                    return Err(RuntimeHostTextGenerationProjectionError::InvalidInputType {
+                        port_id: MIN_NEW_TOKENS_PORT,
+                        expected: "integer",
+                    })
+                }
+            }
+            .ok_or(RuntimeHostTextGenerationProjectionError::InvalidMinNewTokens)
+        })
+        .transpose()
+}
+
+fn validate_min_new_tokens_budget(
+    request: &RuntimeHostExecutionRequest,
+) -> Result<(), RuntimeHostTextGenerationProjectionError> {
+    let maximum = optional_max_new_tokens(request)?
+        .unwrap_or(inference::constants::pytorch::DEFAULT_MAX_NEW_TOKENS);
+    if let Some(minimum) = optional_min_new_tokens(request)? {
+        if minimum > maximum {
+            return Err(
+                RuntimeHostTextGenerationProjectionError::MinNewTokensExceedsBudget {
+                    minimum,
+                    maximum,
+                },
+            );
+        }
+    }
+    Ok(())
 }
 
 fn optional_temperature(
@@ -438,11 +481,13 @@ fn optional_generation_options(
     request: &RuntimeHostExecutionRequest,
 ) -> Result<Option<GenerationOptions>, RuntimeHostTextGenerationProjectionError> {
     let max_new_tokens = optional_max_new_tokens(request)?;
+    let min_new_tokens = optional_min_new_tokens(request)?;
     let top_k = optional_top_k(request)?;
     let temperature = optional_temperature(request)?;
     let top_p = optional_top_p(request)?;
     let repetition_penalty = optional_repetition_penalty(request)?;
     if max_new_tokens.is_none()
+        && min_new_tokens.is_none()
         && top_k.is_none()
         && temperature.is_none()
         && top_p.is_none()
@@ -453,6 +498,7 @@ fn optional_generation_options(
     Ok(Some(GenerationOptions {
         length: LengthGenerationOptions {
             max_new_tokens,
+            min_new_tokens,
             ..LengthGenerationOptions::default()
         },
         sampling: SamplingGenerationOptions {
@@ -498,6 +544,12 @@ pub(crate) enum RuntimeHostTextGenerationProjectionError {
     MissingRequiredInput { port_id: &'static str },
     #[error("runtime-host text input 'max_new_tokens' must be between 1 and 4294967295")]
     InvalidMaxNewTokens,
+    #[error("runtime-host text input 'min_new_tokens' must be between 0 and 4294967295")]
+    InvalidMinNewTokens,
+    #[error(
+        "runtime-host text min_new_tokens {minimum} exceeds effective max_new_tokens {maximum}"
+    )]
+    MinNewTokensExceedsBudget { minimum: u32, maximum: u32 },
     #[error("runtime-host text input 'top_k' must be between 0 and 4294967295")]
     InvalidTopK,
     #[error("runtime-host text input 'temperature' must be a nonnegative finite number representable by the generation f32 contract without losing authored precision")]
@@ -1144,6 +1196,174 @@ mod tests {
                 Arc::new(TextPackageFactsResolver { package_facts }),
                 Arc::new(UnusedTextMediaSink),
                 Arc::new(inference::InferenceGateway::with_backend(Box::new(backend), "PyTorch")),
+            );
+            let cancellation =
+                pantograph_runtime_host_contracts::RuntimeHostExecutionCancellationHandle::running(
+                    request.cancellation_context.clone(),
+                );
+            let response = port
+                .execute_runtime_host_request(request, cancellation)
+                .await
+                .unwrap();
+            assert_eq!(response.state, RuntimeHostExecutionState::Rejected);
+            assert!(response.outputs.is_empty());
+            assert!(
+                response
+                    .diagnostics
+                    .iter()
+                    .any(|diagnostic| diagnostic.message.contains(expected)),
+                "{:?}",
+                response.diagnostics
+            );
+            assert!(calls.lock().unwrap().is_empty());
+            assert!(recorded.lock().unwrap().is_empty());
+        }
+    }
+
+    #[tokio::test]
+    async fn min_new_tokens_reaches_actual_host_gateway_with_zero_omission_and_budget_boundary() {
+        for (minimum, maximum) in [
+            (None, None),
+            (Some(0), None),
+            (Some(3), Some(3)),
+            (
+                Some(inference::constants::pytorch::DEFAULT_MAX_NEW_TOKENS),
+                None,
+            ),
+            (Some(u32::MAX), Some(u32::MAX)),
+        ] {
+            let mut request = text_request_fixture();
+            for (port_id, value) in [
+                (MIN_NEW_TOKENS_PORT, minimum),
+                (MAX_NEW_TOKENS_PORT, maximum),
+            ] {
+                if let Some(value) = value {
+                    request.materialized_inputs.push(RuntimeHostExecutionInput {
+                        port_id: port_id.into(),
+                        value: RuntimeHostExecutionInputValue::U64(u64::from(value)),
+                    });
+                }
+            }
+            request.materialized_inputs.push(RuntimeHostExecutionInput {
+                port_id: TEMPERATURE_PORT.into(),
+                value: RuntimeHostExecutionInputValue::I64(0),
+            });
+            let validated =
+                ValidatedRuntimeHostExecutionRequest::try_from(request.clone()).unwrap();
+            let package_facts = text_package_facts(&validated);
+            let directory = tempfile::tempdir().unwrap();
+            let target = text_load_target(&package_facts, &directory);
+            let projection = project_runtime_host_text_generation(
+                &validated,
+                package_facts.clone(),
+                target.clone(),
+            )
+            .unwrap();
+            assert_eq!(
+                projection
+                    .request()
+                    .generation_options
+                    .as_ref()
+                    .unwrap()
+                    .length
+                    .min_new_tokens,
+                minimum
+            );
+            let backend = TextBackend::default();
+            let recorded = backend.requests.clone();
+            let port = crate::runtime_host_execution_port::EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
+                Arc::new(TextLoadTargetResolver { target }), Arc::new(TextPackageFactsResolver { package_facts }),
+                Arc::new(UnusedTextMediaSink), Arc::new(inference::InferenceGateway::with_backend(Box::new(backend), "PyTorch")),
+            );
+            let cancellation =
+                pantograph_runtime_host_contracts::RuntimeHostExecutionCancellationHandle::running(
+                    request.cancellation_context.clone(),
+                );
+            let response = port
+                .execute_runtime_host_request(request, cancellation)
+                .await
+                .unwrap();
+            assert_eq!(response.state, RuntimeHostExecutionState::Completed);
+            let recorded = recorded.lock().unwrap();
+            assert_eq!(recorded.len(), 1);
+            assert_eq!(
+                recorded[0].get("min_new_tokens"),
+                minimum.map(serde_json::Value::from).as_ref()
+            );
+            assert_eq!(
+                recorded[0].get("max_tokens"),
+                maximum.map(serde_json::Value::from).as_ref()
+            );
+            assert_eq!(recorded[0]["temperature"], serde_json::json!(0.0));
+        }
+    }
+
+    #[tokio::test]
+    async fn min_new_tokens_invalid_shape_or_budget_refuses_host_before_backend_effects() {
+        for (value, maximum, expected) in [
+            (
+                RuntimeHostExecutionInputValue::I64(-1),
+                None,
+                "must be between 0",
+            ),
+            (
+                RuntimeHostExecutionInputValue::U64(u64::from(u32::MAX) + 1),
+                None,
+                "must be between 0",
+            ),
+            (
+                RuntimeHostExecutionInputValue::String("3".into()),
+                None,
+                "must be integer",
+            ),
+            (
+                RuntimeHostExecutionInputValue::Bool(true),
+                None,
+                "must be integer",
+            ),
+            (
+                RuntimeHostExecutionInputValue::F64(serde_json::Number::from_f64(3.0).unwrap()),
+                None,
+                "must be integer",
+            ),
+            (
+                RuntimeHostExecutionInputValue::U64(513),
+                None,
+                "exceeds effective max_new_tokens 512",
+            ),
+            (
+                RuntimeHostExecutionInputValue::I64(9),
+                Some(8),
+                "exceeds effective max_new_tokens 8",
+            ),
+            (
+                RuntimeHostExecutionInputValue::U64(0),
+                Some(0),
+                "must be between 1",
+            ),
+        ] {
+            let mut request = text_request_fixture();
+            request.materialized_inputs.push(RuntimeHostExecutionInput {
+                port_id: MIN_NEW_TOKENS_PORT.into(),
+                value,
+            });
+            if let Some(maximum) = maximum {
+                request.materialized_inputs.push(RuntimeHostExecutionInput {
+                    port_id: MAX_NEW_TOKENS_PORT.into(),
+                    value: RuntimeHostExecutionInputValue::U64(maximum),
+                });
+            }
+            let validated =
+                ValidatedRuntimeHostExecutionRequest::try_from(request.clone()).unwrap();
+            let package_facts = text_package_facts(&validated);
+            let directory = tempfile::tempdir().unwrap();
+            let target = text_load_target(&package_facts, &directory);
+            let backend = TextBackend::default();
+            let calls = backend.calls.clone();
+            let recorded = backend.requests.clone();
+            let port = crate::runtime_host_execution_port::EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
+                Arc::new(TextLoadTargetResolver { target }), Arc::new(TextPackageFactsResolver { package_facts }),
+                Arc::new(UnusedTextMediaSink), Arc::new(inference::InferenceGateway::with_backend(Box::new(backend), "PyTorch")),
             );
             let cancellation =
                 pantograph_runtime_host_contracts::RuntimeHostExecutionCancellationHandle::running(

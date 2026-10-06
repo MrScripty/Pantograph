@@ -256,6 +256,11 @@ fn input_ports(task_entry: &TaskRegistryEntry) -> Vec<InferencePortDescriptor> {
                 temperature_input_port(),
                 top_p_input_port(),
                 repetition_penalty_input_port(),
+                u32_input_port(
+                    crate::runtime_host_text_execution::MIN_NEW_TOKENS_PORT,
+                    "Min new tokens",
+                    0,
+                ),
             ]
         }
         InferenceTaskId::ImageGeneration => vec![
@@ -467,6 +472,7 @@ mod tests {
                 "temperature",
                 "top_p",
                 "repetition_penalty",
+                "min_new_tokens",
             ]
         );
         for (port_id, scalar_type, min, max, step) in [
@@ -498,6 +504,13 @@ mod tests {
                 f64::from(f32::from_bits(1)),
                 f64::from(f32::MAX),
                 None,
+            ),
+            (
+                "min_new_tokens",
+                InferenceScalarType::U64,
+                0.0,
+                f64::from(u32::MAX),
+                Some(1.0),
             ),
         ] {
             let control = inputs

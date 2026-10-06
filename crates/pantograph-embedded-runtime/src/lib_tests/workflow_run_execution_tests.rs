@@ -1951,11 +1951,21 @@ fn assert_retired_onnx_graph_rejected(error: &WorkflowServiceError) {
 #[tokio::test]
 async fn selected_text_workflow_retains_completed_output_through_canonical_batch_host() {
     for repetition_penalty in [None, Some(1.2)] {
-        run_selected_text_workflow_with_repetition_penalty(repetition_penalty).await;
+        run_selected_text_workflow_with_text_controls(repetition_penalty, None).await;
     }
 }
 
-async fn run_selected_text_workflow_with_repetition_penalty(repetition_penalty: Option<f32>) {
+#[tokio::test]
+async fn selected_text_workflow_preserves_connected_integer_min_new_tokens() {
+    for minimum in [0, 3, inference::constants::pytorch::DEFAULT_MAX_NEW_TOKENS] {
+        run_selected_text_workflow_with_text_controls(Some(1.2), Some(minimum)).await;
+    }
+}
+
+async fn run_selected_text_workflow_with_text_controls(
+    repetition_penalty: Option<f32>,
+    min_new_tokens: Option<u32>,
+) {
     const MODEL_ID: &str = "llm/example/tiny-transformers";
     const SELECTED_ARTIFACT_ID: &str = "text-bundle";
 
@@ -1985,6 +1995,7 @@ async fn run_selected_text_workflow_with_repetition_penalty(repetition_penalty: 
             Box::new(SelectedWorkflowTextBackend(
                 prompts.clone(),
                 repetition_penalty,
+                min_new_tokens,
             )),
             "PyTorch",
         )),
@@ -2038,6 +2049,21 @@ async fn run_selected_text_workflow_with_repetition_penalty(repetition_penalty: 
             source_handle: "value".into(),
             target: "infer".into(),
             target_handle: "repetition_penalty".into(),
+        });
+    }
+    if min_new_tokens.is_some() {
+        graph.nodes.push(GraphNode {
+            id: "floor".into(),
+            node_type: "number-input".into(),
+            position: Position { x: 0.0, y: 200.0 },
+            data: serde_json::json!({}),
+        });
+        graph.edges.push(GraphEdge {
+            id: "floor-to-infer".into(),
+            source: "floor".into(),
+            source_handle: "value".into(),
+            target: "infer".into(),
+            target_handle: "min_new_tokens".into(),
         });
     }
     let version = service
@@ -2124,6 +2150,13 @@ async fn run_selected_text_workflow_with_repetition_penalty(repetition_penalty: 
             node_id: "penalty".into(),
             port_id: "value".into(),
             value: serde_json::from_str(&serde_json::to_string(&value).unwrap()).unwrap(),
+        });
+    }
+    if let Some(value) = min_new_tokens {
+        inputs.push(WorkflowPortBinding {
+            node_id: "floor".into(),
+            port_id: "value".into(),
+            value: serde_json::json!(value),
         });
     }
     let response = pantograph_workflow_service::workflow::WorkflowSessionExecutionRuntime::from_shared_service(
@@ -2246,7 +2279,7 @@ async fn selected_text_workflow_retains_outputs_and_materializes_dependent_edge(
             artifact_writer,
         )),
         Arc::new(inference::InferenceGateway::with_backend(
-            Box::new(SelectedWorkflowTextBackend(prompts.clone(), None)),
+            Box::new(SelectedWorkflowTextBackend(prompts.clone(), None, None)),
             "PyTorch",
         )),
     ));
@@ -3380,7 +3413,7 @@ impl crate::runtime_host_load_target::RuntimeHostLoadTargetResolver for Selected
         })
     }
 }
-struct SelectedWorkflowTextBackend(Arc<Mutex<Vec<String>>>, Option<f32>);
+struct SelectedWorkflowTextBackend(Arc<Mutex<Vec<String>>>, Option<f32>, Option<u32>);
 #[async_trait]
 impl InferenceBackend for SelectedWorkflowTextBackend {
     fn name(&self) -> &'static str {
@@ -3443,6 +3476,10 @@ impl InferenceBackend for SelectedWorkflowTextBackend {
                 )
                 .unwrap())
                 .as_ref()
+        );
+        assert_eq!(
+            request.get("min_new_tokens"),
+            self.2.map(serde_json::Value::from).as_ref()
         );
         let prompt = request["messages"][0]["content"][0]["text"]
             .as_str()

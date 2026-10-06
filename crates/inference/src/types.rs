@@ -48,6 +48,8 @@ pub struct ChatRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_tokens: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub min_new_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub temperature: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub top_p: Option<f32>,
@@ -89,6 +91,7 @@ impl InferenceExecutionRequest {
     #[must_use]
     pub fn from_openai_chat_request(request_id: Option<String>, request: ChatRequest) -> Self {
         let generation_options = if request.max_tokens.is_some()
+            || request.min_new_tokens.is_some()
             || request.temperature.is_some()
             || request.top_p.is_some()
             || request.top_k.is_some()
@@ -97,6 +100,7 @@ impl InferenceExecutionRequest {
             Some(GenerationOptions {
                 length: crate::model_contracts::LengthGenerationOptions {
                     max_new_tokens: request.max_tokens,
+                    min_new_tokens: request.min_new_tokens,
                     ..Default::default()
                 },
                 sampling: crate::model_contracts::SamplingGenerationOptions {
@@ -182,6 +186,13 @@ impl InferenceExecutionRequest {
             InferenceExecutionInput::TextGeneration {
                 prompt, messages, ..
             } => {
+                if let Some(maximum) = self
+                    .generation_options
+                    .as_ref()
+                    .and_then(|options| options.length.max_new_tokens)
+                {
+                    self.validate_text_min_new_tokens_budget(maximum)?;
+                }
                 if self
                     .generation_options
                     .as_ref()
@@ -242,6 +253,41 @@ impl InferenceExecutionRequest {
             | InferenceExecutionInput::MultimodalGeneration { .. } => Ok(()),
         }
     }
+
+    /// Check an authored floor against this text backend's effective budget.
+    /// The canonical validator checks an explicit maximum; owners supply their
+    /// actual fallback before loading or dispatching a request with no maximum.
+    pub(crate) fn validate_text_min_new_tokens_budget(
+        &self,
+        default_maximum: u32,
+    ) -> Result<(), InferenceExecutionRequestValidationError> {
+        if !matches!(self.input, InferenceExecutionInput::TextGeneration { .. }) {
+            return Ok(());
+        }
+        if let Some(length) = self
+            .generation_options
+            .as_ref()
+            .map(|options| &options.length)
+        {
+            if let Some(minimum) = length.min_new_tokens {
+                let maximum = length.max_new_tokens.unwrap_or(default_maximum);
+                if maximum == 0 {
+                    return Err(
+                        InferenceExecutionRequestValidationError::InvalidMinNewTokensBudget,
+                    );
+                }
+                if minimum > maximum {
+                    return Err(
+                        InferenceExecutionRequestValidationError::MinNewTokensExceedsBudget {
+                            minimum,
+                            maximum,
+                        },
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 /// Typed request validation failure at the inference execution boundary.
@@ -251,6 +297,10 @@ pub enum InferenceExecutionRequestValidationError {
     MissingTextInput,
     #[error("text repetition_penalty must be positive and finite")]
     InvalidRepetitionPenalty,
+    #[error("text max_new_tokens must be positive when min_new_tokens is authored")]
+    InvalidMinNewTokensBudget,
+    #[error("text min_new_tokens {minimum} exceeds effective max_new_tokens {maximum}")]
+    MinNewTokensExceedsBudget { minimum: u32, maximum: u32 },
     #[error("embedding execution requires at least one text input")]
     EmptyEmbeddingTexts,
     #[error("embedding text at index {index} must not be blank")]
@@ -2322,6 +2372,7 @@ mod tests {
             }],
             stream: true,
             max_tokens: Some(32),
+            min_new_tokens: Some(4),
             temperature: Some(0.4),
             top_p: Some(0.9),
             top_k: Some(40),
@@ -2334,6 +2385,15 @@ mod tests {
         );
 
         typed.validate().expect("mapped chat request is valid");
+        assert_eq!(
+            typed
+                .generation_options
+                .as_ref()
+                .unwrap()
+                .length
+                .min_new_tokens,
+            Some(4)
+        );
         assert_eq!(typed.task_id, InferenceTaskId::ChatCompletion);
         assert_eq!(
             typed

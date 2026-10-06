@@ -18,7 +18,7 @@ CLEAR_KV_CACHE_OPERATION = "clear_kv_cache"
 SAVE_KV_CACHE_OPERATION = "save_kv_cache"
 RESTORE_KV_CACHE_OPERATION = "restore_kv_cache"
 TRUNCATE_KV_CACHE_OPERATION = "truncate_kv_cache"
-ALLOWED_TRANSFORMERS_GENERATE_KWARGS = {"top_k", "repetition_penalty"}
+ALLOWED_TRANSFORMERS_GENERATE_KWARGS = {"top_k", "repetition_penalty", "min_new_tokens"}
 CAUSAL_LM_LOADER = "causal_lm"
 AUTOMATIC_SPEECH_RECOGNITION_LOADER = "automatic_speech_recognition"
 SUPPORTED_TRANSFORMERS_LOADERS = {
@@ -247,6 +247,18 @@ def generate_text_kwargs_from_envelope(envelope, expected_operation=GENERATE_TEX
             raise ValueError("repetition_penalty must be a finite positive number") from exc
         if not math.isfinite(penalty) or penalty <= 0:
             raise ValueError("repetition_penalty must be a finite positive number")
+
+    if "min_new_tokens" in transformers_kwargs:
+        minimum = transformers_kwargs["min_new_tokens"]
+        if (isinstance(minimum, bool) or not isinstance(minimum, int)
+                or not 0 <= minimum <= (1 << 32) - 1):
+            raise ValueError("min_new_tokens must be a non-negative u32 integer")
+        maximum = payload.get("max_tokens", 512)
+        if (isinstance(maximum, bool) or not isinstance(maximum, int)
+                or not 0 < maximum <= (1 << 32) - 1):
+            raise ValueError("max_tokens must be a positive u32 integer when min_new_tokens is authored")
+        if minimum > maximum:
+            raise ValueError("min_new_tokens must not exceed max_tokens")
 
     kwargs = {
         "prompt": prompt,

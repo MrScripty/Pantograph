@@ -5932,3 +5932,181 @@ fn repetition_penalty_mapping_does_not_claim_other_backend_support() {
         );
     }
 }
+
+#[tokio::test]
+async fn selected_text_min_new_tokens_preserves_omission_zero_and_companion_controls() {
+    for (minimum, maximum) in [
+        (None, None),
+        (Some(0), None),
+        (Some(3), Some(3)),
+        (
+            Some(crate::constants::pytorch::DEFAULT_MAX_NEW_TOKENS),
+            None,
+        ),
+        (Some(u32::MAX), Some(u32::MAX)),
+    ] {
+        let (_directory, mut request, target, decision) = crate::selected_text_execution::fixture();
+        let system = "  Keep formatting.\n".to_string();
+        if let InferenceExecutionInput::TextGeneration { system_prompt, .. } = &mut request.input {
+            *system_prompt = Some(system.clone());
+        }
+        request.generation_options = Some(GenerationOptions {
+            length: LengthGenerationOptions {
+                min_new_tokens: minimum,
+                max_new_tokens: maximum,
+                ..Default::default()
+            },
+            sampling: SamplingGenerationOptions {
+                temperature: Some(0.0),
+                top_k: Some(0),
+                top_p: Some(0.7),
+                repetition_penalty: Some(1.2),
+                ..Default::default()
+            },
+            ..Default::default()
+        });
+        let backend = SelectedTextBackend {
+            expected_system_prompt: Some(system),
+            ..Default::default()
+        };
+        let requests = backend.requests.clone();
+        let effects = backend.effects.clone();
+        let gateway = InferenceGateway::with_backend(Box::new(backend), "PyTorch");
+        let result = gateway
+            .execute_selected_text_with_cancellation(
+                request,
+                target.clone(),
+                decision,
+                InferenceExecutionCancellationHandle::running(),
+            )
+            .await
+            .unwrap();
+        let InferenceExecutionResult::TextGeneration {
+            option_diagnostics, ..
+        } = result
+        else {
+            panic!("text result expected")
+        };
+        let requests = requests.lock().unwrap();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(
+            requests[0].get("min_new_tokens"),
+            minimum.map(serde_json::Value::from).as_ref()
+        );
+        assert_eq!(
+            requests[0].get("max_tokens"),
+            maximum.map(serde_json::Value::from).as_ref()
+        );
+        assert_eq!(requests[0]["temperature"], serde_json::json!(0.0));
+        assert_eq!(requests[0]["top_k"], serde_json::json!(0));
+        assert!(requests[0].get("top_p").is_some());
+        assert!(requests[0].get("repetition_penalty").is_some());
+        assert_eq!(
+            option_diagnostics
+                .iter()
+                .any(
+                    |diagnostic| diagnostic.option_path == "length.min_new_tokens"
+                        && diagnostic.state == OptionSupportState::Mapped
+                ),
+            minimum.is_some()
+        );
+        assert_eq!(
+            *effects.lock().unwrap(),
+            [
+                format!("load:{}:cpu", target.local_load_path),
+                "stream".into(),
+                "finish:false".into()
+            ]
+        );
+    }
+}
+
+#[tokio::test]
+async fn selected_text_min_new_tokens_above_effective_budget_has_no_backend_effects() {
+    for (minimum, maximum) in [(513, None), (9, Some(8)), (u32::MAX, None), (0, Some(0))] {
+        let (_directory, mut request, target, decision) = crate::selected_text_execution::fixture();
+        request.generation_options = Some(GenerationOptions {
+            length: LengthGenerationOptions {
+                min_new_tokens: Some(minimum),
+                max_new_tokens: maximum,
+                ..Default::default()
+            },
+            ..Default::default()
+        });
+        let backend = SelectedTextBackend::default();
+        let effects = backend.effects.clone();
+        let requests = backend.requests.clone();
+        let gateway = InferenceGateway::with_backend(Box::new(backend), "PyTorch");
+        let expected = if maximum == Some(0) {
+            "max_new_tokens must be positive when min_new_tokens is authored"
+        } else {
+            "exceeds effective max_new_tokens"
+        };
+        let error = gateway
+            .execute_selected_text_with_cancellation(
+                request.clone(),
+                target,
+                decision,
+                InferenceExecutionCancellationHandle::running(),
+            )
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains(expected), "{error}");
+        assert!(effects.lock().unwrap().is_empty());
+        assert!(requests.lock().unwrap().is_empty());
+        let error = gateway.execute_typed(request.clone()).await.unwrap_err();
+        assert!(error.to_string().contains(expected), "{error}");
+        let error = match gateway.stream_typed_text(request.clone()).await {
+            Err(error) => error,
+            Ok(_) => panic!("invalid budget must refuse before returning a stream"),
+        };
+        assert!(error.to_string().contains(expected), "{error}");
+        let stream_sink = Arc::new(RecordingLifecycleSink::default());
+        let error = match gateway
+            .stream_typed_text_with_lifecycle(request.clone(), stream_sink.clone())
+            .await
+        {
+            Err(error) => error,
+            Ok(_) => panic!("invalid budget must refuse before returning a lifecycle stream"),
+        };
+        assert!(error.to_string().contains(expected), "{error}");
+        let execute_sink = Arc::new(RecordingLifecycleSink::default());
+        let error = gateway
+            .execute_typed_with_lifecycle(request, execute_sink.clone())
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains(expected), "{error}");
+        for sink in [stream_sink, execute_sink] {
+            let events = sink.events();
+            assert!(events.iter().any(|event| {
+                event.phase == InferenceLifecyclePhase::TaskValidation
+                    && event.kind == InferenceRequestLifecycleEventKind::Failed
+            }));
+            assert!(!events
+                .iter()
+                .any(|event| { event.phase == InferenceLifecyclePhase::BackendExecution }));
+        }
+        assert!(effects.lock().unwrap().is_empty());
+        assert!(requests.lock().unwrap().is_empty());
+    }
+}
+
+#[test]
+fn min_new_tokens_mapping_does_not_claim_other_backend_support() {
+    let options = GenerationOptions {
+        length: LengthGenerationOptions {
+            min_new_tokens: Some(0),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    for backend in [None, Some("llamacpp"), Some("external"), Some("candle")] {
+        let diagnostics = typed_text_generation_option_diagnostics(Some(&options), backend);
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(diagnostics[0].option_path, "length.min_new_tokens");
+        assert_eq!(
+            diagnostics[0].state,
+            OptionSupportState::RequiresBackendSupport
+        );
+    }
+}

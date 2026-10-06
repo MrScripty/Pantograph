@@ -74,7 +74,8 @@ mod pytorch_worker_image_contract;
 #[path = "pytorch_text_job.rs"]
 mod pytorch_text_job;
 
-const ALLOWED_TRANSFORMERS_GENERATE_KWARGS: &[&str] = &["top_k", "repetition_penalty"];
+const ALLOWED_TRANSFORMERS_GENERATE_KWARGS: &[&str] =
+    &["top_k", "repetition_penalty", "min_new_tokens"];
 
 #[path = "pytorch_cuda_inventory.rs"]
 mod cuda_inventory;
@@ -114,6 +115,7 @@ pub struct PyTorchTextGenerationRequest {
     pub prompt: String,
     pub system_prompt: Option<String>,
     pub max_tokens: i64,
+    pub min_new_tokens: Option<u32>,
     pub temperature: f64,
     pub top_p: f64,
     pub top_k: Option<u32>,
@@ -1985,6 +1987,29 @@ impl PyTorchBackend {
                 ));
             }
         }
+        if let Some(value) = envelope.payload.transformers_kwargs.get("min_new_tokens") {
+            let minimum = value
+                .as_u64()
+                .and_then(|value| u32::try_from(value).ok())
+                .ok_or_else(|| {
+                    BackendError::Config(
+                        "min_new_tokens must be an integer between 0 and 4294967295".into(),
+                    )
+                })?;
+            if u32::try_from(envelope.payload.max_tokens)
+                .ok()
+                .is_none_or(|maximum| maximum == 0)
+            {
+                return Err(BackendError::Config(
+                    "max_tokens must be a positive u32 when min_new_tokens is authored".into(),
+                ));
+            }
+            if i64::from(minimum) > envelope.payload.max_tokens {
+                return Err(BackendError::Config(
+                    "min_new_tokens exceeds effective max_new_tokens".into(),
+                ));
+            }
+        }
         Ok(())
     }
 
@@ -2128,6 +2153,12 @@ impl PyTorchBackend {
 
     fn generate_text_request(request: PyTorchTextGenerationRequest) -> PyTorchGenerateTextRequest {
         let mut transformers_kwargs = BTreeMap::new();
+        if let Some(min_new_tokens) = request.min_new_tokens {
+            transformers_kwargs.insert(
+                "min_new_tokens".to_string(),
+                serde_json::json!(min_new_tokens),
+            );
+        }
         if let Some(top_k) = request.top_k {
             transformers_kwargs.insert("top_k".to_string(), serde_json::json!(top_k));
         }
@@ -2515,6 +2546,7 @@ impl PyTorchBackend {
             prompt,
             system_prompt,
             max_tokens,
+            min_new_tokens: None,
             temperature,
             top_p,
             top_k: None,
@@ -2613,6 +2645,7 @@ impl PyTorchBackend {
             prompt,
             system_prompt,
             max_tokens,
+            min_new_tokens: None,
             temperature,
             top_p,
             top_k: None,
@@ -2874,7 +2907,36 @@ impl InferenceBackend for PyTorchBackend {
         let max_tokens = request
             .get("max_tokens")
             .and_then(|v| v.as_i64())
-            .unwrap_or(512);
+            .unwrap_or(i64::from(crate::constants::pytorch::DEFAULT_MAX_NEW_TOKENS));
+        let min_new_tokens = request
+            .get("min_new_tokens")
+            .map(|value| {
+                value
+                    .as_u64()
+                    .and_then(|value| u32::try_from(value).ok())
+                    .ok_or_else(|| {
+                        BackendError::Config(
+                            "min_new_tokens must be an integer between 0 and 4294967295".into(),
+                        )
+                    })
+            })
+            .transpose()?;
+        if min_new_tokens.is_some_and(|minimum| i64::from(minimum) > max_tokens) {
+            return Err(BackendError::Config(
+                "min_new_tokens exceeds effective max_new_tokens".into(),
+            ));
+        }
+        if min_new_tokens.is_some()
+            && request.get("max_tokens").is_some_and(|value| {
+                !value
+                    .as_u64()
+                    .is_some_and(|maximum| maximum > 0 && maximum <= u64::from(u32::MAX))
+            })
+        {
+            return Err(BackendError::Config(
+                "max_tokens must be a positive u32 when min_new_tokens is authored".into(),
+            ));
+        }
         let temperature = request
             .get("temperature")
             .and_then(|v| v.as_f64())
@@ -2903,6 +2965,7 @@ impl InferenceBackend for PyTorchBackend {
                 prompt,
                 system_prompt,
                 max_tokens,
+                min_new_tokens,
                 temperature,
                 top_p,
                 top_k,
