@@ -677,3 +677,18 @@ failure remains recorded, with shared class-method patch interference inferred
 from source. No native GPU/pretrained/custom/full-worker/ONNX claim is added.
 Frozen source/evidence and PR54/55 remain unchanged. Seed inspection produced no
 source edits and is paused separately; parent owns PR/review/merge and hosted CI.
+
+## 2026-10-06 — Native Diffusers parallel harness isolation
+
+Exact qualification JSON and original failure/serial logs for frozen `9e8cd64c`
+are published by evidence-only successor `fdb2bf2b`, without source changes.
+The [separate harness repair](reports/2026-10-06-diffusers-native-parallel-isolation.md)
+reproduces the global scheduler-method counter collecting a foreign-thread step:
+three observed instead of two. Thread-local observation now retains exact owned
+call/oracle assertions while two real foreign steps complete under observation.
+The original parallel invocation passes all three native CPU tests, with unchanged
+count/ignore/tolerance and no serialization. Full inference passes 821 plus one
+doctest; strict all-target inference Clippy and affected gates pass. No production
+file changes or broader model/GPU/full-worker qualification are claimed. Frozen
+sources and original evidence remain unchanged; seed may resume separately after
+this bounded publication gate. Parent owns review/PR/merge and hosted CI.
