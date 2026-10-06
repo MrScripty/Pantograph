@@ -1,0 +1,194 @@
+{
+  "savedPath": "/tmp/pantograph-native-cpu.kkTIIva9/fixture/project/.pantograph/workflows/Synthetic-CPU-Embedding-Qualification.json",
+  "workflowId": "Synthetic-CPU-Embedding-Qualification",
+  "restored": {
+    "graph": {
+      "edges": [
+        {
+          "target_handle": "text",
+          "source_handle": "text",
+          "source": "prompt",
+          "id": "text-to-embedding",
+          "target": "infer"
+        },
+        {
+          "target_handle": "vector",
+          "source_handle": "embedding",
+          "source": "infer",
+          "id": "embedding-to-vector",
+          "target": "vectors"
+        },
+        {
+          "target_handle": "dependency_environment_sidecar",
+          "source_handle": "dependency_environment_sidecar",
+          "source": "deps",
+          "id": "deps-to-infer",
+          "target": "infer"
+        }
+      ],
+      "derived_graph": {
+        "consumer_count_map": {
+          "infer:embedding": 1,
+          "prompt:text": 1,
+          "deps:dependency_environment_sidecar": 1
+        },
+        "schema_version": 1,
+        "graph_fingerprint": "dde190203c4f499b"
+      },
+      "nodes": [
+        {
+          "data": {
+            "label": "Synthetic input: hello world",
+            "text": "hello world"
+          },
+          "id": "prompt",
+          "node_type": "text-input",
+          "position": {
+            "x": 0,
+            "y": 100
+          }
+        },
+        {
+          "data": {
+            "runtime": "candle",
+            "pumas_model_ref": {
+              "model_id": "embedding/qualification/synthetic-bert-8",
+              "selected_artifact_id": "main"
+            },
+            "runtime_source_context": {
+              "operation_type": "embedding.text",
+              "cancellation_mode": "run_scoped",
+              "context_shape_key": "embedding.one-text"
+            },
+            "inference_interface_snapshot": {
+              "outputs": [
+                {
+                  "value_type": {
+                    "category": "structured",
+                    "kind": "embedding"
+                  },
+                  "direction": "output",
+                  "label": "Embedding",
+                  "requirement": "required",
+                  "availability": {
+                    "status": "available"
+                  },
+                  "port_id": "embedding"
+                },
+                {
+                  "value_type": {
+                    "category": "structured",
+                    "kind": "json"
+                  },
+                  "direction": "output",
+                  "label": "Metadata",
+                  "requirement": "required",
+                  "availability": {
+                    "status": "available"
+                  },
+                  "port_id": "metadata"
+                },
+                {
+                  "value_type": {
+                    "category": "structured",
+                    "kind": "json"
+                  },
+                  "direction": "output",
+                  "label": "Usage",
+                  "requirement": "optional",
+                  "availability": {
+                    "status": "available"
+                  },
+                  "port_id": "usage"
+                }
+              ],
+              "descriptor_fingerprint": "iface.test.cpu_embedding.v1",
+              "task_kind": "embedding",
+              "inputs": [
+                {
+                  "value_type": {
+                    "category": "scalar",
+                    "kind": "string"
+                  },
+                  "direction": "input",
+                  "label": "Text",
+                  "requirement": "required",
+                  "availability": {
+                    "status": "available"
+                  },
+                  "port_id": "text"
+                }
+              ],
+              "contract_version": 1
+            },
+            "device": "cpu",
+            "label": "Synthetic CPU embedding",
+            "task_kind": "embedding"
+          },
+          "id": "infer",
+          "node_type": "llm-inference",
+          "position": {
+            "x": 300,
+            "y": 100
+          }
+        },
+        {
+          "data": {
+            "label": "Synthetic vector output"
+          },
+          "id": "vectors",
+          "node_type": "vector-output",
+          "position": {
+            "x": 600,
+            "y": 100
+          }
+        },
+        {
+          "data": {
+            "label": "Typed dependency control",
+            "mode": "manual"
+          },
+          "id": "deps",
+          "node_type": "dependency-environment",
+          "position": {
+            "x": 300,
+            "y": 450
+          }
+        }
+      ]
+    },
+    "metadata": {
+      "name": "Synthetic CPU Embedding Qualification",
+      "modified": "2026-10-06T19:03:50.172740438+00:00",
+      "created": "2026-10-06T19:03:50.172740438+00:00",
+      "id": "Synthetic-CPU-Embedding-Qualification"
+    },
+    "version": "1.0"
+  },
+  "fixture": {
+    "synthetic_untrained": true,
+    "discovery": "controlled metadata seeded into isolated Pumas library; not real-user discovery acceptance",
+    "model_id": "embedding/qualification/synthetic-bert-8",
+    "project_root": "/tmp/pantograph-native-cpu.kkTIIva9/fixture/project",
+    "library_root": "/tmp/pantograph-native-cpu.kkTIIva9/fixture/synthetic-library",
+    "expected_vector": [
+      0.13531813025474548,
+      -0.5401950478553772,
+      0.3139018416404724,
+      0.4897967278957367,
+      -0.14633087813854218,
+      0.25764963030815125,
+      0.003314525820314884,
+      -0.5134549736976624
+    ],
+    "fixture_sha256": {
+      "1_Pooling/config.json": "f3471ef375e135a24ebbc10fb48ae1d4a0c8271f75ad9f2c566f391b6bde3892",
+      "config.json": "379d188d421d6eb8a5429fc8241b7006495d316bf51955425679975f580a2308",
+      "golden.json": "903e306675f766e9835375931b96efebb94097b80275220e3c80a76af04daa9c",
+      "model.safetensors": "549cf713305780cd5af92cf397e6be34ada0e3650f967bb9772fa08ba9cedd44",
+      "modules.json": "21ddb3037a55ebf4549eb5c1dc44c3f28f10b56ec7f1335c92fd90e5b30d88ac",
+      "sentence_bert_config.json": "1a8ca78fce4e36626d2b3eef2336842e8b2a502c963cd01ef271d44da0a741df",
+      "tokenizer.json": "36baeedee0eb6001cd65282d64683b33a17e9a9491f80720ab5d9d85eb55e719"
+    }
+  }
+}

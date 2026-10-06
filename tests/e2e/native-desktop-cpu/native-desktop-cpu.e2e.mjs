@@ -155,7 +155,9 @@ describe('actual native Tauri saved CPU embedding graph', () => {
           return Boolean(submissionError);
         }
         const inspector = await $(selector('io-inspector-page'));
-        return await inspector.isExisting() && await inspector.isDisplayed();
+        if (await inspector.isExisting() && await inspector.isDisplayed()) return true;
+        // Successful non-image runs use the existing Scheduler destination.
+        return await $(selector('workbench-nav-scheduler')).getAttribute('aria-current') === 'page';
       }, { timeout: 30000, timeoutMsg: 'Native submission did not report success or its GUI error' });
       assert.equal(submissionError, null, submissionError);
     } catch (error) {
@@ -187,6 +189,8 @@ describe('actual native Tauri saved CPU embedding graph', () => {
     assert.deepEqual(selected.device_ids, ['cpu']);
     assert.equal(selected.model_ref.model_id, fixture.model_id);
     writeFileSync(path.join(evidence, 'native-output.json'), JSON.stringify({ synthetic_untrained: true, discovery: fixture.discovery, runId, output, selected, inspection }, null, 2));
+    await $(selector('workbench-nav-io_inspector')).click();
+    await $(selector('io-inspector-page')).waitForDisplayed({ timeout: 30000 });
     const cards = await $$(selector('io-artifact-card'));
     for (const card of cards) {
       const read = await card.$(selector('io-artifact-read-button'));

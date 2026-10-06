@@ -10,10 +10,41 @@ import {
   nextWorkflowPatchSemanticVersion,
   shouldRefreshValidationFromLifecycleEvent,
   workflowSubmitSuccessWorkbenchPage,
+  workflowAuthoredTextInputs,
   workflowSubmitDisabledReason,
   workflowValidationRefreshKey,
 } from './workflowToolbarEvents.ts';
-import type { NodeExecutionState, WorkflowEvent } from '../services/workflow/types.ts';
+import type { NodeExecutionState, WorkflowEvent, WorkflowGraph } from '../services/workflow/types.ts';
+
+test('authored root text reaches request bindings without coercing other graph data', () => {
+  const graph: WorkflowGraph = {
+    nodes: [
+      { id: 'prompt', node_type: 'text-input', position: { x: 0, y: 0 }, data: { text: ' hello world ' } },
+      { id: 'blank', node_type: 'text-input', position: { x: 0, y: 0 }, data: { text: '' } },
+      { id: 'unset', node_type: 'text-input', position: { x: 0, y: 0 }, data: {} },
+      { id: 'wrong', node_type: 'text-input', position: { x: 0, y: 0 }, data: { text: 7 } },
+      { id: 'infer', node_type: 'llm-inference', position: { x: 0, y: 0 }, data: { text: 'internal' } },
+    ],
+    edges: [{ id: 'prompt-infer', source: 'prompt', source_handle: 'text', target: 'infer', target_handle: 'text' }],
+  };
+  const original = structuredClone(graph);
+  assert.deepEqual(workflowAuthoredTextInputs(graph), [
+    { node_id: 'prompt', port_id: 'text', value: ' hello world ' },
+    { node_id: 'blank', port_id: 'text', value: '' },
+  ]);
+  assert.deepEqual(graph, original);
+});
+
+test('authored text cannot replace a connected input', () => {
+  const graph: WorkflowGraph = {
+    nodes: [
+      { id: 'upstream', node_type: 'text-input', position: { x: 0, y: 0 }, data: { text: 'current' } },
+      { id: 'connected', node_type: 'text-input', position: { x: 0, y: 0 }, data: { text: 'stale' } },
+    ],
+    edges: [{ id: 'input', source: 'upstream', source_handle: 'text', target: 'connected', target_handle: 'text' }],
+  };
+  assert.deepEqual(workflowAuthoredTextInputs(graph), [{ node_id: 'upstream', port_id: 'text', value: 'current' }]);
+});
 
 function createWorkflowActions() {
   const stateCalls: Array<{ nodeId: string; state: NodeExecutionState; message?: string }> = [];

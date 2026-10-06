@@ -46,6 +46,7 @@
     nextWorkflowPatchSemanticVersion,
     shouldRefreshValidationFromLifecycleEvent,
     workflowSubmitSuccessWorkbenchPage,
+    workflowAuthoredTextInputs,
     workflowSubmitDisabledReason,
     workflowValidationRefreshKey,
   } from './workflowToolbarEvents';
@@ -316,7 +317,7 @@
       try {
         const runRequestBase = {
           session_id: executionSession.session_id,
-          inputs: [],
+          inputs: workflowAuthoredTextInputs($workflowGraph),
           output_targets: null,
           override_selection: null,
           timeout_ms: null,

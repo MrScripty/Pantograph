@@ -446,3 +446,36 @@ dynamic ORT with `ORT_SKIP_DOWNLOAD=1`. The isolated qualification workflow's
 path filter now includes this exact projection source so its repair triggers
 the same native route; permissions, checks and deadlines remain unchanged.
 Native CPU execution/output still requires the subsequent source-bound run.
+
+## Authored text is missing from desktop request ingress
+
+[Run 37514419876](https://github.com/MrScripty/Pantograph/actions/runs/37514419876)
+executes `c3ef607630cfead9bfb38adac955bd0de95bf93d`, tree
+`cc8aee7ef4bf2ecb91f6f9da8aa0c7d9ef83ac95`. Typed Resolve and GUI Submit
+clear snapshot publication. The previous invalid-control-node error is absent;
+the scheduler now reports no ready task while the graph is incomplete. Scoped
+run `run_872043f9-43b1-48cf-9e2b-204a361ab8c7` remains queued, with no
+selected runtime/device, no start/completion timestamps and zero retained outputs.
+CPU execution/output remain unestablished. The [complete twelfth-attempt evidence](../evidence/native-desktop-cpu/cold-typed-discovery/typed-proof-successor/source-input/README.md)
+preserves all twenty-two members and masked job log. Artifact `11435994583`
+SHA256 is `259ffd7be87a3c41c7e0c3728ee14c2630fa98ecf30c76696edd4ee5c276c4d4`.
+
+The exact desktop producer always submits `inputs: []`. Source-input tasks require
+request-level port bindings; the saved text therefore never reaches scheduler
+materialization. The successor forwards only explicitly authored root text
+strings through the existing `WorkflowPortBinding` ingress contract. It preserves
+blank/whitespace strings, skips unset/non-string fields and does not override a
+connected text input or forward arbitrary inference data. Numeric, boolean,
+selection and other input handling remain outside this narrow text-input repair.
+Backend ingress validation, scheduler materialization and proof/dispatch guards
+are unchanged. The two regressions fail with the extracted old empty-input
+behavior, then pass with the repair; that reproduction is explicitly not a
+pristine-old-HEAD build. All 675 frontend tests, TypeScript checking, the frontend
+build and affected lint pass.
+
+The fixture additionally assumed every successful run opens I/O Inspector.
+Existing routing explicitly sends non-image runs to Scheduler. The successor
+waits for that actual success destination, verifies the owner-retained run/output,
+then opens I/O Inspector using normal workbench navigation. Production routing
+is unchanged. Actual native scheduler CPU execution/output still requires the
+subsequent source-bound run.

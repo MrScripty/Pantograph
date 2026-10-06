@@ -1,0 +1,18 @@
+{
+  "run_id": 37514419876,
+  "job_id": 112443549660,
+  "source_head": "c3ef607630cfead9bfb38adac955bd0de95bf93d",
+  "source_tree": "cc8aee7ef4bf2ecb91f6f9da8aa0c7d9ef83ac95",
+  "artifact_id": 11435994583,
+  "artifact_sha256": "259ffd7be87a3c41c7e0c3728ee14c2630fa98ecf30c76696edd4ee5c276c4d4",
+  "artifact_members": 22,
+  "conclusion": "failure",
+  "dependency_resolve_status": "request_ready",
+  "gui_submit_clicked": true,
+  "scoped_run_id": "run_872043f9-43b1-48cf-9e2b-204a361ab8c7",
+  "scoped_run_status": "queued",
+  "retained_output_count": 0,
+  "failure": "Internal error: capability_violation: runtime scheduler graph has no ready task and is not complete",
+  "cpu_execution_established": false,
+  "cpu_output_established": false
+}
