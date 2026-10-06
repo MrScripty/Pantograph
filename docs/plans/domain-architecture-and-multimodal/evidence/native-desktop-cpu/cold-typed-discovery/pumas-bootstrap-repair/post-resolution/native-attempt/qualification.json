@@ -1,0 +1,17 @@
+{
+  "executed_head": "2c750701c3e1e073c1bf07280ec523269c97be03",
+  "executed_tree": "41ce4b9fe4de7550e35f0c7809009d9c51b3824c",
+  "run_id": 37533284903,
+  "job_id": 112507769238,
+  "artifact_id": 11446316351,
+  "artifact_sha256": "b8970532236ac1460a1405a9dd604518fd0a2ee271dd38d09a666a77e77b53ea",
+  "native_build": "passed",
+  "startup_tests_passed": 8,
+  "requirements_seed": "stored_resolved",
+  "readiness_proof": "resolved_not_ready",
+  "task_state": "paused_deferred",
+  "last_task_state_version": 19,
+  "output_artifact_count": 0,
+  "blocker": "readiness_adapter_uses_resolve_instead_of_check",
+  "cpu_output_qualification": "incomplete"
+}

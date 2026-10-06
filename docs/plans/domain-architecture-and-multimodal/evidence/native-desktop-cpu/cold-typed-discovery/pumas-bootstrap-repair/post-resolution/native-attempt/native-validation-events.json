@@ -1,0 +1,87 @@
+[
+  {
+    "graph_revision": "157f87306e2aa806",
+    "validation_session_id": "validation.session.d39a79fe-a412-4f25-a104-d7488ac88ac2",
+    "sequence": 0,
+    "graph_session_id": "224baaf1-2c71-4bf8-838a-49275a79ce84",
+    "kind": {
+      "kind": "validation_pending"
+    }
+  },
+  {
+    "graph_revision": "157f87306e2aa806",
+    "validation_session_id": "validation.session.c8808668-9368-4e82-a78c-e1c63d219e27",
+    "sequence": 1,
+    "graph_session_id": "224baaf1-2c71-4bf8-838a-49275a79ce84",
+    "kind": {
+      "superseded_validation_session_id": "validation.session.d39a79fe-a412-4f25-a104-d7488ac88ac2",
+      "kind": "validation_superseded"
+    }
+  },
+  {
+    "graph_revision": "157f87306e2aa806",
+    "validation_session_id": "validation.session.c8808668-9368-4e82-a78c-e1c63d219e27",
+    "sequence": 2,
+    "graph_session_id": "224baaf1-2c71-4bf8-838a-49275a79ce84",
+    "kind": {
+      "kind": "publication_accepted"
+    }
+  },
+  {
+    "graph_revision": "157f87306e2aa806",
+    "validation_session_id": "validation.session.c8808668-9368-4e82-a78c-e1c63d219e27",
+    "sequence": 3,
+    "graph_session_id": "224baaf1-2c71-4bf8-838a-49275a79ce84",
+    "kind": {
+      "reason": "graph_revision_changed",
+      "kind": "validation_cancelled"
+    }
+  },
+  {
+    "graph_revision": "d0f7a8eb92be581d",
+    "validation_session_id": "validation.session.82337d6b-3101-48d6-9fa2-8be0ff6c4467",
+    "sequence": 4,
+    "graph_session_id": "224baaf1-2c71-4bf8-838a-49275a79ce84",
+    "kind": {
+      "kind": "validation_pending"
+    }
+  },
+  {
+    "graph_revision": "d0f7a8eb92be581d",
+    "validation_session_id": "validation.session.82337d6b-3101-48d6-9fa2-8be0ff6c4467",
+    "sequence": 5,
+    "graph_session_id": "224baaf1-2c71-4bf8-838a-49275a79ce84",
+    "kind": {
+      "kind": "publication_accepted"
+    }
+  },
+  {
+    "graph_revision": "d0f7a8eb92be581d",
+    "validation_session_id": "validation.session.d017d0d8-d913-4f78-9174-5404005eb28d",
+    "sequence": 6,
+    "graph_session_id": "224baaf1-2c71-4bf8-838a-49275a79ce84",
+    "kind": {
+      "superseded_validation_session_id": "validation.session.82337d6b-3101-48d6-9fa2-8be0ff6c4467",
+      "kind": "validation_superseded"
+    }
+  },
+  {
+    "graph_revision": "d0f7a8eb92be581d",
+    "validation_session_id": "validation.session.fa18e8df-3119-4905-a298-207524900348",
+    "sequence": 7,
+    "graph_session_id": "224baaf1-2c71-4bf8-838a-49275a79ce84",
+    "kind": {
+      "superseded_validation_session_id": "validation.session.d017d0d8-d913-4f78-9174-5404005eb28d",
+      "kind": "validation_superseded"
+    }
+  },
+  {
+    "graph_revision": "d0f7a8eb92be581d",
+    "validation_session_id": "validation.session.fa18e8df-3119-4905-a298-207524900348",
+    "sequence": 8,
+    "graph_session_id": "224baaf1-2c71-4bf8-838a-49275a79ce84",
+    "kind": {
+      "kind": "publication_accepted"
+    }
+  }
+]

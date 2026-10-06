@@ -734,3 +734,26 @@ and proof validation, without another production repair or synthetic success.
 The preceding native Pumas resolution does not establish those later transitions.
 This first bootstrap also requires an explicit runtime and the current host
 platform; automatic-runtime cold bootstrap remains unsupported.
+
+## Actual post-seed blocker: readiness requests Resolve instead of Check
+
+[Run 37533284903](https://github.com/MrScripty/Pantograph/actions/runs/37533284903)
+executes 2c750701c3e1e073c1bf07280ec523269c97be03, tree
+41ce4b9fe4de7550e35f0c7809009d9c51b3824c. Build and eight startup tests
+pass. The normal requirements consumer stores the actual Resolved seed at
+21:35:43.306Z. The next readiness proof is Resolved at 21:35:43.308Z, and
+infer is paused_deferred version 13 at 21:35:43.309Z, reaching version 19 on
+retries. No task becomes ready and no dispatch selection begins. Source tracing
+confirms the readiness adapter requests Resolve again; inventory produced a
+separate Check snapshot. This is the exact next shared-boundary defect.
+
+The corrected artifact query returns an explicit empty array in all 61
+observations over 120 seconds. The same run, execution session and saved proof
+remain scoped and queued with zero outputs. The [complete seventeenth-attempt
+evidence](../evidence/native-desktop-cpu/cold-typed-discovery/pumas-bootstrap-repair/post-resolution/native-attempt/README.md)
+preserves all 23 members, full masked job log and 52 actual-owner records.
+Artifact 11446316351 SHA256 is
+b8970532236ac1460a1405a9dd604518fd0a2ee271dd38d09a666a77e77b53ea.
+Preserve this failure before the bounded action correction: Resolve for seed,
+Check for readiness, retaining missing/non-ready/mismatched result rejection.
+CPU output and all broader loader/GPU/pretrained claims remain unqualified.
