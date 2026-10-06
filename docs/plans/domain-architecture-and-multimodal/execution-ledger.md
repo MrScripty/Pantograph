@@ -545,3 +545,31 @@ checks. The isolated native rerun passes all three actual CPU checks, strict fiv
 Clippy passes without suppression, and all nine no-download graphs pass. The
 resumption manifest preserves the cache diagnosis; the final manifest records
 actual completion and remote identities. No service-limit failure occurred. Parent owns independent review and integration.
+
+## 2026-10-06 — Isolated PR56 correctness review checkpoint
+
+Parent paused unrelated image scheduler work for five PR56 review findings.
+The [saved repair checkpoint](reports/2026-10-06-pr56-correctness-review-checkpoint.md)
+records four reproducible correctness defects and actual child-process evidence
+contradicting the reaped-child summary. Source `5da09171` is based on the published
+import-only integration `b3c58756`; feature histories remain separate. Full comment
+body reads were Forbidden, with no credential or access-route changes. Exact
+comment disposal and integration publication remain blocked on those bodies.
+Test successor `a92f67ff` passes all affected suites: 805 inference, 503 embedded,
+141 registry and 14 config, plus all 661 frontend assertions. Strict all-target
+Clippy and no-download/gate checks pass. The first combined run exposed six
+zero-probe fixture assumptions, corrected without weakening uncertainty checks.
+No native desktop/GPU/model execution claim is added.
+
+The parent subsequently supplied all five original full review bodies. Exact
+validation found two missing cases in the summary-based recovery checkpoint:
+Candle supervised publication still reused its counter value, and an explicit
+VRAM-only task still failed on unknown RAM residency. Source `4f877149` closes both
+with deterministic regressions against actual owner publication and all four
+registry admission paths. The pinned Tokio InvalidInput allegation is incorrect;
+Unix native child tests and the exact dependency implementation support rejecting
+it without changing production shutdown. No review CLI or denied fetch is used.
+Final source qualification passes 806 inference, 503 embedded and 142 registry
+checks with strict all-target mixed-backend Clippy. Config/frontend source remains
+unchanged from its passing qualification. The independent repair branch is
+published normally; the parent alone updates PR56 and replies/resolves reviews.

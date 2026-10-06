@@ -617,3 +617,85 @@ fn explicit_runtime_transitions_invalidate_estimates_for_a_new_instance() {
         .acquire_reservation(task("candle", "after-observation", 40))
         .unwrap();
 }
+
+#[test]
+fn known_zero_pool_charge_does_not_require_unknown_peer_residency_but_missing_claims_do() {
+    let registry = registry(100, false);
+    registry.observe_runtime(observation(
+        Some("unknown-model"),
+        Some("unknown-instance"),
+        Status::Ready,
+    ));
+    let zero = registry
+        .evaluate_reservation(task("candle", "zero", 0))
+        .expect("zero RAM claim cannot increase the uncertain pool allocation");
+    assert!(
+        zero.observation().resource_domains.is_empty(),
+        "no observation may invent known totals for an uncharged pool"
+    );
+    let lease = registry
+        .acquire_reservation(task("candle", "zero", 0))
+        .expect("authoritative zero admission");
+    assert_eq!(lease.runtime_id, "candle");
+    assert!(matches!(
+        registry.evaluate_reservation(task("candle", "positive", 1)),
+        Err(RuntimeRegistryError::ModelResidencyResourcesUnavailable { .. })
+    ));
+    let mut missing = task("candle", "missing", 0);
+    missing.requirements = None;
+    assert!(matches!(
+        registry.evaluate_reservation(missing),
+        Err(RuntimeRegistryError::ModelResidencyResourcesUnavailable { .. })
+    ));
+}
+
+#[test]
+fn vram_only_task_ignores_unknown_uncharged_ram_without_exposing_free_ram() {
+    let registry = registry(100, false);
+    registry
+        .configure_resource_domain(RuntimeResourceDomain {
+            domain_id: "gpu.0".into(),
+            total_bytes: 100,
+            safety_margin_bytes: 0,
+            bindings: vec![RuntimeResourceDomainBinding {
+                runtime_id: "pytorch".into(),
+                resource_kind: Kind::VramBytes,
+            }],
+        })
+        .unwrap();
+    registry.observe_runtime(RuntimeObservation {
+        runtime_id: "candle".into(),
+        display_name: "Candle".into(),
+        backend_keys: vec!["candle".into()],
+        model_id: Some("unknown-candle-model".into()),
+        runtime_instance_id: Some("candle-instance".into()),
+        status: Status::Ready,
+        last_error: None,
+    });
+    let mut request = task("pytorch", "vram-only", 0);
+    request.requirements = Some(RuntimeReservationRequirements::from_claims(vec![
+        Claim::vram_bytes(20),
+    ]));
+    registry
+        .can_acquire_reservation(&request)
+        .expect("no host RAM charge");
+    let evaluation = registry
+        .evaluate_reservation(request.clone())
+        .unwrap()
+        .observation()
+        .clone();
+    assert_eq!(evaluation.resource_domains.len(), 1);
+    assert_eq!(evaluation.resource_domains[0].domain_id, "gpu.0");
+    assert_eq!(evaluation.resource_domains[0].requested_bytes, 20);
+    let (_, custody) = registry
+        .acquire_reservation_provisional(request.clone(), &evaluation, |_| Ok::<_, &str>(()))
+        .unwrap();
+    drop(custody);
+    registry.acquire_reservation(request.clone()).unwrap();
+    request.reservation_owner_id = Some("positive-ram".into());
+    request.requirements = Some(claims(1, Some(20)));
+    assert!(matches!(
+        registry.can_acquire_reservation(&request),
+        Err(RuntimeRegistryError::ModelResidencyResourcesUnavailable { .. })
+    ));
+}
