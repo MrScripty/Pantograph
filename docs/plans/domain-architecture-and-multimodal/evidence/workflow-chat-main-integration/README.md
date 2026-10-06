@@ -11,7 +11,7 @@ Application code, fixtures and the original chat evidence remain byte-identical
 to frozen chat. Relative to frozen chat, integration changes only the placement
 of an identical stop contract test (keep main's placement) and retains both plan
 records. The original 29-member evidence packet and both fixture manifests verify.
-The subsequent candidate commit adds only this integration evidence directory.
+Subsequent candidate evidence commits change only this integration evidence directory.
 `source.json`, `integration-review.json`, and `integration.patch.gz` bind this
 packet to the combined source. Frozen refs and earlier histories are preserved;
 no rebase, force push or unpublished native desktop repairs are used.

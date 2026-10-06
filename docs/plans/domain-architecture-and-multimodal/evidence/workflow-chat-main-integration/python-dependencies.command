@@ -1,1 +1,1 @@
-uv pip check --python .venv/bin/python 
+uv pip check --python .venv/bin/python

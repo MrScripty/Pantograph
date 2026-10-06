@@ -1,1 +1,1 @@
-cargo test --locked --offline -p pantograph-scheduler -p workflow-nodes --features inference/backend-pytorch\,inference/backend-candle\,inference/std-process\,pantograph-embedded-runtime/backend-pytorch 
+cargo test --locked --offline -p pantograph-scheduler -p workflow-nodes --features inference/backend-pytorch\,inference/backend-candle\,inference/std-process\,pantograph-embedded-runtime/backend-pytorch

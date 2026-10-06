@@ -1,1 +1,1 @@
-./scripts/check-scheduler-only-workflow-execution.sh 
+./scripts/check-scheduler-only-workflow-execution.sh
