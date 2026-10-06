@@ -716,3 +716,21 @@ preserves all 23 members, full masked job log and 13 actual records. Artifact
 235b9d8ad91030c375eccf1b6124f9a031907664be2cef379148a44f07e53d3a.
 Native CPU output, GPU, pretrained models and broad loader qualification remain
 unqualified.
+
+## Post-resolution boundary capture successor
+
+Preserve the sixteenth-attempt evidence at `e4d79b98` before further edits. A
+correction to the preceding response-shape description: the inspection DTO
+does define io_artifacts, but serialization omits the field for an empty list.
+The harness incorrectly assumed its presence. The successor uses the canonical
+workflow_io_artifact_query response's explicit artifacts array; empty output
+still fails qualification. The artifact body/read and producer-port contracts
+are inspected against their current owners.
+
+Additional actual-owner diagnostic records capture progress-loop entry/exit,
+requirements seed storage, readiness proof resolution, the admitted task state,
+and runtime dispatch selection entry/preparation. They retain existing outcomes
+and proof validation, without another production repair or synthetic success.
+The preceding native Pumas resolution does not establish those later transitions.
+This first bootstrap also requires an explicit runtime and the current host
+platform; automatic-runtime cold bootstrap remains unsupported.

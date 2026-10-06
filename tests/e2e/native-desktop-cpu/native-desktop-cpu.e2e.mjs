@@ -200,6 +200,7 @@ describe('actual native Tauri saved CPU embedding graph', () => {
       writeFileSync(path.join(evidence, 'native-initial-submission.json'), JSON.stringify({ submissionError, run }, null, 2));
     }
     let inspection;
+    let artifactQuery;
     const samples = [];
     await browser.waitUntil(async () => {
       const current = await invoke('workflow_run_list_query', { request: { workflow_id: workflowId, limit: 8 } });
@@ -207,14 +208,16 @@ describe('actual native Tauri saved CPU embedding graph', () => {
       assert.equal(current.runs[0].workflow_run_id, runId);
       assert.equal(current.runs[0].workflow_execution_session_id, run.workflow_execution_session_id);
       inspection = await invoke('workflow_run_inspection_query', { request: { workflow_run_id: runId, artifact_limit: 64 } });
+      artifactQuery = await invoke('workflow_io_artifact_query', { request: { workflow_run_id: runId, limit: 64 } });
+      assert.ok(Array.isArray(artifactQuery.artifacts), 'Public artifact query must return its canonical array');
       const scheduler = await invoke('workflow_get_scheduler_snapshot', { request: { session_id: run.workflow_execution_session_id } });
-      samples.push({ capturedAt: new Date().toISOString(), runs: current, scheduler, inspection });
+      samples.push({ capturedAt: new Date().toISOString(), runs: current, scheduler, inspection, artifactQuery });
       writeFileSync(path.join(evidence, 'native-bootstrap-observation.json'), JSON.stringify(samples, null, 2));
-      return inspection.io_artifacts.some((item) => item.producer_node_id === 'infer' && item.producer_port_id === 'embedding')
-        && inspection.io_artifacts.some((item) => item.producer_node_id === 'infer' && item.producer_port_id === 'metadata');
+      return artifactQuery.artifacts.some((item) => item.producer_node_id === 'infer' && item.producer_port_id === 'embedding')
+        && artifactQuery.artifacts.some((item) => item.producer_node_id === 'infer' && item.producer_port_id === 'metadata');
     }, { timeout: 120000, interval: 2000, timeoutMsg: 'The same native submitted run did not retain CPU output after automatic dependency bootstrap' });
-    const embedding = inspection.io_artifacts.find((item) => item.producer_node_id === 'infer' && item.producer_port_id === 'embedding');
-    const metadata = inspection.io_artifacts.find((item) => item.producer_node_id === 'infer' && item.producer_port_id === 'metadata');
+    const embedding = artifactQuery.artifacts.find((item) => item.producer_node_id === 'infer' && item.producer_port_id === 'embedding');
+    const metadata = artifactQuery.artifacts.find((item) => item.producer_node_id === 'infer' && item.producer_port_id === 'metadata');
     assert.ok(embedding && metadata, 'Actual native owner must retain scoped vector and selection metadata');
     assert.equal(embedding.workflow_run_id, runId);
     const output = await readJsonArtifact(embedding);
@@ -227,7 +230,7 @@ describe('actual native Tauri saved CPU embedding graph', () => {
     assert.equal(selected.runtime_variant_id, 'candle.cpu');
     assert.deepEqual(selected.device_ids, ['cpu']);
     assert.equal(selected.model_ref.model_id, fixture.model_id);
-    writeFileSync(path.join(evidence, 'native-output.json'), JSON.stringify({ synthetic_untrained: true, discovery: fixture.discovery, runId, output, selected, inspection }, null, 2));
+    writeFileSync(path.join(evidence, 'native-output.json'), JSON.stringify({ synthetic_untrained: true, discovery: fixture.discovery, runId, output, selected, inspection, artifactQuery }, null, 2));
     await $(selector('workbench-nav-io_inspector')).click();
     await $(selector('io-inspector-page')).waitForDisplayed({ timeout: 30000 });
     const cards = await $$(selector('io-artifact-card'));

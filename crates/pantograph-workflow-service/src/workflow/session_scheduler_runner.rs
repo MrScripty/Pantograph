@@ -104,14 +104,35 @@ impl<'a> WorkflowPreDispatchPreparationBoundary<'a> {
         workflow_run_id: &str,
     ) -> Result<WorkflowPreDispatchPreparationOutcome, WorkflowServiceError> {
         let runner = self.runner();
+        log::info!(
+            "dependency_bootstrap_diagnostic {}",
+            serde_json::json!({
+                "phase":"pre_dispatch_progress_started", "session_id":session_id, "workflow_run_id":workflow_run_id,
+            })
+        );
         runner
             .run_progress_loop(session_id, workflow_run_id)
             .await?;
+        log::info!(
+            "dependency_bootstrap_diagnostic {}",
+            serde_json::json!({
+                "phase":"pre_dispatch_progress_completed", "session_id":session_id, "workflow_run_id":workflow_run_id,
+            })
+        );
         runner.retry_deferred_runtime_dependency_readiness(session_id, workflow_run_id)?;
         let readiness_admission =
             runner.admit_runtime_dependency_readiness(session_id, workflow_run_id)?;
         let (next_ready_task_id, all_tasks_completed) =
             runner.runtime_dispatch_progress(session_id, workflow_run_id)?;
+        log::info!(
+            "dependency_bootstrap_diagnostic {}",
+            serde_json::json!({
+                "phase":"pre_dispatch_readiness_observed", "session_id":session_id, "workflow_run_id":workflow_run_id,
+                "next_ready_task_id":next_ready_task_id, "all_tasks_completed":all_tasks_completed,
+                "deferred_task_ids":readiness_admission.deferred_task_ids,
+                "admitted_task_ids":readiness_admission.admitted.iter().map(|task| &task.task_id).collect::<Vec<_>>(),
+            })
+        );
         if next_ready_task_id.is_none()
             && !all_tasks_completed
             && readiness_admission.deferred_task_ids.is_empty()
@@ -653,6 +674,13 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                     .map_err(dependency_readiness_work_queue_error)?,
             )
             .map_err(dependency_readiness_work_queue_error)?;
+            log::info!(
+                "dependency_bootstrap_diagnostic {}",
+                serde_json::json!({
+                    "phase":"requirements_seed_stored", "session_id":session_id, "workflow_run_id":workflow_run_id,
+                    "task_id":task_id, "request":request.as_envelope(), "result":seed_result.as_result(),
+                })
+            );
             self.service
                 .dependency_readiness_work_queue
                 .enqueue(work_item);
@@ -663,6 +691,13 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                 )
                 .map_err(dependency_readiness_error)?;
             let readiness_proof_for_dispatch = readiness_proof.clone();
+            log::info!(
+                "dependency_bootstrap_diagnostic {}",
+                serde_json::json!({
+                    "phase":"readiness_proof_resolved", "session_id":session_id, "workflow_run_id":workflow_run_id,
+                    "task_id":task_id, "proof":readiness_proof_for_dispatch,
+                })
+            );
             let mut store = self.service.session_store_guard()?;
             let admitted_record = lifecycle
                 .admit_active_runtime_task(
@@ -674,6 +709,13 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                     readiness_proof,
                 )
                 .map_err(dependency_readiness_error)?;
+            log::info!(
+                "dependency_bootstrap_diagnostic {}",
+                serde_json::json!({
+                    "phase":"readiness_task_admitted", "session_id":session_id, "workflow_run_id":workflow_run_id,
+                    "task_id":task_id, "task_state":admitted_record.state.kind(), "task_state_version":admitted_record.state_version,
+                })
+            );
             if admitted_record.state.kind() == SchedulerTaskStateKind::Ready {
                 let readiness_proof = readiness_proof_for_dispatch.ok_or_else(|| {
                     WorkflowServiceError::InvalidRequest(format!(
@@ -859,6 +901,12 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
             )?;
             let dispatch_context =
                 ready_runtime_dispatch_context(self.service, session_id, workflow_run_id, task_id)?;
+            log::info!(
+                "dependency_bootstrap_diagnostic {}",
+                serde_json::json!({
+                    "phase":"runtime_dispatch_selection_started", "session_id":session_id, "workflow_run_id":workflow_run_id, "task_id":task_id,
+                })
+            );
             let prepared_dispatch_selection = runtime_dispatch_selection_boundary
                 .prepare_ready_runtime_task_dispatch(
                     &dispatch_context.task,
@@ -867,6 +915,12 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                 )
                 .await
                 .map_err(runtime_dispatch_preselection_invalid_request)?;
+            log::info!(
+                "dependency_bootstrap_diagnostic {}",
+                serde_json::json!({
+                    "phase":"runtime_dispatch_selection_prepared", "session_id":session_id, "workflow_run_id":workflow_run_id, "task_id":task_id,
+                })
+            );
             let started_runtime_task = {
                 let mut store = self.service.session_store_guard()?;
                 self.service

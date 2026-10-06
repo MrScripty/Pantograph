@@ -34,3 +34,9 @@ It must be corrected without converting pending or empty output into success.
 
 CPU output and loading remain unqualified. No GPU, pretrained or broad loader
 claim follows from the successful build, startup or owner resolution.
+
+Contract correction after capture: the inspection DTO does define io_artifacts,
+but omits that field when the list is empty. The preceding observed response
+therefore represents an empty list, not absence of an artifact capability.
+The harness successor uses workflow_io_artifact_query's explicit artifacts array
+and retains zero outputs as failure. Original captured bytes are unchanged.
