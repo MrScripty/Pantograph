@@ -1018,7 +1018,9 @@ impl WorkflowRuntimeDispatchCandidateProvider for TestRuntimeDispatchCandidatePr
             })?,
             selected_runtime_id,
             selected_runtime_variant_id: Some(
-                if intent.task_type.as_str() == "embedding" {
+                if intent.task_type.as_str() == "rerank" {
+                    "llama_cpp.cpu"
+                } else if intent.task_type.as_str() == "embedding" {
                     "candle.cpu"
                 } else if matches!(
                     intent.task_type.as_str(),
@@ -1031,7 +1033,9 @@ impl WorkflowRuntimeDispatchCandidateProvider for TestRuntimeDispatchCandidatePr
                 .parse()
                 .unwrap(),
             ),
-            selected_backend_key: if intent.task_type.as_str() == "embedding" {
+            selected_backend_key: if intent.task_type.as_str() == "rerank" {
+                "llamacpp"
+            } else if intent.task_type.as_str() == "embedding" {
                 "candle"
             } else {
                 "pytorch"
@@ -1180,6 +1184,38 @@ impl WorkflowHost for ImageRuntimeSessionHost {
                 .iter()
                 .filter(|node| matches!(node.node_type.as_str(), "llm-inference" | "vector-output"))
                 .map(|node| {
+                    if node.data["task_kind"] == "rerank" {
+                        return WorkflowIoNode {
+                            node_id: node.id.clone(),
+                            node_type: node.node_type.clone(),
+                            name: None,
+                            description: None,
+                            ports: [
+                                "results",
+                                "scores",
+                                "top_document",
+                                "top_score",
+                                "diagnostics",
+                            ]
+                            .into_iter()
+                            .map(|port| WorkflowIoPort {
+                                port_id: port.into(),
+                                name: None,
+                                description: None,
+                                data_type: Some(
+                                    if port == "top_document" {
+                                        "string"
+                                    } else {
+                                        "json"
+                                    }
+                                    .into(),
+                                ),
+                                required: Some(false),
+                                multiple: Some(false),
+                            })
+                            .collect(),
+                        };
+                    }
                     if node.node_type == "vector-output" || node.data["task_kind"] == "embedding" {
                         return WorkflowIoNode {
                             node_id: node.id.clone(),
@@ -3848,3 +3884,7 @@ mod completion_session_tests;
 
 #[path = "dependency_completion_session_tests.rs"]
 mod dependency_completion_session_tests;
+
+#[cfg(feature = "backend-candle")]
+#[path = "cpu_rerank_graph_tests.rs"]
+mod cpu_rerank_graph_tests;

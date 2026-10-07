@@ -33,7 +33,7 @@ fn materialized_runtime_host_input(
     materialized_results: &[WorkflowSchedulerTaskResult],
 ) -> Result<Option<RuntimeHostExecutionInput>, WorkflowRuntimeHostTaskInputMappingError> {
     let value = materialized_output(task, binding, materialized_results)?;
-    let Some(value) = runtime_host_input_value(binding, value)? else {
+    let Some(value) = runtime_host_input_value(task, binding, value)? else {
         return Ok(None);
     };
     Ok(Some(RuntimeHostExecutionInput {
@@ -97,6 +97,7 @@ fn materialized_output<'a>(
 }
 
 pub(crate) fn runtime_host_input_value(
+    task: &WorkflowSchedulerTask,
     binding: &WorkflowSchedulerTaskInputBinding,
     value: &WorkflowSchedulerTaskResultValue,
 ) -> Result<Option<RuntimeHostExecutionInputValue>, WorkflowRuntimeHostTaskInputMappingError> {
@@ -132,6 +133,24 @@ pub(crate) fn runtime_host_input_value(
         }
         WorkflowSchedulerTaskResultValue::Json(serde_json::Value::Number(value)) => {
             Ok(Some(RuntimeHostExecutionInputValue::F64(value.clone())))
+        }
+        WorkflowSchedulerTaskResultValue::Json(value)
+            if task
+                .schedulable_intent
+                .as_ref()
+                .map(|intent| intent.task_type.as_str())
+                .or_else(|| {
+                    task.schedulable_intent_template
+                        .as_ref()
+                        .map(|intent| intent.task_type.as_str())
+                })
+                == Some("rerank")
+                && matches!(
+                    binding.target_port_id.as_str(),
+                    "documents" | "task_options" | "extra_options"
+                ) =>
+        {
+            Ok(Some(RuntimeHostExecutionInputValue::Json(value.clone())))
         }
         WorkflowSchedulerTaskResultValue::Json(_) => Err(
             WorkflowRuntimeHostTaskInputMappingError::UnsupportedMaterializedInput {

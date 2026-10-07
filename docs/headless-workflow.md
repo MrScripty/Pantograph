@@ -141,3 +141,21 @@ cannot stand in for missing runtime proofs, and extra/duplicate node identities
 are rejected. Rust callers of `scheduler_inference_task_projections` must supply
 the actual graph for this coverage check; normal run admission also retains its
 workflow-version and fingerprint checks.
+
+### Scheduler-selected rerank
+
+Canonical `rerank` supports scheduler-selected llama.cpp CPU with a validated
+local GGUF target. Supply required string `query` and structured JSON `documents`;
+optional `top_n`, `return_documents`, `task_options` and `extra_options` retain the
+parent request controls. Outputs are `results`, `scores`, nullable `top_document`
+and `top_score`, and `diagnostics`. Structured inputs/outputs are limited to
+64 KiB each; existing scalar text limits still apply.
+
+The host rejects streaming, nonempty runtime traits, custom model code and
+unsupported package/runtime/device selections. Cancellation suppresses output
+after observing backend completion; it does not guarantee an immediate HTTP
+interrupt. A caller's disappearance keeps custody until the owner completes.
+Compatible envelope members execute sequentially. Direct core rerank and audio
+remain available pending qualified replacements; synthetic local qualification
+does not establish native model quality or desktop display. See the
+[local preservation report](plans/domain-architecture-and-multimodal/reports/2026-10-07-scheduler-rerank-preservation.md).

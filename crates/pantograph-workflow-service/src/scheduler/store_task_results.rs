@@ -858,7 +858,7 @@ impl WorkflowExecutionSessionStore {
                 _ => return None,
             };
             remaining = remaining.checked_sub(bytes)?;
-            if let Some(value) = runtime_host_input_value(binding, value).ok()? {
+            if let Some(value) = runtime_host_input_value(task, binding, value).ok()? {
                 inputs.push(
                     pantograph_runtime_host_contracts::RuntimeHostExecutionInput {
                         port_id: binding.target_port_id.clone(),

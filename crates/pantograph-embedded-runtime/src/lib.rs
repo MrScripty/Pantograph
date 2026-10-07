@@ -108,6 +108,7 @@ mod runtime_host_media_artifact_sink;
 mod runtime_host_observation;
 #[allow(dead_code)]
 mod runtime_host_package_facts;
+mod runtime_host_rerank_execution;
 #[allow(dead_code)]
 mod runtime_host_text_execution;
 pub mod runtime_recovery;
