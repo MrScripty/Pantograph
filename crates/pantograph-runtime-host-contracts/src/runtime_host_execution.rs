@@ -11,6 +11,8 @@ const MAX_ID_LEN: usize = 128;
 const MAX_TEXT_LEN: usize = 1024;
 /// Maximum serialized size of one structured node output.
 pub const RUNTIME_HOST_STRUCTURED_OUTPUT_MAX_BYTES: usize = 64 * 1024;
+/// Maximum serialized structured input; used for selected rerank documents.
+pub const RUNTIME_HOST_STRUCTURED_INPUT_MAX_BYTES: usize = 64 * 1024;
 
 const MAX_RUNTIME_HOST_INPUTS: usize = 128;
 /// Maximum output values carried by one runtime task or batch member.
@@ -150,6 +152,7 @@ impl RuntimeHostExecutionInput {
 )]
 #[non_exhaustive]
 pub enum RuntimeHostExecutionInputValue {
+    Json(serde_json::Value),
     String(String),
     Bool(bool),
     I64(i64),
@@ -202,6 +205,22 @@ impl RuntimeHostExecutionInputValue {
 
     fn validate(&self) -> Result<(), RuntimeHostExecutionContractError> {
         match self {
+            Self::Json(value) => {
+                if serde_json::to_vec(value)
+                    .map_err(|_| RuntimeHostExecutionContractError::InvalidField {
+                        field: "input.json",
+                        reason: "cannot serialize structured input",
+                    })?
+                    .len()
+                    > RUNTIME_HOST_STRUCTURED_INPUT_MAX_BYTES
+                {
+                    return Err(RuntimeHostExecutionContractError::FieldTooLong {
+                        field: "input.json",
+                        max_len: RUNTIME_HOST_STRUCTURED_INPUT_MAX_BYTES,
+                    });
+                }
+                Ok(())
+            }
             Self::String(value) => validate_optional_text("input.string", value),
             Self::MediaArtifactRef(value) => value.validate(),
             Self::F64(value) => {

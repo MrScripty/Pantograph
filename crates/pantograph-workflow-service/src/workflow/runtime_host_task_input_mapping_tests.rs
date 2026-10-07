@@ -303,3 +303,38 @@ fn task_result(
         terminal_metadata: None,
     }
 }
+
+#[test]
+fn admits_structured_json_only_on_rerank_document_and_option_ports() {
+    for task_type in ["rerank", "embedding", "text_generation"] {
+        for target_port in ["documents", "task_options", "extra_options", "prompt"] {
+            let mut task = runtime_task(vec![input_binding("source", "value", target_port)]);
+            let request: pantograph_runtime_host_contracts::RuntimeHostExecutionRequest = serde_json::from_str(include_str!("../../../pantograph-runtime-host-contracts/tests/fixtures/runtime_host_execution_request_dispatch_selected.json")).unwrap();
+            let mut intent = request.handoff.task_intent;
+            intent.task_type = task_type.parse().unwrap();
+            task.schedulable_intent = Some(intent);
+            let value = serde_json::json!(["a",{"text":"b"}]);
+            let result = materialize_runtime_host_inputs(
+                &task,
+                &[task_result(
+                    "source",
+                    "value",
+                    WorkflowSchedulerTaskResultValue::Json(value.clone()),
+                )],
+            );
+            if task_type == "rerank" && target_port != "prompt" {
+                assert_eq!(
+                    result.unwrap()[0].value,
+                    RuntimeHostExecutionInputValue::Json(value)
+                );
+            } else {
+                assert!(matches!(
+                    result,
+                    Err(
+                        WorkflowRuntimeHostTaskInputMappingError::UnsupportedMaterializedInput { .. }
+                    )
+                ));
+            }
+        }
+    }
+}

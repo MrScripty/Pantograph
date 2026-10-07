@@ -60,6 +60,8 @@ use crate::{
 
 #[path = "gateway_embedding_replacement.rs"]
 mod embedding_replacement;
+#[path = "gateway_selected_rerank.rs"]
+mod selected_rerank;
 
 const IMAGE_GENERATION_BYTES_PER_RGBA_PIXEL: u64 = 4;
 const MAX_LIFECYCLE_COMPATIBILITY_ISSUES: usize = 32;

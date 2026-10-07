@@ -1,0 +1,193 @@
+{
+  "contract_version": 1,
+  "model_ref": {
+    "model_id": "rerank/bge/tiny-reranker-gguf",
+    "revision": "synthetic-r1",
+    "selected_artifact_id": "q8_0"
+  },
+  "task_kind": "rerank",
+  "descriptor_fingerprint": "iface.test.cpu_rerank.v1",
+  "inputs": [
+    {
+      "port_id": "query",
+      "label": "Query",
+      "direction": "input",
+      "requirement": "required",
+      "value_type": {
+        "category": "scalar",
+        "kind": "string"
+      },
+      "options": {
+        "kind": "none"
+      },
+      "availability": {
+        "status": "available"
+      }
+    },
+    {
+      "port_id": "documents",
+      "label": "Documents",
+      "direction": "input",
+      "requirement": "required",
+      "value_type": {
+        "category": "structured",
+        "kind": "json"
+      },
+      "options": {
+        "kind": "none"
+      },
+      "availability": {
+        "status": "available"
+      }
+    },
+    {
+      "port_id": "top_n",
+      "label": "Top n",
+      "direction": "input",
+      "requirement": "optional",
+      "value_type": {
+        "category": "scalar",
+        "kind": "u64"
+      },
+      "options": {
+        "kind": "none"
+      },
+      "availability": {
+        "status": "available"
+      }
+    },
+    {
+      "port_id": "return_documents",
+      "label": "Return documents",
+      "direction": "input",
+      "requirement": "optional",
+      "value_type": {
+        "category": "scalar",
+        "kind": "bool"
+      },
+      "options": {
+        "kind": "none"
+      },
+      "availability": {
+        "status": "available"
+      }
+    },
+    {
+      "port_id": "task_options",
+      "label": "Task options",
+      "direction": "input",
+      "requirement": "optional",
+      "value_type": {
+        "category": "structured",
+        "kind": "json"
+      },
+      "options": {
+        "kind": "none"
+      },
+      "availability": {
+        "status": "available"
+      }
+    },
+    {
+      "port_id": "extra_options",
+      "label": "Backend options",
+      "direction": "input",
+      "requirement": "optional",
+      "value_type": {
+        "category": "structured",
+        "kind": "json"
+      },
+      "options": {
+        "kind": "none"
+      },
+      "availability": {
+        "status": "available"
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "port_id": "results",
+      "label": "Results",
+      "direction": "output",
+      "requirement": "required",
+      "value_type": {
+        "category": "structured",
+        "kind": "json"
+      },
+      "options": {
+        "kind": "none"
+      },
+      "availability": {
+        "status": "available"
+      }
+    },
+    {
+      "port_id": "scores",
+      "label": "Scores",
+      "direction": "output",
+      "requirement": "required",
+      "value_type": {
+        "category": "structured",
+        "kind": "json"
+      },
+      "options": {
+        "kind": "none"
+      },
+      "availability": {
+        "status": "available"
+      }
+    },
+    {
+      "port_id": "top_document",
+      "label": "Top document",
+      "direction": "output",
+      "requirement": "optional",
+      "value_type": {
+        "category": "scalar",
+        "kind": "string"
+      },
+      "options": {
+        "kind": "none"
+      },
+      "availability": {
+        "status": "available"
+      }
+    },
+    {
+      "port_id": "top_score",
+      "label": "Top score",
+      "direction": "output",
+      "requirement": "optional",
+      "value_type": {
+        "category": "structured",
+        "kind": "json"
+      },
+      "options": {
+        "kind": "none"
+      },
+      "availability": {
+        "status": "available"
+      }
+    },
+    {
+      "port_id": "diagnostics",
+      "label": "Diagnostics",
+      "direction": "output",
+      "requirement": "required",
+      "value_type": {
+        "category": "structured",
+        "kind": "json"
+      },
+      "options": {
+        "kind": "none"
+      },
+      "availability": {
+        "status": "available"
+      }
+    }
+  ],
+  "availability": {
+    "status": "available"
+  }
+}

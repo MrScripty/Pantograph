@@ -255,4 +255,5 @@ pub use types::{
 pub use process::StdProcessSpawner;
 
 mod selected_embedding_execution;
+mod selected_rerank_execution;
 mod selected_text_execution;
