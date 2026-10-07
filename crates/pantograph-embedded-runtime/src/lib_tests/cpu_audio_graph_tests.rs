@@ -390,3 +390,361 @@ async fn saved_owned_audio_reference_reopens_reuses_source_and_publishes_long_tr
             && host.run_attempts.load(Ordering::SeqCst) == 0
     );
 }
+
+// Current native Pumas targets omit fingerprints. This controlled authenticated
+// producer supplies fixture identity while preserving the actual client/resolvers.
+struct HostedAudioProducer(tokio::task::JoinHandle<()>);
+impl Drop for HostedAudioProducer {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
+}
+async fn hosted_audio_producer(
+    owner: Arc<pumas_library::PumasApi>,
+) -> (Arc<pumas_library::PumasLocalClient>, HostedAudioProducer) {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let library_path = owner.launcher_root().to_path_buf();
+    let server = tokio::spawn(async move {
+        let (mut stream, _) = listener.accept().await.unwrap();
+        while let Ok(length) = stream.read_u32().await {
+            assert!(length <= 65536);
+            let mut frame = vec![0; length as usize];
+            stream.read_exact(&mut frame).await.unwrap();
+            let request: serde_json::Value = serde_json::from_slice(&frame).unwrap();
+            assert_eq!(
+                request["params"]["connection_token"],
+                "hosted-audio-fixture-token"
+            );
+            let result = match request["method"].as_str().unwrap() {
+                "resolve_model_artifact_load_target" => {
+                    let selected: pumas_library::models::ResolveModelArtifactLoadTargetRequest =
+                        serde_json::from_value(request["params"]["request"].clone()).unwrap();
+                    let model_id = selected.model_ref.model_id.clone();
+                    let mut response = owner
+                        .resolve_model_artifact_load_target(selected)
+                        .await
+                        .unwrap();
+                    let target = response.target.as_mut().unwrap();
+                    target.local_load_path = owner
+                        .launcher_root()
+                        .join("shared-resources/models")
+                        .join(model_id)
+                        .canonicalize()
+                        .unwrap()
+                        .to_str()
+                        .unwrap()
+                        .into();
+                    target.content_fingerprint = Some("synthetic-content-r1".into());
+                    serde_json::to_value(response).unwrap()
+                }
+                "resolve_model_package_facts" => serde_json::to_value(
+                    owner
+                        .resolve_model_package_facts(
+                            request["params"]["model_id"].as_str().unwrap(),
+                        )
+                        .await
+                        .unwrap(),
+                )
+                .unwrap(),
+                method => panic!("unexpected fixture owner method {method}"),
+            };
+            let response = serde_json::to_vec(
+                &serde_json::json!({"jsonrpc":"2.0","id":request["id"],"result":result}),
+            )
+            .unwrap();
+            stream.write_u32(response.len() as u32).await.unwrap();
+            stream.write_all(&response).await.unwrap();
+        }
+    });
+    let client = pumas_library::PumasLocalClient::connect(pumas_library::registry::InstanceEntry {
+        library_path,
+        pid: std::process::id(),
+        port: address.port(),
+        transport_kind: pumas_library::registry::LocalInstanceTransportKind::LoopbackTcp,
+        endpoint: address.to_string(),
+        connection_token: Some("hosted-audio-fixture-token".into()),
+        started_at: "fixture".into(),
+        version: None,
+        status: pumas_library::registry::InstanceStatus::Ready,
+    })
+    .await
+    .unwrap();
+    (Arc::new(client), HostedAudioProducer(server))
+}
+
+#[tokio::test]
+async fn hosted_startup_owned_audio_graph_reuses_source_and_publishes_long_transcript() {
+    let _owned_fixture = crate::runtime_host_owned_audio::tests::OWNED_AUDIO_TEST_LOCK
+        .lock()
+        .await;
+    use crate::runtime_host_owned_audio::tests::wav;
+    use crate::workflow_service_composition::{
+        EmbeddedHostedStartupCompositionInput, EmbeddedHostedStartupConfig,
+        EmbeddedHostedStartupPumasSelectorSource, EmbeddedWorkflowServiceComposition,
+    };
+    use pantograph_workflow_service::workflow::WorkflowSchedulerTaskResultValue;
+    let root = TempDir::new().unwrap();
+    let model_id = "audio/fixture/hosted-asr";
+    let model_dir = root.path().join("shared-resources/models").join(model_id);
+    std::fs::create_dir_all(&model_dir).unwrap();
+    // Local inspection fixtures only; the controlled backend never loads weights.
+    std::fs::write(
+        model_dir.join("config.json"),
+        r#"{"model_type":"whisper","architectures":["WhisperForConditionalGeneration"]}"#,
+    )
+    .unwrap();
+    std::fs::write(
+        model_dir.join("preprocessor_config.json"),
+        r#"{"feature_extractor_type":"WhisperFeatureExtractor","sampling_rate":16000}"#,
+    )
+    .unwrap();
+    write_min_safetensors(&model_dir.join("model.safetensors"));
+    std::fs::write(model_dir.join("metadata.json"), serde_json::json!({
+        "model_id":model_id,"family":"fixture","model_type":"audio",
+        "official_name":"Hosted ASR fixture","cleaned_name":"hosted-asr",
+        "selected_artifact_id":"hf-main","entry_path":model_dir,
+        "storage_kind":"library_owned","validation_state":"valid",
+        "pipeline_tag":"automatic-speech-recognition","task_type_primary":"audio_transcription",
+        "input_modalities":["audio"],"output_modalities":["text"],
+        "runtime_engine_hints":["transformers"],
+        "files":[{"name":"config.json"},{"name":"preprocessor_config.json"},{"name":"model.safetensors"}]
+    }).to_string()).unwrap();
+    let pumas = Arc::new(
+        crate::pumas_test_support::builder(root.path())
+            .with_hf_client(false)
+            .with_process_manager(false)
+            .build()
+            .await
+            .unwrap(),
+    );
+    pumas.rebuild_model_index().await.unwrap();
+    let package = pumas.resolve_model_package_facts(model_id).await.unwrap();
+    assert_eq!(
+        serde_json::to_value(package.artifact.artifact_kind).unwrap(),
+        serde_json::json!("hf_compatible_directory")
+    );
+    let model_ref: PumasModelRef = serde_json::from_value(serde_json::json!({
+        "model_id": package.model_ref.model_id,
+        "selected_artifact_id": package.model_ref.selected_artifact_id,
+    }))
+    .unwrap();
+    let artifacts = TempDir::new().unwrap();
+    let writer = test_artifact_writer(&artifacts);
+    let source = crate::OwnedAudioInputStore::new(writer.clone())
+        .import_wav("wf-audio", "original-recording-run", wav(32000, 16000, 1))
+        .unwrap();
+    let source_value = serde_json::to_value(WorkflowSchedulerTaskResultValue::MediaArtifactRef(
+        source.clone(),
+    ))
+    .unwrap();
+    let capture = Arc::new(Capture::default());
+    let gateway = gateway(capture.clone());
+    let (pumas_client, _producer) = hosted_audio_producer(pumas).await;
+    let registry = Arc::new(pantograph_runtime_registry::RuntimeRegistry::new());
+    let output = EmbeddedWorkflowServiceComposition::resource_backed_hosted_startup(
+        EmbeddedHostedStartupCompositionInput::new(EmbeddedHostedStartupConfig {
+            runtime_registry: registry,
+            runtime_registry_controller: gateway.clone(),
+            gateway,
+            pumas_selector_source: Some(EmbeddedHostedStartupPumasSelectorSource::Provided(
+                Arc::new(workflow_nodes::setup::PumasSelectorAccess::LocalClient(
+                    pumas_client,
+                )),
+            )),
+            project_root: root.path().to_path_buf(),
+            kv_cache_dir: root.path().join("kv-cache"),
+            dependency_readiness_runtime_handle: tokio::runtime::Handle::current(),
+            max_loaded_sessions: Some(1),
+            max_dispatch_source_snapshot_age_ms: 1000,
+        })
+        .with_workflow_service(
+            WorkflowService::with_ephemeral_attribution_store()
+                .unwrap()
+                .with_artifact_writer(writer)
+                .with_diagnostics_ledger(
+                    pantograph_workflow_service::SqliteDiagnosticsLedger::open_in_memory().unwrap(),
+                ),
+        ),
+    )
+    .await
+    .unwrap();
+    output
+        .dependency_readiness_snapshot_producer
+        .shutdown()
+        .await;
+    // Control readiness and scheduling without replacing either production host
+    // execution port installed by hosted startup. Pumas and artifact custody stay real.
+    struct ControlledSchedulerDiagnostics;
+    impl pantograph_workflow_service::WorkflowSchedulerDiagnosticsProvider
+        for ControlledSchedulerDiagnostics
+    {
+    }
+    let provider = DependencyEnvironmentReadinessSnapshotProvider::new();
+    let lifecycle = Arc::new(TestReservationLifecyclePort::default());
+    let service = Arc::new(
+        Arc::try_unwrap(output.workflow_service)
+            .ok()
+            .expect("exclusive service after producer shutdown")
+            .with_scheduler_diagnostics_provider(Arc::new(ControlledSchedulerDiagnostics))
+            .with_dependency_environment_provider(Arc::new(provider.clone()))
+            .with_runtime_dispatch_source_refresher(Arc::new(
+                TestRuntimeDispatchSourceRefresher::default(),
+            ))
+            .with_runtime_dispatch_candidate_provider(Arc::new(
+                TestRuntimeDispatchCandidateProvider,
+            ))
+            .with_reservation_lifecycle_port(lifecycle.clone()),
+    );
+    let graph_dir = TempDir::new().unwrap();
+    let graph_store = FileSystemWorkflowGraphStore::new(graph_dir.path());
+    let mut graph = audio_graph(&model_ref);
+    graph.nodes[1].data = serde_json::json!({"value":source_value});
+    graph.nodes.push(GraphNode {
+        id: "sink".into(),
+        node_type: "text-output".into(),
+        position: Position { x: 0.0, y: 0.0 },
+        data: serde_json::json!({}),
+    });
+    graph.edges.push(GraphEdge {
+        id: "infer-sink".into(),
+        source: "infer".into(),
+        source_handle: "text".into(),
+        target: "sink".into(),
+        target_handle: "text".into(),
+    });
+    let shape = pantograph_workflow_service::workflow::workflow_scheduler_task_graph(
+        &"wf-audio".parse().unwrap(),
+        &"shape-run".parse().unwrap(),
+        &graph,
+    )
+    .unwrap();
+    let sink = shape
+        .tasks
+        .iter()
+        .find(|t| t.node_id.as_str() == "sink")
+        .unwrap();
+    assert!(
+        sink.diagnostics.is_empty(),
+        "sink projection must succeed without diagnostics"
+    );
+    let saved = service
+        .workflow_graph_save(
+            &graph_store,
+            WorkflowGraphSaveRequest {
+                name: "Owned Recording".into(),
+                graph: graph.clone(),
+            },
+        )
+        .unwrap();
+    let restored = service
+        .workflow_graph_load(&graph_store, WorkflowGraphLoadRequest { path: saved.path })
+        .unwrap()
+        .graph;
+    assert!(restored.nodes[1].data == graph.nodes[1].data);
+    assert!(restored.compute_fingerprint() == graph.compute_fingerprint());
+    assert!(serde_json::to_string(&restored).unwrap().len() < 65536);
+    let version = service
+        .resolve_workflow_graph_version("wf-audio", "1.0.0", &restored)
+        .unwrap();
+    install_audio_readiness(&service, &provider, &restored, &version, &model_ref);
+    let host = Arc::new(ImageRuntimeSessionHost::new(restored));
+    for _ in 0..2 {
+        let session = service
+            .create_workflow_execution_session(
+                host.as_ref(),
+                WorkflowExecutionSessionCreateRequest {
+                    workflow_id: "wf-audio".into(),
+                    usage_profile: None,
+                    keep_alive: false,
+                },
+            )
+            .await
+            .unwrap();
+        let response = pantograph_workflow_service::workflow::WorkflowSessionExecutionRuntime::from_shared_service(service.clone(), host.clone())
+            .run_workflow_execution_session(
+                WorkflowExecutionSessionRunRequest {
+                    session_id: session.session_id,
+                    workflow_semantic_version: "1.0.0".into(),
+                    inputs: vec![
+                        WorkflowPortBinding {
+                            node_id: "prompt".into(),
+                            port_id: "text".into(),
+                            value: serde_json::json!("context"),
+                        },
+                        WorkflowPortBinding {
+                            node_id: "guidance".into(),
+                            port_id: "value".into(),
+                            value: source_value.clone(),
+                        },
+                        WorkflowPortBinding {
+                            node_id: "count".into(),
+                            port_id: "value".into(),
+                            value: serde_json::json!(0.5),
+                        },
+                    ],
+                    output_targets: Some(
+                        [
+                            "text",
+                            "stream",
+                            "language",
+                            "duration_seconds",
+                            "segments",
+                            "metadata",
+                            "diagnostics",
+                        ]
+                        .into_iter()
+                        .map(|port| WorkflowOutputTarget {
+                            node_id: "infer".into(),
+                            port_id: port.into(),
+                        })
+                        .chain([WorkflowOutputTarget {
+                            node_id: "sink".into(),
+                            port_id: "text".into(),
+                        }])
+                        .collect(),
+                    ),
+                    override_selection: None,
+                    timeout_ms: None,
+                    priority: None,
+                },
+            )
+            .await
+            .expect("owned recording graph must complete");
+        assert!(response.outputs.len() == 8);
+        for output in &response.outputs {
+            if matches!(output.port_id.as_str(), "response" | "text") {
+                assert!(
+                    output.value == serde_json::json!("x".repeat(3000)),
+                    "complete bounded transcript equality"
+                );
+            }
+        }
+        assert!(lifecycle
+            .events()
+            .iter()
+            .any(|e| e.workflow_run_id.as_str() == response.workflow_run_id));
+    }
+    let sources = capture.owned_sources.lock().unwrap();
+    assert!(
+        sources.len() == 2
+            && sources.iter().all(|s| s.0 == source.artifact_id
+                && s.2 == "wf-audio"
+                && s.3 == "original-recording-run")
+    );
+    let ids = capture.ids.lock().unwrap();
+    assert!(ids.len() == 2 && ids[0] != ids[1]);
+    assert!(capture
+        .loads
+        .lock()
+        .unwrap()
+        .iter()
+        .all(|l| l.1.local_load_path == model_dir.to_str().unwrap()
+            && l.1.model_ref.model_id == model_id
+            && l.2.selected_runtime_variant_id.as_str() == "pytorch.cpu"));
+    assert!(
+        host.runtime_load_attempts.load(Ordering::SeqCst) == 0
+            && host.run_attempts.load(Ordering::SeqCst) == 0
+    );
+}
