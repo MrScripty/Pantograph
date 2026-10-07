@@ -29,7 +29,7 @@ task identities, complete successor offer universe, evidence and bounds.
 For each legal first placement `a`, use a separately qualified post-completion
 successor snapshot. Preserve every successor's hard identity and constraints;
 only its resource-fit assessment may change. Every placement must have explicit
-conditional Fits or DoesNotFit evidence; Unknown/missing evidence invalidates the
+conditional `Fits`, `WaitingForResources` or `ImpossibleFit` evidence; Unknown/missing evidence invalidates the
 comparison. First-completion release, runtime reconciliation, retention and any
 reload belong to the transition/evidence contract. Never infer future capacity
 by subtracting the first lease, or warmth from equal model identity.

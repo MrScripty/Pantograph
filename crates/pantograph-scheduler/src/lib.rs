@@ -22,6 +22,7 @@ mod readiness;
 mod resource;
 mod resource_types;
 mod supervision;
+mod two_completion;
 
 pub use batching::{
     SchedulerBatchCandidate, SchedulerBatchDiagnostic, SchedulerBatchDiagnosticCode,
@@ -41,6 +42,14 @@ pub use completion_ranking::{
     SchedulerCompletionRankingDiagnostic, SchedulerCompletionRankingPolicy,
     SchedulerCompletionRankingResult, SchedulerCompletionRefusalReason, SchedulerCompletionSample,
     SCHEDULER_COMPLETION_MAX_CANDIDATES,
+};
+
+pub use two_completion::{
+    select_scheduler_candidate_with_two_completions, SchedulerTwoCompletionBudget,
+    SchedulerTwoCompletionContinuation, SchedulerTwoCompletionDiagnostic,
+    SchedulerTwoCompletionFallback, SchedulerTwoCompletionPrefix, SchedulerTwoCompletionResult,
+    SchedulerTwoCompletionScore, SCHEDULER_TWO_COMPLETION_MAX_EVENTS,
+    SCHEDULER_TWO_COMPLETION_MAX_OFFERS, SCHEDULER_TWO_COMPLETION_MAX_PLANS,
 };
 
 pub use dispatch::{

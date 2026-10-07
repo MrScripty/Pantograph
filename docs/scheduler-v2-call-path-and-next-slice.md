@@ -1,5 +1,11 @@
 # Call path and next bounded completion slice
 
+The follow-up implements a narrower pure/local two-task evaluator and hardens
+the native snapshot fence; see [reviewed checkpoint](scheduler-v2-two-completion-checkpoint.md)
+and [results](scheduler-v2-two-completion-results.md). The four-task proposal below
+remains historical and unimplemented. Native successor activation is still gated
+on explicit cohort, serialization and conditional release/capacity evidence.
+
 ## Current admitted-task path: native opt-in connected
 
 Base main is `a8483e511dcec4f36e269e6e4debf181a318222f`. The pure selector
