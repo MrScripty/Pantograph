@@ -1,46 +1,45 @@
 # Call path and next bounded completion slice
 
-## Current admitted-task path: the new selector is not connected
+## Current admitted-task path: native opt-in connected
 
-References below are unchanged production paths at base
-`a8483e511dcec4f36e269e6e4debf181a318222f`; the additive selector was committed
-as `9d613c9f05dc9b15ed6e342ef0aa9f2fdfd2b4b3`, tree
-`370fe80def1267bfbcc82eb24ae47d50a1cbb498`. Its preceding plan checkpoint is
-`170f9aae97b008bc89471a2584dff9a46ced10a9`, tree
-`2041a07b0cce9c4ebb766104ec5c13775fc93e1e`.
+Base main is `a8483e511dcec4f36e269e6e4debf181a318222f`. The pure selector
+landed locally in `9d613c9f05dc9b15ed6e342ef0aa9f2fdfd2b4b3`, following plan
+checkpoint `170f9aae97b008bc89471a2584dff9a46ced10a9`. The subsequent native
+integration is described in [integration results](scheduler-v2-native-integration.md).
 
-1. `session_scheduler_runner.rs:101` prepares runtime dispatch, admits dependency
-   readiness, then calls `runtime_dispatch_progress` at line 114. The latter at
-   line 759 preserves first Ready runtime task selection.
-2. The branch attempt at lines 132–155, and the ready-task loop at lines 808–845,
-   obtain the task's readiness proof and call
-   `WorkflowRuntimeDispatchSelectionBoundary::prepare_ready_runtime_task_dispatch`.
-3. `workflow/runtime_dispatch_selection.rs:309` refreshes sources (line 317) and
-   invokes the configured candidate provider (line 322). Embedded production
-   `runtime_dispatch_candidate_provider.rs:147` enters
-   `resource_backed_candidate_set` at line 158.
-4. The embedded provider evaluates alternatives at lines 322–327 without leases,
-   constructs unreserved offers and a validated request at lines 341–371, then
-   calls **existing** `select_scheduler_candidate_for_reservation` at line 378.
-   It does not call the new completion selector or construct its evidence.
-5. The selected ID alone reaches `reserve_provisional` at line 404. The resource
-   source's `evaluate` at `runtime_dispatch_resource_facts.rs:70` uses registry
-   `evaluate_reservation`; `reserve_provisional` at line 19 uses
-   `acquire_reservation_provisional` at line 37 with the expected observation.
-   Current capacity/instance/ownership are revalidated before publication.
-6. The runner starts the Ready task and calls
-   `select_prepared_started_runtime_task_dispatch` (branch lines 158–182; loop
-   lines 845–870). That boundary at `runtime_dispatch_selection.rs:328` invokes
-   orchestrator selection, whose `task_orchestrator.rs:645` still calls ordinary
-   `select_scheduler_dispatch`. Binding the started attempt's selected reservation
-   and transferring custody remain separate required operations.
+1. Native startup can supply `EmbeddedCompletionTimingOptIn` using
+   `EmbeddedHostedStartupCompositionInput::with_completion_timing`. The public
+   startup configuration and session JSON have no timing numbers or scheduling
+   toggle. The option defaults to absent.
+2. `session_scheduler_runner::ready_runtime_dispatch_context` reads only the
+   opt-in task's referenced persisted scalar inputs, under the same store lock
+   as its Ready record. Default providers do no additional input work. The
+   store uses the same conversion function as runtime-host input mapping.
+3. The selection boundary refreshes owned source facts, then calls the
+   backward-compatible `runtime_dispatch_candidates_with_inputs` provider
+   method. Existing providers delegate to their original method.
+4. The embedded provider evaluates resource alternatives without acquiring
+   leases. Before selected commit, the opt-in builds bounded native queries
+   from model content, exact materialized inputs, task/Ready identity, effective
+   trait settings, owner runtime/device/variant, residency and current resource
+   observations. A trusted bounded native owner source must qualify the actual
+   physical device, implementation/configuration and workload before returning
+   a record. Unknown evidence retains the ordinary selector.
+5. Qualified complete observations or explicitly enabled configured estimates
+   reach `select_scheduler_candidate_with_completion`. Its typed ranked,
+   fallback or refusal reason is retained as a dispatch diagnostic. No warmth
+   bonus is added to measured load/transfer/execution costs.
+6. Only the selected ID reaches the unchanged `reserve_provisional` call with
+   its expected observation. Current capacity, instance and ownership are
+   revalidated before publication. Ready-to-start checks, ordinary dispatch
+   validation, reservation binding, custody transfer, cancellation and output
+   materialization remain required.
 
-The new `completion_ranking.rs:151` function has no production call site.
-Only `tests/completion_ranking.rs` and `examples/completion_policy_cost.rs` call
-it. The intended eventual opt-in insertion is immediately before the provider's
-current line 378 selector, after resource evaluation and before selected commit.
-This requires a profile producer and a way to preserve its typed diagnostic;
-neither exists in this slice. Returning a candidate ID does not bypass steps 5–6.
+Controlled public-session tests exercise this path through the real embedded
+provider, registry, Pumas resolver, host port and reservation lifecycle port;
+backend execution and timing values are explicit fixture data. No calibrated
+production history producer is installed by default. This is one-task ranking,
+not the research completion-search algorithm or a queue-policy replacement.
 
 ## Callable evidence contract and its limits
 
@@ -62,8 +61,8 @@ The sum is preparation/load/owner-delay + required transfer + execution in
 microseconds. It is a scalar prediction, not an authoritative duration or a
 quantile guarantee. A trusted producer must establish actual sample provenance,
 workload conditioning, artifact identity and consistent aggregation; arbitrary
-matching strings or a `Measured` enum value do not do this. Only synthetic
-fixtures have supplied evidence here.
+matching strings or a `Measured` enum value do not do this. Only controlled fixtures have supplied evidence here; the native integration
+adds a trusted owner injection contract, not production calibration.
 
 Invalid, stale, incomplete or incomparable evidence retains the exact legacy
 sole-eligible/otherwise-ambiguous selection and returns a separate typed fallback

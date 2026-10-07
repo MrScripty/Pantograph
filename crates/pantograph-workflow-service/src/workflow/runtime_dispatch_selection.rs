@@ -49,6 +49,22 @@ pub trait WorkflowRuntimeDispatchCandidateProvider: Send + Sync {
         ready_record: &SchedulerTaskStateRecord,
         readiness_proof: &DependencyReadinessProofEnvelope,
     ) -> Result<WorkflowRuntimeDispatchCandidateSet, WorkflowRuntimeDispatchCandidateProviderError>;
+
+    /// Native opt-in only; existing providers keep their original collection path.
+    fn requires_materialized_inputs(&self) -> bool {
+        false
+    }
+
+    fn runtime_dispatch_candidates_with_inputs(
+        &self,
+        task: &WorkflowSchedulerTask,
+        ready_record: &SchedulerTaskStateRecord,
+        readiness_proof: &DependencyReadinessProofEnvelope,
+        _inputs: Option<&[pantograph_runtime_host_contracts::RuntimeHostExecutionInput]>,
+    ) -> Result<WorkflowRuntimeDispatchCandidateSet, WorkflowRuntimeDispatchCandidateProviderError>
+    {
+        self.runtime_dispatch_candidates(task, ready_record, readiness_proof)
+    }
 }
 
 /// Runtime-owned rollback custody travels with prepared facts until binding.
@@ -306,11 +322,29 @@ impl<'a> WorkflowRuntimeDispatchSelectionBoundary<'a> {
         }
     }
 
+    #[cfg(test)]
     pub(crate) async fn prepare_ready_runtime_task_dispatch(
         &self,
         task: &WorkflowSchedulerTask,
         ready_record: &SchedulerTaskStateRecord,
         readiness_proof: DependencyReadinessProofEnvelope,
+    ) -> Result<WorkflowRuntimeDispatchSelectionRequest, WorkflowRuntimeDispatchPreselectionError>
+    {
+        self.prepare_ready_runtime_task_dispatch_with_inputs(
+            task,
+            ready_record,
+            readiness_proof,
+            None,
+        )
+        .await
+    }
+
+    pub(crate) async fn prepare_ready_runtime_task_dispatch_with_inputs(
+        &self,
+        task: &WorkflowSchedulerTask,
+        ready_record: &SchedulerTaskStateRecord,
+        readiness_proof: DependencyReadinessProofEnvelope,
+        inputs: Option<&[pantograph_runtime_host_contracts::RuntimeHostExecutionInput]>,
     ) -> Result<WorkflowRuntimeDispatchSelectionRequest, WorkflowRuntimeDispatchPreselectionError>
     {
         self.source_refresher
@@ -319,7 +353,7 @@ impl<'a> WorkflowRuntimeDispatchSelectionBoundary<'a> {
             .map_err(WorkflowRuntimeDispatchPreselectionError::SourceRefresh)?;
         let candidate_set = self
             .candidate_provider
-            .runtime_dispatch_candidates(task, ready_record, &readiness_proof)
+            .runtime_dispatch_candidates_with_inputs(task, ready_record, &readiness_proof, inputs)
             .map_err(WorkflowRuntimeDispatchPreselectionError::CandidateCollection)?;
         runtime_dispatch_selection_request(task, readiness_proof, candidate_set)
             .map_err(WorkflowRuntimeDispatchPreselectionError::SelectionRequest)

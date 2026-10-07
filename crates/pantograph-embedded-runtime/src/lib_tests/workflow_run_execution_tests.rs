@@ -3842,3 +3842,6 @@ mod cpu_embedding_graph_tests;
 #[cfg(feature = "backend-pytorch")]
 #[path = "cpu_chat_graph_tests.rs"]
 mod cpu_chat_graph_tests;
+
+#[path = "completion_session_tests.rs"]
+mod completion_session_tests;

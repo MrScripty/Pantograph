@@ -1,3 +1,4 @@
+use crate::runtime_dispatch_completion_timing::EmbeddedCompletionTimingOptIn;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -74,6 +75,7 @@ pub(crate) struct EmbeddedHostedWorkflowServiceFactoryInput<C> {
     pub(crate) gateway: Arc<inference::InferenceGateway>,
     pub(crate) pumas_selector_access: Arc<PumasSelectorAccess>,
     pub(crate) max_dispatch_source_snapshot_age_ms: u64,
+    pub(crate) completion_timing: Option<EmbeddedCompletionTimingOptIn>,
 }
 
 impl<C> EmbeddedHostedWorkflowServiceFactoryInput<C> {
@@ -93,6 +95,7 @@ impl<C> EmbeddedHostedWorkflowServiceFactoryInput<C> {
             gateway,
             pumas_selector_access,
             max_dispatch_source_snapshot_age_ms,
+            completion_timing: None,
         }
     }
 
@@ -184,6 +187,7 @@ pub struct EmbeddedHostedStartupCompositionInput<C> {
     dependency_readiness_runtime_handle: tokio::runtime::Handle,
     dependency_readiness_producer_config: EmbeddedDependencyReadinessSnapshotProducerConfig,
     max_dispatch_source_snapshot_age_ms: u64,
+    completion_timing: Option<EmbeddedCompletionTimingOptIn>,
 }
 
 impl<C> EmbeddedHostedStartupCompositionInput<C> {
@@ -213,12 +217,21 @@ impl<C> EmbeddedHostedStartupCompositionInput<C> {
             dependency_readiness_producer_config:
                 EmbeddedDependencyReadinessSnapshotProducerConfig::default(),
             max_dispatch_source_snapshot_age_ms,
+            completion_timing: None,
         }
     }
 
     #[must_use]
     pub fn with_workflow_service(mut self, workflow_service: WorkflowService) -> Self {
         self.workflow_service = workflow_service;
+        self
+    }
+
+    /// Enable completion ranking using a trusted bounded native owner producer.
+    /// Session JSON cannot enable this or submit timing values. Default is absent.
+    #[must_use]
+    pub fn with_completion_timing(mut self, opt_in: EmbeddedCompletionTimingOptIn) -> Self {
+        self.completion_timing = Some(opt_in);
         self
     }
 
@@ -264,12 +277,14 @@ impl EmbeddedWorkflowServiceDispatchDependencies {
     }
 
     #[must_use]
+    #[allow(clippy::too_many_arguments)] // Explicit native composition dependencies.
     pub(crate) fn resource_backed(
         pumas_source: PumasDispatchPackageFactsSource,
         runtime_capability_source: RuntimeDispatchCapabilityFactsSource,
         load_target_source: RuntimeDispatchLoadTargetFactsSource,
         resource_facts_source: RuntimeDispatchResourceFactsSource,
         max_snapshot_age_ms: u64,
+        completion_timing: Option<EmbeddedCompletionTimingOptIn>,
         runtime_host_execution_port: Arc<dyn RuntimeHostExecutionPort>,
         reservation_lifecycle_port: Arc<dyn ReservationLifecyclePort>,
     ) -> Self {
@@ -282,7 +297,8 @@ impl EmbeddedWorkflowServiceDispatchDependencies {
         let provider = EmbeddedRuntimeDispatchCandidateProvider::with_source_snapshot_store(
             snapshot_store.clone(),
         )
-        .with_resource_facts_source(resource_facts_source);
+        .with_resource_facts_source(resource_facts_source)
+        .with_completion_timing(completion_timing);
         let refresher = EmbeddedRuntimeDispatchSourceFactRefresher::new(snapshot_store);
         Self::new(
             Arc::new(provider),
@@ -388,6 +404,7 @@ impl EmbeddedWorkflowServiceComposition {
             RuntimeDispatchLoadTargetFactsSource::new(Some(pumas_selector_access.clone())),
             RuntimeDispatchResourceFactsSource::new(input.runtime_registry.clone()),
             input.max_dispatch_source_snapshot_age_ms,
+            input.completion_timing,
             runtime_host_execution_port,
             reservation_lifecycle_port,
         );
@@ -471,6 +488,7 @@ impl EmbeddedWorkflowServiceComposition {
             RuntimeDispatchLoadTargetFactsSource::new(Some(pumas_selector_access.clone())),
             RuntimeDispatchResourceFactsSource::new(factory_input.runtime_registry.clone()),
             factory_input.max_dispatch_source_snapshot_age_ms,
+            factory_input.completion_timing,
             runtime_host_execution_port,
             reservation_lifecycle_port,
         );
@@ -537,7 +555,7 @@ impl EmbeddedWorkflowServiceComposition {
             guard.set(node_engine::extension_keys::KV_CACHE_STORE, kv_store);
         }
 
-        let factory_input = EmbeddedHostedWorkflowServiceFactoryInput::new(
+        let mut factory_input = EmbeddedHostedWorkflowServiceFactoryInput::new(
             input.runtime_registry,
             input.runtime_registry_controller,
             input.gateway,
@@ -546,6 +564,7 @@ impl EmbeddedWorkflowServiceComposition {
             input.max_dispatch_source_snapshot_age_ms,
         )
         .with_workflow_service(input.workflow_service);
+        factory_input.completion_timing = input.completion_timing;
         let composition_input = EmbeddedHostedWorkflowServiceCompositionInput::new(
             factory_input,
             input.dependency_readiness_runtime_handle,
@@ -798,6 +817,7 @@ mod tests {
             RuntimeDispatchLoadTargetFactsSource::new(None),
             RuntimeDispatchResourceFactsSource::new(registry),
             1_000,
+            None,
             Arc::new(RejectingRuntimeHostPort),
             Arc::new(RejectingReservationLifecyclePort),
         );

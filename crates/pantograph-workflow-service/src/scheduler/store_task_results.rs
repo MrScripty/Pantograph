@@ -748,6 +748,67 @@ impl WorkflowExecutionSessionStore {
         Ok(apply_result)
     }
 
+    /// Bounded opt-in view of already validated persisted inputs. No result-wide
+    /// clones, status changes or access tick; conversion is the host mapper's.
+    pub(crate) fn active_run_completion_inputs(
+        &self,
+        session_id: &str,
+        workflow_run_id: &str,
+        task: &crate::workflow::WorkflowSchedulerTask,
+    ) -> Option<Vec<pantograph_runtime_host_contracts::RuntimeHostExecutionInput>> {
+        use crate::workflow::runtime_host_input_value;
+        use crate::workflow::{
+            WorkflowSchedulerTaskResultStatus, WorkflowSchedulerTaskResultValue as Value,
+        };
+        if task.input_bindings.len() > 16 {
+            return None;
+        }
+        let run = self.active.get(session_id)?.active_run.as_ref()?;
+        if run.workflow_run_id != workflow_run_id {
+            return None;
+        }
+        let mut remaining = 64 * 1024usize;
+        let mut inputs = Vec::new();
+        for binding in &task.input_bindings {
+            if binding.target_port_id.len() > 128 || binding.source_port_id.len() > 128 {
+                return None;
+            }
+            let result = run
+                .scheduler_task_results
+                .get(binding.source_task_id.as_str())?;
+            if result.status != WorkflowSchedulerTaskResultStatus::Completed
+                || result.outputs.len() > 32
+            {
+                return None;
+            }
+            let value = &result
+                .outputs
+                .iter()
+                .find(|o| o.port_id == binding.source_port_id)?
+                .value;
+            let bytes = match value {
+                Value::String(v) => v.len(),
+                Value::MediaArtifactRef(v) => v
+                    .artifact_id
+                    .len()
+                    .checked_add(v.media_type.as_ref().map_or(0, String::len))?,
+                Value::PumasModelRef(_) | Value::Bool(_) | Value::I64(_) | Value::U64(_) => 0,
+                Value::Json(serde_json::Value::Number(_)) => 0,
+                _ => return None,
+            };
+            remaining = remaining.checked_sub(bytes)?;
+            if let Some(value) = runtime_host_input_value(binding, value).ok()? {
+                inputs.push(
+                    pantograph_runtime_host_contracts::RuntimeHostExecutionInput {
+                        port_id: binding.target_port_id.clone(),
+                        value,
+                    },
+                );
+            }
+        }
+        Some(inputs)
+    }
+
     /// Read staged scheduler task results for the active run.
     #[allow(dead_code)]
     pub(crate) fn active_run_scheduler_task_results(

@@ -148,10 +148,11 @@ impl<'a> WorkflowPreDispatchPreparationBoundary<'a> {
         let runtime_dispatch_selection_boundary =
             WorkflowRuntimeDispatchSelectionBoundary::from_service(self.service);
         let prepared_dispatch_selection = runtime_dispatch_selection_boundary
-            .prepare_ready_runtime_task_dispatch(
+            .prepare_ready_runtime_task_dispatch_with_inputs(
                 &dispatch_context.task,
                 &dispatch_context.ready_record,
                 readiness_proof,
+                dispatch_context.materialized_inputs.as_deref(),
             )
             .await
             .map_err(runtime_dispatch_preselection_invalid_request)?;
@@ -245,6 +246,7 @@ pub(super) struct WorkflowSchedulerRunContext<'a> {
 struct ReadyRuntimeDispatchContext {
     task: WorkflowSchedulerTask,
     ready_record: SchedulerTaskStateRecord,
+    materialized_inputs: Option<Vec<pantograph_runtime_host_contracts::RuntimeHostExecutionInput>>,
 }
 
 impl<'a> WorkflowSchedulerSessionRunner<'a> {
@@ -837,10 +839,11 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
             let dispatch_context =
                 ready_runtime_dispatch_context(self.service, session_id, workflow_run_id, task_id)?;
             let prepared_dispatch_selection = runtime_dispatch_selection_boundary
-                .prepare_ready_runtime_task_dispatch(
+                .prepare_ready_runtime_task_dispatch_with_inputs(
                     &dispatch_context.task,
                     &dispatch_context.ready_record,
                     readiness_proof,
+                    dispatch_context.materialized_inputs.as_deref(),
                 )
                 .await
                 .map_err(runtime_dispatch_preselection_invalid_request)?;
@@ -1240,7 +1243,16 @@ fn ready_runtime_dispatch_context(
             ))
         })?
         .clone();
-    Ok(ReadyRuntimeDispatchContext { task, ready_record })
+    let materialized_inputs = service
+        .runtime_dispatch_candidate_provider
+        .requires_materialized_inputs()
+        .then(|| store.active_run_completion_inputs(session_id, workflow_run_id, &task))
+        .flatten();
+    Ok(ReadyRuntimeDispatchContext {
+        task,
+        ready_record,
+        materialized_inputs,
+    })
 }
 
 fn runtime_task_ids_in_state(

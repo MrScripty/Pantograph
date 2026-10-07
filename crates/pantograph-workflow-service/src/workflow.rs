@@ -176,7 +176,8 @@ pub use self::runtime_dispatch_selection::{
 };
 pub use self::runtime_host_observation::WorkflowRuntimeHostObservationRecorder;
 pub(crate) use self::runtime_host_task_input_mapping::{
-    materialize_runtime_host_inputs, WorkflowRuntimeHostTaskInputMappingError,
+    materialize_runtime_host_inputs, runtime_host_input_value,
+    WorkflowRuntimeHostTaskInputMappingError,
 };
 pub(crate) use self::runtime_host_task_result_mapping::{
     runtime_host_batch_member_response_to_task_result, runtime_host_response_to_task_result,

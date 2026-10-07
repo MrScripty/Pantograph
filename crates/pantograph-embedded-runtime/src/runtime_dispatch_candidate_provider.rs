@@ -1,3 +1,7 @@
+use crate::runtime_dispatch_completion_timing::{
+    admitted_task_fingerprint, select_with_owner_timing, EmbeddedCompletionTimingOptIn,
+    EmbeddedCompletionTimingQuery,
+};
 use std::collections::BTreeSet;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -76,6 +80,7 @@ const MISSING_RUNTIME_DISPATCH_EVIDENCE_HINT: &str =
 pub(crate) struct EmbeddedRuntimeDispatchCandidateProvider {
     source_snapshot: EmbeddedRuntimeDispatchCandidateSource,
     resource_facts_source: Option<RuntimeDispatchResourceFactsSource>,
+    completion_timing: Option<EmbeddedCompletionTimingOptIn>,
 }
 
 #[derive(Clone)]
@@ -99,6 +104,7 @@ struct EmbeddedRuntimeDispatchCandidateDraft {
     resolved_load_target: String,
     runtime_residency_key: String,
     selected_model_ref: PumasModelRef,
+    content_fingerprint: Option<String>,
     loaded_runtime_memory_estimate_bytes: Option<u64>,
     runtime_status: RuntimeRegistryStatus,
     runtime_instance_id: Option<String>,
@@ -120,6 +126,7 @@ impl EmbeddedRuntimeDispatchCandidateProvider {
                 source_snapshot,
             )),
             resource_facts_source: None,
+            completion_timing: None,
         }
     }
 
@@ -130,6 +137,7 @@ impl EmbeddedRuntimeDispatchCandidateProvider {
         Self {
             source_snapshot: EmbeddedRuntimeDispatchCandidateSource::Store(source_snapshot_store),
             resource_facts_source: None,
+            completion_timing: None,
         }
     }
 
@@ -143,12 +151,37 @@ impl EmbeddedRuntimeDispatchCandidateProvider {
     }
 }
 
+impl EmbeddedRuntimeDispatchCandidateProvider {
+    pub(crate) fn with_completion_timing(
+        mut self,
+        timing: Option<EmbeddedCompletionTimingOptIn>,
+    ) -> Self {
+        self.completion_timing = timing;
+        self
+    }
+}
+
 impl WorkflowRuntimeDispatchCandidateProvider for EmbeddedRuntimeDispatchCandidateProvider {
     fn runtime_dispatch_candidates(
         &self,
         task: &WorkflowSchedulerTask,
-        _ready_record: &SchedulerTaskStateRecord,
+        ready_record: &SchedulerTaskStateRecord,
         readiness_proof: &DependencyReadinessProofEnvelope,
+    ) -> Result<WorkflowRuntimeDispatchCandidateSet, WorkflowRuntimeDispatchCandidateProviderError>
+    {
+        self.runtime_dispatch_candidates_with_inputs(task, ready_record, readiness_proof, None)
+    }
+
+    fn requires_materialized_inputs(&self) -> bool {
+        self.completion_timing.is_some()
+    }
+
+    fn runtime_dispatch_candidates_with_inputs(
+        &self,
+        task: &WorkflowSchedulerTask,
+        ready_record: &SchedulerTaskStateRecord,
+        readiness_proof: &DependencyReadinessProofEnvelope,
+        inputs: Option<&[pantograph_runtime_host_contracts::RuntimeHostExecutionInput]>,
     ) -> Result<WorkflowRuntimeDispatchCandidateSet, WorkflowRuntimeDispatchCandidateProviderError>
     {
         let source_snapshot = self
@@ -159,7 +192,10 @@ impl WorkflowRuntimeDispatchCandidateProvider for EmbeddedRuntimeDispatchCandida
                 &source_snapshot,
                 resource_facts_source,
                 task,
+                ready_record,
                 readiness_proof,
+                self.completion_timing.as_ref(),
+                inputs,
             );
         }
         Ok(WorkflowRuntimeDispatchCandidateSet::from_diagnostics(
@@ -183,7 +219,7 @@ impl EmbeddedRuntimeDispatchCandidateSource {
     }
 }
 
-fn current_time_ms() -> u64 {
+pub(crate) fn current_time_ms() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|duration| u64::try_from(duration.as_millis()).unwrap_or(u64::MAX))
@@ -194,7 +230,10 @@ fn resource_backed_candidate_set(
     source_snapshot: &EmbeddedRuntimeDispatchCandidateSourceSnapshot,
     resource_facts_source: &RuntimeDispatchResourceFactsSource,
     task: &WorkflowSchedulerTask,
+    ready_record: &SchedulerTaskStateRecord,
     readiness_proof: &DependencyReadinessProofEnvelope,
+    completion_timing: Option<&EmbeddedCompletionTimingOptIn>,
+    inputs: Option<&[pantograph_runtime_host_contracts::RuntimeHostExecutionInput]>,
 ) -> Result<WorkflowRuntimeDispatchCandidateSet, WorkflowRuntimeDispatchCandidateProviderError> {
     let model_ref = &readiness_proof.preflight_result.identity_key.model_ref;
     if model_ref.selected_artifact_path.is_some() {
@@ -375,7 +414,81 @@ fn resource_backed_candidate_set(
                 message: format!("runtime candidate observations failed validation: {error}"),
             },
         )?;
-    let selected_id = match select_scheduler_candidate_for_reservation(&request) {
+    let selection = if let Some(opt_in) = completion_timing {
+        let within_bounds =
+            request.as_ref().candidates.len() <= 64 && request.as_ref().diagnostics.len() <= 32;
+        let task_fingerprint = within_bounds
+            .then(|| admitted_task_fingerprint(task, ready_record))
+            .flatten();
+        let inputs = if within_bounds {
+            inputs.filter(|i| crate::runtime_dispatch_completion_timing::bounded_inputs(i))
+                .map(|i| std::sync::Arc::<[pantograph_runtime_host_contracts::RuntimeHostExecutionInput]>::from(i.to_vec()))
+        } else {
+            None
+        };
+        let queries: Vec<_> = evaluated_drafts
+            .iter()
+            .take(if within_bounds { 64 } else { 0 })
+            .map(|(draft, observation, device, variant)| {
+                let text_bounded = |s: &str| {
+                    s.len() <= 128 && !s.trim().is_empty() && !s.chars().any(char::is_control)
+                };
+                if observation.resources.len() > 8
+                    || observation.resource_domains.len() > 8
+                    || !observation
+                        .resource_domains
+                        .iter()
+                        .all(|d| text_bounded(&d.domain_id))
+                    || !observation
+                        .runtime_instance_id
+                        .as_deref()
+                        .is_none_or(text_bounded)
+                    || !text_bounded(&draft.runtime_residency_key)
+                    || !draft
+                        .content_fingerprint
+                        .as_deref()
+                        .is_some_and(text_bounded)
+                    || task_intent.trait_settings.len() > 32
+                    || !task_intent.trait_settings.iter().all(|t| match &t.value {
+                        pantograph_scheduler::SchedulerTraitValue::String(v) => v.len() <= 1024,
+                        _ => true,
+                    })
+                    || !task.runtime_source_context.as_ref().is_none_or(|c| {
+                        [
+                            &c.operation_type,
+                            &c.context_shape_key,
+                            &c.cancellation_mode,
+                        ]
+                        .into_iter()
+                        .all(|s| text_bounded(s))
+                    })
+                {
+                    return None;
+                }
+                Some(EmbeddedCompletionTimingQuery {
+                    admitted_task_fingerprint: task_fingerprint.clone()?,
+                    artifact_fingerprint: draft
+                        .content_fingerprint
+                        .clone()
+                        .filter(|f| !f.trim().is_empty())?,
+                    runtime_id: draft.selected_runtime_id.as_str().into(),
+                    runtime_variant_id: variant.as_ref().map(|v| v.as_str().to_string()),
+                    backend_key: draft.selected_backend_key.clone(),
+                    task_kind: task_intent.task_type.as_str().into(),
+                    runtime_trait_settings: task_intent.trait_settings.clone(),
+                    runtime_source_context: task.runtime_source_context.clone(),
+                    materialized_inputs: inputs.as_ref()?.clone(),
+                    device_id: device.as_str().into(),
+                    runtime_residency_key: draft.runtime_residency_key.clone(),
+                    resource_observation: observation.clone(),
+                })
+            })
+            .collect();
+        select_with_owner_timing(&request, &queries, opt_in)
+    } else {
+        select_scheduler_candidate_for_reservation(&request)
+    };
+    let selected_id = match selection {
         SchedulerDispatchReservationSelection::NoSelection { diagnostics } => {
             return Ok(WorkflowRuntimeDispatchCandidateSet::from_diagnostics(
                 diagnostics,
@@ -879,6 +992,7 @@ fn runtime_candidate_draft(
         resolved_load_target: load_target.resolved_load_target.clone(),
         runtime_residency_key: runtime.runtime_residency_key.clone(),
         selected_model_ref: load_target.model_ref.clone(),
+        content_fingerprint: load_target.content_fingerprint.clone(),
         loaded_runtime_memory_estimate_bytes: conservative_loaded_runtime_memory_estimate_bytes(
             &package_facts.logical_size,
         ),
@@ -1093,6 +1207,9 @@ fn provider_diagnostic(
         hint: Some(hint.to_string()),
     }
 }
+
+#[cfg(test)]
+pub(crate) use tests::completion_test_provider;
 
 #[cfg(test)]
 mod tests {
@@ -1973,6 +2090,203 @@ mod tests {
                 diagnostics: Vec::new(),
             }),
             ..EmbeddedRuntimeDispatchCandidateSourceSnapshot::default()
+        }
+    }
+
+    // Controlled owner facts for the public-session qualification tests only.
+    pub(crate) fn completion_test_provider(
+        model_ref: PumasModelRef,
+        timing: Option<EmbeddedCompletionTimingOptIn>,
+    ) -> (
+        EmbeddedRuntimeDispatchCandidateProvider,
+        Arc<RuntimeRegistry>,
+    ) {
+        completion_test_provider_with_count(model_ref, timing, 2)
+    }
+
+    fn completion_test_provider_with_count(
+        model_ref: PumasModelRef,
+        timing: Option<EmbeddedCompletionTimingOptIn>,
+        count: usize,
+    ) -> (
+        EmbeddedRuntimeDispatchCandidateProvider,
+        Arc<RuntimeRegistry>,
+    ) {
+        let registry = dispatch_registry();
+        let ids: Vec<_> = (0..count)
+            .map(|i| match i {
+                0 => "pytorch".to_string(),
+                1 => "pytorch-alt".to_string(),
+                _ => format!("pytorch-alt-{i}"),
+            })
+            .collect();
+        for id in &ids {
+            registry.register_runtime(
+                pantograph_runtime_registry::RuntimeRegistration::new(id, id)
+                    .with_backend_keys(vec!["diffusers".into()])
+                    .with_admission_budget(RuntimeAdmissionBudget::from_resources(vec![
+                        RuntimeAdmissionResourceBudget::ram_bytes(Some(16 * 1024 * mib())),
+                        RuntimeAdmissionResourceBudget::vram_bytes(Some(8 * 1024 * mib())),
+                    ])),
+            );
+        }
+        registry
+            .transition_runtime(
+                "pytorch",
+                RuntimeTransition::Ready {
+                    runtime_instance_id: Some("runtime.pytorch.001".into()),
+                },
+            )
+            .unwrap();
+        let mut target = load_target("diffusers");
+        target.model_ref = model_ref.clone();
+        let mut snapshot = source_snapshot(
+            ids.iter()
+                .map(|id| {
+                    let mut facts = runtime_capability(id, vec!["diffusers"]);
+                    facts.automatic_device_candidates.push(
+                        inference::gateway::RuntimeOwnedDeviceCandidate {
+                            backend_key: "diffusers".into(),
+                            runtime_variant_id: inference::RuntimeVariantId::parse("pytorch.cpu")
+                                .unwrap(),
+                            device_id: inference::InferenceDeviceId::parse("cpu").unwrap(),
+                        },
+                    );
+                    facts
+                })
+                .collect(),
+            vec![target],
+        );
+        if let Some(PumasDispatchPackageFactsBridgeOutcome::Projected { facts, .. }) =
+            snapshot.pumas_package_facts.as_mut()
+        {
+            facts.model_ref = model_ref;
+        }
+        (
+            EmbeddedRuntimeDispatchCandidateProvider::with_source_snapshot(snapshot)
+                .with_resource_facts_source(RuntimeDispatchResourceFactsSource::new(
+                    registry.clone(),
+                ))
+                .with_completion_timing(timing),
+            registry,
+        )
+    }
+
+    #[test]
+    fn completion_native_oversized_cohort_never_calls_owner_or_reserves() {
+        struct Source;
+        impl crate::EmbeddedCompletionTimingSource for Source {
+            fn timing_for(
+                &self,
+                _: &EmbeddedCompletionTimingQuery,
+            ) -> Option<crate::EmbeddedCompletionTimingRecord> {
+                panic!("oversized cohort must refuse before owner callback");
+            }
+        }
+        let (provider, registry) = completion_test_provider_with_count(
+            path_free_model_ref(),
+            Some(EmbeddedCompletionTimingOptIn {
+                source: Arc::new(Source),
+                owner_epoch: "owner".into(),
+                max_sample_age_ms: 1000,
+                allow_configured_estimates: true,
+            }),
+            65,
+        );
+        let mut task = workflow_task(Some("cpu"));
+        task.schedulable_intent
+            .as_mut()
+            .unwrap()
+            .constraints
+            .requested_runtime_id = None;
+        let result = provider
+            .runtime_dispatch_candidates_with_inputs(
+                &task,
+                &ready_record(),
+                &readiness_proof(),
+                Some(&[]),
+            )
+            .unwrap();
+        assert!(result.candidates.is_empty());
+        assert!(result
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("WorkLimitExceeded")));
+        assert!(registry.snapshot().reservations.is_empty());
+    }
+
+    #[test]
+    #[ignore = "controlled native dispatch cost probe; run explicitly with --ignored --nocapture"]
+    fn completion_native_dispatch_cost_probe() {
+        use crate::{EmbeddedCompletionTimingRecord, EmbeddedCompletionTimingSource};
+        struct Source;
+        impl EmbeddedCompletionTimingSource for Source {
+            fn timing_for(
+                &self,
+                q: &EmbeddedCompletionTimingQuery,
+            ) -> Option<EmbeddedCompletionTimingRecord> {
+                let value = || inference::RuntimeServiceTimingValue::ConfiguredEstimate {
+                    elapsed_ns: 1000,
+                };
+                Some(EmbeddedCompletionTimingRecord {
+                    query: q.clone(),
+                    observed_at_ms: current_time_ms(),
+                    preparation: value(),
+                    required_transfer: value(),
+                    execution: value(),
+                })
+            }
+        }
+        for (count, input_bytes, samples) in [
+            (1, 256, 1000),
+            (2, 256, 1000),
+            (64, 256, 500),
+            (64, 60 * 1024, 200),
+        ] {
+            let (provider, registry) = completion_test_provider_with_count(
+                path_free_model_ref(),
+                Some(EmbeddedCompletionTimingOptIn {
+                    source: Arc::new(Source),
+                    owner_epoch: "controlled-cost-probe".into(),
+                    max_sample_age_ms: 1000,
+                    allow_configured_estimates: true,
+                }),
+                count,
+            );
+            let mut task = workflow_task(Some("cpu"));
+            task.schedulable_intent
+                .as_mut()
+                .unwrap()
+                .constraints
+                .requested_runtime_id = None;
+            let inputs = vec![
+                pantograph_runtime_host_contracts::RuntimeHostExecutionInput {
+                    port_id: "prompt".into(),
+                    value:
+                        pantograph_runtime_host_contracts::RuntimeHostExecutionInputValue::String(
+                            "x".repeat(input_bytes),
+                        ),
+                },
+            ];
+            let ready = ready_record();
+            let proof = readiness_proof();
+            let mut times = Vec::new();
+            for i in 0..samples + 20 {
+                let start = std::time::Instant::now();
+                let result = provider
+                    .runtime_dispatch_candidates_with_inputs(&task, &ready, &proof, Some(&inputs))
+                    .unwrap();
+                assert_eq!(result.candidates.len(), 1);
+                assert_eq!(registry.snapshot().reservations.len(), 1);
+                drop(result); // provisional custody rolls back the winner
+                assert!(registry.snapshot().reservations.is_empty());
+                if i >= 20 {
+                    times.push(start.elapsed().as_micros());
+                }
+            }
+            times.sort_unstable();
+            println!("native_dispatch candidates={count} input_bytes={input_bytes} samples={samples} median_us={} p95_us={} max_us={}",
+                times[times.len()/2], times[times.len()*95/100], times[times.len()-1]);
         }
     }
 

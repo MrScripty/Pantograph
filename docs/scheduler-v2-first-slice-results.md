@@ -1,5 +1,9 @@
 # Bounded completion first slice: local results
 
+Update: the pure slice now has an explicit native production opt-in; see
+[native integration results](scheduler-v2-native-integration.md). The results
+below describe the earlier standalone pure policy qualification.
+
 2026-10-07; branch `scheduler/bounded-completion-v2`, worktree
 `/workspace/Pantograph-completion`. Remote main was checked again after
 validation and remained `a8483e511dcec4f36e269e6e4debf181a318222f`.
@@ -67,7 +71,9 @@ offers, unsupported batching/multiple devices, stable ordering and work limits.
 Ranking leaves the request unchanged and ordinary dispatch refuses unreserved
 offers. Existing registry suites verify changed instance/capacity rejection,
 concurrent commit exclusion, selected-only publication and reservation custody.
-There is no new production integration to qualify; those seams must be exercised
+At the pure-policy commit there was no production integration to qualify; those
+seams subsequently gained native opt-in coverage described in the update above.
+They must still be exercised
 around the new selector when a real producer is connected.
 
 An independent reviewer inspected design and implementation and independently
@@ -150,7 +156,8 @@ custody tests and 8 evaluation tests. One temporary adversarial test also passed
 at 64 candidates, 128-byte candidate IDs/all context fields, and 32 diagnostics
 with 1024-byte messages/hints; it verified stable choice, late invalid/missing
 evidence fallback, unchanged requests and absent leases. That harness was removed.
-These remain policy/registry seam checks, not production-path integration.
+These earlier checks cover policy/registry seams. The subsequent native
+integration update adds controlled public-session/host/custody qualification.
 
 The full source-level call trace, exact Library failure, and proposed next
 multi-event slice are in [the integration account](scheduler-v2-call-path-and-next-slice.md).

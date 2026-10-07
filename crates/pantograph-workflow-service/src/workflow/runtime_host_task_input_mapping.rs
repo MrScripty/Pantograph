@@ -96,7 +96,7 @@ fn materialized_output<'a>(
         )
 }
 
-fn runtime_host_input_value(
+pub(crate) fn runtime_host_input_value(
     binding: &WorkflowSchedulerTaskInputBinding,
     value: &WorkflowSchedulerTaskResultValue,
 ) -> Result<Option<RuntimeHostExecutionInputValue>, WorkflowRuntimeHostTaskInputMappingError> {
