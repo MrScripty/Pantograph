@@ -11,6 +11,9 @@ publish = false
 [lints]
 workspace = true
 
+[features]
+test-support = []
+
 [dependencies]
 async-trait.workspace = true
 blake3.workspace = true

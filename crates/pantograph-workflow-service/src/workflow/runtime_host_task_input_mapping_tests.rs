@@ -303,3 +303,53 @@ fn task_result(
         terminal_metadata: None,
     }
 }
+
+#[test]
+fn admits_structured_json_only_on_rerank_and_selected_audio_ports() {
+    for task_type in [
+        "rerank",
+        "audio_transcription",
+        "embedding",
+        "text_generation",
+    ] {
+        for target_port in [
+            "documents",
+            "task_options",
+            "extra_options",
+            "prompt",
+            "audio",
+        ] {
+            let mut task = runtime_task(vec![input_binding("source", "value", target_port)]);
+            let request: pantograph_runtime_host_contracts::RuntimeHostExecutionRequest = serde_json::from_str(include_str!("../../../pantograph-runtime-host-contracts/tests/fixtures/runtime_host_execution_request_dispatch_selected.json")).unwrap();
+            let mut intent = request.handoff.task_intent;
+            intent.task_type = task_type.parse().unwrap();
+            task.schedulable_intent = Some(intent);
+            let value = serde_json::json!(["a",{"text":"b"}]);
+            let result = materialize_runtime_host_inputs(
+                &task,
+                &[task_result(
+                    "source",
+                    "value",
+                    WorkflowSchedulerTaskResultValue::Json(value.clone()),
+                )],
+            );
+            if (task_type == "rerank"
+                && matches!(target_port, "documents" | "task_options" | "extra_options"))
+                || (task_type == "audio_transcription"
+                    && matches!(target_port, "audio" | "extra_options"))
+            {
+                assert_eq!(
+                    result.unwrap()[0].value,
+                    RuntimeHostExecutionInputValue::Json(value)
+                );
+            } else {
+                assert!(matches!(
+                    result,
+                    Err(
+                        WorkflowRuntimeHostTaskInputMappingError::UnsupportedMaterializedInput { .. }
+                    )
+                ));
+            }
+        }
+    }
+}

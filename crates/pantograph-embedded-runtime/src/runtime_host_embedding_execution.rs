@@ -29,10 +29,15 @@ pub(crate) fn validate_runtime_host_embedding_request(
     let [input] = request.materialized_inputs.as_slice() else {
         return Err(RuntimeHostEmbeddingProjectionError::InvalidInput);
     };
-    let RuntimeHostExecutionInputValue::String(text) = &input.value else {
-        return Err(RuntimeHostEmbeddingProjectionError::InvalidInput);
+    let text = match &input.value {
+        RuntimeHostExecutionInputValue::String(text)
+        | RuntimeHostExecutionInputValue::TranscriptText(text) => text,
+        _ => return Err(RuntimeHostEmbeddingProjectionError::InvalidInput),
     };
-    if input.port_id != "text" || text.trim().is_empty() || text.len() > 1024 {
+    if input.port_id != "text"
+        || text.trim().is_empty()
+        || text.len() > super::runtime_host_text_execution::semantic_text_limit(&input.value)
+    {
         return Err(RuntimeHostEmbeddingProjectionError::InvalidInput);
     }
     let selected = request

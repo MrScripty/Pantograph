@@ -146,6 +146,9 @@ fn task_result_value(
         RuntimeHostExecutionOutputValue::Json(value) => {
             WorkflowSchedulerTaskResultValue::Json(value)
         }
+        RuntimeHostExecutionOutputValue::TranscriptText(value) => {
+            WorkflowSchedulerTaskResultValue::TranscriptText(value)
+        }
         RuntimeHostExecutionOutputValue::String(value) => {
             WorkflowSchedulerTaskResultValue::String(value)
         }

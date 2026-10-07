@@ -307,6 +307,94 @@ fn input_ports(task_entry: &TaskRegistryEntry) -> Vec<InferencePortDescriptor> {
             image_count_input_port(),
             denoising_scheduler_input_port(),
         ],
+        InferenceTaskId::AudioTranscription => vec![
+            port(
+                "audio",
+                "Small WAV audio",
+                InferencePortDirection::Input,
+                InferencePortRequirement::Required,
+                InferenceValueType::Structured(InferenceStructuredType::Json),
+            ),
+            port(
+                "language",
+                "Language",
+                InferencePortDirection::Input,
+                InferencePortRequirement::Optional,
+                InferenceValueType::Scalar(InferenceScalarType::String),
+            ),
+            port(
+                "prompt",
+                "Prompt",
+                InferencePortDirection::Input,
+                InferencePortRequirement::Optional,
+                InferenceValueType::Scalar(InferenceScalarType::String),
+            ),
+            port(
+                "asr_task",
+                "ASR task",
+                InferencePortDirection::Input,
+                InferencePortRequirement::Optional,
+                InferenceValueType::Scalar(InferenceScalarType::String),
+            ),
+            port(
+                "chunk_length_s",
+                "Chunk length (seconds)",
+                InferencePortDirection::Input,
+                InferencePortRequirement::Optional,
+                InferenceValueType::Scalar(InferenceScalarType::F64),
+            ),
+            port(
+                "extra_options",
+                "Backend options (empty only)",
+                InferencePortDirection::Input,
+                InferencePortRequirement::Optional,
+                InferenceValueType::Structured(InferenceStructuredType::Json),
+            ),
+        ],
+        InferenceTaskId::Rerank => vec![
+            port(
+                "query",
+                "Query",
+                InferencePortDirection::Input,
+                InferencePortRequirement::Required,
+                InferenceValueType::Scalar(InferenceScalarType::String),
+            ),
+            port(
+                "documents",
+                "Documents",
+                InferencePortDirection::Input,
+                InferencePortRequirement::Required,
+                InferenceValueType::Structured(InferenceStructuredType::Json),
+            ),
+            port(
+                "top_n",
+                "Top n",
+                InferencePortDirection::Input,
+                InferencePortRequirement::Optional,
+                InferenceValueType::Scalar(InferenceScalarType::U64),
+            ),
+            port(
+                "return_documents",
+                "Return documents",
+                InferencePortDirection::Input,
+                InferencePortRequirement::Optional,
+                InferenceValueType::Scalar(InferenceScalarType::Bool),
+            ),
+            port(
+                "task_options",
+                "Task options",
+                InferencePortDirection::Input,
+                InferencePortRequirement::Optional,
+                InferenceValueType::Structured(InferenceStructuredType::Json),
+            ),
+            port(
+                "extra_options",
+                "Backend options",
+                InferencePortDirection::Input,
+                InferencePortRequirement::Optional,
+                InferenceValueType::Structured(InferenceStructuredType::Json),
+            ),
+        ],
         InferenceTaskId::Embedding => vec![port(
             "text",
             "Text",
@@ -456,6 +544,101 @@ fn sampling_number_input_port(port_id: &str, label: &str, max: f64) -> Inference
 
 fn output_ports(task_entry: &TaskRegistryEntry) -> Vec<InferencePortDescriptor> {
     match task_entry.task_id {
+        InferenceTaskId::AudioTranscription => vec![
+            port(
+                "response",
+                "Response",
+                InferencePortDirection::Output,
+                InferencePortRequirement::Required,
+                InferenceValueType::Scalar(InferenceScalarType::String),
+            ),
+            port(
+                "stream",
+                "Stream",
+                InferencePortDirection::Output,
+                InferencePortRequirement::Required,
+                InferenceValueType::Structured(InferenceStructuredType::Json),
+            ),
+            port(
+                "text",
+                "Text",
+                InferencePortDirection::Output,
+                InferencePortRequirement::Required,
+                InferenceValueType::Scalar(InferenceScalarType::String),
+            ),
+            port(
+                "language",
+                "Language",
+                InferencePortDirection::Output,
+                InferencePortRequirement::Optional,
+                InferenceValueType::Scalar(InferenceScalarType::String),
+            ),
+            port(
+                "duration_seconds",
+                "Duration seconds",
+                InferencePortDirection::Output,
+                InferencePortRequirement::Optional,
+                InferenceValueType::Structured(InferenceStructuredType::Json),
+            ),
+            port(
+                "segments",
+                "Segments",
+                InferencePortDirection::Output,
+                InferencePortRequirement::Required,
+                InferenceValueType::Structured(InferenceStructuredType::Json),
+            ),
+            port(
+                "metadata",
+                "Metadata",
+                InferencePortDirection::Output,
+                InferencePortRequirement::Required,
+                InferenceValueType::Structured(InferenceStructuredType::Json),
+            ),
+            port(
+                "diagnostics",
+                "Diagnostics",
+                InferencePortDirection::Output,
+                InferencePortRequirement::Required,
+                InferenceValueType::Structured(InferenceStructuredType::Json),
+            ),
+        ],
+        InferenceTaskId::Rerank => vec![
+            port(
+                "results",
+                "Results",
+                InferencePortDirection::Output,
+                InferencePortRequirement::Required,
+                InferenceValueType::Structured(InferenceStructuredType::Json),
+            ),
+            port(
+                "scores",
+                "Scores",
+                InferencePortDirection::Output,
+                InferencePortRequirement::Required,
+                InferenceValueType::Structured(InferenceStructuredType::Json),
+            ),
+            port(
+                "top_document",
+                "Top document",
+                InferencePortDirection::Output,
+                InferencePortRequirement::Optional,
+                InferenceValueType::Scalar(InferenceScalarType::String),
+            ),
+            port(
+                "top_score",
+                "Top score",
+                InferencePortDirection::Output,
+                InferencePortRequirement::Optional,
+                InferenceValueType::Structured(InferenceStructuredType::Json),
+            ),
+            port(
+                "diagnostics",
+                "Diagnostics",
+                InferencePortDirection::Output,
+                InferencePortRequirement::Required,
+                InferenceValueType::Structured(InferenceStructuredType::Json),
+            ),
+        ],
         InferenceTaskId::Embedding => vec![
             port(
                 "embedding",
@@ -780,6 +963,58 @@ mod tests {
         assert!(facts.capability.is_none());
         assert!(facts.runtimes.is_empty());
         assert!(facts.estimate_hints.is_empty());
+    }
+
+    #[test]
+    fn rerank_descriptor_exposes_typed_parent_inputs_outputs_without_streaming_or_defaults() {
+        let mut package = projected_package_facts();
+        let rerank: inference::ResolvedModelPackageFacts = serde_json::from_str(include_str!(
+            "../../inference/tests/fixtures/inference_package_facts/rerank_package_facts.json"
+        ))
+        .unwrap();
+        package.task = rerank.task;
+        let runtime = InferenceRuntimeAvailabilityFact {
+            runtime_id: "llama_cpp".parse().unwrap(),
+            state: InferenceRuntimeAvailabilityState::Available,
+            device_ids: vec!["cpu".parse().unwrap()],
+        };
+        let capability = capability_facts(&package, &[runtime]).unwrap();
+        let descriptor: pantograph_inference_interface_contracts::InferenceInterfaceDescriptor = serde_json::from_str(include_str!("../../pantograph-inference-interface-contracts/tests/fixtures/descriptor_rerank_ready.json")).unwrap();
+        descriptor.validate().unwrap();
+        assert_eq!(capability.task_kind.as_str(), "rerank");
+        assert_eq!(capability.inputs, descriptor.inputs);
+        assert_eq!(capability.outputs, descriptor.outputs);
+        assert!(!capability
+            .inputs
+            .iter()
+            .any(|port| port.port_id.as_str() == "stream"));
+        assert!(capability
+            .inputs
+            .iter()
+            .all(|port| matches!(port.options, InferencePortOptions::None)));
+    }
+
+    #[test]
+    fn selected_audio_descriptor_exposes_all_eight_parent_outputs_without_defaults() {
+        let mut package = projected_package_facts();
+        let audio: inference::ResolvedModelPackageFacts = serde_json::from_str(include_str!("../../inference/tests/fixtures/inference_package_facts/hf_audio_transcription_package_facts.json")).unwrap();
+        package.task = audio.task;
+        let runtime = InferenceRuntimeAvailabilityFact {
+            runtime_id: "pytorch".parse().unwrap(),
+            state: InferenceRuntimeAvailabilityState::Available,
+            device_ids: vec!["cpu".parse().unwrap()],
+        };
+        let capability = capability_facts(&package, &[runtime]).unwrap();
+        let descriptor:pantograph_inference_interface_contracts::InferenceInterfaceDescriptor = serde_json::from_str(include_str!("../../pantograph-inference-interface-contracts/tests/fixtures/descriptor_audio_ready.json")).unwrap();
+        descriptor.validate().unwrap();
+        assert_eq!(capability.task_kind.as_str(), "audio_transcription");
+        assert_eq!(capability.inputs, descriptor.inputs);
+        assert_eq!(capability.outputs, descriptor.outputs);
+        assert_eq!(capability.outputs.len(), 8);
+        assert!(capability
+            .inputs
+            .iter()
+            .all(|port| matches!(port.options, InferencePortOptions::None)));
     }
 
     #[test]

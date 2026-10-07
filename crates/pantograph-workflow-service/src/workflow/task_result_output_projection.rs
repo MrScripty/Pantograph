@@ -106,7 +106,10 @@ fn task_result_value_to_workflow_output(
 ) -> Result<Value, &'static str> {
     match value {
         WorkflowSchedulerTaskResultValue::Json(value) => Ok(value.clone()),
-        WorkflowSchedulerTaskResultValue::String(value) => Ok(Value::String(value.clone())),
+        WorkflowSchedulerTaskResultValue::String(value)
+        | WorkflowSchedulerTaskResultValue::TranscriptText(value) => {
+            Ok(Value::String(value.clone()))
+        }
         WorkflowSchedulerTaskResultValue::Bool(value) => Ok(Value::Bool(*value)),
         WorkflowSchedulerTaskResultValue::I64(value) => Ok(Value::Number((*value).into())),
         WorkflowSchedulerTaskResultValue::U64(value) => Ok(Value::Number((*value).into())),

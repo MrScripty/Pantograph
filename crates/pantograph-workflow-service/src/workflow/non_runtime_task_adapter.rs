@@ -46,7 +46,7 @@ pub(crate) async fn execute_non_runtime_scheduler_task(
         }
     })?;
     let mut inputs = node_engine_inputs(task, template, materialized_results)?;
-    let outputs = if matches!(
+    let mut outputs = if matches!(
         template,
         WorkflowSchedulerNonRuntimeTaskTemplate::VectorOutput
     ) {
@@ -69,6 +69,25 @@ pub(crate) async fn execute_non_runtime_scheduler_task(
             .map_err(WorkflowSchedulerNonRuntimeTaskAdapterError::NodeEngine)?;
         scheduler_outputs(template, response.outputs())?
     };
+    // Explicit transcript provenance survives semantic text consumers. Ordinary
+    // scalar inputs/outputs keep their original small-string validation.
+    if matches!(
+        template,
+        WorkflowSchedulerNonRuntimeTaskTemplate::TextOutput
+            | WorkflowSchedulerNonRuntimeTaskTemplate::Merge
+            | WorkflowSchedulerNonRuntimeTaskTemplate::JsonFilter { .. }
+    ) && task.input_bindings.iter().any(|binding| {
+        matches!(
+            materialized_output(task, binding, materialized_results),
+            Ok(WorkflowSchedulerTaskResultValue::TranscriptText(_))
+        )
+    }) {
+        for output in &mut outputs {
+            if let WorkflowSchedulerTaskResultValue::String(text) = &output.value {
+                output.value = WorkflowSchedulerTaskResultValue::TranscriptText(text.clone());
+            }
+        }
+    }
     let result = WorkflowSchedulerTaskResult {
         schema_version: WORKFLOW_SCHEDULER_TASK_RESULT_SCHEMA_VERSION,
         workflow_id: task.workflow_id.as_str().to_string(),
@@ -196,7 +215,7 @@ fn node_engine_inputs(
         WorkflowSchedulerNonRuntimeTaskTemplate::Merge => {
             let values = task.input_bindings.iter().map(|binding| {
                 match materialized_output(task, binding, materialized_results)? {
-                    WorkflowSchedulerTaskResultValue::String(value) => Ok(Value::String(value.clone())),
+                    WorkflowSchedulerTaskResultValue::String(value) | WorkflowSchedulerTaskResultValue::TranscriptText(value) => Ok(Value::String(value.clone())),
                     _ => Err(WorkflowSchedulerNonRuntimeTaskAdapterError::WrongMaterializedInputType {
                         source_task_id: binding.source_task_id.as_str().to_string(),
                         source_port_id: binding.source_port_id.clone(),
@@ -339,7 +358,8 @@ fn materialized_string_input(
             },
         )?;
     match materialized_output(task, binding, materialized_results)? {
-        WorkflowSchedulerTaskResultValue::String(value) => Ok(value.clone()),
+        WorkflowSchedulerTaskResultValue::String(value)
+        | WorkflowSchedulerTaskResultValue::TranscriptText(value) => Ok(value.clone()),
         _ => Err(
             WorkflowSchedulerNonRuntimeTaskAdapterError::WrongMaterializedInputType {
                 source_task_id: binding.source_task_id.as_str().to_string(),

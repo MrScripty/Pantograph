@@ -1018,11 +1018,13 @@ impl WorkflowRuntimeDispatchCandidateProvider for TestRuntimeDispatchCandidatePr
             })?,
             selected_runtime_id,
             selected_runtime_variant_id: Some(
-                if intent.task_type.as_str() == "embedding" {
+                if intent.task_type.as_str() == "rerank" {
+                    "llama_cpp.cpu"
+                } else if intent.task_type.as_str() == "embedding" {
                     "candle.cpu"
                 } else if matches!(
                     intent.task_type.as_str(),
-                    "text_generation" | "chat_completion"
+                    "text_generation" | "chat_completion" | "audio_transcription"
                 ) {
                     "pytorch.cpu"
                 } else {
@@ -1031,7 +1033,9 @@ impl WorkflowRuntimeDispatchCandidateProvider for TestRuntimeDispatchCandidatePr
                 .parse()
                 .unwrap(),
             ),
-            selected_backend_key: if intent.task_type.as_str() == "embedding" {
+            selected_backend_key: if intent.task_type.as_str() == "rerank" {
+                "llamacpp"
+            } else if intent.task_type.as_str() == "embedding" {
                 "candle"
             } else {
                 "pytorch"
@@ -1178,8 +1182,96 @@ impl WorkflowHost for ImageRuntimeSessionHost {
                 .graph
                 .nodes
                 .iter()
-                .filter(|node| matches!(node.node_type.as_str(), "llm-inference" | "vector-output"))
+                .filter(|node| {
+                    matches!(
+                        node.node_type.as_str(),
+                        "llm-inference" | "vector-output" | "text-output"
+                    )
+                })
                 .map(|node| {
+                    if node.node_type == "text-output" {
+                        return WorkflowIoNode {
+                            node_id: node.id.clone(),
+                            node_type: node.node_type.clone(),
+                            name: None,
+                            description: None,
+                            ports: vec![WorkflowIoPort {
+                                port_id: "text".into(),
+                                name: None,
+                                description: None,
+                                data_type: Some("string".into()),
+                                required: Some(true),
+                                multiple: Some(false),
+                            }],
+                        };
+                    }
+                    if node.data["task_kind"] == "audio_transcription" {
+                        return WorkflowIoNode {
+                            node_id: node.id.clone(),
+                            node_type: node.node_type.clone(),
+                            name: None,
+                            description: None,
+                            ports: [
+                                "response",
+                                "text",
+                                "stream",
+                                "language",
+                                "duration_seconds",
+                                "segments",
+                                "metadata",
+                                "diagnostics",
+                            ]
+                            .into_iter()
+                            .map(|port| WorkflowIoPort {
+                                port_id: port.into(),
+                                name: None,
+                                description: None,
+                                data_type: Some(
+                                    if matches!(port, "response" | "text" | "language") {
+                                        "string"
+                                    } else {
+                                        "json"
+                                    }
+                                    .into(),
+                                ),
+                                required: Some(false),
+                                multiple: Some(false),
+                            })
+                            .collect(),
+                        };
+                    }
+                    if node.data["task_kind"] == "rerank" {
+                        return WorkflowIoNode {
+                            node_id: node.id.clone(),
+                            node_type: node.node_type.clone(),
+                            name: None,
+                            description: None,
+                            ports: [
+                                "results",
+                                "scores",
+                                "top_document",
+                                "top_score",
+                                "diagnostics",
+                            ]
+                            .into_iter()
+                            .map(|port| WorkflowIoPort {
+                                port_id: port.into(),
+                                name: None,
+                                description: None,
+                                data_type: Some(
+                                    if port == "top_document" {
+                                        "string"
+                                    } else {
+                                        "json"
+                                    }
+                                    .into(),
+                                ),
+                                required: Some(false),
+                                multiple: Some(false),
+                            })
+                            .collect(),
+                        };
+                    }
                     if node.node_type == "vector-output" || node.data["task_kind"] == "embedding" {
                         return WorkflowIoNode {
                             node_id: node.id.clone(),
@@ -3842,3 +3934,15 @@ mod cpu_embedding_graph_tests;
 #[cfg(feature = "backend-pytorch")]
 #[path = "cpu_chat_graph_tests.rs"]
 mod cpu_chat_graph_tests;
+
+#[cfg(feature = "backend-candle")]
+#[path = "cpu_rerank_graph_tests.rs"]
+mod cpu_rerank_graph_tests;
+
+#[cfg(all(
+    feature = "backend-candle",
+    feature = "backend-pytorch",
+    feature = "backend-audio"
+))]
+#[path = "cpu_audio_graph_tests.rs"]
+mod cpu_audio_graph_tests;

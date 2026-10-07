@@ -1,5 +1,15 @@
 # Execution Ledger
 
+## 2026-10-07 — Preserve rerank/audio; selected CPU rerank successor
+
+The user retained the unpublished removal experiment and authorized a main-based
+local replacement slice. Rerank was selected and reported before implementation;
+working direct rerank/audio remain unchanged. The [preservation report](reports/2026-10-07-scheduler-rerank-preservation.md)
+records selected-target CPU loading, bounded typed JSON, parent output parity,
+cancellation/caller custody, saved graphs, and the smallest deferred audio route.
+Qualification is synthetic and local; no public write, CI, model/runtime download
+or inspector repair belongs to this successor.
+
 ## 2026-10-06 — Canonical single-prompt chat successor
 
 Fresh main `c75fa237` is explicitly composed with separate stop `e570302d` and

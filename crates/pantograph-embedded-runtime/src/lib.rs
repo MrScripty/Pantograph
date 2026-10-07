@@ -86,6 +86,7 @@ mod runtime_dispatch_resource_facts;
 mod runtime_dispatch_source_snapshot;
 mod runtime_extensions;
 pub mod runtime_health;
+mod runtime_host_audio_execution;
 mod runtime_host_embedding_execution;
 #[allow(dead_code)]
 mod runtime_host_execution_port;
@@ -94,9 +95,12 @@ mod runtime_host_image_execution;
 mod runtime_host_load_target;
 #[allow(dead_code)]
 mod runtime_host_media_artifact_sink;
+mod runtime_host_owned_audio;
+pub use runtime_host_owned_audio::OwnedAudioInputStore;
 mod runtime_host_observation;
 #[allow(dead_code)]
 mod runtime_host_package_facts;
+mod runtime_host_rerank_execution;
 #[allow(dead_code)]
 mod runtime_host_text_execution;
 pub mod runtime_recovery;

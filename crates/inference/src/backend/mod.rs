@@ -1090,6 +1090,77 @@ pub trait InferenceBackend: Send + Sync {
         spawner: Arc<dyn ProcessSpawner>,
     ) -> Result<BackendStartOutcome, BackendError>;
 
+    /// Unsupported owners cannot use generic readiness as selected ASR proof.
+    async fn load_selected_audio(
+        &mut self,
+        _request: &crate::InferenceExecutionRequest,
+        _target: &crate::PumasArtifactLoadTarget,
+        _decision: &crate::BackendExecutionDecision,
+        _spawner: Option<Arc<dyn ProcessSpawner>>,
+        _cancellation: crate::InferenceExecutionCancellationHandle,
+    ) -> Result<BackendStartOutcome, BackendError> {
+        Err(BackendError::Config(
+            "selected audio loading is unsupported by this backend".into(),
+        ))
+    }
+
+    async fn selected_audio(
+        &self,
+        _request: AudioTranscriptionRequest,
+        _request_id: &str,
+        _target: &crate::PumasArtifactLoadTarget,
+        _decision: &crate::BackendExecutionDecision,
+        _cancellation: crate::InferenceExecutionCancellationHandle,
+    ) -> Result<AudioTranscriptionResult, BackendError> {
+        Err(BackendError::Config(
+            "selected audio execution is unsupported by this backend".into(),
+        ))
+    }
+
+    async fn selected_owned_audio(
+        &self,
+        _request: AudioTranscriptionRequest,
+        _snapshot: crate::OwnedAudioWav,
+        _request_id: &str,
+        _target: &crate::PumasArtifactLoadTarget,
+        _decision: &crate::BackendExecutionDecision,
+        _cancellation: crate::InferenceExecutionCancellationHandle,
+    ) -> Result<AudioTranscriptionResult, BackendError> {
+        Err(BackendError::Config(
+            "owned selected audio unsupported by this backend".into(),
+        ))
+    }
+
+    /// Load the scheduler-selected rerank target; unsupported owners reject before effects.
+    async fn load_selected_rerank(
+        &mut self,
+        _request: &crate::InferenceExecutionRequest,
+        _target: &crate::PumasArtifactLoadTarget,
+        _decision: &crate::BackendExecutionDecision,
+        _spawner: Option<Arc<dyn ProcessSpawner>>,
+        _cancellation: crate::InferenceExecutionCancellationHandle,
+    ) -> Result<BackendStartOutcome, BackendError> {
+        Err(BackendError::Config(
+            "selected rerank loading is unsupported by this backend".into(),
+        ))
+    }
+
+    /// Retain request ownership until completion, then suppress output after cancellation.
+    async fn selected_rerank(
+        &self,
+        request: RerankRequest,
+        cancellation: crate::InferenceExecutionCancellationHandle,
+    ) -> Result<RerankResponse, BackendError> {
+        if let Some(reason) = cancellation.rejection_message("selected rerank") {
+            return Err(BackendError::Cancelled(reason));
+        }
+        let result = self.rerank(request).await;
+        if let Some(reason) = cancellation.rejection_message("selected rerank") {
+            return Err(BackendError::Cancelled(reason));
+        }
+        result
+    }
+
     /// Load exactly the scheduler-selected text package and executable target.
     /// Unsupported backends reject without changing residency.
     async fn load_selected_text(

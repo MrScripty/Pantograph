@@ -189,7 +189,17 @@ def load_transformers_model_kwargs_from_envelope(envelope):
     if not isinstance(entry_path, str) or not entry_path.strip():
         raise ValueError("PyTorch worker load payload.entry_path must be a non-empty string")
 
-    return {
+    chunk_length_s = payload.get("chunk_length_s")
+    if chunk_length_s is not None:
+        if loader != AUTOMATIC_SPEECH_RECOGNITION_LOADER or isinstance(chunk_length_s, bool):
+            raise ValueError("chunk length is supported only for ASR loading")
+        if not isinstance(chunk_length_s, (int, float)):
+            raise ValueError("ASR chunk length must be finite and positive")
+        chunk_length_s = float(chunk_length_s)
+        if not math.isfinite(chunk_length_s) or chunk_length_s <= 0:
+            raise ValueError("ASR chunk length must be finite and positive")
+
+    kwargs = {
         "model_path": entry_path,
         "device": _worker_device_or_auto(payload, "load"),
         "model_type": payload.get("model_type_hint"),
@@ -201,6 +211,9 @@ def load_transformers_model_kwargs_from_envelope(envelope):
         "code_revision": trust_policy.get("code_revision"),
         "cache_policy": trust_policy.get("cache_policy", "backend_default"),
     }
+    if loader == AUTOMATIC_SPEECH_RECOGNITION_LOADER:
+        kwargs["chunk_length_s"] = chunk_length_s
+    return kwargs
 
 
 def generate_text_kwargs_from_envelope(envelope, expected_operation=GENERATE_TEXT_OPERATION):

@@ -1464,6 +1464,62 @@ def transcribe_audio(
     }
 
 
+def transcribe_owned_wav_from_envelope(envelope, wav_bytes, metadata_json):
+    """Selected owned-byte ingress, distinct from the retained inline/base64 entry."""
+    import struct
+    request_id = "unknown"
+    try:
+        decoded, request_id = decode_worker_envelope(envelope)
+        kwargs = transcribe_audio_kwargs_from_envelope(decoded)
+        metadata = json.loads(metadata_json)
+        import math
+        chunk = kwargs["chunk_length_s"]
+        original_chunk = decoded["payload"].get("chunk_length_s")
+        if original_chunk is not None and (type(original_chunk) not in (int, float) or not math.isfinite(chunk) or not 0 < chunk <= 300):
+            raise ValueError("Owned WAV chunk length must be finite and within 300 seconds")
+        if set(decoded["payload"]) - {"model_path", "audio_base64", "device", "language", "prompt", "task", "chunk_length_s", "extra_options"}:
+            raise ValueError("Unsupported owned audio options")
+        if kwargs["task"] not in (None, "transcribe", "translate"):
+            raise ValueError("Unsupported owned ASR task")
+        if kwargs.pop("audio_base64") != "__owned_wav_side_argument_v1__" or kwargs["device"] != "cpu":
+            raise ValueError("Owned WAV requires its explicit CPU side argument")
+        if type(wav_bytes) is not bytes or not 46 <= len(wav_bytes) <= 16 * 1024 * 1024:
+            raise ValueError("Owned WAV exceeds byte limits")
+        if not isinstance(metadata, dict) or not all(isinstance(metadata.get(k), str) and metadata[k] for k in ("artifact_id", "workflow_id", "source_run_id", "content_hash")):
+            raise ValueError("Owned WAV identity metadata required")
+        channels, rate, byte_rate, align, bits = struct.unpack_from("<HIIHH", wav_bytes, 22)
+        data_size = struct.unpack_from("<I", wav_bytes, 40)[0]
+        if (wav_bytes[:4] != b"RIFF" or wav_bytes[8:16] != b"WAVEfmt " or
+                struct.unpack_from("<I", wav_bytes, 4)[0] != len(wav_bytes) - 8 or
+                struct.unpack_from("<IH", wav_bytes, 16) != (16, 1) or
+                wav_bytes[36:40] != b"data" or channels not in (1, 2) or
+                not 8000 <= rate <= 48000 or bits != 16 or align != channels * 2 or
+                byte_rate != rate * align or data_size != len(wav_bytes) - 44 or
+                data_size == 0 or data_size % align or data_size // align > rate * 300 or
+                metadata.get("sample_rate") != rate or metadata.get("channels") != channels or
+                metadata.get("frames") != data_size // align):
+            raise ValueError("Owned WAV header/metadata/duration mismatch")
+        audio, sample_rate = sf.read(io.BytesIO(wav_bytes), dtype="float32")
+        if sample_rate != rate or audio.shape[0] != metadata["frames"]:
+            raise ValueError("Owned WAV decoder facts mismatch")
+        audio = np.asarray(audio, dtype=np.float32)
+        if audio.ndim > 1:
+            audio = np.mean(audio, axis=1, dtype=np.float32)
+        load_asr_model(kwargs["model_path"], device="cpu", chunk_length_s=kwargs["chunk_length_s"])
+        if _asr_pipeline is None:
+            raise RuntimeError("Owned ASR pipeline unavailable")
+        controls = {k: kwargs[k].strip() for k in ("language", "prompt", "task") if isinstance(kwargs[k], str) and kwargs[k].strip()}
+        result = _asr_pipeline({"array": audio, "sampling_rate": rate}, generate_kwargs=controls or None)
+        text = result.get("text", "") if isinstance(result, dict) else str(result)
+        if not isinstance(text, str) or len(text.strip().encode("utf-8")) > 65536:
+            raise ValueError("Owned transcript exceeds 64KiB; no truncation")
+        return worker_success_response_json(request_id, {"text": text.strip(), "language": controls.get("language"), "duration_seconds": float(metadata["frames"]) / rate, "chunks": None})
+    except (ValueError, TypeError, KeyError, struct.error) as exc:
+        return worker_error_response_json(request_id, "invalid_request", str(exc), "pytorch_worker_invalid_owned_audio_request")
+    except Exception:
+        return worker_error_response_json(request_id, "generation_failed", "Owned WAV transcription failed", "pytorch_worker_owned_audio_failed")
+
+
 def generate_image(
     prompt,
     negative_prompt=None,
