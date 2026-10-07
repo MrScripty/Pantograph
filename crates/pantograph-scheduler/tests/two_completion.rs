@@ -665,3 +665,6 @@ fn two_completion_cost_probe() {
         );
     }
 }
+
+#[path = "cases/dependency_completion_cases.rs"]
+mod dependency_completion_cases;

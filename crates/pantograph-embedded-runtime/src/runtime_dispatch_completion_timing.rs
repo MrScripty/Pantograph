@@ -46,6 +46,8 @@ pub struct EmbeddedCompletionTimingQuery {
 pub struct EmbeddedCompletionTimingRecord {
     pub query: EmbeddedCompletionTimingQuery,
     pub observed_at_ms: u64,
+    /// Number of successful qualified samples; configured fixtures use one.
+    pub successful_sample_count: u32,
     pub preparation: RuntimeServiceTimingValue,
     pub required_transfer: RuntimeServiceTimingValue,
     pub execution: RuntimeServiceTimingValue,
@@ -57,6 +59,19 @@ pub struct EmbeddedCompletionTimingRecord {
 /// implementation/configuration/generation and exact admitted workload are known.
 /// Existing coarse trace averages and unqualified service attempts are insufficient.
 pub trait EmbeddedCompletionTimingSource: Send + Sync {
+    /// Explicit native capability. Defaults preserve existing one-decision callers.
+    fn dependency_lookahead_enabled(&self) -> bool {
+        false
+    }
+    /// Conditional calibration must qualify symbolic predecessor output class.
+    /// Unknown future length/type, release, residency or capacity => None.
+    fn timing_after_successful_completion(
+        &self,
+        _query: &super::runtime_dispatch_dependency_timing::EmbeddedDependencyCompletionQuery,
+    ) -> Option<super::runtime_dispatch_dependency_timing::EmbeddedDependencyCompletionRecord> {
+        None
+    }
+
     fn timing_for(
         &self,
         query: &EmbeddedCompletionTimingQuery,
@@ -77,6 +92,7 @@ pub(crate) fn select_with_owner_timing(
     request: &ValidatedSchedulerDispatchSelectionRequest,
     queries: &[Option<EmbeddedCompletionTimingQuery>],
     opt_in: &EmbeddedCompletionTimingOptIn,
+    successor: Option<&super::runtime_dispatch_dependency_timing::EmbeddedSuccessorOffers>,
 ) -> SchedulerDispatchReservationSelection {
     let policy = SchedulerCompletionRankingPolicy {
         now_ms: crate::runtime_dispatch_candidate_provider::current_time_ms(),
@@ -173,7 +189,7 @@ pub(crate) fn select_with_owner_timing(
                     candidate,
                     context,
                     source,
-                    sample_count: 1,
+                    sample_count: record.successful_sample_count,
                     observed_at_ms: record.observed_at_ms,
                     preparation_us: Some(preparation),
                     required_transfer_us: Some(transfer),
@@ -190,10 +206,15 @@ pub(crate) fn select_with_owner_timing(
             ..policy
         },
     );
+    if let Some(successor) = successor {
+        return super::runtime_dispatch_dependency_timing::select_dependency_completion(
+            request, &rows, queries, successor, opt_in, result,
+        );
+    }
     diagnosed_selection(result)
 }
 
-fn diagnosed_selection(
+pub(crate) fn diagnosed_selection(
     result: pantograph_scheduler::SchedulerCompletionRankingResult,
 ) -> SchedulerDispatchReservationSelection {
     let message = format!(
@@ -223,7 +244,9 @@ fn diagnosed_selection(
     selection
 }
 
-fn duration(value: &RuntimeServiceTimingValue) -> Option<(u64, SchedulerCompletionEvidenceSource)> {
+pub(crate) fn duration(
+    value: &RuntimeServiceTimingValue,
+) -> Option<(u64, SchedulerCompletionEvidenceSource)> {
     let (ns, source) = match value {
         RuntimeServiceTimingValue::Observed {
             elapsed_ns,
@@ -256,10 +279,10 @@ pub(crate) fn admitted_task_fingerprint(
     Some(blake3::hash(&bytes).to_hex().to_string())
 }
 
-fn bounded_text(value: &str) -> bool {
+pub(crate) fn bounded_text(value: &str) -> bool {
     value.len() <= 128 && !value.trim().is_empty() && !value.chars().any(char::is_control)
 }
-fn query_bounded(q: &EmbeddedCompletionTimingQuery) -> bool {
+pub(crate) fn query_bounded(q: &EmbeddedCompletionTimingQuery) -> bool {
     [
         &q.admitted_task_fingerprint,
         &q.artifact_fingerprint,

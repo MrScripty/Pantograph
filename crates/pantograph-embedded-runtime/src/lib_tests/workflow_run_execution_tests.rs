@@ -3845,3 +3845,6 @@ mod cpu_chat_graph_tests;
 
 #[path = "completion_session_tests.rs"]
 mod completion_session_tests;
+
+#[path = "dependency_completion_session_tests.rs"]
+mod dependency_completion_session_tests;

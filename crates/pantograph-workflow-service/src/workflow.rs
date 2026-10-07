@@ -54,6 +54,7 @@ mod runtime_branch_run_finalization;
 mod runtime_branch_task_event;
 #[allow(dead_code)]
 mod runtime_dispatch_assignment;
+mod runtime_dispatch_lookahead;
 mod runtime_dispatch_selection;
 mod runtime_host_observation;
 mod runtime_host_task_input_mapping;
@@ -159,6 +160,10 @@ pub use self::media_capability_contracts::*;
 pub(crate) use self::non_runtime_task_adapter::{
     execute_non_runtime_scheduler_task, is_bounded_vector_json,
     WorkflowSchedulerNonRuntimeTaskAdapterError,
+};
+pub use self::runtime_dispatch_lookahead::WorkflowCompletionSuccessorSnapshot;
+pub(crate) use self::runtime_dispatch_lookahead::{
+    bounded_serialized, bounded_task, equivalent_environment,
 };
 pub(crate) use self::runtime_dispatch_selection::{
     NoRuntimeDispatchCandidatesProvider, NoRuntimeDispatchSourceRefresher,

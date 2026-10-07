@@ -198,24 +198,7 @@ pub(crate) fn candidate_eligibility(
     candidate: &SchedulerDispatchCandidate,
     require_reservation: bool,
 ) -> Result<(), SchedulerDispatchSelectionDiagnostic> {
-    if let Some(requested_runtime_id) = &request.task_intent.constraints.requested_runtime_id {
-        if requested_runtime_id != &candidate.selected_runtime_id {
-            return Err(SchedulerDispatchSelectionDiagnostic::error(
-                SchedulerDispatchSelectionDiagnosticCode::IncompatibleRuntimeRequirement,
-                Some(&candidate.candidate_id),
-                "Dispatch candidate does not satisfy the explicit runtime requirement.",
-            ));
-        }
-    }
-    if let Some(requested_device_id) = &request.task_intent.constraints.requested_device_id {
-        if !candidate.selected_device_ids.contains(requested_device_id) {
-            return Err(SchedulerDispatchSelectionDiagnostic::error(
-                SchedulerDispatchSelectionDiagnosticCode::IncompatibleDeviceRequirement,
-                Some(&candidate.candidate_id),
-                "Dispatch candidate does not satisfy the explicit device requirement.",
-            ));
-        }
-    }
+    candidate_constraint_eligibility(&request.task_intent, candidate)?;
     if require_reservation {
         let Some(reservation) = candidate.reservations.first() else {
             return Err(SchedulerDispatchSelectionDiagnostic::error(
@@ -279,4 +262,29 @@ fn duplicate_candidate_diagnostics(
         }
     }
     diagnostics
+}
+
+pub(crate) fn candidate_constraint_eligibility(
+    intent: &SchedulableTaskIntent,
+    candidate: &SchedulerDispatchCandidate,
+) -> Result<(), SchedulerDispatchSelectionDiagnostic> {
+    if let Some(requested_runtime_id) = &intent.constraints.requested_runtime_id {
+        if requested_runtime_id != &candidate.selected_runtime_id {
+            return Err(SchedulerDispatchSelectionDiagnostic::error(
+                SchedulerDispatchSelectionDiagnosticCode::IncompatibleRuntimeRequirement,
+                Some(&candidate.candidate_id),
+                "Dispatch candidate does not satisfy the explicit runtime requirement.",
+            ));
+        }
+    }
+    if let Some(requested_device_id) = &intent.constraints.requested_device_id {
+        if !candidate.selected_device_ids.contains(requested_device_id) {
+            return Err(SchedulerDispatchSelectionDiagnostic::error(
+                SchedulerDispatchSelectionDiagnosticCode::IncompatibleDeviceRequirement,
+                Some(&candidate.candidate_id),
+                "Dispatch candidate does not satisfy the explicit device requirement.",
+            ));
+        }
+    }
+    Ok(())
 }

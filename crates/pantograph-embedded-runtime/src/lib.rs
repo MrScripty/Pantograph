@@ -75,9 +75,15 @@ mod runtime_config;
 #[allow(dead_code)]
 mod runtime_dispatch_candidate_provider;
 mod runtime_dispatch_completion_timing;
+mod runtime_dispatch_dependency_timing;
 pub use runtime_dispatch_completion_timing::{
     EmbeddedCompletionTimingOptIn, EmbeddedCompletionTimingQuery, EmbeddedCompletionTimingRecord,
     EmbeddedCompletionTimingSource,
+};
+pub use runtime_dispatch_dependency_timing::{
+    EmbeddedCompletionProjectedResidency, EmbeddedCompletionReleaseCondition,
+    EmbeddedCompletionSuccessorPlacement, EmbeddedDependencyCompletionQuery,
+    EmbeddedDependencyCompletionRecord,
 };
 #[allow(dead_code)]
 mod runtime_dispatch_capability_facts;

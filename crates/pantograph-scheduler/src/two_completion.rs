@@ -315,14 +315,14 @@ fn cost(row: &SchedulerCompletionEvidence<'_>) -> Option<u64> {
 fn text(value: &str) -> bool {
     value.len() <= 128 && !value.trim().is_empty() && !value.chars().any(char::is_control)
 }
-fn traits_bounded(settings: &[SchedulerTraitSetting]) -> bool {
+pub(crate) fn traits_bounded(settings: &[SchedulerTraitSetting]) -> bool {
     settings.len() <= 32
         && settings.iter().all(|s| match &s.value {
             SchedulerTraitValue::String(s) => s.len() <= 1024,
             _ => true,
         })
 }
-fn model_bounded(model: &pantograph_dependency_planning::PumasModelRef) -> bool {
+pub(crate) fn model_bounded(model: &pantograph_dependency_planning::PumasModelRef) -> bool {
     model.model_id.len() <= 128
         && model.revision.as_ref().is_none_or(|s| s.len() <= 128)
         && model
@@ -332,7 +332,7 @@ fn model_bounded(model: &pantograph_dependency_planning::PumasModelRef) -> bool 
         && model.selected_artifact_path.is_none()
         && model.migration_diagnostics.is_empty()
 }
-fn bounded(request: &ValidatedSchedulerDispatchSelectionRequest) -> bool {
+pub(crate) fn bounded(request: &ValidatedSchedulerDispatchSelectionRequest) -> bool {
     let input = request.as_ref();
     let intent = &input.task_intent;
     let proof = &input.readiness_proof;

@@ -8,6 +8,7 @@
 mod batching;
 mod capability;
 mod completion_ranking;
+mod dependency_completion;
 mod dispatch;
 mod dispatch_selection;
 mod dispatch_selection_policy;
@@ -52,6 +53,10 @@ pub use two_completion::{
     SCHEDULER_TWO_COMPLETION_MAX_OFFERS, SCHEDULER_TWO_COMPLETION_MAX_PLANS,
 };
 
+pub use dependency_completion::{
+    select_scheduler_candidate_with_dependency_completion, SchedulerCompletionSuccessorRequest,
+    SchedulerDependencyCompletionEvidence, ValidatedSchedulerCompletionSuccessor,
+};
 pub use dispatch::{
     SchedulerBatchingGroupId, SchedulerDispatchDecision, SchedulerDispatchDiagnostic,
     SchedulerDispatchDiagnosticCode, SchedulerDispatchDiagnosticSeverity,

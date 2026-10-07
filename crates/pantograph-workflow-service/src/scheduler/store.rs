@@ -25,6 +25,8 @@ use super::{
 
 pub(crate) const WORKFLOW_SESSION_QUEUE_POLL_MS: u64 = 10;
 
+#[path = "store_completion_lookahead.rs"]
+mod store_completion_lookahead;
 #[path = "store_diagnostics.rs"]
 mod store_diagnostics;
 #[path = "store_queue.rs"]
@@ -50,6 +52,14 @@ pub(crate) struct WorkflowExecutionSessionQueuedRun {
 }
 
 #[derive(Debug, Clone)]
+struct WorkflowCompletionCleanupGate {
+    first_task_id: String,
+    first_attempt_id: WorkflowSchedulerTaskAttemptId,
+    successor_task_id: String,
+    reservation_lease_id: Option<SchedulerReservationLeaseId>,
+}
+
+#[derive(Debug, Clone)]
 struct WorkflowExecutionSessionActiveRun {
     workflow_run_id: String,
     enqueued_at_ms: u64,
@@ -69,6 +79,7 @@ struct WorkflowExecutionSessionActiveRun {
     scheduler_task_results: BTreeMap<String, WorkflowSchedulerTaskResult>,
     scheduler_task_attempts: BTreeMap<String, WorkflowExecutionSessionTaskAttempt>,
     runtime_dispatch_readiness_proofs: BTreeMap<String, DependencyReadinessProofEnvelope>,
+    completion_cleanup_gate: Option<WorkflowCompletionCleanupGate>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -41,6 +41,11 @@ impl WorkflowExecutionSessionStore {
         inputs: Option<&[pantograph_runtime_host_contracts::RuntimeHostExecutionInput]>,
         check_inputs: bool,
     ) -> Result<(), WorkflowServiceError> {
+        if self.completion_cleanup_pending(session_id, workflow_run_id, task.task_id.as_str()) {
+            return Err(WorkflowServiceError::InvalidRequest(
+                "owned successor is waiting for acknowledged predecessor cleanup".into(),
+            ));
+        }
         let unchanged = self
             .active
             .get(session_id)
@@ -274,9 +279,15 @@ impl WorkflowExecutionSessionStore {
         }
         attempt.reservation = Some(WorkflowSchedulerTaskReservationBinding {
             task_id: task_id.clone(),
-            reservation_lease_id,
+            reservation_lease_id: reservation_lease_id.clone(),
             candidate_id,
         });
+        if let Some(gate) = active_run.completion_cleanup_gate.as_mut() {
+            if gate.first_task_id == task_id.as_str() && gate.first_attempt_id == *attempt_id {
+                gate.reservation_lease_id = Some(reservation_lease_id.clone());
+            }
+        }
+
         Self::mark_session_access(state, tick);
         Ok(())
     }
@@ -296,6 +307,12 @@ impl WorkflowExecutionSessionStore {
         ),
         WorkflowServiceError,
     > {
+        if self.completion_cleanup_pending(session_id, workflow_run_id, transition.task_id.as_str())
+        {
+            return Err(WorkflowServiceError::InvalidRequest(
+                "owned successor is waiting for acknowledged predecessor cleanup".into(),
+            ));
+        }
         let tick = self.next_tick();
         validate_start_attempt_transition(&transition)?;
 

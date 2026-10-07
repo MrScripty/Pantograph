@@ -468,7 +468,7 @@ where
                     )
                 })?;
             }
-            let _application = self
+            let cleanup_ack = self
                 .scheduler_task_orchestrator
                 .apply_runtime_batch_member_reservation_lifecycle(
                     &application.started_batch_member,
@@ -487,6 +487,21 @@ where
                         ),
                     )
                 })?;
+            service
+                .session_store_guard()
+                .map_err(|error| ownership_failure(&error.to_string()))?
+                .acknowledge_completion_cleanup(
+                    &application.member.session_id,
+                    &application.member.workflow_run_id,
+                    application
+                        .started_batch_member
+                        .started()
+                        .task()
+                        .task_id
+                        .as_str(),
+                    application.started_batch_member.started().attempt_id(),
+                    &cleanup_ack,
+                );
         }
         Ok(WorkflowRuntimeBranchBatchResponseMutationOutcome {
             member_outcomes: outcomes,

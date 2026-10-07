@@ -46,6 +46,7 @@ impl EmbeddedCompletionTimingSource for ControlledOwner {
         let cold = q.runtime_id == "pytorch-alt";
         let mut record = EmbeddedCompletionTimingRecord {
             query: q.clone(),
+            successful_sample_count: 1,
             observed_at_ms: crate::runtime_dispatch_candidate_provider::current_time_ms(),
             preparation: estimate(if cold { self.cold_load_ns } else { 0 }),
             required_transfer: if self.mode == 2 {

@@ -3343,3 +3343,6 @@ fn empty_run_request() -> WorkflowExecutionSessionRunRequest {
         priority: None,
     }
 }
+
+#[path = "dependency_completion_gate_tests.rs"]
+mod dependency_completion_gate_tests;

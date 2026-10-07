@@ -2,6 +2,9 @@ use crate::runtime_dispatch_completion_timing::{
     admitted_task_fingerprint, select_with_owner_timing, EmbeddedCompletionTimingOptIn,
     EmbeddedCompletionTimingQuery,
 };
+use crate::runtime_dispatch_dependency_timing::{
+    EmbeddedCompletionSuccessorPlacement, EmbeddedSuccessorOffers,
+};
 use std::collections::BTreeSet;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -184,6 +187,30 @@ impl WorkflowRuntimeDispatchCandidateProvider for EmbeddedRuntimeDispatchCandida
         inputs: Option<&[pantograph_runtime_host_contracts::RuntimeHostExecutionInput]>,
     ) -> Result<WorkflowRuntimeDispatchCandidateSet, WorkflowRuntimeDispatchCandidateProviderError>
     {
+        self.runtime_dispatch_candidates_with_successor(
+            task,
+            ready_record,
+            readiness_proof,
+            inputs,
+            None,
+        )
+    }
+    fn requires_dependency_lookahead(&self) -> bool {
+        self.completion_timing
+            .as_ref()
+            .is_some_and(|o| o.source.dependency_lookahead_enabled())
+    }
+    fn runtime_dispatch_candidates_with_successor(
+        &self,
+        task: &WorkflowSchedulerTask,
+        ready_record: &SchedulerTaskStateRecord,
+        readiness_proof: &DependencyReadinessProofEnvelope,
+        inputs: Option<&[pantograph_runtime_host_contracts::RuntimeHostExecutionInput]>,
+        successor: Option<
+            &pantograph_workflow_service::workflow::WorkflowCompletionSuccessorSnapshot,
+        >,
+    ) -> Result<WorkflowRuntimeDispatchCandidateSet, WorkflowRuntimeDispatchCandidateProviderError>
+    {
         let source_snapshot = self
             .source_snapshot
             .snapshot_for_dispatch(&readiness_proof.preflight_result.identity_key.model_ref);
@@ -196,6 +223,7 @@ impl WorkflowRuntimeDispatchCandidateProvider for EmbeddedRuntimeDispatchCandida
                 readiness_proof,
                 self.completion_timing.as_ref(),
                 inputs,
+                successor,
             );
         }
         Ok(WorkflowRuntimeDispatchCandidateSet::from_diagnostics(
@@ -226,6 +254,7 @@ pub(crate) fn current_time_ms() -> u64 {
         .unwrap_or(0)
 }
 
+#[allow(clippy::too_many_arguments)] // Existing dispatch facts plus advisory successor; no admission authority.
 fn resource_backed_candidate_set(
     source_snapshot: &EmbeddedRuntimeDispatchCandidateSourceSnapshot,
     resource_facts_source: &RuntimeDispatchResourceFactsSource,
@@ -234,6 +263,7 @@ fn resource_backed_candidate_set(
     readiness_proof: &DependencyReadinessProofEnvelope,
     completion_timing: Option<&EmbeddedCompletionTimingOptIn>,
     inputs: Option<&[pantograph_runtime_host_contracts::RuntimeHostExecutionInput]>,
+    successor: Option<&pantograph_workflow_service::workflow::WorkflowCompletionSuccessorSnapshot>,
 ) -> Result<WorkflowRuntimeDispatchCandidateSet, WorkflowRuntimeDispatchCandidateProviderError> {
     let model_ref = &readiness_proof.preflight_result.identity_key.model_ref;
     if model_ref.selected_artifact_path.is_some() {
@@ -346,6 +376,91 @@ fn resource_backed_candidate_set(
         ));
     }
 
+    // Preserve the complete placement universe BEFORE current capacity filtering.
+    // No successor evaluate/reserve/admission occurs; conditional capacity comes
+    // only from the native owner forecast source.
+    let successor_offers = successor.and_then(|next| {
+        if bound_drafts.is_empty()
+            || bound_drafts.len() > 4
+            || !crate::runtime_dispatch_completion_timing::bounded_inputs(&next.known_inputs)
+        {
+            return None;
+        }
+        let intent = next.task.schedulable_intent.as_ref()?;
+        if intent.model_ref != task_intent.model_ref
+            || intent.constraints != task_intent.constraints
+        {
+            return None;
+        }
+        let mut placements = Vec::new();
+        for (draft, device, variant) in &bound_drafts {
+            let text_bounded = crate::runtime_dispatch_completion_timing::bounded_text;
+            let artifact = draft
+                .content_fingerprint
+                .as_deref()
+                .filter(|s| text_bounded(s))?;
+            if !text_bounded(&draft.selected_backend_key)
+                || !text_bounded(&draft.runtime_residency_key)
+                || draft.selected_model_ref.model_id.len() > 128
+                || draft
+                    .selected_model_ref
+                    .revision
+                    .as_ref()
+                    .is_some_and(|s| s.len() > 128)
+                || draft
+                    .selected_model_ref
+                    .selected_artifact_id
+                    .as_ref()
+                    .is_some_and(|s| s.len() > 128)
+                || draft.selected_model_ref.selected_artifact_path.is_some()
+                || !draft.selected_model_ref.migration_diagnostics.is_empty()
+            {
+                return None;
+            }
+            pre_reservation_evidence_check(draft, intent, device.clone()).ok()?;
+            placements.push(EmbeddedCompletionSuccessorPlacement {
+                candidate: SchedulerDispatchCandidate {
+                    candidate_id: draft.candidate_id.clone(),
+                    selected_runtime_id: draft.selected_runtime_id.clone(),
+                    selected_runtime_variant_id: variant.clone(),
+                    selected_device_ids: vec![device.clone()],
+                    selected_model_ref: draft.selected_model_ref.clone(),
+                    runtime_trait_settings: intent.trait_settings.clone(),
+                    reservations: vec![],
+                    resource_fit_assessment: None,
+                    batching_group_id: None,
+                    candidate_source_diagnostics: vec![],
+                },
+                resource_requirements: reservation_requirements_from_estimate_hints(intent),
+                artifact_fingerprint: artifact.to_string(),
+                backend_key: draft.selected_backend_key.clone(),
+                runtime_residency_key: draft.runtime_residency_key.clone(),
+            });
+        }
+        let bytes = serde_json::to_vec(&(
+            &next.predecessor_task_id,
+            next.predecessor_state_version,
+            &next.task,
+            &next.record,
+            &next.known_inputs,
+            &next.predecessor_inputs,
+            &next.shared_environment,
+        ))
+        .ok()?;
+        let request = pantograph_scheduler::ValidatedSchedulerCompletionSuccessor::try_from(
+            pantograph_scheduler::SchedulerCompletionSuccessorRequest {
+                task_intent: intent.clone(),
+                snapshot_identity: blake3::hash(&bytes).to_hex().to_string(),
+                candidates: placements.iter().map(|p| p.candidate.clone()).collect(),
+            },
+        )
+        .ok()?;
+        Some(EmbeddedSuccessorOffers {
+            snapshot: std::sync::Arc::new(next.clone()),
+            request,
+            placements,
+        })
+    });
     let mut offers = Vec::new();
     let mut evaluated_drafts = Vec::new();
     for (mut draft, selected_device_id, selected_runtime_variant_id) in bound_drafts {
@@ -484,7 +599,7 @@ fn resource_backed_candidate_set(
                 })
             })
             .collect();
-        select_with_owner_timing(&request, &queries, opt_in)
+        select_with_owner_timing(&request, &queries, opt_in, successor_offers.as_ref())
     } else {
         select_scheduler_candidate_for_reservation(&request)
     };
@@ -1209,7 +1324,7 @@ fn provider_diagnostic(
 }
 
 #[cfg(test)]
-pub(crate) use tests::completion_test_provider;
+pub(crate) use tests::{completion_test_provider, completion_text_test_provider};
 
 #[cfg(test)]
 mod tests {
@@ -2104,6 +2219,15 @@ mod tests {
         completion_test_provider_with_count(model_ref, timing, 2)
     }
 
+    pub(crate) fn completion_text_test_provider(
+        model_ref: PumasModelRef,
+        timing: Option<EmbeddedCompletionTimingOptIn>,
+    ) -> (
+        EmbeddedRuntimeDispatchCandidateProvider,
+        Arc<RuntimeRegistry>,
+    ) {
+        completion_test_provider_with_backend(model_ref, timing, 2, "transformers")
+    }
     fn completion_test_provider_with_count(
         model_ref: PumasModelRef,
         timing: Option<EmbeddedCompletionTimingOptIn>,
@@ -2112,10 +2236,22 @@ mod tests {
         EmbeddedRuntimeDispatchCandidateProvider,
         Arc<RuntimeRegistry>,
     ) {
+        completion_test_provider_with_backend(model_ref, timing, count, "diffusers")
+    }
+    fn completion_test_provider_with_backend(
+        model_ref: PumasModelRef,
+        timing: Option<EmbeddedCompletionTimingOptIn>,
+        count: usize,
+        backend: &str,
+    ) -> (
+        EmbeddedRuntimeDispatchCandidateProvider,
+        Arc<RuntimeRegistry>,
+    ) {
         let registry = dispatch_registry();
         let ids: Vec<_> = (0..count)
             .map(|i| match i {
                 0 => "pytorch".to_string(),
+                1 if backend == "transformers" => "pytorch.transformers".to_string(),
                 1 => "pytorch-alt".to_string(),
                 _ => format!("pytorch-alt-{i}"),
             })
@@ -2123,10 +2259,16 @@ mod tests {
         for id in &ids {
             registry.register_runtime(
                 pantograph_runtime_registry::RuntimeRegistration::new(id, id)
-                    .with_backend_keys(vec!["diffusers".into()])
+                    .with_backend_keys(vec![backend.into()])
                     .with_admission_budget(RuntimeAdmissionBudget::from_resources(vec![
                         RuntimeAdmissionResourceBudget::ram_bytes(Some(16 * 1024 * mib())),
-                        RuntimeAdmissionResourceBudget::vram_bytes(Some(8 * 1024 * mib())),
+                        RuntimeAdmissionResourceBudget::vram_bytes(Some(
+                            if backend == "transformers" {
+                                0
+                            } else {
+                                8 * 1024 * mib()
+                            },
+                        )),
                     ])),
             );
         }
@@ -2138,15 +2280,20 @@ mod tests {
                 },
             )
             .unwrap();
-        let mut target = load_target("diffusers");
+        let mut target = load_target(backend);
         target.model_ref = model_ref.clone();
+        if backend == "transformers" {
+            target.artifact_kind = "HfCompatibleDirectory".into();
+        }
         let mut snapshot = source_snapshot(
             ids.iter()
                 .map(|id| {
-                    let mut facts = runtime_capability(id, vec!["diffusers"]);
+                    let mut facts = runtime_capability(id, vec![backend]);
+                    facts.runtime_family = backend.into();
+                    facts.runtime_residency_key = format!("runtime.{backend}.{id}.shared");
                     facts.automatic_device_candidates.push(
                         inference::gateway::RuntimeOwnedDeviceCandidate {
-                            backend_key: "diffusers".into(),
+                            backend_key: backend.into(),
                             runtime_variant_id: inference::RuntimeVariantId::parse("pytorch.cpu")
                                 .unwrap(),
                             device_id: inference::InferenceDeviceId::parse("cpu").unwrap(),
@@ -2161,6 +2308,13 @@ mod tests {
             snapshot.pumas_package_facts.as_mut()
         {
             facts.model_ref = model_ref;
+            if backend == "transformers" {
+                facts.artifact_kind = inference::ModelArtifactKind::HfCompatibleDirectory;
+                facts.backend_hints.accepted = vec![inference::BackendHintLabel::Transformers];
+                facts.task.task_type_primary = Some("text-generation".into());
+                facts.task.pipeline_tag = Some("text-generation".into());
+                facts.task.output_modalities = vec!["text".into()];
+            }
         }
         (
             EmbeddedRuntimeDispatchCandidateProvider::with_source_snapshot(snapshot)
@@ -2230,6 +2384,7 @@ mod tests {
                 };
                 Some(EmbeddedCompletionTimingRecord {
                     query: q.clone(),
+                    successful_sample_count: 1,
                     observed_at_ms: current_time_ms(),
                     preparation: value(),
                     required_transfer: value(),

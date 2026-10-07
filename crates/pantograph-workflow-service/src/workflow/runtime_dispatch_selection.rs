@@ -55,6 +55,22 @@ pub trait WorkflowRuntimeDispatchCandidateProvider: Send + Sync {
         false
     }
 
+    fn requires_dependency_lookahead(&self) -> bool {
+        false
+    }
+
+    fn runtime_dispatch_candidates_with_successor(
+        &self,
+        task: &WorkflowSchedulerTask,
+        ready: &SchedulerTaskStateRecord,
+        proof: &DependencyReadinessProofEnvelope,
+        inputs: Option<&[pantograph_runtime_host_contracts::RuntimeHostExecutionInput]>,
+        _successor: Option<&super::WorkflowCompletionSuccessorSnapshot>,
+    ) -> Result<WorkflowRuntimeDispatchCandidateSet, WorkflowRuntimeDispatchCandidateProviderError>
+    {
+        self.runtime_dispatch_candidates_with_inputs(task, ready, proof, inputs)
+    }
+
     fn runtime_dispatch_candidates_with_inputs(
         &self,
         task: &WorkflowSchedulerTask,
@@ -339,6 +355,7 @@ impl<'a> WorkflowRuntimeDispatchSelectionBoundary<'a> {
         .await
     }
 
+    #[cfg(test)]
     pub(crate) async fn prepare_ready_runtime_task_dispatch_with_inputs(
         &self,
         task: &WorkflowSchedulerTask,
@@ -347,13 +364,38 @@ impl<'a> WorkflowRuntimeDispatchSelectionBoundary<'a> {
         inputs: Option<&[pantograph_runtime_host_contracts::RuntimeHostExecutionInput]>,
     ) -> Result<WorkflowRuntimeDispatchSelectionRequest, WorkflowRuntimeDispatchPreselectionError>
     {
+        self.prepare_ready_runtime_task_dispatch_with_successor(
+            task,
+            ready_record,
+            readiness_proof,
+            inputs,
+            None,
+        )
+        .await
+    }
+
+    pub(crate) async fn prepare_ready_runtime_task_dispatch_with_successor(
+        &self,
+        task: &WorkflowSchedulerTask,
+        ready_record: &SchedulerTaskStateRecord,
+        readiness_proof: DependencyReadinessProofEnvelope,
+        inputs: Option<&[pantograph_runtime_host_contracts::RuntimeHostExecutionInput]>,
+        successor: Option<&super::WorkflowCompletionSuccessorSnapshot>,
+    ) -> Result<WorkflowRuntimeDispatchSelectionRequest, WorkflowRuntimeDispatchPreselectionError>
+    {
         self.source_refresher
             .refresh_runtime_dispatch_sources(task, ready_record, &readiness_proof)
             .await
             .map_err(WorkflowRuntimeDispatchPreselectionError::SourceRefresh)?;
         let candidate_set = self
             .candidate_provider
-            .runtime_dispatch_candidates_with_inputs(task, ready_record, &readiness_proof, inputs)
+            .runtime_dispatch_candidates_with_successor(
+                task,
+                ready_record,
+                &readiness_proof,
+                inputs,
+                successor,
+            )
             .map_err(WorkflowRuntimeDispatchPreselectionError::CandidateCollection)?;
         runtime_dispatch_selection_request(task, readiness_proof, candidate_set)
             .map_err(WorkflowRuntimeDispatchPreselectionError::SelectionRequest)
