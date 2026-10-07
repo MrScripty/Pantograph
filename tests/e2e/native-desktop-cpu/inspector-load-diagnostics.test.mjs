@@ -27,7 +27,7 @@ test('load diagnostics keep a pending selected run distinct from graph and artif
   install();
   const header = { textContent: ' run-1 ' };
   globalThis.document = { querySelector: () => ({ textContent: 'Loading run snapshot Projection unavailable',
-    querySelector: selector => selector.includes('active-run') ? header : null,
+    querySelector: selector => selector === 'h1 + div' ? header : null,
     querySelectorAll: () => [] }) };
   const result = readInspectorLoadDiagnostics();
   assert.equal(result.selectedRunHeader, 'run-1');
