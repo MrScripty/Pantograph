@@ -3,7 +3,7 @@ name: Native desktop CPU qualification
 on:
   push:
     branches:
-      - qual/dependency-control-task-projection-2026-10-07
+      - qual/authored-text-submit-input-2026-10-07
     paths:
       - .github/workflows/native-desktop-cpu-qualification.yml
       - scripts/*native-desktop-cpu*
@@ -39,12 +39,12 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Record exact source and require reviewed dependency-control-task-projection combined production ancestor
+      - name: Record exact source and require reviewed authored-text-submit-input combined production ancestor
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p "$PANTOGRAPH_NATIVE_CPU_EVIDENCE_DIR"
-          git merge-base --is-ancestor 378dc7bf76418fdd0807be7aca402e5fe57957ab HEAD
+          git merge-base --is-ancestor 78c614d153a3211f0a1f5f18137440dc402728fd HEAD
           git show -s --format='%H%n%T%n%P' HEAD > "$PANTOGRAPH_NATIVE_CPU_EVIDENCE_DIR/source.txt"
 
       - name: Verify committed synthetic fixture and record proposed graph
