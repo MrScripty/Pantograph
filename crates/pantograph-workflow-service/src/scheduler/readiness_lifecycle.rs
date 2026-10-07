@@ -413,26 +413,23 @@ fn dependency_planning_request_from_task_context(
         )));
     };
 
-    let request = DependencyPlanningRequest {
-        model_ref: task_intent.model_ref.clone(),
-        task_id: task_intent.task_type.clone(),
-        task_type: Some(task_intent.task_type.clone()),
-        expected_artifact_kind: None,
-        scheduler_intent: SchedulerIntent {
+    let request = crate::inference_dependency_planning::inference_dependency_planning_request(
+        task_intent.model_ref.clone(),
+        task_intent.task_type.clone(),
+        SchedulerIntent {
             requested_runtime_id: task_intent.constraints.requested_runtime_id.clone(),
             requested_device_id: task_intent.constraints.requested_device_id.clone(),
         },
-        platform_context: None,
-        selected_binding_ids: dependency_readiness_source(context)?
+        dependency_readiness_source(context)?
             .selected_binding_ids
             .clone(),
-        dependency_override_patches: task_intent.dependency_override_patches.clone(),
-        trait_intents: task_intent
+        task_intent.dependency_override_patches.clone(),
+        task_intent
             .trait_settings
             .iter()
             .map(dependency_trait_intent_from_scheduler_trait)
             .collect::<Result<Vec<_>, _>>()?,
-        caller_context: DependencyPlanningCallerContext {
+        DependencyPlanningCallerContext {
             source_node_type: Some(
                 pantograph_dependency_planning::DependencyNodeTypeId::parse(context.node_type)
                     .map_err(WorkflowDependencyReadinessLifecycleError::DependencyPlanning)?,
@@ -442,7 +439,8 @@ fn dependency_planning_request_from_task_context(
             port_id: None,
             run_id: Some(context.task_graph.workflow_run_id.as_str().to_string()),
         },
-    };
+    )
+    .map_err(WorkflowDependencyReadinessLifecycleError::DependencyPlanning)?;
     let validated_request = request
         .validate()
         .and_then(|_| ValidatedDependencyPlanningRequest::try_from(request.clone()))
