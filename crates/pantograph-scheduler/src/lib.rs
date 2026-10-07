@@ -7,6 +7,7 @@
 
 mod batching;
 mod capability;
+mod completion_ranking;
 mod dispatch;
 mod dispatch_selection;
 mod dispatch_selection_policy;
@@ -33,6 +34,13 @@ pub use capability::{
     SchedulerCapabilityHintSnapshot, SchedulerCapabilitySeverity, SchedulerDeviceCapabilityHint,
     SchedulerRuntimeCapabilityHint, SchedulerTraitOptionHint, SchedulerTraitOptionValue,
     ValidatedSchedulerCapabilityHintSnapshot, SCHEDULER_CAPABILITY_HINT_CONTRACT_VERSION,
+};
+pub use completion_ranking::{
+    select_scheduler_candidate_with_completion, SchedulerCompletionContext,
+    SchedulerCompletionEvidence, SchedulerCompletionEvidenceSource,
+    SchedulerCompletionRankingDiagnostic, SchedulerCompletionRankingPolicy,
+    SchedulerCompletionRankingResult, SchedulerCompletionRefusalReason, SchedulerCompletionSample,
+    SCHEDULER_COMPLETION_MAX_CANDIDATES,
 };
 pub use dispatch::{
     SchedulerBatchingGroupId, SchedulerDispatchDecision, SchedulerDispatchDiagnostic,

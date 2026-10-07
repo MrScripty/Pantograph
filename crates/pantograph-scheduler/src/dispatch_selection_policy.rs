@@ -193,7 +193,7 @@ fn validate_decision(
     ValidatedSchedulerDispatchSelectionDecision::try_from(decision)
 }
 
-fn candidate_eligibility(
+pub(crate) fn candidate_eligibility(
     request: &SchedulerDispatchSelectionRequest,
     candidate: &SchedulerDispatchCandidate,
     require_reservation: bool,

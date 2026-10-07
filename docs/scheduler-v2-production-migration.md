@@ -11,6 +11,11 @@ The evaluation describes a standalone CPU simulator with no production adapter.
 Its C3 fresh cohort reports search mean run CPU 116.79 seconds versus earliest
 approximately 0.19 seconds, and one iterative budget failure among 56 runs.
 This supports a bounded baseline first, not embedding reference search.
+The scheduler is to be designed afresh in production Rust from the research
+requirements and Pantograph's ownership boundaries. POC code is a semantic and
+feasibility reference only: no copying, translation, port or runtime dependency.
+The first slice is an incremental foundation, not a replacement for the full
+researched multi-event completion algorithm.
 
 Local materialization of both reports and `pantograph-scheduler-poc-v2.zip`
 (`libfile_cfe8b8ef4fbc81918d2155af3100c90f`) failed through the current Library
