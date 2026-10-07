@@ -680,3 +680,43 @@ fn runtime_host_batch_diagnostic(
         hint: None,
     }
 }
+
+#[test]
+fn structured_inputs_round_trip_and_enforce_serialized_size_without_numeric_coercion() {
+    use super::{
+        RuntimeHostExecutionInput, RuntimeHostExecutionInputValue,
+        RUNTIME_HOST_STRUCTURED_INPUT_MAX_BYTES,
+    };
+    let mut request: RuntimeHostExecutionRequest = serde_json::from_str(include_str!(
+        "../tests/fixtures/runtime_host_execution_request_dispatch_selected.json"
+    ))
+    .unwrap();
+    let input = RuntimeHostExecutionInputValue::Json(json!(["a",{"text":"b"}]));
+    assert!(input.try_as_f32().is_err());
+    request.materialized_inputs.push(RuntimeHostExecutionInput {
+        port_id: "documents".into(),
+        value: input,
+    });
+    request.validate().unwrap();
+    assert_eq!(
+        serde_json::from_str::<RuntimeHostExecutionRequest>(
+            &serde_json::to_string(&request).unwrap()
+        )
+        .unwrap(),
+        request
+    );
+    request.materialized_inputs.last_mut().unwrap().value = RuntimeHostExecutionInputValue::Json(
+        json!("x".repeat(RUNTIME_HOST_STRUCTURED_INPUT_MAX_BYTES - 2)),
+    );
+    request.validate().unwrap();
+    request.materialized_inputs.last_mut().unwrap().value = RuntimeHostExecutionInputValue::Json(
+        json!("x".repeat(RUNTIME_HOST_STRUCTURED_INPUT_MAX_BYTES - 1)),
+    );
+    assert!(matches!(
+        request.validate(),
+        Err(RuntimeHostExecutionContractError::FieldTooLong {
+            field: "input.json",
+            ..
+        })
+    ));
+}

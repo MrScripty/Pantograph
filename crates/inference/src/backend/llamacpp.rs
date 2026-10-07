@@ -50,6 +50,8 @@ pub struct LlamaCppBackend {
     http_client: reqwest::Client,
     /// Process spawner (stored after start)
     spawner: Option<Arc<dyn ProcessSpawner>>,
+    /// Identity used by selected rerank loading; path equality alone cannot prove reuse.
+    selected_rerank_target: Option<crate::PumasArtifactLoadTarget>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -84,6 +86,7 @@ impl LlamaCppBackend {
             server: LlamaServer::new(),
             http_client: reqwest::Client::new(),
             spawner: None,
+            selected_rerank_target: None,
         }
     }
 
@@ -178,11 +181,64 @@ impl InferenceBackend for LlamaCppBackend {
         Self::static_capabilities()
     }
 
+    async fn load_selected_rerank(
+        &mut self,
+        request: &crate::InferenceExecutionRequest,
+        target: &crate::PumasArtifactLoadTarget,
+        decision: &crate::BackendExecutionDecision,
+        spawner: Option<Arc<dyn ProcessSpawner>>,
+        cancellation: crate::InferenceExecutionCancellationHandle,
+    ) -> Result<BackendStartOutcome, BackendError> {
+        let selected = crate::selected_rerank_execution::SelectedRerankLoad::validate(
+            request, target, decision,
+        )
+        .await?;
+        if let Some(reason) = cancellation.rejection_message("selected rerank load") {
+            return Err(BackendError::Cancelled(reason));
+        }
+        let spawner = spawner.or_else(|| self.spawner.clone()).ok_or_else(|| {
+            BackendError::Config("selected rerank requires an existing process spawner".into())
+        })?;
+        let device = match selected.device.as_str() {
+            "cpu" => crate::backend::BackendStartupDeviceIntent::LlamaCppSelector(
+                crate::DeviceBackend::Cpu,
+            ),
+            _ => {
+                return Err(BackendError::Config(
+                    "unsupported selected rerank device".into(),
+                ))
+            }
+        };
+        if self.is_ready() && self.selected_rerank_target.as_ref() != Some(target) {
+            self.stop().await?;
+        }
+        if let Some(reason) = cancellation.rejection_message("selected rerank load") {
+            return Err(BackendError::Cancelled(reason));
+        }
+        let outcome = self
+            .start(
+                &BackendConfig {
+                    model_path: Some(std::path::PathBuf::from(&selected.target.local_load_path)),
+                    model_name: Some(selected.package.model_ref.model_id.clone()),
+                    reranking_mode: true,
+                    device: Some(device),
+                    gpu_layers: Some(0),
+                    ..Default::default()
+                },
+                spawner,
+            )
+            .await?;
+        self.selected_rerank_target = Some(target.clone());
+        Ok(outcome)
+    }
+
     async fn start(
         &mut self,
         config: &BackendConfig,
         spawner: Arc<dyn ProcessSpawner>,
     ) -> Result<BackendStartOutcome, BackendError> {
+        // A generic start cannot establish selected package/revision ownership.
+        self.selected_rerank_target = None;
         // Store spawner for later use
         self.spawner = Some(spawner.clone());
 
@@ -318,7 +374,9 @@ impl InferenceBackend for LlamaCppBackend {
         self.server
             .stop_confirmed()
             .await
-            .map_err(BackendError::StartupFailed)
+            .map_err(BackendError::StartupFailed)?;
+        self.selected_rerank_target = None;
+        Ok(())
     }
 
     fn is_ready(&self) -> bool {
@@ -710,6 +768,72 @@ mod tests {
         assert!(fingerprint
             .config_hash
             .contains(&defaults::CONTEXT_SIZE.to_string()));
+    }
+
+    #[tokio::test]
+    async fn selected_rerank_reuses_only_exact_known_target_identity() {
+        for case in [
+            "same",
+            "revision",
+            "model",
+            "artifact",
+            "fingerprint",
+            "unknown_owner",
+        ] {
+            let (_directory, mut request, mut target, mut decision) =
+                crate::selected_rerank_execution::tests::fixture();
+            let mut backend = LlamaCppBackend::new();
+            backend.server.set_test_runtime_state(
+                ServerMode::SidecarReranking {
+                    port: crate::constants::ports::SERVER,
+                    model_path: target.local_load_path.clone(),
+                    device: DeviceConfig {
+                        device: DeviceBackend::Cpu,
+                        gpu_layers: 0,
+                    },
+                },
+                true,
+            );
+            if case != "unknown_owner" {
+                backend.selected_rerank_target = Some(target.clone());
+            }
+            match case {
+                "revision" => target.model_ref.revision = Some("synthetic-r2".into()),
+                "model" => target.model_ref.model_id = "rerank/second-owner".into(),
+                "artifact" => {
+                    target.model_ref.selected_artifact_id = Some("second-artifact".into())
+                }
+                "fingerprint" => target.content_fingerprint = Some("different-content".into()),
+                _ => {}
+            }
+            request.model_ref = Some(target.model_ref.clone());
+            request
+                .resolved_model_package_facts
+                .as_mut()
+                .unwrap()
+                .model_ref = target.model_ref.clone();
+            decision.selected_model_ref = Some(target.model_ref.clone());
+            let result = backend
+                .load_selected_rerank(
+                    &request,
+                    &target,
+                    &decision,
+                    Some(Arc::new(NoopProcessSpawner)),
+                    crate::InferenceExecutionCancellationHandle::running(),
+                )
+                .await;
+            if case == "same" {
+                assert_eq!(result.unwrap().runtime_reused, Some(true));
+                assert_eq!(backend.selected_rerank_target.as_ref(), Some(&target));
+            } else {
+                assert!(
+                    result.is_err(),
+                    "{case} must attempt replacement, not reuse a path match"
+                );
+                assert!(!backend.is_ready(), "{case}");
+                assert!(backend.selected_rerank_target.is_none());
+            }
+        }
     }
 
     #[tokio::test]

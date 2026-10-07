@@ -4,6 +4,16 @@
 
 **Current phase:** M3 owner/client consumer source is implemented. Native CPU sampling and the supported inference/embedded host route are qualified separately; the desktop-authored dependent text-to-image graph and full review remain open.
 
+**Preservation successor:** The user selected preservation of functioning rerank
+and audio routes over publishing the direct-core removal experiment. The local
+`local-feature/scheduler-rerank-preservation-20261007` branch starts from main
+`a8483e51` and implements the smaller CPU llama.cpp rerank slice. See the
+[rerank preservation report](reports/2026-10-07-scheduler-rerank-preservation.md)
+for typed contracts, selected identity/custody, parent comparisons, reopened graph
+acceptance and the deferred audio design. Direct rerank/audio handlers remain;
+`63f7b4e` stays separate and unpublished. Native/model/display qualification and
+publication are outside this local task.
+
 **Next slice:** The user-selected single-prompt canonical `chat_completion`
 graph feature is implemented and locally qualified on isolated
 `feat/workflow-chat-completion`; see the [chat report](reports/2026-10-06-workflow-chat-completion.md). Source is
