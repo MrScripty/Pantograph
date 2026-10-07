@@ -46,6 +46,16 @@ worker globals keep their inherited behavior. Private readiness and release
 state are separate from generic readiness, so selected-only stop does not
 shut down another runtime's shared generic worker.
 
+The public direct route can also run after a selected-only load. It records
+possible generic ASR residency before worker execution, separately from the
+private selected module, and retains direct job completion after caller loss.
+Stop and model replacement await those jobs. Stop clears generic ASR ownership
+only after acknowledged all-family shutdown; failed shutdown retains it for
+retry. A selected-only owner that has never invoked direct ASR still leaves the
+generic worker untouched. Deterministic public gateway regressions cover the
+successful selected-to-direct transition, shutdown failure/retry, and caller
+abort while direct inference is blocked.
+
 Selected reuse requires a recorded exact target (including revision, content,
 storage and path), CPU device and chunk length. Changed or unknown residency,
 including a new Rust owner, requires an

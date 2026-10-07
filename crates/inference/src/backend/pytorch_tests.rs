@@ -8054,3 +8054,240 @@ def transcribe_owned_wav_from_envelope(envelope, wav_bytes, metadata):
         }
     }
 }
+
+// Exercise public selected -> direct -> stop with controlled worker effects.
+// The generic module must remain separate from the private selected owner.
+async fn selected_to_direct_audio_cleanup(caller_abort: bool) {
+    let _python_fixture = super::PYTHON_TEST_LOCK.lock().await;
+    let (_directory, request, target, decision) = crate::selected_audio_execution::fixture();
+    let backend = PyTorchBackend::new();
+    let private = backend.selected_audio_worker.clone();
+    let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let (generic, saved_private, saved_generic) = Python::with_gil(|py| {
+        let worker = prepare_selected_audio_worker(py, &private);
+        let save = |module: &Bound<'_, pyo3::types::PyModule>, names: &[&'static str]| {
+            names
+                .iter()
+                .map(|name| (*name, module.getattr(*name).unwrap().unbind()))
+                .collect::<Vec<_>>()
+        };
+        let saved_private = save(
+            &worker,
+            &[
+                "load_transformers_model_from_envelope",
+                "transcribe_audio_from_envelope",
+                "shutdown_worker_from_envelope",
+            ],
+        );
+        patch_selected_audio_worker(py, &worker);
+        worker.setattr("_audio_phase", "none").unwrap();
+        let generic = super::pytorch_worker::worker_module(py).unwrap();
+        let saved_generic = save(
+            &generic,
+            &[
+                "transcribe_audio_from_envelope",
+                "shutdown_worker_from_envelope",
+                "_asr_pipeline",
+            ],
+        );
+        py.run(c"
+_direct_effects=[]
+_direct_abort=False
+_direct_fail_stop=False
+_asr_pipeline=None
+def transcribe_audio_from_envelope(envelope):
+    global _asr_pipeline
+    request=json.loads(envelope)
+    assert request['payload']['model_path'] == _direct_expected_path
+    assert request['payload']['audio_base64'] == _direct_expected_wav
+    _asr_pipeline=object()
+    _direct_effects.append('load')
+    if _direct_abort:
+        _direct_barrier.wait()
+    _direct_effects.append('completed')
+    return json.dumps({'status':'ok','request_id':request['request_id'],'result':{'text':'direct fixture transcript','language':'en','duration_seconds':0.00025,'chunks':None}})
+def shutdown_worker_from_envelope(envelope):
+    global _asr_pipeline
+    _direct_effects.append('shutdown')
+    if _direct_fail_stop:
+        raise RuntimeError('controlled generic shutdown failure')
+    _asr_pipeline=None
+    request=json.loads(envelope)
+    return json.dumps({'status':'ok','request_id':request['request_id'],'result':{'shutdown':True}})
+", Some(&generic.dict()), None).unwrap();
+        generic.setattr("_direct_abort", caller_abort).unwrap();
+        generic
+            .setattr("_direct_expected_path", &target.local_load_path)
+            .unwrap();
+        generic
+            .setattr(
+                "_direct_expected_wav",
+                include_str!("../../tests/fixtures/selected_audio/tiny_pcm16.base64").trim(),
+            )
+            .unwrap();
+        generic
+            .setattr(
+                "_direct_barrier",
+                Py::new(
+                    py,
+                    TextIteratorBarrier {
+                        entered: std::sync::Mutex::new(Some(entered_tx)),
+                        release: std::sync::Mutex::new(release_rx),
+                    },
+                )
+                .unwrap(),
+            )
+            .unwrap();
+        (generic.unbind(), saved_private, saved_generic)
+    });
+    let gateway = Arc::new(crate::InferenceGateway::with_backend(
+        Box::new(backend),
+        "PyTorch",
+    ));
+    let selected = gateway
+        .execute_selected_audio_with_cancellation(
+            request.clone(),
+            target.clone(),
+            decision,
+            crate::InferenceExecutionCancellationHandle::running(),
+        )
+        .await
+        .unwrap();
+    assert!(matches!(
+        selected,
+        crate::InferenceExecutionResult::AudioTranscription { .. }
+    ));
+    Python::with_gil(|py| {
+        assert!(
+            generic
+                .bind(py)
+                .getattr("_direct_effects")
+                .unwrap()
+                .extract::<Vec<String>>()
+                .unwrap()
+                .is_empty(),
+            "private selected work must not mutate the generic worker"
+        );
+    });
+    let crate::InferenceExecutionInput::AudioTranscription {
+        request: mut direct,
+    } = request.input
+    else {
+        unreachable!()
+    };
+    direct.model = target.local_load_path;
+    direct.extra_options = serde_json::Value::Null;
+    let caller = {
+        let gateway = gateway.clone();
+        tokio::spawn(async move { gateway.transcribe_audio(direct).await })
+    };
+    if caller_abort {
+        tokio::time::timeout(std::time::Duration::from_secs(2), entered_rx)
+            .await
+            .unwrap()
+            .unwrap();
+        caller.abort();
+        assert!(caller.await.unwrap_err().is_cancelled());
+        let mut stop = {
+            let gateway = gateway.clone();
+            tokio::spawn(async move { gateway.stop().await })
+        };
+        let early = tokio::time::timeout(std::time::Duration::from_millis(30), &mut stop).await;
+        release_tx.send(()).unwrap();
+        assert!(
+            early.is_err(),
+            "stop must retain actual direct job completion after caller abort"
+        );
+        tokio::time::timeout(std::time::Duration::from_secs(2), stop)
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+    } else {
+        assert_eq!(
+            caller.await.unwrap().unwrap().text,
+            "direct fixture transcript"
+        );
+        // An unacknowledged generic shutdown must retain ownership for retry.
+        Python::with_gil(|py| {
+            generic.bind(py).setattr("_direct_fail_stop", true).unwrap();
+        });
+        assert!(
+            gateway.stop().await.is_err(),
+            "generic shutdown failure must reach the gateway"
+        );
+        assert_ne!(
+            gateway
+                .resident_lifecycle_snapshot()
+                .await
+                .unwrap()
+                .allocation_state,
+            crate::resident_lifecycle::ResidentAllocationState::Released,
+            "failed shutdown must not publish confirmed release"
+        );
+        Python::with_gil(|py| {
+            assert!(!generic.bind(py).getattr("_asr_pipeline").unwrap().is_none());
+            generic
+                .bind(py)
+                .setattr("_direct_fail_stop", false)
+                .unwrap();
+        });
+        gateway.stop().await.unwrap();
+    }
+    assert!(!gateway.is_ready().await);
+    assert_eq!(
+        gateway
+            .resident_lifecycle_snapshot()
+            .await
+            .unwrap()
+            .allocation_state,
+        crate::resident_lifecycle::ResidentAllocationState::Released
+    );
+    Python::with_gil(|py| {
+        let worker = generic.bind(py);
+        assert!(
+            worker.getattr("_asr_pipeline").unwrap().is_none(),
+            "acknowledged stop must release direct generic ASR"
+        );
+        let effects = worker
+            .getattr("_direct_effects")
+            .unwrap()
+            .extract::<Vec<String>>()
+            .unwrap();
+        assert_eq!(
+            effects,
+            if caller_abort {
+                vec!["load", "completed", "shutdown"]
+            } else {
+                vec!["load", "completed", "shutdown", "shutdown"]
+            }
+        );
+        let isolated = private.module(py).unwrap();
+        assert_eq!(
+            isolated
+                .getattr("_audio_effects")
+                .unwrap()
+                .extract::<Vec<String>>()
+                .unwrap(),
+            vec!["shutdown", "load", "forward", "shutdown"]
+        );
+        for (name, value) in saved_private {
+            isolated.setattr(name, value).unwrap();
+        }
+        for (name, value) in saved_generic {
+            worker.setattr(name, value).unwrap();
+        }
+        worker.delattr("_direct_barrier").unwrap();
+    });
+}
+
+#[tokio::test]
+async fn selected_audio_public_direct_success_then_stop_releases_generic_asr_and_retries_failure() {
+    selected_to_direct_audio_cleanup(false).await;
+}
+
+#[tokio::test]
+async fn selected_audio_public_direct_caller_abort_then_stop_waits_and_releases_generic_asr() {
+    selected_to_direct_audio_cleanup(true).await;
+}

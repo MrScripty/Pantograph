@@ -13,7 +13,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use futures_util::Stream;
+use futures_util::{future::BoxFuture, future::Shared, FutureExt, Stream};
 use pyo3::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -159,6 +159,7 @@ pub struct PyTorchBackend {
     /// Whether the backend has been initialised and is ready
     ready: bool,
     text_jobs: pytorch_text_job::TextJobs,
+    direct_audio: parking_lot::Mutex<DirectAudioJobs>,
     selected_audio: parking_lot::Mutex<Option<SelectedAudioCacheKey>>,
     selected_audio_worker: Arc<pytorch_worker::IsolatedAudioWorker>,
     selected_audio_ready: bool,
@@ -168,6 +169,14 @@ pub struct PyTorchBackend {
     /// Effectful load may lose metadata before worker allocation is released.
     /// Only an acknowledged unload/shutdown clears this uncertainty.
     resident_allocation_uncertain: bool,
+}
+
+/// Direct ASR uses the shared generic worker, independently of selected ASR.
+/// Retain completion even when its caller drops the gateway read guard.
+#[derive(Default)]
+struct DirectAudioJobs {
+    residency_possible: bool,
+    completions: Vec<Shared<BoxFuture<'static, ()>>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -1063,6 +1072,7 @@ impl PyTorchBackend {
         Self {
             ready: false,
             text_jobs: Default::default(),
+            direct_audio: Default::default(),
             selected_audio: Default::default(),
             selected_audio_worker: Arc::new(pytorch_worker::IsolatedAudioWorker::new()),
             selected_audio_ready: false,
@@ -1359,6 +1369,14 @@ impl PyTorchBackend {
     ) -> Result<AudioTranscriptionResult, BackendError> {
         Self::execute_audio_envelope_in_worker(envelope, None, None).await
     }
+
+    async fn drain_direct_audio(&mut self) {
+        let completions = self.direct_audio.lock().completions.clone();
+        for completion in completions {
+            completion.await;
+        }
+        self.direct_audio.lock().completions.clear();
+    }
     async fn execute_audio_envelope_in_worker(
         envelope: PyTorchWorkerEnvelope<PyTorchAudioTranscriptionRequest>,
         isolated: Option<Arc<pytorch_worker::IsolatedAudioWorker>>,
@@ -1569,6 +1587,7 @@ impl PyTorchBackend {
         isolated: Option<Arc<pytorch_worker::IsolatedAudioWorker>>,
     ) -> Result<LoadedModelInfo, BackendError> {
         self.text_jobs.drain(false).await?;
+        self.drain_direct_audio().await;
         Self::validate_transformers_load_envelope(&envelope)?;
         let request_id = envelope.request_id.clone();
         let envelope_json = serde_json::to_string(&envelope).map_err(|error| {
@@ -2750,6 +2769,7 @@ impl PyTorchBackend {
     /// Unload the current model and free GPU memory.
     pub async fn unload_model(&mut self) -> Result<(), BackendError> {
         self.text_jobs.drain(false).await?;
+        self.drain_direct_audio().await;
         let request_id = format!("pytorch-unload-{}", Uuid::new_v4().simple());
         let envelope_json = Self::unload_model_envelope_json(&request_id)?;
         tokio::task::spawn_blocking(move || {
@@ -3178,8 +3198,13 @@ impl InferenceBackend for PyTorchBackend {
 
     async fn stop(&mut self) -> Result<(), BackendError> {
         self.text_jobs.drain(true).await?;
+        self.drain_direct_audio().await;
         self.stop_selected_audio_worker(false).await?;
-        if self.ready || self.loaded_model.is_some() || self.resident_allocation_uncertain {
+        if self.ready
+            || self.loaded_model.is_some()
+            || self.resident_allocation_uncertain
+            || self.direct_audio.lock().residency_possible
+        {
             let request_id = format!("pytorch-stop-shutdown-{}", Uuid::new_v4().simple());
             let envelope_json = shutdown_worker_envelope_json(&request_id)?;
             tokio::task::spawn_blocking(move || {
@@ -3191,6 +3216,7 @@ impl InferenceBackend for PyTorchBackend {
         *self.selected_audio.lock() = None;
         self.loaded_model = None;
         self.resident_allocation_uncertain = false;
+        self.direct_audio.lock().residency_possible = false;
         self.ready = false;
         Ok(())
     }
@@ -3356,7 +3382,27 @@ impl InferenceBackend for PyTorchBackend {
         }
         let request_id = format!("pytorch-audio-transcription-{}", Uuid::new_v4().simple());
         let envelope = Self::audio_transcription_envelope_from_request(request_id, request)?;
-        Self::execute_audio_envelope(envelope).await
+        let (sender, receiver) = tokio::sync::oneshot::channel();
+        let completion = {
+            let mut jobs = self.direct_audio.lock();
+            jobs.residency_possible = true;
+            jobs.completions.retain(|job| job.peek().is_none());
+            let handle = tokio::spawn(async move {
+                let result = Self::execute_audio_envelope(envelope).await;
+                let _ = sender.send(result);
+            });
+            let completion = async move {
+                let _ = handle.await;
+            }
+            .boxed()
+            .shared();
+            jobs.completions.push(completion.clone());
+            completion
+        };
+        completion.await;
+        receiver.await.map_err(|error| {
+            BackendError::Inference(format!("PyTorch direct audio job terminated: {error}"))
+        })?
     }
 
     async fn generate_image_from_plan(
