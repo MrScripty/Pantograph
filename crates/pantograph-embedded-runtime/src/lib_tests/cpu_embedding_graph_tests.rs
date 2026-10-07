@@ -83,7 +83,7 @@ fn install_embedding_readiness(
         vec![DependencyBindingId::parse("candle-embedding").unwrap()],
     );
     planning.task_id = DependencyTaskId::parse("embedding").unwrap();
-    planning.task_type = Some(planning.task_id.clone());
+    planning.task_type = None;
     planning.scheduler_intent.requested_runtime_id =
         Some(RuntimeIntentId::parse("candle").unwrap());
     planning.scheduler_intent.requested_device_id = Some(DeviceIntentId::parse("cpu").unwrap());

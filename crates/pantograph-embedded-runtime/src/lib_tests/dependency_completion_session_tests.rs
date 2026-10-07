@@ -440,7 +440,7 @@ async fn qualification(mode: u8, pause: bool, fail: bool) -> Vec<std::time::Dura
             vec![DependencyBindingId::parse("torch-transformers").unwrap()],
         );
         planning.task_id = DependencyTaskId::parse("text_generation").unwrap();
-        planning.task_type = Some(planning.task_id.clone());
+        planning.task_type = None;
         planning.scheduler_intent.requested_runtime_id = None;
         planning.scheduler_intent.requested_device_id = Some(DeviceIntentId::parse("cpu").unwrap());
         planning.caller_context.node_id = Some(node_id.into());
