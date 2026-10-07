@@ -232,3 +232,156 @@ async fn saved_cpu_audio_graph_reopens_and_matches_parent_outputs_and_selected_i
     }
     assert_eq!(capture.loads.lock().unwrap().len(), 2);
 }
+
+#[tokio::test]
+async fn saved_owned_audio_reference_reopens_reuses_source_and_publishes_long_transcript() {
+    use crate::runtime_host_owned_audio::tests::wav;
+    use pantograph_workflow_service::workflow::WorkflowSchedulerTaskResultValue;
+    let (_model, _, package, target) = fixture();
+    let model_ref: PumasModelRef =
+        serde_json::from_value(serde_json::to_value(&package.model_ref).unwrap()).unwrap();
+    let artifacts = TempDir::new().unwrap();
+    let writer = test_artifact_writer(&artifacts);
+    let audio_store = crate::OwnedAudioInputStore::new(writer.clone());
+    let source = audio_store
+        .import_wav("wf-audio", "original-recording-run", wav(32000, 16000, 1))
+        .unwrap();
+    let source_value = serde_json::to_value(WorkflowSchedulerTaskResultValue::MediaArtifactRef(
+        source.clone(),
+    ))
+    .unwrap();
+    let capture = Arc::new(Capture::default());
+    let gateway = gateway(capture.clone());
+    let port = Arc::new(
+        EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
+            Arc::new(Target(
+                serde_json::from_value(serde_json::to_value(&target).unwrap()).unwrap(),
+            )),
+            Arc::new(Package(package.clone())),
+            Arc::new(UnusedMediaSink),
+            gateway,
+        )
+        .with_owned_audio_store(audio_store),
+    );
+    let provider = DependencyEnvironmentReadinessSnapshotProvider::new();
+    let lifecycle = Arc::new(TestReservationLifecyclePort::default());
+    let service = Arc::new(
+        WorkflowService::with_ephemeral_attribution_store()
+            .unwrap()
+            .with_artifact_writer(writer)
+            .with_diagnostics_ledger(
+                pantograph_workflow_service::SqliteDiagnosticsLedger::open_in_memory().unwrap(),
+            )
+            .with_dependency_environment_provider(Arc::new(provider.clone()))
+            .with_dependency_readiness_work_queue(Arc::new(DependencyReadinessWorkQueue::new()))
+            .with_runtime_dispatch_source_refresher(Arc::new(
+                TestRuntimeDispatchSourceRefresher::default(),
+            ))
+            .with_runtime_dispatch_candidate_provider(Arc::new(
+                TestRuntimeDispatchCandidateProvider,
+            ))
+            .with_runtime_host_execution_port(port.clone())
+            .with_runtime_host_batch_execution_port(port)
+            .with_reservation_lifecycle_port(lifecycle.clone()),
+    );
+    let graph_dir = TempDir::new().unwrap();
+    let graph_store = FileSystemWorkflowGraphStore::new(graph_dir.path());
+    let mut graph = audio_graph(&model_ref);
+    graph.nodes[1].data = serde_json::json!({"value":source_value});
+    graph.nodes.push(GraphNode {
+        id: "sink".into(),
+        node_type: "text-output".into(),
+        position: Position { x: 0.0, y: 0.0 },
+        data: serde_json::json!({}),
+    });
+    graph.edges.push(GraphEdge {
+        id: "infer-sink".into(),
+        source: "infer".into(),
+        source_handle: "text".into(),
+        target: "sink".into(),
+        target_handle: "text".into(),
+    });
+    let shape = pantograph_workflow_service::workflow::workflow_scheduler_task_graph(
+        &"wf-audio".parse().unwrap(),
+        &"shape-run".parse().unwrap(),
+        &graph,
+    )
+    .unwrap();
+    let sink = shape
+        .tasks
+        .iter()
+        .find(|t| t.node_id.as_str() == "sink")
+        .unwrap();
+    assert!(
+        sink.diagnostics.is_empty(),
+        "sink projection diagnostics: {:?}",
+        sink.diagnostics
+    );
+    let saved = service
+        .workflow_graph_save(
+            &graph_store,
+            WorkflowGraphSaveRequest {
+                name: "Owned Recording".into(),
+                graph: graph.clone(),
+            },
+        )
+        .unwrap();
+    let restored = service
+        .workflow_graph_load(&graph_store, WorkflowGraphLoadRequest { path: saved.path })
+        .unwrap()
+        .graph;
+    assert!(restored.nodes[1].data == graph.nodes[1].data);
+    assert!(restored.compute_fingerprint() == graph.compute_fingerprint());
+    assert!(serde_json::to_string(&restored).unwrap().len() < 65536);
+    let version = service
+        .resolve_workflow_graph_version("wf-audio", "1.0.0", &restored)
+        .unwrap();
+    install_audio_readiness(&service, &provider, &restored, &version, &model_ref);
+    let host = Arc::new(ImageRuntimeSessionHost::new(restored));
+    for _ in 0..2 {
+        let session = service
+            .create_workflow_execution_session(
+                host.as_ref(),
+                WorkflowExecutionSessionCreateRequest {
+                    workflow_id: "wf-audio".into(),
+                    usage_profile: None,
+                    keep_alive: false,
+                },
+            )
+            .await
+            .unwrap();
+        let response = pantograph_workflow_service::workflow::WorkflowSessionExecutionRuntime::from_shared_service(service.clone(),host.clone()).run_workflow_execution_session(WorkflowExecutionSessionRunRequest{session_id:session.session_id,workflow_semantic_version:"1.0.0".into(),inputs:vec![WorkflowPortBinding{node_id:"prompt".into(),port_id:"text".into(),value:serde_json::json!("context")},WorkflowPortBinding{node_id:"guidance".into(),port_id:"value".into(),value:source_value.clone()},WorkflowPortBinding{node_id:"count".into(),port_id:"value".into(),value:serde_json::json!(0.5)}],output_targets:Some(["text","stream","language","duration_seconds","segments","metadata","diagnostics"].into_iter().map(|port|WorkflowOutputTarget{node_id:"infer".into(),port_id:port.into()}).chain([WorkflowOutputTarget{node_id:"sink".into(),port_id:"text".into()}]).collect()),override_selection:None,timeout_ms:None,priority:None}).await.expect("owned recording graph must complete");
+        assert!(response.outputs.len() == 8);
+        for output in &response.outputs {
+            if matches!(output.port_id.as_str(), "response" | "text") {
+                assert!(
+                    output.value == serde_json::json!("x".repeat(3000)),
+                    "complete bounded transcript equality"
+                );
+            }
+        }
+        assert!(lifecycle
+            .events()
+            .iter()
+            .any(|e| e.workflow_run_id.as_str() == response.workflow_run_id));
+    }
+    let sources = capture.owned_sources.lock().unwrap();
+    assert!(
+        sources.len() == 2
+            && sources.iter().all(|s| s.0 == source.artifact_id
+                && s.2 == "wf-audio"
+                && s.3 == "original-recording-run")
+    );
+    let ids = capture.ids.lock().unwrap();
+    assert!(ids.len() == 2 && ids[0] != ids[1]);
+    assert!(capture
+        .loads
+        .lock()
+        .unwrap()
+        .iter()
+        .all(|l| l.1 == target && l.2.selected_runtime_variant_id.as_str() == "pytorch.cpu"));
+    assert!(
+        host.runtime_load_attempts.load(Ordering::SeqCst) == 0
+            && host.run_attempts.load(Ordering::SeqCst) == 0
+    );
+}

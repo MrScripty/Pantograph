@@ -254,7 +254,12 @@ pub use types::{
 #[cfg(feature = "std-process")]
 pub use process::StdProcessSpawner;
 
+mod owned_audio;
 mod selected_audio_execution;
+pub use owned_audio::{
+    acquire_owned_audio_admission, owned_audio_id, validate_owned_wav, OwnedAudioAdmission,
+    OwnedAudioWav, OWNED_AUDIO_MAX_BYTES, OWNED_AUDIO_MAX_SECONDS,
+};
 mod selected_embedding_execution;
 pub use selected_audio_execution::{
     empty_audio_options, validate_selected_audio_request, validate_small_wav_audio,

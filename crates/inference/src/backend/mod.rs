@@ -1117,6 +1117,20 @@ pub trait InferenceBackend: Send + Sync {
         ))
     }
 
+    async fn selected_owned_audio(
+        &self,
+        _request: AudioTranscriptionRequest,
+        _snapshot: crate::OwnedAudioWav,
+        _request_id: &str,
+        _target: &crate::PumasArtifactLoadTarget,
+        _decision: &crate::BackendExecutionDecision,
+        _cancellation: crate::InferenceExecutionCancellationHandle,
+    ) -> Result<AudioTranscriptionResult, BackendError> {
+        Err(BackendError::Config(
+            "owned selected audio unsupported by this backend".into(),
+        ))
+    }
+
     /// Load the scheduler-selected rerank target; unsupported owners reject before effects.
     async fn load_selected_rerank(
         &mut self,

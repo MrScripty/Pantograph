@@ -36,8 +36,13 @@ impl InferenceGateway {
         crate::selected_audio_execution::SelectedAudioLoad::validate(&request, &target, &decision)
             .await?;
         reject_cancelled_execution_handle("selected audio", &host)?;
-        let InferenceExecutionInput::AudioTranscription { request: audio } = &request.input else {
-            unreachable!("validated audio input")
+        let (audio, owned) = match &request.input {
+            InferenceExecutionInput::AudioTranscription { request: audio } => (audio, None),
+            InferenceExecutionInput::OwnedAudioTranscription {
+                request: audio,
+                snapshot,
+            } => (audio, Some(snapshot.clone())),
+            _ => unreachable!("validated audio input"),
         };
         let mut execution = audio.clone();
         execution.extra_options = serde_json::Value::Null;
@@ -143,16 +148,48 @@ impl InferenceGateway {
             };
             drop(snapshot);
             reject_cancelled_execution_handle("selected audio", &cancellation)?;
-            let result = backend
-                .selected_audio(
-                    execution,
-                    request.request_id.as_deref().expect("validated request id"),
-                    &target,
-                    &decision,
-                    cancellation.clone(),
-                )
-                .await?;
+            let source_duration = owned.as_ref().map(crate::OwnedAudioWav::duration_seconds);
+            let result = if let Some(snapshot) = owned {
+                backend
+                    .selected_owned_audio(
+                        execution,
+                        snapshot,
+                        request.request_id.as_deref().expect("validated request id"),
+                        &target,
+                        &decision,
+                        cancellation.clone(),
+                    )
+                    .await?
+            } else {
+                backend
+                    .selected_audio(
+                        execution,
+                        request.request_id.as_deref().expect("validated request id"),
+                        &target,
+                        &decision,
+                        cancellation.clone(),
+                    )
+                    .await?
+            };
             reject_cancelled_execution_handle("selected audio", &cancellation)?;
+            if source_duration.is_some_and(|duration| {
+                result
+                    .duration_seconds
+                    .is_none_or(|v| (v - duration).abs() > 0.001)
+                    || result
+                        .segments
+                        .iter()
+                        .any(|s| match (s.start_seconds, s.end_seconds) {
+                            (Some(start), Some(end)) => start > end || end > duration,
+                            (None, None) => false,
+                            _ => true,
+                        })
+                    || result.text.len() > 64 * 1024
+            }) {
+                return Err(GatewayError::Backend(BackendError::Inference(
+                    "owned audio output exceeds source/transcript bounds".into(),
+                )));
+            }
             if result
                 .duration_seconds
                 .is_some_and(|v| !v.is_finite() || v < 0.0)

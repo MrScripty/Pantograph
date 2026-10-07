@@ -105,6 +105,8 @@ pub(crate) struct Capture {
     pub completed: AtomicBool,
     pub unsupported_load: AtomicBool,
     pub bad_result: AtomicBool,
+    pub owned_text_bytes: std::sync::atomic::AtomicUsize,
+    pub owned_sources: Mutex<Vec<(String, String, String, String)>>,
 }
 struct Synthetic(Arc<Capture>);
 #[async_trait]
@@ -201,6 +203,44 @@ impl InferenceBackend for Synthetic {
             return Err(BackendError::Cancelled(reason));
         }
         result
+    }
+    async fn selected_owned_audio(
+        &self,
+        request: AudioTranscriptionRequest,
+        source: inference::OwnedAudioWav,
+        id: &str,
+        _: &PumasArtifactLoadTarget,
+        _: &BackendExecutionDecision,
+        cancellation: inference::InferenceExecutionCancellationHandle,
+    ) -> std::result::Result<AudioTranscriptionResult, BackendError> {
+        source.validate_request(&request)?;
+        self.0.ids.lock().unwrap().push(id.to_owned());
+        self.0.requests.lock().unwrap().push(request);
+        if self.0.block.load(Ordering::SeqCst) {
+            self.0.entered.notify_one();
+            self.0.release.notified().await;
+        }
+        // Checked after blocking completion, including caller loss and store mutation.
+        assert!(
+            source.content_hash() == format!("blake3:{}", blake3::hash(source.bytes()).to_hex())
+        );
+        self.0.owned_sources.lock().unwrap().push((
+            source.artifact_id().into(),
+            source.content_hash().into(),
+            source.workflow_id().into(),
+            source.source_run_id().into(),
+        ));
+        self.0.completed.store(true, Ordering::SeqCst);
+        if let Some(reason) = cancellation.rejection_message("owned selected audio") {
+            return Err(BackendError::Cancelled(reason));
+        }
+        Ok(AudioTranscriptionResult {
+            text: "x".repeat(self.0.owned_text_bytes.load(Ordering::SeqCst).max(3000)),
+            language: Some("en".into()),
+            duration_seconds: Some(source.duration_seconds()),
+            segments: vec![],
+            metadata: serde_json::Value::Null,
+        })
     }
     async fn transcribe_audio(
         &self,

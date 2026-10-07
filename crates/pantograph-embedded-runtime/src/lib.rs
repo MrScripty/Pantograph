@@ -95,6 +95,8 @@ mod runtime_host_image_execution;
 mod runtime_host_load_target;
 #[allow(dead_code)]
 mod runtime_host_media_artifact_sink;
+mod runtime_host_owned_audio;
+pub use runtime_host_owned_audio::OwnedAudioInputStore;
 mod runtime_host_observation;
 #[allow(dead_code)]
 mod runtime_host_package_facts;

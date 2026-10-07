@@ -102,6 +102,9 @@ fn runtime_host_input_value(
     value: &WorkflowSchedulerTaskResultValue,
 ) -> Result<Option<RuntimeHostExecutionInputValue>, WorkflowRuntimeHostTaskInputMappingError> {
     match value {
+        WorkflowSchedulerTaskResultValue::TranscriptText(value) => Ok(Some(
+            RuntimeHostExecutionInputValue::TranscriptText(value.clone()),
+        )),
         WorkflowSchedulerTaskResultValue::String(value) => {
             Ok(Some(RuntimeHostExecutionInputValue::String(value.clone())))
         }

@@ -47,8 +47,22 @@ fn inputs(request: &RuntimeHostExecutionRequest) -> Result<HashMap<String, serde
     let mut values = HashMap::new();
     for input in &request.materialized_inputs {
         let value = match (input.port_id.as_str(), &input.value) {
+            ("audio", RuntimeHostExecutionInputValue::MediaArtifactRef(reference)) => {
+                if reference.media_type.as_deref() != Some("audio_wav") {
+                    return Err("owned audio reference requires audio_wav hint".into());
+                }
+                serde_json::json!({"__owned_ref":reference.artifact_id})
+            }
             ("audio", RuntimeHostExecutionInputValue::String(value)) => serde_json::json!(value),
             ("audio" | "extra_options", RuntimeHostExecutionInputValue::Json(value)) => {
+                if value
+                    .as_object()
+                    .is_some_and(|o| o.contains_key("__owned_ref"))
+                {
+                    return Err(
+                        "owned references require the typed media-reference contract".into(),
+                    );
+                }
                 value.clone()
             }
             (
@@ -97,67 +111,76 @@ fn canonical_input(
     model: &str,
 ) -> Result<InferenceExecutionInput> {
     let value = values.get("audio").ok_or("inline WAV audio required")?;
-    let audio = if let Some(data) = value.as_str() {
-        inference::EncodedAudio {
-            data_base64: data.into(),
-            mime_type: "audio/wav".into(),
-            sample_rate_hz: None,
-        }
-    } else {
-        let object = value
-            .as_object()
-            .ok_or("audio must be inline base64 string or encoded-audio object")?;
-        if object.keys().any(|key| {
-            !matches!(
-                key.as_str(),
-                "data_base64"
-                    | "dataBase64"
-                    | "audio_base64"
-                    | "audioBase64"
-                    | "audio_data"
-                    | "audioData"
-                    | "mime_type"
-                    | "mimeType"
-                    | "sample_rate_hz"
-                    | "sampleRateHz"
-            )
-        }) {
-            return Err(
-                "unsupported audio object field or audio reference; small-WAV slice only".into(),
-            );
-        }
-        let data = [
-            "data_base64",
-            "dataBase64",
-            "audio_base64",
-            "audioBase64",
-            "audio_data",
-            "audioData",
-        ]
-        .into_iter()
-        .find_map(|key| object.get(key))
+    let audio_ref = value
+        .get("__owned_ref")
         .and_then(|v| v.as_str())
-        .ok_or("inline audio data string required")?;
-        let mime = object.get("mime_type").or_else(|| object.get("mimeType"));
-        let mime = mime
-            .map(|v| v.as_str().ok_or("audio MIME must be a string"))
-            .transpose()?
-            .unwrap_or("audio/wav");
-        let rate = object
-            .get("sample_rate_hz")
-            .or_else(|| object.get("sampleRateHz"));
-        let rate = rate
-            .map(|v| {
-                v.as_u64()
-                    .and_then(|n| u32::try_from(n).ok())
-                    .ok_or("sample rate must be an unsigned integer")
-            })
-            .transpose()?;
-        inference::EncodedAudio {
-            data_base64: data.into(),
-            mime_type: mime.into(),
-            sample_rate_hz: rate,
-        }
+        .map(ToOwned::to_owned);
+    let audio = if audio_ref.is_some() {
+        None
+    } else {
+        Some(if let Some(data) = value.as_str() {
+            inference::EncodedAudio {
+                data_base64: data.into(),
+                mime_type: "audio/wav".into(),
+                sample_rate_hz: None,
+            }
+        } else {
+            let object = value
+                .as_object()
+                .ok_or("audio must be inline base64 string or encoded-audio object")?;
+            if object.keys().any(|key| {
+                !matches!(
+                    key.as_str(),
+                    "data_base64"
+                        | "dataBase64"
+                        | "audio_base64"
+                        | "audioBase64"
+                        | "audio_data"
+                        | "audioData"
+                        | "mime_type"
+                        | "mimeType"
+                        | "sample_rate_hz"
+                        | "sampleRateHz"
+                )
+            }) {
+                return Err(
+                    "unsupported audio object field or audio reference; small-WAV slice only"
+                        .into(),
+                );
+            }
+            let data = [
+                "data_base64",
+                "dataBase64",
+                "audio_base64",
+                "audioBase64",
+                "audio_data",
+                "audioData",
+            ]
+            .into_iter()
+            .find_map(|key| object.get(key))
+            .and_then(|v| v.as_str())
+            .ok_or("inline audio data string required")?;
+            let mime = object.get("mime_type").or_else(|| object.get("mimeType"));
+            let mime = mime
+                .map(|v| v.as_str().ok_or("audio MIME must be a string"))
+                .transpose()?
+                .unwrap_or("audio/wav");
+            let rate = object
+                .get("sample_rate_hz")
+                .or_else(|| object.get("sampleRateHz"));
+            let rate = rate
+                .map(|v| {
+                    v.as_u64()
+                        .and_then(|n| u32::try_from(n).ok())
+                        .ok_or("sample rate must be an unsigned integer")
+                })
+                .transpose()?;
+            inference::EncodedAudio {
+                data_base64: data.into(),
+                mime_type: mime.into(),
+                sample_rate_hz: rate,
+            }
+        })
     };
     let string = |keys: &[&str]| {
         keys.iter()
@@ -182,15 +205,29 @@ fn canonical_input(
         .unwrap_or(serde_json::Value::Null);
     let request = inference::AudioTranscriptionRequest {
         model: model.into(),
-        audio: Some(audio),
-        audio_ref: None,
+        audio,
+        audio_ref,
         language: string(&["language", "lang"]),
         prompt: string(&["prompt", "context"]),
         task: string(&["asr_task", "asrTask", "task"]),
         chunk_length_s: chunk,
         extra_options: options,
     };
-    inference::validate_selected_audio_request(&request).map_err(|error| error.to_string())?;
+    if request.audio_ref.is_some() {
+        if !inference::empty_audio_options(&request.extra_options) {
+            return Err("nonempty audio options are unsupported".into());
+        }
+        if request.chunk_length_s.is_some_and(|v| v > 300.0)
+            || request
+                .task
+                .as_deref()
+                .is_some_and(|v| !matches!(v, "transcribe" | "translate"))
+        {
+            return Err("unsupported owned audio task/chunk controls".into());
+        }
+    } else {
+        inference::validate_selected_audio_request(&request).map_err(|error| error.to_string())?;
+    }
     Ok(InferenceExecutionInput::AudioTranscription { request })
 }
 
@@ -314,3 +351,21 @@ pub(crate) fn audio_outputs(
 #[cfg(all(test, feature = "backend-candle"))]
 #[path = "runtime_host_audio_execution_tests.rs"]
 pub(crate) mod tests;
+
+pub(crate) fn owned_audio_outputs(
+    result: InferenceExecutionResult,
+) -> Result<Vec<RuntimeHostExecutionOutput>> {
+    let mut outputs = audio_outputs(result)?;
+    for output in &mut outputs {
+        if matches!(output.port_id.as_str(), "response" | "text") {
+            if let RuntimeHostExecutionOutputValue::String(text) = &output.value {
+                if text.len() > pantograph_runtime_host_contracts::RUNTIME_HOST_TRANSCRIPT_MAX_BYTES
+                {
+                    return Err("transcript exceeds 64KiB; no truncation".into());
+                }
+                output.value = RuntimeHostExecutionOutputValue::TranscriptText(text.clone());
+            }
+        }
+    }
+    Ok(outputs)
+}

@@ -1341,9 +1341,12 @@ impl PyTorchBackend {
         if let Some(source) = envelope.payload.model_source.as_mut() {
             source.entry_path = selected.target.local_load_path.clone();
         }
-        let crate::InferenceExecutionInput::AudioTranscription { request: audio } = &request.input
-        else {
-            unreachable!("validated audio")
+        let audio = match &request.input {
+            crate::InferenceExecutionInput::AudioTranscription { request: audio }
+            | crate::InferenceExecutionInput::OwnedAudioTranscription { request: audio, .. } => {
+                audio
+            }
+            _ => unreachable!("validated audio"),
         };
         envelope.payload.chunk_length_s = audio.chunk_length_s;
         envelope.payload.trust_policy.revision = selected.target.model_ref.revision.clone();
@@ -1354,11 +1357,12 @@ impl PyTorchBackend {
     async fn execute_audio_envelope(
         envelope: PyTorchWorkerEnvelope<PyTorchAudioTranscriptionRequest>,
     ) -> Result<AudioTranscriptionResult, BackendError> {
-        Self::execute_audio_envelope_in_worker(envelope, None).await
+        Self::execute_audio_envelope_in_worker(envelope, None, None).await
     }
     async fn execute_audio_envelope_in_worker(
         envelope: PyTorchWorkerEnvelope<PyTorchAudioTranscriptionRequest>,
         isolated: Option<Arc<pytorch_worker::IsolatedAudioWorker>>,
+        snapshot: Option<crate::OwnedAudioWav>,
     ) -> Result<AudioTranscriptionResult, BackendError> {
         let request_id = envelope.request_id.clone();
         let envelope_json = serde_json::to_string(&envelope).map_err(|error| {
@@ -1380,23 +1384,35 @@ impl PyTorchBackend {
                     )
                 })?;
 
-                let response_json = worker
-                    .call_method1("transcribe_audio_from_envelope", (envelope_json,))
-                    .map_err(|e| {
-                        Self::audio_transcription_worker_failure_from_message(
-                            &request_id,
-                            format!("PyTorch worker audio_transcription envelope failed: {e}"),
-                        )
-                    })?
-                    .extract::<String>()
-                    .map_err(|e| {
-                        Self::audio_transcription_worker_failure_from_message(
-                            &request_id,
-                            format!(
-                                "PyTorch worker audio_transcription response was not JSON text: {e}"
-                            ),
-                        )
-                    })?;
+                let response_json = if let Some(source) = &snapshot {
+                    let metadata = serde_json::to_string(source)
+                        .map_err(|e| BackendError::Config(e.to_string()))?;
+                    worker.call_method1(
+                        "transcribe_owned_wav_from_envelope",
+                        (
+                            envelope_json,
+                            pyo3::types::PyBytes::new(py, source.bytes()),
+                            metadata,
+                        ),
+                    )
+                } else {
+                    worker.call_method1("transcribe_audio_from_envelope", (envelope_json,))
+                }
+                .map_err(|e| {
+                    Self::audio_transcription_worker_failure_from_message(
+                        &request_id,
+                        format!("PyTorch worker audio_transcription envelope failed: {e}"),
+                    )
+                })?
+                .extract::<String>()
+                .map_err(|e| {
+                    Self::audio_transcription_worker_failure_from_message(
+                        &request_id,
+                        format!(
+                            "PyTorch worker audio_transcription response was not JSON text: {e}"
+                        ),
+                    )
+                })?;
                 Self::audio_transcription_result_from_worker_response(&request_id, &response_json)
             })
         })
@@ -3061,9 +3077,12 @@ impl InferenceBackend for PyTorchBackend {
         cancellation: crate::InferenceExecutionCancellationHandle,
     ) -> Result<BackendStartOutcome, BackendError> {
         let envelope = Self::selected_audio_load_envelope(request, target, decision).await?;
-        let crate::InferenceExecutionInput::AudioTranscription { request: audio } = &request.input
-        else {
-            unreachable!("validated audio")
+        let audio = match &request.input {
+            crate::InferenceExecutionInput::AudioTranscription { request: audio }
+            | crate::InferenceExecutionInput::OwnedAudioTranscription { request: audio, .. } => {
+                audio
+            }
+            _ => unreachable!("validated audio"),
         };
         let device = envelope.payload.device.as_ref().expect("validated CPU");
         let key = SelectedAudioCacheKey::new(target, device, audio);
@@ -3110,70 +3129,33 @@ impl InferenceBackend for PyTorchBackend {
 
     async fn selected_audio(
         &self,
-        mut request: AudioTranscriptionRequest,
+        request: AudioTranscriptionRequest,
         request_id: &str,
         target: &crate::PumasArtifactLoadTarget,
         decision: &crate::BackendExecutionDecision,
         cancellation: crate::InferenceExecutionCancellationHandle,
     ) -> Result<AudioTranscriptionResult, BackendError> {
-        crate::validate_selected_audio_request(&request)?;
-        let model = decision.selected_model_ref.as_ref();
-        if request_id.trim().is_empty()
-            || decision.selected_task_id != Some(crate::InferenceTaskId::AudioTranscription)
-            || decision.selected_backend_id.as_str() != "pytorch"
-            || decision.selected_runtime_variant_id.as_str() != "pytorch.cpu"
-            || decision.selected_device_class != InferenceDeviceClass::Cpu
-            || decision.device_decision.runtime_variant_id != decision.selected_runtime_variant_id
-            || decision.device_decision.selected_device_class != decision.selected_device_class
-            || decision.device_decision.selected_device_id != decision.selected_device_id
-            || model.is_none_or(|selected| {
-                selected.model_id.trim_start_matches("pumas://models/")
-                    != target
-                        .model_ref
-                        .model_id
-                        .trim_start_matches("pumas://models/")
-                    || selected.selected_artifact_id != target.model_ref.selected_artifact_id
-                    || selected.selected_artifact_path != target.model_ref.selected_artifact_path
-                    || selected.revision.as_ref().is_some_and(|revision| {
-                        target.model_ref.revision.as_ref() != Some(revision)
-                    })
-            })
-            || request.model.trim_start_matches("pumas://models/")
-                != target
-                    .model_ref
-                    .model_id
-                    .trim_start_matches("pumas://models/")
-        {
-            return Err(BackendError::Config(
-                "selected ASR forward identity mismatch".into(),
-            ));
-        }
-        let device = decision
-            .selected_device_id
-            .as_ref()
-            .ok_or_else(|| BackendError::Config("selected ASR device required".into()))?;
-        let key = SelectedAudioCacheKey::new(target, device, &request);
-        if !self.selected_audio_ready || self.selected_audio.lock().as_ref() != Some(&key) {
-            return Err(BackendError::Config(
-                "selected ASR resident identity unavailable".into(),
-            ));
-        }
-        if let Some(reason) = cancellation.rejection_message("selected audio") {
-            return Err(BackendError::Cancelled(reason));
-        }
-        request.model = target.local_load_path.clone();
-        request.extra_options = serde_json::Value::Null;
-        let mut envelope = Self::audio_transcription_envelope_from_request(request_id, request)?;
-        envelope.payload.device = Some(device.clone());
-        let result = Self::execute_audio_envelope_in_worker(
-            envelope,
-            Some(self.selected_audio_worker.clone()),
+        self.selected_audio_with_snapshot(request, None, request_id, target, decision, cancellation)
+            .await
+    }
+    async fn selected_owned_audio(
+        &self,
+        request: AudioTranscriptionRequest,
+        snapshot: crate::OwnedAudioWav,
+        request_id: &str,
+        target: &crate::PumasArtifactLoadTarget,
+        decision: &crate::BackendExecutionDecision,
+        cancellation: crate::InferenceExecutionCancellationHandle,
+    ) -> Result<AudioTranscriptionResult, BackendError> {
+        self.selected_audio_with_snapshot(
+            request,
+            Some(snapshot),
+            request_id,
+            target,
+            decision,
+            cancellation,
         )
-        .await;
-        if let Some(reason) = cancellation.rejection_message("selected audio") {
-            return Err(BackendError::Cancelled(reason));
-        }
-        result
+        .await
     }
 
     async fn load_selected_text(
@@ -3545,3 +3527,87 @@ mod pytorch_worker_image_python_tests;
 #[cfg(test)]
 #[path = "pytorch_tests.rs"]
 mod tests;
+
+impl PyTorchBackend {
+    async fn selected_audio_with_snapshot(
+        &self,
+        mut request: AudioTranscriptionRequest,
+        snapshot: Option<crate::OwnedAudioWav>,
+        request_id: &str,
+        target: &crate::PumasArtifactLoadTarget,
+        decision: &crate::BackendExecutionDecision,
+        cancellation: crate::InferenceExecutionCancellationHandle,
+    ) -> Result<AudioTranscriptionResult, BackendError> {
+        if let Some(source) = &snapshot {
+            source.validate_request(&request)?;
+        } else {
+            crate::validate_selected_audio_request(&request)?;
+        }
+        let model = decision.selected_model_ref.as_ref();
+        if request_id.trim().is_empty()
+            || decision.selected_task_id != Some(crate::InferenceTaskId::AudioTranscription)
+            || decision.selected_backend_id.as_str() != "pytorch"
+            || decision.selected_runtime_variant_id.as_str() != "pytorch.cpu"
+            || decision.selected_device_class != InferenceDeviceClass::Cpu
+            || decision.device_decision.runtime_variant_id != decision.selected_runtime_variant_id
+            || decision.device_decision.selected_device_class != decision.selected_device_class
+            || decision.device_decision.selected_device_id != decision.selected_device_id
+            || model.is_none_or(|selected| {
+                selected.model_id.trim_start_matches("pumas://models/")
+                    != target
+                        .model_ref
+                        .model_id
+                        .trim_start_matches("pumas://models/")
+                    || selected.selected_artifact_id != target.model_ref.selected_artifact_id
+                    || selected.selected_artifact_path != target.model_ref.selected_artifact_path
+                    || selected.revision.as_ref().is_some_and(|revision| {
+                        target.model_ref.revision.as_ref() != Some(revision)
+                    })
+            })
+            || request.model.trim_start_matches("pumas://models/")
+                != target
+                    .model_ref
+                    .model_id
+                    .trim_start_matches("pumas://models/")
+        {
+            return Err(BackendError::Config(
+                "selected ASR forward identity mismatch".into(),
+            ));
+        }
+        let device = decision
+            .selected_device_id
+            .as_ref()
+            .ok_or_else(|| BackendError::Config("selected ASR device required".into()))?;
+        let key = SelectedAudioCacheKey::new(target, device, &request);
+        if !self.selected_audio_ready || self.selected_audio.lock().as_ref() != Some(&key) {
+            return Err(BackendError::Config(
+                "selected ASR resident identity unavailable".into(),
+            ));
+        }
+        if let Some(reason) = cancellation.rejection_message("selected audio") {
+            return Err(BackendError::Cancelled(reason));
+        }
+        request.model = target.local_load_path.clone();
+        request.extra_options = serde_json::Value::Null;
+        if snapshot.is_some() {
+            request.audio_ref = None;
+            request.audio = Some(crate::EncodedAudio {
+                data_base64: "__owned_wav_side_argument_v1__".into(),
+                mime_type: "audio/wav".into(),
+                sample_rate_hz: None,
+            });
+        }
+        let mut envelope = Self::audio_transcription_envelope_from_request(request_id, request)?;
+        envelope.payload.device = Some(device.clone());
+        let result = Self::execute_audio_envelope_in_worker(
+            envelope,
+            Some(self.selected_audio_worker.clone()),
+            snapshot,
+        )
+        .await;
+        if let Some(reason) = cancellation.rejection_message("selected audio") {
+            return Err(BackendError::Cancelled(reason));
+        }
+        result
+    }
+}

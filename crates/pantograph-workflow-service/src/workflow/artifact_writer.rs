@@ -31,6 +31,16 @@ impl WorkflowArtifactWriter {
             .map_err(artifact_store_error)
     }
 
+    pub fn verified_snapshot(
+        &self,
+        artifact_id: &str,
+        max_bytes: usize,
+    ) -> Result<super::VerifiedArtifactSnapshot, WorkflowServiceError> {
+        self.artifact_store_guard()?
+            .verified_snapshot(artifact_id, max_bytes)
+            .map_err(artifact_store_error)
+    }
+
     pub(crate) fn descriptor(
         &self,
         artifact_id: &str,

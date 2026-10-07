@@ -47,10 +47,20 @@ impl<'a> SelectedAudioLoad<'a> {
         if !empty_audio_options(&request.extra_options) {
             return Err(invalid("nonempty backend options are unsupported"));
         }
-        let InferenceExecutionInput::AudioTranscription { request: audio } = &request.input else {
-            return Err(invalid("canonical audio transcription input required"));
+        let audio = match &request.input {
+            InferenceExecutionInput::AudioTranscription { request: audio } => {
+                validate_selected_audio_request(audio)?;
+                audio
+            }
+            InferenceExecutionInput::OwnedAudioTranscription {
+                request: audio,
+                snapshot,
+            } => {
+                snapshot.validate_request(audio)?;
+                audio
+            }
+            _ => return Err(invalid("canonical audio transcription input required")),
         };
-        validate_selected_audio_request(audio)?;
         if target
             .content_fingerprint
             .as_deref()
@@ -133,6 +143,7 @@ impl<'a> SelectedAudioLoad<'a> {
             || !matches!(
                 request.input,
                 InferenceExecutionInput::AudioTranscription { .. }
+                    | InferenceExecutionInput::OwnedAudioTranscription { .. }
             )
         {
             return Err(invalid(
@@ -276,8 +287,22 @@ pub fn validate_small_wav_audio(audio: &crate::EncodedAudio) -> Result<(), Backe
     let bytes = base64::engine::general_purpose::STANDARD
         .decode(encoded)
         .map_err(|_| invalid("audio must be canonical base64 WAV"))?;
-    if bytes.len() < 46 || bytes.len() > SELECTED_AUDIO_MAX_WAV_BYTES {
-        return Err(invalid("WAV must be nonempty and at most 48KiB decoded"));
+    validate_wav_bytes(
+        &bytes,
+        SELECTED_AUDIO_MAX_WAV_BYTES,
+        1,
+        audio.sample_rate_hz,
+    )?;
+    Ok(())
+}
+pub(crate) fn validate_wav_bytes(
+    bytes: &[u8],
+    max_bytes: usize,
+    max_seconds: u32,
+    rate_hint: Option<u32>,
+) -> Result<(u32, u16, usize), BackendError> {
+    if bytes.len() < 46 || bytes.len() > max_bytes {
+        return Err(invalid("WAV exceeds admitted byte limits or is empty"));
     }
     let u16_at = |i| u16::from_le_bytes([bytes[i], bytes[i + 1]]);
     let u32_at = |i| u32::from_le_bytes([bytes[i], bytes[i + 1], bytes[i + 2], bytes[i + 3]]);
@@ -300,12 +325,12 @@ pub fn validate_small_wav_audio(audio: &crate::EncodedAudio) -> Result<(), Backe
         || data != bytes.len() - 44
         || data == 0
         || !data.is_multiple_of(usize::from(align))
-        || data / usize::from(align) > rate as usize
-        || audio.sample_rate_hz.is_some_and(|hint| hint != rate)
+        || data / usize::from(align) > rate as usize * max_seconds as usize
+        || rate_hint.is_some_and(|hint| hint != rate)
     {
-        return Err(invalid("unsupported WAV: require exact PCM16 fmt16/data, mono/stereo, 8..48kHz, <=1s and matching rate"));
+        return Err(invalid("unsupported WAV: require exact PCM16 fmt16/data, mono/stereo, 8..48kHz, admitted duration and matching rate"));
     }
-    Ok(())
+    Ok((rate, channels, data / usize::from(align)))
 }
 
 #[cfg(all(test, feature = "backend-pytorch"))]

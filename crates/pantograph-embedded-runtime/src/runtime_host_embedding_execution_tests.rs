@@ -845,3 +845,17 @@ fn embedding_output_projector_preserves_one_finite_vector_metadata_and_optional_
         }
     }
 }
+
+#[test]
+fn transcript_embedding_profile_is_explicit_and_bounded() {
+    let (_model, mut request, _, _) = fixture(8);
+    for length in [32, 3000, 65536, 65537] {
+        request.materialized_inputs[0].value =
+            RuntimeHostExecutionInputValue::TranscriptText("x".repeat(length));
+        assert!(validate_runtime_host_embedding_request(&request).is_ok() == (length <= 65536));
+        assert!(request.validate().is_ok() == (length <= 65536));
+        request.materialized_inputs[0].value =
+            RuntimeHostExecutionInputValue::String("x".repeat(length));
+        assert!(validate_runtime_host_embedding_request(&request).is_ok() == (length <= 1024));
+    }
+}

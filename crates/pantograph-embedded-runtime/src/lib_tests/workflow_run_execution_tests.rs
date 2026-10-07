@@ -1182,8 +1182,29 @@ impl WorkflowHost for ImageRuntimeSessionHost {
                 .graph
                 .nodes
                 .iter()
-                .filter(|node| matches!(node.node_type.as_str(), "llm-inference" | "vector-output"))
+                .filter(|node| {
+                    matches!(
+                        node.node_type.as_str(),
+                        "llm-inference" | "vector-output" | "text-output"
+                    )
+                })
                 .map(|node| {
+                    if node.node_type == "text-output" {
+                        return WorkflowIoNode {
+                            node_id: node.id.clone(),
+                            node_type: node.node_type.clone(),
+                            name: None,
+                            description: None,
+                            ports: vec![WorkflowIoPort {
+                                port_id: "text".into(),
+                                name: None,
+                                description: None,
+                                data_type: Some("string".into()),
+                                required: Some(true),
+                                multiple: Some(false),
+                            }],
+                        };
+                    }
                     if node.data["task_kind"] == "audio_transcription" {
                         return WorkflowIoNode {
                             node_id: node.id.clone(),

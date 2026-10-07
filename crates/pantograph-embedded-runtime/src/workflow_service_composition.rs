@@ -363,17 +363,19 @@ impl EmbeddedWorkflowServiceComposition {
                 inference::resource_monitor::host_ram::NativeHostRamCapacitySource,
             ));
         let artifact_writer = input.workflow_service.artifact_writer()?;
-        let runtime_host_execution_port =
-            Arc::new(EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
+        let runtime_host_execution_port = Arc::new(
+            EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
                 Arc::new(RuntimeHostPumasLoadTargetResolver::new(
                     pumas_access.clone(),
                 )),
                 Arc::new(RuntimeHostPumasPackageFactsResolver::new(pumas_access)),
                 Arc::new(WorkflowServiceRuntimeHostMediaArtifactSink::new(
-                    artifact_writer,
+                    artifact_writer.clone(),
                 )),
                 input.gateway.clone(),
-            ));
+            )
+            .with_owned_audio_store(crate::OwnedAudioInputStore::new(artifact_writer)),
+        );
         let reservation_lifecycle_port = Arc::new(EmbeddedReservationLifecyclePort::new(
             input.runtime_registry.clone(),
             input.runtime_registry_controller,

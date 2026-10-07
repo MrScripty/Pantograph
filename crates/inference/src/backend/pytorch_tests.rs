@@ -7862,3 +7862,195 @@ async fn selected_audio_two_live_owners_isolate_cache_custody_stop_and_module_re
         });
     }
 }
+
+#[tokio::test]
+async fn owned_audio_production_pybytes_jobs_retain_snapshot_through_caller_loss() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.lock().await;
+    for phase in ["load", "forward"] {
+        for mode in ["success", "cancel", "abort"] {
+            let (_directory, mut request, target, decision) =
+                crate::selected_audio_execution::fixture();
+            let audio = match &request.input {
+                crate::InferenceExecutionInput::AudioTranscription { request } => request.clone(),
+                _ => unreachable!(),
+            };
+            use base64::Engine as _;
+            let bytes: std::sync::Arc<[u8]> = base64::engine::general_purpose::STANDARD
+                .decode(audio.audio.as_ref().unwrap().data_base64.trim())
+                .unwrap()
+                .into();
+            let weak = std::sync::Arc::downgrade(&bytes);
+            let hash = format!("blake3:{}", blake3::hash(&bytes).to_hex());
+            let source_id = crate::owned_audio_id("wf-owned", "original-source", &hash);
+            let snapshot = crate::OwnedAudioWav::verified(
+                source_id.clone(),
+                "wf-owned".into(),
+                "original-source".into(),
+                hash,
+                bytes,
+                crate::acquire_owned_audio_admission().await.unwrap(),
+            )
+            .unwrap();
+            let mut owned_request = audio;
+            owned_request.audio = None;
+            owned_request.audio_ref = Some(source_id.clone());
+            request.input = crate::InferenceExecutionInput::OwnedAudioTranscription {
+                request: owned_request,
+                snapshot,
+            };
+            assert!(serde_json::to_value(&request).unwrap()["input"]["snapshot"]
+                .get("bytes")
+                .is_none());
+            assert!(serde_json::from_value::<crate::InferenceExecutionRequest>(
+                serde_json::to_value(&request).unwrap()
+            )
+            .is_err());
+            let request_id = request.request_id.clone().unwrap();
+            let backend = PyTorchBackend::new();
+            let worker_handle = backend.selected_audio_worker.clone();
+            let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();
+            let (release_tx, release_rx) = std::sync::mpsc::channel();
+            Python::with_gil(|py| {
+                let worker = prepare_selected_audio_worker(py, &worker_handle);
+                patch_selected_audio_worker(py, &worker);
+                py.run(
+                    c"
+_owned_metadata={}
+_owned_bytes_length=0
+def transcribe_owned_wav_from_envelope(envelope, wav_bytes, metadata):
+    global _owned_metadata, _owned_bytes_length
+    assert type(wav_bytes) is bytes
+    _owned_metadata=json.loads(metadata)
+    _owned_bytes_length=len(wav_bytes)
+    return transcribe_audio_from_envelope(envelope)
+",
+                    Some(&worker.dict()),
+                    None,
+                )
+                .unwrap();
+                worker.setattr("_audio_phase", phase).unwrap();
+                worker
+                    .setattr(
+                        "_audio_barrier",
+                        Py::new(
+                            py,
+                            TextIteratorBarrier {
+                                entered: std::sync::Mutex::new(Some(entered_tx)),
+                                release: std::sync::Mutex::new(release_rx),
+                            },
+                        )
+                        .unwrap(),
+                    )
+                    .unwrap();
+            });
+            let gateway = std::sync::Arc::new(crate::InferenceGateway::with_backend(
+                Box::new(backend),
+                "PyTorch",
+            ));
+            let cancel = std::sync::Arc::new(SelectedTextCancellation {
+                cancelled: Default::default(),
+                observed: std::sync::Mutex::new(None),
+            });
+            let caller = {
+                let gateway = gateway.clone();
+                let cancel = cancel.clone();
+                tokio::spawn(async move {
+                    gateway
+                        .execute_selected_audio_with_cancellation(
+                            request,
+                            target,
+                            decision,
+                            crate::InferenceExecutionCancellationHandle::with_signal(cancel),
+                        )
+                        .await
+                })
+            };
+            tokio::time::timeout(std::time::Duration::from_secs(3), entered_rx)
+                .await
+                .unwrap()
+                .unwrap();
+            if mode == "abort" {
+                caller.abort();
+            } else if mode == "cancel" {
+                cancel
+                    .cancelled
+                    .store(true, std::sync::atomic::Ordering::SeqCst);
+            }
+            assert!(
+                weak.upgrade().is_some(),
+                "snapshot custody during actual worker job"
+            );
+            assert!(
+                tokio::time::timeout(std::time::Duration::from_millis(30), gateway.is_ready())
+                    .await
+                    .is_err()
+            );
+            if phase == "forward" {
+                Python::with_gil(|py| {
+                    let worker = worker_handle.module(py).unwrap();
+                    let meta: serde_json::Value = serde_json::from_str(
+                        &worker
+                            .getattr("json")
+                            .unwrap()
+                            .call_method1("dumps", (worker.getattr("_owned_metadata").unwrap(),))
+                            .unwrap()
+                            .extract::<String>()
+                            .unwrap(),
+                    )
+                    .unwrap();
+                    assert!(
+                        meta["artifact_id"] == source_id
+                            && meta["workflow_id"] == "wf-owned"
+                            && meta["source_run_id"] == "original-source"
+                    );
+                    assert!(
+                        worker
+                            .getattr("_owned_bytes_length")
+                            .unwrap()
+                            .extract::<usize>()
+                            .unwrap()
+                            == 52
+                    );
+                    let forward: serde_json::Value = serde_json::from_str(
+                        &worker
+                            .getattr("json")
+                            .unwrap()
+                            .call_method1("dumps", (worker.getattr("_audio_forward").unwrap(),))
+                            .unwrap()
+                            .extract::<String>()
+                            .unwrap(),
+                    )
+                    .unwrap();
+                    assert!(
+                        forward["request_id"] == request_id
+                            && forward["payload"]["device"] == "cpu"
+                    );
+                    assert!(forward["payload"]["audio_base64"] == "__owned_wav_side_argument_v1__");
+                });
+            }
+            release_tx.send(()).unwrap();
+            let result = caller.await;
+            if mode == "success" {
+                assert!(result.unwrap().is_ok());
+            } else if mode == "abort" {
+                assert!(result.unwrap_err().is_cancelled());
+            } else {
+                assert!(result.unwrap().is_err());
+            }
+            tokio::time::timeout(std::time::Duration::from_secs(3), gateway.is_ready())
+                .await
+                .unwrap();
+            assert!(
+                weak.upgrade().is_none(),
+                "snapshot released after actual completion"
+            );
+            Python::with_gil(|py| {
+                worker_handle
+                    .module(py)
+                    .unwrap()
+                    .delattr("_audio_barrier")
+                    .unwrap()
+            });
+        }
+    }
+}

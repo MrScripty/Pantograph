@@ -87,6 +87,7 @@ pub(crate) struct EmbeddedRuntimeHostExecutionPort {
     media_artifact_sink: Option<Arc<dyn RuntimeHostMediaArtifactSink>>,
     package_facts_resolver: Option<Arc<dyn RuntimeHostPackageFactsResolver>>,
     gateway: Option<Arc<inference::InferenceGateway>>,
+    owned_audio_store: Option<crate::OwnedAudioInputStore>,
 }
 
 impl EmbeddedRuntimeHostExecutionPort {
@@ -97,6 +98,7 @@ impl EmbeddedRuntimeHostExecutionPort {
             media_artifact_sink: None,
             package_facts_resolver: None,
             gateway: None,
+            owned_audio_store: None,
         }
     }
 
@@ -109,6 +111,7 @@ impl EmbeddedRuntimeHostExecutionPort {
             media_artifact_sink: None,
             package_facts_resolver: None,
             gateway: None,
+            owned_audio_store: None,
         }
     }
 
@@ -124,9 +127,14 @@ impl EmbeddedRuntimeHostExecutionPort {
             media_artifact_sink: Some(media_artifact_sink),
             package_facts_resolver: Some(package_facts_resolver),
             gateway: Some(gateway),
+            owned_audio_store: None,
         }
     }
 
+    pub(crate) fn with_owned_audio_store(mut self, store: crate::OwnedAudioInputStore) -> Self {
+        self.owned_audio_store = Some(store);
+        self
+    }
     #[cfg(test)]
     fn with_load_target_resolver_only_for_test(
         load_target_resolver: Arc<dyn RuntimeHostLoadTargetResolver>,
@@ -136,6 +144,7 @@ impl EmbeddedRuntimeHostExecutionPort {
             media_artifact_sink: None,
             package_facts_resolver: None,
             gateway: None,
+            owned_audio_store: None,
         }
     }
 }
@@ -858,7 +867,7 @@ impl EmbeddedRuntimeHostExecutionPort {
             return Ok(response);
         }
 
-        let projection = match crate::runtime_host_audio_execution::project_runtime_host_audio(
+        let mut projection = match crate::runtime_host_audio_execution::project_runtime_host_audio(
             request,
             package_facts,
             crate::runtime_host_image_execution::project_pumas_artifact_load_target(load_target),
@@ -877,6 +886,59 @@ impl EmbeddedRuntimeHostExecutionPort {
             return Ok(response);
         }
 
+        let source_id = match &projection.request.input {
+            inference::InferenceExecutionInput::AudioTranscription { request: audio } => {
+                audio.audio_ref.clone()
+            }
+            _ => None,
+        };
+        let owned = source_id.is_some();
+        if let Some(artifact_id) = source_id {
+            let Some(store) = &self.owned_audio_store else {
+                return Ok(rejected_response(
+                    request_ref,
+                    RuntimeHostExecutionDiagnosticCode::ExecutionFailed,
+                    "owned audio store unavailable",
+                    "audio.owned_store_unavailable",
+                ));
+            };
+            let snapshot = match store
+                .resolve_for_execution(
+                    artifact_id,
+                    request_ref.handoff.workflow_id.as_str().to_owned(),
+                    Some(cancellation.clone()),
+                )
+                .await
+            {
+                Ok(snapshot) => snapshot,
+                Err(error) => {
+                    if let Some(response) =
+                        cancellation_rejection_response(request_ref, &cancellation)?
+                    {
+                        return Ok(response);
+                    }
+                    return Ok(rejected_response(
+                        request_ref,
+                        RuntimeHostExecutionDiagnosticCode::ExecutionFailed,
+                        &error,
+                        "audio.owned_reference_invalid",
+                    ));
+                }
+            };
+            let inference::InferenceExecutionInput::AudioTranscription { request: audio } =
+                projection.request.input
+            else {
+                unreachable!("audio projection")
+            };
+            projection.request.input =
+                inference::InferenceExecutionInput::OwnedAudioTranscription {
+                    request: audio,
+                    snapshot,
+                };
+        }
+        if let Some(response) = cancellation_rejection_response(request_ref, &cancellation)? {
+            return Ok(response);
+        }
         let inference_cancellation =
             inference_cancellation_handle_from_runtime_host(cancellation.clone());
         let result = match gateway
@@ -908,7 +970,12 @@ impl EmbeddedRuntimeHostExecutionPort {
             }
         };
 
-        let outputs = match crate::runtime_host_audio_execution::audio_outputs(result) {
+        let projected_outputs = if owned {
+            crate::runtime_host_audio_execution::owned_audio_outputs(result)
+        } else {
+            crate::runtime_host_audio_execution::audio_outputs(result)
+        };
+        let outputs = match projected_outputs {
             Ok(outputs) => outputs,
             Err(error) => {
                 return Ok(failed_response(
@@ -2560,6 +2627,7 @@ mod tests {
             media_artifact_sink: Some(Arc::new(UnusedMediaArtifactSink)),
             package_facts_resolver: None,
             gateway: None,
+            owned_audio_store: None,
         };
 
         let response = port
