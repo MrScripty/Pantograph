@@ -1,7 +1,7 @@
 mod canonicalization;
 mod connection_intent;
 mod contract_validation;
-mod dependency_environment_subject;
+pub(crate) mod dependency_environment_subject;
 mod diagnostics;
 mod effective_definition;
 #[cfg(test)]
