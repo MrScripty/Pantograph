@@ -1,0 +1,133 @@
+name: Native desktop CPU qualification
+
+on:
+  push:
+    branches:
+      - qual/inspector-snapshot-main-2026-10-07
+    paths:
+      - .github/workflows/native-desktop-cpu-qualification.yml
+      - scripts/*native-desktop-cpu*
+      - tests/e2e/native-desktop-cpu/**
+      - crates/pantograph-workflow-service/src/workflow/task_graph.rs
+      - crates/pantograph-workflow-service/src/inference_dependency_planning.rs
+      - crates/pantograph-workflow-service/src/graph/inference_validation_state.rs
+      - crates/pantograph-workflow-service/src/scheduler/readiness_lifecycle.rs
+      - crates/pantograph-workflow-service/src/workflow/session_scheduler_runner.rs
+      - crates/pantograph-workflow-service/src/graph/session.rs
+      - crates/pantograph-embedded-runtime/src/dependency_readiness_lifecycle.rs
+      - crates/inference/src/selected_embedding_execution.rs
+      - crates/inference/src/backend/candle.rs
+      - crates/inference/src/gateway.rs
+      - crates/pantograph-embedded-runtime/src/runtime_host_embedding_execution_tests.rs
+
+permissions:
+  contents: read
+
+jobs:
+  native-desktop-cpu:
+    name: Native Tauri CPU graph (synthetic fixtures)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      ORT_SKIP_DOWNLOAD: '1'
+      HF_HUB_OFFLINE: '1'
+      TRANSFORMERS_OFFLINE: '1'
+      PANTOGRAPH_NATIVE_CPU_EVIDENCE_DIR: ${{ github.workspace }}/native-cpu-evidence
+    steps:
+      - name: Checkout isolated qualification candidate
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Record exact source and require reviewed inspector candidate ancestor
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$PANTOGRAPH_NATIVE_CPU_EVIDENCE_DIR"
+          git merge-base --is-ancestor 2a748f113cbedbeffb0c218d8b2a6936628f49ba HEAD
+          git show -s --format='%H%n%T%n%P' HEAD > "$PANTOGRAPH_NATIVE_CPU_EVIDENCE_DIR/source.txt"
+
+      - name: Verify committed synthetic fixture and record proposed graph
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/prepare-native-desktop-cpu-fixture.py "$RUNNER_TEMP/native-cpu-fixture" > "$PANTOGRAPH_NATIVE_CPU_EVIDENCE_DIR/fixture.json"
+          cp "$RUNNER_TEMP/native-cpu-fixture/graph.json" "$PANTOGRAPH_NATIVE_CPU_EVIDENCE_DIR/proposed-graph.json"
+
+      - name: Install authorized official Ubuntu native dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            bash scripts/install-ubuntu-build-dependencies.sh
+            sudo apt-get install -y webkit2gtk-driver xvfb
+            dpkg-query -W libgtk-3-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev libsoup-3.0-dev protobuf-compiler webkit2gtk-driver xvfb
+          } 2>&1 | tee "$PANTOGRAPH_NATIVE_CPU_EVIDENCE_DIR/native-dependency-install.log"
+
+      - name: Install ordinary Node toolchain
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Install ordinary npm dependencies
+        run: npm ci --include=optional
+
+      - name: Install ordinary Rust toolchain
+        uses: dtolnay/rust-toolchain@1.92.0
+
+      - name: Cache Cargo using the existing supported action
+        uses: Swatinem/rust-cache@v2
+
+      - name: Verify no ONNX build-download feature
+        run: python3 scripts/check-onnx-no-build-download.py
+
+      - name: Inspect and install pinned official Tauri driver
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            cargo info tauri-driver@2.1.0
+            driver_manifest="$(python3 - <<'PY'
+          import os
+          from pathlib import Path
+          root = Path(os.environ.get('CARGO_HOME', str(Path.home() / '.cargo')))
+          matches = list((root / 'registry/src').glob('*/tauri-driver-2.1.0/Cargo.toml'))
+          if len(matches) != 1:
+              raise SystemExit('Expected exactly one official tauri-driver 2.1.0 source manifest')
+          print(matches[0])
+          PY
+            )"
+            cargo tree --locked --manifest-path "$driver_manifest" --target all --edges normal,build,dev --prefix none --format '{p}|{f}' > "$PANTOGRAPH_NATIVE_CPU_EVIDENCE_DIR/tauri-driver-features.txt"
+            python3 - <<'PY'
+          import os
+          from pathlib import Path
+          tree = (Path(os.environ['PANTOGRAPH_NATIVE_CPU_EVIDENCE_DIR']) / 'tauri-driver-features.txt').read_text()
+          if any(line.split(' ', 1)[0] in {'ort', 'ort-sys'} for line in tree.splitlines()):
+              raise SystemExit('Unexpected ONNX owner in official driver dependency graph')
+          if not tree.startswith('tauri-driver v2.1.0 '):
+              raise SystemExit('Unexpected official driver version')
+          print('Complete official driver feature graph inspected; no ONNX dependency')
+          PY
+            cargo install tauri-driver --version 2.1.0 --locked
+            cargo install --list
+            tauri-driver --help
+          } 2>&1 | tee "$PANTOGRAPH_NATIVE_CPU_EVIDENCE_DIR/tauri-driver-install.log"
+
+      - name: Verify installed native prerequisites
+        run: python3 scripts/check-native-desktop-cpu-prerequisites.py
+
+      - name: Run actual native Tauri saved CPU graph
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/run-native-desktop-cpu-qualification.sh 2>&1 | tee "$PANTOGRAPH_NATIVE_CPU_EVIDENCE_DIR/native-runtime.log"
+
+      - name: Preserve runtime, visual evidence or verified prerequisite blocker
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-desktop-cpu-${{ github.sha }}
+          path: native-cpu-evidence
+          if-no-files-found: error
+          retention-days: 14
