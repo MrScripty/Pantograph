@@ -97,7 +97,13 @@ pub(crate) fn validate_runtime_host_text_generation_request(
     if prompt.trim().is_empty() {
         return Err(RuntimeHostTextGenerationProjectionError::BlankPrompt);
     }
-    if prompt.len() > MAX_TEXT_BYTES {
+    let prompt_limit = request
+        .materialized_inputs
+        .iter()
+        .find(|i| i.port_id == PROMPT_PORT)
+        .map(|i| semantic_text_limit(&i.value))
+        .unwrap_or(MAX_TEXT_BYTES);
+    if prompt.len() > prompt_limit {
         return Err(RuntimeHostTextGenerationProjectionError::InputTooLong {
             bytes: prompt.len(),
         });
@@ -313,7 +319,8 @@ fn required_prompt(
         .iter()
         .find(|input| input.port_id == PROMPT_PORT)
         .map(|input| match &input.value {
-            RuntimeHostExecutionInputValue::String(value) => Ok(value.as_str()),
+            RuntimeHostExecutionInputValue::String(value)
+            | RuntimeHostExecutionInputValue::TranscriptText(value) => Ok(value.as_str()),
             _ => Err(RuntimeHostTextGenerationProjectionError::InvalidInputType {
                 port_id: PROMPT_PORT,
                 expected: "string",
@@ -593,6 +600,13 @@ fn optional_generation_options(
     }))
 }
 
+pub(crate) fn semantic_text_limit(value: &RuntimeHostExecutionInputValue) -> usize {
+    match value {
+        RuntimeHostExecutionInputValue::TranscriptText(_) => 65536,
+        _ => MAX_TEXT_BYTES,
+    }
+}
+
 fn optional_system_prompt(
     request: &RuntimeHostExecutionRequest,
 ) -> Result<Option<&str>, RuntimeHostTextGenerationProjectionError> {
@@ -601,10 +615,14 @@ fn optional_system_prompt(
         .iter()
         .find(|input| input.port_id == SYSTEM_PROMPT_PORT)
         .map(|input| match &input.value {
-            RuntimeHostExecutionInputValue::String(value) if value.len() <= MAX_TEXT_BYTES => {
+            RuntimeHostExecutionInputValue::String(value)
+            | RuntimeHostExecutionInputValue::TranscriptText(value)
+                if value.len() <= semantic_text_limit(&input.value) =>
+            {
                 Ok(value.as_str())
             }
-            RuntimeHostExecutionInputValue::String(value) => {
+            RuntimeHostExecutionInputValue::String(value)
+            | RuntimeHostExecutionInputValue::TranscriptText(value) => {
                 Err(RuntimeHostTextGenerationProjectionError::InputTooLong { bytes: value.len() })
             }
             _ => Err(RuntimeHostTextGenerationProjectionError::InvalidInputType {
@@ -3305,5 +3323,36 @@ mod tests {
         assert!(error.to_string().contains("max 1024 bytes"), "{error}");
         assert!(calls.lock().unwrap().is_empty());
         assert!(recorded.lock().unwrap().is_empty());
+    }
+    #[test]
+    fn transcript_semantic_prompt_profile_preserves_scalar_control_bounds() {
+        for length in [32, 3000, 65536] {
+            let mut request = text_request_fixture();
+            request.materialized_inputs[0].value =
+                RuntimeHostExecutionInputValue::TranscriptText("x".repeat(length));
+            request.validate().unwrap();
+            validate_runtime_host_text_generation_request(&request).unwrap();
+            assert!(required_prompt(&request).unwrap().len() == length);
+            let mut system = request.materialized_inputs[0].clone();
+            system.port_id = SYSTEM_PROMPT_PORT.into();
+            request.materialized_inputs.push(system);
+            assert!(optional_system_prompt(&request).unwrap().unwrap().len() == length);
+            request.materialized_inputs[0].value =
+                RuntimeHostExecutionInputValue::String("x".repeat(length));
+            assert!(
+                validate_runtime_host_text_generation_request(&request).is_ok()
+                    == (length <= MAX_TEXT_BYTES)
+            );
+        }
+        let mut request = text_request_fixture();
+        request.materialized_inputs[0].value =
+            RuntimeHostExecutionInputValue::TranscriptText("é".repeat(32769));
+        assert!(request.validate().is_err());
+        assert!(validate_runtime_host_text_generation_request(&request).is_err());
+        let mut stop = request.materialized_inputs[0].clone();
+        stop.port_id = STOP_PORT.into();
+        stop.value = RuntimeHostExecutionInputValue::TranscriptText("stop".into());
+        request.materialized_inputs.push(stop);
+        assert!(optional_stop(&request).is_err());
     }
 }

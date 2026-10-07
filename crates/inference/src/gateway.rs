@@ -60,6 +60,8 @@ use crate::{
 
 #[path = "gateway_embedding_replacement.rs"]
 mod embedding_replacement;
+#[path = "gateway_selected_audio.rs"]
+mod selected_audio;
 #[path = "gateway_selected_rerank.rs"]
 mod selected_rerank;
 
@@ -2508,6 +2510,9 @@ impl InferenceGateway {
         let task_id = request.task_id.clone();
 
         match request.input {
+            InferenceExecutionInput::OwnedAudioTranscription { .. } => Err(GatewayError::Backend(
+                BackendError::Config("owned audio requires selected execution".into()),
+            )),
             InferenceExecutionInput::TextGeneration {
                 prompt,
                 system_prompt,
@@ -3235,7 +3240,8 @@ fn typed_non_generation_option_diagnostics(
             ));
             diagnostics
         }
-        InferenceExecutionInput::AudioTranscription { request } => {
+        InferenceExecutionInput::AudioTranscription { request }
+        | InferenceExecutionInput::OwnedAudioTranscription { request, .. } => {
             let mut diagnostics =
                 typed_audio_transcription_option_diagnostics(request, backend_key);
             diagnostics.extend(extra_option_diagnostics(

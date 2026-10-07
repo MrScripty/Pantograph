@@ -91,7 +91,7 @@ pub use self::artifact_contracts::*;
 pub use self::artifact_store::{
     ArtifactBodyRead, ArtifactStore, ArtifactStoreError, ArtifactStoreStats,
     ArtifactStreamChunkWriteRequest, ArtifactStreamFinalizeRequest, ArtifactStreamOpenRequest,
-    ArtifactWriteRequest,
+    ArtifactWriteRequest, VerifiedArtifactSnapshot,
 };
 pub use self::artifact_writer::WorkflowArtifactWriter;
 pub use self::contracts::*;

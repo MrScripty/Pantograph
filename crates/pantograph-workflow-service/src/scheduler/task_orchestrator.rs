@@ -3670,6 +3670,7 @@ fn non_runtime_input_readiness(
                 MaterializedBindingValue::Ready(
                     WorkflowSchedulerTaskResultValue::Json(_)
                     | WorkflowSchedulerTaskResultValue::String(_)
+                    | WorkflowSchedulerTaskResultValue::TranscriptText(_)
                     | WorkflowSchedulerTaskResultValue::Bool(_)
                     | WorkflowSchedulerTaskResultValue::I64(_)
                     | WorkflowSchedulerTaskResultValue::U64(_),
@@ -3692,9 +3693,10 @@ fn non_runtime_input_readiness(
         WorkflowSchedulerNonRuntimeTaskTemplate::Merge => {
             for binding in &task.input_bindings {
                 match materialized_bound_output(task, results, binding) {
-                    MaterializedBindingValue::Ready(WorkflowSchedulerTaskResultValue::String(
-                        _,
-                    )) => {}
+                    MaterializedBindingValue::Ready(
+                        WorkflowSchedulerTaskResultValue::String(_)
+                        | WorkflowSchedulerTaskResultValue::TranscriptText(_),
+                    ) => {}
                     MaterializedBindingValue::Ready(_) => {
                         return NonRuntimeInputReadiness::Invalid(scheduler_input_diagnostic(
                             SchedulerTaskStateDiagnosticCode::InvalidTask,
@@ -3714,9 +3716,10 @@ fn non_runtime_input_readiness(
         }
         WorkflowSchedulerNonRuntimeTaskTemplate::TextOutput => {
             match materialized_binding_value(task, results, "text") {
-                MaterializedBindingValue::Ready(WorkflowSchedulerTaskResultValue::String(_)) => {
-                    NonRuntimeInputReadiness::Ready
-                }
+                MaterializedBindingValue::Ready(
+                    WorkflowSchedulerTaskResultValue::String(_)
+                    | WorkflowSchedulerTaskResultValue::TranscriptText(_),
+                ) => NonRuntimeInputReadiness::Ready,
                 MaterializedBindingValue::Ready(_) => {
                     NonRuntimeInputReadiness::Invalid(scheduler_input_diagnostic(
                         SchedulerTaskStateDiagnosticCode::InvalidTask,
