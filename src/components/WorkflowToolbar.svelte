@@ -46,6 +46,7 @@
     nextWorkflowPatchSemanticVersion,
     shouldRefreshValidationFromLifecycleEvent,
     workflowSubmitSuccessWorkbenchPage,
+    workflowSubmitTextInputs,
     workflowSubmitDisabledReason,
     workflowValidationRefreshKey,
   } from './workflowToolbarEvents';
@@ -307,6 +308,7 @@
         throw new Error('Workflow version must use numeric major.minor.patch format');
       }
 
+      const submittedInputs = workflowSubmitTextInputs($workflowGraph);
       const executionSession = await workflowService.createWorkflowExecutionSession({
         workflow_id: submittedWorkflowId,
         usage_profile: null,
@@ -316,7 +318,7 @@
       try {
         const runRequestBase = {
           session_id: executionSession.session_id,
-          inputs: [],
+          inputs: submittedInputs,
           output_targets: null,
           override_selection: null,
           timeout_ms: null,
