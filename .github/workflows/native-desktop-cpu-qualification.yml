@@ -3,7 +3,7 @@ name: Native desktop CPU qualification
 on:
   push:
     branches:
-      - qual/inspector-snapshot-main-2026-10-07
+      - qual/cold-candle-inspector-local-2026-10-07
     paths:
       - .github/workflows/native-desktop-cpu-qualification.yml
       - scripts/*native-desktop-cpu*
@@ -39,12 +39,12 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Record exact source and require reviewed inspector candidate ancestor
+      - name: Record exact source and require reviewed combined production ancestor
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p "$PANTOGRAPH_NATIVE_CPU_EVIDENCE_DIR"
-          git merge-base --is-ancestor 2a748f113cbedbeffb0c218d8b2a6936628f49ba HEAD
+          git merge-base --is-ancestor b9089dd965844a3873b6d75b8ac2419c1a3a78fd HEAD
           git show -s --format='%H%n%T%n%P' HEAD > "$PANTOGRAPH_NATIVE_CPU_EVIDENCE_DIR/source.txt"
 
       - name: Verify committed synthetic fixture and record proposed graph
