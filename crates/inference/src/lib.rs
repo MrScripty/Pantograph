@@ -254,6 +254,11 @@ pub use types::{
 #[cfg(feature = "std-process")]
 pub use process::StdProcessSpawner;
 
+mod selected_audio_execution;
 mod selected_embedding_execution;
+pub use selected_audio_execution::{
+    empty_audio_options, validate_selected_audio_request, validate_small_wav_audio,
+    SELECTED_AUDIO_MAX_ENCODED_BYTES, SELECTED_AUDIO_MAX_WAV_BYTES,
+};
 mod selected_rerank_execution;
 mod selected_text_execution;

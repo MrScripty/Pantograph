@@ -200,6 +200,19 @@ impl RuntimeHostExecutionPort for EmbeddedRuntimeHostExecutionPort {
                 .await;
         }
 
+        if validated_request
+            .as_ref()
+            .handoff
+            .task_intent
+            .task_type
+            .as_str()
+            == crate::runtime_host_audio_execution::AUDIO_TASK
+        {
+            return self
+                .execute_runtime_host_audio_request(&validated_request, cancellation)
+                .await;
+        }
+
         let Some(load_target_resolver) = self.load_target_resolver.as_ref() else {
             return Ok(rejected_response(
                 validated_request.as_ref(),
@@ -773,6 +786,159 @@ impl EmbeddedRuntimeHostExecutionPort {
 }
 
 impl EmbeddedRuntimeHostExecutionPort {
+    async fn execute_runtime_host_audio_request(
+        &self,
+        request: &ValidatedRuntimeHostExecutionRequest,
+        cancellation: RuntimeHostExecutionCancellationHandle,
+    ) -> Result<RuntimeHostExecutionResponse, RuntimeHostExecutionPortError> {
+        let request_ref = request.as_ref();
+        if let Err(error) =
+            crate::runtime_host_audio_execution::validate_runtime_host_audio_request(request_ref)
+        {
+            return Ok(rejected_response(
+                request_ref,
+                RuntimeHostExecutionDiagnosticCode::ExecutionFailed,
+                &format!("embedded runtime-host audio projection failed: {error}"),
+                "embedded_runtime_host_execution_port.audio_projection_failed",
+            ));
+        }
+
+        let Some(load_target_resolver) = self.load_target_resolver.as_ref() else {
+            return Ok(rejected_response(
+                request_ref,
+                RuntimeHostExecutionDiagnosticCode::PumasLoadTargetRequired,
+                "embedded runtime-host audio execution requires a Pumas load-target resolver",
+                MISSING_LOAD_TARGET_RESOLVER_HINT,
+            ));
+        };
+        let Some(package_facts_resolver) = self.package_facts_resolver.as_ref() else {
+            return Ok(rejected_response(
+                request_ref,
+                RuntimeHostExecutionDiagnosticCode::RuntimeUnavailable,
+                "embedded runtime-host audio execution requires a Pumas package-facts resolver",
+                MISSING_PACKAGE_FACTS_RESOLVER_HINT,
+            ));
+        };
+        let Some(gateway) = self.gateway.as_ref() else {
+            return Ok(rejected_response(
+                request_ref,
+                RuntimeHostExecutionDiagnosticCode::RuntimeUnavailable,
+                "embedded runtime-host audio execution requires an inference gateway",
+                MISSING_INFERENCE_GATEWAY_HINT,
+            ));
+        };
+
+        let load_target = match load_target_resolver.resolve(request).await {
+            Ok(load_target) => load_target,
+            Err(error) => {
+                return Ok(rejected_response(
+                    request_ref,
+                    RuntimeHostExecutionDiagnosticCode::PumasLoadTargetUnavailable,
+                    &load_target_error_message(error),
+                    LOAD_TARGET_UNAVAILABLE_HINT,
+                ));
+            }
+        };
+        if let Some(response) = cancellation_rejection_response(request_ref, &cancellation)? {
+            return Ok(response);
+        }
+
+        let package_facts = match package_facts_resolver.resolve(request).await {
+            Ok(package_facts) => package_facts,
+            Err(error) => {
+                return Ok(rejected_response(
+                    request_ref,
+                    RuntimeHostExecutionDiagnosticCode::PumasLoadTargetUnavailable,
+                    &package_facts_error_message(error),
+                    PACKAGE_FACTS_UNAVAILABLE_HINT,
+                ));
+            }
+        };
+        if let Some(response) = cancellation_rejection_response(request_ref, &cancellation)? {
+            return Ok(response);
+        }
+
+        let projection = match crate::runtime_host_audio_execution::project_runtime_host_audio(
+            request,
+            package_facts,
+            crate::runtime_host_image_execution::project_pumas_artifact_load_target(load_target),
+        ) {
+            Ok(projection) => projection,
+            Err(error) => {
+                return Ok(rejected_response(
+                    request_ref,
+                    RuntimeHostExecutionDiagnosticCode::ExecutionFailed,
+                    &format!("embedded runtime-host audio projection failed: {error}"),
+                    "embedded_runtime_host_execution_port.audio_projection_failed",
+                ));
+            }
+        };
+        if let Some(response) = cancellation_rejection_response(request_ref, &cancellation)? {
+            return Ok(response);
+        }
+
+        let inference_cancellation =
+            inference_cancellation_handle_from_runtime_host(cancellation.clone());
+        let result = match gateway
+            .execute_selected_audio_with_cancellation(
+                projection.request,
+                projection.target,
+                projection.decision,
+                inference_cancellation,
+            )
+            .await
+        {
+            Ok(result) => result,
+            Err(error) => {
+                if matches!(
+                    error,
+                    inference::GatewayError::Backend(inference::BackendError::Cancelled(_))
+                ) {
+                    if let Some(response) =
+                        cancellation_rejection_response(request_ref, &cancellation)?
+                    {
+                        return Ok(response);
+                    }
+                }
+                return Ok(failed_response(
+                    request_ref,
+                    &format!("embedded runtime-host audio gateway execution failed: {error}"),
+                    "embedded_runtime_host_execution_port.audio_gateway_execution_failed",
+                ));
+            }
+        };
+
+        let outputs = match crate::runtime_host_audio_execution::audio_outputs(result) {
+            Ok(outputs) => outputs,
+            Err(error) => {
+                return Ok(failed_response(
+                    request_ref,
+                    &format!("embedded runtime-host audio projection failed: {error}"),
+                    "embedded_runtime_host_execution_port.audio_projection_failed",
+                ));
+            }
+        };
+
+        if let Some(response) = cancellation_rejection_response(request_ref, &cancellation)? {
+            return Ok(response);
+        }
+        let response = completed_node_response(
+            request_ref,
+            outputs,
+            "embedded runtime-host audio execution completed",
+        );
+        if let Err(error) = response.validate() {
+            return Ok(failed_response(
+                request_ref,
+                &format!("audio output contract failed: {error}"),
+                "embedded_runtime_host_execution_port.audio_projection_failed",
+            ));
+        }
+        Ok(response)
+    }
+}
+
+impl EmbeddedRuntimeHostExecutionPort {
     async fn execute_runtime_host_sequential_batch_request(
         &self,
         request: &RuntimeHostBatchExecutionRequest,
@@ -790,6 +956,13 @@ impl EmbeddedRuntimeHostExecutionPort {
                     == crate::runtime_host_rerank_execution::RERANK_TASK
                 {
                     crate::runtime_host_rerank_execution::validate_runtime_host_rerank_request(
+                        member.as_ref(),
+                    )
+                    .err()
+                } else if member.as_ref().handoff.task_intent.task_type.as_str()
+                    == crate::runtime_host_audio_execution::AUDIO_TASK
+                {
+                    crate::runtime_host_audio_execution::validate_runtime_host_audio_request(
                         member.as_ref(),
                     )
                     .err()
@@ -839,6 +1012,15 @@ impl EmbeddedRuntimeHostExecutionPort {
                             == crate::runtime_host_rerank_execution::RERANK_TASK
                         {
                             "embedded_runtime_host_execution_port.rerank_projection_failed"
+                        } else if member_request
+                            .as_ref()
+                            .handoff
+                            .task_intent
+                            .task_type
+                            .as_str()
+                            == crate::runtime_host_audio_execution::AUDIO_TASK
+                        {
+                            "embedded_runtime_host_execution_port.audio_projection_failed"
                         } else {
                             TEXT_PROJECTION_FAILED_HINT
                         },
@@ -875,6 +1057,16 @@ impl EmbeddedRuntimeHostExecutionPort {
                 == crate::runtime_host_rerank_execution::RERANK_TASK
             {
                 self.execute_runtime_host_rerank_request(&member_request, cancellation.clone())
+                    .await?
+            } else if member_request
+                .as_ref()
+                .handoff
+                .task_intent
+                .task_type
+                .as_str()
+                == crate::runtime_host_audio_execution::AUDIO_TASK
+            {
+                self.execute_runtime_host_audio_request(&member_request, cancellation.clone())
                     .await?
             } else {
                 self.execute_runtime_host_text_request(&member_request, cancellation.clone())
@@ -944,6 +1136,7 @@ impl RuntimeHostBatchExecutionPort for EmbeddedRuntimeHostExecutionPort {
                     | CHAT_COMPLETION_TASK
                     | EMBEDDING_TASK
                     | crate::runtime_host_rerank_execution::RERANK_TASK
+                    | crate::runtime_host_audio_execution::AUDIO_TASK
             )
         }) {
             return self
@@ -1181,6 +1374,7 @@ fn shared_batch_runtime_context_error(
             | CHAT_COMPLETION_TASK
             | EMBEDDING_TASK
             | crate::runtime_host_rerank_execution::RERANK_TASK
+            | crate::runtime_host_audio_execution::AUDIO_TASK
     ) {
         return Some(format!(
             "embedded runtime-host batch task type '{}' is unsupported",

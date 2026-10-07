@@ -3284,6 +3284,7 @@ fn test_pytorch_worker_trust_policy_defaults_closed() {
     );
 
     let request = PyTorchTransformersLoadRequest {
+        chunk_length_s: None,
         model_ref: Some(PumasModelRef {
             model_id: "pumas://models/no-custom-code".to_string(),
             revision: None,
@@ -7228,5 +7229,636 @@ fn test_pytorch_stop_strings_envelope_refuses_invalid_list_before_worker_dispatc
                 "{error}"
             );
         }
+    }
+}
+
+// Production Rust load/forward paths and blocking jobs; Python results are
+// controlled. This is custody/cache evidence, not a real ASR model result.
+fn prepare_selected_audio_worker<'py>(
+    py: Python<'py>,
+    isolated: &Arc<super::pytorch_worker::IsolatedAudioWorker>,
+) -> Bound<'py, pyo3::types::PyModule> {
+    load_worker_module_with_stubbed_dependencies(py);
+    py.run(c"import sys, types
+sys.modules['torch'].no_grad = lambda: (lambda f: f)
+sys.modules['torch.nn'] = types.SimpleNamespace(functional=types.SimpleNamespace())
+sys.modules['transformers'] = types.ModuleType('transformers')
+sys.modules['transformers'].GenerationConfig = type('GenerationConfig', (), {})
+sys.modules['transformers'].GenerationMixin = type('GenerationMixin', (), {})
+sys.modules['transformers.generation.configuration_utils'] = types.SimpleNamespace(GenerationMode=types.SimpleNamespace(SAMPLE='sample', GREEDY_SEARCH='greedy_search'))
+sys.modules['transformers.generation.stopping_criteria'] = types.SimpleNamespace(StoppingCriteria=object, StoppingCriteriaList=list)
+sys.modules['transformers.cache_utils'] = types.SimpleNamespace(DynamicCache=type('DynamicCache', (), {}))
+sys.modules['transformers.generation.logits_process'] = types.SimpleNamespace(RepetitionPenaltyLogitsProcessor=object, MinNewTokensLengthLogitsProcessor=object)",None,None).unwrap();
+    super::pytorch_worker::worker_module(py).unwrap();
+    isolated.module(py).unwrap()
+}
+
+#[tokio::test]
+async fn selected_audio_actual_python_loader_projects_chunk_and_closed_policy_to_pipeline() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.lock().await;
+    let (_directory, request, target, decision) = crate::selected_audio_execution::fixture();
+    let envelope = PyTorchBackend::selected_audio_load_envelope(&request, &target, &decision)
+        .await
+        .unwrap();
+    Python::with_gil(|py| {
+        let module = load_worker_module_with_stubbed_dependencies(py);
+        let contract = load_worker_contract_module(py);
+        module
+            .setattr(
+                "load_transformers_model_kwargs_from_envelope",
+                contract
+                    .getattr("load_transformers_model_kwargs_from_envelope")
+                    .unwrap(),
+            )
+            .unwrap();
+        py.run(c"
+import types
+fixture_calls=[]
+class FixtureAuto:
+    @classmethod
+    def from_pretrained(cls,path,**kwargs):
+        fixture_calls.append((path,kwargs))
+        return types.SimpleNamespace(tokenizer='fixture-tokenizer',feature_extractor='fixture-features')
+def fixture_pipeline(**kwargs):
+    fixture_calls.append(kwargs)
+    return object()
+transformers=types.ModuleType('transformers')
+transformers.AutoModelForSpeechSeq2Seq=FixtureAuto
+transformers.AutoProcessor=FixtureAuto
+transformers.pipeline=fixture_pipeline
+sys.modules['transformers']=transformers
+",Some(&module.dict()),None).unwrap();
+        let response: String = module
+            .call_method1(
+                "load_transformers_model_from_envelope",
+                (serde_json::to_string(&envelope).unwrap(),),
+            )
+            .unwrap()
+            .extract()
+            .unwrap();
+        let result: serde_json::Value = serde_json::from_str(&response).unwrap();
+        assert_eq!(result["status"], "ok", "{result}");
+        let globals = module.dict();
+        globals
+            .set_item("fixture_expected_path", &target.local_load_path)
+            .unwrap();
+        py.run(
+            c"
+assert fixture_calls[0][0] == fixture_expected_path
+assert fixture_calls[1][0] == fixture_expected_path
+for _,kw in fixture_calls[:2]:
+    assert kw['trust_remote_code'] is False
+    assert kw['local_files_only'] is True
+    assert kw['revision'] == 'synthetic-r1'
+assert fixture_calls[2]['task'] == 'automatic-speech-recognition'
+assert fixture_calls[2]['device'] == -1
+assert fixture_calls[2]['chunk_length_s'] == 0.5
+",
+            Some(&globals),
+            None,
+        )
+        .unwrap();
+        for bad in [
+            serde_json::json!(0),
+            serde_json::json!(-1),
+            serde_json::json!(true),
+            serde_json::json!("0.5"),
+        ] {
+            let mut encoded = serde_json::to_value(&envelope).unwrap();
+            encoded["payload"]["chunk_length_s"] = bad;
+            assert!(contract
+                .call_method1(
+                    "load_transformers_model_kwargs_from_envelope",
+                    (encoded.to_string(),)
+                )
+                .is_err());
+        }
+    });
+}
+
+fn patch_selected_audio_worker(py: Python<'_>, worker: &Bound<'_, pyo3::types::PyModule>) {
+    py.run(c"
+_audio_effects=[]
+_audio_mode='success'
+_audio_phase='forward'
+_audio_fail_stop=False
+_audio_load={}
+_audio_forward={}
+def _audio_success(envelope,result):
+    req=json.loads(envelope)
+    return json.dumps({'status':'ok','request_id':req['request_id'],'result':result})
+def load_transformers_model_from_envelope(envelope):
+    global _audio_load
+    _audio_load=json.loads(envelope)
+    _audio_effects.append('load')
+    if _audio_phase=='load':
+        _audio_barrier.wait()
+        _audio_effects.append('load-completed')
+        if _audio_mode=='error':
+            raise RuntimeError('controlled ASR load failure')
+    return _audio_success(envelope,{'model_path':_audio_load['payload']['entry_path'],'model_type':'audio_transcription','device':_audio_load['payload']['device']})
+def transcribe_audio_from_envelope(envelope):
+    global _audio_forward
+    _audio_forward=json.loads(envelope)
+    _audio_effects.append('forward')
+    if _audio_phase=='forward':
+        _audio_barrier.wait()
+        _audio_effects.append('forward-completed')
+        if _audio_mode=='error':
+            raise RuntimeError('controlled ASR forward failure')
+    return _audio_success(envelope,{'text':'controlled fixture transcript','language':'en','duration_seconds':0.00025,'chunks':None})
+def shutdown_worker_from_envelope(envelope):
+    _audio_effects.append('shutdown')
+    if _audio_fail_stop:
+        raise RuntimeError('controlled unacknowledged ASR shutdown')
+    return _audio_success(envelope,{'shutdown':True})
+",Some(&worker.dict()),None).unwrap();
+}
+
+#[tokio::test]
+async fn selected_audio_production_load_forward_jobs_hold_custody_through_cancel_abort_and_error() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.lock().await;
+    for phase in ["load", "forward"] {
+        for mode in ["success", "error", "cancel", "abort"] {
+            let (_directory, request, target, decision) =
+                crate::selected_audio_execution::fixture();
+            let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();
+            let (release_tx, release_rx) = std::sync::mpsc::channel();
+            let backend = PyTorchBackend::new();
+            let worker_handle = backend.selected_audio_worker.clone();
+            let saved = Python::with_gil(|py| {
+                let worker = prepare_selected_audio_worker(py, &worker_handle);
+                let saved = [
+                    "load_transformers_model_from_envelope",
+                    "transcribe_audio_from_envelope",
+                    "shutdown_worker_from_envelope",
+                ]
+                .into_iter()
+                .map(|name| (name, worker.getattr(name).unwrap().unbind()))
+                .collect::<Vec<_>>();
+                patch_selected_audio_worker(py, &worker);
+                worker.setattr("_audio_phase", phase).unwrap();
+                worker.setattr("_audio_mode", mode).unwrap();
+                worker
+                    .setattr(
+                        "_audio_barrier",
+                        Py::new(
+                            py,
+                            TextIteratorBarrier {
+                                entered: std::sync::Mutex::new(Some(entered_tx)),
+                                release: std::sync::Mutex::new(release_rx),
+                            },
+                        )
+                        .unwrap(),
+                    )
+                    .unwrap();
+                saved
+            });
+            let gateway = Arc::new(crate::InferenceGateway::with_backend(
+                Box::new(backend),
+                "PyTorch",
+            ));
+            let cancellation = Arc::new(SelectedTextCancellation {
+                cancelled: Default::default(),
+                observed: std::sync::Mutex::new(None),
+            });
+            let caller = {
+                let gateway = gateway.clone();
+                let cancellation = cancellation.clone();
+                let request = request.clone();
+                let target = target.clone();
+                tokio::spawn(async move {
+                    gateway
+                        .execute_selected_audio_with_cancellation(
+                            request,
+                            target,
+                            decision,
+                            crate::InferenceExecutionCancellationHandle::with_signal(cancellation),
+                        )
+                        .await
+                })
+            };
+            tokio::time::timeout(std::time::Duration::from_secs(2), entered_rx)
+                .await
+                .unwrap()
+                .unwrap();
+            if mode == "abort" {
+                caller.abort();
+            } else if mode == "cancel" {
+                cancellation
+                    .cancelled
+                    .store(true, std::sync::atomic::Ordering::SeqCst);
+            }
+            assert!(
+                tokio::time::timeout(std::time::Duration::from_millis(30), gateway.is_ready())
+                    .await
+                    .is_err(),
+                "{phase}:{mode}"
+            );
+            Python::with_gil(|py| {
+                let worker = worker_handle.module(py).unwrap();
+                let load: serde_json::Value = serde_json::from_str(
+                    &worker
+                        .getattr("json")
+                        .unwrap()
+                        .call_method1("dumps", (worker.getattr("_audio_load").unwrap(),))
+                        .unwrap()
+                        .extract::<String>()
+                        .unwrap(),
+                )
+                .unwrap();
+                assert_eq!(load["request_id"], request.request_id.clone().unwrap());
+                assert_eq!(load["payload"]["entry_path"], target.local_load_path);
+                assert_eq!(load["payload"]["device"], "cpu");
+                assert_eq!(load["payload"]["chunk_length_s"], 0.5);
+                assert_eq!(
+                    load["payload"]["model_ref"]["model_id"],
+                    "synthetic/asr-fixture"
+                );
+                assert_eq!(load["payload"]["trust_policy"]["local_files_only"], true);
+                assert_eq!(load["payload"]["trust_policy"]["allow_remote_code"], false);
+                if phase == "forward" {
+                    let f: serde_json::Value = serde_json::from_str(
+                        &worker
+                            .getattr("json")
+                            .unwrap()
+                            .call_method1("dumps", (worker.getattr("_audio_forward").unwrap(),))
+                            .unwrap()
+                            .extract::<String>()
+                            .unwrap(),
+                    )
+                    .unwrap();
+                    assert_eq!(f["request_id"], request.request_id.clone().unwrap());
+                    assert_eq!(f["payload"]["model_path"], target.local_load_path);
+                    assert_eq!(f["payload"]["device"], "cpu");
+                    assert_eq!(f["payload"]["extra_options"], serde_json::Value::Null);
+                }
+            });
+            release_tx.send(()).unwrap();
+            let result = caller.await;
+            if mode == "abort" {
+                assert!(result.unwrap_err().is_cancelled());
+            } else if mode == "success" {
+                assert!(matches!(
+                    result.unwrap().unwrap(),
+                    crate::InferenceExecutionResult::AudioTranscription { .. }
+                ));
+            } else {
+                let error = result.unwrap().unwrap_err().to_string();
+                assert!(
+                    error.contains(if mode == "error" {
+                        "controlled ASR"
+                    } else {
+                        "cancelled"
+                    }),
+                    "{error}"
+                );
+            }
+            tokio::time::timeout(std::time::Duration::from_secs(2), gateway.is_ready())
+                .await
+                .unwrap();
+            Python::with_gil(|py| {
+                let worker = worker_handle.module(py).unwrap();
+                let effects = worker
+                    .getattr("_audio_effects")
+                    .unwrap()
+                    .extract::<Vec<String>>()
+                    .unwrap();
+                assert!(
+                    effects.contains(&format!("{phase}-completed")),
+                    "{effects:?}"
+                );
+                assert_eq!(
+                    effects[0], "shutdown",
+                    "fresh owner must fence unknown global residency"
+                );
+                for (name, value) in saved {
+                    worker.setattr(name, value).unwrap();
+                }
+                worker.delattr("_audio_barrier").unwrap();
+            });
+        }
+    }
+}
+
+#[tokio::test]
+async fn selected_audio_production_cache_fences_revision_content_chunk_and_generic_mutation() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.lock().await;
+    let (_directory, mut request, mut target, mut decision) =
+        crate::selected_audio_execution::fixture();
+    let mut backend = PyTorchBackend::new();
+    let worker_handle = backend.selected_audio_worker.clone();
+    let saved = Python::with_gil(|py| {
+        let worker = prepare_selected_audio_worker(py, &worker_handle);
+        let saved = [
+            "load_transformers_model_from_envelope",
+            "transcribe_audio_from_envelope",
+            "shutdown_worker_from_envelope",
+        ]
+        .into_iter()
+        .map(|name| (name, worker.getattr(name).unwrap().unbind()))
+        .collect::<Vec<_>>();
+        patch_selected_audio_worker(py, &worker);
+        worker.setattr("_audio_phase", "none").unwrap();
+        saved
+    });
+    let running = crate::InferenceExecutionCancellationHandle::running;
+    assert_eq!(
+        backend
+            .load_selected_audio(&request, &target, &decision, None, running())
+            .await
+            .unwrap()
+            .runtime_reused,
+        Some(false)
+    );
+    assert_eq!(
+        backend
+            .load_selected_audio(&request, &target, &decision, None, running())
+            .await
+            .unwrap()
+            .runtime_reused,
+        Some(true)
+    );
+    let crate::InferenceExecutionInput::AudioTranscription { request: audio } = &mut request.input
+    else {
+        unreachable!()
+    };
+    audio.chunk_length_s = Some(0.25);
+    assert_eq!(
+        backend
+            .load_selected_audio(&request, &target, &decision, None, running())
+            .await
+            .unwrap()
+            .runtime_reused,
+        Some(false)
+    );
+    target.content_fingerprint = Some("synthetic-content-r2".into());
+    assert_eq!(
+        backend
+            .load_selected_audio(&request, &target, &decision, None, running())
+            .await
+            .unwrap()
+            .runtime_reused,
+        Some(false)
+    );
+    target.model_ref.revision = Some("synthetic-r2".into());
+    request.model_ref = Some(target.model_ref.clone());
+    request
+        .resolved_model_package_facts
+        .as_mut()
+        .unwrap()
+        .model_ref = target.model_ref.clone();
+    decision.selected_model_ref = Some(target.model_ref.clone());
+    assert_eq!(
+        backend
+            .load_selected_audio(&request, &target, &decision, None, running())
+            .await
+            .unwrap()
+            .runtime_reused,
+        Some(false)
+    );
+    // A direct-audio attempt cannot certify selected reuse, even on failure.
+    let crate::InferenceExecutionInput::AudioTranscription { request: audio } = &request.input
+    else {
+        unreachable!()
+    };
+    let mut direct = audio.clone();
+    direct.extra_options = serde_json::Value::Null;
+    assert!(backend.transcribe_audio(direct).await.is_err());
+    assert_eq!(
+        backend
+            .load_selected_audio(&request, &target, &decision, None, running())
+            .await
+            .unwrap()
+            .runtime_reused,
+        Some(false)
+    );
+    Python::with_gil(|py| {
+        worker_handle
+            .module(py)
+            .unwrap()
+            .setattr("_audio_fail_stop", true)
+            .unwrap();
+    });
+    target.content_fingerprint = Some("synthetic-content-r3".into());
+    assert!(backend
+        .load_selected_audio(&request, &target, &decision, None, running())
+        .await
+        .unwrap_err()
+        .to_string()
+        .contains("unacknowledged ASR shutdown"));
+    Python::with_gil(|py| {
+        let worker = worker_handle.module(py).unwrap();
+        let effects = worker
+            .getattr("_audio_effects")
+            .unwrap()
+            .extract::<Vec<String>>()
+            .unwrap();
+        assert_eq!(effects.iter().filter(|effect| *effect == "load").count(), 5);
+        assert_eq!(effects.last().unwrap(), "shutdown");
+        for (name, value) in saved {
+            worker.setattr(name, value).unwrap();
+        }
+    });
+}
+
+#[tokio::test]
+async fn selected_audio_two_live_owners_isolate_cache_custody_stop_and_module_retirement() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.lock().await;
+    for phase in ["load", "forward"] {
+        let (_directory, request, target, decision) = crate::selected_audio_execution::fixture();
+        let backend_a = PyTorchBackend::new();
+        let worker_a = backend_a.selected_audio_worker.clone();
+        let mut backend_b = PyTorchBackend::new();
+        let worker_b = backend_b.selected_audio_worker.clone();
+        let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let (name_a, name_b, generic_shutdown) = Python::with_gil(|py| {
+            let a = prepare_selected_audio_worker(py, &worker_a);
+            let b = prepare_selected_audio_worker(py, &worker_b);
+            assert!(!a.is(&b));
+            patch_selected_audio_worker(py, &a);
+            patch_selected_audio_worker(py, &b);
+            a.setattr("_audio_phase", phase).unwrap();
+            b.setattr("_audio_phase", "none").unwrap();
+            a.setattr(
+                "_audio_barrier",
+                Py::new(
+                    py,
+                    TextIteratorBarrier {
+                        entered: std::sync::Mutex::new(Some(entered_tx)),
+                        release: std::sync::Mutex::new(release_rx),
+                    },
+                )
+                .unwrap(),
+            )
+            .unwrap();
+            let generic = super::pytorch_worker::worker_module(py).unwrap();
+            let saved = generic
+                .getattr("shutdown_worker_from_envelope")
+                .unwrap()
+                .unbind();
+            py.run(c"def shutdown_worker_from_envelope(envelope):\n    raise RuntimeError('selected-only stop touched generic worker')",Some(&generic.dict()),None).unwrap();
+            (
+                a.name().unwrap().to_string(),
+                b.name().unwrap().to_string(),
+                saved,
+            )
+        });
+        let gateway = Arc::new(crate::InferenceGateway::with_backend(
+            Box::new(backend_a),
+            "PyTorch",
+        ));
+        let caller = {
+            let gateway = gateway.clone();
+            let r = request.clone();
+            let t = target.clone();
+            let d = decision.clone();
+            tokio::spawn(async move {
+                gateway
+                    .execute_selected_audio_with_cancellation(
+                        r,
+                        t,
+                        d,
+                        crate::InferenceExecutionCancellationHandle::running(),
+                    )
+                    .await
+            })
+        };
+        tokio::time::timeout(std::time::Duration::from_secs(2), entered_rx)
+            .await
+            .unwrap()
+            .unwrap();
+        let mut second_request = request.clone();
+        let mut second_target = target.clone();
+        let mut second_decision = decision.clone();
+        second_target.model_ref.revision = Some("synthetic-r2".into());
+        second_target.content_fingerprint = Some("synthetic-content-r2".into());
+        second_request.model_ref = Some(second_target.model_ref.clone());
+        second_request
+            .resolved_model_package_facts
+            .as_mut()
+            .unwrap()
+            .model_ref = second_target.model_ref.clone();
+        second_decision.selected_model_ref = Some(second_target.model_ref.clone());
+        let crate::InferenceExecutionInput::AudioTranscription { request: audio } =
+            &mut second_request.input
+        else {
+            unreachable!()
+        };
+        audio.chunk_length_s = Some(0.25);
+        let running = crate::InferenceExecutionCancellationHandle::running;
+        assert_eq!(
+            backend_b
+                .load_selected_audio(
+                    &second_request,
+                    &second_target,
+                    &second_decision,
+                    None,
+                    running()
+                )
+                .await
+                .unwrap()
+                .runtime_reused,
+            Some(false)
+        );
+        let crate::InferenceExecutionInput::AudioTranscription { request: audio } =
+            &second_request.input
+        else {
+            unreachable!()
+        };
+        backend_b
+            .selected_audio(
+                audio.clone(),
+                "audio-second-owner",
+                &second_target,
+                &second_decision,
+                running(),
+            )
+            .await
+            .unwrap();
+        backend_b.stop().await.unwrap();
+        assert!(
+            tokio::time::timeout(std::time::Duration::from_millis(30), gateway.is_ready())
+                .await
+                .is_err()
+        );
+        Python::with_gil(|py| {
+            let a = worker_a.module(py).unwrap();
+            let effects = a
+                .getattr("_audio_effects")
+                .unwrap()
+                .extract::<Vec<String>>()
+                .unwrap();
+            assert_eq!(
+                effects
+                    .iter()
+                    .filter(|effect| *effect == "shutdown")
+                    .count(),
+                1,
+                "other owner's stop touched first module"
+            );
+        });
+        release_tx.send(()).unwrap();
+        caller.await.unwrap().unwrap();
+        Python::with_gil(|py| {
+            worker_a
+                .module(py)
+                .unwrap()
+                .setattr("_audio_phase", "none")
+                .unwrap()
+        });
+        gateway
+            .execute_selected_audio_with_cancellation(
+                request.clone(),
+                target.clone(),
+                decision.clone(),
+                running(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            gateway.runtime_lifecycle_snapshot().await.runtime_reused,
+            Some(true)
+        );
+        Python::with_gil(|py| {
+            let a = worker_a.module(py).unwrap();
+            let load = a.getattr("_audio_load").unwrap();
+            assert_eq!(
+                load.get_item("payload")
+                    .unwrap()
+                    .get_item("chunk_length_s")
+                    .unwrap()
+                    .extract::<f64>()
+                    .unwrap(),
+                0.5
+            );
+            assert_eq!(
+                load.get_item("payload")
+                    .unwrap()
+                    .get_item("model_ref")
+                    .unwrap()
+                    .get_item("revision")
+                    .unwrap()
+                    .extract::<String>()
+                    .unwrap(),
+                "synthetic-r1"
+            );
+            // Avoid reusing the one-shot barrier during the warm request below.
+        });
+        gateway.stop().await.unwrap();
+        drop(gateway);
+        drop(backend_b);
+        drop(worker_a);
+        drop(worker_b);
+        Python::with_gil(|py| {
+            let modules = py.import("sys").unwrap().getattr("modules").unwrap();
+            assert!(!modules.contains(name_a).unwrap());
+            assert!(!modules.contains(name_b).unwrap());
+            super::pytorch_worker::worker_module(py)
+                .unwrap()
+                .setattr("shutdown_worker_from_envelope", generic_shutdown)
+                .unwrap();
+        });
     }
 }

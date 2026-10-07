@@ -92,3 +92,59 @@ pub(super) fn worker_module(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
     ensure_worker_initialised(py)?;
     py.import("pantograph_torch_worker")
 }
+
+/// Selected ASR owns module-local model globals, independently of other live
+/// embedded runtimes and the inherited generic worker.
+pub(super) struct IsolatedAudioWorker {
+    name: String,
+    initialized: AtomicBool,
+}
+impl IsolatedAudioWorker {
+    pub(super) fn new() -> Self {
+        Self {
+            name: format!(
+                "pantograph_selected_audio_{}",
+                uuid::Uuid::new_v4().simple()
+            ),
+            initialized: AtomicBool::new(false),
+        }
+    }
+    pub(super) fn module<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyModule>> {
+        ensure_worker_initialised(py)?;
+        match py.import(self.name.as_str()) {
+            Ok(module) => {
+                self.initialized.store(true, Ordering::Release);
+                Ok(module)
+            }
+            Err(error) if error.is_instance_of::<pyo3::exceptions::PyModuleNotFoundError>(py) => {
+                let source = std::ffi::CString::new(WORKER_PY).expect("embedded worker source");
+                let name =
+                    std::ffi::CString::new(self.name.as_str()).expect("generated module name");
+                let module =
+                    PyModule::from_code(py, &source, c"pantograph_selected_audio.py", &name)?;
+                self.initialized.store(true, Ordering::Release);
+                Ok(module)
+            }
+            Err(error) => Err(error),
+        }
+    }
+}
+impl Drop for IsolatedAudioWorker {
+    fn drop(&mut self) {
+        if !self.initialized.load(Ordering::Acquire) {
+            return;
+        }
+        // Blocking closures retain an Arc to this registration. Retirement is
+        // therefore after their actual completion, including caller loss.
+        Python::with_gil(|py| {
+            if let Ok(sys) = py.import("sys") {
+                if let Ok(modules) = sys.getattr("modules") {
+                    if let Ok(module) = modules.get_item(self.name.as_str()) {
+                        let _ = module.call_method0("shutdown_worker");
+                        let _ = modules.del_item(self.name.as_str());
+                    }
+                }
+            }
+        });
+    }
+}

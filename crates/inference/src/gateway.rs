@@ -60,6 +60,8 @@ use crate::{
 
 #[path = "gateway_embedding_replacement.rs"]
 mod embedding_replacement;
+#[path = "gateway_selected_audio.rs"]
+mod selected_audio;
 #[path = "gateway_selected_rerank.rs"]
 mod selected_rerank;
 

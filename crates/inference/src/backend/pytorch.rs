@@ -89,6 +89,26 @@ pub use cuda_inventory::{
     PyTorchCudaPhysicalIdentity,
 };
 
+#[derive(Clone, PartialEq)]
+struct SelectedAudioCacheKey {
+    target: crate::PumasArtifactLoadTarget,
+    device: InferenceDeviceId,
+    chunk_length_bits: Option<u32>,
+}
+impl SelectedAudioCacheKey {
+    fn new(
+        target: &crate::PumasArtifactLoadTarget,
+        device: &InferenceDeviceId,
+        audio: &AudioTranscriptionRequest,
+    ) -> Self {
+        Self {
+            target: target.clone(),
+            device: device.clone(),
+            chunk_length_bits: audio.chunk_length_s.map(f32::to_bits),
+        }
+    }
+}
+
 /// Host-observed PyTorch device probe facts.
 ///
 /// This contract is intentionally pure data. The caller owns how and when
@@ -139,6 +159,10 @@ pub struct PyTorchBackend {
     /// Whether the backend has been initialised and is ready
     ready: bool,
     text_jobs: pytorch_text_job::TextJobs,
+    selected_audio: parking_lot::Mutex<Option<SelectedAudioCacheKey>>,
+    selected_audio_worker: Arc<pytorch_worker::IsolatedAudioWorker>,
+    selected_audio_ready: bool,
+    selected_audio_residency_possible: bool,
     /// Currently loaded model metadata
     loaded_model: Option<LoadedModelInfo>,
     /// Effectful load may lose metadata before worker allocation is released.
@@ -1039,6 +1063,10 @@ impl PyTorchBackend {
         Self {
             ready: false,
             text_jobs: Default::default(),
+            selected_audio: Default::default(),
+            selected_audio_worker: Arc::new(pytorch_worker::IsolatedAudioWorker::new()),
+            selected_audio_ready: false,
+            selected_audio_residency_possible: false,
             loaded_model: None,
             resident_allocation_uncertain: false,
         }
@@ -1295,6 +1323,117 @@ impl PyTorchBackend {
         Ok(envelope)
     }
 
+    async fn selected_audio_load_envelope(
+        request: &crate::InferenceExecutionRequest,
+        target: &crate::PumasArtifactLoadTarget,
+        decision: &crate::BackendExecutionDecision,
+    ) -> Result<PyTorchWorkerEnvelope<PyTorchTransformersLoadRequest>, BackendError> {
+        let selected =
+            crate::selected_audio_execution::SelectedAudioLoad::validate(request, target, decision)
+                .await?;
+        let mut envelope = Self::transformers_load_envelope_from_package(
+            request.request_id.as_deref().expect("validated id"),
+            selected.package,
+            Some(selected.device),
+            Self::default_transformers_trust_policy(),
+        )?;
+        envelope.payload.entry_path = selected.target.local_load_path.clone();
+        if let Some(source) = envelope.payload.model_source.as_mut() {
+            source.entry_path = selected.target.local_load_path.clone();
+        }
+        let crate::InferenceExecutionInput::AudioTranscription { request: audio } = &request.input
+        else {
+            unreachable!("validated audio")
+        };
+        envelope.payload.chunk_length_s = audio.chunk_length_s;
+        envelope.payload.trust_policy.revision = selected.target.model_ref.revision.clone();
+        Self::validate_transformers_load_envelope(&envelope)?;
+        Ok(envelope)
+    }
+
+    async fn execute_audio_envelope(
+        envelope: PyTorchWorkerEnvelope<PyTorchAudioTranscriptionRequest>,
+    ) -> Result<AudioTranscriptionResult, BackendError> {
+        Self::execute_audio_envelope_in_worker(envelope, None).await
+    }
+    async fn execute_audio_envelope_in_worker(
+        envelope: PyTorchWorkerEnvelope<PyTorchAudioTranscriptionRequest>,
+        isolated: Option<Arc<pytorch_worker::IsolatedAudioWorker>>,
+    ) -> Result<AudioTranscriptionResult, BackendError> {
+        let request_id = envelope.request_id.clone();
+        let envelope_json = serde_json::to_string(&envelope).map_err(|error| {
+            BackendError::Config(format!(
+                "Failed to encode PyTorch worker audio_transcription envelope: {error}"
+            ))
+        })?;
+
+        tokio::task::spawn_blocking(move || {
+            Python::with_gil(|py| -> Result<AudioTranscriptionResult, BackendError> {
+                let worker = match &isolated {
+                    Some(worker) => worker.module(py),
+                    None => pytorch_worker::worker_module(py),
+                }
+                .map_err(|e| {
+                    Self::audio_transcription_worker_failure_from_message(
+                        &request_id,
+                        format!("Failed to get worker module: {}", e),
+                    )
+                })?;
+
+                let response_json = worker
+                    .call_method1("transcribe_audio_from_envelope", (envelope_json,))
+                    .map_err(|e| {
+                        Self::audio_transcription_worker_failure_from_message(
+                            &request_id,
+                            format!("PyTorch worker audio_transcription envelope failed: {e}"),
+                        )
+                    })?
+                    .extract::<String>()
+                    .map_err(|e| {
+                        Self::audio_transcription_worker_failure_from_message(
+                            &request_id,
+                            format!(
+                                "PyTorch worker audio_transcription response was not JSON text: {e}"
+                            ),
+                        )
+                    })?;
+                Self::audio_transcription_result_from_worker_response(&request_id, &response_json)
+            })
+        })
+        .await
+        .map_err(|e| BackendError::Inference(task_join_error_message(e)))?
+    }
+
+    async fn stop_selected_audio_worker(&mut self, force: bool) -> Result<(), BackendError> {
+        if !force && !self.selected_audio_residency_possible {
+            return Ok(());
+        }
+        let worker = self.selected_audio_worker.clone();
+        let request_id = format!("selected-audio-shutdown-{}", Uuid::new_v4().simple());
+        let envelope = shutdown_worker_envelope_json(&request_id)?;
+        self.selected_audio_residency_possible = true;
+        tokio::task::spawn_blocking(move || {
+            Python::with_gil(|py| {
+                let module = worker.module(py).map_err(|error| {
+                    Self::shutdown_worker_failure_from_message(&request_id, error.to_string())
+                })?;
+                let response = module
+                    .call_method1("shutdown_worker_from_envelope", (envelope,))
+                    .and_then(|value| value.extract::<String>())
+                    .map_err(|error| {
+                        Self::shutdown_worker_failure_from_message(&request_id, error.to_string())
+                    })?;
+                shutdown_worker_result_from_worker_response(&request_id, &response)
+            })
+        })
+        .await
+        .map_err(|error| BackendError::Inference(task_join_error_message(error)))??;
+        self.selected_audio_residency_possible = false;
+        self.selected_audio_ready = false;
+        *self.selected_audio.lock() = None;
+        Ok(())
+    }
+
     fn default_transformers_trust_policy() -> PyTorchTransformersTrustPolicy {
         PyTorchTransformersTrustPolicy::default()
     }
@@ -1358,6 +1497,7 @@ impl PyTorchBackend {
                 device: device.cloned(),
                 trust_policy,
                 generation_defaults,
+                chunk_length_s: None,
             },
         ))
     }
@@ -1393,6 +1533,7 @@ impl PyTorchBackend {
                 device: device.cloned(),
                 trust_policy,
                 generation_defaults: None,
+                chunk_length_s: None,
             },
         ))
     }
@@ -1400,6 +1541,16 @@ impl PyTorchBackend {
     async fn load_transformers_envelope(
         &mut self,
         envelope: PyTorchWorkerEnvelope<PyTorchTransformersLoadRequest>,
+    ) -> Result<LoadedModelInfo, BackendError> {
+        Self::validate_transformers_load_envelope(&envelope)?;
+        self.stop_selected_audio_worker(false).await?;
+        self.load_transformers_envelope_in_worker(envelope, None)
+            .await
+    }
+    async fn load_transformers_envelope_in_worker(
+        &mut self,
+        envelope: PyTorchWorkerEnvelope<PyTorchTransformersLoadRequest>,
+        isolated: Option<Arc<pytorch_worker::IsolatedAudioWorker>>,
     ) -> Result<LoadedModelInfo, BackendError> {
         self.text_jobs.drain(false).await?;
         Self::validate_transformers_load_envelope(&envelope)?;
@@ -1413,13 +1564,24 @@ impl PyTorchBackend {
         // The worker can unload the resident model before replacement fails.
         // Once effectful loading begins, old metadata no longer proves residency.
         // Drain and envelope validation above leave the prior residency intact.
-        self.resident_allocation_uncertain = true;
-        self.ready = false;
-        self.loaded_model = None;
+        *self.selected_audio.lock() = None;
+        let private = isolated.is_some();
+        if private {
+            self.selected_audio_residency_possible = true;
+            self.selected_audio_ready = false;
+        } else {
+            self.resident_allocation_uncertain = true;
+            self.ready = false;
+            self.loaded_model = None;
+        }
 
         let info = tokio::task::spawn_blocking(move || {
             Python::with_gil(|py| -> Result<LoadedModelInfo, BackendError> {
-                let worker = pytorch_worker::worker_module(py).map_err(|e| {
+                let worker = match &isolated {
+                    Some(worker) => worker.module(py),
+                    None => pytorch_worker::worker_module(py),
+                }
+                .map_err(|e| {
                     Self::load_worker_failure_from_message(
                         &request_id,
                         format!("Failed to load worker module: {}", e),
@@ -1442,9 +1604,13 @@ impl PyTorchBackend {
         .await
         .map_err(|e| BackendError::Inference(task_join_error_message(e)))??;
 
-        self.loaded_model = Some(info.clone());
-        self.resident_allocation_uncertain = false;
-        self.ready = true;
+        if private {
+            self.selected_audio_ready = true;
+        } else {
+            self.loaded_model = Some(info.clone());
+            self.resident_allocation_uncertain = false;
+            self.ready = true;
+        }
         Ok(info)
     }
 
@@ -1872,6 +2038,15 @@ impl PyTorchBackend {
     fn validate_transformers_load_envelope(
         envelope: &PyTorchWorkerEnvelope<PyTorchTransformersLoadRequest>,
     ) -> Result<(), BackendError> {
+        if envelope.payload.chunk_length_s.is_some_and(|v| {
+            !v.is_finite()
+                || v <= 0.0
+                || envelope.payload.task_id != InferenceTaskId::AudioTranscription
+        }) {
+            return Err(BackendError::Config(
+                "chunk length is supported only as positive finite ASR load control".into(),
+            ));
+        }
         if envelope.contract_version != PYTORCH_WORKER_CONTRACT_VERSION {
             return Err(BackendError::Config(format!(
                 "Unsupported PyTorch worker load envelope contract version {}",
@@ -2812,6 +2987,8 @@ impl InferenceBackend for PyTorchBackend {
         config: &BackendConfig,
         _spawner: Arc<dyn ProcessSpawner>,
     ) -> Result<BackendStartOutcome, BackendError> {
+        self.stop_selected_audio_worker(false).await?;
+        *self.selected_audio.lock() = None;
         self.text_jobs.drain(false).await?;
         let was_ready = self.ready;
 
@@ -2875,6 +3052,130 @@ impl InferenceBackend for PyTorchBackend {
         })
     }
 
+    async fn load_selected_audio(
+        &mut self,
+        request: &crate::InferenceExecutionRequest,
+        target: &crate::PumasArtifactLoadTarget,
+        decision: &crate::BackendExecutionDecision,
+        _spawner: Option<Arc<dyn ProcessSpawner>>,
+        cancellation: crate::InferenceExecutionCancellationHandle,
+    ) -> Result<BackendStartOutcome, BackendError> {
+        let envelope = Self::selected_audio_load_envelope(request, target, decision).await?;
+        let crate::InferenceExecutionInput::AudioTranscription { request: audio } = &request.input
+        else {
+            unreachable!("validated audio")
+        };
+        let device = envelope.payload.device.as_ref().expect("validated CPU");
+        let key = SelectedAudioCacheKey::new(target, device, audio);
+        if let Some(reason) = cancellation.rejection_message("selected audio load") {
+            return Err(BackendError::Cancelled(reason));
+        }
+        let reuse = self.selected_audio_ready && self.selected_audio.lock().as_ref() == Some(&key);
+        if !reuse {
+            // Private module globals cannot be replaced by another live owner.
+            // Unknown/changed private residency still requires confirmed release.
+            let had_private = self.selected_audio_residency_possible;
+            self.stop().await?;
+            if !had_private {
+                self.stop_selected_audio_worker(true).await?;
+            }
+            if let Some(reason) = cancellation.rejection_message("selected audio load") {
+                return Err(BackendError::Cancelled(reason));
+            }
+            let info = self
+                .load_transformers_envelope_in_worker(
+                    envelope,
+                    Some(self.selected_audio_worker.clone()),
+                )
+                .await?;
+            if info.model_path != target.local_load_path
+                || info.device != key.device
+                || info.model_type != "audio_transcription"
+            {
+                self.stop().await?;
+                return Err(BackendError::Config(
+                    "selected ASR worker load identity mismatch".into(),
+                ));
+            }
+            *self.selected_audio.lock() = Some(key);
+        }
+        if let Some(reason) = cancellation.rejection_message("selected audio load") {
+            return Err(BackendError::Cancelled(reason));
+        }
+        Ok(BackendStartOutcome {
+            runtime_reused: Some(reuse),
+            lifecycle_decision_reason: Some("scheduler_selected_audio_package_loaded".into()),
+        })
+    }
+
+    async fn selected_audio(
+        &self,
+        mut request: AudioTranscriptionRequest,
+        request_id: &str,
+        target: &crate::PumasArtifactLoadTarget,
+        decision: &crate::BackendExecutionDecision,
+        cancellation: crate::InferenceExecutionCancellationHandle,
+    ) -> Result<AudioTranscriptionResult, BackendError> {
+        crate::validate_selected_audio_request(&request)?;
+        let model = decision.selected_model_ref.as_ref();
+        if request_id.trim().is_empty()
+            || decision.selected_task_id != Some(crate::InferenceTaskId::AudioTranscription)
+            || decision.selected_backend_id.as_str() != "pytorch"
+            || decision.selected_runtime_variant_id.as_str() != "pytorch.cpu"
+            || decision.selected_device_class != InferenceDeviceClass::Cpu
+            || decision.device_decision.runtime_variant_id != decision.selected_runtime_variant_id
+            || decision.device_decision.selected_device_class != decision.selected_device_class
+            || decision.device_decision.selected_device_id != decision.selected_device_id
+            || model.is_none_or(|selected| {
+                selected.model_id.trim_start_matches("pumas://models/")
+                    != target
+                        .model_ref
+                        .model_id
+                        .trim_start_matches("pumas://models/")
+                    || selected.selected_artifact_id != target.model_ref.selected_artifact_id
+                    || selected.selected_artifact_path != target.model_ref.selected_artifact_path
+                    || selected.revision.as_ref().is_some_and(|revision| {
+                        target.model_ref.revision.as_ref() != Some(revision)
+                    })
+            })
+            || request.model.trim_start_matches("pumas://models/")
+                != target
+                    .model_ref
+                    .model_id
+                    .trim_start_matches("pumas://models/")
+        {
+            return Err(BackendError::Config(
+                "selected ASR forward identity mismatch".into(),
+            ));
+        }
+        let device = decision
+            .selected_device_id
+            .as_ref()
+            .ok_or_else(|| BackendError::Config("selected ASR device required".into()))?;
+        let key = SelectedAudioCacheKey::new(target, device, &request);
+        if !self.selected_audio_ready || self.selected_audio.lock().as_ref() != Some(&key) {
+            return Err(BackendError::Config(
+                "selected ASR resident identity unavailable".into(),
+            ));
+        }
+        if let Some(reason) = cancellation.rejection_message("selected audio") {
+            return Err(BackendError::Cancelled(reason));
+        }
+        request.model = target.local_load_path.clone();
+        request.extra_options = serde_json::Value::Null;
+        let mut envelope = Self::audio_transcription_envelope_from_request(request_id, request)?;
+        envelope.payload.device = Some(device.clone());
+        let result = Self::execute_audio_envelope_in_worker(
+            envelope,
+            Some(self.selected_audio_worker.clone()),
+        )
+        .await;
+        if let Some(reason) = cancellation.rejection_message("selected audio") {
+            return Err(BackendError::Cancelled(reason));
+        }
+        result
+    }
+
     async fn load_selected_text(
         &mut self,
         request: &crate::InferenceExecutionRequest,
@@ -2895,6 +3196,7 @@ impl InferenceBackend for PyTorchBackend {
 
     async fn stop(&mut self) -> Result<(), BackendError> {
         self.text_jobs.drain(true).await?;
+        self.stop_selected_audio_worker(false).await?;
         if self.ready || self.loaded_model.is_some() || self.resident_allocation_uncertain {
             let request_id = format!("pytorch-stop-shutdown-{}", Uuid::new_v4().simple());
             let envelope_json = shutdown_worker_envelope_json(&request_id)?;
@@ -2904,6 +3206,7 @@ impl InferenceBackend for PyTorchBackend {
             .await
             .map_err(|e| BackendError::Inference(task_join_error_message(e)))??;
         }
+        *self.selected_audio.lock() = None;
         self.loaded_model = None;
         self.resident_allocation_uncertain = false;
         self.ready = false;
@@ -2911,10 +3214,13 @@ impl InferenceBackend for PyTorchBackend {
     }
 
     fn is_ready(&self) -> bool {
-        self.ready
+        self.ready || self.selected_audio_ready
     }
 
     async fn health_check(&self) -> bool {
+        if self.selected_audio_ready {
+            return true;
+        } // Confirmed private load, exclusive gateway custody.
         if !self.ready {
             return false;
         }
@@ -3062,50 +3368,13 @@ impl InferenceBackend for PyTorchBackend {
         &self,
         request: AudioTranscriptionRequest,
     ) -> Result<AudioTranscriptionResult, BackendError> {
-        if !self.ready {
+        *self.selected_audio.lock() = None;
+        if !self.is_ready() {
             return Err(BackendError::NotReady);
         }
-
         let request_id = format!("pytorch-audio-transcription-{}", Uuid::new_v4().simple());
-        let envelope =
-            Self::audio_transcription_envelope_from_request(request_id.clone(), request)?;
-        let envelope_json = serde_json::to_string(&envelope).map_err(|error| {
-            BackendError::Config(format!(
-                "Failed to encode PyTorch worker audio_transcription envelope: {error}"
-            ))
-        })?;
-
-        tokio::task::spawn_blocking(move || {
-            Python::with_gil(|py| -> Result<AudioTranscriptionResult, BackendError> {
-                let worker = pytorch_worker::worker_module(py).map_err(|e| {
-                    Self::audio_transcription_worker_failure_from_message(
-                        &request_id,
-                        format!("Failed to get worker module: {}", e),
-                    )
-                })?;
-
-                let response_json = worker
-                    .call_method1("transcribe_audio_from_envelope", (envelope_json,))
-                    .map_err(|e| {
-                        Self::audio_transcription_worker_failure_from_message(
-                            &request_id,
-                            format!("PyTorch worker audio_transcription envelope failed: {e}"),
-                        )
-                    })?
-                    .extract::<String>()
-                    .map_err(|e| {
-                        Self::audio_transcription_worker_failure_from_message(
-                            &request_id,
-                            format!(
-                                "PyTorch worker audio_transcription response was not JSON text: {e}"
-                            ),
-                        )
-                    })?;
-                Self::audio_transcription_result_from_worker_response(&request_id, &response_json)
-            })
-        })
-        .await
-        .map_err(|e| BackendError::Inference(task_join_error_message(e)))?
+        let envelope = Self::audio_transcription_envelope_from_request(request_id, request)?;
+        Self::execute_audio_envelope(envelope).await
     }
 
     async fn generate_image_from_plan(
