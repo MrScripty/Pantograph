@@ -127,6 +127,35 @@ fn thesis_cold_warm_and_transfer_reversal_are_explicitly_synthetic() {
 }
 
 #[test]
+fn synthetic_load_cost_alone_reverses_cold_and_warm_choice() {
+    let request = ValidatedSchedulerDispatchSelectionRequest::try_from(offers(2)).unwrap();
+    let mut rows = evidence(&request);
+    rows[0].current_context.residency_fingerprint = "synthetic-warm";
+    rows[0].sample.context = rows[0].current_context;
+    rows[0].sample.execution_us = Some(12_000_000);
+    rows[1].sample.execution_us = Some(3_000_000);
+
+    // Only the cold candidate's serialized preparation/load estimate changes.
+    // Transfers remain explicitly zero and execution costs remain fixed.
+    for (load_us, expected_candidate, expected_completion_us) in [
+        (2_000_000, "candidate.001", 5_000_000),
+        (10_000_000, "candidate.000", 12_000_000),
+    ] {
+        rows[1].sample.preparation_us = Some(load_us);
+        let result = select_scheduler_candidate_with_completion(&request, &rows, policy());
+        assert_eq!(chosen(&result), expected_candidate);
+        assert_eq!(
+            result.diagnostic,
+            SchedulerCompletionRankingDiagnostic::Ranked {
+                predicted_completion_us: expected_completion_us,
+                source: SchedulerCompletionEvidenceSource::Synthetic,
+                eligible_candidates: 2,
+            }
+        );
+    }
+}
+
+#[test]
 fn invalid_samples_retain_the_entire_conservative_population() {
     use SchedulerCompletionRefusalReason as Reason;
     let request = ValidatedSchedulerDispatchSelectionRequest::try_from(offers(2)).unwrap();

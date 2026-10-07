@@ -40,7 +40,7 @@ POC implementation was copied, translated, ported or made a dependency.
 
 ## Verification
 
-All 286 scheduler and runtime-registry tests passed, including 11 new completion
+All 287 scheduler and runtime-registry tests passed, including 12 new completion
 tests. There are no ignored tests in these two crates. Commands used the pinned
 Rust 1.92.0 toolchain with `ORT_SKIP_DOWNLOAD=1`:
 
@@ -71,7 +71,7 @@ There is no new production integration to qualify; those seams must be exercised
 around the new selector when a real producer is connected.
 
 An independent reviewer inspected design and implementation and independently
-ran all 11 new tests. Verdict: no blocking findings. A benchmark-coverage finding
+ran the original 11 new tests. Verdict: no blocking findings. A benchmark-coverage finding
 was addressed by adding maximum-length fields/diagnostics and a late-invalid
 fallback fixture; final independent review closed it.
 
@@ -141,3 +141,16 @@ its action space. This earliest baseline is not the completed research planner.
 
 No push, public writes or main merge were performed. No credentials, network
 settings, model/runtime downloads or unrelated workers' working paths changed.
+
+Follow-up independent review added a retained load-only reversal test: change cold
+preparation from 2 to 10 seconds with execution fixed at 3 and transfer fixed at
+zero; cold 5 seconds wins initially, then warm 12 seconds wins over cold 13.
+The reviewer independently passed all 12 callable policy tests, 12 registry
+custody tests and 8 evaluation tests. One temporary adversarial test also passed
+at 64 candidates, 128-byte candidate IDs/all context fields, and 32 diagnostics
+with 1024-byte messages/hints; it verified stable choice, late invalid/missing
+evidence fallback, unchanged requests and absent leases. That harness was removed.
+These remain policy/registry seam checks, not production-path integration.
+
+The full source-level call trace, exact Library failure, and proposed next
+multi-event slice are in [the integration account](scheduler-v2-call-path-and-next-slice.md).
