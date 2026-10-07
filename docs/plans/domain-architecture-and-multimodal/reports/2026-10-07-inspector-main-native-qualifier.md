@@ -19,7 +19,7 @@ The qualifier adds the existing 12 QA paths from the successful qualified source
   output-contract helper/tests, load-diagnostic helper/tests and hit-diagnostic
   helper/tests.
 
-Three imported QA files are adapted. The existing workflow keeps its name,
+Five imported QA files are adapted. The existing workflow keeps its name,
 job, supported driver, dependency/toolchain installation, complete feature audits,
 offline model environment, ORT download guard, source/evidence recording and
 artifact retention. Its push filter targets this separate branch and its source
@@ -28,6 +28,11 @@ chat qualification ancestor. The inspector spec finds the existing visible
 run-header div adjacent to its heading, scoped inside `io-inspector-page`, and
 still checks the exact selected run through displayed DOM text. This avoids
 adding the old QA-only header test marker to production markup.
+The read-only load diagnostics use that same existing header locator, with the
+diagnostic regression fixture adjusted accordingly. The helper's original marker
+would omit the header field on main; independent review identified this mismatch
+before publication. Failure observation, pending-state distinctions and IPC
+immutability assertions are unchanged.
 
 The output-contract regression previously read an older observation from the
 qualification branch's documentation evidence, which is absent on main. Its

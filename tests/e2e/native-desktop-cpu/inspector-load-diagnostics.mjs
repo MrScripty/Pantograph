@@ -17,7 +17,7 @@ export function readInspectorLoadDiagnostics() {
   const text = page?.textContent ?? '';
   return {
     javascriptFailures: window.__nativeInspectorLoadFailures ?? [],
-    selectedRunHeader: page?.querySelector('[data-testid="io-inspector-active-run"]')?.textContent?.trim(),
+    selectedRunHeader: page?.querySelector('h1 + div')?.textContent?.trim(),
     loadingSnapshot: text.includes('Loading run snapshot'),
     projectionUnavailable: text.includes('Projection unavailable'),
     capturedGraphPresent: Boolean(page?.querySelector('svg[aria-label="Captured workflow graph"]')),
