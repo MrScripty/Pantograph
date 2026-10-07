@@ -256,7 +256,8 @@ impl InferenceExecutionRequest {
                 Ok(())
             }
             InferenceExecutionInput::ImageGeneration { .. } => Ok(()),
-            InferenceExecutionInput::AudioTranscription { .. } => Ok(()),
+            InferenceExecutionInput::AudioTranscription { .. }
+            | InferenceExecutionInput::OwnedAudioTranscription { .. } => Ok(()),
             InferenceExecutionInput::ImageUnderstanding { .. }
             | InferenceExecutionInput::DepthEstimation { .. }
             | InferenceExecutionInput::VideoUnderstanding { .. }
@@ -371,6 +372,12 @@ pub enum InferenceExecutionInput {
     AudioTranscription {
         request: AudioTranscriptionRequest,
     },
+    /// Host-verified snapshot; cannot be constructed by JSON deserialization.
+    #[serde(skip_deserializing)]
+    OwnedAudioTranscription {
+        request: AudioTranscriptionRequest,
+        snapshot: crate::OwnedAudioWav,
+    },
     ImageUnderstanding {
         request: ImageUnderstandingRequest,
     },
@@ -398,7 +405,9 @@ impl InferenceExecutionInput {
             Self::Embedding { .. } => InferenceExecutionInputKind::Embedding,
             Self::Rerank { .. } => InferenceExecutionInputKind::Rerank,
             Self::ImageGeneration { .. } => InferenceExecutionInputKind::ImageGeneration,
-            Self::AudioTranscription { .. } => InferenceExecutionInputKind::AudioTranscription,
+            Self::AudioTranscription { .. } | Self::OwnedAudioTranscription { .. } => {
+                InferenceExecutionInputKind::AudioTranscription
+            }
             Self::ImageUnderstanding { .. } => InferenceExecutionInputKind::ImageUnderstanding,
             Self::DepthEstimation { .. } => InferenceExecutionInputKind::DepthEstimation,
             Self::VideoUnderstanding { .. } => InferenceExecutionInputKind::VideoUnderstanding,

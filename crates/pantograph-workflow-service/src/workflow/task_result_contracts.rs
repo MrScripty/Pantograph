@@ -106,6 +106,7 @@ pub enum WorkflowSchedulerTaskResultValue {
     Json(serde_json::Value),
     PumasModelRef(PumasModelRef),
     String(String),
+    TranscriptText(String),
     Bool(bool),
     I64(i64),
     U64(u64),
@@ -115,6 +116,14 @@ pub enum WorkflowSchedulerTaskResultValue {
 
 impl WorkflowSchedulerTaskResultValue {
     pub(crate) fn from_node_json(value: serde_json::Value) -> Self {
+        if matches!(
+            value.get("value_type").and_then(|v| v.as_str()),
+            Some("media_artifact_ref" | "transcript_text")
+        ) {
+            if let Ok(typed) = serde_json::from_value::<Self>(value.clone()) {
+                return typed;
+            }
+        }
         match value {
             serde_json::Value::String(value) => Self::String(value),
             serde_json::Value::Bool(value) => Self::Bool(value),
@@ -133,7 +142,9 @@ impl WorkflowSchedulerTaskResultValue {
 
     pub(crate) fn node_json(&self) -> Option<serde_json::Value> {
         Some(match self {
-            Self::String(value) => serde_json::Value::String(value.clone()),
+            Self::String(value) | Self::TranscriptText(value) => {
+                serde_json::Value::String(value.clone())
+            }
             Self::Bool(value) => serde_json::Value::Bool(*value),
             Self::I64(value) => serde_json::Value::from(*value),
             Self::U64(value) => serde_json::Value::from(*value),
@@ -165,6 +176,17 @@ impl WorkflowSchedulerTaskResultValue {
                 }
             }),
             Self::String(value) => validate_message("string output", value),
+            Self::TranscriptText(value) => {
+                let max = pantograph_runtime_host_contracts::RUNTIME_HOST_TRANSCRIPT_MAX_BYTES;
+                if value.len() > max {
+                    return Err(WorkflowSchedulerTaskResultError::MessageTooLong {
+                        field: "transcript_text",
+                        max,
+                        actual: value.len(),
+                    });
+                }
+                Ok(())
+            }
             Self::MediaArtifactRef(media_ref) => media_ref.validate(),
             Self::Bool(_) | Self::I64(_) | Self::U64(_) | Self::DiagnosticOnly => Ok(()),
         }

@@ -305,9 +305,20 @@ fn task_result(
 }
 
 #[test]
-fn admits_structured_json_only_on_rerank_document_and_option_ports() {
-    for task_type in ["rerank", "embedding", "text_generation"] {
-        for target_port in ["documents", "task_options", "extra_options", "prompt"] {
+fn admits_structured_json_only_on_rerank_and_selected_audio_ports() {
+    for task_type in [
+        "rerank",
+        "audio_transcription",
+        "embedding",
+        "text_generation",
+    ] {
+        for target_port in [
+            "documents",
+            "task_options",
+            "extra_options",
+            "prompt",
+            "audio",
+        ] {
             let mut task = runtime_task(vec![input_binding("source", "value", target_port)]);
             let request: pantograph_runtime_host_contracts::RuntimeHostExecutionRequest = serde_json::from_str(include_str!("../../../pantograph-runtime-host-contracts/tests/fixtures/runtime_host_execution_request_dispatch_selected.json")).unwrap();
             let mut intent = request.handoff.task_intent;
@@ -322,7 +333,11 @@ fn admits_structured_json_only_on_rerank_document_and_option_ports() {
                     WorkflowSchedulerTaskResultValue::Json(value.clone()),
                 )],
             );
-            if task_type == "rerank" && target_port != "prompt" {
+            if (task_type == "rerank"
+                && matches!(target_port, "documents" | "task_options" | "extra_options"))
+                || (task_type == "audio_transcription"
+                    && matches!(target_port, "audio" | "extra_options"))
+            {
                 assert_eq!(
                     result.unwrap()[0].value,
                     RuntimeHostExecutionInputValue::Json(value)

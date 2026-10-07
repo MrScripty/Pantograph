@@ -67,6 +67,11 @@ fn inputs(request: &RuntimeHostExecutionRequest) -> Result<HashMap<String, serde
             return Err(format!("unsupported rerank input {}", input.port_id));
         }
         let value = match (input.port_id.as_str(), &input.value) {
+            ("query", RuntimeHostExecutionInputValue::TranscriptText(value))
+                if value.len() <= 65536 =>
+            {
+                serde_json::json!(value)
+            }
             ("query" | "documents_json", RuntimeHostExecutionInputValue::String(value)) => {
                 serde_json::json!(value)
             }

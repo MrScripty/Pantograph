@@ -102,6 +102,9 @@ fn runtime_host_input_value(
     value: &WorkflowSchedulerTaskResultValue,
 ) -> Result<Option<RuntimeHostExecutionInputValue>, WorkflowRuntimeHostTaskInputMappingError> {
     match value {
+        WorkflowSchedulerTaskResultValue::TranscriptText(value) => Ok(Some(
+            RuntimeHostExecutionInputValue::TranscriptText(value.clone()),
+        )),
         WorkflowSchedulerTaskResultValue::String(value) => {
             Ok(Some(RuntimeHostExecutionInputValue::String(value.clone())))
         }
@@ -135,20 +138,23 @@ fn runtime_host_input_value(
             Ok(Some(RuntimeHostExecutionInputValue::F64(value.clone())))
         }
         WorkflowSchedulerTaskResultValue::Json(value)
-            if task
-                .schedulable_intent
-                .as_ref()
-                .map(|intent| intent.task_type.as_str())
-                .or_else(|| {
-                    task.schedulable_intent_template
+            if matches!(
+                (
+                    task.schedulable_intent
                         .as_ref()
                         .map(|intent| intent.task_type.as_str())
-                })
-                == Some("rerank")
-                && matches!(
-                    binding.target_port_id.as_str(),
+                        .or_else(|| {
+                            task.schedulable_intent_template
+                                .as_ref()
+                                .map(|intent| intent.task_type.as_str())
+                        }),
+                    binding.target_port_id.as_str()
+                ),
+                (
+                    Some("rerank"),
                     "documents" | "task_options" | "extra_options"
-                ) =>
+                ) | (Some("audio_transcription"), "audio" | "extra_options")
+            ) =>
         {
             Ok(Some(RuntimeHostExecutionInputValue::Json(value.clone())))
         }

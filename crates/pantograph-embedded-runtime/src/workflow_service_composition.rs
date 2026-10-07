@@ -2,7 +2,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use node_engine::ExecutorExtensions;
-use pantograph_runtime_host_contracts::{ReservationLifecyclePort, RuntimeHostExecutionPort};
+use pantograph_runtime_host_contracts::{
+    ReservationLifecyclePort, RuntimeHostBatchExecutionPort, RuntimeHostExecutionPort,
+};
 use pantograph_runtime_registry::SharedRuntimeRegistry;
 use pantograph_workflow_service::workflow::{
     WorkflowRuntimeDispatchCandidateProvider, WorkflowRuntimeDispatchSourceRefresher,
@@ -244,6 +246,7 @@ pub(crate) struct EmbeddedWorkflowServiceDispatchDependencies {
     runtime_dispatch_candidate_provider: Arc<dyn WorkflowRuntimeDispatchCandidateProvider>,
     runtime_dispatch_source_refresher: Arc<dyn WorkflowRuntimeDispatchSourceRefresher>,
     runtime_host_execution_port: Arc<dyn RuntimeHostExecutionPort>,
+    runtime_host_batch_execution_port: Option<Arc<dyn RuntimeHostBatchExecutionPort>>,
     reservation_lifecycle_port: Arc<dyn ReservationLifecyclePort>,
 }
 
@@ -259,6 +262,7 @@ impl EmbeddedWorkflowServiceDispatchDependencies {
             runtime_dispatch_candidate_provider,
             runtime_dispatch_source_refresher,
             runtime_host_execution_port,
+            runtime_host_batch_execution_port: None,
             reservation_lifecycle_port,
         }
     }
@@ -293,7 +297,20 @@ impl EmbeddedWorkflowServiceDispatchDependencies {
     }
 
     #[must_use]
+    fn with_runtime_host_batch_execution_port(
+        mut self,
+        port: Arc<dyn RuntimeHostBatchExecutionPort>,
+    ) -> Self {
+        self.runtime_host_batch_execution_port = Some(port);
+        self
+    }
+
+    #[must_use]
     fn configure_workflow_service(self, service: WorkflowService) -> WorkflowService {
+        let service = match self.runtime_host_batch_execution_port {
+            Some(port) => service.with_runtime_host_batch_execution_port(port),
+            None => service,
+        };
         service
             .with_runtime_dispatch_source_refresher(self.runtime_dispatch_source_refresher)
             .with_runtime_dispatch_candidate_provider(self.runtime_dispatch_candidate_provider)
@@ -363,21 +380,24 @@ impl EmbeddedWorkflowServiceComposition {
                 inference::resource_monitor::host_ram::NativeHostRamCapacitySource,
             ));
         let artifact_writer = input.workflow_service.artifact_writer()?;
-        let runtime_host_execution_port =
-            Arc::new(EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
+        let runtime_host_execution_port = Arc::new(
+            EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
                 Arc::new(RuntimeHostPumasLoadTargetResolver::new(
                     pumas_access.clone(),
                 )),
                 Arc::new(RuntimeHostPumasPackageFactsResolver::new(pumas_access)),
                 Arc::new(WorkflowServiceRuntimeHostMediaArtifactSink::new(
-                    artifact_writer,
+                    artifact_writer.clone(),
                 )),
                 input.gateway.clone(),
-            ));
+            )
+            .with_owned_audio_store(crate::OwnedAudioInputStore::new(artifact_writer)),
+        );
         let reservation_lifecycle_port = Arc::new(EmbeddedReservationLifecyclePort::new(
             input.runtime_registry.clone(),
             input.runtime_registry_controller,
         ));
+        let runtime_host_batch_execution_port = runtime_host_execution_port.clone();
         let runtime_host_execution_port =
             observe_runtime_host_port(runtime_host_execution_port, &input.workflow_service);
         let pumas_selector_access = input.pumas_selector_access;
@@ -390,7 +410,8 @@ impl EmbeddedWorkflowServiceComposition {
             input.max_dispatch_source_snapshot_age_ms,
             runtime_host_execution_port,
             reservation_lifecycle_port,
-        );
+        )
+        .with_runtime_host_batch_execution_port(runtime_host_batch_execution_port);
         let scheduler_diagnostics_provider =
             Arc::new(EmbeddedWorkflowSchedulerDiagnosticsProvider::new(
                 input.gateway.clone(),
@@ -446,21 +467,24 @@ impl EmbeddedWorkflowServiceComposition {
                 .map_err(|error| EmbeddedRuntimeError::Initialization {
                     message: error.to_string(),
                 })?;
-        let runtime_host_execution_port =
-            Arc::new(EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
+        let runtime_host_execution_port = Arc::new(
+            EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
                 Arc::new(RuntimeHostPumasLoadTargetResolver::new(
                     pumas_access.clone(),
                 )),
                 Arc::new(RuntimeHostPumasPackageFactsResolver::new(pumas_access)),
                 Arc::new(WorkflowServiceRuntimeHostMediaArtifactSink::new(
-                    artifact_writer,
+                    artifact_writer.clone(),
                 )),
                 factory_input.gateway.clone(),
-            ));
+            )
+            .with_owned_audio_store(crate::OwnedAudioInputStore::new(artifact_writer)),
+        );
         let reservation_lifecycle_port = Arc::new(EmbeddedReservationLifecyclePort::new(
             factory_input.runtime_registry.clone(),
             factory_input.runtime_registry_controller,
         ));
+        let runtime_host_batch_execution_port = runtime_host_execution_port.clone();
         let runtime_host_execution_port =
             observe_runtime_host_port(runtime_host_execution_port, &factory_input.workflow_service);
         let pumas_selector_access = factory_input.pumas_selector_access;
@@ -473,7 +497,8 @@ impl EmbeddedWorkflowServiceComposition {
             factory_input.max_dispatch_source_snapshot_age_ms,
             runtime_host_execution_port,
             reservation_lifecycle_port,
-        );
+        )
+        .with_runtime_host_batch_execution_port(runtime_host_batch_execution_port);
         let scheduler_diagnostics_provider =
             Arc::new(EmbeddedWorkflowSchedulerDiagnosticsProvider::new(
                 factory_input.gateway.clone(),

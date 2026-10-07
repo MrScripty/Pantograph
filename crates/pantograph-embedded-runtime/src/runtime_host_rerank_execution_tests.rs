@@ -847,3 +847,31 @@ async fn selected_rerank_rejects_runtime_traits_gpu_variant_and_generation_contr
         assert!(capture.requests.lock().unwrap().is_empty());
     }
 }
+
+#[test]
+fn transcript_rerank_query_preserves_exact_text_and_rejects_control_coercion() {
+    let (_model, mut request, package, target) = fixture();
+    for length in [32, 3000, 65536] {
+        let query = "x".repeat(length);
+        request.materialized_inputs[0].value =
+            RuntimeHostExecutionInputValue::TranscriptText(query.clone());
+        let validated =
+            pantograph_runtime_host_contracts::ValidatedRuntimeHostExecutionRequest::try_from(
+                request.clone(),
+            )
+            .unwrap();
+        let projection =
+            project_runtime_host_rerank(&validated, package.clone(), target.clone()).unwrap();
+        let InferenceExecutionInput::Rerank { query: actual, .. } = projection.request.input else {
+            panic!("rerank input")
+        };
+        assert!(actual == query);
+    }
+    request.materialized_inputs[0].value =
+        RuntimeHostExecutionInputValue::TranscriptText("x".repeat(65537));
+    assert!(validate_runtime_host_rerank_request(&request).is_err());
+    request.materialized_inputs[0].port_id = "top_n".into();
+    request.materialized_inputs[0].value =
+        RuntimeHostExecutionInputValue::TranscriptText("2".into());
+    assert!(validate_runtime_host_rerank_request(&request).is_err());
+}
