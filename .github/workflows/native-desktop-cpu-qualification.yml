@@ -3,7 +3,7 @@ name: Native desktop CPU qualification
 on:
   push:
     branches:
-      - qual/aligned-edge-glow-current-main-2026-10-07
+      - qual/session-owner-graph-load-2026-10-07
     paths:
       - .github/workflows/native-desktop-cpu-qualification.yml
       - scripts/*native-desktop-cpu*
@@ -39,12 +39,12 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Record exact source and require reviewed glow-corrected combined production ancestor
+      - name: Record exact source and require reviewed canonical-session-load combined production ancestor
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p "$PANTOGRAPH_NATIVE_CPU_EVIDENCE_DIR"
-          git merge-base --is-ancestor 7ec7c3ad9befd05c38201af2fa63f0954f390cef HEAD
+          git merge-base --is-ancestor d20ae81d88c999312b6817050200e13227f09a0f HEAD
           git show -s --format='%H%n%T%n%P' HEAD > "$PANTOGRAPH_NATIVE_CPU_EVIDENCE_DIR/source.txt"
 
       - name: Verify committed synthetic fixture and record proposed graph
