@@ -28,13 +28,13 @@ use crate::package_readiness_provider::{
 
 pub(crate) struct DependencyInventoryDispatchProvider {
     python_provider: Arc<dyn DependencyInventoryProvider>,
-    #[cfg(any(test, feature = "standalone"))]
+    #[cfg(any(test, feature = "host-dependency-inventory"))]
     managed_runtime_provider: Arc<dyn DependencyInventoryProvider>,
-    #[cfg(any(test, feature = "standalone"))]
+    #[cfg(any(test, feature = "host-dependency-inventory"))]
     runtime_feature_provider: Arc<dyn DependencyInventoryProvider>,
-    #[cfg(any(test, feature = "standalone"))]
+    #[cfg(any(test, feature = "host-dependency-inventory"))]
     device_toolchain_provider: Arc<dyn DependencyInventoryProvider>,
-    #[cfg(any(test, feature = "standalone"))]
+    #[cfg(any(test, feature = "host-dependency-inventory"))]
     system_package_provider: Arc<dyn DependencyInventoryProvider>,
     not_implemented_provider: NotImplementedDependencyInventoryProvider,
 }
@@ -43,13 +43,13 @@ impl DependencyInventoryDispatchProvider {
     pub(crate) fn new(python_provider: Arc<dyn DependencyInventoryProvider>) -> Self {
         Self {
             python_provider,
-            #[cfg(any(test, feature = "standalone"))]
+            #[cfg(any(test, feature = "host-dependency-inventory"))]
             managed_runtime_provider: Arc::new(NotImplementedDependencyInventoryProvider),
-            #[cfg(any(test, feature = "standalone"))]
+            #[cfg(any(test, feature = "host-dependency-inventory"))]
             runtime_feature_provider: Arc::new(NotImplementedDependencyInventoryProvider),
-            #[cfg(any(test, feature = "standalone"))]
+            #[cfg(any(test, feature = "host-dependency-inventory"))]
             device_toolchain_provider: Arc::new(NotImplementedDependencyInventoryProvider),
-            #[cfg(any(test, feature = "standalone"))]
+            #[cfg(any(test, feature = "host-dependency-inventory"))]
             system_package_provider: Arc::new(NotImplementedDependencyInventoryProvider),
             not_implemented_provider: NotImplementedDependencyInventoryProvider,
         }
@@ -86,7 +86,7 @@ impl DependencyInventoryDispatchProvider {
         }
     }
 
-    #[cfg(any(test, feature = "standalone"))]
+    #[cfg(any(test, feature = "host-dependency-inventory"))]
     pub(crate) fn new_with_managed_runtime_and_runtime_feature_and_device_toolchain(
         python_provider: Arc<dyn DependencyInventoryProvider>,
         managed_runtime_provider: Arc<dyn DependencyInventoryProvider>,
@@ -136,7 +136,7 @@ impl DependencyInventoryProvider for DependencyInventoryDispatchProvider {
             diagnostics.extend(observation.diagnostics);
         }
 
-        #[cfg(any(test, feature = "standalone"))]
+        #[cfg(any(test, feature = "host-dependency-inventory"))]
         if !dispatch_plan.managed_runtime_binding_ids.is_empty() {
             let payload =
                 scoped_payload(&request.payload, &dispatch_plan.managed_runtime_binding_ids);
@@ -148,7 +148,7 @@ impl DependencyInventoryProvider for DependencyInventoryDispatchProvider {
             diagnostics.extend(observation.diagnostics);
         }
 
-        #[cfg(any(test, feature = "standalone"))]
+        #[cfg(any(test, feature = "host-dependency-inventory"))]
         if !dispatch_plan.runtime_feature_binding_ids.is_empty() {
             let payload =
                 scoped_payload(&request.payload, &dispatch_plan.runtime_feature_binding_ids);
@@ -160,7 +160,7 @@ impl DependencyInventoryProvider for DependencyInventoryDispatchProvider {
             diagnostics.extend(observation.diagnostics);
         }
 
-        #[cfg(any(test, feature = "standalone"))]
+        #[cfg(any(test, feature = "host-dependency-inventory"))]
         if !dispatch_plan.device_toolchain_binding_ids.is_empty() {
             let payload = scoped_payload(
                 &request.payload,
@@ -174,7 +174,7 @@ impl DependencyInventoryProvider for DependencyInventoryDispatchProvider {
             diagnostics.extend(observation.diagnostics);
         }
 
-        #[cfg(any(test, feature = "standalone"))]
+        #[cfg(any(test, feature = "host-dependency-inventory"))]
         if !dispatch_plan.system_package_binding_ids.is_empty() {
             let payload =
                 scoped_payload(&request.payload, &dispatch_plan.system_package_binding_ids);
@@ -186,7 +186,7 @@ impl DependencyInventoryProvider for DependencyInventoryDispatchProvider {
             diagnostics.extend(observation.diagnostics);
         }
 
-        #[cfg(not(any(test, feature = "standalone")))]
+        #[cfg(not(any(test, feature = "host-dependency-inventory")))]
         let not_implemented_binding_ids = dispatch_plan
             .not_implemented_binding_ids
             .iter()
@@ -195,7 +195,7 @@ impl DependencyInventoryProvider for DependencyInventoryDispatchProvider {
             .chain(dispatch_plan.device_toolchain_binding_ids.iter())
             .chain(dispatch_plan.system_package_binding_ids.iter())
             .collect::<Vec<_>>();
-        #[cfg(any(test, feature = "standalone"))]
+        #[cfg(any(test, feature = "host-dependency-inventory"))]
         let not_implemented_binding_ids = dispatch_plan
             .not_implemented_binding_ids
             .iter()
@@ -244,23 +244,23 @@ impl DependencyInventoryDispatchPlan {
                 Some(DependencyInventoryDispatchTarget::PythonPackage) => {
                     plan.python_binding_ids.push(binding.binding_id);
                 }
-                #[cfg(any(test, feature = "standalone"))]
+                #[cfg(any(test, feature = "host-dependency-inventory"))]
                 Some(DependencyInventoryDispatchTarget::ManagedRuntime) => {
                     plan.managed_runtime_binding_ids.push(binding.binding_id);
                 }
-                #[cfg(any(test, feature = "standalone"))]
+                #[cfg(any(test, feature = "host-dependency-inventory"))]
                 Some(DependencyInventoryDispatchTarget::RuntimeFeature) => {
                     plan.runtime_feature_binding_ids.push(binding.binding_id);
                 }
-                #[cfg(any(test, feature = "standalone"))]
+                #[cfg(any(test, feature = "host-dependency-inventory"))]
                 Some(DependencyInventoryDispatchTarget::DeviceToolchain) => {
                     plan.device_toolchain_binding_ids.push(binding.binding_id);
                 }
-                #[cfg(any(test, feature = "standalone"))]
+                #[cfg(any(test, feature = "host-dependency-inventory"))]
                 Some(DependencyInventoryDispatchTarget::SystemPackage) => {
                     plan.system_package_binding_ids.push(binding.binding_id);
                 }
-                #[cfg(not(any(test, feature = "standalone")))]
+                #[cfg(not(any(test, feature = "host-dependency-inventory")))]
                 Some(DependencyInventoryDispatchTarget::NotImplemented) => {
                     plan.not_implemented_binding_ids.push(binding.binding_id);
                 }
@@ -274,15 +274,15 @@ impl DependencyInventoryDispatchPlan {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum DependencyInventoryDispatchTarget {
     PythonPackage,
-    #[cfg(any(test, feature = "standalone"))]
+    #[cfg(any(test, feature = "host-dependency-inventory"))]
     ManagedRuntime,
-    #[cfg(any(test, feature = "standalone"))]
+    #[cfg(any(test, feature = "host-dependency-inventory"))]
     RuntimeFeature,
-    #[cfg(any(test, feature = "standalone"))]
+    #[cfg(any(test, feature = "host-dependency-inventory"))]
     DeviceToolchain,
-    #[cfg(any(test, feature = "standalone"))]
+    #[cfg(any(test, feature = "host-dependency-inventory"))]
     SystemPackage,
-    #[cfg(not(any(test, feature = "standalone")))]
+    #[cfg(not(any(test, feature = "host-dependency-inventory")))]
     NotImplemented,
 }
 
@@ -312,42 +312,42 @@ fn dispatch_target(
     }
 }
 
-#[cfg(any(test, feature = "standalone"))]
+#[cfg(any(test, feature = "host-dependency-inventory"))]
 fn managed_runtime_dispatch_target() -> DependencyInventoryDispatchTarget {
     DependencyInventoryDispatchTarget::ManagedRuntime
 }
 
-#[cfg(not(any(test, feature = "standalone")))]
+#[cfg(not(any(test, feature = "host-dependency-inventory")))]
 fn managed_runtime_dispatch_target() -> DependencyInventoryDispatchTarget {
     DependencyInventoryDispatchTarget::NotImplemented
 }
 
-#[cfg(any(test, feature = "standalone"))]
+#[cfg(any(test, feature = "host-dependency-inventory"))]
 fn runtime_feature_dispatch_target() -> DependencyInventoryDispatchTarget {
     DependencyInventoryDispatchTarget::RuntimeFeature
 }
 
-#[cfg(not(any(test, feature = "standalone")))]
+#[cfg(not(any(test, feature = "host-dependency-inventory")))]
 fn runtime_feature_dispatch_target() -> DependencyInventoryDispatchTarget {
     DependencyInventoryDispatchTarget::NotImplemented
 }
 
-#[cfg(any(test, feature = "standalone"))]
+#[cfg(any(test, feature = "host-dependency-inventory"))]
 fn device_toolchain_dispatch_target() -> DependencyInventoryDispatchTarget {
     DependencyInventoryDispatchTarget::DeviceToolchain
 }
 
-#[cfg(not(any(test, feature = "standalone")))]
+#[cfg(not(any(test, feature = "host-dependency-inventory")))]
 fn device_toolchain_dispatch_target() -> DependencyInventoryDispatchTarget {
     DependencyInventoryDispatchTarget::NotImplemented
 }
 
-#[cfg(any(test, feature = "standalone"))]
+#[cfg(any(test, feature = "host-dependency-inventory"))]
 fn system_package_dispatch_target() -> DependencyInventoryDispatchTarget {
     DependencyInventoryDispatchTarget::SystemPackage
 }
 
-#[cfg(not(any(test, feature = "standalone")))]
+#[cfg(not(any(test, feature = "host-dependency-inventory")))]
 fn system_package_dispatch_target() -> DependencyInventoryDispatchTarget {
     DependencyInventoryDispatchTarget::NotImplemented
 }

@@ -19,29 +19,29 @@ use pantograph_dependency_planning::{
 };
 
 use crate::dependency_environment_probe_snapshot::environment_ref_for_request;
-#[cfg(any(test, feature = "standalone"))]
+#[cfg(any(test, feature = "host-dependency-inventory"))]
 use crate::dependency_inventory_device_toolchain::DeviceToolchainDependencyInventoryProvider;
-#[cfg(any(test, feature = "standalone"))]
+#[cfg(any(test, feature = "host-dependency-inventory"))]
 use crate::dependency_inventory_device_toolchain_source::DeviceToolchainProviderSource;
-#[cfg(feature = "standalone")]
+#[cfg(feature = "host-dependency-inventory")]
 use crate::dependency_inventory_device_toolchain_source::GatewayDeviceToolchainProviderSource;
 use crate::dependency_inventory_dispatch::DependencyInventoryDispatchProvider;
-#[cfg(feature = "standalone")]
+#[cfg(feature = "host-dependency-inventory")]
 use crate::dependency_inventory_managed_runtime::BlockingManagedRuntimeSnapshotSource;
-#[cfg(any(test, feature = "standalone"))]
+#[cfg(any(test, feature = "host-dependency-inventory"))]
 use crate::dependency_inventory_managed_runtime::{
     ManagedRuntimeDependencyInventoryProvider, ManagedRuntimeSnapshotSource,
 };
 use crate::dependency_inventory_python::PythonPackageDependencyInventoryProvider;
-#[cfg(any(test, feature = "standalone"))]
+#[cfg(any(test, feature = "host-dependency-inventory"))]
 use crate::dependency_inventory_runtime_feature::RuntimeFeatureDependencyInventoryProvider;
-#[cfg(feature = "standalone")]
+#[cfg(feature = "host-dependency-inventory")]
 use crate::dependency_inventory_runtime_feature_source::GatewayRuntimeFeatureProviderSource;
-#[cfg(any(test, feature = "standalone"))]
+#[cfg(any(test, feature = "host-dependency-inventory"))]
 use crate::dependency_inventory_runtime_feature_source::RuntimeFeatureProviderSource;
-#[cfg(any(test, feature = "standalone"))]
+#[cfg(any(test, feature = "host-dependency-inventory"))]
 use crate::dependency_inventory_system_package::SystemPackageDependencyInventoryProvider;
-#[cfg(any(test, feature = "standalone"))]
+#[cfg(any(test, feature = "host-dependency-inventory"))]
 use crate::dependency_inventory_system_package_source::NotImplementedSystemPackageProviderSource;
 #[cfg(test)]
 use crate::dependency_inventory_system_package_source::SystemPackageProviderSource;
@@ -49,7 +49,7 @@ use crate::package_readiness_provider::PackageReadinessProbeRunner;
 use crate::python_package_readiness_probe::ProcessPythonPackageReadinessProbeRunner;
 
 /// Provider-owned diagnostic details; request attribution remains with the observer.
-#[cfg(any(test, feature = "standalone"))]
+#[cfg(any(test, feature = "host-dependency-inventory"))]
 pub(crate) struct DependencyInventoryDiagnosticInput {
     pub code: pantograph_dependency_planning::DependencyPlanningDiagnosticCode,
     pub message: String,
@@ -136,7 +136,7 @@ impl DependencyInventoryService {
     }
 
     #[must_use]
-    #[cfg(feature = "standalone")]
+    #[cfg(feature = "host-dependency-inventory")]
     pub fn from_app_data_dir(
         app_data_dir: std::path::PathBuf,
         gateway: Arc<inference::InferenceGateway>,
@@ -195,7 +195,7 @@ impl DependencyInventoryService {
     }
 
     #[must_use]
-    #[cfg(any(test, feature = "standalone"))]
+    #[cfg(any(test, feature = "host-dependency-inventory"))]
     pub(crate) fn from_package_probe_runner_and_managed_runtime_and_runtime_feature_and_device_toolchain_sources(
         package_probe_runner: Arc<dyn PackageReadinessProbeRunner>,
         managed_runtime_source: Arc<dyn ManagedRuntimeSnapshotSource>,

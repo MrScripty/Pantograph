@@ -60,7 +60,7 @@ impl EmbeddedDependencyReadinessSnapshotProducer {
     }
 
     #[must_use]
-    #[cfg(any(test, feature = "standalone"))]
+    #[cfg(any(test, feature = "host-dependency-inventory"))]
     pub(crate) fn with_dependency_inventory(
         mut self,
         dependency_inventory: Arc<DependencyInventoryService>,

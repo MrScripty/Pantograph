@@ -14,21 +14,21 @@ use pantograph_workflow_service::{
 mod dependency_environment_probe_selector;
 mod dependency_environment_probe_snapshot;
 mod dependency_inventory;
-#[cfg(any(test, feature = "standalone"))]
+#[cfg(any(test, feature = "host-dependency-inventory"))]
 mod dependency_inventory_device_toolchain;
-#[cfg(any(test, feature = "standalone"))]
+#[cfg(any(test, feature = "host-dependency-inventory"))]
 mod dependency_inventory_device_toolchain_source;
 mod dependency_inventory_dispatch;
-#[cfg(any(test, feature = "standalone"))]
+#[cfg(any(test, feature = "host-dependency-inventory"))]
 mod dependency_inventory_managed_runtime;
 mod dependency_inventory_python;
-#[cfg(any(test, feature = "standalone"))]
+#[cfg(any(test, feature = "host-dependency-inventory"))]
 mod dependency_inventory_runtime_feature;
-#[cfg(any(test, feature = "standalone"))]
+#[cfg(any(test, feature = "host-dependency-inventory"))]
 mod dependency_inventory_runtime_feature_source;
-#[cfg(any(test, feature = "standalone"))]
+#[cfg(any(test, feature = "host-dependency-inventory"))]
 mod dependency_inventory_system_package;
-#[cfg(any(test, feature = "standalone"))]
+#[cfg(any(test, feature = "host-dependency-inventory"))]
 mod dependency_inventory_system_package_source;
 #[cfg(test)]
 mod dependency_inventory_tests;
