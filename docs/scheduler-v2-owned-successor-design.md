@@ -49,4 +49,8 @@ replanning, paused/failed cleanup blocks successor, exact matching cleanup resum
 old attempt acknowledgement is rejected, changed cohort/input rejects first start
 with provisional rollback, missing/stale/unknown forecast and default opt-out.
 Measure bounded adapter/dispatch cost separately from modeled completion. No model
-downloads, public writes, main merge or unrelated worker-file edits.
+downloads, public writes, merge into main or unrelated worker-file edits.
+
+Implementation and qualification are recorded in
+[owned successor results](scheduler-v2-owned-successor-results.md), including
+local current-main preservation and remaining offline/calibration limitations.

@@ -101,15 +101,68 @@ capacity are explicitly synthetic fixture data.
 
 | Timed provider call | Median | P95 | Maximum |
 | --- | ---: | ---: | ---: |
-| Owned 2x2 first decision | 826.527 microseconds | 1,911.526 microseconds | 2,813.756 microseconds |
-| Fresh actual successor decision | 370.188 microseconds | 791.279 microseconds | 948.263 microseconds |
+| Owned 2x2 first decision | 860.906 microseconds | 2,106.884 microseconds | 4,042.965 microseconds |
+| Fresh actual successor decision | 376.581 microseconds | 715.673 microseconds | 1,033.275 microseconds |
 
-The whole test process used 3.873891 CPU seconds, 3.956223 wall seconds and
-54,188 KiB maximum RSS. These are controlled dispatch measurements, not a
+The final run on the current-main integration tree used 3.798727 CPU seconds,
+3.803283 wall seconds and 52,956 KiB maximum RSS for the whole test process.
+These are controlled dispatch measurements, not a
 production latency guarantee, maximum-field measurement or model-speed claim.
 The existing separate pure four-offer cost probe remains available. Real profile
 qualification and representative production/maximum-field cost acceptance are
 required before any default change.
+
+## Current-main preservation and final qualification
+
+Implementation commit: `09a3dd46a1c781170b830b30bd51c9b9355fd4c5`.
+Current-main incorporation is local feature-branch commit
+`7d878b4481b694a57911b4f5d4305b6790f06bfc`, code tree
+`046766098864594da028a1ba666415d3745ea743`. Remote main was rechecked after
+qualification and remains `beb6c2630f1b6d9308b6a6e12fcdabbe9d696f46`.
+
+The two merge resolutions preserve all test includes and supply the new rerank
+task-context argument to the bounded scalar input helper. Relative to current
+main, the shared input mapper differs only in `pub(crate)` visibility. Rerank
+functional inference/backend/gateway, native host/descriptor code, contract
+changes, CPU rerank fixtures and tests match current main. Inspector and
+cold-Candle work were not incorporated. Independent review approved both merge
+resolutions and checked these preservation properties.
+
+After incorporation, the affected full libraries pass: 933 workflow tests,
+528 embedded-runtime tests (two cost probes remain ignored by default),
+46 runtime-host contract tests and the zero-test interface-contract library.
+All-target Clippy for scheduler/workflow/embedded-runtime, formatting and
+`git diff --check` pass. Scheduler's earlier 162 passed/one ignored remains
+applicable because current main did not change scheduler sources.
+
+The additional `backend-candle` offline test attempt stops before compilation:
+`failed to download axum v0.7.9` / `attempting to make an HTTP request, but
+--offline was specified`. Thus Candle-gated CPU rerank/embedding regression
+execution was not requalified here. Its source and feature guards are preserved;
+this limitation is distinct from the passing llama.cpp-feature qualification.
+
+Reproduction uses `source /workspace/pantograph-tools/activate.sh`,
+`ORT_SKIP_DOWNLOAD=1`, and
+`XDG_CONFIG_HOME=/workspace/pantograph-cache/test-config`:
+
+```bash
+cargo test -p pantograph-scheduler --locked --offline
+cargo test -p pantograph-workflow-service -p pantograph-embedded-runtime \
+  -p pantograph-runtime-host-contracts -p pantograph-inference-interface-contracts \
+  --lib --no-default-features --features backend-llamacpp --locked --offline
+cargo clippy -p pantograph-scheduler -p pantograph-workflow-service \
+  -p pantograph-embedded-runtime --all-targets --no-default-features \
+  --features backend-llamacpp --locked --offline -- -D warnings -A dead_code
+cargo fmt --all --check
+git diff --check
+```
+
+Logs are local executor evidence under `/workspace/pantograph-cache/`:
+`owned-scheduler-full.log`, `owned-current-main-full.log`,
+`owned-current-main-clippy.log`, `owned-current-main-cost.log`,
+`owned-current-main-candle.log`. The cost probe is
+`dependency_native_dispatch_cost_probe`; run its compiled test binary with
+`--ignored --nocapture --test-threads=1` after compilation has stopped.
 
 ## Remaining prerequisites
 
