@@ -9,6 +9,7 @@ import type {
   WorkflowEvent,
   WorkflowGraphValidationLifecycleEvent,
   WorkflowGraphValidationSubmitGate,
+  WorkflowGraph,
   WorkflowPortBinding,
   WorkflowRunResponse,
 } from '../services/workflow/types.ts';
@@ -67,6 +68,18 @@ export interface WorkflowValidationLifecycleRefreshInput extends WorkflowValidat
 }
 
 type WorkflowSubmitSuccessWorkbenchPage = 'scheduler' | 'io_inspector';
+
+/** Capture authored text sources at the request boundary, before async submission. */
+export function workflowSubmitTextInputs(graph: WorkflowGraph): WorkflowPortBinding[] {
+  return graph.nodes.flatMap((node) => {
+    if (node.node_type !== 'text-input'
+      || typeof node.data?.text !== 'string'
+      || graph.edges.some((edge) => edge.target === node.id)) {
+      return [];
+    }
+    return [{ node_id: node.id, port_id: 'text', value: node.data.text }];
+  });
+}
 
 export function isNumericWorkflowSemanticVersion(version: string): boolean {
   const parts = version.split('.');

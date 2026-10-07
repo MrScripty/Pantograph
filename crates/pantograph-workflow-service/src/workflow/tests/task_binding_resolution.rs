@@ -588,6 +588,162 @@ fn control_only_dependency_sidecar_projects_only_data_tasks_without_changing_gra
     );
 }
 
+#[tokio::test]
+async fn native_control_graph_requires_request_text_then_waits_for_dependency_readiness() {
+    use crate::workflow::session_scheduler_runner::WorkflowPreDispatchPreparationBoundary;
+    use crate::workflow::{
+        WorkflowExecutionSessionRunRequest, WorkflowPortBinding, WorkflowService,
+    };
+    use pantograph_scheduler::SchedulerTaskStateKind;
+
+    let mut source = dependency_control_embedding_graph();
+    source
+        .nodes
+        .iter_mut()
+        .find(|node| node.id == "prompt")
+        .unwrap()
+        .data = json!({"text": "hello world"});
+    let graph = workflow_scheduler_task_graph_with_inference_projections(
+        &workflow_id(),
+        &workflow_run_id(),
+        &source,
+        &embedding_projection(),
+    )
+    .expect("projected native graph");
+    // Every projected dependency names a retained execution task; control metadata
+    // is not the missing prerequisite in this second native failure.
+    for task in &graph.tasks {
+        for dependency in &task.dependency_task_ids {
+            assert!(graph
+                .tasks
+                .iter()
+                .any(|upstream| upstream.task_id == *dependency));
+        }
+        assert!(task
+            .input_bindings
+            .iter()
+            .all(|binding| binding.source_task_id.as_str() != "dep-env"));
+    }
+    let service = WorkflowService::new();
+    let run_id = workflow_run_id().as_str().to_owned();
+    let session_id = {
+        let mut store = service.session_store_guard().expect("store");
+        let session_id = store
+            .create_session(
+                workflow_id().as_str().to_owned(),
+                None,
+                None,
+                Vec::new(),
+                Vec::new(),
+                false,
+            )
+            .expect("session");
+        store
+            .enqueue_run_with_id(
+                &session_id,
+                &WorkflowExecutionSessionRunRequest {
+                    session_id: session_id.clone(),
+                    workflow_semantic_version: "0.1.0".into(),
+                    inputs: Vec::new(),
+                    output_targets: None,
+                    override_selection: None,
+                    timeout_ms: None,
+                    priority: None,
+                },
+                run_id.clone(),
+            )
+            .expect("enqueue");
+        store
+            .begin_queued_run(&session_id, &run_id)
+            .expect("begin")
+            .expect("active run");
+        service
+            .scheduler_task_orchestrator
+            .initialize_active_run_task_state(&mut store, &session_id, &run_id, graph)
+            .expect("initial task state");
+        session_id
+    };
+    let boundary = WorkflowPreDispatchPreparationBoundary::new(&service);
+    boundary
+        .materialize_external_inputs(&session_id, &run_id, &[])
+        .expect("empty inputs");
+    let error = boundary
+        .prepare_runtime_dispatch(&session_id, &run_id)
+        .await
+        .err()
+        .expect("empty GUI inputs reproduce the native readiness guard");
+    assert!(error
+        .to_string()
+        .contains("runtime scheduler graph has no ready task and is not complete"));
+    {
+        let mut store = service.session_store_guard().expect("store");
+        let (_, states) = store
+            .active_run_scheduler_task_state(&session_id, &run_id)
+            .expect("states")
+            .expect("active graph");
+        assert!(states
+            .iter()
+            .all(|state| state.state.kind() == SchedulerTaskStateKind::AwaitingInputs));
+        assert!(store
+            .active_run_scheduler_task_results(&session_id, &run_id)
+            .expect("results")
+            .is_empty());
+    }
+    let wrong = WorkflowPortBinding {
+        node_id: "prompt".into(),
+        port_id: "text".into(),
+        value: json!(7),
+    };
+    assert!(boundary
+        .materialize_external_inputs(&session_id, &run_id, &[wrong])
+        .is_err());
+    boundary
+        .materialize_external_inputs(
+            &session_id,
+            &run_id,
+            &[WorkflowPortBinding {
+                node_id: "prompt".into(),
+                port_id: "text".into(),
+                value: json!("hello world"),
+            }],
+        )
+        .expect("typed Submit input");
+    boundary
+        .run_progress_loop(&session_id, &run_id)
+        .await
+        .expect("progress");
+    let mut store = service.session_store_guard().expect("store");
+    let (_, states) = store
+        .active_run_scheduler_task_state(&session_id, &run_id)
+        .expect("states")
+        .expect("active graph");
+    for (id, expected) in [
+        ("prompt", SchedulerTaskStateKind::Completed),
+        ("infer", SchedulerTaskStateKind::WaitingDependencyReadiness),
+        ("vectors", SchedulerTaskStateKind::AwaitingInputs),
+    ] {
+        assert_eq!(
+            states
+                .iter()
+                .find(|state| state.task_id.as_str() == id)
+                .expect("state")
+                .state
+                .kind(),
+            expected
+        );
+    }
+    let results = store
+        .active_run_scheduler_task_results(&session_id, &run_id)
+        .expect("results");
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].workflow_run_id, run_id);
+    assert_eq!(results[0].node_id, "prompt");
+    assert_eq!(
+        results[0].outputs[0].value,
+        WorkflowSchedulerTaskResultValue::String("hello world".into())
+    );
+}
+
 #[test]
 fn malformed_or_dataflow_bound_dependency_controls_remain_invalid_at_initialization() {
     for case in [
