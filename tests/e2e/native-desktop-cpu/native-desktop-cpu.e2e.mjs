@@ -236,14 +236,32 @@ describe('actual native Tauri saved CPU embedding graph', () => {
       bound_model_ref: boundModelRef, model_ref_source: 'saved executable graph; host selection/loader identity checks apply',
       internal_inference_metadata_exported: artifactQuery.artifacts.some((item) => item.producer_node_id === 'infer' && item.producer_port_id === 'metadata'),
       inspection, artifactQuery }, null, 2));
+    await $(selector('workbench-nav-scheduler')).click();
+    const runButton = await $(`button[title="${runId}"]`);
+    await runButton.waitForDisplayed({ timeout: 30000 });
+    await runButton.click();
     await $(selector('workbench-nav-io_inspector')).click();
     await $(selector('io-inspector-page')).waitForDisplayed({ timeout: 30000 });
-    const cards = await $$(selector('io-artifact-card'));
-    for (const card of cards) {
-      const read = await card.$(selector('io-artifact-read-button'));
-      if (await read.isExisting() && await read.isClickable()) await read.click();
-    }
+    await browser.waitUntil(async () => (await $(selector('io-inspector-page')).getText()).includes(runId),
+      { timeout: 30000, timeoutMsg: 'Inspector did not select the completed native run' });
+    const vectorNode = await $('[role="button"][aria-label^="vectors vector-output"]');
+    await vectorNode.waitForDisplayed({ timeout: 30000 });
+    await vectorNode.click();
+    const card = await $(`${selector('io-artifact-card')}[data-artifact-id="${vectorArtifact.artifact_id}"]`);
+    await card.waitForDisplayed({ timeout: 30000 });
+    const read = await card.$(selector('io-artifact-read-button'));
+    await read.scrollIntoView();
+    await read.waitForClickable({ timeout: 30000 });
+    await read.click();
+    const preview = await card.$('pre');
+    await preview.waitForDisplayed({ timeout: 30000 });
+    const displayedOutput = JSON.parse(await preview.getText());
+    assert.deepEqual(displayedOutput, output, 'Inspector must display the actual scoped vector body');
+    writeFileSync(path.join(evidence, 'native-inspector-vector.json'), JSON.stringify({ runId,
+      artifactId: vectorArtifact.artifact_id, displayedOutput }, null, 2));
+    await preview.scrollIntoView();
     await browser.saveScreenshot(path.join(evidence, 'native-cpu-output.png'));
+    writeFileSync(path.join(evidence, 'native-cpu-output.html'), await browser.getPageSource());
     const finalGraph = await invoke('load_workflow', { path: savedPath });
     assert.deepEqual(finalGraph.graph.edges, graph.edges);
     writeFileSync(path.join(evidence, 'native-final-saved-graph.json'), JSON.stringify(finalGraph, null, 2));
