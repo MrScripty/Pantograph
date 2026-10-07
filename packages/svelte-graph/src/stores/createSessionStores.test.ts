@@ -34,6 +34,7 @@ function createDeferred<T>(): Deferred<T> {
 function createBackendStub(overrides: Partial<WorkflowBackend> = {}): WorkflowBackend {
   let sessionCounter = 0;
   const definitions: NodeDefinition[] = [];
+  const sessionGraphs = new Map<string, WorkflowGraph>();
 
   const backend: WorkflowBackend = {
     async getNodeDefinitions() {
@@ -44,6 +45,7 @@ function createBackendStub(overrides: Partial<WorkflowBackend> = {}): WorkflowBa
     },
     async createSession(_graph: WorkflowGraph) {
       sessionCounter += 1;
+      sessionGraphs.set(`stub-session-${sessionCounter}`, _graph);
       return {
         session_id: `stub-session-${sessionCounter}`,
         session_kind: 'edit',
@@ -92,8 +94,8 @@ function createBackendStub(overrides: Partial<WorkflowBackend> = {}): WorkflowBa
     async updateNodePosition() {
       return { graph: { nodes: [], edges: [] } };
     },
-    async getExecutionGraph() {
-      throw new Error('not implemented');
+    async getExecutionGraph(sessionId: string) {
+      return sessionGraphs.get(sessionId) ?? { nodes: [], edges: [] };
     },
     async getUndoRedoState() {
       return { canUndo: false, canRedo: false, undoCount: 0 };
@@ -135,7 +137,14 @@ function createBackendStub(overrides: Partial<WorkflowBackend> = {}): WorkflowBa
       return () => {};
     },
   };
-  return { ...backend, ...overrides };
+  const result = { ...backend, ...overrides };
+  const createSession = result.createSession;
+  result.createSession = async (graph, workflowId) => {
+    const session = await createSession(graph, workflowId);
+    sessionGraphs.set(session.session_id, graph);
+    return session;
+  };
+  return result;
 }
 
 function createWorkflowStoresStub(
@@ -171,7 +180,7 @@ test('createSessionStores tracks edit session kind for editor-owned sessions', a
   assert.match(get(sessionStores.currentSessionId) ?? '', /^stub-session-/);
 });
 
-test('loadWorkflowByName renders the loaded file graph after creating an edit session', async () => {
+test('loadWorkflowByName renders the owner canonical graph and revision before activating the session', async () => {
   const loadedGraph = {
     nodes: [
       {
@@ -183,6 +192,11 @@ test('loadWorkflowByName renders the loaded file graph after creating an edit se
     ],
     edges: [],
   } satisfies WorkflowGraph;
+  const ownerGraph: WorkflowGraph = {
+    ...loadedGraph,
+    nodes: loadedGraph.nodes.map((node) => ({ ...node, data: { emit_metadata: false } })),
+    derived_graph: { schema_version: 1, graph_fingerprint: 'owner-revision', consumer_count_map: {} },
+  };
   let renderedGraph: WorkflowGraph | null = null;
   let createdSessionWorkflowId: string | null | undefined;
   const backend = createBackendStub({
@@ -206,8 +220,10 @@ test('loadWorkflowByName renders the loaded file graph after creating an edit se
         graph: loadedGraph,
       };
     },
-    async getExecutionGraph() {
-      throw new Error('session graph refresh should not block initial render');
+    async getExecutionGraph(sessionId: string) {
+      assert.equal(sessionId, 'stub-session-1');
+      assert.equal(get(sessionStores.currentSessionId), null);
+      return ownerGraph;
     },
   });
   const workflowStores = createWorkflowStoresStub((graph) => {
@@ -219,7 +235,7 @@ test('loadWorkflowByName renders the loaded file graph after creating an edit se
 
   assert.equal(loaded, true);
   assert.equal(get(sessionStores.graphSessionError), null);
-  assert.deepEqual(renderedGraph, loadedGraph);
+  assert.deepEqual(renderedGraph, ownerGraph);
   assert.equal(createdSessionWorkflowId, 'saved-flow');
   assert.equal(get(sessionStores.currentGraphId), 'saved-flow');
   assert.equal(get(sessionStores.currentGraphName), 'Saved Flow');
@@ -453,6 +469,116 @@ test('loadWorkflowByName closes the previous active session after replacement', 
 
   assert.deepEqual(closedSessions, ['first-flow-session']);
   assert.equal(get(sessionStores.currentSessionId), 'second-flow-session');
+});
+
+test('late owner graph cannot replace a newer session and its orphan is closed', async () => {
+  const started = createDeferred<void>();
+  const firstGraph = createDeferred<WorkflowGraph>();
+  const closed: string[] = [];
+  const rendered: WorkflowGraph[] = [];
+  const backend = createBackendStub({
+    async createSession(_graph, workflowId) {
+      return { session_id: workflowId!, session_kind: 'edit' };
+    },
+    async getExecutionGraph(sessionId) {
+      if (sessionId === 'first') { started.resolve(); return firstGraph.promise; }
+      return { nodes: [], edges: [], derived_graph: {
+        schema_version: 1, graph_fingerprint: sessionId, consumer_count_map: {},
+      } };
+    },
+    async removeSession(sessionId) { closed.push(sessionId); },
+  });
+  const stores = createSessionStores(backend, createWorkflowStoresStub((graph) => rendered.push(graph)), createViewStoresStub());
+  const first = stores.loadWorkflowByName('first');
+  await started.promise;
+  assert.equal(get(stores.currentSessionId), null);
+  assert.equal(await stores.loadWorkflowByName('second'), true);
+  firstGraph.resolve({ nodes: [], edges: [] });
+  assert.equal(await first, false);
+  assert.deepEqual(closed, ['first']);
+  assert.equal(get(stores.currentSessionId), 'second');
+  assert.deepEqual(rendered.map((graph) => graph.derived_graph?.graph_fingerprint), ['second']);
+});
+
+test('failed owner graph read closes only the candidate and preserves the active session', async () => {
+  const closed: string[] = [];
+  let fail = false;
+  const backend = createBackendStub({
+    async getExecutionGraph() {
+      if (fail) throw new Error('Owner snapshot unavailable');
+      return { nodes: [], edges: [] };
+    },
+    async removeSession(sessionId) { closed.push(sessionId); },
+  });
+  const stores = createSessionStores(backend, createWorkflowStoresStub(), createViewStoresStub());
+  assert.equal(await stores.loadWorkflowByName('active'), true);
+  fail = true;
+  assert.equal(await stores.loadWorkflowByName('failed'), false);
+  assert.equal(get(stores.currentSessionId), 'stub-session-1');
+  assert.equal(get(stores.currentGraphId), 'active');
+  assert.match(get(stores.graphSessionError) ?? '', /Owner snapshot unavailable/);
+  assert.deepEqual(closed, ['stub-session-2']);
+});
+
+test('cancelled owner read rejection cannot overwrite a newer graph error or session', async () => {
+  const started = createDeferred<void>();
+  const cancelled = createDeferred<WorkflowGraph>();
+  const closed: string[] = [];
+  const backend = createBackendStub({
+    async getExecutionGraph(sessionId) {
+      if (sessionId === 'stub-session-1') { started.resolve(); return cancelled.promise; }
+      return { nodes: [], edges: [] };
+    },
+    async removeSession(sessionId) { closed.push(sessionId); },
+  });
+  const stores = createSessionStores(backend, createWorkflowStoresStub(), createViewStoresStub());
+  const first = stores.loadWorkflowByName('cancelled');
+  await started.promise;
+  assert.equal(await stores.loadWorkflowByName('current'), true);
+  cancelled.reject(new Error('late cancelled transport'));
+  assert.equal(await first, false);
+  assert.equal(get(stores.currentSessionId), 'stub-session-2');
+  assert.equal(get(stores.graphSessionError), null);
+  assert.deepEqual(closed, ['stub-session-1']);
+});
+
+test('new workflow uses the owner empty graph revision instead of the local fallback fingerprint', async () => {
+  const ownerGraph: WorkflowGraph = { nodes: [], edges: [], derived_graph: {
+    schema_version: 1, graph_fingerprint: 'owner-empty-revision', consumer_count_map: {},
+  } };
+  let rendered: WorkflowGraph | null = null;
+  const backend = createBackendStub({ async getExecutionGraph() { return ownerGraph; } });
+  const stores = createSessionStores(backend, createWorkflowStoresStub((graph) => { rendered = graph; }), createViewStoresStub());
+  await stores.createNewWorkflow();
+  assert.deepEqual(rendered, ownerGraph);
+});
+
+test('new workflow publishes owner graph before cleanup and cannot erase a newer load when cleanup completes', async () => {
+  const cleanupStarted = createDeferred<void>();
+  const cleanup = createDeferred<void>();
+  let rendered: WorkflowGraph | null = null;
+  const backend = createBackendStub({
+    async getExecutionGraph(sessionId) {
+      return { nodes: [], edges: [], derived_graph: {
+        schema_version: 1, graph_fingerprint: sessionId, consumer_count_map: {},
+      } };
+    },
+    async removeSession(sessionId) {
+      if (sessionId === 'stub-session-1') { cleanupStarted.resolve(); await cleanup.promise; }
+    },
+  });
+  const stores = createSessionStores(backend, createWorkflowStoresStub((graph) => { rendered = graph; }), createViewStoresStub());
+  await stores.loadWorkflowByName('old');
+  const creating = stores.createNewWorkflow();
+  await cleanupStarted.promise;
+  assert.equal(get(stores.currentSessionId), 'stub-session-2');
+  assert.equal((rendered as WorkflowGraph | null)?.derived_graph?.graph_fingerprint, 'stub-session-2');
+  await stores.loadWorkflowByName('newer');
+  cleanup.resolve();
+  await creating;
+  assert.equal(get(stores.currentGraphId), 'newer');
+  assert.equal(get(stores.currentSessionId), 'stub-session-3');
+  assert.equal((rendered as WorkflowGraph | null)?.derived_graph?.graph_fingerprint, 'stub-session-3');
 });
 
 test('deleteWorkflowByName deletes current workflow after backend confirmation', async () => {

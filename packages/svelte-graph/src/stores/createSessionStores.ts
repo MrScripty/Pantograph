@@ -129,6 +129,31 @@ export function createSessionStores(
     }
   }
 
+  async function createOwnedSessionGraph(
+    graph: Parameters<WorkflowBackend['createSession']>[0],
+    workflowId: string | undefined,
+    transitionId: number,
+  ) {
+    const session = await backend.createSession(graph, workflowId);
+    if (!isCurrentSessionTransition(transitionId)) {
+      await closeSessionById(session.session_id);
+      return null;
+    }
+    try {
+      // Session creation can canonicalize semantic data and change its revision.
+      // Validation must see the owner's graph, not the pre-session file snapshot.
+      const sessionGraph = await backend.getExecutionGraph(session.session_id);
+      if (!isCurrentSessionTransition(transitionId)) {
+        await closeSessionById(session.session_id);
+        return null;
+      }
+      return { session, graph: sessionGraph };
+    } catch (error) {
+      await closeSessionById(session.session_id);
+      throw error;
+    }
+  }
+
   async function refreshWorkflowList(): Promise<void> {
     try {
       const workflows = await backend.listWorkflows();
@@ -162,17 +187,16 @@ export function createSessionStores(
 
       const workflowId = file.metadata.id ?? name;
       const workflowName = file.metadata.name;
-      const session = await backend.createSession(file.graph, workflowId);
-      if (!isCurrentSessionTransition(transitionId)) {
-        await closeSessionById(session.session_id);
+      const owned = await createOwnedSessionGraph(file.graph, workflowId, transitionId);
+      if (!owned) {
         return false;
       }
 
       currentGraphId.set(workflowId);
       currentGraphType.set('workflow');
       currentGraphName.set(workflowName);
-      workflowStores.loadWorkflow(file.graph, file.metadata);
-      await replaceSessionHandle(session);
+      workflowStores.loadWorkflow(owned.graph, file.metadata);
+      await replaceSessionHandle(owned.session);
 
       // Call optional hook for consumer-specific post-load behavior
       if (options?.onWorkflowLoaded && file.metadata) {
@@ -203,20 +227,18 @@ export function createSessionStores(
   async function createNewWorkflow(): Promise<void> {
     const transitionId = beginSessionTransition();
     const emptyGraph = { nodes: [], edges: [] };
-    const session = await backend.createSession(emptyGraph);
-    if (!isCurrentSessionTransition(transitionId)) {
-      await closeSessionById(session.session_id);
+    const owned = await createOwnedSessionGraph(emptyGraph, undefined, transitionId);
+    if (!owned) {
       return;
     }
-
-    await replaceSessionHandle(session);
-
-    workflowStores.clearWorkflow();
 
     const newId = `workflow-${Date.now()}`;
     currentGraphId.set(newId);
     currentGraphType.set('workflow');
     currentGraphName.set('Untitled Workflow');
+    workflowStores.clearWorkflow();
+    workflowStores.loadWorkflow(owned.graph);
+    await replaceSessionHandle(owned.session);
   }
 
   async function deleteWorkflowByName(name: string): Promise<boolean> {
