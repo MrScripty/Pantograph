@@ -108,7 +108,7 @@ impl SchedulerSerialDispatch {
     /// Assignment terminal state or an arbitrary response alone is insufficient.
     /// Release BEFORE driving continuations; the next attempt reacquires and
     /// recomputes Ready/evidence snapshots.
-    pub fn acknowledge_drained_cleanup(mut self) {
+    pub(super) fn release_after_bound_cleanup(mut self) {
         self.cleanup_acknowledged = true;
         self.state.store(IDLE, Ordering::Release);
     }
@@ -149,9 +149,9 @@ mod tests {
             owner.try_prepare(),
             Err(SchedulerSerialAdmissionRefusal::Busy)
         ));
-        dispatch.acknowledge_drained_cleanup();
+        dispatch.release_after_bound_cleanup();
         let continuation = owner.try_prepare().unwrap().begin_dispatch();
-        continuation.acknowledge_drained_cleanup();
+        continuation.release_after_bound_cleanup();
         assert!(!owner.is_poisoned());
     }
 

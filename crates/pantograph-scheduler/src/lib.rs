@@ -23,12 +23,19 @@ mod readiness;
 mod resource;
 mod resource_types;
 mod serial_admission;
+mod serial_dispatch;
 mod supervision;
 mod two_completion;
 
 pub use serial_admission::{
     SchedulerSerialAdmission, SchedulerSerialAdmissionRefusal, SchedulerSerialDispatch,
     SchedulerSerialPreparation,
+};
+pub use serial_dispatch::{
+    SchedulerSerialAttemptIdentity, SchedulerSerialBoundDispatch, SchedulerSerialCleanupEvent,
+    SchedulerSerialCleanupPending, SchedulerSerialCleanupState, SchedulerSerialDispatchRefusal,
+    SchedulerSerialDrainState, SchedulerSerialDrainedDispatch, SchedulerSerialExecutingDispatch,
+    SchedulerSerialOwnerSnapshot, SchedulerSerialRuntimeOwnerLease,
 };
 
 pub use batching::{
