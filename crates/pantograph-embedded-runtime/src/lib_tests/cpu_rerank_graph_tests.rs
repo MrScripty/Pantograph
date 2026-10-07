@@ -204,7 +204,10 @@ async fn saved_cpu_rerank_graph_reopens_and_matches_parent_outputs_and_selected_
             ],output_targets:Some(["results","scores","top_document","top_score","diagnostics"].into_iter().map(|port| WorkflowOutputTarget {node_id:"infer".into(),port_id:port.into()}).collect()),override_selection:None,timeout_ms:None,priority:None}).await.expect("saved rerank graph through scheduler");
         assert_eq!(response.outputs.len(), 5);
         for output in &response.outputs {
-            assert_eq!(output.value, parent[&output.port_id], "{}", output.port_id);
+            assert!(
+                output.value == parent[&output.port_id],
+                "saved rerank output must match the parent output"
+            );
         }
         let loads = capture.loads.lock().unwrap();
         let selected = loads.last().unwrap();
