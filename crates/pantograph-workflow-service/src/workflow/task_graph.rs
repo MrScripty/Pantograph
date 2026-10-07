@@ -22,6 +22,10 @@ use super::task_graph_contracts::{
     WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION,
 };
 use super::WorkflowServiceError;
+use crate::graph::dependency_environment_subject::{
+    resolve_dependency_environment_action_subject, DependencyEnvironmentActionSubjectResolution,
+    DEPENDENCY_ENVIRONMENT_NODE_TYPE,
+};
 use crate::graph::{workflow_executable_topology, WorkflowGraph, WorkflowRuntimeSourceContext};
 
 const PORT_TEXT: &str = "text";
@@ -146,6 +150,9 @@ pub fn workflow_scheduler_task_graph_with_inference_projections(
 
     let mut tasks = Vec::with_capacity(topology.nodes.len());
     for node in &topology.nodes {
+        if is_dependency_environment_control_node(graph, &node.node_id, &node.node_type) {
+            continue;
+        }
         let node_id = scheduler_node_id(&node.node_id)?;
         let task_id = scheduler_task_id(&node.node_id)?;
         let input_bindings = input_bindings(node.node_id.as_str(), &incoming_edges)?;
@@ -254,6 +261,36 @@ fn input_bindings(
             .then_with(|| left.target_port_id.cmp(&right.target_port_id))
     });
     Ok(bindings)
+}
+
+fn is_dependency_environment_control_node(
+    graph: &WorkflowGraph,
+    node_id: &str,
+    node_type: &str,
+) -> bool {
+    if node_type != DEPENDENCY_ENVIRONMENT_NODE_TYPE {
+        return false;
+    }
+    let Ok(target_node_id) = node_id.parse() else {
+        return false;
+    };
+    if !matches!(
+        resolve_dependency_environment_action_subject(graph, &target_node_id),
+        DependencyEnvironmentActionSubjectResolution::Resolved { .. }
+    ) {
+        return false;
+    }
+    // Workflow-service owns the validated control association and dependency
+    // proof. It is not a dataflow task. Bound/malformed controls stay fail-closed.
+    graph
+        .edges
+        .iter()
+        .filter(|edge| edge.source == node_id || edge.target == node_id)
+        .all(|edge| {
+            edge.source == node_id
+                && edge.source_handle == DEPENDENCY_ENVIRONMENT_SIDECAR_PORT_ID
+                && edge.target_handle == DEPENDENCY_ENVIRONMENT_SIDECAR_PORT_ID
+        })
 }
 
 fn is_control_association_edge(edge: &crate::graph::WorkflowExecutableTopologyEdge) -> bool {
