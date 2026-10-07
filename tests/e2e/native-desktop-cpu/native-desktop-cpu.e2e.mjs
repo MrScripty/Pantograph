@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { defaultVectorArtifact, completedCpuAttempt } from './native-output-contract.mjs';
 import { installInspectorLoadDiagnostics } from './inspector-load-diagnostics.mjs';
+import { readRunGraphHitDiagnostics } from './run-graph-hit-diagnostics.mjs';
 
 const evidence = process.env.PANTOGRAPH_NATIVE_CPU_EVIDENCE_DIR;
 const fixtureRoot = process.env.PANTOGRAPH_NATIVE_CPU_FIXTURE_ROOT;
@@ -250,7 +251,13 @@ describe('actual native Tauri saved CPU embedding graph', () => {
       { timeout: 30000, timeoutMsg: 'Inspector did not select the completed native run' });
     const vectorNode = await $('[role="button"][aria-label^="vectors vector-output"]');
     await vectorNode.waitForDisplayed({ timeout: 30000 });
-    await vectorNode.click();
+    // The painted body receives pointer hits; its click bubbles to the accessible SVG group.
+    const vectorBody = await vectorNode.$(':scope > rect:first-child');
+    await vectorBody.waitForDisplayed({ timeout: 30000 });
+    await vectorBody.scrollIntoView();
+    writeFileSync(path.join(evidence, 'native-inspector-node-hit-target.json'), JSON.stringify(
+      await browser.execute(readRunGraphHitDiagnostics, vectorNode, vectorBody), null, 2));
+    await vectorBody.click();
     const card = await $(`${selector('io-artifact-card')}[data-artifact-id="${vectorArtifact.artifact_id}"]`);
     await card.waitForDisplayed({ timeout: 30000 });
     const read = await card.$(selector('io-artifact-read-button'));
