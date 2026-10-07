@@ -1066,6 +1066,12 @@ pub type ImageResult = ImageGenerationResult;
 /// which backend is active.
 #[async_trait]
 pub trait InferenceBackend: Send + Sync {
+    /// Opaque identity of the actual opt-in loaded CPU model instance.
+    /// Built-in Candle supplies it; injected owners do not enable calibration.
+    #[cfg(feature = "backend-candle")]
+    fn resident_cpu_calibration_instance(&self) -> Option<uuid::Uuid> {
+        None
+    }
     // ─── IDENTITY ───────────────────────────────────────────────────
 
     /// Human-readable name for UI display

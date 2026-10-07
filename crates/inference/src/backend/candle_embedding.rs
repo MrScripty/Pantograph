@@ -92,6 +92,8 @@ pub(super) fn check_load_stop(
 }
 
 pub(super) struct EmbeddingModel {
+    pub(super) calibration_profile: Option<crate::candle_cpu_calibration::LoadedCpuProfile>,
+    calibration: Option<Arc<crate::candle_cpu_calibration::CalibrationOwner>>,
     bert: BertModel,
     tokenizer: tokenizers::Tokenizer,
     width: usize,
@@ -132,6 +134,7 @@ impl EmbeddingModel {
         target: PumasArtifactLoadTarget,
         stop: &AtomicBool,
         cancellation: &InferenceExecutionCancellationHandle,
+        calibration: Option<Arc<crate::candle_cpu_calibration::CalibrationOwner>>,
     ) -> Result<Self, BackendError> {
         check_load_stop(stop, cancellation)?;
         if plan.dtype != CandleLoadDType::F32
@@ -327,8 +330,25 @@ impl EmbeddingModel {
         }
         check_load_stop(stop, cancellation)?;
         let weights_identity = FileIdentity::read(&weights)?;
-        let tensors =
-            candle_core::safetensors::load(&weights, &candle_core::Device::Cpu).map_err(invalid)?;
+        let (tensors, calibration_profile) = if calibration.is_some() {
+            // Hash precisely the bytes passed to tensor deserialization, with no second read.
+            let bytes = std::fs::read(&weights).map_err(invalid)?;
+            let tensors = candle_core::safetensors::load_buffer(&bytes, &candle_core::Device::Cpu)
+                .map_err(invalid)?;
+            let profile = crate::candle_cpu_calibration::LoadedCpuProfile::from_loaded_bytes(
+                &target.model_ref,
+                &bytes,
+                &inputs,
+                config.hidden_size,
+            );
+            (tensors, profile)
+        } else {
+            (
+                candle_core::safetensors::load(&weights, &candle_core::Device::Cpu)
+                    .map_err(invalid)?,
+                None,
+            )
+        };
         check_load_stop(stop, cancellation)?;
         if FileIdentity::read(&weights)? != weights_identity {
             return Err(invalid("checkpoint changed during model loading"));
@@ -341,6 +361,8 @@ impl EmbeddingModel {
         let bert = BertModel::load(vb, &config).map_err(invalid)?;
         check_load_stop(stop, cancellation)?;
         Ok(Self {
+            calibration_profile,
+            calibration,
             bert,
             tokenizer,
             width: config.hidden_size,
@@ -530,12 +552,35 @@ impl EmbeddingJobs {
         texts: Vec<String>,
         cancellation: InferenceExecutionCancellationHandle,
     ) -> Result<Vec<EmbeddingResult>, BackendError> {
-        let completion = self.spawn(move |stop| model.forward(texts, &cancellation, &stop))?;
+        let completion = self.spawn(move |stop| {
+            let run = || {
+                if let (Some(owner), Some(profile)) =
+                    (&model.calibration, &model.calibration_profile)
+                {
+                    owner.check_worker_settings(profile);
+                }
+                let result = model.forward(texts, &cancellation, &stop);
+                if let (Some(owner), Some(profile)) =
+                    (&model.calibration, &model.calibration_profile)
+                {
+                    owner.check_worker_settings(profile);
+                }
+                result
+            };
+            match &model.calibration {
+                Some(owner) => owner.pool.install(run),
+                None => run(),
+            }
+        })?;
         copy_result(completion.await.as_ref())
     }
 }
 
 impl<T: Clone + Send + Sync + 'static> EmbeddingJobs<T> {
+    // Retained custody counts as busy even after completion, until actual drain.
+    pub(super) fn is_idle(&self) -> bool {
+        self.0.try_lock().is_ok_and(|slot| slot.is_none())
+    }
     pub(super) async fn load(
         &self,
         run: impl FnOnce(Arc<AtomicBool>) -> Result<T, BackendError> + Send + 'static,

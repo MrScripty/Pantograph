@@ -24,7 +24,11 @@
 //! ```
 
 pub mod backend;
+#[cfg(feature = "backend-candle")]
+mod candle_cpu_calibration;
 pub mod capability_availability;
+#[cfg(feature = "backend-candle")]
+pub use candle_cpu_calibration::{CandleCpuCalibrationConfig, CandleCpuWarmComparison};
 pub mod config;
 pub mod constants;
 pub mod dependency_requirements;

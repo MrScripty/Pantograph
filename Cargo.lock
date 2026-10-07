@@ -4992,6 +4992,7 @@ dependencies = [
  "pantograph-timing-contracts",
  "parking_lot",
  "pyo3",
+ "rayon",
  "reqwest",
  "serde",
  "serde_json",
