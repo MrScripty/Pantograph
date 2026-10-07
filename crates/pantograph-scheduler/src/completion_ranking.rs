@@ -29,7 +29,7 @@ pub struct SchedulerCompletionContext<'a> {
 }
 
 impl SchedulerCompletionContext<'_> {
-    fn valid(&self) -> bool {
+    pub(crate) fn valid(&self) -> bool {
         [
             self.host_id,
             self.runtime_instance_id,
@@ -157,7 +157,7 @@ pub fn select_scheduler_candidate_with_completion(
     let input = request.as_ref();
     if input.candidates.len() > SCHEDULER_COMPLETION_MAX_CANDIDATES
         || evidence.len() > SCHEDULER_COMPLETION_MAX_CANDIDATES
-        || input.diagnostics.len() > MAX_DIAGNOSTICS
+        || !completion_diagnostics_bounded(&input.diagnostics)
         || input
             .candidates
             .iter()
@@ -295,4 +295,15 @@ pub fn select_scheduler_candidate_with_completion(
             eligible_candidates: eligible.len(),
         },
     }
+}
+
+/// Validate raw lengths: contract validation bounds trimmed text, while a
+/// bounded selector must not clone unbounded whitespace surrounding that text.
+pub fn completion_diagnostics_bounded(
+    diagnostics: &[SchedulerDispatchSelectionDiagnostic],
+) -> bool {
+    diagnostics.len() <= MAX_DIAGNOSTICS
+        && diagnostics.iter().all(|d| {
+            d.message.len() <= 1024 && d.hint.as_ref().is_none_or(|hint| hint.len() <= 1024)
+        })
 }

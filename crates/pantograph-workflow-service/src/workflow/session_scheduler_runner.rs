@@ -151,13 +151,22 @@ impl<'a> WorkflowPreDispatchPreparationBoundary<'a> {
             .prepare_ready_runtime_task_dispatch_with_inputs(
                 &dispatch_context.task,
                 &dispatch_context.ready_record,
-                readiness_proof,
+                readiness_proof.clone(),
                 dispatch_context.materialized_inputs.as_deref(),
             )
             .await
             .map_err(runtime_dispatch_preselection_invalid_request)?;
         let started_runtime_task = {
             let mut store = self.service.session_store_guard()?;
+            store.validate_ready_dispatch_snapshot(
+                session_id,
+                workflow_run_id,
+                &dispatch_context.task,
+                &dispatch_context.ready_record,
+                &readiness_proof,
+                dispatch_context.materialized_inputs.as_deref(),
+                dispatch_context.materialized_inputs_requested,
+            )?;
             self.service
                 .scheduler_task_orchestrator
                 .start_ready_runtime_task(&mut store, session_id, workflow_run_id, task_id)
@@ -247,6 +256,7 @@ struct ReadyRuntimeDispatchContext {
     task: WorkflowSchedulerTask,
     ready_record: SchedulerTaskStateRecord,
     materialized_inputs: Option<Vec<pantograph_runtime_host_contracts::RuntimeHostExecutionInput>>,
+    materialized_inputs_requested: bool,
 }
 
 impl<'a> WorkflowSchedulerSessionRunner<'a> {
@@ -842,13 +852,22 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                 .prepare_ready_runtime_task_dispatch_with_inputs(
                     &dispatch_context.task,
                     &dispatch_context.ready_record,
-                    readiness_proof,
+                    readiness_proof.clone(),
                     dispatch_context.materialized_inputs.as_deref(),
                 )
                 .await
                 .map_err(runtime_dispatch_preselection_invalid_request)?;
             let started_runtime_task = {
                 let mut store = self.service.session_store_guard()?;
+                store.validate_ready_dispatch_snapshot(
+                    session_id,
+                    workflow_run_id,
+                    &dispatch_context.task,
+                    &dispatch_context.ready_record,
+                    &readiness_proof,
+                    dispatch_context.materialized_inputs.as_deref(),
+                    dispatch_context.materialized_inputs_requested,
+                )?;
                 self.service
                     .scheduler_task_orchestrator
                     .start_ready_runtime_task(&mut store, session_id, workflow_run_id, task_id)
@@ -1243,15 +1262,17 @@ fn ready_runtime_dispatch_context(
             ))
         })?
         .clone();
-    let materialized_inputs = service
+    let materialized_inputs_requested = service
         .runtime_dispatch_candidate_provider
-        .requires_materialized_inputs()
+        .requires_materialized_inputs();
+    let materialized_inputs = materialized_inputs_requested
         .then(|| store.active_run_completion_inputs(session_id, workflow_run_id, &task))
         .flatten();
     Ok(ReadyRuntimeDispatchContext {
         task,
         ready_record,
         materialized_inputs,
+        materialized_inputs_requested,
     })
 }
 

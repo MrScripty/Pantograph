@@ -175,3 +175,16 @@ evaluation and archive failed with `library file transfer failed: download faile
 No local archive bytes/hash or simulator differential execution is verified here.
 The supplied C3 hash and CPU audit remain supplied evidence. No alternative storage
 routes or repeated retries were used.
+# Reviewed follow-up
+
+The follow-up on `scheduler/bounded-two-completion` fences the exact task,
+Ready record/version, persisted readiness proof and opt-in materialized inputs
+under the same store lock as task start. A changed snapshot rejects prepared
+selection and drops its selected provisional custody before any attempt starts.
+Provider callbacks remain outside that lock. Raw diagnostic message/hint lengths
+are now checked before bounded ranking, fallback or native owner callbacks.
+These close two findings from independent review of `42f31c65`.
+
+The separately callable two-completion evaluator remains pure/local; see
+[design checkpoint](scheduler-v2-two-completion-checkpoint.md). It does not
+activate native successor forecasting or alter the default queue policy.

@@ -415,8 +415,8 @@ fn resource_backed_candidate_set(
             },
         )?;
     let selection = if let Some(opt_in) = completion_timing {
-        let within_bounds =
-            request.as_ref().candidates.len() <= 64 && request.as_ref().diagnostics.len() <= 32;
+        let within_bounds = request.as_ref().candidates.len() <= 64
+            && pantograph_scheduler::completion_diagnostics_bounded(&request.as_ref().diagnostics);
         let task_fingerprint = within_bounds
             .then(|| admitted_task_fingerprint(task, ready_record))
             .flatten();

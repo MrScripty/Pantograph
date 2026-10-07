@@ -487,3 +487,35 @@ fn ranking_is_non_mutating_and_does_not_produce_dispatch_authority() {
         .iter()
         .any(|d| d.code == SchedulerDispatchSelectionDiagnosticCode::MissingReservation));
 }
+
+#[test]
+fn raw_diagnostic_padding_is_refused_before_clone_or_legacy_fallback() {
+    for padded_hint in [false, true] {
+        let mut request = offers(2);
+        request
+            .diagnostics
+            .push(SchedulerDispatchSelectionDiagnostic {
+                severity: SchedulerDispatchSelectionDiagnosticSeverity::Info,
+                code: SchedulerDispatchSelectionDiagnosticCode::CandidateSelected,
+                candidate_id: None,
+                message: if padded_hint {
+                    "fixture".into()
+                } else {
+                    format!("{}fixture", " ".repeat(200_000))
+                },
+                hint: padded_hint.then(|| format!("{}hint", " ".repeat(200_000))),
+            });
+        let request = ValidatedSchedulerDispatchSelectionRequest::try_from(request).unwrap();
+        let result = select_scheduler_candidate_with_completion(&request, &[], policy());
+        assert_eq!(
+            result.diagnostic,
+            SchedulerCompletionRankingDiagnostic::Refused(
+                SchedulerCompletionRefusalReason::WorkLimitExceeded
+            )
+        );
+        assert!(matches!(
+            result.selection,
+            SchedulerDispatchReservationSelection::NoSelection { .. }
+        ));
+    }
+}

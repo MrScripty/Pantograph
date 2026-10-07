@@ -2,8 +2,8 @@
 use inference::{RuntimeServiceTimingOutcome, RuntimeServiceTimingValue};
 use pantograph_runtime_registry::RuntimeReservationAdmissionObservation;
 use pantograph_scheduler::{
-    select_scheduler_candidate_with_completion, SchedulerCompletionContext,
-    SchedulerCompletionEvidence, SchedulerCompletionEvidenceSource,
+    completion_diagnostics_bounded, select_scheduler_candidate_with_completion,
+    SchedulerCompletionContext, SchedulerCompletionEvidence, SchedulerCompletionEvidenceSource,
     SchedulerCompletionRankingPolicy, SchedulerCompletionSample,
     SchedulerDispatchReservationSelection, SchedulerDispatchSelectionDiagnostic,
     SchedulerDispatchSelectionDiagnosticCode, SchedulerDispatchSelectionDiagnosticSeverity,
@@ -86,7 +86,7 @@ pub(crate) fn select_with_owner_timing(
     };
     let input = request.as_ref();
     let bounded = input.candidates.len() <= SCHEDULER_COMPLETION_MAX_CANDIDATES
-        && input.diagnostics.len() <= 32
+        && completion_diagnostics_bounded(&input.diagnostics)
         && input
             .candidates
             .iter()

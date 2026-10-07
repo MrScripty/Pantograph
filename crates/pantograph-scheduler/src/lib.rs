@@ -36,12 +36,13 @@ pub use capability::{
     ValidatedSchedulerCapabilityHintSnapshot, SCHEDULER_CAPABILITY_HINT_CONTRACT_VERSION,
 };
 pub use completion_ranking::{
-    select_scheduler_candidate_with_completion, SchedulerCompletionContext,
-    SchedulerCompletionEvidence, SchedulerCompletionEvidenceSource,
+    completion_diagnostics_bounded, select_scheduler_candidate_with_completion,
+    SchedulerCompletionContext, SchedulerCompletionEvidence, SchedulerCompletionEvidenceSource,
     SchedulerCompletionRankingDiagnostic, SchedulerCompletionRankingPolicy,
     SchedulerCompletionRankingResult, SchedulerCompletionRefusalReason, SchedulerCompletionSample,
     SCHEDULER_COMPLETION_MAX_CANDIDATES,
 };
+
 pub use dispatch::{
     SchedulerBatchingGroupId, SchedulerDispatchDecision, SchedulerDispatchDiagnostic,
     SchedulerDispatchDiagnosticCode, SchedulerDispatchDiagnosticSeverity,

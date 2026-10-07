@@ -27,6 +27,50 @@ pub(crate) struct WorkflowSchedulerTaskTerminalMutation {
 }
 
 impl WorkflowExecutionSessionStore {
+    /// Read-only fence, called under the same store lock as Ready -> Running.
+    /// A changed snapshot must drop the prepared provisional custody, never
+    /// silently reinterpret timing evidence against a newer task or workload.
+    #[allow(clippy::too_many_arguments)] // Explicit snapshot fence, all consumed under the start lock.
+    pub(crate) fn validate_ready_dispatch_snapshot(
+        &self,
+        session_id: &str,
+        workflow_run_id: &str,
+        task: &crate::workflow::WorkflowSchedulerTask,
+        ready: &pantograph_scheduler::SchedulerTaskStateRecord,
+        proof: &DependencyReadinessProofEnvelope,
+        inputs: Option<&[pantograph_runtime_host_contracts::RuntimeHostExecutionInput]>,
+        check_inputs: bool,
+    ) -> Result<(), WorkflowServiceError> {
+        let unchanged = self
+            .active
+            .get(session_id)
+            .and_then(|state| state.active_run.as_ref())
+            .is_some_and(|run| {
+                run.workflow_run_id == workflow_run_id
+                    && run.scheduler_task_graph.as_ref().is_some_and(|graph| {
+                        graph.tasks.iter().find(|t| t.task_id == task.task_id) == Some(task)
+                    })
+                    && run.scheduler_task_records.get(task.task_id.as_str()) == Some(ready)
+                    && ready.state.kind() == SchedulerTaskStateKind::Ready
+                    && run
+                        .runtime_dispatch_readiness_proofs
+                        .get(task.task_id.as_str())
+                        == Some(proof)
+            })
+            && (!check_inputs
+                || self
+                    .active_run_completion_inputs(session_id, workflow_run_id, task)
+                    .as_deref()
+                    == inputs);
+        if unchanged {
+            Ok(())
+        } else {
+            Err(WorkflowServiceError::InvalidRequest(
+                "runtime dispatch Ready/task/readiness/input snapshot changed before start".into(),
+            ))
+        }
+    }
+
     /// Stage scheduler task results on the active run until durable ledger
     /// replay replaces this storage boundary.
     #[allow(dead_code)]

@@ -900,6 +900,9 @@ mod tests {
             "cancel_before_bind",
             "selection_rejected",
             "bound",
+            "snapshot_version_changed",
+            "snapshot_inputs_changed",
+            "snapshot_proof_changed",
         ] {
             let rollbacks = Arc::new(std::sync::atomic::AtomicUsize::new(0));
             let transfers = Arc::new(std::sync::atomic::AtomicUsize::new(0));
@@ -910,7 +913,16 @@ mod tests {
                     transfers: transfers.clone(),
                 },
             );
-            let task = runtime_task_fixture();
+            let mut task = runtime_task_fixture();
+            if scenario == "snapshot_inputs_changed" {
+                task.input_bindings
+                    .push(super::super::WorkflowSchedulerTaskInputBinding {
+                        source_node_id: "node.source".parse().unwrap(),
+                        source_task_id: "task.source".parse().unwrap(),
+                        source_port_id: "text".into(),
+                        target_port_id: "prompt".into(),
+                    });
+            }
             let run_id = task.workflow_run_id.as_str();
             let mut store = crate::scheduler::WorkflowExecutionSessionStore::new(1, 1);
             let session = store
@@ -942,6 +954,29 @@ mod tests {
                 workflow_run_id: task.workflow_run_id.clone(),
                 tasks: vec![task.clone()],
             };
+            let source_result = |text: &str| super::super::WorkflowSchedulerTaskResult {
+                schema_version: super::super::WORKFLOW_SCHEDULER_TASK_RESULT_SCHEMA_VERSION,
+                workflow_id: task.workflow_id.to_string(),
+                workflow_run_id: run_id.into(),
+                node_id: "node.source".into(),
+                task_id: "task.source".into(),
+                status: super::super::WorkflowSchedulerTaskResultStatus::Completed,
+                outputs: vec![super::super::WorkflowSchedulerTaskResultOutput {
+                    port_id: "text".into(),
+                    value: super::super::WorkflowSchedulerTaskResultValue::String(text.into()),
+                }],
+                diagnostics: vec![],
+                terminal_metadata: None,
+            };
+            if scenario == "snapshot_inputs_changed" {
+                store
+                    .record_active_run_scheduler_task_result(
+                        &session,
+                        run_id,
+                        source_result("original"),
+                    )
+                    .unwrap();
+            }
             let orchestrator = boundary.scheduler_task_orchestrator;
             orchestrator
                 .initialize_active_run_task_state(&mut store, &session, run_id, graph)
@@ -956,14 +991,89 @@ mod tests {
                     Some(runtime_dispatch_readiness_proof_fixture()),
                 )
                 .unwrap();
-            let mut prepared = boundary
-                .prepare_ready_runtime_task_dispatch(
+            let (original_graph, original_records) = store
+                .active_run_scheduler_task_state(&session, run_id)
+                .unwrap()
+                .unwrap();
+            let ready = original_records
+                .iter()
+                .find(|r| r.task_id == task.task_id)
+                .unwrap();
+            let original_inputs = store.active_run_completion_inputs(&session, run_id, &task);
+            let proof = runtime_dispatch_readiness_proof_fixture();
+            store
+                .validate_ready_dispatch_snapshot(
+                    &session,
+                    run_id,
                     &task,
-                    &ready_record_fixture(&task),
-                    runtime_dispatch_readiness_proof_fixture(),
+                    ready,
+                    &proof,
+                    original_inputs.as_deref(),
+                    true,
                 )
+                .unwrap();
+            let mut prepared = boundary
+                .prepare_ready_runtime_task_dispatch(&task, ready, proof.clone())
                 .await
                 .unwrap();
+            if scenario.starts_with("snapshot_") {
+                match scenario {
+                    "snapshot_version_changed" => {
+                        let mut changed = original_records.clone();
+                        changed[0].state_version += 1;
+                        store
+                            .set_active_run_scheduler_task_state(
+                                &session,
+                                run_id,
+                                original_graph,
+                                changed,
+                            )
+                            .unwrap();
+                    }
+                    "snapshot_inputs_changed" => store
+                        .record_active_run_scheduler_task_result(
+                            &session,
+                            run_id,
+                            source_result("replacement"),
+                        )
+                        .unwrap(),
+                    "snapshot_proof_changed" => {
+                        let mut changed = proof.clone();
+                        changed.execution_context.correlation_id =
+                            "changed-correlation".parse().unwrap();
+                        store
+                            .record_active_run_runtime_dispatch_readiness_proof(
+                                &session,
+                                run_id,
+                                task.task_id.as_str(),
+                                changed,
+                            )
+                            .unwrap();
+                    }
+                    _ => unreachable!(),
+                }
+                // This is the authoritative fence used by both real runner paths;
+                // it runs before attempt creation while holding the start lock.
+                assert!(store
+                    .validate_ready_dispatch_snapshot(
+                        &session,
+                        run_id,
+                        &task,
+                        ready,
+                        &proof,
+                        original_inputs.as_deref(),
+                        true
+                    )
+                    .is_err());
+                assert!(store
+                    .active_run_scheduler_task_attempt_read_facts(&session, run_id)
+                    .unwrap()
+                    .is_empty());
+                drop(prepared);
+                assert_eq!(rollbacks.load(std::sync::atomic::Ordering::SeqCst), 1);
+                assert_eq!(transfers.load(std::sync::atomic::Ordering::SeqCst), 0);
+                continue;
+            }
             if scenario == "selection_rejected" {
                 let mut raw = prepared.selection_request.into_inner();
                 raw.candidates[0].selected_runtime_id = "unrequested-runtime".parse().unwrap();
