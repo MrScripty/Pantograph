@@ -1,98 +1,85 @@
-# Combined native qualifier for inspector PR 64 and CPU capability PR 65
+# Current-main connector, cold CPU and inspector native qualifier
 
-This qualification branch, `qual/cold-candle-inspector-local-2026-10-07`, starts
-at reviewed combined production `b9089dd965844a3873b6d75b8ac2419c1a3a78fd`,
-tree `988838ba5b8b527e6c1911b600c48f467a3366a5`. Its parent is the exact
-three-file inspector candidate `2a748f113cbedbeffb0c218d8b2a6936628f49ba`
-([PR 64](https://github.com/MrScripty/Pantograph/pull/64)). Its second production
-commit carries the independently reviewed five-file CPU slice
-`6338b71a55371317c5ace6adbeacdec469c96950`, tree
-`f31ffcb4fce4a47166d0f8824ce3183d86fc7b24`
-([PR 65](https://github.com/MrScripty/Pantograph/pull/65)). Both production slices
-start at frozen main `a8483e511dcec4f36e269e6e4debf181a318222f`; their path sets
-are disjoint and every combined blob matches its independent candidate.
+This is a separate QA-only branch, `qual/connector-cpu-inspector-current-main-2026-10-07`.
+It validates three independent production slices on freshly fetched main
+`038dacaaa98ebd007c32e13d4608726ca5ccf63a`. No merge to main is performed.
 
-The CPU slice enrolls the owner-advertised stopped `candle.cpu` capability in
-production hosted composition and retains actual CPU device evidence in cold
-inference descriptors. It creates no ready model, runtime instance, admission
-budget or reservation. QA does not inject a registration or preload a backend.
-Qualified source `2590a5337fe30688c8cd29dc60aa2cb518ad9422`, failed main-based
-run `37586061519`, its 16 original artifact members and all prior evidence remain
-preserved. That run failed before graph saving because cold Candle enrollment
-was absent. It does not qualify this combination.
+## Production source and normal ancestry
 
-The QA overlay is reused in order from preserved commits
-`8717dc69e294ca6dbc89046b13403eba3ad926c7` and
-`4f2d7090543c5ec4619b6801cca4daa09aa2cb8d`. Relative to the resulting `4f2d7090`
-QA file contents, this qualifier changes only two paths: the existing workflow's
-push branch, exact combined-source guard and step label; and this report's
-production-source/qualification provenance. All scripts, test helpers, fixtures,
-ordinary native interaction and actual acceptance assertions remain byte-for-byte
-unchanged from that preserved main-based qualifier. A fresh run must record its
-own exact source, graph, execution and display evidence.
+Combined production HEAD is `85536d3982fc1fe3f6b1c1a90da30793b7537b04`, tree
+`5dd020e1becc791d99b8bcae2ae9c3c83e9e193a`. Normal merges retain these sources:
 
-## Complete QA-only delta
+- Connector `0dac67e43537180f5a76312c31b70fd0d8a2d6a1` was merged with main
+  `038dacaa` in `cc78968b8579fe421a78ed8e1bde05577a20f176`, tree
+  `c58989c5b1e4674d33a7f5421302c250b263e861`. Its main-relative delta is the
+  same three accepted connector source/test/report blobs.
+- Original inspector PR64 source `2a748f113cbedbeffb0c218d8b2a6936628f49ba`
+  was merged in `b45d99cada7200d68f7cb8171f029f8eefc469a5`.
+- Original cold CPU PR65 source `6338b71a55371317c5ace6adbeacdec469c96950`
+  was merged in combined `85536d39`.
 
-The qualifier adds the existing 12 QA paths from the successful qualified source:
+All four source refs are ancestors of the combined production head. The resulting
+main-relative delta has eleven paths: three connector, three inspector and five
+CPU paths. The current-main audio/rerank additions are inherited through main;
+this qualification does not add or resume those feature projects. Auto-merged
+runtime facts/composition files retain current main plus the bounded cold owner
+changes. Both existing PR heads remain separate and unchanged.
 
-- `.github/workflows/native-desktop-cpu-qualification.yml`;
-- `scripts/check-native-desktop-cpu-prerequisites.py`,
-  `scripts/prepare-native-desktop-cpu-fixture.py`,
-  `scripts/run-native-desktop-cpu-qualification.sh`;
-- eight files under `tests/e2e/native-desktop-cpu/`: the spec, WebdriverIO config,
-  output-contract helper/tests, load-diagnostic helper/tests and hit-diagnostic
-  helper/tests.
+## Preserved QA recipe
 
-Five imported QA files are adapted. The existing workflow keeps its name,
-job, supported driver, dependency/toolchain installation, complete feature audits,
-offline model environment, ORT download guard, source/evidence recording and
-artifact retention. Its push filter targets this separate branch and its source
-ancestor check requires the reviewed production candidate instead of the older
-chat qualification ancestor. The inspector spec finds the existing visible
-run-header div adjacent to its heading, scoped inside `io-inspector-page`, and
-still checks the exact selected run through displayed DOM text. This avoids
-adding the old QA-only header test marker to production markup.
-The read-only load diagnostics use that same existing header locator, with the
-diagnostic regression fixture adjusted accordingly. The helper's original marker
-would omit the header field on main; independent review identified this mismatch
-before publication. Failure observation, pending-state distinctions and IPC
-immutability assertions are unchanged.
+The previous qualifier `1f679b5a2888a07188378fde788f6c2f35af2847` is retained as
+an ordinary merge parent in QA import `4eaf6eed9d467bae4801f600a23a8048943f5dad`.
+The import adds exactly fourteen QA paths and no application or manifest delta
+relative to combined production. Only the existing workflow branch/source guard,
+step label and this report are adapted. The twelve other imported files are
+byte-identical to previous QA, including every native assertion, interaction,
+synthetic weight/metadata fixture and scoped output/load/hit test.
 
-The output-contract regression previously read an older observation from the
-qualification branch's documentation evidence, which is absent on main. Its
-initial local test fails with ENOENT; that failure log remains preserved. The
-test now reads one additional QA fixture containing the exact run record and
-artifact-query excerpt from successful native run `37582221446`, with original
-source, archive and member hashes. All existing output/negative-scope/runtime
-assertions remain unchanged. This captured fixture is regression input and does
-not establish native acceptance for the new main-based tree.
+The workflow keeps its driver, toolchain/native dependency installation, CPU and
+offline model environment, complete all-target normal/build/dev Cargo feature
+audits, mandatory `ORT_SKIP_DOWNLOAD=1`, source recording, thirty-minute bound,
+full log and artifact retention. It requires exact combined `85536d39` ancestry
+before building. ORT must remain dynamic with disable-linking, no
+ download-binaries/fetch-models/copy-dylibs/tls-native features and pinned Pumas
+`26a84e323cae566a46a8f76bef48fa1010aed48b`.
 
-The fixture and this report make fourteen paths. There are no changes under `src/`, `packages/`,
-`src-tauri/` or `crates/`, and no manifest or lockfile changes relative to the
-combined production base. Research-scheduler migration, rerank and audio remain
-outside this repair. Beyond the explicit CPU capability production slice, broader runtime/backend
-repairs from the older successful qualification branch are not included.
+## Prior failures and unchanged acceptance
 
-## Acceptance and interpretation
+Preserve failed main-only run
+[37586061519](https://github.com/MrScripty/Pantograph/actions/runs/37586061519),
+which stopped before graph save because the cold Candle registration was absent.
+Preserve failed combined run
+[37593069408](https://github.com/MrScripty/Pantograph/actions/runs/37593069408),
+which passed cold stopped CPU registration and native four-node/three-edge
+save/reopen, then stopped at rendered edge IDs because `deps-to-infer` lacked
+its inference target handle. Its artifact11470176309 has eighteen intact members,
+ZIP SHA256 `466bddd115583cae0f6fe40e5fdc6409a471e402cc433a84d7ef009217dea885`.
+Earlier successful and failed inspector archives remain unchanged.
 
-Keep the existing native gates: real Tauri IPC, cold Candle owner and typed-device
-discovery, saved/reopened graph, typed ports and painted edges, public scheduler
-submission, scoped completed `candle.cpu` timeline, retained vector output and
-CPU oracle, exact visible run, captured graph, native pointer selection, exact
-artifact card, Read and displayed vector body equality. No application state,
-handlers, synthetic events or weakened assertions may substitute for those steps.
+The accepted connector restores the registered sidecar handle in controlled
+frontend tests. The native run must still prove the actual desktop result.
+Retain all gates: actual Tauri IPC/cold owner, graph save/reopen, typed ports and
+rendered edges, geometry/glow, ordinary validation update, submission/admission,
+dependency resolution, same-run completed Candle CPU attempt, retained scoped
+vector provenance and Read, exact selected run, captured inspector graph,
+ordinary pointer selection and all eight displayed values matching the actual
+artifact and committed CPU oracle.
 
-The main-based combination differs from the earlier qualified runtime tree, as
-documented in the separate production reports. This run can expose a missing prerequisite or
-application behavior independently of the snapshot normalization. Record the
-first actual failure and preserve all available source, logs, DOM, screenshot,
-graph and artifact evidence. A failed prerequisite or exported vector alone
-does not establish inspector display acceptance. Any needed production repair
-must be separately scoped and reviewed rather than hidden in QA changes.
+The production edge component still uses URL glow filters, while the unchanged
+native loop after edge IDs requires drop-shadow. This remains a known separate
+gate; it is not repaired or weakened in QA. Record the first actual failure and
+actual admission/result status, distinguishing unvisited gates from failed ones.
+An empty JavaScript failure list is inconclusive if failure precedes listener
+installation. Inspect complete saved HTML and screenshots, not truncated log
+snippets. Preserve every original member and the full masked job log.
 
-No model/runtime binary download is authorized. The complete effective Cargo
-graph must retain `load-dynamic`/`disable-linking`, reject download features and
-retain the current Pumas pin; `ORT_SKIP_DOWNLOAD=1` remains mandatory. Ordinary
-official toolchain/native dependencies use the existing workflow. This controlled
-synthetic CPU run does not qualify real-user discovery, GPU, pretrained models
-or the full production loader. No merge or manual CodeRabbit request is made.
+## Qualification boundary
+
+The connector current-main frontend tests, browser rendering and source review
+qualify that local slice. Combined runtime tests and the new native outcome must
+be recorded against their exact heads; prior tests do not substitute for them.
+No application patch, injected registration, bypassed admission or substitute
+execution/output may be hidden in QA. No model/runtime binary download, GPU
+operation, authentication change, main merge or manual review request occurs.
+This controlled synthetic CPU test does not establish real-user discovery,
+pretrained quality or full production loader/GPU acceptance.
