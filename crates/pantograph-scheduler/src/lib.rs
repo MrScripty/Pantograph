@@ -22,8 +22,14 @@ mod queue;
 mod readiness;
 mod resource;
 mod resource_types;
+mod serial_admission;
 mod supervision;
 mod two_completion;
+
+pub use serial_admission::{
+    SchedulerSerialAdmission, SchedulerSerialAdmissionRefusal, SchedulerSerialDispatch,
+    SchedulerSerialPreparation,
+};
 
 pub use batching::{
     SchedulerBatchCandidate, SchedulerBatchDiagnostic, SchedulerBatchDiagnosticCode,
