@@ -313,3 +313,46 @@ fn oversized_identity_and_unpublished_owner_refuse_before_cloning() {
         assert_poisoned(&owner);
     }
 }
+
+#[test]
+fn ranked_attempt_cannot_downgrade_to_unranked_drain() {
+    let owner = SchedulerSerialAdmission::new();
+    assert!(matches!(
+        bound(&owner)
+            .record_unranked_drained_response(identity(), SchedulerSerialDrainState::Completed),
+        Err(SchedulerSerialDispatchRefusal::NotDrained)
+    ));
+    assert_poisoned(&owner);
+}
+#[test]
+fn unranked_owner_requires_actual_terminal_identity_and_matched_cleanup() {
+    let owner = SchedulerSerialAdmission::new();
+    let bound = owner
+        .try_prepare()
+        .unwrap()
+        .begin_dispatch()
+        .bind_unranked_attempt(identity())
+        .unwrap();
+    assert_eq!(bound.expected_owner(), None);
+    assert_eq!(bound.identity(), identity());
+    let drained = bound
+        .record_unranked_drained_response(identity(), SchedulerSerialDrainState::Completed)
+        .unwrap();
+    drained
+        .expect_cleanup(cleanup_event())
+        .unwrap()
+        .acknowledge_cleanup("cleanup.1", "lease.1", SchedulerSerialCleanupState::Applied)
+        .unwrap();
+    assert!(owner.try_prepare().is_ok());
+    let bound = owner
+        .try_prepare()
+        .unwrap()
+        .begin_dispatch()
+        .bind_unranked_attempt(identity())
+        .unwrap();
+    assert!(matches!(
+        bound.record_unranked_drained_response(identity(), SchedulerSerialDrainState::Accepted),
+        Err(SchedulerSerialDispatchRefusal::NotDrained)
+    ));
+    assert_poisoned(&owner);
+}

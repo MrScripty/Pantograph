@@ -31,6 +31,8 @@ mod store_completion_lookahead;
 mod store_diagnostics;
 #[path = "store_queue.rs"]
 mod store_queue;
+#[path = "store_serial_ready.rs"]
+mod store_serial_ready;
 #[path = "store_task_results.rs"]
 mod store_task_results;
 

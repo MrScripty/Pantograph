@@ -102,7 +102,7 @@ pub struct SchedulerSerialCleanupEvent<'a> {
 pub struct SchedulerSerialBoundDispatch {
     dispatch: SchedulerSerialDispatch,
     identity: [String; 8],
-    expected_owner: SchedulerSerialOwnerSnapshot,
+    expected_owner: Option<SchedulerSerialOwnerSnapshot>,
 }
 
 #[must_use]
@@ -141,12 +141,60 @@ impl SchedulerSerialDispatch {
         Ok(SchedulerSerialBoundDispatch {
             dispatch: self,
             identity: identity.fields().map(str::to_owned),
-            expected_owner,
+            expected_owner: Some(expected_owner),
+        })
+    }
+
+    /// Baseline ordering with no warm-owner/timing claim. The configured serial
+    /// execution owner still must observe actual drain and matched cleanup.
+    pub fn bind_unranked_attempt(
+        self,
+        identity: SchedulerSerialAttemptIdentity<'_>,
+    ) -> Result<SchedulerSerialBoundDispatch, SchedulerSerialDispatchRefusal> {
+        if !identity.fields().into_iter().all(bounded_identifier) {
+            return Err(SchedulerSerialDispatchRefusal::InvalidIdentity);
+        }
+        Ok(SchedulerSerialBoundDispatch {
+            dispatch: self,
+            identity: identity.fields().map(str::to_owned),
+            expected_owner: None,
         })
     }
 }
 
 impl SchedulerSerialBoundDispatch {
+    pub fn identity(&self) -> SchedulerSerialAttemptIdentity<'_> {
+        let f = &self.identity;
+        SchedulerSerialAttemptIdentity {
+            workflow_id: &f[0],
+            workflow_run_id: &f[1],
+            node_id: &f[2],
+            task_id: &f[3],
+            attempt_id: &f[4],
+            execution_request_id: &f[5],
+            candidate_id: &f[6],
+            reservation_lease_id: &f[7],
+        }
+    }
+    pub fn expected_owner(&self) -> Option<SchedulerSerialOwnerSnapshot> {
+        self.expected_owner
+    }
+
+    /// Trusted serial execution owner only, after actual unranked worker drain.
+    /// A ranked attempt cannot use this path to bypass owner validation.
+    pub fn record_unranked_drained_response(
+        self,
+        identity: SchedulerSerialAttemptIdentity<'_>,
+        state: SchedulerSerialDrainState,
+    ) -> Result<SchedulerSerialDrainedDispatch, SchedulerSerialDispatchRefusal> {
+        if self.expected_owner.is_some() || state == SchedulerSerialDrainState::Accepted {
+            return Err(SchedulerSerialDispatchRefusal::NotDrained);
+        }
+        if !self.matches(identity) {
+            return Err(SchedulerSerialDispatchRefusal::ForeignResponse);
+        }
+        Ok(SchedulerSerialDrainedDispatch { bound: self })
+    }
     fn matches(&self, identity: SchedulerSerialAttemptIdentity<'_>) -> bool {
         self.identity
             .iter()
@@ -160,7 +208,7 @@ impl SchedulerSerialBoundDispatch {
         self,
         owner_lease: &dyn SchedulerSerialRuntimeOwnerLease,
     ) -> Result<SchedulerSerialExecutingDispatch<'_>, SchedulerSerialDispatchRefusal> {
-        if owner_lease.snapshot() != self.expected_owner {
+        if Some(owner_lease.snapshot()) != self.expected_owner {
             return Err(SchedulerSerialDispatchRefusal::OwnerChanged);
         }
         Ok(SchedulerSerialExecutingDispatch {
@@ -185,7 +233,7 @@ impl SchedulerSerialExecutingDispatch<'_> {
         if state == SchedulerSerialDrainState::Accepted {
             return Err(SchedulerSerialDispatchRefusal::NotDrained);
         }
-        if self.owner_lease.snapshot() != self.bound.expected_owner {
+        if Some(self.owner_lease.snapshot()) != self.bound.expected_owner {
             return Err(SchedulerSerialDispatchRefusal::OwnerChanged);
         }
         Ok(SchedulerSerialDrainedDispatch { bound: self.bound })

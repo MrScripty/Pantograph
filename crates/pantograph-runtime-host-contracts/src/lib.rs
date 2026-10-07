@@ -13,6 +13,11 @@ mod reservation_lifecycle;
 mod runtime_host_dispatch;
 mod runtime_host_execution;
 mod runtime_session_load;
+mod serial_runtime_host;
+
+pub use serial_runtime_host::{
+    SerialRuntimeHostBatchExecutionPort, SerialRuntimeHostCpuOwnerEvidence,
+};
 
 pub use reservation_lifecycle::{
     ReservationLifecycleApplication, ReservationLifecycleApplicationState,

@@ -62,7 +62,10 @@ mod runtime_host_task_result_mapping;
 mod runtime_preflight;
 #[allow(dead_code)]
 mod runtime_task_attempt_fact;
+mod serial_ready;
 mod service_config;
+pub use serial_ready::WorkflowSerialReadyConfig;
+pub(crate) use serial_ready::{WorkflowSerialReadyMember, WorkflowSerialReadyPair};
 mod session_execution_api;
 mod session_io_artifacts;
 mod session_lifecycle_api;
@@ -163,7 +166,7 @@ pub(crate) use self::non_runtime_task_adapter::{
 };
 pub use self::runtime_dispatch_lookahead::WorkflowCompletionSuccessorSnapshot;
 pub(crate) use self::runtime_dispatch_lookahead::{
-    bounded_serialized, bounded_task, equivalent_environment,
+    bounded_proof, bounded_serialized, bounded_task, equivalent_environment,
 };
 pub(crate) use self::runtime_dispatch_selection::{
     NoRuntimeDispatchCandidatesProvider, NoRuntimeDispatchSourceRefresher,
@@ -287,6 +290,7 @@ pub use crate::scheduler::{
 /// Service entrypoint for workflow API operations.
 #[derive(Clone)]
 pub struct WorkflowService {
+    serial_ready_mode: Option<Arc<serial_ready::SerialReadyMode>>,
     session_store: Arc<Mutex<WorkflowExecutionSessionStore>>,
     runtime_branch_task_event_repository:
         Arc<Mutex<runtime_branch_task_event::InMemoryWorkflowRuntimeBranchTaskEventRepository>>,

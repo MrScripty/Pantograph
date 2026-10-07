@@ -216,6 +216,8 @@ pub(super) trait WorkflowRuntimeDispatchAssignmentRepository {
 #[derive(Debug, Default)]
 #[must_use]
 pub(super) struct InMemoryWorkflowRuntimeDispatchAssignmentRepository {
+    serial_singleton: bool,
+    serial_running: Option<WorkflowRuntimeDispatchAssignmentId>,
     records: BTreeMap<WorkflowRuntimeDispatchAssignmentId, WorkflowRuntimeDispatchAssignmentRecord>,
     ownership: BTreeMap<String, WorkflowRuntimeDispatchBatchOwnership>,
 }
@@ -231,6 +233,12 @@ struct WorkflowRuntimeDispatchBatchOwnership {
 impl InMemoryWorkflowRuntimeDispatchAssignmentRepository {
     pub(super) fn new() -> Self {
         Self::default()
+    }
+    pub(super) fn new_serial_singleton() -> Self {
+        Self {
+            serial_singleton: true,
+            ..Self::default()
+        }
     }
     pub(super) fn own_batch_claim(
         &mut self,
@@ -772,6 +780,17 @@ impl InMemoryWorkflowRuntimeDispatchAssignmentRepository {
         let anchor_fact = task_attempt_fact(anchor)?;
         let mut selected_assignment_ids = vec![anchor_assignment_id.clone()];
 
+        if self.serial_singleton {
+            // Both anchor and peer paths share this repository-wide mode. A
+            // recovered/bypassing Running peer is refused, never absorbed.
+            if self.serial_running.as_ref() != Some(anchor_assignment_id) {
+                return Err(invalid_owned_batch(
+                    "serial repository does not own this Running assignment",
+                ));
+            }
+            return Ok(selected_assignment_ids);
+        }
+
         for (assignment_id, candidate) in &self.records {
             if selected_assignment_ids.len() >= max_assignments {
                 break;
@@ -833,6 +852,16 @@ impl InMemoryWorkflowRuntimeDispatchAssignmentRepository {
             ));
         }
         if next_state == WorkflowRuntimeDispatchAssignmentState::Running {
+            if self.serial_singleton
+                && self
+                    .serial_running
+                    .as_ref()
+                    .is_some_and(|id| id != assignment_id)
+            {
+                return Err(invalid_owned_batch(
+                    "serial repository already has a Running assignment",
+                ));
+            }
             record.task_attempt_fact = Some(record.task_attempt_fact_record(now_ms).map_err(
                 |diagnostic| {
                     WorkflowRuntimeDispatchAssignmentDiagnostic::new(
@@ -846,6 +875,13 @@ impl InMemoryWorkflowRuntimeDispatchAssignmentRepository {
             )?);
         }
         record.state = next_state;
+        if self.serial_singleton {
+            if next_state == WorkflowRuntimeDispatchAssignmentState::Running {
+                self.serial_running = Some(assignment_id.clone());
+            } else if self.serial_running.as_ref() == Some(assignment_id) {
+                self.serial_running = None;
+            }
+        }
         record.updated_at_ms = now_ms;
         Ok(record.clone())
     }

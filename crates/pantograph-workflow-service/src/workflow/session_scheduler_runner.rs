@@ -128,6 +128,7 @@ impl<'a> WorkflowPreDispatchPreparationBoundary<'a> {
         })
     }
 
+    #[allow(clippy::too_many_arguments)] // Explicit bounded final Start fences.
     pub(super) async fn start_runtime_branch_dispatch_attempt(
         &self,
         session_id: &str,
@@ -135,6 +136,8 @@ impl<'a> WorkflowPreDispatchPreparationBoundary<'a> {
         task_id: &str,
         admitted_runtime_readiness: &[AdmittedRuntimeTaskReadiness],
         attempt_start_transition: SchedulerTaskAttemptLifecycleTransition,
+        serial_pair: Option<&super::WorkflowSerialReadyPair>,
+        serial_owner: Option<&pantograph_runtime_host_contracts::SerialRuntimeHostCpuOwnerEvidence>,
     ) -> Result<WorkflowStartedRuntimeDispatchAttempt, WorkflowServiceError> {
         let readiness_proof = runtime_dispatch_readiness_proof(
             self.service,
@@ -164,6 +167,14 @@ impl<'a> WorkflowPreDispatchPreparationBoundary<'a> {
             .map_err(runtime_dispatch_preselection_invalid_request)?;
         let started_runtime_task = {
             let mut store = self.service.session_store_guard()?;
+            if let Some(pair) = serial_pair {
+                store.validate_serial_ready_pair(session_id, workflow_run_id, pair)?;
+            }
+            if serial_owner.is_some_and(|owner| !owner.is_current()) {
+                return Err(WorkflowServiceError::InvalidRequest(
+                    "serial CPU owner changed before Start".into(),
+                ));
+            }
             store.validate_ready_dispatch_snapshot(
                 session_id,
                 workflow_run_id,
@@ -851,6 +862,11 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
         admitted_runtime_readiness: &[AdmittedRuntimeTaskReadiness],
         attempt_start_transition: SchedulerTaskAttemptLifecycleTransition,
     ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
+        if self.service.serial_ready_mode.is_some() {
+            return Err(WorkflowServiceError::InvalidRequest(
+                "serial Ready mode requires the supervised TaskWorker route".into(),
+            ));
+        }
         let WorkflowSchedulerRunContext {
             session_id,
             workflow_run_id,
