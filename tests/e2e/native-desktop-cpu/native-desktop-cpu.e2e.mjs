@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { defaultVectorArtifact, completedCpuAttempt } from './native-output-contract.mjs';
+import { installInspectorLoadDiagnostics } from './inspector-load-diagnostics.mjs';
 
 const evidence = process.env.PANTOGRAPH_NATIVE_CPU_EVIDENCE_DIR;
 const fixtureRoot = process.env.PANTOGRAPH_NATIVE_CPU_FIXTURE_ROOT;
@@ -236,13 +237,16 @@ describe('actual native Tauri saved CPU embedding graph', () => {
       bound_model_ref: boundModelRef, model_ref_source: 'saved executable graph; host selection/loader identity checks apply',
       internal_inference_metadata_exported: artifactQuery.artifacts.some((item) => item.producer_node_id === 'infer' && item.producer_port_id === 'metadata'),
       inspection, artifactQuery }, null, 2));
+    await browser.execute(installInspectorLoadDiagnostics);
     await $(selector('workbench-nav-scheduler')).click();
     const runButton = await $(`button[title="${runId}"]`);
     await runButton.waitForDisplayed({ timeout: 30000 });
     await runButton.click();
     await $(selector('workbench-nav-io_inspector')).click();
     await $(selector('io-inspector-page')).waitForDisplayed({ timeout: 30000 });
-    await browser.waitUntil(async () => (await $(selector('io-inspector-page')).getText()).includes(runId),
+    const runHeader = await $(selector('io-inspector-active-run'));
+    await runHeader.waitForDisplayed({ timeout: 30000 });
+    await browser.waitUntil(async () => (await runHeader.getProperty('textContent')).trim() === runId,
       { timeout: 30000, timeoutMsg: 'Inspector did not select the completed native run' });
     const vectorNode = await $('[role="button"][aria-label^="vectors vector-output"]');
     await vectorNode.waitForDisplayed({ timeout: 30000 });

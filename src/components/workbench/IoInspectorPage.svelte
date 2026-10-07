@@ -786,7 +786,7 @@
   <div class="flex shrink-0 items-center justify-between gap-4 border-b border-neutral-800 px-4 py-3">
     <div class="min-w-0">
       <h1 class="text-base font-semibold text-neutral-100">I/O Inspector</h1>
-      <div class="mt-1 truncate text-xs text-neutral-500">
+      <div class="mt-1 truncate text-xs text-neutral-500" data-testid="io-inspector-active-run">
         {#if $activeWorkflowRun}
           {$activeWorkflowRun.workflow_run_id}
         {:else}

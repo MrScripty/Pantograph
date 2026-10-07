@@ -2,6 +2,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readInspectorLoadDiagnostics } from './inspector-load-diagnostics.mjs';
 
 const directory = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(directory, '../../..');
@@ -59,6 +60,8 @@ export const config = {
   },
   afterTest: async function (_test, _context, { passed }) {
     if (evidence && globalThis.browser) {
+      const inspector = await browser.execute(readInspectorLoadDiagnostics);
+      writeFileSync(path.join(evidence, 'native-inspector-load-diagnostics.json'), JSON.stringify(inspector, null, 2));
       const events = await browser.execute(() => window.__nativeCpuValidationEvents || []);
       writeFileSync(path.join(evidence, 'native-validation-events.json'), JSON.stringify(events, null, 2));
       const active = events.at(-1);
