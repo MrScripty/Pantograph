@@ -91,6 +91,42 @@ pub fn register_active_runtime(
     descriptor
 }
 
+/// Enroll the compiled Candle CPU owner for typed scheduler loading. Registration
+/// leaves the runtime stopped; package/target authorization occurs at execution.
+pub(crate) fn register_scheduler_loadable_candle(
+    registry: &RuntimeRegistry,
+    gateway: &inference::InferenceGateway,
+) {
+    if !gateway
+        .runtime_owned_device_candidates()
+        .iter()
+        .any(|candidate| {
+            candidate.backend_key == "candle"
+                && candidate.runtime_variant_id.as_str() == "candle.cpu"
+                && candidate.device_id.as_str() == "cpu"
+        })
+    {
+        return;
+    }
+    // Existing registrations own their identity and lifecycle evidence.
+    if registry
+        .snapshot()
+        .runtimes
+        .iter()
+        .any(|runtime| runtime.runtime_id == "candle")
+    {
+        return;
+    }
+    registry.register_runtime(
+        RuntimeRegistration::new("candle", "Candle")
+            .with_backend_keys(vec!["candle".into()])
+            .with_dispatch_identity(
+                pantograph_runtime_registry::RuntimeDispatchIdentity::new("candle", "candle.cpu")
+                    .expect("Candle owner dispatch identity is valid"),
+            ),
+    );
+}
+
 pub fn active_runtime_reservation_request(
     registry: &RuntimeRegistry,
     mode_info: &HostRuntimeModeSnapshot,
