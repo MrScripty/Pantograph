@@ -25,11 +25,20 @@ ineligible for successful phase reuse.
 ## Exact safe slice
 
 Reuse the gateway's opt-in phase guard and monotonic clock. Add an optional capture
-envelope with its clock epoch, completion timestamp, owner provenance and selected
+envelope with its clock epoch, capture timestamp, owner provenance and selected
 load disposition reported by the backend's successful `BackendStartOutcome`.
 `Reloaded` means a new model load rather than reuse; it is not a claim about cold
 filesystem caches, allocator state or total preparation. Missing legacy capture
 metadata remains unusable for production qualification.
+
+The guard records its timestamp at drop, immediately after the gateway finishes
+the attempt; there is no intervening await. It is a capture timestamp, not a
+separate backend completion acknowledgement. All capture and query metadata is
+trusted in-process evidence; replayed JSON cannot authenticate owner provenance.
+Identity preflight borrows the exact payload and caps raw strings/bytes at 64 KiB,
+nodes at 2048 and compound depth at 32. Exceeding these bounds leaves identity
+unknown without truncating it or rejecting execution. Caller request IDs above
+64 KiB omit optional correlation hashing and continue to execute unchanged.
 
 Conservatively mark every `with_backend` owner injected, even if its label says
 PyTorch or it subsequently switches to a built-in backend. `InferenceGateway::new`

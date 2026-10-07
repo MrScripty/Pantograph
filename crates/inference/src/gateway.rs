@@ -221,6 +221,8 @@ pub struct InferenceGateway {
     llamacpp_ever_owned: Arc<AtomicBool>,
     /// Disabled by default; no phase clocks, identity hashing or recording work.
     service_timing: Option<crate::service_timing::ServiceTimingInstrumentation>,
+    service_timing_owner_provenance:
+        pantograph_timing_contracts::RuntimeServiceTimingOwnerProvenance,
 }
 
 struct RuntimeWarmupStartContext<'a> {
@@ -321,6 +323,8 @@ impl InferenceGateway {
             llamacpp_release_confirmed: Arc::new(AtomicBool::new(true)),
             llamacpp_ever_owned: Arc::new(AtomicBool::new(false)),
             service_timing: None,
+            service_timing_owner_provenance:
+                pantograph_timing_contracts::RuntimeServiceTimingOwnerProvenance::BuiltIn,
         }
     }
 
@@ -350,6 +354,8 @@ impl InferenceGateway {
             llamacpp_release_confirmed: Arc::new(AtomicBool::new(false)),
             llamacpp_ever_owned: Arc::new(AtomicBool::new(false)),
             service_timing: None,
+            service_timing_owner_provenance:
+                pantograph_timing_contracts::RuntimeServiceTimingOwnerProvenance::Injected,
         }
     }
 
@@ -364,6 +370,16 @@ impl InferenceGateway {
             recorder,
         ));
         self
+    }
+
+    /// Same live clock domain as this gateway's opt-in service observations.
+    /// Absent instrumentation preserves the disabled default without reading time.
+    pub fn runtime_service_timing_clock_snapshot(
+        &self,
+    ) -> Option<pantograph_timing_contracts::RuntimeServiceTimingClockSnapshot> {
+        self.service_timing
+            .as_ref()
+            .map(|timing| timing.clock_snapshot())
     }
 
     /// Set the process spawner
@@ -1356,12 +1372,14 @@ impl InferenceGateway {
         let mut timing = self.service_timing.as_ref().map(|instrumentation| {
             crate::service_timing::SelectedTextServiceTimingAttempt::new(
                 instrumentation,
+                self.service_timing_owner_provenance,
                 &self.resident_source_id,
                 &request,
                 &artifact_load_target,
                 &backend_decision,
             )
         });
+        let timing_cancellation = timing.as_ref().map(|_| cancellation.clone());
         let result = self
             .execute_selected_text_inner(
                 request,
@@ -1372,7 +1390,15 @@ impl InferenceGateway {
             )
             .await;
         if let Some(timing) = timing.as_mut() {
-            timing.finish(result.is_ok());
+            // A cancellation requested during successful worker drain still
+            // excludes this observation. It does not change the execution result.
+            timing.finish(
+                result.is_ok()
+                    && timing_cancellation.as_ref().is_some_and(|handle| {
+                        handle.snapshot().state
+                            == crate::InferenceExecutionCancellationState::Running
+                    }),
+            );
         }
         result
     }
@@ -1436,6 +1462,9 @@ impl InferenceGateway {
             } else {
                 Outcome::Failed
             });
+            if let Ok(outcome) = &outcome {
+                timing.bind_load_outcome(outcome);
+            }
         }
         if let Err(error) = outcome {
             let ready = backend.is_ready();
