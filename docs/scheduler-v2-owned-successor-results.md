@@ -135,11 +135,11 @@ All-target Clippy for scheduler/workflow/embedded-runtime, formatting and
 `git diff --check` pass. Scheduler's earlier 162 passed/one ignored remains
 applicable because current main did not change scheduler sources.
 
-The additional `backend-candle` offline test attempt stops before compilation:
+The initial additional `backend-candle` offline test attempt stopped before compilation:
 `failed to download axum v0.7.9` / `attempting to make an HTTP request, but
---offline was specified`. Thus Candle-gated CPU rerank/embedding regression
-execution was not requalified here. Its source and feature guards are preserved;
-this limitation is distinct from the passing llama.cpp-feature qualification.
+--offline was specified`. That execution gap is closed by the authorized ordinary
+dependency installation and final qualification below. The original failure is
+retained as historical evidence.
 
 Reproduction uses `source /workspace/pantograph-tools/activate.sh`,
 `ORT_SKIP_DOWNLOAD=1`, and
@@ -164,6 +164,62 @@ Logs are local executor evidence under `/workspace/pantograph-cache/`:
 `dependency_native_dispatch_cost_probe`; run its compiled test binary with
 `--ignored --nocapture --test-threads=1` after compilation has stopped.
 
+## Candle closure and final aggregate
+
+The owner subsequently authorized installation of ordinary dependencies. Cargo
+fetched exact locked `axum 0.7.9` and the other missing Rust dependencies from
+crates.io; the official Candle source remains locked at
+`88ed7911de9e88196b1f55b199145d22647f415e`. Manifests, lockfile, feature defaults,
+credentials and network/security settings are unchanged. No source implementation
+changed after reviewed commit `fe5219e0bd0bb09121b7751b43ad4655bfd0e160`.
+
+`ORT_SKIP_DOWNLOAD=1`, `HF_HUB_OFFLINE=1`, `TRANSFORMERS_OFFLINE=1` and isolated
+XDG test state were set. Exact resolved normal/build/dev features pass the existing
+ONNX no-build-download checker and pin checks: `ort` has `load-dynamic`,
+`ort-sys` has `disable-linking`, and neither enables `download-binaries`,
+`fetch-models`, `copy-dylibs` or `tls-native`. No CUDA feature, ONNX payload,
+model payload or runtime executable download was enabled or performed.
+
+Final combined `backend-llamacpp,backend-candle` library qualification passes
+2,393 tests: inference 522, node-engine 339, embedded runtime 550, runtime-host
+contracts 46, scheduler 3, workflow service 933, interface contracts 0. Three
+opt-in tests remain ignored by default. The separate full scheduler suite passes
+162 with one ignored; its 159 non-library cases make the deduplicated final
+aggregate **2,552 passed, zero failed, four ignored**. Formatting, whitespace and
+all-target Clippy for all seven packages pass with `-D warnings -A dead_code`;
+the command's existing inference dead-code allowance is explicit, and no source
+lint suppression was added.
+
+Independent compiled-binary execution passed 11 rerank cases (including the
+saved/reopened public graph), the public CPU embedding graph and three public
+dependency-session cases. Independent source review reconfirms the production
+opt-in call path, exact first/pair fencing, acknowledgement gate, actual successor
+inputs and fresh admission. This closes the Candle execution gap without claiming
+native-model numerical quality, GPU execution or production timing calibration.
+
+The final seven-package commands use the same environment above:
+
+```bash
+cargo test -p inference -p node-engine -p pantograph-scheduler \
+  -p pantograph-workflow-service -p pantograph-embedded-runtime \
+  -p pantograph-runtime-host-contracts -p pantograph-inference-interface-contracts \
+  --lib --no-default-features --features backend-llamacpp,backend-candle \
+  --locked --offline
+cargo test -p pantograph-scheduler --locked --offline
+cargo clippy -p inference -p node-engine -p pantograph-scheduler \
+  -p pantograph-workflow-service -p pantograph-embedded-runtime \
+  -p pantograph-runtime-host-contracts -p pantograph-inference-interface-contracts \
+  --all-targets --no-default-features --features backend-llamacpp,backend-candle \
+  --locked --offline -- -D warnings -A dead_code
+```
+
+Final local logs: `owned-candle-dependency-fetch.log`,
+`owned-candle-feature-tree.log`, `owned-candle-aggregate.log`,
+`owned-candle-scheduler-full.log`, `owned-candle-clippy.log`, under the cache
+directory above. The controlled provider measurements above are from the
+llama.cpp-feature debug binary on the same source lineage; they remain distinct
+from production calibration and the later Candle regression execution.
+
 ## Remaining prerequisites
 
 The [migration map](scheduler-v2-production-migration.md) still identifies the
@@ -183,5 +239,6 @@ not block the independently qualified local ownership slice.
 
 Remote main was reverified as `beb6c2630f1b6d9308b6a6e12fcdabbe9d696f46`
 after CPU rerank PR63 merged. Its runtime dispatch changes must remain preserved;
-cold-Candle PR65 and inspector PR64 remain separate. No public writes, pushes or
-merge into main are authorized by this work.
+cold-Candle PR65 and inspector PR64 remain separate. Draft publication uses the
+owner's later standing push/draft authority; hosted CI is recorded separately
+from local checks. No merge into main or manual CodeRabbit request is included.
