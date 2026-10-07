@@ -416,6 +416,34 @@ async fn selected_rerank_rejects_streaming_and_invalid_inputs_before_owner_effec
 }
 
 #[tokio::test]
+async fn selected_rerank_rejects_opaque_stream_controls_before_owner_effects() {
+    for stream in [
+        serde_json::json!(true),
+        serde_json::json!(false),
+        serde_json::json!("true"),
+        serde_json::Value::Null,
+    ] {
+        let (_directory, mut request, package, target) = fixture();
+        request.materialized_inputs.push(
+            pantograph_runtime_host_contracts::RuntimeHostExecutionInput {
+                port_id: "extra_options".into(),
+                value: RuntimeHostExecutionInputValue::Json(serde_json::json!({"stream": stream})),
+            },
+        );
+        let capture = Arc::new(Capture::default());
+        let response = port(package, target, gateway(capture.clone()))
+            .execute_runtime_host_request(request.clone(), running(&request))
+            .await
+            .unwrap();
+        assert_eq!(response.state, RuntimeHostExecutionState::Failed);
+        assert!(format!("{:?}", response.diagnostics).contains("streaming controls"));
+        assert!(response.outputs.is_empty());
+        assert!(capture.loads.lock().unwrap().is_empty());
+        assert!(capture.requests.lock().unwrap().is_empty());
+    }
+}
+
+#[tokio::test]
 async fn selected_rerank_checks_package_target_revision_and_owner_support() {
     for case in [
         "model",

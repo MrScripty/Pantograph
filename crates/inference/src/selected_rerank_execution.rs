@@ -3,16 +3,25 @@ use std::path::Path;
 
 use crate::backend::BackendError;
 use crate::{
-    BackendExecutionDecision, InferenceDeviceClass, InferenceDeviceId, InferenceDevicePolicy,
-    InferenceExecutionInput, InferenceExecutionRequest, InferenceTaskId, ModelArtifactKind,
-    ModelStorageKind, ModelValidationState, PumasArtifactEntryPath, PumasArtifactLoadPathKind,
-    PumasArtifactLoadTarget, PumasModelRef, ResolvedModelPackageFacts,
+    BackendExecutionDecision, InferenceDeviceClass, InferenceDevicePolicy, InferenceExecutionInput,
+    InferenceExecutionRequest, InferenceTaskId, ModelArtifactKind, ModelStorageKind,
+    ModelValidationState, PumasArtifactEntryPath, PumasArtifactLoadPathKind,
+    PumasArtifactLoadTarget, PumasModelRef,
 };
+#[cfg(feature = "backend-llamacpp")]
+use crate::{InferenceDeviceId, ResolvedModelPackageFacts};
 
 pub(crate) struct SelectedRerankLoad<'a> {
+    #[cfg(feature = "backend-llamacpp")]
     pub(crate) package: &'a ResolvedModelPackageFacts,
+    #[cfg(feature = "backend-llamacpp")]
     pub(crate) target: &'a PumasArtifactLoadTarget,
+    #[cfg(feature = "backend-llamacpp")]
     pub(crate) device: &'a InferenceDeviceId,
+    // Validation also gates unsupported-owner refusal when llama.cpp is absent.
+    // No backend consumes load fields in that build, but keep the borrow contract.
+    #[cfg(not(feature = "backend-llamacpp"))]
+    _selection: std::marker::PhantomData<&'a ()>,
 }
 
 fn invalid(message: impl Into<String>) -> BackendError {
@@ -35,6 +44,15 @@ impl<'a> SelectedRerankLoad<'a> {
         request
             .validate()
             .map_err(|error| invalid(error.to_string()))?;
+        if request
+            .extra_options
+            .as_object()
+            .is_some_and(|options| options.contains_key("stream"))
+        {
+            return Err(invalid(
+                "streaming controls are unsupported for selected rerank",
+            ));
+        }
         if request.extra_options.as_object().is_some_and(|options| {
             [
                 "model",
@@ -202,14 +220,19 @@ impl<'a> SelectedRerankLoad<'a> {
             }
         }
         Ok(Self {
+            #[cfg(feature = "backend-llamacpp")]
             package,
+            #[cfg(feature = "backend-llamacpp")]
             target,
+            #[cfg(feature = "backend-llamacpp")]
             device,
+            #[cfg(not(feature = "backend-llamacpp"))]
+            _selection: std::marker::PhantomData,
         })
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "backend-llamacpp"))]
 pub(crate) mod tests {
     use super::*;
     pub(crate) fn fixture() -> (
