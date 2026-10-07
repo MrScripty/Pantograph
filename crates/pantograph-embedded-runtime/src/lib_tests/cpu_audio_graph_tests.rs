@@ -206,7 +206,10 @@ async fn saved_cpu_audio_graph_reopens_and_matches_parent_outputs_and_selected_i
             ],output_targets:Some(["response","text","stream","language","duration_seconds","segments","metadata","diagnostics"].into_iter().map(|port| WorkflowOutputTarget {node_id:"infer".into(),port_id:port.into()}).collect()),override_selection:None,timeout_ms:None,priority:None}).await.expect("saved audio graph through scheduler");
         assert_eq!(response.outputs.len(), 8);
         for output in &response.outputs {
-            assert_eq!(output.value, parent[&output.port_id], "{}", output.port_id);
+            assert!(
+                output.value == parent[&output.port_id],
+                "saved audio output must match the parent output"
+            );
         }
         let loads = capture.loads.lock().unwrap();
         let selected = loads.last().unwrap();
@@ -235,6 +238,9 @@ async fn saved_cpu_audio_graph_reopens_and_matches_parent_outputs_and_selected_i
 
 #[tokio::test]
 async fn saved_owned_audio_reference_reopens_reuses_source_and_publishes_long_transcript() {
+    let _owned_fixture = crate::runtime_host_owned_audio::tests::OWNED_AUDIO_TEST_LOCK
+        .lock()
+        .await;
     use crate::runtime_host_owned_audio::tests::wav;
     use pantograph_workflow_service::workflow::WorkflowSchedulerTaskResultValue;
     let (_model, _, package, target) = fixture();
@@ -314,8 +320,7 @@ async fn saved_owned_audio_reference_reopens_reuses_source_and_publishes_long_tr
         .unwrap();
     assert!(
         sink.diagnostics.is_empty(),
-        "sink projection diagnostics: {:?}",
-        sink.diagnostics
+        "sink projection must succeed without diagnostics"
     );
     let saved = service
         .workflow_graph_save(

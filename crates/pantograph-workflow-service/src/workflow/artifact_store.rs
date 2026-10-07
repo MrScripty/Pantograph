@@ -228,6 +228,27 @@ impl ArtifactStore {
         artifact_id: &str,
         max_bytes: usize,
     ) -> Result<VerifiedArtifactSnapshot, ArtifactStoreError> {
+        self.verified_snapshot_observed(artifact_id, max_bytes, |_| {})
+    }
+
+    /// Deterministic test seam inside the real bounded read/hash operation.
+    #[cfg(any(test, feature = "test-support"))]
+    #[doc(hidden)]
+    pub fn verified_snapshot_with_read_barrier(
+        &self,
+        artifact_id: &str,
+        max_bytes: usize,
+        barrier: impl FnOnce(&std::sync::Arc<[u8]>),
+    ) -> Result<VerifiedArtifactSnapshot, ArtifactStoreError> {
+        self.verified_snapshot_observed(artifact_id, max_bytes, barrier)
+    }
+
+    fn verified_snapshot_observed(
+        &self,
+        artifact_id: &str,
+        max_bytes: usize,
+        after_read: impl FnOnce(&std::sync::Arc<[u8]>),
+    ) -> Result<VerifiedArtifactSnapshot, ArtifactStoreError> {
         use std::io::Read;
         validate_artifact_id(artifact_id)?;
         let entry = self.entry(artifact_id)?;
@@ -264,17 +285,17 @@ impl ArtifactStore {
         let limit = (max_bytes as u64).checked_add(1).ok_or_else(unavailable)?;
         let mut body = Vec::new();
         file.take(limit).read_to_end(&mut body)?;
-        if body.len() > max_bytes
-            || descriptor.byte_length != Some(body.len() as u64)
-            || descriptor.content_hash.as_deref()
-                != Some(format!("blake3:{}", blake3::hash(&body).to_hex()).as_str())
+        if body.len() > max_bytes || descriptor.byte_length != Some(body.len() as u64) {
+            return Err(unavailable());
+        }
+        let body: std::sync::Arc<[u8]> = body.into();
+        after_read(&body);
+        if descriptor.content_hash.as_deref()
+            != Some(format!("blake3:{}", blake3::hash(&body).to_hex()).as_str())
         {
             return Err(unavailable());
         }
-        Ok(VerifiedArtifactSnapshot {
-            descriptor,
-            body: body.into(),
-        })
+        Ok(VerifiedArtifactSnapshot { descriptor, body })
     }
 
     pub fn descriptor(&self, artifact_id: &str) -> Result<ArtifactDescriptor, ArtifactStoreError> {

@@ -5,13 +5,26 @@ use pantograph_workflow_service::{
     WorkflowArtifactWriter,
 };
 
+#[cfg(test)]
+type SnapshotReadBarrier = std::sync::Arc<dyn Fn(&std::sync::Arc<[u8]>) + Send + Sync>;
+
 #[derive(Clone)]
 pub struct OwnedAudioInputStore {
     writer: WorkflowArtifactWriter,
+    #[cfg(test)]
+    snapshot_read_barrier: Option<SnapshotReadBarrier>,
+    #[cfg(test)]
+    before_snapshot_admission: Option<std::sync::Arc<tokio::sync::Notify>>,
 }
 impl OwnedAudioInputStore {
     pub fn new(writer: WorkflowArtifactWriter) -> Self {
-        Self { writer }
+        Self {
+            writer,
+            #[cfg(test)]
+            snapshot_read_barrier: None,
+            #[cfg(test)]
+            before_snapshot_admission: None,
+        }
     }
     /// Host-owned byte ingress, no path/URL and no implicit policy enlargement.
     pub fn import_wav(
@@ -69,6 +82,10 @@ impl OwnedAudioInputStore {
             pantograph_runtime_host_contracts::RuntimeHostExecutionCancellationHandle,
         >,
     ) -> Result<inference::OwnedAudioWav, String> {
+        #[cfg(test)]
+        if let Some(entered) = &self.before_snapshot_admission {
+            entered.notify_one();
+        }
         let permit = inference::acquire_owned_audio_admission()
             .await
             .map_err(|e| e.to_string())?;
@@ -76,11 +93,23 @@ impl OwnedAudioInputStore {
             return Err("owned audio cancelled before snapshot read".into());
         }
         let writer = self.writer.clone();
+        #[cfg(test)]
+        let read_barrier = self.snapshot_read_barrier.clone();
         // Detached blocking read retains its admission even if the caller disappears.
         tokio::task::spawn_blocking(move || {
-            let snapshot = writer
-                .verified_snapshot(&artifact_id, inference::OWNED_AUDIO_MAX_BYTES)
-                .map_err(|e| e.to_string())?;
+            #[cfg(test)]
+            let snapshot = if let Some(barrier) = read_barrier {
+                writer.verified_snapshot_with_read_barrier(
+                    &artifact_id,
+                    inference::OWNED_AUDIO_MAX_BYTES,
+                    |body| barrier(body),
+                )
+            } else {
+                writer.verified_snapshot(&artifact_id, inference::OWNED_AUDIO_MAX_BYTES)
+            };
+            #[cfg(not(test))]
+            let snapshot = writer.verified_snapshot(&artifact_id, inference::OWNED_AUDIO_MAX_BYTES);
+            let snapshot = snapshot.map_err(|e| e.to_string())?;
             let d = snapshot.descriptor;
             if d.payload_kind != ArtifactPayloadKind::Audio
                 || d.artifact_role.as_deref() != Some("owned_audio_input")
