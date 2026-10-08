@@ -1066,6 +1066,24 @@ pub type ImageResult = ImageGenerationResult;
 /// which backend is active.
 #[async_trait]
 pub trait InferenceBackend: Send + Sync {
+    /// Strict native receipt route. Ordinary backends cannot assert verified reuse.
+    #[cfg(feature = "backend-candle")]
+    async fn load_verified_cpu_warm_embedding(
+        &mut self,
+        _request: &crate::InferenceExecutionRequest,
+        _target: &crate::PumasArtifactLoadTarget,
+        _decision: &crate::BackendExecutionDecision,
+        _cancellation: crate::InferenceExecutionCancellationHandle,
+    ) -> Result<BackendStartOutcome, BackendError> {
+        Err(BackendError::Config(
+            "actual verified CPU warm-load capability required".into(),
+        ))
+    }
+
+    #[cfg(feature = "backend-candle")]
+    fn take_verified_cpu_warm_load(&mut self) -> Option<crate::CandleCpuVerifiedWarmLoad> {
+        None
+    }
     /// Opaque identity of the actual opt-in loaded CPU model instance.
     /// Built-in Candle supplies it; injected owners do not enable calibration.
     #[cfg(feature = "backend-candle")]

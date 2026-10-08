@@ -12,7 +12,7 @@ use pantograph_timing_contracts::{
 };
 use serde::Serialize;
 #[path = "service_timing_bounds.rs"]
-mod bounds;
+pub(crate) mod bounds;
 
 /// Fresh facts from the loaded backend owner, not scheduler-selected labels.
 /// Tokens cover implementation, effective load configuration (including resolved

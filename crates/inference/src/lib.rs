@@ -29,7 +29,8 @@ mod candle_cpu_calibration;
 pub mod capability_availability;
 #[cfg(feature = "backend-candle")]
 pub use candle_cpu_calibration::{
-    CandleCpuCalibrationConfig, CandleCpuCleanupOwner, CandleCpuWarmComparison,
+    CandleCpuCalibrationConfig, CandleCpuCleanupOwner, CandleCpuVerifiedWarmLoad,
+    CandleCpuWarmComparison,
 };
 pub mod config;
 pub mod constants;

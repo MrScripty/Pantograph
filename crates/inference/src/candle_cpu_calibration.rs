@@ -63,8 +63,28 @@ pub struct CandleCpuCleanupOwner {
     generation: u64,
 }
 impl CandleCpuCleanupOwner {
+    #[cfg(test)]
+    pub(crate) fn epoch_for_test(&self) -> u64 {
+        self.generation
+    }
     pub(crate) fn model_ref(&self) -> &PumasModelRef {
         &self.profile.model_ref
+    }
+}
+
+/// Private-contents linear receipt minted only by successful actual warm-load
+/// publication. It is not a drain, reservation or scheduler capability by itself.
+pub struct CandleCpuVerifiedWarmLoad {
+    previous: CandleCpuCleanupOwner,
+    current: CandleCpuCleanupOwner,
+}
+impl CandleCpuVerifiedWarmLoad {
+    pub(crate) fn adopt(self, expected: &CandleCpuCleanupOwner) -> Option<CandleCpuCleanupOwner> {
+        (Arc::ptr_eq(&self.previous.owner, &expected.owner)
+            && self.previous.profile == expected.profile
+            && self.previous.generation == expected.generation
+            && expected.generation.checked_add(2) == Some(self.current.generation))
+        .then_some(self.current)
     }
 }
 impl CandleCpuWarmComparison {
@@ -157,7 +177,11 @@ struct Store {
     entries: VecDeque<Entry>,
     warm: bool,
 }
+#[cfg(test)]
+type AttemptHook = Arc<dyn Fn(&str) + Send + Sync>;
 pub(crate) struct CalibrationOwner {
+    #[cfg(test)]
+    pub(crate) attempt_hook: Mutex<Option<AttemptHook>>,
     pub(crate) pool: rayon::ThreadPool,
     config: CandleCpuCalibrationConfig,
     clock: Arc<dyn Fn() -> Option<u64> + Send + Sync>,
@@ -167,6 +191,13 @@ pub(crate) struct CalibrationOwner {
     store: Mutex<Store>,
 }
 impl CalibrationOwner {
+    #[cfg(test)]
+    pub(crate) fn test_attempt_phase(&self, phase: &str) {
+        let hook = self.attempt_hook.lock().unwrap().clone();
+        if let Some(hook) = hook {
+            hook(phase);
+        }
+    }
     pub(crate) fn cleanup_owner(
         self: &Arc<Self>,
         instance: uuid::Uuid,
@@ -224,6 +255,8 @@ impl CalibrationOwner {
                 BackendError::Config(format!("CPU calibration worker pool: {error}"))
             })?;
         Ok(Arc::new(Self {
+            #[cfg(test)]
+            attempt_hook: Mutex::new(None),
             pool,
             config,
             clock,
@@ -257,11 +290,18 @@ impl CalibrationOwner {
         }
     }
     pub(crate) fn begin_load(self: &Arc<Self>) -> LoadPublication {
+        let previous = self
+            .store
+            .try_lock()
+            .ok()
+            .and_then(|store| store.profile.as_ref().map(|profile| profile.instance))
+            .and_then(|instance| self.cleanup_owner(instance));
         self.invalidate_generation();
         LoadPublication {
             owner: self.clone(),
             epoch: self.generation.load(Ordering::Acquire),
             published: false,
+            previous,
         }
     }
     pub(crate) fn begin_service(
@@ -434,13 +474,19 @@ pub(crate) struct LoadPublication {
     owner: Arc<CalibrationOwner>,
     epoch: u64,
     published: bool,
+    previous: Option<CandleCpuCleanupOwner>,
 }
 impl LoadPublication {
-    pub(crate) fn publish(mut self, profile: Option<LoadedCpuProfile>, reused: bool) {
-        let Some(profile) = profile else { return };
+    pub(crate) fn publish(
+        mut self,
+        profile: Option<LoadedCpuProfile>,
+        reused: bool,
+    ) -> Option<CandleCpuVerifiedWarmLoad> {
+        let profile = profile?;
+        let mut verified = None;
         if let Ok(mut store) = self.owner.store.try_lock() {
             if self.owner.generation.load(Ordering::Acquire) != self.epoch {
-                return;
+                return None;
             }
             if !reused
                 || store.profile.as_ref() != Some(&profile)
@@ -449,7 +495,7 @@ impl LoadPublication {
                 store.entries.clear();
                 store.latest_timestamp = None;
             }
-            store.profile = Some(profile);
+            store.profile = Some(profile.clone());
             store.warm = reused;
             if let Some(next) = self.epoch.checked_add(1) {
                 store.accepted_generation = next;
@@ -458,8 +504,25 @@ impl LoadPublication {
                     .generation
                     .compare_exchange(self.epoch, next, Ordering::AcqRel, Ordering::Acquire)
                     .is_ok();
+                if self.published && reused {
+                    if let Some(previous) = self.previous.take().filter(|previous| {
+                        previous.profile == profile
+                            && previous.generation.checked_add(1) == Some(self.epoch)
+                            && previous.generation.checked_add(2) == Some(next)
+                    }) {
+                        verified = Some(CandleCpuVerifiedWarmLoad {
+                            previous,
+                            current: CandleCpuCleanupOwner {
+                                owner: self.owner.clone(),
+                                profile,
+                                generation: next,
+                            },
+                        });
+                    }
+                }
             }
         }
+        verified
     }
 }
 impl Drop for LoadPublication {

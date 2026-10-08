@@ -50,6 +50,26 @@ impl RuntimeRegistry {
         expected: &RuntimeReservationLease,
         owner: RuntimeRetainedOwnerIdentity<'_>,
     ) -> Result<RuntimeRetentionDisposition, RuntimeRetainedCleanupError> {
+        self.check_retained_reservation_for_owner(expected, owner, true)
+    }
+
+    /// Read-only admission preflight for an actually held native attempt owner.
+    /// Cleanup must repeat this check; this result does not reserve exclusion.
+    pub fn validate_retained_reservation_for_owner(
+        &self,
+        expected: &RuntimeReservationLease,
+        owner: RuntimeRetainedOwnerIdentity<'_>,
+    ) -> Result<(), RuntimeRetainedCleanupError> {
+        self.check_retained_reservation_for_owner(expected, owner, false)
+            .map(|_| ())
+    }
+
+    fn check_retained_reservation_for_owner(
+        &self,
+        expected: &RuntimeReservationLease,
+        owner: RuntimeRetainedOwnerIdentity<'_>,
+        release: bool,
+    ) -> Result<RuntimeRetentionDisposition, RuntimeRetainedCleanupError> {
         let runtime_id = canonical_runtime_id(owner.runtime_id);
         let refuse = |reason| RuntimeRetainedCleanupError::Refused {
             runtime_id: runtime_id.clone(),
@@ -152,8 +172,10 @@ impl RuntimeRegistry {
         };
         // The successor remains charged; resident accounting was established
         // before releasing this task's peak claim. No stop or callback follows.
-        remove_reservation_locked(&mut state, expected.reservation_id)
-            .expect("validated live reservation under the same lock");
+        if release {
+            remove_reservation_locked(&mut state, expected.reservation_id)
+                .expect("validated live reservation under the same lock");
+        }
         Ok(RuntimeRetentionDisposition::retain(runtime_id, reason))
     }
 }

@@ -554,6 +554,10 @@ impl EmbeddingJobs {
     ) -> Result<Vec<EmbeddingResult>, BackendError> {
         let completion = self.spawn(move |stop| {
             let run = || {
+                #[cfg(test)]
+                if let Some(owner) = &model.calibration {
+                    owner.test_attempt_phase("forward");
+                }
                 if let (Some(owner), Some(profile)) =
                     (&model.calibration, &model.calibration_profile)
                 {

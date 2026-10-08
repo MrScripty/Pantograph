@@ -7,17 +7,20 @@ const MAX_NODES: usize = 2048;
 const MAX_DEPTH: usize = 32;
 
 pub(super) fn digest(value: &impl Serialize) -> Option<String> {
+    within_budget(value).then_some(())?;
+    // Escaping/structural expansion is finite after the borrowed preflight.
+    let bytes = serde_json::to_vec(value).ok()?;
+    Some(blake3::hash(&bytes).to_hex().to_string())
+}
+
+pub(crate) fn within_budget(value: &impl Serialize) -> bool {
     value
         .serialize(&mut Budget {
             bytes: 0,
             nodes: 0,
             depth: 0,
         })
-        .ok()?;
-    // Preflight bounds raw bytes, nodes and depth. Escape expansion is at most
-    // six bytes per raw byte; structural output is bounded by the node budget.
-    let bytes = serde_json::to_vec(value).ok()?;
-    Some(blake3::hash(&bytes).to_hex().to_string())
+        .is_ok()
 }
 
 #[derive(Debug)]
