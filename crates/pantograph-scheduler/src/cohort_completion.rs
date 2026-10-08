@@ -12,6 +12,14 @@ use crate::{
     ValidatedSchedulerDispatchSelectionRequest,
 };
 
+mod workflow_objective;
+pub use workflow_objective::{
+    SchedulerCohortWorkflowCompletion, SchedulerCohortWorkflowIncomplete,
+    SchedulerCohortWorkflowObjective, SchedulerCohortWorkflowObligation,
+    SchedulerCohortWorkflowProfile, SchedulerCohortWorkflowRelease, SchedulerCohortWorkflowResult,
+    SchedulerCohortWorkflowScore, SCHEDULER_COHORT_WORKFLOW_OUTPUT_CONVENTION,
+};
+
 pub const SCHEDULER_COHORT_MAX_TASKS: usize = 4;
 pub const SCHEDULER_COHORT_MAX_PLACEMENTS: usize = 2;
 // The complete fixed-first four-task tree has 2 + 12 + 48 + 96 edges.
@@ -268,28 +276,100 @@ pub fn evaluate_scheduler_cohort_completion(
     policy: SchedulerCompletionRankingPolicy,
     budget: SchedulerCohortBudget,
 ) -> SchedulerCohortResult {
+    let (result, work) = evaluate(cohort, evidence, policy, budget, None);
+    match result {
+        Ok(best) => SchedulerCohortResult::Ranked(SchedulerCohortScore {
+            cohort_identity: cohort.identity.to_owned(),
+            objective_identity: cohort.objective_identity.to_owned(),
+            dependency_snapshot_identity: cohort.dependency_snapshot_identity.to_owned(),
+            first_candidate_id: best.state.completions[0].candidate_id.clone(),
+            terminal_completion_us: best.state.elapsed,
+            completion_sum_us: best.state.sum,
+            completions: best.state.completions,
+            source: cohort.source,
+            work,
+        }),
+        Err(SchedulerCohortWorkflowIncomplete::Cohort(reason)) => {
+            SchedulerCohortResult::Incomplete { reason, work }
+        }
+        // Objective-only failures cannot arise without an objective. Preserve
+        // the legacy reason enum and fail closed if that invariant changes.
+        Err(
+            SchedulerCohortWorkflowIncomplete::InvalidObjective
+            | SchedulerCohortWorkflowIncomplete::ObjectiveOverflow,
+        ) => SchedulerCohortResult::Incomplete {
+            reason: SchedulerCohortIncomplete::InvalidCohort,
+            work,
+        },
+    }
+}
+
+/// Opt-in closed-workflow makespan or weighted flow-time loss on the SAME
+/// bounded two-event search/common six-stage continuation. Owner declarations
+/// must cover all required outputs/branches/retries and their acceptance boundary.
+/// This authorizes no native execution, app entitlement or resource release.
+/// Incomplete comparisons return no winner; retain the current safe selector.
+pub fn evaluate_scheduler_cohort_workflow_objective(
+    cohort: &SchedulerFrozenCohort<'_>,
+    evidence: &[SchedulerCohortEvidence<'_>],
+    objective: &SchedulerCohortWorkflowObjective<'_>,
+    policy: SchedulerCompletionRankingPolicy,
+    budget: SchedulerCohortBudget,
+) -> SchedulerCohortWorkflowResult {
+    let (result, work) = evaluate(cohort, evidence, policy, budget, Some(objective));
+    match result {
+        Ok(best) => {
+            let values = best
+                .objective
+                .expect("explicit workflow objective scored every winner");
+            SchedulerCohortWorkflowResult::Ranked(Box::new(SchedulerCohortWorkflowScore {
+                cohort_identity: cohort.identity.to_owned(),
+                objective_identity: cohort.objective_identity.to_owned(),
+                dependency_snapshot_identity: cohort.dependency_snapshot_identity.to_owned(),
+                first_candidate_id: best.state.completions[0].candidate_id.clone(),
+                terminal_completion_us: best.state.elapsed,
+                completions: best.state.completions,
+                workflow_completions: values.completions,
+                profile: objective.profile,
+                objective_loss_us: values.loss,
+                workflow_makespan_us: values.makespan,
+                workflow_completion_sum_us: values.sum,
+                source: cohort.source,
+                work,
+            }))
+        }
+        Err(reason) => SchedulerCohortWorkflowResult::Incomplete { reason, work },
+    }
+}
+
+fn evaluate<'a>(
+    cohort: &SchedulerFrozenCohort<'a>,
+    evidence: &[SchedulerCohortEvidence<'a>],
+    policy: SchedulerCompletionRankingPolicy,
+    budget: SchedulerCohortBudget,
+    objective: Option<&SchedulerCohortWorkflowObjective<'_>>,
+) -> (
+    Result<Winner<'a>, SchedulerCohortWorkflowIncomplete>,
+    SchedulerCohortWork,
+) {
     let mut meter = Meter {
         budget,
         work: SchedulerCohortWork::default(),
     };
     let result = (|| {
-        if !within_bounds(cohort, evidence, budget) {
-            return Err(SchedulerCohortIncomplete::WorkLimitExceeded);
+        if !within_bounds(cohort, evidence, budget)
+            || objective.is_some_and(|o| !workflow_objective::bounded(o))
+        {
+            return Err(SchedulerCohortIncomplete::WorkLimitExceeded.into());
         }
-        validate_cohort(cohort, policy, &mut meter)?;
+        validate_cohort(cohort, policy, objective.is_some(), &mut meter)?;
+        if let Some(objective) = objective {
+            workflow_objective::validate(cohort, objective, &mut meter)?;
+        }
         validate_evidence(cohort, evidence, policy, &mut meter)?;
-        search(cohort, evidence, &mut meter)
+        search(cohort, evidence, objective, &mut meter)
     })();
-    match result {
-        Ok(mut score) => {
-            score.work = meter.work;
-            SchedulerCohortResult::Ranked(score)
-        }
-        Err(reason) => SchedulerCohortResult::Incomplete {
-            reason,
-            work: meter.work,
-        },
-    }
+    (result, meter.work)
 }
 fn text(s: &str) -> bool {
     s.len() <= 128 && !s.trim().is_empty() && !s.chars().any(char::is_control)
@@ -338,6 +418,7 @@ fn ready(history: &[SchedulerCohortAction<'_>], task: &SchedulerCohortTask<'_>) 
 fn validate_cohort(
     c: &SchedulerFrozenCohort<'_>,
     policy: SchedulerCompletionRankingPolicy,
+    workflow_objective: bool,
     m: &mut Meter,
 ) -> Result<(), SchedulerCohortIncomplete> {
     use SchedulerCohortIncomplete as R;
@@ -370,8 +451,9 @@ fn validate_cohort(
         if !text(task.workload_fingerprint)
             || task.placements.is_empty()
             || task.placements.len() != task.request.candidates().len()
-            || intent.workflow_id != c.first.as_ref().task_intent.workflow_id
-            || intent.workflow_run_id != c.first.as_ref().task_intent.workflow_run_id
+            || (!workflow_objective
+                && (intent.workflow_id != c.first.as_ref().task_intent.workflow_id
+                    || intent.workflow_run_id != c.first.as_ref().task_intent.workflow_run_id))
             || c.tasks[..i]
                 .iter()
                 .any(|old| old.request.intent().task_id == intent.task_id)
@@ -647,14 +729,17 @@ fn advance<'a>(
     row: &SchedulerCohortEvidence<'a>,
     end: u64,
     optimized: bool,
+    legacy_objective: bool,
     m: &mut Meter,
 ) -> Result<State<'a>, SchedulerCohortIncomplete> {
     m.event(optimized)?;
     let mut next = state.clone();
-    next.sum = next
-        .sum
-        .checked_add(end)
-        .ok_or(SchedulerCohortIncomplete::DurationOverflow)?;
+    if legacy_objective {
+        next.sum = next
+            .sum
+            .checked_add(end)
+            .ok_or(SchedulerCohortIncomplete::DurationOverflow)?;
+    }
     next.elapsed = end;
     next.history.push(row.action);
     next.completions.push(SchedulerCohortCompletion {
@@ -669,17 +754,22 @@ fn advance<'a>(
     });
     Ok(next)
 }
+struct Winner<'a> {
+    state: State<'a>,
+    objective: Option<workflow_objective::Values>,
+}
 fn search<'a>(
     c: &SchedulerFrozenCohort<'a>,
     rows: &[SchedulerCohortEvidence<'a>],
+    objective: Option<&SchedulerCohortWorkflowObjective<'_>>,
     m: &mut Meter,
-) -> Result<SchedulerCohortScore, SchedulerCohortIncomplete> {
+) -> Result<Winner<'a>, SchedulerCohortWorkflowIncomplete> {
     let root = State::default();
-    let mut winner: Option<State<'a>> = None;
+    let mut winner = None;
     for (first, end) in choices(c, rows, &root, m)? {
-        let initial = advance(&root, first, end, true, m)?;
+        let initial = advance(&root, first, end, true, objective.is_none(), m)?;
         if c.tasks.len() == 1 {
-            consider(initial, &mut winner, m)?;
+            consider(initial, objective, &mut winner, m)?;
             continue;
         }
         let seconds = choices(c, rows, &initial, m)?;
@@ -687,57 +777,62 @@ fn search<'a>(
             m.work.dead_ends += 1;
         }
         for (second, end) in seconds {
-            let mut state = advance(&initial, second, end, true, m)?;
+            let mut state = advance(&initial, second, end, true, objective.is_none(), m)?;
             while state.history.len() < c.tasks.len() {
                 let next = choices(c, rows, &state, m)?;
                 let Some((row, end)) = next.first() else {
                     m.work.dead_ends += 1;
                     break;
                 };
-                state = advance(&state, row, *end, false, m)?;
+                state = advance(&state, row, *end, false, objective.is_none(), m)?;
             }
             if state.history.len() == c.tasks.len() {
-                consider(state, &mut winner, m)?;
+                consider(state, objective, &mut winner, m)?;
             }
         }
     }
-    let best = winner.ok_or(SchedulerCohortIncomplete::NoCompletePlan)?;
-    Ok(SchedulerCohortScore {
-        cohort_identity: c.identity.to_owned(),
-        objective_identity: c.objective_identity.to_owned(),
-        dependency_snapshot_identity: c.dependency_snapshot_identity.to_owned(),
-        first_candidate_id: best.completions[0].candidate_id.clone(),
-        terminal_completion_us: best.elapsed,
-        completion_sum_us: best.sum,
-        completions: best.completions,
-        source: c.source,
-        work: m.work,
-    })
+    winner.ok_or(SchedulerCohortIncomplete::NoCompletePlan.into())
 }
 fn consider<'a>(
     state: State<'a>,
-    winner: &mut Option<State<'a>>,
+    objective: Option<&SchedulerCohortWorkflowObjective<'_>>,
+    winner: &mut Option<Winner<'a>>,
     m: &mut Meter,
-) -> Result<(), SchedulerCohortIncomplete> {
+) -> Result<(), SchedulerCohortWorkflowIncomplete> {
     m.charge()?;
     m.work.complete_plans += 1;
+    let values = objective
+        .map(|o| workflow_objective::score(o, &state, m))
+        .transpose()?;
+    let key = values
+        .as_ref()
+        .map_or((u128::from(state.elapsed), u128::from(state.sum), 0), |v| {
+            v.key(objective.expect("scored explicit objective").profile)
+        });
     if winner.as_ref().is_none_or(|old| {
-        (state.elapsed, state.sum)
-            .cmp(&(old.elapsed, old.sum))
+        let old_key = old.objective.as_ref().map_or(
+            (u128::from(old.state.elapsed), u128::from(old.state.sum), 0),
+            |v| v.key(objective.expect("scored explicit objective").profile),
+        );
+        key.cmp(&old_key)
             .then_with(|| {
                 state
                     .completions
                     .iter()
                     .map(|e| (&e.task_id, &e.candidate_id))
                     .cmp(
-                        old.completions
+                        old.state
+                            .completions
                             .iter()
                             .map(|e| (&e.task_id, &e.candidate_id)),
                     )
             })
             .is_lt()
     }) {
-        *winner = Some(state);
+        *winner = Some(Winner {
+            state,
+            objective: values,
+        });
     }
     Ok(())
 }

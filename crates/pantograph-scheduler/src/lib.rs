@@ -53,13 +53,18 @@ pub use capability::{
     ValidatedSchedulerCapabilityHintSnapshot, SCHEDULER_CAPABILITY_HINT_CONTRACT_VERSION,
 };
 pub use cohort_completion::{
-    evaluate_scheduler_cohort_completion, SchedulerCohortAction, SchedulerCohortBudget,
-    SchedulerCohortCompletion, SchedulerCohortCosts, SchedulerCohortEvidence,
-    SchedulerCohortIncomplete, SchedulerCohortPlacement, SchedulerCohortResult,
-    SchedulerCohortSample, SchedulerCohortScore, SchedulerCohortTask, SchedulerCohortTaskRequest,
-    SchedulerCohortTransition, SchedulerCohortWork, SchedulerFrozenCohort,
-    SCHEDULER_COHORT_MAX_BRANCHES, SCHEDULER_COHORT_MAX_EVENTS, SCHEDULER_COHORT_MAX_EVIDENCE,
-    SCHEDULER_COHORT_MAX_PLACEMENTS, SCHEDULER_COHORT_MAX_TASKS, SCHEDULER_COHORT_MAX_WORK,
+    evaluate_scheduler_cohort_completion, evaluate_scheduler_cohort_workflow_objective,
+    SchedulerCohortAction, SchedulerCohortBudget, SchedulerCohortCompletion, SchedulerCohortCosts,
+    SchedulerCohortEvidence, SchedulerCohortIncomplete, SchedulerCohortPlacement,
+    SchedulerCohortResult, SchedulerCohortSample, SchedulerCohortScore, SchedulerCohortTask,
+    SchedulerCohortTaskRequest, SchedulerCohortTransition, SchedulerCohortWork,
+    SchedulerCohortWorkflowCompletion, SchedulerCohortWorkflowIncomplete,
+    SchedulerCohortWorkflowObjective, SchedulerCohortWorkflowObligation,
+    SchedulerCohortWorkflowProfile, SchedulerCohortWorkflowRelease, SchedulerCohortWorkflowResult,
+    SchedulerCohortWorkflowScore, SchedulerFrozenCohort, SCHEDULER_COHORT_MAX_BRANCHES,
+    SCHEDULER_COHORT_MAX_EVENTS, SCHEDULER_COHORT_MAX_EVIDENCE, SCHEDULER_COHORT_MAX_PLACEMENTS,
+    SCHEDULER_COHORT_MAX_TASKS, SCHEDULER_COHORT_MAX_WORK,
+    SCHEDULER_COHORT_WORKFLOW_OUTPUT_CONVENTION,
 };
 
 pub use completion_ranking::{

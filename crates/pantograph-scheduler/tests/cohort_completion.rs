@@ -128,11 +128,44 @@ fn evaluate(
     budget: SchedulerCohortBudget,
     permute: bool,
 ) -> SchedulerCohortResult {
+    with_fixture(
+        f,
+        fault,
+        permute,
+        None,
+        "serialized-six-stage-mean-us.v1",
+        |cohort, rows| evaluate_scheduler_cohort_completion(cohort, rows, policy(), budget),
+    )
+}
+
+fn with_fixture<R>(
+    f: &Fixture,
+    fault: &str,
+    permute: bool,
+    workflow_groups: Option<&[usize]>,
+    timing_convention: &str,
+    consume: impl FnOnce(&SchedulerFrozenCohort<'_>, &[SchedulerCohortEvidence<'_>]) -> R,
+) -> R {
     let mut requests: Vec<_> = f
         .widths
         .iter()
         .enumerate()
-        .map(|(i, n)| request(i, *n))
+        .map(|(i, n)| {
+            let r = request(i, *n);
+            if let Some(groups) = workflow_groups {
+                let text = serde_json::to_string(r.as_ref())
+                    .unwrap()
+                    .replace(
+                        "workflow.image_generation",
+                        &format!("workflow.group.{}", groups[i]),
+                    )
+                    .replace("run.001", &format!("run.group.{}", groups[i]));
+                let raw: SchedulerDispatchSelectionRequest = serde_json::from_str(&text).unwrap();
+                raw.try_into().unwrap()
+            } else {
+                r
+            }
+        })
         .collect();
     if fault == "hard-constraint" {
         let mut r = requests[0].clone().into_inner();
@@ -240,7 +273,7 @@ fn evaluate(
         first,
         tasks: &tasks,
         host_id: "host.fixed",
-        timing_convention: "serialized-six-stage-mean-us.v1",
+        timing_convention,
         initial_condition_fingerprint: "state.root",
         initial_residency_fingerprint: "state.root",
         source: SchedulerCompletionEvidenceSource::Synthetic,
@@ -364,7 +397,7 @@ fn evaluate(
         rows.reverse();
     }
     let before = serde_json::to_value(first.as_ref()).unwrap();
-    let result = evaluate_scheduler_cohort_completion(&cohort, &rows, policy(), budget);
+    let result = consume(&cohort, &rows);
     assert_eq!(
         serde_json::to_value(first.as_ref()).unwrap(),
         before,
@@ -372,6 +405,9 @@ fn evaluate(
     );
     result
 }
+
+#[path = "cases/cohort_workflow_objective_cases.rs"]
+mod workflow_objective_tests;
 fn ranked(result: SchedulerCohortResult) -> SchedulerCohortScore {
     match result {
         SchedulerCohortResult::Ranked(s) => s,
