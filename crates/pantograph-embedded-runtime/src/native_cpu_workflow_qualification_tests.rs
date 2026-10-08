@@ -414,7 +414,10 @@ async fn qualify_cpu_workflow(keep_alive: bool) {
             check.readiness_state,
             pantograph_dependency_planning::DependencyEnvironmentReadinessState::Ready
         );
-        assert_eq!(result.outputs.len(), 1);
+        assert!(
+            result.outputs.len() == 1,
+            "actual CPU workflow must produce one output"
+        );
         let vector = result.outputs[0]
             .value
             .as_array()
@@ -463,13 +466,6 @@ async fn qualify_cpu_workflow(keep_alive: bool) {
                 "ephemeral session and task leases retired"
             );
         }
-        eprintln!(
-            "CPU qualification keep_alive={keep_alive} run={run} output_dim={} wall_ms={} has_instance={} reservation_count={}",
-            vector.len(),
-            result.timing_ms,
-            instance.is_some(),
-            snapshot.reservations.len()
-        );
     }
     runtime
         .close_workflow_execution_session(WorkflowExecutionSessionCloseRequest {
