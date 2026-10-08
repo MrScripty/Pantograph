@@ -3,7 +3,7 @@
 use super::*;
 use crate::{EmbeddedDependencyReadinessAutoResumeConfig, EmbeddedRuntime, EmbeddedRuntimeConfig};
 use pantograph_workflow_service::{
-    WorkflowExecutionSessionCloseRequest, WorkflowExecutionSessionCreateRequest,
+    WorkflowErrorCode, WorkflowExecutionSessionCloseRequest, WorkflowExecutionSessionCreateRequest,
     WorkflowExecutionSessionRunRequest, WorkflowOutputTarget, WorkflowPortBinding,
 };
 use std::time::Duration;
@@ -13,7 +13,7 @@ use std::time::Duration;
 struct RecordingAutoResume {
     inner: crate::dependency_readiness_auto_resume::EmbeddedWorkflowServiceAutoResumePort,
     completed: Arc<std::sync::Mutex<Vec<pantograph_workflow_service::WorkflowRunResponse>>>,
-    failures: Arc<std::sync::Mutex<Vec<String>>>,
+    failures: Arc<std::sync::Mutex<Vec<WorkflowErrorCode>>>,
 }
 
 #[async_trait]
@@ -38,10 +38,39 @@ impl crate::DependencyReadinessAutoResumePort for RecordingAutoResume {
                 error,
                 WorkflowServiceError::RuntimeDependencyReadinessPending { .. }
             ) {
-                self.failures.lock().unwrap().push(error.to_string());
+                self.failures.lock().unwrap().push(error.code());
             }
         }
         result
+    }
+}
+
+// Explicit service-failure diagnostics accept only the closed error-code enum.
+// Arbitrary service error messages can contain session or attribution details.
+fn qualification_error_identifier(code: WorkflowErrorCode) -> String {
+    format!("{code:?}")
+}
+
+#[test]
+fn qualification_error_identifiers_omit_service_error_payloads() {
+    let marker = "session_private_qualification_marker";
+    for (error, expected) in [
+        (
+            WorkflowServiceError::InvalidRequest(marker.into()),
+            "InvalidRequest",
+        ),
+        (
+            WorkflowServiceError::SessionNotFound(marker.into()),
+            "SessionNotFound",
+        ),
+        (
+            WorkflowServiceError::Internal(marker.into()),
+            "InternalError",
+        ),
+    ] {
+        let identifier = qualification_error_identifier(error.code());
+        assert_eq!(identifier, expected);
+        assert!(!identifier.contains(marker));
     }
 }
 
@@ -204,8 +233,7 @@ async fn qualify_cpu_workflow(keep_alive: bool) {
     assert_eq!(
         validation.summary.summary.as_ref().unwrap().status,
         DraftGraphValidationStatus::Executable,
-        "{:?}",
-        validation.summary
+        "native fixture validation must be executable"
     );
     let validation_id = validation.summary.validation_session_id.unwrap();
     let action = service
@@ -224,8 +252,7 @@ async fn qualify_cpu_workflow(keep_alive: bool) {
     assert_eq!(
         action.status,
         DependencyEnvironmentActionIntentStatus::RequestReady,
-        "{:?}",
-        action
+        "native fixture dependency action must be ready"
     );
     let executable = service
         .publish_graph_session_executable_validation_snapshot(
@@ -355,16 +382,31 @@ async fn qualify_cpu_workflow(keep_alive: bool) {
             Err(WorkflowServiceError::RuntimeDependencyReadinessPending { .. }) => {
                 tokio::time::timeout(Duration::from_secs(15), async {
                     loop {
-                        if let Some(error) = failures.lock().unwrap().pop() { panic!("actual auto-resume failed: {error}"); }
+                        if let Some(code) = failures.lock().unwrap().pop() {
+                            panic!("actual auto-resume failed: {}", qualification_error_identifier(code));
+                        }
                         if let Some(result) = completed.lock().unwrap().pop() { break result; }
                         tokio::time::sleep(Duration::from_millis(5)).await;
                     }
-                }).await.unwrap_or_else(|_| panic!("actual CPU run {run} never completed after owned resume: {:?}; snapshot_count={}",registry.snapshot(),readiness.snapshot_provider().snapshot_count()))
+                }).await.unwrap_or_else(|_| {
+                    let snapshot = registry.snapshot();
+                    panic!(
+                        "actual CPU run {run} never completed after owned resume: runtime_count={} reservation_count={} snapshot_count={}",
+                        snapshot.runtimes.len(),
+                        snapshot.reservations.len(),
+                        readiness.snapshot_provider().snapshot_count()
+                    )
+                })
             }
-            Err(error) => panic!(
-                "actual CPU run {run}: {error:?}; registry={:?}",
-                registry.snapshot()
-            ),
+            Err(error) => {
+                let snapshot = registry.snapshot();
+                panic!(
+                    "actual CPU run {run}: code={} runtime_count={} reservation_count={}",
+                    qualification_error_identifier(error.code()),
+                    snapshot.runtimes.len(),
+                    snapshot.reservations.len()
+                )
+            }
         };
         use pantograph_dependency_environment_service::DependencyEnvironmentProvider;
         let check = readiness.snapshot_provider().check(&probe_request);
@@ -395,8 +437,8 @@ async fn qualify_cpu_workflow(keep_alive: bool) {
             if run == 0 {
                 instance = candle.runtime_instance_id.clone();
             } else {
-                assert_eq!(
-                    candle.runtime_instance_id, instance,
+                assert!(
+                    candle.runtime_instance_id == instance,
                     "same native owner reused"
                 );
                 assert_eq!(
@@ -422,11 +464,11 @@ async fn qualify_cpu_workflow(keep_alive: bool) {
             );
         }
         eprintln!(
-            "CPU qualification keep_alive={keep_alive} run={run} output_dim={} wall_ms={} instance={:?} reservations={:?}",
+            "CPU qualification keep_alive={keep_alive} run={run} output_dim={} wall_ms={} has_instance={} reservation_count={}",
             vector.len(),
             result.timing_ms,
-            instance,
-            snapshot.reservations
+            instance.is_some(),
+            snapshot.reservations.len()
         );
     }
     runtime
