@@ -77,6 +77,7 @@ pub(crate) struct SerialReadyContext {
     preparation: Option<SchedulerSerialPreparation>,
     dispatch: Option<SchedulerSerialDispatch>,
     drained: Option<SchedulerSerialDrainedDispatch>,
+    cleanup: Option<Box<dyn SerialRuntimeHostCleanupReceipt>>,
     claimed: bool,
     cleanup_acknowledged: bool,
     successful: bool,
@@ -122,6 +123,7 @@ impl SerialReadyMode {
             preparation: Some(preparation),
             dispatch: None,
             drained: None,
+            cleanup: None,
             claimed: false,
             cleanup_acknowledged: false,
             successful: false,
@@ -203,6 +205,26 @@ impl SerialReadyMode {
             return None;
         }
         Some((usize::from(costs[1] < costs[0]), first))
+    }
+    fn migrate_verified_reuse(
+        &self,
+        previous: &SerialRuntimeHostCpuOwnerEvidence,
+        current: &SerialRuntimeHostCpuOwnerEvidence,
+    ) {
+        // Only after consumed actual receipt cleanup and a fresh private-owner
+        // query. Preserve freshness/counts; never carry across arbitrary reload.
+        if !current.is_current() {
+            return;
+        }
+        if let Ok(mut samples) = self.observations.lock() {
+            for sample in samples.iter_mut() {
+                if sample.owner.snapshot == previous.snapshot
+                    && Arc::ptr_eq(&sample.owner.generation, &previous.generation)
+                {
+                    sample.owner = current.clone();
+                }
+            }
+        }
     }
     fn record(&self, key: [u8; 32], owner: SerialRuntimeHostCpuOwnerEvidence, started: Instant) {
         let now = Instant::now();
@@ -380,18 +402,45 @@ impl RuntimeHostBatchExecutionPort for SerialReadyPortAdapter {
             None => dispatch.bind_unranked_attempt(identity),
         }
         .map_err(|e| execution_error(format!("serial binding refused: {e:?}")))?;
-        let (response, drained, actual_owner) = self
+        let execution = self
             .0
             .port
-            .execute_serial_singleton(request, cancellation.clone(), bound)
+            .execute_serial_singleton_with_cleanup(request, cancellation.clone(), bound)
             .await?;
+        let SerialRuntimeHostDrainedExecution {
+            response,
+            drained,
+            owner: actual_owner,
+            cleanup,
+        } = execution;
+        let predecessor = cleanup.as_ref().map(|receipt| receipt.previous_owner());
+        if let Some(receipt) = cleanup.as_ref() {
+            let old = predecessor.as_ref().expect("present receipt predecessor");
+            let new = receipt.current_owner();
+            if old.snapshot.loaded_instance != new.snapshot.loaded_instance
+                || old.snapshot.loaded_profile != new.snapshot.loaded_profile
+                || old.snapshot.effective_settings != new.snapshot.effective_settings
+                || old.snapshot.cpu_threads != new.snapshot.cpu_threads
+                || old.snapshot.generation.checked_add(2) != Some(new.snapshot.generation)
+                || !Arc::ptr_eq(&old.generation, &new.generation)
+                || !actual_owner.as_ref().is_some_and(|actual| {
+                    actual.snapshot == new.snapshot
+                        && Arc::ptr_eq(&actual.generation, &new.generation)
+                })
+            {
+                return Err(execution_error(
+                    "linear warm receipt collection evidence refused",
+                ));
+            }
+        }
         let mut context = context
             .lock()
             .map_err(|_| execution_error("serial context lock poisoned"))?;
         if let Some(expected) = context.owner.as_ref() {
             if !actual_owner.as_ref().is_some_and(|actual| {
-                actual.snapshot == expected.snapshot
-                    && Arc::ptr_eq(&actual.generation, &expected.generation)
+                let observed = predecessor.as_ref().unwrap_or(actual);
+                observed.snapshot == expected.snapshot
+                    && Arc::ptr_eq(&observed.generation, &expected.generation)
             }) {
                 return Err(execution_error(
                     "ranked actual owner evidence changed after drain",
@@ -405,6 +454,7 @@ impl RuntimeHostBatchExecutionPort for SerialReadyPortAdapter {
             && response.members.len() == 1
             && response.members[0].state == RuntimeHostBatchExecutionMemberState::Completed;
         context.drained = Some(drained);
+        context.cleanup = cleanup;
         Ok(response)
     }
 }
@@ -434,6 +484,7 @@ impl ReservationLifecyclePort for SerialReadyPortAdapter {
             c.drained.take().map(|drained| {
                 (
                     drained,
+                    c.cleanup.take(),
                     c.owner.clone(),
                     c.attempt_id.clone(),
                     c.request_id.clone(),
@@ -444,7 +495,8 @@ impl ReservationLifecyclePort for SerialReadyPortAdapter {
                 )
             })
         };
-        let Some((drained, expected, attempt, request_id, key, started, task, successful)) = data
+        let Some((drained, cleanup, expected, attempt, request_id, key, started, task, successful)) =
+            data
         else {
             return self.0.port.apply_reservation_lifecycle(event).await;
         };
@@ -469,12 +521,20 @@ impl ReservationLifecyclePort for SerialReadyPortAdapter {
                 releases_reservation,
             })
             .map_err(|e| cleanup_error(format!("serial cleanup binding refused: {e:?}")))?;
-        let completed_release = event.outcome == ReservationLifecycleOutcome::RuntimeHostCompleted;
-        let application = self
-            .0
-            .port
-            .apply_serial_cleanup(event, expected.as_ref().map(|o| o.snapshot))
-            .await?;
+        let completed_release = event.outcome == ReservationLifecycleOutcome::RuntimeHostCompleted
+            || (cleanup.is_some()
+                && successful
+                && event.outcome == ReservationLifecycleOutcome::RetryDeferred);
+        let predecessor = cleanup.as_ref().map(|receipt| receipt.previous_owner());
+        let application = match cleanup {
+            Some(receipt) => receipt.apply(event).await?,
+            None => {
+                self.0
+                    .port
+                    .apply_serial_cleanup(event, expected.as_ref().map(|o| o.snapshot))
+                    .await?
+            }
+        };
         application
             .validate()
             .map_err(|e| cleanup_error(e.to_string()))?;
@@ -514,6 +574,9 @@ impl ReservationLifecyclePort for SerialReadyPortAdapter {
                 })
             });
             if owner_matches && running {
+                if let Some(previous) = predecessor.as_ref() {
+                    self.0.migrate_verified_reuse(previous, &expected);
+                }
                 self.0.record(key, expected, started);
             }
         }
@@ -578,6 +641,19 @@ fn cleanup_error(message: impl Into<String>) -> ReservationLifecyclePortError {
 }
 
 impl WorkflowService {
+    /// Test-only acceptance evidence from the actual cleanup-qualified ring.
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn serial_ready_observations_for_test(&self) -> Vec<(u64, usize)> {
+        let Some(mode) = &self.serial_ready_mode else {
+            return Vec::new();
+        };
+        let samples = mode.observations.lock().expect("serial observations lock");
+        let mut counts = std::collections::BTreeMap::new();
+        for sample in samples.iter() {
+            *counts.entry(sample.owner.snapshot.generation).or_insert(0) += 1;
+        }
+        counts.into_iter().collect()
+    }
     /// Dedicated construction, before any store/repository escapes. The supplied
     /// port owns ALL serial fallback/ranked execution, drain and cleanup.
     pub fn new_serial_ready_cpu(

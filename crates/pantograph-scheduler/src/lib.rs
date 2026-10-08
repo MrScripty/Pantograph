@@ -36,6 +36,7 @@ pub use serial_dispatch::{
     SchedulerSerialCleanupPending, SchedulerSerialCleanupState, SchedulerSerialDispatchRefusal,
     SchedulerSerialDrainState, SchedulerSerialDrainedDispatch, SchedulerSerialExecutingDispatch,
     SchedulerSerialOwnerSnapshot, SchedulerSerialRuntimeOwnerLease,
+    SchedulerSerialVerifiedWarmDrain,
 };
 
 pub use batching::{

@@ -63,6 +63,24 @@ pub struct CandleCpuCleanupOwner {
     generation: u64,
 }
 impl CandleCpuCleanupOwner {
+    /// Read-only owner facts for an opt-in serial host. This stamp is opaque;
+    /// facts alone cannot attest a warm transition, drain or cleanup authority.
+    pub fn serial_facts(&self) -> CandleCpuSerialOwnerFacts {
+        let mut settings = blake3::Hasher::new();
+        settings.update(&self.profile.settings.gemm_partitions.to_le_bytes());
+        settings.update(&[self.profile.settings.tokenizer_effective_parallelism as u8]);
+        if let Some(value) = &self.profile.settings.tokenizer_parallelism {
+            settings.update(value.as_bytes());
+        }
+        CandleCpuSerialOwnerFacts {
+            loaded_instance: *self.profile.instance.as_bytes(),
+            loaded_profile: *self.profile.digest.as_bytes(),
+            effective_settings: *settings.finalize().as_bytes(),
+            generation: self.generation,
+            cpu_threads: self.owner.config.threads as u8,
+            generation_handle: self.owner.serial_generation.clone(),
+        }
+    }
     #[cfg(test)]
     pub(crate) fn epoch_for_test(&self) -> u64 {
         self.generation
@@ -70,6 +88,17 @@ impl CandleCpuCleanupOwner {
     pub(crate) fn model_ref(&self) -> &PumasModelRef {
         &self.profile.model_ref
     }
+}
+
+/// Advisory serial facts issued by the actual opaque owner stamp.
+#[derive(Clone)]
+pub struct CandleCpuSerialOwnerFacts {
+    pub loaded_instance: [u8; 16],
+    pub loaded_profile: [u8; 32],
+    pub effective_settings: [u8; 32],
+    pub generation: u64,
+    pub cpu_threads: u8,
+    pub generation_handle: Arc<AtomicU64>,
 }
 
 /// Private-contents linear receipt minted only by successful actual warm-load
@@ -188,6 +217,7 @@ pub(crate) struct CalibrationOwner {
     synthetic: bool,
     // Odd generations are invalid. Publication is the only transition to even.
     generation: AtomicU64,
+    serial_generation: Arc<AtomicU64>,
     store: Mutex<Store>,
 }
 impl CalibrationOwner {
@@ -262,11 +292,13 @@ impl CalibrationOwner {
             clock,
             synthetic,
             generation: AtomicU64::new(1),
+            serial_generation: Arc::new(AtomicU64::new(1)),
             store: Mutex::new(Store::default()),
         }))
     }
     fn invalidate_generation(&self) -> u64 {
-        self.generation
+        let previous = self
+            .generation
             .fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| {
                 Some(if n.is_multiple_of(2) {
                     n.saturating_add(1)
@@ -274,7 +306,10 @@ impl CalibrationOwner {
                     n.saturating_add(2)
                 })
             })
-            .unwrap()
+            .unwrap();
+        self.serial_generation
+            .store(self.generation.load(Ordering::Acquire), Ordering::Release);
+        previous
     }
     pub(crate) fn invalidate(&self) {
         self.invalidate_generation();
@@ -504,6 +539,9 @@ impl LoadPublication {
                     .generation
                     .compare_exchange(self.epoch, next, Ordering::AcqRel, Ordering::Acquire)
                     .is_ok();
+                if self.published {
+                    self.owner.serial_generation.store(next, Ordering::Release);
+                }
                 if self.published && reused {
                     if let Some(previous) = self.previous.take().filter(|previous| {
                         previous.profile == profile

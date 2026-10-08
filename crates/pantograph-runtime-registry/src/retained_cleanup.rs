@@ -50,7 +50,7 @@ impl RuntimeRegistry {
         expected: &RuntimeReservationLease,
         owner: RuntimeRetainedOwnerIdentity<'_>,
     ) -> Result<RuntimeRetentionDisposition, RuntimeRetainedCleanupError> {
-        self.check_retained_reservation_for_owner(expected, owner, true)
+        self.check_retained_reservation_for_owner(expected, owner, true, None)
     }
 
     /// Read-only admission preflight for an actually held native attempt owner.
@@ -60,15 +60,16 @@ impl RuntimeRegistry {
         expected: &RuntimeReservationLease,
         owner: RuntimeRetainedOwnerIdentity<'_>,
     ) -> Result<(), RuntimeRetainedCleanupError> {
-        self.check_retained_reservation_for_owner(expected, owner, false)
+        self.check_retained_reservation_for_owner(expected, owner, false, None)
             .map(|_| ())
     }
 
-    fn check_retained_reservation_for_owner(
+    pub(crate) fn check_retained_reservation_for_owner(
         &self,
         expected: &RuntimeReservationLease,
         owner: RuntimeRetainedOwnerIdentity<'_>,
         release: bool,
+        execution_token: Option<u64>,
     ) -> Result<RuntimeRetentionDisposition, RuntimeRetainedCleanupError> {
         let runtime_id = canonical_runtime_id(owner.runtime_id);
         let refuse = |reason| RuntimeRetainedCleanupError::Refused {
@@ -79,6 +80,14 @@ impl RuntimeRegistry {
             .state
             .lock()
             .expect("runtime registry state lock poisoned");
+        if state
+            .executing_reservations
+            .get(&expected.reservation_id)
+            .copied()
+            != execution_token
+        {
+            return Err(refuse(RuntimeRetainedCleanupRefusal::PendingCustody));
+        }
         if state
             .pending_reservations
             .contains_key(&expected.reservation_id)
@@ -173,6 +182,9 @@ impl RuntimeRegistry {
         // The successor remains charged; resident accounting was established
         // before releasing this task's peak claim. No stop or callback follows.
         if release {
+            state
+                .executing_reservations
+                .remove(&expected.reservation_id);
             remove_reservation_locked(&mut state, expected.reservation_id)
                 .expect("validated live reservation under the same lock");
         }

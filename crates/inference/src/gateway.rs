@@ -1742,7 +1742,8 @@ impl InferenceGateway {
                 .await?;
         } else {
             #[cfg(feature = "backend-candle")]
-            let start = if attempt.is_some() {
+            let start = if let Some(attempt) = attempt.as_mut() {
+                attempt.begin_custodied_execution();
                 backend
                     .load_verified_cpu_warm_embedding(
                         &request,

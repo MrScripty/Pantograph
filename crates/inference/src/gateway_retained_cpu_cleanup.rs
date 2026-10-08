@@ -9,6 +9,29 @@ use pantograph_runtime_registry::{
 use std::sync::atomic::Ordering;
 
 impl InferenceGateway {
+    /// Nonblocking advisory query. Actual dispatch revalidates under its writer.
+    pub fn resident_cpu_serial_owner(
+        &self,
+        model: &crate::PumasModelRef,
+    ) -> Option<CandleCpuCleanupOwner> {
+        let backend = self.backend.try_read().ok()?;
+        if canonical_backend_key(backend.name()) != "candle" || !backend.is_ready() {
+            return None;
+        }
+        let instance = backend.resident_cpu_calibration_instance()?;
+        let owner = self
+            .candle_cpu_calibration
+            .as_ref()?
+            .cleanup_owner(instance)?;
+        let lifecycle = self.runtime_lifecycle.try_read().ok()?;
+        let config = self.current_runtime_config.try_read().ok()?;
+        (owner.model_ref() == model
+            && lifecycle.runtime_id.as_deref() == Some("candle")
+            && lifecycle.active
+            && config.as_ref()?.model_name.as_deref() == Some(model.model_id.as_str()))
+        .then_some(owner)
+    }
+
     /// Publish actual loaded CPU identity to a separately configured registry
     /// envelope, and issue an opaque current stamp. Missing estimates stay
     /// unknown; publication alone does not enable retained cleanup or scheduling.
@@ -86,6 +109,17 @@ impl InferenceGateway {
         expected_lease: &RuntimeReservationLease,
         expected_owner: &CandleCpuCleanupOwner,
     ) -> Result<RuntimeRetentionDisposition, GatewayError> {
+        self.release_retained_cpu_reservation_owned(registry, expected_lease, expected_owner, None)
+            .await
+    }
+
+    pub(super) async fn release_retained_cpu_reservation_owned(
+        &self,
+        registry: &RuntimeRegistry,
+        expected_lease: &RuntimeReservationLease,
+        expected_owner: &CandleCpuCleanupOwner,
+        custody: Option<pantograph_runtime_registry::RuntimeReservationExecutionCustody>,
+    ) -> Result<RuntimeRetentionDisposition, GatewayError> {
         let backend = self.backend.write().await;
         if canonical_backend_key(backend.name()) != "candle" || !backend.is_ready() {
             return Err(cleanup_refusal());
@@ -126,17 +160,17 @@ impl InferenceGateway {
         {
             return Err(cleanup_refusal());
         }
-        registry
-            .release_retained_reservation_for_owner(
-                expected_lease,
-                RuntimeRetainedOwnerIdentity {
-                    runtime_id: "candle",
-                    source_id: &self.resident_source_id,
-                    runtime_instance_id,
-                    model_target: &model_target,
-                },
-            )
-            .map_err(|error| GatewayError::SwitchFailed(error.to_string()))
+        let identity = RuntimeRetainedOwnerIdentity {
+            runtime_id: "candle",
+            source_id: &self.resident_source_id,
+            runtime_instance_id,
+            model_target: &model_target,
+        };
+        match custody {
+            Some(custody) => custody.release_retained(identity),
+            None => registry.release_retained_reservation_for_owner(expected_lease, identity),
+        }
+        .map_err(|error| GatewayError::SwitchFailed(error.to_string()))
     }
 }
 

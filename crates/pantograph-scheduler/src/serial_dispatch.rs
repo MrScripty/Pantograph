@@ -60,6 +60,15 @@ pub trait SchedulerSerialRuntimeOwnerLease: Sync {
     fn snapshot(&self) -> SchedulerSerialOwnerSnapshot;
 }
 
+/// Trusted host boundary implemented on an ACTUAL linear success/drain receipt.
+/// The receipt must attest the load publication under the held producer, exact
+/// attempt and physical drain; caller snapshots alone cannot implement custody.
+pub trait SchedulerSerialVerifiedWarmDrain {
+    fn identity(&self) -> SchedulerSerialAttemptIdentity<'_>;
+    fn previous_owner(&self) -> SchedulerSerialOwnerSnapshot;
+    fn current_owner(&self) -> SchedulerSerialOwnerSnapshot;
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SchedulerSerialDispatchRefusal {
     InvalidIdentity,
@@ -163,6 +172,30 @@ impl SchedulerSerialDispatch {
 }
 
 impl SchedulerSerialBoundDispatch {
+    /// Additive native receipt path. Preserve legacy acquire/drain equality.
+    /// The host retains this SAME receipt for consumed fenced cleanup.
+    pub fn record_verified_warm_drained_response(
+        self,
+        receipt: &dyn SchedulerSerialVerifiedWarmDrain,
+    ) -> Result<SchedulerSerialDrainedDispatch, SchedulerSerialDispatchRefusal> {
+        if !self.matches(receipt.identity()) {
+            return Err(SchedulerSerialDispatchRefusal::ForeignResponse);
+        }
+        let old = receipt.previous_owner();
+        let new = receipt.current_owner();
+        if !old.valid()
+            || !new.valid()
+            || self.expected_owner.is_some_and(|expected| expected != old)
+            || old.loaded_instance != new.loaded_instance
+            || old.loaded_profile != new.loaded_profile
+            || old.effective_settings != new.effective_settings
+            || old.cpu_threads != new.cpu_threads
+            || old.generation.checked_add(2) != Some(new.generation)
+        {
+            return Err(SchedulerSerialDispatchRefusal::OwnerChanged);
+        }
+        Ok(SchedulerSerialDrainedDispatch { bound: self })
+    }
     pub fn identity(&self) -> SchedulerSerialAttemptIdentity<'_> {
         let f = &self.identity;
         SchedulerSerialAttemptIdentity {

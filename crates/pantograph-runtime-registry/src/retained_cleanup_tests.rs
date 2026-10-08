@@ -240,3 +240,66 @@ fn task_vram_requires_resident_vram_accounting() {
     ));
     assert_eq!(before, state(&registry));
 }
+
+#[test]
+fn execution_custody_gates_all_same_lease_mutations_and_success_consumes_charge() {
+    let (registry, task, successor) = fixture();
+    let before = state(&registry);
+    let mut custody = registry.acquire_execution_custody(&task).unwrap();
+    custody.begin_execution();
+    assert!(registry.acquire_execution_custody(&task).is_err());
+    assert!(registry.release_reservation(task.reservation_id).is_err());
+    assert!(registry
+        .release_reservation_if_present(task.reservation_id)
+        .is_err());
+    assert!(registry
+        .update_reservation_retention_hint(task.reservation_id, RuntimeRetentionHint::KeepAlive)
+        .is_err());
+    assert!(registry.acquire_reservation(request("task")).is_err());
+    let evaluation = registry.evaluate_reservation(request("task")).unwrap();
+    assert!(registry
+        .acquire_reservation_provisional(
+            request("task"),
+            evaluation.observation(),
+            |_| Ok::<_, ()>(())
+        )
+        .is_err());
+    assert!(evaluation.commit().is_err());
+    assert!(registry
+        .release_retained_reservation_for_owner(&task, owner())
+        .is_err());
+    assert!(custody.validate_retained_owner(owner()).is_ok());
+    assert_eq!(before, state(&registry));
+    custody.release_retained(owner()).unwrap();
+    assert!(registry.reservation_lease(task.reservation_id).is_none());
+    assert_eq!(
+        registry.reservation_lease(successor.reservation_id),
+        Some(successor)
+    );
+}
+#[test]
+fn prepared_drop_unpins_but_execution_and_receipt_abandonment_stay_fenced() {
+    let (registry, task, _) = fixture();
+    let before = state(&registry);
+    drop(registry.acquire_execution_custody(&task).unwrap());
+    let mut custody = registry.acquire_execution_custody(&task).unwrap();
+    custody.begin_execution();
+    drop(custody);
+    assert_eq!(before, state(&registry));
+    assert!(registry.release_reservation(task.reservation_id).is_err());
+    assert!(registry.acquire_reservation(request("task")).is_err());
+    assert!(registry.acquire_execution_custody(&task).is_err());
+}
+#[test]
+fn custodied_cleanup_refuses_missing_successor_and_keeps_charge_fenced() {
+    let (registry, task, successor) = fixture();
+    let mut custody = registry.acquire_execution_custody(&task).unwrap();
+    custody.begin_execution();
+    registry
+        .release_reservation(successor.reservation_id)
+        .unwrap();
+    let before = state(&registry);
+    assert!(custody.release_retained(owner()).is_err());
+    assert_eq!(before, state(&registry));
+    assert!(registry.release_reservation(task.reservation_id).is_err());
+}

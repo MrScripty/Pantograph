@@ -236,6 +236,9 @@ pub(crate) fn prospective_reservation(
         if state
             .pending_reservations
             .contains_key(&previous.reservation_id)
+            || state
+                .executing_reservations
+                .contains_key(&previous.reservation_id)
         {
             return Err(RuntimeRegistryError::ReservationCustodyPending(
                 previous.reservation_id,

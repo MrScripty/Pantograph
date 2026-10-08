@@ -5,11 +5,13 @@ pub use model_resources::RuntimeModelResourceResidency;
 pub use producer_resources::{
     RuntimeModelResidentEstimate, RuntimeProducerAllocationState, RuntimeProducerObservation,
 };
+mod execution_custody;
 mod observation;
 mod reclaim;
 mod registry_queries;
 mod reservation;
 mod reservation_custody;
+pub use execution_custody::RuntimeReservationExecutionCustody;
 mod reservation_evaluation;
 mod resource_domain;
 use reservation_custody::{
@@ -223,6 +225,7 @@ struct RuntimeRegistryState {
     runtimes: BTreeMap<String, RuntimeRegistryRecord>,
     reservations: BTreeMap<u64, RuntimeReservationRecord>,
     pending_reservations: BTreeMap<u64, PendingReservation>,
+    executing_reservations: BTreeMap<u64, u64>,
 }
 
 #[derive(Debug, Default)]
@@ -439,6 +442,17 @@ impl RuntimeRegistry {
         validate_reservation_request(&guard, &runtime_id, request.requirements.as_ref(), None)
     }
 
+    /// Exact selected-lease query; does not scan the registry population.
+    pub fn reservation_lease(&self, reservation_id: u64) -> Option<RuntimeReservationLease> {
+        self.state
+            .lock()
+            .expect("runtime registry state lock poisoned")
+            .reservations
+            .get(&reservation_id)
+            .cloned()
+            .map(RuntimeReservationRecord::into_lease)
+    }
+
     pub fn release_reservation(&self, reservation_id: u64) -> Result<(), RuntimeRegistryError> {
         self.release_reservation_with_disposition(reservation_id)
             .map(|_| ())
@@ -476,7 +490,9 @@ impl RuntimeRegistry {
             .state
             .lock()
             .expect("runtime registry state lock poisoned");
-        if guard.pending_reservations.contains_key(&reservation_id) {
+        if guard.pending_reservations.contains_key(&reservation_id)
+            || guard.executing_reservations.contains_key(&reservation_id)
+        {
             return Err(RuntimeRegistryError::ReservationCustodyPending(
                 reservation_id,
             ));
@@ -774,6 +790,11 @@ fn release_reservation_locked(
     state: &mut RuntimeRegistryState,
     reservation_id: u64,
 ) -> Result<Option<RuntimeRetentionDisposition>, RuntimeRegistryError> {
+    if state.executing_reservations.contains_key(&reservation_id) {
+        return Err(RuntimeRegistryError::ReservationCustodyPending(
+            reservation_id,
+        ));
+    }
     let Some(reservation) = remove_reservation_locked(state, reservation_id) else {
         return Ok(None);
     };

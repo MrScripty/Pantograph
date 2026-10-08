@@ -5,7 +5,7 @@ use pantograph_workflow_service::{
     FileSystemWorkflowGraphStore, WorkflowGraphLoadRequest, WorkflowGraphSaveRequest,
 };
 
-fn embedding_graph(model_ref: &PumasModelRef) -> WorkflowGraph {
+pub(super) fn embedding_graph(model_ref: &PumasModelRef) -> WorkflowGraph {
     let mut descriptor: InferenceInterfaceDescriptor = serde_json::from_str(include_str!(
         "../../../pantograph-inference-interface-contracts/tests/fixtures/descriptor_embedding_ready.json"
     ))
@@ -57,7 +57,7 @@ fn embedding_graph(model_ref: &PumasModelRef) -> WorkflowGraph {
     }
 }
 
-fn install_embedding_readiness(
+pub(super) fn install_embedding_readiness(
     service: &WorkflowService,
     provider: &DependencyEnvironmentReadinessSnapshotProvider,
     graph: &WorkflowGraph,

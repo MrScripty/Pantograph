@@ -356,3 +356,137 @@ fn unranked_owner_requires_actual_terminal_identity_and_matched_cleanup() {
     ));
     assert_poisoned(&owner);
 }
+
+// Synthetic trusted-host protocol fixtures. Actual sealed native proof is tested
+// by the embedded dispatch/worker suites; labels here establish no inference.
+struct WarmReceipt {
+    old: SchedulerSerialOwnerSnapshot,
+    new: SchedulerSerialOwnerSnapshot,
+    identity: SchedulerSerialAttemptIdentity<'static>,
+}
+impl SchedulerSerialVerifiedWarmDrain for WarmReceipt {
+    fn identity(&self) -> SchedulerSerialAttemptIdentity<'_> {
+        self.identity
+    }
+    fn previous_owner(&self) -> SchedulerSerialOwnerSnapshot {
+        self.old
+    }
+    fn current_owner(&self) -> SchedulerSerialOwnerSnapshot {
+        self.new
+    }
+}
+#[test]
+fn verified_warm_transition_requires_exact_identity_profile_settings_instance_budget_and_plus_two()
+{
+    let old = snapshot();
+    let valid = SchedulerSerialOwnerSnapshot {
+        generation: 4,
+        ..old
+    };
+    let changes = [
+        SchedulerSerialOwnerSnapshot {
+            generation: 2,
+            ..valid
+        },
+        SchedulerSerialOwnerSnapshot {
+            generation: 3,
+            ..valid
+        },
+        SchedulerSerialOwnerSnapshot {
+            generation: 6,
+            ..valid
+        },
+        SchedulerSerialOwnerSnapshot {
+            loaded_instance: [9; 16],
+            ..valid
+        },
+        SchedulerSerialOwnerSnapshot {
+            loaded_profile: [9; 32],
+            ..valid
+        },
+        SchedulerSerialOwnerSnapshot {
+            effective_settings: [9; 32],
+            ..valid
+        },
+        SchedulerSerialOwnerSnapshot {
+            cpu_threads: 2,
+            ..valid
+        },
+    ];
+    for new in changes {
+        let admission = SchedulerSerialAdmission::new();
+        assert!(bound(&admission)
+            .record_verified_warm_drained_response(&WarmReceipt {
+                old,
+                new,
+                identity: identity()
+            })
+            .is_err());
+        assert_poisoned(&admission);
+    }
+    let admission = SchedulerSerialAdmission::new();
+    let ticket = bound(&admission)
+        .record_verified_warm_drained_response(&WarmReceipt {
+            old,
+            new: valid,
+            identity: identity(),
+        })
+        .unwrap();
+    ticket
+        .expect_cleanup(cleanup_event())
+        .unwrap()
+        .acknowledge_cleanup("cleanup.1", "lease.1", SchedulerSerialCleanupState::Applied)
+        .unwrap();
+    assert!(admission.try_prepare().is_ok());
+}
+#[test]
+fn foreign_warm_receipt_and_changed_predecessor_poison_and_legacy_equality_stays_strict() {
+    for field in 0..8 {
+        let admission = SchedulerSerialAdmission::new();
+        let mut id = identity();
+        match field {
+            0 => id.workflow_id = "foreign",
+            1 => id.workflow_run_id = "foreign",
+            2 => id.node_id = "foreign",
+            3 => id.task_id = "foreign",
+            4 => id.attempt_id = "foreign",
+            5 => id.execution_request_id = "foreign",
+            6 => id.candidate_id = "foreign",
+            _ => id.reservation_lease_id = "foreign",
+        };
+        assert!(bound(&admission)
+            .record_verified_warm_drained_response(&WarmReceipt {
+                old: snapshot(),
+                new: SchedulerSerialOwnerSnapshot {
+                    generation: 4,
+                    ..snapshot()
+                },
+                identity: id
+            })
+            .is_err());
+        assert_poisoned(&admission);
+    }
+    let admission = SchedulerSerialAdmission::new();
+    assert!(bound(&admission)
+        .record_verified_warm_drained_response(&WarmReceipt {
+            old: SchedulerSerialOwnerSnapshot {
+                generation: 4,
+                ..snapshot()
+            },
+            new: SchedulerSerialOwnerSnapshot {
+                generation: 6,
+                ..snapshot()
+            },
+            identity: identity()
+        })
+        .is_err());
+    assert_poisoned(&admission);
+    let admission = SchedulerSerialAdmission::new();
+    let lease = Lease(Mutex::new(snapshot()));
+    let executing = bound(&admission).acquire_owner(&lease).unwrap();
+    lease.0.lock().unwrap().generation += 2;
+    assert!(executing
+        .record_drained_response(identity(), SchedulerSerialDrainState::Completed)
+        .is_err());
+    assert_poisoned(&admission);
+}

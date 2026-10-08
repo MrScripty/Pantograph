@@ -2,8 +2,8 @@
 use super::*;
 use crate::CandleCpuCleanupOwner;
 use pantograph_runtime_registry::{
-    RuntimeRegistry, RuntimeReservationLease, RuntimeRetainedOwnerIdentity,
-    RuntimeRetentionDisposition,
+    RuntimeRegistry, RuntimeReservationExecutionCustody, RuntimeReservationLease,
+    RuntimeRetainedOwnerIdentity, RuntimeRetentionDisposition,
 };
 use std::sync::atomic::AtomicBool;
 use tokio::sync::OwnedRwLockWriteGuard;
@@ -31,6 +31,14 @@ pub struct CandleCpuWarmAttemptRequest<'a> {
     pub expected_owner: &'a CandleCpuCleanupOwner,
 }
 
+impl CandleCpuWarmAttemptRequest<'_> {
+    /// Shared borrowed byte/node/depth preflight for the opt-in host boundary.
+    /// Does not bound resolver filesystem I/O or physical worker elapsed time.
+    pub fn metadata_is_bounded(value: &impl serde::Serialize) -> bool {
+        crate::service_timing::bounds::within_budget(value)
+    }
+}
+
 /// Linear actual success/drain capability, bound to its original gateway,
 /// registry, request and exact lease. No public constructor or Clone exists.
 #[must_use]
@@ -38,6 +46,25 @@ pub struct CandleCpuDrainedAttempt {
     binding: AttemptBinding,
 }
 impl CandleCpuDrainedAttempt {
+    pub fn previous_owner_facts(&self) -> crate::CandleCpuSerialOwnerFacts {
+        self.binding.previous_owner.serial_facts()
+    }
+    pub fn current_owner_facts(&self) -> crate::CandleCpuSerialOwnerFacts {
+        self.binding.owner.serial_facts()
+    }
+    pub fn identity(&self) -> CandleCpuWarmAttemptIdentity<'_> {
+        let f = &self.binding.identity;
+        CandleCpuWarmAttemptIdentity {
+            workflow_id: &f[0],
+            workflow_run_id: &f[1],
+            node_id: &f[2],
+            task_id: &f[3],
+            attempt_id: &f[4],
+            execution_request_id: &f[5],
+            candidate_id: &f[6],
+            reservation_lease_id: self.binding.lease.reservation_id,
+        }
+    }
     pub fn execution_request_id(&self) -> &str {
         &self.binding.identity[5]
     }
@@ -48,10 +75,11 @@ impl CandleCpuDrainedAttempt {
     pub async fn release_retained(self) -> Result<RuntimeRetentionDisposition, GatewayError> {
         self.binding
             .gateway
-            .release_retained_cpu_reservation(
+            .release_retained_cpu_reservation_owned(
                 &self.binding.registry,
                 &self.binding.lease,
                 &self.binding.owner,
+                self.binding.custody,
             )
             .await
     }
@@ -62,6 +90,8 @@ pub(super) struct AttemptBinding {
     registry: Arc<RuntimeRegistry>,
     lease: RuntimeReservationLease,
     owner: CandleCpuCleanupOwner,
+    previous_owner: CandleCpuCleanupOwner,
+    custody: Option<RuntimeReservationExecutionCustody>,
     identity: [String; 7],
     input: blake3::Hash,
     model_target: String,
@@ -104,7 +134,6 @@ impl AttemptBinding {
             || lease.reservation_id != id.reservation_lease_id
             || input.request.request_id.as_deref() != Some(id.execution_request_id)
             || input.request.task_id != crate::InferenceTaskId::Embedding
-            || id.task_id != "embedding"
             || lease.model_id.as_deref() != Some(input.expected_owner.model_ref().model_id.as_str())
             || [&lease.runtime_id, &lease.workflow_id]
                 .into_iter()
@@ -133,6 +162,8 @@ impl AttemptBinding {
             registry,
             lease: lease.clone(),
             owner: input.expected_owner.clone(),
+            previous_owner: input.expected_owner.clone(),
+            custody: None,
             identity: tags.map(str::to_owned),
             input: blake3::hash(text.as_bytes()),
             model_target: input.target.local_load_path.clone(),
@@ -178,20 +209,32 @@ impl AttemptBinding {
             return Err(refusal());
         }
         self.runtime_instance_id = Some(runtime_instance_id.to_owned());
-        self.registry
-            .validate_retained_reservation_for_owner(
-                &self.lease,
-                RuntimeRetainedOwnerIdentity {
-                    runtime_id: "candle",
-                    source_id: &self.gateway.resident_source_id,
-                    runtime_instance_id: lifecycle
-                        .runtime_instance_id
-                        .as_deref()
-                        .ok_or_else(refusal)?,
-                    model_target: &target.local_load_path,
-                },
-            )
-            .map_err(|error| GatewayError::SwitchFailed(error.to_string()))
+        self.validate_lease_owner(RuntimeRetainedOwnerIdentity {
+            runtime_id: "candle",
+            source_id: &self.gateway.resident_source_id,
+            runtime_instance_id: lifecycle
+                .runtime_instance_id
+                .as_deref()
+                .ok_or_else(refusal)?,
+            model_target: &target.local_load_path,
+        })
+    }
+    fn validate_lease_owner(
+        &self,
+        identity: RuntimeRetainedOwnerIdentity<'_>,
+    ) -> Result<(), GatewayError> {
+        match &self.custody {
+            Some(custody) => custody.validate_retained_owner(identity),
+            None => self
+                .registry
+                .validate_retained_reservation_for_owner(&self.lease, identity),
+        }
+        .map_err(|error| GatewayError::SwitchFailed(error.to_string()))
+    }
+    pub(super) fn begin_custodied_execution(&mut self) {
+        if let Some(custody) = &mut self.custody {
+            custody.begin_execution();
+        }
     }
     pub(super) fn adopt_verified_load(
         &mut self,
@@ -223,17 +266,12 @@ impl AttemptBinding {
         backend: &dyn InferenceBackend,
     ) -> Result<CandleCpuDrainedAttempt, GatewayError> {
         self.current(backend)?;
-        self.registry
-            .validate_retained_reservation_for_owner(
-                &self.lease,
-                RuntimeRetainedOwnerIdentity {
-                    runtime_id: "candle",
-                    source_id: &self.gateway.resident_source_id,
-                    runtime_instance_id: self.runtime_instance_id.as_deref().ok_or_else(refusal)?,
-                    model_target: &self.model_target,
-                },
-            )
-            .map_err(|error| GatewayError::SwitchFailed(error.to_string()))?;
+        self.validate_lease_owner(RuntimeRetainedOwnerIdentity {
+            runtime_id: "candle",
+            source_id: &self.gateway.resident_source_id,
+            runtime_instance_id: self.runtime_instance_id.as_deref().ok_or_else(refusal)?,
+            model_target: &self.model_target,
+        })?;
         self.current(backend)?;
         Ok(CandleCpuDrainedAttempt { binding: self })
     }
@@ -275,7 +313,38 @@ impl InferenceGateway {
         input: CandleCpuWarmAttemptRequest<'_>,
         host: InferenceExecutionCancellationHandle,
     ) -> Result<(InferenceExecutionResult, CandleCpuDrainedAttempt), GatewayError> {
-        let binding = AttemptBinding::bind(self.clone(), registry, &input)?;
+        self.execute_cpu_warm_attempt_with_custody(registry, input, host, false)
+            .await
+    }
+
+    /// Opt-in actual dispatch route. Same-lease mutations are excluded from
+    /// preflight through receipt cleanup; after physical start, abandonment
+    /// leaves the charge fenced. No ordinary cleanup or cold fallback exists.
+    pub async fn execute_custodied_cpu_warm_attempt(
+        self: &Arc<Self>,
+        registry: Arc<RuntimeRegistry>,
+        input: CandleCpuWarmAttemptRequest<'_>,
+        host: InferenceExecutionCancellationHandle,
+    ) -> Result<(InferenceExecutionResult, CandleCpuDrainedAttempt), GatewayError> {
+        self.execute_cpu_warm_attempt_with_custody(registry, input, host, true)
+            .await
+    }
+
+    async fn execute_cpu_warm_attempt_with_custody(
+        self: &Arc<Self>,
+        registry: Arc<RuntimeRegistry>,
+        input: CandleCpuWarmAttemptRequest<'_>,
+        host: InferenceExecutionCancellationHandle,
+        require_custody: bool,
+    ) -> Result<(InferenceExecutionResult, CandleCpuDrainedAttempt), GatewayError> {
+        let mut binding = AttemptBinding::bind(self.clone(), registry.clone(), &input)?;
+        if require_custody {
+            binding.custody = Some(
+                registry
+                    .acquire_execution_custody(input.lease)
+                    .map_err(|error| GatewayError::SwitchFailed(error.to_string()))?,
+            );
+        }
         self.embedding_replacement.drain().await?;
         let backend: BackendGuard = self.backend.clone().write_owned().await;
         reject_cancelled_execution_handle("native warm attempt", &host)?;

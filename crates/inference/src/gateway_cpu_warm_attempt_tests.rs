@@ -335,7 +335,7 @@ impl crate::InferenceExecutionCancellationSignal for CancelSignal {
         }
     }
 }
-async fn controlled_loss(phase: &'static str, abandon: bool, end_lease: bool) {
+async fn controlled_loss(phase: &'static str, abandon: bool, end_lease: bool, custodied: bool) {
     let f = fixture().await;
     let started = Arc::new(tokio::sync::Notify::new());
     let gate = Arc::new((std::sync::Mutex::new(false), std::sync::Condvar::new()));
@@ -369,20 +369,23 @@ async fn controlled_loss(phase: &'static str, abandon: bool, end_lease: bool) {
     let owner = f.owner.clone();
     let before = state(&f.registry);
     let task = tokio::spawn(async move {
-        gateway
-            .execute_retained_cpu_warm_attempt(
-                registry,
-                CandleCpuWarmAttemptRequest {
-                    request,
-                    target,
-                    decision,
-                    identity: identity(&lease),
-                    lease: &lease,
-                    expected_owner: &owner,
-                },
-                handle,
-            )
-            .await
+        let input = CandleCpuWarmAttemptRequest {
+            request,
+            target,
+            decision,
+            identity: identity(&lease),
+            lease: &lease,
+            expected_owner: &owner,
+        };
+        if custodied {
+            gateway
+                .execute_custodied_cpu_warm_attempt(registry, input, handle)
+                .await
+        } else {
+            gateway
+                .execute_retained_cpu_warm_attempt(registry, input, handle)
+                .await
+        }
     });
     let mut task = Some(task);
     tokio::time::timeout(Duration::from_secs(5), started.notified())
@@ -394,12 +397,37 @@ async fn controlled_loss(phase: &'static str, abandon: bool, end_lease: bool) {
     } else if !end_lease {
         cancellation.store(true, Ordering::Release);
     }
-    if end_lease {
+    if custodied {
+        assert!(f
+            .registry
+            .release_reservation(f.task.reservation_id)
+            .is_err());
+        assert!(f
+            .registry
+            .update_reservation_retention_hint(
+                f.task.reservation_id,
+                RuntimeRetentionHint::KeepAlive
+            )
+            .is_err());
+        assert!(f
+            .registry
+            .acquire_reservation(RuntimeReservationRequest {
+                runtime_id: "candle".into(),
+                workflow_id: f.task.workflow_id.clone(),
+                reservation_owner_id: f.task.reservation_owner_id.clone(),
+                usage_profile: None,
+                model_id: f.task.model_id.clone(),
+                pin_runtime: false,
+                requirements: None,
+                retention_hint: RuntimeRetentionHint::Ephemeral
+            })
+            .is_err());
+    } else if end_lease {
         f.registry
             .release_reservation(f.task.reservation_id)
             .unwrap();
     }
-    let expected = if end_lease {
+    let expected = if end_lease && !custodied {
         state(&f.registry)
     } else {
         before
@@ -414,8 +442,14 @@ async fn controlled_loss(phase: &'static str, abandon: bool, end_lease: bool) {
     assert_eq!(expected, state(&f.registry));
     *gate.0.lock().unwrap() = true;
     gate.1.notify_all();
+    let mut receipt = None;
     if !abandon {
-        assert!(matches!(task.take().unwrap().await, Ok(Err(_))));
+        let outcome = task.take().unwrap().await;
+        if custodied && end_lease {
+            receipt = Some(outcome.unwrap().unwrap().1);
+        } else {
+            assert!(matches!(outcome, Ok(Err(_))));
+        }
     }
     let backend = tokio::time::timeout(Duration::from_secs(5), f.gateway.backend.write())
         .await
@@ -434,18 +468,26 @@ async fn controlled_loss(phase: &'static str, abandon: bool, end_lease: bool) {
         .attempt_hook
         .lock()
         .unwrap() = None;
+    if let Some(receipt) = receipt {
+        receipt.release_retained().await.unwrap();
+    } else if custodied {
+        assert!(f
+            .registry
+            .release_reservation(f.task.reservation_id)
+            .is_err());
+    }
     f.gateway.stop().await.unwrap();
 }
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn cancellation_at_real_load_forward_and_drain_mints_no_receipt() {
     for phase in ["load", "forward", "drain"] {
-        controlled_loss(phase, false, false).await;
+        controlled_loss(phase, false, false, false).await;
     }
 }
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn dropped_collector_keeps_actual_writer_through_real_load_forward_and_drain() {
     for phase in ["load", "forward", "drain"] {
-        controlled_loss(phase, true, false).await;
+        controlled_loss(phase, true, false, false).await;
     }
 }
 
@@ -453,7 +495,7 @@ async fn dropped_collector_keeps_actual_writer_through_real_load_forward_and_dra
 async fn external_lease_release_during_real_work_refuses_receipt_without_readmitting_cleanup() {
     // Read-only preflight does not pin ordinary registry mutations. The caller
     // must own lease lifecycle; losing it cannot produce a valid drain receipt.
-    controlled_loss("forward", false, true).await;
+    controlled_loss("forward", false, true, false).await;
 }
 
 #[tokio::test]
@@ -601,4 +643,60 @@ async fn actual_foreign_owner_and_pending_lease_refuse_without_epoch_change() {
     assert_eq!(fresh.epoch_for_test(), f.owner.epoch_for_test());
     foreign.stop().await.unwrap();
     f.gateway.stop().await.unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn custody_excludes_competing_release_replacement_and_retention_through_actual_phases() {
+    for phase in ["load", "forward", "drain"] {
+        controlled_loss(phase, false, true, true).await;
+    }
+}
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn custodied_cancellation_and_collector_loss_keep_claim_fenced_after_physical_drain() {
+    for phase in ["load", "forward", "drain"] {
+        controlled_loss(phase, false, false, true).await;
+        controlled_loss(phase, true, false, true).await;
+    }
+}
+#[tokio::test]
+async fn advisory_epoch_tampering_cannot_forge_native_epoch_or_restore_stale_cleanup() {
+    for offset in [0, 1, 2, 100] {
+        let f = fixture().await;
+        let old = f.owner.serial_facts();
+        old.generation_handle
+            .store(old.generation + offset, Ordering::Release);
+        let actual = f
+            .gateway
+            .resident_cpu_serial_owner(&f.target.model_ref)
+            .unwrap()
+            .serial_facts();
+        assert_eq!(actual.generation, old.generation);
+        let (_, receipt) = f
+            .gateway
+            .execute_custodied_cpu_warm_attempt(
+                f.registry.clone(),
+                f.input(),
+                InferenceExecutionCancellationHandle::running(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(receipt.current_owner_facts().generation, old.generation + 2);
+        old.generation_handle
+            .store(old.generation, Ordering::Release); // replay stale advisory generation
+        assert!(f
+            .gateway
+            .release_retained_cpu_reservation(&f.registry, &f.task, &f.owner)
+            .await
+            .is_err());
+        receipt.release_retained().await.unwrap(); // private actual current epoch still authoritative
+        assert!(f
+            .registry
+            .reservation_lease(f.task.reservation_id)
+            .is_none());
+        assert_eq!(
+            f.registry.reservation_lease(f.successor.reservation_id),
+            Some(f.successor)
+        );
+        f.gateway.stop().await.unwrap();
+    }
 }

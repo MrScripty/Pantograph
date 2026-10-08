@@ -46,6 +46,24 @@ pub trait SerialRuntimeHostBatchExecutionPort:
         RuntimeHostExecutionPortError,
     >;
 
+    /// Additive linear cleanup path. Legacy ports retain exact-owner semantics.
+    async fn execute_serial_singleton_with_cleanup(
+        &self,
+        request: RuntimeHostBatchExecutionRequest,
+        cancellation: RuntimeHostExecutionCancellationHandle,
+        ownership: SchedulerSerialBoundDispatch,
+    ) -> Result<SerialRuntimeHostDrainedExecution, RuntimeHostExecutionPortError> {
+        let (response, drained, owner) = self
+            .execute_serial_singleton(request, cancellation, ownership)
+            .await?;
+        Ok(SerialRuntimeHostDrainedExecution {
+            response,
+            drained,
+            owner,
+            cleanup: None,
+        })
+    }
+
     /// Apply the real owned release/reconciliation. For qualified warm attempts,
     /// release must atomically fence this expected loaded owner or exclude every
     /// relevant producer entry path through cleanup. Failed fencing returns Err;
@@ -70,4 +88,23 @@ impl SerialRuntimeHostCpuOwnerEvidence {
             && self.snapshot.generation.is_multiple_of(2)
             && self.generation.load(Ordering::Acquire) == self.snapshot.generation
     }
+}
+
+/// In-process linear handoff. No serialization, Clone, global receipt map or
+/// caller replacement owner is provided. Implement on the actual native receipt.
+#[async_trait]
+pub trait SerialRuntimeHostCleanupReceipt: Send {
+    fn previous_owner(&self) -> SerialRuntimeHostCpuOwnerEvidence;
+    fn current_owner(&self) -> SerialRuntimeHostCpuOwnerEvidence;
+    async fn apply(
+        self: Box<Self>,
+        event: ReservationLifecycleEvent,
+    ) -> Result<ReservationLifecycleApplication, ReservationLifecyclePortError>;
+}
+#[must_use]
+pub struct SerialRuntimeHostDrainedExecution {
+    pub response: RuntimeHostBatchExecutionResponse,
+    pub drained: SchedulerSerialDrainedDispatch,
+    pub owner: Option<SerialRuntimeHostCpuOwnerEvidence>,
+    pub cleanup: Option<Box<dyn SerialRuntimeHostCleanupReceipt>>,
 }

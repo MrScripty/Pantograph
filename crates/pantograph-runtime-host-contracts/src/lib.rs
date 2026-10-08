@@ -16,7 +16,8 @@ mod runtime_session_load;
 mod serial_runtime_host;
 
 pub use serial_runtime_host::{
-    SerialRuntimeHostBatchExecutionPort, SerialRuntimeHostCpuOwnerEvidence,
+    SerialRuntimeHostBatchExecutionPort, SerialRuntimeHostCleanupReceipt,
+    SerialRuntimeHostCpuOwnerEvidence, SerialRuntimeHostDrainedExecution,
 };
 
 pub use reservation_lifecycle::{
