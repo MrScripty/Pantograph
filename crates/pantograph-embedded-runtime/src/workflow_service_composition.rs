@@ -267,6 +267,8 @@ pub struct EmbeddedHostedStartupCompositionOutput {
     pub shared_extensions: SharedExtensions,
     pub dependency_activity: Arc<DependencyActivityHub>,
     pub dependency_readiness_snapshot_producer: EmbeddedDependencyReadinessSnapshotProducerHandle,
+    #[cfg(test)]
+    dependency_readiness: WorkflowDependencyReadinessComponents,
 }
 
 #[derive(Clone)]
@@ -641,6 +643,8 @@ impl EmbeddedWorkflowServiceComposition {
         let output = Self::resource_backed_hosted_bundle(composition_input)?;
 
         Ok(EmbeddedHostedStartupCompositionOutput {
+            #[cfg(test)]
+            dependency_readiness: output.dependency_readiness,
             workflow_service: output.workflow_service,
             shared_extensions,
             dependency_activity,
@@ -940,6 +944,11 @@ mod tests {
             assert!(candle.models.is_empty());
         }
         drop(shared);
+    }
+
+    #[cfg(all(feature = "backend-candle", feature = "host-dependency-inventory"))]
+    mod native_cpu_qualification {
+        include!("native_cpu_workflow_qualification_tests.rs");
     }
 
     #[cfg(feature = "backend-candle")]

@@ -177,6 +177,28 @@ impl CurrentInferenceValidationStateStore {
         )
     }
 
+    /// Keep the validation generation stable through a synchronous owner handoff.
+    /// The graph owner holds its session lock while calling this method.
+    pub(crate) async fn with_current_validation<R>(
+        &self,
+        key: WorkflowGraphCurrentValidationSummaryStateRequest,
+        expected_session: Option<&DraftGraphValidationSessionId>,
+        handoff: impl FnOnce() -> R,
+    ) -> Option<R> {
+        if key.requested_graph_revision != key.current_graph_revision {
+            return None;
+        }
+        let summaries = self.summaries.read().await;
+        let record = summaries.get(&CurrentInferenceValidationStateKey {
+            graph_session_id: key.graph_session_id,
+            graph_revision: key.current_graph_revision,
+        })?;
+        if expected_session != Some(&record.validation_session_id) || !record.summary.executable {
+            return None;
+        }
+        Some(handoff())
+    }
+
     pub(crate) async fn current_validation_projection(
         &self,
         request: WorkflowGraphCurrentValidationSummaryStateRequest,

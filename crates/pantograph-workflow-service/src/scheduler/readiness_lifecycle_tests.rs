@@ -774,3 +774,108 @@ fn empty_run_request() -> WorkflowExecutionSessionRunRequest {
         priority: None,
     }
 }
+
+#[test]
+fn checked_inventory_evidence_dominates_legacy_resolve_snapshot() {
+    use pantograph_dependency_environment_service::{
+        DependencyEnvironmentProvider, DependencyEnvironmentReadinessSnapshot,
+        DependencyEnvironmentReadinessSnapshotProvider,
+        DependencyEnvironmentReadinessSnapshotStatus,
+    };
+    use pantograph_dependency_planning::{
+        DependencyEnvironmentAction, DependencyEnvironmentFailureState,
+        DependencyEnvironmentRequest, DependencyEnvironmentResult,
+        DependencyEnvironmentValidationState, ValidatedDependencyEnvironmentRequest,
+    };
+    let envelope=ValidatedDependencyReadinessRequestEnvelope::try_from(serde_json::from_str::<serde_json::Value>(include_str!(
+        "../../../pantograph-dependency-planning/tests/fixtures/dependency_readiness_request_envelope.json")).unwrap()).unwrap();
+    let source = &envelope.as_envelope().readiness_request;
+    let request_for = |action| {
+        ValidatedDependencyEnvironmentRequest::try_from(DependencyEnvironmentRequest {
+            contract_version: 1,
+            action,
+            identity_key: source.identity_key.clone(),
+            planning_request: source.planning_request.clone(),
+            dependency_requirements_id: Some(
+                envelope
+                    .as_envelope()
+                    .execution_context
+                    .dependency_requirements_id
+                    .clone(),
+            ),
+            environment_ref: None,
+        })
+        .unwrap()
+    };
+    let ready_for = |request: &ValidatedDependencyEnvironmentRequest| {
+        let mut result:DependencyEnvironmentResult=serde_json::from_str(include_str!(
+            "../../../pantograph-dependency-planning/tests/fixtures/dependency_environment_ready_result.json")).unwrap();
+        result.action = request.as_request().action;
+        result.identity_key = request.as_request().identity_key.clone();
+        result.dependency_requirements_id = request.as_request().dependency_requirements_id.clone();
+        result.bindings[0].binding_id = source.identity_key.selected_binding_ids[0].clone();
+        result.selected_binding_ids = source.identity_key.selected_binding_ids.clone();
+        result.binding_statuses.clear();
+        result.operation = None;
+        result
+    };
+    for case in ["absent", "ready", "missing", "stale", "failed"] {
+        let provider = DependencyEnvironmentReadinessSnapshotProvider::new();
+        let resolve = request_for(DependencyEnvironmentAction::Resolve);
+        provider
+            .insert_snapshot(
+                DependencyEnvironmentReadinessSnapshot::for_request(
+                    &resolve,
+                    ready_for(&resolve),
+                    DependencyEnvironmentReadinessSnapshotStatus::Fresh,
+                )
+                .unwrap(),
+            )
+            .unwrap();
+        if case != "absent" {
+            let check = request_for(DependencyEnvironmentAction::Check);
+            let mut result = ready_for(&check);
+            if case == "missing" {
+                result.readiness_state = DependencyEnvironmentReadinessState::Missing;
+                result.validation_state = DependencyEnvironmentValidationState::Valid;
+            }
+            if case == "failed" {
+                result.readiness_state = DependencyEnvironmentReadinessState::Failed;
+                result.validation_state = DependencyEnvironmentValidationState::Invalid;
+                result.failure_state = Some(DependencyEnvironmentFailureState::InvalidRequest);
+                result.diagnostics = NotImplementedDependencyEnvironmentProvider
+                    .resolve(&check)
+                    .diagnostics;
+            }
+            provider
+                .insert_snapshot(
+                    DependencyEnvironmentReadinessSnapshot::for_request(
+                        &check,
+                        result,
+                        if case == "stale" {
+                            DependencyEnvironmentReadinessSnapshotStatus::Stale
+                        } else {
+                            DependencyEnvironmentReadinessSnapshotStatus::Fresh
+                        },
+                    )
+                    .unwrap(),
+                )
+                .unwrap();
+        }
+        let result = DependencyEnvironmentService::new(provider)
+            .resolve_dependency_readiness(&envelope)
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            result.readiness_state == DependencyEnvironmentReadinessState::Ready,
+            matches!(case, "absent" | "ready"),
+            "{case}"
+        );
+        if case == "missing" {
+            assert_eq!(
+                result.readiness_state,
+                DependencyEnvironmentReadinessState::Missing
+            );
+        }
+    }
+}

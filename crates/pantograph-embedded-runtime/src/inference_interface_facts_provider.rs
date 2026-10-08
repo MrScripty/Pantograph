@@ -55,6 +55,21 @@ impl fmt::Debug for EmbeddedInferenceInterfaceFactsProvider {
 
 #[async_trait]
 impl InferenceInterfaceFactsProvider for EmbeddedInferenceInterfaceFactsProvider {
+    async fn resolved_dependency_requirements(
+        &self,
+        request: &pantograph_dependency_planning::ValidatedDependencyEnvironmentRequest,
+    ) -> Result<
+        Option<pantograph_dependency_planning::ValidatedDependencyEnvironmentResult>,
+        InferenceInterfaceFactsProviderError,
+    > {
+        crate::inference_dependency_requirements::resolve_native_candle_requirements(
+            &self.pumas_source,
+            &self.runtime_capability_source,
+            request,
+        )
+        .await
+    }
+
     async fn facts_for_resolution_inputs(
         &self,
         inputs: &[InferenceInterfaceGraphResolutionInput],

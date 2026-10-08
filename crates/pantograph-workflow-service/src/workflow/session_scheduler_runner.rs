@@ -649,31 +649,36 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                     )
                     .map_err(dependency_readiness_error)?
             };
-            let seed_result = match lifecycle
-                .resolve_dependency_requirements_seed(
-                    self.service.dependency_readiness_provider.as_ref(),
-                    &request,
-                )
-                .map_err(dependency_readiness_error)?
-            {
-                Some(seed_result) => seed_result,
-                None => {
-                    self.defer_runtime_dependency_readiness(
-                        &lifecycle,
-                        session_id,
-                        workflow_run_id,
-                        &task_id,
-                        &request,
-                    )?;
-                    deferred_task_ids.push(task_id);
-                    continue;
+            let environment_request =
+                dependency_environment_request_from_readiness_envelope(&request)
+                    .map_err(dependency_readiness_work_queue_error)?;
+            let payload_available = match pantograph_dependency_environment_service::resolve_dependency_requirements_payload(
+                self.service.dependency_requirements_registry.as_ref(), &environment_request,
+            ) {
+                Ok(_) => true,
+                Err(pantograph_dependency_environment_service::DependencyRequirementsRegistryError::MissingPayload { .. }) => {
+                    let seed = lifecycle.resolve_dependency_requirements_seed(
+                        self.service.dependency_readiness_provider.as_ref(), &request,
+                    ).map_err(dependency_readiness_error)?;
+                    match seed {
+                        Some(seed) => {
+                            let expected = environment_request.as_request();
+                            let actual = seed.as_result();
+                            actual.action == DependencyEnvironmentAction::Resolve
+                                && actual.identity_key == expected.identity_key
+                                && actual.dependency_requirements_id == expected.dependency_requirements_id
+                                && (expected.identity_key.selected_binding_ids.is_empty() || actual.selected_binding_ids == expected.identity_key.selected_binding_ids)
+                                && expected.environment_ref.as_ref().is_none_or(|value| actual.environment_ref.as_ref() == Some(value))
+                                && self.service.store_dependency_requirements_payload_from_result(&seed).is_ok()
+                        }
+                        None => false,
+                    }
                 }
+                // Stale or foreign payloads cannot be silently replaced by a
+                // readiness snapshot. Refresh their authoritative producer first.
+                Err(_) => false,
             };
-            if self
-                .service
-                .store_dependency_requirements_payload_from_result(&seed_result)
-                .is_err()
-            {
+            if !payload_available {
                 self.defer_runtime_dependency_readiness(
                     &lifecycle,
                     session_id,
@@ -688,8 +693,7 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                 session_id,
                 workflow_run_id,
                 &task_id,
-                dependency_environment_request_from_readiness_envelope(&request)
-                    .map_err(dependency_readiness_work_queue_error)?,
+                environment_request,
             )
             .map_err(dependency_readiness_work_queue_error)?;
             self.service
@@ -1087,6 +1091,9 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                 }
             }
         }
+        // Runtime completion materializes inputs for downstream non-runtime
+        // tasks; settle those tasks before projecting the workflow response.
+        self.run_progress_loop(session_id, workflow_run_id).await?;
         completed_scheduler_run_response(
             self.service,
             host,

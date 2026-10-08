@@ -63,15 +63,44 @@ where
         &self,
         request: &ValidatedDependencyReadinessRequestEnvelope,
     ) -> Result<Option<DependencyPreflightResult>, WorkflowDependencyReadinessProviderError> {
+        // The owned producer publishes Check snapshots. Resolve is only the
+        // compatibility source when no Check snapshot exists; stale/failed
+        // checked evidence must not be replaced by an older Resolve result.
         let environment_request = dependency_environment_request_from_readiness_request(
             request,
-            DependencyEnvironmentAction::Resolve,
+            DependencyEnvironmentAction::Check,
         )?;
-        let environment_result = self.handle(&environment_request).map_err(|error| {
+        let mut environment_result = self.handle(&environment_request).map_err(|error| {
             WorkflowDependencyReadinessProviderError::Failed {
                 message: error.to_string(),
             }
         })?;
+        let checked = environment_result.as_result();
+        let check_snapshot_absent = checked.readiness_state
+                == pantograph_dependency_planning::DependencyEnvironmentReadinessState::Missing
+            && checked.validation_state
+                == pantograph_dependency_planning::DependencyEnvironmentValidationState::Unavailable
+            && checked.failure_state
+                == Some(pantograph_dependency_planning::DependencyEnvironmentFailureState::RequirementsUnavailable)
+            && checked.diagnostics.iter().any(|diagnostic|
+                diagnostic.field_path.as_deref() == Some("dependency_environment.snapshot")
+                && diagnostic.code == pantograph_dependency_planning::DependencyPlanningDiagnosticCode::InternalError);
+        if check_snapshot_absent {
+            let legacy_request = dependency_environment_request_from_readiness_request(
+                request,
+                DependencyEnvironmentAction::Resolve,
+            )?;
+            let legacy = self.handle(&legacy_request).map_err(|error| {
+                WorkflowDependencyReadinessProviderError::Failed {
+                    message: error.to_string(),
+                }
+            })?;
+            if legacy.as_result().readiness_state
+                == pantograph_dependency_planning::DependencyEnvironmentReadinessState::Ready
+            {
+                environment_result = legacy;
+            }
+        }
         let preflight_result = dependency_preflight_result_from_environment_result(
             &environment_result,
         )

@@ -302,7 +302,15 @@ fn dependency_environment_result_from_inventory_observation(
         action: request.action,
         identity_key: request.identity_key.clone(),
         dependency_requirements_id: Some(payload.dependency_requirements_id.clone()),
-        environment_ref: Some(environment_ref_for_request(item)),
+        environment_ref: Some(
+            if request.environment_ref.is_none()
+                && crate::inference_dependency_requirements::is_native_payload(request, &payload)
+            {
+                crate::inference_dependency_requirements::native_environment_ref()
+            } else {
+                environment_ref_for_request(item)
+            },
+        ),
         requirements: payload.requirements,
         bindings: payload.bindings,
         selected_binding_ids: payload.selected_binding_ids,
