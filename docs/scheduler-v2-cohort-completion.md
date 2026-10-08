@@ -12,7 +12,8 @@ The owner freezes one to four tasks, one or two capability-valid serialized,
 single-device placements per task, a dependency snapshot, observation and
 objective identities, and evidence. Exactly one task borrows the already-admitted
 first request; every other task borrows an advisory forecast without a Ready
-proof. Placements exactly cover their request's candidate universe. The kernel
+proof. Every task must share the first task's workflow ID and workflow-run ID;
+cross-workflow and cross-run cohorts are outside this API. Placements exactly cover their request's candidate universe. The kernel
 checks associations, constraints and supported shape; the owner remains
 responsible for capability discovery and completeness of the represented cohort.
 
@@ -89,13 +90,19 @@ retention reversals, direct compatibility with the existing two-task selector,
 stable permutations, invalid evidence/dependencies, dead ends, checked overflow
 and exact budget exhaustion. An independent numeric reference enumerates full
 tiny schedules, then filters them by the specified continuation rule; it does
-not reuse production search helpers. A separate fixture demonstrates that the
-fixed continuation can be worse than globally reordering the tail.
+not reuse production search helpers. Its 192 generated cohorts have fitting
+placements and either chain or independent-task dependencies. Other shapes,
+including fan-out/join dependencies and blocked paths, are covered by directed
+tests. Repeated identical-input evaluation checks determinism; it is not an
+independent stochastic nonanticipation experiment. A separate fixture demonstrates
+that the fixed continuation can be worse than globally reordering the tail.
 
-Local qualification on 2026-10-08: `cargo test --locked --offline -p
-pantograph-scheduler` passed 197 tests, including all 15 cohort tests; the existing
+Local qualification of `cc64e28` on private predecessor `f98e4ae`, on
+2026-10-08: `cargo test --locked --offline -p pantograph-scheduler` passed 197 tests, including all 15 cohort tests; the existing
 controlled two-completion timing probe remained ignored. The new numeric oracle
-checks 192 generated cohorts and two-task compatibility checks 24 matrices.
+checks the 192 fitting chain/independent cohorts described above; direct two-task
+compatibility checks 24 matrices. The reporting-only successor preserves kernel
+bytes and renames the identical-input test without expanding this evidence claim.
 `cargo clippy --locked --offline -p pantograph-scheduler --all-targets -- -D warnings`,
 `cargo fmt --all -- --check` and `git diff --check` passed. Builds used one job,
 no debug information and no incremental compilation in a separate scheduler-only

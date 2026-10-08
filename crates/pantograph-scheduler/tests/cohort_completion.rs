@@ -900,10 +900,10 @@ fn two_task_scope_matches_existing_two_completion_selector() {
 }
 
 #[test]
-fn fixed_observation_does_not_depend_on_unobserved_future_draws() {
+fn identical_frozen_inputs_produce_deterministic_results() {
     let f = Fixture::chain(4, |h, (t, p)| 1 + (h.len() + t + p) as u64);
     let observation = f.run();
-    for _hidden_future in [0_u64, 42, u64::MAX] {
+    for _ in 0..3 {
         assert_eq!(f.run(), observation);
     }
 }
