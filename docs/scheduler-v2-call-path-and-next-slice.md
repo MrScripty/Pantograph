@@ -2,9 +2,10 @@
 
 The follow-up implements a narrower pure/local two-task evaluator and hardens
 the native snapshot fence; see [reviewed checkpoint](scheduler-v2-two-completion-checkpoint.md)
-and [results](scheduler-v2-two-completion-results.md). The four-task proposal below
-remains historical and unimplemented. Native successor activation is still gated
-on explicit cohort, serialization and conditional release/capacity evidence.
+and [results](scheduler-v2-two-completion-results.md). The four-task proposal below now has a separate
+[pure frozen-cohort kernel](scheduler-v2-cohort-completion.md). Native successor
+activation is still gated on explicit owner cohort, serialization and conditional
+release/capacity evidence; this kernel is advisory only.
 
 ## Current admitted-task path: native opt-in connected
 
