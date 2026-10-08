@@ -53,6 +53,20 @@ pub struct CandleCpuWarmComparison {
     generation: u64,
     owner: Arc<CalibrationOwner>,
 }
+
+/// Opaque actual loaded-owner stamp. Only a held native owner may issue it;
+/// it carries no reservation authority and cannot enable serial scheduling.
+#[derive(Clone)]
+pub struct CandleCpuCleanupOwner {
+    owner: Arc<CalibrationOwner>,
+    profile: LoadedCpuProfile,
+    generation: u64,
+}
+impl CandleCpuCleanupOwner {
+    pub(crate) fn model_ref(&self) -> &PumasModelRef {
+        &self.profile.model_ref
+    }
+}
 impl CandleCpuWarmComparison {
     /// Bounded atomic refusal after reload, stop or another service load begins.
     /// Callers must still acquire/revalidate dispatch ownership before execution.
@@ -153,6 +167,43 @@ pub(crate) struct CalibrationOwner {
     store: Mutex<Store>,
 }
 impl CalibrationOwner {
+    pub(crate) fn cleanup_owner(
+        self: &Arc<Self>,
+        instance: uuid::Uuid,
+    ) -> Option<CandleCpuCleanupOwner> {
+        if self.synthetic {
+            return None;
+        }
+        let generation = self.generation.load(Ordering::Acquire);
+        if generation == 0 || !generation.is_multiple_of(2) {
+            return None;
+        }
+        let store = self.store.try_lock().ok()?;
+        let profile = store.profile.as_ref()?;
+        if profile.instance != instance
+            || ExecutionSettings::current().as_ref() != Some(&profile.settings)
+            || self.generation.load(Ordering::Acquire) != generation
+        {
+            return None;
+        }
+        Some(CandleCpuCleanupOwner {
+            owner: self.clone(),
+            profile: profile.clone(),
+            generation,
+        })
+    }
+
+    pub(crate) fn matches_cleanup_owner(
+        self: &Arc<Self>,
+        expected: &CandleCpuCleanupOwner,
+        instance: uuid::Uuid,
+    ) -> bool {
+        Arc::ptr_eq(self, &expected.owner)
+            && self.cleanup_owner(instance).is_some_and(|actual| {
+                actual.generation == expected.generation && actual.profile == expected.profile
+            })
+    }
+
     pub(crate) fn new(config: CandleCpuCalibrationConfig) -> Result<Arc<Self>, BackendError> {
         let start = Instant::now();
         Self::with_clock(

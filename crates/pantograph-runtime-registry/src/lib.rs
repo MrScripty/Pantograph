@@ -83,6 +83,11 @@ pub use warmup::{RuntimeWarmupDecision, RuntimeWarmupDisposition, RuntimeWarmupR
 
 pub type SharedRuntimeRegistry = Arc<RuntimeRegistry>;
 
+mod retained_cleanup;
+pub use retained_cleanup::{
+    RuntimeRetainedCleanupError, RuntimeRetainedCleanupRefusal, RuntimeRetainedOwnerIdentity,
+};
+
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum RuntimeRegistryError {
     #[error("runtime '{0}' model/producer identity changed before resident resource publication")]
@@ -769,18 +774,26 @@ fn release_reservation_locked(
     state: &mut RuntimeRegistryState,
     reservation_id: u64,
 ) -> Result<Option<RuntimeRetentionDisposition>, RuntimeRegistryError> {
+    let Some(reservation) = remove_reservation_locked(state, reservation_id) else {
+        return Ok(None);
+    };
+    runtime_retention_disposition(&reservation.runtime_id, state).map(Some)
+}
+
+fn remove_reservation_locked(
+    state: &mut RuntimeRegistryState,
+    reservation_id: u64,
+) -> Option<RuntimeReservationRecord> {
     // Explicit release ends this lease's lineage. A later custody drop must not
     // resurrect an owner-ended predecessor; only custody rollback restores it.
     state.pending_reservations.remove(&reservation_id);
-    let Some(reservation) = state.reservations.remove(&reservation_id) else {
-        return Ok(None);
-    };
+    let reservation = state.reservations.remove(&reservation_id)?;
 
     if let Some(runtime) = state.runtimes.get_mut(&reservation.runtime_id) {
         runtime.active_reservations.remove(&reservation_id);
     }
 
-    runtime_retention_disposition(&reservation.runtime_id, state).map(Some)
+    Some(reservation)
 }
 
 fn admission_failure(

@@ -16,6 +16,10 @@ use pantograph_runtime_identity::canonical_runtime_id;
 use pantograph_timing_contracts::WorkflowTimingContractError;
 use tokio::sync::RwLock;
 
+#[cfg(feature = "backend-candle")]
+#[path = "gateway_retained_cpu_cleanup.rs"]
+mod retained_cpu_cleanup;
+
 use crate::backend::{
     canonical_backend_key, BackendCapabilities, BackendCompatibilityOptions,
     BackendCompatibilityRequest, BackendConfig, BackendDefaultStartMode, BackendError, BackendInfo,
