@@ -25,6 +25,8 @@ use super::{
 
 pub(crate) const WORKFLOW_SESSION_QUEUE_POLL_MS: u64 = 10;
 
+#[path = "store_cohort_snapshot.rs"]
+mod store_cohort_snapshot;
 #[path = "store_completion_lookahead.rs"]
 mod store_completion_lookahead;
 #[path = "store_diagnostics.rs"]

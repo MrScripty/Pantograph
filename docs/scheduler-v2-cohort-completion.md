@@ -140,3 +140,7 @@ preemption, preload/eviction plans, remote modes, mutable priority services,
 production profile collection, owner cohort certification or native wiring.
 Existing selectors, workers, lifecycle/dependency/wire contracts and defaults
 remain unchanged. No POC implementation was copied.
+
+The additive workflow-service [store capture and read-only coverage API](scheduler-v2-cohort-capture.md)
+now prepares bounded owned snapshots separately. It does not wire this kernel
+into dispatch or provide a complete native evidence matrix.
