@@ -97,6 +97,8 @@ tests. Repeated identical-input evaluation checks determinism; it is not an
 independent stochastic nonanticipation experiment. A separate fixture demonstrates
 that the fixed continuation can be worse than globally reordering the tail.
 
+### Private-stack qualification (historical)
+
 Local qualification of `cc64e28` on private predecessor `f98e4ae`, on
 2026-10-08: `cargo test --locked --offline -p pantograph-scheduler` passed 197 tests, including all 15 cohort tests; the existing
 controlled two-completion timing probe remained ignored. The new numeric oracle
@@ -108,6 +110,29 @@ bytes and renames the identical-input test without expanding this evidence claim
 no debug information and no incremental compilation in a separate scheduler-only
 target. No embedded/native consumer was rebuilt and no performance claim follows
 from these correctness checks.
+
+### Public-only qualification
+
+Separately, on 2026-10-08, local head
+`2389a96d9b1c4eda921c04c65e8971e64356b096` and published head
+`7b278df2976d3f9ae0696bf3ea2cd50e0d94f0d5` share the verified tree
+`671378482e2a13c9136122432c5a6cf2ccd1ee4f`, based directly on public PR68 head
+`1479748faa9ca383619384633acff5a88f4471be`. On this exact tree,
+`cargo test --locked --offline -p pantograph-scheduler` passed **196 tests**, with
+all 15 cohort tests passing and the same existing timing probe ignored. The
+scheduler all-targets Clippy, formatting and diff checks above also passed.
+
+The historical 197-pass result includes the private initial-drain test
+`initial_receipt_requires_unranked_binding_valid_owner_and_all_eight_identities`,
+which is absent from the public-only base. The reporting successor neither added
+nor removed a scheduler test; the one-test difference comes from the distinct
+source bases. The private native predecessors remain outside this cohort PR.
+
+On published head `7b278df`, [Quality Gates](https://github.com/MrScripty/Pantograph/actions/runs/37746312733),
+[Headless Workflow Contract](https://github.com/MrScripty/Pantograph/actions/runs/37746312802)
+and [Runtime Separation](https://github.com/MrScripty/Pantograph/actions/runs/37746312742)
+passed. These Actions results do not clear separate security findings on parent
+PR68 or imply native/default cohort activation.
 
 This is an exact implementation of this bounded algorithm, not a global-optimum
 claim or calibrated performance result. It does not add overlap, batching,
