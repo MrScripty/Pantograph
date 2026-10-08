@@ -8,6 +8,7 @@ mod effective_definition;
 mod effective_definition_tests;
 mod executable_topology;
 mod executable_validation_snapshot_source;
+mod group_execution_projection;
 mod group_mutation;
 mod inference_interface_facts;
 mod inference_interface_patch;
@@ -62,6 +63,7 @@ pub use executable_topology::{
 pub(crate) use executable_validation_snapshot_source::{
     CurrentExecutableValidationSnapshotNodeSource, CurrentExecutableValidationSnapshotSource,
 };
+pub use group_execution_projection::{lower_groups, GroupExecutionProjection};
 pub use inference_interface_facts::{
     InferenceInterfaceFactsProvider, InferenceInterfaceFactsProviderError,
     UnavailableInferenceInterfaceFactsProvider,
@@ -150,8 +152,8 @@ pub use session_types::{
     WorkflowGraphRemoveEdgeRequest, WorkflowGraphRemoveEdgesRequest,
     WorkflowGraphRemoveNodeRequest, WorkflowGraphUndoRedoStateRequest,
     WorkflowGraphUndoRedoStateResponse, WorkflowGraphUngroupRequest,
-    WorkflowGraphUpdateGroupPortsRequest, WorkflowGraphUpdateNodeDataRequest,
-    WorkflowGraphUpdateNodePositionRequest,
+    WorkflowGraphUpdateGroupNodeDataRequest, WorkflowGraphUpdateGroupPortsRequest,
+    WorkflowGraphUpdateNodeDataRequest, WorkflowGraphUpdateNodePositionRequest,
 };
 pub use types::{
     ConnectionAnchor, ConnectionCandidatesResponse, ConnectionCommitResponse, ConnectionRejection,

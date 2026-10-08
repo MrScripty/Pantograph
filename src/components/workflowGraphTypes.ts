@@ -13,6 +13,7 @@ import BooleanInputNode from './nodes/workflow/BooleanInputNode.svelte';
 import DependencyEnvironmentNode from './nodes/workflow/DependencyEnvironmentNode.svelte';
 import GenericNode from './nodes/workflow/GenericNode.svelte';
 import ImageOutputNode from './nodes/workflow/ImageOutputNode.svelte';
+import JsonFilterNode from './nodes/workflow/JsonFilterNode.svelte';
 import LinkedInputNode from './nodes/workflow/LinkedInputNode.svelte';
 import LLMInferenceNode from './nodes/workflow/LLMInferenceNode.svelte';
 import MaskedTextInputNode from './nodes/workflow/MaskedTextInputNode.svelte';
@@ -37,6 +38,7 @@ export const workflowNodeTypes: NodeTypes = {
   'boolean-input': BooleanInputNode,
   'selection-input': SelectionInputNode,
   'vector-input': VectorInputNode,
+  'json-filter': JsonFilterNode,
   'llm-inference': LLMInferenceNode,
   'model-provider': ModelProviderNode,
   'text-output': TextOutputNode,

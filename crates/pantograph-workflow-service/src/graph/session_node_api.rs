@@ -8,8 +8,8 @@ use super::super::session_event::{dirty_tasks_from_seed_nodes, graph_modified_ev
 use super::super::session_graph::{merge_node_data, sync_embedding_emit_metadata_flags};
 use super::super::session_types::{
     WorkflowGraphAddNodeRequest, WorkflowGraphDeleteSelectionRequest,
-    WorkflowGraphRemoveNodeRequest, WorkflowGraphUpdateNodeDataRequest,
-    WorkflowGraphUpdateNodePositionRequest,
+    WorkflowGraphRemoveNodeRequest, WorkflowGraphUpdateGroupNodeDataRequest,
+    WorkflowGraphUpdateNodeDataRequest, WorkflowGraphUpdateNodePositionRequest,
 };
 use super::{
     dirty_tasks_from_seed_nodes_unique, phase6_memory_impact_projection, GraphSessionStore,
@@ -56,6 +56,44 @@ impl GraphSessionStore {
                 &state.graph,
                 &dirty_tasks_from_seed_nodes(&state.graph, std::slice::from_ref(&request.node_id)),
             );
+            let workflow_event = graph_modified_event(
+                &request.session_id,
+                &request.session_id,
+                dirty_tasks,
+                memory_impact.clone(),
+            );
+            let projection = phase6_memory_impact_projection(memory_impact);
+            state.snapshot_response_with_state(
+                &request.session_id,
+                Some(workflow_event),
+                projection,
+            )
+        };
+        self.start_validation_after_semantic_graph_mutation(&request.session_id)
+            .await?;
+        Ok(response)
+    }
+
+    pub async fn update_group_node_data(
+        &self,
+        request: WorkflowGraphUpdateGroupNodeDataRequest,
+    ) -> Result<WorkflowGraphEditSessionGraphResponse, WorkflowServiceError> {
+        let response = {
+            let handle = self.get_session_handle(&request.session_id).await?;
+            let mut state = handle.lock().await;
+            state.touch();
+            // Guard and build the patch while holding the same owner lock used
+            // for commit. Refusal leaves graph, undo and validation unchanged.
+            let changed =
+                super::super::group_mutation::update_group_node_data_graph(&state.graph, &request)?;
+            let before_graph = state.graph.clone();
+            state.push_undo_snapshot();
+            state.graph = changed;
+            sync_embedding_emit_metadata_flags(&mut state.graph);
+            let dirty_tasks =
+                dirty_tasks_from_seed_nodes(&state.graph, std::slice::from_ref(&request.group_id));
+            let memory_impact =
+                graph_memory_impact_from_graph_change(&before_graph, &state.graph, &dirty_tasks);
             let workflow_event = graph_modified_event(
                 &request.session_id,
                 &request.session_id,

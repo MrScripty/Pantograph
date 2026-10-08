@@ -235,6 +235,17 @@ export class TauriWorkflowBackend implements WorkflowBackend {
     return parseWorkflowGraphMutationResponse(response);
   }
 
+  async updateGroupNodeData(
+    groupId: string, nodeId: string, expectedNodeType: string,
+    expectedNodeData: unknown, data: Record<string, unknown>, sessionId: string,
+  ): Promise<WorkflowGraphMutationResponse> {
+    const response = await invoke<unknown>('update_group_node_data', { request: {
+      session_id: sessionId, group_id: groupId, node_id: nodeId,
+      expected_node_type: expectedNodeType, expected_node_data: expectedNodeData, data,
+    } });
+    return parseWorkflowGraphMutationResponse(response);
+  }
+
   async updateNodePosition(
     nodeId: string,
     position: { x: number; y: number },

@@ -14,7 +14,7 @@ use pantograph_workflow_service::{
     WorkflowGraphCurrentValidationSummaryRequest, WorkflowGraphCurrentValidationSummaryResponse,
     WorkflowGraphEditSessionGraphResponse,
     WorkflowGraphSessionExecutableValidationSnapshotPublishRequest,
-    WorkflowGraphValidationLifecycleEventSnapshot,
+    WorkflowGraphUpdateGroupNodeDataRequest, WorkflowGraphValidationLifecycleEventSnapshot,
 };
 
 #[command]
@@ -55,6 +55,14 @@ pub async fn update_node_data(
         workflow_service,
     )
     .await
+}
+
+#[command]
+pub async fn update_group_node_data(
+    request: WorkflowGraphUpdateGroupNodeDataRequest,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<WorkflowGraphEditSessionGraphResponse, String> {
+    super::workflow_execution_commands::update_group_node_data(request, workflow_service).await
 }
 
 #[command]

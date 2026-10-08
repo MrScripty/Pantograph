@@ -290,6 +290,82 @@ fn node_group_from_node(node: &GraphNode) -> Result<NodeGroup, WorkflowServiceEr
     })
 }
 
+/// Validate the published group shape, then patch its original JSON tree so
+/// extension fields on groups, nodes, edges and mappings survive the edit.
+pub(crate) fn update_group_node_data_graph(
+    graph: &WorkflowGraph,
+    request: &super::session_types::WorkflowGraphUpdateGroupNodeDataRequest,
+) -> Result<WorkflowGraph, WorkflowServiceError> {
+    let invalid = |message: &str| WorkflowServiceError::InvalidRequest(message.to_string());
+    if !request.data.is_object() {
+        return Err(invalid("group node data patch must be an object"));
+    }
+    let mut changed = graph.clone();
+    if changed
+        .nodes
+        .iter()
+        .filter(|n| n.id == request.group_id)
+        .count()
+        != 1
+    {
+        return Err(invalid("group identity is missing or ambiguous"));
+    }
+    let wrapper = changed
+        .find_node_mut(&request.group_id)
+        .ok_or_else(|| invalid("group identity is missing"))?;
+    if wrapper.node_type != GROUP_NODE_TYPE {
+        return Err(invalid("target is not a node group"));
+    }
+    let group_value = wrapper
+        .data
+        .get_mut("group")
+        .ok_or_else(|| invalid("node group data is missing"))?;
+    if !group_value.is_object() {
+        return Err(invalid("node group must be a JSON object"));
+    }
+    let raw_nodes = group_value
+        .get("nodes")
+        .and_then(serde_json::Value::as_array)
+        .ok_or_else(|| invalid("internal nodes must be a JSON array"))?;
+    if raw_nodes.iter().any(|node| !node.is_object()) {
+        return Err(invalid("internal nodes must be JSON objects"));
+    }
+    let group: NodeGroup = serde_json::from_value(group_value.clone())
+        .map_err(|_| invalid("node group data is malformed"))?;
+    if group.id != request.group_id {
+        return Err(invalid("wrapper and group identities do not match"));
+    }
+    let targets = group
+        .nodes
+        .iter()
+        .filter(|n| n.id == request.node_id)
+        .collect::<Vec<_>>();
+    if targets.len() != 1 {
+        return Err(invalid("internal node identity is missing or ambiguous"));
+    }
+    let target = targets[0];
+    if target.node_type == GROUP_NODE_TYPE {
+        return Err(invalid("nested group property editing is not supported"));
+    }
+    if target.node_type != request.expected_node_type || target.data != request.expected_node_data {
+        return Err(invalid(
+            "internal node changed; reload its saved properties before applying",
+        ));
+    }
+    let nodes = group_value
+        .get_mut("nodes")
+        .and_then(serde_json::Value::as_array_mut)
+        .ok_or_else(|| invalid("internal nodes must be a JSON array"))?;
+    let target = nodes
+        .iter_mut()
+        .find(|n| n.get("id").and_then(serde_json::Value::as_str) == Some(request.node_id.as_str()))
+        .and_then(serde_json::Value::as_object_mut)
+        .ok_or_else(|| invalid("internal node must be a JSON object with the selected identity"))?;
+    let data = target.entry("data").or_insert(serde_json::Value::Null);
+    super::session_graph::merge_node_data(data, request.data.clone());
+    Ok(changed)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

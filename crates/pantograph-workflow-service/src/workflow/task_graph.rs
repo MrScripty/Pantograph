@@ -22,7 +22,10 @@ use super::task_graph_contracts::{
     WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION,
 };
 use super::WorkflowServiceError;
-use crate::graph::{workflow_executable_topology, WorkflowGraph, WorkflowRuntimeSourceContext};
+use crate::graph::{
+    lower_groups, workflow_executable_topology, NodeRegistry, WorkflowGraph,
+    WorkflowRuntimeSourceContext,
+};
 
 const PORT_TEXT: &str = "text";
 const PORT_VALUE: &str = "value";
@@ -131,6 +134,8 @@ pub fn workflow_scheduler_task_graph_with_inference_projections(
     graph: &WorkflowGraph,
     inference_task_projections: &WorkflowSchedulerInferenceTaskProjections,
 ) -> Result<WorkflowSchedulerTaskGraph, WorkflowServiceError> {
+    let projection = lower_groups(graph, &NodeRegistry::new())?;
+    let graph = &projection.executable_graph;
     let workflow_id = scheduler_workflow_id(workflow_id)?;
     let workflow_run_id = scheduler_workflow_run_id(workflow_run_id)?;
     let topology = workflow_executable_topology(graph)?;
@@ -203,6 +208,25 @@ pub fn workflow_scheduler_task_graph_with_inference_projections(
             runtime_source_context,
             diagnostics,
         });
+    }
+
+    // Grouped CPU primitives must have valid materialized templates before
+    // submission reaches the queue. Keep existing flat/root diagnostic policy.
+    for task in &tasks {
+        if projection
+            .parent_by_node
+            .contains_key(task.node_id.as_str())
+        {
+            if let Some(diagnostic) = task.diagnostics.iter().find(|diagnostic| {
+                diagnostic.severity == WorkflowSchedulerTaskProjectionDiagnosticSeverity::Error
+            }) {
+                return Err(WorkflowServiceError::InvalidRequest(format!(
+                    "grouped primitive '{}' cannot materialize its CPU task: {}",
+                    task.node_id.as_str(),
+                    diagnostic.message
+                )));
+            }
+        }
     }
 
     Ok(WorkflowSchedulerTaskGraph {

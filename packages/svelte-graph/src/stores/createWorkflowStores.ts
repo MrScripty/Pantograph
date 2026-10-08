@@ -73,6 +73,10 @@ export interface WorkflowStores {
     nodeId: string,
     data: Record<string, unknown>,
   ) => Promise<WorkflowGraphMutationResult>;
+  updateGroupNodeData: (
+    groupId: string, nodeId: string, expectedNodeType: string,
+    expectedNodeData: unknown, data: Record<string, unknown>, expectedSessionId: string | null,
+  ) => Promise<WorkflowGraphMutationResult>;
   updateNodeRuntimeData: (nodeId: string, data: Record<string, unknown>) => void;
   clearNodeRuntimeData: (keys: string[]) => void;
   getNodeById: (nodeId: string) => Node | undefined;
@@ -261,6 +265,22 @@ export function createWorkflowStores(
     );
   }
 
+  function updateGroupNodeData(
+    groupId: string, nodeId: string, expectedNodeType: string,
+    expectedNodeData: unknown, data: Record<string, unknown>, expectedSessionId: string | null,
+  ): Promise<WorkflowGraphMutationResult> {
+    return syncGraphMutationFromBackend('update group node data', (sessionId) => {
+      if (sessionId !== expectedSessionId) throw new Error('The graph session changed; reopen the group property editor');
+      if (!backend.updateGroupNodeData) throw new Error('This host does not support group node property editing');
+      // Detach the published JSON payload before asynchronous host work.
+      // JSON serialization supports Svelte proxies; structuredClone does not.
+      // Serialization errors remain typed failed results through the dispatcher.
+      const expected: unknown = JSON.parse(JSON.stringify(expectedNodeData));
+      const patch: Record<string, unknown> = JSON.parse(JSON.stringify(data));
+      return backend.updateGroupNodeData(groupId, nodeId, expectedNodeType, expected, patch, sessionId);
+    });
+  }
+
   function updateNodeRuntimeData(nodeId: string, data: Record<string, unknown>) {
     graphState.updateNodeRuntimeData(nodeId, data);
   }
@@ -388,7 +408,7 @@ export function createWorkflowStores(
     connectionIntent,
     workflowGraph, nodeDefinitionsByCategory,
     // Node actions
-    addNode, removeNode, deleteSelection, updateNodePosition, updateNodeData,
+    addNode, removeNode, deleteSelection, updateNodePosition, updateNodeData, updateGroupNodeData,
     updateNodeRuntimeData, clearNodeRuntimeData,
     getNodeById, isNodeGroup: isNodeGroupFn, getConnectedNodes, getNodesBounds,
     // Edge actions

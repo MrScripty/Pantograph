@@ -5,8 +5,8 @@ pub use super::workflow_edit_session::{
     get_undo_redo_state, insert_node_and_connect_in_execution, insert_node_on_edge_in_execution,
     preview_node_insert_on_edge_in_execution, redo_workflow, remove_edge_from_execution,
     remove_edges_from_execution, remove_execution, remove_node_from_execution, undo_workflow,
-    ungroup_in_execution, update_group_ports_in_execution, update_node_data,
-    update_node_position_in_execution,
+    ungroup_in_execution, update_group_node_data, update_group_ports_in_execution,
+    update_node_data, update_node_position_in_execution,
 };
 #[cfg(test)]
 mod tests {

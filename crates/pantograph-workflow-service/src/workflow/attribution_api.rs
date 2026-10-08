@@ -434,6 +434,27 @@ fn reconstruct_workflow_graph(
         }
     }
 
+    if graph_settings
+        .nodes
+        .iter()
+        .any(|node| node.node_type == "node-group")
+    {
+        if graph_settings.schema_version != 1
+            || presentation_metadata.schema_version != 1
+            || executable_topology.schema_version != 1
+        {
+            return Err(WorkflowServiceError::Internal(
+                "stored grouped workflow graph uses an unsupported schema version".into(),
+            ));
+        }
+        return reconstruct_grouped_workflow_graph(
+            executable_topology,
+            presentation_metadata,
+            positions_by_node_id,
+            settings_by_node_id,
+        );
+    }
+
     let mut nodes = Vec::with_capacity(executable_topology.nodes.len());
     for node in &executable_topology.nodes {
         let Some(position) = positions_by_node_id.remove(&node.node_id) else {
@@ -528,6 +549,106 @@ fn reconstruct_workflow_graph(
     })
 }
 
+fn reconstruct_grouped_workflow_graph(
+    executable_topology: &WorkflowExecutableTopology,
+    presentation_metadata: &WorkflowPresentationMetadata,
+    mut positions_by_node_id: BTreeMap<String, crate::graph::Position>,
+    settings_by_node_id: BTreeMap<String, (String, serde_json::Value)>,
+) -> Result<WorkflowGraph, WorkflowServiceError> {
+    let mut nodes = Vec::with_capacity(settings_by_node_id.len());
+    for (node_id, (node_type, data)) in settings_by_node_id {
+        let position = positions_by_node_id.remove(&node_id).ok_or_else(|| {
+            WorkflowServiceError::Internal(format!(
+                "stored workflow presentation metadata is missing authored node '{node_id}'"
+            ))
+        })?;
+        nodes.push(GraphNode {
+            id: node_id,
+            node_type,
+            position,
+            data,
+        });
+    }
+    if let Some(extra_node_id) = positions_by_node_id.keys().next() {
+        return Err(WorkflowServiceError::Internal(format!(
+            "stored workflow presentation metadata contains extra authored node '{extra_node_id}'"
+        )));
+    }
+    let graph = WorkflowGraph {
+        nodes,
+        edges: presentation_metadata
+            .edges
+            .iter()
+            .map(|edge| GraphEdge {
+                id: edge.edge_id.clone(),
+                source: edge.source_node_id.clone(),
+                source_handle: edge.source_port_id.clone(),
+                target: edge.target_node_id.clone(),
+                target_handle: edge.target_port_id.clone(),
+            })
+            .collect(),
+        derived_graph: None,
+    };
+    let primitive = crate::graph::lower_groups(&graph, &NodeRegistry::new())
+        .map_err(|error| {
+            WorkflowServiceError::Internal(format!(
+                "stored authored group graph cannot be lowered: {error}"
+            ))
+        })?
+        .executable_graph;
+    let mut primitive_nodes = primitive
+        .nodes
+        .iter()
+        .map(|node| (node.id.as_str(), node.node_type.as_str()))
+        .collect::<Vec<_>>();
+    let mut stored_nodes = executable_topology
+        .nodes
+        .iter()
+        .map(|node| (node.node_id.as_str(), node.node_type.as_str()))
+        .collect::<Vec<_>>();
+    primitive_nodes.sort();
+    stored_nodes.sort();
+    if primitive_nodes != stored_nodes {
+        return Err(WorkflowServiceError::Internal(
+            "stored authored group nodes do not match executable topology".into(),
+        ));
+    }
+    let mut primitive_edges = primitive
+        .edges
+        .iter()
+        .map(|edge| {
+            (
+                edge.source.as_str(),
+                edge.source_handle.as_str(),
+                edge.target.as_str(),
+                edge.target_handle.as_str(),
+            )
+        })
+        .collect::<Vec<_>>();
+    let mut stored_edges = executable_topology
+        .edges
+        .iter()
+        .map(|edge| {
+            (
+                edge.source_node_id.as_str(),
+                edge.source_port_id.as_str(),
+                edge.target_node_id.as_str(),
+                edge.target_port_id.as_str(),
+            )
+        })
+        .collect::<Vec<_>>();
+    primitive_edges.sort();
+    stored_edges.sort();
+    if primitive_edges != stored_edges {
+        return Err(WorkflowServiceError::Internal(
+            "stored authored group edges do not match executable topology".into(),
+        ));
+    }
+    // Return the authored view. The caller returns the original primitive
+    // topology/versions separately; nothing here rewrites version or lineage facts.
+    Ok(graph)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -546,6 +667,386 @@ mod tests {
             diagnostic.code == WorkflowGraphDiagnosticCode::RetiredNodeType
                 && diagnostic.node_id.as_deref() == Some("diffusion")
         }));
+    }
+
+    fn grouped_record_fixture() -> (WorkflowRunVersionProjection, WorkflowGraph) {
+        use crate::graph::{NodeGroup, PortDataType, PortMapping, Position};
+        let group = NodeGroup {
+            id: "wrapper".into(),
+            name: "Stored group".into(),
+            nodes: vec![GraphNode {
+                id: "extract".into(),
+                node_type: "json-filter".into(),
+                position: Position { x: 12.5, y: -77.25 },
+                data: serde_json::json!({"path":"results[0].text","opaque":[null,7,"🐾"]}),
+            }],
+            edges: vec![],
+            exposed_inputs: vec![PortMapping {
+                internal_node_id: "extract".into(),
+                internal_port_id: "json".into(),
+                group_port_id: "input-json".into(),
+                group_port_label: "Input".into(),
+                data_type: PortDataType::Any,
+            }],
+            exposed_outputs: vec![PortMapping {
+                internal_node_id: "extract".into(),
+                internal_port_id: "value".into(),
+                group_port_id: "selected".into(),
+                group_port_label: "Selected".into(),
+                data_type: PortDataType::Any,
+            }],
+            position: Position { x: 1.0, y: 2.0 },
+            collapsed: true,
+            description: Some("Exact stored authoring data".into()),
+            color: Some("#abcdef".into()),
+        };
+        let graph = WorkflowGraph {
+            nodes: vec![
+                GraphNode {
+                    id: "source".into(),
+                    node_type: "selection-input".into(),
+                    position: Position { x: -41.25, y: 87.0 },
+                    data: serde_json::json!({}),
+                },
+                GraphNode {
+                    id: "wrapper".into(),
+                    node_type: "node-group".into(),
+                    position: Position { x: 155.0, y: -42.5 },
+                    data: serde_json::json!({"group":group,"opaque":{"unchanged":true}}),
+                },
+                GraphNode {
+                    id: "sink".into(),
+                    node_type: "text-output".into(),
+                    position: Position {
+                        x: 801.0,
+                        y: 291.25,
+                    },
+                    data: serde_json::json!({}),
+                },
+            ],
+            edges: vec![
+                GraphEdge {
+                    id: "authored-input".into(),
+                    source: "source".into(),
+                    source_handle: "value".into(),
+                    target: "wrapper".into(),
+                    target_handle: "input-json".into(),
+                },
+                GraphEdge {
+                    id: "authored-output".into(),
+                    source: "wrapper".into(),
+                    source_handle: "selected".into(),
+                    target: "sink".into(),
+                    target_handle: "text".into(),
+                },
+            ],
+            derived_graph: None,
+        };
+        // Synthetic typed record identities, with content produced by the actual
+        // public graph owners. These are unit fixtures, not observed execution IDs.
+        let mut record = stale_diffusion_version_projection();
+        let topology = workflow_executable_topology(&graph).unwrap();
+        let fingerprint = workflow_execution_fingerprint_for_topology(&topology).unwrap();
+        record.workflow_version.executable_topology_json =
+            serde_json::to_string(&topology).unwrap();
+        record.workflow_version.execution_fingerprint = fingerprint.clone();
+        record.snapshot.workflow_execution_fingerprint = fingerprint;
+        record.presentation_revision.presentation_metadata_json =
+            workflow_presentation_metadata_json(&workflow_presentation_metadata(&graph)).unwrap();
+        record.snapshot.graph_settings_json = crate::graph::workflow_graph_run_settings_json(
+            &crate::graph::workflow_graph_run_settings(&graph),
+        )
+        .unwrap();
+        (record, graph)
+    }
+
+    #[test]
+    fn grouped_history_retains_authored_data_and_stored_behavior_identity() {
+        let (mut record, authored) = grouped_record_fixture();
+        let mut topology: WorkflowExecutableTopology =
+            serde_json::from_str(&record.workflow_version.executable_topology_json).unwrap();
+        for node in &mut topology.nodes {
+            node.contract_version = "9.8.7".into();
+            node.behavior_digest = format!("stored-historical:{}", node.node_id);
+        }
+        record.workflow_version.executable_topology_json =
+            serde_json::to_string(&topology).unwrap();
+        let fingerprint = workflow_execution_fingerprint_for_topology(&topology).unwrap();
+        record.workflow_version.execution_fingerprint = fingerprint.clone();
+        record.snapshot.workflow_execution_fingerprint = fingerprint;
+        let actual = workflow_run_graph_projection_from_version(record.clone()).unwrap();
+        assert_eq!(actual.executable_topology, topology);
+        for node in &authored.nodes {
+            assert_eq!(actual.graph.find_node(&node.id), Some(node));
+        }
+        assert_eq!(actual.graph.edges.len(), authored.edges.len());
+        for edge in &authored.edges {
+            assert_eq!(
+                actual.graph.edges.iter().find(|e| e.id == edge.id),
+                Some(edge)
+            );
+        }
+        assert_eq!(
+            actual.workflow_version_id,
+            record.snapshot.workflow_version_id.as_str()
+        );
+        assert_eq!(
+            actual.workflow_presentation_revision_id,
+            record.snapshot.workflow_presentation_revision_id.as_str()
+        );
+        assert_eq!(
+            actual.workflow_execution_fingerprint,
+            record.snapshot.workflow_execution_fingerprint
+        );
+        assert!(actual
+            .graph_diagnostics
+            .iter()
+            .any(|d| d.node_type.as_deref() == Some("node-group") && d.blocking_submission));
+    }
+
+    fn stored_group_mut(value: &mut serde_json::Value) -> &mut serde_json::Value {
+        &mut value["nodes"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|node| node["node_type"] == "node-group")
+            .unwrap()["data"]["group"]
+    }
+
+    #[test]
+    fn grouped_history_refuses_malformed_or_mismatched_stored_records() {
+        use serde_json::{json, Value};
+        #[derive(Clone, Copy)]
+        enum Record {
+            Settings,
+            Presentation,
+            Topology,
+        }
+        let cases: Vec<(&str, Record, fn(&mut Value), &str)> = vec![
+            (
+                "duplicate-settings",
+                Record::Settings,
+                |v| {
+                    let n = v["nodes"][0].clone();
+                    v["nodes"].as_array_mut().unwrap().push(n);
+                },
+                "duplicate node id",
+            ),
+            (
+                "extra-settings",
+                Record::Settings,
+                |v| {
+                    v["nodes"]
+                        .as_array_mut()
+                        .unwrap()
+                        .push(json!({"node_id":"phantom","node_type":"selection-input","data":{}}));
+                },
+                "missing authored node 'phantom'",
+            ),
+            (
+                "missing-settings",
+                Record::Settings,
+                |v| {
+                    v["nodes"]
+                        .as_array_mut()
+                        .unwrap()
+                        .retain(|n| n["node_id"] != "source");
+                },
+                "extra authored node 'source'",
+            ),
+            (
+                "duplicate-position",
+                Record::Presentation,
+                |v| {
+                    let n = v["nodes"][0].clone();
+                    v["nodes"].as_array_mut().unwrap().push(n);
+                },
+                "duplicate node id",
+            ),
+            (
+                "missing-position",
+                Record::Presentation,
+                |v| {
+                    v["nodes"]
+                        .as_array_mut()
+                        .unwrap()
+                        .retain(|n| n["node_id"] != "wrapper");
+                },
+                "missing authored node 'wrapper'",
+            ),
+            (
+                "extra-position",
+                Record::Presentation,
+                |v| {
+                    v["nodes"]
+                        .as_array_mut()
+                        .unwrap()
+                        .push(json!({"node_id":"phantom","position":{"x":1,"y":2}}));
+                },
+                "extra authored node 'phantom'",
+            ),
+            (
+                "malformed-position",
+                Record::Presentation,
+                |v| {
+                    v["nodes"][0].as_object_mut().unwrap().remove("position");
+                },
+                "JSON is invalid",
+            ),
+            (
+                "wrapper-identity",
+                Record::Settings,
+                |v| {
+                    stored_group_mut(v)["id"] = json!("wrong");
+                },
+                "cannot be lowered",
+            ),
+            (
+                "malformed-group",
+                Record::Settings,
+                |v| {
+                    *stored_group_mut(v) = json!("broken");
+                },
+                "cannot be lowered",
+            ),
+            (
+                "child-id-collision",
+                Record::Settings,
+                |v| {
+                    stored_group_mut(v)["nodes"][0]["id"] = json!("source");
+                },
+                "cannot be lowered",
+            ),
+            (
+                "dangling-mapping",
+                Record::Settings,
+                |v| {
+                    stored_group_mut(v)["exposed_inputs"][0]["internal_node_id"] = json!("missing");
+                },
+                "cannot be lowered",
+            ),
+            (
+                "wrong-node-type",
+                Record::Topology,
+                |v| {
+                    v["nodes"][0]["node_type"] = json!("merge");
+                },
+                "nodes do not match",
+            ),
+            (
+                "missing-primitive-node",
+                Record::Topology,
+                |v| {
+                    v["nodes"].as_array_mut().unwrap().pop();
+                },
+                "nodes do not match",
+            ),
+            (
+                "duplicate-primitive-node",
+                Record::Topology,
+                |v| {
+                    let n = v["nodes"][0].clone();
+                    v["nodes"].as_array_mut().unwrap().push(n);
+                },
+                "nodes do not match",
+            ),
+            (
+                "missing-primitive-edge",
+                Record::Topology,
+                |v| {
+                    v["edges"].as_array_mut().unwrap().pop();
+                },
+                "edges do not match",
+            ),
+            (
+                "duplicate-primitive-edge",
+                Record::Topology,
+                |v| {
+                    let e = v["edges"][0].clone();
+                    v["edges"].as_array_mut().unwrap().push(e);
+                },
+                "edges do not match",
+            ),
+            (
+                "wrong-primitive-port",
+                Record::Topology,
+                |v| {
+                    v["edges"][0]["target_port_id"] = json!("other");
+                },
+                "edges do not match",
+            ),
+            (
+                "missing-root-edge",
+                Record::Presentation,
+                |v| {
+                    v["edges"].as_array_mut().unwrap().pop();
+                },
+                "edges do not match",
+            ),
+            (
+                "dangling-root-edge",
+                Record::Presentation,
+                |v| {
+                    v["edges"][0]["target_node_id"] = json!("missing");
+                },
+                "cannot be lowered",
+            ),
+            (
+                "duplicate-authored-edge",
+                Record::Presentation,
+                |v| {
+                    let e = v["edges"][0].clone();
+                    v["edges"].as_array_mut().unwrap().push(e);
+                },
+                "cannot be lowered",
+            ),
+            (
+                "unknown-settings-schema",
+                Record::Settings,
+                |v| {
+                    v["schema_version"] = json!(99);
+                },
+                "unsupported schema",
+            ),
+            (
+                "unknown-presentation-schema",
+                Record::Presentation,
+                |v| {
+                    v["schema_version"] = json!(99);
+                },
+                "unsupported schema",
+            ),
+            (
+                "unknown-topology-schema",
+                Record::Topology,
+                |v| {
+                    v["schema_version"] = json!(99);
+                },
+                "unsupported schema",
+            ),
+        ];
+        for (name, field, mutate, expected) in cases {
+            let (mut record, _) = grouped_record_fixture();
+            let text = match field {
+                Record::Settings => &mut record.snapshot.graph_settings_json,
+                Record::Presentation => {
+                    &mut record.presentation_revision.presentation_metadata_json
+                }
+                Record::Topology => &mut record.workflow_version.executable_topology_json,
+            };
+            let mut value: Value = serde_json::from_str(text).unwrap();
+            mutate(&mut value);
+            *text = value.to_string();
+            let error = workflow_run_graph_projection_from_version(record).unwrap_err();
+            assert!(
+                matches!(error, WorkflowServiceError::Internal(ref message) if message.contains(expected)),
+                "{name}: expected Internal containing {expected}, got {error}"
+            );
+        }
+        let (mut record, _) = grouped_record_fixture();
+        record.snapshot.graph_settings_json = "{".into();
+        assert!(matches!(workflow_run_graph_projection_from_version(record),
+            Err(WorkflowServiceError::Internal(message)) if message.contains("JSON is invalid")));
     }
 
     fn stale_diffusion_version_projection() -> WorkflowRunVersionProjection {

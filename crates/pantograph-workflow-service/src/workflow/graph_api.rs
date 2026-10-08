@@ -17,9 +17,9 @@ use crate::graph::{
     WorkflowGraphRemoveEdgesRequest, WorkflowGraphRemoveNodeRequest, WorkflowGraphSaveRequest,
     WorkflowGraphSaveResponse, WorkflowGraphStore, WorkflowGraphUndoRedoStateRequest,
     WorkflowGraphUndoRedoStateResponse, WorkflowGraphUngroupRequest,
-    WorkflowGraphUpdateGroupPortsRequest, WorkflowGraphUpdateNodeDataRequest,
-    WorkflowGraphUpdateNodePositionRequest, WorkflowGraphValidationLifecycleEventSink,
-    WorkflowGraphValidationLifecycleEventSnapshot,
+    WorkflowGraphUpdateGroupNodeDataRequest, WorkflowGraphUpdateGroupPortsRequest,
+    WorkflowGraphUpdateNodeDataRequest, WorkflowGraphUpdateNodePositionRequest,
+    WorkflowGraphValidationLifecycleEventSink, WorkflowGraphValidationLifecycleEventSnapshot,
 };
 use crate::WorkflowRunId;
 use pantograph_inference_interface_contracts::{
@@ -156,6 +156,15 @@ impl WorkflowService {
         request: WorkflowGraphUpdateNodeDataRequest,
     ) -> Result<WorkflowGraphEditSessionGraphResponse, WorkflowServiceError> {
         self.graph_session_store.update_node_data(request).await
+    }
+
+    pub async fn workflow_graph_update_group_node_data(
+        &self,
+        request: WorkflowGraphUpdateGroupNodeDataRequest,
+    ) -> Result<WorkflowGraphEditSessionGraphResponse, WorkflowServiceError> {
+        self.graph_session_store
+            .update_group_node_data(request)
+            .await
     }
 
     pub async fn workflow_graph_update_node_position(

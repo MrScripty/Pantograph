@@ -72,6 +72,19 @@ pub struct WorkflowGraphUpdateNodeDataRequest {
     pub data: serde_json::Value,
 }
 
+/// Scoped edit of one immediate internal node. The owner compares the complete
+/// expected data and type under its session lock before merging an object patch.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowGraphUpdateGroupNodeDataRequest {
+    pub session_id: String,
+    pub group_id: String,
+    pub node_id: String,
+    pub expected_node_type: String,
+    pub expected_node_data: serde_json::Value,
+    pub data: serde_json::Value,
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct WorkflowGraphUpdateNodePositionRequest {
