@@ -212,6 +212,7 @@ pub(crate) fn prospective_reservation(
     next_id: u64,
 ) -> Result<(RuntimeReservationRecord, Option<RuntimeReservationRecord>), RuntimeRegistryError> {
     let runtime_id = canonical_runtime_id(&request.runtime_id);
+    crate::reject_eviction_pending(state, &runtime_id)?;
     let previous = request
         .reservation_owner_id
         .as_deref()

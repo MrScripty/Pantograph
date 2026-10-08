@@ -6,6 +6,8 @@ pub use producer_resources::{
     RuntimeModelResidentEstimate, RuntimeProducerAllocationState, RuntimeProducerObservation,
 };
 mod execution_custody;
+mod last_lease_eviction;
+pub use last_lease_eviction::RuntimeLastLeaseEviction;
 mod observation;
 mod reclaim;
 mod registry_queries;
@@ -226,6 +228,7 @@ struct RuntimeRegistryState {
     reservations: BTreeMap<u64, RuntimeReservationRecord>,
     pending_reservations: BTreeMap<u64, PendingReservation>,
     executing_reservations: BTreeMap<u64, u64>,
+    evicting_runtimes: BTreeMap<String, u64>,
 }
 
 #[derive(Debug, Default)]
@@ -282,6 +285,7 @@ impl RuntimeRegistry {
             .state
             .lock()
             .expect("runtime registry state lock poisoned");
+        reject_eviction_pending(&guard, &runtime_id)?;
         if guard.producer_observations.contains_key(&runtime_id) {
             let current_instance = guard
                 .runtimes
@@ -740,6 +744,7 @@ fn runtime_reclaim(
     state: &mut RuntimeRegistryState,
     now_ms: u64,
 ) -> Result<RuntimeReclaimDisposition, RuntimeRegistryError> {
+    reject_eviction_pending(state, &canonical_runtime_id(runtime_id))?;
     let retention = runtime_retention_disposition(runtime_id, state)?;
     let runtime_id = retention.runtime_id.clone();
     let record = state
@@ -898,6 +903,7 @@ fn validate_reservation_request(
     requirements: Option<&RuntimeReservationRequirements>,
     existing_reservation_id: Option<u64>,
 ) -> Result<(), RuntimeRegistryError> {
+    reject_eviction_pending(state, runtime_id)?;
     let record = state
         .runtimes
         .get(runtime_id)
@@ -1043,6 +1049,9 @@ fn apply_runtime_observation(
     now_ms: u64,
 ) {
     let runtime_id = canonical_runtime_id(&observation.runtime_id);
+    if state.evicting_runtimes.contains_key(&runtime_id) {
+        return;
+    }
     if state.producer_observations.contains_key(&runtime_id) {
         // Matching health assessments may make dispatch less permissive, but
         // unsequenced projections never replace identity or release allocation.
@@ -1138,3 +1147,14 @@ fn unix_timestamp_ms() -> u64 {
 #[cfg(test)]
 #[path = "lib_tests.rs"]
 mod tests;
+
+fn reject_eviction_pending(
+    state: &RuntimeRegistryState,
+    runtime_id: &str,
+) -> Result<(), RuntimeRegistryError> {
+    if state.evicting_runtimes.contains_key(runtime_id) {
+        Err(RuntimeRegistryError::ReservationRejected(runtime_id.into()))
+    } else {
+        Ok(())
+    }
+}

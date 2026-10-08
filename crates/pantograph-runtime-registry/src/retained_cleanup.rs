@@ -24,6 +24,7 @@ pub enum RuntimeRetainedCleanupRefusal {
     OwnerMismatch,
     UnknownResidentAccounting,
     LastLease,
+    RetentionRequired,
 }
 
 /// Additive opt-in API error; existing registry error contracts are unchanged.
@@ -80,89 +81,8 @@ impl RuntimeRegistry {
             .state
             .lock()
             .expect("runtime registry state lock poisoned");
-        if state
-            .executing_reservations
-            .get(&expected.reservation_id)
-            .copied()
-            != execution_token
-        {
-            return Err(refuse(RuntimeRetainedCleanupRefusal::PendingCustody));
-        }
-        if state
-            .pending_reservations
-            .contains_key(&expected.reservation_id)
-        {
-            return Err(refuse(RuntimeRetainedCleanupRefusal::PendingCustody));
-        }
-        let lease = state
-            .reservations
-            .get(&expected.reservation_id)
-            .ok_or_else(|| refuse(RuntimeRetainedCleanupRefusal::ChangedLease))?;
-        if lease.reservation_id != expected.reservation_id
-            || lease.runtime_id != expected.runtime_id
-            || lease.workflow_id != expected.workflow_id
-            || lease.reservation_owner_id != expected.reservation_owner_id
-            || lease.usage_profile != expected.usage_profile
-            || lease.model_id != expected.model_id
-            || lease.pin_runtime != expected.pin_runtime
-            || lease.retention_hint != expected.retention_hint
-            || lease.created_at_ms != expected.created_at_ms
-            || expected.runtime_id != runtime_id
-        {
-            return Err(refuse(RuntimeRetainedCleanupRefusal::ChangedLease));
-        }
-        let record = state
-            .runtimes
-            .get(&runtime_id)
-            .ok_or_else(|| refuse(RuntimeRetainedCleanupRefusal::OwnerMismatch))?;
-        if state
-            .producer_observations
-            .get(&runtime_id)
-            .map(|(source, _)| source.as_str())
-            != Some(owner.source_id)
-            || record.runtime_instance_id.as_deref() != Some(owner.runtime_instance_id)
-            || !matches!(
-                record.status,
-                RuntimeRegistryStatus::Ready | RuntimeRegistryStatus::Busy
-            )
-            || !record
-                .active_reservations
-                .contains(&expected.reservation_id)
-        {
-            return Err(refuse(RuntimeRetainedCleanupRefusal::OwnerMismatch));
-        }
-        let accounted = record
-            .model_resource_residency
-            .as_ref()
-            .is_some_and(|resident| {
-                resident.model_id == owner.model_target
-                    && resident.runtime_instance_id.as_deref() == Some(owner.runtime_instance_id)
-                    && resident
-                        .requirements
-                        .as_ref()
-                        .is_some_and(|r| !r.claims.is_empty())
-            });
-        if record.resident_resources_uncertain || !accounted {
-            return Err(refuse(
-                RuntimeRetainedCleanupRefusal::UnknownResidentAccounting,
-            ));
-        }
-        let resident_claim = reservation_claim_from_requirements(
-            &runtime_id,
-            record
-                .model_resource_residency
-                .as_ref()
-                .and_then(|resident| resident.requirements.as_ref()),
-        )?;
-        // A retained native CPU allocation requires explicit RAM accounting.
-        // Every kind charged by the completed task must remain explicitly known.
-        if resident_claim.ram_bytes.is_none()
-            || (lease.claim.vram_bytes.is_some() && resident_claim.vram_bytes.is_none())
-        {
-            return Err(refuse(
-                RuntimeRetainedCleanupRefusal::UnknownResidentAccounting,
-            ));
-        }
+        validate_retained_owner_locked(&state, expected, &owner, execution_token)?;
+        let record = state.runtimes.get(&runtime_id).expect("validated runtime");
         // At most two IDs are inspected: only one can be the released lease.
         let successor = record
             .active_reservations
@@ -190,4 +110,105 @@ impl RuntimeRegistry {
         }
         Ok(RuntimeRetentionDisposition::retain(runtime_id, reason))
     }
+}
+
+/// Shared exact owner/accounting checks; caller holds the one admission lock.
+pub(crate) fn validate_retained_owner_locked(
+    state: &crate::RuntimeRegistryState,
+    expected: &RuntimeReservationLease,
+    owner: &RuntimeRetainedOwnerIdentity<'_>,
+    execution_token: Option<u64>,
+) -> Result<String, RuntimeRetainedCleanupError> {
+    let runtime_id = canonical_runtime_id(owner.runtime_id);
+    let refuse = |reason| RuntimeRetainedCleanupError::Refused {
+        runtime_id: runtime_id.clone(),
+        reason,
+    };
+    if state.evicting_runtimes.contains_key(&runtime_id) {
+        return Err(refuse(RuntimeRetainedCleanupRefusal::PendingCustody));
+    }
+    if state
+        .executing_reservations
+        .get(&expected.reservation_id)
+        .copied()
+        != execution_token
+    {
+        return Err(refuse(RuntimeRetainedCleanupRefusal::PendingCustody));
+    }
+    if state
+        .pending_reservations
+        .contains_key(&expected.reservation_id)
+    {
+        return Err(refuse(RuntimeRetainedCleanupRefusal::PendingCustody));
+    }
+    let lease = state
+        .reservations
+        .get(&expected.reservation_id)
+        .ok_or_else(|| refuse(RuntimeRetainedCleanupRefusal::ChangedLease))?;
+    if lease.reservation_id != expected.reservation_id
+        || lease.runtime_id != expected.runtime_id
+        || lease.workflow_id != expected.workflow_id
+        || lease.reservation_owner_id != expected.reservation_owner_id
+        || lease.usage_profile != expected.usage_profile
+        || lease.model_id != expected.model_id
+        || lease.pin_runtime != expected.pin_runtime
+        || lease.retention_hint != expected.retention_hint
+        || lease.created_at_ms != expected.created_at_ms
+        || expected.runtime_id != runtime_id
+    {
+        return Err(refuse(RuntimeRetainedCleanupRefusal::ChangedLease));
+    }
+    let record = state
+        .runtimes
+        .get(&runtime_id)
+        .ok_or_else(|| refuse(RuntimeRetainedCleanupRefusal::OwnerMismatch))?;
+    if state
+        .producer_observations
+        .get(&runtime_id)
+        .map(|(source, _)| source.as_str())
+        != Some(owner.source_id)
+        || record.runtime_instance_id.as_deref() != Some(owner.runtime_instance_id)
+        || !matches!(
+            record.status,
+            RuntimeRegistryStatus::Ready | RuntimeRegistryStatus::Busy
+        )
+        || !record
+            .active_reservations
+            .contains(&expected.reservation_id)
+    {
+        return Err(refuse(RuntimeRetainedCleanupRefusal::OwnerMismatch));
+    }
+    let accounted = record
+        .model_resource_residency
+        .as_ref()
+        .is_some_and(|resident| {
+            resident.model_id == owner.model_target
+                && resident.runtime_instance_id.as_deref() == Some(owner.runtime_instance_id)
+                && resident
+                    .requirements
+                    .as_ref()
+                    .is_some_and(|r| !r.claims.is_empty())
+        });
+    if record.resident_resources_uncertain || !accounted {
+        return Err(refuse(
+            RuntimeRetainedCleanupRefusal::UnknownResidentAccounting,
+        ));
+    }
+    let resident_claim = reservation_claim_from_requirements(
+        &runtime_id,
+        record
+            .model_resource_residency
+            .as_ref()
+            .and_then(|resident| resident.requirements.as_ref()),
+    )?;
+    // A retained native CPU allocation requires explicit RAM accounting.
+    // Every kind charged by the completed task must remain explicitly known.
+    if resident_claim.ram_bytes.is_none()
+        || (lease.claim.vram_bytes.is_some() && resident_claim.vram_bytes.is_none())
+    {
+        return Err(refuse(
+            RuntimeRetainedCleanupRefusal::UnknownResidentAccounting,
+        ));
+    }
+    Ok(runtime_id)
 }

@@ -303,3 +303,295 @@ fn custodied_cleanup_refuses_missing_successor_and_keeps_charge_fenced() {
     assert_eq!(before, state(&registry));
     assert!(registry.release_reservation(task.reservation_id).is_err());
 }
+
+fn eviction_fixture() -> (
+    Arc<RuntimeRegistry>,
+    RuntimeReservationLease,
+    crate::RuntimeLastLeaseEviction,
+) {
+    let (registry, task, successor) = fixture();
+    let mut custody = registry.acquire_execution_custody(&task).unwrap();
+    custody.begin_execution();
+    registry
+        .release_reservation(successor.reservation_id)
+        .unwrap();
+    let ticket = custody.begin_last_lease_eviction(owner()).unwrap();
+    (registry, task, ticket)
+}
+fn frame(
+    sequence: u64,
+    allocation_state: RuntimeProducerAllocationState,
+) -> RuntimeProducerObservation {
+    RuntimeProducerObservation {
+        source_id: "actual-owner".into(),
+        sequence,
+        allocation_state,
+        observation: RuntimeObservation {
+            runtime_id: "candle".into(),
+            display_name: "Candle".into(),
+            backend_keys: vec!["candle".into()],
+            model_id: (allocation_state == RuntimeProducerAllocationState::Resident)
+                .then(|| "model-target".into()),
+            runtime_instance_id: Some("instance".into()),
+            status: RuntimeRegistryStatus::Ready,
+            last_error: None,
+        },
+    }
+}
+#[test]
+fn last_lease_ticket_fences_mutations_until_ack_and_preserves_sequence_tombstone() {
+    let (registry, task, successor) = fixture();
+    let evaluation = registry.evaluate_reservation(request("late")).unwrap();
+    let mut custody = registry.acquire_execution_custody(&task).unwrap();
+    custody.begin_execution();
+    registry
+        .release_reservation(successor.reservation_id)
+        .unwrap();
+    let ticket = custody.begin_last_lease_eviction(owner()).unwrap();
+    let before = state(&registry);
+    assert_eq!(before.0[0].status, RuntimeRegistryStatus::Stopping);
+    assert!(before.0[0].model_resource_residency.is_some());
+    assert_eq!(before.1, vec![task.clone()]);
+    assert!(registry.release_reservation(task.reservation_id).is_err());
+    assert!(registry
+        .update_reservation_retention_hint(task.reservation_id, RuntimeRetentionHint::KeepAlive)
+        .is_err());
+    assert!(registry.acquire_execution_custody(&task).is_err());
+    assert!(registry.acquire_reservation(request("new")).is_err());
+    assert!(registry.can_acquire_reservation(&request("new")).is_err());
+    assert!(registry.evaluate_reservation(request("new")).is_err());
+    assert!(registry
+        .acquire_reservation_provisional(
+            request("late"),
+            evaluation.observation(),
+            |_| Ok::<_, ()>(())
+        )
+        .is_err());
+    assert!(evaluation.commit().is_err());
+    assert!(registry
+        .release_retained_reservation_for_owner(&task, owner())
+        .is_err());
+    assert!(registry.reclaim_runtime("candle", false).is_err());
+    assert!(registry
+        .transition_runtime(
+            "candle",
+            crate::RuntimeTransition::Failed {
+                message: "late".into()
+            }
+        )
+        .is_err());
+    for allocation in [
+        RuntimeProducerAllocationState::Resident,
+        RuntimeProducerAllocationState::Released,
+        RuntimeProducerAllocationState::Unknown,
+    ] {
+        assert!(registry
+            .observe_runtime_producer(frame(2, allocation))
+            .is_err());
+    }
+    let mut health = frame(2, RuntimeProducerAllocationState::Resident).observation;
+    health.status = RuntimeRegistryStatus::Failed;
+    registry.observe_runtime(health.clone());
+    registry.observe_runtimes(vec![health]);
+    registry.observe_runtimes(vec![]);
+    assert_eq!(before, state(&registry));
+    assert_eq!(
+        ticket.acknowledge_stopped(3).unwrap().decision,
+        RuntimeRetentionDecision::Evict
+    );
+    let stopped = state(&registry);
+    assert!(stopped.1.is_empty());
+    assert_eq!(stopped.0[0].status, RuntimeRegistryStatus::Stopped);
+    assert!(stopped.0[0].model_resource_residency.is_none());
+    assert!(stopped.0[0].runtime_instance_id.is_none());
+    for sequence in [1, 2, 3] {
+        assert!(registry
+            .observe_runtime_producer(frame(sequence, RuntimeProducerAllocationState::Resident))
+            .is_err());
+    }
+    assert_eq!(stopped, state(&registry));
+    // A later trusted producer frame can represent a genuine new load.
+    registry
+        .observe_runtime_producer(frame(4, RuntimeProducerAllocationState::Resident))
+        .unwrap();
+    assert!(registry.acquire_reservation(request("new")).is_ok());
+}
+#[test]
+fn invalid_ack_or_ticket_loss_never_clears_charges_or_admission_fence() {
+    for invalid_sequence in [0, 1] {
+        let (registry, task, ticket) = eviction_fixture();
+        let before = state(&registry);
+        assert!(ticket.acknowledge_stopped(invalid_sequence).is_err());
+        assert_eq!(before, state(&registry));
+        assert!(registry.release_reservation(task.reservation_id).is_err());
+        assert!(registry.acquire_reservation(request("late")).is_err());
+    }
+    let (registry, task, ticket) = eviction_fixture();
+    let before = state(&registry);
+    drop(ticket);
+    assert_eq!(before, state(&registry));
+    assert!(registry.release_reservation(task.reservation_id).is_err());
+    assert!(registry
+        .observe_runtime_producer(frame(2, RuntimeProducerAllocationState::Released))
+        .is_err());
+    let (registry, _, ticket) = eviction_fixture();
+    registry
+        .state
+        .lock()
+        .unwrap()
+        .runtimes
+        .get_mut("candle")
+        .unwrap()
+        .model_resource_residency
+        .as_mut()
+        .unwrap()
+        .requirements = Some(RuntimeReservationRequirements::from_claims(vec![
+        RuntimeReservationResourceClaim::ram_bytes(101),
+    ]));
+    let changed = state(&registry);
+    assert!(ticket.acknowledge_stopped(3).is_err());
+    assert_eq!(changed, state(&registry));
+}
+#[test]
+fn eviction_refuses_successor_retention_pins_unknown_models_and_prepared_custody() {
+    let (registry, task, successor) = fixture();
+    let mut custody = registry.acquire_execution_custody(&task).unwrap();
+    custody.begin_execution();
+    let before = state(&registry);
+    assert!(custody.begin_last_lease_eviction(owner()).is_err());
+    assert_eq!(before, state(&registry));
+    assert_eq!(
+        registry.reservation_lease(successor.reservation_id),
+        Some(successor)
+    );
+    for mode in [
+        "keepalive",
+        "lease-pin",
+        "model-pin",
+        "extra-model",
+        "prepared",
+    ] {
+        let (registry, task, successor) = fixture();
+        registry
+            .release_reservation(successor.reservation_id)
+            .unwrap();
+        let task = if mode == "keepalive" {
+            registry
+                .update_reservation_retention_hint(
+                    task.reservation_id,
+                    RuntimeRetentionHint::KeepAlive,
+                )
+                .unwrap()
+        } else if mode == "lease-pin" {
+            let mut req = request("task");
+            req.pin_runtime = true;
+            registry.acquire_reservation(req).unwrap()
+        } else {
+            task
+        };
+        if mode == "model-pin" {
+            registry
+                .state
+                .lock()
+                .unwrap()
+                .runtimes
+                .get_mut("candle")
+                .unwrap()
+                .models
+                .get_mut("model-target")
+                .unwrap()
+                .pinned = true;
+        }
+        if mode == "extra-model" {
+            let mut state = registry.state.lock().unwrap();
+            let r = state.runtimes.get_mut("candle").unwrap();
+            let mut m = r.models.get("model-target").unwrap().clone();
+            m.model_id = "extra".into();
+            r.models.insert("extra".into(), m);
+        }
+        let mut custody = registry.acquire_execution_custody(&task).unwrap();
+        if mode != "prepared" {
+            custody.begin_execution();
+        }
+        let before = state(&registry);
+        assert!(
+            custody.begin_last_lease_eviction(owner()).is_err(),
+            "{mode}"
+        );
+        assert_eq!(before, state(&registry));
+    }
+}
+
+#[test]
+fn pending_stop_keeps_shared_ram_charged_until_exact_ack() {
+    let (registry, task, successor) = fixture();
+    registry.register_runtime(crate::RuntimeRegistration::new("llama_cpp", "Peer"));
+    registry
+        .configure_resource_domain(crate::RuntimeResourceDomain {
+            domain_id: "synthetic-shared-ram".into(),
+            total_bytes: 1000,
+            safety_margin_bytes: 0,
+            bindings: ["candle", "llama_cpp"]
+                .into_iter()
+                .map(|runtime_id| crate::RuntimeResourceDomainBinding {
+                    runtime_id: runtime_id.into(),
+                    resource_kind: crate::RuntimeAdmissionResourceKind::RamBytes,
+                })
+                .collect(),
+        })
+        .unwrap();
+    registry
+        .observe_runtime_producer(RuntimeProducerObservation {
+            source_id: "peer-owner".into(),
+            sequence: 1,
+            allocation_state: RuntimeProducerAllocationState::Released,
+            observation: RuntimeObservation {
+                runtime_id: "llama_cpp".into(),
+                display_name: "Peer".into(),
+                backend_keys: vec!["llama_cpp".into()],
+                model_id: None,
+                runtime_instance_id: None,
+                status: RuntimeRegistryStatus::Stopped,
+                last_error: None,
+            },
+        })
+        .unwrap();
+    let peer = || {
+        let mut r = request("peer");
+        r.runtime_id = "llama_cpp".into();
+        r
+    };
+    let mut custody = registry.acquire_execution_custody(&task).unwrap();
+    custody.begin_execution();
+    registry
+        .release_reservation(successor.reservation_id)
+        .unwrap();
+    let before = registry
+        .evaluate_reservation(peer())
+        .unwrap()
+        .observation()
+        .resource_domains[0]
+        .clone();
+    assert_eq!(before.reserved_bytes, 110);
+    assert_eq!(before.resident_bytes, 100);
+    assert_eq!(before.available_bytes, 890);
+    let ticket = custody.begin_last_lease_eviction(owner()).unwrap();
+    assert_eq!(
+        registry
+            .evaluate_reservation(peer())
+            .unwrap()
+            .observation()
+            .resource_domains[0],
+        before
+    );
+    ticket.acknowledge_stopped(3).unwrap();
+    let after = registry
+        .evaluate_reservation(peer())
+        .unwrap()
+        .observation()
+        .resource_domains[0]
+        .clone();
+    assert_eq!(after.reserved_bytes, 0);
+    assert_eq!(after.resident_bytes, 0);
+    assert_eq!(after.available_bytes, 1000);
+}

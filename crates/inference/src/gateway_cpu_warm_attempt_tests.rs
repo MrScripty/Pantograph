@@ -700,3 +700,312 @@ async fn advisory_epoch_tampering_cannot_forge_native_epoch_or_restore_stale_cle
         f.gateway.stop().await.unwrap();
     }
 }
+
+async fn last_receipt(f: &Fixture) -> CandleCpuDrainedAttempt {
+    let (warm, receipt) = f
+        .gateway
+        .execute_custodied_cpu_warm_attempt(
+            f.registry.clone(),
+            f.input(),
+            InferenceExecutionCancellationHandle::running(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(warm, f.cold);
+    f.registry
+        .release_reservation(f.successor.reservation_id)
+        .unwrap();
+    receipt
+}
+fn competing_request() -> RuntimeReservationRequest {
+    RuntimeReservationRequest {
+        runtime_id: "candle".into(),
+        workflow_id: "competing".into(),
+        reservation_owner_id: Some("competing".into()),
+        usage_profile: None,
+        model_id: None,
+        pin_runtime: false,
+        requirements: None,
+        retention_hint: RuntimeRetentionHint::Ephemeral,
+    }
+}
+#[tokio::test]
+async fn actual_last_lease_eviction_clears_only_after_stop_and_rejects_undelivered_frames() {
+    let f = fixture().await;
+    let receipt = last_receipt(&f).await;
+    // Actual owner snapshot/sequence sampled under the backend reader but not
+    // delivered. Stop must exceed this counter, not only delivered sequence.
+    let backend = f.gateway.backend.read().await;
+    let lifecycle = f.gateway.runtime_lifecycle.read().await;
+    let delayed = pantograph_runtime_registry::RuntimeProducerObservation {
+        source_id: f.gateway.resident_source_id.clone(),
+        sequence: f
+            .gateway
+            .resident_observation_sequence
+            .fetch_add(1, Ordering::AcqRel)
+            + 1,
+        allocation_state: pantograph_runtime_registry::RuntimeProducerAllocationState::Resident,
+        observation: pantograph_runtime_registry::RuntimeObservation {
+            runtime_id: "candle".into(),
+            display_name: "Candle".into(),
+            backend_keys: vec!["candle".into()],
+            model_id: Some(f.target.local_load_path.clone()),
+            runtime_instance_id: lifecycle.runtime_instance_id.clone(),
+            status: pantograph_runtime_registry::RuntimeRegistryStatus::Ready,
+            last_error: None,
+        },
+    };
+    drop(lifecycle);
+    drop(backend);
+    let result = receipt
+        .evict_last(InferenceExecutionCancellationHandle::running())
+        .await
+        .unwrap();
+    assert_eq!(result.decision, RuntimeRetentionDecision::Evict);
+    assert!(!f.gateway.is_ready().await);
+    assert!(!f.gateway.is_embedding_mode().await);
+    assert!(f.gateway.current_runtime_config.read().await.is_none());
+    let stopped = state(&f.registry);
+    assert!(stopped.1.is_empty());
+    assert!(stopped.0[0].model_resource_residency.is_none());
+    assert_eq!(
+        stopped.0[0].status,
+        pantograph_runtime_registry::RuntimeRegistryStatus::Stopped
+    );
+    assert!(f.registry.observe_runtime_producer(delayed).is_err());
+    assert_eq!(stopped, state(&f.registry));
+    assert!(f
+        .gateway
+        .resident_cpu_serial_owner(&f.target.model_ref)
+        .is_none());
+}
+#[tokio::test]
+async fn native_eviction_refuses_retaining_successor_stale_owner_and_precancelled_host() {
+    let f = fixture().await;
+    let (_, receipt) = f
+        .gateway
+        .execute_custodied_cpu_warm_attempt(
+            f.registry.clone(),
+            f.input(),
+            InferenceExecutionCancellationHandle::running(),
+        )
+        .await
+        .unwrap();
+    let before = state(&f.registry);
+    assert!(receipt
+        .evict_last(InferenceExecutionCancellationHandle::running())
+        .await
+        .is_err());
+    assert_eq!(before, state(&f.registry));
+    assert!(f.gateway.is_ready().await);
+    assert!(f
+        .registry
+        .release_reservation(f.task.reservation_id)
+        .is_err());
+    f.gateway.stop().await.unwrap();
+    let f = fixture().await;
+    let receipt = last_receipt(&f).await;
+    f.gateway
+        .execute_selected_embedding_with_cancellation(
+            f.request.clone(),
+            f.target.clone(),
+            f.decision.clone(),
+            InferenceExecutionCancellationHandle::running(),
+        )
+        .await
+        .unwrap();
+    let before = state(&f.registry);
+    assert!(receipt
+        .evict_last(InferenceExecutionCancellationHandle::running())
+        .await
+        .is_err());
+    assert_eq!(before, state(&f.registry));
+    assert!(f.gateway.is_ready().await);
+    f.gateway.stop().await.unwrap();
+    let f = fixture().await;
+    let receipt = last_receipt(&f).await;
+    let flag = Arc::new(AtomicBool::new(true));
+    let before = state(&f.registry);
+    assert!(receipt
+        .evict_last(InferenceExecutionCancellationHandle::with_signal(Arc::new(
+            CancelSignal(flag)
+        )))
+        .await
+        .is_err());
+    assert_eq!(before, state(&f.registry));
+    assert!(f.gateway.is_ready().await);
+    f.gateway.stop().await.unwrap();
+}
+async fn controlled_eviction(phase: &'static str, abandon: bool, stale_owner: bool) {
+    let f = fixture().await;
+    let receipt = last_receipt(&f).await;
+    let started = Arc::new(tokio::sync::Notify::new());
+    let gate = Arc::new((std::sync::Mutex::new(false), std::sync::Condvar::new()));
+    let hook_started = started.clone();
+    let hook_gate = gate.clone();
+    *f.gateway
+        .candle_cpu_calibration
+        .as_ref()
+        .unwrap()
+        .attempt_hook
+        .lock()
+        .unwrap() = Some(Arc::new(move |current| {
+        if current == phase {
+            hook_started.notify_one();
+            let (lock, wake) = &*hook_gate;
+            let mut open = lock.lock().unwrap();
+            while !*open {
+                open = wake.wait(open).unwrap();
+            }
+        }
+    }));
+    let flag = Arc::new(AtomicBool::new(false));
+    let host =
+        InferenceExecutionCancellationHandle::with_signal(Arc::new(CancelSignal(flag.clone())));
+    let mut task = tokio::spawn(async move { receipt.evict_last(host).await });
+    tokio::time::timeout(Duration::from_secs(10), started.notified())
+        .await
+        .unwrap();
+    let pending = state(&f.registry);
+    assert_eq!(pending.1, vec![f.task.clone()]);
+    assert!(pending.0[0].model_resource_residency.is_some());
+    assert_eq!(
+        pending.0[0].status,
+        pantograph_runtime_registry::RuntimeRegistryStatus::Stopping
+    );
+    assert!(f.gateway.backend.try_read().is_err());
+    assert!(f.registry.acquire_reservation(competing_request()).is_err());
+    assert!(f
+        .registry
+        .release_reservation(f.task.reservation_id)
+        .is_err());
+    if stale_owner {
+        f.gateway
+            .candle_cpu_calibration
+            .as_ref()
+            .unwrap()
+            .invalidate();
+    }
+    if abandon {
+        task.abort();
+    } else if !stale_owner {
+        flag.store(true, Ordering::Release);
+    }
+    if abandon {
+        assert!((&mut task).await.unwrap_err().is_cancelled());
+    }
+    let (lock, wake) = &*gate;
+    *lock.lock().unwrap() = true;
+    wake.notify_all();
+    if !abandon {
+        let result = tokio::time::timeout(Duration::from_secs(10), task)
+            .await
+            .unwrap()
+            .unwrap();
+        if phase == "eviction_before_stop" {
+            assert!(result.is_err());
+        } else {
+            assert_eq!(result.unwrap().decision, RuntimeRetentionDecision::Evict);
+        }
+    }
+    let backend = tokio::time::timeout(Duration::from_secs(10), f.gateway.backend.write())
+        .await
+        .unwrap();
+    if phase == "eviction_before_stop" {
+        assert!(backend.is_ready());
+        assert_eq!(pending, state(&f.registry));
+    } else {
+        assert!(!backend.is_ready());
+        let stopped = state(&f.registry);
+        assert!(stopped.1.is_empty());
+        assert!(stopped.0[0].model_resource_residency.is_none());
+    }
+    drop(backend);
+    *f.gateway
+        .candle_cpu_calibration
+        .as_ref()
+        .unwrap()
+        .attempt_hook
+        .lock()
+        .unwrap() = None;
+    if phase == "eviction_before_stop" {
+        assert!(f.registry.acquire_reservation(competing_request()).is_err());
+        f.gateway.stop().await.unwrap();
+        assert_eq!(pending, state(&f.registry));
+    }
+}
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn actual_eviction_supervision_survives_cancel_and_collector_loss_at_both_stop_boundaries() {
+    for phase in ["eviction_before_stop", "eviction_after_stop"] {
+        for abandon in [false, true] {
+            controlled_eviction(phase, abandon, false).await;
+        }
+    }
+}
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn eviction_supervision_failure_leaves_accounting_and_runtime_fence() {
+    let f = fixture().await;
+    let receipt = last_receipt(&f).await;
+    *f.gateway
+        .candle_cpu_calibration
+        .as_ref()
+        .unwrap()
+        .attempt_hook
+        .lock()
+        .unwrap() = Some(Arc::new(|phase| {
+        if phase == "eviction_before_stop" {
+            panic!("controlled supervision fault before physical stop");
+        }
+    }));
+    assert!(receipt
+        .evict_last(InferenceExecutionCancellationHandle::running())
+        .await
+        .is_err());
+    assert!(f.gateway.is_ready().await);
+    assert_eq!(state(&f.registry).1, vec![f.task.clone()]);
+    assert!(state(&f.registry).0[0].model_resource_residency.is_some());
+    assert!(f.registry.acquire_reservation(competing_request()).is_err());
+    assert!(f
+        .registry
+        .release_reservation(f.task.reservation_id)
+        .is_err());
+    *f.gateway
+        .candle_cpu_calibration
+        .as_ref()
+        .unwrap()
+        .attempt_hook
+        .lock()
+        .unwrap() = None;
+    f.gateway.stop().await.unwrap();
+    assert_eq!(state(&f.registry).1, vec![f.task.clone()]); // Ordinary teardown proves no ticket recovery.
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn actual_eviction_rechecks_private_owner_immediately_before_stop() {
+    controlled_eviction("eviction_before_stop", false, true).await;
+}
+#[tokio::test]
+async fn actual_stopped_owner_with_failed_ack_remains_charged_and_fenced() {
+    let f = fixture().await;
+    let receipt = last_receipt(&f).await;
+    f.gateway
+        .resident_observation_sequence
+        .store(u64::MAX, Ordering::Release);
+    assert!(receipt
+        .evict_last(InferenceExecutionCancellationHandle::running())
+        .await
+        .is_err());
+    assert!(!f.gateway.is_ready().await);
+    let pending = state(&f.registry);
+    assert_eq!(pending.1, vec![f.task.clone()]);
+    assert!(pending.0[0].model_resource_residency.is_some());
+    assert_eq!(
+        pending.0[0].status,
+        pantograph_runtime_registry::RuntimeRegistryStatus::Stopping
+    );
+    assert!(f.registry.acquire_reservation(competing_request()).is_err());
+    assert!(f
+        .registry
+        .release_reservation(f.task.reservation_id)
+        .is_err());
+}

@@ -13,7 +13,7 @@ pub struct RuntimeReservationExecutionCustody {
     pub(crate) registry: Arc<RuntimeRegistry>,
     pub(crate) lease: RuntimeReservationLease,
     pub(crate) token: u64,
-    started: bool,
+    pub(crate) started: bool,
 }
 impl RuntimeReservationExecutionCustody {
     /// Trusted held producer boundary, immediately before starting physical work.

@@ -10,6 +10,9 @@ use tokio::sync::OwnedRwLockWriteGuard;
 
 type BackendGuard = OwnedRwLockWriteGuard<Box<dyn InferenceBackend>>;
 
+#[path = "gateway_cpu_last_lease_eviction.rs"]
+mod last_lease_eviction;
+
 /// Caller-owned tags. Native request/lease fields are checked exactly; the
 /// native layer cannot independently certify run/node/attempt/candidate custody.
 pub struct CandleCpuWarmAttemptIdentity<'a> {
