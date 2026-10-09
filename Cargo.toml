@@ -112,3 +112,5 @@ rusqlite = { version = "0.32.1", features = ["bundled"] }
 # Model management
 pumas-library = { git = "https://github.com/MrScripty/Pumas-Library.git", rev = "3d977f11be98eb9bce5be199e05b5ed1846043ca" }
 pumas-app-manager = { git = "https://github.com/MrScripty/Pumas-Library.git", rev = "3d977f11be98eb9bce5be199e05b5ed1846043ca", default-features = false }
+# Same owner package, without full runtime features for byte-only consumers.
+pumas-byte-custody = { package = "pumas-library", git = "https://github.com/MrScripty/Pumas-Library.git", rev = "3d977f11be98eb9bce5be199e05b5ed1846043ca", default-features = false }

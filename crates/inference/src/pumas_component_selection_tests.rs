@@ -4,7 +4,7 @@ use super::*;
 use crate::python_startup_broker::PythonStartupPhase;
 use crate::{CapabilityAvailabilityId, RuntimeVariantId};
 use pumas_app_manager::VersionManager;
-use pumas_library::{
+use pumas_byte_custody::{
     metadata::{InstalledVersionMetadata, MetadataManager},
     AppId,
 };
@@ -415,4 +415,36 @@ async fn component_declared_environment_is_not_owner_fact_and_never_opens_start(
         drop(token);
         assert_eq!(broker.phase().unwrap(), PythonStartupPhase::Unclaimed);
     }
+}
+
+#[tokio::test]
+async fn component_inert_owner_bytes_never_authenticate_reviewed_provider() {
+    let fixture = Fixture::new().await;
+    let selection = fixture.selection().await;
+    selection.validate().unwrap();
+    let value = request(&selection);
+    let depot = selection.interpreter_depot_manifest_sha256().to_owned();
+    let exact_source = selection.retained_source().clone();
+    let weak = Arc::downgrade(&exact_source);
+    let broker = Arc::new(PythonStartupBroker::default());
+    let token = broker
+        .reserve_component_selection(&value, &depot, selection)
+        .unwrap();
+    assert_eq!(
+        token.validate_reviewed_provider(),
+        Err(PumasComponentStartRefusal::ProviderContentMismatch)
+    );
+    assert!(Arc::ptr_eq(
+        token.selection().retained_source(),
+        &exact_source
+    ));
+    assert_eq!(broker.phase().unwrap(), PythonStartupPhase::ManagedReserved);
+    assert_eq!(
+        token.closed_start_refusal(),
+        PumasComponentStartRefusal::AssembledUnqualified
+    );
+    drop(exact_source);
+    drop(token);
+    assert!(weak.upgrade().is_none());
+    assert_eq!(broker.phase().unwrap(), PythonStartupPhase::Unclaimed);
 }

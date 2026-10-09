@@ -45,13 +45,19 @@ The actual global legacy fence is composed at `InferenceBackend::start` before
 drain/start effects, and at generic worker init and shutdown helpers before
 `Python::with_gil`. Its sticky claim preserves repeated ordinary legacy startup.
 Shutdown can initialize the inherited worker, so that helper is also fenced.
+Generic loaded-model/KV helpers, public Transformers loading, unloading, text
+producers and KV truncation now claim the same broker before their first Python
+entry. Text producers claim on their registered effect thread after cancellation
+checks; KV truncation claims before temporary-file effects. Refusal propagates
+through each existing error contract. Claims remain sticky for ordinary legacy
+work; they do not certify actual interpreter history.
 Managed `start_managed_runtime` uses the same broker for a closed preflight and
 reads only the existing Rust worker flag. No Python query or initialization is
 performed. The metadata-only managed entry does not expose global reservations
 or accept a dummy keepalive as a real owner selection.
 
 This is incomplete PyO3-entry coverage. Separate audio/rerank/inspection paths,
-CUDA inventory, other `with_gil` calls and external interpreters may have prior
+ CUDA inventory, other `with_gil` calls and external interpreters may have prior
 unregistered history; their working bodies are untouched. A successful legacy
 claim or empty broker is not evidence that CPython was uninitialized. Positive
 startup remains refused until all relevant first-entry paths and actual linked
@@ -107,8 +113,8 @@ revision/manifest/depot identities to the actual retained source. The depot
 digest uses Pumas's domain-separated sorted Interpreter byte manifest. There is
 no Pumas environment identity: Pantograph's `environment_id` remains its own
 configuration declaration. It is not synthesized from an owner tag or digest.
-Owner issuance and byte matching do not authenticate the consumer's declared
-provider wheel, extension or build-source constants against component contents.
+Owner issuance alone does not authenticate the consumer's declared provider
+wheel, extension or build-source constants against component contents.
 No runnable interpreter or initialized/imported provider is inferred from them.
 
 The method must preserve650b behavior: no lifetime global versions lock;
@@ -133,13 +139,36 @@ exposure, or parks the actual source Arc in the existing process pin mechanism.
 Pinning returns no execution permission.
 
 `start_managed_component_runtime_blocking` is a synchronous typed PyTorch
-preflight. It reserves validated selected-byte custody, refuses the fixed
+preflight. It reserves validated selected-byte custody, checks retained provider
+association outside the mutex, refuses the fixed
 `assembled_unqualified` disposition, and releases its pre-exposure reservation.
 Even a future different disposition refuses missing startup evidence. It creates
 no async/detached job, enters no GIL and changes no worker/configuration state.
 An async caller must own and drain its blocking validation effect; this adapter
 does not install a new supervisor or provide bounded OS-read latency. The
 metadata-only managed entry remains closed and existing legacy behavior remains.
+
+The static provider check reads only the genuine retained
+`Sidecar/component-manifest.json`, capped at the owner's 64 MiB manifest limit.
+Strict published component/acquisition schemas reject unknown or duplicate wire
+fields. Wheel identity, size/digest declarations, immutable build-binding source
+revision, Python/platform/tag and provider names must match the reviewed inputs.
+Archive and final dependency paths are exact, case-fold duplicates refuse, and
+every archive member must survive unchanged in the actual retained final closure.
+Base dependencies outside the component remain allowed. The check reopens the
+required extension and standalone build-binding through retained descriptors,
+verifying their exact reviewed digests (and native size) without importing them.
+Alternative tokenizers distributions/native members refuse.
+
+This establishes required native/build-member byte association plus consistent
+declared closure. The retained wheel itself is absent: its SHA is input metadata,
+and other wrapper/RECORD/METADATA digests are owner-manifest declarations rather
+than an independently frozen reviewed wheel-member manifest. Full reviewed wheel
+association, build-history authenticity and positive acceptance remain held
+input gates. The blocking check revalidates bytes, holds the actual selection,
+creates no detached job and returns no startup permit. Generic byte reservations
+remain useful independently; only the managed execution preflight requires this
+additional check before its unconditional refusal.
 
 Controlled selection tests seed isolated inert assembly/depot metadata and
 sidecar bytes, then invoke the actual public VersionManager selector. They do

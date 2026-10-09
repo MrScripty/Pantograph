@@ -28,13 +28,15 @@ backend-candle = [     # In-process CPU F32 BERT embeddings
     "dep:tower-http",
 ]
 backend-pytorch = ["dep:pyo3", "dep:tokio-stream", "pumas-component-selection"]  # In-process PyTorch via PyO3 (dLLM/Sherry/HF)
-pumas-component-selection = ["dep:pumas-app-manager"] # Byte custody/refusal only; no Python entry
+pumas-component-selection = ["dep:pumas-app-manager", "dep:pumas-byte-custody", "dep:sha2"] # Byte custody/refusal only; no Python entry
 
 # Optional: standard process spawner for non-Tauri use
 std-process = []
 
 [dependencies]
 pumas-app-manager = { workspace = true, optional = true }
+pumas-byte-custody = { workspace = true, optional = true }
+sha2 = { version = "0.10", optional = true }
 base64 = "=0.22.1"
 pantograph-runtime-registry = { path = "../pantograph-runtime-registry" }
 pantograph-managed-dependencies = { path = "../pantograph-managed-dependencies" }
@@ -78,7 +80,8 @@ zip.workspace = true
 once_cell.workspace = true
 
 [dev-dependencies]
-pumas-library.workspace = true
+# Preserve the existing full owner fixture graph; production remains byte-only.
+pumas-byte-custody = { workspace = true, features = ["default"] }
 sha2 = "0.10"
 pantograph-runtime-host-contracts = { path = "../pantograph-runtime-host-contracts" }
 env_logger.workspace = true

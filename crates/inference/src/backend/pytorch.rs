@@ -917,6 +917,9 @@ pub async fn active_loaded_model_info() -> Result<LoadedModelInfo, BackendError>
         ))
     })?;
     tokio::task::spawn_blocking(move || {
+        crate::python_startup_broker::process_startup_broker()
+            .claim_legacy()
+            .map_err(|error| BackendError::ManagedBinary(error.to_string()))?;
         Python::with_gil(|py| -> Result<LoadedModelInfo, BackendError> {
             let worker = pytorch_worker::worker_module(py).map_err(|e| {
                 kv_worker_failure_from_message(
@@ -960,6 +963,9 @@ pub async fn save_live_kv_snapshot(path: &Path) -> Result<PyTorchLiveKvInfo, Bac
         ))
     })?;
     tokio::task::spawn_blocking(move || {
+        crate::python_startup_broker::process_startup_broker()
+            .claim_legacy()
+            .map_err(|error| BackendError::ManagedBinary(error.to_string()))?;
         Python::with_gil(|py| -> Result<PyTorchLiveKvInfo, BackendError> {
             let worker = pytorch_worker::worker_module(py).map_err(|e| {
                 kv_worker_failure_from_message(
@@ -1004,6 +1010,9 @@ pub async fn restore_live_kv_snapshot(path: &Path) -> Result<PyTorchLiveKvInfo, 
         ))
     })?;
     tokio::task::spawn_blocking(move || {
+        crate::python_startup_broker::process_startup_broker()
+            .claim_legacy()
+            .map_err(|error| BackendError::ManagedBinary(error.to_string()))?;
         Python::with_gil(|py| -> Result<PyTorchLiveKvInfo, BackendError> {
             let worker = pytorch_worker::worker_module(py).map_err(|e| {
                 kv_worker_failure_from_message(
@@ -1046,6 +1055,9 @@ pub async fn clear_live_kv_snapshot() -> Result<(), BackendError> {
         ))
     })?;
     tokio::task::spawn_blocking(move || {
+        crate::python_startup_broker::process_startup_broker()
+            .claim_legacy()
+            .map_err(|error| BackendError::ManagedBinary(error.to_string()))?;
         Python::with_gil(|py| -> Result<(), BackendError> {
             let worker = pytorch_worker::worker_module(py).map_err(|e| {
                 kv_worker_failure_from_message(
@@ -1126,7 +1138,10 @@ impl PyTorchBackend {
                 selection,
             )
             .map_err(|error| BackendError::ManagedBinary(error.to_string()))?;
-        // Valid byte association cannot qualify an interpreter or provider.
+        reservation
+            .validate_reviewed_provider()
+            .map_err(|error| BackendError::ManagedBinary(error.to_string()))?;
+        // Static provider content cannot qualify an interpreter or imports.
         // Pre-exposure refusal drops this reservation and releases only its hold.
         Err(BackendError::ManagedBinary(
             reservation.closed_start_refusal().to_string(),
@@ -1631,6 +1646,9 @@ impl PyTorchBackend {
         // into a later uninstrumented load.
         let timing_requested = std::mem::take(&mut self.text_timing_enabled);
         Self::validate_transformers_load_envelope(&envelope)?;
+        crate::python_startup_broker::process_startup_broker()
+            .claim_legacy()
+            .map_err(|error| BackendError::ManagedBinary(error.to_string()))?;
         self.stop_selected_audio_worker(false).await?;
         self.load_transformers_envelope_in_worker(envelope, None, timing_requested)
             .await
@@ -2363,6 +2381,9 @@ impl PyTorchBackend {
         request_id: &str,
         envelope_json: String,
     ) -> Result<(), BackendError> {
+        crate::python_startup_broker::process_startup_broker()
+            .claim_legacy()
+            .map_err(|error| BackendError::ManagedBinary(error.to_string()))?;
         Python::with_gil(|py| -> Result<(), BackendError> {
             let worker = pytorch_worker::worker_module(py).map_err(|e| {
                 Self::unload_worker_failure_from_message(
@@ -2896,6 +2917,9 @@ impl PyTorchBackend {
 
         let mut stream = self.text_jobs.spawn(move |mut producer| {
             producer.check()?;
+            crate::python_startup_broker::process_startup_broker()
+                .claim_legacy()
+                .map_err(|error| BackendError::ManagedBinary(error.to_string()))?;
             let text = Python::with_gil(|py| -> Result<String, BackendError> {
                 let worker = pytorch_worker::worker_module(py).map_err(|e| {
                     Self::generate_text_worker_failure_from_message(
@@ -3006,6 +3030,9 @@ impl PyTorchBackend {
 
         let stream = self.text_jobs.spawn(move |mut producer| {
             producer.check()?;
+            crate::python_startup_broker::process_startup_broker()
+                .claim_legacy()
+                .map_err(|error| BackendError::ManagedBinary(error.to_string()))?;
             Python::with_gil(|py| -> Result<(), BackendError> {
                 let failure = |error: PyErr| {
                     Self::stream_worker_failure_from_message(&request_id, error.to_string())
@@ -3536,6 +3563,9 @@ impl InferenceBackend for PyTorchBackend {
         token_position: usize,
         _active_config: Option<&BackendConfig>,
     ) -> Result<Vec<u8>, BackendError> {
+        crate::python_startup_broker::process_startup_broker()
+            .claim_legacy()
+            .map_err(|error| BackendError::ManagedBinary(error.to_string()))?;
         let request_id = format!("pytorch-kv-truncate-{}", Uuid::new_v4().simple());
         let temp_path = std::env::temp_dir().join(format!(
             "pantograph-pytorch-kv-truncate-{}.bin",

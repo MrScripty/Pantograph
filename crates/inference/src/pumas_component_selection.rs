@@ -10,11 +10,15 @@ use crate::python_startup_broker::{
 use pumas_app_manager::version_manager::TorchComponentSelection;
 use std::{fmt, sync::Arc};
 
+#[path = "pumas_provider_association.rs"]
+mod provider_association;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PumasComponentStartRefusal {
     InvalidDeclaration,
     SelectionMismatch,
     InvalidRetainedBytes,
+    ProviderContentMismatch,
     Reservation(PythonStartupReservationRefusal),
     AssembledUnqualified,
     StartupEvidenceUnavailable,
@@ -26,6 +30,7 @@ impl fmt::Display for PumasComponentStartRefusal {
             Self::InvalidDeclaration => f.write_str("managed component declaration is invalid"),
             Self::SelectionMismatch => f.write_str("Pumas selected revision/manifest/depot mismatch"),
             Self::InvalidRetainedBytes => f.write_str("Pumas retained byte association is invalid"),
+            Self::ProviderContentMismatch => f.write_str("retained component does not match reviewed provider content"),
             Self::Reservation(error) => error.fmt(f),
             Self::AssembledUnqualified => f.write_str(
                 "Pumas component is assembled_unqualified: no runnable interpreter or initialized import provenance",
@@ -49,6 +54,14 @@ pub struct PumasComponentReservation {
 impl PumasComponentReservation {
     pub fn selection(&self) -> &TorchComponentSelection {
         &self.selection
+    }
+
+    /// Static content association only. Keep the genuine owner on this blocking
+    /// stack; no broker mutex or native execution is involved. This cannot
+    /// qualify a runtime, source build history, or initialized imports.
+    pub fn validate_reviewed_provider(&self) -> Result<(), PumasComponentStartRefusal> {
+        provider_association::validate(&self.selection)
+            .map_err(|_| PumasComponentStartRefusal::ProviderContentMismatch)
     }
 
     /// No disposition, including any future qualified value, authorizes startup
