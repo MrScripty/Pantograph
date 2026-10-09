@@ -22,6 +22,31 @@ limited to four tasks, two placements per task, 64 branch expansions, 512
 completion events and 131,072 work units. These limits describe computation,
 not a demonstrated production dispatch-latency guarantee.
 
+`estimate_scheduler_empirical_service_duration` adds a pure, opt-in timing
+primitive over at most 128 distinct individual successful attempts. It sums
+paired setup, transfer, execution, cleanup, retention and reload durations
+within each attempt before taking an exact nearest-rank empirical quantile.
+Running elapsed time conditions on strictly longer total service observations;
+the quantile is taken over their remaining durations. Both original and surviving
+populations require the declared minimum sample support. Missing stages, failed
+or censored attempts, duplicate IDs, stale/future records and changed context or
+source refuse the entire estimate. The convention identifies disjoint serialized
+service through acknowledged drain, with elapsed from that same origin. It
+does not describe overlapping phases or resident-cache lifetime.
+
+The helper requires exact host, runtime-instance, artifact, workload, resource,
+residency and convention identities from a trusted producer. Owner generation
+and clock-domain qualification remain the producer's responsibility; matching
+labels do not authenticate measurements. Synthetic observations require explicit opt-in
+and remain labelled. This is a success-conditioned empirical description, not
+an unconditional survival predictor, calibrated confidence bound or failure-risk
+model. Producers must retain failures/censoring separately. Original and tail
+support, quantile rank and deterministic work counters are returned. All identity
+comparisons, order comparisons and adjacent swaps are metered within 32,768 work
+units; the hard population guard precedes row inspection. An incomplete estimate
+requires existing safe fallback. No default selector, timing source, store,
+native phase observer, lease or runtime/session behavior uses this helper yet.
+
 Embedded completion timing is a trusted in-process opt-in through
 `EmbeddedCompletionTimingOptIn` and hosted startup's `with_completion_timing`.
 It does not accept timing authority from workflow/session JSON. The separate

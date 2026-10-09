@@ -14,6 +14,7 @@ mod dispatch;
 mod dispatch_selection;
 mod dispatch_selection_policy;
 mod dispatch_selection_validation;
+mod empirical_timing;
 mod error;
 mod handoff;
 mod intent;
@@ -84,6 +85,16 @@ pub use completion_ranking::{
     SchedulerCompletionRankingDiagnostic, SchedulerCompletionRankingPolicy,
     SchedulerCompletionRankingResult, SchedulerCompletionRefusalReason, SchedulerCompletionSample,
     SCHEDULER_COMPLETION_MAX_CANDIDATES,
+};
+
+pub use empirical_timing::{
+    estimate_scheduler_empirical_service_duration, SchedulerEmpiricalQuantile,
+    SchedulerEmpiricalServiceBudget, SchedulerEmpiricalServiceCondition,
+    SchedulerEmpiricalServiceEstimate, SchedulerEmpiricalServiceIncomplete,
+    SchedulerEmpiricalServiceObservation, SchedulerEmpiricalServiceOutcome,
+    SchedulerEmpiricalServiceResult, SchedulerEmpiricalServiceWork,
+    SCHEDULER_EMPIRICAL_MAX_OBSERVATIONS, SCHEDULER_EMPIRICAL_MAX_WORK,
+    SCHEDULER_EMPIRICAL_SERVICE_CONVENTION,
 };
 
 pub use two_completion::{
