@@ -1,0 +1,152 @@
+{
+  "contract": "pantograph.pumas.local-python-wheel-component.v1",
+  "status": "proposal_pending_pumas_owner_acknowledgment",
+  "consumer_source": {
+    "repository": "https://github.com/MrScripty/Pantograph",
+    "commit": "f26721b8d6dcda8fc2d3f62c6d81d374e9ea9257",
+    "tree": "4ea7f55f50102f6cf5c5158072c5c5f5474d12b9",
+    "provider_bundle": "crates/inference/torch/provider/tokenizers-0.21.4"
+  },
+  "owner_source_inspected": {
+    "repository": "https://github.com/MrScripty/Pumas-Library",
+    "revision": "26a84e323cae566a46a8f76bef48fa1010aed48b"
+  },
+  "artifact": {
+    "kind": "python_wheel",
+    "filename": "tokenizers-0.21.4+pantograph.snapshot1-cp39-abi3-linux_x86_64.whl",
+    "size_bytes": 24366281,
+    "sha256": "678b155145bb06c271ad6d8eb2df95a8a8173155323fafd4b102e50349940b95",
+    "distribution": "tokenizers",
+    "version": "0.21.4+pantograph.snapshot1",
+    "wheel_tag": "cp39-abi3-linux_x86_64"
+  },
+  "installed_extension": {
+    "relative_path": "tokenizers/tokenizers.abi3.so",
+    "size_bytes": 24156176,
+    "sha256": "5a7eacfad202bcacf122716f5a45e9796d098c8e65f86a56536efddceb573423"
+  },
+  "source": {
+    "upstream_revision": "e892882fd4608b468dcf9dc33ea95283882b8e6d",
+    "prepared_inputs_sha256": {
+      "tokenizers/src/models/wordlevel/mod.rs": "48a837669fa1649e4f40ffe980d49922921c6d9bd34726d5bf29ff9e759c8e50",
+      "tokenizers/src/tokenizer/added_vocabulary.rs": "9df9ec40c085855e490d1aa7c577ef8f9956f61d8bc84b742e3102c93d38dc18",
+      "bindings/python/src/lib.rs": "163924c4a1ccaf3a9de01aeeead1e39813eab8436c4d09acdaf37fe208ff080e",
+      "bindings/python/src/tokenizer.rs": "14dab802df8de42ab7c7151b8bb90b6141f63c43f49038bf2b87dabee22f88f3",
+      "bindings/python/src/pantograph_snapshot.rs": "46be7b5d6b58cda81a09dc02a45dfd54e3fdefd17bb9fe587ef87d0aa7e05d99",
+      "bindings/python/src/snapshot_units.rs": "227aa29b7d69dcd3d924f819e1b27dcef5acf89663e7aab127affb2abfbde97d",
+      "bindings/python/src/pantograph_snapshot/settings_snapshot.rs": "cab91e5fcaf9ed3b2b2b0884a2b14520e033763e8372cd25a3a78551aa872f77",
+      "bindings/python/build.rs": "d9d05df1d18f74fa3cfc8e3ca79ba0f62af39840aa869731272d87c91fc35a85",
+      "bindings/python/Cargo.lock": "120c0e8d5b5362bf80e3911372354402ab491b31b3c900ded6a67c539e35cbea"
+    },
+    "build_source_binding_sha256": "b2a4fc2a43b6ae5631b2f5ec45deb5394cd2059e456f97213a87d1bc5d1f703a",
+    "consumer_inputs_sha256": {
+      "crates/inference/src/backend/pytorch.rs": "2632c21cd932fdd799bad991dc945331afbc24c3337557f01f024fbb11b467d0",
+      "crates/inference/src/gateway.rs": "b282a7196a1066c7b7234426043aa510f4c97871da083a2acabd82c3e6393c4e",
+      "crates/inference/src/gateway_tests.rs": "29ccfe9224ba588d85456541473ce6f11f7331df9d5b673bc0d48bd6952318c0",
+      "crates/inference/src/selected_text_execution.rs": "76c918d95d506193b8e0b77020f2ce519ea9c3b6230e248b71ce766bf79de899",
+      "crates/inference/torch/provider/tokenizers-0.21.4/README.md": "223d187b13a1604f266105649260deccfe1915220728c039a68d5756ad7a807b",
+      "crates/inference/torch/provider/tokenizers-0.21.4/package.py": "6eec7859e2237594633360bd6d70122c9a6ff881defaf3d7438e71444ddbc93c",
+      "crates/inference/torch/provider/tokenizers-0.21.4/pantograph_snapshot.rs": "46be7b5d6b58cda81a09dc02a45dfd54e3fdefd17bb9fe587ef87d0aa7e05d99",
+      "crates/inference/torch/provider/tokenizers-0.21.4/prepare.py": "8bc8c0fce653a80d07abd0bbccc0ac0af15bf5a9c0f21005821cafca211c54f9",
+      "crates/inference/torch/provider/tokenizers-0.21.4/provider.patch": "8e249778b40c9a2a06ee381c4161c3e97d59dd2a44bf08120608c71367f2e9c9",
+      "crates/inference/torch/provider/tokenizers-0.21.4/settings_snapshot.rs": "cab91e5fcaf9ed3b2b2b0884a2b14520e033763e8372cd25a3a78551aa872f77",
+      "crates/inference/torch/service_timing_owner.py": "a6294e12296d297fc176f8f5291b6c7a8f911ee473ad9590a5c1159eac03f988",
+      "crates/inference/torch/tests/test_bounded_settings_snapshot_oracle.py": "e155ba91a9dd58a811aaef07f003739836aa6f0d5bc65dcbf8cbe3ed4e0e6860",
+      "crates/inference/torch/tests/test_bounded_tokenizer_snapshot_integration.py": "3e8101da959e2f12c2f9500370c6b32958ff086df052109a612e85dce5b56f23",
+      "crates/inference/torch/tests/test_bounded_tokenizer_snapshot_oracle.py": "af138bc98b36bf90c3be6ce1eee72b8af729c624fb4f261ef1f763dd5b55aaa9",
+      "docs/scheduler-v2-development.md": "848160c34c122b9146e87aa9c95eec28c5a3330cda9d4303a00ee33daaccaf1d"
+    }
+  },
+  "qualification": {
+    "scope": "individual WordLevel and primitive-settings logical work/copy components; aggregate Unknown/refused",
+    "profiles": [
+      "pantograph-tokenizers-0.21.4-wordlevel-snapshot.v1",
+      "pantograph-cpython-3.12.3-tokenizer-settings.v1"
+    ],
+    "compiler": "rustc1.92.0 ded5c06cf21d2b93bffd5d884aa6e96934ee4234",
+    "rust_target": "x86_64-unknown-linux-gnu",
+    "python_implementation": "CPython",
+    "python_version": "3.12.3",
+    "gil": "conventional continuously held during component calls",
+    "wheel_tag_authority": "tag is not a portability or source-qualification certificate",
+    "opaque_native_settings": "refused",
+    "runtime_interpreter_inputs": {
+      "executable": {
+        "filename": "python3.12",
+        "size_bytes": 4206512,
+        "sha256": "4933b6c4a8521fb3aa93856701e30b3ac2626d3c47ceb22965a3b0b422e85b44",
+        "scope": "local qualification input; not a Pumas registration"
+      },
+      "library": {
+        "filename": "libpython3.12.so.1.0",
+        "size_bytes": 212868080,
+        "sha256": "baab5fe9e2e811ff6e9a5be18655c1eee92bf6b3b56011711f78aed544c2f139",
+        "scope": "local qualification input; not a Pumas registration"
+      }
+    },
+    "elf_requirements": {
+      "dt_needed": [
+        "libstdc++.so.6",
+        "libgcc_s.so.1",
+        "libm.so.6",
+        "libc.so.6",
+        "ld-linux-x86-64.so.2"
+      ],
+      "version_references_include": [
+        "GLIBC_2.34",
+        "GLIBCXX_3.4.29",
+        "CXXABI_1.3.8"
+      ],
+      "note": "static ELF inspection; no loading or manylinux certification"
+    }
+  },
+  "owner_input_required": {
+    "existing_custody": "TorchPendingStage + TorchVersionsLock + validated staged file manifest + child cleanup lease + VersionManager publication",
+    "destination": "distinct immutable runtime bundle revision; never in-place repair",
+    "data_authority": "a proposed artifact manifest/request is not an execution lease",
+    "dependency_resolution": "existing validated runtime lock and offline approved local-wheel input; no network resolver escape",
+    "returned_identity": [
+      "environment_id",
+      "runtime_revision",
+      "published_manifest_sha256",
+      "interpreter_build_fingerprint",
+      "installed_provider_extension_fingerprint"
+    ],
+    "returned_custody": "opaque owner execution lease that prevents removal/repair/replacement for the imported native-image process lifetime; interpreter/model stop does not release it",
+    "returned_import_proof": "owner-associated interpreter initialization and provider import registration preceding native import; mutable sys labels/current file hashes alone cannot establish it",
+    "interpreter_preflight": "current safe-Rust consumer performs no interpreter query/initialization; missing registered proof refuses",
+    "selected_base_runtime": {
+      "required": [
+        "registered_environment_id",
+        "opaque_revision",
+        "published_manifest_sha256"
+      ],
+      "status": "not selected by this handoff; owner rechecks under mutation/publication lock"
+    },
+    "derived_revision": "distinct owner-registered revision incorporating base/component/interpreter identities; upstream release tag remains separate, not sufficient identity; naming/storage/lease representation remain owner-owned pending acknowledgment"
+  },
+  "transitions": [
+    "proposed local bytes -> hash/size/source/ABI validated owner plan",
+    "owner-owned pending stage under existing version lock; all children attached to cleanup custody",
+    "verify installed RECORD and staged files match wheel and immutable runtime lock; no import needed to publish",
+    "publish/register distinct manifest atomically; partial stages never execute",
+    "acquire immutable process/interpreter-use lease before native initialization/import",
+    "Pantograph refuses uninitialized or legacy/unregistered interpreter; only genuine owner-associated registration can later enable managed start",
+    "model/worker stop drains existing producers but does not release imported-image custody; process exit closes native use"
+  ],
+  "rejection_and_rollback": [
+    "wrong/incomplete SHA/size/source/profile/ABI/RECORD, symlink/path escape/duplicate file/native image collision, mutable active bundle -> refuse before publication",
+    "missing offline dependency inputs -> refuse; never download/repair behind this local-component request",
+    "cancellation or caller loss keeps stage/version lock and child cleanup leases until actual child drain; quarantine only owner-owned partial stage",
+    "publication failure leaves previous active/default revision unchanged; remove pending bytes only after drain",
+    "missing/revoked or wrong-environment lease/registration, legacy worker, missing provider import custody or initialized interpreter mismatch -> refuse before lifecycle effects",
+    "post-native-import failure drains all jobs and clears executable readiness; retain bundle pin for process/mapped-image lifetime; no interpreter rebinding/finalize/uninstall"
+  ],
+  "remaining_gates": [
+    "Pumas local-component input within existing pending stage/version lock/hash-manifest/cleanup/publication custody; no in-place repair",
+    "Actual already-initialized in-process PyO3 interpreter/prefix/loaded-extension binding to managed runtime",
+    "Native AddedToken and other opaque Python settings remain refused",
+    "Wrapper access, configuration/tensors/build/CPU-domain collection and atomic aggregate qualification",
+    "Comparable timing coverage, realistic dispatch cost and simulator differential acceptance; actual archive bytes remain unavailable/unverified"
+  ]
+}

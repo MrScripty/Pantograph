@@ -50,6 +50,7 @@ pub(crate) mod llamacpp_sidecar_events;
 pub mod managed_binaries;
 pub mod managed_dependencies;
 pub mod managed_media_dependencies;
+pub mod managed_python_binding;
 mod managed_redistributables;
 pub mod managed_runtime;
 pub mod model_contracts;

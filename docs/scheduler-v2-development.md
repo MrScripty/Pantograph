@@ -257,6 +257,11 @@ publication lifecycle, plus bind the actual in-process PyO3 interpreter and load
 extension to that environment. Neither a managed venv install alone nor package
 presence is sufficient. No live runtime registration or replacement is done by
 the packaging helper; that owner/interpreter decision remains a rollout gate.
+The [concrete Pumas handoff](pumas-managed-tokenizer-handoff.md) supplies exact
+local wheel/source identities and the proposed immutable bundle/process-lifetime
+lease and prior import-registration boundary. The explicit managed PyTorch start
+entry currently refuses missing owner custody before lifecycle effects; it does
+not enable managed execution or change ordinary startup.
 
 The unchanged production/test sources have qualified native and non-native
 Rust suites, feature-light compilation, Clippy and independent executable

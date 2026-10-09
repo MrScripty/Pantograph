@@ -1089,6 +1089,28 @@ impl PyTorchBackend {
         }
     }
 
+    /// Managed counterpart to the existing backend startup lifecycle. This is
+    /// a closed entry until Pumas provides an immutable execution lease and
+    /// genuine prior interpreter/import registration. It changes no Python
+    /// globals, imports no module, initializes no interpreter, and drains or
+    /// mutates no existing worker on refusal. Ordinary startup remains unchanged.
+    pub async fn start_managed_runtime(
+        &mut self,
+        request: &crate::managed_python_binding::ManagedPythonRuntimeStartRequest,
+        _config: &BackendConfig,
+        _spawner: Arc<dyn ProcessSpawner>,
+    ) -> Result<BackendStartOutcome, BackendError> {
+        let refusal = request.start_refusal(|| {
+            crate::managed_python_binding::ManagedPythonStartObservation {
+                // Only existing Rust worker state is observed. PyO3 .23 has no
+                // safe no-initialization interpreter query; unknown interpreter
+                // custody refuses without FFI or Python::with_gil.
+                legacy_worker_initialized: pytorch_worker::legacy_worker_initialised(),
+            }
+        });
+        Err(BackendError::ManagedBinary(refusal.to_string()))
+    }
+
     /// Get static capabilities (for registry info before instantiation)
     pub fn static_capabilities() -> BackendCapabilities {
         BackendCapabilities {

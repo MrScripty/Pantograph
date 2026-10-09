@@ -38,6 +38,10 @@ pub(super) fn text_timing_implementation_digest(owner_source: &str) -> String {
 
 static WORKER_INITIALISED: AtomicBool = AtomicBool::new(false);
 
+pub(super) fn legacy_worker_initialised() -> bool {
+    WORKER_INITIALISED.load(Ordering::Acquire)
+}
+
 pub(super) fn ensure_worker_initialised(py: Python<'_>) -> PyResult<()> {
     if WORKER_INITIALISED.load(Ordering::Acquire) {
         return Ok(());
