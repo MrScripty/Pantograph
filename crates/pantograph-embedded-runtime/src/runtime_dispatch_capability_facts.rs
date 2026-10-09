@@ -20,11 +20,25 @@ impl RuntimeDispatchCapabilityFactsSource {
     }
 
     pub(crate) fn with_gateway(mut self, gateway: Arc<InferenceGateway>) -> Self {
+        crate::runtime_registry::register_scheduler_loadable_candle(&self.registry, &gateway);
+        crate::runtime_registry::register_backend_runtimes(
+            &self.registry,
+            &gateway.available_backends(),
+        );
         self.gateway = Some(gateway);
         self
     }
 
-    pub(crate) fn collect(&self) -> RuntimeDispatchCapabilityFactsOutcome {
+    pub(crate) async fn collect(&self) -> RuntimeDispatchCapabilityFactsOutcome {
+        let (backends, mode_info) = if let Some(gateway) = &self.gateway {
+            let mut backends = gateway.available_backends();
+            let current = gateway.current_backend_info().await;
+            backends.retain(|backend| backend.backend_key != current.backend_key);
+            backends.push(current);
+            (backends, Some(gateway.mode_info().await))
+        } else {
+            (Vec::new(), None)
+        };
         let snapshot = self.registry.snapshot();
         let owned_devices = self
             .gateway
@@ -43,7 +57,15 @@ impl RuntimeDispatchCapabilityFactsSource {
         let runtimes = snapshot
             .runtimes
             .into_iter()
-            .filter_map(|runtime| project_runtime(runtime, &owned_devices, &mut diagnostics))
+            .filter_map(|runtime| {
+                project_runtime(
+                    runtime,
+                    &backends,
+                    mode_info.as_ref(),
+                    &owned_devices,
+                    &mut diagnostics,
+                )
+            })
             .collect::<Vec<_>>();
         if runtimes.is_empty() {
             return RuntimeDispatchCapabilityFactsOutcome::Unavailable { diagnostics };
@@ -69,6 +91,8 @@ pub(crate) struct RuntimeDispatchCapabilityFactsProjection {
 pub(crate) struct RuntimeDispatchRuntimeCapabilityFacts {
     pub runtime_id: String,
     pub backend_keys: Vec<String>,
+    pub backend_capabilities: inference::BackendCapabilityFacts,
+    pub device_ids: Vec<inference::InferenceDeviceId>,
     pub runtime_family: String,
     pub runtime_residency_key: String,
     pub status: RuntimeRegistryStatus,
@@ -115,6 +139,8 @@ impl RuntimeDispatchCapabilityFactsOutcome {
 
 fn project_runtime(
     runtime: RuntimeRegistryRuntimeSnapshot,
+    backends: &[inference::BackendInfo],
+    mode_info: Option<&inference::ServerModeInfo>,
     owned_devices: &[RuntimeOwnedDeviceCandidate],
     diagnostics: &mut Vec<RuntimeDispatchCapabilityFactsDiagnostic>,
 ) -> Option<RuntimeDispatchRuntimeCapabilityFacts> {
@@ -151,9 +177,69 @@ fn project_runtime(
         })
         .cloned()
         .collect();
+    let backend = backends.iter().find(|backend| {
+        backend.available
+            && runtime
+                .backend_keys
+                .iter()
+                .any(|key| inference::backend::canonical_backend_key(key) == backend.backend_key)
+    });
+    let backend_capabilities = backend
+        .map(|backend| backend.capabilities.facts.clone())
+        .unwrap_or_default();
+    let mut device_ids = Vec::new();
+    for variant in backend_capabilities
+        .runtime_variants
+        .iter()
+        .filter(|variant| variant.available)
+    {
+        // CPU and MPS name singleton devices. Indexed device classes alone do
+        // not establish an inventory or authorize inventing e.g. cuda:0.
+        let singleton = match variant.device_class {
+            inference::InferenceDeviceClass::Cpu => Some("cpu"),
+            inference::InferenceDeviceClass::Mps => Some("mps"),
+            _ => None,
+        };
+        if let Some(device) = singleton {
+            device_ids.push(
+                inference::InferenceDeviceId::parse(device).expect("canonical singleton device ID"),
+            );
+        }
+    }
+    if let Some(mode) = mode_info.filter(|mode| {
+        backend.is_some_and(|backend| {
+            mode.backend_key.as_deref() == Some(backend.backend_key.as_str())
+        }) && mode.active_runtime.as_ref().is_some_and(|active| {
+            active.active
+                && active
+                    .runtime_id
+                    .as_deref()
+                    .map(pantograph_runtime_identity::canonical_runtime_id)
+                    .as_deref()
+                    == Some(runtime.runtime_id.as_str())
+                && active.runtime_instance_id.is_some()
+                && active.runtime_instance_id == runtime.runtime_instance_id
+        })
+    }) {
+        if let Some(device) = mode.active_resolved_device.as_ref().filter(|device| {
+            backend_capabilities.runtime_variants.iter().any(|variant| {
+                variant.available && device_matches_class(device.as_str(), variant.device_class)
+            })
+        }) {
+            device_ids.push(device.clone());
+        }
+    }
+    device_ids.sort();
+    device_ids.dedup();
+    let backend_keys = backend
+        .map(|backend| vec![backend.backend_key.clone()])
+        .unwrap_or(runtime.backend_keys);
+
     Some(RuntimeDispatchRuntimeCapabilityFacts {
         runtime_id: runtime.runtime_id,
-        backend_keys: runtime.backend_keys,
+        backend_keys,
+        backend_capabilities,
+        device_ids,
         runtime_family,
         runtime_residency_key,
         status: runtime.status,
@@ -167,6 +253,23 @@ fn project_runtime(
         has_admission_budget: runtime.admission_budget.is_some(),
         automatic_device_candidates,
     })
+}
+
+pub(crate) fn device_matches_class(
+    device_id: &str,
+    class: inference::InferenceDeviceClass,
+) -> bool {
+    match class {
+        inference::InferenceDeviceClass::Cpu => device_id == "cpu",
+        inference::InferenceDeviceClass::Mps => device_id == "mps",
+        inference::InferenceDeviceClass::Cuda => device_id
+            .strip_prefix("cuda:")
+            .is_some_and(|index| index.parse::<u32>().is_ok()),
+        inference::InferenceDeviceClass::Metal => device_id
+            .strip_prefix("metal:")
+            .is_some_and(|index| index.parse::<u32>().is_ok()),
+        _ => false,
+    }
 }
 
 fn diagnostic(
@@ -191,8 +294,8 @@ mod tests {
     use super::*;
 
     #[cfg(feature = "backend-pytorch")]
-    #[test]
-    fn projection_joins_registered_backend_aliases_to_gateway_owned_cpu_candidates() {
+    #[tokio::test]
+    async fn projection_joins_registered_backend_aliases_to_gateway_owned_cpu_candidates() {
         let registry = Arc::new(RuntimeRegistry::new());
         for (id, key) in [("pytorch", "torch"), ("other", "unsupported")] {
             registry.register_runtime(
@@ -208,7 +311,7 @@ mod tests {
             );
         }
         let source = RuntimeDispatchCapabilityFactsSource::new(registry.clone());
-        let RuntimeDispatchCapabilityFactsOutcome::Projected { facts, .. } = source.collect()
+        let RuntimeDispatchCapabilityFactsOutcome::Projected { facts, .. } = source.collect().await
         else {
             panic!("registered facts");
         };
@@ -222,7 +325,7 @@ mod tests {
             .iter()
             .any(|device| device.backend_key == "pytorch"));
         let RuntimeDispatchCapabilityFactsOutcome::Projected { facts, .. } =
-            source.with_gateway(gateway).collect()
+            source.with_gateway(gateway).collect().await
         else {
             panic!("owned facts");
         };
@@ -246,8 +349,8 @@ mod tests {
         assert!(registry.snapshot().reservations.is_empty());
     }
 
-    #[test]
-    fn source_projects_path_free_runtime_registry_facts() {
+    #[tokio::test]
+    async fn source_projects_path_free_runtime_registry_facts() {
         let registry = Arc::new(RuntimeRegistry::new());
         registry.register_runtime(
             RuntimeRegistration::new("pytorch", "PyTorch")
@@ -264,7 +367,7 @@ mod tests {
             .expect("ready runtime transition");
         let source = RuntimeDispatchCapabilityFactsSource::new(registry);
 
-        let outcome = source.collect();
+        let outcome = source.collect().await;
 
         let RuntimeDispatchCapabilityFactsOutcome::Projected { facts, .. } = outcome else {
             panic!("runtime registry source should project facts");
@@ -287,11 +390,11 @@ mod tests {
         assert!(!runtime.has_admission_budget);
     }
 
-    #[test]
-    fn source_reports_no_registered_runtimes() {
+    #[tokio::test]
+    async fn source_reports_no_registered_runtimes() {
         let source = RuntimeDispatchCapabilityFactsSource::new(Arc::new(RuntimeRegistry::new()));
 
-        let outcome = source.collect();
+        let outcome = source.collect().await;
 
         assert!(matches!(
             outcome,
@@ -302,8 +405,8 @@ mod tests {
         }));
     }
 
-    #[test]
-    fn source_rejects_runtime_without_backend_keys() {
+    #[tokio::test]
+    async fn source_rejects_runtime_without_backend_keys() {
         let registry = Arc::new(RuntimeRegistry::new());
         registry.register_runtime(
             RuntimeRegistration::new("custom-runtime", "Custom Runtime")
@@ -311,7 +414,7 @@ mod tests {
         );
         let source = RuntimeDispatchCapabilityFactsSource::new(registry);
 
-        let outcome = source.collect();
+        let outcome = source.collect().await;
 
         assert!(matches!(
             outcome,
@@ -324,8 +427,8 @@ mod tests {
         }));
     }
 
-    #[test]
-    fn source_rejects_dispatch_runtime_without_dispatch_identity() {
+    #[tokio::test]
+    async fn source_rejects_dispatch_runtime_without_dispatch_identity() {
         let registry = Arc::new(RuntimeRegistry::new());
         registry.register_runtime(
             RuntimeRegistration::new("pytorch", "PyTorch")
@@ -333,7 +436,7 @@ mod tests {
         );
         let source = RuntimeDispatchCapabilityFactsSource::new(registry);
 
-        let outcome = source.collect();
+        let outcome = source.collect().await;
 
         assert!(matches!(
             outcome,
@@ -344,6 +447,110 @@ mod tests {
                 == RuntimeDispatchCapabilityFactsDiagnosticCode::RuntimeMissingDispatchIdentity
                 && diagnostic.runtime_id.as_deref() == Some("pytorch")
         }));
+    }
+
+    #[cfg(feature = "backend-pytorch")]
+    #[tokio::test]
+    async fn indexed_devices_require_matching_live_owner_observation() {
+        let registry = Arc::new(RuntimeRegistry::new());
+        let gateway = inference::InferenceGateway::with_backend(
+            Box::new(inference::PyTorchBackend::new()),
+            "PyTorch",
+        );
+        let mut backend = gateway.current_backend_info().await;
+        backend.capabilities.facts.runtime_variants =
+            inference::PyTorchBackend::runtime_variants_from_device_probe(
+                inference::backend::pytorch::PyTorchDeviceProbeSnapshot {
+                    cuda_available: true,
+                    mps_available: false,
+                },
+            );
+        crate::runtime_registry::register_backend_runtimes(
+            &registry,
+            std::slice::from_ref(&backend),
+        );
+        registry
+            .transition_runtime(
+                "pytorch",
+                RuntimeTransition::Ready {
+                    runtime_instance_id: Some("observed.1".into()),
+                },
+            )
+            .unwrap();
+        let runtime = registry.snapshot().runtimes.remove(0);
+        let mut mode = gateway.mode_info().await;
+        mode.active_runtime = Some(inference::RuntimeLifecycleSnapshot {
+            runtime_id: Some("pytorch".into()),
+            runtime_instance_id: Some("observed.1".into()),
+            active: true,
+            ..Default::default()
+        });
+        mode.active_resolved_device = Some("cuda:1".parse().unwrap());
+        let facts = project_runtime(
+            runtime.clone(),
+            std::slice::from_ref(&backend),
+            Some(&mode),
+            &[],
+            &mut Vec::new(),
+        )
+        .unwrap();
+        assert_eq!(
+            facts
+                .device_ids
+                .iter()
+                .map(|device| device.as_str())
+                .collect::<Vec<_>>(),
+            vec!["cpu", "cuda:1"]
+        );
+        for invalidation in [
+            "unobserved",
+            "instance",
+            "runtime",
+            "inactive",
+            "unavailable",
+        ] {
+            let mut changed_mode = mode.clone();
+            let mut changed_backend = backend.clone();
+            match invalidation {
+                "unobserved" => changed_mode.active_resolved_device = None,
+                "instance" => {
+                    changed_mode
+                        .active_runtime
+                        .as_mut()
+                        .unwrap()
+                        .runtime_instance_id = Some("other.2".into())
+                }
+                "runtime" => {
+                    changed_mode.active_runtime.as_mut().unwrap().runtime_id = Some("other".into())
+                }
+                "inactive" => changed_mode.active_runtime.as_mut().unwrap().active = false,
+                "unavailable" => changed_backend
+                    .capabilities
+                    .facts
+                    .runtime_variants
+                    .iter_mut()
+                    .filter(|variant| variant.device_class == inference::InferenceDeviceClass::Cuda)
+                    .for_each(|variant| variant.available = false),
+                _ => unreachable!(),
+            }
+            let facts = project_runtime(
+                runtime.clone(),
+                &[changed_backend],
+                Some(&changed_mode),
+                &[],
+                &mut Vec::new(),
+            )
+            .unwrap();
+            assert_eq!(
+                facts
+                    .device_ids
+                    .iter()
+                    .map(|device| device.as_str())
+                    .collect::<Vec<_>>(),
+                vec!["cpu"],
+                "{invalidation}"
+            );
+        }
     }
 
     fn dispatch_identity() -> RuntimeDispatchIdentity {
