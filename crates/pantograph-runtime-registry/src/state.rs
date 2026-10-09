@@ -39,6 +39,8 @@ pub struct RuntimeRegistryRecord {
     pub last_transition_at_ms: u64,
     pub active_reservations: BTreeSet<u64>,
     pub models: BTreeMap<String, RuntimeModelResidencyRecord>,
+    pub resident_resources_uncertain: bool,
+    pub model_resource_residency: Option<crate::RuntimeModelResourceResidency>,
     pub admission_budget: Option<RuntimeAdmissionBudget>,
 }
 
@@ -56,6 +58,8 @@ impl RuntimeRegistryRecord {
             last_transition_at_ms: now_ms,
             active_reservations: BTreeSet::new(),
             models: BTreeMap::new(),
+            resident_resources_uncertain: false,
+            model_resource_residency: None,
             admission_budget: None,
         }
     }

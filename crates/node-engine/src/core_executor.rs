@@ -434,14 +434,16 @@ fn reject_contract_only_inference_task(
     let artifact_refs = contract_only_task_artifact_refs(inputs);
     record_task_validation_failure_lifecycle(
         extensions,
-        task_id,
-        execution_id,
-        entry.canonical_label(),
-        backend_key,
-        inference_model_id_from_inputs(inputs),
-        message.clone(),
-        option_diagnostics,
-        artifact_refs,
+        TaskValidationFailureContext {
+            task_id,
+            execution_id,
+            task_label: entry.canonical_label(),
+            backend_key,
+            model_id: inference_model_id_from_inputs(inputs),
+            detail: message.clone(),
+            option_diagnostics,
+            artifact_refs,
+        },
     );
 
     Err(NodeEngineError::ExecutionFailed(message))
@@ -570,17 +572,32 @@ fn task_option_present(inputs: &HashMap<String, serde_json::Value>, aliases: &[&
 }
 
 #[cfg(feature = "inference-nodes")]
-fn record_task_validation_failure_lifecycle(
-    extensions: &ExecutorExtensions,
-    task_id: &str,
-    execution_id: &str,
-    task_label: &str,
-    backend_key: Option<&str>,
+struct TaskValidationFailureContext<'a> {
+    task_id: &'a str,
+    execution_id: &'a str,
+    task_label: &'a str,
+    backend_key: Option<&'a str>,
     model_id: Option<String>,
     detail: String,
     option_diagnostics: Vec<OptionCompatibilityDiagnostic>,
     artifact_refs: Vec<String>,
+}
+
+#[cfg(feature = "inference-nodes")]
+fn record_task_validation_failure_lifecycle(
+    extensions: &ExecutorExtensions,
+    context: TaskValidationFailureContext<'_>,
 ) {
+    let TaskValidationFailureContext {
+        task_id,
+        execution_id,
+        task_label,
+        backend_key,
+        model_id,
+        detail,
+        option_diagnostics,
+        artifact_refs,
+    } = context;
     let Some(sink) = extensions
         .get::<Arc<dyn InferenceRequestLifecycleEventSink>>(
             extension_keys::INFERENCE_LIFECYCLE_SINK,

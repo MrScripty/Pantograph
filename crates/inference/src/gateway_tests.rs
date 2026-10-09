@@ -1,5 +1,45 @@
 use super::*;
+
+#[test]
+fn owned_cpu_candidates_require_available_matching_owner_facts_and_never_guess_gpu_ids() {
+    let mut info = BackendInfo {
+        name: "PyTorch".into(),
+        backend_key: "pytorch".into(),
+        description: String::new(),
+        capabilities: BackendCapabilities::default(),
+        default_start_mode: BackendDefaultStartMode::Inference,
+        active: false,
+        available: true,
+        unavailable_reason: None,
+        can_install: false,
+        runtime_binary_id: None,
+    };
+    let variant =
+        |id: &str, device_class, available| crate::device_contracts::RuntimeVariantCapability {
+            runtime_variant_id: id.parse().unwrap(),
+            device_class,
+            available,
+            diagnostics: Vec::new(),
+        };
+    info.capabilities.facts.runtime_variants = vec![
+        variant("pytorch.cpu", InferenceDeviceClass::Cpu, true),
+        variant("pytorch.cuda", InferenceDeviceClass::Cuda, true),
+        variant("other.cpu", InferenceDeviceClass::Cpu, true),
+    ];
+    let candidates = cpu_device_candidates(vec![info.clone()]);
+    assert_eq!(candidates.len(), 1);
+    assert_eq!(candidates[0].backend_key, "pytorch");
+    assert_eq!(candidates[0].device_id.as_str(), "cpu");
+    assert_eq!(candidates[0].runtime_variant_id.as_str(), "pytorch.cpu");
+    info.available = false;
+    assert!(cpu_device_candidates(vec![info.clone()]).is_empty());
+    info.available = true;
+    info.capabilities.facts.runtime_variants[0].available = false;
+    assert!(cpu_device_candidates(vec![info]).is_empty());
+}
 use std::path::PathBuf;
+#[path = "gateway_tests/service_timing.rs"]
+mod service_timing;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -52,6 +92,9 @@ use crate::{
     InferenceExecutionCancellationSnapshot, InferenceExecutionCancellationState,
     InferenceExecutionTelemetryError, RuntimeNativeTelemetryProvider,
 };
+
+#[path = "gateway_tests/resident_lifecycle.rs"]
+mod resident_lifecycle;
 
 #[path = "gateway_tests/start_config.rs"]
 mod start_config;
@@ -2460,11 +2503,11 @@ async fn test_execute_typed_text_reports_generation_option_diagnostics() {
             }));
             assert!(option_diagnostics.iter().any(|diagnostic| {
                 diagnostic.option_path == "sampling.seed"
-                    && diagnostic.state == OptionSupportState::Unsupported
+                    && diagnostic.state == OptionSupportState::RequiresBackendSupport
             }));
             assert!(option_diagnostics.iter().any(|diagnostic| {
                 diagnostic.option_path == "stopping.stop_strings"
-                    && diagnostic.state == OptionSupportState::Unsupported
+                    && diagnostic.state == OptionSupportState::RequiresBackendSupport
             }));
             assert!(option_diagnostics.iter().any(|diagnostic| {
                 diagnostic.option_path == "cache.use_cache"
@@ -2568,7 +2611,7 @@ async fn test_execute_typed_text_reports_generation_option_diagnostics() {
         .option_diagnostics
         .iter()
         .any(|diagnostic| diagnostic.option_path == "sampling.seed"
-            && diagnostic.state == OptionSupportState::Unsupported));
+            && diagnostic.state == OptionSupportState::RequiresBackendSupport));
     assert!(completed_validation_event
         .option_diagnostics
         .iter()
@@ -2594,7 +2637,7 @@ async fn test_execute_typed_text_reports_generation_option_diagnostics() {
         .option_diagnostics
         .iter()
         .any(|diagnostic| diagnostic.option_path == "sampling.seed"
-            && diagnostic.state == OptionSupportState::Unsupported));
+            && diagnostic.state == OptionSupportState::RequiresBackendSupport));
     assert!(completed_backend_event
         .option_diagnostics
         .iter()
@@ -3283,7 +3326,7 @@ async fn test_execute_typed_with_lifecycle_records_planned_boundary_failure() {
     }));
     assert!(events[7].option_diagnostics.iter().any(|diagnostic| {
         diagnostic.option_path == "image.denoising_scheduler"
-            && diagnostic.state == OptionSupportState::Unsupported
+            && diagnostic.state == OptionSupportState::Honored
             && diagnostic.backend_key.as_deref() == Some("mock")
     }));
     assert!(events[7].option_diagnostics.iter().any(|diagnostic| {
@@ -4841,7 +4884,9 @@ async fn typed_text_rejects_premature_eof() {
 #[derive(Clone, Default)]
 struct SelectedTextBackend {
     effects: Arc<Mutex<Vec<String>>>,
+    requests: Arc<Mutex<Vec<serde_json::Value>>>,
     terminal: u8,
+    expected_system_prompt: Option<String>,
 }
 #[async_trait]
 impl InferenceBackend for SelectedTextBackend {
@@ -4896,14 +4941,34 @@ impl InferenceBackend for SelectedTextBackend {
             .push(format!("finish:{cancel}"));
         Ok(())
     }
+    async fn load_selected_embedding(
+        &mut self,
+        _: &InferenceExecutionRequest,
+        _: &PumasArtifactLoadTarget,
+        _: &BackendExecutionDecision,
+    ) -> Result<BackendStartOutcome, BackendError> {
+        Ok(BackendStartOutcome::default())
+    }
     async fn chat_completion_stream(
         &self,
         request: String,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, BackendError>> + Send>>, BackendError>
     {
         let request: serde_json::Value = serde_json::from_str(&request).unwrap();
+        self.requests.lock().unwrap().push(request.clone());
+        let messages = request["messages"].as_array().unwrap();
+        let user_index = if let Some(system) = &self.expected_system_prompt {
+            assert_eq!(messages.len(), 2);
+            assert_eq!(messages[0]["role"], "system");
+            assert_eq!(messages[0]["content"][0]["text"], system.as_str());
+            1
+        } else {
+            assert_eq!(messages.len(), 1);
+            0
+        };
+        assert_eq!(messages[user_index]["role"], "user");
         assert_eq!(
-            request["messages"][0]["content"][0]["text"],
+            messages[user_index]["content"][0]["text"],
             "  exact prompt\n"
         );
         self.effects.lock().unwrap().push("stream".into());
@@ -4947,6 +5012,477 @@ impl crate::backend::BackendFactory for SelectedTextFactory {
     fn info(&self) -> BackendInfo {
         panic!("not used")
     }
+}
+
+#[tokio::test]
+async fn selected_text_preserves_optional_system_prompt_before_user_message() {
+    for system in [
+        None,
+        Some(String::new()),
+        Some("  Return an image prompt only.\n".into()),
+    ] {
+        let (_directory, mut request, target, decision) = crate::selected_text_execution::fixture();
+        let InferenceExecutionInput::TextGeneration { system_prompt, .. } = &mut request.input
+        else {
+            panic!("text fixture expected");
+        };
+        *system_prompt = system.clone();
+        let selected = SelectedTextBackend {
+            expected_system_prompt: system,
+            ..Default::default()
+        };
+        let effects = selected.effects.clone();
+        let gateway = InferenceGateway::with_backend(Box::new(selected), "PyTorch");
+        let result = gateway
+            .execute_selected_text_with_cancellation(
+                request,
+                target.clone(),
+                decision,
+                InferenceExecutionCancellationHandle::running(),
+            )
+            .await
+            .unwrap();
+        assert!(
+            matches!(result, InferenceExecutionResult::TextGeneration { text, .. } if text == "exact text")
+        );
+        assert_eq!(
+            *effects.lock().unwrap(),
+            [
+                format!("load:{}:cpu", target.local_load_path),
+                "stream".into(),
+                "finish:false".into(),
+            ]
+        );
+    }
+}
+
+#[tokio::test]
+async fn selected_text_preserves_top_k_boundaries_with_optional_length_and_system() {
+    for top_k in [None, Some(0), Some(40), Some(u32::MAX)] {
+        for max_new_tokens in [None, Some(128)] {
+            for system in [None, Some("  Return an image prompt only.\n".to_string())] {
+                let (_directory, mut request, target, decision) =
+                    crate::selected_text_execution::fixture();
+                let InferenceExecutionInput::TextGeneration { system_prompt, .. } =
+                    &mut request.input
+                else {
+                    panic!("text fixture expected");
+                };
+                *system_prompt = system.clone();
+                request.generation_options = if top_k.is_some() || max_new_tokens.is_some() {
+                    Some(GenerationOptions {
+                        sampling: SamplingGenerationOptions {
+                            top_k,
+                            ..Default::default()
+                        },
+                        length: LengthGenerationOptions {
+                            max_new_tokens,
+                            ..Default::default()
+                        },
+                        ..Default::default()
+                    })
+                } else {
+                    None
+                };
+                let selected = SelectedTextBackend {
+                    expected_system_prompt: system,
+                    ..Default::default()
+                };
+                let requests = selected.requests.clone();
+                let effects = selected.effects.clone();
+                let gateway = InferenceGateway::with_backend(Box::new(selected), "PyTorch");
+                let result = gateway
+                    .execute_selected_text_with_cancellation(
+                        request,
+                        target.clone(),
+                        decision,
+                        InferenceExecutionCancellationHandle::running(),
+                    )
+                    .await
+                    .unwrap();
+                let InferenceExecutionResult::TextGeneration {
+                    text,
+                    option_diagnostics,
+                    ..
+                } = result
+                else {
+                    panic!("text result expected");
+                };
+                assert_eq!(text, "exact text");
+                let requests = requests.lock().unwrap();
+                assert_eq!(requests.len(), 1);
+                assert_eq!(
+                    requests[0].get("top_k"),
+                    top_k.map(serde_json::Value::from).as_ref()
+                );
+                assert_eq!(
+                    requests[0].get("max_tokens"),
+                    max_new_tokens.map(serde_json::Value::from).as_ref()
+                );
+                assert_eq!(
+                    option_diagnostics
+                        .iter()
+                        .any(|diagnostic| diagnostic.option_path == "sampling.top_k"
+                            && diagnostic.state == OptionSupportState::Mapped),
+                    top_k.is_some()
+                );
+                assert_eq!(
+                    *effects.lock().unwrap(),
+                    [
+                        format!("load:{}:cpu", target.local_load_path),
+                        "stream".into(),
+                        "finish:false".into()
+                    ]
+                );
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn selected_text_preserves_temperature_boundaries_with_optional_length_and_system() {
+    for temperature in [None, Some(0.0), Some(0.7), Some(f32::MAX)] {
+        for max_new_tokens in [None, Some(128)] {
+            for system in [None, Some("  Return an image prompt only.\n".to_string())] {
+                let (_directory, mut request, target, decision) =
+                    crate::selected_text_execution::fixture();
+                let InferenceExecutionInput::TextGeneration { system_prompt, .. } =
+                    &mut request.input
+                else {
+                    panic!("text fixture expected");
+                };
+                *system_prompt = system.clone();
+                request.generation_options = if temperature.is_some() || max_new_tokens.is_some() {
+                    Some(GenerationOptions {
+                        sampling: SamplingGenerationOptions {
+                            temperature,
+                            ..Default::default()
+                        },
+                        length: LengthGenerationOptions {
+                            max_new_tokens,
+                            ..Default::default()
+                        },
+                        ..Default::default()
+                    })
+                } else {
+                    None
+                };
+                let selected = SelectedTextBackend {
+                    expected_system_prompt: system,
+                    ..Default::default()
+                };
+                let requests = selected.requests.clone();
+                let effects = selected.effects.clone();
+                let gateway = InferenceGateway::with_backend(Box::new(selected), "PyTorch");
+                let result = gateway
+                    .execute_selected_text_with_cancellation(
+                        request,
+                        target.clone(),
+                        decision,
+                        InferenceExecutionCancellationHandle::running(),
+                    )
+                    .await
+                    .unwrap();
+                let InferenceExecutionResult::TextGeneration {
+                    text,
+                    option_diagnostics,
+                    ..
+                } = result
+                else {
+                    panic!("text result expected");
+                };
+                assert_eq!(text, "exact text");
+                let requests = requests.lock().unwrap();
+                assert_eq!(requests.len(), 1);
+                assert_eq!(
+                    requests[0].get("temperature"),
+                    temperature
+                        .map(|value| serde_json::from_str::<serde_json::Value>(
+                            &serde_json::to_string(&value).unwrap()
+                        )
+                        .unwrap())
+                        .as_ref()
+                );
+                assert_eq!(
+                    requests[0].get("max_tokens"),
+                    max_new_tokens.map(serde_json::Value::from).as_ref()
+                );
+                assert_eq!(
+                    option_diagnostics
+                        .iter()
+                        .any(
+                            |diagnostic| diagnostic.option_path == "sampling.temperature"
+                                && diagnostic.state == OptionSupportState::Mapped
+                        ),
+                    temperature.is_some()
+                );
+                assert_eq!(
+                    *effects.lock().unwrap(),
+                    [
+                        format!("load:{}:cpu", target.local_load_path),
+                        "stream".into(),
+                        "finish:false".into()
+                    ]
+                );
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn selected_text_preserves_top_p_boundaries_with_optional_length_and_system() {
+    for top_p in [None, Some(0.0), Some(0.7), Some(1.0)] {
+        for max_new_tokens in [None, Some(128)] {
+            for system in [None, Some("  Return an image prompt only.\n".to_string())] {
+                let (_directory, mut request, target, decision) =
+                    crate::selected_text_execution::fixture();
+                let InferenceExecutionInput::TextGeneration { system_prompt, .. } =
+                    &mut request.input
+                else {
+                    panic!("text fixture expected");
+                };
+                *system_prompt = system.clone();
+                request.generation_options = if top_p.is_some() || max_new_tokens.is_some() {
+                    Some(GenerationOptions {
+                        sampling: SamplingGenerationOptions {
+                            top_p,
+                            ..Default::default()
+                        },
+                        length: LengthGenerationOptions {
+                            max_new_tokens,
+                            ..Default::default()
+                        },
+                        ..Default::default()
+                    })
+                } else {
+                    None
+                };
+                let selected = SelectedTextBackend {
+                    expected_system_prompt: system,
+                    ..Default::default()
+                };
+                let requests = selected.requests.clone();
+                let effects = selected.effects.clone();
+                let gateway = InferenceGateway::with_backend(Box::new(selected), "PyTorch");
+                let result = gateway
+                    .execute_selected_text_with_cancellation(
+                        request,
+                        target.clone(),
+                        decision,
+                        InferenceExecutionCancellationHandle::running(),
+                    )
+                    .await
+                    .unwrap();
+                let InferenceExecutionResult::TextGeneration {
+                    text,
+                    option_diagnostics,
+                    ..
+                } = result
+                else {
+                    panic!("text result expected");
+                };
+                assert_eq!(text, "exact text");
+                let requests = requests.lock().unwrap();
+                assert_eq!(requests.len(), 1);
+                assert_eq!(
+                    requests[0].get("top_p"),
+                    top_p
+                        .map(|value| serde_json::from_str::<serde_json::Value>(
+                            &serde_json::to_string(&value).unwrap()
+                        )
+                        .unwrap())
+                        .as_ref()
+                );
+                assert_eq!(
+                    requests[0].get("max_tokens"),
+                    max_new_tokens.map(serde_json::Value::from).as_ref()
+                );
+                assert_eq!(
+                    option_diagnostics
+                        .iter()
+                        .any(|diagnostic| diagnostic.option_path == "sampling.top_p"
+                            && diagnostic.state == OptionSupportState::Mapped),
+                    top_p.is_some()
+                );
+                assert_eq!(
+                    *effects.lock().unwrap(),
+                    [
+                        format!("load:{}:cpu", target.local_load_path),
+                        "stream".into(),
+                        "finish:false".into()
+                    ]
+                );
+            }
+        }
+    }
+}
+#[tokio::test]
+async fn selected_text_preserves_repetition_penalty_boundaries_with_optional_length_and_system() {
+    for repetition_penalty in [None, Some(0.5), Some(1.0), Some(1.2)] {
+        for max_new_tokens in [None, Some(128)] {
+            for system in [None, Some("  Return an image prompt only.\n".to_string())] {
+                let (_directory, mut request, target, decision) =
+                    crate::selected_text_execution::fixture();
+                let InferenceExecutionInput::TextGeneration { system_prompt, .. } =
+                    &mut request.input
+                else {
+                    panic!("text fixture expected");
+                };
+                *system_prompt = system.clone();
+                request.generation_options =
+                    if repetition_penalty.is_some() || max_new_tokens.is_some() {
+                        Some(GenerationOptions {
+                            sampling: SamplingGenerationOptions {
+                                repetition_penalty,
+                                ..Default::default()
+                            },
+                            length: LengthGenerationOptions {
+                                max_new_tokens,
+                                ..Default::default()
+                            },
+                            ..Default::default()
+                        })
+                    } else {
+                        None
+                    };
+                let selected = SelectedTextBackend {
+                    expected_system_prompt: system,
+                    ..Default::default()
+                };
+                let requests = selected.requests.clone();
+                let effects = selected.effects.clone();
+                let gateway = InferenceGateway::with_backend(Box::new(selected), "PyTorch");
+                let result = gateway
+                    .execute_selected_text_with_cancellation(
+                        request,
+                        target.clone(),
+                        decision,
+                        InferenceExecutionCancellationHandle::running(),
+                    )
+                    .await
+                    .unwrap();
+                let InferenceExecutionResult::TextGeneration {
+                    text,
+                    option_diagnostics,
+                    ..
+                } = result
+                else {
+                    panic!("text result expected");
+                };
+                assert_eq!(text, "exact text");
+                let requests = requests.lock().unwrap();
+                assert_eq!(requests.len(), 1);
+                assert_eq!(
+                    requests[0].get("repetition_penalty"),
+                    repetition_penalty
+                        .map(|value| serde_json::from_str::<serde_json::Value>(
+                            &serde_json::to_string(&value).unwrap()
+                        )
+                        .unwrap())
+                        .as_ref()
+                );
+                assert_eq!(
+                    requests[0].get("max_tokens"),
+                    max_new_tokens.map(serde_json::Value::from).as_ref()
+                );
+                assert_eq!(
+                    option_diagnostics
+                        .iter()
+                        .any(
+                            |diagnostic| diagnostic.option_path == "sampling.repetition_penalty"
+                                && diagnostic.state == OptionSupportState::Mapped
+                        ),
+                    repetition_penalty.is_some()
+                );
+                assert_eq!(
+                    *effects.lock().unwrap(),
+                    [
+                        format!("load:{}:cpu", target.local_load_path),
+                        "stream".into(),
+                        "finish:false".into()
+                    ]
+                );
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn ordinary_and_selected_text_loads_never_reuse_an_allocation_generation() {
+    let (_directory, request, target, decision) = crate::selected_text_execution::fixture();
+    let gateway =
+        InferenceGateway::with_backend(Box::new(SelectedTextBackend::default()), "PyTorch");
+    gateway.set_spawner(Arc::new(MockProcessSpawner)).await;
+    gateway.start(&BackendConfig::default()).await.unwrap();
+    let first = gateway
+        .runtime_lifecycle_snapshot()
+        .await
+        .runtime_instance_id
+        .unwrap();
+    gateway
+        .execute_selected_text_with_cancellation(
+            request,
+            target,
+            decision,
+            InferenceExecutionCancellationHandle::running(),
+        )
+        .await
+        .unwrap();
+    let selected = gateway
+        .runtime_lifecycle_snapshot()
+        .await
+        .runtime_instance_id
+        .unwrap();
+    assert_ne!(
+        first, selected,
+        "a newly loaded allocation must not inherit an earlier generation"
+    );
+    gateway.start(&BackendConfig::default()).await.unwrap();
+    assert_eq!(
+        gateway
+            .runtime_lifecycle_snapshot()
+            .await
+            .runtime_instance_id
+            .as_deref(),
+        Some(selected.as_str()),
+        "a proved reuse retains the same generation"
+    );
+}
+
+#[tokio::test]
+async fn embedding_replacement_supervisor_cannot_duplicate_a_previous_candle_generation() {
+    let (_directory, request, target, decision) = crate::selected_text_execution::fixture();
+    let mut gateway =
+        InferenceGateway::with_backend(Box::new(SelectedTextBackend::default()), "PyTorch");
+    gateway.registry.register(
+        "candle",
+        Box::new(SelectedTextFactory(SelectedTextBackend::default())),
+    );
+    let previous = gateway.allocate_runtime_instance_id("candle");
+    let backend = gateway.backend.clone().write_owned().await;
+    // Controlled candidate loading isolates the actual supervised retirement/publication
+    // path. This does not execute Candle or validate an embedding model package.
+    let backend = gateway
+        .replace_selected_embedding(
+            backend,
+            request,
+            target,
+            decision,
+            InferenceExecutionCancellationHandle::running(),
+            BackendConfig::default(),
+        )
+        .await
+        .unwrap();
+    drop(backend);
+    let replaced = gateway
+        .runtime_lifecycle_snapshot()
+        .await
+        .runtime_instance_id
+        .unwrap();
+    assert_ne!(
+        previous, replaced,
+        "supervised allocations share the generation rule"
+    );
 }
 
 #[tokio::test]
@@ -4996,6 +5532,193 @@ async fn selected_text_switches_to_requested_target_and_requires_terminal_output
             ]
         );
     }
+}
+
+#[cfg(feature = "backend-candle")]
+#[tokio::test]
+async fn selected_embedding_gateway_executes_real_models_and_replaces_width() {
+    let gateway =
+        InferenceGateway::with_backend(Box::new(crate::backend::CandleBackend::new()), "Candle");
+    for width in [8, 12] {
+        let (_directory, request, target, decision) =
+            crate::selected_embedding_execution::fixture(width);
+        let expected_path = target.local_load_path.clone();
+        let result = gateway
+            .execute_selected_embedding_with_cancellation(
+                request,
+                target,
+                decision,
+                InferenceExecutionCancellationHandle::running(),
+            )
+            .await
+            .unwrap();
+        let InferenceExecutionResult::Embedding {
+            embeddings, usage, ..
+        } = result
+        else {
+            panic!("embedding result required")
+        };
+        assert_eq!(embeddings.len(), 3);
+        for (index, result) in embeddings.iter().enumerate() {
+            assert_eq!(result.index, Some(index));
+            assert_eq!(result.vector.len(), width);
+            assert_eq!(result.token_count, Some(if index == 1 { 3 } else { 4 }));
+            assert!(result.vector.iter().all(|value| value.is_finite()));
+        }
+        assert_eq!(usage.unwrap().prompt_tokens, Some(11));
+        assert_eq!(gateway.current_backend_name().await, "Candle");
+        assert!(gateway.is_embedding_mode().await);
+        assert!(gateway.is_ready().await);
+        assert_eq!(
+            gateway
+                .current_runtime_config
+                .read()
+                .await
+                .as_ref()
+                .unwrap()
+                .model_path
+                .as_ref()
+                .unwrap(),
+            &PathBuf::from(expected_path)
+        );
+    }
+    gateway.stop().await.unwrap();
+    assert!(!gateway.is_ready().await);
+}
+
+#[cfg(feature = "backend-candle")]
+#[tokio::test]
+async fn selected_embedding_gateway_reuse_preserves_runtime_identity_with_optional_revision() {
+    let (_directory, mut request, target, mut decision) =
+        crate::selected_embedding_execution::fixture(8);
+    request.model_ref.as_mut().unwrap().revision = None;
+    decision.selected_model_ref.as_mut().unwrap().revision = None;
+    let gateway =
+        InferenceGateway::with_backend(Box::new(crate::backend::CandleBackend::new()), "Candle");
+    gateway
+        .execute_selected_embedding_with_cancellation(
+            request.clone(),
+            target.clone(),
+            decision.clone(),
+            crate::InferenceExecutionCancellationHandle::running(),
+        )
+        .await
+        .unwrap();
+    let first = gateway.runtime_lifecycle_snapshot().await;
+    assert_eq!(first.runtime_reused, Some(false));
+    let result = gateway
+        .execute_selected_embedding_with_cancellation(
+            request,
+            target,
+            decision,
+            crate::InferenceExecutionCancellationHandle::running(),
+        )
+        .await
+        .unwrap();
+    let second = gateway.runtime_lifecycle_snapshot().await;
+    assert_eq!(second.runtime_reused, Some(true));
+    assert_eq!(second.runtime_instance_id, first.runtime_instance_id);
+    assert_eq!(
+        second.lifecycle_decision_reason.as_deref(),
+        Some("scheduler_selected_embedding_package_reused")
+    );
+    let crate::InferenceExecutionResult::Embedding { embeddings, .. } = result else {
+        panic!("native embedding output required")
+    };
+    assert_eq!(embeddings[0].vector.len(), 8);
+    gateway.stop().await.unwrap();
+}
+
+#[cfg(feature = "backend-candle")]
+#[tokio::test]
+async fn selected_embedding_invalid_handoffs_and_precancellation_preserve_residency() {
+    let (_directory, request, target, decision) = crate::selected_embedding_execution::fixture(8);
+    let gateway =
+        InferenceGateway::with_backend(Box::new(crate::backend::CandleBackend::new()), "Candle");
+    gateway
+        .execute_selected_embedding_with_cancellation(
+            request.clone(),
+            target.clone(),
+            decision.clone(),
+            InferenceExecutionCancellationHandle::running(),
+        )
+        .await
+        .unwrap();
+    let original_instance = gateway
+        .runtime_lifecycle
+        .read()
+        .await
+        .runtime_instance_id
+        .clone();
+    for mutation in 0..8 {
+        let mut request = request.clone();
+        let mut target = target.clone();
+        let mut decision = decision.clone();
+        match mutation {
+            0 => request.model_ref.as_mut().unwrap().revision = Some("other-revision".into()),
+            1 => {
+                decision
+                    .selected_model_ref
+                    .as_mut()
+                    .unwrap()
+                    .selected_artifact_id = Some("other-artifact".into())
+            }
+            2 => target.model_ref.selected_artifact_path = Some("other/path".into()),
+            3 => {
+                request
+                    .resolved_model_package_facts
+                    .as_mut()
+                    .unwrap()
+                    .model_ref
+                    .model_id = "other/model".into()
+            }
+            4 => {
+                decision.selected_runtime_variant_id =
+                    crate::RuntimeVariantId::parse("candle.cuda").unwrap()
+            }
+            5 => {
+                decision.selected_device_id =
+                    Some(crate::InferenceDeviceId::parse("cuda:0").unwrap())
+            }
+            6 => {
+                request
+                    .resolved_model_package_facts
+                    .as_mut()
+                    .unwrap()
+                    .custom_code
+                    .requires_custom_code = true
+            }
+            7 => target.package_facts_contract_version = None,
+            _ => unreachable!(),
+        }
+        assert!(gateway
+            .execute_selected_embedding_with_cancellation(
+                request,
+                target,
+                decision,
+                InferenceExecutionCancellationHandle::running()
+            )
+            .await
+            .is_err());
+        assert!(gateway.is_ready().await);
+        assert_eq!(
+            gateway.runtime_lifecycle.read().await.runtime_instance_id,
+            original_instance
+        );
+    }
+    assert!(gateway
+        .execute_selected_embedding_with_cancellation(
+            request,
+            target,
+            decision,
+            InferenceExecutionCancellationHandle::cancellation_requested("before load")
+        )
+        .await
+        .is_err());
+    assert_eq!(
+        gateway.runtime_lifecycle.read().await.runtime_instance_id,
+        original_instance
+    );
 }
 
 #[tokio::test]
@@ -5070,4 +5793,609 @@ async fn selected_text_invalid_handoffs_have_no_backend_effects() {
         .await
         .is_err());
     assert!(effects.lock().unwrap().is_empty());
+}
+
+#[test]
+fn private_lifecycle_context_preserves_complete_attribution_and_absence() {
+    let sink = RecordingLifecycleSink::default();
+    let device_id = InferenceDeviceId::parse("cuda:0").expect("device id");
+    let context = InferenceRequestLifecycleEventContext {
+        request_id: Some("request-1".to_string()),
+        task_id: Some("text_generation".to_string()),
+        backend_key: Some("llama_cpp".to_string()),
+        runtime_id: Some("llama_cpp.cuda".to_string()),
+        runtime_instance_id: Some("instance-1".to_string()),
+        selected_device_class: Some(InferenceDeviceClass::Cuda),
+        selected_device_id: Some(device_id.clone()),
+        model_id: Some("pumas://models/example".to_string()),
+        ..Default::default()
+    };
+    record_inference_lifecycle_event(
+        &sink,
+        context.clone(),
+        InferenceRequestLifecycleEventKind::Started,
+        Some("start detail".to_string()),
+    );
+    record_inference_lifecycle_phase_event(
+        &sink,
+        InferenceLifecyclePhase::Preprocessing,
+        context,
+        InferenceRequestLifecycleEventKind::Completed,
+        None,
+    );
+    record_inference_lifecycle_event(
+        &sink,
+        InferenceRequestLifecycleEventContext::default(),
+        InferenceRequestLifecycleEventKind::CleanupCompleted,
+        None,
+    );
+    let events = sink.events();
+    assert_eq!(events.len(), 3);
+    for (index, (phase, kind, detail)) in [
+        (
+            InferenceLifecyclePhase::BackendExecution,
+            InferenceRequestLifecycleEventKind::Started,
+            Some("start detail".to_string()),
+        ),
+        (
+            InferenceLifecyclePhase::Preprocessing,
+            InferenceRequestLifecycleEventKind::Completed,
+            None,
+        ),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let expected =
+            InferenceRequestLifecycleEvent::builder(phase, kind, events[index].occurred_at_ms)
+                .with_request_id(Some("request-1".to_string()))
+                .with_task_id(Some("text_generation".to_string()))
+                .with_backend_key(Some("llama_cpp".to_string()))
+                .with_runtime_id(Some("llama_cpp.cuda".to_string()))
+                .with_runtime_instance_id(Some("instance-1".to_string()))
+                .with_selected_device_class(Some(InferenceDeviceClass::Cuda))
+                .with_selected_device_id(Some(device_id.clone()))
+                .with_model_id(Some("pumas://models/example".to_string()))
+                .with_detail(detail)
+                .build();
+        assert_eq!(events[index], expected);
+        assert_eq!(events[index].selected_runtime_variant_id, None);
+        assert_eq!(events[index].selected_network_node_id, None);
+        assert_eq!(events[index].resolved_artifact_kind, None);
+    }
+    assert_eq!(
+        events[2],
+        InferenceRequestLifecycleEvent::builder(
+            InferenceLifecyclePhase::BackendExecution,
+            InferenceRequestLifecycleEventKind::CleanupCompleted,
+            events[2].occurred_at_ms,
+        )
+        .build()
+    );
+}
+
+#[cfg(feature = "backend-candle")]
+#[path = "gateway_embedding_replacement_tests.rs"]
+mod embedding_replacement;
+
+#[tokio::test]
+async fn selected_text_invalid_repetition_penalty_fails_before_load_or_serialization() {
+    for repetition_penalty in [0.0, -1.0, f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+        let (_directory, mut request, target, decision) = crate::selected_text_execution::fixture();
+        request.generation_options = Some(GenerationOptions {
+            sampling: SamplingGenerationOptions {
+                repetition_penalty: Some(repetition_penalty),
+                ..Default::default()
+            },
+            ..Default::default()
+        });
+        let backend = SelectedTextBackend::default();
+        let effects = backend.effects.clone();
+        let requests = backend.requests.clone();
+        let gateway = InferenceGateway::with_backend(Box::new(backend), "PyTorch");
+        let error = gateway
+            .execute_selected_text_with_cancellation(
+                request,
+                target,
+                decision,
+                InferenceExecutionCancellationHandle::running(),
+            )
+            .await
+            .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("repetition_penalty must be positive and finite"),
+            "{error}"
+        );
+        assert!(effects.lock().unwrap().is_empty());
+        assert!(requests.lock().unwrap().is_empty());
+    }
+}
+
+#[test]
+fn repetition_penalty_mapping_does_not_claim_other_backend_support() {
+    let options = GenerationOptions {
+        sampling: SamplingGenerationOptions {
+            repetition_penalty: Some(1.2),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    for backend in [None, Some("llamacpp"), Some("external"), Some("candle")] {
+        let diagnostics = typed_text_generation_option_diagnostics(Some(&options), backend);
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(diagnostics[0].option_path, "sampling.repetition_penalty");
+        assert_eq!(
+            diagnostics[0].state,
+            OptionSupportState::RequiresBackendSupport
+        );
+    }
+}
+
+#[tokio::test]
+async fn selected_text_min_new_tokens_preserves_omission_zero_and_companion_controls() {
+    for (minimum, maximum) in [
+        (None, None),
+        (Some(0), None),
+        (Some(3), Some(3)),
+        (
+            Some(crate::constants::pytorch::DEFAULT_MAX_NEW_TOKENS),
+            None,
+        ),
+        (Some(u32::MAX), Some(u32::MAX)),
+    ] {
+        let (_directory, mut request, target, decision) = crate::selected_text_execution::fixture();
+        let system = "  Keep formatting.\n".to_string();
+        if let InferenceExecutionInput::TextGeneration { system_prompt, .. } = &mut request.input {
+            *system_prompt = Some(system.clone());
+        }
+        request.generation_options = Some(GenerationOptions {
+            length: LengthGenerationOptions {
+                min_new_tokens: minimum,
+                max_new_tokens: maximum,
+                ..Default::default()
+            },
+            sampling: SamplingGenerationOptions {
+                temperature: Some(0.0),
+                top_k: Some(0),
+                top_p: Some(0.7),
+                repetition_penalty: Some(1.2),
+                ..Default::default()
+            },
+            ..Default::default()
+        });
+        let backend = SelectedTextBackend {
+            expected_system_prompt: Some(system),
+            ..Default::default()
+        };
+        let requests = backend.requests.clone();
+        let effects = backend.effects.clone();
+        let gateway = InferenceGateway::with_backend(Box::new(backend), "PyTorch");
+        let result = gateway
+            .execute_selected_text_with_cancellation(
+                request,
+                target.clone(),
+                decision,
+                InferenceExecutionCancellationHandle::running(),
+            )
+            .await
+            .unwrap();
+        let InferenceExecutionResult::TextGeneration {
+            option_diagnostics, ..
+        } = result
+        else {
+            panic!("text result expected")
+        };
+        let requests = requests.lock().unwrap();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(
+            requests[0].get("min_new_tokens"),
+            minimum.map(serde_json::Value::from).as_ref()
+        );
+        assert_eq!(
+            requests[0].get("max_tokens"),
+            maximum.map(serde_json::Value::from).as_ref()
+        );
+        assert_eq!(requests[0]["temperature"], serde_json::json!(0.0));
+        assert_eq!(requests[0]["top_k"], serde_json::json!(0));
+        assert!(requests[0].get("top_p").is_some());
+        assert!(requests[0].get("repetition_penalty").is_some());
+        assert_eq!(
+            option_diagnostics
+                .iter()
+                .any(
+                    |diagnostic| diagnostic.option_path == "length.min_new_tokens"
+                        && diagnostic.state == OptionSupportState::Mapped
+                ),
+            minimum.is_some()
+        );
+        assert_eq!(
+            *effects.lock().unwrap(),
+            [
+                format!("load:{}:cpu", target.local_load_path),
+                "stream".into(),
+                "finish:false".into()
+            ]
+        );
+    }
+}
+
+#[tokio::test]
+async fn selected_text_min_new_tokens_above_effective_budget_has_no_backend_effects() {
+    for (minimum, maximum) in [(513, None), (9, Some(8)), (u32::MAX, None), (0, Some(0))] {
+        let (_directory, mut request, target, decision) = crate::selected_text_execution::fixture();
+        request.generation_options = Some(GenerationOptions {
+            length: LengthGenerationOptions {
+                min_new_tokens: Some(minimum),
+                max_new_tokens: maximum,
+                ..Default::default()
+            },
+            ..Default::default()
+        });
+        let backend = SelectedTextBackend::default();
+        let effects = backend.effects.clone();
+        let requests = backend.requests.clone();
+        let gateway = InferenceGateway::with_backend(Box::new(backend), "PyTorch");
+        let expected = if maximum == Some(0) {
+            "max_new_tokens must be positive when min_new_tokens is authored"
+        } else {
+            "exceeds effective max_new_tokens"
+        };
+        let error = gateway
+            .execute_selected_text_with_cancellation(
+                request.clone(),
+                target,
+                decision,
+                InferenceExecutionCancellationHandle::running(),
+            )
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains(expected), "{error}");
+        assert!(effects.lock().unwrap().is_empty());
+        assert!(requests.lock().unwrap().is_empty());
+        let error = gateway.execute_typed(request.clone()).await.unwrap_err();
+        assert!(error.to_string().contains(expected), "{error}");
+        let error = match gateway.stream_typed_text(request.clone()).await {
+            Err(error) => error,
+            Ok(_) => panic!("invalid budget must refuse before returning a stream"),
+        };
+        assert!(error.to_string().contains(expected), "{error}");
+        let stream_sink = Arc::new(RecordingLifecycleSink::default());
+        let error = match gateway
+            .stream_typed_text_with_lifecycle(request.clone(), stream_sink.clone())
+            .await
+        {
+            Err(error) => error,
+            Ok(_) => panic!("invalid budget must refuse before returning a lifecycle stream"),
+        };
+        assert!(error.to_string().contains(expected), "{error}");
+        let execute_sink = Arc::new(RecordingLifecycleSink::default());
+        let error = gateway
+            .execute_typed_with_lifecycle(request, execute_sink.clone())
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains(expected), "{error}");
+        for sink in [stream_sink, execute_sink] {
+            let events = sink.events();
+            assert!(events.iter().any(|event| {
+                event.phase == InferenceLifecyclePhase::TaskValidation
+                    && event.kind == InferenceRequestLifecycleEventKind::Failed
+            }));
+            assert!(!events
+                .iter()
+                .any(|event| { event.phase == InferenceLifecyclePhase::BackendExecution }));
+        }
+        assert!(effects.lock().unwrap().is_empty());
+        assert!(requests.lock().unwrap().is_empty());
+    }
+}
+
+#[test]
+fn min_new_tokens_mapping_does_not_claim_other_backend_support() {
+    let options = GenerationOptions {
+        length: LengthGenerationOptions {
+            min_new_tokens: Some(0),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    for backend in [None, Some("llamacpp"), Some("external"), Some("candle")] {
+        let diagnostics = typed_text_generation_option_diagnostics(Some(&options), backend);
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(diagnostics[0].option_path, "length.min_new_tokens");
+        assert_eq!(
+            diagnostics[0].state,
+            OptionSupportState::RequiresBackendSupport
+        );
+    }
+}
+
+#[test]
+fn seed_mapping_does_not_claim_other_backend_support() {
+    let options = GenerationOptions {
+        sampling: SamplingGenerationOptions {
+            seed: Some(0),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    for backend in [
+        None,
+        Some("llamacpp"),
+        Some("external"),
+        Some("candle"),
+        Some("pytorch"),
+    ] {
+        let diagnostics = typed_text_generation_option_diagnostics(Some(&options), backend);
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(diagnostics[0].option_path, "sampling.seed");
+        assert_eq!(
+            diagnostics[0].state,
+            if backend == Some("pytorch") {
+                OptionSupportState::Mapped
+            } else {
+                OptionSupportState::RequiresBackendSupport
+            }
+        );
+    }
+}
+
+#[tokio::test]
+async fn selected_text_seed_preserves_omission_zero_and_u64_max_at_chat_dispatch() {
+    for seed in [None, Some(0), Some(u64::MAX)] {
+        let (_directory, mut request, target, decision) = crate::selected_text_execution::fixture();
+        request.generation_options = Some(GenerationOptions {
+            sampling: SamplingGenerationOptions {
+                seed,
+                ..Default::default()
+            },
+            ..Default::default()
+        });
+        let backend = SelectedTextBackend::default();
+        let requests = backend.requests.clone();
+        let gateway = InferenceGateway::with_backend(Box::new(backend), "PyTorch");
+        let result = gateway
+            .execute_selected_text_with_cancellation(
+                request,
+                target,
+                decision,
+                InferenceExecutionCancellationHandle::running(),
+            )
+            .await
+            .unwrap();
+        let InferenceExecutionResult::TextGeneration {
+            option_diagnostics, ..
+        } = result
+        else {
+            panic!("text result expected")
+        };
+        let requests = requests.lock().unwrap();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(
+            requests[0].get("seed"),
+            seed.map(serde_json::Value::from).as_ref()
+        );
+        assert_eq!(
+            option_diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.option_path == "sampling.seed"
+                    && diagnostic.state == OptionSupportState::Mapped),
+            seed.is_some()
+        );
+    }
+}
+
+#[tokio::test]
+async fn selected_text_seed_dispatch_preserves_caller_resolved_default_precedence() {
+    use crate::model_contracts::GenerationOptionSource;
+
+    let model_defaults = serde_json::json!({"seed": 7});
+    for (workflow_seed, preset_seed, request_seed, expected_seed, expected_source) in [
+        (None, None, None, 7, GenerationOptionSource::ModelDefaults),
+        (
+            Some(11),
+            None,
+            None,
+            11,
+            GenerationOptionSource::WorkflowDefaults,
+        ),
+        (
+            Some(11),
+            Some(13),
+            None,
+            13,
+            GenerationOptionSource::RuntimePreset,
+        ),
+        (
+            Some(11),
+            Some(13),
+            Some(0),
+            0,
+            GenerationOptionSource::RequestOverride,
+        ),
+    ] {
+        let layer = |seed| GenerationOptions {
+            sampling: SamplingGenerationOptions {
+                seed,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let workflow = layer(workflow_seed);
+        let preset = layer(preset_seed);
+        let overrides = layer(request_seed);
+        // Resolution belongs to the caller. Missing fields in later scopes
+        // retain inherited values; an authored zero overrides every default.
+        let resolved = GenerationOptions::resolve_precedence(
+            Some(&model_defaults),
+            Some(&workflow),
+            Some(&preset),
+            Some(&overrides),
+        );
+        assert_eq!(resolved.options.sampling.seed, Some(expected_seed));
+        let source = resolved
+            .diagnostics
+            .iter()
+            .rfind(|diagnostic| diagnostic.option_path == "sampling.seed")
+            .unwrap();
+        assert_eq!(source.source, expected_source);
+        assert_eq!(
+            source.state,
+            if request_seed.is_some() {
+                OptionSupportState::Honored
+            } else {
+                OptionSupportState::Defaulted
+            }
+        );
+
+        let (_directory, mut request, target, decision) = crate::selected_text_execution::fixture();
+        request.generation_options = Some(resolved.options);
+        let backend = SelectedTextBackend::default();
+        let requests = backend.requests.clone();
+        let gateway = InferenceGateway::with_backend(Box::new(backend), "PyTorch");
+        let result = gateway
+            .execute_selected_text_with_cancellation(
+                request,
+                target,
+                decision,
+                InferenceExecutionCancellationHandle::running(),
+            )
+            .await
+            .unwrap();
+        assert!(matches!(
+            result,
+            InferenceExecutionResult::TextGeneration { .. }
+        ));
+        let requests = requests.lock().unwrap();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0]["seed"].as_u64(), Some(expected_seed));
+    }
+}
+
+#[test]
+fn stop_strings_mapping_requires_other_backend_support() {
+    let options = GenerationOptions {
+        stopping: crate::model_contracts::StoppingGenerationOptions {
+            stop_strings: vec!["END".into()],
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    for backend in [
+        None,
+        Some("llamacpp"),
+        Some("external"),
+        Some("candle"),
+        Some("pytorch"),
+    ] {
+        let diagnostics = typed_text_generation_option_diagnostics(Some(&options), backend);
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(diagnostics[0].option_path, "stopping.stop_strings");
+        assert_eq!(
+            diagnostics[0].state,
+            if backend == Some("pytorch") {
+                OptionSupportState::Mapped
+            } else {
+                OptionSupportState::RequiresBackendSupport
+            }
+        );
+    }
+}
+
+#[tokio::test]
+async fn selected_text_stop_dispatch_preserves_caller_resolved_default_precedence() {
+    use crate::model_contracts::{GenerationOptionSource, StoppingGenerationOptions};
+    let model_defaults = serde_json::json!({"stop_strings": ["model END"]});
+    for (workflow_stop, preset_stop, request_stop, expected_stop, expected_source) in [
+        (
+            None,
+            None,
+            None,
+            "model END",
+            GenerationOptionSource::ModelDefaults,
+        ),
+        (
+            Some("workflow END"),
+            None,
+            None,
+            "workflow END",
+            GenerationOptionSource::WorkflowDefaults,
+        ),
+        (
+            Some("workflow END"),
+            Some("preset END"),
+            None,
+            "preset END",
+            GenerationOptionSource::RuntimePreset,
+        ),
+        (
+            Some("workflow END"),
+            Some("preset END"),
+            Some("  終わり🛑\n"),
+            "  終わり🛑\n",
+            GenerationOptionSource::RequestOverride,
+        ),
+    ] {
+        let layer = |stop: Option<&str>| GenerationOptions {
+            stopping: StoppingGenerationOptions {
+                stop_strings: stop.map(|value| vec![value.to_owned()]).unwrap_or_default(),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let workflow = layer(workflow_stop);
+        let preset = layer(preset_stop);
+        let overrides = layer(request_stop);
+        let resolved = GenerationOptions::resolve_precedence(
+            Some(&model_defaults),
+            Some(&workflow),
+            Some(&preset),
+            Some(&overrides),
+        );
+        assert_eq!(resolved.options.stopping.stop_strings, [expected_stop]);
+        let source = resolved
+            .diagnostics
+            .iter()
+            .rfind(|diagnostic| diagnostic.option_path == "stopping.stop_strings")
+            .unwrap();
+        assert_eq!(source.source, expected_source);
+        assert_eq!(
+            source.state,
+            if request_stop.is_some() {
+                OptionSupportState::Honored
+            } else {
+                OptionSupportState::Defaulted
+            }
+        );
+        let (_directory, mut request, target, decision) = crate::selected_text_execution::fixture();
+        request.generation_options = Some(resolved.options);
+        let backend = SelectedTextBackend::default();
+        let requests = backend.requests.clone();
+        let gateway = InferenceGateway::with_backend(Box::new(backend), "PyTorch");
+        let result = gateway
+            .execute_selected_text_with_cancellation(
+                request,
+                target,
+                decision,
+                InferenceExecutionCancellationHandle::running(),
+            )
+            .await
+            .unwrap();
+        let InferenceExecutionResult::TextGeneration {
+            option_diagnostics, ..
+        } = result
+        else {
+            panic!("text result expected")
+        };
+        let requests = requests.lock().unwrap();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0]["stop"], serde_json::json!([expected_stop]));
+        assert!(option_diagnostics
+            .iter()
+            .any(
+                |diagnostic| diagnostic.option_path == "stopping.stop_strings"
+                    && diagnostic.state == OptionSupportState::Mapped
+            ));
+    }
 }

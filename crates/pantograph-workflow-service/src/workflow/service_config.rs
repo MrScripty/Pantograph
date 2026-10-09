@@ -439,6 +439,26 @@ fn dependency_requirements_registry_error(
     ))
 }
 
+fn load_artifact_format_settings(
+    path: &Path,
+) -> Result<ArtifactFormatSettings, WorkflowServiceError> {
+    if !path.exists() {
+        return Ok(ArtifactFormatSettings::default());
+    }
+    let content = std::fs::read_to_string(path).map_err(|error| {
+        WorkflowServiceError::Internal(format!(
+            "failed to read artifact format settings {:?}: {error}",
+            path
+        ))
+    })?;
+    serde_json::from_str(&content).map_err(|error| {
+        WorkflowServiceError::InvalidRequest(format!(
+            "artifact format settings file {:?} is invalid: {error}",
+            path
+        ))
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::{Arc, Mutex};
@@ -593,24 +613,4 @@ mod tests {
             }],
         }
     }
-}
-
-fn load_artifact_format_settings(
-    path: &Path,
-) -> Result<ArtifactFormatSettings, WorkflowServiceError> {
-    if !path.exists() {
-        return Ok(ArtifactFormatSettings::default());
-    }
-    let content = std::fs::read_to_string(path).map_err(|error| {
-        WorkflowServiceError::Internal(format!(
-            "failed to read artifact format settings {:?}: {error}",
-            path
-        ))
-    })?;
-    serde_json::from_str(&content).map_err(|error| {
-        WorkflowServiceError::InvalidRequest(format!(
-            "artifact format settings file {:?} is invalid: {error}",
-            path
-        ))
-    })
 }

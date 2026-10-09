@@ -5,7 +5,11 @@
   import {
     findConnectedTargetPort,
     normalizePortDefaultValue,
-    parseNumberNodeValue,
+    DESKTOP_SEED_MAX,
+    hasInferenceSeedTarget,
+    numberInputState,
+    numberInputPersistedValue,
+    numberInputDisplayValue,
   } from './primitiveInputMetadata';
 
   interface Props {
@@ -24,13 +28,15 @@
   let { id, data, selected = false }: Props = $props();
 
   let inputId = $derived(`number-input-${id}-value`);
+  let errorId = $derived(`${inputId}-error`);
+  let seedInput = $derived(hasInferenceSeedTarget(id, $nodes, $edges));
   let targetPort = $derived.by(() => findConnectedTargetPort(id, 'value', $nodes, $edges));
-  let defaultValue = $derived(parseNumberNodeValue(normalizePortDefaultValue(targetPort?.default_value)));
-  let currentValue = $derived(parseNumberNodeValue(data.value));
+  let defaultValue = $derived(numberInputState(normalizePortDefaultValue(targetPort?.default_value), seedInput).value);
+  let currentState = $derived(numberInputState(data.value, seedInput));
   let inputValue = $state('');
 
   $effect(() => {
-    const nextText = currentValue === null ? '' : String(currentValue);
+    const nextText = numberInputDisplayValue(data.value, seedInput);
     if (nextText !== inputValue) {
       inputValue = nextText;
     }
@@ -49,8 +55,7 @@
     const nextValue = target?.value ?? '';
     inputValue = nextValue;
 
-    const parsed = parseNumberNodeValue(nextValue);
-    updateNodeData(id, { value: parsed });
+    updateNodeData(id, { value: numberInputPersistedValue(nextValue, seedInput) });
   }
 </script>
 
@@ -76,15 +81,20 @@
           id={inputId}
           class="nodrag nopan nowheel w-full bg-neutral-900 border border-neutral-600 rounded px-2 py-1 text-sm text-neutral-200 focus:outline-none"
           style="--focus-color: {NODE_COLOR}"
-          type="number"
-          inputmode="decimal"
-          min={targetPort?.constraints?.min}
-          max={targetPort?.constraints?.max}
-          step="any"
+          type={seedInput ? 'text' : 'number'}
+          inputmode={seedInput ? 'numeric' : 'decimal'}
+          min={seedInput ? 0 : targetPort?.constraints?.min}
+          max={seedInput ? DESKTOP_SEED_MAX : targetPort?.constraints?.max}
+          step={seedInput ? 1 : 'any'}
+          aria-invalid={currentState.error !== null ? true : undefined}
+          aria-describedby={currentState.error !== null ? errorId : undefined}
           placeholder={DEFAULT_PLACEHOLDER}
           value={inputValue}
           oninput={handleInput}
         />
+        {#if currentState.error !== null}
+          <p id={errorId} class="text-[10px] text-red-400" role="alert">{currentState.error}</p>
+        {/if}
       </div>
       {#if targetPort?.description}
         <div class="text-[10px] text-neutral-500">{targetPort.description}</div>

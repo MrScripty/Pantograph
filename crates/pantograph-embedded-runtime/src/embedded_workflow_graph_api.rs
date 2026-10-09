@@ -1,15 +1,17 @@
 use pantograph_workflow_service::{
     ConnectionCandidatesResponse, ConnectionCommitResponse, EdgeInsertionPreviewResponse,
     FileSystemWorkflowGraphStore, InsertNodeConnectionResponse, InsertNodeOnEdgeResponse,
-    WorkflowFile, WorkflowGraphAddEdgeRequest, WorkflowGraphAddNodeRequest,
-    WorkflowGraphConnectRequest, WorkflowGraphEditSessionCloseRequest,
-    WorkflowGraphEditSessionCloseResponse, WorkflowGraphEditSessionCreateRequest,
-    WorkflowGraphEditSessionCreateResponse, WorkflowGraphEditSessionGraphRequest,
-    WorkflowGraphEditSessionGraphResponse, WorkflowGraphGetConnectionCandidatesRequest,
-    WorkflowGraphInsertNodeAndConnectRequest, WorkflowGraphInsertNodeOnEdgeRequest,
-    WorkflowGraphListResponse, WorkflowGraphLoadRequest,
+    ValidatedWorkflowExecutableValidationSnapshotRecord, WorkflowFile, WorkflowGraphAddEdgeRequest,
+    WorkflowGraphAddNodeRequest, WorkflowGraphConnectRequest,
+    WorkflowGraphCurrentValidationRefreshRequest, WorkflowGraphCurrentValidationRefreshResponse,
+    WorkflowGraphEditSessionCloseRequest, WorkflowGraphEditSessionCloseResponse,
+    WorkflowGraphEditSessionCreateRequest, WorkflowGraphEditSessionCreateResponse,
+    WorkflowGraphEditSessionGraphRequest, WorkflowGraphEditSessionGraphResponse,
+    WorkflowGraphGetConnectionCandidatesRequest, WorkflowGraphInsertNodeAndConnectRequest,
+    WorkflowGraphInsertNodeOnEdgeRequest, WorkflowGraphListResponse, WorkflowGraphLoadRequest,
     WorkflowGraphPreviewNodeInsertOnEdgeRequest, WorkflowGraphRemoveEdgeRequest,
     WorkflowGraphRemoveNodeRequest, WorkflowGraphSaveRequest, WorkflowGraphSaveResponse,
+    WorkflowGraphSessionExecutableValidationSnapshotPublishRequest,
     WorkflowGraphUndoRedoStateRequest, WorkflowGraphUndoRedoStateResponse,
     WorkflowGraphUpdateNodeDataRequest, WorkflowGraphUpdateNodePositionRequest,
     WorkflowServiceError,
@@ -18,6 +20,26 @@ use pantograph_workflow_service::{
 use crate::EmbeddedRuntime;
 
 impl EmbeddedRuntime {
+    /// Refresh validation from the current server-owned graph edit session.
+    pub async fn workflow_graph_refresh_current_validation_summary(
+        &self,
+        request: WorkflowGraphCurrentValidationRefreshRequest,
+    ) -> Result<WorkflowGraphCurrentValidationRefreshResponse, WorkflowServiceError> {
+        self.workflow_service
+            .workflow_graph_refresh_current_validation_summary(request)
+            .await
+    }
+
+    /// Publish executable validation from current graph-session provenance.
+    pub async fn publish_graph_session_executable_validation_snapshot(
+        &self,
+        request: WorkflowGraphSessionExecutableValidationSnapshotPublishRequest,
+    ) -> Result<ValidatedWorkflowExecutableValidationSnapshotRecord, WorkflowServiceError> {
+        self.workflow_service
+            .publish_graph_session_executable_validation_snapshot(request)
+            .await
+    }
+
     pub(crate) fn graph_store(&self) -> FileSystemWorkflowGraphStore {
         FileSystemWorkflowGraphStore::new(self.config.project_root.clone())
     }

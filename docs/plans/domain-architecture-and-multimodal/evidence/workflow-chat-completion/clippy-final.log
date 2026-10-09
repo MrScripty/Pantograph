@@ -1,0 +1,8 @@
+    Checking inference v0.1.0 (/workspace/Pantograph-chat-completion/crates/inference)
+    Checking node-engine v0.1.0 (/workspace/Pantograph-chat-completion/crates/node-engine)
+    Checking workflow-nodes v0.1.0 (/workspace/Pantograph-chat-completion/crates/workflow-nodes)
+    Checking pantograph-workflow-service v0.1.0 (/workspace/Pantograph-chat-completion/crates/pantograph-workflow-service)
+    Checking pantograph-embedded-runtime v0.1.0 (/workspace/Pantograph-chat-completion/crates/pantograph-embedded-runtime)
+    Checking pantograph-inference-interface-contracts v0.1.0 (/workspace/Pantograph-chat-completion/crates/pantograph-inference-interface-contracts)
+    Checking pantograph-runtime-host-contracts v0.1.0 (/workspace/Pantograph-chat-completion/crates/pantograph-runtime-host-contracts)
+    Finished `dev` profile [unoptimized] target(s) in 1m 07s

@@ -1,0 +1,77 @@
+{
+  "branch": "fix/text-seed-desktop-precision",
+  "frozen_seed_base": {
+    "head": "6cf549dd04933bd49a15b4527732d6a5db6e3c71",
+    "tree": "790791fba8cfc904664cc79f65f0672293332cff"
+  },
+  "main_normal_merge_source": {
+    "head": "d61b86fc27a7ecd725bd994b29a7cdcfcef9a6a3",
+    "tree": "e714ccb9508797268964a3c42190280d57b7b043",
+    "same_tree_as": "d0c9788c5d5ba11ebdfe548f360f1c270e41acab"
+  },
+  "source_sha256": {
+    "crates/inference/src/types.rs": "fc65aefc6ad8d4fcadfcf9e9a95bcbe40f6498f153135665f514a6ef473c6b44",
+    "src/components/WorkflowToolbar.svelte": "83823f8d00fca990b80e75b05c7fc9efa879fc29b6c7cc7b51ddec9473a1abf1",
+    "src/components/nodes/workflow/NumberInputNode.svelte": "a8346722925f280430ca1bd96983156e1515d9c081a42643beb5b1b97090866c",
+    "src/components/nodes/workflow/primitiveInputMetadata.ts": "8ce6e8f0a4f4f47d48fd863fb0a3362e07118e6ff32d0bd528b71a33c0c4a4df",
+    "src/components/nodes/workflow/desktopSeedPrecision.test.ts": "ff3eba4a2583706212429e482da076da3e6cc738e940648b4447e2689c985624",
+    "scripts/check-desktop-seed-precision-browser.mjs": "954c2fb9f30d29dbef0ea6bf712edc1e1dccd92dd0c79b57b77292fd67f27c29"
+  },
+  "unchanged_runtime_sha256": {
+    "crates/inference/torch/autoregressive.py": "1973f8accf08ea6e6ef32ebbc15022f1c9782f707eb96c45ee8173b08e36bd2d",
+    "crates/inference/torch/worker.py": "3e2c676047d46e69a63baae64e6aa9d5278431c718efa5349bd6a7f4c6239c75",
+    "crates/inference/torch/worker_contract.py": "7003db0e0d519b8390290f228e68bbc7783b869f6e7e0f0d29f9a7e3c9de6d43",
+    "crates/pantograph-embedded-runtime/src/runtime_host_text_execution.rs": "e79a6e2eafcb4d53718abadaa81fcbddfefd1f6654ca7dfb67626ea0a4fe7736"
+  },
+  "contract": {
+    "scope": "desktop NumberInput directly connected to llm-inference.seed, all fan-out edges",
+    "desktop_maximum": "9007199254740991",
+    "typed_api_maximum": "18446744073709551615",
+    "unsafe_text": "persist original string; show error; refuse before execution-session creation",
+    "omission": "absent",
+    "zero": "accepted",
+    "generic_floats": "unchanged"
+  },
+  "cargo_graph": {
+    "command": "cargo tree --locked --offline -p inference --features backend-pytorch --target all -e features",
+    "ORT_SKIP_DOWNLOAD": "1",
+    "download_binaries": "absent",
+    "ORT_Pumas_selected_dependencies": "absent",
+    "manifests_and_lockfile": "unchanged"
+  },
+  "versions": {
+    "node": "v24.12.0",
+    "npm": "11.6.2",
+    "rustc": "rustc 1.92.0 (ded5c06cf 2025-12-08)",
+    "cargo": "cargo 1.92.0 (344c4567c 2025-10-21)",
+    "chromium": "Chromium 151.0.7922.173 built on Debian GNU/Linux 13 (trixie)"
+  },
+  "results": {
+    "frontend_methods": 669,
+    "browser_groups": 14,
+    "rust_wire_methods": 1,
+    "typescript": "pass",
+    "changed_file_eslint": "pass",
+    "vite_build": "pass",
+    "strict_all_target_inference_clippy": "pass",
+    "format": "pass",
+    "critical": "pass",
+    "accessibility": "pass",
+    "scheduler_boundary": "pass",
+    "staged_traceability": "pass"
+  },
+  "independent_review": {
+    "model_effort": "Astra medium",
+    "result": "No remaining substantive findings after text-input sanitization correction",
+    "usage_metrics": "unavailable"
+  },
+  "limits": [
+    "controlled graph store and BaseNode shell",
+    "real component/helpers and JSON persistence, not full Tauri execution",
+    "submission guard, not actual scheduler dispatch, in browser fixture",
+    "no production loader/GPU/pretrained/custom/full-worker/ONNX qualification",
+    "no arbitrary-precision desktop graph representation",
+    "cannot recover text already rounded historically"
+  ],
+  "workspace_package_resolution": "worktree-local links; historical checkout packages excluded"
+}

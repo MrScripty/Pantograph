@@ -1,5 +1,26 @@
 # Execution Ledger
 
+## 2026-10-07 — Preserve rerank/audio; selected CPU rerank successor
+
+The user retained the unpublished removal experiment and authorized a main-based
+local replacement slice. Rerank was selected and reported before implementation;
+working direct rerank/audio remain unchanged. The [preservation report](reports/2026-10-07-scheduler-rerank-preservation.md)
+records selected-target CPU loading, bounded typed JSON, parent output parity,
+cancellation/caller custody, saved graphs, and the smallest deferred audio route.
+Qualification is synthetic and local; no public write, CI, model/runtime download
+or inspector repair belongs to this successor.
+
+## 2026-10-06 — Canonical single-prompt chat successor
+
+Fresh main `c75fa237` is explicitly composed with separate stop `e570302d` and
+embedding-revision `7be490d7` candidates on `feat/workflow-chat-completion`.
+The [chat report](reports/2026-10-06-workflow-chat-completion.md) records exact
+composition, canonical task/revision constraints, actual local synthetic CPU
+worker and saved public graph qualification, and precancellation/scope limits.
+Independent review, parent publication, live Pumas, pretrained/GPU/desktop and
+post-start native cancellation remain separate. Prior candidates stay preserved;
+no resident/ranking work or PR mutation is included.
+
 ## 2026-09-08 — Plan prepared
 
 - User priorities: coherent maintainable domain architecture, complete current-standards review/remediation, and functional text/image model workflows; execution by GPT-6 Astra medium.
@@ -313,26 +334,450 @@ Known-rate subtotal **$7.303404 Standard / $14.606808 Fast**. Current root turn 
 
 Delegation lesson: Astra delivered the consequential source-backed comparison. The Luna inventory lane did not supply a consolidated handoff before the bounded design stop and was interrupted; its attempts and root waiting remain charged, not an accepted independent change. The existing source trace and Astra comparison establish the selected contract; do not invent a completed field inventory. Use a shorter, explicitly bounded consumer enumeration or Sol medium for a future such task when coordination cost outweighs the direct model saving. This is one design outcome, not a controlled model benchmark.
 
-## 2026-10-02 — Production-composition execution restarted
+## 2026-10-05 — Workflow top-k candidate and current M3 sequencing
 
-- Reverified remote `main` at `4938e405c7f656365eefdca492774ccae110c90d`, no open PRs, and Coding-Standards at `dcc56f26e884ade260770beceba2501d3746200d`. Continued this sole active plan; older superseded plans and accepted lifecycle/continuation work remain history.
-- Prioritized independently repairable stock registration/variant propagation before the selected Pumas Owner/LocalClient migration. Source tracing revalidated P-01/P-02 and found P-08 semantic backend-hint mismatch in the same producer-projection population. Controlled tests with manually complete candidates are insufficient; actual producer-path regression is the acceptance gate.
-- Admitted `codex/production-dispatch-identity` from the exact base, plus disjoint persistence and research reports coordinated by the parent. No Pumas/other repository writes, broad backend rewrite, GPU inference, browser use or expensive PoC search port is authorized by this slice. No commits or tests have yet established implementation acceptance.
-- Manual standards routing: Core/Router; implementation, planning/discovery, development proportionality, verification/oracles, documentation and commit; architecture, contracts/code design; Rust/API and library guidance. Concurrent proposals require base/shared-authority comparison at integration; only this implementer edits current plan controls. The executable Router has not been run.
-- Rust/cargo/rustup are absent. Official workspace-local 1.92.0 setup with rustfmt/Clippy and Cargo downloads is pending approval. Executed Rust evidence, real model qualification and current CI remain explicit pending stages, never inferred from source inspection.
+- Feature milestone `9d6646a47c0dda8d391266970e160f0fb53aacb3`, tree
+  `6b4e09ae6b7ad80cf010babb1096072ce6a1edad`, is published on
+  `feat/workflow-text-top-k`, directly based on PR54
+  `d6e9fcd15b135bedf36437ab2eceba229a0c9e2c`. Optional U64 `top_k`
+  projects into existing typed sampling options, accepts zero, and leaves
+  omitted controls at backend defaults. The [feature report](reports/2026-10-05-workflow-text-top-k.md)
+  records boundaries, test coverage and final hosted/native commands.
+- Contract tests: 20 passed; PyTorch-enabled inference tests: 686 passed.
+  Normal-default embedded library/test compiler-Clippy check passed with ONNX
+  downloading disabled. Native host tests are compiled but unexecuted locally;
+  cloud ONNX/native execution remains deferred. Formatting, critical,
+  accessibility and staged/range traceability gates accompany publication.
+- Source reconciliation confirms current Pumas pin `2243a2b6` already exposes
+  authenticated full facts, and Pantograph's existing facade and dispatch/host
+  composition already support Owner/LocalClient. Plan header and DA-I03/04 now
+  distinguish implemented source from pending qualification; the old
+  producer/consumer implementation step is retired from current sequencing.
+- Parent owns composition with accepted repair series `c83d5179`, `029ac704`,
+  `cd54e12`, independent review and merge. That series is not included here;
+  graph/reservation/observation files are untouched. Final hosted/native tests
+  and current owner-produced model/device qualification precede required-real
+  dependent text-to-image acceptance. No DA-03/07 closure, broader runtime
+  capability, model inference or speculative scheduler work is claimed.
 
-## 2026-10-02 — Production dispatch source verified; integration pending
+The parent subsequently published those repairs as `f56e2b5a` → `f9fb470c` →
+`78bc71931772d891a6b5555076a072a63fe969a7`, exact tree
+`141a0eae52ec7aa587536da297dd14a652836431`, and authorized composition.
+PR54's remote head/ancestry match that source. The feature branch merges it
+without conflicts, preserving the separate feature and plan milestones; all
+five repair paths match the published bytes. The composed normal-default
+embedded compiler-Clippy check, formatting and critical gate pass. Native
+execution remains deferred and the parent's repair-head CI does not substitute
+for qualification of the final feature composition. The plan now sequences
+parent review and final hosted/native acceptance of that composition.
 
-- Repaired P-01/P-02 plus source-backed P-08 model-source/backend mismatch. Review found P-09 graph facts contradictory to dispatch (no devices; cold runtime treated absent); the final source now preserves backend task/model-source/variant facts, projects only authoritative concrete devices, admits supported cold CPU and carries selected variant through graph resolution, candidate production, scheduler and text-host completion. Explicit host identity and existing trust/readiness/claims/continuation remain intact.
-- Final source Rust-diff SHA-256 `5dd0629b774e68129055d6be25cf2e1f2899b9ed443442707026b24047bed16c`. `cargo fmt --all -- --check` passes. Focused dispatch 46/46 passes; broad embedded candidate 449/3 versus exact-base 444/3 has identical failure identities and assertion bodies. Full Clippy stops in existing managed-dependencies code; package-only JSON comparison has the same 49 diagnostic observations, no additions/removals. Detailed boundary/environment/commands are in [production dispatch report](reports/2026-10-02-production-dispatch.md); no clean broad-suite/static/hardware claim.
-- Approved workspace-local Rust 1.92.0 setup and official matching ONNX Runtime 1.24.2 artifact recovered the declared native dependency after CDN connection refusal. Used supported linker paths and isolated XDG test state, not dependency edits or feature suppression. No source edits to Pumas or any unrelated repository.
-- TOOL-01 is a publication dependency: old traceability enforces retired directory README/heading rules. A separate reviewed gate replacement will be the initial stack base; repairs target its branch for focused review until main integration. No hook bypass, boilerplate docs or history rewrite. All changes remain uncommitted pending that composed-tree check.
-- Latest user authority permits parent-coordinated merges only after exact-head CI passes and applicable Greptile/CodeRabbit review is satisfied. Absence of CI and draft-skipped review are not passes. Docs-only PR #1 at `b093806` independently reproduces CI lint/audit/generator/native blockers; those stay in a separate baseline-repair scope.
+Independent top-k review then identified real sampling failure for k above
+vocabulary; the earlier recording/envelope evidence and no-blocker assessment
+were provisional. Separate sampler milestone `3bf3eb45` caps positive k at
+logits width using Transformers semantics and preserves explicit non-streaming
+zero. Four real CPU tensor/streaming/kwargs tests pass and detect both defects
+in the frozen original; [sampling evidence](reports/2026-10-05-top-k-vocabulary-sampling.md)
+distinguishes this from model inference.
 
-- Independent re-review accepted the bounded producer-projection source at the final diff hash and separately passed graph→candidate→selection→text-host, indexed-owner observation and no-reservation negative tests. Integration remains `Verifying` pending the exact gate dependency and published CI; source acceptance does not close DA-03/04/05/06/07.
+Separate PR54 fixture successor `174c1950`, based directly on `78bc7193`,
+persists canonical built-in definitions and asserts public I/O discovery while
+retaining exact final text and zero runtime loads. The [fixture handoff](reports/2026-10-05-pr54-session-output-discovery.md)
+records the full finalization trace and exact native test names. Eleven
+supported node-engine tests pass; native public-session execution remains
+deferred. Their conflict-free composition preserves the frozen top-k branch
+and both independent commits. The composed 686-test inference suite and normal
+embedded library/test compiler-Clippy check pass; final hosted/native scenario
+execution and parent review remain outstanding.
 
-## 2026-10-02 — Traceability dependency published; dispatch composed
 
-- Gate draft PR #2 at `9567186252f7ebb60794911baeeabce0daec5140` contains the reviewed impact-map replacement. Root independent review reproduced 24 tests; hosted pinned Node/npm also passed all 24. All three aggregate workflows remain red on existing debt; CodeRabbit review was requested and initially rate-limited. No merge occurred.
-- Dispatch fast-forwarded from its admitted base onto that exact gate commit without rewriting history or changing any staged implementation bytes. Fresh staged traceability, whitespace and formatting pass. The existing previously qualified binary reran 46 dispatch tests and the connected-host/indexed-device cases; this does not claim fresh composed-tree compilation.
-- Focused dispatch publication targets the gate branch. CI-01 remains separate; no unrelated baseline repair, check suppression or runtime acceptance was mixed into this proposal.
+## 2026-10-05 — Finite temperature and real CPU hosted qualification
+
+Peer source review accepts frozen `174c1950` and `3bf3eb45`; composition
+`60197971` remains unchanged pending exact-head hosted/native execution.
+The existing review logs and exact source/hash inventory are saved in Library
+`libfile_cdf0c1d747c0819183dfb308ea0875d0`, without expensive reruns. Small
+CI successor `a6d1fd15` adds real offline CPU sampler tests to the existing
+focused-test job and retains their log; hosted provisioning is not yet claimed.
+
+The separate [temperature milestone](reports/2026-10-05-workflow-text-temperature.md)
+adds an optional zero-inclusive descriptor, a finite JSON-number host variant,
+and checked f32 conversion. Existing integer ports and omitted defaults are
+preserved. Shared contracts pass 73 tests, inference passes 688, and five real
+CPU tests include actual Transformers generation and streaming sampling on
+fixed logits. Native descriptor/host/workflow tests are compiler checked only.
+Parent owns publication and review; required-real acceptance remains open.
+
+
+## 2026-10-05 — Nucleus sampling and CI failure propagation
+
+Independent review found the frozen CPU CI step could mask unittest failures
+through tee. Separate corrective commit `fddae90d` explicitly enables Bash
+pipefail and corrects the earlier report; exact-script red/green shell checks
+return failing/passing status correctly while retaining logs. A green run from
+uncorrected `a6d1fd15` alone cannot qualify sampling. Frozen histories and
+Library packets remain unchanged.
+
+The separate [top_p milestone](reports/2026-10-05-workflow-text-top-p.md) starts
+from temperature `e0293ebf` and integrates that CI correction. It reuses the
+finite-number host contract, exposes an optional [0,1] input without a default,
+and repairs streaming ties/cutoffs to match actual Transformers nucleus
+sampling. Six real CPU tests pass, including 375 interaction cases; the new
+matrix detects 112 failures against the frozen sampler. Shared tests pass 74,
+inference passes 690, and embedded library/test compilation passes. Native
+host/source execution and hosted provisioning remain pending; parent owns
+independent review/publication, including any forthcoming finite-contract
+corrections. No model weights, ONNX retry or complete-workflow acceptance.
+
+
+## 2026-10-05 — Exact-head native text-control route and dependency blocker
+
+Continued from frozen `a8c6970f` in the newly ready environment. Embedded host
+and workflow binary attempts failed at missing ONNX symbols; one standard
+locked build returned HTTP 403 for the pinned ONNX Runtime 1.24.2 artifact.
+Zero native host/workflow tests executed. No further dependency download,
+substitution, pin change or model-weight download occurred.
+
+The separate [qualification route](reports/2026-10-05-text-control-native-qualification-route.md)
+adds exact-source/cleanliness and nonempty-suite guards, real CPU tests,
+pipefail/log capture and an independent required job in existing Quality Gates.
+A controlled Rust-command fixture with actual CPU tests proves 112 frozen-source
+sampling failures return exit 1 and six corrected tests return exit 0. Those
+controlled statuses do not count as native execution. Shared serialization
+passes 74 tests. Parent retains hosted/native qualification and publication;
+next planned feature is DA-03's desktop-authored dependent real text-to-image
+workflow after owner identity/target/device and desktop prerequisites.
+
+## 2026-10-05 — Shared backing resource admission candidate
+
+Continued independent scheduler delivery from frozen qualification `6aa6b717`
+on `feat/scheduler-shared-resource-admission`. Research and current registry
+inspection identify per-runtime capacity as the bounded prerequisite: two runtime
+claims can spend one backing pool independently. The
+[candidate](reports/2026-10-05-shared-resource-admission.md) adds explicit shared
+RAM/VRAM domains to existing evaluation, authoritative admission and provisional
+custody. Eleven public tests exercise actual contention, unified-memory sums,
+replacement rollback/transfer, margins and configuration. Full portable suites
+pass 106 registry plus 133 scheduler tests. Production physical bindings and
+desktop activation remain open; native sampling qualification stays blocked.
+Parent retains review/PR/hosted execution; old milestones remain frozen.
+
+## 2026-10-05 — Explicit shared-resource startup composition candidate
+
+The parent froze `27af8aa3` and authorized connecting its shared admission API
+through the application. The [successor](reports/2026-10-05-shared-resource-composition.md)
+adds optional domains to existing AppConfig/config.json and uses the registry's
+portable factory in actual desktop setup before gateway/workflow startup. No
+backing topology is inferred from device selection. Empty/absent configuration
+retains the previous empty registry; malformed declarations fail startup, and
+live domain edits require restart. Eight actual portable composition tests cover
+persisted declarations, shared contention, unified memory and rollback/transfer.
+Native AppConfig tests are authored but unexecuted because GTK/WebKit prerequisites
+are absent. Parent retains desktop/native qualification and review; frozen
+sampling source and PR54 diagnostics remain unchanged.
+
+## 2026-10-05 — AppConfig filesystem repair and production composition qualification
+
+Continued separately from frozen `73211ddc` on
+`qualification/shared-resource-app-config`. Peer review found `Path::exists`
+discarded permission/metadata failures and broken symlinks as apparent absence.
+The [repair and qualification](reports/2026-10-05-app-config-startup-qualification.md)
+uses a fallible read and confirms genuine absence, preserving other filesystem,
+JSON and domain errors. The actual AppConfig implementation now lives in a
+production crate consumed by Tauri setup, so full settings, persistence and
+startup registry composition execute without unrelated GUI/inference dependencies.
+Ten AppConfig tests and the existing 114 registry/133 scheduler tests pass;
+the exact frozen loader fails three new filesystem regressions. No native
+runtime is simulated. Official APT update was attempted with owner authorization
+but returned OS permission denial; desktop compilation fails at missing
+`glib-2.0.pc`. Tauri setup/IPC and desktop-process qualification stay blocked.
+Parent retains review/publication; old source milestones and PR54 remain frozen.
+
+## 2026-10-05 — Explicit retained model resource accounting
+
+Parent froze `eabbcc83` and authorized the next independent scheduler capability.
+Source inspection confirms shared domains sum task leases only; model residency
+metadata and candidate loaded-memory estimates do not keep an idle producer's
+allocations charged. The [successor](reports/2026-10-05-resident-resource-accounting.md)
+adds explicit model/instance resident declarations at the registry owner, counts
+them in local/shared admission, and preserves envelopes after task cleanup.
+Unknown loaded shared-pool members fail admission with typed unavailable
+diagnostics instead of exposing free capacity. Fifteen new portable tests cover
+lifecycle, identity freshness, real contention, unified kinds, overflow and
+provisional replacement. Current host producers still need a bridge publishing
+per-kind estimates; peak task envelopes remain conservatively charged in full.
+No hardware measurements, native execution or pin changes are claimed. Parent
+retains review/publication; frozen qualifications and PR54 remain unchanged.
+
+
+## 2026-10-05 — Ordered PyTorch producer resident estimates
+
+Continued from frozen `254aef1` on `feat/runtime-producer-resident-estimates`.
+The [producer bridge](reports/2026-10-05-runtime-producer-resident-estimates.md)
+uses explicit startup estimates for the exact observed model target, publishing
+coherent source/sequence/model/instance facts from the existing gateway owner.
+Old stops and loads cannot replace newer allocation facts; explicit zero and
+missing per-kind estimates remain distinct. Effectful load failure retains the
+previous envelope and blocks shared admission until owner evidence resolves it.
+PyTorch shutdown must acknowledge cleanup even after failed load erased metadata.
+Existing peak task claims/custody remain fully charged. Portable owner/config
+fixtures qualify the logical accounting; native GUI/GPU execution and other
+producers remain unqualified. No previous branch rewrite or PR/review creation.
+
+## 2026-10-06 — Graph-authored image guidance scale
+
+Parent froze green integration `ab7a1b4e` and authorized the next bounded planned
+capability on a separate successor. The [guidance control](reports/2026-10-06-workflow-image-guidance-scale.md)
+completes an explicitly deferred image input: descriptor and actual host now
+forward optional checked finite-f32 guidance to the existing planner/worker.
+Source `9486610d` passes 803 inference, 507 embedded, 22 interface and eight
+materialization tests, plus strict affected-package Clippy. An explicit real
+CPU Torch/Diffusers test passes six guidance cases using a tiny random UNet and
+an exact conditional-noise oracle; controlled public workflow sessions qualify
+graph materialization and lifecycle separately. No pretrained-image, GPU or
+desktop claim follows. Full-peak accounting, ownership and unknown facts remain
+unchanged; no dependency/download changes or PR actions. Parent owns review and
+publication. Execution cost was not measured; no estimate is invented.
+
+## 2026-10-06 — Multiple-image workflow generation
+
+The [image-count successor](reports/2026-10-06-workflow-image-count.md) continues
+from frozen guidance `14dfd4a7`. Optional count is bounded by the existing
+64-output host contract; compatible PyTorch batches preserve per-member image
+order and advancing seeded streams. Terminal workflow projection keeps singleton
+shape and returns an ordered artifact-reference array for multiple images.
+Source `994463e1` passes 805 inference, 509 embedded, 916 workflow-service and
+74 contract tests. Explicit native CPU guidance/count tests pass on actual
+Diffusers 0.39.0 and production-loader-admitted 0.37.0 with a tiny random UNet.
+No pretrained model, GPU or desktop qualification follows. Strict affected-package
+Clippy and repository gates pass. PR56 import repair remains independently based
+on `ab7a1b4e`; parent owns reviews/publication. Cost was not measured.
+
+## 2026-10-06 — Resumed graph-authored denoising scheduler feature
+
+Parent froze the PR56 correctness repair for independent publication review and
+resumed the separate scheduler checkpoint `69e7a3b9`. The
+[scheduler control report](reports/2026-10-06-workflow-image-scheduler.md) records
+closed DDIM/Euler selection, real public-session/Pumas host routing and CPU native
+oracles without pretrained weights. Correctness repairs change no required public
+interface, so no commits from their frozen branch were mixed into this feature.
+A misleading shared Cargo cache run was excluded; a private target cleaned of all
+workspace artifacts passes 808 inference, 511 embedded, 75 contract and 916 service
+checks. The isolated native rerun passes all three actual CPU checks, strict five-package
+Clippy passes without suppression, and all nine no-download graphs pass. The
+resumption manifest preserves the cache diagnosis; the final manifest records
+actual completion and remote identities. No service-limit failure occurred. Parent owns independent review and integration.
+
+## 2026-10-06 — Isolated PR56 correctness review checkpoint
+
+Parent paused unrelated image scheduler work for five PR56 review findings.
+The [saved repair checkpoint](reports/2026-10-06-pr56-correctness-review-checkpoint.md)
+records four reproducible correctness defects and actual child-process evidence
+contradicting the reaped-child summary. Source `5da09171` is based on the published
+import-only integration `b3c58756`; feature histories remain separate. Full comment
+body reads were Forbidden, with no credential or access-route changes. Exact
+comment disposal and integration publication remain blocked on those bodies.
+Test successor `a92f67ff` passes all affected suites: 805 inference, 503 embedded,
+141 registry and 14 config, plus all 661 frontend assertions. Strict all-target
+Clippy and no-download/gate checks pass. The first combined run exposed six
+zero-probe fixture assumptions, corrected without weakening uncertainty checks.
+No native desktop/GPU/model execution claim is added.
+
+The parent subsequently supplied all five original full review bodies. Exact
+validation found two missing cases in the summary-based recovery checkpoint:
+Candle supervised publication still reused its counter value, and an explicit
+VRAM-only task still failed on unknown RAM residency. Source `4f877149` closes both
+with deterministic regressions against actual owner publication and all four
+registry admission paths. The pinned Tokio InvalidInput allegation is incorrect;
+Unix native child tests and the exact dependency implementation support rejecting
+it without changing production shutdown. No review CLI or denied fetch is used.
+Final source qualification passes 806 inference, 503 embedded and 142 registry
+checks with strict all-target mixed-backend Clippy. Config/frontend source remains
+unchanged from its passing qualification. The independent repair branch is
+published normally; the parent alone updates PR56 and replies/resolves reviews.
+
+## 2026-10-06 — Separate image-controls integration candidate
+
+Parent requested a normal-history successor combining scheduler `af4174a4` with
+reviewed correctness `13d24e89`. Guidance/count are already ancestors, so merge
+`a894ec69` adds correctness once and preserves both parents. Only plan/ledger
+conflicts required resolution. Test successor `12728772` adds combined controls
+through public sessions and worker envelopes, and checks each malformed parameter
+amidst other valid controls. The [integration report](reports/2026-10-06-image-controls-integration-candidate.md)
+records isolated-target qualification: 812 inference, 512 embedded, 142 registry,
+14 config, 75 contract, 916 service and 661 frontend passes, plus three actual
+CPU Diffusers checks. Strict seven-package Clippy and all required gates pass. The final checkpoint
+changes documentation only and is published as a separate review candidate.
+PR56 and all frozen feature/correctness refs remain untouched. Parent owns review
+and publication after gates; native GTK/GPU/pretrained-model limits remain open.
+
+## 2026-10-06 — PR56 config fixture contract correction
+
+The parent's re-review record 4191994790 identifies malformed startup-domain keys
+and incomplete AppConfig fields in the controlled handler regression. The
+isolated successor of `13d24e8` uses the actual registry startup JSON and a strict
+complete-payload save expectation. A new rejection regression fails against the
+old mock and passes after repair; all three focused handler tests, TypeScript,
+formatting, critical/accessibility gates, lint and traceability pass. Production
+code is unchanged. Parent retains PR56 advancement; the combined image-controls
+candidate is preserved independently. See the existing
+[checkpoint report](reports/2026-10-06-pr56-correctness-review-checkpoint.md).
+
+## 2026-10-06 — Graph-authored text repetition penalty
+
+The independent successor of reviewed correctness `13d24e89` exposes the existing
+text sampling option through the descriptor, selected host/gateway and PyTorch
+worker owner. Omission preserves model defaults; explicit one is neutral.
+Validation refuses non-positive/non-finite values before effects, including the
+NaN-to-JSON-null typed API case. Full token history is used for native Transformers,
+manual streaming and SDAR cache/replay; masked block diffusion rejects the option.
+The actual public session connects a Selection Input source and retains generated
+text. The [feature report](reports/2026-10-06-workflow-text-repetition-penalty.md)
+records 811 inference, 505 embedded, 23 interface and 661 frontend passes, 13 actual
+CPU tests, strict Clippy, type/format/critical/accessibility/traceability checks
+and nine no-build-download graphs. Initial import/snapshot/source fixture errors
+were corrected before these final passes. Native desktop/GPU/pretrained/ONNX
+qualification remains separate. Config `f0472ca1` and combined `1034daeb` review
+checkpoints remain frozen; parent owns PR/review/integration.
+
+## 2026-10-06 — Text repetition numeric successor
+
+Review reproduced float32 extreme overflow, fp16 overflow and ordinary fp16
+rounding divergence at frozen `2a6f7cf5`. The separate
+[numeric correction](reports/2026-10-06-text-repetition-numerics.md) promotes manual
+scores to float32 and rejects undefined repetition arithmetic at the native
+processor's original position, preserving defaults and masks. Scalar bounds are
+unchanged; operational overflow now explicitly refuses. Cached numeric refusal
+cannot fall back to a different history. Twenty-three actual CPU tests and 811
+portable inference checks pass; strict inference Clippy and affected quality
+gates pass. Frozen feature/evidence and independent image/main integration remain
+unchanged. Native desktop/GPU/pretrained/ONNX/SDAR loading remain unqualified;
+parent owns review and publication.
+
+## 2026-10-06 — Cached numeric refusal clears live KV
+
+Review accepted numeric checkpoint `12980c2f` but reproduced old token history
+beside a mutated cache after refusal. The separate
+[KV refusal correction](reports/2026-10-06-text-repetition-kv-refusal.md) clears
+the live snapshot before rethrowing without fresh retry. A real DynamicCache
+regression fails on the old catch for suffix/generated/replay mutations and
+passes with refusal of export, later fresh capture, subsequent reuse and matching
+exported cache/history. Twenty-four actual CPU and 811 portable inference checks,
+strict inference Clippy and affected gates pass. Existing numeric/source evidence
+remains frozen; model resident custody and resource accounting are unchanged.
+Native desktop/GPU/pretrained/ONNX qualification remains separate. Parent owns
+PR/review/merge; merged PR57 image controls are not part of this successor.
+
+## 2026-10-06 — Graph-authored minimum new tokens
+
+After verified local Git identity correction, the parent lifted the commit hold
+and authorized the next inference/scheduler capability. The successor of frozen
+KV refusal `59992b9b` exposes the existing typed minimum-new-token option through
+the descriptor, actual selected host/gateway, public scheduler and PyTorch worker.
+The [feature report](reports/2026-10-06-workflow-text-min-new-tokens.md) records
+budget validation before effects, official EOS suppression, model-default parity,
+suffix/replay counting and cached operational refusal without fresh retry.
+Thirty-two actual CPU methods, 815 inference checks plus one doctest, 508 embedded,
+24 interface and 661 frontend tests pass, alongside strict Clippy and quality
+gates. The initial full-disk link failure was recovered by cleaning generated
+workspace artifacts; frozen source/evidence remain unchanged. Native desktop,
+GPU, pretrained/custom generation and ONNX execution remain unqualified. Parent
+owns review/publication; PR54/55 and merged PR57 image controls are separate.
+
+## 2026-10-06 — Text controls composed onto current main
+
+Parent accepted repetition/KV and minimum-token source scopes, then prioritized
+their normal-history composition onto main `763e8d4b` before text-seed work.
+The [composition report](reports/2026-10-06-text-controls-main-composition.md)
+records preservation of both parents' text/image controls and startup fixture.
+Only plan/ledger conflicts required resolution. Fresh qualification passes 821
+inference checks plus one doctest, 517 embedded, 142 registry, 14 config, 77
+interface/host contracts, 916 service and 662 frontend tests, alongside 32 actual
+text CPU methods, strict Clippy and affected gates. Three actual CPU Diffusers
+checks pass serially on installed 0.39.0; the earlier parallel scheduler assertion
+failure remains recorded, with shared class-method patch interference inferred
+from source. No native GPU/pretrained/custom/full-worker/ONNX claim is added.
+Frozen source/evidence and PR54/55 remain unchanged. Seed inspection produced no
+source edits and is paused separately; parent owns PR/review/merge and hosted CI.
+
+## 2026-10-06 — Native Diffusers parallel harness isolation
+
+Exact qualification JSON and original failure/serial logs for frozen `9e8cd64c`
+are published by evidence-only successor `fdb2bf2b`, without source changes.
+The [separate harness repair](reports/2026-10-06-diffusers-native-parallel-isolation.md)
+reproduces the global scheduler-method counter collecting a foreign-thread step:
+three observed instead of two. Thread-local observation now retains exact owned
+call/oracle assertions while two real foreign steps complete under observation.
+The original parallel invocation passes all three native CPU tests, with unchanged
+count/ignore/tolerance and no serialization. Full inference passes 821 plus one
+doctest; strict all-target inference Clippy and affected gates pass. No production
+file changes or broader model/GPU/full-worker qualification are claimed. Frozen
+sources and original evidence remain unchanged; seed may resume separately after
+this bounded publication gate. Parent owns review/PR/merge and hosted CI.
+
+## 2026-10-06 — PR58 omitted-control compatibility repair
+
+Parent paused the separate text-seed work and prioritized two validated PR58
+findings. The [repair report](reports/2026-10-06-pr58-omitted-controls-repair.md)
+records exact main/PR58 comparison, restored tokenizer EOS stopping, native
+inherited minimum/forced-EOS semantics, strict authored minima and existing SDAR
+retry delimiter safeguards. The retry guard enforces the authored floor rather
+than its internal heuristic, and refused retries discard KV before setup. Original
+failing logs and final passes remain distinct in a hashed evidence archive. Forty
+actual Python CPU methods, six exact-main comparison methods, 747 inference
+library tests and strict all-target inference Clippy pass with affected gates.
+Independent medium review found no remaining blocker. No ONNX build download,
+manifest/lockfile, seed, resident-accounting or main changes are included. Seed
+hashes remain unchanged; loader/GPU/pretrained/desktop qualification and parent
+PR58 integration/hosted CI remain outstanding.
+
+## 2026-10-06 — Graph-authored text seed on the PR58 repair line
+
+Parent paused seed for the bounded PR58 repair, closed its source blockers at
+`796d84cd`, and resumed seed using that integration base. The documentation-only
+repair successor `d0c9788c` was pushed separately and incorporated normally; both
+remain ancestors, and frozen seed/repair evidence is preserved. The [seed report](reports/2026-10-06-workflow-text-seed.md)
+records optional u64 graph input, actual host/chat/worker forwarding, caller-owned
+scope defaults, private token RNG/replay/omission semantics and explicit unsupported
+route refusals. Seeded minimum/EOS/retry tests preserve the accepted PR58 behavior.
+Fifty-nine actual Python methods, 795 inference library plus 74 integration tests
+and one doctest, 524 embedded, 78 interface/host contract tests, 976 workflow tests
+and 662 frontend tests pass with affected static gates. Independent medium review
+found no substantive issue. Dynamic ORT/no-download checks preceded builds; no
+manifest, lockfile, main or old resident-accounting changes are included. PR58 main
+merge and parent publication/hosted CI remain release dependencies. GPU, real
+models/loaders, desktop and full-u64 desktop entry remain unqualified.
+
+## 2026-10-06 — Desktop text-seed precision successor
+
+Parent review reproduced JavaScript rounding before Rust validation in frozen
+`6cf549dd`. The [precision repair](reports/2026-10-06-text-seed-desktop-precision.md)
+limits direct desktop NumberInput seed entry to safe nonnegative integers, retains
+invalid raw text through save/load, shows an error and guards scheduler submission.
+Generic floats and full-u64 typed API routes remain unchanged. Fourteen controlled
+Chromium component groups, 669 frontend tests and the expanded Rust wire test
+pass with affected gates. Independent medium review closed the browser number
+field sanitization finding. Verified main `d61b86fc` is incorporated normally
+with the exact prior repair tree; frozen seed/repair histories remain unchanged.
+No RNG implementation, resident-accounting or dependency/download change is
+included. Full desktop execution, production loader/GPU/pretrained qualification
+and parent publication/hosted CI remain separate.
+
+## 2026-10-06 — Canonical CPU embedding graph successor
+
+The parent selected the canonical embedding graph after fresh main inspection.
+The [embedding report](reports/2026-10-06-workflow-cpu-embedding-graphs.md) records
+the isolated `c75fa237` base, typed embedding/JSON ports and connections, sequential
+selected-owner envelope execution and bounded exact-JSON vector output. Public
+save/load and scheduler execution compare both committed actual Candle CPU
+fixtures, selected identity, metadata and usage. Focused tests cover scoped
+source lookup, malformed vectors/results, cancellation and member identities.
+Independent source review found no remaining substantive issue. The first
+combined run rejected two new test fixtures whose nested readiness/dispatch
+identities had not followed their distinct members; only the fixtures were
+corrected, with failure evidence retained. Final qualification is recorded in
+the report. The complete effective dynamic-ORT feature graph preceded builds,
+with `ORT_SKIP_DOWNLOAD=1` and no binary downloads or dependency changes.
+Accepted stop-string/PR60 and all seed/precision/repair/paused histories remain
+separate. Controlled package/readiness/dispatch/session facts and untrained CPU
+models do not qualify live Pumas, pretrained quality, GPU, desktop or native
+batching/throughput. Full plan acceptance and parent publication remain separate.

@@ -79,17 +79,13 @@ impl BackendFactory for CandleFactory {
         BackendInfo {
             name: "Candle".to_string(),
             backend_key: "candle".to_string(),
-            description: if available {
-                "In-process Candle inference (CUDA)".to_string()
-            } else {
-                "In-process Candle inference (CUDA required)".to_string()
-            },
+            description: "In-process CPU F32 BERT embeddings".to_string(),
             capabilities: CandleBackend::static_capabilities(),
             default_start_mode: BackendDefaultStartMode::Embedding,
             active: false,
             available,
             unavailable_reason,
-            can_install: false, // CUDA must be installed system-wide, can't auto-install
+            can_install: false, // Compiled in-process backend, no managed installation.
             runtime_binary_id: None,
         }
     }
@@ -129,7 +125,12 @@ impl BackendFactory for PyTorchFactory {
 /// At runtime, the registry can list available backends and create
 /// instances on demand.
 pub struct BackendRegistry {
-    factories: HashMap<String, Box<dyn BackendFactory>>,
+    factories: HashMap<String, RegisteredBackendFactory>,
+}
+
+struct RegisteredBackendFactory {
+    registered_name: String,
+    factory: Box<dyn BackendFactory>,
 }
 
 pub fn canonical_backend_key(name: &str) -> String {
@@ -164,28 +165,38 @@ impl BackendRegistry {
         registry
     }
 
-    /// Register a backend factory
+    /// Register one factory per canonical backend identity. Registering another
+    /// alias replaces the previous factory, just like registering the same name.
     pub fn register(&mut self, name: &str, factory: Box<dyn BackendFactory>) {
-        self.factories.insert(name.to_string(), factory);
+        self.factories.insert(
+            canonical_backend_key(name),
+            RegisteredBackendFactory {
+                registered_name: name.to_string(),
+                factory,
+            },
+        );
     }
 
     /// List all available backend names
     pub fn available_names(&self) -> Vec<&str> {
-        self.factories.keys().map(|s| s.as_str()).collect()
+        self.factories
+            .values()
+            .map(|entry| entry.registered_name.as_str())
+            .collect()
     }
 
     /// Get information about all registered backends
     pub fn list(&self) -> Vec<BackendInfo> {
-        self.factories.values().map(|f| f.info()).collect()
+        self.factories
+            .values()
+            .map(|entry| entry.factory.info())
+            .collect()
     }
 
     fn resolve_factory(&self, name: &str) -> Option<&dyn BackendFactory> {
         self.factories
-            .iter()
-            .find_map(|(registered_name, factory)| {
-                (canonical_backend_key(registered_name) == canonical_backend_key(name))
-                    .then_some(factory.as_ref())
-            })
+            .get(&canonical_backend_key(name))
+            .map(|entry| entry.factory.as_ref())
     }
 
     /// Create a backend instance by name
@@ -210,6 +221,46 @@ impl Default for BackendRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    struct MarkerFactory(&'static str);
+    impl BackendFactory for MarkerFactory {
+        fn create(&self) -> Result<Box<dyn InferenceBackend>, BackendError> {
+            Err(BackendError::Config(self.0.to_string()))
+        }
+        fn info(&self) -> BackendInfo {
+            BackendInfo {
+                name: self.0.into(),
+                backend_key: "pytorch".into(),
+                description: "controlled factory identity".into(),
+                capabilities: super::super::BackendCapabilities::default(),
+                default_start_mode: super::super::BackendDefaultStartMode::Inference,
+                active: false,
+                available: true,
+                unavailable_reason: None,
+                can_install: false,
+                runtime_binary_id: None,
+            }
+        }
+    }
+
+    #[test]
+    fn alias_registration_replaces_one_logical_factory_and_preserves_latest_name() {
+        let mut registry = BackendRegistry {
+            factories: HashMap::new(),
+        };
+        registry.register("PyTorch", Box::new(MarkerFactory("first")));
+        registry.register("pytorch", Box::new(MarkerFactory("replacement")));
+        registry.register("torch", Box::new(MarkerFactory("latest")));
+        assert_eq!(registry.list().len(), 1, "one owner per canonical backend");
+        assert_eq!(registry.available_names(), vec!["torch"]);
+        assert_eq!(registry.list()[0].name, "latest");
+        for alias in ["PyTorch", "pytorch", "torch", "transformers-pytorch"] {
+            assert!(registry.is_available(alias));
+            assert!(
+                matches!(registry.create(alias), Err(BackendError::Config(message)) if message == "latest")
+            );
+        }
+    }
 
     #[test]
     fn test_registry_creation() {
@@ -253,7 +304,7 @@ mod tests {
 
     #[cfg(feature = "backend-candle")]
     #[test]
-    fn test_registry_marks_staged_candle_unavailable() {
+    fn test_registry_reports_native_candle_cpu_available() {
         let registry = BackendRegistry::new();
         let candle = registry
             .list()
@@ -261,11 +312,8 @@ mod tests {
             .find(|backend| backend.backend_key == "candle")
             .expect("candle backend info should be registered behind feature");
 
-        assert!(!candle.available);
-        assert!(candle
-            .unavailable_reason
-            .as_deref()
-            .is_some_and(|reason| reason.contains("executable model loading is not implemented")));
+        assert!(candle.available);
+        assert!(candle.unavailable_reason.is_none());
         assert_eq!(
             candle.default_start_mode,
             BackendDefaultStartMode::Embedding

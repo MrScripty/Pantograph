@@ -55,6 +55,9 @@ pub async fn set_app_config(
 
     let mut config_guard = config.write().await;
     new_config.scrub_retired_fields();
+    if new_config.runtime_resources != config_guard.runtime_resources {
+        return Err("Resource domains and resident estimates are startup configuration; edit config.json and restart Pantograph to change them".to_string());
+    }
     *config_guard = new_config;
     let max_loaded_sessions = config_guard.workflow.max_loaded_sessions;
     config_guard

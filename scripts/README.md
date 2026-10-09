@@ -10,9 +10,11 @@ main app entrypoint.
 | ----------- | ----------- |
 | `check-runtime-redistributables-smoke.sh` | Verifies a built Pantograph release artifact exists, then runs the bounded release contract smoke that covers managed-runtime view projection, runtime diagnostics projection, current image workflow shape, Pumas resolution, stale graph diagnostics, and image artifact retention. |
 | `check-current-image-workflow-smoke.mjs` | Validates the bundled current image workflow template and tracked Juggernaut workflow still use canonical `puma-lib -> llm-inference -> image-output` graph shape without retired executable inference nodes. |
+| `check-desktop-seed-precision-browser.mjs` | Runs the actual NumberInput component and seed guards in installed Chromium with a controlled graph store/node shell; verifies exact safe seeds, raw invalid-text persistence and blocked replay. Requires Node 24, existing frontend dependencies and `chromium` (or `CHROMIUM_BINARY`); downloads nothing. |
 | `check-decision-traceability.sh` | Runs the decision-to-guide traceability gate over explicit Git snapshots using the reviewed impact map. |
 | `check-decision-traceability.mjs` | Validates mapped decision impacts, canonical guides, and local ADR references without per-directory documentation rules. |
 | `check-decision-traceability.test.mjs` | Exercises Git snapshot isolation, impact ownership, missing inputs, broken references, and path transitions. |
+| `check-onnx-no-build-download.py` | Verifies the Pumas manifest/lock/CI pin and rejects additive ORT download/copy features across default, all-feature, and mixed embedded graphs for Linux, Windows, and macOS. Honors Cargo offline configuration; provisions no native SDK. |
 | `check-no-python-linkage.sh` | Verifies the runtime-separation guarantee that Pantograph no longer links Python in-process. |
 | `check-scheduler-only-workflow-execution.sh` | Fails when public Rust, Tauri, binding, or frontend source reintroduces direct workflow execution APIs outside scheduler session execution. |
 | `check-rustler-beam-smoke.sh` | Builds `pantograph_rustler`, verifies the local BEAM toolchain exists, and runs the Mix smoke harness under `bindings/beam/pantograph_native_smoke/`. |
@@ -102,6 +104,7 @@ npm run format:check
 npm run release:sbom -- 0.1.0
 TRACEABILITY_STAGED_ONLY=1 ./scripts/check-decision-traceability.sh
 node --test scripts/check-decision-traceability.test.mjs
+node scripts/check-desktop-seed-precision-browser.mjs
 ./scripts/check-no-python-linkage.sh
 ./scripts/check-scheduler-only-workflow-execution.sh
 ./scripts/check-rustler-beam-smoke.sh
@@ -173,8 +176,12 @@ TRACEABILITY_MODE=range TRACEABILITY_BASE_REF=<base-commit> \
   TRACEABILITY_HEAD_REF=<head-commit> npm run traceability
 ```
 
-The gate reports the resolved input IDs. CI supplies event base/head commits
-and fetches their history. Missing modes, refs, maps, owners or local targets
+The gate reports and compares the exact supplied input IDs. CI fetches history
+and, for pull requests, explicitly selects the unique merge base of the event
+base/head commits as the comparison base. This excludes unrelated target-branch
+changes from the PR delta. Push events compare the event before/head commits
+directly. Missing or multiple PR merge bases fail; the gate itself never silently
+substitutes a caller-provided revision. Missing modes, refs, maps, owners or local targets
 fail; unreadable Git state also fails. The old source-root/host/producer path
 list overrides are rejected. The shell entrypoint explicitly selects this
 repository's map; the Node implementation accepts `--map` for isolated tests or
@@ -205,3 +212,47 @@ with review and applicable contract tests. Routine repairs under unchanged
 contracts need no documentation churn. Existing host/binding, scheduler-only,
 worker-protocol and structured-producer checks remain required; the removed
 universal README headings never proved those contracts.
+
+## Ubuntu CI Build Prerequisites
+
+`install-ubuntu-build-dependencies.sh` owns the shared native package list for
+workspace check, warning-deny Clippy and the desktop linkage build on Ubuntu
+hosted runners. It retains the existing GTK/WebKit/libsoup packages and installs
+`protobuf-compiler` for the Lance build's `protoc` requirement. This command
+uses `sudo apt-get` and changes the runner's system packages; do not treat it as
+a read-only check or run it on another computer without authorization. A failed
+install fails the step. It changes no Rust features, pins or verification gates.
+
+## Exact-Head Text Control Qualification
+
+`bash scripts/qualify-workflow-text-controls.sh FULL_COMMIT_SHA LOG_DIRECTORY`
+checks the requested commit, tracked-source cleanliness and untracked source
+before executing native host, descriptor, workflow input mapping, authored
+source, public-session and shared serialization tests. It then executes all
+six real CPU sampler tests. Discovery guards reject empty/ignored-only suites;
+Bash pipefail preserves every test failure through log capture. The final
+source check and log checksums retain review evidence. Logs should live outside
+the checkout. Set `PANTOGRAPH_QUALIFICATION_PYTHON` to an installed CPU Python
+environment; model Hub access is disabled. No model weights are required.
+
+The existing Quality Gates workflow includes a separate focused job checking
+out the PR head SHA (or exact push SHA), using normal locked native dependency
+resolution and recording the source identity. Parent owns PR publication;
+adding this route does not dispatch it. A missing ONNX Runtime or failed native
+dependency download fails qualification before native execution. Compilation
+or a historical sampler log does not replace the missing native result.
+
+## Role-Button Name Evidence
+
+The parsed literal-role scanner accepts explicit `aria-label`/`aria-labelledby`
+attributes or directly rendered descendant text and `ExpressionTag` evidence.
+Snippet declarations are inert, and a `RenderTag` alone does not prove an
+accessible name: local, nested, shadowed, recursive and external calls may
+produce no text. The guard intentionally does not resolve snippet bindings or
+execute calls. Even a nonempty local snippet used as the sole label needs an
+explicit label attribute or independent rendered evidence to pass this gate.
+This conservative policy avoids treating render-call source as visible content;
+it preserves the existing expression-evidence policy rather than proving its
+runtime value. Native-button rules and reviewed-ignore rules are unchanged.
+Runtime accessibility and dynamically empty/hidden content still require UI
+validation.

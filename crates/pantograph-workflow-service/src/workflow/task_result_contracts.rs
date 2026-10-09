@@ -102,8 +102,11 @@ impl WorkflowSchedulerTaskResultOutput {
 #[serde(tag = "value_type", content = "value", rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum WorkflowSchedulerTaskResultValue {
+    /// Structured node output, limited to 64 KiB when serialized.
+    Json(serde_json::Value),
     PumasModelRef(PumasModelRef),
     String(String),
+    TranscriptText(String),
     Bool(bool),
     I64(i64),
     U64(u64),
@@ -112,14 +115,78 @@ pub enum WorkflowSchedulerTaskResultValue {
 }
 
 impl WorkflowSchedulerTaskResultValue {
+    pub(crate) fn from_node_json(value: serde_json::Value) -> Self {
+        if matches!(
+            value.get("value_type").and_then(|v| v.as_str()),
+            Some("media_artifact_ref" | "transcript_text")
+        ) {
+            if let Ok(typed) = serde_json::from_value::<Self>(value.clone()) {
+                return typed;
+            }
+        }
+        match value {
+            serde_json::Value::String(value) => Self::String(value),
+            serde_json::Value::Bool(value) => Self::Bool(value),
+            serde_json::Value::Number(number) => {
+                if let Some(value) = number.as_i64() {
+                    Self::I64(value)
+                } else if let Some(value) = number.as_u64() {
+                    Self::U64(value)
+                } else {
+                    Self::Json(serde_json::Value::Number(number))
+                }
+            }
+            value => Self::Json(value),
+        }
+    }
+
+    pub(crate) fn node_json(&self) -> Option<serde_json::Value> {
+        Some(match self {
+            Self::String(value) | Self::TranscriptText(value) => {
+                serde_json::Value::String(value.clone())
+            }
+            Self::Bool(value) => serde_json::Value::Bool(*value),
+            Self::I64(value) => serde_json::Value::from(*value),
+            Self::U64(value) => serde_json::Value::from(*value),
+            Self::Json(value) => value.clone(),
+            _ => return None,
+        })
+    }
+
     fn validate(&self) -> Result<(), WorkflowSchedulerTaskResultError> {
         match self {
+            Self::Json(value) => {
+                let actual = serde_json::to_vec(value)
+                    .map_err(|_| WorkflowSchedulerTaskResultError::InvalidStructuredOutput)?
+                    .len();
+                if actual
+                    > pantograph_runtime_host_contracts::RUNTIME_HOST_STRUCTURED_OUTPUT_MAX_BYTES
+                {
+                    return Err(WorkflowSchedulerTaskResultError::MessageTooLong {
+                        field: "json output",
+                        max: pantograph_runtime_host_contracts::RUNTIME_HOST_STRUCTURED_OUTPUT_MAX_BYTES,
+                        actual,
+                    });
+                }
+                Ok(())
+            }
             Self::PumasModelRef(model_ref) => model_ref.validate().map_err(|error| {
                 WorkflowSchedulerTaskResultError::InvalidPumasModelRef {
                     message: error.to_string(),
                 }
             }),
             Self::String(value) => validate_message("string output", value),
+            Self::TranscriptText(value) => {
+                let max = pantograph_runtime_host_contracts::RUNTIME_HOST_TRANSCRIPT_MAX_BYTES;
+                if value.len() > max {
+                    return Err(WorkflowSchedulerTaskResultError::MessageTooLong {
+                        field: "transcript_text",
+                        max,
+                        actual: value.len(),
+                    });
+                }
+                Ok(())
+            }
             Self::MediaArtifactRef(media_ref) => media_ref.validate(),
             Self::Bool(_) | Self::I64(_) | Self::U64(_) | Self::DiagnosticOnly => Ok(()),
         }
@@ -196,6 +263,8 @@ impl WorkflowSchedulerTaskResultTerminalMetadata {
 /// Validation failure for task-result contracts.
 #[derive(Debug, Clone, Error, PartialEq, Eq)]
 pub enum WorkflowSchedulerTaskResultError {
+    #[error("structured output cannot be serialized")]
+    InvalidStructuredOutput,
     #[error("unsupported task-result schema version {actual}, expected {expected}")]
     UnsupportedSchemaVersion { actual: u16, expected: u16 },
     #[error("{field} must be non-empty")]

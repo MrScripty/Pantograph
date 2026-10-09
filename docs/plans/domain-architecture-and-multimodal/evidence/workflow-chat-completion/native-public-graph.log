@@ -1,0 +1,72 @@
+    Finished `test` profile [unoptimized] target(s) in 0.52s
+     Running unittests src/lib.rs (/workspace/pantograph-cache/target/debug/deps/inference-0e884a3b0e08ce43)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 802 filtered out; finished in 0.00s
+
+     Running tests/device_contracts.rs (/workspace/pantograph-cache/target/debug/deps/device_contracts-89f65e61977435c3)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.00s
+
+     Running tests/diffusers_guidance_native.rs (/workspace/pantograph-cache/target/debug/deps/diffusers_guidance_native-015ee6208ed33bb4)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s
+
+     Running tests/managed_media_dependencies.rs (/workspace/pantograph-cache/target/debug/deps/managed_media_dependencies-6925e2576b4e8201)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 10 filtered out; finished in 0.00s
+
+     Running tests/managed_redistributables.rs (/workspace/pantograph-cache/target/debug/deps/managed_redistributables-d7f9b29d815ff1aa)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 12 filtered out; finished in 0.00s
+
+     Running tests/model_contracts.rs (/workspace/pantograph-cache/target/debug/deps/model_contracts-cbaa36c28b8bf979)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 42 filtered out; finished in 0.00s
+
+     Running tests/process_termination.rs (/workspace/pantograph-cache/target/debug/deps/process_termination-f65754eff89e4096)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+
+     Running tests/pytorch_cuda_inventory_native.rs (/workspace/pantograph-cache/target/debug/deps/pytorch_cuda_inventory_native-647490b9279122bd)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/runtime_load_contracts.rs (/workspace/pantograph-cache/target/debug/deps/runtime_load_contracts-26fd5df526848606)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (/workspace/pantograph-cache/target/debug/deps/pantograph_embedded_runtime-e304b5d1155c8b12)
+
+running 1 test
+
+thread 'tests::workflow_run_execution_tests::cpu_chat_graph_tests::saved_cpu_chat_graph_runs_native_owner_with_template_controls_and_scope_isolation' (88033) panicked at crates/pantograph-embedded-runtime/src/lib_tests/cpu_chat_graph_tests.rs:691:83:
+actual synthetic chat through saved public scheduler graph: Internal("capability_violation: runtime scheduler graph has no ready task and is not complete")
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test tests::workflow_run_execution_tests::cpu_chat_graph_tests::saved_cpu_chat_graph_runs_native_owner_with_template_controls_and_scope_isolation ... FAILED
+
+failures:
+
+failures:
+    tests::workflow_run_execution_tests::cpu_chat_graph_tests::saved_cpu_chat_graph_runs_native_owner_with_template_controls_and_scope_isolation
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 543 filtered out; finished in 0.06s
+
+error: test failed, to rerun pass `-p pantograph-embedded-runtime --lib`

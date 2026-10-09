@@ -160,12 +160,13 @@ impl SchedulerRuntimeHandoff {
 #[must_use]
 pub struct ValidatedSchedulerRuntimeHandoff(SchedulerRuntimeHandoff);
 
-impl ValidatedSchedulerRuntimeHandoff {
-    #[must_use]
-    pub fn as_ref(&self) -> &SchedulerRuntimeHandoff {
+impl AsRef<SchedulerRuntimeHandoff> for ValidatedSchedulerRuntimeHandoff {
+    fn as_ref(&self) -> &SchedulerRuntimeHandoff {
         &self.0
     }
+}
 
+impl ValidatedSchedulerRuntimeHandoff {
     #[must_use]
     pub fn into_inner(self) -> SchedulerRuntimeHandoff {
         self.0

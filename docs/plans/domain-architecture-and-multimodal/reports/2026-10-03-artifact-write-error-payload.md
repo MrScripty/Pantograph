@@ -1,0 +1,7 @@
+# Private artifact-write failure payload and source identity
+
+Fresh embedded-runtime Clippy identifies three large-error returns caused by ArtifactWriteFailed carrying a raw WorkflowServiceError plus attribution. Keep all media sink trait and Result signatures unchanged, but box a private RuntimeHostArtifactWriteFailure payload containing the unchanged raw source. The enum variant is error-transparent. One production constructor and one existing test pattern are migrated.
+
+Directly boxing the #[source] field was rejected during design: pinned thiserror 1.0.69 calls source.as_dyn_error(), which can expose Box<WorkflowServiceError> to downcast consumers. The transparent payload delegates Error::source through its own raw #[source] field instead. Tests explicitly require the concrete WorkflowServiceError downcast and classification, reject wrapper/boxed-source downcasts, preserve exact outer/source messages, and retain the invalid-image variant's message and absent source. The real missing-artifact-store failure now also checks concrete source identity. A private enum-size bound targets the reported large errors.
+
+Root approved this source-chain-preserving design. Full pinned cargo fmt and staged checks passed. Root source review accepted both files at frozen tree 002ee22ba66b1a957906fc530d1ac080f54c8dbe; actual hosted execution remains required. No public DTO/API or failure classification change is intended.

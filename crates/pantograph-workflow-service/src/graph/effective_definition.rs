@@ -3,7 +3,7 @@ use serde_json::Value;
 use pantograph_inference_interface_contracts::{
     AuthoredInferenceInterfaceSnapshot, AuthoredInferencePortSnapshot, InferenceArtifactType,
     InferenceConstraintType, InferencePortDirection, InferencePortRequirement,
-    InferenceReferenceType, InferenceScalarType, InferenceValueType,
+    InferenceReferenceType, InferenceScalarType, InferenceStructuredType, InferenceValueType,
     ValidatedAuthoredInferenceInterfaceSnapshot,
 };
 use pantograph_node_contracts::{
@@ -229,6 +229,10 @@ fn inference_value_type_to_port_value_type(
         InferenceValueType::Scalar(
             InferenceScalarType::I64 | InferenceScalarType::U64 | InferenceScalarType::F64,
         ) => PortValueType::Number,
+        InferenceValueType::Structured(InferenceStructuredType::Embedding) => {
+            PortValueType::Embedding
+        }
+        InferenceValueType::Structured(InferenceStructuredType::Json) => PortValueType::Json,
         InferenceValueType::Artifact(InferenceArtifactType::Image) => PortValueType::Image,
         InferenceValueType::Artifact(InferenceArtifactType::Audio) => PortValueType::Audio,
         InferenceValueType::Artifact(InferenceArtifactType::Tensor) => PortValueType::Tensor,

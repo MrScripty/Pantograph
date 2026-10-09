@@ -138,3 +138,24 @@ coordination; it is not an accepted integration or cleanup instruction.
 The existing pre-push `npm test` also passed on 2026-10-02: node-engine
 258 passed / 1 ignored, workflow-nodes 168 passed. This proves its declared
 library scope, not the unrelated failing aggregate/desktop gates.
+
+## Hosted Review: Pull-request Range Selection
+
+CodeRabbit reviewed exact head `9567186252f7ebb60794911baeeabce0daec5140` and
+identified the PR target-tip versus fork-point mismatch. The workflow now
+resolves a unique PR merge base explicitly, while push events retain their
+before/head range. The gate continues to compare exactly the supplied snapshots;
+it does not silently reinterpret an explicit range. Ambiguous/no common bases
+fail. A diverged-branch regression covers unrelated target-only map additions.
+This correction is separate from unchanged baseline CI failures.
+
+Correction verification: 25 focused tests pass. The actual workflow shell was
+extracted and executed against a disposable divergent Git fixture: PR mode
+selected its fork point, and push mode preserved the exact before/head input.
+Workflow YAML, Bash syntax, scoped ESLint and whitespace checks pass. The
+integration owner independently reviewed staged tree
+`85ab1fe64e85c7f299d53f99e5ebb74625730607`, read the actual workflow delta,
+reproduced the divergent-PR regression and passed staged whitespace checks.
+That bounded review found no new source issue and accepted publication.
+This report-only addition records the review; exact-head hosted CI and hosted
+review qualification remain outstanding.

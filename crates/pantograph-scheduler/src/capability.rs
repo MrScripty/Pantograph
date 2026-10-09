@@ -202,12 +202,13 @@ fn default_scheduler_capability_hint_contract_version() -> u16 {
 #[must_use]
 pub struct ValidatedSchedulerCapabilityHintSnapshot(SchedulerCapabilityHintSnapshot);
 
-impl ValidatedSchedulerCapabilityHintSnapshot {
-    #[must_use]
-    pub fn as_ref(&self) -> &SchedulerCapabilityHintSnapshot {
+impl AsRef<SchedulerCapabilityHintSnapshot> for ValidatedSchedulerCapabilityHintSnapshot {
+    fn as_ref(&self) -> &SchedulerCapabilityHintSnapshot {
         &self.0
     }
+}
 
+impl ValidatedSchedulerCapabilityHintSnapshot {
     #[must_use]
     pub fn into_inner(self) -> SchedulerCapabilityHintSnapshot {
         self.0

@@ -16,6 +16,16 @@ use crate::{
 };
 
 pub trait DiagnosticsLedgerRepository {
+    fn record_runtime_host_observation(
+        &mut self,
+        observation: crate::RuntimeHostRequestObservation,
+    ) -> Result<(), DiagnosticsLedgerError>;
+
+    fn runtime_host_observation_summary(
+        &self,
+        query: crate::RuntimeHostObservationQuery,
+    ) -> Result<crate::RuntimeHostObservationSummary, DiagnosticsLedgerError>;
+
     fn record_usage_event(
         &mut self,
         event: ModelLicenseUsageEvent,

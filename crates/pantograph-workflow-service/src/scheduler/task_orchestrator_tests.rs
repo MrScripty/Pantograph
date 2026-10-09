@@ -689,6 +689,12 @@ async fn orchestrator_selects_scheduler_dispatch_before_runtime_host_port() {
 async fn orchestrator_does_not_dispatch_runtime_host_when_scheduler_selects_no_candidate() {
     let mut selection_request = dispatch_selection_request_fixture();
     selection_request.candidates.clear();
+    let expected_selection = select_scheduler_dispatch(
+        ValidatedSchedulerDispatchSelectionRequest::try_from(selection_request.clone()).unwrap(),
+    )
+    .unwrap()
+    .into_inner();
+    let expected_json = serde_json::to_value(&expected_selection).unwrap();
     let port = Arc::new(RecordingRuntimeHostPort::with_response(
         runtime_host_response_fixture(),
     ));
@@ -708,12 +714,57 @@ async fn orchestrator_does_not_dispatch_runtime_host_when_scheduler_selects_no_c
         .await
         .expect_err("no-selection diagnostics must stop before runtime host");
 
-    assert!(matches!(
-        error,
-        WorkflowSchedulerTaskOrchestratorError::RuntimeDispatchSelectionNoSelection(selection)
-            if selection.state == SchedulerDispatchSelectionState::NoSelection
-    ));
+    assert_eq!(
+        error.to_string(),
+        "scheduler dispatch selection did not select a runtime task"
+    );
+    let WorkflowSchedulerTaskOrchestratorError::RuntimeDispatchSelectionNoSelection(selection) =
+        error
+    else {
+        panic!("expected retained no-selection decision");
+    };
+    assert_eq!(
+        selection.state,
+        SchedulerDispatchSelectionState::NoSelection
+    );
+    assert_eq!(*selection, expected_selection);
+    assert_eq!(
+        serde_json::to_value(selection.as_ref()).unwrap(),
+        expected_json
+    );
     assert!(port.requests().is_empty());
+}
+
+#[test]
+fn no_selection_handoff_error_preserves_the_complete_decision() {
+    let mut request = dispatch_selection_request_fixture();
+    request.candidates.clear();
+    let decision = select_scheduler_dispatch(
+        ValidatedSchedulerDispatchSelectionRequest::try_from(request).unwrap(),
+    )
+    .unwrap()
+    .into_inner();
+    let expected_json = serde_json::to_value(&decision).unwrap();
+    let error = super::dispatch_selected_handoff_from_selection(decision.clone()).unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        "scheduler dispatch selection did not select a runtime task"
+    );
+    let WorkflowSchedulerTaskOrchestratorError::RuntimeDispatchSelectionNoSelection(retained) =
+        error
+    else {
+        panic!("expected retained no-selection decision");
+    };
+    assert_eq!(*retained, decision);
+    assert_eq!(
+        serde_json::to_value(retained.as_ref()).unwrap(),
+        expected_json
+    );
+}
+
+#[test]
+fn orchestrator_error_does_not_embed_the_large_selection_decision() {
+    assert!(std::mem::size_of::<WorkflowSchedulerTaskOrchestratorError>() <= 128);
 }
 
 #[tokio::test]
@@ -2350,6 +2401,107 @@ fn orchestrator_advances_dependent_non_runtime_task_when_inputs_materialize() {
 }
 
 #[test]
+fn orchestrator_merge_waits_for_every_upstream_result() {
+    let orchestrator = orchestrator_without_runtime_host_response();
+    let mut merge = text_output_task();
+    merge.node_id = "join".parse().unwrap();
+    merge.task_id = "join".parse().unwrap();
+    merge.node_type = "merge".into();
+    merge.non_runtime_task_template = Some(WorkflowSchedulerNonRuntimeTaskTemplate::Merge);
+    merge.input_bindings = ["a", "b"]
+        .map(|id| WorkflowSchedulerTaskInputBinding {
+            source_node_id: id.parse().unwrap(),
+            source_task_id: id.parse().unwrap(),
+            source_port_id: "text".into(),
+            target_port_id: "inputs".into(),
+        })
+        .to_vec();
+    merge.dependency_task_ids = ["a".parse().unwrap(), "b".parse().unwrap()].to_vec();
+    let graph = task_graph(vec![
+        text_input_task("a", "first"),
+        text_input_task("b", "second"),
+        merge,
+    ]);
+    let run = graph.workflow_run_id.as_str().to_owned();
+    let mut store = WorkflowExecutionSessionStore::new(1, 1);
+    let session = begin_active_run_for_task_graph(&mut store, &graph);
+    orchestrator
+        .initialize_active_run_task_state(&mut store, &session, &run, graph)
+        .unwrap();
+    store
+        .record_active_run_scheduler_task_result(
+            &session,
+            &run,
+            text_result("a", WorkflowSchedulerTaskResultStatus::Completed),
+        )
+        .unwrap();
+    assert!(orchestrator
+        .advance_awaiting_non_runtime_task_inputs(&mut store, &session, &run, "join")
+        .unwrap()
+        .is_none());
+    store
+        .record_active_run_scheduler_task_result(
+            &session,
+            &run,
+            text_result("b", WorkflowSchedulerTaskResultStatus::Completed),
+        )
+        .unwrap();
+    let ready = orchestrator
+        .advance_awaiting_non_runtime_task_inputs(&mut store, &session, &run, "join")
+        .unwrap()
+        .unwrap();
+    assert_eq!(ready.state.kind(), SchedulerTaskStateKind::Ready);
+}
+
+#[test]
+fn orchestrator_retains_integer_number_source_as_completed_task_result() {
+    let orchestrator = orchestrator_without_runtime_host_response();
+    let mut source = text_input_task("limit", "");
+    source.node_type = "number-input".to_string();
+    source.source_input_task_template = Some(WorkflowSchedulerSourceInputTemplate::Integer {
+        port_id: "value".to_string(),
+    });
+    let task_graph = task_graph(vec![source]);
+    let workflow_run_id = task_graph.workflow_run_id.as_str().to_string();
+    let mut store = WorkflowExecutionSessionStore::new(1, 1);
+    let session_id = begin_active_run_for_task_graph(&mut store, &task_graph);
+    orchestrator
+        .initialize_active_run_task_state(&mut store, &session_id, &workflow_run_id, task_graph)
+        .expect("initialize number source");
+    let completed = orchestrator
+        .materialize_external_inputs_for_active_run(
+            &mut store,
+            &session_id,
+            &workflow_run_id,
+            &[WorkflowPortBinding {
+                node_id: "limit".to_string(),
+                port_id: "value".to_string(),
+                value: json!(128),
+            }],
+        )
+        .expect("materialize integer number source");
+    let SchedulerTaskState::Completed { execution_intent } = &completed[0].state else {
+        panic!("expected completed number source");
+    };
+    assert_eq!(
+        execution_intent
+            .source_input_task_intent()
+            .unwrap()
+            .task_kind
+            .as_str(),
+        "number-input"
+    );
+    let results = store
+        .active_run_scheduler_task_results(&session_id, &workflow_run_id)
+        .expect("retained number result");
+    assert_eq!(results[0].task_id, "limit");
+    assert_eq!(
+        results[0].outputs[0].value,
+        WorkflowSchedulerTaskResultValue::I64(128)
+    );
+}
+
+#[test]
 fn orchestrator_materializes_external_source_input_through_task_state() {
     let orchestrator = orchestrator_without_runtime_host_response();
     let task_graph = task_graph(vec![
@@ -2926,6 +3078,128 @@ fn text_output_task() -> WorkflowSchedulerTask {
         runtime_source_context: None,
         diagnostics: Vec::new(),
     }
+}
+
+fn vector_output_task(connected: bool) -> WorkflowSchedulerTask {
+    let mut task = text_output_task();
+    task.node_type = "vector-output".into();
+    task.non_runtime_task_template = Some(WorkflowSchedulerNonRuntimeTaskTemplate::VectorOutput);
+    task.input_bindings.clear();
+    task.dependency_task_ids.clear();
+    if connected {
+        let mut binding = text_binding("embed", "vector-output");
+        binding.source_port_id = "vector".into();
+        binding.target_port_id = "vector".into();
+        task.dependency_task_ids
+            .push(binding.source_task_id.clone());
+        task.input_bindings.push(binding);
+    }
+    task
+}
+
+fn vector_result(value: serde_json::Value) -> WorkflowSchedulerTaskResult {
+    let mut result = task_result(
+        "embed",
+        WorkflowSchedulerTaskResultStatus::Completed,
+        WorkflowSchedulerTaskResultValue::Json(value),
+    );
+    result.outputs[0].port_id = "vector".into();
+    result
+}
+
+#[test]
+fn vector_readiness_distinguishes_optional_pending_missing_and_invalid() {
+    use super::NonRuntimeInputReadiness;
+    let task = vector_output_task(true);
+    assert!(matches!(
+        super::non_runtime_input_readiness(&vector_output_task(false), &[]),
+        NonRuntimeInputReadiness::Ready
+    ));
+    assert!(matches!(
+        super::non_runtime_input_readiness(&task, &[]),
+        NonRuntimeInputReadiness::Blocked
+    ));
+    for value in [json!([0.5]), json!(vec![0.25; 4096])] {
+        assert!(matches!(
+            super::non_runtime_input_readiness(&task, &[vector_result(value)]),
+            NonRuntimeInputReadiness::Ready
+        ));
+    }
+    let mut missing = vector_result(json!([0.5]));
+    missing.outputs.clear();
+    assert!(
+        matches!(super::non_runtime_input_readiness(&task, &[missing]),
+        NonRuntimeInputReadiness::InputUnavailable(diagnostic) if diagnostic.code == SchedulerTaskStateDiagnosticCode::InputUnavailable)
+    );
+    for value in [
+        json!(null),
+        json!([]),
+        json!(["0.5"]),
+        json!([true]),
+        json!([[0.5]]),
+        json!([null]),
+        json!(vec![0; 4097]),
+        json!(vec![u64::MAX; 4096]),
+    ] {
+        assert!(
+            matches!(super::non_runtime_input_readiness(&task, &[vector_result(value)]),
+            NonRuntimeInputReadiness::Invalid(diagnostic) if diagnostic.code == SchedulerTaskStateDiagnosticCode::InvalidTask)
+        );
+    }
+    let mut string = vector_result(json!([0.5]));
+    string.outputs[0].value = WorkflowSchedulerTaskResultValue::String("[0.5]".into());
+    assert!(matches!(
+        super::non_runtime_input_readiness(&task, &[string]),
+        NonRuntimeInputReadiness::Invalid(_)
+    ));
+}
+
+#[test]
+fn vector_readiness_preserves_source_identity_and_failure_states() {
+    use super::NonRuntimeInputReadiness;
+    let task = vector_output_task(true);
+    for field in ["workflow_id", "workflow_run_id", "node_id", "task_id"] {
+        let mut other = vector_result(json!([0.5]));
+        match field {
+            "workflow_id" => other.workflow_id = "other-workflow".into(),
+            "workflow_run_id" => other.workflow_run_id = "other-run".into(),
+            "node_id" => other.node_id = "other-node".into(),
+            "task_id" => other.task_id = "other-task".into(),
+            _ => unreachable!(),
+        }
+        assert!(
+            matches!(
+                super::non_runtime_input_readiness(&task, &[other]),
+                NonRuntimeInputReadiness::Blocked
+            ),
+            "{field}"
+        );
+    }
+    let mut unavailable = vector_result(json!([0.5]));
+    unavailable.status = WorkflowSchedulerTaskResultStatus::Unavailable;
+    assert!(matches!(
+        super::non_runtime_input_readiness(&task, &[unavailable]),
+        NonRuntimeInputReadiness::InputUnavailable(_)
+    ));
+    for status in [
+        WorkflowSchedulerTaskResultStatus::Failed,
+        WorkflowSchedulerTaskResultStatus::Invalid,
+    ] {
+        let mut failed = vector_result(json!([0.5]));
+        failed.status = status;
+        assert!(matches!(
+            super::non_runtime_input_readiness(&task, &[failed]),
+            NonRuntimeInputReadiness::Invalid(_)
+        ));
+    }
+    let mut invalid_binding = vector_output_task(false);
+    let mut binding = text_binding("embed", "vector-output");
+    binding.target_port_id = "text".into();
+    invalid_binding.input_bindings.push(binding);
+    assert!(matches!(
+        super::non_runtime_input_readiness(&invalid_binding, &[]),
+        NonRuntimeInputReadiness::Invalid(_)
+    ));
 }
 
 fn text_binding(source_task_id: &str, _target_task_id: &str) -> WorkflowSchedulerTaskInputBinding {

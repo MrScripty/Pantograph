@@ -13,14 +13,6 @@ pub mod ports {
     pub const ALTERNATE_RANGE: u16 = 100;
 }
 
-/// Default values for inference configuration
-pub mod defaults {
-    /// Default GPU layers (-1 = all layers on GPU)
-    pub const GPU_LAYERS: i32 = -1;
-    /// Default device selection
-    pub const DEVICE: &str = "auto";
-}
-
 /// Data storage paths
 pub mod paths {
     /// Directory for downloaded/generated data (svelte docs, vector embeddings, etc.)

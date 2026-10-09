@@ -1,12 +1,13 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
 use async_trait::async_trait;
 use inference::{InferenceTaskId, ModelValidationState, TaskRegistryEntry};
 use pantograph_inference_interface_contracts::{
-    InferenceArtifactType, InferenceAvailability, InferencePortDescriptor, InferencePortDirection,
-    InferencePortId, InferencePortOptions, InferencePortRequirement, InferenceScalarType,
-    InferenceTaskKind, InferenceValueType, RuntimeIntentId,
+    InferenceArtifactType, InferenceAvailability, InferenceNumericRange, InferencePortDescriptor,
+    InferencePortDirection, InferencePortId, InferencePortOptions, InferencePortRequirement,
+    InferenceScalarType, InferenceStructuredType, InferenceTaskKind, InferenceValueType,
+    RuntimeIntentId,
 };
 use pantograph_runtime_registry::RuntimeRegistryStatus;
 use pantograph_workflow_service::graph::{
@@ -25,6 +26,7 @@ use crate::runtime_dispatch_capability_facts::{
     RuntimeDispatchCapabilityFactsOutcome, RuntimeDispatchCapabilityFactsProjection,
     RuntimeDispatchCapabilityFactsSource, RuntimeDispatchRuntimeCapabilityFacts,
 };
+use crate::runtime_host_image_execution as image;
 
 #[derive(Clone)]
 pub(crate) struct EmbeddedInferenceInterfaceFactsProvider {
@@ -217,14 +219,37 @@ fn runtime_availability_fact(
 ) -> Option<InferenceRuntimeAvailabilityFact> {
     Some(InferenceRuntimeAvailabilityFact {
         runtime_id: RuntimeIntentId::parse(&runtime.runtime_id).ok()?,
-        state: runtime_availability_state(runtime.status),
+        state: if runtime.status == RuntimeRegistryStatus::Stopped && runtime.runtime_id == "candle"
+        {
+            if runtime.runtime_family == "candle"
+                && runtime.automatic_device_candidates.iter().any(|candidate| {
+                    candidate.backend_key == "candle"
+                        && candidate.runtime_variant_id.as_str() == "candle.cpu"
+                        && candidate.device_id.as_str() == "cpu"
+                })
+            {
+                InferenceRuntimeAvailabilityState::Available
+            } else {
+                InferenceRuntimeAvailabilityState::NotInstalled
+            }
+        } else {
+            runtime_availability_state(runtime.status)
+        },
         device_ids: runtime
             .device_ids
             .iter()
+            .map(|device| device.as_str())
+            .chain(
+                runtime
+                    .automatic_device_candidates
+                    .iter()
+                    .map(|candidate| candidate.device_id.as_str()),
+            )
             .filter_map(|device| {
-                pantograph_inference_interface_contracts::DeviceIntentId::parse(device.as_str())
-                    .ok()
+                pantograph_inference_interface_contracts::DeviceIntentId::parse(device).ok()
             })
+            .collect::<BTreeSet<_>>()
+            .into_iter()
             .collect(),
     })
 }
@@ -244,10 +269,176 @@ fn runtime_availability_state(status: RuntimeRegistryStatus) -> InferenceRuntime
 
 fn input_ports(task_entry: &TaskRegistryEntry) -> Vec<InferencePortDescriptor> {
     match task_entry.task_id {
-        InferenceTaskId::ImageGeneration
-        | InferenceTaskId::TextGeneration
-        | InferenceTaskId::ChatCompletion
-        | InferenceTaskId::MultimodalGeneration => vec![port(
+        InferenceTaskId::TextGeneration | InferenceTaskId::ChatCompletion => {
+            vec![
+                port(
+                    "prompt",
+                    "Prompt",
+                    InferencePortDirection::Input,
+                    InferencePortRequirement::Required,
+                    InferenceValueType::Scalar(InferenceScalarType::String),
+                ),
+                positive_u32_input_port(
+                    crate::runtime_host_text_execution::MAX_NEW_TOKENS_PORT,
+                    "Max new tokens",
+                ),
+                port(
+                    crate::runtime_host_text_execution::SYSTEM_PROMPT_PORT,
+                    "System prompt",
+                    InferencePortDirection::Input,
+                    InferencePortRequirement::Optional,
+                    InferenceValueType::Scalar(InferenceScalarType::String),
+                ),
+                u32_input_port(crate::runtime_host_text_execution::TOP_K_PORT, "Top k", 0),
+                temperature_input_port(),
+                top_p_input_port(),
+                repetition_penalty_input_port(),
+                u32_input_port(
+                    crate::runtime_host_text_execution::MIN_NEW_TOKENS_PORT,
+                    "Min new tokens",
+                    0,
+                ),
+                port(
+                    crate::runtime_host_text_execution::SEED_PORT,
+                    "Seed",
+                    InferencePortDirection::Input,
+                    InferencePortRequirement::Optional,
+                    InferenceValueType::Scalar(InferenceScalarType::U64),
+                ),
+                port(
+                    crate::runtime_host_text_execution::STOP_PORT,
+                    "Stop string",
+                    InferencePortDirection::Input,
+                    InferencePortRequirement::Optional,
+                    InferenceValueType::Scalar(InferenceScalarType::String),
+                ),
+            ]
+        }
+        InferenceTaskId::ImageGeneration => vec![
+            port(
+                image::PROMPT_PORT,
+                "Prompt",
+                InferencePortDirection::Input,
+                InferencePortRequirement::Required,
+                InferenceValueType::Scalar(InferenceScalarType::String),
+            ),
+            port(
+                image::NEGATIVE_PROMPT_PORT,
+                "Negative prompt",
+                InferencePortDirection::Input,
+                InferencePortRequirement::Optional,
+                InferenceValueType::Scalar(InferenceScalarType::String),
+            ),
+            positive_u32_input_port(image::WIDTH_PORT, "Width"),
+            positive_u32_input_port(image::HEIGHT_PORT, "Height"),
+            positive_u32_input_port(image::STEPS_PORT, "Inference steps"),
+            port(
+                image::SEED_PORT,
+                "Seed",
+                InferencePortDirection::Input,
+                InferencePortRequirement::Optional,
+                InferenceValueType::Scalar(InferenceScalarType::U64),
+            ),
+            guidance_scale_input_port(),
+            image_count_input_port(),
+            denoising_scheduler_input_port(),
+        ],
+        InferenceTaskId::AudioTranscription => vec![
+            port(
+                "audio",
+                "Small WAV audio",
+                InferencePortDirection::Input,
+                InferencePortRequirement::Required,
+                InferenceValueType::Structured(InferenceStructuredType::Json),
+            ),
+            port(
+                "language",
+                "Language",
+                InferencePortDirection::Input,
+                InferencePortRequirement::Optional,
+                InferenceValueType::Scalar(InferenceScalarType::String),
+            ),
+            port(
+                "prompt",
+                "Prompt",
+                InferencePortDirection::Input,
+                InferencePortRequirement::Optional,
+                InferenceValueType::Scalar(InferenceScalarType::String),
+            ),
+            port(
+                "asr_task",
+                "ASR task",
+                InferencePortDirection::Input,
+                InferencePortRequirement::Optional,
+                InferenceValueType::Scalar(InferenceScalarType::String),
+            ),
+            port(
+                "chunk_length_s",
+                "Chunk length (seconds)",
+                InferencePortDirection::Input,
+                InferencePortRequirement::Optional,
+                InferenceValueType::Scalar(InferenceScalarType::F64),
+            ),
+            port(
+                "extra_options",
+                "Backend options (empty only)",
+                InferencePortDirection::Input,
+                InferencePortRequirement::Optional,
+                InferenceValueType::Structured(InferenceStructuredType::Json),
+            ),
+        ],
+        InferenceTaskId::Rerank => vec![
+            port(
+                "query",
+                "Query",
+                InferencePortDirection::Input,
+                InferencePortRequirement::Required,
+                InferenceValueType::Scalar(InferenceScalarType::String),
+            ),
+            port(
+                "documents",
+                "Documents",
+                InferencePortDirection::Input,
+                InferencePortRequirement::Required,
+                InferenceValueType::Structured(InferenceStructuredType::Json),
+            ),
+            port(
+                "top_n",
+                "Top n",
+                InferencePortDirection::Input,
+                InferencePortRequirement::Optional,
+                InferenceValueType::Scalar(InferenceScalarType::U64),
+            ),
+            port(
+                "return_documents",
+                "Return documents",
+                InferencePortDirection::Input,
+                InferencePortRequirement::Optional,
+                InferenceValueType::Scalar(InferenceScalarType::Bool),
+            ),
+            port(
+                "task_options",
+                "Task options",
+                InferencePortDirection::Input,
+                InferencePortRequirement::Optional,
+                InferenceValueType::Structured(InferenceStructuredType::Json),
+            ),
+            port(
+                "extra_options",
+                "Backend options",
+                InferencePortDirection::Input,
+                InferencePortRequirement::Optional,
+                InferenceValueType::Structured(InferenceStructuredType::Json),
+            ),
+        ],
+        InferenceTaskId::Embedding => vec![port(
+            "text",
+            "Text",
+            InferencePortDirection::Input,
+            InferencePortRequirement::Required,
+            InferenceValueType::Scalar(InferenceScalarType::String),
+        )],
+        InferenceTaskId::MultimodalGeneration => vec![port(
             "prompt",
             "Prompt",
             InferencePortDirection::Input,
@@ -258,8 +449,255 @@ fn input_ports(task_entry: &TaskRegistryEntry) -> Vec<InferencePortDescriptor> {
     }
 }
 
+fn denoising_scheduler_input_port() -> InferencePortDescriptor {
+    let mut descriptor = port(
+        image::DENOISING_SCHEDULER_PORT,
+        "Denoising scheduler",
+        InferencePortDirection::Input,
+        InferencePortRequirement::Optional,
+        InferenceValueType::Scalar(InferenceScalarType::String),
+    );
+    descriptor.options = InferencePortOptions::Enum {
+        values: inference::STABLE_DIFFUSION_DENOISING_SCHEDULERS
+            .iter()
+            .map(
+                |id| pantograph_inference_interface_contracts::InferenceOptionValue {
+                    option_id: pantograph_inference_interface_contracts::InferenceOptionId::parse(
+                        id,
+                    )
+                    .expect("static scheduler id"),
+                    label: match *id {
+                        "ddim" => "DDIM",
+                        "euler" => "Euler",
+                        _ => unreachable!("closed scheduler choices"),
+                    }
+                    .into(),
+                    value: pantograph_inference_interface_contracts::InferenceOptionScalar::String(
+                        (*id).into(),
+                    ),
+                    availability: InferenceAvailability::available(),
+                    diagnostics: Vec::new(),
+                },
+            )
+            .collect(),
+    };
+    descriptor
+}
+
+fn image_count_input_port() -> InferencePortDescriptor {
+    let mut descriptor = positive_u32_input_port(image::NUM_IMAGES_PORT, "Images per prompt");
+    let InferencePortOptions::NumericRange { range } = &mut descriptor.options else {
+        unreachable!("integer port has numeric bounds");
+    };
+    range.max = pantograph_runtime_host_contracts::MAX_RUNTIME_HOST_OUTPUTS as f64;
+    descriptor
+}
+
+fn guidance_scale_input_port() -> InferencePortDescriptor {
+    let mut descriptor = port(
+        image::GUIDANCE_SCALE_PORT,
+        "Guidance scale",
+        InferencePortDirection::Input,
+        InferencePortRequirement::Optional,
+        InferenceValueType::Scalar(InferenceScalarType::F64),
+    );
+    descriptor.options = InferencePortOptions::NumericRange {
+        range: InferenceNumericRange {
+            min: f64::from(f32::MIN),
+            max: f64::from(f32::MAX),
+            step: None,
+            default: None,
+        },
+    };
+    descriptor
+}
+
+fn positive_u32_input_port(port_id: &str, label: &str) -> InferencePortDescriptor {
+    u32_input_port(port_id, label, 1)
+}
+
+fn u32_input_port(port_id: &str, label: &str, min: u32) -> InferencePortDescriptor {
+    let mut descriptor = port(
+        port_id,
+        label,
+        InferencePortDirection::Input,
+        InferencePortRequirement::Optional,
+        InferenceValueType::Scalar(InferenceScalarType::U64),
+    );
+    descriptor.options = InferencePortOptions::NumericRange {
+        range: InferenceNumericRange {
+            min: f64::from(min),
+            max: f64::from(u32::MAX),
+            step: Some(1.0),
+            default: None,
+        },
+    };
+    descriptor
+}
+
+fn temperature_input_port() -> InferencePortDescriptor {
+    sampling_number_input_port(
+        crate::runtime_host_text_execution::TEMPERATURE_PORT,
+        "Temperature",
+        f64::from(f32::MAX),
+    )
+}
+
+fn top_p_input_port() -> InferencePortDescriptor {
+    sampling_number_input_port(crate::runtime_host_text_execution::TOP_P_PORT, "Top p", 1.0)
+}
+
+fn repetition_penalty_input_port() -> InferencePortDescriptor {
+    let mut descriptor = sampling_number_input_port(
+        crate::runtime_host_text_execution::REPETITION_PENALTY_PORT,
+        "Repetition penalty",
+        f64::from(f32::MAX),
+    );
+    if let InferencePortOptions::NumericRange { range } = &mut descriptor.options {
+        range.min = f64::from(f32::from_bits(1));
+    }
+    descriptor
+}
+
+fn sampling_number_input_port(port_id: &str, label: &str, max: f64) -> InferencePortDescriptor {
+    let mut descriptor = port(
+        port_id,
+        label,
+        InferencePortDirection::Input,
+        InferencePortRequirement::Optional,
+        InferenceValueType::Scalar(InferenceScalarType::F64),
+    );
+    descriptor.options = InferencePortOptions::NumericRange {
+        range: InferenceNumericRange {
+            min: 0.0,
+            max,
+            step: None,
+            default: None,
+        },
+    };
+    descriptor
+}
+
 fn output_ports(task_entry: &TaskRegistryEntry) -> Vec<InferencePortDescriptor> {
     match task_entry.task_id {
+        InferenceTaskId::AudioTranscription => vec![
+            port(
+                "response",
+                "Response",
+                InferencePortDirection::Output,
+                InferencePortRequirement::Required,
+                InferenceValueType::Scalar(InferenceScalarType::String),
+            ),
+            port(
+                "stream",
+                "Stream",
+                InferencePortDirection::Output,
+                InferencePortRequirement::Required,
+                InferenceValueType::Structured(InferenceStructuredType::Json),
+            ),
+            port(
+                "text",
+                "Text",
+                InferencePortDirection::Output,
+                InferencePortRequirement::Required,
+                InferenceValueType::Scalar(InferenceScalarType::String),
+            ),
+            port(
+                "language",
+                "Language",
+                InferencePortDirection::Output,
+                InferencePortRequirement::Optional,
+                InferenceValueType::Scalar(InferenceScalarType::String),
+            ),
+            port(
+                "duration_seconds",
+                "Duration seconds",
+                InferencePortDirection::Output,
+                InferencePortRequirement::Optional,
+                InferenceValueType::Structured(InferenceStructuredType::Json),
+            ),
+            port(
+                "segments",
+                "Segments",
+                InferencePortDirection::Output,
+                InferencePortRequirement::Required,
+                InferenceValueType::Structured(InferenceStructuredType::Json),
+            ),
+            port(
+                "metadata",
+                "Metadata",
+                InferencePortDirection::Output,
+                InferencePortRequirement::Required,
+                InferenceValueType::Structured(InferenceStructuredType::Json),
+            ),
+            port(
+                "diagnostics",
+                "Diagnostics",
+                InferencePortDirection::Output,
+                InferencePortRequirement::Required,
+                InferenceValueType::Structured(InferenceStructuredType::Json),
+            ),
+        ],
+        InferenceTaskId::Rerank => vec![
+            port(
+                "results",
+                "Results",
+                InferencePortDirection::Output,
+                InferencePortRequirement::Required,
+                InferenceValueType::Structured(InferenceStructuredType::Json),
+            ),
+            port(
+                "scores",
+                "Scores",
+                InferencePortDirection::Output,
+                InferencePortRequirement::Required,
+                InferenceValueType::Structured(InferenceStructuredType::Json),
+            ),
+            port(
+                "top_document",
+                "Top document",
+                InferencePortDirection::Output,
+                InferencePortRequirement::Optional,
+                InferenceValueType::Scalar(InferenceScalarType::String),
+            ),
+            port(
+                "top_score",
+                "Top score",
+                InferencePortDirection::Output,
+                InferencePortRequirement::Optional,
+                InferenceValueType::Structured(InferenceStructuredType::Json),
+            ),
+            port(
+                "diagnostics",
+                "Diagnostics",
+                InferencePortDirection::Output,
+                InferencePortRequirement::Required,
+                InferenceValueType::Structured(InferenceStructuredType::Json),
+            ),
+        ],
+        InferenceTaskId::Embedding => vec![
+            port(
+                "embedding",
+                "Embedding",
+                InferencePortDirection::Output,
+                InferencePortRequirement::Required,
+                InferenceValueType::Structured(InferenceStructuredType::Embedding),
+            ),
+            port(
+                "metadata",
+                "Metadata",
+                InferencePortDirection::Output,
+                InferencePortRequirement::Required,
+                InferenceValueType::Structured(InferenceStructuredType::Json),
+            ),
+            port(
+                "usage",
+                "Usage",
+                InferencePortDirection::Output,
+                InferencePortRequirement::Optional,
+                InferenceValueType::Structured(InferenceStructuredType::Json),
+            ),
+        ],
         InferenceTaskId::ImageGeneration => vec![port(
             "image",
             "Image",
@@ -313,6 +751,128 @@ mod tests {
     use super::*;
 
     #[test]
+    fn text_generation_descriptor_exposes_optional_numeric_controls_without_defaults() {
+        let task = inference::resolve_task_registry_entry("text_generation").expect("task entry");
+        let inputs = input_ports(&task);
+        assert_eq!(
+            inputs
+                .iter()
+                .map(|input| input.port_id.as_str())
+                .collect::<Vec<_>>(),
+            [
+                "prompt",
+                "max_new_tokens",
+                "system_prompt",
+                "top_k",
+                "temperature",
+                "top_p",
+                "repetition_penalty",
+                "min_new_tokens",
+                "seed",
+                "stop",
+            ]
+        );
+        for (port_id, scalar_type, min, max, step) in [
+            (
+                "max_new_tokens",
+                InferenceScalarType::U64,
+                1.0,
+                f64::from(u32::MAX),
+                Some(1.0),
+            ),
+            (
+                "top_k",
+                InferenceScalarType::U64,
+                0.0,
+                f64::from(u32::MAX),
+                Some(1.0),
+            ),
+            (
+                "temperature",
+                InferenceScalarType::F64,
+                0.0,
+                f64::from(f32::MAX),
+                None,
+            ),
+            ("top_p", InferenceScalarType::F64, 0.0, 1.0, None),
+            (
+                "repetition_penalty",
+                InferenceScalarType::F64,
+                f64::from(f32::from_bits(1)),
+                f64::from(f32::MAX),
+                None,
+            ),
+            (
+                "min_new_tokens",
+                InferenceScalarType::U64,
+                0.0,
+                f64::from(u32::MAX),
+                Some(1.0),
+            ),
+        ] {
+            let control = inputs
+                .iter()
+                .find(|input| input.port_id.as_str() == port_id)
+                .expect("numeric control port");
+            assert_eq!(
+                control.direction,
+                InferencePortDirection::Input,
+                "{port_id}"
+            );
+            assert_eq!(
+                control.requirement,
+                InferencePortRequirement::Optional,
+                "{port_id}"
+            );
+            assert_eq!(
+                control.value_type,
+                InferenceValueType::Scalar(scalar_type),
+                "{port_id}"
+            );
+            assert!(control.default.is_none(), "{port_id} must have no default");
+            assert_eq!(
+                control.options,
+                InferencePortOptions::NumericRange {
+                    range: InferenceNumericRange {
+                        min,
+                        max,
+                        step,
+                        default: None,
+                    },
+                },
+                "{port_id}"
+            );
+            control.validate().expect("numeric control port contract");
+        }
+        let chat = inference::resolve_task_registry_entry("chat_completion").expect("chat task");
+        assert_eq!(input_ports(&chat), input_ports(&task));
+    }
+
+    #[test]
+    fn text_generation_inputs_match_shared_system_prompt_contract() {
+        let task = inference::resolve_task_registry_entry("text_generation").unwrap();
+        let expected: Vec<InferencePortDescriptor> = serde_json::from_str(include_str!(
+            "../../pantograph-inference-interface-contracts/tests/fixtures/text_generation_system_prompt_inputs.json"
+        )).unwrap();
+        assert_eq!(input_ports(&task), expected);
+        let chat = inference::resolve_task_registry_entry("chat_completion").unwrap();
+        assert_eq!(input_ports(&chat), expected);
+    }
+
+    #[test]
+    fn image_generation_inputs_match_the_shared_basic_controls_contract() {
+        let task = inference::resolve_task_registry_entry("image_generation").expect("image task");
+        let expected: Vec<InferencePortDescriptor> = serde_json::from_str(include_str!(
+            "../../pantograph-inference-interface-contracts/tests/fixtures/image_generation_basic_inputs.json"
+        )).expect("image input contract fixture");
+        let actual = input_ports(&task);
+        assert_eq!(actual, expected);
+        for input in actual {
+            input.validate().expect("image input contract");
+        }
+    }
+
+    #[test]
     fn projected_package_and_runtime_facts_publish_descriptor_inputs_and_estimates() {
         let package = projected_package_facts();
         let runtime = RuntimeDispatchCapabilityFactsOutcome::Projected {
@@ -341,6 +901,7 @@ mod tests {
                     loaded_model_ids: Vec::new(),
                     active_reservation_ids: Vec::new(),
                     has_admission_budget: true,
+                    automatic_device_candidates: Vec::new(),
                 }],
             },
             diagnostics: Vec::new(),
@@ -348,7 +909,7 @@ mod tests {
 
         let facts = resolver_facts_from_sources(
             PumasDispatchPackageFactsBridgeOutcome::Projected {
-                facts: package,
+                facts: Box::new(package),
                 diagnostics: Vec::new(),
             },
             &runtime,
@@ -379,7 +940,7 @@ mod tests {
     fn missing_runtime_facts_keep_capability_but_publish_no_runtime_availability() {
         let facts = resolver_facts_from_sources(
             PumasDispatchPackageFactsBridgeOutcome::Projected {
-                facts: projected_package_facts(),
+                facts: Box::new(projected_package_facts()),
                 diagnostics: Vec::new(),
             },
             &RuntimeDispatchCapabilityFactsOutcome::Unavailable {
@@ -416,6 +977,229 @@ mod tests {
         assert!(facts.capability.is_none());
         assert!(facts.runtimes.is_empty());
         assert!(facts.estimate_hints.is_empty());
+    }
+
+    #[test]
+    fn rerank_descriptor_exposes_typed_parent_inputs_outputs_without_streaming_or_defaults() {
+        let mut package = projected_package_facts();
+        let rerank: inference::ResolvedModelPackageFacts = serde_json::from_str(include_str!(
+            "../../inference/tests/fixtures/inference_package_facts/rerank_package_facts.json"
+        ))
+        .unwrap();
+        package.task = rerank.task;
+        let runtime = InferenceRuntimeAvailabilityFact {
+            runtime_id: "llama_cpp".parse().unwrap(),
+            state: InferenceRuntimeAvailabilityState::Available,
+            device_ids: vec!["cpu".parse().unwrap()],
+        };
+        let capability = capability_facts(&package, &[runtime]).unwrap();
+        let descriptor: pantograph_inference_interface_contracts::InferenceInterfaceDescriptor = serde_json::from_str(include_str!("../../pantograph-inference-interface-contracts/tests/fixtures/descriptor_rerank_ready.json")).unwrap();
+        descriptor.validate().unwrap();
+        assert_eq!(capability.task_kind.as_str(), "rerank");
+        assert_eq!(capability.inputs, descriptor.inputs);
+        assert_eq!(capability.outputs, descriptor.outputs);
+        assert!(!capability
+            .inputs
+            .iter()
+            .any(|port| port.port_id.as_str() == "stream"));
+        assert!(capability
+            .inputs
+            .iter()
+            .all(|port| matches!(port.options, InferencePortOptions::None)));
+    }
+
+    #[test]
+    fn selected_audio_descriptor_exposes_all_eight_parent_outputs_without_defaults() {
+        let mut package = projected_package_facts();
+        let audio: inference::ResolvedModelPackageFacts = serde_json::from_str(include_str!("../../inference/tests/fixtures/inference_package_facts/hf_audio_transcription_package_facts.json")).unwrap();
+        package.task = audio.task;
+        let runtime = InferenceRuntimeAvailabilityFact {
+            runtime_id: "pytorch".parse().unwrap(),
+            state: InferenceRuntimeAvailabilityState::Available,
+            device_ids: vec!["cpu".parse().unwrap()],
+        };
+        let capability = capability_facts(&package, &[runtime]).unwrap();
+        let descriptor:pantograph_inference_interface_contracts::InferenceInterfaceDescriptor = serde_json::from_str(include_str!("../../pantograph-inference-interface-contracts/tests/fixtures/descriptor_audio_ready.json")).unwrap();
+        descriptor.validate().unwrap();
+        assert_eq!(capability.task_kind.as_str(), "audio_transcription");
+        assert_eq!(capability.inputs, descriptor.inputs);
+        assert_eq!(capability.outputs, descriptor.outputs);
+        assert_eq!(capability.outputs.len(), 8);
+        assert!(capability
+            .inputs
+            .iter()
+            .all(|port| matches!(port.options, InferencePortOptions::None)));
+    }
+
+    #[test]
+    fn embedding_descriptor_types_have_stable_fingerprints_and_saved_snapshots() {
+        use pantograph_inference_interface_contracts::ResolveInferenceInterfaceRequest;
+        use pantograph_workflow_service::graph::{
+            authored_snapshot_from_descriptor, resolve_inference_interface_from_facts,
+        };
+        let mut package = projected_package_facts();
+        package.task = TaskEvidence {
+            pipeline_tag: Some("feature-extraction".into()),
+            task_type_primary: Some("embedding".into()),
+            input_modalities: vec!["text".into()],
+            output_modalities: vec!["embedding".into()],
+        };
+        let runtime = InferenceRuntimeAvailabilityFact {
+            runtime_id: "candle".parse().unwrap(),
+            state: InferenceRuntimeAvailabilityState::Available,
+            device_ids: vec!["cpu".parse().unwrap()],
+        };
+        let capability = capability_facts(&package, std::slice::from_ref(&runtime)).unwrap();
+        assert_eq!(capability.task_kind.as_str(), "embedding");
+        let fixture: pantograph_inference_interface_contracts::InferenceInterfaceDescriptor = serde_json::from_str(include_str!("../../pantograph-inference-interface-contracts/tests/fixtures/descriptor_embedding_ready.json")).unwrap();
+        assert_eq!(capability.inputs, fixture.inputs);
+        assert_eq!(capability.outputs, fixture.outputs);
+        let request: ResolveInferenceInterfaceRequest = serde_json::from_value(serde_json::json!({
+            "model_ref": {"model_id": "embedding/example/tiny-cpu", "selected_artifact_id": "candle-safetensors"},
+            "task_kind": "embedding", "runtime_constraint": "candle", "device_constraint": "cpu",
+        })).unwrap();
+        let facts = InferenceInterfaceResolverFacts {
+            model: InferenceModelResolutionFacts {
+                state: InferenceModelResolutionState::Ready,
+            },
+            capability: Some(capability),
+            runtimes: vec![runtime],
+            estimate_hints: Vec::new(),
+        };
+        let descriptor =
+            resolve_inference_interface_from_facts(request.clone(), facts.clone()).unwrap();
+        let repeated =
+            resolve_inference_interface_from_facts(request.clone(), facts.clone()).unwrap();
+        assert_eq!(
+            descriptor.descriptor_fingerprint,
+            repeated.descriptor_fingerprint
+        );
+        let snapshot = authored_snapshot_from_descriptor(&descriptor).unwrap();
+        let restored: pantograph_inference_interface_contracts::AuthoredInferenceInterfaceSnapshot =
+            serde_json::from_str(&serde_json::to_string(&snapshot).unwrap()).unwrap();
+        assert_eq!(restored, snapshot);
+        assert_eq!(
+            restored.descriptor_fingerprint,
+            descriptor.descriptor_fingerprint
+        );
+        let mut tensor_facts = facts;
+        tensor_facts.capability.as_mut().unwrap().outputs[0].value_type =
+            InferenceValueType::Artifact(InferenceArtifactType::Tensor);
+        let tensor_descriptor =
+            resolve_inference_interface_from_facts(request, tensor_facts).unwrap();
+        assert_ne!(
+            descriptor.descriptor_fingerprint,
+            tensor_descriptor.descriptor_fingerprint
+        );
+    }
+
+    fn candle_runtime_fact(
+        status: RuntimeRegistryStatus,
+        advertises_cpu: bool,
+    ) -> RuntimeDispatchRuntimeCapabilityFacts {
+        RuntimeDispatchRuntimeCapabilityFacts {
+            runtime_id: "candle".into(),
+            backend_keys: vec!["candle".into()],
+            backend_capabilities: Default::default(),
+            device_ids: Vec::new(),
+            runtime_family: "candle".into(),
+            runtime_residency_key: "candle.cpu".into(),
+            status,
+            runtime_instance_id: None,
+            loaded_model_ids: Vec::new(),
+            active_reservation_ids: Vec::new(),
+            has_admission_budget: false,
+            automatic_device_candidates: if advertises_cpu {
+                vec![inference::gateway::RuntimeOwnedDeviceCandidate {
+                    backend_key: "candle".into(),
+                    runtime_variant_id: "candle.cpu".parse().unwrap(),
+                    device_id: "cpu".parse().unwrap(),
+                }]
+            } else {
+                Vec::new()
+            },
+        }
+    }
+
+    #[test]
+    fn ready_and_cold_candle_descriptors_preserve_owner_cpu_device_evidence() {
+        use pantograph_inference_interface_contracts::ResolveInferenceInterfaceRequest;
+        use pantograph_workflow_service::graph::resolve_inference_interface_from_facts;
+        for status in [RuntimeRegistryStatus::Ready, RuntimeRegistryStatus::Stopped] {
+            let runtime = runtime_availability_fact(&candle_runtime_fact(status, true)).unwrap();
+            assert_eq!(runtime.device_ids, vec!["cpu".parse().unwrap()]);
+            let mut package = projected_package_facts();
+            package.task = TaskEvidence {
+                pipeline_tag: Some("feature-extraction".into()),
+                task_type_primary: Some("embedding".into()),
+                input_modalities: vec!["text".into()],
+                output_modalities: vec!["embedding".into()],
+            };
+            let capability = capability_facts(&package, std::slice::from_ref(&runtime)).unwrap();
+            let request: ResolveInferenceInterfaceRequest = serde_json::from_value(serde_json::json!({
+            "model_ref": {"model_id":"embedding/qualification/synthetic-bert-8","selected_artifact_id":"main"},
+            "task_kind":"embedding","runtime_constraint":"candle","device_constraint":"cpu",
+        })).unwrap();
+            let descriptor = resolve_inference_interface_from_facts(
+                request,
+                InferenceInterfaceResolverFacts {
+                    model: InferenceModelResolutionFacts {
+                        state: InferenceModelResolutionState::Ready,
+                    },
+                    capability: Some(capability),
+                    runtimes: vec![runtime],
+                    estimate_hints: Vec::new(),
+                },
+            )
+            .unwrap();
+            assert_eq!(
+                descriptor.availability.status,
+                pantograph_inference_interface_contracts::InferenceAvailabilityStatus::Available
+            );
+            assert!(descriptor.diagnostics.is_empty());
+        }
+    }
+
+    #[test]
+    fn cold_candle_requires_owner_cpu_evidence_and_preserves_failure_gates() {
+        let ready =
+            runtime_availability_fact(&candle_runtime_fact(RuntimeRegistryStatus::Ready, false))
+                .unwrap();
+        assert!(ready.device_ids.is_empty());
+        let stopped =
+            runtime_availability_fact(&candle_runtime_fact(RuntimeRegistryStatus::Stopped, true))
+                .unwrap();
+        assert_eq!(stopped.state, InferenceRuntimeAvailabilityState::Available);
+        for status in [
+            RuntimeRegistryStatus::Stopped,
+            RuntimeRegistryStatus::Stopping,
+            RuntimeRegistryStatus::Unhealthy,
+            RuntimeRegistryStatus::Failed,
+        ] {
+            let without_owner =
+                runtime_availability_fact(&candle_runtime_fact(status, false)).unwrap();
+            assert_ne!(
+                without_owner.state,
+                InferenceRuntimeAvailabilityState::Available
+            );
+        }
+        for status in [
+            RuntimeRegistryStatus::Stopping,
+            RuntimeRegistryStatus::Unhealthy,
+            RuntimeRegistryStatus::Failed,
+        ] {
+            let advertised = runtime_availability_fact(&candle_runtime_fact(status, true)).unwrap();
+            assert_ne!(
+                advertised.state,
+                InferenceRuntimeAvailabilityState::Available
+            );
+        }
+        let mut mismatched = candle_runtime_fact(RuntimeRegistryStatus::Stopped, true);
+        mismatched.runtime_family = "foreign".into();
+        assert_eq!(
+            runtime_availability_fact(&mismatched).unwrap().state,
+            InferenceRuntimeAvailabilityState::NotInstalled
+        );
     }
 
     fn projected_package_facts() -> PumasDispatchPackageFactsProjection {

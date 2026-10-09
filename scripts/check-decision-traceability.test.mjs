@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -309,4 +309,77 @@ test('changing the canonical owner requires disposition of the retained prior gu
   f.write(guide, '# Consumer moved\n\nSee [current owner](new-consumer.md).\n');
   f.git('add', guide);
   passed(f.run());
+});
+
+test('PR callers select the fork point explicitly without changing exact range semantics', t => {
+  const f = fixture(t);
+  f.write('src/internal.rs', 'fn pr_repair() {}\n');
+  const head = f.commit();
+  f.git('checkout', '-b', 'target', f.base);
+  const next = f.map([{ id: 'target-only', triggers: ['docs/adr/ADR-002-target.md'], artifact: 'docs/target-guide.md', profile: 'contract-readme', knowledge: 'Target-only contract' }]);
+  f.writeMap(next);
+  f.write('docs/adr/ADR-002-target.md', '# Target decision\n');
+  f.write('docs/target-guide.md', '# Target owner\n');
+  f.write('scripts/README.md', '# Gate\n\nTarget-only contract added.\n');
+  const target = f.commit();
+  const env = { TRACEABILITY_STAGED_ONLY: undefined, TRACEABILITY_MODE: 'range', TRACEABILITY_BASE_REF: target, TRACEABILITY_HEAD_REF: head };
+  // Exact range is intentionally not silently changed by the checker.
+  failed(f.run(env), /unavailable: docs\/target-guide.md is missing/);
+  const base = f.git('merge-base', '--all', target, head);
+  assert.equal(base, f.base);
+  const workflowRange = runWorkflowRange(f.root, target, head, 'pull_request');
+  assert.equal(workflowRange.status, 0, workflowRange.stderr);
+  assert.equal(workflowRange.range, `base=${base}\nhead=${head}\n`);
+  const result = f.run({ ...env, TRACEABILITY_BASE_REF: base });
+  passed(result);
+  assert.match(result.output, /1 changed path\(s\), 0 mapped impact\(s\)/);
+});
+
+// Exercise the actual CI shell block, not a second implementation of its range policy.
+function runWorkflowRange(root, base, head, event = 'push') {
+  const workflow = readFileSync(new URL('../.github/workflows/quality-gates.yml', import.meta.url), 'utf8');
+  const step = workflow.split('        id: traceability-range\n')[1];
+  assert.ok(step, 'CI traceability step must exist');
+  const block = step.split('        run: |\n')[1]?.split('\n      - name:')[0];
+  assert.ok(block, 'CI traceability shell block must exist');
+  const script = block.split('\n').map((line) => line.replace(/^ {10}/, '')).join('\n');
+  const outputPath = path.join(root, 'event-range-output');
+  const result = spawnSync('bash', ['-c', script], {
+    cwd: root, encoding: 'utf8',
+    env: { ...process.env, EVENT_NAME: event, EVENT_BASE: base, EVENT_HEAD: head, GITHUB_OUTPUT: outputPath },
+  });
+  return { ...result, range: existsSync(outputPath) ? readFileSync(outputPath, 'utf8') : '' };
+}
+
+test('CI uses a present event base without fetching or replacing its push range', t => {
+  const f = fixture(t);
+  f.write('src/internal.rs', 'fn next() {}\n');
+  const head = f.commit();
+  // No origin is configured, so an unnecessary fetch would fail this check.
+  const result = runWorkflowRange(f.root, f.base, head);
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.range, `base=${f.base}\nhead=${head}\n`);
+});
+
+test('CI fetches the exact missing event base and retains the explicit push range', t => {
+  const f = fixture(t);
+  f.write('src/internal.rs', 'fn next() {}\n');
+  const head = f.commit();
+  const client = path.join(f.root, 'client');
+  const clone = spawnSync(realGit, ['clone', '--depth', '1', `file://${f.root}`, client], { encoding: 'utf8' });
+  assert.equal(clone.status, 0, clone.stderr);
+  assert.notEqual(spawnSync(realGit, ['cat-file', '-e', `${f.base}^{commit}`], { cwd: client }).status, 0);
+  const result = runWorkflowRange(client, f.base, head);
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.range, `base=${f.base}\nhead=${head}\n`);
+});
+
+test('CI fails closed when the event base cannot be fetched or is not a full SHA', t => {
+  for (const base of ['f'.repeat(40), '', '--all']) {
+    const f = fixture(t);
+    const result = runWorkflowRange(f.root, base, f.base);
+    assert.equal(result.status, 1, result.stderr);
+    assert.equal(result.range, '');
+    assert.match(result.stderr, /Traceability (event base is unavailable|requires the event's full base commit SHA)/);
+  }
 });

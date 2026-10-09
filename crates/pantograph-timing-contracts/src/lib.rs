@@ -4,6 +4,9 @@ use std::str::FromStr;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+mod service;
+pub use service::*;
+
 const TIMING_ATTEMPT_ID_PREFIX: &str = "timing_attempt_";
 const MAX_TIMING_ATTEMPT_ID_LEN: usize = 128;
 

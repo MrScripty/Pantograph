@@ -29,6 +29,7 @@ try
 
     if (args.Contains("--run-session", StringComparer.Ordinal))
     {
+        await PublishSavedWorkflow(runtime, workflowId, savedPath);
         await RunWorkflowSession(runtime, workflowId);
     }
     else
@@ -171,6 +172,56 @@ static async Task EditWorkflowText(FfiPantographRuntime runtime, string savedPat
 
     await runtime.WorkflowGraphCloseEditSession(
         $$"""{"session_id":{{JsonSerializer.Serialize(editSessionId)}}}""");
+}
+
+static async Task PublishSavedWorkflow(
+    FfiPantographRuntime runtime, string workflowId, string savedPath)
+{
+    string fileJson = runtime.WorkflowGraphLoad(JsonSerializer.Serialize(new { path = savedPath }));
+    using JsonDocument file = JsonDocument.Parse(fileJson);
+    string editJson = await runtime.WorkflowGraphCreateEditSession(JsonSerializer.Serialize(new
+    {
+        workflow_id = workflowId,
+        graph = file.RootElement.GetProperty("graph"),
+    }));
+    string editSessionId = ReadString(editJson, "session_id");
+    string graphRevision = ReadString(editJson, "graph_revision");
+    try
+    {
+        string validationJson = await runtime.WorkflowGraphRefreshCurrentValidationSummary(
+            JsonSerializer.Serialize(new
+            {
+                graph_session_id = editSessionId,
+                graph_revision = graphRevision,
+            }));
+        using JsonDocument validation = JsonDocument.Parse(validationJson);
+        JsonElement summary = validation.RootElement.GetProperty("summary");
+        if (summary.GetProperty("state").GetString() != "current"
+            || !summary.GetProperty("submit_gate").GetProperty("allowed").GetBoolean())
+        {
+            throw new InvalidOperationException($"Workflow validation is not executable: {validationJson}");
+        }
+        string validationSessionId = summary.GetProperty("validation_session_id").GetString()
+            ?? throw new InvalidOperationException("Missing validation session identity");
+        string publicationJson = await runtime.PublishGraphSessionExecutableValidationSnapshot(
+            JsonSerializer.Serialize(new
+            {
+                workflow_id = workflowId,
+                workflow_semantic_version = "0.1.0",
+                graph_session_id = editSessionId,
+                validation_session_id = validationSessionId,
+            }));
+        if (ReadString(publicationJson, "validation_session_id") != validationSessionId
+            || string.IsNullOrWhiteSpace(ReadString(publicationJson, "validation_snapshot_id")))
+        {
+            throw new InvalidOperationException($"Unexpected publication identity: {publicationJson}");
+        }
+    }
+    finally
+    {
+        await runtime.WorkflowGraphCloseEditSession(
+            JsonSerializer.Serialize(new { session_id = editSessionId }));
+    }
 }
 
 static async Task RunWorkflowSession(FfiPantographRuntime runtime, string workflowId)

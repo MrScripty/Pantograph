@@ -23,7 +23,11 @@ export function resolveNodeDefinitionOverlay(
 
     return {
       ...baseDefinition,
-      inputs: snapshot.inputs,
+      // Dependency association is a schema-owned control, separate from the
+      // model's payload interface. Keep it reachable after applying a snapshot.
+      inputs: [...snapshot.inputs, ...baseDefinition.inputs.filter((port) =>
+        port.id === 'dependency_environment_sidecar'
+          && !snapshot.inputs.some((input) => input.id === port.id))],
       outputs: snapshot.outputs,
     };
   }
@@ -118,6 +122,8 @@ function inferenceValueTypeToPortDataType(value: unknown): PortDataType {
   switch (record.category) {
     case 'scalar':
       return scalarInferenceTypeToPortDataType(record.kind);
+    case 'structured':
+      return record.kind === 'embedding' ? 'embedding' : 'json';
     case 'artifact':
       return artifactInferenceTypeToPortDataType(record.kind);
     case 'reference':

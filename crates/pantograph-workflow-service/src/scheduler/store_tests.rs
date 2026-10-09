@@ -176,7 +176,7 @@ fn scheduler_state(
 }
 
 fn runtime_execution_intent(task_intent: SchedulableTaskIntent) -> SchedulerTaskExecutionIntent {
-    SchedulerTaskExecutionIntent::Runtime { task_intent }
+    SchedulerTaskExecutionIntent::runtime(task_intent)
 }
 
 fn scheduler_state_diagnostics() -> Vec<pantograph_scheduler::SchedulerTaskStateDiagnostic> {

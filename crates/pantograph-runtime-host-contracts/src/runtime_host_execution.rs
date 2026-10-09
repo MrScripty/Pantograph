@@ -9,13 +9,21 @@ use thiserror::Error;
 
 const MAX_ID_LEN: usize = 128;
 const MAX_TEXT_LEN: usize = 1024;
+/// Maximum serialized size of one structured node output.
+pub const RUNTIME_HOST_STRUCTURED_OUTPUT_MAX_BYTES: usize = 64 * 1024;
+/// Maximum serialized structured input; used for selected rerank documents.
+pub const RUNTIME_HOST_STRUCTURED_INPUT_MAX_BYTES: usize = 64 * 1024;
+
 const MAX_RUNTIME_HOST_INPUTS: usize = 128;
-const MAX_RUNTIME_HOST_OUTPUTS: usize = 64;
+/// Maximum output values carried by one runtime task or batch member.
+pub const MAX_RUNTIME_HOST_OUTPUTS: usize = 64;
 const MAX_RUNTIME_HOST_DIAGNOSTICS: usize = 64;
 const MAX_RUNTIME_HOST_BATCH_MEMBERS: usize = 32;
 
 /// Current contract version for runtime-host execution requests and responses.
 pub const RUNTIME_HOST_EXECUTION_CONTRACT_VERSION: u16 = 2;
+/// Explicit transcript-text profile; unrelated scalar String bounds are unchanged.
+pub const RUNTIME_HOST_TRANSCRIPT_MAX_BYTES: usize = 64 * 1024;
 
 /// Host-owned request to execute one scheduler-dispatched task.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -146,18 +154,89 @@ impl RuntimeHostExecutionInput {
 )]
 #[non_exhaustive]
 pub enum RuntimeHostExecutionInputValue {
+    Json(serde_json::Value),
     String(String),
+    TranscriptText(String),
     Bool(bool),
     I64(i64),
     U64(u64),
+    /// Finite JSON number; reuses the scheduler's numeric domain without
+    /// permitting NaN/infinity or changing existing integer variants.
+    F64(serde_json::Number),
     MediaArtifactRef(RuntimeHostExecutionMediaArtifactRef),
 }
 
 impl RuntimeHostExecutionInputValue {
+    /// Convert a numeric input to existing f32 consumers without dropping
+    /// authored precision. Exact binary f32 values and their shortest JSON
+    /// decimals are accepted; other rounding, overflow and underflow fail.
+    pub fn try_as_f32(&self) -> Result<f32, RuntimeHostExecutionContractError> {
+        let invalid = || RuntimeHostExecutionContractError::InvalidField {
+            field: "input.f32",
+            reason: "number must retain authored precision in finite f32",
+        };
+        let number = match self {
+            Self::F64(value) => value.clone(),
+            Self::I64(value) => (*value).into(),
+            Self::U64(value) => (*value).into(),
+            _ => return Err(invalid()),
+        };
+        let value = number
+            .as_f64()
+            .filter(|value| value.is_finite())
+            .ok_or_else(invalid)?;
+        let narrowed = value as f32;
+        if !narrowed.is_finite() || (value != 0.0 && narrowed == 0.0) {
+            return Err(invalid());
+        }
+        let preserved = if let Some(integer) = number.as_i64() {
+            i128::from(integer) == narrowed as i128
+        } else if let Some(integer) = number.as_u64() {
+            i128::from(integer) == narrowed as i128
+        } else {
+            f64::from(narrowed) == value
+                || serde_json::to_string(&narrowed)
+                    .ok()
+                    .and_then(|value| value.parse::<f64>().ok())
+                    == Some(value)
+        };
+        if !preserved || value.abs() > f64::from(f32::MAX) {
+            return Err(invalid());
+        }
+        Ok(narrowed)
+    }
+
     fn validate(&self) -> Result<(), RuntimeHostExecutionContractError> {
         match self {
+            Self::Json(value) => {
+                if serde_json::to_vec(value)
+                    .map_err(|_| RuntimeHostExecutionContractError::InvalidField {
+                        field: "input.json",
+                        reason: "cannot serialize structured input",
+                    })?
+                    .len()
+                    > RUNTIME_HOST_STRUCTURED_INPUT_MAX_BYTES
+                {
+                    return Err(RuntimeHostExecutionContractError::FieldTooLong {
+                        field: "input.json",
+                        max_len: RUNTIME_HOST_STRUCTURED_INPUT_MAX_BYTES,
+                    });
+                }
+                Ok(())
+            }
             Self::String(value) => validate_optional_text("input.string", value),
+            Self::TranscriptText(value) => validate_transcript(value),
             Self::MediaArtifactRef(value) => value.validate(),
+            Self::F64(value) => {
+                if value.as_f64().is_some_and(f64::is_finite) {
+                    Ok(())
+                } else {
+                    Err(RuntimeHostExecutionContractError::InvalidField {
+                        field: "input.f64",
+                        reason: "number must be finite",
+                    })
+                }
+            }
             Self::Bool(_) | Self::I64(_) | Self::U64(_) => Ok(()),
         }
     }
@@ -167,12 +246,13 @@ impl RuntimeHostExecutionInputValue {
 #[must_use]
 pub struct ValidatedRuntimeHostExecutionRequest(RuntimeHostExecutionRequest);
 
-impl ValidatedRuntimeHostExecutionRequest {
-    #[must_use]
-    pub fn as_ref(&self) -> &RuntimeHostExecutionRequest {
+impl AsRef<RuntimeHostExecutionRequest> for ValidatedRuntimeHostExecutionRequest {
+    fn as_ref(&self) -> &RuntimeHostExecutionRequest {
         &self.0
     }
+}
 
+impl ValidatedRuntimeHostExecutionRequest {
     #[must_use]
     pub fn into_inner(self) -> RuntimeHostExecutionRequest {
         self.0
@@ -267,7 +347,10 @@ impl RuntimeHostExecutionOutput {
 )]
 #[non_exhaustive]
 pub enum RuntimeHostExecutionOutputValue {
+    /// Structured node output, bounded independently of scalar text.
+    Json(serde_json::Value),
     String(String),
+    TranscriptText(String),
     Bool(bool),
     I64(i64),
     U64(u64),
@@ -278,13 +361,39 @@ pub enum RuntimeHostExecutionOutputValue {
 impl RuntimeHostExecutionOutputValue {
     fn validate(&self) -> Result<(), RuntimeHostExecutionContractError> {
         match self {
+            Self::Json(value) => {
+                if serde_json::to_vec(value)
+                    .map_err(|_| RuntimeHostExecutionContractError::InvalidField {
+                        field: "output.json",
+                        reason: "cannot serialize structured output",
+                    })?
+                    .len()
+                    > RUNTIME_HOST_STRUCTURED_OUTPUT_MAX_BYTES
+                {
+                    return Err(RuntimeHostExecutionContractError::FieldTooLong {
+                        field: "output.json",
+                        max_len: RUNTIME_HOST_STRUCTURED_OUTPUT_MAX_BYTES,
+                    });
+                }
+                Ok(())
+            }
             Self::String(value) => validate_optional_text("output.string", value),
+            Self::TranscriptText(value) => validate_transcript(value),
             Self::MediaArtifactRef(value) => value.validate(),
             Self::Bool(_) | Self::I64(_) | Self::U64(_) | Self::DiagnosticOnly => Ok(()),
         }
     }
 }
 
+fn validate_transcript(value: &str) -> Result<(), RuntimeHostExecutionContractError> {
+    if value.len() > RUNTIME_HOST_TRANSCRIPT_MAX_BYTES {
+        return Err(RuntimeHostExecutionContractError::FieldTooLong {
+            field: "transcript_text",
+            max_len: RUNTIME_HOST_TRANSCRIPT_MAX_BYTES,
+        });
+    }
+    Ok(())
+}
 /// Path-free media or artifact reference returned by a runtime host.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
@@ -388,12 +497,13 @@ impl RuntimeHostExecutionResponse {
 #[must_use]
 pub struct ValidatedRuntimeHostExecutionResponse(RuntimeHostExecutionResponse);
 
-impl ValidatedRuntimeHostExecutionResponse {
-    #[must_use]
-    pub fn as_ref(&self) -> &RuntimeHostExecutionResponse {
+impl AsRef<RuntimeHostExecutionResponse> for ValidatedRuntimeHostExecutionResponse {
+    fn as_ref(&self) -> &RuntimeHostExecutionResponse {
         &self.0
     }
+}
 
+impl ValidatedRuntimeHostExecutionResponse {
     #[must_use]
     pub fn into_inner(self) -> RuntimeHostExecutionResponse {
         self.0
@@ -724,12 +834,13 @@ pub enum RuntimeHostBatchMemberReservationDisposition {
 #[must_use]
 pub struct ValidatedRuntimeHostBatchExecutionRequest(RuntimeHostBatchExecutionRequest);
 
-impl ValidatedRuntimeHostBatchExecutionRequest {
-    #[must_use]
-    pub fn as_ref(&self) -> &RuntimeHostBatchExecutionRequest {
+impl AsRef<RuntimeHostBatchExecutionRequest> for ValidatedRuntimeHostBatchExecutionRequest {
+    fn as_ref(&self) -> &RuntimeHostBatchExecutionRequest {
         &self.0
     }
+}
 
+impl ValidatedRuntimeHostBatchExecutionRequest {
     #[must_use]
     pub fn into_inner(self) -> RuntimeHostBatchExecutionRequest {
         self.0
@@ -749,12 +860,13 @@ impl TryFrom<RuntimeHostBatchExecutionRequest> for ValidatedRuntimeHostBatchExec
 #[must_use]
 pub struct ValidatedRuntimeHostBatchExecutionResponse(RuntimeHostBatchExecutionResponse);
 
-impl ValidatedRuntimeHostBatchExecutionResponse {
-    #[must_use]
-    pub fn as_ref(&self) -> &RuntimeHostBatchExecutionResponse {
+impl AsRef<RuntimeHostBatchExecutionResponse> for ValidatedRuntimeHostBatchExecutionResponse {
+    fn as_ref(&self) -> &RuntimeHostBatchExecutionResponse {
         &self.0
     }
+}
 
+impl ValidatedRuntimeHostBatchExecutionResponse {
     #[must_use]
     pub fn into_inner(self) -> RuntimeHostBatchExecutionResponse {
         self.0

@@ -16,6 +16,7 @@ than an in-tree archive, preserves completed plans and superseded notes.
 | Which architecture decisions are accepted? | [ADR index](adr/README.md) |
 | What standards gaps are currently known? | [Current standards audit](audits/2026-09-03-current-standards/README.md) |
 | What work is currently authorized? | [Domain architecture and multimodal workflows](plans/domain-architecture-and-multimodal/plan.md) |
+| Which research informs development, and what does it prove? | [Research sources](research/README.md) |
 
 ## Current Plans
 

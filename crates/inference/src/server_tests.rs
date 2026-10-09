@@ -1,4 +1,5 @@
 use super::{parse_sidecar_pid, LlamaServer, ServerMode};
+use crate::backend::LlamaCppRuntimeSettings;
 use crate::config::DeviceConfig;
 use crate::device::DeviceBackend;
 use crate::llamacpp_sidecar_events::LlamaCppSidecarStartupError;
@@ -89,21 +90,13 @@ fn inference_runtime_matcher_requires_matching_port() {
     assert!(server.matches_inference_runtime(
         "/models/main.gguf",
         Some("/models/vision.mmproj"),
-        &device,
-        4096,
-        Some(8),
-        Some(512),
-        Some(128),
+        &inference_settings(&device, 4096, Some(8), Some(512), Some(128)),
         Some(11434),
     ));
     assert!(!server.matches_inference_runtime(
         "/models/other.gguf",
         Some("/models/vision.mmproj"),
-        &device,
-        4096,
-        Some(8),
-        Some(512),
-        Some(128),
+        &inference_settings(&device, 4096, Some(8), Some(512), Some(128)),
         Some(11434),
     ));
     assert!(!server.matches_embedding_runtime("/models/main.gguf", &device, Some(11434),));
@@ -111,31 +104,19 @@ fn inference_runtime_matcher_requires_matching_port() {
     assert!(!server.matches_inference_runtime(
         "/models/main.gguf",
         Some("/models/vision.mmproj"),
-        &device,
-        4096,
-        Some(8),
-        Some(512),
-        Some(128),
+        &inference_settings(&device, 4096, Some(8), Some(512), Some(128)),
         Some(18080),
     ));
     assert!(!server.matches_inference_runtime(
         "/models/main.gguf",
         Some("/models/vision.mmproj"),
-        &device,
-        8192,
-        Some(8),
-        Some(512),
-        Some(128),
+        &inference_settings(&device, 8192, Some(8), Some(512), Some(128)),
         Some(11434),
     ));
     assert!(!server.matches_inference_runtime(
         "/models/main.gguf",
         Some("/models/vision.mmproj"),
-        &device,
-        4096,
-        Some(16),
-        Some(512),
-        Some(128),
+        &inference_settings(&device, 4096, Some(16), Some(512), Some(128)),
         Some(11434),
     ));
 }
@@ -253,6 +234,72 @@ impl ProcessHandle for ErroringProcessHandle {
     }
 }
 
+#[tokio::test]
+async fn stop_signal_without_termination_retains_handle_and_blocks_replacement() {
+    let killed = Arc::new(AtomicBool::new(false));
+    let mut server = LlamaServer::new();
+    server.child = Some(Box::new(ErroringProcessHandle {
+        killed: killed.clone(),
+    }));
+    let (sender, receiver) = mpsc::channel(1);
+    drop(sender);
+    server.process_events = Some(receiver);
+    assert!(server.stop_confirmed().await.is_err());
+    assert!(killed.load(Ordering::SeqCst));
+    assert!(server.child.is_some());
+    let temp = tempfile::tempdir().unwrap();
+    let captured = Arc::new(Mutex::new(Vec::new()));
+    assert!(server
+        .start_sidecar_inference(
+            Arc::new(ErroringProcessSpawner {
+                app_data_dir: temp.path().into(),
+                killed,
+                captured_args: Some(captured.clone())
+            }),
+            "model-a",
+            None,
+            &inference_settings(
+                &DeviceConfig {
+                    device: DeviceBackend::Auto,
+                    gpu_layers: -1
+                },
+                4096,
+                None,
+                None,
+                None
+            ),
+            Some(18080),
+        )
+        .await
+        .is_err());
+    assert!(
+        captured.lock().unwrap().is_empty(),
+        "replacement must not spawn over an unconfirmed owner"
+    );
+    assert!(server.child.is_some());
+}
+
+#[tokio::test]
+async fn owned_termination_clears_handle_and_pid_file() {
+    let temp = tempfile::tempdir().unwrap();
+    let pid_file = temp.path().join(super::SIDECAR_PID_FILE);
+    std::fs::write(&pid_file, "1234").unwrap();
+    let mut server = LlamaServer::new();
+    server.child = Some(Box::new(ErroringProcessHandle {
+        killed: Arc::new(AtomicBool::new(false)),
+    }));
+    server.pid_file = Some(pid_file.clone());
+    let (sender, receiver) = mpsc::channel(1);
+    sender
+        .send(ProcessEvent::Terminated(Some(0)))
+        .await
+        .unwrap();
+    server.process_events = Some(receiver);
+    server.stop_confirmed().await.unwrap();
+    assert!(server.child.is_none());
+    assert!(!pid_file.exists());
+}
+
 #[test]
 fn active_process_id_reports_ready_sidecar_child_pid_only() {
     let mut server = LlamaServer::new();
@@ -341,7 +388,7 @@ fn pid_path_arg(args: &[&str]) -> Option<PathBuf> {
 }
 
 #[tokio::test]
-async fn start_sidecar_inference_cleans_process_and_pid_file_on_start_error() {
+async fn start_sidecar_inference_retains_custody_without_termination_on_start_error() {
     let temp = tempfile::tempdir().expect("temp dir");
     let pid_file = temp.path().join(super::SIDECAR_PID_FILE);
     let killed = Arc::new(AtomicBool::new(false));
@@ -356,26 +403,30 @@ async fn start_sidecar_inference_cleans_process_and_pid_file_on_start_error() {
             }),
             "/models/main.gguf",
             None,
-            &DeviceConfig {
-                device: DeviceBackend::Auto,
-                gpu_layers: -1,
-            },
-            4096,
-            None,
-            None,
-            None,
+            &inference_settings(
+                &DeviceConfig {
+                    device: DeviceBackend::Auto,
+                    gpu_layers: -1,
+                },
+                4096,
+                None,
+                None,
+                None,
+            ),
             Some(18080),
         )
         .await;
 
     assert_eq!(result, Err(LlamaCppSidecarStartupError::ProcessError));
     assert!(killed.load(Ordering::SeqCst));
-    assert!(!pid_file.exists());
+    assert!(pid_file.exists());
+    assert!(server.stop_confirmed().await.is_err());
+    assert!(server.child.is_some());
     assert!(!server.is_ready());
-    assert_eq!(server.mode_info().mode, "none");
+    assert_eq!(server.mode_info().mode, "sidecar_inference");
 
     server.stop();
-    assert_eq!(server.mode_info().mode, "none");
+    assert_eq!(server.mode_info().mode, "sidecar_inference");
 }
 
 #[tokio::test]
@@ -394,14 +445,16 @@ async fn start_sidecar_inference_applies_runtime_settings_to_llama_server_args()
             }),
             "/models/main.gguf",
             Some("/models/mmproj.gguf"),
-            &DeviceConfig {
-                device: DeviceBackend::Vulkan(0),
-                gpu_layers: 12,
-            },
-            16384,
-            Some(8),
-            Some(512),
-            Some(128),
+            &inference_settings(
+                &DeviceConfig {
+                    device: DeviceBackend::Vulkan(0),
+                    gpu_layers: 12,
+                },
+                16384,
+                Some(8),
+                Some(512),
+                Some(128),
+            ),
             Some(18080),
         )
         .await;
@@ -423,4 +476,75 @@ fn assert_arg_pair(args: &[String], name: &str, value: &str) {
             .any(|window| window[0] == name && window[1] == value),
         "expected arg pair {name} {value} in {args:?}"
     );
+}
+
+#[test]
+fn runtime_matchers_preserve_path_component_comparison() {
+    let device = DeviceConfig {
+        device: DeviceBackend::Auto,
+        gpu_layers: -1,
+    };
+    let mut server = LlamaServer::new();
+    server.set_test_runtime_state(
+        ServerMode::SidecarInference {
+            port: 11434,
+            model_path: "models/main.gguf".to_string(),
+            mmproj_path: None,
+            device: device.clone(),
+            context_size: 4096,
+            cpu_threads: None,
+            batch_size: None,
+            ubatch_size: None,
+        },
+        true,
+    );
+    assert!(server.matches_inference_runtime(
+        "models/./main.gguf",
+        None,
+        &inference_settings(&device, 4096, None, None, None),
+        Some(11434),
+    ));
+    assert!(!server.matches_inference_runtime(
+        "models/other.gguf",
+        None,
+        &inference_settings(&device, 4096, None, None, None),
+        Some(11434),
+    ));
+    server.set_test_runtime_state(
+        ServerMode::SidecarEmbedding {
+            port: 11434,
+            model_path: "models/main.gguf".to_string(),
+            device: device.clone(),
+        },
+        true,
+    );
+    assert!(server.matches_embedding_runtime("models/./main.gguf", &device, Some(11434)));
+    assert!(!server.matches_embedding_runtime("models/other.gguf", &device, Some(11434)));
+    server.set_test_runtime_state(
+        ServerMode::SidecarReranking {
+            port: 11434,
+            model_path: "models/main.gguf".to_string(),
+            device: device.clone(),
+        },
+        true,
+    );
+    assert!(server.matches_reranking_runtime("models/./main.gguf", &device, Some(11434)));
+    assert!(!server.matches_reranking_runtime("models/other.gguf", &device, Some(11434)));
+}
+
+fn inference_settings(
+    device: &DeviceConfig,
+    context_size: u32,
+    cpu_threads: Option<u32>,
+    batch_size: Option<u32>,
+    ubatch_size: Option<u32>,
+) -> LlamaCppRuntimeSettings {
+    LlamaCppRuntimeSettings {
+        device: device.device.clone(),
+        gpu_layers: device.gpu_layers,
+        context_size,
+        cpu_threads,
+        batch_size,
+        ubatch_size,
+    }
 }

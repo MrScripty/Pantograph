@@ -103,10 +103,7 @@ impl TauriTaskExecutor {
     }
 
     pub(in crate::task_executor) fn python_runtime_handles_node(node_type: &str) -> bool {
-        match node_type {
-            "audio-generation" | "onnx-inference" => true,
-            _ => false,
-        }
+        matches!(node_type, "audio-generation" | "onnx-inference")
     }
 
     pub(in crate::task_executor) fn sanitize_key_component(raw: &str) -> String {
@@ -128,5 +125,30 @@ impl TauriTaskExecutor {
             digest = digest.wrapping_mul(Self::FNV64_PRIME);
         }
         format!("{:016x}", digest)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::TauriTaskExecutor;
+
+    #[test]
+    fn python_runtime_node_classification_keeps_exact_accepted_set() {
+        for node_type in ["audio-generation", "onnx-inference"] {
+            assert!(TauriTaskExecutor::python_runtime_handles_node(node_type));
+        }
+        for node_type in [
+            "llm-inference",
+            "embedding",
+            "vision",
+            "",
+            "Audio-generation",
+            "onnx-inference ",
+        ] {
+            assert!(
+                !TauriTaskExecutor::python_runtime_handles_node(node_type),
+                "{node_type}"
+            );
+        }
     }
 }

@@ -12,14 +12,15 @@ use pantograph_scheduler::SchedulerDispatchDecision;
 use thiserror::Error;
 
 const IMAGE_GENERATION_TASK: &str = "image_generation";
-const PROMPT_PORT: &str = "prompt";
-const NEGATIVE_PROMPT_PORT: &str = "negative_prompt";
-const WIDTH_PORT: &str = "width";
-const HEIGHT_PORT: &str = "height";
-const STEPS_PORT: &str = "num_inference_steps";
-const SEED_PORT: &str = "seed";
-const NUM_IMAGES_PORT: &str = "num_images_per_prompt";
-const DENOISING_SCHEDULER_PORT: &str = "denoising_scheduler";
+pub(crate) const PROMPT_PORT: &str = "prompt";
+pub(crate) const NEGATIVE_PROMPT_PORT: &str = "negative_prompt";
+pub(crate) const WIDTH_PORT: &str = "width";
+pub(crate) const HEIGHT_PORT: &str = "height";
+pub(crate) const STEPS_PORT: &str = "num_inference_steps";
+pub(crate) const SEED_PORT: &str = "seed";
+pub(crate) const GUIDANCE_SCALE_PORT: &str = "guidance_scale";
+pub(crate) const NUM_IMAGES_PORT: &str = "num_images_per_prompt";
+pub(crate) const DENOISING_SCHEDULER_PORT: &str = "denoising_scheduler";
 const PYTORCH_BACKEND_ID: &str = "pytorch";
 const PYTORCH_RUNTIME_ID: &str = "pytorch";
 const DIFFUSERS_PYTORCH_RUNTIME_ID: &str = "diffusers-pytorch";
@@ -94,10 +95,10 @@ fn image_generation_request(
         width: optional_u32_input(request, WIDTH_PORT)?,
         height: optional_u32_input(request, HEIGHT_PORT)?,
         num_inference_steps: optional_u32_input(request, STEPS_PORT)?,
-        guidance_scale: None,
+        guidance_scale: optional_guidance_scale(request)?,
         seed: optional_u64_input(request, SEED_PORT)?,
         denoising_scheduler: denoising_scheduler(request, dispatch_decision)?,
-        num_images_per_prompt: optional_u32_input(request, NUM_IMAGES_PORT)?,
+        num_images_per_prompt: optional_image_count(request)?,
         init_image: None,
         mask_image: None,
         strength: None,
@@ -331,6 +332,38 @@ fn optional_u32_input(
         .transpose()
 }
 
+fn optional_image_count(
+    request: &pantograph_runtime_host_contracts::RuntimeHostExecutionRequest,
+) -> Result<Option<u32>, RuntimeHostImageGenerationProjectionError> {
+    let count = optional_u32_input(request, NUM_IMAGES_PORT)?;
+    if count.is_some_and(|count| {
+        count == 0 || count as usize > pantograph_runtime_host_contracts::MAX_RUNTIME_HOST_OUTPUTS
+    }) {
+        return Err(RuntimeHostImageGenerationProjectionError::InvalidImageCount);
+    }
+    Ok(count)
+}
+
+fn optional_guidance_scale(
+    request: &pantograph_runtime_host_contracts::RuntimeHostExecutionRequest,
+) -> Result<Option<f32>, RuntimeHostImageGenerationProjectionError> {
+    optional_input(request, GUIDANCE_SCALE_PORT)
+        .map(|value| match value {
+            RuntimeHostExecutionInputValue::F64(_)
+            | RuntimeHostExecutionInputValue::I64(_)
+            | RuntimeHostExecutionInputValue::U64(_) => value
+                .try_as_f32()
+                .map_err(|_| RuntimeHostImageGenerationProjectionError::InvalidGuidanceScale),
+            _ => Err(
+                RuntimeHostImageGenerationProjectionError::InvalidInputType {
+                    port_id: GUIDANCE_SCALE_PORT,
+                    expected: "finite number",
+                },
+            ),
+        })
+        .transpose()
+}
+
 fn optional_input<'a>(
     request: &'a pantograph_runtime_host_contracts::RuntimeHostExecutionRequest,
     port_id: &str,
@@ -354,6 +387,7 @@ fn validate_supported_inputs(
                 | HEIGHT_PORT
                 | STEPS_PORT
                 | SEED_PORT
+                | GUIDANCE_SCALE_PORT
                 | NUM_IMAGES_PORT
                 | DENOISING_SCHEDULER_PORT
         ) {
@@ -466,6 +500,12 @@ pub(crate) enum RuntimeHostImageGenerationProjectionError {
     UnsupportedInputPort { port_id: String },
     #[error("runtime-host image input '{port_id}' value {value} exceeds u32")]
     IntegerInputOutOfRange { port_id: &'static str, value: u64 },
+    #[error(
+        "runtime-host image input 'guidance_scale' must retain authored precision in finite f32"
+    )]
+    InvalidGuidanceScale,
+    #[error("runtime-host image input 'num_images_per_prompt' exceeds the positive per-task output limit")]
+    InvalidImageCount,
     #[error("runtime-host image trait '{trait_id}' must be {expected}")]
     InvalidTraitValue {
         trait_id: &'static str,
@@ -497,6 +537,163 @@ mod tests {
         RuntimeHostExecutionInput, RuntimeHostExecutionRequest,
         ValidatedRuntimeHostExecutionRequest,
     };
+
+    #[test]
+    fn versioned_pumas_load_target_wire_projects_without_losing_consumer_facts() {
+        let wire: serde_json::Value = serde_json::from_str(include_str!(
+            "../../inference/tests/fixtures/runtime_load/pumas_artifact_load_target_wire.json"
+        ))
+        .expect("producer wire fixture");
+        // Decode with the actual pinned producer DTO, never the strict consumer
+        // mirror. This also catches fixture drift against producer serialization.
+        let producer: pumas_library::models::PumasArtifactLoadTarget =
+            serde_json::from_value(wire.clone()).expect("pinned Pumas wire must decode");
+        assert_eq!(
+            producer.model_ref.model_ref_contract_version,
+            pumas_library::models::PUMAS_MODEL_REF_CONTRACT_VERSION
+        );
+        assert_eq!(serde_json::to_value(&producer).unwrap(), wire);
+        assert!(serde_json::from_value::<PumasArtifactLoadTarget>(wire).is_err());
+
+        let projected = project_pumas_artifact_load_target(producer);
+        projected
+            .validate_for_handoff()
+            .expect("handoff must validate");
+        let expected: serde_json::Value = serde_json::from_str(include_str!(
+            "../../inference/tests/fixtures/runtime_load/pantograph_artifact_load_target_projected.json"
+        ))
+        .expect("consumer projection fixture");
+        assert_eq!(
+            serde_json::to_value(&projected).unwrap(),
+            expected,
+            "the real host adapter preserves every declared consumer fact"
+        );
+        assert_eq!(
+            serde_json::from_value::<PumasArtifactLoadTarget>(expected).unwrap(),
+            projected
+        );
+    }
+
+    #[test]
+    fn advertised_basic_image_controls_reach_canonical_planning_without_loss() {
+        let ports: Vec<pantograph_inference_interface_contracts::InferencePortDescriptor> =
+            serde_json::from_str(include_str!(
+                "../../pantograph-inference-interface-contracts/tests/fixtures/image_generation_basic_inputs.json"
+            ))
+            .expect("shared image controls fixture");
+        let mut request = runtime_host_request_fixture();
+        request
+            .handoff
+            .dispatch_decision
+            .as_mut()
+            .unwrap()
+            .runtime_trait_settings
+            .clear();
+        request.materialized_inputs = ports
+            .into_iter()
+            .zip([
+                RuntimeHostExecutionInputValue::String("a red cube".into()),
+                RuntimeHostExecutionInputValue::String(" blur, low quality ".into()),
+                RuntimeHostExecutionInputValue::U64(512),
+                RuntimeHostExecutionInputValue::U64(768),
+                RuntimeHostExecutionInputValue::U64(12),
+                RuntimeHostExecutionInputValue::U64(u64::MAX),
+                RuntimeHostExecutionInputValue::F64(serde_json::Number::from_f64(7.5).unwrap()),
+                RuntimeHostExecutionInputValue::U64(3),
+                RuntimeHostExecutionInputValue::String("euler".into()),
+            ])
+            .map(|(port, value)| input(port.port_id.as_str(), value))
+            .collect();
+        let request = ValidatedRuntimeHostExecutionRequest::try_from(request).unwrap();
+        let package = image_package_facts();
+        let target = image_load_target(&package);
+        let projection = project_runtime_host_image_generation(&request, package, target).unwrap();
+        let inference::ImageGenerationPlanningOutcome::Planned { plan } =
+            inference::plan_image_generation_execution(projection.planning_input())
+        else {
+            panic!("advertised controls must produce an image plan");
+        };
+        assert_eq!(plan.prompt, "a red cube");
+        assert_eq!(plan.negative_prompt.as_deref(), Some(" blur, low quality "));
+        assert_eq!(plan.width, Some(512));
+        assert_eq!(plan.height, Some(768));
+        assert_eq!(plan.num_inference_steps, Some(12));
+        assert_eq!(plan.seed, Some(u64::MAX));
+        assert_eq!(plan.guidance_scale, Some(7.5));
+        assert_eq!(plan.num_images_per_prompt, Some(3));
+        assert_eq!(plan.denoising_scheduler.unwrap().as_str(), "euler");
+    }
+
+    #[test]
+    fn image_guidance_preserves_existing_finite_f32_semantics_without_clamping() {
+        for expected in [f32::MIN, -1.0, 0.0, 1.0, 7.5, f32::MAX] {
+            let mut request = runtime_host_request_fixture();
+            request.materialized_inputs.push(input(
+                GUIDANCE_SCALE_PORT,
+                RuntimeHostExecutionInputValue::F64(
+                    serde_json::Number::from_f64(f64::from(expected)).unwrap(),
+                ),
+            ));
+            assert_eq!(optional_guidance_scale(&request).unwrap(), Some(expected));
+        }
+        for value in [
+            RuntimeHostExecutionInputValue::I64(-1),
+            RuntimeHostExecutionInputValue::U64(1),
+        ] {
+            let mut request = runtime_host_request_fixture();
+            request
+                .materialized_inputs
+                .push(input(GUIDANCE_SCALE_PORT, value.clone()));
+            assert_eq!(
+                optional_guidance_scale(&request).unwrap(),
+                Some(value.try_as_f32().unwrap())
+            );
+        }
+        for value in [f64::MAX, 1e-300, 1.0000000000000002] {
+            let mut request = runtime_host_request_fixture();
+            request.materialized_inputs.push(input(
+                GUIDANCE_SCALE_PORT,
+                RuntimeHostExecutionInputValue::F64(serde_json::Number::from_f64(value).unwrap()),
+            ));
+            assert_eq!(
+                optional_guidance_scale(&request),
+                Err(RuntimeHostImageGenerationProjectionError::InvalidGuidanceScale)
+            );
+        }
+        let mut request = runtime_host_request_fixture();
+        request.materialized_inputs.push(input(
+            GUIDANCE_SCALE_PORT,
+            RuntimeHostExecutionInputValue::String("7.5".into()),
+        ));
+        assert!(matches!(
+            optional_guidance_scale(&request),
+            Err(
+                RuntimeHostImageGenerationProjectionError::InvalidInputType {
+                    port_id: GUIDANCE_SCALE_PORT,
+                    ..
+                }
+            )
+        ));
+    }
+
+    #[test]
+    fn omitted_basic_image_controls_preserve_backend_defaults() {
+        let mut request = runtime_host_request_fixture();
+        request
+            .materialized_inputs
+            .retain(|input| input.port_id == PROMPT_PORT);
+        let request = ValidatedRuntimeHostExecutionRequest::try_from(request).unwrap();
+        let package = image_package_facts();
+        let target = image_load_target(&package);
+        let projection = project_runtime_host_image_generation(&request, package, target).unwrap();
+        let image = projection.request();
+        assert_eq!(image.negative_prompt, None);
+        assert_eq!(image.width, None);
+        assert_eq!(image.height, None);
+        assert_eq!(image.num_inference_steps, None);
+        assert_eq!(image.seed, None);
+        assert_eq!(image.guidance_scale, None);
+    }
 
     #[test]
     fn projects_valid_runtime_host_image_request_to_planning_input() {
@@ -618,7 +815,7 @@ mod tests {
     fn rejects_unsupported_materialized_inputs_instead_of_ignoring_them() {
         let mut request = runtime_host_request_fixture();
         request.materialized_inputs.push(input(
-            "guidance_scale",
+            "guidance_rescale",
             RuntimeHostExecutionInputValue::String("7.5".to_string()),
         ));
         let request = ValidatedRuntimeHostExecutionRequest::try_from(request)
@@ -634,7 +831,7 @@ mod tests {
         assert!(matches!(
             error,
             RuntimeHostImageGenerationProjectionError::UnsupportedInputPort { port_id }
-                if port_id == "guidance_scale"
+                if port_id == "guidance_rescale"
         ));
     }
 

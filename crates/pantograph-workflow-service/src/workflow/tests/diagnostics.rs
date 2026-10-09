@@ -408,12 +408,13 @@ fn workflow_diagnostic_error_recorder_validates_registered_scope() {
 fn workflow_diagnostic_error_registry_declares_phase_contracts() {
     let registry = registered_workflow_diagnostic_error_phases();
 
-    assert_eq!(registry.len(), 13);
+    assert_eq!(registry.len(), 14);
     for entry in registry {
         assert!(!entry.phase_id.starts_with("inference"));
         assert!(!entry.code.starts_with("inference"));
     }
     for phase_id in [
+        "session_runtime_admission",
         "runtime_preflight",
         "runtime_model_load",
         "runtime_launch",
@@ -426,6 +427,22 @@ fn workflow_diagnostic_error_registry_declares_phase_contracts() {
             "missing canonical diagnostic error phase {phase_id}"
         );
     }
+    let session_runtime = registry
+        .iter()
+        .find(|entry| entry.phase == WorkflowDiagnosticErrorPhase::SessionRuntimeAdmission)
+        .expect("session runtime phase");
+    assert_eq!(
+        session_runtime.scope_kind,
+        pantograph_diagnostics_ledger::DiagnosticErrorScopeKind::SessionRuntime
+    );
+    assert_eq!(
+        session_runtime.projection_effect,
+        WorkflowDiagnosticProjectionEffect::DiagnosticsOnly
+    );
+    assert_eq!(
+        session_runtime.default_severity,
+        pantograph_diagnostics_ledger::DiagnosticErrorSeverity::Error
+    );
     let runtime_model_load = registry
         .iter()
         .find(|entry| entry.phase == WorkflowDiagnosticErrorPhase::RuntimeModelLoad)
@@ -2794,7 +2811,7 @@ fn sample_io_artifact_event(
         privacy_class: DiagnosticEventPrivacyClass::SensitiveReference,
         retention_class: DiagnosticEventRetentionClass::PayloadReference,
         payload_ref: Some(format!("artifact://{artifact_id}")),
-        payload: DiagnosticEventPayload::IoArtifactObserved(IoArtifactObservedPayload {
+        payload: DiagnosticEventPayload::IoArtifactObserved(Box::new(IoArtifactObservedPayload {
             artifact_fact_id: None,
             payload_artifact_id: None,
             artifact_id: artifact_id.to_string(),
@@ -2819,7 +2836,7 @@ fn sample_io_artifact_event(
             read_handle: None,
             stream_handle: None,
             format: None,
-        }),
+        })),
     }
 }
 

@@ -55,6 +55,7 @@ mod runtime_branch_task_event;
 #[allow(dead_code)]
 mod runtime_dispatch_assignment;
 mod runtime_dispatch_selection;
+mod runtime_host_observation;
 mod runtime_host_task_input_mapping;
 mod runtime_host_task_result_mapping;
 mod runtime_preflight;
@@ -89,7 +90,7 @@ pub use self::artifact_contracts::*;
 pub use self::artifact_store::{
     ArtifactBodyRead, ArtifactStore, ArtifactStoreError, ArtifactStoreStats,
     ArtifactStreamChunkWriteRequest, ArtifactStreamFinalizeRequest, ArtifactStreamOpenRequest,
-    ArtifactWriteRequest,
+    ArtifactWriteRequest, VerifiedArtifactSnapshot,
 };
 pub use self::artifact_writer::WorkflowArtifactWriter;
 pub use self::contracts::*;
@@ -156,7 +157,8 @@ pub use self::host::{
 pub use self::identity::{WorkflowIdentity, WorkflowIdentityError};
 pub use self::media_capability_contracts::*;
 pub(crate) use self::non_runtime_task_adapter::{
-    execute_non_runtime_scheduler_task, WorkflowSchedulerNonRuntimeTaskAdapterError,
+    execute_non_runtime_scheduler_task, is_bounded_vector_json,
+    WorkflowSchedulerNonRuntimeTaskAdapterError,
 };
 pub(crate) use self::runtime_dispatch_selection::{
     NoRuntimeDispatchCandidatesProvider, NoRuntimeDispatchSourceRefresher,
@@ -168,9 +170,11 @@ pub use self::runtime_dispatch_selection::{
     WorkflowRuntimeDispatchCandidateFactBundle, WorkflowRuntimeDispatchCandidateFactBundleError,
     WorkflowRuntimeDispatchCandidateProvider, WorkflowRuntimeDispatchCandidateProviderError,
     WorkflowRuntimeDispatchCandidateSet, WorkflowRuntimeDispatchLoadState,
-    WorkflowRuntimeDispatchSourceRefreshError, WorkflowRuntimeDispatchSourceRefresher,
+    WorkflowRuntimeDispatchReservationCustody, WorkflowRuntimeDispatchSourceRefreshError,
+    WorkflowRuntimeDispatchSourceRefresher,
     WORKFLOW_RUNTIME_DISPATCH_CANDIDATE_FACT_BUNDLE_CONTRACT_VERSION,
 };
+pub use self::runtime_host_observation::WorkflowRuntimeHostObservationRecorder;
 pub(crate) use self::runtime_host_task_input_mapping::{
     materialize_runtime_host_inputs, WorkflowRuntimeHostTaskInputMappingError,
 };

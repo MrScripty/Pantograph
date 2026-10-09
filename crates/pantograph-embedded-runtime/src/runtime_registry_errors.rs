@@ -8,16 +8,24 @@ pub(crate) fn workflow_service_error_from_runtime_registry(
 ) -> WorkflowServiceError {
     match error {
         RuntimeRegistryError::RuntimeNotFound(_)
+        | RuntimeRegistryError::ModelResidencyObservationChanged(_)
+        | RuntimeRegistryError::ModelResidencyResourcesUnavailable { .. }
         | RuntimeRegistryError::ReservationRejected(_)
-        | RuntimeRegistryError::AdmissionRejected { .. } => {
+        | RuntimeRegistryError::ReservationCustodyPending(_)
+        | RuntimeRegistryError::ReservationObservationChanged(_)
+        | RuntimeRegistryError::AdmissionRejected { .. }
+        | RuntimeRegistryError::ResourceDomainAdmissionRejected { .. } => {
             WorkflowServiceError::RuntimeNotReady(error.to_string())
         }
-        RuntimeRegistryError::ReservationOwnerConflict { .. } => {
+        RuntimeRegistryError::ReservationOwnerConflict { .. }
+        | RuntimeRegistryError::InvalidModelResidencyResources { .. }
+        | RuntimeRegistryError::InvalidResourceDomain { .. } => {
             WorkflowServiceError::InvalidRequest(error.to_string())
         }
         RuntimeRegistryError::ReservationNotFound(_)
         | RuntimeRegistryError::InvalidTransition { .. }
         | RuntimeRegistryError::ResourceAccountingOverflow { .. }
+        | RuntimeRegistryError::ResourceDomainAccountingOverflow { .. }
         | RuntimeRegistryError::ResourceBudgetUnderflow { .. } => {
             WorkflowServiceError::Internal(error.to_string())
         }

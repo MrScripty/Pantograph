@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 import { readdir, readFile } from 'node:fs/promises';
 import { extname, join, relative } from 'node:path';
+import { collectRoleButtonViolations } from './svelte-role-button-check.mjs';
 
 const ROOT = process.cwd();
 const SCAN_ROOTS = ['src', 'packages/svelte-graph/src'];
 const IGNORE_DIRS = new Set(['node_modules', 'dist', 'target', '.git', '.svelte-kit']);
-const INTERACTIVE_SEMANTIC_TAGS = new Set(['button', 'a', 'input', 'select', 'textarea']);
 
 async function listSvelteFiles(dir, out = []) {
   const entries = await readdir(dir, { withFileTypes: true });
@@ -59,44 +59,6 @@ function collectButtonViolations(text, relPath) {
         line: lineForIndex(text, match.index),
         rule: 'button-accessible-name',
         message: 'Icon-only or textless <button> must include aria-label or aria-labelledby.',
-      });
-    }
-  }
-  return violations;
-}
-
-function collectRoleButtonViolations(text, relPath) {
-  const violations = [];
-  const roleRegex = /<([\w:-]+)\b(?=[^>]*\srole\s*=\s*["']button["'])[^>]*>/g;
-  let match;
-  while ((match = roleRegex.exec(text)) !== null) {
-    const tag = match[1];
-    if (INTERACTIVE_SEMANTIC_TAGS.has(tag)) continue;
-
-    const open = match[0];
-    const line = lineForIndex(text, match.index);
-    if (!/\stabindex\s*=/.test(open)) {
-      violations.push({
-        file: relPath,
-        line,
-        rule: 'role-button-tabindex',
-        message: 'Generic role="button" element must declare tabindex.',
-      });
-    }
-    if (!/\son:keydown\s*=|\sonkeydown\s*=/.test(open)) {
-      violations.push({
-        file: relPath,
-        line,
-        rule: 'role-button-keydown',
-        message: 'Generic role="button" element must handle keyboard activation.',
-      });
-    }
-    if (!hasAccessibleName(open)) {
-      violations.push({
-        file: relPath,
-        line,
-        rule: 'role-button-accessible-name',
-        message: 'Generic role="button" element must include an accessible name.',
       });
     }
   }

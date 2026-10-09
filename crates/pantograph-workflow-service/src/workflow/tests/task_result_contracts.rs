@@ -61,9 +61,9 @@ fn scheduler_task_result_validates_path_free_typed_outputs() {
         encoded["outputs"][1]["value"]["value"]["artifact_id"],
         "artifact-image-1"
     );
-    assert_eq!(encoded.to_string().contains("model_path"), false);
-    assert_eq!(encoded.to_string().contains("local_load_path"), false);
-    assert_eq!(encoded.to_string().contains("runtime_handoff"), false);
+    assert!(!encoded.to_string().contains("model_path"));
+    assert!(!encoded.to_string().contains("local_load_path"));
+    assert!(!encoded.to_string().contains("runtime_handoff"));
 }
 
 #[test]

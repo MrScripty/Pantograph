@@ -180,12 +180,13 @@ impl SchedulerBatchPolicyDecision {
 #[must_use]
 pub struct ValidatedSchedulerBatchPolicyDecision(SchedulerBatchPolicyDecision);
 
-impl ValidatedSchedulerBatchPolicyDecision {
-    #[must_use]
-    pub fn as_ref(&self) -> &SchedulerBatchPolicyDecision {
+impl AsRef<SchedulerBatchPolicyDecision> for ValidatedSchedulerBatchPolicyDecision {
+    fn as_ref(&self) -> &SchedulerBatchPolicyDecision {
         &self.0
     }
+}
 
+impl ValidatedSchedulerBatchPolicyDecision {
     #[must_use]
     pub fn into_inner(self) -> SchedulerBatchPolicyDecision {
         self.0

@@ -482,12 +482,15 @@ async fn test_execute_llm_inference_non_streaming_uses_typed_gateway_boundary() 
     assert_eq!(captured[0]["temperature"], serde_json::json!(0.2));
     assert_eq!(captured[0]["top_p"], serde_json::json!(0.8));
     assert_eq!(captured[0]["top_k"], serde_json::json!(40));
+    assert_eq!(captured[0]["seed"], serde_json::json!(42));
     let diagnostics = outputs["diagnostics"]
         .as_array()
         .expect("diagnostics output should be an array");
+    // The generic mock receives the seed and still requires backend support.
     assert!(diagnostics.iter().any(|diagnostic| {
         diagnostic["option_path"] == serde_json::json!("sampling.seed")
-            && diagnostic["state"] == serde_json::json!("unsupported")
+            && diagnostic["state"] == serde_json::json!("requires_backend_support")
+            && diagnostic["backend_key"] == serde_json::json!("mock")
     }));
     assert!(diagnostics.iter().any(|diagnostic| {
         diagnostic["option_path"] == serde_json::json!("length.max_new_tokens")
@@ -3178,8 +3181,11 @@ impl InferenceBackend for MockTypedTextBackend {
 }
 
 #[cfg(feature = "inference-nodes")]
+type CapturedEmbeddingRequest = (Vec<String>, String);
+
+#[cfg(feature = "inference-nodes")]
 struct MockTypedEmbeddingBackend {
-    embedding_requests: Arc<Mutex<Vec<(Vec<String>, String)>>>,
+    embedding_requests: Arc<Mutex<Vec<CapturedEmbeddingRequest>>>,
 }
 
 #[cfg(feature = "inference-nodes")]

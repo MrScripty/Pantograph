@@ -36,5 +36,11 @@ your workflow and append `--run-session`.
 - Loads the saved workflow through `WorkflowGraphLoad`.
 - Opens a graph edit session, mutates node data, saves the edited graph, and
   closes the graph edit session.
-- When `--run-session` is passed: opens a workflow execution session, submits a
+- When `--run-session` is passed: refreshes owner validation for the saved graph,
+  publishes its current executable snapshot, closes that edit session, opens a
+  workflow execution session, submits a
   session run, prints outputs, and closes the workflow execution session.
+
+The native runtime's attribution store is ephemeral. The example publishes again
+each time it opens the runtime. Missing or stale validation is an error; the
+example does not construct snapshot content or bypass admission.

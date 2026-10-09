@@ -1,0 +1,14 @@
+{
+  "workflow-chat-completion": {
+    "members_verified": 29,
+    "manifest_sha256": "31eec0d5e96fd4f7f9720b23b46dc50f19e2f94055967afe146fadec27f3f227"
+  },
+  "workflow-chat-main-integration": {
+    "members_verified": 78,
+    "manifest_sha256": "1fb50e426f0107c29db70adb694a250b698e728d4836d8bc7f42d388e2e74976"
+  },
+  "workflow-chat-seed-diagnostic-successor": {
+    "members_verified": 72,
+    "manifest_sha256": "290cc93ff437534f6a98fc40a4745d0912783657a68e25540f1dbae037b6aa10"
+  }
+}
