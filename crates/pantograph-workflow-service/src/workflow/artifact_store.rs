@@ -135,12 +135,46 @@ pub struct ArtifactStore {
     memory_cache_bytes: u64,
 }
 
+enum PolicyOnOpen {
+    Override,
+    PreservePersisted,
+}
+
 impl ArtifactStore {
+    /// Open a store and explicitly replace any persisted policy with `policy`.
+    ///
+    /// Hosts supplying creation defaults should use [`Self::open_with_default_policy`]
+    /// instead so saved user settings survive a restart.
     pub fn open(
         root_dir: impl AsRef<Path>,
         policy: ArtifactPolicy,
     ) -> Result<Self, ArtifactStoreError> {
-        let root_dir = root_dir.as_ref().to_path_buf();
+        Self::open_with_policy(root_dir.as_ref(), policy, PolicyOnOpen::Override)
+    }
+
+    /// Open a store, using `default_policy` only when no manifest exists.
+    ///
+    /// An existing manifest remains authoritative for the policy, including its
+    /// identity and version. Unreadable or invalid manifests return an error;
+    /// defaults never replace them. Use [`Self::update_policy`] to change a saved
+    /// policy, or [`Self::open`] for an explicit host override.
+    pub fn open_with_default_policy(
+        root_dir: impl AsRef<Path>,
+        default_policy: ArtifactPolicy,
+    ) -> Result<Self, ArtifactStoreError> {
+        Self::open_with_policy(
+            root_dir.as_ref(),
+            default_policy,
+            PolicyOnOpen::PreservePersisted,
+        )
+    }
+
+    fn open_with_policy(
+        root_dir: &Path,
+        policy: ArtifactPolicy,
+        policy_on_open: PolicyOnOpen,
+    ) -> Result<Self, ArtifactStoreError> {
+        let root_dir = root_dir.to_path_buf();
         fs::create_dir_all(root_dir.join(BODIES_DIR))?;
         let manifest_path = root_dir.join(manifest::MANIFEST_FILE);
         let mut manifest = if manifest_path.exists() {
@@ -152,7 +186,9 @@ impl ArtifactStore {
                 artifacts: Vec::new(),
             }
         };
-        manifest.policy = policy;
+        if matches!(policy_on_open, PolicyOnOpen::Override) {
+            manifest.policy = policy;
+        }
         reconcile_manifest(&root_dir, &mut manifest);
         save_manifest(&manifest_path, &manifest)?;
 

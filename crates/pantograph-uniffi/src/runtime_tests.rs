@@ -842,6 +842,32 @@ async fn direct_runtime_exposes_artifact_store_contract_surface() {
     assert!(envelope.message.contains("artifact not found"));
 
     runtime.shutdown().await.expect("runtime shutdown");
+    drop(runtime);
+
+    let reopened = FfiPantographRuntime::new(
+        FfiEmbeddedRuntimeConfig {
+            app_data_dir: root.join("app-data").to_string_lossy().into_owned(),
+            project_root: root.to_string_lossy().into_owned(),
+            workflow_roots: Vec::new(),
+            max_loaded_sessions: None,
+        },
+        None,
+    )
+    .await
+    .expect("reopen runtime");
+    let reopened_policy: serde_json::Value = serde_json::from_str(
+        &reopened
+            .workflow_artifact_policy()
+            .expect("reopened policy"),
+    )
+    .expect("parse reopened policy");
+    assert_eq!(reopened_policy, updated_policy);
+
+    reopened
+        .shutdown()
+        .await
+        .expect("reopened runtime shutdown");
+    drop(reopened);
     let _ = std::fs::remove_dir_all(root);
 }
 
