@@ -136,8 +136,11 @@ pub(crate) fn validate_retained_owner_locked(
         return Err(refuse(RuntimeRetainedCleanupRefusal::PendingCustody));
     }
     if state
-        .pending_reservations
+        .pending_predecessors
         .contains_key(&expected.reservation_id)
+        || state
+            .pending_reservations
+            .contains_key(&expected.reservation_id)
     {
         return Err(refuse(RuntimeRetainedCleanupRefusal::PendingCustody));
     }

@@ -619,6 +619,30 @@ async fn test_session_runtime_load_reuses_ready_gateway_runtime_in_registry() {
     assert_eq!(snapshot.runtimes[0].runtime_id, "mock");
     assert_eq!(snapshot.runtimes[0].status, RuntimeRegistryStatus::Ready);
     assert!(snapshot.runtimes[0].runtime_instance_id.is_some());
+    runtime
+        .host()
+        .reserve_loaded_session_runtime(
+            "session-ready",
+            "runtime-text",
+            Some("interactive"),
+            WorkflowExecutionSessionRetentionHint::KeepAlive,
+        )
+        .await
+        .unwrap();
+    let replacement = runtime_registry.snapshot();
+    assert_eq!(replacement.reservations.len(), 1);
+    assert_ne!(
+        replacement.reservations[0].reservation_id,
+        snapshot.reservations[0].reservation_id
+    );
+    assert_eq!(
+        runtime
+            .session_runtime_reservations
+            .lock()
+            .unwrap()
+            .get("session-ready"),
+        Some(&replacement.reservations[0].reservation_id)
+    );
 }
 
 #[tokio::test]
@@ -953,4 +977,150 @@ async fn test_session_run_without_keep_alive_releases_runtime_reservation_after_
         .handle(&created.session_id)
         .expect("session execution lookup should succeed")
         .is_none());
+}
+
+async fn pending_session_replacement_fixture(
+) -> (TempDir, EmbeddedRuntime, Arc<RuntimeRegistry>, u64) {
+    let temp = TempDir::new().unwrap();
+    write_test_workflow(temp.path(), "runtime-text");
+    let app_data_dir = temp.path().join("app-data");
+    std::fs::create_dir_all(&app_data_dir).unwrap();
+    install_fake_default_runtime(&app_data_dir);
+    let entered = Arc::new(tokio::sync::Notify::new());
+    let gateway = Arc::new(inference::InferenceGateway::with_backend(
+        Box::new(RecordingLlamaBackend {
+            start_entered: Some(entered.clone()),
+            ..Default::default()
+        }),
+        "llama.cpp",
+    ));
+    gateway.set_spawner(Arc::new(MockProcessSpawner)).await;
+    let starting = gateway.clone();
+    let start = tokio::spawn(async move { starting.start(&BackendConfig::default()).await });
+    entered.notified().await;
+    start.abort();
+    assert!(start.await.unwrap_err().is_cancelled());
+    let registry = Arc::new(RuntimeRegistry::new());
+    runtime_registry::sync_runtime_registry(gateway.as_ref(), registry.as_ref()).await;
+    let old = registry
+        .acquire_reservation(RuntimeReservationRequest {
+            runtime_id: registry.snapshot().runtimes[0].runtime_id.clone(),
+            workflow_id: "runtime-text".into(),
+            reservation_owner_id: Some("session-existing".into()),
+            usage_profile: Some("original".into()),
+            model_id: None,
+            pin_runtime: false,
+            requirements: None,
+            retention_hint: RuntimeRetentionHint::KeepAlive,
+        })
+        .unwrap();
+    let runtime = EmbeddedRuntime::with_default_python_runtime(
+        EmbeddedRuntimeConfig {
+            app_data_dir,
+            project_root: temp.path().to_path_buf(),
+            workflow_roots: vec![temp.path().join(".pantograph").join("workflows")],
+            max_loaded_sessions: None,
+        },
+        gateway,
+        Arc::new(RwLock::new(ExecutorExtensions::new())),
+        Arc::new(WorkflowService::new()),
+        None,
+    )
+    .with_runtime_registry(registry.clone());
+    runtime
+        .host()
+        .record_session_runtime_reservation("session-existing", old.reservation_id)
+        .unwrap();
+    (temp, runtime, registry, old.reservation_id)
+}
+
+#[tokio::test]
+async fn failed_session_replacement_warmup_restores_original_claim_and_cached_incarnation() {
+    let (_temp, runtime, registry, old_id) = pending_session_replacement_fixture().await;
+    let before = registry.snapshot().reservations;
+    let result = runtime
+        .host()
+        .reserve_loaded_session_runtime(
+            "session-existing",
+            "runtime-text",
+            Some("replacement"),
+            WorkflowExecutionSessionRetentionHint::Ephemeral,
+        )
+        .await;
+    assert!(matches!(
+        result,
+        Err(WorkflowServiceError::RuntimeTimeout(_))
+    ));
+    assert_eq!(registry.snapshot().reservations, before);
+    assert_eq!(
+        runtime
+            .session_runtime_reservations
+            .lock()
+            .unwrap()
+            .get("session-existing"),
+        Some(&old_id)
+    );
+}
+
+#[tokio::test]
+async fn aborted_session_replacement_preserves_claim_and_release_refusal_preserves_cache() {
+    for attempt_release in [false, true] {
+        let (_temp, runtime, registry, old_id) = pending_session_replacement_fixture().await;
+        let before = registry.snapshot().reservations;
+        let host = runtime.host();
+        let preparation = tokio::spawn(async move {
+            host.reserve_loaded_session_runtime(
+                "session-existing",
+                "runtime-text",
+                Some("replacement"),
+                WorkflowExecutionSessionRetentionHint::Ephemeral,
+            )
+            .await
+        });
+        tokio::time::timeout(Duration::from_secs(5), async {
+            while registry.reservation_lease(old_id).is_some() {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!(
+            runtime
+                .session_runtime_reservations
+                .lock()
+                .unwrap()
+                .get("session-existing"),
+            Some(&old_id)
+        );
+        if attempt_release {
+            assert!(runtime
+                .host()
+                .release_loaded_session_runtime("session-existing")
+                .await
+                .is_err());
+            assert_eq!(
+                runtime
+                    .session_runtime_reservations
+                    .lock()
+                    .unwrap()
+                    .get("session-existing"),
+                Some(&old_id)
+            );
+        }
+        preparation.abort();
+        assert!(preparation.await.unwrap_err().is_cancelled());
+        assert_eq!(registry.snapshot().reservations, before);
+        assert_eq!(
+            runtime
+                .session_runtime_reservations
+                .lock()
+                .unwrap()
+                .get("session-existing"),
+            Some(&old_id)
+        );
+        assert_eq!(
+            registry.snapshot().runtimes[0].active_reservation_ids,
+            vec![old_id]
+        );
+    }
 }

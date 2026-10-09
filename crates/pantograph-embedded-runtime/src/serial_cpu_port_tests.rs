@@ -3,6 +3,175 @@ use crate::runtime_host_embedding_execution::tests::{fixture as model_fixture, P
 use pantograph_runtime_registry::*;
 use std::time::Duration;
 
+struct PausedPackage {
+    package: inference::ResolvedModelPackageFacts,
+    entered: Arc<tokio::sync::Notify>,
+    proceed: Arc<tokio::sync::Notify>,
+}
+#[async_trait]
+impl RuntimeHostPackageFactsResolver for PausedPackage {
+    async fn resolve(
+        &self,
+        _: &ValidatedRuntimeHostExecutionRequest,
+    ) -> Result<
+        inference::ResolvedModelPackageFacts,
+        crate::runtime_host_package_facts::RuntimeHostPumasPackageFactsError,
+    > {
+        self.entered.notify_one();
+        self.proceed.notified().await;
+        Ok(self.package.clone())
+    }
+}
+
+fn shrink_task_claim(f: &Fixture, provisional: bool) -> RuntimeReservationLease {
+    let replacement = RuntimeReservationRequest {
+        runtime_id: "candle".into(),
+        workflow_id: f.request.handoff.workflow_id.to_string(),
+        reservation_owner_id: Some("native.aba".into()),
+        usage_profile: None,
+        model_id: Some(f.target.model_ref.model_id.clone()),
+        pin_runtime: false,
+        requirements: Some(RuntimeReservationRequirements::from_claims(vec![
+            RuntimeReservationResourceClaim::ram_bytes(1),
+        ])),
+        retention_hint: RuntimeRetentionHint::Ephemeral,
+    };
+    if provisional {
+        let expected = f
+            .port
+            .registry
+            .evaluate_reservation(replacement.clone())
+            .unwrap()
+            .observation()
+            .clone();
+        let (lease, custody) = f
+            .port
+            .registry
+            .acquire_reservation_provisional(replacement, &expected, |lease| {
+                Ok::<_, ()>(lease.clone())
+            })
+            .unwrap();
+        custody.transfer().unwrap();
+        lease
+    } else {
+        f.port.registry.acquire_reservation(replacement).unwrap()
+    }
+}
+
+#[tokio::test]
+async fn selected_incarnation_replaced_before_host_entry_refuses_native_forward() {
+    for provisional in [false, true] {
+        let f = fixture().await;
+        let old = task_lease(&f, f.request.handoff.workflow_id.as_str(), "native.aba");
+        let request = batch(&f, &old);
+        let owner_before = f
+            .port
+            .resident_serial_cpu_owner(&request.members[0].handoff.task_intent)
+            .unwrap()
+            .snapshot;
+        let admission = SchedulerSerialAdmission::new();
+        let bound = bind(&admission, &request, None);
+        let new = shrink_task_claim(&f, provisional);
+        let result = f
+            .port
+            .execute_serial_singleton_with_cleanup(
+                request.clone(),
+                RuntimeHostExecutionCancellationHandle::running(
+                    request.cancellation_context.clone(),
+                ),
+                bound,
+            )
+            .await;
+        eprintln!(
+            "before_entry provisional={provisional} leases_equal={} dispatch_accepted={}",
+            old == new,
+            result.is_ok()
+        );
+        assert!(
+            result.is_err(),
+            "selected admission was replaced before host entry"
+        );
+        assert_eq!(
+            f.port
+                .resident_serial_cpu_owner(&f.request.handoff.task_intent)
+                .unwrap()
+                .snapshot,
+            owner_before
+        );
+        assert_eq!(
+            f.port.registry.reservation_lease(new.reservation_id),
+            Some(new)
+        );
+    }
+}
+
+#[tokio::test]
+async fn selected_incarnation_replaced_during_awaited_resolver_refuses_native_forward() {
+    for provisional in [false, true] {
+        let f = fixture().await;
+        let old = task_lease(&f, f.request.handoff.workflow_id.as_str(), "native.aba");
+        let request = batch(&f, &old);
+        let owner_before = f
+            .port
+            .resident_serial_cpu_owner(&request.members[0].handoff.task_intent)
+            .unwrap()
+            .snapshot;
+        let admission = SchedulerSerialAdmission::new();
+        let bound = bind(&admission, &request, None);
+        let entered = Arc::new(tokio::sync::Notify::new());
+        let proceed = Arc::new(tokio::sync::Notify::new());
+        let port = Arc::new(EmbeddedRetainedCpuSerialPort {
+            gateway: f.port.gateway.clone(),
+            registry: f.port.registry.clone(),
+            package: Arc::new(PausedPackage {
+                package: f.package.clone(),
+                entered: entered.clone(),
+                proceed: proceed.clone(),
+            }),
+            target: f.port.target.clone(),
+        });
+        let execution = tokio::spawn(async move {
+            port.execute_serial_singleton_with_cleanup(
+                request.clone(),
+                RuntimeHostExecutionCancellationHandle::running(
+                    request.cancellation_context.clone(),
+                ),
+                bound,
+            )
+            .await
+        });
+        tokio::time::timeout(Duration::from_secs(5), entered.notified())
+            .await
+            .unwrap();
+        let new = shrink_task_claim(&f, provisional);
+        proceed.notify_one();
+        let result = tokio::time::timeout(Duration::from_secs(5), execution)
+            .await
+            .unwrap()
+            .unwrap();
+        eprintln!(
+            "during_resolver provisional={provisional} leases_equal={} dispatch_accepted={}",
+            old == new,
+            result.is_ok()
+        );
+        assert!(
+            result.is_err(),
+            "admitted incarnation changed while resolver was suspended"
+        );
+        assert_eq!(
+            f.port
+                .resident_serial_cpu_owner(&f.request.handoff.task_intent)
+                .unwrap()
+                .snapshot,
+            owner_before
+        );
+        assert_eq!(
+            f.port.registry.reservation_lease(new.reservation_id),
+            Some(new)
+        );
+    }
+}
+
 pub(crate) struct Fixture {
     pub directory: tempfile::TempDir,
     pub port: Arc<EmbeddedRetainedCpuSerialPort>,

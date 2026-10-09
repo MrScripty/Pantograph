@@ -3,7 +3,7 @@ use crate::{
     RuntimeRegistry, RuntimeRegistryError, RuntimeReservationLease, RuntimeRetainedCleanupError,
     RuntimeRetainedOwnerIdentity, RuntimeRetentionDisposition,
 };
-use std::sync::{atomic::Ordering, Arc};
+use std::sync::Arc;
 
 /// Non-Clone guard. Ordinary release, replacement and retention changes refuse
 /// while it lives. Before execution, Drop ends exclusion without freeing a claim. Once actual
@@ -77,8 +77,11 @@ impl RuntimeRegistry {
             .lock()
             .expect("runtime registry state lock poisoned");
         if state
-            .pending_reservations
+            .pending_predecessors
             .contains_key(&expected.reservation_id)
+            || state
+                .pending_reservations
+                .contains_key(&expected.reservation_id)
             || state
                 .executing_reservations
                 .contains_key(&expected.reservation_id)
@@ -95,7 +98,7 @@ impl RuntimeRegistry {
                 expected.runtime_id.clone(),
             ));
         }
-        let token = self.reservation_sequence.fetch_add(1, Ordering::Relaxed) + 1;
+        let token = self.next_reservation_token()?;
         state
             .executing_reservations
             .insert(expected.reservation_id, token);

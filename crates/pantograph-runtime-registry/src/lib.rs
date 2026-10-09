@@ -138,6 +138,9 @@ pub enum RuntimeRegistryError {
     #[error("reservation '{0}' was not found")]
     ReservationNotFound(u64),
 
+    #[error("reservation identity sequence is exhausted")]
+    ReservationSequenceExhausted,
+
     #[error("reservation '{0}' is awaiting custody transfer")]
     ReservationCustodyPending(u64),
 
@@ -227,6 +230,8 @@ struct RuntimeRegistryState {
     runtimes: BTreeMap<String, RuntimeRegistryRecord>,
     reservations: BTreeMap<u64, RuntimeReservationRecord>,
     pending_reservations: BTreeMap<u64, PendingReservation>,
+    // Exact predecessor fence while rollback can restore its original ID.
+    pending_predecessors: BTreeMap<u64, u64>,
     executing_reservations: BTreeMap<u64, u64>,
     evicting_runtimes: BTreeMap<String, u64>,
 }
@@ -238,6 +243,15 @@ pub struct RuntimeRegistry {
 }
 
 impl RuntimeRegistry {
+    pub(crate) fn next_reservation_token(&self) -> Result<u64, RuntimeRegistryError> {
+        self.reservation_sequence
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |value| {
+                value.checked_add(1)
+            })
+            .map(|previous| previous + 1)
+            .map_err(|_| RuntimeRegistryError::ReservationSequenceExhausted)
+    }
+
     pub fn new() -> Self {
         Self::default()
     }
@@ -382,7 +396,7 @@ impl RuntimeRegistry {
         request: RuntimeReservationRequest,
         expected: Option<&RuntimeReservationAdmissionObservation>,
     ) -> Result<RuntimeReservationLease, RuntimeRegistryError> {
-        let next_id = self.reservation_sequence.fetch_add(1, Ordering::Relaxed) + 1;
+        let next_id = self.next_reservation_token()?;
         let mut state = self
             .state
             .lock()
@@ -390,7 +404,10 @@ impl RuntimeRegistry {
         if let Some(expected) = expected {
             check_observed_runtime_identity(&state, &request, expected)?;
         }
-        let (reservation, _) = prospective_reservation(&state, request, next_id)?;
+        let (reservation, previous) = prospective_reservation(&state, request, next_id)?;
+        if let Some(previous) = previous {
+            remove_reservation_locked(&mut state, previous.reservation_id);
+        }
         state
             .runtimes
             .get_mut(&reservation.runtime_id)
@@ -494,7 +511,8 @@ impl RuntimeRegistry {
             .state
             .lock()
             .expect("runtime registry state lock poisoned");
-        if guard.pending_reservations.contains_key(&reservation_id)
+        if guard.pending_predecessors.contains_key(&reservation_id)
+            || guard.pending_reservations.contains_key(&reservation_id)
             || guard.executing_reservations.contains_key(&reservation_id)
         {
             return Err(RuntimeRegistryError::ReservationCustodyPending(
@@ -795,7 +813,9 @@ fn release_reservation_locked(
     state: &mut RuntimeRegistryState,
     reservation_id: u64,
 ) -> Result<Option<RuntimeRetentionDisposition>, RuntimeRegistryError> {
-    if state.executing_reservations.contains_key(&reservation_id) {
+    if state.pending_predecessors.contains_key(&reservation_id)
+        || state.executing_reservations.contains_key(&reservation_id)
+    {
         return Err(RuntimeRegistryError::ReservationCustodyPending(
             reservation_id,
         ));
@@ -812,7 +832,11 @@ fn remove_reservation_locked(
 ) -> Option<RuntimeReservationRecord> {
     // Explicit release ends this lease's lineage. A later custody drop must not
     // resurrect an owner-ended predecessor; only custody rollback restores it.
-    state.pending_reservations.remove(&reservation_id);
+    if let Some(pending) = state.pending_reservations.remove(&reservation_id) {
+        if let Some(previous) = pending.previous {
+            state.pending_predecessors.remove(&previous.reservation_id);
+        }
+    }
     let reservation = state.reservations.remove(&reservation_id)?;
 
     if let Some(runtime) = state.runtimes.get_mut(&reservation.runtime_id) {
