@@ -10,7 +10,7 @@ use pantograph_workflow_service::{WorkflowErrorCode, WorkflowErrorEnvelope};
 use super::{FfiEmbeddedRuntimeConfig, FfiPantographRuntime};
 use crate::FfiError;
 
-fn create_temp_root(workflow_id: &str) -> PathBuf {
+pub(super) fn create_temp_root(workflow_id: &str) -> PathBuf {
     let suffix = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("clock")
@@ -270,7 +270,7 @@ fn write_human_input_workflow(root: &Path, workflow_id: &str) {
     .expect("write workflow");
 }
 
-fn workflow_error_envelope(err: FfiError) -> WorkflowErrorEnvelope {
+pub(super) fn workflow_error_envelope(err: FfiError) -> WorkflowErrorEnvelope {
     let message = match err {
         FfiError::Other { message } => message,
         other => panic!("expected FfiError::Other with envelope JSON, got {other:?}"),
@@ -294,6 +294,8 @@ async fn direct_runtime_runs_workflow_session_from_json() {
     )
     .await
     .expect("runtime");
+
+    super::runtime_validation_tests::publish_saved_workflow(&runtime, &root, workflow_id).await;
 
     let create_session_json = runtime
         .workflow_create_session(
@@ -369,13 +371,13 @@ async fn direct_runtime_runs_workflow_session_from_json() {
     let close: serde_json::Value = serde_json::from_str(&close_json).expect("parse close");
     assert_eq!(close["ok"], true);
 
-    runtime.shutdown().await;
+    runtime.shutdown().await.expect("runtime shutdown");
 
     let _ = std::fs::remove_dir_all(root);
 }
 
 #[tokio::test]
-async fn direct_runtime_workflow_session_run_preserves_invalid_request_envelope() {
+async fn direct_runtime_rejects_interactive_graph_at_scheduler_boundary() {
     let workflow_id = "uniffi-runtime-interactive-run";
     let root = create_temp_root(workflow_id);
     write_human_input_workflow(&root, workflow_id);
@@ -391,6 +393,8 @@ async fn direct_runtime_workflow_session_run_preserves_invalid_request_envelope(
     )
     .await
     .expect("runtime");
+
+    super::runtime_validation_tests::publish_saved_workflow(&runtime, &root, workflow_id).await;
 
     let create_session_json = runtime
         .workflow_create_session(
@@ -421,16 +425,16 @@ async fn direct_runtime_workflow_session_run_preserves_invalid_request_envelope(
             .to_string(),
         )
         .await
-        .expect_err("interactive workflow session run should preserve invalid-request envelope");
+        .expect_err("interactive workflow must remain unsupported by the scheduler");
 
     let envelope = workflow_error_envelope(err);
-    assert_eq!(envelope.code, WorkflowErrorCode::InvalidRequest);
-    assert_eq!(
-        envelope.message,
-        "workflow 'uniffi-runtime-interactive-run' requires interactive input at node 'human-input-1'"
-    );
+    assert_eq!(envelope.code, WorkflowErrorCode::CapabilityViolation);
+    assert!(envelope
+        .message
+        .contains("scheduler task session runner has no execution path"));
+    assert!(envelope.message.contains("unsupported=1"));
 
-    runtime.shutdown().await;
+    runtime.shutdown().await.expect("runtime shutdown");
     let _ = std::fs::remove_dir_all(root);
 }
 
@@ -486,7 +490,7 @@ async fn direct_runtime_exposes_attribution_client_session_json() {
         serde_json::from_str(&open_session_json).expect("parse open response");
     assert!(opened["session"]["client_session_id"].as_str().is_some());
 
-    runtime.shutdown().await;
+    runtime.shutdown().await.expect("runtime shutdown");
     let _ = std::fs::remove_dir_all(root);
 }
 
@@ -606,7 +610,7 @@ async fn direct_runtime_exposes_workflow_graph_persistence_and_edit_session() {
         )
         .await
         .expect("close graph edit session");
-    runtime.shutdown().await;
+    runtime.shutdown().await.expect("runtime shutdown");
 
     let _ = std::fs::remove_dir_all(root);
 }
@@ -669,7 +673,12 @@ async fn direct_runtime_exposes_backend_owned_graph_authoring_discovery() {
         .as_array()
         .expect("queryable ports")
         .iter()
-        .any(|port| port["node_type"] == "puma-lib" && port["port_id"] == "model_path"));
+        .any(|port| port["node_type"] == "puma-lib" && port["port_id"] == "pumas_model_ref"));
+    assert!(!queryable
+        .as_array()
+        .expect("queryable ports")
+        .iter()
+        .any(|port| { port["node_type"] == "puma-lib" && port["port_id"] == "model_path" }));
 
     let missing = runtime
         .workflow_graph_get_node_definition("missing-node".to_string())
@@ -692,7 +701,7 @@ async fn direct_runtime_exposes_backend_owned_graph_authoring_discovery() {
         .message
         .contains("No options provider for text-input:text"));
 
-    runtime.shutdown().await;
+    runtime.shutdown().await.expect("runtime shutdown");
     let _ = std::fs::remove_dir_all(root);
 }
 
@@ -732,7 +741,7 @@ async fn direct_runtime_puma_lib_options_use_selector_access_from_pumas_api() {
     let options_json = runtime
         .workflow_graph_query_port_options(
             "puma-lib".to_string(),
-            "model_path".to_string(),
+            "pumas_model_ref".to_string(),
             serde_json::json!({
                 "limit": 10,
                 "context": {
@@ -757,15 +766,22 @@ async fn direct_runtime_puma_lib_options_use_selector_access_from_pumas_api() {
         .find(|option| option["metadata"]["id"] == "llm/imported/uniffi-test-gguf")
         .expect("selector option should be present");
 
+    assert!(
+        option["value"].is_object(),
+        "selection must carry a model reference, not a display path"
+    );
+    assert_eq!(option["value"]["model_ref_contract_version"], 1);
+    assert_eq!(option["value"]["model_id"], "llm/imported/uniffi-test-gguf");
+    assert_eq!(option["value"], option["metadata"]["pumas_model_ref"]);
     assert_eq!(
-        option["value"],
+        option["metadata"]["display_entry_path"],
         serde_json::json!(model_file.display().to_string())
     );
     assert!(result["metadata"]["package_facts_summary_cursor"]
         .as_str()
         .is_some_and(|cursor| cursor.starts_with("model-library-updates:")));
 
-    runtime.shutdown().await;
+    runtime.shutdown().await.expect("runtime shutdown");
     let _ = std::fs::remove_dir_all(root);
 }
 
@@ -825,7 +841,7 @@ async fn direct_runtime_exposes_artifact_store_contract_surface() {
     assert_eq!(envelope.code, WorkflowErrorCode::InvalidRequest);
     assert!(envelope.message.contains("artifact not found"));
 
-    runtime.shutdown().await;
+    runtime.shutdown().await.expect("runtime shutdown");
     drop(runtime);
 
     let reopened = FfiPantographRuntime::new(
@@ -847,7 +863,10 @@ async fn direct_runtime_exposes_artifact_store_contract_surface() {
     .expect("parse reopened policy");
     assert_eq!(reopened_policy, updated_policy);
 
-    reopened.shutdown().await;
+    reopened
+        .shutdown()
+        .await
+        .expect("reopened runtime shutdown");
     drop(reopened);
     let _ = std::fs::remove_dir_all(root);
 }
@@ -994,7 +1013,7 @@ async fn direct_runtime_exposes_artifact_format_settings_and_capabilities_json()
         "image quality_percent 0 is outside allowed range"
     );
 
-    runtime.shutdown().await;
+    runtime.shutdown().await.expect("runtime shutdown");
     let _ = std::fs::remove_dir_all(root);
 }
 
@@ -1035,11 +1054,22 @@ async fn direct_runtime_exposes_managed_media_dependency_statuses_and_actions_js
     let neutral_statuses: serde_json::Value = serde_json::from_str(&neutral_statuses_json)
         .expect("parse neutral managed dependency statuses");
     let neutral_statuses = neutral_statuses.as_array().expect("neutral statuses array");
-    assert!(neutral_statuses.iter().any(|status| {
-        status["key"]["runtime_sidecar"] == serde_json::json!("llama_cpp")
-            && status["category"] == serde_json::json!("runtime_sidecar")
-            && status["readiness_state"] == serde_json::json!("ready")
-    }));
+    let runtime_status = neutral_statuses
+        .iter()
+        .find(|status| {
+            status["key"]["runtime_sidecar"] == serde_json::json!("llama_cpp")
+                && status["category"] == serde_json::json!("runtime_sidecar")
+        })
+        .expect("neutral runtime sidecar status");
+    // Legacy files under app-data/runtimes are not a managed installation.
+    // The current owner resolves app-data/third-party/runtimes instead.
+    assert_eq!(runtime_status["install_state"], "missing");
+    assert_eq!(runtime_status["readiness_state"], "missing");
+    assert_eq!(runtime_status["available"], false);
+    assert!(!runtime_status["missing_files"]
+        .as_array()
+        .expect("missing runtime files")
+        .is_empty());
     assert!(neutral_statuses.iter().any(|status| {
         status["key"]["media_tool"] == serde_json::json!("ffmpeg")
             && status["category"] == serde_json::json!("media_tool")
@@ -1180,7 +1210,7 @@ async fn direct_runtime_exposes_managed_media_dependency_statuses_and_actions_js
         assert!(envelope.message.contains("missing expected file"));
     }
 
-    runtime.shutdown().await;
+    runtime.shutdown().await.expect("runtime shutdown");
     let _ = std::fs::remove_dir_all(root);
 }
 
