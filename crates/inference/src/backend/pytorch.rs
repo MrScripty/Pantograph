@@ -355,6 +355,9 @@ fn init_worker_from_envelope_blocking(
     request_id: &str,
     envelope_json: String,
 ) -> Result<(), BackendError> {
+    crate::python_startup_broker::process_startup_broker()
+        .claim_legacy()
+        .map_err(|error| BackendError::ManagedBinary(error.to_string()))?;
     Python::with_gil(|py| {
         pytorch_worker::ensure_worker_initialised(py).map_err(|e| {
             PyTorchBackend::init_worker_failure_from_message(
@@ -474,6 +477,9 @@ fn shutdown_worker_from_envelope_blocking(
     request_id: &str,
     envelope_json: String,
 ) -> Result<(), BackendError> {
+    crate::python_startup_broker::process_startup_broker()
+        .claim_legacy()
+        .map_err(|error| BackendError::ManagedBinary(error.to_string()))?;
     Python::with_gil(|py| {
         pytorch_worker::ensure_worker_initialised(py).map_err(|e| {
             PyTorchBackend::shutdown_worker_failure_from_message(
@@ -1100,14 +1106,8 @@ impl PyTorchBackend {
         _config: &BackendConfig,
         _spawner: Arc<dyn ProcessSpawner>,
     ) -> Result<BackendStartOutcome, BackendError> {
-        let refusal = request.start_refusal(|| {
-            crate::managed_python_binding::ManagedPythonStartObservation {
-                // Only existing Rust worker state is observed. PyO3 .23 has no
-                // safe no-initialization interpreter query; unknown interpreter
-                // custody refuses without FFI or Python::with_gil.
-                legacy_worker_initialized: pytorch_worker::legacy_worker_initialised(),
-            }
-        });
+        let refusal = crate::python_startup_broker::process_startup_broker()
+            .closed_start_refusal(request, pytorch_worker::legacy_worker_initialised);
         Err(BackendError::ManagedBinary(refusal.to_string()))
     }
 
@@ -3066,6 +3066,9 @@ impl InferenceBackend for PyTorchBackend {
         config: &BackendConfig,
         _spawner: Arc<dyn ProcessSpawner>,
     ) -> Result<BackendStartOutcome, BackendError> {
+        crate::python_startup_broker::process_startup_broker()
+            .claim_legacy()
+            .map_err(|error| BackendError::ManagedBinary(error.to_string()))?;
         self.stop_selected_audio_worker(false).await?;
         *self.selected_audio.lock() = None;
         self.text_jobs.drain(false).await?;

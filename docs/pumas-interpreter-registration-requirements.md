@@ -68,6 +68,10 @@ while holding that real owner source. Pumas need not initialize Python inside
 `retain_torch_runtime_bytes`. Both owners still need to agree the association and
 startup protocol; byte-source metadata alone cannot stand in for the consumer's
 actual initialization/import evidence.
+The [startup broker and exact proposed owner-selection API](pumas-python-startup-broker.md)
+now implement controlled exclusion/keepalive lifetime mechanics. Every managed
+phase still refuses; the proposal supplies no observed native proof or positive
+startup implementation.
 
 ## Exact registration requirements still outstanding
 

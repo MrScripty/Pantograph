@@ -267,6 +267,11 @@ host prepares the reviewed wheel's existing `ArtifactManifest` without submittin
 an acquisition. Its [interpreter/import registration requirements](pumas-interpreter-registration-requirements.md)
 distinguish that selection and the published retained-byte API from positive
 managed runtime qualification. No transfer, install or native import is enabled.
+The [Python startup broker](pumas-python-startup-broker.md) adds a short shared
+legacy/preflight state fence and controlled Arc-retention behavior, without
+turning declarations into observed interpreter/import evidence. Managed startup
+remains closed; the owner-issued immutable selection wrapper and joint native
+startup qualification remain required.
 
 The unchanged production/test sources have qualified native and non-native
 Rust suites, feature-light compilation, Clippy and independent executable

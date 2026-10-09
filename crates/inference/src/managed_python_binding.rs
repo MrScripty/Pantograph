@@ -57,7 +57,6 @@ impl std::error::Error for ManagedPythonBindingRefusal {}
 
 /// Negative observations only; these flags cannot authorize a positive binding.
 #[derive(Debug, Clone, Copy)]
-#[cfg(any(test, feature = "backend-pytorch"))]
 pub(crate) struct ManagedPythonStartObservation {
     pub(crate) legacy_worker_initialized: bool,
 }
@@ -89,7 +88,6 @@ impl ManagedPythonRuntimeStartRequest {
     /// Entry-before-effects preflight. Validate metadata before even querying
     /// existing interpreter/worker flags. No positive variant is fabricated:
     /// mutable sys/module labels or a caller-declared lease cannot open this gate.
-    #[cfg(any(test, feature = "backend-pytorch"))]
     pub(crate) fn start_refusal(
         &self,
         observe: impl FnOnce() -> ManagedPythonStartObservation,
