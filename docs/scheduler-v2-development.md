@@ -69,11 +69,51 @@ The existing best-effort recorder can drop any outcome under saturation; neither
 these counts nor success quantiles establish unbiased coverage or failure rates.
 Its bounded prequalification is separate from the quantile kernel work counters.
 
-No selector or new telemetry store consumes this bridge. Built-in text backends
-currently lack qualified owner fingerprints, and gateway runtime identities
-change after each selected load. Genuine production history therefore remains
-unqualified. The bridge refuses unknown/injected evidence and cannot substitute
-labels for owner facts, merge runtime generations, qualify running elapsed time,
+No selector or new telemetry store consumes this bridge. Its legacy exact-instance
+key still changes after each selected load; this bridge remains unqualified for
+cross-reload history. A separate opt-in native history identity is now available
+for a deliberately narrow Linux CPU profile: standard GPT2LMHeadModel with at
+most 8 MiB of installed contiguous tensor data and a simple WordLevel tokenizer.
+It requires an explicitly serial tokenizer environment (`TOKENIZERS_PARALLELISM=false`);
+other or absent settings refuse because effective native Rayon configuration is
+not inspectable. Collection does not change environment settings.
+It hashes actual weights/buffers, effective model/tokenizer/generation settings,
+embedded worker/build versions, thread settings and the process CPU domain.
+Paths, optional package labels, generated load IDs and correlation IDs cannot
+substitute for that evidence. Unsupported/custom/quantized/GPU/oversized owners
+refuse timing identity while preserving ordinary inference behavior.
+
+History keys are separate from raw runtime-instance IDs and native load fences.
+The actual caller's load ACK is paired with weak model/tokenizer objects and a
+monotonic generation; ordinary shared-worker load/unload/shutdown, failed loads,
+foreign replacements and A-to-B-to-A transitions invalidate it. No new reuse path
+is added: selected text still reloads. Active native collectors hold bounded shared-worker custody; every ordinary
+load/unload/shutdown drains their actual native borrows before physical effects,
+including a blocking collector whose Rust caller was aborted. Weak saved stamps
+do not retain old models. Fresh inspection after acknowledged worker
+drain must reproduce every native fact and the same live fence. A new strict
+history interval getter also requires built-in provenance, known load disposition,
+fresh capture and actual drain, completed lifecycle and all four complete phases.
+Old profile equality/getters and the empirical bridge are unchanged. This slice
+adds no pooling, live prediction binding, calibration, telemetry store or selector.
+
+Opt-in load timing includes the initial native hash, and the whole interval also
+includes pre-execution revalidation. The post-drain hash runs after the intrinsic
+drain endpoint. These inspection costs are not subtracted from observations;
+comparing such observations with uninstrumented dispatch requires measurement.
+
+Inspection caps accepted tensor bytes, traversal, vocabulary, metadata and active
+collectors/transitions; overflow refuses evidence. Opaque native tokenizer getters
+can copy strings before Python checks their size, so these limits do not prove a
+universal refusal-work or allocation bound. A bounded native export API or proof
+of bounded loader-consumed input would be required for that stronger contract.
+This opt-in observer is advisory and supplies no deterministic dispatch guarantee.
+The CPU domain is process-local, not portable hardware equivalence or capacity.
+The native fixtures use small locally generated untrained models; they establish
+identity/ACK semantics, not trained-model quality or performance. Retained aliases
+to pre-install functions, arbitrary Python/native memory mutation and other
+unsupported execution profiles are not universally certified. The bridge still
+refuses unknown/injected evidence and cannot substitute labels for owner facts, merge runtime generations, qualify running elapsed time,
 or reinterpret these observations as six separate native service phases.
 
 Embedded completion timing is a trusted in-process opt-in through

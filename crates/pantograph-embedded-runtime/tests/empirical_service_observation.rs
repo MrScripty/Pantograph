@@ -14,6 +14,7 @@ fn profile() -> RuntimeServiceTimingProfile {
 fn row(id: &str, total_ns: u64) -> RuntimeServiceTimingAttempt {
     let drain_ns = 10_000_000_u64.max(total_ns);
     RuntimeServiceTimingAttempt {
+        history: None,
         attempt_id: id.into(),
         execution_request_id_digest: None,
         identity: RuntimeServiceTimingIdentity::Exact { profile: profile() },

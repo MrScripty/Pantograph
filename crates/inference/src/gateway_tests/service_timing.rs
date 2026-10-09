@@ -64,6 +64,10 @@ struct Backend {
     clock: Arc<Clock>,
     owner_reads: Arc<AtomicU64>,
     facts: Option<crate::RuntimeServiceTimingOwnerFacts>,
+    native_owner: Option<crate::RuntimeServiceTimingOwnerAttestation>,
+    native_reads: AtomicU64,
+    native_generation: u64,
+    native_drain_change: Option<&'static str>,
     shared_facts: Option<Arc<Mutex<Option<crate::RuntimeServiceTimingOwnerFacts>>>>,
     fail_load: bool,
     rewind_load_clock: bool,
@@ -85,6 +89,10 @@ impl Backend {
             clock,
             owner_reads: Arc::new(AtomicU64::new(0)),
             facts: Some(owner_facts()),
+            native_owner: None,
+            native_reads: AtomicU64::new(0),
+            native_generation: 0,
+            native_drain_change: None,
             shared_facts: None,
             fail_load: false,
             rewind_load_clock: false,
@@ -152,6 +160,23 @@ impl InferenceBackend for Backend {
             None => self.facts.clone(),
         }
     }
+    async fn runtime_service_timing_attestation(
+        &self,
+    ) -> Option<crate::RuntimeServiceTimingOwnerAttestation> {
+        let read = self.native_reads.fetch_add(1, Ordering::SeqCst);
+        let mut owner = self.native_owner.clone()?;
+        if read % 2 == 1 {
+            match self.native_drain_change {
+                Some("fence") => owner.owner_fence.push_str("-foreign-load"),
+                Some("content") => owner.content_fingerprint = "9".repeat(64),
+                Some("config") => owner.facts.effective_configuration_fingerprint = "9".repeat(64),
+                Some("device") => owner.facts.physical_device_fingerprint = "9".repeat(64),
+                Some("missing") => return None,
+                _ => {}
+            }
+        }
+        Some(owner)
+    }
     async fn load_selected_text(
         &mut self,
         request: &InferenceExecutionRequest,
@@ -178,6 +203,10 @@ impl InferenceBackend for Backend {
             .load_selected_text(request, target, decision)
             .await?;
         outcome.runtime_reused = self.load_reuse;
+        self.native_generation += 1;
+        if let Some(owner) = &mut self.native_owner {
+            owner.owner_fence = format!("controlled-native-owner:{}", self.native_generation);
+        }
         Ok(outcome)
     }
     async fn finish_selected_text(&self, cancel: bool) -> Result<(), BackendError> {
@@ -795,3 +824,6 @@ async fn service_timing_cancellation_during_successful_cleanup_excludes_sample()
 
 #[path = "service_timing_lifecycle_oracle.rs"]
 mod lifecycle_oracle;
+
+#[path = "service_timing_history_tests.rs"]
+mod history_tests;

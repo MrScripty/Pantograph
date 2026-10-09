@@ -19,12 +19,41 @@ pub(crate) mod bounds;
 /// Fresh facts from the loaded backend owner, not scheduler-selected labels.
 /// Tokens cover implementation, effective load configuration (including resolved
 /// defaults), and the actual device. An owner without these facts returns None.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct RuntimeServiceTimingOwnerFacts {
     pub implementation_fingerprint: String,
     pub effective_configuration_fingerprint: String,
     pub physical_device_fingerprint: String,
     pub device_id: crate::InferenceDeviceId,
+}
+
+/// Installed native content and private load-generation proof. Stable history
+/// excludes `owner_fence`; live custody checks must retain and revalidate it.
+/// This does not authorize model reuse, device capacity or scheduler admission.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct RuntimeServiceTimingOwnerAttestation {
+    pub content_fingerprint: String,
+    pub facts: RuntimeServiceTimingOwnerFacts,
+    pub owner_fence: String,
+}
+impl RuntimeServiceTimingOwnerAttestation {
+    pub(crate) fn valid(&self) -> bool {
+        valid_token(&self.owner_fence)
+            && self.facts.device_id.as_str() == "cpu"
+            && [
+                &self.content_fingerprint,
+                &self.facts.implementation_fingerprint,
+                &self.facts.effective_configuration_fingerprint,
+                &self.facts.physical_device_fingerprint,
+            ]
+            .into_iter()
+            .all(|digest| {
+                digest.len() == 64
+                    && digest
+                        .bytes()
+                        .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+            })
+    }
 }
 
 /// Optional consumer. Implementations must be bounded, nonblocking, nonpanicking
@@ -83,6 +112,8 @@ pub(crate) struct SelectedTextServiceTimingAttempt<'a> {
     instrumentation: &'a ServiceTimingInstrumentation,
     owner_epoch: String,
     request_digest: Option<String>,
+    history_workload_digest: Option<String>,
+    history_owner: Option<RuntimeServiceTimingOwnerAttestation>,
     selected_device: Option<crate::InferenceDeviceId>,
     pending: Option<(RuntimeServiceTimingPhase, u64)>,
     record: Option<RuntimeServiceTimingAttempt>,
@@ -152,6 +183,17 @@ impl<'a> SelectedTextServiceTimingAttempt<'a> {
             instrumentation,
             owner_epoch: owner_epoch.to_owned(),
             request_digest,
+            // Request/correlation IDs, paths, package labels and generated load
+            // IDs do not describe native work. Actual installed content supplies
+            // model identity later, independently of optional Pumas labels.
+            history_workload_digest: bounds::digest(&(
+                "native_text_history.v1",
+                &request.task_id,
+                &request.input,
+                &request.generation_options,
+                &request.extra_options,
+            )),
+            history_owner: None,
             selected_device: decision.selected_device_id.clone(),
             pending: None,
             owner_provenance: if instrumentation.controlled_clock {
@@ -168,6 +210,7 @@ impl<'a> SelectedTextServiceTimingAttempt<'a> {
             record: Some(RuntimeServiceTimingAttempt {
                 capture: None,
                 lifecycle: None,
+                history: None,
                 attempt_id: uuid::Uuid::new_v4().to_string(),
                 // Validation may reject the call after this guard is created.
                 // Never retain or normalize arbitrary caller identity payloads.
@@ -252,6 +295,61 @@ impl<'a> SelectedTextServiceTimingAttempt<'a> {
         if let Some(profile) = identity {
             self.record.as_mut().unwrap().identity =
                 RuntimeServiceTimingIdentity::Exact { profile };
+        }
+    }
+
+    pub(crate) fn bind_history_owner(
+        &mut self,
+        runtime_instance: Option<&str>,
+        owner: Option<RuntimeServiceTimingOwnerAttestation>,
+    ) {
+        let Some(instance) = runtime_instance.filter(|id| valid_token(id)) else {
+            return;
+        };
+        let Some(owner) = owner.filter(|owner| {
+            owner.valid() && Some(&owner.facts.device_id) == self.selected_device.as_ref()
+        }) else {
+            return;
+        };
+        let Some(workload) = self.history_workload_digest.as_ref() else {
+            return;
+        };
+        let Some(digest) = bounds::digest(&(
+            "native_text_history_owner.v1",
+            &owner.content_fingerprint,
+            &owner.facts,
+            workload,
+        )) else {
+            return;
+        };
+        let Ok(profile) = pantograph_timing_contracts::RuntimeServiceTimingHistoryProfile::new(
+            self.owner_epoch.clone(),
+            digest,
+        ) else {
+            return;
+        };
+        self.record.as_mut().unwrap().history = Some(
+            pantograph_timing_contracts::RuntimeServiceTimingHistoryEvidence {
+                profile,
+                runtime_instance_id: instance.to_owned(),
+                load_owner_fence: owner.owner_fence.clone(),
+                drained_owner_fence: None,
+            },
+        );
+        self.history_owner = Some(owner);
+    }
+
+    pub(crate) fn revalidate_history_owner(
+        &mut self,
+        owner: Option<RuntimeServiceTimingOwnerAttestation>,
+    ) {
+        if self.worker_drained_at_ns.is_none() || owner.as_ref() != self.history_owner.as_ref() {
+            return;
+        }
+        if let (Some(owner), Some(history)) =
+            (owner, self.record.as_mut().unwrap().history.as_mut())
+        {
+            history.drained_owner_fence = Some(owner.owner_fence);
         }
     }
 

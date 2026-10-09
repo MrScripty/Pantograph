@@ -1578,6 +1578,7 @@ impl InferenceGateway {
         if let Some(timing) = timing.as_deref_mut() {
             timing.begin(Phase::SelectedModelLoad);
         }
+        backend.prepare_selected_text_timing(timing.is_some());
         let outcome = backend
             .load_selected_text(&request, &artifact_load_target, &backend_decision)
             .await;
@@ -1628,14 +1629,16 @@ impl InferenceGateway {
         };
         if let Some(timing) = timing.as_deref_mut() {
             let lifecycle = self.runtime_lifecycle.read().await;
-            timing.bind_owner(
-                if lifecycle.active {
-                    lifecycle.runtime_instance_id.as_deref()
-                } else {
-                    None
-                },
-                backend.runtime_service_timing_owner_facts(),
-            );
+            let instance = if lifecycle.active {
+                lifecycle.runtime_instance_id.as_deref()
+            } else {
+                None
+            };
+            timing.bind_owner(instance, backend.runtime_service_timing_owner_facts());
+            // The legacy exact-instance key stays unchanged. Native history is
+            // additive and separately fenced against the actual load ACK.
+            let attestation = backend.runtime_service_timing_attestation().await;
+            timing.bind_history_owner(instance, attestation);
         }
         reject_cancelled_execution_handle("selected text", &cancellation)?;
         if let Some(timing) = timing.as_deref_mut() {
@@ -1665,6 +1668,11 @@ impl InferenceGateway {
             } else {
                 Outcome::Failed
             });
+            if cleanup.is_ok() {
+                // End the intrinsic interval at the drain ACK before inspection.
+                // Keep backend custody while revalidating the native ACK stamp.
+                timing.revalidate_history_owner(backend.runtime_service_timing_attestation().await);
+            }
         }
         cleanup?;
         reject_cancelled_execution_handle("selected text", &cancellation)?;

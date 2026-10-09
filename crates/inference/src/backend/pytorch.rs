@@ -62,6 +62,9 @@ use pantograph_runtime_identity::{canonical_runtime_backend_key, canonical_runti
 
 #[path = "pytorch_image_generation.rs"]
 mod pytorch_image_generation;
+#[path = "pytorch_service_timing.rs"]
+mod pytorch_service_timing;
+
 #[path = "pytorch_worker.rs"]
 mod pytorch_worker;
 #[allow(dead_code)]
@@ -159,6 +162,8 @@ pub struct PyTorchBackend {
     /// Whether the backend has been initialised and is ready
     ready: bool,
     text_jobs: pytorch_text_job::TextJobs,
+    text_timing_enabled: bool,
+    text_timing_owner: Option<Arc<pytorch_service_timing::NativeOwner>>,
     direct_audio: parking_lot::Mutex<DirectAudioJobs>,
     selected_audio: parking_lot::Mutex<Option<SelectedAudioCacheKey>>,
     selected_audio_worker: Arc<pytorch_worker::IsolatedAudioWorker>,
@@ -1072,6 +1077,8 @@ impl PyTorchBackend {
         Self {
             ready: false,
             text_jobs: Default::default(),
+            text_timing_enabled: false,
+            text_timing_owner: None,
             direct_audio: Default::default(),
             selected_audio: Default::default(),
             selected_audio_worker: Arc::new(pytorch_worker::IsolatedAudioWorker::new()),
@@ -1576,15 +1583,19 @@ impl PyTorchBackend {
         &mut self,
         envelope: PyTorchWorkerEnvelope<PyTorchTransformersLoadRequest>,
     ) -> Result<LoadedModelInfo, BackendError> {
+        // Consume opt-in before any await; cancellation cannot carry the flag
+        // into a later uninstrumented load.
+        let timing_requested = std::mem::take(&mut self.text_timing_enabled);
         Self::validate_transformers_load_envelope(&envelope)?;
         self.stop_selected_audio_worker(false).await?;
-        self.load_transformers_envelope_in_worker(envelope, None)
+        self.load_transformers_envelope_in_worker(envelope, None, timing_requested)
             .await
     }
     async fn load_transformers_envelope_in_worker(
         &mut self,
         envelope: PyTorchWorkerEnvelope<PyTorchTransformersLoadRequest>,
         isolated: Option<Arc<pytorch_worker::IsolatedAudioWorker>>,
+        timing_requested: bool,
     ) -> Result<LoadedModelInfo, BackendError> {
         self.text_jobs.drain(false).await?;
         self.drain_direct_audio().await;
@@ -1608,10 +1619,12 @@ impl PyTorchBackend {
             self.resident_allocation_uncertain = true;
             self.ready = false;
             self.loaded_model = None;
+            self.text_timing_owner = None;
         }
+        let timing_enabled = !private && timing_requested;
 
-        let info = tokio::task::spawn_blocking(move || {
-            Python::with_gil(|py| -> Result<LoadedModelInfo, BackendError> {
+        let (info, timing_owner) = tokio::task::spawn_blocking(move || {
+            Python::with_gil(|py| -> Result<_, BackendError> {
                 let worker = match &isolated {
                     Some(worker) => worker.module(py),
                     None => pytorch_worker::worker_module(py),
@@ -1623,17 +1636,23 @@ impl PyTorchBackend {
                     )
                 })?;
 
-                let response_json = worker
-                    .call_method1("load_transformers_model_from_envelope", (envelope_json,))
-                    .and_then(|result| result.extract::<String>())
-                    .map_err(|e| {
-                        Self::load_worker_failure_from_message(
-                            &request_id,
-                            format!("Transformers envelope model load failed: {}", e),
-                        )
-                    })?;
+                let (response_json, timing_owner) = (if timing_enabled {
+                    pytorch_service_timing::load_with_ack(py, &worker, envelope_json)
+                } else {
+                    worker
+                        .call_method1("load_transformers_model_from_envelope", (envelope_json,))
+                        .and_then(|result| result.extract::<String>())
+                        .map(|response| (response, None))
+                })
+                .map_err(|e| {
+                    Self::load_worker_failure_from_message(
+                        &request_id,
+                        format!("Transformers envelope model load failed: {}", e),
+                    )
+                })?;
 
                 Self::load_info_from_worker_response(&request_id, &response_json)
+                    .map(|info| (info, timing_owner))
             })
         })
         .await
@@ -1643,6 +1662,7 @@ impl PyTorchBackend {
             self.selected_audio_ready = true;
         } else {
             self.loaded_model = Some(info.clone());
+            self.text_timing_owner = timing_owner;
             self.resident_allocation_uncertain = false;
             self.ready = true;
         }
@@ -2779,6 +2799,7 @@ impl PyTorchBackend {
         .map_err(|e| BackendError::Inference(task_join_error_message(e)))??;
 
         self.loaded_model = None;
+        self.text_timing_owner = None;
         self.resident_allocation_uncertain = false;
         Ok(())
     }
@@ -3125,6 +3146,7 @@ impl InferenceBackend for PyTorchBackend {
                 .load_transformers_envelope_in_worker(
                     envelope,
                     Some(self.selected_audio_worker.clone()),
+                    false,
                 )
                 .await?;
             if info.model_path != target.local_load_path
@@ -3178,14 +3200,28 @@ impl InferenceBackend for PyTorchBackend {
         .await
     }
 
+    fn prepare_selected_text_timing(&mut self, enabled: bool) {
+        self.text_timing_enabled = enabled;
+    }
+
+    async fn runtime_service_timing_attestation(
+        &self,
+    ) -> Option<crate::RuntimeServiceTimingOwnerAttestation> {
+        pytorch_service_timing::revalidate(self.text_timing_owner.as_ref()?.clone()).await
+    }
+
     async fn load_selected_text(
         &mut self,
         request: &crate::InferenceExecutionRequest,
         target: &crate::PumasArtifactLoadTarget,
         decision: &crate::BackendExecutionDecision,
     ) -> Result<BackendStartOutcome, BackendError> {
+        let enabled = std::mem::take(&mut self.text_timing_enabled);
         let envelope = Self::selected_text_load_envelope(request, target, decision).await?;
-        self.load_transformers_envelope(envelope).await?;
+        self.text_timing_enabled = enabled;
+        let result = self.load_transformers_envelope(envelope).await;
+        self.text_timing_enabled = false;
+        result?;
         Ok(BackendStartOutcome {
             runtime_reused: Some(false),
             lifecycle_decision_reason: Some("scheduler_selected_text_package_loaded".into()),
@@ -3215,6 +3251,7 @@ impl InferenceBackend for PyTorchBackend {
         }
         *self.selected_audio.lock() = None;
         self.loaded_model = None;
+        self.text_timing_owner = None;
         self.resident_allocation_uncertain = false;
         self.direct_audio.lock().residency_possible = false;
         self.ready = false;

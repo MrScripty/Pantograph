@@ -1368,6 +1368,19 @@ pub trait InferenceBackend: Send + Sync {
     /// Returning None preserves unknown provenance; selected labels or requested
     /// defaults are insufficient. This is called only when timing is enabled.
     /// Implementations must be bounded and must not reenter the gateway.
+    /// Enable inspection only for the following selected-text load. This cannot
+    /// change load/reuse semantics. Unknown native profiles refuse evidence.
+    fn prepare_selected_text_timing(&mut self, _enabled: bool) {}
+
+    /// Revalidate the actual load ACK's native objects/generation. A current-owner
+    /// lookup alone cannot establish the caller's ACK. Probe off the async thread;
+    /// missing/stale evidence must never fail inference or imply residency.
+    async fn runtime_service_timing_attestation(
+        &self,
+    ) -> Option<crate::RuntimeServiceTimingOwnerAttestation> {
+        None
+    }
+
     fn runtime_service_timing_owner_facts(&self) -> Option<crate::RuntimeServiceTimingOwnerFacts> {
         None
     }

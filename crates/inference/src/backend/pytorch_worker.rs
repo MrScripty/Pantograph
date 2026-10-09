@@ -12,6 +12,30 @@ const WORKER_TRANSFORMERS_PY: &str = include_str!("../../torch/worker_transforme
 const WORKER_CONTRACT_PY: &str = include_str!("../../torch/worker_contract.py");
 const WORKER_IMAGE_CONTRACT_PY: &str = include_str!("../../torch/worker_image_contract.py");
 
+/// Hash the actual embedded worker implementation, including timing inspection.
+pub(super) fn text_timing_implementation_digest(owner_source: &str) -> String {
+    let mut hash = blake3::Hasher::new();
+    for source in [
+        WORKER_PY,
+        BLOCK_DIFFUSION_PY,
+        AUTOREGRESSIVE_PY,
+        WORKER_DIFFUSION_PY,
+        WORKER_RUNTIME_PY,
+        WORKER_TRANSFORMERS_PY,
+        WORKER_CONTRACT_PY,
+        WORKER_IMAGE_CONTRACT_PY,
+        owner_source,
+        include_str!("pytorch.rs"),
+        include_str!("pytorch_worker_contract.rs"),
+        include_str!("pytorch_text_job.rs"),
+        include_str!("pytorch_service_timing.rs"),
+    ] {
+        hash.update(&(source.len() as u64).to_le_bytes());
+        hash.update(source.as_bytes());
+    }
+    hash.finalize().to_hex().to_string()
+}
+
 static WORKER_INITIALISED: AtomicBool = AtomicBool::new(false);
 
 pub(super) fn ensure_worker_initialised(py: Python<'_>) -> PyResult<()> {
