@@ -1173,6 +1173,8 @@ fn model_lifecycle_projects_canonical_error_link_without_counting_new_error() {
     let mut lifecycle = sample_scheduler_model_lifecycle_event("workflow_run_alpha");
     lifecycle.payload = DiagnosticEventPayload::SchedulerModelLifecycleChanged(
         SchedulerModelLifecycleChangedPayload {
+            workflow_execution_session_id: None,
+            unloaded_workflow_execution_session_id: None,
             transition: SchedulerModelLifecycleTransition::LoadFailed,
             cache_state: Some(SchedulerModelCacheState::Failed),
             execution_plan_summary: Some(SchedulerExecutionPlanSummary {
@@ -1431,6 +1433,48 @@ fn diagnostic_event_ledger_projects_backend_and_task_on_node_status() {
 }
 
 #[test]
+fn inference_diagnostic_payload_preserves_exact_tagged_wire_and_ledger_round_trip() {
+    let expected = serde_json::json!({
+        "payload_type": "inference_execution_diagnostic_observed",
+        "request_id": "req-wire",
+        "task_id": "text_generation",
+        "compatibility_issue_count": 0,
+        "option_support_counts": {
+            "honored": 0, "mapped": 0, "defaulted": 0, "ignored": 0,
+            "unsupported": 0, "rejected": 0, "conflict": 0,
+            "model_unavailable": 0, "backend_unavailable": 0,
+            "requires_model_support": 0, "requires_backend_support": 0
+        }
+    });
+    let payload: DiagnosticEventPayload = serde_json::from_value(expected.clone()).unwrap();
+    assert_eq!(serde_json::to_value(&payload).unwrap(), expected);
+    let mut event = sample_inference_execution_diagnostic_event();
+    event.payload = payload.clone();
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().unwrap();
+    ledger
+        .append_diagnostic_event(event)
+        .expect("valid inference payload appends");
+    let records = ledger.diagnostic_events_after(0, 10).unwrap();
+    assert_eq!(records.len(), 1);
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&records[0].payload_json).unwrap(),
+        expected
+    );
+    assert_eq!(
+        serde_json::from_str::<DiagnosticEventPayload>(&records[0].payload_json).unwrap(),
+        payload
+    );
+}
+
+#[test]
+fn diagnostic_event_payload_keeps_large_inference_record_indirect() {
+    assert!(
+        std::mem::size_of::<DiagnosticEventPayload>()
+            < std::mem::size_of::<InferenceExecutionDiagnosticObservedPayload>()
+    );
+}
+
+#[test]
 fn diagnostic_event_ledger_appends_inference_execution_diagnostic_summary() {
     let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
     let event = sample_inference_execution_diagnostic_event();
@@ -1527,12 +1571,9 @@ fn scheduler_timeline_projection_includes_inference_execution_diagnostics() {
     assert!(detail.contains("cache handle observed"));
     assert!(detail.contains("artifact refs 1"));
     assert!(detail.contains("kv cache restore_input hit"));
-    assert_eq!(
-        record
-            .payload_json
-            .contains("generated text should not appear"),
-        false
-    );
+    assert!(!record
+        .payload_json
+        .contains("generated text should not appear"));
 }
 
 #[test]
@@ -2220,6 +2261,10 @@ fn projection_state_persists_failure_health_and_success_clears_it() {
         })
         .expect("failed projection state stores");
 
+    assert_eq!(failed.projection_name, "scheduler_timeline");
+    assert_eq!(failed.projection_version, 1);
+    assert_eq!(failed.last_applied_event_seq, 10);
+    assert_eq!(failed.rebuilt_at_ms, None);
     assert_eq!(failed.status, ProjectionStatus::Failed);
     assert_eq!(
         failed.last_error.as_deref(),
@@ -2227,6 +2272,11 @@ fn projection_state_persists_failure_health_and_success_clears_it() {
     );
     assert_eq!(failed.last_error_at_ms, Some(20));
     assert_eq!(failed.last_failed_event_seq, Some(11));
+
+    assert_eq!(
+        ledger.projection_state("scheduler_timeline").unwrap(),
+        Some(failed.clone())
+    );
 
     let recovered = ledger
         .upsert_projection_state(ProjectionStateUpdate {
@@ -2996,6 +3046,46 @@ fn run_detail_projection_backfills_selected_runtime_from_node_status() {
         Some("pumas://models/tiny-transformers")
     );
     assert_eq!(record.selected_task_id.as_deref(), Some("text_generation"));
+}
+
+#[test]
+fn io_artifact_payload_preserves_exact_tagged_wire_and_ledger_round_trip() {
+    let expected = serde_json::json!({
+        "payload_type": "io_artifact_observed",
+        "artifact_id": "artifact-wire",
+        "artifact_role": "node_output",
+        "producer_node_id": null, "producer_port_id": null,
+        "consumer_node_id": null, "consumer_port_id": null,
+        "media_type": null, "size_bytes": null, "content_hash": null,
+        "retention_state": null, "retention_reason": null
+    });
+    let payload: DiagnosticEventPayload = serde_json::from_value(expected.clone()).unwrap();
+    assert_eq!(serde_json::to_value(&payload).unwrap(), expected);
+    let mut event =
+        sample_io_artifact_event("run-wire", "node-wire", "node_output", "artifact-wire");
+    event.payload = payload.clone();
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().unwrap();
+    ledger
+        .append_diagnostic_event(event)
+        .expect("valid artifact payload appends");
+    let records = ledger.diagnostic_events_after(0, 10).unwrap();
+    assert_eq!(records.len(), 1);
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&records[0].payload_json).unwrap(),
+        expected
+    );
+    assert_eq!(
+        serde_json::from_str::<DiagnosticEventPayload>(&records[0].payload_json).unwrap(),
+        payload
+    );
+}
+
+#[test]
+fn diagnostic_event_payload_keeps_large_artifact_record_indirect() {
+    assert!(
+        std::mem::size_of::<DiagnosticEventPayload>()
+            < std::mem::size_of::<IoArtifactObservedPayload>()
+    );
 }
 
 #[test]
@@ -4987,13 +5077,10 @@ fn sqlite_column_exists(conn: &Connection, table_name: &str, column_name: &str) 
     let mut stmt = conn
         .prepare(&format!("PRAGMA table_info({table_name})"))
         .expect("table info statement prepares");
-    let columns = stmt
+    let mut columns = stmt
         .query_map([], |row| row.get::<_, String>(1))
         .expect("table info query succeeds");
-    let exists = columns
-        .map(|column| column.expect("column row loads"))
-        .any(|column| column == column_name);
-    exists
+    columns.any(|column| column.expect("column row loads") == column_name)
 }
 
 fn assert_columns_exist(conn: &Connection, table_name: &str, column_names: &[&str]) {
@@ -5872,6 +5959,8 @@ fn sample_scheduler_model_lifecycle_event(workflow_run_id: &str) -> DiagnosticEv
         payload_ref: None,
         payload: DiagnosticEventPayload::SchedulerModelLifecycleChanged(
             SchedulerModelLifecycleChangedPayload {
+                workflow_execution_session_id: None,
+                unloaded_workflow_execution_session_id: None,
                 transition: SchedulerModelLifecycleTransition::LoadRequested,
                 cache_state: Some(SchedulerModelCacheState::CacheMiss),
                 execution_plan_summary: None,
@@ -5911,6 +6000,7 @@ fn sample_diagnostic_error_event(workflow_run_id: &str) -> DiagnosticEventAppend
         retention_class: DiagnosticEventRetentionClass::AuditMetadata,
         payload_ref: None,
         payload: DiagnosticEventPayload::DiagnosticErrorOccurred(DiagnosticErrorOccurredPayload {
+            workflow_execution_session_id: None,
             phase: "runtime_model_load".to_string(),
             scope: DiagnosticErrorScopeKind::RuntimeModel,
             severity: DiagnosticErrorSeverity::Fatal,
@@ -6206,7 +6296,7 @@ fn sample_io_artifact_event(
         privacy_class: DiagnosticEventPrivacyClass::SensitiveReference,
         retention_class: DiagnosticEventRetentionClass::PayloadReference,
         payload_ref: Some(format!("artifact://{artifact_id}")),
-        payload: DiagnosticEventPayload::IoArtifactObserved(IoArtifactObservedPayload {
+        payload: DiagnosticEventPayload::IoArtifactObserved(Box::new(IoArtifactObservedPayload {
             artifact_fact_id: None,
             payload_artifact_id: None,
             artifact_id: artifact_id.to_string(),
@@ -6247,7 +6337,7 @@ fn sample_io_artifact_event(
                 conversion_command_id: None,
                 conversion_dependencies: Vec::new(),
             }),
-        }),
+        })),
     }
 }
 
@@ -6389,7 +6479,7 @@ fn sample_inference_execution_diagnostic_event() -> DiagnosticEventAppendRequest
         privacy_class: DiagnosticEventPrivacyClass::SystemMetadata,
         retention_class: DiagnosticEventRetentionClass::AuditMetadata,
         payload_ref: None,
-        payload: DiagnosticEventPayload::InferenceExecutionDiagnosticObserved(
+        payload: DiagnosticEventPayload::InferenceExecutionDiagnosticObserved(Box::new(
             InferenceExecutionDiagnosticObservedPayload {
                 request_id: "req-a".to_string(),
                 task_id: "text_generation".to_string(),
@@ -6457,7 +6547,7 @@ fn sample_inference_execution_diagnostic_event() -> DiagnosticEventAppendRequest
                     },
                 ],
             },
-        ),
+        )),
     }
 }
 
@@ -6580,4 +6670,80 @@ fn sample_event(
         completed_at_ms: Some(completed_at_ms),
         correlation_id: Some("corr-1".to_string()),
     }
+}
+
+#[test]
+fn session_capacity_events_preserve_identity_without_creating_a_run() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger");
+    let mut event = sample_scheduler_model_lifecycle_event("unused");
+    event.workflow_run_id = None;
+    event.workflow_version_id = None;
+    event.workflow_semantic_version = None;
+    let DiagnosticEventPayload::SchedulerModelLifecycleChanged(payload) = &mut event.payload else {
+        panic!("model lifecycle payload");
+    };
+    payload.workflow_execution_session_id = Some("session-target".to_string());
+    payload.unloaded_workflow_execution_session_id = Some("session-victim".to_string());
+    payload.transition = SchedulerModelLifecycleTransition::UnloadCompleted;
+    payload.duration_ms = Some(7);
+    let recorded = ledger
+        .append_diagnostic_event(event)
+        .expect("session event");
+    assert!(recorded.workflow_run_id.is_none());
+    let payload: serde_json::Value = serde_json::from_str(&recorded.payload_json).expect("payload");
+    assert_eq!(payload["workflow_execution_session_id"], "session-target");
+    ledger
+        .drain_run_list_projection(100)
+        .expect("list projection");
+    ledger
+        .drain_run_detail_projection(100)
+        .expect("detail projection");
+    assert!(ledger
+        .query_run_list_projection(RunListProjectionQuery::default())
+        .expect("runs")
+        .is_empty());
+}
+
+#[test]
+fn session_capacity_identity_does_not_relax_legacy_run_event_requirements() {
+    let mut event = sample_scheduler_model_lifecycle_event("run-real");
+    let original = serde_json::to_value(&event.payload).expect("legacy payload");
+    let decoded: DiagnosticEventPayload =
+        serde_json::from_value(original.clone()).expect("old payload parses");
+    assert_eq!(serde_json::to_value(decoded).expect("round trip"), original);
+    event.workflow_run_id = None;
+    assert!(event.validate().is_err());
+    let DiagnosticEventPayload::SchedulerModelLifecycleChanged(payload) = &mut event.payload else {
+        panic!("model lifecycle payload");
+    };
+    payload.workflow_execution_session_id = Some("session-target".to_string());
+    assert!(event.validate().is_err());
+    let DiagnosticEventPayload::SchedulerModelLifecycleChanged(payload) = &mut event.payload else {
+        panic!("model lifecycle payload");
+    };
+    payload.unloaded_workflow_execution_session_id = Some(" ".to_string());
+    assert!(event.validate().is_err());
+    let mut run_event = sample_run_started_event("run-real");
+    run_event.workflow_run_id = None;
+    assert!(run_event.validate().is_err());
+}
+
+#[test]
+fn session_runtime_error_requires_genuine_session_and_workflow_identity() {
+    let mut event = sample_diagnostic_error_event("unused");
+    event.workflow_run_id = None;
+    event.source_component = DiagnosticEventSourceComponent::Scheduler;
+    let DiagnosticEventPayload::DiagnosticErrorOccurred(payload) = &mut event.payload else {
+        panic!("error payload");
+    };
+    payload.scope = DiagnosticErrorScopeKind::SessionRuntime;
+    payload.severity = DiagnosticErrorSeverity::Error;
+    assert!(event.validate().is_err());
+    let DiagnosticEventPayload::DiagnosticErrorOccurred(payload) = &mut event.payload else {
+        panic!("error payload");
+    };
+    payload.workflow_execution_session_id = Some("session-target".to_string());
+    event.validate().expect("session-scoped error");
+    event.workflow_id = None;
+    assert!(event.validate().is_err());
 }

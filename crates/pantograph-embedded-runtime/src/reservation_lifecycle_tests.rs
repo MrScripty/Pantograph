@@ -19,6 +19,12 @@ use super::*;
 use crate::runtime_registry::HostRuntimeProducer;
 use crate::HostRuntimeModeSnapshot;
 
+#[cfg(feature = "backend-llamacpp")]
+#[path = "reservation_lifecycle_tests/llamacpp_resident.rs"]
+mod llamacpp_resident;
+#[path = "reservation_lifecycle_tests/resident_resources.rs"]
+mod resident_resources;
+
 #[tokio::test]
 async fn terminal_completion_releases_registry_reservation_and_reconciles_runtime() {
     let registry = Arc::new(RuntimeRegistry::new());

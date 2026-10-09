@@ -1,0 +1,9 @@
+INFO:pantograph.pytorch:Shimmed dispatch_model for meta-tensor safety (transformers 4.53.3)
+INFO:pantograph.pytorch:Loading text-generation model from /workspace/Pantograph-chat-completion/crates/inference/tests/fixtures/tiny_chat_gpt2/model-11 onto cpu (trust_remote_code=False, local_files_only=True, revision=None, code_revision=None, cache_policy=backend_default, trust_policy_decision_id=None)
+INFO:pantograph.pytorch:Model loaded: model-11 (text-generation)
+INFO:pantograph.pytorch:Model unloaded: model-11
+INFO:pantograph.pytorch:Loading text-generation model from /workspace/Pantograph-chat-completion/crates/inference/tests/fixtures/tiny_chat_gpt2/model-37 onto cpu (trust_remote_code=False, local_files_only=True, revision=None, code_revision=None, cache_policy=backend_default, trust_policy_decision_id=None)
+INFO:pantograph.pytorch:Model loaded: model-37 (text-generation)
+INFO:pantograph.pytorch:Model unloaded: model-37
+model-11: 16 full-worker CPU requests match native oracles, actual prompt forwards and private RNG
+model-37: 16 full-worker CPU requests match native oracles, actual prompt forwards and private RNG

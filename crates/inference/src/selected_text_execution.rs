@@ -22,7 +22,6 @@ fn invalid(message: impl Into<String>) -> BackendError {
 fn same_model(left: &PumasModelRef, right: &PumasModelRef) -> bool {
     left.model_id.trim_start_matches("pumas://models/")
         == right.model_id.trim_start_matches("pumas://models/")
-        && left.revision == right.revision
         && left.selected_artifact_id == right.selected_artifact_id
         && left.selected_artifact_path == right.selected_artifact_path
 }
@@ -35,6 +34,9 @@ impl<'a> SelectedTextLoad<'a> {
     ) -> Result<Self, BackendError> {
         request
             .validate()
+            .map_err(|error| invalid(error.to_string()))?;
+        request
+            .validate_text_min_new_tokens_budget(crate::constants::pytorch::DEFAULT_MAX_NEW_TOKENS)
             .map_err(|error| invalid(error.to_string()))?;
         if request
             .request_id
@@ -68,19 +70,53 @@ impl<'a> SelectedTextLoad<'a> {
                 ));
             }
         }
-        if request.task_id != InferenceTaskId::TextGeneration
-            || decision.selected_task_id != Some(InferenceTaskId::TextGeneration)
+        if model
+            .revision
+            .as_ref()
+            .is_some_and(|revision| selected.revision.as_ref() != Some(revision))
+        {
+            return Err(invalid(
+                "selected revision must preserve the explicit requested revision",
+            ));
+        }
+        for requested in [model, selected] {
+            if let Some(revision) = &requested.revision {
+                if package.model_ref.revision.as_ref() != Some(revision)
+                    || target.model_ref.revision.as_ref() != Some(revision)
+                {
+                    return Err(invalid(
+                        "explicit requested revision is missing or mismatched",
+                    ));
+                }
+            }
+        }
+        if package
+            .model_ref
+            .revision
+            .as_ref()
+            .is_some_and(|revision| target.model_ref.revision.as_ref() != Some(revision))
+        {
+            return Err(invalid("target must preserve the known package revision"));
+        }
+        if !matches!(
+            request.task_id,
+            InferenceTaskId::TextGeneration | InferenceTaskId::ChatCompletion
+        ) || decision.selected_task_id != Some(request.task_id.clone())
             || !matches!(
                 request.input,
                 InferenceExecutionInput::TextGeneration { .. }
             )
         {
-            return Err(invalid("explicit text_generation task required"));
+            return Err(invalid(
+                "exact requested and selected canonical text task required",
+            ));
         }
         let task = crate::resolve_task_registry_entry_from_evidence(&package.task)
             .map_err(|error| invalid(format!("invalid package task evidence: {error:?}")))?;
-        if task.task_id != InferenceTaskId::TextGeneration {
-            return Err(invalid("package task is not text_generation"));
+        if task.task_id != request.task_id {
+            return Err(invalid(
+                "package task must match the requested canonical text task",
+            ));
         }
         if !package.uses_current_contract()
             || target.package_facts_contract_version != Some(package.package_facts_contract_version)
@@ -228,4 +264,69 @@ pub(crate) fn fixture() -> (
         extra_options: serde_json::Value::Null,
     };
     (directory, request, target, decision)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn canonical_text_tasks_require_exact_request_selection_and_package_agreement() {
+        for requested in [
+            InferenceTaskId::TextGeneration,
+            InferenceTaskId::ChatCompletion,
+        ] {
+            for selected in [
+                InferenceTaskId::TextGeneration,
+                InferenceTaskId::ChatCompletion,
+            ] {
+                for packaged in [
+                    InferenceTaskId::TextGeneration,
+                    InferenceTaskId::ChatCompletion,
+                ] {
+                    let (_directory, mut request, target, mut decision) = fixture();
+                    request.task_id = requested.clone();
+                    decision.selected_task_id = Some(selected.clone());
+                    let task = &mut request.resolved_model_package_facts.as_mut().unwrap().task;
+                    task.pipeline_tag = None;
+                    task.task_type_primary = Some(packaged.canonical_label().to_string());
+                    assert_eq!(
+                        SelectedTextLoad::validate(&request, &target, &decision)
+                            .await
+                            .is_ok(),
+                        requested == selected && selected == packaged,
+                        "request={requested:?}, selected={selected:?}, package={packaged:?}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn canonical_text_revisions_preserve_explicit_constraints_and_allow_omitted_refinement() {
+        for (requested, selected, package, target_revision, valid) in [
+            (Some("a"), Some("a"), Some("a"), Some("a"), true),
+            (None, Some("a"), Some("a"), Some("a"), true),
+            (None, None, Some("a"), Some("a"), true),
+            (Some("b"), Some("a"), Some("a"), Some("a"), false),
+            (Some("a"), None, Some("a"), Some("a"), false),
+            (Some("a"), Some("a"), None, Some("a"), false),
+            (Some("a"), Some("a"), Some("a"), None, false),
+            (None, Some("a"), Some("a"), Some("b"), false),
+            (None, None, Some("a"), None, false),
+        ] {
+            let (_directory, mut request, mut target, mut decision) = fixture();
+            request.model_ref.as_mut().unwrap().revision = requested.map(str::to_owned);
+            decision.selected_model_ref.as_mut().unwrap().revision = selected.map(str::to_owned);
+            request
+                .resolved_model_package_facts
+                .as_mut()
+                .unwrap()
+                .model_ref
+                .revision = package.map(str::to_owned);
+            target.model_ref.revision = target_revision.map(str::to_owned);
+            assert_eq!(SelectedTextLoad::validate(&request, &target, &decision).await.is_ok(), valid,
+                "request={requested:?}, selected={selected:?}, package={package:?}, target={target_revision:?}");
+        }
+    }
 }

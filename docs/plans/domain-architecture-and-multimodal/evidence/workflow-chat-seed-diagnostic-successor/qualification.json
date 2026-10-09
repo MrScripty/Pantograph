@@ -1,0 +1,84 @@
+{
+  "checks": {
+    "ci-yaml": 0,
+    "ci-capture-step": 0,
+    "scheduler-only": 0,
+    "final-expanded-rust": 0,
+    "typecheck": 0,
+    "expanded-rust": 0,
+    "frontend-tests": 0,
+    "final-affected-rust": 0,
+    "final-source-gates": 0,
+    "format": 0,
+    "source-gates": 0,
+    "final-format": 0,
+    "affected-rust": 0,
+    "python-tests": 0,
+    "final-native-chat-graph": 0,
+    "native-chat-graph": 0,
+    "worker-cpu": 0,
+    "focused-seed": 0,
+    "final-clippy": 0,
+    "frontend-build": 0
+  },
+  "rust_results": {
+    "focused-seed": {
+      "passed_including_doctests": 1,
+      "failed": 0,
+      "ignored_including_doctests": 0,
+      "exit": 0
+    },
+    "final-affected-rust": {
+      "passed_including_doctests": 2487,
+      "failed": 0,
+      "ignored_including_doctests": 7,
+      "exit": 0
+    },
+    "final-expanded-rust": {
+      "passed_including_doctests": 3171,
+      "failed": 0,
+      "ignored_including_doctests": 23,
+      "exit": 0
+    },
+    "final-native-chat-graph": {
+      "passed_including_doctests": 1,
+      "failed": 0,
+      "ignored_including_doctests": 0,
+      "exit": 0
+    },
+    "ci-capture-step": {
+      "passed_including_doctests": 3,
+      "failed": 0,
+      "ignored_including_doctests": 0,
+      "exit": 0
+    }
+  },
+  "affected_rust_tests": 2486,
+  "affected_doctests": 1,
+  "expanded_rust_tests": 3170,
+  "expanded_doctests": 1,
+  "frontend_tests": 670,
+  "python_worker_tests": 78,
+  "actual_full_worker_cpu_requests": 32,
+  "actual_public_graph_runs": 28,
+  "actual_chat_completion_graph_runs": 21,
+  "actual_text_generation_control_graph_runs": 7,
+  "actual_sequential_native_envelope_members": 8,
+  "chat_completion_envelope_members": 6,
+  "text_generation_control_envelope_members": 2,
+  "ci_exact_capture_tests": 3,
+  "strict_clippy_scope": "All targets of all eight expanded packages, -D warnings",
+  "frontend_python_source": "cf1be8cee288968c1e67601d75458c4ef7720dcd; application/frontend/Python source identical in final combined test/CI source 91d2657a",
+  "main_reproduction_and_original_failed_run_preserved": true,
+  "scope": "Synthetic untrained GPT-2 CPU fixtures with explicit tokenizer template; controlled package/target/readiness/dispatch/graph discovery; actual selected loader/gateway/full worker/CPU forwards. Precancellation only; sequential envelopes.",
+  "excluded_claims": [
+    "production model quality",
+    "GPU",
+    "usage accuracy",
+    "post-start cancellation",
+    "native desktop",
+    "live Pumas discovery",
+    "general architectures/tokenizers/template fallbacks"
+  ],
+  "remaining_review": "Parent owns independent/external final-head review; separately owned native desktop gate remains unqualified. Hosted CI for updated head pending."
+}

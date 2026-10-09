@@ -2,7 +2,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use node_engine::ExecutorExtensions;
-use pantograph_runtime_host_contracts::{ReservationLifecyclePort, RuntimeHostExecutionPort};
+use pantograph_runtime_host_contracts::{
+    ReservationLifecyclePort, RuntimeHostBatchExecutionPort, RuntimeHostExecutionPort,
+};
 use pantograph_runtime_registry::SharedRuntimeRegistry;
 use pantograph_workflow_service::workflow::{
     WorkflowRuntimeDispatchCandidateProvider, WorkflowRuntimeDispatchSourceRefresher,
@@ -25,6 +27,7 @@ use crate::runtime_dispatch_source_snapshot::{
 use crate::runtime_host_execution_port::EmbeddedRuntimeHostExecutionPort;
 use crate::runtime_host_load_target::RuntimeHostPumasLoadTargetResolver;
 use crate::runtime_host_media_artifact_sink::WorkflowServiceRuntimeHostMediaArtifactSink;
+use crate::runtime_host_observation::ObservedRuntimeHostExecutionPort;
 use crate::runtime_host_package_facts::RuntimeHostPumasPackageFactsResolver;
 use crate::workflow_scheduler_diagnostics::EmbeddedWorkflowSchedulerDiagnosticsProvider;
 use crate::SharedExtensions;
@@ -33,6 +36,21 @@ use crate::{
     EmbeddedDependencyReadinessSnapshotProducer, EmbeddedDependencyReadinessSnapshotProducerConfig,
     EmbeddedDependencyReadinessSnapshotProducerHandle, EmbeddedRuntimeError, SharedWorkflowService,
 };
+
+fn observe_runtime_host_port(
+    port: Arc<dyn RuntimeHostExecutionPort>,
+    service: &WorkflowService,
+) -> Arc<dyn RuntimeHostExecutionPort> {
+    match service.runtime_host_observation_recorder() {
+        Some(recorder) => Arc::new(ObservedRuntimeHostExecutionPort::new(port, recorder)),
+        None => {
+            log::warn!(
+                "runtime-host observations unavailable: workflow service has no diagnostics ledger"
+            );
+            port
+        }
+    }
+}
 
 /// Builds embedded-runtime workflow services before sharing them across hosts.
 ///
@@ -140,6 +158,22 @@ pub enum EmbeddedHostedStartupPumasSelectorSource {
     SetupPath(Option<PathBuf>),
 }
 
+/// Owned inputs for hosted startup composition, without changing startup defaults.
+///
+/// Rust callers construct these named fields and pass the config to
+/// `EmbeddedHostedStartupCompositionInput::new`.
+pub struct EmbeddedHostedStartupConfig<C> {
+    pub runtime_registry: SharedRuntimeRegistry,
+    pub runtime_registry_controller: Arc<C>,
+    pub gateway: Arc<inference::InferenceGateway>,
+    pub pumas_selector_source: Option<EmbeddedHostedStartupPumasSelectorSource>,
+    pub project_root: PathBuf,
+    pub kv_cache_dir: PathBuf,
+    pub dependency_readiness_runtime_handle: tokio::runtime::Handle,
+    pub max_loaded_sessions: Option<usize>,
+    pub max_dispatch_source_snapshot_age_ms: u64,
+}
+
 pub struct EmbeddedHostedStartupCompositionInput<C> {
     workflow_service: WorkflowService,
     max_loaded_sessions: Option<usize>,
@@ -156,17 +190,18 @@ pub struct EmbeddedHostedStartupCompositionInput<C> {
 
 impl<C> EmbeddedHostedStartupCompositionInput<C> {
     #[must_use]
-    pub fn new(
-        runtime_registry: SharedRuntimeRegistry,
-        runtime_registry_controller: Arc<C>,
-        gateway: Arc<inference::InferenceGateway>,
-        pumas_selector_source: Option<EmbeddedHostedStartupPumasSelectorSource>,
-        project_root: PathBuf,
-        kv_cache_dir: PathBuf,
-        dependency_readiness_runtime_handle: tokio::runtime::Handle,
-        max_loaded_sessions: Option<usize>,
-        max_dispatch_source_snapshot_age_ms: u64,
-    ) -> Self {
+    pub fn new(config: EmbeddedHostedStartupConfig<C>) -> Self {
+        let EmbeddedHostedStartupConfig {
+            runtime_registry,
+            runtime_registry_controller,
+            gateway,
+            pumas_selector_source,
+            project_root,
+            kv_cache_dir,
+            dependency_readiness_runtime_handle,
+            max_loaded_sessions,
+            max_dispatch_source_snapshot_age_ms,
+        } = config;
         Self {
             workflow_service: WorkflowService::new(),
             max_loaded_sessions,
@@ -211,6 +246,7 @@ pub(crate) struct EmbeddedWorkflowServiceDispatchDependencies {
     runtime_dispatch_candidate_provider: Arc<dyn WorkflowRuntimeDispatchCandidateProvider>,
     runtime_dispatch_source_refresher: Arc<dyn WorkflowRuntimeDispatchSourceRefresher>,
     runtime_host_execution_port: Arc<dyn RuntimeHostExecutionPort>,
+    runtime_host_batch_execution_port: Option<Arc<dyn RuntimeHostBatchExecutionPort>>,
     reservation_lifecycle_port: Arc<dyn ReservationLifecyclePort>,
 }
 
@@ -226,6 +262,7 @@ impl EmbeddedWorkflowServiceDispatchDependencies {
             runtime_dispatch_candidate_provider,
             runtime_dispatch_source_refresher,
             runtime_host_execution_port,
+            runtime_host_batch_execution_port: None,
             reservation_lifecycle_port,
         }
     }
@@ -260,7 +297,20 @@ impl EmbeddedWorkflowServiceDispatchDependencies {
     }
 
     #[must_use]
+    fn with_runtime_host_batch_execution_port(
+        mut self,
+        port: Arc<dyn RuntimeHostBatchExecutionPort>,
+    ) -> Self {
+        self.runtime_host_batch_execution_port = Some(port);
+        self
+    }
+
+    #[must_use]
     fn configure_workflow_service(self, service: WorkflowService) -> WorkflowService {
+        let service = match self.runtime_host_batch_execution_port {
+            Some(port) => service.with_runtime_host_batch_execution_port(port),
+            None => service,
+        };
         service
             .with_runtime_dispatch_source_refresher(self.runtime_dispatch_source_refresher)
             .with_runtime_dispatch_candidate_provider(self.runtime_dispatch_candidate_provider)
@@ -313,39 +363,59 @@ impl EmbeddedWorkflowServiceComposition {
     where
         C: HostRuntimeRegistryController + Send + Sync + 'static,
     {
-        let pumas_api = match input.pumas_selector_access.as_ref() {
-            PumasSelectorAccess::Owner(api) => api.clone(),
-            PumasSelectorAccess::LocalClient(_) | PumasSelectorAccess::ReadOnly(_) => {
+        let pumas_access = match input.pumas_selector_access.as_ref() {
+            PumasSelectorAccess::Owner(_) | PumasSelectorAccess::LocalClient(_) => {
+                input.pumas_selector_access.clone()
+            }
+            PumasSelectorAccess::ReadOnly(_) => {
                 return Err(WorkflowServiceError::InvalidRequest(format!(
-                    "hosted resource-backed workflow-service construction requires Pumas owner selector access, got {} access",
+                    "hosted resource-backed workflow-service construction requires Pumas owner or authenticated local-client selector access, got {} access",
                     input.pumas_selector_access.role_name()
                 )));
             }
         };
+        input
+            .runtime_registry
+            .bind_host_ram_capacity_source(Arc::new(
+                inference::resource_monitor::host_ram::NativeHostRamCapacitySource,
+            ));
+        crate::runtime_registry::register_scheduler_loadable_candle(
+            &input.runtime_registry,
+            &input.gateway,
+        );
         let artifact_writer = input.workflow_service.artifact_writer()?;
-        let runtime_host_execution_port =
-            Arc::new(EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
-                Arc::new(RuntimeHostPumasLoadTargetResolver::new(pumas_api.clone())),
-                Arc::new(RuntimeHostPumasPackageFactsResolver::new(pumas_api)),
+        let runtime_host_execution_port = Arc::new(
+            EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
+                Arc::new(RuntimeHostPumasLoadTargetResolver::new(
+                    pumas_access.clone(),
+                )),
+                Arc::new(RuntimeHostPumasPackageFactsResolver::new(pumas_access)),
                 Arc::new(WorkflowServiceRuntimeHostMediaArtifactSink::new(
-                    artifact_writer,
+                    artifact_writer.clone(),
                 )),
                 input.gateway.clone(),
-            ));
+            )
+            .with_owned_audio_store(crate::OwnedAudioInputStore::new(artifact_writer)),
+        );
         let reservation_lifecycle_port = Arc::new(EmbeddedReservationLifecyclePort::new(
             input.runtime_registry.clone(),
             input.runtime_registry_controller,
         ));
+        let runtime_host_batch_execution_port = runtime_host_execution_port.clone();
+        let runtime_host_execution_port =
+            observe_runtime_host_port(runtime_host_execution_port, &input.workflow_service);
         let pumas_selector_access = input.pumas_selector_access;
         let dispatch_dependencies = EmbeddedWorkflowServiceDispatchDependencies::resource_backed(
             PumasDispatchPackageFactsSource::new(Some(pumas_selector_access.clone())),
-            RuntimeDispatchCapabilityFactsSource::new(input.runtime_registry.clone()),
+            RuntimeDispatchCapabilityFactsSource::new(input.runtime_registry.clone())
+                .with_gateway(input.gateway.clone()),
             RuntimeDispatchLoadTargetFactsSource::new(Some(pumas_selector_access.clone())),
             RuntimeDispatchResourceFactsSource::new(input.runtime_registry.clone()),
             input.max_dispatch_source_snapshot_age_ms,
             runtime_host_execution_port,
             reservation_lifecycle_port,
-        );
+        )
+        .with_runtime_host_batch_execution_port(runtime_host_batch_execution_port);
         let scheduler_diagnostics_provider =
             Arc::new(EmbeddedWorkflowSchedulerDiagnosticsProvider::new(
                 input.gateway.clone(),
@@ -354,7 +424,8 @@ impl EmbeddedWorkflowServiceComposition {
         let inference_interface_facts_provider =
             Arc::new(EmbeddedInferenceInterfaceFactsProvider::new(
                 PumasDispatchPackageFactsSource::new(Some(pumas_selector_access)),
-                RuntimeDispatchCapabilityFactsSource::new(input.runtime_registry),
+                RuntimeDispatchCapabilityFactsSource::new(input.runtime_registry)
+                    .with_gateway(input.gateway.clone()),
             ));
         Self::new()
             .with_runtime_dispatch_dependencies(dispatch_dependencies)
@@ -372,12 +443,14 @@ impl EmbeddedWorkflowServiceComposition {
     where
         C: HostRuntimeRegistryController + Send + Sync + 'static,
     {
-        let pumas_api = match input.factory_input.pumas_selector_access.as_ref() {
-            PumasSelectorAccess::Owner(api) => api.clone(),
-            PumasSelectorAccess::LocalClient(_) | PumasSelectorAccess::ReadOnly(_) => {
+        let pumas_access = match input.factory_input.pumas_selector_access.as_ref() {
+            PumasSelectorAccess::Owner(_) | PumasSelectorAccess::LocalClient(_) => {
+                input.factory_input.pumas_selector_access.clone()
+            }
+            PumasSelectorAccess::ReadOnly(_) => {
                 return Err(EmbeddedRuntimeError::Initialization {
                     message: format!(
-                        "hosted resource-backed workflow-service composition requires Pumas owner selector access, got {} access",
+                        "hosted resource-backed workflow-service composition requires Pumas owner or authenticated local-client selector access, got {} access",
                         input.factory_input.pumas_selector_access.role_name()
                     ),
                 });
@@ -386,6 +459,15 @@ impl EmbeddedWorkflowServiceComposition {
         let dependency_readiness_runtime_handle = input.dependency_readiness_runtime_handle;
         let dependency_readiness_producer_config = input.dependency_readiness_producer_config;
         let factory_input = input.factory_input;
+        crate::runtime_registry::register_scheduler_loadable_candle(
+            &factory_input.runtime_registry,
+            &factory_input.gateway,
+        );
+        factory_input
+            .runtime_registry
+            .bind_host_ram_capacity_source(Arc::new(
+                inference::resource_monitor::host_ram::NativeHostRamCapacitySource,
+            ));
         let artifact_writer =
             factory_input
                 .workflow_service
@@ -393,38 +475,48 @@ impl EmbeddedWorkflowServiceComposition {
                 .map_err(|error| EmbeddedRuntimeError::Initialization {
                     message: error.to_string(),
                 })?;
-        let runtime_host_execution_port =
-            Arc::new(EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
-                Arc::new(RuntimeHostPumasLoadTargetResolver::new(pumas_api.clone())),
-                Arc::new(RuntimeHostPumasPackageFactsResolver::new(pumas_api)),
+        let runtime_host_execution_port = Arc::new(
+            EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
+                Arc::new(RuntimeHostPumasLoadTargetResolver::new(
+                    pumas_access.clone(),
+                )),
+                Arc::new(RuntimeHostPumasPackageFactsResolver::new(pumas_access)),
                 Arc::new(WorkflowServiceRuntimeHostMediaArtifactSink::new(
-                    artifact_writer,
+                    artifact_writer.clone(),
                 )),
                 factory_input.gateway.clone(),
-            ));
+            )
+            .with_owned_audio_store(crate::OwnedAudioInputStore::new(artifact_writer)),
+        );
         let reservation_lifecycle_port = Arc::new(EmbeddedReservationLifecyclePort::new(
             factory_input.runtime_registry.clone(),
             factory_input.runtime_registry_controller,
         ));
+        let runtime_host_batch_execution_port = runtime_host_execution_port.clone();
+        let runtime_host_execution_port =
+            observe_runtime_host_port(runtime_host_execution_port, &factory_input.workflow_service);
         let pumas_selector_access = factory_input.pumas_selector_access;
         let dispatch_dependencies = EmbeddedWorkflowServiceDispatchDependencies::resource_backed(
             PumasDispatchPackageFactsSource::new(Some(pumas_selector_access.clone())),
-            RuntimeDispatchCapabilityFactsSource::new(factory_input.runtime_registry.clone()),
+            RuntimeDispatchCapabilityFactsSource::new(factory_input.runtime_registry.clone())
+                .with_gateway(factory_input.gateway.clone()),
             RuntimeDispatchLoadTargetFactsSource::new(Some(pumas_selector_access.clone())),
             RuntimeDispatchResourceFactsSource::new(factory_input.runtime_registry.clone()),
             factory_input.max_dispatch_source_snapshot_age_ms,
             runtime_host_execution_port,
             reservation_lifecycle_port,
-        );
+        )
+        .with_runtime_host_batch_execution_port(runtime_host_batch_execution_port);
         let scheduler_diagnostics_provider =
             Arc::new(EmbeddedWorkflowSchedulerDiagnosticsProvider::new(
-                factory_input.gateway,
+                factory_input.gateway.clone(),
                 factory_input.runtime_registry.clone(),
             ));
         let inference_interface_facts_provider =
             Arc::new(EmbeddedInferenceInterfaceFactsProvider::new(
                 PumasDispatchPackageFactsSource::new(Some(pumas_selector_access)),
-                RuntimeDispatchCapabilityFactsSource::new(factory_input.runtime_registry),
+                RuntimeDispatchCapabilityFactsSource::new(factory_input.runtime_registry)
+                    .with_gateway(factory_input.gateway),
             ));
         let composition = Self::new()
             .with_runtime_dispatch_dependencies(dispatch_dependencies)
@@ -544,11 +636,11 @@ impl EmbeddedWorkflowServiceComposition {
         selector_access: &PumasSelectorAccess,
     ) -> Result<(), EmbeddedRuntimeError> {
         match selector_access {
-            PumasSelectorAccess::Owner(_) => Ok(()),
-            PumasSelectorAccess::LocalClient(_) | PumasSelectorAccess::ReadOnly(_) => {
+            PumasSelectorAccess::Owner(_) | PumasSelectorAccess::LocalClient(_) => Ok(()),
+            PumasSelectorAccess::ReadOnly(_) => {
                 Err(EmbeddedRuntimeError::Initialization {
                     message: format!(
-                        "hosted startup composition requires Pumas owner selector access, got {} access",
+                        "hosted startup composition requires Pumas owner or authenticated local-client selector access, got {} access",
                         selector_access.role_name()
                     ),
                 })
@@ -755,7 +847,7 @@ mod tests {
     async fn builds_resource_backed_hosted_workflow_service_before_sharing() {
         let temp_dir = tempfile::tempdir().expect("tempdir");
         let pumas_api = Arc::new(
-            pumas_library::PumasApi::builder(temp_dir.path())
+            crate::pumas_test_support::builder(temp_dir.path())
                 .with_hf_client(false)
                 .with_process_manager(false)
                 .build()
@@ -765,7 +857,7 @@ mod tests {
         let registry: SharedRuntimeRegistry = Arc::new(RuntimeRegistry::new());
         let gateway = Arc::new(inference::InferenceGateway::new());
         let input = EmbeddedHostedWorkflowServiceFactoryInput::new(
-            registry,
+            registry.clone(),
             gateway.clone(),
             gateway,
             Arc::new(PumasSelectorAccess::Owner(pumas_api)),
@@ -777,7 +869,133 @@ mod tests {
         let shared = EmbeddedWorkflowServiceComposition::resource_backed_hosted(input)
             .expect("hosted resource-backed workflow service should build");
 
+        #[cfg(feature = "backend-candle")]
+        {
+            let snapshot = registry.snapshot();
+            let candle = snapshot
+                .runtimes
+                .iter()
+                .find(|runtime| runtime.runtime_id == "candle")
+                .expect("hosted composition enrolls the available compiled owner");
+            assert_eq!(
+                candle.status,
+                pantograph_runtime_registry::RuntimeRegistryStatus::Stopped
+            );
+            assert!(candle.runtime_instance_id.is_none());
+            assert!(candle.models.is_empty());
+        }
         drop(shared);
+    }
+
+    #[cfg(feature = "backend-candle")]
+    #[tokio::test]
+    async fn cold_candle_descriptor_uses_real_pumas_and_compiled_owner_without_loading() {
+        let temp_dir = create_test_env();
+        let model_id = "embedding/qualification/synthetic-bert-8";
+        let model_dir = temp_dir
+            .path()
+            .join("shared-resources/models")
+            .join(model_id);
+        std::fs::create_dir_all(&model_dir).unwrap();
+        let source = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../inference/tests/fixtures/candle_bert/bert-8");
+        fn copy_fixture(source: &std::path::Path, destination: &std::path::Path) {
+            std::fs::create_dir_all(destination).unwrap();
+            for entry in std::fs::read_dir(source).unwrap() {
+                let entry = entry.unwrap();
+                let target = destination.join(entry.file_name());
+                if entry.file_type().unwrap().is_dir() {
+                    copy_fixture(&entry.path(), &target);
+                } else {
+                    std::fs::copy(entry.path(), target).unwrap();
+                }
+            }
+        }
+        copy_fixture(&source, &model_dir);
+        std::fs::write(
+            model_dir.join("metadata.json"),
+            serde_json::to_vec(&serde_json::json!({
+                "schema_version":2, "model_id":model_id, "family":"qualification",
+                "model_type":"embedding", "official_name":"Synthetic-BERT-8",
+                "cleaned_name":"synthetic-bert-8", "source_path":model_dir,
+                "entry_path":model_dir, "storage_kind":"library_owned",
+                "selected_artifact_id":"main", "selected_artifact_files":["model.safetensors"],
+                "import_state":"ready", "validation_state":"valid",
+                "pipeline_tag":"feature-extraction", "task_type_primary":"embedding",
+                "input_modalities":["text"], "output_modalities":["embedding"],
+                "recommended_backend":"candle", "runtime_engine_hints":["candle"]
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        let api = Arc::new(
+            crate::pumas_test_support::builder(temp_dir.path())
+                .with_hf_client(false)
+                .with_process_manager(false)
+                .build()
+                .await
+                .unwrap(),
+        );
+        api.rebuild_model_index().await.unwrap();
+        let registry = Arc::new(RuntimeRegistry::new());
+        let gateway = Arc::new(inference::InferenceGateway::new());
+        let input = EmbeddedHostedWorkflowServiceFactoryInput::new(
+            registry.clone(),
+            gateway.clone(),
+            gateway,
+            Arc::new(PumasSelectorAccess::Owner(api)),
+            Some(1),
+            1_000,
+        )
+        .with_workflow_service(workflow_service_with_artifact_store(&temp_dir));
+        let service = EmbeddedWorkflowServiceComposition::resource_backed_hosted(input).unwrap();
+        let graph: WorkflowGraph = serde_json::from_value(serde_json::json!({
+            "nodes":[{"id":"infer", "node_type":"llm-inference",
+                "position":{"x":0,"y":0}, "data":{
+                    "task_kind":"embedding", "runtime":"candle", "device":"cpu",
+                    "pumas_model_ref":{"model_id":model_id,"selected_artifact_id":"main"},
+                    "runtime_source_context":{"operation_type":"embedding.text",
+                        "context_shape_key":"embedding.one-text", "cancellation_mode":"run_scoped"}
+                }}], "edges":[]
+        }))
+        .unwrap();
+        let session = service
+            .workflow_graph_create_edit_session(WorkflowGraphEditSessionCreateRequest {
+                graph,
+                workflow_id: None,
+            })
+            .await
+            .unwrap();
+        let validation = service
+            .workflow_graph_refresh_current_validation_summary(
+                WorkflowGraphCurrentValidationRefreshRequest {
+                    graph_session_id: session.session_id,
+                    graph_revision: session.graph_revision.parse().unwrap(),
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(validation.node_projections.len(), 1);
+        let descriptor = &validation.node_projections[0].descriptor;
+        assert_eq!(
+            descriptor.availability.status,
+            pantograph_inference_interface_contracts::InferenceAvailabilityStatus::Available
+        );
+        assert_eq!(descriptor.task_kind.as_str(), "embedding");
+        assert!(descriptor.diagnostics.is_empty());
+        let snapshot = registry.snapshot();
+        let candle = snapshot
+            .runtimes
+            .iter()
+            .find(|runtime| runtime.runtime_id == "candle")
+            .unwrap();
+        assert_eq!(
+            candle.status,
+            pantograph_runtime_registry::RuntimeRegistryStatus::Stopped
+        );
+        assert!(candle.runtime_instance_id.is_none());
+        assert!(candle.models.is_empty());
+        assert!(snapshot.reservations.is_empty());
     }
 
     #[tokio::test]
@@ -791,7 +1009,7 @@ mod tests {
         write_test_diffusers_bundle(&model_dir);
         write_imported_diffusion_metadata(&model_dir, model_id, &model_dir);
         let pumas_api = Arc::new(
-            pumas_library::PumasApi::builder(temp_dir.path())
+            crate::pumas_test_support::builder(temp_dir.path())
                 .with_hf_client(false)
                 .with_process_manager(false)
                 .build()
@@ -850,6 +1068,12 @@ mod tests {
             .await
             .expect("refresh validation summary");
 
+        assert!(
+            validation.summary.diagnostics.is_empty(),
+            "validation diagnostics: {:?}",
+            validation.summary.diagnostics
+        );
+        assert_eq!(validation.node_projections.len(), 1);
         let summary = validation
             .summary
             .summary
@@ -886,7 +1110,7 @@ mod tests {
         write_test_diffusers_bundle(&model_dir);
         write_imported_diffusion_metadata(&model_dir, model_id, &model_dir);
         let pumas_api = Arc::new(
-            pumas_library::PumasApi::builder(temp_dir.path())
+            crate::pumas_test_support::builder(temp_dir.path())
                 .with_hf_client(false)
                 .with_process_manager(false)
                 .build()
@@ -946,6 +1170,21 @@ mod tests {
             )
             .await
             .expect("refresh validation summary");
+        assert!(
+            validation.summary.diagnostics.is_empty(),
+            "validation diagnostics: {:?}",
+            validation.summary.diagnostics
+        );
+        assert_eq!(validation.node_projections.len(), 1);
+        assert_eq!(
+            validation
+                .summary
+                .summary
+                .as_ref()
+                .expect("current validation summary")
+                .status,
+            DraftGraphValidationStatus::Executable
+        );
         let validation_session_id = validation
             .summary
             .validation_session_id
@@ -1012,7 +1251,7 @@ mod tests {
         }));
 
         let projections = snapshot
-            .scheduler_inference_task_projections()
+            .scheduler_inference_task_projections(&connected_dependency_inference_graph(model_id))
             .expect("scheduler projections");
         let scheduler_node_id = "infer".parse().expect("scheduler node id");
         let projection = projections
@@ -1046,7 +1285,7 @@ mod tests {
     async fn hosted_resource_backed_factory_requires_artifact_writer_before_sharing() {
         let temp_dir = tempfile::tempdir().expect("tempdir");
         let pumas_api = Arc::new(
-            pumas_library::PumasApi::builder(temp_dir.path())
+            crate::pumas_test_support::builder(temp_dir.path())
                 .with_hf_client(false)
                 .with_process_manager(false)
                 .build()
@@ -1079,7 +1318,7 @@ mod tests {
     #[tokio::test]
     async fn hosted_resource_backed_factory_rejects_non_owner_pumas_access() {
         let temp_dir = tempfile::tempdir().expect("tempdir");
-        let pumas_api = pumas_library::PumasApi::builder(temp_dir.path())
+        let pumas_api = crate::pumas_test_support::builder(temp_dir.path())
             .with_hf_client(false)
             .with_process_manager(false)
             .build()
@@ -1112,14 +1351,14 @@ mod tests {
         assert!(matches!(error, WorkflowServiceError::InvalidRequest(_)));
         assert!(error
             .to_string()
-            .contains("requires Pumas owner selector access"));
+            .contains("requires Pumas owner or authenticated local-client selector access"));
     }
 
     #[tokio::test]
     async fn resource_backed_hosted_bundle_returns_service_and_lifecycle_handle() {
         let temp_dir = tempfile::tempdir().expect("tempdir");
         let pumas_api = Arc::new(
-            pumas_library::PumasApi::builder(temp_dir.path())
+            crate::pumas_test_support::builder(temp_dir.path())
                 .with_hf_client(false)
                 .with_process_manager(false)
                 .build()
@@ -1129,7 +1368,7 @@ mod tests {
         let registry: SharedRuntimeRegistry = Arc::new(RuntimeRegistry::new());
         let gateway = Arc::new(inference::InferenceGateway::new());
         let factory_input = EmbeddedHostedWorkflowServiceFactoryInput::new(
-            registry,
+            registry.clone(),
             gateway.clone(),
             gateway,
             Arc::new(PumasSelectorAccess::Owner(pumas_api)),
@@ -1145,6 +1384,26 @@ mod tests {
         let output = EmbeddedWorkflowServiceComposition::resource_backed_hosted_bundle(input)
             .expect("hosted resource-backed bundle should build");
 
+        #[cfg(feature = "backend-candle")]
+        {
+            let snapshot = registry.snapshot();
+            let candle = snapshot
+                .runtimes
+                .iter()
+                .find(|runtime| runtime.runtime_id == "candle")
+                .expect("hosted bundle enrolls the available compiled owner");
+            assert_eq!(
+                candle.status,
+                pantograph_runtime_registry::RuntimeRegistryStatus::Stopped
+            );
+            assert_eq!(candle.runtime_family.as_deref(), Some("candle"));
+            assert_eq!(candle.runtime_residency_key.as_deref(), Some("candle.cpu"));
+            assert!(candle.runtime_instance_id.is_none());
+            assert!(candle.models.is_empty());
+            assert!(candle.active_reservation_ids.is_empty());
+            assert!(snapshot.reservations.is_empty());
+        }
+
         assert!(Arc::strong_count(output.workflow_service()) >= 1);
         output
             .dependency_readiness_snapshot_producer
@@ -1156,7 +1415,7 @@ mod tests {
     async fn resource_backed_hosted_bundle_rejects_invalid_producer_config_before_sharing() {
         let temp_dir = tempfile::tempdir().expect("tempdir");
         let pumas_api = Arc::new(
-            pumas_library::PumasApi::builder(temp_dir.path())
+            crate::pumas_test_support::builder(temp_dir.path())
                 .with_hf_client(false)
                 .with_process_manager(false)
                 .build()
@@ -1196,10 +1455,56 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn hosted_startup_named_config_preserves_owned_values_and_defaults() {
+        let registry: SharedRuntimeRegistry = Arc::new(RuntimeRegistry::new());
+        let gateway = Arc::new(inference::InferenceGateway::new());
+        let input = EmbeddedHostedStartupCompositionInput::new(EmbeddedHostedStartupConfig {
+            runtime_registry: registry.clone(),
+            runtime_registry_controller: gateway.clone(),
+            gateway: gateway.clone(),
+            pumas_selector_source: Some(EmbeddedHostedStartupPumasSelectorSource::SetupPath(Some(
+                PathBuf::from("pumas-root"),
+            ))),
+            project_root: PathBuf::from("project-root"),
+            kv_cache_dir: PathBuf::from("kv-root"),
+            dependency_readiness_runtime_handle: tokio::runtime::Handle::current(),
+            max_loaded_sessions: Some(7),
+            max_dispatch_source_snapshot_age_ms: 2_345,
+        });
+        assert!(Arc::ptr_eq(&input.runtime_registry, &registry));
+        assert!(Arc::ptr_eq(&input.runtime_registry_controller, &gateway));
+        assert!(Arc::ptr_eq(&input.gateway, &gateway));
+        assert!(
+            matches!(&input.pumas_selector_source, Some(EmbeddedHostedStartupPumasSelectorSource::SetupPath(Some(path))) if path == std::path::Path::new("pumas-root"))
+        );
+        assert_eq!(input.project_root, PathBuf::from("project-root"));
+        assert_eq!(input.kv_cache_dir, PathBuf::from("kv-root"));
+        assert_eq!(input.max_loaded_sessions, Some(7));
+        assert_eq!(input.max_dispatch_source_snapshot_age_ms, 2_345);
+        assert_eq!(
+            input.dependency_readiness_producer_config,
+            EmbeddedDependencyReadinessSnapshotProducerConfig::default()
+        );
+        assert_eq!(
+            input
+                .dependency_readiness_runtime_handle
+                .spawn(async { 42 })
+                .await
+                .expect("original runtime handle"),
+            42
+        );
+        let config = EmbeddedDependencyReadinessSnapshotProducerConfig {
+            poll_interval: std::time::Duration::from_secs(17),
+        };
+        let input = input.with_dependency_readiness_producer_config(config.clone());
+        assert_eq!(input.dependency_readiness_producer_config, config);
+    }
+
+    #[tokio::test]
     async fn hosted_startup_composition_returns_service_extensions_and_lifecycle_handle() {
         let temp_dir = tempfile::tempdir().expect("tempdir");
         let pumas_api = Arc::new(
-            pumas_library::PumasApi::builder(temp_dir.path())
+            crate::pumas_test_support::builder(temp_dir.path())
                 .with_hf_client(false)
                 .with_process_manager(false)
                 .build()
@@ -1208,19 +1513,19 @@ mod tests {
         );
         let registry: SharedRuntimeRegistry = Arc::new(RuntimeRegistry::new());
         let gateway = Arc::new(inference::InferenceGateway::new());
-        let input = EmbeddedHostedStartupCompositionInput::new(
-            registry,
-            gateway.clone(),
+        let input = EmbeddedHostedStartupCompositionInput::new(EmbeddedHostedStartupConfig {
+            runtime_registry: registry,
+            runtime_registry_controller: gateway.clone(),
             gateway,
-            Some(EmbeddedHostedStartupPumasSelectorSource::Provided(
+            pumas_selector_source: Some(EmbeddedHostedStartupPumasSelectorSource::Provided(
                 Arc::new(PumasSelectorAccess::Owner(pumas_api.clone())),
             )),
-            temp_dir.path().to_path_buf(),
-            temp_dir.path().join("kv-cache"),
-            tokio::runtime::Handle::current(),
-            Some(1),
-            1_000,
-        )
+            project_root: temp_dir.path().to_path_buf(),
+            kv_cache_dir: temp_dir.path().join("kv-cache"),
+            dependency_readiness_runtime_handle: tokio::runtime::Handle::current(),
+            max_loaded_sessions: Some(1),
+            max_dispatch_source_snapshot_age_ms: 1_000,
+        })
         .with_workflow_service(workflow_service_with_artifact_store(&temp_dir));
 
         let output = EmbeddedWorkflowServiceComposition::resource_backed_hosted_startup(input)
@@ -1283,17 +1588,17 @@ mod tests {
         let temp_dir = tempfile::tempdir().expect("tempdir");
         let registry: SharedRuntimeRegistry = Arc::new(RuntimeRegistry::new());
         let gateway = Arc::new(inference::InferenceGateway::new());
-        let input = EmbeddedHostedStartupCompositionInput::new(
-            registry,
-            gateway.clone(),
+        let input = EmbeddedHostedStartupCompositionInput::new(EmbeddedHostedStartupConfig {
+            runtime_registry: registry,
+            runtime_registry_controller: gateway.clone(),
             gateway,
-            None,
-            temp_dir.path().to_path_buf(),
-            temp_dir.path().join("kv-cache"),
-            tokio::runtime::Handle::current(),
-            Some(1),
-            1_000,
-        );
+            pumas_selector_source: None,
+            project_root: temp_dir.path().to_path_buf(),
+            kv_cache_dir: temp_dir.path().join("kv-cache"),
+            dependency_readiness_runtime_handle: tokio::runtime::Handle::current(),
+            max_loaded_sessions: Some(1),
+            max_dispatch_source_snapshot_age_ms: 1_000,
+        });
 
         let error =
             match EmbeddedWorkflowServiceComposition::resource_backed_hosted_startup(input).await {
@@ -1310,7 +1615,7 @@ mod tests {
     #[tokio::test]
     async fn hosted_startup_composition_rejects_non_owner_pumas_selector_access() {
         let temp_dir = tempfile::tempdir().expect("tempdir");
-        let pumas_api = pumas_library::PumasApi::builder(temp_dir.path())
+        let pumas_api = crate::pumas_test_support::builder(temp_dir.path())
             .with_hf_client(false)
             .with_process_manager(false)
             .build()
@@ -1326,19 +1631,19 @@ mod tests {
         .expect("read-only pumas");
         let registry: SharedRuntimeRegistry = Arc::new(RuntimeRegistry::new());
         let gateway = Arc::new(inference::InferenceGateway::new());
-        let input = EmbeddedHostedStartupCompositionInput::new(
-            registry,
-            gateway.clone(),
+        let input = EmbeddedHostedStartupCompositionInput::new(EmbeddedHostedStartupConfig {
+            runtime_registry: registry,
+            runtime_registry_controller: gateway.clone(),
             gateway,
-            Some(EmbeddedHostedStartupPumasSelectorSource::Provided(
+            pumas_selector_source: Some(EmbeddedHostedStartupPumasSelectorSource::Provided(
                 Arc::new(PumasSelectorAccess::ReadOnly(Arc::new(read_only))),
             )),
-            temp_dir.path().to_path_buf(),
-            temp_dir.path().join("kv-cache"),
-            tokio::runtime::Handle::current(),
-            Some(1),
-            1_000,
-        );
+            project_root: temp_dir.path().to_path_buf(),
+            kv_cache_dir: temp_dir.path().join("kv-cache"),
+            dependency_readiness_runtime_handle: tokio::runtime::Handle::current(),
+            max_loaded_sessions: Some(1),
+            max_dispatch_source_snapshot_age_ms: 1_000,
+        });
 
         let error =
             match EmbeddedWorkflowServiceComposition::resource_backed_hosted_startup(input).await {
@@ -1349,14 +1654,14 @@ mod tests {
         assert!(matches!(error, EmbeddedRuntimeError::Initialization { .. }));
         assert!(error
             .to_string()
-            .contains("requires Pumas owner selector access"));
+            .contains("requires Pumas owner or authenticated local-client selector access"));
     }
 
     #[tokio::test]
     async fn hosted_startup_composition_rejects_service_error_before_starting_sidecar() {
         let temp_dir = tempfile::tempdir().expect("tempdir");
         let pumas_api = Arc::new(
-            pumas_library::PumasApi::builder(temp_dir.path())
+            crate::pumas_test_support::builder(temp_dir.path())
                 .with_hf_client(false)
                 .with_process_manager(false)
                 .build()
@@ -1365,19 +1670,19 @@ mod tests {
         );
         let registry: SharedRuntimeRegistry = Arc::new(RuntimeRegistry::new());
         let gateway = Arc::new(inference::InferenceGateway::new());
-        let input = EmbeddedHostedStartupCompositionInput::new(
-            registry,
-            gateway.clone(),
+        let input = EmbeddedHostedStartupCompositionInput::new(EmbeddedHostedStartupConfig {
+            runtime_registry: registry,
+            runtime_registry_controller: gateway.clone(),
             gateway,
-            Some(EmbeddedHostedStartupPumasSelectorSource::Provided(
+            pumas_selector_source: Some(EmbeddedHostedStartupPumasSelectorSource::Provided(
                 Arc::new(PumasSelectorAccess::Owner(pumas_api)),
             )),
-            temp_dir.path().to_path_buf(),
-            temp_dir.path().join("kv-cache"),
-            tokio::runtime::Handle::current(),
-            Some(0),
-            1_000,
-        )
+            project_root: temp_dir.path().to_path_buf(),
+            kv_cache_dir: temp_dir.path().join("kv-cache"),
+            dependency_readiness_runtime_handle: tokio::runtime::Handle::current(),
+            max_loaded_sessions: Some(0),
+            max_dispatch_source_snapshot_age_ms: 1_000,
+        })
         .with_workflow_service(workflow_service_with_store(
             &temp_dir,
             WorkflowService::with_capacity_limits(2, 2),
@@ -1435,7 +1740,12 @@ mod tests {
                     position: Position { x: 200.0, y: 0.0 },
                     data: serde_json::json!({
                         "task_kind": "image_generation",
-                        "runtime": "pytorch"
+                        "runtime": "pytorch",
+                        "runtime_source_context": {
+                            "operation_type": "image-generation.txt2img",
+                            "context_shape_key": "txt2img.1024x1024.steps30",
+                            "cancellation_mode": "per-run-fanout"
+                        }
                     }),
                 },
             ],

@@ -4,8 +4,8 @@ use crate::records::{RetentionClass, DEFAULT_STANDARD_RETENTION_DAYS};
 use crate::util::now_ms;
 use crate::DiagnosticsLedgerError;
 
-pub(crate) const SCHEMA_VERSION: i64 = 26;
-const SCHEMA_CHECKSUM: &str = "pantograph-diagnostics-ledger-v26";
+pub(crate) const SCHEMA_VERSION: i64 = 27;
+const SCHEMA_CHECKSUM: &str = "pantograph-diagnostics-ledger-v27";
 
 pub(crate) fn apply_schema(tx: &Transaction<'_>) -> Result<(), DiagnosticsLedgerError> {
     tx.execute_batch(
@@ -123,6 +123,7 @@ pub(crate) fn apply_schema(tx: &Transaction<'_>) -> Result<(), DiagnosticsLedger
     apply_timing_schema(tx)?;
     apply_workflow_run_summary_schema(tx)?;
     apply_event_ledger_schema(tx)?;
+    apply_runtime_host_observation_schema(tx)?;
     tx.execute(
         "INSERT INTO ledger_schema_migrations (version, applied_at_ms, checksum)
          VALUES (?1, ?2, ?3)",
@@ -244,6 +245,9 @@ pub(crate) fn migrate_schema(
     if found < 24 {
         apply_run_projection_device_class_migration(&tx)?;
     }
+    if found < 27 {
+        apply_runtime_host_observation_schema(&tx)?;
+    }
     apply_latest_idempotent_schema_repairs(&tx)?;
     if found < SCHEMA_VERSION {
         tx.execute(
@@ -253,6 +257,25 @@ pub(crate) fn migrate_schema(
         )?;
     }
     tx.commit()?;
+    Ok(())
+}
+
+fn apply_runtime_host_observation_schema(
+    tx: &Transaction<'_>,
+) -> Result<(), DiagnosticsLedgerError> {
+    tx.execute_batch(
+        "CREATE TABLE runtime_host_request_observations (
+            observation_id TEXT PRIMARY KEY,
+            host_epoch TEXT NOT NULL,
+            request_fingerprint TEXT NOT NULL,
+            recorded_at_ms INTEGER NOT NULL,
+            payload_json TEXT NOT NULL
+         );
+         CREATE INDEX idx_runtime_host_observation_profile_time
+         ON runtime_host_request_observations(host_epoch, request_fingerprint, recorded_at_ms);
+         CREATE INDEX idx_runtime_host_observation_retention_time
+         ON runtime_host_request_observations(recorded_at_ms DESC, observation_id DESC);",
+    )?;
     Ok(())
 }
 

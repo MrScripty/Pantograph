@@ -68,6 +68,21 @@ pub struct ArtifactWriteRequest {
     pub body: Vec<u8>,
 }
 
+/// Immutable bounded copy verified together with its descriptor under the writer lock.
+#[derive(Clone)]
+pub struct VerifiedArtifactSnapshot {
+    pub descriptor: ArtifactDescriptor,
+    pub body: std::sync::Arc<[u8]>,
+}
+
+impl std::fmt::Debug for VerifiedArtifactSnapshot {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("VerifiedArtifactSnapshot")
+            .field("body_length", &self.body.len())
+            .finish_non_exhaustive()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ArtifactStreamOpenRequest {
     pub artifact_id: Option<String>,
@@ -242,6 +257,81 @@ impl ArtifactStore {
         self.cache_body_if_allowed(&artifact_id, request.body)?;
         self.save()?;
         Ok(descriptor)
+    }
+
+    pub fn verified_snapshot(
+        &self,
+        artifact_id: &str,
+        max_bytes: usize,
+    ) -> Result<VerifiedArtifactSnapshot, ArtifactStoreError> {
+        self.verified_snapshot_observed(artifact_id, max_bytes, |_| {})
+    }
+
+    /// Deterministic test seam inside the real bounded read/hash operation.
+    #[cfg(any(test, feature = "test-support"))]
+    #[doc(hidden)]
+    pub fn verified_snapshot_with_read_barrier(
+        &self,
+        artifact_id: &str,
+        max_bytes: usize,
+        barrier: impl FnOnce(&std::sync::Arc<[u8]>),
+    ) -> Result<VerifiedArtifactSnapshot, ArtifactStoreError> {
+        self.verified_snapshot_observed(artifact_id, max_bytes, barrier)
+    }
+
+    fn verified_snapshot_observed(
+        &self,
+        artifact_id: &str,
+        max_bytes: usize,
+        after_read: impl FnOnce(&std::sync::Arc<[u8]>),
+    ) -> Result<VerifiedArtifactSnapshot, ArtifactStoreError> {
+        use std::io::Read;
+        validate_artifact_id(artifact_id)?;
+        let entry = self.entry(artifact_id)?;
+        let descriptor = entry.descriptor.clone();
+        let unavailable = || ArtifactStoreError::BodyUnavailable {
+            artifact_id: artifact_id.to_owned(),
+        };
+        if let Some(seconds) = self.manifest.policy.ttl_seconds {
+            let ttl = seconds.checked_mul(1000).ok_or(
+                ArtifactStoreError::ArtifactAccountingOverflow {
+                    field: "retention.ttl_ms",
+                },
+            )?;
+            if unix_now_ms().saturating_sub(entry.created_at_ms) >= ttl {
+                return Err(unavailable());
+            }
+        }
+        if descriptor.lifecycle_state != ArtifactLifecycleState::Retained
+            || descriptor.retention_state != IoArtifactRetentionState::Retained
+            || !descriptor.access_modes.contains(&ArtifactAccessMode::Read)
+            || descriptor.byte_length.is_none_or(|n| n > max_bytes as u64)
+        {
+            return Err(unavailable());
+        }
+        // Read the owned canonical body path, not a manifest-provided arbitrary path.
+        let path = self.body_path(artifact_id)?;
+        if !fs::symlink_metadata(&path)?.file_type().is_file() {
+            return Err(unavailable());
+        }
+        let file = fs::File::open(path)?;
+        if !file.metadata()?.is_file() {
+            return Err(unavailable());
+        }
+        let limit = (max_bytes as u64).checked_add(1).ok_or_else(unavailable)?;
+        let mut body = Vec::new();
+        file.take(limit).read_to_end(&mut body)?;
+        if body.len() > max_bytes || descriptor.byte_length != Some(body.len() as u64) {
+            return Err(unavailable());
+        }
+        let body: std::sync::Arc<[u8]> = body.into();
+        after_read(&body);
+        if descriptor.content_hash.as_deref()
+            != Some(format!("blake3:{}", blake3::hash(&body).to_hex()).as_str())
+        {
+            return Err(unavailable());
+        }
+        Ok(VerifiedArtifactSnapshot { descriptor, body })
     }
 
     pub fn descriptor(&self, artifact_id: &str) -> Result<ArtifactDescriptor, ArtifactStoreError> {
@@ -883,5 +973,76 @@ mod tests {
                         .to_string(),
             }],
         }
+    }
+    #[test]
+    fn verified_snapshot_checks_retention_disk_integrity_and_nonregular_files() {
+        let temp = tempfile::tempdir().unwrap();
+        let mut store = ArtifactStore::open(temp.path(), policy_with_large_cache()).unwrap();
+        let request = ArtifactWriteRequest {
+            artifact_id: Some("owned-snapshot-test".into()),
+            payload_kind: ArtifactPayloadKind::Audio,
+            media_type: "audio/wav".into(),
+            format: None,
+            attribution: ArtifactAttribution {
+                workflow_run_id: "source-run".into(),
+                workflow_id: Some("wf".into()),
+                workflow_version_id: None,
+                node_id: None,
+                port_id: None,
+                model_id: None,
+                runtime_id: None,
+            },
+            artifact_role: Some("owned_audio_input".into()),
+            parent_artifact_id: None,
+            revision_index: None,
+            body: b"immutable snapshot body".to_vec(),
+        };
+        let id = "owned-snapshot-test";
+        store.write_artifact(request.clone()).unwrap();
+        let snapshot = store.verified_snapshot(id, 64).unwrap();
+        assert!(snapshot.body.as_ref() == request.body);
+        assert!(!format!("{snapshot:?}").contains("immutable"));
+        assert!(store.verified_snapshot(id, request.body.len() - 1).is_err());
+        let path = store.body_path(id).unwrap();
+        std::fs::write(&path, b"different bytes").unwrap();
+        assert!(
+            store.verified_snapshot(id, 64).is_err(),
+            "cached originals cannot mask disk replacement"
+        );
+        store.write_artifact(request.clone()).unwrap();
+        store.manifest.policy.ttl_seconds = Some(1);
+        store.entry_mut(id).unwrap().created_at_ms = unix_now_ms().saturating_sub(2000);
+        assert!(store.verified_snapshot(id, 64).is_err());
+        store.manifest.policy.ttl_seconds = None;
+        store.manifest.policy.delete_on_consume = true;
+        store
+            .acknowledge_consume(ArtifactConsumeAcknowledgementRequest {
+                artifact_id: id.into(),
+                consumer_id: "test".into(),
+            })
+            .unwrap();
+        assert!(store.verified_snapshot(id, 64).is_err());
+        store.write_artifact(request.clone()).unwrap();
+        std::fs::remove_file(&path).unwrap();
+        std::fs::create_dir(&path).unwrap();
+        assert!(store.verified_snapshot(id, 64).is_err());
+        std::fs::remove_dir(&path).unwrap();
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(temp.path().join("elsewhere"), &path).unwrap();
+            assert!(store.verified_snapshot(id, 64).is_err());
+            std::fs::remove_file(&path).unwrap();
+            assert!(std::process::Command::new("mkfifo")
+                .arg(&path)
+                .status()
+                .unwrap()
+                .success());
+            assert!(
+                store.verified_snapshot(id, 64).is_err(),
+                "FIFO must be rejected before open"
+            );
+            std::fs::remove_file(&path).unwrap();
+        }
+        assert!(snapshot.body.as_ref() == request.body);
     }
 }

@@ -84,7 +84,7 @@ pub(crate) enum PumasDispatchPackageFactsDiagnosticCode {
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum PumasDispatchPackageFactsBridgeOutcome {
     Projected {
-        facts: PumasDispatchPackageFactsProjection,
+        facts: Box<PumasDispatchPackageFactsProjection>,
         diagnostics: Vec<PumasDispatchPackageFactsDiagnostic>,
     },
     Unavailable {
@@ -119,20 +119,14 @@ pub(crate) async fn resolve_pumas_dispatch_package_facts(
         );
     };
 
-    let api = match selector_access {
-        PumasSelectorAccess::Owner(api) => api,
-        PumasSelectorAccess::LocalClient(_) | PumasSelectorAccess::ReadOnly(_) => {
-            return unavailable(
-                PumasDispatchPackageFactsDiagnosticCode::UnsupportedSelectorAccessRole,
-                format!(
-                    "Pumas {} selector access does not provide full package facts for runtime dispatch",
-                    selector_access.role_name()
-                ),
-            );
-        }
-    };
+    if matches!(selector_access, PumasSelectorAccess::ReadOnly(_)) {
+        return unavailable(
+            PumasDispatchPackageFactsDiagnosticCode::UnsupportedSelectorAccessRole,
+            "read-only Pumas access cannot provide owner-fresh full package facts".into(),
+        );
+    }
 
-    let raw_facts = match api
+    let raw_facts = match selector_access
         .resolve_model_package_facts(model_ref.model_id.as_str())
         .await
     {
@@ -177,6 +171,26 @@ fn validate_and_project_dispatch_package_facts(
         ));
         return PumasDispatchPackageFactsBridgeOutcome::Unavailable { diagnostics };
     }
+    if model_ref
+        .model_id
+        .strip_prefix("pumas://models/")
+        .unwrap_or(&model_ref.model_id)
+        != facts
+            .model_ref
+            .model_id
+            .strip_prefix("pumas://models/")
+            .unwrap_or(&facts.model_ref.model_id)
+        || model_ref
+            .revision
+            .as_ref()
+            .is_some_and(|revision| facts.model_ref.revision.as_ref() != Some(revision))
+    {
+        diagnostics.push(diagnostic(
+            PumasDispatchPackageFactsDiagnosticCode::SelectedArtifactMismatch,
+            "Pumas full package facts do not match selected model/revision".into(),
+        ));
+        return PumasDispatchPackageFactsBridgeOutcome::Unavailable { diagnostics };
+    }
     if model_ref.selected_artifact_id.is_some()
         && facts.model_ref.selected_artifact_id != model_ref.selected_artifact_id
     {
@@ -210,7 +224,7 @@ fn validate_and_project_dispatch_package_facts(
     }
 
     PumasDispatchPackageFactsBridgeOutcome::Projected {
-        facts: project_dispatch_package_facts(facts),
+        facts: Box::new(project_dispatch_package_facts(facts)),
         diagnostics,
     }
 }
@@ -332,7 +346,7 @@ mod tests {
         write_test_diffusers_bundle(&model_dir);
         write_imported_diffusion_metadata(&model_dir, model_id, &model_dir);
         let api = Arc::new(
-            pumas_library::PumasApi::builder(temp_dir.path())
+            crate::pumas_test_support::builder(temp_dir.path())
                 .with_hf_client(false)
                 .with_process_manager(false)
                 .build()
@@ -400,7 +414,7 @@ mod tests {
         write_test_diffusers_bundle(&model_dir);
         write_imported_diffusion_metadata(&model_dir, model_id, &model_dir);
         let api = Arc::new(
-            pumas_library::PumasApi::builder(temp_dir.path())
+            crate::pumas_test_support::builder(temp_dir.path())
                 .with_hf_client(false)
                 .with_process_manager(false)
                 .build()
@@ -490,7 +504,7 @@ mod tests {
     #[tokio::test]
     async fn read_only_selector_access_does_not_promote_summaries() {
         let temp_dir = create_test_env();
-        let api = pumas_library::PumasApi::builder(temp_dir.path())
+        let api = crate::pumas_test_support::builder(temp_dir.path())
             .with_hf_client(false)
             .with_process_manager(false)
             .build()

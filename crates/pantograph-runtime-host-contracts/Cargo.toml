@@ -16,8 +16,8 @@ pantograph-scheduler = { path = "../pantograph-scheduler" }
 
 async-trait.workspace = true
 serde.workspace = true
+serde_json = { workspace = true, features = ["float_roundtrip"] }
 thiserror.workspace = true
 
 [dev-dependencies]
-serde_json.workspace = true
 tokio.workspace = true

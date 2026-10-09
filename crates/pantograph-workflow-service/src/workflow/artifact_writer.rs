@@ -31,6 +31,29 @@ impl WorkflowArtifactWriter {
             .map_err(artifact_store_error)
     }
 
+    pub fn verified_snapshot(
+        &self,
+        artifact_id: &str,
+        max_bytes: usize,
+    ) -> Result<super::VerifiedArtifactSnapshot, WorkflowServiceError> {
+        self.artifact_store_guard()?
+            .verified_snapshot(artifact_id, max_bytes)
+            .map_err(artifact_store_error)
+    }
+
+    #[cfg(any(test, feature = "test-support"))]
+    #[doc(hidden)]
+    pub fn verified_snapshot_with_read_barrier(
+        &self,
+        artifact_id: &str,
+        max_bytes: usize,
+        barrier: impl FnOnce(&std::sync::Arc<[u8]>),
+    ) -> Result<super::VerifiedArtifactSnapshot, WorkflowServiceError> {
+        self.artifact_store_guard()?
+            .verified_snapshot_with_read_barrier(artifact_id, max_bytes, barrier)
+            .map_err(artifact_store_error)
+    }
+
     pub(crate) fn descriptor(
         &self,
         artifact_id: &str,

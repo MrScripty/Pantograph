@@ -2,11 +2,196 @@
 
 **Plan status:** `Active`
 
-**Current phase:** M3 Pumas owner/client integration design selected. Full review and required-real text→image acceptance remain open.
+**Current phase:** M3 owner/client consumer source is implemented. Native CPU sampling and the supported inference/embedded host route are qualified separately; the desktop-authored dependent text-to-image graph and full review remain open.
 
-**Next slice:** Expose Pumas's existing full package-facts operation through its authenticated typed local client, then migrate Pantograph's existing access facade and hosted execution to supported Owner/LocalClient roles. Use the configured launcher-root identity, preserve ReadOnly browsing without execution, and qualify real owner-produced identities/facts/load targets before model runs. The current reviewed Pumas committed baseline is `3b0d5ee4eda4d68ae33a158162883208e4608edb`; its active uncommitted lifecycle work is separate.
+**Preservation successor:** The user selected preservation of functioning rerank
+and audio routes over publishing the direct-core removal experiment. The local
+`local-feature/scheduler-rerank-preservation-20261007` branch starts from main
+`a8483e51` and implements the smaller CPU llama.cpp rerank slice. See the
+[rerank preservation report](reports/2026-10-07-scheduler-rerank-preservation.md)
+for typed contracts, selected identity/custody, parent comparisons, reopened graph
+acceptance and the deferred audio design. Direct rerank/audio handlers remain;
+`63f7b4e` stays separate and unpublished. Native/model/display qualification and
+publication are outside this local task.
+
+**Next slice:** The user-selected single-prompt canonical `chat_completion`
+graph feature is implemented and locally qualified on isolated
+`feat/workflow-chat-completion`; see the [chat report](reports/2026-10-06-workflow-chat-completion.md). Source is
+fresh main `c75fa237` with explicit ordinary composition of stop successor
+`e570302d` and embedding revision successor `7be490d7`; those frozen candidates
+remain separate and their review/publication belongs to the parent. Acceptance
+requires exact canonical task/requested revision constraints and an offline
+synthetic causal LM through saved/reopened public scheduler graphs, precancellation,
+isolation and retained text-generation controls. Independent review and parent
+publication remain separate. No pretrained/GPU/desktop or
+resident-accounting qualification is implied.
+
+**Prior stop slice:** The user-authorized bounded M2 text stop-string successor is
+implemented on `feat/workflow-text-stop-string` from accepted seed/precision
+`fae339bdb1eb681a01ea983f1abe0f2f48916349`, which includes main `d61b86fc`.
+The [stop-string report](reports/2026-10-06-workflow-text-stop-string.md) records
+exact graph text, omission/default layering, generated-only matching, marker
+withholding, authored-minimum refusal and conditional backend support. Controlled
+CPU and public graph/host checks plus independent medium review decide this
+bounded slice; it extends M2 descriptor/validation work and was not an explicit
+numbered post-seed milestone. Parent candidate review/publication remains separate.
+
+PR60's held-text rewrite finding is repaired in a narrow successor of frozen
+`19119837`; the [same report](reports/2026-10-06-workflow-text-stop-string.md#pr60-held-text-rewrite-successor)
+defines immutable emitted-prefix and suffix-only rewrite semantics, including
+crossing-boundary marker refusal and EOS/budget flushing. Parent verification and
+fresh hosted CI remain separate; chat graph work resumes on its own candidate.
+
+**Prior embedding slice:** The isolated [canonical CPU embedding graph successor](reports/2026-10-06-workflow-cpu-embedding-graphs.md)
+is implemented from freshly fetched main `c75fa237`. Typed embedding/JSON ports,
+the existing selected Candle owner, sequential envelope execution and the bounded
+vector sink now compose through a saved public scheduler graph. Later independent
+review found an explicit requested-revision projection gap in frozen `2961b148`.
+The [isolated revision successor](reports/2026-10-06-workflow-cpu-embedding-graphs.md#explicit-requested-revision-successor)
+reproduces it with actual Candle CPU output, requires requested/selected revision
+agreement before resolution and preserves the original typed request constraint.
+Parent verification remains pending. Local qualification and separate candidate
+publication are recorded in the report; live Pumas,
+pretrained-quality, GPU and desktop execution remain separate. Preserve frozen
+stop-string source `19119837`, PR60's separate `e570302d` successor and every
+frozen seed/precision/repair/paused history.
+Do not resume ranking or resident-accounting work as part of this feature.
+
+**Current-main integration:** PR61 merges freshly fetched main
+`7b63535b6b850aa9fd001f96fe95b45f21c32b4c` into reviewed embedding revision
+`7be490d7e403a95e2efff7e5a8f21a68d40a42fd` without rewriting either history.
+Both additive contract tests and both plan records are retained. No native
+desktop/chat source or evidence is included. Fresh composition tests and hosted
+CI remain prerequisites for the separately owned review request.
+
+**Integrated stop-string slice:** The user-authorized bounded M2 text stop-string successor is
+implemented on `feat/workflow-text-stop-string` from accepted seed/precision
+`fae339bdb1eb681a01ea983f1abe0f2f48916349`, which includes main `d61b86fc`.
+The [stop-string report](reports/2026-10-06-workflow-text-stop-string.md) records
+exact graph text, omission/default layering, generated-only matching, marker
+withholding, authored-minimum refusal and conditional backend support. Controlled
+CPU and public graph/host checks plus independent medium review decide this
+bounded slice; it extends M2 descriptor/validation work and was not an explicit
+numbered post-seed milestone. PR60 was merged normally into current main `7b63535b`.
+
+PR60's held-text rewrite finding is repaired in a narrow successor of frozen
+`19119837`; the [same report](reports/2026-10-06-workflow-text-stop-string.md#pr60-held-text-rewrite-successor)
+defines immutable emitted-prefix and suffix-only rewrite semantics, including
+crossing-boundary marker refusal and EOS/budget flushing. The reviewed
+`e570302d` source is retained through that main merge.
+
+**Prior seed slice:** Graph-authored text seed is implemented in frozen candidate
+`6cf549dd`; see the [seed report](reports/2026-10-06-workflow-text-seed.md). Its
+separate [desktop precision successor](reports/2026-10-06-text-seed-desktop-precision.md)
+validates authored seeds before numeric persistence and blocks unsafe execution,
+retaining raw text and a visible error. Direct desktop NumberInput seed edges support 0 through
+`2^53 - 1`; typed Rust/API routes retain full u64. Local component/save/load/replay,
+frontend and Rust wire checks pass after independent medium review. PR58 merged
+at `d61b86fc` with the exact `d0c9788c` repair tree and is incorporated normally.
+Parent publication and fresh hosted CI remain release dependencies. Frozen
+composition `9e8cd64c`, evidence `fdb2bf2b`, harness successor `1b9fd0bd`, repair
+line, seed candidate, paused seed work and their histories remain preserved.
+Preserve full peaks, custody, uncertainty, known zero, source/instance fences and
+the no-build-download contract. Native desktop, GPU, pretrained/custom models
+and full desktop execution remain separate qualification. Full-u64 desktop
+NumberInput entry is explicitly unsupported by this bounded contract.
+
+**Prior native qualification:** Parent reviews frozen text-control source `a8c6970f` and its separate [exact-head native qualification route](reports/2026-10-05-text-control-native-qualification-route.md). Earlier local native host/workflow attempts failed before execution: the pinned ONNX dependency download returned HTTP 403, and no-download builds lacked linker symbols. Subsequent [hosted run 37360010163, job 111931961024](https://github.com/MrScripty/Pantograph/actions/runs/37360010163/job/111931961024) at exact head `815bceffbb0d877644184b71be6584f586be2e6e` passed 145 Rust tests across eight groups and six actual CPU sampler tests; all individual quality checks and all three workflows passed at that head. The focused native host/workflow qualification is complete for that head. Next qualify current owner-produced Pumas identities/facts/load targets/devices and the desktop-authored dependent text-to-image graph (DA-03). Frozen temperature `e0293ebf`, CI correction `fddae90d`, fixture `174c1950`, top-k `3bf3eb45` and composition `60197971` remain unchanged with their stated qualification requirements. Parent holds publication for owner confirmation and integrates review corrections without rewriting history. Current Pumas pin: `26a84e323cae566a46a8f76bef48fa1010aed48b`. DA-03/DA-07 remain open.
+
+The next bounded scheduler capability is a fresh host RAM ceiling for explicitly declared backing pools, after CPU candidate discovery. See [host RAM ceilings](reports/2026-10-05-runtime-owned-host-ram-ceilings.md). It may only lower the configured budget, must preserve live task/resident charges after shrink, and must reread missing or changed owner facts at authoritative admission. It does not infer GPU placement, external-consumer allowance or a resident/transient discount.
+
+CPU `394d4748` passed independent bounded source review. Frozen RAM `d7903010`
+received two correctness findings: real cgroup hierarchy roots lack `memory.max`,
+and over-capacity RAM incorrectly blocked unrelated VRAM resident publication.
+The [narrow review repair](reports/2026-10-05-host-ram-ceiling-review-repairs.md)
+distinguishes verified real roots from namespace-visible roots and limits resident
+validation to charged pools. Its native source remains unavailable in this
+container's unresolved `/..` mount layout. The independent [exact runtime service timing slice](reports/2026-10-05-exact-runtime-service-timing.md)
+adds opt-in actual gateway/host observations with strict identity and provenance,
+deterministic lifecycle tests, and disabled-by-default collection. Native owners
+without immutable content and loaded implementation/configuration/device facts
+remain unknown; controlled tests do not qualify real model latency. Ranking and
+calibration remain separate until comparable native owner evidence is available.
+
+Independent review accepted RAM repair `43f0a777`. The
+[service timing retention repair](reports/2026-10-06-service-timing-correlation-review-repair.md)
+replaces raw caller ID retention with bounded correlation digests, preserving
+actual IDs through direct gateway and host execution, including rejected calls.
+Frozen timing and device checkpoints remain separate. Parent coordinates normal
+history-preserving integration with approved main `4153772634269e342a8b0cca797f1cd6716f18a5`;
+its prior descriptor/sampler repairs will not be duplicated on feature ancestry.
+
+The [runtime-owned CUDA fact slice](reports/2026-10-05-runtime-owned-cuda-device-facts.md)
+uses the existing embedded PyTorch owner for explicit UUID/property observations.
+The real CPU-only runtime qualifies the unavailable path; positive UUID tests are
+controlled and GPU execution/capacity remain unqualified. Configured labels, Pumas
+monitor aggregates and llama.cpp selectors cannot become physical backing facts.
+Automatic GPU admission and completion ranking remain pending authoritative owner
+placement, shared backing/capacity and comparable timing evidence.
+
+The [bounded integration checkpoint](reports/2026-10-06-runtime-owner-integration-readiness.md)
+combines both owner successors with approved main through ordinary merges. The
+historical checkpoint records its two suite failures; the descriptor repair
+arrives from main. Owner-authorized resumption produced the
+[tested integration successor and draft review packet](reports/2026-10-06-runtime-owner-integration-successor.md):
+canonical backend registration and real-owner abandoned warmup cleanup now pass
+all affected library/host suites. The remaining model-contract failure is closed
+by the [Pumas wire/projection qualification](reports/2026-10-06-pumas-wire-projection-qualification.md).
+The producer version field remains current; the stale test had bypassed the
+existing typed host adapter. Full mixed-backend inference and embedded suites now
+pass. Parent coordinates PR publication, review and merge; native GPU, exact-model
+and GTK qualification limits remain unchanged.
 
 **Acceptance status:** `blocked`
+
+**Independent scheduler slice:** The parent authorized continued feature delivery
+while frozen native sampling qualification is blocked. The
+[shared resource admission candidate](reports/2026-10-05-shared-resource-admission.md)
+adds explicit backing domains across runtime RAM/VRAM claims, including unified
+memory and authoritative commit/custody checks. Its separate
+[startup composition successor](reports/2026-10-05-shared-resource-composition.md)
+activates explicit persisted declarations through actual AppConfig/desktop setup;
+portable config-factory/registry tests execute without ONNX. Native desktop qualification and automatic physical bindings remain pending;
+parent owns coordinated review. Explicit-domain capacity now has an independent
+host RAM ceiling successor; it does not establish complete available capacity.
+
+The separate [AppConfig qualification successor](reports/2026-10-05-app-config-startup-qualification.md)
+preserves frozen `73211ddc`, moves the actual persisted settings/startup composition
+owner into `pantograph-app-config`, and fixes `Path::exists` hiding filesystem
+failures. Real AppConfig cold-load/save/composition and filesystem regressions
+execute locally. Authorized official dependency installation is blocked by OS
+permission denial; the real desktop build fails at missing GLib prerequisites.
+Tauri setup/IPC and a running desktop remain unqualified.
+
+The independent [resident-resource successor](reports/2026-10-05-resident-resource-accounting.md)
+adds explicit model/producer resident envelopes to the registry's existing local
+and shared accounting, preserving charges after task release until confirmed
+stop. Missing shared-pool resident estimates produce typed unavailable outcomes.
+Portable lifecycle/contended admission tests qualify this owner capability;
+the [producer bridge](reports/2026-10-05-runtime-producer-resident-estimates.md)
+now publishes explicitly configured estimates from the active PyTorch lifecycle
+owner with ordered-generation and known-zero handling. The bounded lifecycle repair at `b9e83208` establishes resident accounting or
+uncertainty before terminal custody release, reconciles Retain, and makes failed
+owned allocations ordinarily reclaimable. `dedbef88` adds acknowledged llama
+child shutdown and ordered resident batches across PyTorch and llama owners.
+Controlled real-host regressions qualify those paths. A proven resident/transient
+split, GPU execution and real model execution remain separate gaps. Frozen
+`eabbcc83` and `254aef1` are unchanged.
+
+The [CPU candidate successor](reports/2026-10-05-runtime-owned-cpu-device-candidates.md)
+projects available owner CPU variants into automatic selection and real selected
+text execution while preserving full peak claims. Its full embedded suite has two
+explicit frozen-parent failures: the four-versus-six descriptor assertion and the
+warmup-timeout test receiving success. The descriptor repair `9ec3c2e` is already
+an ancestor of PR55 qualification `ff84841`, but is absent from CPU `394d4748`.
+Do not duplicate it on this ancestry or increase the warmup timeout.
+
+Scheduler thesis priorities after the RAM ceiling slice are comparable exact-model
+load/execution observations, actual per-device GPU ownership/backing facts, and
+then completion-oriented ranking evaluated on frozen matched cohorts. Existing
+technical-fit history ranking is already present. Warm-first heuristics, GPU class
+counts as physical devices, and unproven resident/transient discounts do not meet
+the thesis's physical-feasibility or timing-evidence requirements.
 
 **Execution ledger:** [execution-ledger.md](execution-ledger.md)
 
@@ -482,7 +667,29 @@ their proper owner. This is intermediate evidence, not DA-03 desktop acceptance.
 
 **Status:** `Active`
 
-### Pumas owner/client integration — selected design
+### Pumas owner/client integration — implemented source, qualification open
+
+The selected design below is retained as rationale. Its producer operation and
+consumer migration are already present at the current pin; they are no longer
+the next implementation slice. `PumasSelectorAccess` routes full facts and
+targets through Owner/LocalClient, while dispatch, host resolution and hosted
+composition consume that facade and preserve ReadOnly execution refusal.
+The [full-facts consumer report](reports/2026-10-04-pumas-full-facts-consumer.md)
+records the six boundaries, exact producer identity and outstanding native
+acceptance. Its earlier source-only receipts do not establish real model or
+desktop acceptance. The [configured-owner report](reports/2026-10-04-pumas-configured-owner-client.md)
+records accepted attachment and configured-root ownership behavior.
+
+Workflow text generation already supports `max_new_tokens` and `system_prompt`.
+The [top-k candidate](reports/2026-10-05-workflow-text-top-k.md) adds the missing
+optional integer sampling input through existing U64 values and typed options,
+with explicit zero and unchanged omission semantics. This is a bounded input
+projection; scheduler redesign and broader backend support are not admitted.
+The original feature composition with PR54 repair head `78bc7193` remains
+frozen. Its successors preserve both histories: the [public-session fixture repair](reports/2026-10-05-pr54-session-output-discovery.md)
+persists real built-in I/O definitions, and the [sampling repair](reports/2026-10-05-top-k-vocabulary-sampling.md)
+caps positive k at vocabulary width and preserves non-streaming explicit zero.
+Parent review and final native qualification remain outstanding.
 
 **Decision:** Reuse the existing Pumas facts/target operations and Pantograph
 access facade. Pumas owns model identity, inspection, freshness, cache and path
@@ -615,6 +822,43 @@ affected tests and static gates pass; the mixed workflow remains functional.
 No arbitrary file-size target, new crate quota, or mandatory universal abstraction.
 
 **Status:** `Active`
+
+### CI-01 — Session Capacity Observability Repair
+
+**Decision (2026-10-02):** Explicit keep-alive creation/enablement owns the
+existing session-count capacity limit, host-selected eviction and affinity.
+Runtime-task dispatch continues to own dependency admission and resource
+reservations; non-runtime runs must not acquire a session runtime. The five
+legacy capacity tests reached the wrong owner after this split. Moving only
+their trigger would lose previously asserted eviction diagnostics and timing:
+`session_runtime.rs` currently receives no diagnostic context from its sole
+keep-alive caller, while that context requires a run that does not exist.
+
+**Admitted repair:** Emit eviction lifecycle facts with genuine target and
+unloaded execution-session identities and optional real run attribution. Extend
+the existing typed diagnostic payloads additively, retaining old payload decoding
+and validation of run-only events. Add a registered session-runtime error scope
+so an unload failure retains its original code/message and reports diagnostic
+unavailability without inventing a workflow run. Preserve host selection,
+rollback, cleanup, event order and a shared timing-attempt identity. Session-only
+facts belong in the ledger; they must not create fabricated run projections.
+
+**Write set:** workflow-service `session_runtime.rs`, `diagnostic_errors.rs`,
+`tests/session_capacity.rs`, `tests/session_capacity_faults.rs`, test module
+registration and focused diagnostic tests if needed; diagnostics
+ledger `event.rs` and `tests.rs`; this plan, its scoped report, and the owning
+`docs/headless-workflow.md` guide. No runtime-task admission, resource reservation,
+non-runtime execution, public run facade, or unrelated baseline repair changes.
+The integrator owns this decision and independent review. Implementation is on
+`fix/session-capacity-observability-2026-10-02`, separate from fixture PR #7.
+
+**Gate:** Direct keep-alive lifecycle tests preserve victim selection, all three
+affinity cases, explicit target cleanup, rollback and original unload failure;
+available and unavailable diagnostics are tested. Ledger tests accept valid
+session-only events, reject missing/blank identity, preserve old run-event
+contracts, and demonstrate no fabricated run projection. The non-runtime no-load
+regression and focused runtime-dispatch tests remain green. Full CI gaps remain
+explicit; independent review precedes integration.
 
 ### M5 — Integrated acceptance and maintainer handoff
 
@@ -839,6 +1083,41 @@ Subsequent invocations supply this same canonical plan path with the operation
 appropriate to its recorded lifecycle; the next-slice field is not independent
 execution authority. The user has now authorized starting the plan with subagents
 and the bounded implementation pilot.
+
+## UniFFI Validation Publication Bridge (2026-10-03)
+
+Hosted headless qualification now reaches the UniFFI runtime tests. The FFI
+constructor owns an ephemeral attribution store, and execution correctly requires
+an owner-published executable validation snapshot. The embedding API exposes
+edit sessions but omits validation refresh and snapshot publication, so a valid
+text graph cannot currently complete the public create/run flow.
+
+Accepted bounded repair: expose typed EmbeddedRuntime delegates and strict JSON
+UniFFI entrypoints for the existing workflow-service current-validation refresh
+and graph-session snapshot publication methods. Keep graph/proof construction,
+revision checks, descriptor compatibility and dependency-proof freshness at their
+existing owners. A client supplies session/version identifiers, never trusted
+snapshot content. It loads/saves a graph, creates an edit session, refreshes the
+returned graph revision, publishes its current executable validation session,
+then creates/runs an execution session. Reopening the ephemeral FFI runtime
+requires publication again. Missing, stale and unavailable validation still fail
+closed; runtime inference facts and readiness are not fabricated.
+
+Required evidence: actual public JSON text execution; missing/stale/reopened
+runtime rejection; existing error-envelope fidelity; UniFFI metadata and generated
+C# surface checks. Independent read-only review is required before publication.
+Canonical selector fixtures and managed-runtime readiness evidence stay separate.
+
+Independent review found that inference-only snapshots rejected every legitimate
+zero-inference graph and that real C# callers had not been migrated. The accepted
+correction keeps publication mandatory and checks exact canonical inference-node
+coverage at owner publication and executable projection, including imported
+records. Empty coverage is valid only for a graph with no inference nodes. Missing,
+extra and duplicate runtime projections fail closed; per-node proofs and existing
+freshness checks remain. The canonical inference request owner supplies the shared
+classification; unsupported inference-bearing task types remain rejected. Both
+NativeSmoke and the packaged DirectRuntimeQuickstart must perform the real public
+load/edit/refresh/publish lifecycle before execution.
 
 ## Final Acceptance
 

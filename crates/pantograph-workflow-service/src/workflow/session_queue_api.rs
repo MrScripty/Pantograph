@@ -726,7 +726,6 @@ impl WorkflowService {
             },
         )
         .map(|_| ())
-        .map_err(WorkflowServiceError::from)
     }
 
     fn record_scheduler_estimate_update_for_queue_item_if_configured(

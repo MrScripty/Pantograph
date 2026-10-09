@@ -7,7 +7,7 @@ use pumas_library::PumasError;
 use thiserror::Error;
 
 pub(crate) struct RuntimeHostPumasPackageFactsResolver {
-    pumas_api: Arc<pumas_library::PumasApi>,
+    selector_access: Arc<workflow_nodes::setup::PumasSelectorAccess>,
 }
 
 #[async_trait]
@@ -19,8 +19,8 @@ pub(crate) trait RuntimeHostPackageFactsResolver: Send + Sync {
 }
 
 impl RuntimeHostPumasPackageFactsResolver {
-    pub(crate) fn new(pumas_api: Arc<pumas_library::PumasApi>) -> Self {
-        Self { pumas_api }
+    pub(crate) fn new(selector_access: Arc<workflow_nodes::setup::PumasSelectorAccess>) -> Self {
+        Self { selector_access }
     }
 }
 
@@ -32,14 +32,17 @@ impl RuntimeHostPackageFactsResolver for RuntimeHostPumasPackageFactsResolver {
     ) -> Result<ResolvedModelPackageFacts, RuntimeHostPumasPackageFactsError> {
         let selected_model_ref = selected_pumas_model_ref(request)?;
         let raw_facts = self
-            .pumas_api
+            .selector_access
             .resolve_model_package_facts(selected_model_ref.model_id.as_str())
             .await?;
-        let package_facts = normalize_runtime_host_package_fact_identity(
+        let package_facts = validate_runtime_host_package_facts(
             selected_model_ref,
             decode_pumas_package_facts(raw_facts)?,
-        );
-        validate_runtime_host_package_facts(selected_model_ref, package_facts)
+        )?;
+        Ok(normalize_runtime_host_package_fact_identity(
+            selected_model_ref,
+            package_facts,
+        ))
     }
 }
 
@@ -67,6 +70,26 @@ fn validate_runtime_host_package_facts(
             },
         );
     }
+    let canonical_id = |id: &str| id.strip_prefix("pumas://models/").unwrap_or(id).to_string();
+    if canonical_id(&selected_model_ref.model_id) != canonical_id(&package_facts.model_ref.model_id)
+        || selected_model_ref
+            .revision
+            .as_ref()
+            .is_some_and(|revision| package_facts.model_ref.revision.as_ref() != Some(revision))
+        || selected_model_ref
+            .selected_artifact_path
+            .as_ref()
+            .is_some_and(|path| {
+                package_facts.model_ref.selected_artifact_path.as_ref() != Some(path)
+            })
+    {
+        return Err(
+            RuntimeHostPumasPackageFactsError::PackageFactsDecodeFailed {
+                message: "full package facts disagree with selected model/revision/artifact path"
+                    .into(),
+            },
+        );
+    }
     if selected_model_ref.selected_artifact_id.is_some()
         && package_facts.model_ref.selected_artifact_id != selected_model_ref.selected_artifact_id
     {
@@ -90,7 +113,12 @@ fn normalize_runtime_host_package_fact_identity(
     selected_model_ref: &pantograph_dependency_planning::PumasModelRef,
     mut package_facts: ResolvedModelPackageFacts,
 ) -> ResolvedModelPackageFacts {
-    package_facts.artifact.entry_path = runtime_host_package_fact_entry_path(selected_model_ref);
+    // Keep the producer's concrete root-relative entry when available. The
+    // existing logical privacy projection remains for owner-local absolute paths.
+    if !is_path_free_artifact_entry(&package_facts.artifact.entry_path) {
+        package_facts.artifact.entry_path =
+            runtime_host_package_fact_entry_path(selected_model_ref);
+    }
     package_facts.model_ref.selected_artifact_path = selected_model_ref
         .selected_artifact_path
         .as_deref()
@@ -296,6 +324,54 @@ mod tests {
             RuntimeHostPumasPackageFactsError::MissingLogicalSizeFacts { model_id }
                 if model_id == "pumas://models/juggernaut-xl-v10"
         ));
+    }
+
+    #[test]
+    fn full_package_model_and_revision_mismatches_fail_closed() {
+        let request = validated_runtime_host_request();
+        let selected = selected_pumas_model_ref(&request).unwrap();
+        for different_model in [true, false] {
+            let mut facts = image_package_facts_for_request(selected);
+            if different_model {
+                facts.model_ref.model_id = "other/model".into();
+            } else {
+                facts.model_ref.revision = Some("different-revision".into());
+            }
+            assert!(validate_runtime_host_package_facts(selected, facts).is_err());
+        }
+        let mut selected = selected.clone();
+        selected.revision = Some("requested-revision".into());
+        let mut facts = image_package_facts_for_request(&selected);
+        facts.model_ref.revision = None;
+        assert!(
+            validate_runtime_host_package_facts(&selected, facts).is_err(),
+            "a requested revision cannot be inferred from missing producer evidence"
+        );
+    }
+
+    #[test]
+    fn relative_producer_entry_and_embedding_evidence_survive_host_adaptation() {
+        let mut raw: serde_json::Value = serde_json::from_str(include_str!(
+            "../../inference/tests/fixtures/inference_package_facts/hf_candle_embedding_package_facts.json"
+        )).unwrap();
+        raw["model_ref"]["model_ref_contract_version"] = serde_json::json!(1);
+        let producer = serde_json::from_value(raw).unwrap();
+        let facts = decode_pumas_package_facts(producer).unwrap();
+        let selected = facts.model_ref.clone();
+        let expected_entry = facts.artifact.entry_path.clone();
+        let expected_components = facts.components.clone();
+        let expected_transformers = facts.transformers.clone();
+        let expected_task = facts.task.clone();
+        let facts = normalize_runtime_host_package_fact_identity(&selected, facts);
+        assert_eq!(facts.artifact.entry_path, expected_entry);
+        assert_eq!(facts.components, expected_components);
+        assert_eq!(facts.transformers, expected_transformers);
+        assert_eq!(facts.task, expected_task);
+        assert_eq!(facts.model_ref.model_id, selected.model_id);
+        assert_eq!(
+            facts.model_ref.selected_artifact_id,
+            selected.selected_artifact_id
+        );
     }
 
     #[test]

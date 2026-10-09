@@ -121,7 +121,7 @@ async fn runtime_extensions_apply_workflow_service_for_stream_artifacts() {
 async fn runtime_extensions_apply_pumas_selector_access() {
     let temp_dir = TempDir::new().expect("temporary Pumas root should be created");
     let pumas_api = Arc::new(
-        pumas_library::PumasApi::builder(temp_dir.path())
+        crate::pumas_test_support::builder(temp_dir.path())
             .build()
             .await
             .expect("pumas api should initialize"),

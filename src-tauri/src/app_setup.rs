@@ -3,14 +3,14 @@ use crate::app_tasks::{AppTaskRegistry, SharedAppTaskRegistry};
 use crate::config::AppConfig;
 use crate::constants::paths::DATA_DIR;
 use crate::llm::{
-    self, InferenceGateway, RuntimeRegistry, SharedAppConfig, SharedGateway, SharedHealthMonitor,
+    self, InferenceGateway, SharedAppConfig, SharedGateway, SharedHealthMonitor,
     SharedRecoveryManager, SharedRuntimeRegistry,
 };
 use crate::project_root::resolve_project_root;
 use crate::workflow;
 use pantograph_embedded_runtime::{
-    EmbeddedHostedStartupCompositionInput, EmbeddedHostedStartupPumasSelectorSource,
-    EmbeddedWorkflowServiceComposition,
+    EmbeddedHostedStartupCompositionInput, EmbeddedHostedStartupConfig,
+    EmbeddedHostedStartupPumasSelectorSource, EmbeddedWorkflowServiceComposition,
 };
 use std::sync::Arc;
 use tauri::{Emitter, Manager};
@@ -133,7 +133,6 @@ pub fn run_app() -> AppStartupResult<()> {
     // Create the shared node-engine registry (includes port options providers via inventory)
     let node_registry: workflow::commands::SharedNodeRegistry =
         Arc::new(node_engine::NodeRegistry::with_builtins());
-    let runtime_registry: SharedRuntimeRegistry = Arc::new(RuntimeRegistry::new());
     let health_monitor: SharedHealthMonitor =
         Arc::new(llm::health_monitor::HealthMonitor::default());
     let recovery_manager: SharedRecoveryManager =
@@ -141,26 +140,30 @@ pub fn run_app() -> AppStartupResult<()> {
     let app_task_registry: SharedAppTaskRegistry = Arc::new(AppTaskRegistry::new());
 
     let startup_project_root = project_root.clone();
-    let startup_runtime_registry = runtime_registry.clone();
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(workflow_diagnostics_store)
         .manage(workflow_graph_store)
         .manage(orchestration_store)
         .manage(node_registry)
-        .manage(runtime_registry)
         .manage(health_monitor)
         .manage(recovery_manager)
         .manage(app_task_registry.clone())
         .setup({
             let app_task_registry = app_task_registry.clone();
-            let runtime_registry = startup_runtime_registry.clone();
             let project_root = startup_project_root.clone();
             move |app| {
                 let runtime_handle = tauri::async_runtime::handle().inner().clone();
                 let app_data_dir = app.path().app_data_dir().map_err(|error| {
                     startup_error(format!("failed to resolve app data dir: {error}"))
                 })?;
+
+                // A missing config uses defaults. A present unreadable/invalid config
+                // must not silently discard declared shared-capacity constraints.
+                let (config, registry) = tauri::async_runtime::block_on(AppConfig::load_with_runtime_registry(&app_data_dir))
+                    .map_err(|error| startup_error(format!("failed to load app configuration: {error}")))?;
+                let runtime_registry: SharedRuntimeRegistry = Arc::new(registry);
+                app.manage(runtime_registry.clone());
 
                 if let Err(err) =
                     inference::reconcile_interrupted_managed_runtime_jobs(&app_data_dir)
@@ -198,18 +201,6 @@ pub fn run_app() -> AppStartupResult<()> {
                 app.manage(rag_manager.clone());
 
                 let kv_cache_dir = app_data_dir.join("kv_cache");
-                let config = tauri::async_runtime::block_on(async {
-                    match AppConfig::load(&app_data_dir).await {
-                        Ok(config) => {
-                            log::info!("Loaded app configuration");
-                            config
-                        }
-                        Err(e) => {
-                            log::warn!("Failed to load config, using defaults: {}", e);
-                            AppConfig::default()
-                        }
-                    }
-                });
                 let max_loaded_sessions = config.workflow.max_loaded_sessions;
                 let shared_config: SharedAppConfig = Arc::new(RwLock::new(config));
                 app.manage(shared_config);
@@ -231,17 +222,20 @@ pub fn run_app() -> AppStartupResult<()> {
                 let pumas_library_path = pumas_release_dir.or(pumas_launcher_root);
 
                 let startup_input = EmbeddedHostedStartupCompositionInput::new(
-                    runtime_registry.clone(),
-                    gateway.clone(),
-                    gateway.inner_arc(),
-                    Some(EmbeddedHostedStartupPumasSelectorSource::SetupPath(
-                        pumas_library_path,
-                    )),
-                    project_root.clone(),
-                    kv_cache_dir,
-                    runtime_handle.clone(),
-                    max_loaded_sessions,
-                    HOSTED_DISPATCH_SOURCE_SNAPSHOT_MAX_AGE_MS,
+                    EmbeddedHostedStartupConfig {
+                        runtime_registry: runtime_registry.clone(),
+                        runtime_registry_controller: gateway.clone(),
+                        gateway: gateway.inner_arc(),
+                        pumas_selector_source: Some(
+                            EmbeddedHostedStartupPumasSelectorSource::SetupPath(pumas_library_path),
+                        ),
+                        project_root: project_root.clone(),
+                        kv_cache_dir,
+                        dependency_readiness_runtime_handle: runtime_handle.clone(),
+                        max_loaded_sessions,
+                        max_dispatch_source_snapshot_age_ms:
+                            HOSTED_DISPATCH_SOURCE_SNAPSHOT_MAX_AGE_MS,
+                    },
                 )
                 .with_workflow_service(workflow_service);
                 let startup_output = tauri::async_runtime::block_on(

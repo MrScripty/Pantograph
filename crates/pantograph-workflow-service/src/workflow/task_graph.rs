@@ -27,8 +27,14 @@ use crate::graph::{workflow_executable_topology, WorkflowGraph, WorkflowRuntimeS
 const PORT_TEXT: &str = "text";
 const PORT_VALUE: &str = "value";
 const NODE_TYPE_BOOLEAN_INPUT: &str = "boolean-input";
+const NODE_TYPE_NUMBER_INPUT: &str = "number-input";
 const NODE_TYPE_TEXT_INPUT: &str = "text-input";
 const NODE_TYPE_TEXT_OUTPUT: &str = "text-output";
+const NODE_TYPE_VECTOR_OUTPUT: &str = "vector-output";
+const NODE_TYPE_IMAGE_OUTPUT: &str = "image-output";
+const NODE_TYPE_MERGE: &str = "merge";
+const NODE_TYPE_JSON_FILTER: &str = "json-filter";
+const NODE_TYPE_SELECTION_INPUT: &str = "selection-input";
 const MISSING_RESOURCE_ESTIMATES_MESSAGE: &str =
     "runtime inference scheduler tasks require validated resource estimate hints";
 
@@ -64,7 +70,7 @@ impl WorkflowSchedulerInferenceTaskProjections {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WorkflowSchedulerInferenceTaskProjection {
-    Ready(WorkflowSchedulerReadyInferenceTaskProjection),
+    Ready(Box<WorkflowSchedulerReadyInferenceTaskProjection>),
     Blocked(WorkflowSchedulerBlockedInferenceTaskProjection),
 }
 
@@ -168,6 +174,11 @@ pub fn workflow_scheduler_task_graph_with_inference_projections(
                 &node.node_type,
                 execution_class,
                 &input_bindings,
+                graph
+                    .nodes
+                    .iter()
+                    .find(|source| source.id == node.node_id)
+                    .map(|source| &source.data),
             );
         let (source_input_task_template, source_input_diagnostics) =
             source_input_task_template_for_node(&node_id, &node.node_type, execution_class);
@@ -254,12 +265,18 @@ fn dependency_task_ids(bindings: &[WorkflowSchedulerTaskInputBinding]) -> Vec<Sc
     let mut seen = BTreeSet::new();
     bindings
         .iter()
-        .filter_map(|binding| {
-            seen.insert(binding.source_task_id.clone())
-                .then(|| binding.source_task_id.clone())
-        })
+        .filter(|binding| seen.insert(binding.source_task_id.clone()))
+        .map(|binding| binding.source_task_id.clone())
         .collect()
 }
+
+type SchedulableIntentProjection = (
+    Option<SchedulableTaskIntent>,
+    Option<WorkflowSchedulerTaskIntentTemplate>,
+    Option<InferenceInterfaceFingerprint>,
+    Option<WorkflowRuntimeSourceContext>,
+    Vec<WorkflowSchedulerTaskProjectionDiagnostic>,
+);
 
 fn schedulable_intent_for_node(
     workflow_id: &SchedulerWorkflowId,
@@ -268,13 +285,7 @@ fn schedulable_intent_for_node(
     task_id: &SchedulerTaskId,
     execution_class: WorkflowSchedulerTaskExecutionClass,
     inference_task_projection: Option<&WorkflowSchedulerInferenceTaskProjection>,
-) -> (
-    Option<SchedulableTaskIntent>,
-    Option<WorkflowSchedulerTaskIntentTemplate>,
-    Option<InferenceInterfaceFingerprint>,
-    Option<WorkflowRuntimeSourceContext>,
-    Vec<WorkflowSchedulerTaskProjectionDiagnostic>,
-) {
+) -> SchedulableIntentProjection {
     if execution_class != WorkflowSchedulerTaskExecutionClass::RuntimeInference {
         return (None, None, None, None, Vec::new());
     }
@@ -360,6 +371,7 @@ fn non_runtime_task_template_for_node(
     node_type: &str,
     execution_class: WorkflowSchedulerTaskExecutionClass,
     input_bindings: &[WorkflowSchedulerTaskInputBinding],
+    node_data: Option<&serde_json::Value>,
 ) -> (
     Option<WorkflowSchedulerNonRuntimeTaskTemplate>,
     Vec<WorkflowSchedulerTaskProjectionDiagnostic>,
@@ -370,6 +382,67 @@ fn non_runtime_task_template_for_node(
 
     match node_type {
         NODE_TYPE_TEXT_OUTPUT => text_output_template(node_id, input_bindings),
+        NODE_TYPE_VECTOR_OUTPUT => {
+            // The registered vector sink is optional. A connected sink accepts
+            // exactly one vector; an unconnected sink retains its null output.
+            if input_bindings.len() <= 1
+                && input_bindings
+                    .iter()
+                    .all(|binding| binding.target_port_id == "vector")
+            {
+                (
+                    Some(WorkflowSchedulerNonRuntimeTaskTemplate::VectorOutput),
+                    Vec::new(),
+                )
+            } else {
+                (
+                    None,
+                    vec![diagnostic(
+                    node_id,
+                    Some("vector"),
+                    WorkflowSchedulerTaskProjectionDiagnosticCode::InvalidNonRuntimeTemplateValue,
+                    "vector-output accepts at most one materialized vector input",
+                )],
+                )
+            }
+        }
+        NODE_TYPE_IMAGE_OUTPUT => {
+            if input_bindings.len() == 1 && input_bindings[0].target_port_id == "image" {
+                (
+                    Some(WorkflowSchedulerNonRuntimeTaskTemplate::ImageOutput),
+                    Vec::new(),
+                )
+            } else {
+                (None, vec![diagnostic(
+                    node_id,
+                    Some("image"),
+                    WorkflowSchedulerTaskProjectionDiagnosticCode::MissingNonRuntimeTemplateValue,
+                    "image-output requires one materialized image input; streaming is not supported",
+                )])
+            }
+        }
+        NODE_TYPE_JSON_FILTER => json_filter_template(node_id, input_bindings, node_data),
+        NODE_TYPE_MERGE => {
+            if input_bindings
+                .iter()
+                .all(|binding| binding.target_port_id == "inputs")
+            {
+                (
+                    Some(WorkflowSchedulerNonRuntimeTaskTemplate::Merge),
+                    Vec::new(),
+                )
+            } else {
+                (
+                    None,
+                    vec![diagnostic(
+                        node_id,
+                        Some("inputs"),
+                        WorkflowSchedulerTaskProjectionDiagnosticCode::InvalidNonRuntimeTemplateValue,
+                        "merge accepts only bindings that target 'inputs'",
+                    )],
+                )
+            }
+        }
         _ => (
             None,
             vec![diagnostic(
@@ -395,6 +468,12 @@ fn source_input_task_template_for_node(
     }
 
     match node_type {
+        NODE_TYPE_SELECTION_INPUT => (
+            Some(WorkflowSchedulerSourceInputTemplate::Selection {
+                port_id: PORT_VALUE.to_string(),
+            }),
+            Vec::new(),
+        ),
         NODE_TYPE_TEXT_INPUT => (
             Some(WorkflowSchedulerSourceInputTemplate::Text {
                 port_id: PORT_TEXT.to_string(),
@@ -403,6 +482,12 @@ fn source_input_task_template_for_node(
         ),
         NODE_TYPE_BOOLEAN_INPUT => (
             Some(WorkflowSchedulerSourceInputTemplate::Boolean {
+                port_id: PORT_VALUE.to_string(),
+            }),
+            Vec::new(),
+        ),
+        NODE_TYPE_NUMBER_INPUT => (
+            Some(WorkflowSchedulerSourceInputTemplate::Integer {
                 port_id: PORT_VALUE.to_string(),
             }),
             Vec::new(),
@@ -417,6 +502,46 @@ fn source_input_task_template_for_node(
             )],
         ),
     }
+}
+
+fn json_filter_template(
+    node_id: &SchedulerNodeId,
+    input_bindings: &[WorkflowSchedulerTaskInputBinding],
+    node_data: Option<&serde_json::Value>,
+) -> (
+    Option<WorkflowSchedulerNonRuntimeTaskTemplate>,
+    Vec<WorkflowSchedulerTaskProjectionDiagnostic>,
+) {
+    if input_bindings.len() != 1 || input_bindings[0].target_port_id != "json" {
+        return (
+            None,
+            vec![diagnostic(
+                node_id,
+                Some("json"),
+                WorkflowSchedulerTaskProjectionDiagnosticCode::MissingNonRuntimeTemplateValue,
+                "json-filter requires one materialized upstream JSON input",
+            )],
+        );
+    }
+    let path = match node_data.and_then(|data| data.get("path")) {
+        None => String::new(),
+        Some(serde_json::Value::String(path)) => path.clone(),
+        Some(_) => {
+            return (
+                None,
+                vec![diagnostic(
+                    node_id,
+                    None,
+                    WorkflowSchedulerTaskProjectionDiagnosticCode::InvalidNonRuntimeTemplateValue,
+                    "json-filter path must be a string",
+                )],
+            )
+        }
+    };
+    (
+        Some(WorkflowSchedulerNonRuntimeTaskTemplate::JsonFilter { path }),
+        Vec::new(),
+    )
 }
 
 fn text_output_template(
@@ -504,5 +629,31 @@ fn diagnostic(
         node_id: node_id.clone(),
         port_id: port_id.map(str::to_string),
         message: message.into(),
+    }
+}
+
+#[cfg(test)]
+mod lint_style_regressions {
+    use super::{
+        dependency_task_ids, SchedulerNodeId, SchedulerTaskId, WorkflowSchedulerTaskInputBinding,
+    };
+
+    #[test]
+    fn lint_style_dependency_ids_preserve_first_seen_order() {
+        let bindings = ["z", "a", "z", "b", "a"]
+            .into_iter()
+            .map(|id| WorkflowSchedulerTaskInputBinding {
+                source_node_id: SchedulerNodeId::parse(id).unwrap(),
+                source_task_id: SchedulerTaskId::parse(id).unwrap(),
+                source_port_id: "out".to_string(),
+                target_port_id: "in".to_string(),
+            })
+            .collect::<Vec<_>>();
+        let ids = dependency_task_ids(&bindings);
+        assert_eq!(
+            ids.iter().map(|id| id.as_str()).collect::<Vec<_>>(),
+            vec!["z", "a", "b"]
+        );
+        assert!(dependency_task_ids(&[]).is_empty());
     }
 }

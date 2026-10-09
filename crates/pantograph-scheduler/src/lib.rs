@@ -47,7 +47,10 @@ pub use dispatch_selection::{
     SchedulerDispatchSelectionState, ValidatedSchedulerDispatchSelectionDecision,
     ValidatedSchedulerDispatchSelectionRequest, SCHEDULER_DISPATCH_SELECTION_CONTRACT_VERSION,
 };
-pub use dispatch_selection_policy::select_scheduler_dispatch;
+pub use dispatch_selection_policy::{
+    select_scheduler_candidate_for_reservation, select_scheduler_dispatch,
+    SchedulerDispatchReservationSelection,
+};
 pub use error::SchedulerContractError;
 pub use handoff::{
     SchedulerRuntimeHandoff, SchedulerRuntimeHandoffState, ValidatedSchedulerRuntimeHandoff,

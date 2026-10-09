@@ -7,6 +7,7 @@ mod error;
 mod event;
 mod records;
 mod repository;
+mod runtime_host_observation;
 mod runtime_selection_history;
 mod schema;
 mod sqlite;
@@ -74,6 +75,11 @@ pub use records::{
     UsageLineage, DEFAULT_STANDARD_RETENTION_DAYS, MAX_RETENTION_DAYS, MILLIS_PER_DAY,
 };
 pub use repository::DiagnosticsLedgerRepository;
+pub use runtime_host_observation::{
+    RuntimeHostObservationOutcome, RuntimeHostObservationProfile, RuntimeHostObservationQuery,
+    RuntimeHostObservationSummary, RuntimeHostRequestObservation,
+    RUNTIME_HOST_OBSERVATION_STORED_LIMIT,
+};
 pub use runtime_selection_history::{
     RuntimeSelectionHistoryKey, RuntimeSelectionHistoryQuery, RuntimeSelectionHistoryRunStatus,
     RuntimeSelectionHistorySample, RuntimeSelectionHistorySummary,

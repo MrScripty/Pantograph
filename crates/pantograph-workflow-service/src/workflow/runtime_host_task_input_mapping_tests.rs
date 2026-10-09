@@ -60,6 +60,65 @@ fn materializes_path_free_runtime_host_inputs_from_completed_task_results() {
 }
 
 #[test]
+fn materializes_numeric_node_results_without_truncating_or_coercing_integer_ports() {
+    for (node_value, expected) in [
+        (
+            serde_json::json!(0.7),
+            RuntimeHostExecutionInputValue::F64(serde_json::Number::from_f64(0.7).unwrap()),
+        ),
+        (serde_json::json!(0), RuntimeHostExecutionInputValue::I64(0)),
+        (
+            serde_json::json!(u64::MAX),
+            RuntimeHostExecutionInputValue::U64(u64::MAX),
+        ),
+    ] {
+        let result = WorkflowSchedulerTaskResultValue::from_node_json(node_value);
+        // A float sent to an integer target stays a float; that target's host
+        // validator must reject it instead of materialization truncating it.
+        for port_id in [
+            "temperature",
+            "top_p",
+            "top_k",
+            "max_new_tokens",
+            "guidance_scale",
+        ] {
+            let task = runtime_task(vec![input_binding("source", "value", port_id)]);
+            let inputs = materialize_runtime_host_inputs(
+                &task,
+                &[task_result("source", "value", result.clone())],
+            )
+            .unwrap();
+            assert_eq!(inputs[0].value, expected);
+        }
+    }
+}
+
+#[test]
+fn rejects_structured_json_instead_of_treating_it_as_a_numeric_host_input() {
+    for value in [
+        serde_json::json!({"temperature":0.7}),
+        serde_json::json!([0.7]),
+        serde_json::Value::Null,
+    ] {
+        let task = runtime_task(vec![input_binding("source", "value", "temperature")]);
+        let result = task_result(
+            "source",
+            "value",
+            WorkflowSchedulerTaskResultValue::from_node_json(value),
+        );
+        assert!(matches!(
+            materialize_runtime_host_inputs(&task, &[result]),
+            Err(
+                WorkflowRuntimeHostTaskInputMappingError::UnsupportedMaterializedInput {
+                    value_type: "json",
+                    ..
+                }
+            )
+        ));
+    }
+}
+
+#[test]
 fn skips_model_ref_binding_because_model_identity_lives_in_scheduler_handoff() {
     let task = runtime_task(vec![
         input_binding("model-selector", "pumas_model_ref", "pumas_model_ref"),
@@ -242,5 +301,55 @@ fn task_result(
         }],
         diagnostics: Vec::new(),
         terminal_metadata: None,
+    }
+}
+
+#[test]
+fn admits_structured_json_only_on_rerank_and_selected_audio_ports() {
+    for task_type in [
+        "rerank",
+        "audio_transcription",
+        "embedding",
+        "text_generation",
+    ] {
+        for target_port in [
+            "documents",
+            "task_options",
+            "extra_options",
+            "prompt",
+            "audio",
+        ] {
+            let mut task = runtime_task(vec![input_binding("source", "value", target_port)]);
+            let request: pantograph_runtime_host_contracts::RuntimeHostExecutionRequest = serde_json::from_str(include_str!("../../../pantograph-runtime-host-contracts/tests/fixtures/runtime_host_execution_request_dispatch_selected.json")).unwrap();
+            let mut intent = request.handoff.task_intent;
+            intent.task_type = task_type.parse().unwrap();
+            task.schedulable_intent = Some(intent);
+            let value = serde_json::json!(["a",{"text":"b"}]);
+            let result = materialize_runtime_host_inputs(
+                &task,
+                &[task_result(
+                    "source",
+                    "value",
+                    WorkflowSchedulerTaskResultValue::Json(value.clone()),
+                )],
+            );
+            if (task_type == "rerank"
+                && matches!(target_port, "documents" | "task_options" | "extra_options"))
+                || (task_type == "audio_transcription"
+                    && matches!(target_port, "audio" | "extra_options"))
+            {
+                assert_eq!(
+                    result.unwrap()[0].value,
+                    RuntimeHostExecutionInputValue::Json(value)
+                );
+            } else {
+                assert!(matches!(
+                    result,
+                    Err(
+                        WorkflowRuntimeHostTaskInputMappingError::UnsupportedMaterializedInput { .. }
+                    )
+                ));
+            }
+        }
     }
 }

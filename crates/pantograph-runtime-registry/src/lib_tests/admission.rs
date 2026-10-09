@@ -270,11 +270,14 @@ fn reserved_resource_accounting_overflow_returns_typed_error() {
         },
     );
 
-    let err =
-        total_reserved_resource_bytes("pytorch", "ram_bytes", &reservations, None, |reservation| {
-            reservation.claim.ram_bytes
-        })
-        .expect_err("reserved resource accounting should reject overflow");
+    let err = total_reserved_resource_bytes(
+        &RuntimeRegistryRecord::new("pytorch", "PyTorch", 0),
+        "ram_bytes",
+        &reservations,
+        None,
+        |reservation| reservation.claim.ram_bytes,
+    )
+    .expect_err("reserved resource accounting should reject overflow");
 
     assert_eq!(
         err,

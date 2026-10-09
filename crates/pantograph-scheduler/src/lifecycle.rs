@@ -179,12 +179,15 @@ pub struct ValidatedSchedulerTaskLifecycleDiagnosticSnapshot(
     SchedulerTaskLifecycleDiagnosticSnapshot,
 );
 
-impl ValidatedSchedulerTaskLifecycleDiagnosticSnapshot {
-    #[must_use]
-    pub fn as_ref(&self) -> &SchedulerTaskLifecycleDiagnosticSnapshot {
+impl AsRef<SchedulerTaskLifecycleDiagnosticSnapshot>
+    for ValidatedSchedulerTaskLifecycleDiagnosticSnapshot
+{
+    fn as_ref(&self) -> &SchedulerTaskLifecycleDiagnosticSnapshot {
         &self.0
     }
+}
 
+impl ValidatedSchedulerTaskLifecycleDiagnosticSnapshot {
     #[must_use]
     pub fn into_inner(self) -> SchedulerTaskLifecycleDiagnosticSnapshot {
         self.0

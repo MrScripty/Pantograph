@@ -34,6 +34,23 @@ Platform-specific Tauri prerequisites are maintained in the
 [official Tauri setup guide](https://v2.tauri.app/start/prerequisites/) and the
 CI bootstrap in `.github/workflows/quality-gates.yml`.
 
+## ONNX Runtime provisioning
+
+Cargo builds do not download ONNX Runtime. The Pumas dependency uses dynamic
+loading; metadata and host lifecycle use does not require a native SDK. The
+consumer feature gate (`python3 scripts/check-onnx-no-build-download.py`) checks
+additive features and keeps the manifest, lockfile and CI checkout pin aligned.
+
+Before ONNX execution, separately provision and verify Microsoft's ONNX Runtime
+1.24.2 for the host target (C API 24). Record the official archive and library
+hashes and preserve upstream notices. Set `ORT_DYLIB_PATH` to the absolute library
+file for that invocation, or stage the full SDK closure beside the executable.
+This is runtime configuration; `ORT_LIB_PATH` and download-suppression variables
+are not substitutes. Missing/invalid selection returns a typed `runtime_library`
+error. Build and test jobs must consume an already provisioned SDK when execution
+needs it; they must not acquire one. Native inference and extracted-package
+qualification are separate from successful compilation and metadata tests.
+
 ## Useful Checks
 
 ```bash
@@ -48,6 +65,13 @@ npm test
 Use targeted `cargo test -p <crate>` commands for affected Rust owners and the
 specialized scripts under `scripts/` for binding, runtime, GUI, and packaging
 paths.
+
+`cargo test --locked -p pantograph-app-config` executes the production persisted
+AppConfig loader, save/restore, and startup registry composition used by desktop
+setup. These tests need no GTK/WebKit or inference runtime. They exercise real
+filesystem failures and shared admission, but do not qualify Tauri setup, IPC,
+or a running desktop process. Desktop build prerequisites remain required for
+those checks.
 
 There is no single green command that currently proves repository-wide
 standards compliance. The [current audit baseline](audits/2026-09-03-current-standards/04-verification-and-tooling.md)

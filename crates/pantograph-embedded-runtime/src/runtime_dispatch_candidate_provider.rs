@@ -1,4 +1,3 @@
-use std::collections::BTreeSet;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use pantograph_dependency_planning::{
@@ -9,17 +8,19 @@ use pantograph_runtime_registry::{
     RuntimeRetentionHint,
 };
 use pantograph_scheduler::{
-    SchedulerDispatchCandidateId, SchedulerDispatchSelectionDiagnostic,
-    SchedulerDispatchSelectionDiagnosticCode, SchedulerDispatchSelectionDiagnosticSeverity,
-    SchedulerEstimateHintKind, SchedulerReservationLeaseId, SchedulerResourceFitAssessment,
-    SchedulerResourceFitState, SchedulerResourceKind, SchedulerResourceReservation,
-    SchedulerTaskStateRecord,
+    select_scheduler_candidate_for_reservation, SchedulerDispatchCandidate,
+    SchedulerDispatchCandidateId, SchedulerDispatchReservationSelection,
+    SchedulerDispatchSelectionDiagnostic, SchedulerDispatchSelectionDiagnosticCode,
+    SchedulerDispatchSelectionDiagnosticSeverity, SchedulerDispatchSelectionRequest,
+    SchedulerEstimateHintKind, SchedulerResourceFitAssessment, SchedulerResourceFitState,
+    SchedulerResourceReservation, SchedulerRuntimeVariantId, SchedulerTaskStateRecord,
+    ValidatedSchedulerDispatchSelectionRequest, SCHEDULER_DISPATCH_SELECTION_CONTRACT_VERSION,
 };
 use pantograph_workflow_service::workflow::{
     ValidatedWorkflowRuntimeDispatchCandidateFactBundle, WorkflowRuntimeDispatchCandidateFact,
     WorkflowRuntimeDispatchCandidateFactBundle, WorkflowRuntimeDispatchCandidateProvider,
     WorkflowRuntimeDispatchCandidateProviderError, WorkflowRuntimeDispatchCandidateSet,
-    WorkflowRuntimeDispatchLoadState,
+    WorkflowRuntimeDispatchLoadState, WorkflowRuntimeDispatchReservationCustody,
 };
 use pantograph_workflow_service::WorkflowSchedulerTask;
 
@@ -29,8 +30,9 @@ use crate::pumas_dispatch_package_facts::{
     PumasDispatchPackageFactsDiagnosticCode, PumasDispatchPackageFactsProjection,
 };
 use crate::runtime_dispatch_capability_facts::{
-    RuntimeDispatchCapabilityFactsDiagnostic, RuntimeDispatchCapabilityFactsOutcome,
-    RuntimeDispatchCapabilityFactsProjection, RuntimeDispatchRuntimeCapabilityFacts,
+    device_matches_class, RuntimeDispatchCapabilityFactsDiagnostic,
+    RuntimeDispatchCapabilityFactsOutcome, RuntimeDispatchCapabilityFactsProjection,
+    RuntimeDispatchRuntimeCapabilityFacts,
 };
 use crate::runtime_dispatch_evidence::{
     RuntimeDispatchEvidenceDiagnostic, RuntimeDispatchEvidenceLoadState,
@@ -42,7 +44,7 @@ use crate::runtime_dispatch_load_target_facts::{
     RuntimeDispatchLoadTargetFactsProjection,
 };
 use crate::runtime_dispatch_resource_facts::{
-    RuntimeDispatchResourceFactsDiagnostic, RuntimeDispatchResourceFactsOutcome,
+    RuntimeDispatchPublicationOutcome, RuntimeDispatchResourceFactsDiagnostic,
     RuntimeDispatchResourceFactsRequest, RuntimeDispatchResourceFactsSource,
 };
 use crate::runtime_dispatch_source_snapshot::{
@@ -70,7 +72,7 @@ const INCOMPATIBLE_RUNTIME_BACKEND_HINT: &str =
 const MISSING_RUNTIME_DISPATCH_EVIDENCE_HINT: &str =
     "embedded_runtime_dispatch_candidate_provider.missing_runtime_dispatch_evidence";
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub(crate) struct EmbeddedRuntimeDispatchCandidateProvider {
     source_snapshot: EmbeddedRuntimeDispatchCandidateSource,
     resource_facts_source: Option<RuntimeDispatchResourceFactsSource>,
@@ -78,22 +80,13 @@ pub(crate) struct EmbeddedRuntimeDispatchCandidateProvider {
 
 #[derive(Clone)]
 enum EmbeddedRuntimeDispatchCandidateSource {
-    Snapshot(EmbeddedRuntimeDispatchCandidateSourceSnapshot),
+    Snapshot(Box<EmbeddedRuntimeDispatchCandidateSourceSnapshot>),
     Store(EmbeddedRuntimeDispatchSourceFactSnapshotStore),
 }
 
 impl Default for EmbeddedRuntimeDispatchCandidateSource {
     fn default() -> Self {
-        Self::Snapshot(EmbeddedRuntimeDispatchCandidateSourceSnapshot::default())
-    }
-}
-
-impl Default for EmbeddedRuntimeDispatchCandidateProvider {
-    fn default() -> Self {
-        Self {
-            source_snapshot: EmbeddedRuntimeDispatchCandidateSource::default(),
-            resource_facts_source: None,
-        }
+        Self::Snapshot(Box::default())
     }
 }
 
@@ -108,7 +101,10 @@ struct EmbeddedRuntimeDispatchCandidateDraft {
     selected_model_ref: PumasModelRef,
     loaded_runtime_memory_estimate_bytes: Option<u64>,
     runtime_status: RuntimeRegistryStatus,
+    backend_capabilities: inference::BackendCapabilityFacts,
+    device_ids: Vec<inference::InferenceDeviceId>,
     runtime_instance_id: Option<String>,
+    automatic_device_candidates: Vec<inference::gateway::RuntimeOwnedDeviceCandidate>,
 }
 
 impl EmbeddedRuntimeDispatchCandidateProvider {
@@ -122,7 +118,9 @@ impl EmbeddedRuntimeDispatchCandidateProvider {
         source_snapshot: EmbeddedRuntimeDispatchCandidateSourceSnapshot,
     ) -> Self {
         Self {
-            source_snapshot: EmbeddedRuntimeDispatchCandidateSource::Snapshot(source_snapshot),
+            source_snapshot: EmbeddedRuntimeDispatchCandidateSource::Snapshot(Box::new(
+                source_snapshot,
+            )),
             resource_facts_source: None,
         }
     }
@@ -181,7 +179,7 @@ impl EmbeddedRuntimeDispatchCandidateSource {
         model_ref: &PumasModelRef,
     ) -> EmbeddedRuntimeDispatchCandidateSourceSnapshot {
         match self {
-            Self::Snapshot(snapshot) => snapshot.clone(),
+            Self::Snapshot(snapshot) => snapshot.as_ref().clone(),
             Self::Store(store) => store.snapshot_for_dispatch(model_ref, current_time_ms()),
         }
     }
@@ -245,19 +243,98 @@ fn resource_backed_candidate_set(
             diagnostics,
         ));
     };
-    let Some(selected_device_id) = task_intent.constraints.requested_device_id.clone() else {
+    let mut bound_drafts = Vec::new();
+    for draft in candidate_drafts {
+        // These devices were joined to this registered runtime by its owner
+        // backend key. Package hints (e.g. transformers) are library labels,
+        // not backend ownership aliases.
+        let owned_devices = draft.automatic_device_candidates.iter();
+        let bindings: Vec<(
+            pantograph_dependency_planning::DeviceIntentId,
+            Option<pantograph_scheduler::SchedulerRuntimeVariantId>,
+        )> = if let Some(requested) = &task_intent.constraints.requested_device_id {
+            // Explicit devices keep their existing evidence/admission path.
+            // Discovering CPU never substitutes it for a hard device constraint.
+            let matching: Vec<_> = owned_devices
+                .filter(|device| device.device_id.as_str() == requested.as_str())
+                .map(|device| {
+                    (
+                        requested.clone(),
+                        Some(
+                            device
+                                .runtime_variant_id
+                                .as_str()
+                                .parse()
+                                .expect("canonical runtime variant"),
+                        ),
+                    )
+                })
+                .collect();
+            if matching.is_empty() {
+                vec![(requested.clone(), None)]
+            } else {
+                matching
+            }
+        } else {
+            owned_devices
+                .map(|device| {
+                    (
+                        device
+                            .device_id
+                            .as_str()
+                            .parse()
+                            .expect("canonical device intent"),
+                        Some(
+                            device
+                                .runtime_variant_id
+                                .as_str()
+                                .parse()
+                                .expect("canonical runtime variant"),
+                        ),
+                    )
+                })
+                .collect()
+        };
+        bound_drafts.extend(
+            bindings
+                .into_iter()
+                .map(|(device, variant)| (draft.clone(), device, variant)),
+        );
+    }
+    if bound_drafts.is_empty() && task_intent.constraints.requested_device_id.is_none() {
         diagnostics.push(provider_diagnostic(
             SchedulerDispatchSelectionDiagnosticCode::IncompatibleDeviceRequirement,
-            "runtime dispatch candidate provider requires an explicit selected device until runtime capability facts expose device candidates",
+            "runtime owner has no canonical device candidate for this unconstrained request",
             MISSING_SELECTED_DEVICE_FACTS_HINT,
         ));
-        return Ok(WorkflowRuntimeDispatchCandidateSet::from_diagnostics(
-            diagnostics,
-        ));
-    };
+    }
 
-    let mut facts = Vec::new();
-    for draft in candidate_drafts {
+    let mut offers = Vec::new();
+    let mut evaluated_drafts = Vec::new();
+    for (mut draft, selected_device_id, selected_runtime_variant_id) in bound_drafts {
+        let variant = match select_runtime_variant(
+            &draft,
+            task_intent.task_type.as_str(),
+            selected_device_id.as_str(),
+        ) {
+            Ok(variant) => variant,
+            Err(diagnostic) => {
+                diagnostics.push(diagnostic);
+                continue;
+            }
+        };
+        if selected_runtime_variant_id
+            .as_ref()
+            .is_some_and(|owned| owned != &variant)
+        {
+            diagnostics.push(provider_diagnostic(
+                SchedulerDispatchSelectionDiagnosticCode::IncompatibleDeviceRequirement,
+                "runtime owner device offer does not match the available capability variant",
+                "embedded_runtime_dispatch_candidate_provider.runtime_variant",
+            ));
+            continue;
+        }
+        let selected_runtime_variant_id = Some(variant);
         if let Err(evidence_diagnostic) =
             pre_reservation_evidence_check(&draft, task_intent, selected_device_id.clone())
         {
@@ -267,88 +344,155 @@ fn resource_backed_candidate_set(
             ));
             continue;
         }
-        match resource_facts_source.reserve(resource_facts_request(
+        match resource_facts_source.evaluate(&resource_facts_request(
             &draft,
             task_intent,
             selected_device_id.clone(),
         )) {
-            RuntimeDispatchResourceFactsOutcome::Reserved {
-                facts: resource_facts,
-                diagnostics: resource_diagnostics,
-            } => {
-                diagnostics.extend(resource_source_diagnostics(
-                    &draft.candidate_id,
-                    &resource_diagnostics,
-                ));
-                let evidence_record = match runtime_dispatch_evidence_record(
-                    &draft,
-                    selected_device_id.clone(),
-                    resource_facts.reservations.clone(),
-                    resource_facts.fit_assessment.clone(),
-                ) {
-                    Ok(evidence_record) => evidence_record,
-                    Err(evidence_diagnostic) => {
-                        let _ = resource_facts_source.release_if_present(resource_facts.lease_id);
-                        diagnostics.push(runtime_dispatch_evidence_diagnostic(
-                            &draft.candidate_id,
-                            evidence_diagnostic,
-                        ));
-                        continue;
-                    }
-                };
-                facts.push(WorkflowRuntimeDispatchCandidateFact {
-                    candidate_id: draft.candidate_id,
-                    selected_runtime_id: evidence_record.selected_runtime_id,
-                    selected_runtime_variant_id: None,
-                    selected_backend_key: evidence_record.selected_backend_key,
-                    runtime_family: evidence_record.runtime_family,
-                    resolved_load_target: evidence_record.resolved_load_target,
-                    runtime_residency_key: evidence_record.runtime_residency_key,
-                    loaded_runtime_memory_estimate_bytes: evidence_record
-                        .loaded_runtime_memory_estimate_bytes,
-                    runtime_load_state: workflow_runtime_dispatch_load_state(
-                        evidence_record.runtime_load_state,
-                    ),
-                    runtime_instance_id: evidence_record.runtime_instance_id,
-                    selected_device_ids: vec![evidence_record.selected_device_id],
-                    selected_model_ref: evidence_record.selected_model_ref,
+            Ok(observation) => {
+                draft.runtime_status = observation.runtime_status;
+                draft.runtime_instance_id = observation.runtime_instance_id.clone();
+                if let Err(evidence_diagnostic) =
+                    pre_reservation_evidence_check(&draft, task_intent, selected_device_id.clone())
+                {
+                    diagnostics.push(runtime_dispatch_evidence_diagnostic(
+                        &draft.candidate_id,
+                        evidence_diagnostic,
+                    ));
+                    continue;
+                }
+                offers.push(SchedulerDispatchCandidate {
+                    candidate_id: draft.candidate_id.clone(),
+                    selected_runtime_id: draft.selected_runtime_id.clone(),
+                    selected_runtime_variant_id: selected_runtime_variant_id.clone(),
+                    selected_device_ids: vec![selected_device_id.clone()],
+                    selected_model_ref: draft.selected_model_ref.clone(),
                     runtime_trait_settings: task_intent.trait_settings.clone(),
-                    environment_ref: environment_ref.clone(),
-                    reservations: evidence_record.reservations,
-                    resource_fit_assessment: evidence_record.resource_fit_assessment,
+                    reservations: Vec::new(),
+                    resource_fit_assessment: Some(fits_assessment(task_intent)),
                     batching_group_id: None,
+                    candidate_source_diagnostics: Vec::new(),
                 });
+                evaluated_drafts.push((
+                    draft,
+                    observation,
+                    selected_device_id,
+                    selected_runtime_variant_id,
+                ));
             }
-            RuntimeDispatchResourceFactsOutcome::Unavailable {
-                diagnostics: resource_diagnostics,
-                ..
-            } => diagnostics.extend(resource_source_diagnostics(
+            Err(resource_diagnostics) => diagnostics.extend(resource_source_diagnostics(
                 &draft.candidate_id,
                 &resource_diagnostics,
             )),
         }
     }
-
-    if facts.is_empty() && diagnostics.is_empty() {
-        diagnostics.push(provider_diagnostic(
-            SchedulerDispatchSelectionDiagnosticCode::NoCandidates,
-            "runtime dispatch candidate provider produced no resource-backed candidates",
-            MISSING_RUNTIME_RESOURCE_FACTS_HINT,
-        ));
-    }
-
-    let bundle =
-        ValidatedWorkflowRuntimeDispatchCandidateFactBundle::try_from(
-            WorkflowRuntimeDispatchCandidateFactBundle {
-                contract_version: pantograph_workflow_service::workflow::WORKFLOW_RUNTIME_DISPATCH_CANDIDATE_FACT_BUNDLE_CONTRACT_VERSION,
-                facts,
+    let request =
+        ValidatedSchedulerDispatchSelectionRequest::try_from(SchedulerDispatchSelectionRequest {
+            contract_version: SCHEDULER_DISPATCH_SELECTION_CONTRACT_VERSION,
+            task_intent: task_intent.clone(),
+            readiness_proof: readiness_proof.clone(),
+            environment_ref: environment_ref.clone(),
+            candidates: offers,
+            diagnostics,
+        })
+        .map_err(
+            |error| WorkflowRuntimeDispatchCandidateProviderError::Failed {
+                message: format!("runtime candidate observations failed validation: {error}"),
+            },
+        )?;
+    let selected_id = match select_scheduler_candidate_for_reservation(&request) {
+        SchedulerDispatchReservationSelection::NoSelection { diagnostics } => {
+            return Ok(WorkflowRuntimeDispatchCandidateSet::from_diagnostics(
                 diagnostics,
+            ));
+        }
+        SchedulerDispatchReservationSelection::Selected {
+            candidate_id,
+            diagnostics: selected_diagnostics,
+        } => {
+            diagnostics = selected_diagnostics;
+            candidate_id
+        }
+    };
+    let Some((draft, expected, selected_device_id, selected_runtime_variant_id)) = evaluated_drafts
+        .into_iter()
+        .find(|(draft, _, _, _)| draft.candidate_id == selected_id)
+    else {
+        return Err(WorkflowRuntimeDispatchCandidateProviderError::Failed {
+            message: "selected candidate has no evaluated source draft".into(),
+        });
+    };
+    let publication = resource_facts_source.reserve_provisional(
+        resource_facts_request(&draft, task_intent, selected_device_id.clone()),
+        &expected,
+        |resource_facts| {
+            let evidence_record = runtime_dispatch_evidence_record(
+                &draft, selected_device_id.clone(), resource_facts.reservations,
+                resource_facts.fit_assessment,
+            ).map_err(|error| WorkflowRuntimeDispatchCandidateProviderError::Failed {
+                message: format!("runtime dispatch evidence failed before reservation publication: {error:?}"),
+            })?;
+            let fact = WorkflowRuntimeDispatchCandidateFact {
+                candidate_id: draft.candidate_id.clone(),
+                selected_runtime_id: evidence_record.selected_runtime_id,
+                selected_runtime_variant_id: selected_runtime_variant_id.clone(),
+                selected_backend_key: evidence_record.selected_backend_key,
+                runtime_family: evidence_record.runtime_family,
+                resolved_load_target: evidence_record.resolved_load_target,
+                runtime_residency_key: evidence_record.runtime_residency_key,
+                loaded_runtime_memory_estimate_bytes: evidence_record.loaded_runtime_memory_estimate_bytes,
+                runtime_load_state: workflow_runtime_dispatch_load_state(evidence_record.runtime_load_state),
+                runtime_instance_id: evidence_record.runtime_instance_id,
+                selected_device_ids: vec![evidence_record.selected_device_id],
+                selected_model_ref: evidence_record.selected_model_ref,
+                runtime_trait_settings: task_intent.trait_settings.clone(),
+                environment_ref: environment_ref.clone(),
+                reservations: evidence_record.reservations,
+                resource_fit_assessment: evidence_record.resource_fit_assessment,
+                batching_group_id: None,
+            };
+            ValidatedWorkflowRuntimeDispatchCandidateFactBundle::try_from(WorkflowRuntimeDispatchCandidateFactBundle {
+                contract_version: pantograph_workflow_service::workflow::WORKFLOW_RUNTIME_DISPATCH_CANDIDATE_FACT_BUNDLE_CONTRACT_VERSION,
+                facts: vec![fact], diagnostics: diagnostics.clone(),
+            }).map_err(|error| WorkflowRuntimeDispatchCandidateProviderError::Failed {
+                message: format!("runtime dispatch candidate facts failed before reservation publication: {error}"),
+            })
+        },
+    )?;
+    match publication {
+        RuntimeDispatchPublicationOutcome::Reserved { value, custody } => Ok(
+            WorkflowRuntimeDispatchCandidateSet::from_candidate_fact_bundle(value)
+                .with_reservation_custody(Box::new(EmbeddedRuntimeDispatchReservationCustody(
+                    custody,
+                ))),
+        ),
+        RuntimeDispatchPublicationOutcome::Unavailable {
+            diagnostics: resource_diagnostics,
+        } => {
+            diagnostics.extend(resource_source_diagnostics(
+                &draft.candidate_id,
+                &resource_diagnostics,
+            ));
+            Ok(WorkflowRuntimeDispatchCandidateSet::from_diagnostics(
+                diagnostics,
+            ))
+        }
+    }
+}
+
+#[derive(Debug)]
+struct EmbeddedRuntimeDispatchReservationCustody(
+    pantograph_runtime_registry::RuntimeReservationCustody,
+);
+
+impl WorkflowRuntimeDispatchReservationCustody for EmbeddedRuntimeDispatchReservationCustody {
+    fn transfer(self: Box<Self>) -> Result<(), WorkflowRuntimeDispatchCandidateProviderError> {
+        self.0.transfer().map_err(
+            |error| WorkflowRuntimeDispatchCandidateProviderError::Failed {
+                message: format!("runtime registry custody transfer failed: {error}"),
             },
         )
-        .map_err(|error| WorkflowRuntimeDispatchCandidateProviderError::Failed {
-            message: format!("runtime dispatch candidate facts failed validation: {error}"),
-        })?;
-    Ok(WorkflowRuntimeDispatchCandidateSet::from_candidate_fact_bundle(bundle))
+    }
 }
 
 fn fail_closed_diagnostics(
@@ -589,6 +733,7 @@ fn load_target_diagnostic_code(
 ) -> SchedulerDispatchSelectionDiagnosticCode {
     match code {
         RuntimeDispatchLoadTargetFactsDiagnosticCode::ReadyResponseMissingTarget
+        | RuntimeDispatchLoadTargetFactsDiagnosticCode::SelectedIdentityMismatch
         | RuntimeDispatchLoadTargetFactsDiagnosticCode::EmptyLoadTargetPath => {
             SchedulerDispatchSelectionDiagnosticCode::InvalidCandidateEvidence
         }
@@ -625,6 +770,9 @@ fn load_target_diagnostic_hint(code: RuntimeDispatchLoadTargetFactsDiagnosticCod
         }
         RuntimeDispatchLoadTargetFactsDiagnosticCode::EmptyLoadTargetPath => {
             "embedded_runtime_dispatch_candidate_provider.load_target.empty_load_target_path"
+        }
+        RuntimeDispatchLoadTargetFactsDiagnosticCode::SelectedIdentityMismatch => {
+            "embedded_runtime_dispatch_candidate_provider.load_target.selected_identity_mismatch"
         }
         RuntimeDispatchLoadTargetFactsDiagnosticCode::PathFactsStripped => {
             "embedded_runtime_dispatch_candidate_provider.load_target.path_facts_stripped"
@@ -671,8 +819,7 @@ fn candidate_drafts_from_projected_facts(
     Vec<EmbeddedRuntimeDispatchCandidateDraft>,
     Vec<SchedulerDispatchSelectionDiagnostic>,
 ) {
-    let backend_hint_keys = backend_hint_keys(&package_facts.backend_hints);
-    if backend_hint_keys.is_empty() {
+    if package_facts.backend_hints.accepted.is_empty() {
         return (
             Vec::new(),
             vec![provider_diagnostic(
@@ -686,15 +833,18 @@ fn candidate_drafts_from_projected_facts(
     let mut drafts = Vec::new();
     let mut diagnostics = Vec::new();
     for runtime in &capability_facts.runtimes {
-        let matching_backend_keys = runtime
-            .backend_keys
+        if !runtime
+            .backend_capabilities
+            .model_sources
+            .backend_hints
             .iter()
-            .map(|backend_key| normalize_backend_key(backend_key))
-            .filter(|backend_key| backend_hint_keys.contains(backend_key))
-            .collect::<Vec<_>>();
-        if matching_backend_keys.is_empty() {
+            .any(|hint| package_facts.backend_hints.accepted.contains(hint))
+        {
             continue;
         }
+        let Some(selected_backend_key) = runtime.backend_keys.first() else {
+            continue;
+        };
         let Some(load_target) = load_target_for_runtime(load_target_facts, &runtime.runtime_family)
         else {
             diagnostics.push(provider_diagnostic(
@@ -704,9 +854,12 @@ fn candidate_drafts_from_projected_facts(
             ));
             continue;
         };
-        drafts.extend(matching_backend_keys.into_iter().map(|backend_key| {
-            runtime_candidate_draft(package_facts, runtime, load_target, backend_key)
-        }));
+        drafts.push(runtime_candidate_draft(
+            package_facts,
+            runtime,
+            load_target,
+            selected_backend_key.clone(),
+        ));
     }
 
     if drafts.is_empty() {
@@ -760,16 +913,73 @@ fn runtime_candidate_draft(
             &package_facts.logical_size,
         ),
         runtime_status: runtime.status,
+        backend_capabilities: runtime.backend_capabilities.clone(),
+        device_ids: runtime.device_ids.clone(),
         runtime_instance_id: runtime.runtime_instance_id.clone(),
+        automatic_device_candidates: runtime.automatic_device_candidates.clone(),
     }
+}
+
+fn select_runtime_variant(
+    draft: &EmbeddedRuntimeDispatchCandidateDraft,
+    task_type: &str,
+    device_id: &str,
+) -> Result<SchedulerRuntimeVariantId, SchedulerDispatchSelectionDiagnostic> {
+    let capabilities = &draft.backend_capabilities;
+    if !capabilities.tasks.iter().any(|task| {
+        task.task_id.canonical_label() == task_type
+            && capabilities.supports_task(task.task_id.clone())
+    }) {
+        return Err(provider_diagnostic(
+            SchedulerDispatchSelectionDiagnosticCode::IncompatibleRuntimeRequirement,
+            "backend capability facts do not support the requested task",
+            "embedded_runtime_dispatch_candidate_provider.unsupported_task",
+        ));
+    }
+    if !draft
+        .device_ids
+        .iter()
+        .any(|device| device.as_str() == device_id)
+    {
+        return Err(provider_diagnostic(
+            SchedulerDispatchSelectionDiagnosticCode::IncompatibleDeviceRequirement,
+            "runtime capability source has not established the explicit concrete device",
+            "embedded_runtime_dispatch_candidate_provider.unobserved_device",
+        ));
+    }
+    let matching = capabilities
+        .runtime_variants
+        .iter()
+        .filter(|variant| {
+            variant.available && device_matches_class(device_id, variant.device_class)
+        })
+        .collect::<Vec<_>>();
+    let [variant] = matching.as_slice() else {
+        return Err(provider_diagnostic(
+            if matching.is_empty() {
+                SchedulerDispatchSelectionDiagnosticCode::IncompatibleDeviceRequirement
+            } else {
+                SchedulerDispatchSelectionDiagnosticCode::AmbiguousRanking
+            },
+            "backend capability facts must identify exactly one available variant for the explicit device",
+            "embedded_runtime_dispatch_candidate_provider.runtime_variant",
+        ));
+    };
+    SchedulerRuntimeVariantId::parse(variant.runtime_variant_id.as_str()).map_err(|_| {
+        provider_diagnostic(
+            SchedulerDispatchSelectionDiagnosticCode::InvalidCandidateEvidence,
+            "backend runtime variant cannot be represented by the dispatch contract",
+            "embedded_runtime_dispatch_candidate_provider.runtime_variant",
+        )
+    })
 }
 
 fn pre_reservation_evidence_check(
     draft: &EmbeddedRuntimeDispatchCandidateDraft,
     task_intent: &pantograph_scheduler::SchedulableTaskIntent,
     selected_device_id: pantograph_dependency_planning::DeviceIntentId,
-) -> Result<RuntimeDispatchEvidenceRecord, RuntimeDispatchEvidenceDiagnostic> {
-    RuntimeDispatchEvidenceRecord::new(RuntimeDispatchEvidenceRequest {
+) -> Result<(), RuntimeDispatchEvidenceDiagnostic> {
+    RuntimeDispatchEvidenceRequest {
         selected_backend_key: draft.selected_backend_key.clone(),
         runtime_family: draft.runtime_family.clone(),
         resolved_load_target: draft.resolved_load_target.clone(),
@@ -781,10 +991,11 @@ fn pre_reservation_evidence_check(
         runtime_instance_id: draft.runtime_instance_id.clone(),
         selected_runtime_id: draft.selected_runtime_id.clone(),
         selected_model_ref: draft.selected_model_ref.clone(),
-        selected_device_id: selected_device_id.clone(),
-        reservations: vec![pre_reservation_placeholder(selected_device_id)],
+        selected_device_id,
+        reservations: Vec::new(),
         resource_fit_assessment: fits_assessment(task_intent),
-    })
+    }
+    .validate_candidate_identity()
 }
 
 fn runtime_dispatch_evidence_record(
@@ -809,26 +1020,6 @@ fn runtime_dispatch_evidence_record(
         reservations,
         resource_fit_assessment,
     })
-}
-
-fn pre_reservation_placeholder(
-    selected_device_id: pantograph_dependency_planning::DeviceIntentId,
-) -> SchedulerResourceReservation {
-    SchedulerResourceReservation {
-        reservation_lease_id: SchedulerReservationLeaseId::parse(
-            "runtime-dispatch-evidence.pre-reservation",
-        )
-        .expect("pre-reservation lease id should be scheduler-safe"),
-        workflow_run_id: "pre-reservation.run"
-            .parse()
-            .expect("pre-reservation run id"),
-        task_id: "pre-reservation.task"
-            .parse()
-            .expect("pre-reservation task id"),
-        device_id: selected_device_id,
-        resource_kind: SchedulerResourceKind::DeviceVram,
-        reserved_bytes: 1,
-    }
 }
 
 fn fits_assessment(
@@ -951,30 +1142,6 @@ fn resource_source_diagnostics(
         .collect()
 }
 
-fn backend_hint_keys(backend_hints: &inference::BackendHintFacts) -> BTreeSet<String> {
-    backend_hints
-        .accepted
-        .iter()
-        .map(|hint| normalize_backend_key(backend_hint_label_key(*hint)))
-        .collect()
-}
-
-fn backend_hint_label_key(label: inference::BackendHintLabel) -> &'static str {
-    match label {
-        inference::BackendHintLabel::Transformers => "transformers",
-        inference::BackendHintLabel::LlamaCpp => "llama.cpp",
-        inference::BackendHintLabel::Vllm => "vllm",
-        inference::BackendHintLabel::Mlx => "mlx",
-        inference::BackendHintLabel::Candle => "candle",
-        inference::BackendHintLabel::Diffusers => "diffusers",
-        inference::BackendHintLabel::OnnxRuntime => "onnxruntime",
-    }
-}
-
-fn normalize_backend_key(value: &str) -> String {
-    value.trim().to_ascii_lowercase()
-}
-
 fn provider_diagnostic(
     code: SchedulerDispatchSelectionDiagnosticCode,
     message: &str,
@@ -1010,6 +1177,54 @@ mod tests {
     use crate::runtime_dispatch_capability_facts::{
         RuntimeDispatchCapabilityFactsProjection, RuntimeDispatchRuntimeCapabilityFacts,
     };
+
+    #[test]
+    fn private_source_indirections_preserve_raw_facts_and_snapshot_clone_isolation() {
+        let expected = source_snapshot(Vec::new(), Vec::new());
+        let expected_facts = pumas_package_facts(vec![inference::BackendHintLabel::Diffusers]);
+        let provider =
+            EmbeddedRuntimeDispatchCandidateProvider::with_source_snapshot(expected.clone());
+        let mut returned = provider
+            .source_snapshot
+            .snapshot_for_dispatch(&path_free_model_ref());
+        assert_eq!(returned, expected);
+        let Some(PumasDispatchPackageFactsBridgeOutcome::Projected { facts, diagnostics }) =
+            returned.pumas_package_facts.as_mut()
+        else {
+            panic!("snapshot must preserve projected package facts");
+        };
+        assert_eq!(facts.as_ref(), &expected_facts);
+        assert!(diagnostics.is_empty());
+        facts.model_ref.model_id = "changed-returned-copy".to_string();
+        returned.snapshot_version = 99;
+        assert_eq!(
+            provider
+                .source_snapshot
+                .snapshot_for_dispatch(&path_free_model_ref()),
+            expected
+        );
+        assert!(std::mem::size_of::<PumasDispatchPackageFactsBridgeOutcome>() <= 64);
+        assert!(std::mem::size_of::<EmbeddedRuntimeDispatchCandidateSource>() <= 64);
+    }
+
+    #[test]
+    fn default_provider_retains_empty_snapshot_and_fail_closed_diagnostics() {
+        let provider = EmbeddedRuntimeDispatchCandidateProvider::default();
+        assert!(provider.resource_facts_source.is_none());
+        let EmbeddedRuntimeDispatchCandidateSource::Snapshot(snapshot) = provider.source_snapshot
+        else {
+            panic!("default provider must retain snapshot mode");
+        };
+        assert_eq!(
+            *snapshot,
+            EmbeddedRuntimeDispatchCandidateSourceSnapshot::default()
+        );
+        let diagnostics = fail_closed_diagnostics(&snapshot, &path_free_model_ref());
+        assert_eq!(diagnostics.len(), 4);
+        assert!(diagnostics.iter().all(|diagnostic| diagnostic.code
+            == SchedulerDispatchSelectionDiagnosticCode::NoCandidates
+            && diagnostic.severity == SchedulerDispatchSelectionDiagnosticSeverity::Error));
+    }
 
     #[test]
     fn fail_closed_provider_reports_missing_source_facts() {
@@ -1214,6 +1429,39 @@ mod tests {
     }
 
     #[test]
+    fn mismatched_load_target_identity_cannot_reserve_a_candidate() {
+        let registry = dispatch_registry();
+        let mut snapshot = source_snapshot(
+            vec![runtime_capability("pytorch", vec!["diffusers"])],
+            Vec::new(),
+        );
+        snapshot.pumas_load_target_facts =
+            Some(RuntimeDispatchLoadTargetFactsOutcome::Unavailable {
+                diagnostics: vec![RuntimeDispatchLoadTargetFactsDiagnostic {
+                    code: RuntimeDispatchLoadTargetFactsDiagnosticCode::SelectedIdentityMismatch,
+                    runtime_family: Some("diffusers".to_string()),
+                    message: "selected model identity disagrees with the ready target".to_string(),
+                }],
+            });
+        let provider = EmbeddedRuntimeDispatchCandidateProvider::with_source_snapshot(snapshot)
+            .with_resource_facts_source(RuntimeDispatchResourceFactsSource::new(registry.clone()));
+        let result = provider
+            .runtime_dispatch_candidates(
+                &workflow_task(Some("cuda:0")),
+                &ready_record(),
+                &readiness_proof(),
+            )
+            .expect("identity mismatch must remain a typed rejection");
+        assert!(result.candidates.is_empty());
+        assert!(result.diagnostics.iter().any(|diagnostic| {
+            diagnostic.code == SchedulerDispatchSelectionDiagnosticCode::InvalidCandidateEvidence
+                && diagnostic.hint.as_deref()
+                    == Some("embedded_runtime_dispatch_candidate_provider.load_target.selected_identity_mismatch")
+        }));
+        assert!(registry.snapshot().reservations.is_empty());
+    }
+
+    #[test]
     fn provider_fails_closed_when_load_target_evidence_is_missing() {
         let registry = Arc::new(RuntimeRegistry::new());
         registry.register_runtime(
@@ -1235,7 +1483,9 @@ mod tests {
         let provider = EmbeddedRuntimeDispatchCandidateProvider::with_source_snapshot(
             EmbeddedRuntimeDispatchCandidateSourceSnapshot {
                 pumas_package_facts: Some(PumasDispatchPackageFactsBridgeOutcome::Projected {
-                    facts: pumas_package_facts(vec![inference::BackendHintLabel::Diffusers]),
+                    facts: Box::new(pumas_package_facts(vec![
+                        inference::BackendHintLabel::Diffusers,
+                    ])),
                     diagnostics: Vec::new(),
                 }),
                 runtime_capability_facts: Some(RuntimeDispatchCapabilityFactsOutcome::Projected {
@@ -1386,6 +1636,86 @@ mod tests {
     }
 
     #[test]
+    fn provider_ambiguous_or_duplicate_alternatives_leave_registry_unreserved() {
+        for duplicate in [false, true] {
+            let registry = dispatch_registry();
+            registry.register_runtime(
+                pantograph_runtime_registry::RuntimeRegistration::new("pytorch-alt", "Alternative")
+                    .with_backend_keys(vec!["diffusers".into()])
+                    .with_admission_budget(RuntimeAdmissionBudget::from_resources(vec![
+                        RuntimeAdmissionResourceBudget::ram_bytes(Some(16 * mib())),
+                        RuntimeAdmissionResourceBudget::vram_bytes(Some(8 * mib())),
+                    ])),
+            );
+            let first = runtime_capability("pytorch", vec!["diffusers"]);
+            let second = if duplicate {
+                first.clone()
+            } else {
+                runtime_capability("pytorch-alt", vec!["diffusers"])
+            };
+            let provider = EmbeddedRuntimeDispatchCandidateProvider::with_source_snapshot(
+                source_snapshot(vec![first, second], vec![load_target("diffusers")]),
+            )
+            .with_resource_facts_source(RuntimeDispatchResourceFactsSource::new(registry.clone()));
+            let mut task = workflow_task(Some("cuda:0"));
+            task.schedulable_intent
+                .as_mut()
+                .unwrap()
+                .constraints
+                .requested_runtime_id = None;
+            let result = provider
+                .runtime_dispatch_candidates(&task, &ready_record(), &readiness_proof())
+                .unwrap();
+            assert!(result.candidates.is_empty());
+            assert!(result.diagnostics.iter().any(|diagnostic| diagnostic.code
+                == if duplicate {
+                    SchedulerDispatchSelectionDiagnosticCode::DuplicateCandidateId
+                } else {
+                    SchedulerDispatchSelectionDiagnosticCode::AmbiguousRanking
+                }));
+            assert!(registry.snapshot().reservations.is_empty());
+        }
+    }
+
+    #[test]
+    fn provider_ignores_unrequested_alternative_before_acquiring_exactly_one_lease() {
+        let registry = dispatch_registry();
+        registry.register_runtime(
+            pantograph_runtime_registry::RuntimeRegistration::new("pytorch-alt", "Alternative")
+                .with_backend_keys(vec!["diffusers".into()])
+                .with_admission_budget(RuntimeAdmissionBudget::from_resources(vec![
+                    RuntimeAdmissionResourceBudget::ram_bytes(Some(16 * mib())),
+                    RuntimeAdmissionResourceBudget::vram_bytes(Some(8 * mib())),
+                ])),
+        );
+        let provider =
+            EmbeddedRuntimeDispatchCandidateProvider::with_source_snapshot(source_snapshot(
+                vec![
+                    runtime_capability("pytorch-alt", vec!["diffusers"]),
+                    runtime_capability("pytorch", vec!["diffusers"]),
+                ],
+                vec![load_target("diffusers")],
+            ))
+            .with_resource_facts_source(RuntimeDispatchResourceFactsSource::new(registry.clone()));
+        let result = provider
+            .runtime_dispatch_candidates(
+                &workflow_task(Some("cuda:0")),
+                &ready_record(),
+                &readiness_proof(),
+            )
+            .unwrap();
+        assert_eq!(result.candidates.len(), 1);
+        let snapshot = registry.snapshot();
+        assert_eq!(snapshot.reservations.len(), 1);
+        assert_eq!(snapshot.reservations[0].runtime_id, "pytorch");
+        assert_eq!(snapshot.reservations[0].reservation_id, 1);
+        assert_eq!(
+            result.candidates[0].candidate_id.as_str(),
+            "runtime.pytorch"
+        );
+    }
+
+    #[test]
     fn provider_does_not_emit_candidate_without_explicit_device_fact() {
         let registry = Arc::new(RuntimeRegistry::new());
         registry.register_runtime(
@@ -1395,7 +1725,9 @@ mod tests {
         let provider = EmbeddedRuntimeDispatchCandidateProvider::with_source_snapshot(
             EmbeddedRuntimeDispatchCandidateSourceSnapshot {
                 pumas_package_facts: Some(PumasDispatchPackageFactsBridgeOutcome::Projected {
-                    facts: pumas_package_facts(vec![inference::BackendHintLabel::Diffusers]),
+                    facts: Box::new(pumas_package_facts(vec![
+                        inference::BackendHintLabel::Diffusers,
+                    ])),
                     diagnostics: Vec::new(),
                 }),
                 runtime_capability_facts: Some(RuntimeDispatchCapabilityFactsOutcome::Projected {
@@ -1423,6 +1755,219 @@ mod tests {
             diagnostic.code
                 == SchedulerDispatchSelectionDiagnosticCode::IncompatibleDeviceRequirement
         }));
+    }
+
+    fn cpu_runtime_capability(runtime_id: &str) -> RuntimeDispatchRuntimeCapabilityFacts {
+        let mut runtime = runtime_capability(runtime_id, vec!["diffusers"]);
+        runtime.device_ids = vec!["cpu".parse().unwrap()];
+        runtime.backend_capabilities.runtime_variants[0].device_class =
+            inference::InferenceDeviceClass::Cpu;
+        runtime.backend_capabilities.runtime_variants[0].runtime_variant_id =
+            "pytorch.cpu".parse().unwrap();
+        runtime
+            .automatic_device_candidates
+            .push(inference::gateway::RuntimeOwnedDeviceCandidate {
+                backend_key: "pytorch".into(),
+                runtime_variant_id: "pytorch.cpu".parse().unwrap(),
+                device_id: "cpu".parse().unwrap(),
+            });
+        runtime
+    }
+
+    #[test]
+    fn unconstrained_cpu_selection_keeps_full_peak_claims_and_rolls_back_untransferred_custody() {
+        let registry = dispatch_registry();
+        let provider =
+            EmbeddedRuntimeDispatchCandidateProvider::with_source_snapshot(source_snapshot(
+                vec![cpu_runtime_capability("pytorch")],
+                vec![load_target("diffusers")],
+            ))
+            .with_resource_facts_source(RuntimeDispatchResourceFactsSource::new(registry.clone()));
+        let result = provider
+            .runtime_dispatch_candidates(&workflow_task(None), &ready_record(), &readiness_proof())
+            .unwrap();
+        assert_eq!(result.candidates.len(), 1, "{:?}", result.diagnostics);
+        let selected = &result.candidates[0];
+        assert_eq!(selected.selected_device_ids[0].as_str(), "cpu");
+        assert_eq!(
+            selected
+                .selected_runtime_variant_id
+                .as_ref()
+                .unwrap()
+                .as_str(),
+            "pytorch.cpu"
+        );
+        assert_eq!(registry.snapshot().reservations.len(), 1);
+        assert_eq!(
+            selected
+                .reservations
+                .iter()
+                .map(|claim| claim.reserved_bytes)
+                .sum::<u64>(),
+            3 * mib()
+        );
+        drop(result);
+        assert!(registry.snapshot().reservations.is_empty());
+    }
+
+    #[test]
+    fn automatic_cpu_alternatives_and_hard_runtime_constraints_never_acquire_speculative_leases() {
+        let registry = dispatch_registry();
+        registry.register_runtime(
+            pantograph_runtime_registry::RuntimeRegistration::new("pytorch-alt", "alternative")
+                .with_backend_keys(vec!["diffusers".into()])
+                .with_admission_budget(RuntimeAdmissionBudget::from_resources(vec![
+                    RuntimeAdmissionResourceBudget::ram_bytes(Some(16 * mib())),
+                    RuntimeAdmissionResourceBudget::vram_bytes(Some(8 * mib())),
+                ])),
+        );
+        let provider =
+            EmbeddedRuntimeDispatchCandidateProvider::with_source_snapshot(source_snapshot(
+                vec![
+                    cpu_runtime_capability("pytorch"),
+                    cpu_runtime_capability("pytorch-alt"),
+                ],
+                vec![load_target("diffusers")],
+            ))
+            .with_resource_facts_source(RuntimeDispatchResourceFactsSource::new(registry.clone()));
+        for runtime_constraint in [None, Some("unsupported")] {
+            let mut task = workflow_task(None);
+            task.schedulable_intent
+                .as_mut()
+                .unwrap()
+                .constraints
+                .requested_runtime_id = runtime_constraint.map(|id| id.parse().unwrap());
+            let result = provider
+                .runtime_dispatch_candidates(&task, &ready_record(), &readiness_proof())
+                .unwrap();
+            assert!(result.candidates.is_empty());
+            assert!(registry.snapshot().reservations.is_empty());
+            if runtime_constraint.is_none() {
+                assert!(result.diagnostics.iter().any(|diagnostic| diagnostic.code
+                    == SchedulerDispatchSelectionDiagnosticCode::AmbiguousRanking));
+            }
+        }
+        let result = provider
+            .runtime_dispatch_candidates(&workflow_task(None), &ready_record(), &readiness_proof())
+            .unwrap();
+        assert_eq!(result.candidates.len(), 1);
+        assert_eq!(result.candidates[0].selected_runtime_id.as_str(), "pytorch");
+        assert_eq!(registry.snapshot().reservations[0].reservation_id, 1);
+    }
+
+    #[test]
+    fn cpu_discovery_preserves_explicit_device_and_authoritative_admission() {
+        let registry = dispatch_registry();
+        let provider =
+            EmbeddedRuntimeDispatchCandidateProvider::with_source_snapshot(source_snapshot(
+                vec![cpu_runtime_capability("pytorch")],
+                vec![load_target("diffusers")],
+            ))
+            .with_resource_facts_source(RuntimeDispatchResourceFactsSource::new(registry.clone()));
+        let result = provider
+            .runtime_dispatch_candidates(
+                &workflow_task(Some("cuda:0")),
+                &ready_record(),
+                &readiness_proof(),
+            )
+            .unwrap();
+        assert_eq!(result.candidates.len(), 1);
+        assert_eq!(
+            result.candidates[0].selected_device_ids[0].as_str(),
+            "cuda:0"
+        );
+        assert!(result.candidates[0].selected_runtime_variant_id.is_none());
+        drop(result);
+        let mut task = workflow_task(None);
+        task.schedulable_intent.as_mut().unwrap().estimate_hints[0].value = 17 * mib();
+        let result = provider
+            .runtime_dispatch_candidates(&task, &ready_record(), &readiness_proof())
+            .unwrap();
+        assert!(result.candidates.is_empty());
+        assert!(registry.snapshot().reservations.is_empty());
+    }
+
+    #[test]
+    fn duplicate_owned_cpu_bindings_fail_closed_before_any_lease_for_explicit_or_automatic_choice()
+    {
+        let registry = dispatch_registry();
+        let mut runtime = cpu_runtime_capability("pytorch");
+        runtime
+            .automatic_device_candidates
+            .push(runtime.automatic_device_candidates[0].clone());
+        let provider = EmbeddedRuntimeDispatchCandidateProvider::with_source_snapshot(
+            source_snapshot(vec![runtime], vec![load_target("diffusers")]),
+        )
+        .with_resource_facts_source(RuntimeDispatchResourceFactsSource::new(registry.clone()));
+        for requested in [None, Some("cpu")] {
+            let result = provider
+                .runtime_dispatch_candidates(
+                    &workflow_task(requested),
+                    &ready_record(),
+                    &readiness_proof(),
+                )
+                .unwrap();
+            assert!(result.candidates.is_empty());
+            assert!(result.diagnostics.iter().any(|diagnostic| diagnostic.code
+                == SchedulerDispatchSelectionDiagnosticCode::DuplicateCandidateId));
+            assert!(registry.snapshot().reservations.is_empty());
+        }
+    }
+
+    #[test]
+    fn unavailable_ambiguous_and_incompatible_variants_reserve_nothing() {
+        for case in [
+            "missing",
+            "unavailable",
+            "ambiguous",
+            "device",
+            "unobserved",
+            "task",
+        ] {
+            let registry = dispatch_registry();
+            let mut runtime = runtime_capability("pytorch", vec!["diffusers"]);
+            match case {
+                "missing" => runtime.backend_capabilities.runtime_variants.clear(),
+                "unavailable" => runtime.backend_capabilities.runtime_variants[0].available = false,
+                "ambiguous" => runtime
+                    .backend_capabilities
+                    .runtime_variants
+                    .push(runtime.backend_capabilities.runtime_variants[0].clone()),
+                "device" => {
+                    runtime.backend_capabilities.runtime_variants[0].device_class =
+                        inference::InferenceDeviceClass::Cpu
+                }
+                "unobserved" => runtime.device_ids.clear(),
+                "task" => runtime.backend_capabilities.tasks.clear(),
+                _ => unreachable!(),
+            }
+            let provider = EmbeddedRuntimeDispatchCandidateProvider::with_source_snapshot(
+                source_snapshot(vec![runtime], vec![load_target("diffusers")]),
+            )
+            .with_resource_facts_source(RuntimeDispatchResourceFactsSource::new(registry.clone()));
+            let result = provider
+                .runtime_dispatch_candidates(
+                    &workflow_task(Some("cuda:0")),
+                    &ready_record(),
+                    &readiness_proof(),
+                )
+                .expect("typed candidate outcome");
+            assert!(result.candidates.is_empty(), "{case}");
+            let expected = match case {
+                "task" => SchedulerDispatchSelectionDiagnosticCode::IncompatibleRuntimeRequirement,
+                "ambiguous" => SchedulerDispatchSelectionDiagnosticCode::AmbiguousRanking,
+                _ => SchedulerDispatchSelectionDiagnosticCode::IncompatibleDeviceRequirement,
+            };
+            assert!(
+                result
+                    .diagnostics
+                    .iter()
+                    .any(|diagnostic| diagnostic.code == expected),
+                "{case}: {:?}",
+                result.diagnostics
+            );
+            assert!(registry.snapshot().reservations.is_empty(), "{case}");
+        }
     }
 
     fn has_hint(diagnostics: &[SchedulerDispatchSelectionDiagnostic], hint: &str) -> bool {
@@ -1498,6 +2043,29 @@ mod tests {
     ) -> RuntimeDispatchRuntimeCapabilityFacts {
         RuntimeDispatchRuntimeCapabilityFacts {
             runtime_id: runtime_id.to_string(),
+            backend_capabilities: inference::BackendCapabilityFacts {
+                tasks: vec![inference::BackendTaskCapability::stable(
+                    inference::InferenceTaskId::ImageGeneration,
+                    vec![inference::InferenceModality::Text],
+                    vec![inference::InferenceModality::Image],
+                )],
+                model_sources: inference::BackendModelSourceCapabilityFacts {
+                    backend_hints: if backend_keys.contains(&"diffusers") {
+                        vec![inference::BackendHintLabel::Diffusers]
+                    } else {
+                        vec![inference::BackendHintLabel::LlamaCpp]
+                    },
+                    ..Default::default()
+                },
+                runtime_variants: vec![inference::RuntimeVariantCapability {
+                    runtime_variant_id: "pytorch.cuda".parse().expect("variant"),
+                    device_class: inference::InferenceDeviceClass::Cuda,
+                    available: true,
+                    diagnostics: Vec::new(),
+                }],
+                ..Default::default()
+            },
+            device_ids: vec!["cuda:0".parse().expect("observed fixture device")],
             backend_keys: backend_keys.into_iter().map(str::to_string).collect(),
             runtime_family: "diffusers".to_string(),
             runtime_residency_key: format!("runtime.diffusers.{runtime_id}.shared"),
@@ -1506,6 +2074,7 @@ mod tests {
             loaded_model_ids: Vec::new(),
             active_reservation_ids: Vec::new(),
             has_admission_budget: true,
+            automatic_device_candidates: Vec::new(),
         }
     }
 
@@ -1536,7 +2105,9 @@ mod tests {
     ) -> EmbeddedRuntimeDispatchCandidateSourceSnapshot {
         EmbeddedRuntimeDispatchCandidateSourceSnapshot {
             pumas_package_facts: Some(PumasDispatchPackageFactsBridgeOutcome::Projected {
-                facts: pumas_package_facts(vec![inference::BackendHintLabel::Diffusers]),
+                facts: Box::new(pumas_package_facts(vec![
+                    inference::BackendHintLabel::Diffusers,
+                ])),
                 diagnostics: Vec::new(),
             }),
             runtime_capability_facts: Some(RuntimeDispatchCapabilityFactsOutcome::Projected {
@@ -1636,9 +2207,9 @@ mod tests {
             node_id: intent.node_id,
             task_id: intent.task_id,
             state: SchedulerTaskState::Ready {
-                execution_intent: pantograph_scheduler::SchedulerTaskExecutionIntent::Runtime {
-                    task_intent: schedulable_intent(Some("cuda:0")),
-                },
+                execution_intent: pantograph_scheduler::SchedulerTaskExecutionIntent::runtime(
+                    schedulable_intent(Some("cuda:0")),
+                ),
             },
             state_version: 1,
             last_transition_id: SchedulerTaskStateTransitionId::parse("transition.ready")

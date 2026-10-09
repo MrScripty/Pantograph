@@ -178,6 +178,8 @@ fn runtime_snapshot_with_claims(
         active_reservation_claims,
         admission_budget: record.admission_budget.clone(),
         models,
+        resident_resources_uncertain: record.resident_resources_uncertain,
+        model_resource_residency: record.model_resource_residency.clone(),
     }
 }
 
@@ -196,7 +198,7 @@ pub(super) fn runtime_is_evictable(record: &RuntimeRegistryRecord) -> bool {
             | RuntimeRegistryStatus::Ready
             | RuntimeRegistryStatus::Unhealthy
             | RuntimeRegistryStatus::Stopping
-    )
+    ) || (record.status == RuntimeRegistryStatus::Failed && record.resident_resources_uncertain)
 }
 
 fn runtime_is_reservation_evictable(record: &RuntimeRegistryRecord) -> bool {
@@ -210,7 +212,7 @@ fn runtime_is_reservation_evictable(record: &RuntimeRegistryRecord) -> bool {
             | RuntimeRegistryStatus::Ready
             | RuntimeRegistryStatus::Unhealthy
             | RuntimeRegistryStatus::Stopping
-    )
+    ) || (record.status == RuntimeRegistryStatus::Failed && record.resident_resources_uncertain)
 }
 
 fn eviction_status_rank(status: RuntimeRegistryStatus) -> u8 {

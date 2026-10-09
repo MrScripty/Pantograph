@@ -11,7 +11,7 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  PUMAS_LIBRARY_REF: 66c0c11a57b8bfe8fb70d827efced0fbc442b156
+  PUMAS_LIBRARY_REF: 26a84e323cae566a46a8f76bef48fa1010aed48b
 
 jobs:
   lint-no-new:
@@ -44,6 +44,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          if [[ ! "$EVENT_BASE" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            echo "Traceability requires the event's full base commit SHA" >&2
+            exit 1
+          fi
+          if ! git cat-file -e "${EVENT_BASE}^{commit}" 2>/dev/null; then
+            if ! git fetch --no-tags origin "$EVENT_BASE" ||
+              ! git cat-file -e "${EVENT_BASE}^{commit}" 2>/dev/null; then
+              echo "Traceability event base is unavailable; cannot compute the no-new lint range" >&2
+              exit 1
+            fi
+          fi
           base="$(git rev-parse --verify --end-of-options "${EVENT_BASE}^{commit}")"
           head="$(git rev-parse --verify --end-of-options "${EVENT_HEAD}^{commit}")"
           if [[ "$EVENT_NAME" == pull_request ]]; then
@@ -121,6 +132,12 @@ jobs:
       - name: Block high severity production vulnerabilities
         run: npm audit --omit=dev --audit-level=high
 
+      - name: Verify installed dependency tree
+        run: npm ls --all
+
+      - name: Build frontend assets
+        run: npm run build
+
   rust-check:
     name: Rust workspace check
     runs-on: ubuntu-latest
@@ -128,21 +145,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Ubuntu native desktop dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential \
-            libayatana-appindicator3-dev \
-            libglib2.0-dev \
-            libgtk-3-dev \
-            libjavascriptcoregtk-4.1-dev \
-            librsvg2-dev \
-            libsoup-3.0-dev \
-            libssl-dev \
-            libwebkit2gtk-4.1-dev \
-            libxdo-dev \
-            pkg-config
+      - name: Install Ubuntu native build dependencies
+        run: ./scripts/install-ubuntu-build-dependencies.sh
 
       - name: Checkout Pumas-Library
         uses: actions/checkout@v4
@@ -163,11 +167,17 @@ jobs:
       - name: Cache Cargo
         uses: Swatinem/rust-cache@v2
 
+      - name: Verify ONNX cannot download during builds
+        run: python3 scripts/check-onnx-no-build-download.py
+
       - name: Check workspace without default features
         run: cargo check --workspace --no-default-features
 
       - name: Check workspace with all features
         run: cargo check --workspace --all-features
+
+      - name: Verify Tauri injected-state IPC contracts
+        run: bash scripts/check-tauri-command-state-tests.sh
 
   rust-tests:
     name: Rust focused tests
@@ -191,9 +201,95 @@ jobs:
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@1.92.0
+        with:
+          components: clippy
 
       - name: Cache Cargo
         uses: Swatinem/rust-cache@v2
+
+      - name: Run persisted AppConfig and startup composition tests
+        run: cargo test --locked -p pantograph-app-config
+
+      - name: Run scheduler contract and accessor compatibility tests
+        run: cargo test -p pantograph-scheduler
+
+      - name: Check scheduler standard-trait accessor lint
+        run: cargo clippy -p pantograph-scheduler --all-targets -- -D clippy::should_implement_trait
+
+      - name: Run runtime-host contract and accessor compatibility tests
+        run: cargo test -p pantograph-runtime-host-contracts
+      - name: Check runtime-host standard-trait accessor lint
+        run: cargo clippy -p pantograph-runtime-host-contracts --all-targets -- -D clippy::should_implement_trait
+      - name: Run diagnostics ledger contract tests
+        run: cargo test -p pantograph-diagnostics-ledger
+      - name: Run media conversion contract tests
+        run: cargo test -p pantograph-media-conversion
+
+      - name: Run inference compatibility and contract tests
+        run: |
+          cargo test -p inference --lib backend::compatibility::tests
+          cargo test -p inference --lib model_contracts::tests
+          cargo test -p inference --lib server::tests::runtime_matchers_preserve_path_component_comparison
+
+      - name: Run inference payload serialization and planner tests
+        run: |
+          cargo test -p inference --lib managed_runtime::contracts::tests
+          cargo test -p inference --lib image_generation_planner_tests
+          cargo test -p inference --features backend-pytorch --lib pytorch_worker_image_contract_tests -- --list > "$RUNNER_TEMP/pytorch-image-contract-tests.list"
+          python3 -c 'import pathlib, sys; names = [line for line in pathlib.Path(sys.argv[1]).read_text().splitlines() if line.startswith("backend::pytorch::pytorch_worker_image_contract_tests::") and line.endswith(": test")]; print("PyTorch image contract tests discovered:", len(names)); sys.exit(0 if names else 1)' "$RUNNER_TEMP/pytorch-image-contract-tests.list"
+          cargo test -p inference --features backend-pytorch --lib pytorch_worker_image_contract_tests
+
+      - name: Run gateway attribution and warmup regression tests
+        run: |
+          cargo test -p inference --lib gateway::tests::private_lifecycle_context
+          cargo test -p inference --lib gateway::tests::test_runtime_lifecycle_snapshot
+          cargo test -p inference --lib gateway::tests::test_failed_restart_clears_active_runtime_config_and_attempted_modes
+
+      - name: Run typed error boundary regression tests
+        run: |
+          cargo test -p inference --lib managed_binaries::tests
+          cargo test -p inference --test model_contracts task_registry_resolution_
+
+      - name: Run named PyTorch text request contract tests
+        run: |
+          cargo test -p inference --features backend-pytorch --lib pytorch_named_text_request -- --list > "$RUNNER_TEMP/pytorch-named-text-tests.list"
+          python3 -c 'import pathlib, sys; names = [line for line in pathlib.Path(sys.argv[1]).read_text().splitlines() if line.startswith("backend::pytorch::tests::pytorch_named_text_request") and line.endswith(": test")]; print("Named PyTorch text tests discovered:", len(names)); sys.exit(0 if names else 1)' "$RUNNER_TEMP/pytorch-named-text-tests.list"
+          cargo test -p inference --features backend-pytorch --lib pytorch_named_text_request
+          cargo test -p inference --features backend-pytorch --lib test_pytorch_generate_text_
+
+      - name: Run aggregate inference tests with Python worker fixtures
+        run: cargo test -p inference --features backend-pytorch --lib
+
+      - name: Run llama server startup and reuse contract tests
+        run: |
+          for test_filter in server::tests backend::llamacpp::tests; do
+            cargo test -p inference --features backend-llamacpp --lib "$test_filter" -- --list > "$RUNNER_TEMP/llama-settings-tests.list"
+            python3 -c 'import pathlib, sys; prefix = sys.argv[2] + "::"; names = [line for line in pathlib.Path(sys.argv[1]).read_text().splitlines() if line.startswith(prefix) and line.endswith(": test")]; print(prefix, "tests discovered:", len(names)); sys.exit(0 if names else 1)' "$RUNNER_TEMP/llama-settings-tests.list" "$test_filter"
+            cargo test -p inference --features backend-llamacpp --lib "$test_filter"
+          done
+
+      - name: Run contract-only node lifecycle tests
+        run: |
+          cargo test -p node-engine --features inference-nodes --lib rejects_contract_only_with_lifecycle -- --list > "$RUNNER_TEMP/node-validation-lifecycle-tests.list"
+          python3 -c 'import pathlib, sys; names = [line for line in pathlib.Path(sys.argv[1]).read_text().splitlines() if line.startswith("core_executor::tests::inference_tests::") and "rejects_contract_only_with_lifecycle" in line and line.endswith(": test")]; print("Contract-only lifecycle tests discovered:", len(names)); sys.exit(0 if names else 1)' "$RUNNER_TEMP/node-validation-lifecycle-tests.list"
+          cargo test -p node-engine --features inference-nodes --lib rejects_contract_only_with_lifecycle
+
+      - name: Run typed embedding and seed capture regressions
+        run: |
+          set -euo pipefail
+          export ORT_SKIP_DOWNLOAD=1
+          tests=(
+            core_executor::tests::inference_tests::test_canonical_llm_embedding_uses_typed_gateway_boundary
+            core_executor::tests::inference_tests::test_canonical_llm_embedding_with_package_facts_emits_compatibility_lifecycle
+            core_executor::tests::inference_tests::test_execute_llm_inference_non_streaming_uses_typed_gateway_boundary
+          )
+          cargo test -p node-engine --features inference-nodes --lib core_executor::tests::inference_tests:: -- --list > "$RUNNER_TEMP/node-typed-capture-tests.list"
+          for test_name in "${tests[@]}"; do
+            python3 -c 'import pathlib, sys; lines = pathlib.Path(sys.argv[1]).read_text().splitlines(); sys.exit(0 if sys.argv[2] + ": test" in lines else 1)' "$RUNNER_TEMP/node-typed-capture-tests.list" "$test_name"
+            result_path="$RUNNER_TEMP/node-typed-capture-${test_name##*::}.log"
+            cargo test -p node-engine --features inference-nodes --lib "$test_name" -- --exact 2>&1 | tee "$result_path"
+            python3 -c 'import pathlib, re, sys; text = pathlib.Path(sys.argv[1]).read_text(); sys.exit(0 if re.search(r"^test result: ok\. 1 passed; 0 failed; 0 ignored;", text, re.M) else 1)' "$result_path"
+          done
 
       - name: Run node-engine tests
         run: cargo test -p node-engine --lib
@@ -201,8 +297,132 @@ jobs:
       - name: Run workflow-nodes tests
         run: cargo test -p workflow-nodes --lib
 
+      - name: Run workflow-nodes model-library tests
+        run: cargo test --locked -p workflow-nodes --features model-library --lib
+
+      - name: Run embedded runtime unit tests
+        run: cargo test -p pantograph-embedded-runtime --lib
+      - name: Run runtime registry contract tests
+        run: cargo test -p pantograph-runtime-registry
+      - name: Run task summary contract tests
+        run: |
+          cargo test -p pantograph-workflow-service --lib workflow::task_run_summary::tests:: -- --list > "$RUNNER_TEMP/task-summary-tests.list"
+          python3 -c 'import pathlib, sys; names = [line for line in pathlib.Path(sys.argv[1]).read_text().splitlines() if line.startswith("workflow::task_run_summary::tests::") and line.endswith(": test")]; print("Task summary tests discovered:", len(names)); sys.exit(0 if names else 1)' "$RUNNER_TEMP/task-summary-tests.list"
+          cargo test -p pantograph-workflow-service --lib workflow::task_run_summary::tests::
+      - name: Run complete session execution regression suite
+        run: |
+          cargo test -p pantograph-workflow-service --lib workflow::tests::session_execution:: -- --list > "$RUNNER_TEMP/session-execution-tests.list"
+          python3 -c 'import pathlib, sys; names = [line for line in pathlib.Path(sys.argv[1]).read_text().splitlines() if line.startswith("workflow::tests::session_execution::") and line.endswith(": test")]; print("Session execution tests discovered:", len(names)); sys.exit(0 if names else 1)' "$RUNNER_TEMP/session-execution-tests.list"
+          cargo test -p pantograph-workflow-service --lib workflow::tests::session_execution::
+      - name: Run terminal diagnostic regression suite
+        run: |
+          cargo test -p pantograph-workflow-service --lib workflow::runtime_branch_run_finalization::tests:: -- --list > "$RUNNER_TEMP/terminal-diagnostic-tests.list"
+          python3 -c 'import pathlib, sys; names = [line for line in pathlib.Path(sys.argv[1]).read_text().splitlines() if line.startswith("workflow::runtime_branch_run_finalization::tests::") and line.endswith(": test")]; print("Terminal diagnostic tests discovered:", len(names)); sys.exit(0 if names else 1)' "$RUNNER_TEMP/terminal-diagnostic-tests.list"
+          cargo test -p pantograph-workflow-service --lib workflow::runtime_branch_run_finalization::tests::
+      - name: Run workflow inference projection regression suites
+        run: |
+          for module in workflow::tests::task_graph:: workflow::tests::task_binding_resolution:: workflow::executable_validation_snapshot::tests::; do
+            cargo test -p pantograph-workflow-service --lib "$module" -- --list > "$RUNNER_TEMP/projection-tests.list"
+            python3 -c 'import pathlib, sys; names = [line for line in pathlib.Path(sys.argv[1]).read_text().splitlines() if line.startswith(sys.argv[2]) and line.endswith(": test")]; print(sys.argv[2], "tests discovered:", len(names)); sys.exit(0 if names else 1)' "$RUNNER_TEMP/projection-tests.list" "$module"
+            cargo test -p pantograph-workflow-service --lib "$module"
+          done
+      - name: Run private workflow owner regression suites
+        run: |
+          for module in graph::inference_validation_state::tests:: workflow::task_execution_worker::tests::; do
+            cargo test -p pantograph-workflow-service --lib "$module" -- --list > "$RUNNER_TEMP/private-owner-tests.list"
+            python3 -c 'import pathlib, sys; names = [line for line in pathlib.Path(sys.argv[1]).read_text().splitlines() if line.startswith(sys.argv[2]) and line.endswith(": test")]; print(sys.argv[2], "tests discovered:", len(names)); sys.exit(0 if names else 1)' "$RUNNER_TEMP/private-owner-tests.list" "$module"
+            cargo test -p pantograph-workflow-service --lib "$module"
+          done
+      - name: Run workflow style contract regressions
+        run: |
+          cargo test -p pantograph-workflow-service --lib lint_style_ -- --list > "$RUNNER_TEMP/workflow-style-tests.list"
+          python3 -c 'import pathlib, sys; names = [line for line in pathlib.Path(sys.argv[1]).read_text().splitlines() if "lint_style_regressions::lint_style_" in line and line.endswith(": test")]; print("Workflow style tests discovered:", len(names)); sys.exit(0 if names else 1)' "$RUNNER_TEMP/workflow-style-tests.list"
+          cargo test -p pantograph-workflow-service --lib lint_style_
+      - name: Run workflow scheduler orchestrator regression tests
+        run: |
+          cargo test -p pantograph-workflow-service --lib scheduler::task_orchestrator::tests:: -- --list > "$RUNNER_TEMP/orchestrator-tests.list"
+          python3 -c 'import pathlib, sys; names = [line for line in pathlib.Path(sys.argv[1]).read_text().splitlines() if line.startswith("scheduler::task_orchestrator::tests::") and line.endswith(": test")]; print("Orchestrator tests discovered:", len(names)); sys.exit(0 if names else 1)' "$RUNNER_TEMP/orchestrator-tests.list"
+          cargo test -p pantograph-workflow-service --lib scheduler::task_orchestrator::tests::
       - name: Run workflow-service contract tests
         run: cargo test -p pantograph-workflow-service --test contract
+      - name: Run artifact-store integration contracts
+        run: cargo test -p pantograph-workflow-service --test artifact_store
+
+      - name: Install CPU sampler test dependencies
+        run: |
+          python3 -m venv "$RUNNER_TEMP/sampler-venv"
+          "$RUNNER_TEMP/sampler-venv/bin/python" -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          "$RUNNER_TEMP/sampler-venv/bin/python" -m pip install 'transformers>=4.52,<4.54'
+
+      - name: Run real CPU sampler tests without model downloads
+        shell: bash
+        env:
+          HF_HUB_OFFLINE: '1'
+          TRANSFORMERS_OFFLINE: '1'
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/sampler-venv/bin/python" -c 'import torch, transformers, unittest; print("torch", torch.__version__, "transformers", transformers.__version__); assert torch.version.cuda is None; suite = unittest.defaultTestLoader.discover("crates/inference/torch/tests"); print("Sampler tests discovered:", suite.countTestCases()); assert suite.countTestCases() >= 6'
+          "$RUNNER_TEMP/sampler-venv/bin/python" -m unittest discover -s crates/inference/torch/tests -v 2>&1 | tee "$RUNNER_TEMP/cpu-sampler-tests.log"
+
+      - name: Upload CPU sampler test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cpu-sampler-tests
+          path: ${{ runner.temp }}/cpu-sampler-tests.log
+          if-no-files-found: warn
+
+  text-control-qualification:
+    name: Exact-head native text controls
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact requested source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Install Ubuntu native build dependencies
+        run: ./scripts/install-ubuntu-build-dependencies.sh
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@1.92.0
+
+      - name: Install Python toolchain
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install CPU sampler test dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m venv "$RUNNER_TEMP/text-control-venv"
+          "$RUNNER_TEMP/text-control-venv/bin/python" -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          "$RUNNER_TEMP/text-control-venv/bin/python" -m pip install 'transformers>=4.52,<4.54'
+
+      - name: Execute exact-head native host, workflow and CPU tests
+        shell: bash
+        env:
+          TEXT_CONTROL_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          export PANTOGRAPH_QUALIFICATION_PYTHON="$RUNNER_TEMP/text-control-venv/bin/python"
+          export PYO3_PYTHON="$PANTOGRAPH_QUALIFICATION_PYTHON"
+          python_library_dir="$("$PANTOGRAPH_QUALIFICATION_PYTHON" -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR"))')"
+          export LD_LIBRARY_PATH="$python_library_dir${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+          bash scripts/qualify-workflow-text-controls.sh "$TEXT_CONTROL_SOURCE_SHA" "$RUNNER_TEMP/text-control-qualification"
+
+      - name: Upload exact-head qualification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: exact-head-text-control-qualification
+          path: ${{ runner.temp }}/text-control-qualification/
+          if-no-files-found: warn
 
   rust-doc-tests:
     name: Rust doc tests
@@ -323,21 +543,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Ubuntu native desktop dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential \
-            libayatana-appindicator3-dev \
-            libglib2.0-dev \
-            libgtk-3-dev \
-            libjavascriptcoregtk-4.1-dev \
-            librsvg2-dev \
-            libsoup-3.0-dev \
-            libssl-dev \
-            libwebkit2gtk-4.1-dev \
-            libxdo-dev \
-            pkg-config
+      - name: Install Ubuntu native build dependencies
+        run: ./scripts/install-ubuntu-build-dependencies.sh
 
       - name: Checkout Pumas-Library
         uses: actions/checkout@v4
@@ -361,7 +568,7 @@ jobs:
       - name: Run warning-deny clippy audit
         id: run-clippy-audit
         continue-on-error: true
-        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+        run: cargo clippy --workspace --all-targets --all-features --keep-going -- -D warnings
 
       - name: Record clippy audit result
         id: report-clippy-audit
@@ -407,6 +614,7 @@ jobs:
       - dependency-audit
       - rust-check
       - rust-tests
+      - text-control-qualification
       - rust-doc-tests
       - rustler-beam-smoke
       - rust-format-audit
@@ -424,6 +632,7 @@ jobs:
             "dependency-audit:${{ needs.dependency-audit.result }}" \
             "rust-check:${{ needs.rust-check.result }}" \
             "rust-tests:${{ needs.rust-tests.result }}" \
+            "text-control-qualification:${{ needs.text-control-qualification.result }}" \
             "rust-doc-tests:${{ needs.rust-doc-tests.result }}" \
             "rustler-beam-smoke:${{ needs.rustler-beam-smoke.result }}"
           do

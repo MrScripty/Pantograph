@@ -1,0 +1,20 @@
+{
+  "main": "11ef074ad6fe42a4269a3b78edc931ae5d27533c",
+  "main_tree": "bafd6ccf9bf9696f713b4e6ab10db052e5fd6ac3",
+  "frozen": "0d7d573f36d8f25f3ae5c8adb25ab86c42e1dd8c",
+  "frozen_tree": "4f8b991baa72b537d6cb1a96c7450c019aec1577",
+  "tested_frozen": "2189046a6a0a418b54444308028b1af27323bf5a",
+  "integration": "bd99b620d479a96c6c6d0bc093e7e56b8bdd8eac",
+  "integration_tree": "3779e55bf32613871944cc7f14b9b7bbcfee4c74",
+  "parents": [
+    "11ef074ad6fe42a4269a3b78edc931ae5d27533c",
+    "0d7d573f36d8f25f3ae5c8adb25ab86c42e1dd8c"
+  ],
+  "frozen_to_integration_paths": [
+    "crates/pantograph-inference-interface-contracts/tests/contract.rs",
+    "docs/plans/domain-architecture-and-multimodal/plan.md"
+  ],
+  "local_name": "MrScripty",
+  "local_email": "TheEnvironmentGuy@protonmail.com",
+  "instructions": "No AGENTS.md or local SKILL.md found in checkout or accessible workspace .agents/.codex. Saved tools READINESS.md read; explicit task overrides its setup-only restrictions."
+}

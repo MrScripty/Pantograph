@@ -19,8 +19,8 @@ use inference::{
     PackageSizeRole, ProcessorComponentKind, PumasArtifactLoadPathKind, PumasArtifactLoadTarget,
     PumasModelRef, ResolvedModelPackageFacts, ResolvedModelSource, ResolvedModelSourceKind,
     RuntimeLifecycleSnapshot, SupportTier, TaskEvidence, TaskExecutionBehavior, TaskFamily,
-    TaskRegistryEntry, TaskRegistryResolutionDiagnosticKind, TaskRequestContract,
-    TaskStreamingSupport, MODEL_PACKAGE_FACTS_CONTRACT_VERSION,
+    TaskRegistryEntry, TaskRegistryResolutionDiagnostic, TaskRegistryResolutionDiagnosticKind,
+    TaskRequestContract, TaskStreamingSupport, MODEL_PACKAGE_FACTS_CONTRACT_VERSION,
 };
 
 const PACKAGE_FACT_FIXTURES: &[(&str, &str)] = &[
@@ -203,24 +203,18 @@ fn pumas_image_generation_fixture_decodes_with_structured_diffusers_facts() {
     }
 }
 
-#[test]
-fn pumas_artifact_load_target_decodes_existing_pumas_wire_shape() {
-    let target: PumasArtifactLoadTarget = serde_json::from_value(serde_json::json!({
-        "model_ref": {
-            "model_ref_contract_version": 1,
-            "model_id": "image/stable-diffusion/tiny-sd",
-            "selected_artifact_path": "image/stable-diffusion/tiny-sd"
-        },
-        "artifact_kind": "diffusers_bundle",
-        "local_load_path": "/pumas/models/image/stable-diffusion/tiny-sd",
-        "load_path_kind": "directory",
-        "library_root_id": "library-root",
-        "storage_kind": "library_owned",
-        "validation_state": "valid",
-        "package_facts_contract_version": MODEL_PACKAGE_FACTS_CONTRACT_VERSION
-    }))
-    .expect("Pumas load-target response target should decode");
+const PROJECTED_LOAD_TARGET: &str =
+    include_str!("fixtures/runtime_load/pantograph_artifact_load_target_projected.json");
+const PUMAS_LOAD_TARGET_WIRE: &str =
+    include_str!("fixtures/runtime_load/pumas_artifact_load_target_wire.json");
 
+#[test]
+fn pantograph_artifact_load_target_decodes_projected_pumas_shape() {
+    // This is the consumer contract after the host's typed Pumas adapter.
+    // The versioned producer DTO is decoded and projected in embedded runtime.
+    let target: PumasArtifactLoadTarget = serde_json::from_str(PROJECTED_LOAD_TARGET)
+        .expect("projected Pumas load target should decode");
+    target.validate_for_handoff().expect("target must validate");
     assert_eq!(target.model_ref.model_id, "image/stable-diffusion/tiny-sd");
     assert_eq!(target.artifact_kind, ModelArtifactKind::DiffusersBundle);
     assert_eq!(target.load_path_kind, PumasArtifactLoadPathKind::Directory);
@@ -230,6 +224,49 @@ fn pumas_artifact_load_target_decodes_existing_pumas_wire_shape() {
         target.local_load_path,
         "/pumas/models/image/stable-diffusion/tiny-sd"
     );
+    assert_eq!(
+        serde_json::to_value(target).unwrap(),
+        serde_json::from_str::<serde_json::Value>(PROJECTED_LOAD_TARGET).unwrap(),
+        "all projected identity, diagnostic, content and load-target facts survive"
+    );
+}
+
+#[test]
+fn pantograph_artifact_load_target_requires_projection_of_versioned_pumas_wire() {
+    let error = serde_json::from_str::<PumasArtifactLoadTarget>(PUMAS_LOAD_TARGET_WIRE)
+        .expect_err("producer metadata cannot bypass the typed host adapter");
+    assert!(error
+        .to_string()
+        .contains("unknown field `model_ref_contract_version`"));
+}
+
+#[test]
+fn projected_artifact_load_target_preserves_required_fields() {
+    let fixture: serde_json::Value = serde_json::from_str(PROJECTED_LOAD_TARGET).unwrap();
+    for field in [
+        "model_ref",
+        "artifact_kind",
+        "local_load_path",
+        "load_path_kind",
+        "storage_kind",
+        "validation_state",
+    ] {
+        let mut incomplete = fixture.clone();
+        incomplete.as_object_mut().unwrap().remove(field);
+        let error = serde_json::from_value::<PumasArtifactLoadTarget>(incomplete)
+            .expect_err("required target field must not default");
+        assert!(error
+            .to_string()
+            .contains(&format!("missing field `{field}`")));
+    }
+    let mut incomplete = fixture;
+    incomplete["model_ref"]
+        .as_object_mut()
+        .unwrap()
+        .remove("model_id");
+    let error = serde_json::from_value::<PumasArtifactLoadTarget>(incomplete)
+        .expect_err("selected model identity remains required");
+    assert!(error.to_string().contains("missing field `model_id`"));
 }
 
 #[test]
@@ -1156,6 +1193,11 @@ fn task_registry_resolution_returns_validated_entry_from_package_evidence() {
     .expect("text generation evidence should resolve");
 
     assert_eq!(entry.task_id, InferenceTaskId::TextGeneration);
+    let expected = resolve_task_registry_entry("text_generation").expect("canonical entry");
+    assert_eq!(
+        serde_json::to_value(&entry).expect("resolved entry"),
+        serde_json::to_value(expected).expect("canonical entry")
+    );
 }
 
 #[test]
@@ -1181,7 +1223,17 @@ fn task_registry_resolution_reports_unsupported_task_evidence() {
     );
 
     let encoded = serde_json::to_value(&diagnostic).expect("encode diagnostic");
-    assert_eq!(encoded["kind"], serde_json::json!("unsupported_task_label"));
+    assert_eq!(
+        encoded,
+        serde_json::json!({
+            "kind": "unsupported_task_label",
+            "message": "package task evidence does not match a canonical inference task registry entry",
+            "labels": ["object_detection", "object-detection"],
+        })
+    );
+    let decoded: TaskRegistryResolutionDiagnostic =
+        serde_json::from_value(encoded).expect("decode existing diagnostic shape");
+    assert_eq!(&decoded, diagnostic.as_ref());
 }
 
 #[test]
@@ -1198,6 +1250,13 @@ fn task_registry_resolution_reports_missing_task_evidence() {
         TaskRegistryResolutionDiagnosticKind::MissingTaskEvidence
     );
     assert!(diagnostic.labels.is_empty());
+    assert_eq!(
+        serde_json::to_value(&diagnostic).expect("missing diagnostic"),
+        serde_json::json!({
+            "kind": "missing_task_evidence",
+            "message": "package task evidence does not include a task label",
+        })
+    );
 }
 
 #[test]

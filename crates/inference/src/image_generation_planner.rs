@@ -101,7 +101,6 @@ impl PlannedImageGenerationLaunchHandoff {
         &self.artifact_load_target
     }
 
-    #[must_use]
     pub fn backend_decision(&self) -> &BackendExecutionDecision {
         &self.backend_decision
     }
@@ -143,7 +142,7 @@ pub enum ImageGenerationPlanningOutcome {
     /// The request has one canonical PyTorch/Diffusers execution plan.
     Planned {
         /// Validated execution plan.
-        plan: ImageGenerationExecutionPlan,
+        plan: Box<ImageGenerationExecutionPlan>,
     },
     /// Planning failed closed with typed diagnostics.
     Rejected {
@@ -494,7 +493,7 @@ pub fn plan_image_generation_execution(
         )]);
     };
     ImageGenerationPlanningOutcome::Planned {
-        plan: ImageGenerationExecutionPlan {
+        plan: Box::new(ImageGenerationExecutionPlan {
             model_ref: input.package_facts.model_ref.clone(),
             artifact_entry_path,
             artifact_load_target: input.artifact_load_target.clone(),
@@ -516,7 +515,7 @@ pub fn plan_image_generation_execution(
             denoising_scheduler,
             num_images_per_prompt: input.request.num_images_per_prompt,
             resource_estimates,
-        },
+        }),
     }
 }
 

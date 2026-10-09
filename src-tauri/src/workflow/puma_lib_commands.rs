@@ -160,7 +160,7 @@ pub async fn resolve_model_package_facts_summary(
         let ext = extensions.read().await;
         pumas_update_feed_access_from_extensions(&ext)
     };
-    resolve_model_package_facts_summary_from_access(selector_access, &model_id).await
+    resolve_model_package_facts_summary_from_access(selector_access, model_id).await
 }
 
 pub async fn list_model_library_updates_since(

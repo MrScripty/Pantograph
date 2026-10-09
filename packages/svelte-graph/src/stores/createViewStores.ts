@@ -8,11 +8,14 @@
  */
 import { writable, derived, get } from 'svelte/store';
 import type { ViewLevel, BreadcrumbItem, ViewportState, ZoomTarget, AnimationConfig } from '../types/view.js';
-import { DEFAULT_ANIMATION } from '../types/view.js';
+import { DEFAULT_ANIMATION } from '../types/view.ts';
+import { decodeViewStateRecord, type ViewStateRecord } from './viewStatePersistence.ts';
 
 export interface ViewStoreOptions {
   /** localStorage key for auto-persistence (omit to disable) */
   storageKey?: string;
+  /** Per-instance storage boundary; defaults to browser localStorage. */
+  storage?: Pick<Storage, 'getItem' | 'setItem'>;
 }
 
 export interface ViewStores {
@@ -100,8 +103,37 @@ export function createViewStores(options?: ViewStoreOptions): ViewStores {
   );
 
   // --- Utility ---
-  function sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+  let activeAnimation: {
+    timer: ReturnType<typeof setTimeout>;
+    resolve: () => void;
+  } | null = null;
+
+  function cancelAnimation(): void {
+    if (!activeAnimation) return;
+    const previous = activeAnimation;
+    activeAnimation = null;
+    clearTimeout(previous.timer);
+    previous.resolve();
+  }
+
+  function beginAnimation(target: ZoomTarget | null): Promise<void> {
+    cancelAnimation();
+    const completion = new Promise<void>((resolve) => {
+      const animation = {
+        resolve,
+        timer: setTimeout(() => {
+          if (activeAnimation !== animation) return;
+          activeAnimation = null;
+          zoomTarget.set(null);
+          isAnimating.set(false);
+          resolve();
+        }, get(animationConfig).duration),
+      };
+      activeAnimation = animation;
+    });
+    isAnimating.set(true);
+    zoomTarget.set(target);
+    return completion;
   }
 
   // --- Actions ---
@@ -109,64 +141,48 @@ export function createViewStores(options?: ViewStoreOptions): ViewStores {
   async function zoomToOrchestration(targetNodeId?: string): Promise<void> {
     if (get(viewLevel) === 'orchestration') return;
 
-    isAnimating.set(true);
-    if (targetNodeId) {
-      zoomTarget.set({ nodeId: targetNodeId, position: { x: 0, y: 0 } });
-    }
+    const completion = beginAnimation(targetNodeId
+      ? { nodeId: targetNodeId, position: { x: 0, y: 0 } }
+      : null);
 
     viewLevel.set('orchestration');
     groupStack.set([]);
 
-    const config = get(animationConfig);
-    await sleep(config.duration);
-    zoomTarget.set(null);
-    isAnimating.set(false);
+    await completion;
   }
 
   async function zoomToDataGraph(orchestrationNodeId: string, dataGraphId: string): Promise<void> {
     const currentLevel = get(viewLevel);
     if (currentLevel === 'data-graph' || currentLevel === 'group') return;
 
-    isAnimating.set(true);
-    zoomTarget.set({ nodeId: orchestrationNodeId, position: { x: 0, y: 0 } });
+    const completion = beginAnimation({ nodeId: orchestrationNodeId, position: { x: 0, y: 0 } });
     currentDataGraphId.set(dataGraphId);
     viewLevel.set('data-graph');
 
-    const config = get(animationConfig);
-    await sleep(config.duration);
-    zoomTarget.set(null);
-    isAnimating.set(false);
+    await completion;
   }
 
   async function tabIntoGroup(groupId: string): Promise<void> {
-    isAnimating.set(true);
-    zoomTarget.set({ nodeId: groupId, position: { x: 0, y: 0 } });
+    const completion = beginAnimation({ nodeId: groupId, position: { x: 0, y: 0 } });
     groupStack.update((stack) => [...stack, groupId]);
     viewLevel.set('group');
 
-    const config = get(animationConfig);
-    await sleep(config.duration);
-    zoomTarget.set(null);
-    isAnimating.set(false);
+    await completion;
   }
 
   async function tabOutOfGroup(): Promise<void> {
     const stack = get(groupStack);
     if (stack.length === 0) return;
 
-    isAnimating.set(true);
     const poppedGroupId = stack[stack.length - 1];
+    const completion = beginAnimation({ nodeId: poppedGroupId, position: { x: 0, y: 0 } });
     groupStack.update((s) => s.slice(0, -1));
-    zoomTarget.set({ nodeId: poppedGroupId, position: { x: 0, y: 0 } });
 
     if (stack.length === 1) {
       viewLevel.set('data-graph');
     }
 
-    const config = get(animationConfig);
-    await sleep(config.duration);
-    zoomTarget.set(null);
-    isAnimating.set(false);
+    await completion;
   }
 
   async function navigateBack(): Promise<void> {
@@ -189,12 +205,18 @@ export function createViewStores(options?: ViewStoreOptions): ViewStores {
       await zoomToOrchestration();
     } else if (item.level === 'data-graph') {
       if (currentLevel === 'group') {
+        cancelAnimation();
+        zoomTarget.set(null);
+        isAnimating.set(false);
         groupStack.set([]);
         viewLevel.set('data-graph');
       }
     } else if (item.level === 'group') {
       const targetIndex = stack.indexOf(item.id);
       if (targetIndex >= 0 && targetIndex < stack.length - 1) {
+        cancelAnimation();
+        zoomTarget.set(null);
+        isAnimating.set(false);
         groupStack.set(stack.slice(0, targetIndex + 1));
       }
     }
@@ -217,6 +239,7 @@ export function createViewStores(options?: ViewStoreOptions): ViewStores {
   }
 
   function resetViewState(): void {
+    cancelAnimation();
     viewLevel.set('data-graph');
     currentOrchestrationId.set(null);
     currentDataGraphId.set(null);
@@ -229,56 +252,133 @@ export function createViewStores(options?: ViewStoreOptions): ViewStores {
     animationConfig.update((current) => ({ ...current, ...config }));
   }
 
-  function persistViewState(): void {
-    if (!storageKey) return;
+  let persistenceOwners = 0;
+  let cleanupPersistence: (() => void) | null = null;
+  let restoringViewState = false;
+  let writebackBlocked = false;
+  let storageInitialized = false;
+
+  function blockWriteback(): void {
+    // Retain rejected/unavailable bytes for this instance, without recovery writes.
+    writebackBlocked = true;
+    cleanupPersistence?.();
+    cleanupPersistence = null;
+  }
+
+  function readViewState():
+    | { status: 'valid'; record: ViewStateRecord }
+    | { status: 'missing' | 'invalid' | 'unavailable' } {
+    if (!storageKey) return { status: 'missing' };
+    let stored: string | null;
     try {
-      const state = {
-        viewLevel: get(viewLevel),
-        orchestrationId: get(currentOrchestrationId),
-        dataGraphId: get(currentDataGraphId),
-        groupStack: get(groupStack),
-      };
-      localStorage.setItem(storageKey, JSON.stringify(state));
+      stored = (options?.storage ?? localStorage).getItem(storageKey);
     } catch {
-      // localStorage might not be available
+      blockWriteback();
+      return { status: 'unavailable' };
+    }
+    if (stored === null) return { status: 'missing' };
+    try {
+      const value: unknown = JSON.parse(stored);
+      const record = decodeViewStateRecord(value);
+      if (record) return { status: 'valid', record };
+    } catch {
+      // Invalid JSON has the same non-applying disposition as an invalid record.
+    }
+    blockWriteback();
+    return { status: 'invalid' };
+  }
+
+  function persistViewState(): void {
+    if (!storageKey || writebackBlocked || restoringViewState) return;
+    // Recheck before each write, including changes since subscriptions started.
+    const existing = readViewState();
+    if (existing.status === 'invalid' || existing.status === 'unavailable') return;
+    const state = decodeViewStateRecord({
+      viewLevel: get(viewLevel),
+      orchestrationId: get(currentOrchestrationId),
+      dataGraphId: get(currentDataGraphId),
+      groupStack: get(groupStack),
+    });
+    if (!state) {
+      blockWriteback();
+      return;
+    }
+    try {
+      (options?.storage ?? localStorage).setItem(storageKey, JSON.stringify(state));
+      storageInitialized = true;
+    } catch {
+      blockWriteback();
     }
   }
 
   function restoreViewState(): boolean {
-    if (!storageKey) return false;
-    try {
-      const stored = localStorage.getItem(storageKey);
-      if (stored) {
-        const state = JSON.parse(stored);
-        if (state.viewLevel) viewLevel.set(state.viewLevel);
-        if (state.orchestrationId) currentOrchestrationId.set(state.orchestrationId);
-        if (state.dataGraphId) currentDataGraphId.set(state.dataGraphId);
-        if (state.groupStack) groupStack.set(state.groupStack);
-        return true;
-      }
-    } catch {
-      // localStorage might not be available or corrupted
+    if (restoringViewState) return false;
+    const stored = readViewState();
+    if (stored.status !== 'valid') {
+      if (stored.status === 'missing') storageInitialized = true;
+      return false;
     }
-    return false;
+    restoringViewState = true;
+    try {
+      const state = stored.record;
+      if (state.groupStack !== undefined) groupStack.set(state.groupStack);
+      if (state.orchestrationId !== undefined) currentOrchestrationId.set(state.orchestrationId);
+      if (state.dataGraphId !== undefined) currentDataGraphId.set(state.dataGraphId);
+      if (state.viewLevel !== undefined) viewLevel.set(state.viewLevel);
+      storageInitialized = true;
+      return true;
+    } catch {
+      blockWriteback();
+      return false;
+    } finally {
+      restoringViewState = false;
+    }
   }
 
-  /** Enable auto-persistence on state changes. Returns a cleanup function. */
+  /** Share auto-persistence while any caller owns an enable handle. */
   function enablePersistence(): () => void {
-    if (!storageKey) return () => {};
+    if (!storageKey || writebackBlocked || restoringViewState) return () => {};
 
-    let persistTimeout: ReturnType<typeof setTimeout> | null = null;
-    const debouncedPersist = () => {
-      if (persistTimeout) clearTimeout(persistTimeout);
-      persistTimeout = setTimeout(persistViewState, 500);
-    };
+    if (persistenceOwners === 0) {
+      // Initialize before subscriptions schedule defaults; restarts retain local edits.
+      if (storageInitialized) readViewState();
+      else restoreViewState();
+      if (writebackBlocked) return () => {};
+    }
+    persistenceOwners += 1;
+    if (persistenceOwners === 1) {
+      let persistTimeout: ReturnType<typeof setTimeout> | null = null;
+      const cancelPending = () => {
+        if (persistTimeout) clearTimeout(persistTimeout);
+        persistTimeout = null;
+      };
+      const debouncedPersist = () => {
+        if (restoringViewState || writebackBlocked) return;
+        cancelPending();
+        persistTimeout = setTimeout(() => {
+          persistTimeout = null;
+          persistViewState();
+        }, 500);
+      };
 
-    const unsub1 = viewLevel.subscribe(debouncedPersist);
-    const unsub2 = groupStack.subscribe(debouncedPersist);
+      const unsub1 = viewLevel.subscribe(debouncedPersist);
+      const unsub2 = groupStack.subscribe(debouncedPersist);
+      cleanupPersistence = () => {
+        unsub1();
+        unsub2();
+        cancelPending();
+      };
+    }
 
+    let released = false;
     return () => {
-      unsub1();
-      unsub2();
-      if (persistTimeout) clearTimeout(persistTimeout);
+      if (released) return;
+      released = true;
+      persistenceOwners -= 1;
+      if (persistenceOwners === 0) {
+        cleanupPersistence?.();
+        cleanupPersistence = null;
+      }
     };
   }
 

@@ -1,0 +1,14 @@
+   Compiling pantograph-embedded-runtime v0.1.0 (/workspace/Pantograph-chat-completion/crates/pantograph-embedded-runtime)
+error[E0412]: cannot find type `WorkflowRunHandle` in this scope
+  --> crates/pantograph-embedded-runtime/src/lib_tests/cpu_chat_graph_tests.rs:77:12
+   |
+77 |         _: WorkflowRunHandle,
+   |            ^^^^^^^^^^^^^^^^^ not found in this scope
+   |
+help: consider importing this struct
+   |
+ 1 + use pantograph_workflow_service::WorkflowRunHandle;
+   |
+
+For more information about this error, try `rustc --explain E0412`.
+error: could not compile `pantograph-embedded-runtime` (lib test) due to 1 previous error

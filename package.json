@@ -20,7 +20,7 @@
     "lint": "eslint scripts eslint.config.mjs vite.config.ts --max-warnings 0",
     "lint:full": "eslint src packages scripts eslint.config.mjs vite.config.ts --max-warnings 0",
     "lint:critical": "node scripts/check-critical-antipatterns.mjs",
-    "lint:a11y": "node scripts/check-svelte-a11y.mjs",
+    "lint:a11y": "node --test scripts/svelte-role-button-check.test.mjs && node scripts/check-svelte-a11y.mjs",
     "lint:no-new": "npm run lint:critical && npm run lint:a11y && npm run traceability",
     "format:check": "cargo fmt --all -- --check",
     "test:frontend": "node scripts/run-frontend-tests.mjs",
@@ -38,17 +38,14 @@
   "dependencies": {
     "@tauri-apps/api": "^2.9.0",
     "@tauri-apps/plugin-dialog": "^2.6.0",
-    "@tiptap/core": "^3.15.3",
-    "@tiptap/extension-placeholder": "^3.15.3",
-    "@tiptap/pm": "^3.15.3",
-    "@tiptap/starter-kit": "^3.15.3",
+    "@tiptap/core": "^3.30.5",
+    "@tiptap/extension-placeholder": "^3.30.5",
+    "@tiptap/pm": "^3.30.5",
+    "@tiptap/starter-kit": "^3.30.5",
     "@xyflow/svelte": "^1.5.0",
     "lucide-svelte": "^0.562.0",
-    "svelte": "^5.55.4",
+    "svelte": "^5.55.7",
     "three": "^0.183.1"
-  },
-  "overrides": {
-    "markdown-it": "14.1.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",

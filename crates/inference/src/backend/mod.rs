@@ -14,6 +14,9 @@ pub mod llamacpp;
 #[cfg(feature = "backend-candle")]
 pub mod candle;
 
+#[cfg(feature = "backend-candle")]
+mod candle_embedding;
+
 #[cfg(feature = "backend-pytorch")]
 pub mod pytorch;
 
@@ -63,7 +66,7 @@ pub use llamacpp::LlamaCppBackend;
 pub use candle::CandleBackend;
 
 #[cfg(feature = "backend-pytorch")]
-pub use pytorch::PyTorchBackend;
+pub use pytorch::{PyTorchBackend, PyTorchTextGenerationRequest};
 
 pub use compatibility::{
     BackendCompatibilityIssue, BackendCompatibilityIssueKind, BackendCompatibilityOptions,
@@ -1087,6 +1090,77 @@ pub trait InferenceBackend: Send + Sync {
         spawner: Arc<dyn ProcessSpawner>,
     ) -> Result<BackendStartOutcome, BackendError>;
 
+    /// Unsupported owners cannot use generic readiness as selected ASR proof.
+    async fn load_selected_audio(
+        &mut self,
+        _request: &crate::InferenceExecutionRequest,
+        _target: &crate::PumasArtifactLoadTarget,
+        _decision: &crate::BackendExecutionDecision,
+        _spawner: Option<Arc<dyn ProcessSpawner>>,
+        _cancellation: crate::InferenceExecutionCancellationHandle,
+    ) -> Result<BackendStartOutcome, BackendError> {
+        Err(BackendError::Config(
+            "selected audio loading is unsupported by this backend".into(),
+        ))
+    }
+
+    async fn selected_audio(
+        &self,
+        _request: AudioTranscriptionRequest,
+        _request_id: &str,
+        _target: &crate::PumasArtifactLoadTarget,
+        _decision: &crate::BackendExecutionDecision,
+        _cancellation: crate::InferenceExecutionCancellationHandle,
+    ) -> Result<AudioTranscriptionResult, BackendError> {
+        Err(BackendError::Config(
+            "selected audio execution is unsupported by this backend".into(),
+        ))
+    }
+
+    async fn selected_owned_audio(
+        &self,
+        _request: AudioTranscriptionRequest,
+        _snapshot: crate::OwnedAudioWav,
+        _request_id: &str,
+        _target: &crate::PumasArtifactLoadTarget,
+        _decision: &crate::BackendExecutionDecision,
+        _cancellation: crate::InferenceExecutionCancellationHandle,
+    ) -> Result<AudioTranscriptionResult, BackendError> {
+        Err(BackendError::Config(
+            "owned selected audio unsupported by this backend".into(),
+        ))
+    }
+
+    /// Load the scheduler-selected rerank target; unsupported owners reject before effects.
+    async fn load_selected_rerank(
+        &mut self,
+        _request: &crate::InferenceExecutionRequest,
+        _target: &crate::PumasArtifactLoadTarget,
+        _decision: &crate::BackendExecutionDecision,
+        _spawner: Option<Arc<dyn ProcessSpawner>>,
+        _cancellation: crate::InferenceExecutionCancellationHandle,
+    ) -> Result<BackendStartOutcome, BackendError> {
+        Err(BackendError::Config(
+            "selected rerank loading is unsupported by this backend".into(),
+        ))
+    }
+
+    /// Retain request ownership until completion, then suppress output after cancellation.
+    async fn selected_rerank(
+        &self,
+        request: RerankRequest,
+        cancellation: crate::InferenceExecutionCancellationHandle,
+    ) -> Result<RerankResponse, BackendError> {
+        if let Some(reason) = cancellation.rejection_message("selected rerank") {
+            return Err(BackendError::Cancelled(reason));
+        }
+        let result = self.rerank(request).await;
+        if let Some(reason) = cancellation.rejection_message("selected rerank") {
+            return Err(BackendError::Cancelled(reason));
+        }
+        result
+    }
+
     /// Load exactly the scheduler-selected text package and executable target.
     /// Unsupported backends reject without changing residency.
     async fn load_selected_text(
@@ -1105,6 +1179,52 @@ pub trait InferenceBackend: Send + Sync {
     async fn finish_selected_text(&self, _cancel: bool) -> Result<(), BackendError> {
         Err(BackendError::Config(
             "selected text completion is unsupported by this backend".into(),
+        ))
+    }
+
+    /// Load the exact selected embedding package without introducing another owner.
+    async fn load_selected_embedding(
+        &mut self,
+        _request: &crate::InferenceExecutionRequest,
+        _target: &crate::PumasArtifactLoadTarget,
+        _decision: &crate::BackendExecutionDecision,
+    ) -> Result<BackendStartOutcome, BackendError> {
+        Err(BackendError::Config(
+            "selected embedding loading is unsupported by this backend".into(),
+        ))
+    }
+
+    /// Cancellation-aware loading; the original method remains available for
+    /// consumers that do not provide a host cancellation signal.
+    async fn load_selected_embedding_with_cancellation(
+        &mut self,
+        request: &crate::InferenceExecutionRequest,
+        target: &crate::PumasArtifactLoadTarget,
+        decision: &crate::BackendExecutionDecision,
+        cancellation: crate::InferenceExecutionCancellationHandle,
+    ) -> Result<BackendStartOutcome, BackendError> {
+        if let Some(reason) = cancellation.rejection_message("selected embedding load") {
+            return Err(BackendError::Cancelled(reason));
+        }
+        self.load_selected_embedding(request, target, decision)
+            .await
+    }
+
+    /// Execute selected embeddings while retaining actual worker completion.
+    async fn selected_embeddings(
+        &self,
+        _texts: Vec<String>,
+        _cancellation: crate::InferenceExecutionCancellationHandle,
+    ) -> Result<Vec<EmbeddingResult>, BackendError> {
+        Err(BackendError::Config(
+            "selected embedding execution is unsupported by this backend".into(),
+        ))
+    }
+
+    /// Observe termination before residency or scheduler reservations can be released.
+    async fn finish_selected_embedding(&self, _cancel: bool) -> Result<(), BackendError> {
+        Err(BackendError::Config(
+            "selected embedding completion is unsupported by this backend".into(),
         ))
     }
 
@@ -1208,6 +1328,14 @@ pub trait InferenceBackend: Send + Sync {
         Err(BackendError::Inference(
             "Audio transcription not supported by this backend".to_string(),
         ))
+    }
+
+    /// Fresh exact configuration/device facts for optional service observations.
+    /// Returning None preserves unknown provenance; selected labels or requested
+    /// defaults are insufficient. This is called only when timing is enabled.
+    /// Implementations must be bounded and must not reenter the gateway.
+    fn runtime_service_timing_owner_facts(&self) -> Option<crate::RuntimeServiceTimingOwnerFacts> {
+        None
     }
 
     /// Describe the active runtime semantics that govern whether one KV artifact

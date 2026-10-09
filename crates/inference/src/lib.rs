@@ -47,8 +47,16 @@ mod managed_redistributables;
 pub mod managed_runtime;
 pub mod model_contracts;
 pub mod process;
+pub mod resident_lifecycle;
 pub mod resource_estimates;
 pub mod resource_monitor;
+mod service_timing;
+pub use pantograph_timing_contracts::{
+    RuntimeServiceTimingAttempt, RuntimeServiceTimingIdentity, RuntimeServiceTimingOutcome,
+    RuntimeServiceTimingPhase, RuntimeServiceTimingPhaseEvidence, RuntimeServiceTimingProfile,
+    RuntimeServiceTimingUnavailableReason, RuntimeServiceTimingValue,
+};
+pub use service_timing::{RuntimeServiceTimingOwnerFacts, RuntimeServiceTimingRecorder};
 pub mod resource_observation;
 pub mod runtime_load;
 pub mod server;
@@ -79,7 +87,7 @@ pub use backend::LlamaCppBackend;
 pub use backend::CandleBackend;
 
 #[cfg(feature = "backend-pytorch")]
-pub use backend::PyTorchBackend;
+pub use backend::{PyTorchBackend, PyTorchTextGenerationRequest};
 
 pub use config::{DeviceConfig, EmbeddingMemoryMode};
 pub use dependency_requirements::{
@@ -125,6 +133,7 @@ pub use image_generation_batch::{
     IMAGE_GENERATION_BATCH_ID_MAX_LEN, IMAGE_GENERATION_BATCH_MAX_DIAGNOSTICS,
     IMAGE_GENERATION_BATCH_MAX_MEMBERS, IMAGE_GENERATION_BATCH_MEMBER_ID_MAX_LEN,
 };
+pub use image_generation_family_rules::STABLE_DIFFUSION_DENOISING_SCHEDULERS;
 pub use image_generation_planner::{
     plan_image_generation_execution, DenoisingSchedulerOptionId, DenoisingSchedulerOptionIdError,
     ImageGenerationExecutionPlan, ImageGenerationPlannerDiagnostic,
@@ -245,4 +254,16 @@ pub use types::{
 #[cfg(feature = "std-process")]
 pub use process::StdProcessSpawner;
 
+mod owned_audio;
+mod selected_audio_execution;
+pub use owned_audio::{
+    acquire_owned_audio_admission, owned_audio_id, validate_owned_wav, OwnedAudioAdmission,
+    OwnedAudioWav, OWNED_AUDIO_MAX_BYTES, OWNED_AUDIO_MAX_SECONDS,
+};
+mod selected_embedding_execution;
+pub use selected_audio_execution::{
+    empty_audio_options, validate_selected_audio_request, validate_small_wav_audio,
+    SELECTED_AUDIO_MAX_ENCODED_BYTES, SELECTED_AUDIO_MAX_WAV_BYTES,
+};
+mod selected_rerank_execution;
 mod selected_text_execution;

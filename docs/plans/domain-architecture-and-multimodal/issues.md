@@ -1,11 +1,22 @@
 # Issues
 
+## 2026-10-06 — Embedding requested revision finding
+
+Independent review found that frozen `2961b148` erased an explicit requested
+revision during host projection. The exact four-pointer counterexample passes
+structural request validation and produced actual Candle CPU vectors/metadata for
+the different selected revision. The [separate narrow successor](reports/2026-10-06-workflow-cpu-embedding-graphs.md#explicit-requested-revision-successor)
+rejects mismatched or missing selected revisions before resolvers and retains
+omitted-request refinement. Single/batch resolver sentinels and actual CPU
+goldens decide this scope; parent review/hosted qualification remain separate.
+Generic scheduler policy and quarantined resident histories are unchanged.
+
 | ID | Issue | Owner | Disposition / next evidence |
 | --- | --- | --- | --- |
 | DA-I01 | “Text and images” may mean dependent text-to-image generation, vision inputs, or both. | Product contract / M0 | Initial assumption is text-model output feeding image inference; incorporate user selection before fixture admission. |
 | DA-I02 | Old audit findings and proposed mechanisms predate the current standards revision. | Integrator / M0–M1 | Revalidate and map every old claim; no automatic adoption or dismissal. |
-| DA-I03 | Real model identities, trusted code policy, dependencies, device capacity and Tauri runner are not jointly qualified. | Runtime and desktop owners / M0 | Isolated owner qualification hydrated current facts but produced no executable canonical pair: Tiny Aya's directory target names a file and Tiny SD's selected-artifact identity does not resolve. Those outcomes apply to the old pinned revision. Qualify current Pumas contracts and Pantograph consumer migration before deciding whether an external repair is needed. |
-| DA-I04 | Pumas load-target and fast-snapshot proposals expose external dependency work. | Runtime reviewer | Old pinned owner evidence records the gap: Tiny Aya's `directory` target resolves to a safetensors file, while Tiny SD's hydrated model reference resolves `artifact_missing`. Current source comparison selects completing existing Pumas typed local full-facts exposure and Pantograph owner/client migration. Current producer identity/shape defects remain qualification questions. Preserve the user proposals and Pumas ownership. |
+| DA-I03 | Real model identities, trusted code policy, dependencies, device capacity and Tauri runner are not jointly qualified. | Runtime and desktop owners / M0 | Old-pin owner qualification produced no executable canonical pair: Tiny Aya's directory target names a file and Tiny SD's selected-artifact identity does not resolve. Owner/client consumer source is now implemented at Pumas `2243a2b6`; qualify its current facts/targets and the final native host composition before assigning a current producer defect or claiming DA-03. Cloud ONNX/native execution remains deferred. |
+| DA-I04 | Pumas load-target and fast-snapshot proposals expose external dependency work. | Runtime reviewer | The authenticated full-facts operation and Pantograph Owner/LocalClient migration are present at the current pin; see the [consumer handoff](reports/2026-10-04-pumas-full-facts-consumer.md). Old-pin Tiny Aya path-kind and Tiny SD `artifact_missing` outcomes remain historical evidence. Current producer identity/shape defects remain qualification questions. Preserve the user proposals and Pumas ownership; no path guessing or consumer-side substitute. |
 | DA-I05 | Full supported consumer/target and licensing authority is not yet established. | Coverage reviewer / M0–M1 | Reconcile actual contracts; do not silently delete compatibility obligations or claim unavailable target/release evidence. |
 | EX-01 | Runtime branch batching requires two peers; a dependent single-ready-task graph cannot dispatch. | Scheduler / M2 | Closed for immediate compatible 1–8 dispatch, including singleton and retained text input; medium review and integrated tests accepted. Real model execution remains separate. |
 | RT-01 | Diffusers enables model code; a false trust flag alone does not block local custom code or unsafe cache reuse. | Inference / M2 | Closed for admitted built-in Stable Diffusion adapter: qualified Diffusers 0.37.0, Torch safety floor, explicit installed components, restricted deserialization, cache invalidation and typed denial; medium review accepted. Custom-code permission and other pipelines remain unsupported; real model compatibility unproven. |
@@ -21,3 +32,41 @@
 | COV-05 | Workflow-service broad tests and warning-deny static gate have existing failures. | Repository standards review / M4 | EX-04 final run has 852 passes and the same 20 library failures as the five-file HEAD baseline (graph validation, technical fit, classification and session capacity). Current Clippy reports 134 library / 149 test diagnostics with no changed-line hits or identified introduced consequence. Preserve these obligations; focused EX acceptance is not full-crate compliance. |
 | COV-06 | Embedded-runtime baseline has 27 test failures and existing static diagnostics. | Repository standards review / M4 | EX-04 final embedded run: 420 passed, same 27 baseline failure identities. Clippy reports 11 lib / 38 test diagnostics with no changed-line hits. Preserve full repository acceptance obligation; no unrelated repairs or suppressions. |
 | EX-04 | Canonical session execution cannot continue between dependent runtime tasks: all-Ready admission rejects downstream AwaitingInputs, event claim does not select the scheduler-ready task, and one completed runtime member finalizes the whole run. | Workflow execution / M2 | Closed by 7941e428 after independent medium review: scheduler-ready/proof-gated exact task claims, supervised responder continuation, all-complete finalization and composed downstream readiness recovery without upstream replay. Five canonical dependent tests pass, including retained text→image and pending caller. Real-model/desktop acceptance remains outstanding. |
+
+## 2026-10-06 — PR58 compatibility findings
+
+The earlier model-default parity claim is narrowed by the reproduced omitted-control
+regressions and [separate repair](reports/2026-10-06-pr58-omitted-controls-repair.md).
+Tokenizer EOS stopping and native inherited minimum/forced-EOS behavior are restored;
+authored minimum validation and SDAR safeguards remain. Eight new CPU regression
+methods and independent medium review pass. This candidate does not imply PR58
+integration, hosted CI, real models or completed seed qualification.
+
+## 2026-10-06 — Text seed candidate and remaining qualification
+
+The [text seed candidate](reports/2026-10-06-workflow-text-seed.md) closes the
+missing graph/host/chat/worker token-sampling route on the reviewed PR58 repair
+line. CPU replay/isolation, scope forwarding, zero/omission and seeded PR58
+compatibility pass with independent medium review. Release still depends on
+PR58's main merge and parent publication/hosted CI. Real loaders/GPU/pretrained
+models and desktop remain open; JavaScript number entry may round seeds above
+`2^53 - 1`, despite exact Rust/JSON u64 transport. No UI precision claim is added.
+
+## 2026-10-06 — Graph-authored text stop-string candidate
+
+PR60 review found that a held-suffix rewrite could grow a marker prefix across
+already emitted text and falsely refuse before a complete marker existed.
+The [narrow successor](reports/2026-10-06-workflow-text-stop-string.md#pr60-held-text-rewrite-successor)
+bounds holdback to the un-emitted suffix and retains complete-marker/retraction
+refusal. Five actual CPU streaming regressions pass; independent parent review
+and fresh hosted CI remain pending. Original source/evidence stay frozen.
+
+The [bounded stop-string successor](reports/2026-10-06-workflow-text-stop-string.md)
+connects the existing typed stop option to the canonical text graph and PyTorch
+AR routes. Exact text/omission, scope defaults, marker withholding and authored
+minimum priority are qualified with controlled CPU and public graph/host tests.
+Independent review's legacy-default layering finding is closed; incompatible
+SDAR/masked/custom routes explicitly refuse. Parent candidate review/publication
+and real model/loader/GPU/full desktop qualification remain separate. The accepted
+seed/precision histories are preserved; this entry does not close DA-03/DA-07 or
+authorize the historical resident-accounting next-slice text.

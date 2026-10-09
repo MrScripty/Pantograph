@@ -343,20 +343,15 @@ impl TaskModalitySignature {
 }
 
 /// Support tier for a task or backend mapping.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum SupportTier {
     Stable,
     Experimental,
     Roadmap,
     Unsupported,
+    #[default]
     Unknown,
-}
-
-impl Default for SupportTier {
-    fn default() -> Self {
-        Self::Unknown
-    }
 }
 
 /// Broad task family used for compatibility diagnostics without choosing a
@@ -805,10 +800,12 @@ pub fn resolve_task_registry_entry(value: &str) -> Option<TaskRegistryEntry> {
 /// task signature.
 pub fn resolve_task_registry_entry_from_evidence(
     evidence: &TaskEvidence,
-) -> Result<TaskRegistryEntry, TaskRegistryResolutionDiagnostic> {
+) -> Result<TaskRegistryEntry, Box<TaskRegistryResolutionDiagnostic>> {
     let labels = task_evidence_labels(evidence);
     if labels.is_empty() {
-        return Err(TaskRegistryResolutionDiagnostic::missing_task_evidence());
+        return Err(Box::new(
+            TaskRegistryResolutionDiagnostic::missing_task_evidence(),
+        ));
     }
 
     let mut resolved_entries = Vec::new();
@@ -819,8 +816,8 @@ pub fn resolve_task_registry_entry_from_evidence(
     }
 
     let Some(first) = resolved_entries.first().cloned() else {
-        return Err(TaskRegistryResolutionDiagnostic::unsupported_task_label(
-            labels,
+        return Err(Box::new(
+            TaskRegistryResolutionDiagnostic::unsupported_task_label(labels),
         ));
     };
 
@@ -835,21 +832,20 @@ pub fn resolve_task_registry_entry_from_evidence(
     }
 
     if canonical_task_ids.len() > 1 {
-        return Err(TaskRegistryResolutionDiagnostic::conflicting_task_evidence(
-            labels,
-            canonical_task_ids,
+        return Err(Box::new(
+            TaskRegistryResolutionDiagnostic::conflicting_task_evidence(labels, canonical_task_ids),
         ));
     }
 
     if !first.matches_task_evidence(evidence) {
-        return Err(TaskRegistryResolutionDiagnostic::unsupported_task_label(
-            labels,
+        return Err(Box::new(
+            TaskRegistryResolutionDiagnostic::unsupported_task_label(labels),
         ));
     }
 
     if !first.matches_modality_evidence(evidence) {
-        return Err(TaskRegistryResolutionDiagnostic::modality_mismatch(
-            &first, evidence,
+        return Err(Box::new(
+            TaskRegistryResolutionDiagnostic::modality_mismatch(&first, evidence),
         ));
     }
 
@@ -2136,7 +2132,6 @@ impl ResolvedModelSource {
     ///
     /// This enforces model-source shape invariants without selecting a backend
     /// or deciding runtime placement.
-    #[must_use]
     pub fn validate_for_backend_load(&self) -> Result<(), Vec<ModelPackageDiagnostic>> {
         let mut diagnostics = Vec::new();
 
@@ -2421,6 +2416,15 @@ mod tests {
         resolve_task_registry_entry(task_id.canonical_label())
             .and_then(|entry| entry.request_contract())
             .unwrap_or_else(|| panic!("missing request contract for {task_id:?}"))
+    }
+
+    #[test]
+    fn support_tier_default_retains_unknown_wire_value() {
+        assert_eq!(SupportTier::default(), SupportTier::Unknown);
+        assert_eq!(
+            serde_json::to_value(SupportTier::default()).expect("default serializes"),
+            serde_json::json!("unknown")
+        );
     }
 
     #[test]

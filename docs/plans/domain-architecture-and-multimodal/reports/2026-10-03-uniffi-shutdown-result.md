@@ -1,0 +1,13 @@
+# Preserve fallible shutdown through UniFFI
+
+Exact PR42 head e7e5277 clears embedded-runtime Clippy and exposes one UniFFI unused Result at runtime.rs shutdown. EmbeddedRuntime::shutdown already awaits owned shutdown, preserves gateway residency on stop failure and only invalidates loaded session runtimes after successful stop. The adapter must propagate that result rather than report success or discard it.
+
+Return Result<(), FfiError> through the existing workflow_adapter_error internal_error JSON envelope, retaining the original owner Display cause. Twelve existing Rust shutdown calls now require success explicitly. No embedded lifecycle, invalidation, retry or backend policy is changed. A dedicated real adapter-chain regression uses the production FFI, EmbeddedRuntime and InferenceGateway with a failure-once backend: it checks the exact envelope, one stop invocation, retained actual gateway readiness, then successful retry and stopped readiness. A second test covers initial/repeated success. Non-shutdown trait methods panic if unexpectedly invoked.
+
+The test-only futures-util manifest/lock edge reuses the existing locked workspace version for the backend trait stream signature; no package version changes. The mock remains a backend fixture, not an alternate adapter implementation.
+
+Generated C# calls remain await runtime.Shutdown() (NativeSmoke has one executed call plus its compile-surface call; Quickstart has one executed call). Fallible metadata now enables the existing generated FfiException path for Rust FfiError; bindings and native library must be regenerated/shipped together, with no old-generated-binary compatibility claim. Headless CI regenerates and executes NativeSmoke and compiles/runs the packaged quickstart. A C# shutdown-failure injection is not available through the public runtime constructor without adding a production testing API or forcing an actual backend failure; the bounded failure test therefore exercises the real Rust adapter chain, while C# success/generated plumbing remains hosted qualification.
+
+Root source review accepted the complete eight-file checkpoint at frozen tree 18436e4cf375a4bb204f086453991fa07966eca0. Full pinned format passes locally, with no local Rust/native build claimed. PR42 has 455/455 embedded tests, full focused tests, workspace feature checks and format green; this distinct adapter milestone requires new exact-head aggregate and generated binding qualification.
+
+The pinned generator source confirms the C# error naming: CsCodeOracle::convert_error_suffix maps Error to Exception, so Rust FfiError is generated as FfiException ([official source](https://github.com/NordSecurity/uniffi-bindgen-cs/blob/2f4880f03ed08d960ad0ee14d11cf95444eee540/bindgen/src/gen_cs/mod.rs)).

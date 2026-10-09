@@ -42,13 +42,14 @@ use pantograph_scheduler::{
 use thiserror::Error;
 
 use crate::workflow::{
-    execute_non_runtime_scheduler_task, materialize_external_workflow_inputs,
-    materialize_runtime_host_inputs, runtime_host_batch_member_response_to_task_result,
-    runtime_host_response_to_task_result, WorkflowExternalInputMaterializationError,
-    WorkflowPortBinding, WorkflowRuntimeHostTaskInputMappingError,
-    WorkflowRuntimeHostTaskResultMappingError, WorkflowSchedulerNonRuntimeTaskAdapterError,
-    WorkflowSchedulerNonRuntimeTaskTemplate, WorkflowSchedulerSourceInputTemplate,
-    WorkflowSchedulerTask, WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskGraph,
+    execute_non_runtime_scheduler_task, is_bounded_vector_json,
+    materialize_external_workflow_inputs, materialize_runtime_host_inputs,
+    runtime_host_batch_member_response_to_task_result, runtime_host_response_to_task_result,
+    WorkflowExternalInputMaterializationError, WorkflowPortBinding,
+    WorkflowRuntimeHostTaskInputMappingError, WorkflowRuntimeHostTaskResultMappingError,
+    WorkflowSchedulerNonRuntimeTaskAdapterError, WorkflowSchedulerNonRuntimeTaskTemplate,
+    WorkflowSchedulerSourceInputTemplate, WorkflowSchedulerTask,
+    WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskGraph,
     WorkflowSchedulerTaskInputBinding, WorkflowSchedulerTaskProjectionDiagnostic,
     WorkflowSchedulerTaskProjectionDiagnosticSeverity, WorkflowSchedulerTaskResult,
     WorkflowSchedulerTaskResultStatus, WorkflowSchedulerTaskResultValue, WorkflowServiceError,
@@ -619,6 +620,27 @@ impl WorkflowSchedulerTaskOrchestrator {
         task: &WorkflowSchedulerTask,
         selection_request: ValidatedSchedulerDispatchSelectionRequest,
     ) -> Result<SelectedRuntimeTaskDispatch, WorkflowSchedulerTaskOrchestratorError> {
+        self.select_runtime_task_dispatch_inner(task, selection_request, true)
+            .await
+    }
+
+    /// The prepared request's custody owns rollback; releasing its lease here
+    /// would also end a predecessor that a failed replacement must preserve.
+    pub(crate) async fn select_runtime_task_dispatch_with_custody(
+        &self,
+        task: &WorkflowSchedulerTask,
+        selection_request: ValidatedSchedulerDispatchSelectionRequest,
+    ) -> Result<SelectedRuntimeTaskDispatch, WorkflowSchedulerTaskOrchestratorError> {
+        self.select_runtime_task_dispatch_inner(task, selection_request, false)
+            .await
+    }
+
+    async fn select_runtime_task_dispatch_inner(
+        &self,
+        task: &WorkflowSchedulerTask,
+        selection_request: ValidatedSchedulerDispatchSelectionRequest,
+        cleanup_unselected: bool,
+    ) -> Result<SelectedRuntimeTaskDispatch, WorkflowSchedulerTaskOrchestratorError> {
         let selection_request = selection_request.into_inner();
         let selection = select_scheduler_dispatch(
             ValidatedSchedulerDispatchSelectionRequest::try_from(selection_request.clone())
@@ -627,22 +649,24 @@ impl WorkflowSchedulerTaskOrchestrator {
         .map_err(WorkflowSchedulerTaskOrchestratorError::SchedulerContract)?
         .into_inner();
         if selection.state != SchedulerDispatchSelectionState::Selected {
-            self.apply_unselected_candidate_lifecycle_events(task, &selection_request)
-                .await?;
+            if cleanup_unselected {
+                self.apply_unselected_candidate_lifecycle_events(task, &selection_request)
+                    .await?;
+            }
             return Err(
                 WorkflowSchedulerTaskOrchestratorError::RuntimeDispatchSelectionNoSelection(
-                    selection,
+                    Box::new(selection),
                 ),
             );
         }
         let handoff = dispatch_selected_handoff_from_selection(selection)?;
-        let dispatch_decision = handoff.dispatch_decision.as_ref().ok_or_else(|| {
+        let dispatch_decision = handoff.dispatch_decision.as_ref().ok_or(
             WorkflowSchedulerTaskOrchestratorError::SchedulerContract(
                 SchedulerContractError::MissingField {
                     field: "dispatch_decision",
                 },
-            )
-        })?;
+            ),
+        )?;
         let reservation_lease_id = dispatch_decision.reservation_lease_id.clone();
         let candidate_id = selected_candidate_id(&selection_request, dispatch_decision);
         Ok(SelectedRuntimeTaskDispatch {
@@ -2115,7 +2139,9 @@ fn dispatch_selected_handoff_from_selection(
 ) -> Result<SchedulerRuntimeHandoff, WorkflowSchedulerTaskOrchestratorError> {
     if selection.state != SchedulerDispatchSelectionState::Selected {
         return Err(
-            WorkflowSchedulerTaskOrchestratorError::RuntimeDispatchSelectionNoSelection(selection),
+            WorkflowSchedulerTaskOrchestratorError::RuntimeDispatchSelectionNoSelection(Box::new(
+                selection,
+            )),
         );
     }
     let Some(dispatch_decision) = selection.dispatch_decision else {
@@ -2718,7 +2744,7 @@ fn initial_task_state(
             }
             if let Some(task_intent) = task.schedulable_intent.clone() {
                 Ok(SchedulerTaskState::WaitingDependencyReadiness {
-                    execution_intent: SchedulerTaskExecutionIntent::Runtime { task_intent },
+                    execution_intent: SchedulerTaskExecutionIntent::runtime(task_intent),
                 })
             } else {
                 Ok(awaiting_inputs_state())
@@ -2812,7 +2838,7 @@ pub(crate) enum WorkflowSchedulerTaskOrchestratorError {
     #[error("runtime-host task input mapping failed")]
     RuntimeHostTaskInputMapping(WorkflowRuntimeHostTaskInputMappingError),
     #[error("scheduler dispatch selection did not select a runtime task")]
-    RuntimeDispatchSelectionNoSelection(SchedulerDispatchSelectionDecision),
+    RuntimeDispatchSelectionNoSelection(Box<SchedulerDispatchSelectionDecision>),
     #[error("reservation lifecycle contract validation failed: {0}")]
     ReservationLifecycleContract(ReservationLifecycleContractError),
     #[error("reservation lifecycle port failed: {0}")]
@@ -3497,6 +3523,8 @@ fn source_input_task_kind(
     let task_kind = match template {
         WorkflowSchedulerSourceInputTemplate::Text { .. } => "text-input",
         WorkflowSchedulerSourceInputTemplate::Boolean { .. } => "boolean-input",
+        WorkflowSchedulerSourceInputTemplate::Integer { .. } => "number-input",
+        WorkflowSchedulerSourceInputTemplate::Selection { .. } => "selection-input",
     };
     SchedulerSourceInputTaskKind::parse(task_kind)
         .map_err(WorkflowSchedulerTaskOrchestratorError::SchedulerContract)
@@ -3567,11 +3595,84 @@ fn non_runtime_input_readiness(
     };
 
     match template {
+        WorkflowSchedulerNonRuntimeTaskTemplate::VectorOutput => {
+            vector_output_input_readiness(task, results)
+        }
+        WorkflowSchedulerNonRuntimeTaskTemplate::ImageOutput => {
+            match materialized_binding_value(task, results, "image") {
+                MaterializedBindingValue::Ready(
+                    WorkflowSchedulerTaskResultValue::MediaArtifactRef(_),
+                ) => NonRuntimeInputReadiness::Ready,
+                MaterializedBindingValue::Ready(_) => {
+                    NonRuntimeInputReadiness::Invalid(scheduler_input_diagnostic(
+                        SchedulerTaskStateDiagnosticCode::InvalidTask,
+                        "image-output input is not a typed media artifact reference",
+                    ))
+                }
+                MaterializedBindingValue::Blocked => NonRuntimeInputReadiness::Blocked,
+                MaterializedBindingValue::Unavailable(diagnostic) => {
+                    NonRuntimeInputReadiness::InputUnavailable(diagnostic)
+                }
+                MaterializedBindingValue::Invalid(diagnostic) => {
+                    NonRuntimeInputReadiness::Invalid(diagnostic)
+                }
+            }
+        }
+        WorkflowSchedulerNonRuntimeTaskTemplate::JsonFilter { .. } => {
+            match materialized_binding_value(task, results, "json") {
+                MaterializedBindingValue::Ready(
+                    WorkflowSchedulerTaskResultValue::Json(_)
+                    | WorkflowSchedulerTaskResultValue::String(_)
+                    | WorkflowSchedulerTaskResultValue::TranscriptText(_)
+                    | WorkflowSchedulerTaskResultValue::Bool(_)
+                    | WorkflowSchedulerTaskResultValue::I64(_)
+                    | WorkflowSchedulerTaskResultValue::U64(_),
+                ) => NonRuntimeInputReadiness::Ready,
+                MaterializedBindingValue::Ready(_) => {
+                    NonRuntimeInputReadiness::Invalid(scheduler_input_diagnostic(
+                        SchedulerTaskStateDiagnosticCode::InvalidTask,
+                        "json-filter input is not a JSON-compatible value",
+                    ))
+                }
+                MaterializedBindingValue::Blocked => NonRuntimeInputReadiness::Blocked,
+                MaterializedBindingValue::Unavailable(diagnostic) => {
+                    NonRuntimeInputReadiness::InputUnavailable(diagnostic)
+                }
+                MaterializedBindingValue::Invalid(diagnostic) => {
+                    NonRuntimeInputReadiness::Invalid(diagnostic)
+                }
+            }
+        }
+        WorkflowSchedulerNonRuntimeTaskTemplate::Merge => {
+            for binding in &task.input_bindings {
+                match materialized_bound_output(task, results, binding) {
+                    MaterializedBindingValue::Ready(
+                        WorkflowSchedulerTaskResultValue::String(_)
+                        | WorkflowSchedulerTaskResultValue::TranscriptText(_),
+                    ) => {}
+                    MaterializedBindingValue::Ready(_) => {
+                        return NonRuntimeInputReadiness::Invalid(scheduler_input_diagnostic(
+                            SchedulerTaskStateDiagnosticCode::InvalidTask,
+                            "materialized merge input has the wrong value type",
+                        ))
+                    }
+                    MaterializedBindingValue::Blocked => return NonRuntimeInputReadiness::Blocked,
+                    MaterializedBindingValue::Unavailable(diagnostic) => {
+                        return NonRuntimeInputReadiness::InputUnavailable(diagnostic)
+                    }
+                    MaterializedBindingValue::Invalid(diagnostic) => {
+                        return NonRuntimeInputReadiness::Invalid(diagnostic)
+                    }
+                }
+            }
+            NonRuntimeInputReadiness::Ready
+        }
         WorkflowSchedulerNonRuntimeTaskTemplate::TextOutput => {
             match materialized_binding_value(task, results, "text") {
-                MaterializedBindingValue::Ready(WorkflowSchedulerTaskResultValue::String(_)) => {
-                    NonRuntimeInputReadiness::Ready
-                }
+                MaterializedBindingValue::Ready(
+                    WorkflowSchedulerTaskResultValue::String(_)
+                    | WorkflowSchedulerTaskResultValue::TranscriptText(_),
+                ) => NonRuntimeInputReadiness::Ready,
                 MaterializedBindingValue::Ready(_) => {
                     NonRuntimeInputReadiness::Invalid(scheduler_input_diagnostic(
                         SchedulerTaskStateDiagnosticCode::InvalidTask,
@@ -3590,6 +3691,50 @@ fn non_runtime_input_readiness(
     }
 }
 
+fn vector_output_input_readiness(
+    task: &WorkflowSchedulerTask,
+    results: &[WorkflowSchedulerTaskResult],
+) -> NonRuntimeInputReadiness {
+    if task.node_type != "vector-output"
+        || task.input_bindings.len() > 1
+        || task
+            .input_bindings
+            .iter()
+            .any(|binding| binding.target_port_id != "vector")
+    {
+        return NonRuntimeInputReadiness::Invalid(scheduler_input_diagnostic(
+            SchedulerTaskStateDiagnosticCode::InvalidTask,
+            "vector-output accepts at most one vector input binding",
+        ));
+    }
+    let Some(binding) = task.input_bindings.first() else {
+        // The registered input is optional: an unconnected sink emits null.
+        return NonRuntimeInputReadiness::Ready;
+    };
+    let Some(result) = results.iter().find(|result| {
+        result.workflow_id == task.workflow_id.as_str()
+            && result.workflow_run_id == task.workflow_run_id.as_str()
+            && result.task_id == binding.source_task_id.as_str()
+            && result.node_id == binding.source_node_id.as_str()
+    }) else {
+        return NonRuntimeInputReadiness::Blocked;
+    };
+    match materialized_bound_output(task, std::slice::from_ref(result), binding) {
+        MaterializedBindingValue::Ready(WorkflowSchedulerTaskResultValue::Json(value))
+            if is_bounded_vector_json(value) => NonRuntimeInputReadiness::Ready,
+        MaterializedBindingValue::Ready(_) => NonRuntimeInputReadiness::Invalid(scheduler_input_diagnostic(
+            SchedulerTaskStateDiagnosticCode::InvalidTask,
+            "vector-output input must be a finite numeric JSON array of 1..4096 elements, at most 64 KiB",
+        )),
+        MaterializedBindingValue::Blocked => NonRuntimeInputReadiness::InputUnavailable(scheduler_input_diagnostic(
+            SchedulerTaskStateDiagnosticCode::InputUnavailable,
+            format!("completed upstream task '{}' did not produce vector port '{}'", result.task_id, binding.source_port_id),
+        )),
+        MaterializedBindingValue::Unavailable(diagnostic) => NonRuntimeInputReadiness::InputUnavailable(diagnostic),
+        MaterializedBindingValue::Invalid(diagnostic) => NonRuntimeInputReadiness::Invalid(diagnostic),
+    }
+}
+
 fn runtime_execution_intent(
     task: &WorkflowSchedulerTask,
 ) -> Result<SchedulerTaskExecutionIntent, WorkflowSchedulerTaskOrchestratorError> {
@@ -3601,7 +3746,7 @@ fn runtime_execution_intent(
             )),
         ));
     };
-    Ok(SchedulerTaskExecutionIntent::Runtime { task_intent })
+    Ok(SchedulerTaskExecutionIntent::runtime(task_intent))
 }
 
 enum MaterializedBindingValue<'a> {

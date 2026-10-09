@@ -36,6 +36,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 # Local crates
+pantograph-app-config = { path = "../crates/pantograph-app-config" }
 inference = { path = "../crates/inference", default-features = false }
 node-engine = { path = "../crates/node-engine", features = ["inference-nodes"] }
 workflow-nodes = { path = "../crates/workflow-nodes", features = ["model-library"] }
@@ -96,4 +97,5 @@ axum = { workspace = true }
 tower-http = { workspace = true, optional = true }
 
 [dev-dependencies]
+tauri = { version = "2.9.0", features = ["test"] }
 tempfile.workspace = true

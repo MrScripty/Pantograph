@@ -38,6 +38,14 @@ if _self_path.parent.is_dir():
 
 from block_diffusion import _generate_dllm_masked, _generate_dllm_masked_streaming
 from autoregressive import (
+    MinimumNewTokensError,
+    SeedSamplingError,
+    StopStringError,
+    _resolve_stop_strings,
+    _seeded_sampling,
+    RepetitionPenaltyNumericsError,
+    _generate_native_checked,
+    _resolve_min_new_tokens,
     _generate_autoregressive,
     _generate_autoregressive_streaming,
     _continue_sdar_cached,
@@ -74,7 +82,7 @@ from worker_contract import (
     worker_success_response_json,
 )
 from worker_diffusion import (
-    DiffusionLoadError, admit_diffusion_bundle, construct_diffusion_pipeline,
+    DiffusionLoadError, admit_diffusion_bundle, construct_diffusion_pipeline, call_diffusion_pipeline,
 )
 from worker_image_contract import generate_image_kwargs_from_envelope
 from worker_image_contract import generate_image_batch_kwargs_from_envelope
@@ -151,7 +159,8 @@ def shutdown_worker_from_envelope(envelope):
         )
 
 
-def _generate_dllm_autoregressive_safe(formatted_prompt, max_tokens, temperature, top_p, top_k=None):
+def _generate_dllm_autoregressive_safe(formatted_prompt, max_tokens, temperature, top_p,
+                                      top_k=None, repetition_penalty=None, min_new_tokens=None, sampling=None):
     """Generate for TraDo/SDAR via native generate(), with empty-output retry.
 
     Some SDAR exports include chat delimiters in generation_config.eos_token_id,
@@ -159,6 +168,7 @@ def _generate_dllm_autoregressive_safe(formatted_prompt, max_tokens, temperature
     single EOS and a small min_new_tokens floor when that happens.
     """
     global _live_kv_state
+    resolved_minimum = _resolve_min_new_tokens(_model, min_new_tokens, max_tokens)
     if _live_kv_state is not None:
         cached_token_ids = _live_kv_state.get("token_ids")
         cached_cache = _live_kv_state.get("cache")
@@ -175,6 +185,9 @@ def _generate_dllm_autoregressive_safe(formatted_prompt, max_tokens, temperature
                     cached_token_ids,
                     cached_cache,
                     top_k=top_k,
+                    repetition_penalty=repetition_penalty,
+                    min_new_tokens=min_new_tokens,
+                    sampling=sampling,
                 )
                 _live_kv_state = {
                     "token_ids": token_ids,
@@ -184,12 +197,19 @@ def _generate_dllm_autoregressive_safe(formatted_prompt, max_tokens, temperature
                     "device": str(_device) if _device is not None else None,
                 }
                 return text
+            except (RepetitionPenaltyNumericsError, MinimumNewTokensError, SeedSamplingError):
+                # Continuation mutates KV before publishing its matching history.
+                # Drop that uncommitted snapshot, and refuse without fresh retry.
+                clear_live_kv_cache()
+                raise
             except Exception as exc:
                 logger.warning("Live KV reuse failed; falling back to fresh decode: %s", exc)
                 _live_kv_state = None
 
     text, token_ids, cache = _generate_sdar_cached(
-        _model, _tokenizer, _device, formatted_prompt, max_tokens, temperature, top_p, top_k=top_k,
+        _model, _tokenizer, _device, formatted_prompt, max_tokens, temperature, top_p,
+        top_k=top_k, repetition_penalty=repetition_penalty, min_new_tokens=min_new_tokens,
+        sampling=sampling,
     )
     _live_kv_state = {
         "token_ids": token_ids,
@@ -201,15 +221,26 @@ def _generate_dllm_autoregressive_safe(formatted_prompt, max_tokens, temperature
     if text and text.strip():
         return text
 
+    # The empty SDAR snapshot cannot represent either a failed or native retry.
+    # Clear it before any retry setup/processor can refuse the request.
+    _live_kv_state = None
     logger.warning("Empty dllm decode on SDAR path; retrying with stricter EOS settings")
 
     inputs = _tokenizer(formatted_prompt, return_tensors="pt").to(_device)
     retry_min_new = min(max_tokens, 24)
+    if min_new_tokens is not None:
+        retry_min_new = max(retry_min_new, resolved_minimum)
     eos_id = getattr(_tokenizer, "eos_token_id", None)
     pad_id = getattr(_tokenizer, "pad_token_id", eos_id)
+    retry_kwargs = {}
+    if repetition_penalty is not None:
+        retry_kwargs["repetition_penalty"] = repetition_penalty
 
     with torch.no_grad():
-        outputs = _model.generate(
+        outputs = _generate_native_checked(
+            _model,
+            minimum_to_enforce=min_new_tokens or 0,
+            sampling=sampling,
             **inputs,
             max_new_tokens=max_tokens,
             min_new_tokens=retry_min_new if retry_min_new > 0 else None,
@@ -219,11 +250,11 @@ def _generate_dllm_autoregressive_safe(formatted_prompt, max_tokens, temperature
             do_sample=temperature > 0,
             eos_token_id=eos_id,
             pad_token_id=pad_id,
+            **retry_kwargs,
         )
 
     input_len = inputs["input_ids"].shape[1]
     generated = outputs[0][input_len:]
-    _live_kv_state = None
     decoded = _tokenizer.decode(generated, skip_special_tokens=True)
     if decoded and decoded.strip():
         return decoded
@@ -1433,6 +1464,62 @@ def transcribe_audio(
     }
 
 
+def transcribe_owned_wav_from_envelope(envelope, wav_bytes, metadata_json):
+    """Selected owned-byte ingress, distinct from the retained inline/base64 entry."""
+    import struct
+    request_id = "unknown"
+    try:
+        decoded, request_id = decode_worker_envelope(envelope)
+        kwargs = transcribe_audio_kwargs_from_envelope(decoded)
+        metadata = json.loads(metadata_json)
+        import math
+        chunk = kwargs["chunk_length_s"]
+        original_chunk = decoded["payload"].get("chunk_length_s")
+        if original_chunk is not None and (type(original_chunk) not in (int, float) or not math.isfinite(chunk) or not 0 < chunk <= 300):
+            raise ValueError("Owned WAV chunk length must be finite and within 300 seconds")
+        if set(decoded["payload"]) - {"model_path", "audio_base64", "device", "language", "prompt", "task", "chunk_length_s", "extra_options"}:
+            raise ValueError("Unsupported owned audio options")
+        if kwargs["task"] not in (None, "transcribe", "translate"):
+            raise ValueError("Unsupported owned ASR task")
+        if kwargs.pop("audio_base64") != "__owned_wav_side_argument_v1__" or kwargs["device"] != "cpu":
+            raise ValueError("Owned WAV requires its explicit CPU side argument")
+        if type(wav_bytes) is not bytes or not 46 <= len(wav_bytes) <= 16 * 1024 * 1024:
+            raise ValueError("Owned WAV exceeds byte limits")
+        if not isinstance(metadata, dict) or not all(isinstance(metadata.get(k), str) and metadata[k] for k in ("artifact_id", "workflow_id", "source_run_id", "content_hash")):
+            raise ValueError("Owned WAV identity metadata required")
+        channels, rate, byte_rate, align, bits = struct.unpack_from("<HIIHH", wav_bytes, 22)
+        data_size = struct.unpack_from("<I", wav_bytes, 40)[0]
+        if (wav_bytes[:4] != b"RIFF" or wav_bytes[8:16] != b"WAVEfmt " or
+                struct.unpack_from("<I", wav_bytes, 4)[0] != len(wav_bytes) - 8 or
+                struct.unpack_from("<IH", wav_bytes, 16) != (16, 1) or
+                wav_bytes[36:40] != b"data" or channels not in (1, 2) or
+                not 8000 <= rate <= 48000 or bits != 16 or align != channels * 2 or
+                byte_rate != rate * align or data_size != len(wav_bytes) - 44 or
+                data_size == 0 or data_size % align or data_size // align > rate * 300 or
+                metadata.get("sample_rate") != rate or metadata.get("channels") != channels or
+                metadata.get("frames") != data_size // align):
+            raise ValueError("Owned WAV header/metadata/duration mismatch")
+        audio, sample_rate = sf.read(io.BytesIO(wav_bytes), dtype="float32")
+        if sample_rate != rate or audio.shape[0] != metadata["frames"]:
+            raise ValueError("Owned WAV decoder facts mismatch")
+        audio = np.asarray(audio, dtype=np.float32)
+        if audio.ndim > 1:
+            audio = np.mean(audio, axis=1, dtype=np.float32)
+        load_asr_model(kwargs["model_path"], device="cpu", chunk_length_s=kwargs["chunk_length_s"])
+        if _asr_pipeline is None:
+            raise RuntimeError("Owned ASR pipeline unavailable")
+        controls = {k: kwargs[k].strip() for k in ("language", "prompt", "task") if isinstance(kwargs[k], str) and kwargs[k].strip()}
+        result = _asr_pipeline({"array": audio, "sampling_rate": rate}, generate_kwargs=controls or None)
+        text = result.get("text", "") if isinstance(result, dict) else str(result)
+        if not isinstance(text, str) or len(text.strip().encode("utf-8")) > 65536:
+            raise ValueError("Owned transcript exceeds 64KiB; no truncation")
+        return worker_success_response_json(request_id, {"text": text.strip(), "language": controls.get("language"), "duration_seconds": float(metadata["frames"]) / rate, "chunks": None})
+    except (ValueError, TypeError, KeyError, struct.error) as exc:
+        return worker_error_response_json(request_id, "invalid_request", str(exc), "pytorch_worker_invalid_owned_audio_request")
+    except Exception:
+        return worker_error_response_json(request_id, "generation_failed", "Owned WAV transcription failed", "pytorch_worker_owned_audio_failed")
+
+
 def generate_image(
     prompt,
     negative_prompt=None,
@@ -1450,12 +1537,6 @@ def generate_image(
     **kwargs,
 ):
     """Generate one or more images from the loaded diffusion pipeline."""
-    if denoising_scheduler is not None:
-        raise ValueError(
-            "PyTorch worker image generation does not support explicit "
-            "denoising_scheduler changes yet"
-        )
-
     if _diffusion_pipeline is None:
         raise RuntimeError("No diffusion pipeline loaded. Call load_diffusion_model() first.")
 
@@ -1489,7 +1570,7 @@ def generate_image(
 
     _attach_diffusion_preview_callback(call_kwargs, resolved_steps, emit_stream)
 
-    result = _diffusion_pipeline(**call_kwargs)
+    result = call_diffusion_pipeline(_diffusion_pipeline, call_kwargs, denoising_scheduler)
     images = getattr(result, "images", None)
     if not images:
         raise RuntimeError("Diffusion pipeline returned no images")
@@ -1536,20 +1617,12 @@ def _batch_pipeline_call_kwargs(planned_members):
     )
     if image_count is None:
         image_count = 1
-    if int(image_count) != 1:
+    if int(image_count) < 1:
         raise ValueError(
-            "PyTorch worker generate_image_batch supports exactly one image per member"
+            "PyTorch worker generate_image_batch requires a positive image count per member"
         )
 
-    denoising_scheduler = _batch_shared_generation_value(
-        planned_members, "denoising_scheduler"
-    )
-    if denoising_scheduler is not None:
-        raise ValueError(
-            "PyTorch worker image batch generation does not support explicit "
-            "denoising_scheduler changes yet"
-        )
-
+    _batch_shared_generation_value(planned_members, "denoising_scheduler")
     call_kwargs = {
         "prompt": [
             member["planned"]["generation_kwargs"]["prompt"]
@@ -1561,7 +1634,7 @@ def _batch_pipeline_call_kwargs(planned_members):
             )
             or 30
         ),
-        "num_images_per_prompt": 1,
+        "num_images_per_prompt": int(image_count),
     }
     negative_prompts = [
         member["planned"]["generation_kwargs"].get("negative_prompt")
@@ -1594,10 +1667,12 @@ def _batch_pipeline_call_kwargs(planned_members):
                 "PyTorch worker generate_image_batch requires all members to provide "
                 "seeds when any member is seeded"
             )
-        call_kwargs["generator"] = [
-            torch.Generator(device="cpu").manual_seed(int(seed))
-            for seed in seeds
-        ]
+        generators = []
+        for seed in seeds:
+            generator = torch.Generator(device="cpu").manual_seed(int(seed))
+            # Each member owns one advancing RNG stream, as in solo generation.
+            generators.extend([generator] * int(image_count))
+        call_kwargs["generator"] = generators
 
     return call_kwargs
 
@@ -1658,14 +1733,18 @@ def generate_image_batch_from_envelope(envelope):
         )
 
         call_kwargs = _batch_pipeline_call_kwargs(planned_members)
-        result = _diffusion_pipeline(**call_kwargs)
+        result = call_diffusion_pipeline(
+            _diffusion_pipeline, call_kwargs,
+            _batch_shared_generation_value(planned_members, "denoising_scheduler"),
+        )
         images = getattr(result, "images", None)
-        expected_images = len(planned_members)
+        image_count = call_kwargs["num_images_per_prompt"]
+        expected_images = len(planned_members) * image_count
         if not images or len(images) != expected_images:
             raise RuntimeError(
                 "Diffusion pipeline returned "
                 f"{0 if not images else len(images)} images for {expected_images} "
-                "batch members"
+                "expected batch images"
             )
 
         encoded_images = [_encode_image(image) for image in images]
@@ -1679,12 +1758,12 @@ def generate_image_batch_from_envelope(envelope):
                         "member_id": member["member_id"],
                         "status": "succeeded",
                         "result": {
-                            "images": [encoded],
+                            "images": encoded_images[index * image_count:(index + 1) * image_count],
                             "seed_used": member["planned"]["generation_kwargs"].get("seed"),
                             "metadata": _batch_member_metadata(member["planned"]),
                         },
                     }
-                    for member, encoded in zip(planned_members, encoded_images)
+                    for index, member in enumerate(planned_members)
                 ],
             },
             resource_observation=resource_observation,
@@ -1834,8 +1913,20 @@ def generate(prompt, system_prompt=None, max_tokens=512, temperature=0.7, top_p=
     if _model is None:
         raise RuntimeError("No model loaded. Call load_model() first.")
 
+    sampling = _seeded_sampling(kwargs.get("seed"))
+    stops = _resolve_stop_strings(_model, kwargs.get("stop_strings"))
+    if stops and _model_type == "dllm":
+        raise StopStringError("stop strings do not support SDAR or masked block-diffusion generation")
+    stop_kwargs = {"stop_strings": kwargs["stop_strings"]} if "stop_strings" in kwargs else {}
+
     # Masked prompt routing for dLLM models
     if masked_prompt_json is not None and _model_type == "dllm":
+        if sampling is not None:
+            raise SeedSamplingError("Masked block-diffusion generation does not support seed")
+        if kwargs.get("repetition_penalty") is not None:
+            raise ValueError("Masked block-diffusion generation does not support repetition_penalty")
+        if kwargs.get("min_new_tokens") is not None:
+            raise ValueError("Masked block-diffusion generation does not support min_new_tokens")
         clear_live_kv_cache()
         mp = json.loads(masked_prompt_json)
         segments = mp.get("segments", [])
@@ -1845,8 +1936,12 @@ def generate(prompt, system_prompt=None, max_tokens=512, temperature=0.7, top_p=
             denoising_steps=denoising_steps, block_length=block_length,
         )
 
+    min_new_tokens = kwargs.get("min_new_tokens")
+    if min_new_tokens is not None:
+        _resolve_min_new_tokens(_model, min_new_tokens, max_tokens)
     formatted = _format_prompt(prompt, system_prompt)
     top_k = kwargs.get("top_k")
+    repetition_penalty = kwargs.get("repetition_penalty")
 
     if _model_type == "dllm":
         # For TraDo/SDAR instruct models in Pantograph, the model's native
@@ -1854,10 +1949,16 @@ def generate(prompt, system_prompt=None, max_tokens=512, temperature=0.7, top_p=
         # experimental custom block-diffusion decode path.
         return _generate_dllm_autoregressive_safe(
             formatted, max_tokens, temperature, top_p, top_k=top_k,
+            repetition_penalty=repetition_penalty,
+            min_new_tokens=min_new_tokens,
+            sampling=sampling,
         )
     clear_live_kv_cache()
     return _generate_autoregressive(
-        _model, _tokenizer, _device, formatted, max_tokens, temperature, top_p, top_k=top_k,
+        _model, _tokenizer, _device, formatted, max_tokens, temperature, top_p,
+        top_k=top_k, repetition_penalty=repetition_penalty, min_new_tokens=min_new_tokens,
+        sampling=sampling,
+        **stop_kwargs,
     )
 
 
@@ -1874,8 +1975,20 @@ def generate_tokens(prompt, system_prompt=None, max_tokens=512, temperature=0.7,
     if _model is None:
         raise RuntimeError("No model loaded. Call load_model() first.")
 
+    sampling = _seeded_sampling(kwargs.get("seed"))
+    stops = _resolve_stop_strings(_model, kwargs.get("stop_strings"))
+    if stops and _model_type == "dllm":
+        raise StopStringError("stop strings do not support SDAR or masked block-diffusion generation")
+    stop_kwargs = {"stop_strings": kwargs["stop_strings"]} if "stop_strings" in kwargs else {}
+
     # Masked prompt streaming routing for dLLM models
     if masked_prompt_json is not None and _model_type == "dllm":
+        if sampling is not None:
+            raise SeedSamplingError("Masked block-diffusion generation does not support seed")
+        if kwargs.get("repetition_penalty") is not None:
+            raise ValueError("Masked block-diffusion generation does not support repetition_penalty")
+        if kwargs.get("min_new_tokens") is not None:
+            raise ValueError("Masked block-diffusion generation does not support min_new_tokens")
         clear_live_kv_cache()
         mp = json.loads(masked_prompt_json)
         segments = mp.get("segments", [])
@@ -1886,19 +1999,29 @@ def generate_tokens(prompt, system_prompt=None, max_tokens=512, temperature=0.7,
         )
         return
 
+    min_new_tokens = kwargs.get("min_new_tokens")
+    if min_new_tokens is not None:
+        _resolve_min_new_tokens(_model, min_new_tokens, max_tokens)
     formatted = _format_prompt(prompt, system_prompt)
     top_k = kwargs.get("top_k")
+    repetition_penalty = kwargs.get("repetition_penalty")
 
     if _model_type == "dllm":
         # Stream a single final replacement for stability on TraDo/SDAR.
         final_text = _generate_dllm_autoregressive_safe(
             formatted, max_tokens, temperature, top_p, top_k=top_k,
+            repetition_penalty=repetition_penalty,
+            min_new_tokens=min_new_tokens,
+            sampling=sampling,
         )
         yield {"mode": "replace", "text": final_text}
     else:
         clear_live_kv_cache()
         yield from _generate_autoregressive_streaming(
-            _model, _tokenizer, _device, formatted, max_tokens, temperature, top_p, top_k=top_k,
+            _model, _tokenizer, _device, formatted, max_tokens, temperature, top_p,
+            top_k=top_k, repetition_penalty=repetition_penalty, min_new_tokens=min_new_tokens,
+            sampling=sampling,
+            **stop_kwargs,
         )
 
 

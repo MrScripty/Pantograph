@@ -1,6 +1,7 @@
 """Worker envelope validation helpers that do not import torch."""
 
 import json
+import math
 
 WORKER_CONTRACT_VERSION = 1
 INIT_WORKER_OPERATION = "init_worker"
@@ -17,7 +18,7 @@ CLEAR_KV_CACHE_OPERATION = "clear_kv_cache"
 SAVE_KV_CACHE_OPERATION = "save_kv_cache"
 RESTORE_KV_CACHE_OPERATION = "restore_kv_cache"
 TRUNCATE_KV_CACHE_OPERATION = "truncate_kv_cache"
-ALLOWED_TRANSFORMERS_GENERATE_KWARGS = {"top_k"}
+ALLOWED_TRANSFORMERS_GENERATE_KWARGS = {"top_k", "repetition_penalty", "min_new_tokens", "seed", "stop_strings"}
 CAUSAL_LM_LOADER = "causal_lm"
 AUTOMATIC_SPEECH_RECOGNITION_LOADER = "automatic_speech_recognition"
 SUPPORTED_TRANSFORMERS_LOADERS = {
@@ -188,7 +189,17 @@ def load_transformers_model_kwargs_from_envelope(envelope):
     if not isinstance(entry_path, str) or not entry_path.strip():
         raise ValueError("PyTorch worker load payload.entry_path must be a non-empty string")
 
-    return {
+    chunk_length_s = payload.get("chunk_length_s")
+    if chunk_length_s is not None:
+        if loader != AUTOMATIC_SPEECH_RECOGNITION_LOADER or isinstance(chunk_length_s, bool):
+            raise ValueError("chunk length is supported only for ASR loading")
+        if not isinstance(chunk_length_s, (int, float)):
+            raise ValueError("ASR chunk length must be finite and positive")
+        chunk_length_s = float(chunk_length_s)
+        if not math.isfinite(chunk_length_s) or chunk_length_s <= 0:
+            raise ValueError("ASR chunk length must be finite and positive")
+
+    kwargs = {
         "model_path": entry_path,
         "device": _worker_device_or_auto(payload, "load"),
         "model_type": payload.get("model_type_hint"),
@@ -200,6 +211,9 @@ def load_transformers_model_kwargs_from_envelope(envelope):
         "code_revision": trust_policy.get("code_revision"),
         "cache_policy": trust_policy.get("cache_policy", "backend_default"),
     }
+    if loader == AUTOMATIC_SPEECH_RECOGNITION_LOADER:
+        kwargs["chunk_length_s"] = chunk_length_s
+    return kwargs
 
 
 def generate_text_kwargs_from_envelope(envelope, expected_operation=GENERATE_TEXT_OPERATION):
@@ -235,6 +249,40 @@ def generate_text_kwargs_from_envelope(envelope, expected_operation=GENERATE_TEX
         raise ValueError(
             f"PyTorch worker generate_text transformers_kwargs contains unsupported key(s): {joined}"
         )
+
+    if "stop_strings" in transformers_kwargs:
+        markers = transformers_kwargs["stop_strings"]
+        if (not isinstance(markers, list) or not markers
+                or any(not isinstance(marker, str) or not marker for marker in markers)):
+            raise ValueError("stop_strings must be a non-empty list of non-empty strings")
+
+    if "seed" in transformers_kwargs:
+        seed = transformers_kwargs["seed"]
+        if isinstance(seed, bool) or not isinstance(seed, int) or not 0 <= seed < 1 << 64:
+            raise ValueError("seed must be a non-negative u64 integer")
+
+    if "repetition_penalty" in transformers_kwargs:
+        penalty = transformers_kwargs["repetition_penalty"]
+        if isinstance(penalty, bool) or not isinstance(penalty, (int, float)):
+            raise ValueError("repetition_penalty must be a finite positive number")
+        try:
+            penalty = float(penalty)
+        except OverflowError as exc:
+            raise ValueError("repetition_penalty must be a finite positive number") from exc
+        if not math.isfinite(penalty) or penalty <= 0:
+            raise ValueError("repetition_penalty must be a finite positive number")
+
+    if "min_new_tokens" in transformers_kwargs:
+        minimum = transformers_kwargs["min_new_tokens"]
+        if (isinstance(minimum, bool) or not isinstance(minimum, int)
+                or not 0 <= minimum <= (1 << 32) - 1):
+            raise ValueError("min_new_tokens must be a non-negative u32 integer")
+        maximum = payload.get("max_tokens", 512)
+        if (isinstance(maximum, bool) or not isinstance(maximum, int)
+                or not 0 < maximum <= (1 << 32) - 1):
+            raise ValueError("max_tokens must be a positive u32 integer when min_new_tokens is authored")
+        if minimum > maximum:
+            raise ValueError("min_new_tokens must not exceed max_tokens")
 
     kwargs = {
         "prompt": prompt,

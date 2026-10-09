@@ -12,6 +12,7 @@ use std::sync::Arc;
 use sysinfo::{Pid, ProcessesToUpdate, Signal, System};
 use tokio::sync::RwLock;
 
+use crate::backend::LlamaCppRuntimeSettings;
 use crate::config::DeviceConfig;
 use crate::constants::{hosts, ports, timeouts};
 use crate::llamacpp_sidecar_events::{
@@ -54,17 +55,32 @@ fn parse_sidecar_pid(raw: &str) -> Option<i32> {
         .map(|record| record.pid)
 }
 
-fn active_runtime_descriptor(
+struct RuntimeDescriptorInput<'a> {
     mode: LlamaCppRuntimeMode,
     port: u16,
-    model_path: &str,
-    mmproj_path: Option<&str>,
-    device: &DeviceConfig,
+    model_path: &'a str,
+    mmproj_path: Option<&'a str>,
+    device: &'a DeviceConfig,
     context_size: Option<u32>,
     cpu_threads: Option<u32>,
     batch_size: Option<u32>,
     ubatch_size: Option<u32>,
+}
+
+fn active_runtime_descriptor(
+    input: RuntimeDescriptorInput<'_>,
 ) -> Option<LlamaCppActiveRuntimeDescriptor> {
+    let RuntimeDescriptorInput {
+        mode,
+        port,
+        model_path,
+        mmproj_path,
+        device,
+        context_size,
+        cpu_threads,
+        batch_size,
+        ubatch_size,
+    } = input;
     let selected_device = selected_contract_device(device)?;
     let (selected_device_class, selected_device_id) = selected_device
         .map(|(device_class, device_id)| (Some(device_class), Some(device_id)))
@@ -163,6 +179,7 @@ pub enum ServerMode {
 /// Manages llama-server sidecar processes
 pub struct LlamaServer {
     child: Option<Box<dyn ProcessHandle>>,
+    process_events: Option<tokio::sync::mpsc::Receiver<ProcessEvent>>,
     mode: ServerMode,
     ready: bool,
     pid_file: Option<PathBuf>,
@@ -172,6 +189,7 @@ impl LlamaServer {
     pub fn new() -> Self {
         Self {
             child: None,
+            process_events: None,
             mode: ServerMode::None,
             ready: false,
             pid_file: None,
@@ -208,7 +226,7 @@ impl LlamaServer {
     /// Connect to an external server
     pub async fn connect_external(&mut self, url: &str) -> Result<(), String> {
         // Stop any existing sidecar
-        self.stop();
+        self.stop_confirmed().await?;
         let normalized_url = normalize_server_url(url);
 
         // Validate the URL by making a simple request
@@ -250,15 +268,18 @@ impl LlamaServer {
         spawner: Arc<dyn ProcessSpawner>,
         model_path: &str,
         mmproj_path: Option<&str>,
-        device: &DeviceConfig,
-        context_size: u32,
-        cpu_threads: Option<u32>,
-        batch_size: Option<u32>,
-        ubatch_size: Option<u32>,
+        settings: &LlamaCppRuntimeSettings,
         port_override: Option<u16>,
     ) -> Result<(), LlamaCppSidecarStartupError> {
+        let device = &settings.device_config();
+        let context_size = settings.context_size;
+        let cpu_threads = settings.cpu_threads;
+        let batch_size = settings.batch_size;
+        let ubatch_size = settings.ubatch_size;
         // Stop any existing connection
-        self.stop();
+        self.stop_confirmed()
+            .await
+            .map_err(LlamaCppSidecarEventClassifier::classify_process_error)?;
 
         let port = port_override.unwrap_or(ports::SERVER);
 
@@ -365,7 +386,9 @@ impl LlamaServer {
         port_override: Option<u16>,
     ) -> Result<(), LlamaCppSidecarStartupError> {
         // Stop any existing connection
-        self.stop();
+        self.stop_confirmed()
+            .await
+            .map_err(LlamaCppSidecarEventClassifier::classify_process_error)?;
 
         let port = port_override.unwrap_or(ports::SERVER);
 
@@ -433,7 +456,9 @@ impl LlamaServer {
         device: &DeviceConfig,
         port_override: Option<u16>,
     ) -> Result<(), LlamaCppSidecarStartupError> {
-        self.stop();
+        self.stop_confirmed()
+            .await
+            .map_err(LlamaCppSidecarEventClassifier::classify_process_error)?;
 
         let port = port_override.unwrap_or(ports::SERVER);
         let gpu_layers_str = device.gpu_layers.to_string();
@@ -526,15 +551,31 @@ impl LlamaServer {
     /// Wait for sidecar to become ready
     async fn wait_for_ready(
         &mut self,
-        mut rx: tokio::sync::mpsc::Receiver<ProcessEvent>,
+        rx: tokio::sync::mpsc::Receiver<ProcessEvent>,
     ) -> Result<(), LlamaCppSidecarStartupError> {
         let timeout = tokio::time::Duration::from_secs(timeouts::SERVER_STARTUP_SECS);
-        let start = std::time::Instant::now();
+        let deadline = tokio::time::Instant::now() + timeout;
+        self.process_events = Some(rx);
 
-        while let Some(event) = rx.recv().await {
-            if start.elapsed() > timeout {
-                self.stop();
-                return Err(LlamaCppSidecarStartupError::ReadinessTimeout);
+        loop {
+            let received = tokio::time::timeout_at(
+                deadline,
+                self.process_events
+                    .as_mut()
+                    .expect("owned process events")
+                    .recv(),
+            )
+            .await;
+            let event = match received {
+                Ok(Some(event)) => event,
+                Ok(None) => break,
+                Err(_) => {
+                    self.stop();
+                    return Err(LlamaCppSidecarStartupError::ReadinessTimeout);
+                }
+            };
+            if matches!(event, ProcessEvent::Terminated(_)) {
+                self.clear_terminated_process();
             }
 
             match LlamaCppSidecarEventClassifier::classify_event(event) {
@@ -585,6 +626,36 @@ impl LlamaServer {
             return Err(LlamaCppSidecarStartupError::EndedBeforeReady);
         }
 
+        // Continue draining logs after readiness. Retaining an undrained
+        // bounded receiver would eventually block the sidecar's stdout pipe.
+        // This consumes the existing process stream, not a second lifecycle.
+        let mut events = self.process_events.take().expect("owned process events");
+        let (termination, receiver) = tokio::sync::mpsc::channel(1);
+        tokio::spawn(async move {
+            loop {
+                let event = tokio::select! {
+                    _ = termination.closed() => break,
+                    event = events.recv() => event,
+                };
+                match event {
+                    Some(ProcessEvent::Terminated(code)) => {
+                        let _ = termination.send(ProcessEvent::Terminated(code)).await;
+                        break;
+                    }
+                    Some(ProcessEvent::Stdout(line)) => {
+                        log::debug!("[llama-server] {}", String::from_utf8_lossy(&line))
+                    }
+                    Some(ProcessEvent::Stderr(line)) => {
+                        log::debug!("[llama-server stderr] {}", String::from_utf8_lossy(&line))
+                    }
+                    Some(ProcessEvent::Error(error)) => {
+                        log::warn!("llama-server process event: {error}")
+                    }
+                    None => break,
+                }
+            }
+        });
+        self.process_events = Some(receiver);
         Ok(())
     }
 
@@ -636,19 +707,20 @@ impl LlamaServer {
         &self,
         model_path: &str,
         mmproj_path: Option<&str>,
-        device: &DeviceConfig,
-        context_size: u32,
-        cpu_threads: Option<u32>,
-        batch_size: Option<u32>,
-        ubatch_size: Option<u32>,
+        settings: &LlamaCppRuntimeSettings,
         port_override: Option<u16>,
     ) -> bool {
+        let device = &settings.device_config();
+        let context_size = settings.context_size;
+        let cpu_threads = settings.cpu_threads;
+        let batch_size = settings.batch_size;
+        let ubatch_size = settings.ubatch_size;
         let expected_port = port_override.unwrap_or(ports::SERVER);
         let Some(active) = self.active_runtime_descriptor() else {
             return false;
         };
         active.mode == LlamaCppRuntimeMode::Inference
-            && active.model_path == PathBuf::from(model_path)
+            && active.model_path.as_path() == Path::new(model_path)
             && active.mmproj_path == mmproj_path.map(PathBuf::from)
             && active.device == *device
             && active.context_size == Some(context_size)
@@ -669,7 +741,7 @@ impl LlamaServer {
             return false;
         };
         active.mode == LlamaCppRuntimeMode::Embedding
-            && active.model_path == PathBuf::from(model_path)
+            && active.model_path.as_path() == Path::new(model_path)
             && active.device == *device
             && active.port == expected_port
     }
@@ -685,7 +757,7 @@ impl LlamaServer {
             return false;
         };
         active.mode == LlamaCppRuntimeMode::Reranking
-            && active.model_path == PathBuf::from(model_path)
+            && active.model_path.as_path() == Path::new(model_path)
             && active.device == *device
             && active.port == expected_port
     }
@@ -719,47 +791,47 @@ impl LlamaServer {
                 cpu_threads,
                 batch_size,
                 ubatch_size,
-            } => active_runtime_descriptor(
-                LlamaCppRuntimeMode::Inference,
-                *port,
+            } => active_runtime_descriptor(RuntimeDescriptorInput {
+                mode: LlamaCppRuntimeMode::Inference,
+                port: *port,
                 model_path,
-                mmproj_path.as_deref(),
+                mmproj_path: mmproj_path.as_deref(),
                 device,
-                Some(*context_size),
-                *cpu_threads,
-                *batch_size,
-                *ubatch_size,
-            ),
+                context_size: Some(*context_size),
+                cpu_threads: *cpu_threads,
+                batch_size: *batch_size,
+                ubatch_size: *ubatch_size,
+            }),
             ServerMode::SidecarEmbedding {
                 port,
                 model_path,
                 device,
-            } => active_runtime_descriptor(
-                LlamaCppRuntimeMode::Embedding,
-                *port,
+            } => active_runtime_descriptor(RuntimeDescriptorInput {
+                mode: LlamaCppRuntimeMode::Embedding,
+                port: *port,
                 model_path,
-                None,
+                mmproj_path: None,
                 device,
-                None,
-                None,
-                None,
-                None,
-            ),
+                context_size: None,
+                cpu_threads: None,
+                batch_size: None,
+                ubatch_size: None,
+            }),
             ServerMode::SidecarReranking {
                 port,
                 model_path,
                 device,
-            } => active_runtime_descriptor(
-                LlamaCppRuntimeMode::Reranking,
-                *port,
+            } => active_runtime_descriptor(RuntimeDescriptorInput {
+                mode: LlamaCppRuntimeMode::Reranking,
+                port: *port,
                 model_path,
-                None,
+                mmproj_path: None,
                 device,
-                None,
-                None,
-                None,
-                None,
-            ),
+                context_size: None,
+                cpu_threads: None,
+                batch_size: None,
+                ubatch_size: None,
+            }),
             ServerMode::None | ServerMode::External { .. } => None,
         }
     }
@@ -871,24 +943,66 @@ impl LlamaServer {
         }
     }
 
+    /// Request shutdown without claiming that the owned process has exited.
+    /// Startup failures and Drop use this best-effort path; failed shutdown
+    /// retains the process handle and its generation-specific event receiver.
     pub fn stop(&mut self) {
-        if let Some(child) = self.child.take() {
-            let pid = child.pid();
-            log::debug!("Stopping llama-server (PID: {})", pid);
-
-            if let Err(e) = child.kill() {
-                log::warn!("Failed to kill llama-server: {}", e);
+        self.ready = false;
+        if let Some(child) = self.child.as_ref() {
+            if let Err(error) = child.kill() {
+                log::warn!("Failed to kill llama-server: {error}");
             }
-            log::debug!("llama-server stop signal sent");
+        } else {
+            self.clear_terminated_process();
         }
+    }
 
-        // Clean up PID file
+    fn clear_terminated_process(&mut self) {
+        self.child = None;
+        self.process_events = None;
         if let Some(pid_file) = self.pid_file.take() {
             let _ = fs::remove_file(pid_file);
         }
-
         self.mode = ServerMode::None;
         self.ready = false;
+    }
+
+    /// Only this generation's Terminated event acknowledges owned release.
+    /// Missing evidence, kill failure, timeout, and caller cancellation all
+    /// retain custody so a later stop can safely retry.
+    pub async fn stop_confirmed(&mut self) -> Result<(), String> {
+        self.ready = false;
+        if self.child.is_none() {
+            self.clear_terminated_process();
+            return Ok(());
+        }
+        if let Some(events) = self.process_events.as_mut() {
+            while let Ok(event) = events.try_recv() {
+                if matches!(event, ProcessEvent::Terminated(_)) {
+                    self.clear_terminated_process();
+                    return Ok(());
+                }
+            }
+        }
+        self.child.as_ref().expect("owned child").kill()?;
+        let events = self.process_events.as_mut().ok_or_else(|| {
+            "llama-server termination evidence unavailable; custody retained".to_string()
+        })?;
+        let acknowledged = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            while let Some(event) = events.recv().await {
+                if matches!(event, ProcessEvent::Terminated(_)) {
+                    return true;
+                }
+            }
+            false
+        })
+        .await
+        .unwrap_or(false);
+        if !acknowledged {
+            return Err("llama-server termination unacknowledged; custody retained".into());
+        }
+        self.clear_terminated_process();
+        Ok(())
     }
 }
 

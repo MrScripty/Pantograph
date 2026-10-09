@@ -48,11 +48,19 @@ pub struct ChatRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_tokens: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub min_new_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub temperature: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub top_p: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub top_k: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub repetition_penalty: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub seed: Option<u64>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub stop: Vec<String>,
 }
 
 /// Canonical task execution request consumed by future typed backend paths.
@@ -87,19 +95,29 @@ impl InferenceExecutionRequest {
     #[must_use]
     pub fn from_openai_chat_request(request_id: Option<String>, request: ChatRequest) -> Self {
         let generation_options = if request.max_tokens.is_some()
+            || request.min_new_tokens.is_some()
             || request.temperature.is_some()
             || request.top_p.is_some()
             || request.top_k.is_some()
+            || request.repetition_penalty.is_some()
+            || request.seed.is_some()
+            || !request.stop.is_empty()
         {
             Some(GenerationOptions {
                 length: crate::model_contracts::LengthGenerationOptions {
                     max_new_tokens: request.max_tokens,
+                    min_new_tokens: request.min_new_tokens,
                     ..Default::default()
                 },
                 sampling: crate::model_contracts::SamplingGenerationOptions {
                     temperature: request.temperature,
                     top_p: request.top_p,
                     top_k: request.top_k,
+                    repetition_penalty: request.repetition_penalty,
+                    seed: request.seed,
+                },
+                stopping: crate::model_contracts::StoppingGenerationOptions {
+                    stop_strings: request.stop,
                     ..Default::default()
                 },
                 ..Default::default()
@@ -178,6 +196,21 @@ impl InferenceExecutionRequest {
             InferenceExecutionInput::TextGeneration {
                 prompt, messages, ..
             } => {
+                if let Some(maximum) = self
+                    .generation_options
+                    .as_ref()
+                    .and_then(|options| options.length.max_new_tokens)
+                {
+                    self.validate_text_min_new_tokens_budget(maximum)?;
+                }
+                if self
+                    .generation_options
+                    .as_ref()
+                    .and_then(|options| options.sampling.repetition_penalty)
+                    .is_some_and(|value| !value.is_finite() || value <= 0.0)
+                {
+                    return Err(InferenceExecutionRequestValidationError::InvalidRepetitionPenalty);
+                }
                 if prompt
                     .as_deref()
                     .is_none_or(|value| value.trim().is_empty())
@@ -223,12 +256,48 @@ impl InferenceExecutionRequest {
                 Ok(())
             }
             InferenceExecutionInput::ImageGeneration { .. } => Ok(()),
-            InferenceExecutionInput::AudioTranscription { .. } => Ok(()),
+            InferenceExecutionInput::AudioTranscription { .. }
+            | InferenceExecutionInput::OwnedAudioTranscription { .. } => Ok(()),
             InferenceExecutionInput::ImageUnderstanding { .. }
             | InferenceExecutionInput::DepthEstimation { .. }
             | InferenceExecutionInput::VideoUnderstanding { .. }
             | InferenceExecutionInput::MultimodalGeneration { .. } => Ok(()),
         }
+    }
+
+    /// Check an authored floor against this text backend's effective budget.
+    /// The canonical validator checks an explicit maximum; owners supply their
+    /// actual fallback before loading or dispatching a request with no maximum.
+    pub(crate) fn validate_text_min_new_tokens_budget(
+        &self,
+        default_maximum: u32,
+    ) -> Result<(), InferenceExecutionRequestValidationError> {
+        if !matches!(self.input, InferenceExecutionInput::TextGeneration { .. }) {
+            return Ok(());
+        }
+        if let Some(length) = self
+            .generation_options
+            .as_ref()
+            .map(|options| &options.length)
+        {
+            if let Some(minimum) = length.min_new_tokens {
+                let maximum = length.max_new_tokens.unwrap_or(default_maximum);
+                if maximum == 0 {
+                    return Err(
+                        InferenceExecutionRequestValidationError::InvalidMinNewTokensBudget,
+                    );
+                }
+                if minimum > maximum {
+                    return Err(
+                        InferenceExecutionRequestValidationError::MinNewTokensExceedsBudget {
+                            minimum,
+                            maximum,
+                        },
+                    );
+                }
+            }
+        }
+        Ok(())
     }
 }
 
@@ -237,6 +306,12 @@ impl InferenceExecutionRequest {
 pub enum InferenceExecutionRequestValidationError {
     #[error("text generation requires a prompt or chat messages")]
     MissingTextInput,
+    #[error("text repetition_penalty must be positive and finite")]
+    InvalidRepetitionPenalty,
+    #[error("text max_new_tokens must be positive when min_new_tokens is authored")]
+    InvalidMinNewTokensBudget,
+    #[error("text min_new_tokens {minimum} exceeds effective max_new_tokens {maximum}")]
+    MinNewTokensExceedsBudget { minimum: u32, maximum: u32 },
     #[error("embedding execution requires at least one text input")]
     EmptyEmbeddingTexts,
     #[error("embedding text at index {index} must not be blank")]
@@ -297,6 +372,12 @@ pub enum InferenceExecutionInput {
     AudioTranscription {
         request: AudioTranscriptionRequest,
     },
+    /// Host-verified snapshot; cannot be constructed by JSON deserialization.
+    #[serde(skip_deserializing)]
+    OwnedAudioTranscription {
+        request: AudioTranscriptionRequest,
+        snapshot: crate::OwnedAudioWav,
+    },
     ImageUnderstanding {
         request: ImageUnderstandingRequest,
     },
@@ -324,7 +405,9 @@ impl InferenceExecutionInput {
             Self::Embedding { .. } => InferenceExecutionInputKind::Embedding,
             Self::Rerank { .. } => InferenceExecutionInputKind::Rerank,
             Self::ImageGeneration { .. } => InferenceExecutionInputKind::ImageGeneration,
-            Self::AudioTranscription { .. } => InferenceExecutionInputKind::AudioTranscription,
+            Self::AudioTranscription { .. } | Self::OwnedAudioTranscription { .. } => {
+                InferenceExecutionInputKind::AudioTranscription
+            }
             Self::ImageUnderstanding { .. } => InferenceExecutionInputKind::ImageUnderstanding,
             Self::DepthEstimation { .. } => InferenceExecutionInputKind::DepthEstimation,
             Self::VideoUnderstanding { .. } => InferenceExecutionInputKind::VideoUnderstanding,
@@ -922,7 +1005,6 @@ pub struct InferenceRequestLifecycleEvent {
 }
 
 impl InferenceRequestLifecycleEvent {
-    #[must_use]
     pub fn builder(
         phase: InferenceLifecyclePhase,
         kind: InferenceRequestLifecycleEventKind,
@@ -950,7 +1032,6 @@ pub struct InferenceRequestLifecycleEventContext {
 }
 
 impl InferenceRequestLifecycleEventContext {
-    #[must_use]
     pub fn builder(
         &self,
         phase: InferenceLifecyclePhase,
@@ -980,7 +1061,6 @@ pub struct InferenceRequestLifecycleEventBuilder {
 }
 
 impl InferenceRequestLifecycleEventBuilder {
-    #[must_use]
     pub fn new(
         phase: InferenceLifecyclePhase,
         kind: InferenceRequestLifecycleEventKind,
@@ -1015,49 +1095,41 @@ impl InferenceRequestLifecycleEventBuilder {
         }
     }
 
-    #[must_use]
     pub fn with_request_id(mut self, request_id: Option<String>) -> Self {
         self.event.request_id = request_id;
         self
     }
 
-    #[must_use]
     pub fn with_phase(mut self, phase: InferenceLifecyclePhase) -> Self {
         self.event.phase = phase;
         self
     }
 
-    #[must_use]
     pub fn with_kind(mut self, kind: InferenceRequestLifecycleEventKind) -> Self {
         self.event.kind = kind;
         self
     }
 
-    #[must_use]
     pub fn with_occurred_at_ms(mut self, occurred_at_ms: u64) -> Self {
         self.event.occurred_at_ms = occurred_at_ms;
         self
     }
 
-    #[must_use]
     pub fn with_task_id(mut self, task_id: Option<String>) -> Self {
         self.event.task_id = task_id;
         self
     }
 
-    #[must_use]
     pub fn with_backend_key(mut self, backend_key: Option<String>) -> Self {
         self.event.backend_key = backend_key;
         self
     }
 
-    #[must_use]
     pub fn with_runtime_id(mut self, runtime_id: Option<String>) -> Self {
         self.event.runtime_id = runtime_id;
         self
     }
 
-    #[must_use]
     pub fn with_selected_runtime_variant_id(
         mut self,
         selected_runtime_variant_id: Option<String>,
@@ -1066,13 +1138,11 @@ impl InferenceRequestLifecycleEventBuilder {
         self
     }
 
-    #[must_use]
     pub fn with_runtime_instance_id(mut self, runtime_instance_id: Option<String>) -> Self {
         self.event.runtime_instance_id = runtime_instance_id;
         self
     }
 
-    #[must_use]
     pub fn with_selected_device_class(
         mut self,
         selected_device_class: Option<InferenceDeviceClass>,
@@ -1081,7 +1151,6 @@ impl InferenceRequestLifecycleEventBuilder {
         self
     }
 
-    #[must_use]
     pub fn with_selected_device_id(
         mut self,
         selected_device_id: Option<InferenceDeviceId>,
@@ -1090,7 +1159,6 @@ impl InferenceRequestLifecycleEventBuilder {
         self
     }
 
-    #[must_use]
     pub fn with_selected_network_node_id(
         mut self,
         selected_network_node_id: Option<String>,
@@ -1099,37 +1167,31 @@ impl InferenceRequestLifecycleEventBuilder {
         self
     }
 
-    #[must_use]
     pub fn with_model_id(mut self, model_id: Option<String>) -> Self {
         self.event.model_id = model_id;
         self
     }
 
-    #[must_use]
     pub fn with_resolved_artifact_kind(mut self, resolved_artifact_kind: Option<String>) -> Self {
         self.event.resolved_artifact_kind = resolved_artifact_kind;
         self
     }
 
-    #[must_use]
     pub fn with_usage(mut self, usage: Option<InferenceUsage>) -> Self {
         self.event.usage = usage;
         self
     }
 
-    #[must_use]
     pub fn with_cache_handle_id(mut self, cache_handle_id: Option<String>) -> Self {
         self.event.cache_handle_id = cache_handle_id;
         self
     }
 
-    #[must_use]
     pub fn with_artifact_refs(mut self, artifact_refs: Vec<String>) -> Self {
         self.event.artifact_refs = artifact_refs;
         self
     }
 
-    #[must_use]
     pub fn with_resource_observation(
         mut self,
         resource_observation: Option<InferenceExecutionResourceObservation>,
@@ -1138,13 +1200,11 @@ impl InferenceRequestLifecycleEventBuilder {
         self
     }
 
-    #[must_use]
     pub fn with_detail(mut self, detail: Option<String>) -> Self {
         self.event.detail = detail;
         self
     }
 
-    #[must_use]
     pub fn with_canonical_error_event_id(
         mut self,
         canonical_error_event_id: Option<String>,
@@ -1153,7 +1213,6 @@ impl InferenceRequestLifecycleEventBuilder {
         self
     }
 
-    #[must_use]
     pub fn with_compatibility_report(
         mut self,
         compatibility_report: Option<InferenceCompatibilityReportSummary>,
@@ -1162,7 +1221,6 @@ impl InferenceRequestLifecycleEventBuilder {
         self
     }
 
-    #[must_use]
     pub fn with_compatibility_issues(
         mut self,
         compatibility_issues: Vec<InferenceCompatibilityIssueSummary>,
@@ -1171,7 +1229,6 @@ impl InferenceRequestLifecycleEventBuilder {
         self
     }
 
-    #[must_use]
     pub fn with_option_diagnostics(
         mut self,
         option_diagnostics: Vec<OptionCompatibilityDiagnostic>,
@@ -2323,6 +2380,70 @@ mod tests {
     }
 
     #[test]
+    fn chat_seed_maps_alone_without_changing_omitted_options() {
+        for seed in [
+            None,
+            Some(0),
+            Some((1 << 53) - 1),
+            Some(1 << 53),
+            Some((1 << 53) + 1),
+            Some(u64::MAX),
+        ] {
+            let mut encoded = serde_json::json!({
+                "model": "seed-chat",
+                "messages": [{"role": "user", "content": [{"type": "text", "text": "Hi"}]}],
+                "stream": true
+            });
+            if let Some(seed) = seed {
+                encoded["seed"] = serde_json::json!(seed);
+            }
+            let chat: ChatRequest = serde_json::from_str(&encoded.to_string()).unwrap();
+            assert_eq!(chat.seed, seed);
+            assert_eq!(serde_json::to_value(&chat).unwrap(), encoded);
+            let typed = InferenceExecutionRequest::from_openai_chat_request(None, chat);
+            typed.validate().unwrap();
+            assert_eq!(typed.generation_options.is_some(), seed.is_some());
+            if let Some(options) = typed.generation_options {
+                assert_eq!(options.sampling.seed, seed);
+                assert_eq!(options.requested_option_paths(), ["sampling.seed"]);
+            }
+        }
+        for seed in [
+            serde_json::json!(-1),
+            serde_json::json!(1.5),
+            serde_json::json!(true),
+            serde_json::json!("42"),
+        ] {
+            assert!(serde_json::from_value::<ChatRequest>(serde_json::json!({
+                "model": "seed-chat", "messages": [], "stream": true, "seed": seed
+            }))
+            .is_err());
+        }
+    }
+
+    #[test]
+    fn chat_stop_maps_exact_strings_and_preserves_omission() {
+        for stop in [
+            Vec::new(),
+            vec!["終わり🛑".to_owned()],
+            vec!["  END\n".to_owned(), " ".to_owned()],
+        ] {
+            let mut wire = serde_json::json!({"model": "stop-chat", "messages": [{"role": "user", "content": [{"type": "text", "text": "Hi"}]}], "stream": true});
+            if !stop.is_empty() {
+                wire["stop"] = serde_json::json!(stop);
+            }
+            let chat: ChatRequest = serde_json::from_str(&wire.to_string()).unwrap();
+            assert_eq!(chat.stop, stop);
+            assert_eq!(serde_json::to_value(&chat).unwrap(), wire);
+            let typed = InferenceExecutionRequest::from_openai_chat_request(None, chat);
+            assert_eq!(typed.generation_options.is_some(), !stop.is_empty());
+            if let Some(options) = typed.generation_options {
+                assert_eq!(options.stopping.stop_strings, stop);
+            }
+        }
+    }
+
+    #[test]
     fn typed_execution_request_maps_openai_chat_at_edge_and_validates() {
         let request = ChatRequest {
             model: "tiny-chat".to_string(),
@@ -2334,9 +2455,13 @@ mod tests {
             }],
             stream: true,
             max_tokens: Some(32),
+            min_new_tokens: Some(4),
             temperature: Some(0.4),
             top_p: Some(0.9),
             top_k: Some(40),
+            repetition_penalty: Some(1.2),
+            seed: Some(42),
+            stop: Vec::new(),
         };
 
         let typed = InferenceExecutionRequest::from_openai_chat_request(
@@ -2345,7 +2470,25 @@ mod tests {
         );
 
         typed.validate().expect("mapped chat request is valid");
+        assert_eq!(
+            typed
+                .generation_options
+                .as_ref()
+                .unwrap()
+                .length
+                .min_new_tokens,
+            Some(4)
+        );
         assert_eq!(typed.task_id, InferenceTaskId::ChatCompletion);
+        assert_eq!(
+            typed
+                .generation_options
+                .as_ref()
+                .unwrap()
+                .sampling
+                .repetition_penalty,
+            Some(1.2)
+        );
         assert_eq!(typed.model_name.as_deref(), Some("tiny-chat"));
         assert_eq!(
             typed

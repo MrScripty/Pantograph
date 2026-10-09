@@ -34,6 +34,7 @@ export type {
   ErrorType,
   ComponentError,
   ImportResult,
+  ImportFailureCode,
   ValidationResult,
 } from './types';
 
