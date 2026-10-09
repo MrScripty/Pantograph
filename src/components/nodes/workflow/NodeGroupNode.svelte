@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Handle, Position } from '@xyflow/svelte';
   import type { PortDefinition } from '../../../services/workflow/types';
-  import type { PortMapping, NodeGroup } from '../../../services/workflow/groupTypes';
+  import { groupDisplay } from './groupDisplayDiagnostics';
   import GroupJsonFilterPathEditor from './GroupJsonFilterPathEditor.svelte';
   import { currentSessionId, isReadOnly } from '../../../stores/graphSessionStore';
   import { expandedGroupId, isEditing, tabIntoGroup } from '../../../stores/workflowStore';
@@ -9,7 +9,7 @@
   interface Props {
     id: string;
     data: {
-      group: NodeGroup;
+      group?: unknown;
       label?: string;
     } & Record<string, unknown>;
     selected?: boolean;
@@ -18,31 +18,13 @@
   let { id, data, selected = false }: Props = $props();
 
   let editPaths = $state(false);
-  let group = $derived(data.group);
-  let label = $derived(data.label || group?.name || 'Group');
-  let nodeCount = $derived(group?.nodes?.length || 0);
+  let display = $derived(groupDisplay(data));
+  let label = $derived(display.label);
+  let nodeCount = $derived(display.nodeCount);
   let isExpanded = $derived($expandedGroupId === id);
-
-  // Convert port mappings to port definitions for rendering handles
-  let inputs = $derived<PortDefinition[]>(
-    (group?.exposed_inputs || []).map((mapping: PortMapping) => ({
-      id: mapping.group_port_id,
-      label: mapping.group_port_label,
-      data_type: mapping.data_type,
-      required: false,
-      multiple: false,
-    }))
-  );
-
-  let outputs = $derived<PortDefinition[]>(
-    (group?.exposed_outputs || []).map((mapping: PortMapping) => ({
-      id: mapping.group_port_id,
-      label: mapping.group_port_label,
-      data_type: mapping.data_type,
-      required: false,
-      multiple: false,
-    }))
-  );
+  let inputs = $derived(display.inputs);
+  let outputs = $derived(display.outputs);
+  let filterNodes = $derived(display.nodes.filter(node => node.node_type === 'json-filter'));
 
   const typeColors: Record<string, string> = {
     string: '#22c55e',
@@ -68,7 +50,7 @@
   }
 
   function handleOpenGroup() {
-    if (group) {
+    if (!display.diagnostics.length) {
       tabIntoGroup(id);
     }
   }
@@ -87,6 +69,19 @@
     <span class="text-sm font-medium text-purple-200">{label}</span>
     <span class="text-xs text-purple-400 ml-auto">{nodeCount} nodes</span>
   </div>
+
+  {#if display.diagnostics.length}
+    <div class="nodrag nopan nowheel px-3 py-2 text-xs text-amber-200" role="status" data-testid="group-display-diagnostics">
+      <p class="font-semibold">Group editor unavailable</p>
+      <ul class="mt-2 space-y-2">
+        {#each display.diagnostics as diagnostic, index (index)}
+          <li><code>{diagnostic.code}</code>: <code>{diagnostic.field}</code><br />{diagnostic.message}</li>
+        {/each}
+      </ul>
+      <p class="mt-2">{display.diagnostics[0].hint}</p>
+      <p class="mt-2">This display check does not determine whether the workflow can execute.</p>
+    </div>
+  {/if}
 
   <!-- Ports Section -->
   <div class="ports-section px-3 py-2">
@@ -113,17 +108,17 @@
   <!-- Double-click hint -->
   <div class="hint-section px-3 py-2 border-t border-purple-700/30 flex items-center justify-between">
     <span class="text-[10px] text-purple-400/60">Open group to edit internals</span>
-    <button type="button" class="open-group-btn text-[10px]" onclick={handleOpenGroup}>
+    <button type="button" class="open-group-btn text-[10px] disabled:opacity-50" onclick={handleOpenGroup} disabled={display.diagnostics.length > 0}>
       Open
     </button>
   </div>
 
-  {#if $isEditing && !$isReadOnly && group?.nodes?.some(node => node.node_type === 'json-filter')}
+  {#if $isEditing && !$isReadOnly && filterNodes.length > 0}
     <div class="nodrag nopan nowheel px-3 py-2 border-t border-purple-700/30">
       <button type="button" class="open-group-btn text-xs" onclick={() => { editPaths = !editPaths; }}
         aria-expanded={editPaths}>JSON Filter paths</button>
       {#if editPaths}
-        {#each group.nodes.filter(node => node.node_type === 'json-filter') as node (node.id)}
+        {#each filterNodes as node (node.id)}
           {#key JSON.stringify([$currentSessionId, id, node.id, node.node_type])}
             <div class="mt-3 space-y-2" data-testid="group-json-filter-editor">
               <p class="text-xs text-purple-200">{node.id}</p>

@@ -37,6 +37,7 @@
   } from '../stores/workbenchStore';
   import { formatWorkflowCommandError } from './workbench/workflowErrorPresenters';
   import WorkflowPersistenceControls from './WorkflowPersistenceControls.svelte';
+  import WorkflowValidationDiagnostics from './WorkflowValidationDiagnostics.svelte';
   import { assertDesktopSeedInputs, desktopSeedInputError } from './nodes/workflow/primitiveInputMetadata';
   import {
     applyWorkflowToolbarEvent,
@@ -159,6 +160,7 @@
     }
 
     if (currentValidationSummaryKey !== requestKey) {
+      currentValidationSummary = null;
       clearNodeRuntimeData([...INFERENCE_INTERFACE_VALIDATION_RUNTIME_KEYS]);
     }
     currentValidationSummaryKey = requestKey;
@@ -462,6 +464,12 @@
       Submit unavailable: {submitDisabledReason}
     </div>
   {/if}
+
+  <WorkflowValidationDiagnostics
+    validation={currentValidationSummary}
+    graphSessionId={$currentSessionId}
+    graphRevision={$workflowGraph.derived_graph?.graph_fingerprint ?? null}
+  />
 
   {#if workflowErrorMessage}
     <div class="flex items-center justify-between gap-3 border-b border-red-700 bg-red-900/70 px-4 py-2 text-xs text-red-200">
