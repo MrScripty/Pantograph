@@ -3,13 +3,13 @@ import type {
   ComponentUpdate,
   Position,
   Size,
-  ComponentStatus,
+  ImportFailureCode,
   LoggerInterface,
   HotloadConfig,
-} from '../types';
-import { defaultLogger } from '../types';
-import { ImportManager } from './ImportManager';
-import { ErrorReporter } from './ErrorReporter';
+} from '../types.ts';
+import { defaultLogger } from '../types.ts';
+import { ImportManager } from './ImportManager.ts';
+import { ErrorReporter } from './ErrorReporter.ts';
 
 /**
  * Registry for managing dynamically loaded components.
@@ -21,6 +21,8 @@ export class ComponentRegistry {
   private logger: LoggerInterface;
   private importManager: ImportManager;
   private errorReporter: ErrorReporter;
+  // Candidate identity owns publication and retains the failed input for retry.
+  private candidates = new Map<string, ComponentUpdate>();
 
   constructor(
     config?: HotloadConfig,
@@ -43,80 +45,77 @@ export class ComponentRegistry {
     position: Position,
     size: Size
   ): Promise<void> {
-    // Create initial loading entry
-    const loadingComponent: GeneratedComponent = {
-      id,
-      component: null,
-      source,
-      path,
-      position,
-      size,
-      status: 'loading',
-      props: this.createPositionProps(position, size),
-    };
+    await this.loadCandidate({ id, source, path, position, size });
+  }
 
-    // Update or add to registry
-    const existingIndex = this.components.findIndex((c) => c.id === id);
-    if (existingIndex >= 0) {
-      this.components[existingIndex] = loadingComponent;
-    } else {
-      this.components.push(loadingComponent);
-    }
-    this.notify();
-
-    // Clear any previous errors for this component
+  private async loadCandidate(update: ComponentUpdate): Promise<boolean> {
+    const { id, source, path, position, size } = update;
+    const candidate: ComponentUpdate = { id, source, path, position, size };
+    this.candidates.set(id, candidate);
+    const previous = this.getById(id);
+    // A replacement is tentative. Keep the accepted constructor and its source,
+    // geometry and props intact until the candidate has passed admission.
+    const loading: GeneratedComponent = previous?.component
+      ? { ...previous, pendingUpdate: { status: 'loading' } }
+      : {
+          ...update,
+          component: null,
+          status: 'loading',
+          props: this.createPositionProps(position, size),
+        };
+    this.publish(loading);
     this.errorReporter.clearErrors(id);
 
-    // Attempt to import the component
-    const result = await this.importManager.importComponent(path);
+    let result = previous
+      ? await this.importManager.reimportComponent(path)
+      : await this.importManager.importComponent(path);
+    // Another component ID can refresh the same path without superseding this
+    // candidate. Join that requested generation; never retry validation here.
+    while (!result.success && result.failureCode === 'superseded' && this.candidates.get(id) === candidate) {
+      const currentImport = this.importManager.getCurrentImport(path);
+      if (!currentImport) break;
+      result = await currentImport;
+    }
+    if (this.candidates.get(id) !== candidate) {
+      this.logger.log('COMPONENT_LOAD_SUPERSEDED', { id, path });
+      return false;
+    }
 
-    // Validate the component
-    const validation = this.importManager.validateComponent(result.component);
-
-    // Determine final status and error
-    let status: ComponentStatus = 'ready';
-    let error: string | undefined;
-
-    if (!result.success) {
-      status = 'error';
-      error = result.error ?? 'Import failed';
+    const validation = result.success
+      ? this.importManager.validateComponent(result.component)
+      : null;
+    if (!result.success || !validation?.valid) {
+      const error = result.error ?? validation?.error ?? 'Component validation failed';
+      const failureCode: ImportFailureCode = result.success ? 'validation-invalid' : result.failureCode;
+      const current = this.getById(id);
+      if (!current) return false;
+      this.publish(current.component
+        ? { ...current, pendingUpdate: { status: 'error', error, failureCode } }
+        : { ...current, status: 'error', error, pendingUpdate: undefined });
       this.errorReporter.report(
-        id,
-        path,
-        result.error?.includes('timeout') ? 'timeout' : 'import',
-        error,
-        source
+        id, path,
+        failureCode.startsWith('validation-') ? 'validation' : failureCode === 'import-timeout' ? 'timeout' : 'import',
+        error, source,
       );
-    } else if (!validation.valid) {
-      status = 'error';
-      error = validation.error;
-      this.errorReporter.report(id, path, 'validation', error ?? 'Validation failed', source);
+      this.logger.log('COMPONENT_REGISTRATION_FAILED', { id, path, failureCode, error });
+      return false;
     }
 
-    // Create final component entry
-    const finalComponent: GeneratedComponent = {
-      id,
-      component: validation.valid ? result.component : null,
-      source,
-      path,
-      position,
-      size,
-      status,
-      error,
-      props: this.createPositionProps(position, size),
-    };
+    this.candidates.delete(id);
+    this.publish({
+      ...candidate,
+      component: result.component,
+      status: 'ready',
+      props: this.createPositionProps(candidate.position, candidate.size),
+    });
+    this.logger.log('COMPONENT_REGISTERED', { id, path });
+    return true;
+  }
 
-    // Update in registry
-    const idx = this.components.findIndex((c) => c.id === id);
-    if (idx >= 0) {
-      this.components[idx] = finalComponent;
-    }
-
-    this.logger.log(
-      status === 'ready' ? 'COMPONENT_REGISTERED' : 'COMPONENT_REGISTRATION_FAILED',
-      { id, path, status, error }
-    );
-
+  private publish(component: GeneratedComponent): void {
+    const index = this.components.findIndex(c => c.id === component.id);
+    if (index >= 0) this.components[index] = component;
+    else this.components.push(component);
     this.notify();
   }
 
@@ -172,6 +171,8 @@ export class ComponentRegistry {
     const comp = this.components.find((c) => c.id === id);
     if (comp) {
       comp.position = { x, y };
+      const candidate = this.candidates.get(id);
+      if (candidate) candidate.position = comp.position;
       comp.props = this.createPositionProps(comp.position, comp.size);
       this.logger.log('COMPONENT_POSITION_UPDATED', { id, x, y });
       this.notify();
@@ -185,6 +186,8 @@ export class ComponentRegistry {
     const comp = this.components.find((c) => c.id === id);
     if (comp) {
       comp.size = { width, height };
+      const candidate = this.candidates.get(id);
+      if (candidate) candidate.size = comp.size;
       comp.props = this.createPositionProps(comp.position, comp.size);
       this.logger.log('COMPONENT_SIZE_UPDATED', { id, width, height });
       this.notify();
@@ -195,6 +198,7 @@ export class ComponentRegistry {
    * Unregister a component.
    */
   public unregister(id: string): void {
+    this.candidates.delete(id);
     const before = this.components.length;
     this.components = this.components.filter((c) => c.id !== id);
     if (this.components.length < before) {
@@ -208,15 +212,8 @@ export class ComponentRegistry {
    * Retry loading a component.
    */
   public async retry(id: string): Promise<void> {
-    const comp = this.components.find((c) => c.id === id);
-    if (comp) {
-      // Clear cache to force re-import
-      this.importManager.clearCache(comp.path);
-      this.errorReporter.clearErrors(id);
-
-      // Re-register
-      await this.registerFromSource(id, comp.source, comp.path, comp.position, comp.size);
-    }
+    const candidate = this.candidates.get(id) ?? this.getById(id);
+    if (candidate) await this.loadCandidate(candidate);
   }
 
   /**
@@ -249,7 +246,7 @@ export class ComponentRegistry {
    * Get all components with errors.
    */
   public getErrored(): GeneratedComponent[] {
-    return this.components.filter((c) => c.status === 'error');
+    return this.components.filter((c) => c.status === 'error' || c.pendingUpdate?.status === 'error');
   }
 
   /**
@@ -270,6 +267,7 @@ export class ComponentRegistry {
    * Clear all components.
    */
   public clear(): void {
+    this.candidates.clear();
     this.components = [];
     this.errorReporter.clearErrors();
     this.importManager.clearCache();
@@ -294,8 +292,11 @@ export class ComponentRegistry {
 
     // Find components that match any of the updated paths
     const componentsToRefresh = this.components.filter(comp =>
-      normalizedPaths.some(p => comp.path === p || comp.path.endsWith(p))
-    );
+      normalizedPaths.some(p => {
+        const candidatePath = this.candidates.get(comp.id)?.path;
+        return comp.path === p || comp.path.endsWith(p) || candidatePath === p;
+      })
+    ).map(component => ({ component, candidate: this.candidates.get(component.id) }));
 
     if (componentsToRefresh.length === 0) {
       this.logger.log('HMR_NO_MATCHING_COMPONENTS', { updatedPaths });
@@ -304,40 +305,18 @@ export class ComponentRegistry {
 
     this.logger.log('HMR_REFRESHING_COMPONENTS', {
       count: componentsToRefresh.length,
-      ids: componentsToRefresh.map(c => c.id),
+      ids: componentsToRefresh.map(({ component }) => component.id),
     });
 
-    // Refresh each component
-    for (const comp of componentsToRefresh) {
-      // Clear cache to force fresh import
-      this.importManager.clearCache(comp.path);
-      this.errorReporter.clearErrors(comp.id);
-
-      // Re-import the component
-      const result = await this.importManager.reimportComponent(comp.path);
-
-      if (result.success && result.component) {
-        // Update the component in registry
-        comp.component = result.component;
-        comp.status = 'ready';
-        comp.error = undefined;
-        comp.renderError = undefined;
-
-        this.logger.log('HMR_COMPONENT_REFRESHED', { id: comp.id, path: comp.path });
-      } else {
-        comp.status = 'error';
-        comp.error = result.error ?? 'HMR refresh failed';
-
-        this.logger.log('HMR_COMPONENT_REFRESH_FAILED', {
-          id: comp.id,
-          path: comp.path,
-          error: result.error,
-        }, 'error');
+    for (const { component, candidate } of componentsToRefresh) {
+      // A queued refresh has no authority after removal, clear, or a newer
+      // registration/refresh. Check both identities after earlier items finish.
+      if (this.getById(component.id) !== component || this.candidates.get(component.id) !== candidate) {
+        this.logger.log('COMPONENT_REFRESH_SUPERSEDED', { id: component.id, path: component.path });
+        continue;
       }
+      await this.loadCandidate(candidate ?? component);
     }
-
-    // Notify subscribers of the changes
-    this.notify();
   }
 
   /**
@@ -351,8 +330,7 @@ export class ComponentRegistry {
       return false;
     }
 
-    await this.refreshByPaths([comp.path]);
-    return this.getById(id)?.status === 'ready';
+    return this.loadCandidate(this.candidates.get(id) ?? comp);
   }
 
   private createPositionProps(position: Position, size: Size): Record<string, unknown> {

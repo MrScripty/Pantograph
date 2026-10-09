@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
 use async_trait::async_trait;
-use inference::{BackendHintLabel, InferenceTaskId, ModelValidationState, TaskRegistryEntry};
+use inference::{InferenceTaskId, ModelValidationState, TaskRegistryEntry};
 use pantograph_inference_interface_contracts::{
     InferenceArtifactType, InferenceAvailability, InferenceNumericRange, InferencePortDescriptor,
     InferencePortDirection, InferencePortId, InferencePortOptions, InferencePortRequirement,
@@ -77,7 +77,7 @@ impl InferenceInterfaceFactsProvider for EmbeddedInferenceInterfaceFactsProvider
         BTreeMap<String, InferenceInterfaceResolverFacts>,
         InferenceInterfaceFactsProviderError,
     > {
-        let runtime_facts = self.runtime_capability_source.collect();
+        let runtime_facts = self.runtime_capability_source.collect().await;
         let mut facts_by_node_id = BTreeMap::new();
         for input in inputs {
             let package_facts = self.pumas_source.collect(&input.request.model_ref).await;
@@ -90,7 +90,8 @@ impl InferenceInterfaceFactsProvider for EmbeddedInferenceInterfaceFactsProvider
     }
 }
 
-fn resolver_facts_from_sources(
+/// Project the owned source facts into the graph admission contract.
+pub(crate) fn resolver_facts_from_sources(
     package_outcome: PumasDispatchPackageFactsBridgeOutcome,
     runtime_outcome: &RuntimeDispatchCapabilityFactsOutcome,
 ) -> InferenceInterfaceResolverFacts {
@@ -205,18 +206,24 @@ fn matching_runtime_facts(
     package_facts: &PumasDispatchPackageFactsProjection,
     runtime_facts: &RuntimeDispatchCapabilityFactsProjection,
 ) -> Vec<InferenceRuntimeAvailabilityFact> {
-    let backend_keys = backend_hint_keys(&package_facts.backend_hints);
-    if backend_keys.is_empty() {
+    let Ok(task) = inference::resolve_task_registry_entry_from_evidence(&package_facts.task) else {
         return Vec::new();
-    }
+    };
     runtime_facts
         .runtimes
         .iter()
         .filter(|runtime| {
             runtime
-                .backend_keys
+                .backend_capabilities
+                .supports_task(task.task_id.clone())
+        })
+        .filter(|runtime| {
+            runtime
+                .backend_capabilities
+                .model_sources
+                .backend_hints
                 .iter()
-                .any(|key| backend_keys.contains(&normalize_backend_key(key)))
+                .any(|hint| package_facts.backend_hints.accepted.contains(hint))
         })
         .filter_map(runtime_availability_fact)
         .collect()
@@ -227,24 +234,35 @@ fn runtime_availability_fact(
 ) -> Option<InferenceRuntimeAvailabilityFact> {
     Some(InferenceRuntimeAvailabilityFact {
         runtime_id: RuntimeIntentId::parse(&runtime.runtime_id).ok()?,
-        // Installation capability is distinct from a loaded runtime instance.
-        // Candle's typed scheduler path can load an owner-advertised CPU variant.
-        state: if runtime.status == RuntimeRegistryStatus::Stopped
-            && runtime.runtime_id == "candle"
-            && runtime.runtime_family == "candle"
-            && runtime.automatic_device_candidates.iter().any(|candidate| {
-                candidate.backend_key == "candle"
-                    && candidate.runtime_variant_id.as_str() == "candle.cpu"
-                    && candidate.device_id.as_str() == "cpu"
-            }) {
-            InferenceRuntimeAvailabilityState::Available
+        state: if runtime.status == RuntimeRegistryStatus::Stopped && runtime.runtime_id == "candle"
+        {
+            if runtime.runtime_family == "candle"
+                && runtime.automatic_device_candidates.iter().any(|candidate| {
+                    candidate.backend_key == "candle"
+                        && candidate.runtime_variant_id.as_str() == "candle.cpu"
+                        && candidate.device_id.as_str() == "cpu"
+                })
+            {
+                InferenceRuntimeAvailabilityState::Available
+            } else {
+                InferenceRuntimeAvailabilityState::NotInstalled
+            }
         } else {
             runtime_availability_state(runtime.status)
         },
         device_ids: runtime
-            .automatic_device_candidates
+            .device_ids
             .iter()
-            .filter_map(|candidate| candidate.device_id.as_str().parse().ok())
+            .map(|device| device.as_str())
+            .chain(
+                runtime
+                    .automatic_device_candidates
+                    .iter()
+                    .map(|candidate| candidate.device_id.as_str()),
+            )
+            .filter_map(|device| {
+                pantograph_inference_interface_contracts::DeviceIntentId::parse(device).ok()
+            })
             .collect::<BTreeSet<_>>()
             .into_iter()
             .collect(),
@@ -253,12 +271,11 @@ fn runtime_availability_fact(
 
 fn runtime_availability_state(status: RuntimeRegistryStatus) -> InferenceRuntimeAvailabilityState {
     match status {
-        RuntimeRegistryStatus::Ready
+        RuntimeRegistryStatus::Stopped
+        | RuntimeRegistryStatus::Ready
         | RuntimeRegistryStatus::Busy
         | RuntimeRegistryStatus::Warming => InferenceRuntimeAvailabilityState::Available,
-        RuntimeRegistryStatus::Stopped | RuntimeRegistryStatus::Stopping => {
-            InferenceRuntimeAvailabilityState::NotInstalled
-        }
+        RuntimeRegistryStatus::Stopping => InferenceRuntimeAvailabilityState::NotInstalled,
         RuntimeRegistryStatus::Unhealthy | RuntimeRegistryStatus::Failed => {
             InferenceRuntimeAvailabilityState::Unsupported
         }
@@ -737,46 +754,11 @@ fn port(
     }
 }
 
-fn backend_hint_keys(backend_hints: &inference::BackendHintFacts) -> BTreeSet<String> {
-    backend_hints
-        .accepted
-        .iter()
-        .map(|hint| normalize_backend_key(backend_hint_label_key(*hint)))
-        .chain(
-            backend_hints
-                .raw
-                .iter()
-                .map(|hint| normalize_backend_key(hint)),
-        )
-        .filter(|key| !key.is_empty())
-        .collect()
-}
-
-fn backend_hint_label_key(label: BackendHintLabel) -> &'static str {
-    match label {
-        BackendHintLabel::Transformers => "transformers",
-        BackendHintLabel::LlamaCpp => "llama.cpp",
-        BackendHintLabel::Vllm => "vllm",
-        BackendHintLabel::Mlx => "mlx",
-        BackendHintLabel::Candle => "candle",
-        BackendHintLabel::Diffusers => "diffusers",
-        BackendHintLabel::OnnxRuntime => "onnxruntime",
-    }
-}
-
-fn normalize_backend_key(value: &str) -> String {
-    value
-        .trim()
-        .chars()
-        .filter(|ch| ch.is_ascii_alphanumeric())
-        .flat_map(char::to_lowercase)
-        .collect()
-}
-
 #[cfg(test)]
 mod tests {
     use inference::{
-        BackendHintFacts, PackageFactValueSource, PackageLogicalSizeFacts, TaskEvidence,
+        BackendHintFacts, BackendHintLabel, PackageFactValueSource, PackageLogicalSizeFacts,
+        TaskEvidence,
     };
     use pantograph_dependency_planning::PumasModelRef;
     use pantograph_scheduler::SchedulerEstimateHintKind;
@@ -914,6 +896,19 @@ mod tests {
                 runtimes: vec![RuntimeDispatchRuntimeCapabilityFacts {
                     runtime_id: "pytorch".to_string(),
                     backend_keys: vec!["pytorch".to_string()],
+                    device_ids: vec!["cpu".parse().unwrap()],
+                    backend_capabilities: inference::BackendCapabilityFacts {
+                        tasks: vec![inference::BackendTaskCapability::stable(
+                            InferenceTaskId::ImageGeneration,
+                            vec![inference::InferenceModality::Text],
+                            vec![inference::InferenceModality::Image],
+                        )],
+                        model_sources: inference::BackendModelSourceCapabilityFacts {
+                            backend_hints: vec![inference::BackendHintLabel::Diffusers],
+                            ..Default::default()
+                        },
+                        ..Default::default()
+                    },
                     runtime_family: "diffusers".to_string(),
                     runtime_residency_key: "runtime.diffusers.pytorch.shared".to_string(),
                     status: RuntimeRegistryStatus::Ready,
@@ -1120,6 +1115,8 @@ mod tests {
         RuntimeDispatchRuntimeCapabilityFacts {
             runtime_id: "candle".into(),
             backend_keys: vec!["candle".into()],
+            backend_capabilities: Default::default(),
+            device_ids: Vec::new(),
             runtime_family: "candle".into(),
             runtime_residency_key: "candle.cpu".into(),
             status,

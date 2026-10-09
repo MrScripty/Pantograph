@@ -164,7 +164,8 @@ pub(crate) async fn resolve_native_candle_requirements(
     {
         return Ok(None);
     }
-    let RuntimeDispatchCapabilityFactsOutcome::Projected { facts, .. } = capabilities.collect()
+    let RuntimeDispatchCapabilityFactsOutcome::Projected { facts, .. } =
+        capabilities.collect().await
     else {
         return Ok(None);
     };

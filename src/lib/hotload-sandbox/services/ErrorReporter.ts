@@ -1,5 +1,5 @@
-import type { ComponentError, ErrorType, LoggerInterface, HotloadConfig } from '../types';
-import { defaultLogger } from '../types';
+import type { ComponentError, ErrorType, LoggerInterface, HotloadConfig } from '../types.ts';
+import { defaultLogger } from '../types.ts';
 
 /**
  * Service for tracking and reporting component errors.

@@ -111,7 +111,7 @@ impl EmbeddedRuntimeDispatchSourceFactSnapshotStore {
         let (pumas_package_facts, runtime_capability_facts, pumas_load_target_facts) =
             if diagnostics.is_empty() {
                 let pumas_package_facts = self.pumas_source.collect(model_ref).await;
-                let runtime_capability_facts = self.runtime_capability_source.collect();
+                let runtime_capability_facts = self.runtime_capability_source.collect().await;
                 let pumas_load_target_facts = load_target_facts_for_sources(
                     &self.load_target_source,
                     model_ref,
