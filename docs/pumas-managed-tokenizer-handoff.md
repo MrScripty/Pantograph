@@ -7,6 +7,14 @@ or execution authority. The machine-readable input is
 No new package store, network resolver, in-place repair or Python rebinding is
 introduced by Pantograph.
 
+Pumas subsequently published held-file local acquisition at `c9fb9ce7`.
+Pantograph now prepares its compatible exact wheel manifest using the existing
+Pumas26a constructors. Pumas published `retain_torch_runtime_bytes` byte custody
+at `650b6cb3`; genuine initialization/import registration is still
+required. See the [current consumer requirements and acceptance gates](pumas-interpreter-registration-requirements.md).
+Real wheel transfer and alternate artifact publication are on hold pending
+specific user approval; this update performs neither.
+
 ## Exact first input
 
 | Item | Identity |
@@ -58,16 +66,20 @@ Pumas-owned and must be acknowledged before a positive consumer is implemented.
 Use `TorchPendingStage`, `TorchVersionsLock`, the staged-file manifest, registered
 child cleanup custody, and VersionManager's atomic publication lifecycle. Create
 a distinct immutable runtime revision. Do not alter an active/shared environment.
-Current Pumas26a exposes release installs and forbids in-place Torch dependency
-repair; Pantograph cannot supply the missing public local input by copying files.
+The pinned Pumas26a exposes release installs and forbids in-place Torch dependency
+repair. Published c9 adds local acquisition; integration with Torch staging,
+component-bearing publication and consumer dependency migration still remain.
+Pantograph cannot implement them by copying files into an active runtime.
 
 Return the registered environment ID, opaque revision, published manifest digest,
-interpreter build identity and installed provider image identity. Separately
-provide an opaque owner execution lease preventing removal, repair and replacement
-for the interpreter/imported-image lifetime. A serializable manifest, readiness
-probe, active-version name or file path is insufficient. Owner lease acquisition
-must precede native initialization/import and must coordinate with the same owner
-mutation/publication locks; a consumer-side parallel lock or store is insufficient.
+interpreter build identity and installed provider image identity. The published
+retained runtime read source supplies revision/depot byte custody, separately
+from mutable registration metadata. Retain it through process retirement and
+acquire it before native
+initialization/import under the existing owner publication/deletion authority.
+It remains separate from genuine interpreter/import registration; retained bytes
+alone grant no execution authority. A serializable manifest, readiness probe,
+active-version name, file path or consumer-side parallel lock/store is insufficient.
 
 An owner-associated interpreter/import registration must bind that lease to the
 actual process/interpreter and the approved imported native image. Mutable
@@ -119,8 +131,8 @@ Python-global changes. There is deliberately no positive proof constructor or
 caller-declared lease switch. Ordinary startup and worker/drain behavior remain
 unchanged; the new entry is not composed as a default route.
 
-The owner acknowledgment and real lease/import registration adapter are the
-next prerequisites. Separate configuration, tensor, CPU-domain and atomic owner
+Integrating published retained byte custody and implementing real interpreter/import
+registration are the next prerequisites. Separate configuration, tensor, CPU-domain and atomic owner
 inspection remain unqualified; NativeOwnerSnapshot stays Unknown/refused. The
 qualified native tokenizer/settings component profiles continue to refuse
 opaque values. Research scheduling defaults and timing acceptance are unchanged.

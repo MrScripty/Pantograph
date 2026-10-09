@@ -8,6 +8,9 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 
 pub const MANAGED_PYTHON_START_CONTRACT_VERSION: u32 = 1;
+pub const TOKENIZER_PROVIDER_WHEEL_FILENAME: &str =
+    "tokenizers-0.21.4+pantograph.snapshot1-cp39-abi3-linux_x86_64.whl";
+pub const TOKENIZER_PROVIDER_WHEEL_SIZE_BYTES: u64 = 24_366_281;
 pub const TOKENIZER_PROVIDER_WHEEL_SHA256: &str =
     "678b155145bb06c271ad6d8eb2df95a8a8173155323fafd4b102e50349940b95";
 pub const TOKENIZER_PROVIDER_EXTENSION_SHA256: &str =

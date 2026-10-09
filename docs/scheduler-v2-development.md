@@ -262,6 +262,11 @@ local wheel/source identities and the proposed immutable bundle/process-lifetime
 lease and prior import-registration boundary. The explicit managed PyTorch start
 entry currently refuses missing owner custody before lifecycle effects; it does
 not enable managed execution or change ordinary startup.
+Published Pumas local acquisition now permits exact held-file inputs; the embedded
+host prepares the reviewed wheel's existing `ArtifactManifest` without submitting
+an acquisition. Its [interpreter/import registration requirements](pumas-interpreter-registration-requirements.md)
+distinguish that selection and the published retained-byte API from positive
+managed runtime qualification. No transfer, install or native import is enabled.
 
 The unchanged production/test sources have qualified native and non-native
 Rust suites, feature-light compilation, Clippy and independent executable

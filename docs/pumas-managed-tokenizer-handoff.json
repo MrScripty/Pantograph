@@ -101,7 +101,7 @@
     }
   },
   "owner_input_required": {
-    "existing_custody": "TorchPendingStage + TorchVersionsLock + validated staged file manifest + child cleanup lease + VersionManager publication",
+    "existing_custody": "published acquisition store/task/effect/verified-use lifecycle, then existing TorchPendingStage + TorchVersionsLock + staged file manifest + child cleanup + VersionManager publication; acquisition is not runtime publication",
     "destination": "distinct immutable runtime bundle revision; never in-place repair",
     "data_authority": "a proposed artifact manifest/request is not an execution lease",
     "dependency_resolution": "existing validated runtime lock and offline approved local-wheel input; no network resolver escape",
@@ -112,7 +112,7 @@
       "interpreter_build_fingerprint",
       "installed_provider_extension_fingerprint"
     ],
-    "returned_custody": "opaque owner execution lease that prevents removal/repair/replacement for the imported native-image process lifetime; interpreter/model stop does not release it",
+    "returned_custody": "published retained runtime read source supplies physical revision/depot byte custody, not registry pin or initialization/import proof; acquire before native startup and hold actual Arc through process retirement",
     "returned_import_proof": "owner-associated interpreter initialization and provider import registration preceding native import; mutable sys labels/current file hashes alone cannot establish it",
     "interpreter_preflight": "current safe-Rust consumer performs no interpreter query/initialization; missing registered proof refuses",
     "selected_base_runtime": {
@@ -130,7 +130,7 @@
     "owner-owned pending stage under existing version lock; all children attached to cleanup custody",
     "verify installed RECORD and staged files match wheel and immutable runtime lock; no import needed to publish",
     "publish/register distinct manifest atomically; partial stages never execute",
-    "acquire immutable process/interpreter-use lease before native initialization/import",
+    "acquire actual VersionManager-issued retained revision/depot source before native startup, then establish genuine first-initializer/import registration",
     "Pantograph refuses uninitialized or legacy/unregistered interpreter; only genuine owner-associated registration can later enable managed start",
     "model/worker stop drains existing producers but does not release imported-image custody; process exit closes native use"
   ],
@@ -143,10 +143,62 @@
     "post-native-import failure drains all jobs and clears executable readiness; retain bundle pin for process/mapped-image lifetime; no interpreter rebinding/finalize/uninstall"
   ],
   "remaining_gates": [
-    "Pumas local-component input within existing pending stage/version lock/hash-manifest/cleanup/publication custody; no in-place repair",
-    "Actual already-initialized in-process PyO3 interpreter/prefix/loaded-extension binding to managed runtime",
+    "Integrate published local acquisition with existing Torch staging/RECORD/offline dependency validation and distinct immutable publication; pinned consumer remains26a",
+    "Integrate published650b byte custody and component-bearing immutable assembler; separately implement/qualify joint pre-initialization/import broker",
+    "Genuine owner-associated initialization/import registration for actual in-process PyO3 interpreter and provider image; unknown already-initialized process refuses",
     "Native AddedToken and other opaque Python settings remain refused",
     "Wrapper access, configuration/tensors/build/CPU-domain collection and atomic aggregate qualification",
     "Comparable timing coverage, realistic dispatch cost and simulator differential acceptance; actual archive bytes remain unavailable/unverified"
-  ]
+  ],
+  "published_acquisition": {
+    "owner_commit": "c9fb9ce7e502bb04682a1ca640f8d0a446a4ee50",
+    "owner_branch": "integration/v08-local-component-ingestion-20261009",
+    "consumer_dependency_revision": "26a84e323cae566a46a8f76bef48fa1010aed48b",
+    "status": "published owner API reviewed; consumer prepares compatible ArtifactManifest only, not a local acquisition request",
+    "interfaces": [
+      "AcquisitionLocalSource::new(File, Arc<dyn Send + Sync>)",
+      "AcquisitionLocalRequest",
+      "AcquisitionConsumer::acquire_local"
+    ],
+    "mandatory_selection": "exact size and SHA256 for every member",
+    "input_custody": "actual held regular File plus cooperating input-owner keepalive, Linux; no pathname/JSON custody or execution authority",
+    "drain": "a refusal can precede registered read completion; retain consumer/service until shutdown drainage",
+    "manifest_source_revision": "pantograph.build-source-binding.sha256 identifies frozen reviewed prepared source/build association, not mutable local input",
+    "delivery_status": "real wheel transfer and alternate artifact publication on hold pending specific user approval"
+  },
+  "interpreter_import_registration_requirements": {
+    "status": "requirements only; no new positive proof type or owner method invented",
+    "guide": "pumas-interpreter-registration-requirements.md",
+    "required": [
+      "owner-issued non-serializable association to actual retained selected revision and depot, immutable manifest and qualified interpreter/provider images",
+      "registration before any native initialization/import with one synchronized first-initializer/import owner; legacy or unregistered already-initialized process refuses",
+      "actual linked CPython build, startup configuration/prefix/package resolution and provider native-image provenance must match qualified cohort; mutable current paths/hashes cannot retroactively prove loaded images",
+      "process/interpreter identity and non-reused owner generation; exact provider wheel/RECORD/native image/build-source association",
+      "retain byte source and registration through all native jobs, cancellation/caller loss, partial import failure and process retirement; never release on model stop",
+      "owner-consumer tests for concurrent legacy start, wrong/replaced revision/image, revoked/missing proof, failed import and process-lifetime deletion protection"
+    ],
+    "ownership": "Pumas owns revision/depot byte identity and retention authority; Pantograph owns in-process first initialization/provider import registration while holding the real source. Joint protocol/association remains unimplemented.",
+    "startup_order": "assembled immutable selection -> retained/validated bytes -> first-initializer registration -> controlled initialization/import -> ready -> drain -> process retirement; proposed protocol only, no executable state/proof type",
+    "architectural_blockers": "PyO3 auto-initialize and shared with_gil paths require earlier first-start ownership; actual linked-image/build evidence and approved startup configuration mechanism are unresolved under safe-Rust/no-global-Python-change constraints"
+  },
+  "published_byte_retention": {
+    "signature": "pub async fn retain_torch_runtime_bytes(&self, tag: &str) -> Result<Arc<RetainedRuntimeReadSource>>",
+    "status": "published Linux byte-custody seam; owner synthetic tests qualified, not linked/called by pinned26a consumer or a positive interpreter witness",
+    "scope": "retains selected revision and interpreter depot, releases global lock before capture; byte custody only",
+    "lifetime": "acquire before initialization/import; retain through process retirement; model/worker stop does not release native-image custody",
+    "missing": "actual interpreter initialization and provider import registration; retained bytes are not loaded-image provenance",
+    "owner_commit": "650b6cb38eb432b2dd39a58cc6ea14855d2f62ae",
+    "owner_tree": "8855c3941dfaec9101e5cf2a1bf9a22dc4ccd43f",
+    "owner_branch": "integration/v08-torch-revision-custody-20261009",
+    "metadata_scope": "retains physical revision/depot bytes, not registry/selection metadata; cooperative mutation custody, no hostile same-user writer protection",
+    "read_interface": [
+      "RetainedRuntimeReadSource::validate()",
+      "RetainedRuntimeReadSource::manifest()",
+      "RetainedRuntimeReadSource::clone_root(role)",
+      "RetainedRuntimeReadSource::clone_member(role, path)"
+    ],
+    "read_lifetime": "blocking read/validation effects retain actual source Arc through registered drainage; cloned File alone is not a revision/depot lease",
+    "unattested": "omitted namespaces, system ELF libraries, loader search paths and complete model-specific executable read sets",
+    "owner_type": "VersionManager"
+  }
 }
