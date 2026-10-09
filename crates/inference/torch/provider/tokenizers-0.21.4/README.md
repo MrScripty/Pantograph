@@ -64,7 +64,33 @@ in current or historical storage refuses: a current absent normalizer does not
 prove what output a previous normalizer used to compile its matcher. Existing
 general serializers are never invoked; occupied entries use metered heapsort.
 
-This qualifies a tokenizer component only. Python settings, configuration,
+The companion `_pantograph_settings_snapshot_v1(original_fields)` inspects exact
+primitive settings under continuously retained native GIL custody on CPython
+3.12.3. It accepts None/bool/bounded int/finite float/str/list/tuple/dict. Sets,
+subclasses, native AddedToken, configuration objects and opaque values refuse.
+Every key is checked before the fixed root/init locator filters; dictionary
+lookups and Python comparisons never run. Cycles refuse at the fixed depth/node
+limits. Retained built-in storage refuses above 256 KiB per container; the
+constant `__sizeof__` descriptor runs only for exact built-ins. Split dictionary
+shared keys have a fixed 1,024-byte extra scan allowance (CPython max30 keys).
+Unicode metadata is checked before conversion. Twice the worst-case 4 bytes per
+code point are charged before the abi3 PyO3 UTF8/Python-bytes and Rust-string
+copies; conservative aggregate text reserves 4 bytes per code point even for
+ASCII. Encoded-key scratch, reference slots, sorting, output and PyBytes zeroing
+and copying are metered cumulatively within the existing work/4 MiB copy caps.
+No Python evaluation, arbitrary callback or GIL release occurs in traversal.
+The storage/Unicode/GC assumptions are tied to the reviewed CPython sources:
+[dictionary sizing](https://github.com/python/cpython/blob/v3.12.3/Objects/dictobject.c),
+[shared-key bound](https://github.com/python/cpython/blob/v3.12.3/Include/internal/pycore_dict.h),
+[GC scheduling](https://github.com/python/cpython/blob/v3.12.3/Modules/gcmodule.c),
+and [UTF8 conversion](https://github.com/python/cpython/blob/v3.12.3/Objects/unicodeobject.c).
+The actual tokenizer consumer uses the original settings dictionary and versions
+the combined identity as `installed-wordlevel-bounded-components.v3`. Available
+settings refusal does not fall back to `_canonical`. A real tokenizer without
+Python native AddedToken settings is accepted; native AddedToken Python settings
+remain an explicit unsupported profile. The old ordinary-wheel path is unchanged.
+
+These qualify two components only. Configuration,
 tensor/build/CPU-domain collection and the aggregate owner still need their own
 cost models. `NativeOwnerSnapshot` in the Rust inspection ledger remains
 Unknown/refused. No real timing, capacity, GPU/native batching, default policy
@@ -93,3 +119,22 @@ lock and extension hashes and the receipt alongside test results. Missing build
 dependencies fail qualification; the helper does not fetch them or suppress
 build/test failures. Runtime distribution and the aggregate inspection budget
 remain separate integration gates.
+
+`package.py PREPARED_SOURCE BUILD_BINDING OUTPUT` creates a deterministic local
+wheel from the verified development extension and its pinned source association,
+including license, dependency metadata and RECORD hashes. It refuses changed
+bytes, unassociated source changes and overwriting an artifact. It performs no
+build, fetch, installation or registration. Its source/artifact manifest is a
+review association, not authority supplied by an arbitrary caller.
+
+Managed deployment is blocked at the current Pumas26a ownership boundary:
+Torch installs accept validated runtime recipes/releases; in-place dependency
+repair explicitly refuses, and no public local-component ingestion exists.
+The required next owner change is a distinct local-artifact input inside the
+existing pending-stage/version-lock/hash-manifest/cleanup/publication path.
+The selected backend also uses in-process PyO3: a managed venv install alone
+cannot bind the live interpreter. Startup must bind the actual interpreter,
+prefix and loaded extension hash to the registered runtime, refusing a different
+already-initialized interpreter. No readiness presence probe, PYTHONPATH override
+or copied extension establishes that managed ownership. This milestone leaves
+those architectural decisions unresolved and the installed environment intact.

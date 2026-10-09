@@ -238,6 +238,26 @@ wrapper; it is not automatically installed as a runtime dependency. Aggregate
 components have qualified cost models. The existing selection default is
 unchanged.
 
+The bounded-provider consumer now also uses a CPython3.12.3 native primitive
+settings component. Original settings enter under continuous GIL custody before
+key filtering, UTF8 conversion or sorting, with conservative storage, work and
+cumulative copy bounds. Opaque/native settings refuse; accepted native and Python
+settings mutations change the versioned identity. This is component accounting:
+pre-component wrapper access, configurations, tensors, build/CPU-domain collection
+and the aggregate owner remain unqualified. No cancellation or drain contract is
+changed. The internal selected-text validator returns borrowed tuple parts so
+feature-light consumers can validate without unused backend-only struct fields;
+all existing admission checks remain in that common validator.
+
+A deterministic hash-associated development wheel can be packaged locally for
+review. Pumas26a has no public local-component ingestion into its validated Torch
+bundle custody and forbids in-place dependency repair. The future owner input
+must use the existing pending stage, version lock, hash manifest, cleanup and
+publication lifecycle, plus bind the actual in-process PyO3 interpreter and loaded
+extension to that environment. Neither a managed venv install alone nor package
+presence is sufficient. No live runtime registration or replacement is done by
+the packaging helper; that owner/interpreter decision remains a rollout gate.
+
 The unchanged production/test sources have qualified native and non-native
 Rust suites, feature-light compilation, Clippy and independent executable
 review. Directed public API cases cover valid saved fanout, typed refusals,

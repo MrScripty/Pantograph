@@ -1320,21 +1320,21 @@ impl PyTorchBackend {
         target: &crate::PumasArtifactLoadTarget,
         decision: &crate::BackendExecutionDecision,
     ) -> Result<PyTorchWorkerEnvelope<PyTorchTransformersLoadRequest>, BackendError> {
-        let selected =
-            crate::selected_text_execution::SelectedTextLoad::validate(request, target, decision)
+        let (package, target, device) =
+            crate::selected_text_execution::validate_selected_text_load(request, target, decision)
                 .await?;
         let mut envelope = Self::transformers_load_envelope_from_package(
             request.request_id.clone().ok_or_else(|| {
                 BackendError::Config("selected text request id is required".into())
             })?,
-            selected.package,
-            Some(selected.device),
+            package,
+            Some(device),
             Self::default_transformers_trust_policy(),
         )?;
         // Package paths remain logical facts; only the separate Pumas target is executable.
-        envelope.payload.entry_path = selected.target.local_load_path.clone();
+        envelope.payload.entry_path = target.local_load_path.clone();
         if let Some(source) = envelope.payload.model_source.as_mut() {
-            source.entry_path = selected.target.local_load_path.clone();
+            source.entry_path = target.local_load_path.clone();
         }
         Self::validate_transformers_load_envelope(&envelope)?;
         Ok(envelope)

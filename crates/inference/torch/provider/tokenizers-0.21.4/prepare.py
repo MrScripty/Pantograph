@@ -30,12 +30,16 @@ def prepare(destination):
     git("apply", "--unidiff-zero", str(patch))
     shutil.copyfile(bundle / "pantograph_snapshot.rs", target)
     shutil.copyfile(bundle / "snapshot_units.rs", target.with_name("snapshot_units.rs"))
+    settings = target.with_suffix("") / "settings_snapshot.rs"
+    settings.parent.mkdir()
+    shutil.copyfile(bundle / "settings_snapshot.rs", settings)
     shutil.copyfile(bundle / "build.rs", destination / "bindings/python/build.rs")
     shutil.copyfile(bundle / "Cargo.lock", destination / "bindings/python/Cargo.lock")
     paths = ["tokenizers/src/models/wordlevel/mod.rs",
              "tokenizers/src/tokenizer/added_vocabulary.rs",
              "bindings/python/src/lib.rs", "bindings/python/src/tokenizer.rs",
              "bindings/python/src/pantograph_snapshot.rs", "bindings/python/src/snapshot_units.rs",
+             "bindings/python/src/pantograph_snapshot/settings_snapshot.rs",
              "bindings/python/build.rs",
              "bindings/python/Cargo.lock"]
     manifest = {"provider_revision": REVISION,

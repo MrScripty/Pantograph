@@ -1539,7 +1539,7 @@ impl InferenceGateway {
         use pantograph_timing_contracts::{
             RuntimeServiceTimingOutcome as Outcome, RuntimeServiceTimingPhase as Phase,
         };
-        crate::selected_text_execution::SelectedTextLoad::validate(
+        crate::selected_text_execution::validate_selected_text_load(
             &request,
             &artifact_load_target,
             &backend_decision,

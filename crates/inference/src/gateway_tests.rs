@@ -4925,7 +4925,7 @@ impl InferenceBackend for SelectedTextBackend {
         target: &PumasArtifactLoadTarget,
         decision: &BackendExecutionDecision,
     ) -> Result<BackendStartOutcome, BackendError> {
-        crate::selected_text_execution::SelectedTextLoad::validate(request, target, decision)
+        crate::selected_text_execution::validate_selected_text_load(request, target, decision)
             .await?;
         self.effects.lock().unwrap().push(format!(
             "load:{}:{}",

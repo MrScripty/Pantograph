@@ -9,10 +9,14 @@ diff --git a/bindings/python/src/tokenizer.rs b/bindings/python/src/tokenizer.rs
 index 68e961a..4ea9b0f 100644
 --- a/bindings/python/src/tokenizer.rs
 +++ b/bindings/python/src/tokenizer.rs
-@@ -485,0 +486,5 @@ impl PyTokenizer {
+@@ -485,0 +486,9 @@ impl PyTokenizer {
 +    // Pantograph modification: opaque fixed-budget binary snapshot/receipt.
 +    fn _pantograph_wordlevel_snapshot_v1<'py>(&self, py: Python<'py>) -> PyResult<(bool, Bound<'py,PyBytes>, usize, usize)> {
 +        crate::pantograph_snapshot::inspect(self, py)
++    }
++
++    fn _pantograph_settings_snapshot_v1<'py>(&self, py: Python<'py>, fields: &Bound<'py, PyAny>) -> PyResult<(bool, Bound<'py,PyBytes>, usize, usize)> {
++        crate::pantograph_snapshot::inspect_settings(py, fields)
 +    }
 +
 diff --git a/tokenizers/src/models/wordlevel/mod.rs b/tokenizers/src/models/wordlevel/mod.rs

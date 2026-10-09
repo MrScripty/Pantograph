@@ -259,9 +259,11 @@ class BoundedTokenizerSnapshotOracle(unittest.TestCase):
         receipt = self.inspect(tokenizer)
         self.assertTrue(receipt[0])
         wrapper = ControlledFastTokenizer(tokenizer)
-        expected = hashlib.sha256(b"installed-wordlevel-bounded-component.v2\0")
+        settings = vars(Tokenizer)["_pantograph_settings_snapshot_v1"](tokenizer, vars(wrapper))
+        self.assertTrue(settings[0])
+        expected = hashlib.sha256(b"installed-wordlevel-bounded-components.v3\0")
         expected.update(receipt[1])
-        expected.update(self.helper._canonical({"model_max_length": 16, "init_kwargs": {}}))
+        expected.update(settings[1])
         with patch.dict(sys.modules, {"transformers": controlled_transformers()}):
             with self.forbid_legacy():
                 actual = self.helper._tokenizer_state(wrapper)

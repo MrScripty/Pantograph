@@ -30,7 +30,7 @@ class BoundedTokenizerWrapperIntegration(unittest.TestCase):
             {"unk": 0, "hello": 1}, unk_token="unk"))
         native.pre_tokenizer = tokenizers.pre_tokenizers.Whitespace()
         return PreTrainedTokenizerFast(tokenizer_object=native,
-                                       unk_token="unk", model_max_length=16)
+                                       model_max_length=16)
 
     def test_actual_wrapper_has_stable_content_and_observes_native_mutation(self):
         one, two = self.wrapper(), self.wrapper()
@@ -52,6 +52,12 @@ class BoundedTokenizerWrapperIntegration(unittest.TestCase):
         stamp = self.helper._tokenizer_state(wrapper)
         wrapper.chat_template = "{{ messages }}"
         self.assertNotEqual(stamp, self.helper._tokenizer_state(wrapper))
+
+    def test_native_added_token_python_settings_remain_unqualified(self):
+        wrapper = self.wrapper()
+        wrapper._special_tokens_map["unk_token"] = tokenizers.AddedToken("unk", normalized=False)
+        with self.assertRaises(self.helper._Unknown):
+            self.helper._tokenizer_state(wrapper)
 
 
 if __name__ == "__main__":

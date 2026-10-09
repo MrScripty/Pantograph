@@ -12,6 +12,9 @@ use tk::tokenizer::{
     AddedToken, PaddingDirection, PaddingStrategy, TruncationDirection, TruncationStrategy,
 };
 
+mod settings_snapshot;
+pub(crate) use settings_snapshot::inspect as inspect_settings;
+
 const ENTRIES: usize = 4096;
 const STRING: usize = 16 * 1024;
 const TEXT: usize = 64 * 1024;

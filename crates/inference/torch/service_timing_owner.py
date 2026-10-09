@@ -227,6 +227,32 @@ def _tokenizer_state(tokenizer):
     fields = vars(tokenizer)
     if len(fields) > MAX_NODES:
         raise _Unknown()
+    if bounded is not None:
+        operation = vars(tokenizers.Tokenizer).get("_pantograph_settings_snapshot_v1")
+        if (type(operation) is not types.MethodDescriptorType
+                or operation.__objclass__ is not tokenizers.Tokenizer
+                or operation.__name__ != "_pantograph_settings_snapshot_v1"):
+            raise _Unknown()
+        # The compiled component consumes the original dictionary under native
+        # GIL custody. No Python comprehension, unknown key hash/equality,
+        # native AddedToken getter, JSON export or advisory fallback precedes it.
+        result = operation(native, fields)
+        if type(result) is not tuple or len(result) != 4:
+            raise _Unknown()
+        accepted, settings, work, copied = result
+        maximum_work = 5 * 4 * MAX_VOCAB * 14 * (MAX_STRING + 1) + 32 * MAX_TOKENIZER_BYTES
+        if (type(accepted) is not bool or not accepted or type(settings) is not bytes
+                or not settings.startswith(b"pantograph-cpython-3.12.3-tokenizer-settings.v1\0")
+                or len(settings) > MAX_TOKENIZER_BYTES
+                or type(work) is not int or not 0 <= work <= maximum_work
+                or type(copied) is not int or not 0 <= copied <= MAX_TOKENIZER_BYTES):
+            raise _Unknown()
+        payload, _component_cost = bounded
+        # Component counters stay separate; no aggregate owner authority follows.
+        digest = hashlib.sha256(b"installed-wordlevel-bounded-components.v3\0")
+        digest.update(payload)
+        digest.update(settings)
+        return digest.hexdigest()
     python_settings = {key: value for key, value in fields.items()
                        if key not in {"_tokenizer", "name_or_path", "deprecation_warnings"}}
     init = python_settings["init_kwargs"]
@@ -235,14 +261,6 @@ def _tokenizer_state(tokenizer):
     python_settings["init_kwargs"] = {key: value for key, value in init.items()
                                        if key not in {"name_or_path", "tokenizer_file", "_commit_hash"}}
     settings = _canonical(python_settings)
-    if bounded is not None:
-        payload, _component_cost = bounded
-        # Explicitly version the new binary convention; old advisory hashes
-        # cannot be comparable to this stronger installed-history identity.
-        digest = hashlib.sha256(b"installed-wordlevel-bounded-component.v2\0")
-        digest.update(payload)
-        digest.update(settings)
-        return digest.hexdigest()
     state = native.to_str(pretty=False)
     if len(state) > MAX_TOKENIZER_BYTES:
         raise _Unknown()
