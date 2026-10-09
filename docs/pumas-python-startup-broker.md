@@ -56,12 +56,42 @@ reads only the existing Rust worker flag. No Python query or initialization is
 performed. The metadata-only managed entry does not expose global reservations
 or accept a dummy keepalive as a real owner selection.
 
-This is incomplete PyO3-entry coverage. Separate audio/rerank/inspection paths,
- CUDA inventory, other `with_gil` calls and external interpreters may have prior
-unregistered history; their working bodies are untouched. A successful legacy
-claim or empty broker is not evidence that CPython was uninitialized. Positive
-startup remains refused until all relevant first-entry paths and actual linked
-image/configuration/import provenance are coordinated and qualified.
+All 19 known production GIL entry sites now use `PythonLegacyAdmission::with_gil`;
+the token method is the sole direct production `Python::with_gil` call. CUDA
+inventory, audio execution/shared-private loading/shutdown, image generation,
+timing revalidation and isolated-worker Drop are included. Inventory returns
+`python_startup_refused` when admission fails, image/audio operations propagate
+the existing backend error, and optional version diagnostics retain their
+`unknown` fallback. Separate inspector, gateway, selected/host audio/rerank
+adapters and all Python workload files remain unchanged. The earlier broader
+backend freeze was an internal worker precaution; this backend-only coordination
+does not rescind the standing adapter ownership restriction.
+
+The generic process owner retains its original admission in static `LEGACY_ENTRY`.
+Shutdown/unload therefore do not reacquire admission and skip required cleanup
+after later broker poison. Isolated workers inherit that actual token and retain
+an independent `PythonLegacyExposure` record; timing owners retain it alongside
+their native handles. Preparation occurs before GIL on production effect paths.
+Worker initialization also defensively retains admission for internal callers
+already holding Python; that post-entry retention is not first-entry evidence.
+No claim or broker mutex spans Python callbacks or native owner destruction.
+
+Admission and native exposure are distinct. A prepared but never-entered worker
+does not enter Python during Drop. Exposure is marked inside the admitted GIL
+body before imports/module creation, so partial initialization failure still
+requires cleanup through the original token. Blocking jobs retain their actual
+worker Arc through completion, including caller loss; Drop runs after the final
+Arc release. Poison cannot revoke the earlier claim or suppress its cleanup.
+Global worker/native images and deferred `Py<T>` decrefs remain under sticky
+process admission until retirement; model stop does not reset that ownership.
+Controlled Rust tests exercise this actual record without entering Python.
+
+This completes coordination for known repo-owned production entry/cleanup seams,
+not an authenticated first-initializer protocol. External/third-party interpreter
+entry and earlier unregistered initialization remain unknown. A successful claim
+or empty broker cannot prove that CPython was uninitialized or identify its loaded
+image. Positive startup remains refused until real linked-image/configuration/
+interpreter/import provenance is qualified; no such witness is fabricated here.
 
 ## Published Pumas owner contract and consumer adapter
 

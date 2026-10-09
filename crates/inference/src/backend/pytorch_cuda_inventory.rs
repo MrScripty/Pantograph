@@ -14,6 +14,7 @@ const MAX_CUDA_DEVICES: usize = 256;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PyTorchCudaInventoryUnavailable {
+    PythonStartupRefused,
     PythonProbeFailed,
     CudaUnavailable,
     CudaRuntimeNotInitialized,
@@ -65,7 +66,10 @@ impl PyTorchBackend {
     /// that API's lazy-initialization path. This flag is not proof of custody.
     pub async fn observe_cuda_inventory() -> PyTorchCudaInventory {
         tokio::task::spawn_blocking(|| {
-            Python::with_gil(|py| {
+            let Ok(admission) = super::legacy_python_admission() else {
+                return unavailable(PyTorchCudaInventoryUnavailable::PythonStartupRefused);
+            };
+            admission.with_gil(|py| {
                 let Ok(torch) = py.import("torch") else {
                     return unavailable(PyTorchCudaInventoryUnavailable::PythonProbeFailed);
                 };

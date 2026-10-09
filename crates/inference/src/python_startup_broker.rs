@@ -7,7 +7,9 @@ use crate::managed_python_binding::{
     ManagedPythonBindingRefusal, ManagedPythonRuntimeStartRequest, ManagedPythonStartObservation,
 };
 use std::fmt;
-#[cfg(feature = "backend-pytorch")]
+#[cfg(any(feature = "backend-pytorch", test))]
+use std::sync::atomic::{AtomicBool, Ordering};
+#[cfg(any(feature = "backend-pytorch", test))]
 use std::sync::OnceLock;
 use std::sync::{Arc, Mutex};
 
@@ -115,6 +117,18 @@ impl PythonStartupBroker {
         }
     }
 
+    /// Actual sticky admission retained through work and cleanup. This is only
+    /// ordering for existing legacy Python, never managed runtime provenance.
+    #[cfg(any(feature = "backend-pytorch", test))]
+    pub(crate) fn admit_legacy(
+        self: &Arc<Self>,
+    ) -> Result<PythonLegacyAdmission, PythonStartupReservationRefusal> {
+        self.claim_legacy()?;
+        Ok(PythonLegacyAdmission {
+            _broker: self.clone(),
+        })
+    }
+
     /// Reserve declaration/keepalive custody only. An Arc<()> works as a keepalive
     /// but cannot establish owner issuance, loaded-image provenance or readiness.
     /// A future typed owner adapter must provide the genuine retained source.
@@ -172,6 +186,89 @@ impl PythonStartupBroker {
         declaration.start_refusal(|| ManagedPythonStartObservation {
             legacy_worker_initialized: worker_initialized(),
         })
+    }
+}
+
+/// A genuine earlier legacy claim cannot be revoked by model stop, cancellation
+/// or later broker poison. Retained native owners use it for mandatory cleanup,
+/// without querying a fresh admission or holding the broker mutex across Python.
+#[cfg(any(feature = "backend-pytorch", test))]
+#[derive(Clone)]
+pub(crate) struct PythonLegacyAdmission {
+    _broker: Arc<PythonStartupBroker>,
+}
+
+/// The isolated worker's actual admission/exposure record. A claim made before
+/// a cancelled effect never implies Python cleanup. Potential partial exposure
+/// is marked on the admitted GIL thread, before invoking import/module code.
+#[cfg(any(feature = "backend-pytorch", test))]
+#[derive(Default)]
+pub(crate) struct PythonLegacyExposure {
+    admission: OnceLock<PythonLegacyAdmission>,
+    exposed: AtomicBool,
+}
+
+#[cfg(any(feature = "backend-pytorch", test))]
+impl PythonLegacyExposure {
+    pub(crate) const fn new() -> Self {
+        Self {
+            admission: OnceLock::new(),
+            exposed: AtomicBool::new(false),
+        }
+    }
+
+    pub(crate) fn prepare(
+        &self,
+        broker: &Arc<PythonStartupBroker>,
+    ) -> Result<PythonLegacyAdmission, PythonStartupReservationRefusal> {
+        if let Some(admission) = self.admission.get() {
+            if !Arc::ptr_eq(&admission._broker, broker) {
+                return Err(PythonStartupReservationRefusal::RegistrationBusy);
+            }
+            return Ok(admission.clone());
+        }
+        let admission = broker.admit_legacy()?;
+        self.retain_admission(&admission)
+    }
+
+    /// A private owner inherits the actual process owner's already-admitted
+    /// token, not a fresh claim that could revoke mandatory cleanup on poison.
+    pub(crate) fn retain_admission(
+        &self,
+        admission: &PythonLegacyAdmission,
+    ) -> Result<PythonLegacyAdmission, PythonStartupReservationRefusal> {
+        let _ = self.admission.set(admission.clone());
+        let retained = self.admission.get().expect("successful legacy admission");
+        if !Arc::ptr_eq(&retained._broker, &admission._broker) {
+            return Err(PythonStartupReservationRefusal::RegistrationBusy);
+        }
+        Ok(retained.clone())
+    }
+
+    pub(crate) fn mark_exposed(&self) {
+        assert!(
+            self.admission.get().is_some(),
+            "exposure requires admission"
+        );
+        self.exposed.store(true, Ordering::Release);
+    }
+
+    pub(crate) fn cleanup_admission(&self) -> Option<&PythonLegacyAdmission> {
+        self.exposed.load(Ordering::Acquire).then(|| {
+            self.admission
+                .get()
+                .expect("exposure retained its original admission")
+        })
+    }
+}
+
+#[cfg(feature = "backend-pytorch")]
+impl PythonLegacyAdmission {
+    pub(crate) fn with_gil<F, R>(&self, effect: F) -> R
+    where
+        F: for<'py> FnOnce(pyo3::Python<'py>) -> R,
+    {
+        pyo3::Python::with_gil(effect)
     }
 }
 
@@ -254,3 +351,7 @@ pub(crate) fn process_startup_broker() -> &'static Arc<PythonStartupBroker> {
 #[cfg(test)]
 #[path = "python_startup_broker_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "python_startup_entry_tests.rs"]
+mod entry_tests;

@@ -10,6 +10,7 @@ const OWNER_PY: &str = include_str!("../../torch/service_timing_owner.py");
 pub(super) struct NativeOwner {
     tracker: Py<PyAny>,
     stamp: Py<PyAny>,
+    admission: crate::python_startup_broker::PythonLegacyAdmission,
 }
 
 #[derive(Deserialize)]
@@ -75,6 +76,7 @@ pub(super) fn load_with_ack(
     py: Python<'_>,
     worker: &Bound<'_, PyModule>,
     envelope: String,
+    admission: &crate::python_startup_broker::PythonLegacyAdmission,
 ) -> PyResult<(String, Option<Arc<NativeOwner>>)> {
     let Some(tracker) = tracker(py, worker) else {
         return worker
@@ -92,6 +94,7 @@ pub(super) fn load_with_ack(
             Arc::new(NativeOwner {
                 tracker: tracker.unbind(),
                 stamp,
+                admission: admission.clone(),
             })
         })
     };
@@ -102,7 +105,7 @@ pub(super) async fn revalidate(
     owner: Arc<NativeOwner>,
 ) -> Option<RuntimeServiceTimingOwnerAttestation> {
     tokio::task::spawn_blocking(move || {
-        Python::with_gil(|py| {
+        owner.admission.with_gil(|py| {
             let value = owner
                 .tracker
                 .bind(py)

@@ -37,12 +37,28 @@ pub(super) fn text_timing_implementation_digest(owner_source: &str) -> String {
 }
 
 static WORKER_INITIALISED: AtomicBool = AtomicBool::new(false);
+// Root legacy Python for this process, including partial worker initialization.
+// No worker/model stop or caller loss retires this original admission.
+static LEGACY_ENTRY: crate::python_startup_broker::PythonLegacyExposure =
+    crate::python_startup_broker::PythonLegacyExposure::new();
+
+pub(super) fn prepare_legacy_entry(
+) -> Result<crate::python_startup_broker::PythonLegacyAdmission, super::BackendError> {
+    LEGACY_ENTRY
+        .prepare(crate::python_startup_broker::process_startup_broker())
+        .map_err(|error| super::BackendError::ManagedBinary(error.to_string()))
+}
 
 pub(super) fn legacy_worker_initialised() -> bool {
     WORKER_INITIALISED.load(Ordering::Acquire)
 }
 
 pub(super) fn ensure_worker_initialised(py: Python<'_>) -> PyResult<()> {
+    // Production entry already retained this before GIL. Internal callers with
+    // Python (legacy fixtures) also retain it; this is not first-init proof.
+    let _admission = prepare_legacy_entry()
+        .map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))?;
+    LEGACY_ENTRY.mark_exposed();
     if WORKER_INITIALISED.load(Ordering::Acquire) {
         return Ok(());
     }
@@ -125,7 +141,7 @@ pub(super) fn worker_module(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
 /// embedded runtimes and the inherited generic worker.
 pub(super) struct IsolatedAudioWorker {
     name: String,
-    initialized: AtomicBool,
+    exposure: crate::python_startup_broker::PythonLegacyExposure,
 }
 impl IsolatedAudioWorker {
     pub(super) fn new() -> Self {
@@ -134,23 +150,37 @@ impl IsolatedAudioWorker {
                 "pantograph_selected_audio_{}",
                 uuid::Uuid::new_v4().simple()
             ),
-            initialized: AtomicBool::new(false),
+            exposure: Default::default(),
         }
     }
+    /// Production callers obtain this before entering Python. Existing owners
+    /// retain their original sticky claim, including through cleanup and poison.
+    pub(super) fn prepare_entry(
+        &self,
+    ) -> Result<crate::python_startup_broker::PythonLegacyAdmission, super::BackendError> {
+        let admission = prepare_legacy_entry()?;
+        self.exposure
+            .retain_admission(&admission)
+            .map_err(|error| super::BackendError::ManagedBinary(error.to_string()))
+    }
     pub(super) fn module<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyModule>> {
+        // Also retain admission for internal callers already holding Python
+        // (including legacy unit fixtures). This is not first-entry evidence:
+        // all production GIL boundaries must obtain prepare_entry beforehand.
+        let _admission = self
+            .prepare_entry()
+            .map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))?;
+        // Mark potential partial exposure before any effect, not only success.
+        self.exposure.mark_exposed();
         ensure_worker_initialised(py)?;
         match py.import(self.name.as_str()) {
-            Ok(module) => {
-                self.initialized.store(true, Ordering::Release);
-                Ok(module)
-            }
+            Ok(module) => Ok(module),
             Err(error) if error.is_instance_of::<pyo3::exceptions::PyModuleNotFoundError>(py) => {
                 let source = std::ffi::CString::new(WORKER_PY).expect("embedded worker source");
                 let name =
                     std::ffi::CString::new(self.name.as_str()).expect("generated module name");
                 let module =
                     PyModule::from_code(py, &source, c"pantograph_selected_audio.py", &name)?;
-                self.initialized.store(true, Ordering::Release);
                 Ok(module)
             }
             Err(error) => Err(error),
@@ -159,12 +189,12 @@ impl IsolatedAudioWorker {
 }
 impl Drop for IsolatedAudioWorker {
     fn drop(&mut self) {
-        if !self.initialized.load(Ordering::Acquire) {
+        let Some(admission) = self.exposure.cleanup_admission() else {
             return;
-        }
+        };
         // Blocking closures retain an Arc to this registration. Retirement is
         // therefore after their actual completion, including caller loss.
-        Python::with_gil(|py| {
+        admission.with_gil(|py| {
             if let Ok(sys) = py.import("sys") {
                 if let Ok(modules) = sys.getattr("modules") {
                     if let Ok(module) = modules.get_item(self.name.as_str()) {

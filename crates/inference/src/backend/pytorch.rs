@@ -92,6 +92,11 @@ pub use cuda_inventory::{
     PyTorchCudaPhysicalIdentity,
 };
 
+fn legacy_python_admission(
+) -> Result<crate::python_startup_broker::PythonLegacyAdmission, BackendError> {
+    pytorch_worker::prepare_legacy_entry()
+}
+
 #[derive(Clone, PartialEq)]
 struct SelectedAudioCacheKey {
     target: crate::PumasArtifactLoadTarget,
@@ -355,10 +360,8 @@ fn init_worker_from_envelope_blocking(
     request_id: &str,
     envelope_json: String,
 ) -> Result<(), BackendError> {
-    crate::python_startup_broker::process_startup_broker()
-        .claim_legacy()
-        .map_err(|error| BackendError::ManagedBinary(error.to_string()))?;
-    Python::with_gil(|py| {
+    let admission = legacy_python_admission()?;
+    admission.with_gil(|py| {
         pytorch_worker::ensure_worker_initialised(py).map_err(|e| {
             PyTorchBackend::init_worker_failure_from_message(
                 request_id,
@@ -477,10 +480,8 @@ fn shutdown_worker_from_envelope_blocking(
     request_id: &str,
     envelope_json: String,
 ) -> Result<(), BackendError> {
-    crate::python_startup_broker::process_startup_broker()
-        .claim_legacy()
-        .map_err(|error| BackendError::ManagedBinary(error.to_string()))?;
-    Python::with_gil(|py| {
+    let admission = legacy_python_admission()?;
+    admission.with_gil(|py| {
         pytorch_worker::ensure_worker_initialised(py).map_err(|e| {
             PyTorchBackend::shutdown_worker_failure_from_message(
                 request_id,
@@ -917,10 +918,8 @@ pub async fn active_loaded_model_info() -> Result<LoadedModelInfo, BackendError>
         ))
     })?;
     tokio::task::spawn_blocking(move || {
-        crate::python_startup_broker::process_startup_broker()
-            .claim_legacy()
-            .map_err(|error| BackendError::ManagedBinary(error.to_string()))?;
-        Python::with_gil(|py| -> Result<LoadedModelInfo, BackendError> {
+        let admission = legacy_python_admission()?;
+        admission.with_gil(|py| -> Result<LoadedModelInfo, BackendError> {
             let worker = pytorch_worker::worker_module(py).map_err(|e| {
                 kv_worker_failure_from_message(
                     &request_id,
@@ -963,10 +962,8 @@ pub async fn save_live_kv_snapshot(path: &Path) -> Result<PyTorchLiveKvInfo, Bac
         ))
     })?;
     tokio::task::spawn_blocking(move || {
-        crate::python_startup_broker::process_startup_broker()
-            .claim_legacy()
-            .map_err(|error| BackendError::ManagedBinary(error.to_string()))?;
-        Python::with_gil(|py| -> Result<PyTorchLiveKvInfo, BackendError> {
+        let admission = legacy_python_admission()?;
+        admission.with_gil(|py| -> Result<PyTorchLiveKvInfo, BackendError> {
             let worker = pytorch_worker::worker_module(py).map_err(|e| {
                 kv_worker_failure_from_message(
                     &request_id,
@@ -1010,10 +1007,8 @@ pub async fn restore_live_kv_snapshot(path: &Path) -> Result<PyTorchLiveKvInfo, 
         ))
     })?;
     tokio::task::spawn_blocking(move || {
-        crate::python_startup_broker::process_startup_broker()
-            .claim_legacy()
-            .map_err(|error| BackendError::ManagedBinary(error.to_string()))?;
-        Python::with_gil(|py| -> Result<PyTorchLiveKvInfo, BackendError> {
+        let admission = legacy_python_admission()?;
+        admission.with_gil(|py| -> Result<PyTorchLiveKvInfo, BackendError> {
             let worker = pytorch_worker::worker_module(py).map_err(|e| {
                 kv_worker_failure_from_message(
                     &request_id,
@@ -1055,10 +1050,8 @@ pub async fn clear_live_kv_snapshot() -> Result<(), BackendError> {
         ))
     })?;
     tokio::task::spawn_blocking(move || {
-        crate::python_startup_broker::process_startup_broker()
-            .claim_legacy()
-            .map_err(|error| BackendError::ManagedBinary(error.to_string()))?;
-        Python::with_gil(|py| -> Result<(), BackendError> {
+        let admission = legacy_python_admission()?;
+        admission.with_gil(|py| -> Result<(), BackendError> {
             let worker = pytorch_worker::worker_module(py).map_err(|e| {
                 kv_worker_failure_from_message(
                     &request_id,
@@ -1456,7 +1449,11 @@ impl PyTorchBackend {
         })?;
 
         tokio::task::spawn_blocking(move || {
-            Python::with_gil(|py| -> Result<AudioTranscriptionResult, BackendError> {
+            let admission = match &isolated {
+                Some(worker) => worker.prepare_entry()?,
+                None => legacy_python_admission()?,
+            };
+            admission.with_gil(|py| -> Result<AudioTranscriptionResult, BackendError> {
                 let worker = match &isolated {
                     Some(worker) => worker.module(py),
                     None => pytorch_worker::worker_module(py),
@@ -1511,9 +1508,10 @@ impl PyTorchBackend {
         let worker = self.selected_audio_worker.clone();
         let request_id = format!("selected-audio-shutdown-{}", Uuid::new_v4().simple());
         let envelope = shutdown_worker_envelope_json(&request_id)?;
+        let admission = worker.prepare_entry()?;
         self.selected_audio_residency_possible = true;
         tokio::task::spawn_blocking(move || {
-            Python::with_gil(|py| {
+            admission.with_gil(|py| {
                 let module = worker.module(py).map_err(|error| {
                     Self::shutdown_worker_failure_from_message(&request_id, error.to_string())
                 })?;
@@ -1669,6 +1667,11 @@ impl PyTorchBackend {
             ))
         })?;
 
+        let admission = match &isolated {
+            Some(worker) => worker.prepare_entry()?,
+            None => legacy_python_admission()?,
+        };
+
         // The worker can unload the resident model before replacement fails.
         // Once effectful loading begins, old metadata no longer proves residency.
         // Drain and envelope validation above leave the prior residency intact.
@@ -1686,7 +1689,7 @@ impl PyTorchBackend {
         let timing_enabled = !private && timing_requested;
 
         let (info, timing_owner) = tokio::task::spawn_blocking(move || {
-            Python::with_gil(|py| -> Result<_, BackendError> {
+            admission.with_gil(|py| -> Result<_, BackendError> {
                 let worker = match &isolated {
                     Some(worker) => worker.module(py),
                     None => pytorch_worker::worker_module(py),
@@ -1699,7 +1702,7 @@ impl PyTorchBackend {
                 })?;
 
                 let (response_json, timing_owner) = (if timing_enabled {
-                    pytorch_service_timing::load_with_ack(py, &worker, envelope_json)
+                    pytorch_service_timing::load_with_ack(py, &worker, envelope_json, &admission)
                 } else {
                     worker
                         .call_method1("load_transformers_model_from_envelope", (envelope_json,))
@@ -2381,10 +2384,8 @@ impl PyTorchBackend {
         request_id: &str,
         envelope_json: String,
     ) -> Result<(), BackendError> {
-        crate::python_startup_broker::process_startup_broker()
-            .claim_legacy()
-            .map_err(|error| BackendError::ManagedBinary(error.to_string()))?;
-        Python::with_gil(|py| -> Result<(), BackendError> {
+        let admission = legacy_python_admission()?;
+        admission.with_gil(|py| -> Result<(), BackendError> {
             let worker = pytorch_worker::worker_module(py).map_err(|e| {
                 Self::unload_worker_failure_from_message(
                     request_id,
@@ -2917,10 +2918,8 @@ impl PyTorchBackend {
 
         let mut stream = self.text_jobs.spawn(move |mut producer| {
             producer.check()?;
-            crate::python_startup_broker::process_startup_broker()
-                .claim_legacy()
-                .map_err(|error| BackendError::ManagedBinary(error.to_string()))?;
-            let text = Python::with_gil(|py| -> Result<String, BackendError> {
+            let admission = legacy_python_admission()?;
+            let text = admission.with_gil(|py| -> Result<String, BackendError> {
                 let worker = pytorch_worker::worker_module(py).map_err(|e| {
                     Self::generate_text_worker_failure_from_message(
                         &request_id,
@@ -3030,10 +3029,8 @@ impl PyTorchBackend {
 
         let stream = self.text_jobs.spawn(move |mut producer| {
             producer.check()?;
-            crate::python_startup_broker::process_startup_broker()
-                .claim_legacy()
-                .map_err(|error| BackendError::ManagedBinary(error.to_string()))?;
-            Python::with_gil(|py| -> Result<(), BackendError> {
+            let admission = legacy_python_admission()?;
+            admission.with_gil(|py| -> Result<(), BackendError> {
                 let failure = |error: PyErr| {
                     Self::stream_worker_failure_from_message(&request_id, error.to_string())
                 };
@@ -3134,7 +3131,10 @@ impl InferenceBackend for PyTorchBackend {
 
         // Log the transformers version for diagnostics
         let tf_version = tokio::task::spawn_blocking(|| {
-            Python::with_gil(|py| -> String {
+            let Ok(admission) = legacy_python_admission() else {
+                return "unknown".to_string();
+            };
+            admission.with_gil(|py| -> String {
                 py.import("transformers")
                     .and_then(|m| m.getattr("__version__"))
                     .and_then(|v| v.extract::<String>())
@@ -3591,7 +3591,8 @@ impl InferenceBackend for PyTorchBackend {
         let truncate_result = tokio::task::spawn_blocking({
             let request_id = request_id.clone();
             move || {
-                Python::with_gil(|py| -> Result<PyTorchTruncateKvCacheResult, BackendError> {
+                let admission = legacy_python_admission()?;
+                admission.with_gil(|py| -> Result<PyTorchTruncateKvCacheResult, BackendError> {
                     let worker = pytorch_worker::worker_module(py).map_err(|e| {
                         kv_truncate_worker_failure_from_message(
                             &request_id,
