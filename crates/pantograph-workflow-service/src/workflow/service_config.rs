@@ -53,6 +53,7 @@ impl WorkflowService {
     pub fn with_capacity_limits(max_sessions: usize, max_loaded_sessions: usize) -> Self {
         Self {
             serial_ready_mode: None,
+            cohort_coverage_provider: None,
             session_store: Arc::new(Mutex::new(WorkflowExecutionSessionStore::new(
                 max_sessions,
                 max_loaded_sessions,

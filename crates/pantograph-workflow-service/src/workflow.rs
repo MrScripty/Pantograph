@@ -29,6 +29,7 @@ mod artifact_settings_api;
 mod artifact_store;
 mod artifact_writer;
 mod attribution_api;
+mod cohort_coverage;
 mod contracts;
 mod dependency_readiness_composition;
 #[allow(dead_code)]
@@ -97,6 +98,8 @@ pub use self::artifact_store::{
     ArtifactWriteRequest, VerifiedArtifactSnapshot,
 };
 pub use self::artifact_writer::WorkflowArtifactWriter;
+pub(crate) use self::cohort_coverage::cohort_fingerprint;
+pub use self::cohort_coverage::*;
 pub use self::contracts::*;
 pub use self::dependency_readiness_composition::WorkflowDependencyReadinessComponents;
 pub use self::diagnostics_api::{
@@ -291,6 +294,7 @@ pub use crate::scheduler::{
 #[derive(Clone)]
 pub struct WorkflowService {
     serial_ready_mode: Option<Arc<serial_ready::SerialReadyMode>>,
+    cohort_coverage_provider: Option<Arc<dyn WorkflowCohortCoverageProvider>>,
     session_store: Arc<Mutex<WorkflowExecutionSessionStore>>,
     runtime_branch_task_event_repository:
         Arc<Mutex<runtime_branch_task_event::InMemoryWorkflowRuntimeBranchTaskEventRepository>>,

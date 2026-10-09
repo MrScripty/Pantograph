@@ -7,6 +7,7 @@
 
 mod batching;
 mod capability;
+mod cohort_completion;
 mod completion_ranking;
 mod dependency_completion;
 mod dispatch;
@@ -51,6 +52,16 @@ pub use capability::{
     SchedulerRuntimeCapabilityHint, SchedulerTraitOptionHint, SchedulerTraitOptionValue,
     ValidatedSchedulerCapabilityHintSnapshot, SCHEDULER_CAPABILITY_HINT_CONTRACT_VERSION,
 };
+pub use cohort_completion::{
+    evaluate_scheduler_cohort_completion, SchedulerCohortAction, SchedulerCohortBudget,
+    SchedulerCohortCompletion, SchedulerCohortCosts, SchedulerCohortEvidence,
+    SchedulerCohortIncomplete, SchedulerCohortPlacement, SchedulerCohortResult,
+    SchedulerCohortSample, SchedulerCohortScore, SchedulerCohortTask, SchedulerCohortTaskRequest,
+    SchedulerCohortTransition, SchedulerCohortWork, SchedulerFrozenCohort,
+    SCHEDULER_COHORT_MAX_BRANCHES, SCHEDULER_COHORT_MAX_EVENTS, SCHEDULER_COHORT_MAX_EVIDENCE,
+    SCHEDULER_COHORT_MAX_PLACEMENTS, SCHEDULER_COHORT_MAX_TASKS, SCHEDULER_COHORT_MAX_WORK,
+};
+
 pub use completion_ranking::{
     completion_diagnostics_bounded, select_scheduler_candidate_with_completion,
     SchedulerCompletionContext, SchedulerCompletionEvidence, SchedulerCompletionEvidenceSource,
