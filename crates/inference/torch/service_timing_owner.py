@@ -15,6 +15,7 @@ import os
 import platform
 import sys
 import threading
+import types
 import uuid
 import weakref
 
@@ -153,6 +154,40 @@ def _cpu_domain(torch):
                     platform.machine(), affinity, torch.backends.cpu.get_cpu_capability()))
 
 
+def _bounded_tokenizer_native_state(native):
+    """Use only the pinned provider's compiled, fixed-envelope component API.
+
+    The component owns admission before traversal and returns spent counters,
+    including refused prefixes. This does not qualify the complete owner or
+    admit NativeOwnerSnapshot in the Rust ledger. Missing API remains advisory.
+    """
+    import tokenizers
+
+    operation = vars(tokenizers.Tokenizer).get("_pantograph_wordlevel_snapshot_v1")
+    if operation is None:
+        return None
+    if (type(tokenizers.__version__) is not str or tokenizers.__version__ != "0.21.4"
+            or type(operation) is not types.MethodDescriptorType
+            or operation.__objclass__ is not tokenizers.Tokenizer
+            or operation.__name__ != "_pantograph_wordlevel_snapshot_v1"):
+        raise _Unknown()
+    # Invoke the sealed type descriptor, never a per-instance override. It
+    # enters before model/unk/id/export getters, retains native read guards,
+    # and takes no caller-provided caps, callback, or timing declaration.
+    result = operation(native)
+    if type(result) is not tuple or len(result) != 4:
+        raise _Unknown()
+    accepted, payload, work, copied = result
+    maximum_work = 5 * 4 * MAX_VOCAB * 14 * (MAX_STRING + 1) + 32 * MAX_TOKENIZER_BYTES
+    if (type(accepted) is not bool or type(payload) is not bytes
+            or type(work) is not int or not 0 <= work <= maximum_work
+            or type(copied) is not int or not 0 <= copied <= MAX_TOKENIZER_BYTES
+            or not accepted or len(payload) > MAX_TOKENIZER_BYTES
+            or not payload.startswith(b"pantograph-tokenizers-0.21.4-wordlevel-snapshot.v1\0")):
+        raise _Unknown()
+    return payload, (work, copied)
+
+
 def _tokenizer_state(tokenizer):
     import tokenizers
     from transformers import PreTrainedTokenizerFast
@@ -162,8 +197,10 @@ def _tokenizer_state(tokenizer):
     if type(tokenizer.model_max_length) is not int or not 0 < tokenizer.model_max_length <= 1_000_000:
         raise _Unknown()
     native = tokenizer.backend_tokenizer
-    if (type(native) is not tokenizers.Tokenizer
-            or type(native.model) is not tokenizers.models.WordLevel
+    if type(native) is not tokenizers.Tokenizer:
+        raise _Unknown()
+    bounded = _bounded_tokenizer_native_state(native)
+    if bounded is None and (type(native.model) is not tokenizers.models.WordLevel
             or type(native.pre_tokenizer) not in
                (tokenizers.pre_tokenizers.Whitespace, tokenizers.pre_tokenizers.WhitespaceSplit)
             or native.normalizer is not None or native.post_processor is not None
@@ -172,19 +209,21 @@ def _tokenizer_state(tokenizer):
     # This scalar is outside the vocabulary; qualify it before whole export.
     # Native getters themselves may allocate before returning a Python string.
     # This bounds accepted content, not universal oversized-refusal copy cost.
-    _text(native.model.unk_token)
-    size = native.get_vocab_size(with_added_tokens=True)
-    if not 0 < size <= MAX_VOCAB:
-        raise _Unknown()
-    total = 0
-    for index in range(size):
-        token = _text(native.id_to_token(index))
-        total += len(token.encode("utf-8"))
-        if total > MAX_TEXT_BYTES:
+    if bounded is None:
+        _text(native.model.unk_token)
+        size = native.get_vocab_size(with_added_tokens=True)
+        if not 0 < size <= MAX_VOCAB:
             raise _Unknown()
+        total = 0
+        for index in range(size):
+            token = _text(native.id_to_token(index))
+            total += len(token.encode("utf-8"))
+            if total > MAX_TEXT_BYTES:
+                raise _Unknown()
     # WordLevel has no opaque merges/regex/processor graphs. Vocab, added-token
     # content and fixed scalar metadata are bounded above before native export.
-    _canonical((native.padding, native.truncation))
+    if bounded is None:
+        _canonical((native.padding, native.truncation))
     fields = vars(tokenizer)
     if len(fields) > MAX_NODES:
         raise _Unknown()
@@ -196,6 +235,14 @@ def _tokenizer_state(tokenizer):
     python_settings["init_kwargs"] = {key: value for key, value in init.items()
                                        if key not in {"name_or_path", "tokenizer_file", "_commit_hash"}}
     settings = _canonical(python_settings)
+    if bounded is not None:
+        payload, _component_cost = bounded
+        # Explicitly version the new binary convention; old advisory hashes
+        # cannot be comparable to this stronger installed-history identity.
+        digest = hashlib.sha256(b"installed-wordlevel-bounded-component.v2\0")
+        digest.update(payload)
+        digest.update(settings)
+        return digest.hexdigest()
     state = native.to_str(pretty=False)
     if len(state) > MAX_TOKENIZER_BYTES:
         raise _Unknown()

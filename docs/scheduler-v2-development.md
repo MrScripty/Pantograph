@@ -225,6 +225,19 @@ session creation. Lifecycle events invalidate authority rather than granting it.
 
 ## Verification and remaining rollout gates
 
+The opt-in text owner now consumes a source-qualified bounded WordLevel
+component when the pinned Tokenizers provider capability is installed. See the
+[provider patch and build procedure](../crates/inference/torch/provider/tokenizers-0.21.4/README.md).
+It inspects borrowed native state under nonblocking guards, meters retained
+table storage and cumulative buffer copies, and returns an explicitly versioned
+binary identity. Available-capability refusal never calls legacy exporters.
+The ordinary wheel keeps its existing advisory observation path. The patch is
+qualified locally through synthetic native units and the actual tokenizer
+wrapper; it is not automatically installed as a runtime dependency. Aggregate
+`NativeOwnerSnapshot` remains Unknown/refused until all other collection
+components have qualified cost models. The existing selection default is
+unchanged.
+
 The unchanged production/test sources have qualified native and non-native
 Rust suites, feature-light compilation, Clippy and independent executable
 review. Directed public API cases cover valid saved fanout, typed refusals,

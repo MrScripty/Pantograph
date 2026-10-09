@@ -1,0 +1,66 @@
+diff --git a/bindings/python/src/lib.rs b/bindings/python/src/lib.rs
+index 76bc153..09daff0 100644
+--- a/bindings/python/src/lib.rs
++++ b/bindings/python/src/lib.rs
+@@ -9,6 +9,8 @@ mod decoders;
+ mod encoding;
+ mod error;
+ mod models;
++// Pantograph modification: fixed-budget native inspection.
++mod pantograph_snapshot;
+ mod normalizers;
+ mod pre_tokenizers;
+ mod processors;
+diff --git a/bindings/python/src/tokenizer.rs b/bindings/python/src/tokenizer.rs
+index 68e961a..4ea9b0f 100644
+--- a/bindings/python/src/tokenizer.rs
++++ b/bindings/python/src/tokenizer.rs
+@@ -483,6 +483,11 @@ impl PyTokenizer {
+ 
+ #[pymethods]
+ impl PyTokenizer {
++    // Pantograph modification: opaque fixed-budget binary snapshot/receipt.
++    fn _pantograph_wordlevel_snapshot_v1<'py>(&self, py: Python<'py>) -> PyResult<(bool, Bound<'py,PyBytes>, usize, usize)> {
++        crate::pantograph_snapshot::inspect(self, py)
++    }
++
+     #[new]
+     #[pyo3(text_signature = "(self, model)")]
+     fn __new__(model: PyRef<PyModel>) -> Self {
+diff --git a/tokenizers/src/models/wordlevel/mod.rs b/tokenizers/src/models/wordlevel/mod.rs
+index 94e7c86..6c0efc5 100644
+--- a/tokenizers/src/models/wordlevel/mod.rs
++++ b/tokenizers/src/models/wordlevel/mod.rs
+@@ -112,6 +112,11 @@ impl std::fmt::Debug for WordLevel {
+ }
+ 
+ impl WordLevel {
++    // Pantograph modification: borrowed metadata/traversal for bounded snapshot.
++    pub fn pantograph_borrowed_vocab(&self) -> (&AHashMap<String, u32>, &AHashMap<u32, String>) {
++        (&self.vocab, &self.vocab_r)
++    }
++
+     pub fn builder() -> WordLevelBuilder {
+         WordLevelBuilder::new()
+     }
+diff --git a/tokenizers/src/tokenizer/added_vocabulary.rs b/tokenizers/src/tokenizer/added_vocabulary.rs
+index 5fa80ae..32857b6 100644
+--- a/tokenizers/src/tokenizer/added_vocabulary.rs
++++ b/tokenizers/src/tokenizer/added_vocabulary.rs
+@@ -165,6 +165,16 @@ pub struct AddedVocabulary {
+ }
+ 
+ impl AddedVocabulary {
++    // Pantograph modification: no clone, serializer or matcher traversal.
++    pub fn pantograph_borrowed_history(&self) -> (
++        &Vec<AddedToken>, &Vec<AddedToken>, &AHashSet<String>, &Vec<u32>, &Vec<u32>, usize, usize, usize
++    ) {
++        (&self.added_tokens, &self.special_tokens, &self.special_tokens_set,
++         &self.split_trie.1, &self.split_normalized_trie.1,
++         self.split_trie.0.patterns_len(), self.split_normalized_trie.0.patterns_len(),
++         self.split_trie.0.memory_usage())
++    }
++
+     pub fn new() -> Self {
+         let trie = AhoCorasickBuilder::new()
+             .match_kind(MatchKind::LeftmostLongest)
