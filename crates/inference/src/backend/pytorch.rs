@@ -1111,6 +1111,28 @@ impl PyTorchBackend {
         Err(BackendError::ManagedBinary(refusal.to_string()))
     }
 
+    /// Blocking owner-issued byte preflight. No Python/configuration/worker
+    /// effects occur. Async callers must use their registered blocking custody.
+    pub fn start_managed_component_runtime_blocking(
+        &self,
+        request: &crate::managed_python_binding::ManagedPythonRuntimeStartRequest,
+        expected_interpreter_depot_manifest_sha256: &str,
+        selection: pumas_app_manager::version_manager::TorchComponentSelection,
+    ) -> Result<BackendStartOutcome, BackendError> {
+        let reservation = crate::python_startup_broker::process_startup_broker()
+            .reserve_component_selection(
+                request,
+                expected_interpreter_depot_manifest_sha256,
+                selection,
+            )
+            .map_err(|error| BackendError::ManagedBinary(error.to_string()))?;
+        // Valid byte association cannot qualify an interpreter or provider.
+        // Pre-exposure refusal drops this reservation and releases only its hold.
+        Err(BackendError::ManagedBinary(
+            reservation.closed_start_refusal().to_string(),
+        ))
+    }
+
     /// Get static capabilities (for registry info before instantiation)
     pub fn static_capabilities() -> BackendCapabilities {
         BackendCapabilities {

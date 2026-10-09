@@ -250,10 +250,10 @@ feature-light consumers can validate without unused backend-only struct fields;
 all existing admission checks remain in that common validator.
 
 A deterministic hash-associated development wheel can be packaged locally for
-review. Pumas26a has no public local-component ingestion into its validated Torch
-bundle custody and forbids in-place dependency repair. The future owner input
-must use the existing pending stage, version lock, hash manifest, cleanup and
-publication lifecycle, plus bind the actual in-process PyO3 interpreter and loaded
+review. Published Pumas3d now supplies local-component assembly into retained
+immutable byte bundles, using its existing pending stage, version lock, hash
+manifest, cleanup and publication lifecycle. Those bundles remain unqualified;
+positive startup must still bind the actual in-process PyO3 interpreter and loaded
 extension to that environment. Neither a managed venv install alone nor package
 presence is sufficient. No live runtime registration or replacement is done by
 the packaging helper; that owner/interpreter decision remains a rollout gate.
@@ -270,8 +270,12 @@ managed runtime qualification. No transfer, install or native import is enabled.
 The [Python startup broker](pumas-python-startup-broker.md) adds a short shared
 legacy/preflight state fence and controlled Arc-retention behavior, without
 turning declarations into observed interpreter/import evidence. Managed startup
-remains closed; the owner-issued immutable selection wrapper and joint native
-startup qualification remain required.
+remains closed. The published Pumas3d `TorchComponentSelection` is now linked
+through a typed byte adapter: exact identity matching and blocking validation
+occur before broker admission, retaining the actual owner source Arc. Its fixed
+unqualified disposition refuses startup; joint native qualification remains
+required. Controlled seeded owner fixtures exercise byte selection and lifetime,
+without an actual wheel transfer, assembler/install run or Python entry.
 
 The unchanged production/test sources have qualified native and non-native
 Rust suites, feature-light compilation, Clippy and independent executable

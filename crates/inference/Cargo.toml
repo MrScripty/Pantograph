@@ -27,12 +27,14 @@ backend-candle = [     # In-process CPU F32 BERT embeddings
     "dep:axum",
     "dep:tower-http",
 ]
-backend-pytorch = ["dep:pyo3", "dep:tokio-stream"]  # In-process PyTorch via PyO3 (dLLM/Sherry/HF)
+backend-pytorch = ["dep:pyo3", "dep:tokio-stream", "pumas-component-selection"]  # In-process PyTorch via PyO3 (dLLM/Sherry/HF)
+pumas-component-selection = ["dep:pumas-app-manager"] # Byte custody/refusal only; no Python entry
 
 # Optional: standard process spawner for non-Tauri use
 std-process = []
 
 [dependencies]
+pumas-app-manager = { workspace = true, optional = true }
 base64 = "=0.22.1"
 pantograph-runtime-registry = { path = "../pantograph-runtime-registry" }
 pantograph-managed-dependencies = { path = "../pantograph-managed-dependencies" }
@@ -76,6 +78,8 @@ zip.workspace = true
 once_cell.workspace = true
 
 [dev-dependencies]
+pumas-library.workspace = true
+sha2 = "0.10"
 pantograph-runtime-host-contracts = { path = "../pantograph-runtime-host-contracts" }
 env_logger.workspace = true
 tempfile.workspace = true

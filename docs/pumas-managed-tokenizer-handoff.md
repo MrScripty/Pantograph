@@ -1,5 +1,15 @@
 # Pumas local provider ingestion and Pantograph interpreter binding
 
+This document and its JSON are the original frozen wheel/source handoff and
+Pumas26a consumer qualification receipt. Their dependency/status fields describe
+that increment, not the current source pin. The published Pumas3d component
+assembler and [selected-byte consumer adapter](pumas-python-startup-broker.md)
+supersede the earlier assembly/selection proposal below. Pumas issues immutable
+revision/manifest/depot identities, with no environment ID; Pantograph keeps its
+configuration identity separate. The original JSON and artifact association
+remain unchanged. Actual wheel transfer and positive runtime qualification
+remain held.
+
 This is a concrete consumer requirement and proposed owner boundary, pending
 Pumas acknowledgment. It supplies reviewed local bytes; it grants no installation
 or execution authority. The machine-readable input is
@@ -45,7 +55,7 @@ development build, without manylinux certification. A different interpreter
 build, target or opaque settings profile needs separate qualification. No GPU,
 native batching, total allocation or elapsed-time authority follows.
 
-## Minimal Pumas boundary
+## Original proposed Pumas boundary (historical)
 
 Add a local wheel component to the existing validated Torch runtime plan. Input
 is owner-materialized local bytes plus the exact SHA256, size, distribution,

@@ -1,8 +1,8 @@
 //! Managed Python startup request and the current, deliberately closed boundary.
 //!
 //! This request identifies reviewed inputs; it supplies no owner lease, import
-//! provenance or timing authority. Pumas26a has no local-component/interpreter
-//! lease API. Every managed start therefore refuses before backend effects.
+//! provenance or timing authority. The separate Pumas component adapter accepts
+//! owner-issued byte custody; every managed start still refuses before effects.
 use crate::{CapabilityAvailabilityId, RuntimeVariantId};
 use serde::{Deserialize, Serialize};
 use std::fmt;

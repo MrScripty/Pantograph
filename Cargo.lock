@@ -4992,11 +4992,14 @@ dependencies = [
  "pantograph-runtime-registry",
  "pantograph-timing-contracts",
  "parking_lot",
+ "pumas-app-manager",
+ "pumas-library",
  "pyo3",
  "rayon",
  "reqwest",
  "serde",
  "serde_json",
+ "sha2",
  "sysinfo",
  "tar",
  "tempfile",
@@ -8229,9 +8232,38 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "40e24eee682d89fb193496edf918a7f407d30175b2e785fe057e4392dfd182e0"
 
 [[package]]
+name = "pumas-app-manager"
+version = "0.7.0"
+source = "git+https://github.com/MrScripty/Pumas-Library.git?rev=3d977f11be98eb9bce5be199e05b5ed1846043ca#3d977f11be98eb9bce5be199e05b5ed1846043ca"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "chrono",
+ "flate2",
+ "fs2",
+ "futures",
+ "getrandom 0.3.4",
+ "nix 0.29.0",
+ "pumas-library",
+ "regex",
+ "reqwest",
+ "semver 1.0.27",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tar",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "walkdir",
+ "zip 2.4.2",
+ "zstd",
+]
+
+[[package]]
 name = "pumas-library"
 version = "0.7.0"
-source = "git+https://github.com/MrScripty/Pumas-Library.git?rev=26a84e323cae566a46a8f76bef48fa1010aed48b#26a84e323cae566a46a8f76bef48fa1010aed48b"
+source = "git+https://github.com/MrScripty/Pumas-Library.git?rev=3d977f11be98eb9bce5be199e05b5ed1846043ca#3d977f11be98eb9bce5be199e05b5ed1846043ca"
 dependencies = [
  "anyhow",
  "async-trait",

@@ -1,7 +1,8 @@
 # Managed PyO3 interpreter/import registration requirements
 
-These are consumer requirements, pending an implemented and qualified owner
-contract. They do not name a new Pumas method or create a positive proof type.
+These are consumer requirements for positive interpreter/import qualification.
+The owner-issued selected-byte contract is published and linked; it supplies
+no positive runtime proof type.
 Pantograph's explicit managed-start entry continues to refuse. Real wheel
 transfer, alternate artifact publication, installation, native import and live
 execution remain outside this source preparation increment.
@@ -22,17 +23,18 @@ can arrive before an admitted read drains; retain the consumer/service and
 await shutdown before owner teardown. Its deadline gates new reads and retries,
 without promising a bound on a blocked OS read or shutdown.
 
-Pantograph still compiles against Pumas26a. The existing `ArtifactManifest`
-constructors are unchanged at published c9, so
+The original preparation increment compiled against Pumas26a. The existing
+`ArtifactManifest` constructors are unchanged at published c9, so
 `managed_python_acquisition::reviewed_tokenizer_acquisition_manifest` prepares
-the exact one-member selection without moving the dependency pin. It provides
+the exact one-member selection at that original pin. It provides
 the 24,366,281-byte wheel and SHA256 recorded in the
 [handoff](pumas-managed-tokenizer-handoff.json); revision evidence identifies
 the frozen build-source association, including all nine prepared source files.
 It opens no file, acquires no input keepalive, creates no workspace/store/task,
 submits no request and grants no execution readiness. It belongs in the existing
-embedded host's Pumas adapter; the inference library stays independent of Pumas.
-An approved acquisition integration and dependency migration remain later work.
+embedded host's Pumas adapter. The current source advances both Pumas dependencies
+to3d and adds an optional typed owner-selection adapter in inference; real
+acquisition submission remains held.
 
 Pumas published the async `VersionManager` method
 `pub async fn retain_torch_runtime_bytes(&self, tag: &str) -> Result<Arc<RetainedRuntimeReadSource>>`
@@ -43,8 +45,9 @@ selected revision and interpreter depot, releasing the global lock before
 blocking capture. Same-revision physical mutations refuse while retained;
 unrelated revision publication is covered by owner synthetic tests. Acquire the
 actual Arc before initialization/import and retain it through process retirement.
-Pantograph's current dependency stays26a: this increment neither links nor calls
-the newer source, and introduces no parallel lease or package store.
+The current3d dependency includes this source and the genuine component selection
+wrapper. The consumer calls its blocking validation and retains the actual Arc,
+with no parallel lease or package store.
 
 This source retains bytes, not registry metadata: registration/selection metadata
 may change while held. It uses cooperative physical-mutation locks, not protection
@@ -68,16 +71,18 @@ while holding that real owner source. Pumas need not initialize Python inside
 `retain_torch_runtime_bytes`. Both owners still need to agree the association and
 startup protocol; byte-source metadata alone cannot stand in for the consumer's
 actual initialization/import evidence.
-The [startup broker and exact proposed owner-selection API](pumas-python-startup-broker.md)
-now implement controlled exclusion/keepalive lifetime mechanics. Every managed
-phase still refuses; the proposal supplies no observed native proof or positive
-startup implementation.
+The [startup broker and published owner-selection adapter](pumas-python-startup-broker.md)
+implement controlled exclusion and actual selected-byte Arc lifetime mechanics.
+Pumas3d issues revision/manifest/depot facts, with no environment ID; Pantograph's
+configuration identity remains declared. Every managed phase still refuses;
+selected byte custody supplies no observed native proof or positive startup.
 
 ## Exact registration requirements still outstanding
 
-1. **Registered selection.** Resolve the selected base's environment ID, opaque
-   revision and immutable published manifest under owner mutation/publication
-   authority. A component-bearing revision must also bind the reviewed wheel,
+1. **Registered selection.** Resolve the opaque revision and immutable published
+   manifest under owner mutation/publication authority. Keep Pantograph's declared
+   environment/configuration ID separate; Pumas issues no environment ID.
+   A component-bearing revision must also bind the reviewed wheel,
    installed RECORD, native extension and build-source association. Bind its
    actual interpreter depot/build and approved offline dependency closure.
    The handoff selects no base, and a Torch release tag alone is insufficient.
@@ -130,7 +135,8 @@ validated role/member bytes -> owner-associated first-initializer registration -
 controlled initialization/import -> ready registration -> drain -> process-held
 retirement custody. These are protocol phases, not a new executable API or enum.
 Pumas's existing VersionInstaller owns staged validation, atomic publication and
-finalization; its component-bearing immutable assembler remains outstanding.
+finalization; its component-bearing immutable byte assembler is published at3d.
+Its output remains `assembled_unqualified`, with no runnable interpreter entry.
 The broker must retain the same actual source throughout the later phases and
 close readiness on every failure without releasing possibly mapped-image pins.
 

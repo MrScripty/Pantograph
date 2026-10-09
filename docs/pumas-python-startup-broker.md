@@ -1,4 +1,4 @@
-# Python startup broker and proposed owner selection contract
+# Python startup broker and Pumas selected-byte adapter
 
 This increment implements Rust startup exclusion and keepalive retention, using
 controlled tests. It supplies no native initialization/import permission or
@@ -57,7 +57,7 @@ claim or empty broker is not evidence that CPython was uninitialized. Positive
 startup remains refused until all relevant first-entry paths and actual linked
 image/configuration/import provenance are coordinated and qualified.
 
-## Exact proposed Pumas owner contract — not implemented
+## Published Pumas owner contract and consumer adapter
 
 The published Pumas650b API supplies physical revision/depot byte custody:
 `pub async fn retain_torch_runtime_bytes(&self, tag: &str) -> Result<Arc<RetainedRuntimeReadSource>>`.
@@ -76,50 +76,40 @@ interpreter/depot is not evidence of a runnable interpreter entry in the newly
 assembled component bundle. The consumer broker therefore continues to refuse
 even when byte custody and all declared digest fields match.
 
-Proposed names and signatures for owner reconciliation:
+Pantograph now pins Pumas commit `3d977f11be98eb9bce5be199e05b5ed1846043ca`,
+tree `f906976a94f87e086698cf0e4f177e8cd6d87366`. The exact published
+[component assembly/selection contract](https://github.com/MrScripty/Pumas-Library/blob/3d977f11be98eb9bce5be199e05b5ed1846043ca/docs/plans/artifact-acquisition/reports/torch-component-assembly-2026-10-09.md)
+replaces the earlier proposed wrapper. Exported names are:
 
 ```rust
-// Proposed owner types; no production stub or positive implementation exists.
-pub struct RetainedTorchStartupSelection { /* private owner-issued fields */ }
-pub struct TorchStartupSelectionIdentity {
-    pub environment_id: String,
-    pub runtime_revision: String,
-    pub published_manifest_sha256: String,
-    pub interpreter_depot_manifest_sha256: String,
-}
-
+pub struct TorchComponentSelection { /* private owner-issued fields */ }
 impl VersionManager {
-    pub async fn retain_torch_startup_selection(
-        &self,
-        tag: &str,
-        expected: &TorchStartupSelectionIdentity,
-    ) -> Result<RetainedTorchStartupSelection>;
+    pub async fn select_torch_component_revision(
+        &self, revision_tag: &str,
+    ) -> Result<TorchComponentSelection>;
+    pub async fn select_torch_component_revision_matching(
+        &self, revision_tag: &str, expected_manifest_sha256: &str,
+        expected_interpreter_depot_manifest_sha256: &str,
+    ) -> Result<TorchComponentSelection>;
 }
-impl RetainedTorchStartupSelection {
-    pub fn identity(&self) -> &TorchStartupSelectionIdentity;
-    pub fn bytes(&self) -> &Arc<RetainedRuntimeReadSource>;
+impl TorchComponentSelection {
+    pub fn revision_tag(&self) -> &str;
+    pub fn manifest_sha256(&self) -> &str;
+    pub fn interpreter_depot_manifest_sha256(&self) -> &str;
+    pub fn qualification(&self) -> &'static str; // assembled_unqualified
+    pub fn retained_source(&self) -> &Arc<RetainedRuntimeReadSource>;
+    pub fn validate(&self) -> Result<()>; // blocking
 }
 ```
 
-`expected` is a consumer declaration. Pumas must match it against the actual
-published immutable component manifest and managed depot while acquiring the
-genuine revision/depot source through existing publication/deletion custody.
-The returned wrapper has no public constructor or serde reconstruction. Its
-identity must be a frozen fact associated with those actual retained bytes,
-not a later active tag, caller-provided JSON or mutable registry lookup.
-Its immutable manifest must identify the exact wheel/RECORD/native provider,
-build-source association and actual retained base interpreter/depot. An approved
-executable/shared-library build, runnable interpreter entry, startup profile and
-offline dependency closure are separate startup requirements; absent or
-unqualified fields refuse rather than being inferred from base retention.
-The owner's unqualified disposition and launch restrictions must remain bound
-to the same immutable manifest and must not be removed by this retention API.
-No successful wrapper return or empty caller-supplied restriction list may
-constitute executable readiness. The depot digest names the
-owner's closed selected depot manifest; its format and canonical digest must
-be specified by the owner assembler. All field shapes and expected values
-must be validated; omission/mismatch refuses before native effects. This is
-still a byte/selection association, not loaded-image or execution proof.
+The private, cloneable selection is genuinely owner-issued and binds immutable
+revision/manifest/depot identities to the actual retained source. The depot
+digest uses Pumas's domain-separated sorted Interpreter byte manifest. There is
+no Pumas environment identity: Pantograph's `environment_id` remains its own
+configuration declaration. It is not synthesized from an owner tag or digest.
+Owner issuance and byte matching do not authenticate the consumer's declared
+provider wheel, extension or build-source constants against component contents.
+No runnable interpreter or initialized/imported provider is inferred from them.
 
 The method must preserve650b behavior: no lifetime global versions lock;
 same-revision physical mutation exclusion and unrelated revision publication;
@@ -131,14 +121,36 @@ The wrapper and its returned actual source Arc remain held through the consumer
 process/native owner, including possibly partial import failure. No model-stop
 event releases that custody.
 
-Pantograph still links Pumas26a. The new wrapper names are a concrete proposal,
-not claims about current Pumas methods/types or a speculative dependency bump.
-The generic broker is ready for the real Arc lifetime without importing an
-unpublished type; the metadata-only managed entry remains closed. Linking the
-published byte API and owner-issued wrapper requires a separately reviewed
-dependency/consumer adapter increment after agreement and assembly publication.
+The optional `pumas-component-selection` inference feature links the published
+app-manager API; `backend-pytorch` enables it. The typed
+`reserve_component_selection` validates declaration/digest shapes and exact
+revision/manifest/depot matches before blocking `selection.validate()`, then
+reserves the broker with a clone of the exact `retained_source()` Arc. All byte
+validation happens outside the broker mutex while this synchronous stack owns
+the selection. A legacy winner during validation makes final admission refuse.
+The returned transaction retains the genuine selection, rolls back before
+exposure, or parks the actual source Arc in the existing process pin mechanism.
+Pinning returns no execution permission.
 
-## Joint startup protocol after that owner contract
+`start_managed_component_runtime_blocking` is a synchronous typed PyTorch
+preflight. It reserves validated selected-byte custody, refuses the fixed
+`assembled_unqualified` disposition, and releases its pre-exposure reservation.
+Even a future different disposition refuses missing startup evidence. It creates
+no async/detached job, enters no GIL and changes no worker/configuration state.
+An async caller must own and drain its blocking validation effect; this adapter
+does not install a new supervisor or provide bounded OS-read latency. The
+metadata-only managed entry remains closed and existing legacy behavior remains.
+
+Controlled selection tests seed isolated inert assembly/depot metadata and
+sidecar bytes, then invoke the actual public VersionManager selector. They do
+not execute the assembler/install pipeline or any Python/native bytes. Set
+`PUMAS_COMPONENT_TEST_SOURCE_ROOT` to the verified Pumas3d repository source root
+for those fixtures; a missing fixture input fails explicitly.
+The fixture copies upstream embedded sidecar source as bytes only. Those tests
+and fresh broker retirement qualify byte selection/refusal/lifetime/races, not
+real OS process retirement, a transferred wheel or positive runtime startup.
+
+## Joint positive startup protocol still outstanding
 
 1. Obtain and validate the actual owner-issued immutable selection outside the
    broker mutex. A legacy startup can win during capture; after capture, reserve

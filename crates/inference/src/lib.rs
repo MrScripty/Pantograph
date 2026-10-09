@@ -55,6 +55,8 @@ mod managed_redistributables;
 pub mod managed_runtime;
 pub mod model_contracts;
 pub mod process;
+#[cfg(feature = "pumas-component-selection")]
+pub mod pumas_component_selection;
 pub mod python_startup_broker;
 pub mod resident_lifecycle;
 pub mod resource_estimates;
