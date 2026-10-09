@@ -3,7 +3,8 @@
 
 use crate::{
     SchedulerCohortCosts, SchedulerCompletionContext, SchedulerCompletionEvidenceSource,
-    SchedulerCompletionRankingPolicy,
+    SchedulerCompletionRankingPolicy, SchedulerEmpiricalHistoryContext,
+    SchedulerEmpiricalHistoryTotalObservation,
 };
 
 pub const SCHEDULER_EMPIRICAL_MAX_OBSERVATIONS: usize = 128;
@@ -49,34 +50,97 @@ pub struct SchedulerEmpiricalServiceTotalObservation<'a> {
     pub duration_us: Option<u64>,
 }
 
-trait Observation {
-    fn sample(&self) -> SchedulerEmpiricalServiceObservation<'_>;
+// Private kernel identities remain distinct; history never manufactures a live
+// runtime-instance field merely to reuse arithmetic.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum KernelContext<'a> {
+    Exact(SchedulerCompletionContext<'a>),
+    History(SchedulerEmpiricalHistoryContext<'a>),
 }
-impl Observation for SchedulerEmpiricalServiceObservation<'_> {
-    fn sample(&self) -> SchedulerEmpiricalServiceObservation<'_> {
-        *self
+impl KernelContext<'_> {
+    fn valid(&self) -> bool {
+        match self {
+            Self::Exact(context) => context.valid(),
+            Self::History(context) => context.valid(),
+        }
+    }
+    fn convention(&self) -> &str {
+        match self {
+            Self::Exact(context) => context.timing_convention,
+            Self::History(context) => context.timing_convention,
+        }
     }
 }
-impl Observation for SchedulerEmpiricalServiceTotalObservation<'_> {
-    fn sample(&self) -> SchedulerEmpiricalServiceObservation<'_> {
-        // Private arithmetic encoding of ONE known total under its own convention.
-        // These additive identities do not assert any observed phase was zero.
-        SchedulerEmpiricalServiceObservation {
+
+pub(crate) struct KernelObservation<'a> {
+    attempt_id: &'a str,
+    context: KernelContext<'a>,
+    source: SchedulerCompletionEvidenceSource,
+    observed_at_ms: u64,
+    outcome: SchedulerEmpiricalServiceOutcome,
+    costs: SchedulerCohortCosts,
+}
+
+pub(crate) trait Observation {
+    fn sample(&self) -> KernelObservation<'_>;
+}
+impl Observation for SchedulerEmpiricalServiceObservation<'_> {
+    fn sample(&self) -> KernelObservation<'_> {
+        KernelObservation {
             attempt_id: self.attempt_id,
-            context: self.context,
+            context: KernelContext::Exact(self.context),
             source: self.source,
             observed_at_ms: self.observed_at_ms,
             outcome: self.outcome,
-            costs: SchedulerCohortCosts {
-                execution_us: self.duration_us,
-                setup_us: Some(0),
-                transfer_us: Some(0),
-                cleanup_us: Some(0),
-                retention_us: Some(0),
-                reload_us: Some(0),
-            },
+            costs: self.costs,
         }
     }
+}
+
+// Private arithmetic encoding of ONE known total under its own convention.
+// These additive identities do not assert any observed phase was zero. Keeping
+// six additions preserves the existing metering and limits for both identities.
+fn total_costs(duration_us: Option<u64>) -> SchedulerCohortCosts {
+    SchedulerCohortCosts {
+        execution_us: duration_us,
+        setup_us: Some(0),
+        transfer_us: Some(0),
+        cleanup_us: Some(0),
+        retention_us: Some(0),
+        reload_us: Some(0),
+    }
+}
+impl Observation for SchedulerEmpiricalServiceTotalObservation<'_> {
+    fn sample(&self) -> KernelObservation<'_> {
+        KernelObservation {
+            attempt_id: self.attempt_id,
+            context: KernelContext::Exact(self.context),
+            source: self.source,
+            observed_at_ms: self.observed_at_ms,
+            outcome: self.outcome,
+            costs: total_costs(self.duration_us),
+        }
+    }
+}
+impl Observation for SchedulerEmpiricalHistoryTotalObservation<'_> {
+    fn sample(&self) -> KernelObservation<'_> {
+        KernelObservation {
+            attempt_id: self.attempt_id,
+            context: KernelContext::History(self.context),
+            source: self.source,
+            observed_at_ms: self.observed_at_ms,
+            outcome: self.outcome,
+            costs: total_costs(self.duration_us),
+        }
+    }
+}
+
+pub(crate) struct KernelEstimate {
+    pub source: SchedulerCompletionEvidenceSource,
+    pub duration_us: u64,
+    pub support_count: usize,
+    pub rank: usize,
+    pub work: SchedulerEmpiricalServiceWork,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -244,6 +308,47 @@ fn estimate_duration<'a, O: Observation>(
     budget: SchedulerEmpiricalServiceBudget,
     convention: &str,
 ) -> SchedulerEmpiricalServiceResult<'a> {
+    match estimate_kernel(
+        KernelContext::Exact(current_context),
+        observations,
+        quantile,
+        condition,
+        policy,
+        budget,
+        convention,
+    ) {
+        Ok(value) => {
+            SchedulerEmpiricalServiceResult::Estimated(SchedulerEmpiricalServiceEstimate {
+                context: current_context,
+                source: value.source,
+                condition,
+                quantile,
+                duration_us: value.duration_us,
+                total_observations: observations.len(),
+                support_count: value.support_count,
+                rank: value.rank,
+                work: value.work,
+            })
+        }
+        Err((reason, work)) => SchedulerEmpiricalServiceResult::Incomplete { reason, work },
+    }
+}
+
+pub(crate) fn estimate_kernel<O: Observation>(
+    current_context: KernelContext<'_>,
+    observations: &[O],
+    quantile: SchedulerEmpiricalQuantile,
+    condition: SchedulerEmpiricalServiceCondition,
+    policy: SchedulerCompletionRankingPolicy,
+    budget: SchedulerEmpiricalServiceBudget,
+    convention: &str,
+) -> Result<
+    KernelEstimate,
+    (
+        SchedulerEmpiricalServiceIncomplete,
+        SchedulerEmpiricalServiceWork,
+    ),
+> {
     use SchedulerEmpiricalServiceIncomplete as R;
     let mut meter = Meter {
         limit: budget.max_work_units,
@@ -268,7 +373,7 @@ fn estimate_duration<'a, O: Observation>(
         if !current_context.valid() {
             return Err(R::InvalidContext);
         }
-        if current_context.timing_convention != convention {
+        if current_context.convention() != convention {
             return Err(R::UnsupportedConvention);
         }
         let source = observations
@@ -361,23 +466,14 @@ fn estimate_duration<'a, O: Observation>(
         Ok((source, durations[rank - 1], durations.len(), rank))
     })();
     match result {
-        Ok((source, duration_us, support_count, rank)) => {
-            SchedulerEmpiricalServiceResult::Estimated(SchedulerEmpiricalServiceEstimate {
-                context: current_context,
-                source,
-                condition,
-                quantile,
-                duration_us,
-                total_observations: observations.len(),
-                support_count,
-                rank,
-                work: meter.work,
-            })
-        }
-        Err(reason) => SchedulerEmpiricalServiceResult::Incomplete {
-            reason,
+        Ok((source, duration_us, support_count, rank)) => Ok(KernelEstimate {
+            source,
+            duration_us,
+            support_count,
+            rank,
             work: meter.work,
-        },
+        }),
+        Err(reason) => Err((reason, meter.work)),
     }
 }
 

@@ -14,6 +14,7 @@ mod dispatch;
 mod dispatch_selection;
 mod dispatch_selection_policy;
 mod dispatch_selection_validation;
+mod empirical_history;
 mod empirical_timing;
 mod error;
 mod handoff;
@@ -85,6 +86,12 @@ pub use completion_ranking::{
     SchedulerCompletionRankingDiagnostic, SchedulerCompletionRankingPolicy,
     SchedulerCompletionRankingResult, SchedulerCompletionRefusalReason, SchedulerCompletionSample,
     SCHEDULER_COMPLETION_MAX_CANDIDATES,
+};
+
+pub use empirical_history::{
+    estimate_scheduler_empirical_history_total_duration, SchedulerEmpiricalHistoryContext,
+    SchedulerEmpiricalHistoryServiceEstimate, SchedulerEmpiricalHistoryServiceResult,
+    SchedulerEmpiricalHistoryTotalObservation, SCHEDULER_EMPIRICAL_HISTORY_TOTAL_CONVENTION,
 };
 
 pub use empirical_timing::{

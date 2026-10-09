@@ -95,7 +95,29 @@ drain must reproduce every native fact and the same live fence. A new strict
 history interval getter also requires built-in provenance, known load disposition,
 fresh capture and actual drain, completed lifecycle and all four complete phases.
 Old profile equality/getters and the empirical bridge are unchanged. This slice
-adds no pooling, live prediction binding, calibration, telemetry store or selector.
+adds no automatic collection/pooling policy, live prediction binding, calibration,
+telemetry store or selector.
+
+`estimate_selected_text_empirical_history_duration` is a separate pure consumer
+of individually qualified history rows. It has a comparable-history context
+(owner, exact clock, joint identity and reload/reuse stratum) with no live runtime
+instance or running-elapsed field. Genuine reloads can contribute to one window;
+every raw row retains and must validate its own actual load/drain fence. Mixed
+reload/reuse conditions, foreign identities/clocks, stale capture or drain,
+failed/canceled/abandoned/unknown/injected attempts and duplicate IDs refuse the
+whole estimate. No row is filtered to manufacture a successful population.
+
+The history API has its own whole-interval convention and shares the existing
+metered nearest-rank kernel, retaining the 128-row/32,768-work-unit caps. Bridge
+prequalification is separately bounded, as in the old exact-instance bridge;
+returned counters cover the kernel. Scheduler context text retains its 128-byte
+cap; longer observer IDs remain raw evidence and refuse estimation. Whole ns
+intervals round upward once to us.
+The result is an opt-in, not-started, success-conditioned empirical description;
+recorder loss prevents claims of complete coverage or failure rates. This adds no
+store, collection campaign, calibrated prediction, live elapsed origin,
+reservation/admission authority, default selection or performance claim. The
+legacy exact-instance API and its running-residual semantics are preserved.
 
 Opt-in load timing includes the initial native hash, and the whole interval also
 includes pre-execution revalidation. The post-drain hash runs after the intrinsic

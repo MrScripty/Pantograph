@@ -87,7 +87,11 @@ mod runtime_config;
 #[allow(dead_code)]
 mod runtime_dispatch_candidate_provider;
 mod runtime_dispatch_completion_timing;
+mod runtime_dispatch_empirical_history;
 mod runtime_dispatch_empirical_timing;
+pub use runtime_dispatch_empirical_history::{
+    estimate_selected_text_empirical_history_duration, SelectedTextEmpiricalHistoryServiceReport,
+};
 pub use runtime_dispatch_empirical_timing::{
     estimate_selected_text_empirical_service_duration, SelectedTextEmpiricalOutcomeCounts,
     SelectedTextEmpiricalServiceReport,
