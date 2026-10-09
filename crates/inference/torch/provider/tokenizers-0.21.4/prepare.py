@@ -26,8 +26,8 @@ def prepare(destination):
     if target.exists():
         raise SystemExit("Snapshot module already exists")
     patch = bundle / "provider.patch"
-    git("apply", "--check", str(patch))
-    git("apply", str(patch))
+    git("apply", "--check", "--unidiff-zero", str(patch))
+    git("apply", "--unidiff-zero", str(patch))
     shutil.copyfile(bundle / "pantograph_snapshot.rs", target)
     shutil.copyfile(bundle / "snapshot_units.rs", target.with_name("snapshot_units.rs"))
     shutil.copyfile(bundle / "build.rs", destination / "bindings/python/build.rs")
