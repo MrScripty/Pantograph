@@ -9,6 +9,31 @@ pub(crate) struct PumasDispatchPackageFactsSource {
 }
 
 impl PumasDispatchPackageFactsSource {
+    /// Owner-fresh dependency declarations; unsupported selector roles refuse
+    /// this narrow native profile rather than assuming an empty declaration.
+    pub(crate) async fn has_no_declared_dependencies(
+        &self,
+        model_id: &str,
+        platform_key: &str,
+    ) -> Result<bool, String> {
+        let Some(PumasSelectorAccess::Owner(api)) = self.selector_access.as_deref() else {
+            return Ok(false);
+        };
+        let model_id = model_id.strip_prefix("pumas://models/").unwrap_or(model_id);
+        let facts = api
+            .resolve_model_dependency_requirements(model_id, platform_key, Some("candle"))
+            .await
+            .map_err(|error| error.to_string())?;
+        Ok(facts.model_id == model_id
+            && facts.platform_key == platform_key
+            && facts.backend_key.as_deref() == Some("candle")
+            && facts.dependency_contract_version == 1
+            && facts.validation_state
+                == pumas_library::model_library::DependencyValidationState::Resolved
+            && facts.validation_errors.is_empty()
+            && facts.bindings.is_empty())
+    }
+
     pub(crate) fn new(selector_access: Option<Arc<PumasSelectorAccess>>) -> Self {
         Self { selector_access }
     }

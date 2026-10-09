@@ -1,3 +1,4 @@
+use crate::runtime_dispatch_completion_timing::EmbeddedCompletionTimingOptIn;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -76,6 +77,8 @@ pub(crate) struct EmbeddedHostedWorkflowServiceFactoryInput<C> {
     pub(crate) gateway: Arc<inference::InferenceGateway>,
     pub(crate) pumas_selector_access: Arc<PumasSelectorAccess>,
     pub(crate) max_dispatch_source_snapshot_age_ms: u64,
+    pub(crate) completion_timing: Option<EmbeddedCompletionTimingOptIn>,
+    pub(crate) dependency_inventory_app_data_dir: Option<PathBuf>,
 }
 
 impl<C> EmbeddedHostedWorkflowServiceFactoryInput<C> {
@@ -95,6 +98,8 @@ impl<C> EmbeddedHostedWorkflowServiceFactoryInput<C> {
             gateway,
             pumas_selector_access,
             max_dispatch_source_snapshot_age_ms,
+            completion_timing: None,
+            dependency_inventory_app_data_dir: None,
         }
     }
 
@@ -139,6 +144,8 @@ pub(crate) struct EmbeddedHostedWorkflowServiceCompositionOutput {
     pub(crate) workflow_service: SharedWorkflowService,
     pub(crate) dependency_readiness_snapshot_producer:
         EmbeddedDependencyReadinessSnapshotProducerHandle,
+    #[cfg(test)]
+    dependency_readiness: WorkflowDependencyReadinessComponents,
 }
 
 impl EmbeddedHostedWorkflowServiceCompositionOutput {
@@ -186,6 +193,8 @@ pub struct EmbeddedHostedStartupCompositionInput<C> {
     dependency_readiness_runtime_handle: tokio::runtime::Handle,
     dependency_readiness_producer_config: EmbeddedDependencyReadinessSnapshotProducerConfig,
     max_dispatch_source_snapshot_age_ms: u64,
+    completion_timing: Option<EmbeddedCompletionTimingOptIn>,
+    dependency_inventory_app_data_dir: Option<PathBuf>,
 }
 
 impl<C> EmbeddedHostedStartupCompositionInput<C> {
@@ -215,12 +224,31 @@ impl<C> EmbeddedHostedStartupCompositionInput<C> {
             dependency_readiness_producer_config:
                 EmbeddedDependencyReadinessSnapshotProducerConfig::default(),
             max_dispatch_source_snapshot_age_ms,
+            completion_timing: None,
+            dependency_inventory_app_data_dir: None,
         }
     }
 
     #[must_use]
     pub fn with_workflow_service(mut self, workflow_service: WorkflowService) -> Self {
         self.workflow_service = workflow_service;
+        self
+    }
+
+    /// Supply the hosted owner's real managed-runtime directory. This enables
+    /// read-only gateway/runtime/device inventory; it performs no installation.
+    #[must_use]
+    #[cfg(feature = "host-dependency-inventory")]
+    pub fn with_dependency_inventory_app_data_dir(mut self, app_data_dir: PathBuf) -> Self {
+        self.dependency_inventory_app_data_dir = Some(app_data_dir);
+        self
+    }
+
+    /// Enable completion ranking using a trusted bounded native owner producer.
+    /// Session JSON cannot enable this or submit timing values. Default is absent.
+    #[must_use]
+    pub fn with_completion_timing(mut self, opt_in: EmbeddedCompletionTimingOptIn) -> Self {
+        self.completion_timing = Some(opt_in);
         self
     }
 
@@ -239,6 +267,8 @@ pub struct EmbeddedHostedStartupCompositionOutput {
     pub shared_extensions: SharedExtensions,
     pub dependency_activity: Arc<DependencyActivityHub>,
     pub dependency_readiness_snapshot_producer: EmbeddedDependencyReadinessSnapshotProducerHandle,
+    #[cfg(test)]
+    dependency_readiness: WorkflowDependencyReadinessComponents,
 }
 
 #[derive(Clone)]
@@ -268,12 +298,14 @@ impl EmbeddedWorkflowServiceDispatchDependencies {
     }
 
     #[must_use]
+    #[allow(clippy::too_many_arguments)] // Explicit native composition dependencies.
     pub(crate) fn resource_backed(
         pumas_source: PumasDispatchPackageFactsSource,
         runtime_capability_source: RuntimeDispatchCapabilityFactsSource,
         load_target_source: RuntimeDispatchLoadTargetFactsSource,
         resource_facts_source: RuntimeDispatchResourceFactsSource,
         max_snapshot_age_ms: u64,
+        completion_timing: Option<EmbeddedCompletionTimingOptIn>,
         runtime_host_execution_port: Arc<dyn RuntimeHostExecutionPort>,
         reservation_lifecycle_port: Arc<dyn ReservationLifecyclePort>,
     ) -> Self {
@@ -286,7 +318,8 @@ impl EmbeddedWorkflowServiceDispatchDependencies {
         let provider = EmbeddedRuntimeDispatchCandidateProvider::with_source_snapshot_store(
             snapshot_store.clone(),
         )
-        .with_resource_facts_source(resource_facts_source);
+        .with_resource_facts_source(resource_facts_source)
+        .with_completion_timing(completion_timing);
         let refresher = EmbeddedRuntimeDispatchSourceFactRefresher::new(snapshot_store);
         Self::new(
             Arc::new(provider),
@@ -412,6 +445,7 @@ impl EmbeddedWorkflowServiceComposition {
             RuntimeDispatchLoadTargetFactsSource::new(Some(pumas_selector_access.clone())),
             RuntimeDispatchResourceFactsSource::new(input.runtime_registry.clone()),
             input.max_dispatch_source_snapshot_age_ms,
+            input.completion_timing,
             runtime_host_execution_port,
             reservation_lifecycle_port,
         )
@@ -503,6 +537,7 @@ impl EmbeddedWorkflowServiceComposition {
             RuntimeDispatchLoadTargetFactsSource::new(Some(pumas_selector_access.clone())),
             RuntimeDispatchResourceFactsSource::new(factory_input.runtime_registry.clone()),
             factory_input.max_dispatch_source_snapshot_age_ms,
+            factory_input.completion_timing,
             runtime_host_execution_port,
             reservation_lifecycle_port,
         )
@@ -512,6 +547,18 @@ impl EmbeddedWorkflowServiceComposition {
                 factory_input.gateway.clone(),
                 factory_input.runtime_registry.clone(),
             ));
+        #[cfg(feature = "host-dependency-inventory")]
+        let dependency_inventory = factory_input
+            .dependency_inventory_app_data_dir
+            .as_ref()
+            .map(|dir| {
+                Arc::new(
+                    crate::dependency_inventory::DependencyInventoryService::from_app_data_dir(
+                        dir.clone(),
+                        factory_input.gateway.clone(),
+                    ),
+                )
+            });
         let inference_interface_facts_provider =
             Arc::new(EmbeddedInferenceInterfaceFactsProvider::new(
                 PumasDispatchPackageFactsSource::new(Some(pumas_selector_access)),
@@ -531,17 +578,24 @@ impl EmbeddedWorkflowServiceComposition {
             .map_err(|error| EmbeddedRuntimeError::Initialization {
                 message: error.to_string(),
             })?;
+        let producer = EmbeddedDependencyReadinessSnapshotProducer::new(
+            dependency_readiness.snapshot_provider(),
+            dependency_readiness.work_queue(),
+            dependency_readiness.requirements_registry(),
+        )
+        .with_config(dependency_readiness_producer_config);
+        #[cfg(feature = "host-dependency-inventory")]
+        let producer = match dependency_inventory {
+            Some(inventory) => producer.with_dependency_inventory(inventory),
+            None => producer,
+        };
         let dependency_readiness_snapshot_producer =
-            EmbeddedDependencyReadinessSnapshotProducer::new(
-                dependency_readiness.snapshot_provider(),
-                dependency_readiness.work_queue(),
-                dependency_readiness.requirements_registry(),
-            )
-            .with_config(dependency_readiness_producer_config)
-            .spawn(dependency_readiness_runtime_handle)?;
+            producer.spawn(dependency_readiness_runtime_handle)?;
         Ok(EmbeddedHostedWorkflowServiceCompositionOutput {
             workflow_service,
             dependency_readiness_snapshot_producer,
+            #[cfg(test)]
+            dependency_readiness,
         })
     }
 
@@ -570,7 +624,7 @@ impl EmbeddedWorkflowServiceComposition {
             guard.set(node_engine::extension_keys::KV_CACHE_STORE, kv_store);
         }
 
-        let factory_input = EmbeddedHostedWorkflowServiceFactoryInput::new(
+        let mut factory_input = EmbeddedHostedWorkflowServiceFactoryInput::new(
             input.runtime_registry,
             input.runtime_registry_controller,
             input.gateway,
@@ -579,6 +633,8 @@ impl EmbeddedWorkflowServiceComposition {
             input.max_dispatch_source_snapshot_age_ms,
         )
         .with_workflow_service(input.workflow_service);
+        factory_input.completion_timing = input.completion_timing;
+        factory_input.dependency_inventory_app_data_dir = input.dependency_inventory_app_data_dir;
         let composition_input = EmbeddedHostedWorkflowServiceCompositionInput::new(
             factory_input,
             input.dependency_readiness_runtime_handle,
@@ -587,6 +643,8 @@ impl EmbeddedWorkflowServiceComposition {
         let output = Self::resource_backed_hosted_bundle(composition_input)?;
 
         Ok(EmbeddedHostedStartupCompositionOutput {
+            #[cfg(test)]
+            dependency_readiness: output.dependency_readiness,
             workflow_service: output.workflow_service,
             shared_extensions,
             dependency_activity,
@@ -831,6 +889,7 @@ mod tests {
             RuntimeDispatchLoadTargetFactsSource::new(None),
             RuntimeDispatchResourceFactsSource::new(registry),
             1_000,
+            None,
             Arc::new(RejectingRuntimeHostPort),
             Arc::new(RejectingReservationLifecyclePort),
         );
@@ -885,6 +944,11 @@ mod tests {
             assert!(candle.models.is_empty());
         }
         drop(shared);
+    }
+
+    #[cfg(all(feature = "backend-candle", feature = "host-dependency-inventory"))]
+    mod native_cpu_qualification {
+        include!("native_cpu_workflow_qualification_tests.rs");
     }
 
     #[cfg(feature = "backend-candle")]
@@ -1405,10 +1469,192 @@ mod tests {
         }
 
         assert!(Arc::strong_count(output.workflow_service()) >= 1);
+        assert_eq!(
+            output
+                .dependency_readiness
+                .snapshot_provider()
+                .snapshot_count(),
+            0
+        );
         output
             .dependency_readiness_snapshot_producer
             .shutdown()
             .await;
+    }
+
+    #[cfg(all(feature = "host-dependency-inventory", feature = "backend-candle"))]
+    async fn hosted_candle_feature_snapshot(
+        with_inventory: bool,
+        feature_id: &str,
+    ) -> pantograph_dependency_planning::DependencyEnvironmentResult {
+        use pantograph_dependency_environment_service::{
+            DependencyEnvironmentProvider, DependencyReadinessWorkItem,
+            DependencyReadinessWorkItemProvenance, DependencyRequirementsPayload,
+        };
+        use pantograph_dependency_planning::{
+            DependencyEnvironmentRequest, ValidatedDependencyEnvironmentRequest,
+        };
+        let temp_dir = tempfile::tempdir().expect("tempdir");
+        let pumas_api = Arc::new(
+            crate::pumas_test_support::builder(temp_dir.path())
+                .with_hf_client(false)
+                .with_process_manager(false)
+                .build()
+                .await
+                .expect("pumas api"),
+        );
+        let gateway = Arc::new(inference::InferenceGateway::new());
+        let mut factory_input = EmbeddedHostedWorkflowServiceFactoryInput::new(
+            Arc::new(RuntimeRegistry::new()),
+            gateway.clone(),
+            gateway,
+            Arc::new(PumasSelectorAccess::Owner(pumas_api)),
+            Some(1),
+            1_000,
+        )
+        .with_workflow_service(workflow_service_with_artifact_store(&temp_dir));
+        assert!(factory_input.dependency_inventory_app_data_dir.is_none());
+        if with_inventory {
+            factory_input.dependency_inventory_app_data_dir =
+                Some(temp_dir.path().join("actual-host-app-data"));
+        }
+        let input = EmbeddedHostedWorkflowServiceCompositionInput::new(
+            factory_input,
+            tokio::runtime::Handle::current(),
+        )
+        .with_dependency_readiness_producer_config(
+            EmbeddedDependencyReadinessSnapshotProducerConfig {
+                poll_interval: std::time::Duration::from_millis(5),
+            },
+        );
+        let output = EmbeddedWorkflowServiceComposition::resource_backed_hosted_bundle(input)
+            .expect("actual hosted bundle");
+
+        let mut value: serde_json::Value = serde_json::from_str(include_str!(
+            "../../pantograph-dependency-planning/tests/fixtures/dependency_environment_resolve_request.json"
+        ))
+        .expect("request fixture");
+        let binding_id = format!("candle.{feature_id}");
+        value["dependency_requirements_id"] = serde_json::json!("deps.hosted.candle.feature");
+        for key in ["identity_key", "planning_request"] {
+            value[key]["model_ref"] = serde_json::json!({"model_id": "synthetic/embedding"});
+            value[key]["task_id"] = serde_json::json!("embedding");
+            value[key]["task_type"] = serde_json::Value::Null;
+            value[key]["expected_artifact_kind"] = serde_json::Value::Null;
+            value[key]["scheduler_intent"] = serde_json::json!({
+                "requested_runtime_id": "candle", "requested_device_id": "cpu"
+            });
+            value[key]["selected_binding_ids"] = serde_json::json!([binding_id]);
+        }
+        value["planning_request"]["dependency_override_patches"] = serde_json::json!([]);
+        let raw: DependencyEnvironmentRequest = serde_json::from_value(value).expect("request");
+        let request = ValidatedDependencyEnvironmentRequest::try_from(raw).expect("valid request");
+        let payload = DependencyRequirementsPayload::new(
+            request
+                .as_request()
+                .dependency_requirements_id
+                .clone()
+                .expect("requirements id"),
+            request.as_request().identity_key.clone(),
+            vec![serde_json::from_value(serde_json::json!({
+                "name": "candle_feature", "kind": "runtime_feature",
+                "runtime_feature": {"runtime_id": "candle", "feature_id": feature_id}
+            }))
+            .expect("runtime feature requirement")],
+            vec![serde_json::from_value(serde_json::json!({
+                "binding_id": binding_id, "requirement_name": "candle_feature",
+                "environment_kind": "runtime_feature",
+                "runtime_feature": {"runtime_id": "candle", "feature_id": feature_id}
+            }))
+            .expect("runtime feature binding")],
+            request
+                .as_request()
+                .identity_key
+                .selected_binding_ids
+                .clone(),
+        )
+        .expect("valid requirements metadata");
+        output
+            .dependency_readiness
+            .requirements_registry()
+            .insert_payload(payload);
+        let provenance = DependencyReadinessWorkItemProvenance::new(
+            "hosted-session".parse().expect("session"),
+            "hosted-run".parse().expect("run"),
+            "hosted-task".parse().expect("task"),
+        );
+        output
+            .dependency_readiness
+            .work_queue()
+            .enqueue(DependencyReadinessWorkItem::new(
+                provenance,
+                request.clone(),
+            ));
+        let provider = output.dependency_readiness.snapshot_provider();
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            while provider.snapshot_count() == 0 {
+                tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .expect("actual producer published a snapshot");
+        let result = provider.resolve(&request);
+        output
+            .dependency_readiness_snapshot_producer
+            .shutdown()
+            .await;
+        result
+    }
+
+    #[cfg(all(feature = "host-dependency-inventory", feature = "backend-candle"))]
+    #[tokio::test]
+    async fn hosted_inventory_observes_real_compiled_candle_lifecycle() {
+        let result = hosted_candle_feature_snapshot(true, "request_lifecycle").await;
+        assert_eq!(
+            result.readiness_state,
+            pantograph_dependency_planning::DependencyEnvironmentReadinessState::Ready
+        );
+        assert_eq!(
+            result.selected_binding_ids[0].as_str(),
+            "candle.request_lifecycle"
+        );
+    }
+
+    #[cfg(all(feature = "host-dependency-inventory", feature = "backend-candle"))]
+    #[tokio::test]
+    async fn hosted_inventory_preserves_unsupported_candle_feature() {
+        let result = hosted_candle_feature_snapshot(true, "external_connection").await;
+        assert_eq!(
+            result.readiness_state,
+            pantograph_dependency_planning::DependencyEnvironmentReadinessState::Unavailable
+        );
+        assert_eq!(
+            result.selected_binding_ids[0].as_str(),
+            "candle.external_connection"
+        );
+        assert_eq!(result.binding_statuses.len(), 1);
+        assert_eq!(
+            result.binding_statuses[0].binding_id.as_str(),
+            "candle.external_connection"
+        );
+        assert_eq!(
+            result.binding_statuses[0].state,
+            pantograph_dependency_planning::DependencyBindingStatusState::Unavailable
+        );
+        assert!(result.diagnostics.iter().any(|diagnostic| {
+            diagnostic.code == pantograph_dependency_planning::DependencyPlanningDiagnosticCode::RuntimeUnavailable
+                && diagnostic.field_path.as_deref() == Some("dependency_environment.runtime_feature.source")
+        }));
+    }
+
+    #[cfg(all(feature = "host-dependency-inventory", feature = "backend-candle"))]
+    #[tokio::test]
+    async fn hosted_inventory_without_explicit_owner_context_stays_conservative() {
+        let result = hosted_candle_feature_snapshot(false, "request_lifecycle").await;
+        assert_eq!(
+            result.readiness_state,
+            pantograph_dependency_planning::DependencyEnvironmentReadinessState::NotImplemented
+        );
     }
 
     #[tokio::test]
@@ -1481,6 +1727,7 @@ mod tests {
         assert_eq!(input.kv_cache_dir, PathBuf::from("kv-root"));
         assert_eq!(input.max_loaded_sessions, Some(7));
         assert_eq!(input.max_dispatch_source_snapshot_age_ms, 2_345);
+        assert!(input.dependency_inventory_app_data_dir.is_none());
         assert_eq!(
             input.dependency_readiness_producer_config,
             EmbeddedDependencyReadinessSnapshotProducerConfig::default()
@@ -1498,6 +1745,13 @@ mod tests {
         };
         let input = input.with_dependency_readiness_producer_config(config.clone());
         assert_eq!(input.dependency_readiness_producer_config, config);
+        #[cfg(feature = "host-dependency-inventory")]
+        {
+            let owner_path = PathBuf::from("actual-owner-dir");
+            let input = input.with_dependency_inventory_app_data_dir(owner_path.clone());
+            assert_eq!(input.dependency_inventory_app_data_dir, Some(owner_path));
+            assert!(Arc::ptr_eq(&input.gateway, &gateway));
+        }
     }
 
     #[tokio::test]

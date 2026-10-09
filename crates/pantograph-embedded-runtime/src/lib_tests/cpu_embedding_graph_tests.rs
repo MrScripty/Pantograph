@@ -5,7 +5,7 @@ use pantograph_workflow_service::{
     FileSystemWorkflowGraphStore, WorkflowGraphLoadRequest, WorkflowGraphSaveRequest,
 };
 
-fn embedding_graph(model_ref: &PumasModelRef) -> WorkflowGraph {
+pub(super) fn embedding_graph(model_ref: &PumasModelRef) -> WorkflowGraph {
     let mut descriptor: InferenceInterfaceDescriptor = serde_json::from_str(include_str!(
         "../../../pantograph-inference-interface-contracts/tests/fixtures/descriptor_embedding_ready.json"
     ))
@@ -57,7 +57,7 @@ fn embedding_graph(model_ref: &PumasModelRef) -> WorkflowGraph {
     }
 }
 
-fn install_embedding_readiness(
+pub(super) fn install_embedding_readiness(
     service: &WorkflowService,
     provider: &DependencyEnvironmentReadinessSnapshotProvider,
     graph: &WorkflowGraph,
@@ -83,7 +83,7 @@ fn install_embedding_readiness(
         vec![DependencyBindingId::parse("candle-embedding").unwrap()],
     );
     planning.task_id = DependencyTaskId::parse("embedding").unwrap();
-    planning.task_type = Some(planning.task_id.clone());
+    planning.task_type = None;
     planning.scheduler_intent.requested_runtime_id =
         Some(RuntimeIntentId::parse("candle").unwrap());
     planning.scheduler_intent.requested_device_id = Some(DeviceIntentId::parse("cpu").unwrap());

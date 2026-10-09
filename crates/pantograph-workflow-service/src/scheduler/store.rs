@@ -25,10 +25,14 @@ use super::{
 
 pub(crate) const WORKFLOW_SESSION_QUEUE_POLL_MS: u64 = 10;
 
+#[path = "store_completion_lookahead.rs"]
+mod store_completion_lookahead;
 #[path = "store_diagnostics.rs"]
 mod store_diagnostics;
 #[path = "store_queue.rs"]
 mod store_queue;
+#[path = "store_serial_ready.rs"]
+mod store_serial_ready;
 #[path = "store_task_results.rs"]
 mod store_task_results;
 
@@ -47,6 +51,14 @@ pub(crate) struct WorkflowExecutionSessionQueuedRun {
     pub(super) scheduler_decision_reason: WorkflowSchedulerDecisionReason,
     pub(crate) enqueued_tick: u64,
     pub(super) starvation_bypass_count: u32,
+}
+
+#[derive(Debug, Clone)]
+struct WorkflowCompletionCleanupGate {
+    first_task_id: String,
+    first_attempt_id: WorkflowSchedulerTaskAttemptId,
+    successor_task_id: String,
+    reservation_lease_id: Option<SchedulerReservationLeaseId>,
 }
 
 #[derive(Debug, Clone)]
@@ -69,6 +81,7 @@ struct WorkflowExecutionSessionActiveRun {
     scheduler_task_results: BTreeMap<String, WorkflowSchedulerTaskResult>,
     scheduler_task_attempts: BTreeMap<String, WorkflowExecutionSessionTaskAttempt>,
     runtime_dispatch_readiness_proofs: BTreeMap<String, DependencyReadinessProofEnvelope>,
+    completion_cleanup_gate: Option<WorkflowCompletionCleanupGate>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

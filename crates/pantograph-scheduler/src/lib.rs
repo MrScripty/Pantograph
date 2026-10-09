@@ -7,6 +7,8 @@
 
 mod batching;
 mod capability;
+mod completion_ranking;
+mod dependency_completion;
 mod dispatch;
 mod dispatch_selection;
 mod dispatch_selection_policy;
@@ -20,7 +22,22 @@ mod queue;
 mod readiness;
 mod resource;
 mod resource_types;
+mod serial_admission;
+mod serial_dispatch;
 mod supervision;
+mod two_completion;
+
+pub use serial_admission::{
+    SchedulerSerialAdmission, SchedulerSerialAdmissionRefusal, SchedulerSerialDispatch,
+    SchedulerSerialPreparation,
+};
+pub use serial_dispatch::{
+    SchedulerSerialAttemptIdentity, SchedulerSerialBoundDispatch, SchedulerSerialCleanupEvent,
+    SchedulerSerialCleanupPending, SchedulerSerialCleanupState, SchedulerSerialDispatchRefusal,
+    SchedulerSerialDrainState, SchedulerSerialDrainedDispatch, SchedulerSerialExecutingDispatch,
+    SchedulerSerialOwnerSnapshot, SchedulerSerialRuntimeOwnerLease,
+    SchedulerSerialVerifiedWarmDrain,
+};
 
 pub use batching::{
     SchedulerBatchCandidate, SchedulerBatchDiagnostic, SchedulerBatchDiagnosticCode,
@@ -33,6 +50,26 @@ pub use capability::{
     SchedulerCapabilityHintSnapshot, SchedulerCapabilitySeverity, SchedulerDeviceCapabilityHint,
     SchedulerRuntimeCapabilityHint, SchedulerTraitOptionHint, SchedulerTraitOptionValue,
     ValidatedSchedulerCapabilityHintSnapshot, SCHEDULER_CAPABILITY_HINT_CONTRACT_VERSION,
+};
+pub use completion_ranking::{
+    completion_diagnostics_bounded, select_scheduler_candidate_with_completion,
+    SchedulerCompletionContext, SchedulerCompletionEvidence, SchedulerCompletionEvidenceSource,
+    SchedulerCompletionRankingDiagnostic, SchedulerCompletionRankingPolicy,
+    SchedulerCompletionRankingResult, SchedulerCompletionRefusalReason, SchedulerCompletionSample,
+    SCHEDULER_COMPLETION_MAX_CANDIDATES,
+};
+
+pub use two_completion::{
+    select_scheduler_candidate_with_two_completions, SchedulerTwoCompletionBudget,
+    SchedulerTwoCompletionContinuation, SchedulerTwoCompletionDiagnostic,
+    SchedulerTwoCompletionFallback, SchedulerTwoCompletionPrefix, SchedulerTwoCompletionResult,
+    SchedulerTwoCompletionScore, SCHEDULER_TWO_COMPLETION_MAX_EVENTS,
+    SCHEDULER_TWO_COMPLETION_MAX_OFFERS, SCHEDULER_TWO_COMPLETION_MAX_PLANS,
+};
+
+pub use dependency_completion::{
+    select_scheduler_candidate_with_dependency_completion, SchedulerCompletionSuccessorRequest,
+    SchedulerDependencyCompletionEvidence, ValidatedSchedulerCompletionSuccessor,
 };
 pub use dispatch::{
     SchedulerBatchingGroupId, SchedulerDispatchDecision, SchedulerDispatchDiagnostic,

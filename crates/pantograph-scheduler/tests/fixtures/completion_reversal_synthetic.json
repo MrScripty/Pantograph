@@ -1,0 +1,20 @@
+{
+  "source": "synthetic",
+  "scope": "thesis section 12.1, serialized single-task earliest-finish subset",
+  "cases": [
+    {
+      "name": "cold_beats_warm",
+      "warm_us": [0, 0, 12000000],
+      "cold_us": [2000000, 0, 3000000],
+      "expected_candidate": "candidate.cold",
+      "expected_completion_us": 5000000
+    },
+    {
+      "name": "required_transfer_reverses_choice",
+      "warm_us": [0, 0, 12000000],
+      "cold_us": [2000000, 8000000, 3000000],
+      "expected_candidate": "candidate.warm",
+      "expected_completion_us": 12000000
+    }
+  ]
+}

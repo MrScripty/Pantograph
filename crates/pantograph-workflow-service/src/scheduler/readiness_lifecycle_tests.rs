@@ -41,6 +41,131 @@ use crate::scheduler::lifecycle::{
 use crate::scheduler::WorkflowSchedulerTaskOrchestrator;
 
 #[test]
+fn readiness_rejects_proofs_for_different_planning_facts() {
+    use super::WorkflowDependencyReadinessLifecycleError;
+    use crate::workflow::WorkflowServiceError;
+    use pantograph_dependency_planning::DependencyPlanningPlatformContext;
+
+    for mismatch in [
+        "task_type",
+        "task_id",
+        "platform_absent",
+        "platform_other",
+        "model",
+        "runtime",
+        "device",
+    ] {
+        let task_intent = runtime_host_request_fixture().handoff.task_intent;
+        let mut other_request = dependency_planning_request_for_intent(&task_intent);
+        match mismatch {
+            "task_type" => other_request.task_type = Some(other_request.task_id.clone()),
+            "task_id" => other_request.task_id = "embedding".parse().unwrap(),
+            "platform_absent" => other_request.platform_context = None,
+            "platform_other" => {
+                other_request.platform_context = Some(
+                    DependencyPlanningPlatformContext::parse_platform_key("other-os-other-arch")
+                        .unwrap(),
+                )
+            }
+            "model" => other_request.model_ref.model_id = "other/model".into(),
+            "runtime" => {
+                other_request.scheduler_intent.requested_runtime_id =
+                    Some("other-runtime".parse().unwrap())
+            }
+            "device" => {
+                other_request.scheduler_intent.requested_device_id =
+                    Some("other-device".parse().unwrap())
+            }
+            _ => unreachable!(),
+        }
+        let other_proof = produce_dependency_requirements_proof(
+            &ValidatedDependencyPlanningRequest::try_from(other_request).unwrap(),
+            None,
+        )
+        .unwrap();
+        let mut task = task_from_intent(task_intent.clone());
+        let source = &mut task
+            .schedulable_intent_template
+            .as_mut()
+            .unwrap()
+            .dependency_readiness_source;
+        assert_ne!(
+            source.dependency_requirements_id, other_proof.dependency_requirements_id,
+            "{mismatch}"
+        );
+        source.dependency_requirements_id = other_proof.dependency_requirements_id;
+        let task_graph = task_graph(vec![task]);
+        let orchestrator = orchestrator_without_runtime_host_response();
+        let mut store = initialized_store(&orchestrator, &task_graph);
+        let session_id = begin_active_run_for_task_graph(&mut store, &task_graph);
+        orchestrator
+            .initialize_active_run_task_state(
+                &mut store,
+                &session_id,
+                task_intent.workflow_run_id.as_str(),
+                task_graph,
+            )
+            .unwrap();
+        let lifecycle = WorkflowDependencyReadinessLifecycle::new(orchestrator);
+        let result = lifecycle.readiness_request_for_active_runtime_task(
+            &store,
+            &session_id,
+            task_intent.workflow_run_id.as_str(),
+            task_intent.task_id.as_str(),
+            DependencyReadinessPolicy::CheckOnly,
+        );
+        match result {
+            Err(WorkflowDependencyReadinessLifecycleError::WorkflowService(
+                WorkflowServiceError::InvalidRequest(inner),
+            )) => {
+                assert_eq!(inner, format!("scheduler task '{}' dependency requirements id does not match the saved validation proof", task_intent.task_id.as_str()), "{mismatch}");
+            }
+            _ => panic!("different {mismatch} proof must fail the saved requirements guard"),
+        }
+    }
+}
+
+#[test]
+fn readiness_retains_saved_override_fingerprint_guard() {
+    use super::WorkflowDependencyReadinessLifecycleError;
+    use crate::workflow::WorkflowServiceError;
+    let task_intent = runtime_host_request_fixture().handoff.task_intent;
+    let mut task = task_from_intent(task_intent.clone());
+    task.schedulable_intent_template
+        .as_mut()
+        .unwrap()
+        .dependency_readiness_source
+        .dependency_override_fingerprint = "other-overrides".parse().unwrap();
+    let task_graph = task_graph(vec![task]);
+    let orchestrator = orchestrator_without_runtime_host_response();
+    let mut store = initialized_store(&orchestrator, &task_graph);
+    let session_id = begin_active_run_for_task_graph(&mut store, &task_graph);
+    orchestrator
+        .initialize_active_run_task_state(
+            &mut store,
+            &session_id,
+            task_intent.workflow_run_id.as_str(),
+            task_graph,
+        )
+        .unwrap();
+    let lifecycle = WorkflowDependencyReadinessLifecycle::new(orchestrator);
+    match lifecycle.readiness_request_for_active_runtime_task(
+        &store,
+        &session_id,
+        task_intent.workflow_run_id.as_str(),
+        task_intent.task_id.as_str(),
+        DependencyReadinessPolicy::CheckOnly,
+    ) {
+        Err(WorkflowDependencyReadinessLifecycleError::WorkflowService(
+            WorkflowServiceError::InvalidRequest(inner),
+        )) => {
+            assert_eq!(inner, format!("scheduler task '{}' dependency override fingerprint does not match the saved validation proof", task_intent.task_id.as_str()));
+        }
+        _ => panic!("different override fingerprint must fail the saved proof guard"),
+    }
+}
+
+#[test]
 fn readiness_lifecycle_builds_request_and_admits_ready_provider_result() {
     let orchestrator = orchestrator_without_runtime_host_response();
     let lifecycle = WorkflowDependencyReadinessLifecycle::new(orchestrator.clone());
@@ -481,19 +606,16 @@ fn ready_preflight_result(task_intent: &SchedulableTaskIntent) -> DependencyPref
 fn dependency_planning_request_for_intent(
     task_intent: &SchedulableTaskIntent,
 ) -> DependencyPlanningRequest {
-    DependencyPlanningRequest {
-        model_ref: task_intent.model_ref.clone(),
-        task_id: task_intent.task_type.clone(),
-        task_type: Some(task_intent.task_type.clone()),
-        expected_artifact_kind: None,
-        scheduler_intent: SchedulerIntent {
+    crate::inference_dependency_planning::inference_dependency_planning_request(
+        task_intent.model_ref.clone(),
+        task_intent.task_type.clone(),
+        SchedulerIntent {
             requested_runtime_id: task_intent.constraints.requested_runtime_id.clone(),
             requested_device_id: task_intent.constraints.requested_device_id.clone(),
         },
-        platform_context: None,
-        selected_binding_ids: Vec::new(),
-        dependency_override_patches: task_intent.dependency_override_patches.clone(),
-        trait_intents: task_intent
+        Vec::new(),
+        task_intent.dependency_override_patches.clone(),
+        task_intent
             .trait_settings
             .iter()
             .map(|setting| DependencyTraitIntent {
@@ -517,7 +639,7 @@ fn dependency_planning_request_for_intent(
                 },
             })
             .collect(),
-        caller_context: DependencyPlanningCallerContext {
+        DependencyPlanningCallerContext {
             source_node_type: Some(
                 DependencyNodeTypeId::parse("llm-inference").expect("node type"),
             ),
@@ -526,7 +648,8 @@ fn dependency_planning_request_for_intent(
             port_id: None,
             run_id: Some(task_intent.workflow_run_id.as_str().to_string()),
         },
-    }
+    )
+    .expect("graph-compatible planning request")
 }
 
 fn orchestrator_without_runtime_host_response() -> WorkflowSchedulerTaskOrchestrator {
@@ -649,5 +772,110 @@ fn empty_run_request() -> WorkflowExecutionSessionRunRequest {
         override_selection: None,
         timeout_ms: None,
         priority: None,
+    }
+}
+
+#[test]
+fn checked_inventory_evidence_dominates_legacy_resolve_snapshot() {
+    use pantograph_dependency_environment_service::{
+        DependencyEnvironmentProvider, DependencyEnvironmentReadinessSnapshot,
+        DependencyEnvironmentReadinessSnapshotProvider,
+        DependencyEnvironmentReadinessSnapshotStatus,
+    };
+    use pantograph_dependency_planning::{
+        DependencyEnvironmentAction, DependencyEnvironmentFailureState,
+        DependencyEnvironmentRequest, DependencyEnvironmentResult,
+        DependencyEnvironmentValidationState, ValidatedDependencyEnvironmentRequest,
+    };
+    let envelope=ValidatedDependencyReadinessRequestEnvelope::try_from(serde_json::from_str::<serde_json::Value>(include_str!(
+        "../../../pantograph-dependency-planning/tests/fixtures/dependency_readiness_request_envelope.json")).unwrap()).unwrap();
+    let source = &envelope.as_envelope().readiness_request;
+    let request_for = |action| {
+        ValidatedDependencyEnvironmentRequest::try_from(DependencyEnvironmentRequest {
+            contract_version: 1,
+            action,
+            identity_key: source.identity_key.clone(),
+            planning_request: source.planning_request.clone(),
+            dependency_requirements_id: Some(
+                envelope
+                    .as_envelope()
+                    .execution_context
+                    .dependency_requirements_id
+                    .clone(),
+            ),
+            environment_ref: None,
+        })
+        .unwrap()
+    };
+    let ready_for = |request: &ValidatedDependencyEnvironmentRequest| {
+        let mut result:DependencyEnvironmentResult=serde_json::from_str(include_str!(
+            "../../../pantograph-dependency-planning/tests/fixtures/dependency_environment_ready_result.json")).unwrap();
+        result.action = request.as_request().action;
+        result.identity_key = request.as_request().identity_key.clone();
+        result.dependency_requirements_id = request.as_request().dependency_requirements_id.clone();
+        result.bindings[0].binding_id = source.identity_key.selected_binding_ids[0].clone();
+        result.selected_binding_ids = source.identity_key.selected_binding_ids.clone();
+        result.binding_statuses.clear();
+        result.operation = None;
+        result
+    };
+    for case in ["absent", "ready", "missing", "stale", "failed"] {
+        let provider = DependencyEnvironmentReadinessSnapshotProvider::new();
+        let resolve = request_for(DependencyEnvironmentAction::Resolve);
+        provider
+            .insert_snapshot(
+                DependencyEnvironmentReadinessSnapshot::for_request(
+                    &resolve,
+                    ready_for(&resolve),
+                    DependencyEnvironmentReadinessSnapshotStatus::Fresh,
+                )
+                .unwrap(),
+            )
+            .unwrap();
+        if case != "absent" {
+            let check = request_for(DependencyEnvironmentAction::Check);
+            let mut result = ready_for(&check);
+            if case == "missing" {
+                result.readiness_state = DependencyEnvironmentReadinessState::Missing;
+                result.validation_state = DependencyEnvironmentValidationState::Valid;
+            }
+            if case == "failed" {
+                result.readiness_state = DependencyEnvironmentReadinessState::Failed;
+                result.validation_state = DependencyEnvironmentValidationState::Invalid;
+                result.failure_state = Some(DependencyEnvironmentFailureState::InvalidRequest);
+                result.diagnostics = NotImplementedDependencyEnvironmentProvider
+                    .resolve(&check)
+                    .diagnostics;
+            }
+            provider
+                .insert_snapshot(
+                    DependencyEnvironmentReadinessSnapshot::for_request(
+                        &check,
+                        result,
+                        if case == "stale" {
+                            DependencyEnvironmentReadinessSnapshotStatus::Stale
+                        } else {
+                            DependencyEnvironmentReadinessSnapshotStatus::Fresh
+                        },
+                    )
+                    .unwrap(),
+                )
+                .unwrap();
+        }
+        let result = DependencyEnvironmentService::new(provider)
+            .resolve_dependency_readiness(&envelope)
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            result.readiness_state == DependencyEnvironmentReadinessState::Ready,
+            matches!(case, "absent" | "ready"),
+            "{case}"
+        );
+        if case == "missing" {
+            assert_eq!(
+                result.readiness_state,
+                DependencyEnvironmentReadinessState::Missing
+            );
+        }
     }
 }

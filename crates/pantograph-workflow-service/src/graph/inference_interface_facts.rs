@@ -17,6 +17,19 @@ pub enum InferenceInterfaceFactsProviderError {
 
 #[async_trait]
 pub trait InferenceInterfaceFactsProvider: std::fmt::Debug + Send + Sync {
+    /// Resolve authoritative requirements independently of host readiness.
+    /// Returning None preserves the existing dependency-provider path. Resolved
+    /// requirements alone are never executable readiness evidence.
+    async fn resolved_dependency_requirements(
+        &self,
+        _request: &pantograph_dependency_planning::ValidatedDependencyEnvironmentRequest,
+    ) -> Result<
+        Option<pantograph_dependency_planning::ValidatedDependencyEnvironmentResult>,
+        InferenceInterfaceFactsProviderError,
+    > {
+        Ok(None)
+    }
+
     async fn facts_for_resolution_inputs(
         &self,
         inputs: &[InferenceInterfaceGraphResolutionInput],

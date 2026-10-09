@@ -1,4 +1,3 @@
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
 use crate::reservation::RuntimeReservationRecord;
@@ -18,7 +17,7 @@ pub enum RuntimeReservationPublicationError<E> {
 #[derive(Debug)]
 pub(crate) struct PendingReservation {
     token: u64,
-    previous: Option<RuntimeReservationRecord>,
+    pub(crate) previous: Option<RuntimeReservationRecord>,
     committed: RuntimeReservationRecord,
 }
 
@@ -63,6 +62,9 @@ impl RuntimeReservationCustody {
             .pending_reservations
             .remove(&self.reservation_id)
             .expect("checked pending lease");
+        if let Some(previous) = &pending.previous {
+            state.pending_predecessors.remove(&previous.reservation_id);
+        }
         state
             .reservations
             .insert(self.reservation_id, pending.committed);
@@ -104,7 +106,9 @@ impl RuntimeRegistry {
         expected: &RuntimeReservationAdmissionObservation,
         validate: impl FnOnce(&RuntimeReservationLease) -> Result<T, E>,
     ) -> Result<(T, RuntimeReservationCustody), RuntimeReservationPublicationError<E>> {
-        let token = self.reservation_sequence.fetch_add(1, Ordering::Relaxed) + 1;
+        let token = self
+            .next_reservation_token()
+            .map_err(RuntimeReservationPublicationError::Registry)?;
         let mut state = self
             .state
             .lock()
@@ -153,6 +157,18 @@ impl RuntimeRegistry {
         .map_err(RuntimeReservationPublicationError::Registry)?;
         let output = validate(&committed.clone().into_lease())
             .map_err(RuntimeReservationPublicationError::Validation)?;
+        if let Some(previous) = &previous {
+            state.reservations.remove(&previous.reservation_id);
+            state
+                .runtimes
+                .get_mut(&held.runtime_id)
+                .expect("validated runtime")
+                .active_reservations
+                .remove(&previous.reservation_id);
+            state
+                .pending_predecessors
+                .insert(previous.reservation_id, reservation_id);
+        }
         state
             .runtimes
             .get_mut(&held.runtime_id)
@@ -212,6 +228,7 @@ pub(crate) fn prospective_reservation(
     next_id: u64,
 ) -> Result<(RuntimeReservationRecord, Option<RuntimeReservationRecord>), RuntimeRegistryError> {
     let runtime_id = canonical_runtime_id(&request.runtime_id);
+    crate::reject_eviction_pending(state, &runtime_id)?;
     let previous = request
         .reservation_owner_id
         .as_deref()
@@ -236,6 +253,9 @@ pub(crate) fn prospective_reservation(
         if state
             .pending_reservations
             .contains_key(&previous.reservation_id)
+            || state
+                .executing_reservations
+                .contains_key(&previous.reservation_id)
         {
             return Err(RuntimeRegistryError::ReservationCustodyPending(
                 previous.reservation_id,
@@ -251,10 +271,10 @@ pub(crate) fn prospective_reservation(
     let claim = reservation_claim_from_requirements(&runtime_id, request.requirements.as_ref())?;
     Ok((
         RuntimeReservationRecord {
-            reservation_id: previous
-                .as_ref()
-                .map(|record| record.reservation_id)
-                .unwrap_or(next_id),
+            // This ID already crosses selection, dispatch and cleanup. Every
+            // replacement invalidates the original admitted incarnation, even
+            // when metadata/claims match or later return to their old values.
+            reservation_id: next_id,
             created_at_ms: previous
                 .as_ref()
                 .map(|record| record.created_at_ms)
@@ -278,13 +298,16 @@ pub(crate) fn rollback_pending_reservation(
 ) -> Option<String> {
     let pending = state.pending_reservations.remove(&reservation_id)?;
     let runtime_id = pending.committed.runtime_id;
+    state.reservations.remove(&reservation_id);
+    if let Some(runtime) = state.runtimes.get_mut(&runtime_id) {
+        runtime.active_reservations.remove(&reservation_id);
+    }
     if let Some(previous) = pending.previous {
-        state.reservations.insert(reservation_id, previous);
-    } else {
-        state.reservations.remove(&reservation_id);
+        state.pending_predecessors.remove(&previous.reservation_id);
         if let Some(runtime) = state.runtimes.get_mut(&runtime_id) {
-            runtime.active_reservations.remove(&reservation_id);
+            runtime.active_reservations.insert(previous.reservation_id);
         }
+        state.reservations.insert(previous.reservation_id, previous);
     }
     Some(runtime_id)
 }

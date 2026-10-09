@@ -237,6 +237,7 @@ pub fn run_app() -> AppStartupResult<()> {
                             HOSTED_DISPATCH_SOURCE_SNAPSHOT_MAX_AGE_MS,
                     },
                 )
+                .with_dependency_inventory_app_data_dir(app_data_dir.clone())
                 .with_workflow_service(workflow_service);
                 let startup_output = tauri::async_runtime::block_on(
                     EmbeddedWorkflowServiceComposition::resource_backed_hosted_startup(

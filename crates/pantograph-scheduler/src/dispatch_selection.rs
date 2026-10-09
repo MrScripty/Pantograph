@@ -199,7 +199,10 @@ pub struct SchedulerDispatchCandidate {
 }
 
 impl SchedulerDispatchCandidate {
-    fn validate(&self, intent: &SchedulableTaskIntent) -> Result<(), SchedulerContractError> {
+    pub(crate) fn validate(
+        &self,
+        intent: &SchedulableTaskIntent,
+    ) -> Result<(), SchedulerContractError> {
         self.selected_model_ref
             .validate()
             .map_err(map_dependency_error)?;

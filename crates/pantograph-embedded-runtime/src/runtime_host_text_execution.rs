@@ -2242,7 +2242,8 @@ mod tests {
         }
         let capabilities = RuntimeDispatchCapabilityFactsSource::new(registry.clone())
             .with_gateway(gateway.clone())
-            .collect();
+            .collect()
+            .await;
         assert!(
             registry.snapshot().reservations.is_empty(),
             "capability reads acquire no custody"
@@ -2373,7 +2374,7 @@ mod tests {
                 .into_inner()
                 .dispatch_decision;
         assert!(request.handoff.dispatch_decision.is_some());
-        let port = crate::runtime_host_execution_port::EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(Arc::new(TextLoadTargetResolver { target }), Arc::new(TextPackageFactsResolver { package_facts: package }), Arc::new(UnusedTextMediaSink), gateway);
+        let port = crate::runtime_host_execution_port::EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(Arc::new(TextLoadTargetResolver { target }), Arc::new(TextPackageFactsResolver { package_facts: package }), Arc::new(UnusedTextMediaSink), gateway.clone());
         let cancellation =
             pantograph_runtime_host_contracts::RuntimeHostExecutionCancellationHandle::running(
                 request.cancellation_context.clone(),
@@ -2409,10 +2410,9 @@ mod tests {
                 &response.execution_request_id,
                 timing_request_id.as_ref().unwrap()
             );
-            assert_eq!(
-                rows[0].execution_request_id_digest.as_ref().unwrap().len(),
-                64
-            );
+            // Oversized caller correlation is omitted, while the host still
+            // executes and returns the original request ID unchanged.
+            assert!(rows[0].execution_request_id_digest.is_none());
             assert!(serde_json::to_string(&rows[0]).unwrap().len() < 4096);
             let inference::RuntimeServiceTimingIdentity::Exact { profile } = &rows[0].identity
             else {
@@ -2422,6 +2422,22 @@ mod tests {
                 rows[0].outcome,
                 inference::RuntimeServiceTimingOutcome::Completed
             );
+            let capture = rows[0].capture.as_ref().unwrap();
+            assert_eq!(
+                capture.owner_provenance,
+                inference::RuntimeServiceTimingOwnerProvenance::Injected
+            );
+            assert_eq!(
+                capture.load_disposition,
+                inference::RuntimeServiceTimingLoadDisposition::Reloaded
+            );
+            assert!(rows[0]
+                .fresh_production_observation(
+                    profile,
+                    &gateway.runtime_service_timing_clock_snapshot().unwrap(),
+                    u64::MAX
+                )
+                .is_none());
             for phase in [
                 inference::RuntimeServiceTimingPhase::GatewayCustodyWait,
                 inference::RuntimeServiceTimingPhase::SelectedModelLoad,
@@ -2579,7 +2595,7 @@ mod tests {
         };
         let snapshot = EmbeddedRuntimeDispatchCandidateSourceSnapshot {
             pumas_package_facts: Some(PumasDispatchPackageFactsBridgeOutcome::Projected {
-                facts: PumasDispatchPackageFactsProjection {
+                facts: Box::new(PumasDispatchPackageFactsProjection {
                     model_ref: intent.model_ref.clone(),
                     artifact_kind: package_facts.artifact.artifact_kind.clone(),
                     validation_state: package_facts.artifact.validation_state.clone(),
@@ -2588,7 +2604,7 @@ mod tests {
                     requires_custom_code: false,
                     logical_size,
                     diffusers: None,
-                },
+                }),
                 diagnostics: Vec::new(),
             }),
             runtime_capability_facts: Some(capabilities),

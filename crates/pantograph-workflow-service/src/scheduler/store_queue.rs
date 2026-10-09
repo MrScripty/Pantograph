@@ -213,6 +213,7 @@ impl WorkflowExecutionSessionStore {
             scheduler_task_results: Default::default(),
             scheduler_task_attempts: Default::default(),
             runtime_dispatch_readiness_proofs: Default::default(),
+            completion_cleanup_gate: None,
         });
         Self::mark_session_access(state, tick);
         Ok(Some(WorkflowExecutionSessionDequeuedRun {

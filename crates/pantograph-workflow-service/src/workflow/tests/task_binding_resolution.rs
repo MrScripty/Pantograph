@@ -425,6 +425,10 @@ fn sidecar_association_is_not_materialized_as_scheduler_input() {
         &inference_projection(),
     )
     .expect("scheduler task graph");
+    assert!(!graph
+        .tasks
+        .iter()
+        .any(|task| task.task_id.as_str() == "dep-env"));
     let inference_task = graph
         .tasks
         .iter()
@@ -457,6 +461,409 @@ fn sidecar_association_is_not_materialized_as_scheduler_input() {
     );
     assert!(resolution.schedulable_intent.is_some());
     assert!(resolution.diagnostics.is_empty());
+}
+
+fn dependency_control_embedding_graph() -> WorkflowGraph {
+    let mut graph = graph_with_bound_model_ref_prompt_and_dependency_sidecar();
+    graph.nodes.retain(|node| node.id != "model-selector");
+    graph.edges.retain(|edge| edge.source != "model-selector");
+    let infer = graph
+        .nodes
+        .iter_mut()
+        .find(|node| node.id == "infer")
+        .expect("infer");
+    infer.data = json!({"task_kind": "embedding", "pumas_model_ref": pumas_model_ref()});
+    graph
+        .edges
+        .iter_mut()
+        .find(|edge| edge.target == "infer" && edge.source == "prompt")
+        .expect("text edge")
+        .target_handle = "text".to_string();
+    graph.nodes.push(GraphNode {
+        id: "vectors".to_string(),
+        node_type: "vector-output".to_string(),
+        position: Position { x: 600.0, y: 0.0 },
+        data: json!({}),
+    });
+    graph.edges.push(GraphEdge {
+        id: "infer-vectors".to_string(),
+        source: "infer".to_string(),
+        source_handle: "embedding".to_string(),
+        target: "vectors".to_string(),
+        target_handle: "vector".to_string(),
+    });
+    graph
+}
+
+fn embedding_projection() -> WorkflowSchedulerInferenceTaskProjections {
+    let original = inference_projection();
+    let Some(WorkflowSchedulerInferenceTaskProjection::Ready(projection)) =
+        original.get(&SchedulerNodeId::parse("infer").expect("node id"))
+    else {
+        panic!("ready projection")
+    };
+    let mut projection = (**projection).clone();
+    projection.task_type = DependencyTaskId::parse("embedding").expect("task kind");
+    projection.constraints.requested_runtime_id =
+        Some(RuntimeIntentId::parse("candle").expect("runtime"));
+    projection.constraints.requested_device_id = Some("cpu".parse().expect("device"));
+    projection.runtime_source_context = crate::graph::WorkflowRuntimeSourceContext {
+        operation_type: "embedding.text".to_string(),
+        context_shape_key: "embedding.one-text".to_string(),
+        cancellation_mode: "run_scoped".to_string(),
+    };
+    WorkflowSchedulerInferenceTaskProjections::from_records(vec![
+        WorkflowSchedulerInferenceTaskProjection::Ready(Box::new(projection)),
+    ])
+    .expect("embedding projection")
+}
+
+#[test]
+fn control_only_dependency_sidecar_projects_only_data_tasks_without_changing_graph() {
+    let source = dependency_control_embedding_graph();
+    let before = source.clone();
+    let fingerprint = source.compute_fingerprint();
+    let topology = crate::graph::workflow_executable_topology(&source).expect("topology");
+    let graph = workflow_scheduler_task_graph_with_inference_projections(
+        &workflow_id(),
+        &workflow_run_id(),
+        &source,
+        &embedding_projection(),
+    )
+    .expect("task graph");
+    assert_eq!(
+        graph
+            .tasks
+            .iter()
+            .map(|task| task.task_id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["infer", "prompt", "vectors"]
+    );
+    let infer = graph
+        .tasks
+        .iter()
+        .find(|task| task.task_id.as_str() == "infer")
+        .expect("infer task");
+    assert_eq!(
+        infer
+            .dependency_task_ids
+            .iter()
+            .map(|id| id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["prompt"]
+    );
+    assert_eq!(
+        infer
+            .schedulable_intent_template
+            .as_ref()
+            .expect("intent template")
+            .dependency_readiness_source,
+        dependency_readiness_source("iface.binding.v1")
+    );
+    let service = crate::workflow::WorkflowService::new();
+    let records = service
+        .scheduler_task_orchestrator
+        .initial_task_state_records(&graph)
+        .expect("states");
+    assert!(
+        records
+            .iter()
+            .all(|record| record.state.kind()
+                != pantograph_scheduler::SchedulerTaskStateKind::Invalid)
+    );
+    assert_eq!(
+        records
+            .iter()
+            .find(|record| record.task_id.as_str() == "infer")
+            .expect("infer state")
+            .state
+            .kind(),
+        pantograph_scheduler::SchedulerTaskStateKind::AwaitingInputs
+    );
+    assert_eq!(source, before);
+    assert_eq!(source.compute_fingerprint(), fingerprint);
+    assert_eq!(
+        crate::graph::workflow_executable_topology(&source).expect("topology"),
+        topology
+    );
+}
+
+#[tokio::test]
+async fn native_control_graph_requires_request_text_then_waits_for_dependency_readiness() {
+    use crate::workflow::session_scheduler_runner::WorkflowPreDispatchPreparationBoundary;
+    use crate::workflow::{
+        WorkflowExecutionSessionRunRequest, WorkflowPortBinding, WorkflowService,
+    };
+    use pantograph_scheduler::SchedulerTaskStateKind;
+
+    let mut source = dependency_control_embedding_graph();
+    source
+        .nodes
+        .iter_mut()
+        .find(|node| node.id == "prompt")
+        .unwrap()
+        .data = json!({"text": "hello world"});
+    let graph = workflow_scheduler_task_graph_with_inference_projections(
+        &workflow_id(),
+        &workflow_run_id(),
+        &source,
+        &embedding_projection(),
+    )
+    .expect("projected native graph");
+    // Every projected dependency names a retained execution task; control metadata
+    // is not the missing prerequisite in this second native failure.
+    for task in &graph.tasks {
+        for dependency in &task.dependency_task_ids {
+            assert!(graph
+                .tasks
+                .iter()
+                .any(|upstream| upstream.task_id == *dependency));
+        }
+        assert!(task
+            .input_bindings
+            .iter()
+            .all(|binding| binding.source_task_id.as_str() != "dep-env"));
+    }
+    let service = WorkflowService::new();
+    let run_id = workflow_run_id().as_str().to_owned();
+    let session_id = {
+        let mut store = service.session_store_guard().expect("store");
+        let session_id = store
+            .create_session(
+                workflow_id().as_str().to_owned(),
+                None,
+                None,
+                Vec::new(),
+                Vec::new(),
+                false,
+            )
+            .expect("session");
+        store
+            .enqueue_run_with_id(
+                &session_id,
+                &WorkflowExecutionSessionRunRequest {
+                    session_id: session_id.clone(),
+                    workflow_semantic_version: "0.1.0".into(),
+                    inputs: Vec::new(),
+                    output_targets: None,
+                    override_selection: None,
+                    timeout_ms: None,
+                    priority: None,
+                },
+                run_id.clone(),
+            )
+            .expect("enqueue");
+        store
+            .begin_queued_run(&session_id, &run_id)
+            .expect("begin")
+            .expect("active run");
+        service
+            .scheduler_task_orchestrator
+            .initialize_active_run_task_state(&mut store, &session_id, &run_id, graph)
+            .expect("initial task state");
+        session_id
+    };
+    let boundary = WorkflowPreDispatchPreparationBoundary::new(&service);
+    boundary
+        .materialize_external_inputs(&session_id, &run_id, &[])
+        .expect("empty inputs");
+    let error = boundary
+        .prepare_runtime_dispatch(&session_id, &run_id)
+        .await
+        .err()
+        .expect("empty GUI inputs reproduce the native readiness guard");
+    assert!(error
+        .to_string()
+        .contains("runtime scheduler graph has no ready task and is not complete"));
+    {
+        let mut store = service.session_store_guard().expect("store");
+        let (_, states) = store
+            .active_run_scheduler_task_state(&session_id, &run_id)
+            .expect("states")
+            .expect("active graph");
+        assert!(states
+            .iter()
+            .all(|state| state.state.kind() == SchedulerTaskStateKind::AwaitingInputs));
+        assert!(store
+            .active_run_scheduler_task_results(&session_id, &run_id)
+            .expect("results")
+            .is_empty());
+    }
+    let wrong = WorkflowPortBinding {
+        node_id: "prompt".into(),
+        port_id: "text".into(),
+        value: json!(7),
+    };
+    assert!(boundary
+        .materialize_external_inputs(&session_id, &run_id, &[wrong])
+        .is_err());
+    boundary
+        .materialize_external_inputs(
+            &session_id,
+            &run_id,
+            &[WorkflowPortBinding {
+                node_id: "prompt".into(),
+                port_id: "text".into(),
+                value: json!("hello world"),
+            }],
+        )
+        .expect("typed Submit input");
+    boundary
+        .run_progress_loop(&session_id, &run_id)
+        .await
+        .expect("progress");
+    let mut store = service.session_store_guard().expect("store");
+    let (_, states) = store
+        .active_run_scheduler_task_state(&session_id, &run_id)
+        .expect("states")
+        .expect("active graph");
+    for (id, expected) in [
+        ("prompt", SchedulerTaskStateKind::Completed),
+        ("infer", SchedulerTaskStateKind::WaitingDependencyReadiness),
+        ("vectors", SchedulerTaskStateKind::AwaitingInputs),
+    ] {
+        assert_eq!(
+            states
+                .iter()
+                .find(|state| state.task_id.as_str() == id)
+                .expect("state")
+                .state
+                .kind(),
+            expected
+        );
+    }
+    let results = store
+        .active_run_scheduler_task_results(&session_id, &run_id)
+        .expect("results");
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].workflow_run_id, run_id);
+    assert_eq!(results[0].node_id, "prompt");
+    assert_eq!(
+        results[0].outputs[0].value,
+        WorkflowSchedulerTaskResultValue::String("hello world".into())
+    );
+}
+
+#[test]
+fn malformed_or_dataflow_bound_dependency_controls_remain_invalid_at_initialization() {
+    for case in [
+        "missing",
+        "duplicate",
+        "wrong_source",
+        "wrong_target",
+        "non_inference",
+        "dangling",
+        "incoming_data",
+        "outgoing_data",
+    ] {
+        let mut source = dependency_control_embedding_graph();
+        let sidecar_index = source
+            .edges
+            .iter()
+            .position(|edge| edge.source == "dep-env")
+            .expect("sidecar");
+        match case {
+            "missing" => {
+                source.edges.remove(sidecar_index);
+            }
+            "duplicate" => {
+                let mut duplicate = source.edges[sidecar_index].clone();
+                duplicate.id = "duplicate".into();
+                source.edges.push(duplicate);
+            }
+            "wrong_source" => source.edges[sidecar_index].source_handle = "mode".into(),
+            "wrong_target" => source.edges[sidecar_index].target_handle = "text".into(),
+            "non_inference" => source.edges[sidecar_index].target = "prompt".into(),
+            "dangling" => source.edges[sidecar_index].target = "missing-infer".into(),
+            "incoming_data" => source.edges.push(GraphEdge {
+                id: "data-in".into(),
+                source: "prompt".into(),
+                source_handle: "text".into(),
+                target: "dep-env".into(),
+                target_handle: "mode".into(),
+            }),
+            "outgoing_data" => source.edges.push(GraphEdge {
+                id: "data-out".into(),
+                source: "dep-env".into(),
+                source_handle: "value".into(),
+                target: "vectors".into(),
+                target_handle: "vector".into(),
+            }),
+            _ => unreachable!(),
+        }
+        let graph = workflow_scheduler_task_graph_with_inference_projections(
+            &workflow_id(),
+            &workflow_run_id(),
+            &source,
+            &embedding_projection(),
+        )
+        .expect("task graph");
+        let control = graph
+            .tasks
+            .iter()
+            .find(|task| task.task_id.as_str() == "dep-env")
+            .expect("unsupported control retained");
+        assert_eq!(
+            control.execution_class,
+            crate::workflow::WorkflowSchedulerTaskExecutionClass::Unsupported,
+            "{case}"
+        );
+        let service = crate::workflow::WorkflowService::new();
+        let states = service
+            .scheduler_task_orchestrator
+            .initial_task_state_records(&graph)
+            .expect("states");
+        let control = states
+            .iter()
+            .find(|record| record.task_id.as_str() == "dep-env")
+            .expect("control state");
+        assert_eq!(
+            control.state.kind(),
+            pantograph_scheduler::SchedulerTaskStateKind::Invalid,
+            "{case}"
+        );
+        assert_eq!(control.state_version, 1);
+        assert_eq!(control.last_transition_id.as_str(), "initial:dep-env");
+    }
+}
+
+#[test]
+fn control_projection_preserves_missing_inference_facts_and_other_unsupported_failures() {
+    let mut source = dependency_control_embedding_graph();
+    source.nodes.push(GraphNode {
+        id: "unsupported".into(),
+        node_type: "model-provider".into(),
+        position: Position { x: 0.0, y: 0.0 },
+        data: json!({}),
+    });
+    let graph = workflow_scheduler_task_graph_with_inference_projections(
+        &workflow_id(),
+        &workflow_run_id(),
+        &source,
+        &WorkflowSchedulerInferenceTaskProjections::default(),
+    )
+    .expect("task graph");
+    assert!(!graph
+        .tasks
+        .iter()
+        .any(|task| task.task_id.as_str() == "dep-env"));
+    let service = crate::workflow::WorkflowService::new();
+    let states = service
+        .scheduler_task_orchestrator
+        .initial_task_state_records(&graph)
+        .expect("states");
+    for id in ["infer", "unsupported"] {
+        assert_eq!(
+            states
+                .iter()
+                .find(|record| record.task_id.as_str() == id)
+                .expect("retained state")
+                .state
+                .kind(),
+            pantograph_scheduler::SchedulerTaskStateKind::Invalid,
+            "{id}"
+        );
+    }
 }
 
 #[test]

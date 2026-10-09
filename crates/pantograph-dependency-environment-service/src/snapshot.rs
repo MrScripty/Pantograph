@@ -130,12 +130,38 @@ impl DependencyEnvironmentReadinessSnapshot {
                 },
             );
         }
-        if result.selected_binding_ids != self.identity_key.selected_binding_ids {
+        // Empty authored choices allow the requirements owner to select its
+        // default bindings. The request identity and hash remain unchanged.
+        // Explicit choices must still be preserved exactly.
+        if !self.identity_key.selected_binding_ids.is_empty()
+            && result.selected_binding_ids != self.identity_key.selected_binding_ids
+        {
             return Err(
                 DependencyEnvironmentSnapshotStoreError::MismatchedSnapshot {
                     field: "dependency_environment_snapshot.result.selected_binding_ids",
                 },
             );
+        }
+        // Successful requirements/readiness claims must cover every selected
+        // binding. Unavailable evidence may have no payload to enumerate.
+        if matches!(
+            result.readiness_state,
+            DependencyEnvironmentReadinessState::Resolved
+                | DependencyEnvironmentReadinessState::Ready
+        ) {
+            for selected in &result.selected_binding_ids {
+                if !result
+                    .bindings
+                    .iter()
+                    .any(|binding| &binding.binding_id == selected)
+                {
+                    return Err(
+                        DependencyEnvironmentSnapshotStoreError::MismatchedSnapshot {
+                            field: "dependency_environment_snapshot.result.bindings",
+                        },
+                    );
+                }
+            }
         }
         Ok(())
     }

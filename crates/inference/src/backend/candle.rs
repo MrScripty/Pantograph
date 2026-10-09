@@ -32,6 +32,8 @@ use crate::{BackendHintLabel, ModelArtifactKind};
 /// This backend runs inference directly in the process using Candle.
 /// It supports the explicitly declared CPU F32 BERT embedding recipe.
 pub struct CandleBackend {
+    verified_warm_load: Option<crate::CandleCpuVerifiedWarmLoad>,
+    calibration: Option<Arc<crate::candle_cpu_calibration::CalibrationOwner>>,
     pub(super) model: Option<Arc<super::candle_embedding::EmbeddingModel>>,
     jobs: super::candle_embedding::EmbeddingJobs,
     loads: super::candle_embedding::EmbeddingJobs<super::candle_embedding::LoadedEmbedding>,
@@ -90,12 +92,22 @@ impl CandleBackend {
     /// Create a new Candle backend
     pub fn new() -> Self {
         Self {
+            verified_warm_load: None,
+            calibration: None,
             model: None,
             jobs: Default::default(),
             loads: Default::default(),
             #[cfg(test)]
             load_hook: None,
         }
+    }
+
+    pub(crate) fn with_calibration(
+        owner: Arc<crate::candle_cpu_calibration::CalibrationOwner>,
+    ) -> Self {
+        let mut backend = Self::new();
+        backend.calibration = Some(owner);
+        backend
     }
 
     /// Get static capabilities (for registry info before instantiation)
@@ -522,8 +534,26 @@ impl Default for CandleBackend {
     }
 }
 
+impl Drop for CandleBackend {
+    fn drop(&mut self) {
+        if let Some(owner) = &self.calibration {
+            owner.invalidate();
+        }
+    }
+}
+
 #[async_trait]
 impl InferenceBackend for CandleBackend {
+    fn resident_cpu_calibration_instance(&self) -> Option<uuid::Uuid> {
+        if !self.jobs.is_idle() || !self.loads.is_idle() {
+            return None;
+        }
+        self.model
+            .as_ref()?
+            .calibration_profile
+            .as_ref()
+            .map(|profile| profile.instance)
+    }
     fn name(&self) -> &'static str {
         "Candle"
     }
@@ -569,74 +599,35 @@ impl InferenceBackend for CandleBackend {
         decision: &crate::BackendExecutionDecision,
         cancellation: crate::InferenceExecutionCancellationHandle,
     ) -> Result<BackendStartOutcome, BackendError> {
-        self.loads.drain(true).await?;
-        let selected = crate::selected_embedding_execution::SelectedEmbeddingLoad::validate(
-            request, target, decision,
+        self.load_selected_embedding_with_reuse_policy(
+            request,
+            target,
+            decision,
+            cancellation,
+            false,
         )
-        .await?;
-        let mut package = selected.package.clone();
-        package.artifact.entry_path = selected.target.local_load_path.clone();
-        let device = selected.device.as_str().to_owned();
-        let target = target.clone();
-        let previous = self.model.clone();
-        let worker_cancellation = cancellation.clone();
-        #[cfg(test)]
-        let hook = self.load_hook.clone();
-        self.jobs.drain(true).await?;
-        let candidate = self
-            .loads
-            .load(move |stop| {
-                super::candle_embedding::check_load_stop(&stop, &worker_cancellation)?;
-                let plan = Self::embedding_load_plan_from_package(&package, Some(&device))?;
-                if package
-                    .transformers
-                    .as_ref()
-                    .is_none_or(|evidence| evidence.architectures != ["BertModel"])
-                {
-                    return Err(BackendError::Config(
-                        "Candle executable architecture requires BertModel".into(),
-                    ));
-                }
-                if let Some(model) = previous.filter(|model| model.matches_load(&plan, &target)) {
-                    return Ok(super::candle_embedding::LoadedEmbedding {
-                        model,
-                        reused: true,
-                    });
-                }
-                let model = Arc::new(super::candle_embedding::EmbeddingModel::load(
-                    plan,
-                    target,
-                    &stop,
-                    &worker_cancellation,
-                )?);
-                #[cfg(test)]
-                if let Some(hook) = hook {
-                    hook();
-                }
-                super::candle_embedding::check_load_stop(&stop, &worker_cancellation)?;
-                Ok(super::candle_embedding::LoadedEmbedding {
-                    model,
-                    reused: false,
-                })
-            })
-            .await;
-        self.loads.drain(false).await?;
-        let candidate = candidate?;
-        if let Some(reason) = cancellation.rejection_message("Candle model load publication") {
-            return Err(BackendError::Cancelled(reason));
-        }
-        self.model = Some(candidate.model);
-        Ok(BackendStartOutcome {
-            runtime_reused: Some(candidate.reused),
-            lifecycle_decision_reason: Some(
-                if candidate.reused {
-                    "scheduler_selected_embedding_package_reused"
-                } else {
-                    "scheduler_selected_embedding_package_loaded"
-                }
-                .into(),
-            ),
-        })
+        .await
+    }
+
+    async fn load_verified_cpu_warm_embedding(
+        &mut self,
+        request: &crate::InferenceExecutionRequest,
+        target: &crate::PumasArtifactLoadTarget,
+        decision: &crate::BackendExecutionDecision,
+        cancellation: crate::InferenceExecutionCancellationHandle,
+    ) -> Result<BackendStartOutcome, BackendError> {
+        self.load_selected_embedding_with_reuse_policy(
+            request,
+            target,
+            decision,
+            cancellation,
+            true,
+        )
+        .await
+    }
+
+    fn take_verified_cpu_warm_load(&mut self) -> Option<crate::CandleCpuVerifiedWarmLoad> {
+        self.verified_warm_load.take()
     }
 
     async fn selected_embeddings(
@@ -653,6 +644,9 @@ impl InferenceBackend for CandleBackend {
     }
 
     async fn stop(&mut self) -> Result<(), BackendError> {
+        if let Some(owner) = &self.calibration {
+            owner.invalidate();
+        }
         self.loads.drain(true).await?;
         self.jobs.drain(true).await?;
         self.model = None;
@@ -703,6 +697,114 @@ impl InferenceBackend for CandleBackend {
         Err(BackendError::Inference(
             "Reranking not supported by Candle backend".to_string(),
         ))
+    }
+}
+
+impl CandleBackend {
+    async fn load_selected_embedding_with_reuse_policy(
+        &mut self,
+        request: &crate::InferenceExecutionRequest,
+        target: &crate::PumasArtifactLoadTarget,
+        decision: &crate::BackendExecutionDecision,
+        cancellation: crate::InferenceExecutionCancellationHandle,
+        require_reuse: bool,
+    ) -> Result<BackendStartOutcome, BackendError> {
+        self.verified_warm_load = None;
+        let publication = self.calibration.as_ref().map(|owner| owner.begin_load());
+        self.loads.drain(true).await?;
+        let selected = crate::selected_embedding_execution::SelectedEmbeddingLoad::validate(
+            request, target, decision,
+        )
+        .await?;
+        let mut package = selected.package.clone();
+        package.artifact.entry_path = selected.target.local_load_path.clone();
+        let device = selected.device.as_str().to_owned();
+        let target = target.clone();
+        let previous = self.model.clone();
+        let worker_cancellation = cancellation.clone();
+        let calibration = self.calibration.clone();
+        #[cfg(test)]
+        let hook = self.load_hook.clone();
+        self.jobs.drain(true).await?;
+        let candidate = self
+            .loads
+            .load(move |stop| {
+                let run = || {
+                    #[cfg(test)]
+                    if require_reuse {
+                        if let Some(owner) = &calibration {
+                            owner.test_attempt_phase("load");
+                        }
+                    }
+                    super::candle_embedding::check_load_stop(&stop, &worker_cancellation)?;
+                    let plan = Self::embedding_load_plan_from_package(&package, Some(&device))?;
+                    if package
+                        .transformers
+                        .as_ref()
+                        .is_none_or(|evidence| evidence.architectures != ["BertModel"])
+                    {
+                        return Err(BackendError::Config(
+                            "Candle executable architecture requires BertModel".into(),
+                        ));
+                    }
+                    if let Some(model) = previous.filter(|model| model.matches_load(&plan, &target))
+                    {
+                        return Ok(super::candle_embedding::LoadedEmbedding {
+                            model,
+                            reused: true,
+                        });
+                    }
+                    if require_reuse {
+                        return Err(BackendError::Config(
+                            "verified warm attempt refuses cold replacement".into(),
+                        ));
+                    }
+                    let model = Arc::new(super::candle_embedding::EmbeddingModel::load(
+                        plan,
+                        target,
+                        &stop,
+                        &worker_cancellation,
+                        calibration.clone(),
+                    )?);
+                    #[cfg(test)]
+                    if let Some(hook) = hook {
+                        hook();
+                    }
+                    super::candle_embedding::check_load_stop(&stop, &worker_cancellation)?;
+                    Ok(super::candle_embedding::LoadedEmbedding {
+                        model,
+                        reused: false,
+                    })
+                };
+                match &calibration {
+                    Some(owner) => owner.pool.install(run),
+                    None => run(),
+                }
+            })
+            .await;
+        self.loads.drain(false).await?;
+        let candidate = candidate?;
+        if let Some(reason) = cancellation.rejection_message("Candle model load publication") {
+            return Err(BackendError::Cancelled(reason));
+        }
+        if let Some(publication) = publication {
+            self.verified_warm_load = publication.publish(
+                candidate.model.calibration_profile.clone(),
+                candidate.reused,
+            );
+        }
+        self.model = Some(candidate.model);
+        Ok(BackendStartOutcome {
+            runtime_reused: Some(candidate.reused),
+            lifecycle_decision_reason: Some(
+                if candidate.reused {
+                    "scheduler_selected_embedding_package_reused"
+                } else {
+                    "scheduler_selected_embedding_package_loaded"
+                }
+                .into(),
+            ),
+        })
     }
 }
 

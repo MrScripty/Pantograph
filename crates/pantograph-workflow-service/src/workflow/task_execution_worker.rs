@@ -1327,6 +1327,25 @@ async fn claim_and_execute_runtime_branch_event(
     runtime_branch_responder_registration: &mut WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistration,
 ) -> WorkflowTaskExecutionWorkerRuntimeBranchExecutionResult {
     let service = environment.service();
+    let serial_scope = if let Some(mode) = service.serial_ready_mode.as_ref() {
+        match mode.enter().await {
+            Ok(scope) => Some(scope),
+            Err(error) => {
+                return WorkflowTaskExecutionWorkerRuntimeBranchExecutionResult::complete(
+                    WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
+                        command,
+                        error.to_string(),
+                        vec![WorkflowTaskExecutionWorkerDiagnostic::new(
+                        WorkflowTaskExecutionWorkerDiagnosticCode::RuntimeBranchDispatchUnavailable,
+                        error.to_string(),
+                    )],
+                    ),
+                )
+            }
+        }
+    } else {
+        None
+    };
     let preparation_boundary = WorkflowPreDispatchPreparationBoundary::new(service.as_ref());
     let preparation = async {
         let inputs = runtime_branch_active_run_inputs(service.as_ref(), command)?;
@@ -1406,6 +1425,50 @@ async fn claim_and_execute_runtime_branch_event(
             ),
         );
     };
+    let mut selected_task_id = task_id.to_owned();
+    let mut serial_pair = None;
+    let mut serial_owner = None;
+    if let (Some(mode), Some(scope)) = (service.serial_ready_mode.as_ref(), serial_scope.as_ref()) {
+        let pair = service.session_store_guard().ok().and_then(|store| {
+            store.serial_ready_pair(&command.session_id, &command.workflow_run_id)
+        });
+        if let Some(pair) = pair {
+            if pair.members[0].task.task_id.as_str() == task_id {
+                if let Some((position, owner)) = mode.select(&pair) {
+                    selected_task_id = pair.members[position].task.task_id.to_string();
+                    serial_owner = Some(owner);
+                    serial_pair = Some(pair);
+                }
+            }
+        }
+        if let Some(member) = service.session_store_guard().ok().and_then(|store| {
+            store.serial_ready_member(
+                &command.session_id,
+                &command.workflow_run_id,
+                &selected_task_id,
+            )
+        }) {
+            if let Err(error) = scope.capture(&member, serial_owner.clone()) {
+                return WorkflowTaskExecutionWorkerRuntimeBranchExecutionResult::complete(
+                    WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
+                        command,
+                        error.to_string(),
+                        Vec::new(),
+                    ),
+                );
+            }
+        }
+        if let Err(error) = scope.claim() {
+            return WorkflowTaskExecutionWorkerRuntimeBranchExecutionResult::complete(
+                WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
+                    command,
+                    error.to_string(),
+                    Vec::new(),
+                ),
+            );
+        }
+    }
+    let task_id = selected_task_id.as_str();
     let now_ms = unix_timestamp_ms();
     let (claimed, proof) = match claim_runtime_branch_task_event_for_worker(
         service.as_ref(),
@@ -1472,6 +1535,8 @@ async fn claim_and_execute_runtime_branch_event(
             &dispatching_record.scheduler_task_id,
             preparation.admitted_runtime_readiness(),
             scheduler_transition_from_runtime_branch_start_reason(command.start_reason),
+            serial_pair.as_ref(),
+            serial_owner.as_ref(),
         )
         .await
     {
@@ -1487,6 +1552,11 @@ async fn claim_and_execute_runtime_branch_event(
             );
         }
     };
+    if let Some(scope) = serial_scope.as_ref() {
+        if let Err(error) = scope.started(&started_dispatch) {
+            return WorkflowTaskExecutionWorkerRuntimeBranchExecutionResult::complete(WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(command, error.to_string(), Vec::new()));
+        }
+    }
     let evidence_record = match record_runtime_branch_selected_candidate_fact(
         service.as_ref(),
         &dispatching_record.event_id,
@@ -2535,6 +2605,7 @@ fn scheduler_transition_from_runtime_branch_start_reason(
 
 #[cfg(test)]
 mod tests {
+    include!("serial_ready_worker_tests.rs");
     use super::*;
     use crate::scheduler::{
         WorkflowSchedulerLifecycleComponentKind, WorkflowSchedulerLifecycleComponentRegistryHandle,

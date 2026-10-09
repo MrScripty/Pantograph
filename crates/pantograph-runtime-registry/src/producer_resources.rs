@@ -118,6 +118,7 @@ impl RuntimeRegistry {
             .state
             .lock()
             .expect("runtime registry state lock poisoned");
+        crate::reject_eviction_pending(&state, &runtime_id)?;
         let configured = state
             .resident_estimates
             .keys()

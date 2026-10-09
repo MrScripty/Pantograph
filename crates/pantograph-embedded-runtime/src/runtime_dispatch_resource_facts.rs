@@ -408,13 +408,13 @@ mod tests {
     }
 
     #[test]
-    fn source_reuses_reservation_owner_for_same_runtime() {
+    fn source_preserves_owner_with_fresh_reservation_incarnation_for_same_runtime() {
         let registry = Arc::new(pantograph_runtime_registry::RuntimeRegistry::new());
         registry.register_runtime(
             pantograph_runtime_registry::RuntimeRegistration::new("pytorch", "PyTorch")
                 .with_backend_keys(vec!["pytorch".to_string()]),
         );
-        let source = RuntimeDispatchResourceFactsSource::new(registry);
+        let source = RuntimeDispatchResourceFactsSource::new(registry.clone());
         let request = resource_request(vec![RuntimeReservationResourceClaim::ram_bytes(mib())]);
 
         let first = source.reserve(request.clone());
@@ -426,7 +426,13 @@ mod tests {
         let RuntimeDispatchResourceFactsOutcome::Reserved { facts: second, .. } = second else {
             panic!("second reservation should succeed");
         };
-        assert_eq!(first.lease_id, second.lease_id);
+        assert_ne!(first.lease_id, second.lease_id);
+        assert!(registry.reservation_lease(first.lease_id).is_none());
+        assert_eq!(registry.snapshot().reservations.len(), 1);
+        assert_eq!(
+            registry.snapshot().reservations[0].reservation_id,
+            second.lease_id
+        );
     }
 
     #[test]

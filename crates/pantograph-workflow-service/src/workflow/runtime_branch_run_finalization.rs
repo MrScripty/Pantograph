@@ -165,7 +165,7 @@ pub(super) async fn finalize_started_runtime_task_dispatch(
                     terminal_mutation: Some(&terminal_mutation),
                 },
             )?;
-            service
+            let cleanup_ack = service
                 .scheduler_task_orchestrator
                 .apply_runtime_task_result_reservation_lifecycle(
                     started_runtime_task.task(),
@@ -178,6 +178,17 @@ pub(super) async fn finalize_started_runtime_task_dispatch(
                         "scheduler runtime task reservation release failed: {error}"
                     ))
                 })?;
+            if let Some(ack) = &cleanup_ack {
+                service
+                    .session_store_guard()?
+                    .acknowledge_completion_cleanup(
+                        session_id,
+                        workflow_run_id,
+                        started_runtime_task.task().task_id.as_str(),
+                        started_runtime_task.attempt_id(),
+                        ack,
+                    );
+            }
             Ok(WorkflowRuntimeTaskDispatchFinalizationOutcome::Completed)
         }
         Err(error) => {
@@ -216,7 +227,7 @@ pub(super) async fn finalize_started_runtime_task_dispatch(
                         terminal_mutation: Some(&terminal_mutation),
                     },
                 )?;
-                service
+                let cleanup_ack = service
                     .scheduler_task_orchestrator
                     .apply_runtime_task_cancellation_reservation_lifecycle(
                         started_runtime_task.task(),
@@ -229,6 +240,17 @@ pub(super) async fn finalize_started_runtime_task_dispatch(
                             "scheduler runtime task reservation release failed: {release_error}"
                         ))
                     })?;
+                if let Some(ack) = &cleanup_ack {
+                    service
+                        .session_store_guard()?
+                        .acknowledge_completion_cleanup(
+                            session_id,
+                            workflow_run_id,
+                            started_runtime_task.task().task_id.as_str(),
+                            started_runtime_task.attempt_id(),
+                            ack,
+                        );
+                }
                 return Ok(WorkflowRuntimeTaskDispatchFinalizationOutcome::Cancelled { message });
             }
             let terminal_mutation = {
@@ -261,7 +283,7 @@ pub(super) async fn finalize_started_runtime_task_dispatch(
                     terminal_mutation: Some(&terminal_mutation),
                 },
             )?;
-            service
+            let cleanup_ack = service
                 .scheduler_task_orchestrator
                 .apply_runtime_task_dispatch_error_reservation_lifecycle(
                     started_runtime_task.task(),
@@ -274,6 +296,17 @@ pub(super) async fn finalize_started_runtime_task_dispatch(
                         "scheduler runtime task reservation release failed: {release_error}"
                     ))
                 })?;
+            if let Some(ack) = &cleanup_ack {
+                service
+                    .session_store_guard()?
+                    .acknowledge_completion_cleanup(
+                        session_id,
+                        workflow_run_id,
+                        started_runtime_task.task().task_id.as_str(),
+                        started_runtime_task.attempt_id(),
+                        ack,
+                    );
+            }
             Ok(WorkflowRuntimeTaskDispatchFinalizationOutcome::Failed { error })
         }
     }

@@ -24,7 +24,14 @@
 //! ```
 
 pub mod backend;
+#[cfg(feature = "backend-candle")]
+mod candle_cpu_calibration;
 pub mod capability_availability;
+#[cfg(feature = "backend-candle")]
+pub use candle_cpu_calibration::{
+    CandleCpuCalibrationConfig, CandleCpuCleanupOwner, CandleCpuSerialOwnerFacts,
+    CandleCpuVerifiedWarmLoad, CandleCpuWarmComparison,
+};
 pub mod config;
 pub mod constants;
 pub mod dependency_requirements;
@@ -52,9 +59,12 @@ pub mod resource_estimates;
 pub mod resource_monitor;
 mod service_timing;
 pub use pantograph_timing_contracts::{
-    RuntimeServiceTimingAttempt, RuntimeServiceTimingIdentity, RuntimeServiceTimingOutcome,
-    RuntimeServiceTimingPhase, RuntimeServiceTimingPhaseEvidence, RuntimeServiceTimingProfile,
-    RuntimeServiceTimingUnavailableReason, RuntimeServiceTimingValue,
+    RuntimeServiceTimingAttempt, RuntimeServiceTimingCapture, RuntimeServiceTimingClockSnapshot,
+    RuntimeServiceTimingIdentity, RuntimeServiceTimingLoadDisposition, RuntimeServiceTimingOutcome,
+    RuntimeServiceTimingOwnerProvenance, RuntimeServiceTimingPhase,
+    RuntimeServiceTimingPhaseEvidence, RuntimeServiceTimingProfile,
+    RuntimeServiceTimingQualifiedObservation, RuntimeServiceTimingUnavailableReason,
+    RuntimeServiceTimingValue,
 };
 pub use service_timing::{RuntimeServiceTimingOwnerFacts, RuntimeServiceTimingRecorder};
 pub mod resource_observation;

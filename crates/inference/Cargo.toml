@@ -17,7 +17,8 @@ default = ["backend-llamacpp"]
 
 # Inference backends - at least one should be enabled
 backend-llamacpp = []  # llama.cpp sidecar with GGUF support
-backend-candle = [     # In-process Candle inference (CUDA required)
+backend-candle = [     # In-process CPU F32 BERT embeddings
+    "dep:rayon",
     "dep:candle-core",
     "dep:candle-nn",
     "dep:candle-transformers",
@@ -54,6 +55,7 @@ parking_lot.workspace = true
 sysinfo = "0.32"
 
 # Candle dependencies (optional)
+rayon = { version = "=1.11.0", optional = true }
 candle-core = { workspace = true, optional = true }
 candle-nn = { workspace = true, optional = true }
 candle-transformers = { workspace = true, optional = true }

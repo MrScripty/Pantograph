@@ -29,6 +29,31 @@ impl RuntimeDispatchCapabilityFactsSource {
         self
     }
 
+    /// Read the actual gateway owner's task declaration, independently of
+    /// registry enrollment and package metadata.
+    pub(crate) async fn supports_candle_cpu_embeddings(&self) -> bool {
+        let Some(gateway) = self.gateway.as_ref() else {
+            return false;
+        };
+        let selected = gateway.current_backend_info().await;
+        let candle = if inference::backend::canonical_backend_key(&selected.backend_key) == "candle"
+        {
+            Some(selected)
+        } else {
+            gateway.available_backends().into_iter().find(|backend| {
+                inference::backend::canonical_backend_key(&backend.backend_key) == "candle"
+            })
+        };
+        candle.is_some_and(|backend| {
+            backend.available
+                && backend.capabilities.embeddings
+                && backend
+                    .capabilities
+                    .facts
+                    .supports_task(inference::InferenceTaskId::Embedding)
+        })
+    }
+
     pub(crate) async fn collect(&self) -> RuntimeDispatchCapabilityFactsOutcome {
         let (backends, mode_info) = if let Some(gateway) = &self.gateway {
             let mut backends = gateway.available_backends();

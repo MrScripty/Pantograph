@@ -14,21 +14,21 @@ use pantograph_workflow_service::{
 mod dependency_environment_probe_selector;
 mod dependency_environment_probe_snapshot;
 mod dependency_inventory;
-#[cfg(any(test, feature = "standalone"))]
+#[cfg(any(test, feature = "host-dependency-inventory"))]
 mod dependency_inventory_device_toolchain;
-#[cfg(any(test, feature = "standalone"))]
+#[cfg(any(test, feature = "host-dependency-inventory"))]
 mod dependency_inventory_device_toolchain_source;
 mod dependency_inventory_dispatch;
-#[cfg(any(test, feature = "standalone"))]
+#[cfg(any(test, feature = "host-dependency-inventory"))]
 mod dependency_inventory_managed_runtime;
 mod dependency_inventory_python;
-#[cfg(any(test, feature = "standalone"))]
+#[cfg(any(test, feature = "host-dependency-inventory"))]
 mod dependency_inventory_runtime_feature;
-#[cfg(any(test, feature = "standalone"))]
+#[cfg(any(test, feature = "host-dependency-inventory"))]
 mod dependency_inventory_runtime_feature_source;
-#[cfg(any(test, feature = "standalone"))]
+#[cfg(any(test, feature = "host-dependency-inventory"))]
 mod dependency_inventory_system_package;
-#[cfg(any(test, feature = "standalone"))]
+#[cfg(any(test, feature = "host-dependency-inventory"))]
 mod dependency_inventory_system_package_source;
 #[cfg(test)]
 mod dependency_inventory_tests;
@@ -49,6 +49,7 @@ mod embedded_workflow_service_api;
 pub mod embedding_model_config;
 pub mod embedding_workflow;
 pub mod host_runtime;
+mod inference_dependency_requirements;
 mod inference_interface_facts_provider;
 mod inference_resource_estimator;
 pub mod managed_runtime_manager;
@@ -70,10 +71,25 @@ mod python_runtime_execution;
 pub mod rag;
 #[allow(dead_code)]
 mod reservation_lifecycle;
+#[cfg(feature = "backend-candle")]
+mod serial_cpu_port;
+#[cfg(feature = "backend-candle")]
+pub use serial_cpu_port::EmbeddedRetainedCpuSerialPort;
 pub mod runtime_capabilities;
 mod runtime_config;
 #[allow(dead_code)]
 mod runtime_dispatch_candidate_provider;
+mod runtime_dispatch_completion_timing;
+mod runtime_dispatch_dependency_timing;
+pub use runtime_dispatch_completion_timing::{
+    EmbeddedCompletionTimingOptIn, EmbeddedCompletionTimingQuery, EmbeddedCompletionTimingRecord,
+    EmbeddedCompletionTimingSource,
+};
+pub use runtime_dispatch_dependency_timing::{
+    EmbeddedCompletionProjectedResidency, EmbeddedCompletionReleaseCondition,
+    EmbeddedCompletionSuccessorPlacement, EmbeddedDependencyCompletionQuery,
+    EmbeddedDependencyCompletionRecord,
+};
 #[allow(dead_code)]
 mod runtime_dispatch_capability_facts;
 #[allow(dead_code)]

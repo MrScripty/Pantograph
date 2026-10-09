@@ -16,6 +16,23 @@ use pantograph_runtime_identity::canonical_runtime_id;
 use pantograph_timing_contracts::WorkflowTimingContractError;
 use tokio::sync::RwLock;
 
+#[cfg(feature = "backend-candle")]
+#[path = "gateway_cpu_warm_attempt.rs"]
+mod cpu_warm_attempt;
+#[cfg(feature = "backend-candle")]
+pub use cpu_warm_attempt::{
+    CandleCpuDrainedAttempt, CandleCpuWarmAttemptIdentity, CandleCpuWarmAttemptRequest,
+};
+struct SelectedEmbeddingOwnedOutcome {
+    result: InferenceExecutionResult,
+    #[cfg(feature = "backend-candle")]
+    drained_attempt: Option<CandleCpuDrainedAttempt>,
+}
+
+#[cfg(feature = "backend-candle")]
+#[path = "gateway_retained_cpu_cleanup.rs"]
+mod retained_cpu_cleanup;
+
 use crate::backend::{
     canonical_backend_key, BackendCapabilities, BackendCompatibilityOptions,
     BackendCompatibilityRequest, BackendConfig, BackendDefaultStartMode, BackendError, BackendInfo,
@@ -221,6 +238,10 @@ pub struct InferenceGateway {
     llamacpp_ever_owned: Arc<AtomicBool>,
     /// Disabled by default; no phase clocks, identity hashing or recording work.
     service_timing: Option<crate::service_timing::ServiceTimingInstrumentation>,
+    #[cfg(feature = "backend-candle")]
+    candle_cpu_calibration: Option<Arc<crate::candle_cpu_calibration::CalibrationOwner>>,
+    service_timing_owner_provenance:
+        pantograph_timing_contracts::RuntimeServiceTimingOwnerProvenance,
 }
 
 struct RuntimeWarmupStartContext<'a> {
@@ -321,6 +342,10 @@ impl InferenceGateway {
             llamacpp_release_confirmed: Arc::new(AtomicBool::new(true)),
             llamacpp_ever_owned: Arc::new(AtomicBool::new(false)),
             service_timing: None,
+            #[cfg(feature = "backend-candle")]
+            candle_cpu_calibration: None,
+            service_timing_owner_provenance:
+                pantograph_timing_contracts::RuntimeServiceTimingOwnerProvenance::BuiltIn,
         }
     }
 
@@ -350,7 +375,104 @@ impl InferenceGateway {
             llamacpp_release_confirmed: Arc::new(AtomicBool::new(false)),
             llamacpp_ever_owned: Arc::new(AtomicBool::new(false)),
             service_timing: None,
+            #[cfg(feature = "backend-candle")]
+            candle_cpu_calibration: None,
+            service_timing_owner_provenance:
+                pantograph_timing_contracts::RuntimeServiceTimingOwnerProvenance::Injected,
         }
+    }
+
+    /// Opt into calibration before a built-in gateway starts its first runtime.
+    /// The default registry, injected backends and scheduling policy are unchanged.
+    #[cfg(feature = "backend-candle")]
+    pub fn with_candle_cpu_calibration(
+        self,
+        config: crate::CandleCpuCalibrationConfig,
+    ) -> Result<Self, GatewayError> {
+        self.install_candle_cpu_calibration(crate::candle_cpu_calibration::CalibrationOwner::new(
+            config,
+        )?)
+    }
+
+    /// Construct an authoritative calibrated CPU owner without requiring another backend.
+    #[cfg(feature = "backend-candle")]
+    pub fn new_calibrated_candle_cpu(
+        config: crate::CandleCpuCalibrationConfig,
+    ) -> Result<Self, GatewayError> {
+        Self::new_with_calibrated_candle_cpu_owner(
+            crate::candle_cpu_calibration::CalibrationOwner::new(config)?,
+        )
+    }
+
+    #[cfg(feature = "backend-candle")]
+    pub(crate) fn new_with_calibrated_candle_cpu_owner(
+        owner: Arc<crate::candle_cpu_calibration::CalibrationOwner>,
+    ) -> Result<Self, GatewayError> {
+        let mut gateway = Self::with_backend(
+            Box::new(crate::CandleBackend::with_calibration(owner.clone())),
+            "Candle",
+        );
+        // The backend was constructed here, rather than supplied by a caller.
+        gateway.service_timing_owner_provenance =
+            crate::RuntimeServiceTimingOwnerProvenance::BuiltIn;
+        gateway.install_candle_cpu_calibration(owner)
+    }
+
+    #[cfg(feature = "backend-candle")]
+    pub(crate) fn install_candle_cpu_calibration(
+        mut self,
+        owner: Arc<crate::candle_cpu_calibration::CalibrationOwner>,
+    ) -> Result<Self, GatewayError> {
+        if self.service_timing_owner_provenance
+            != crate::RuntimeServiceTimingOwnerProvenance::BuiltIn
+            || self.runtime_instance_sequence.load(Ordering::Acquire) != 0
+            || self.candle_cpu_calibration.is_some()
+            || self
+                .backend
+                .try_read()
+                .map_or(true, |backend| backend.is_ready())
+        {
+            return Err(BackendError::Config(
+                "CPU calibration must be installed once at built-in gateway construction".into(),
+            )
+            .into());
+        }
+        self.registry.register(
+            "Candle",
+            Box::new(crate::candle_cpu_calibration::CalibratedCandleFactory(
+                owner.clone(),
+            )),
+        );
+        self.candle_cpu_calibration = Some(owner);
+        Ok(self)
+    }
+
+    /// Compare two exact single-text workloads on the currently resident CPU BERT.
+    /// Missing, synthetic, stale or busy evidence returns None, preserving caller order.
+    /// This local recommendation does not admit tasks or guarantee future residency.
+    #[cfg(feature = "backend-candle")]
+    pub fn compare_resident_cpu_embeddings(
+        &self,
+        model_ref: &crate::PumasModelRef,
+        texts: [&str; 2],
+    ) -> Option<crate::CandleCpuWarmComparison> {
+        let backend = self.backend.try_read().ok()?;
+        if canonical_backend_key(backend.name()) != "candle" || !backend.is_ready() {
+            return None;
+        }
+        self.candle_cpu_calibration.as_ref()?.compare(
+            backend.resident_cpu_calibration_instance()?,
+            model_ref,
+            texts,
+        )
+    }
+
+    #[cfg(all(test, feature = "backend-candle"))]
+    pub(crate) fn cpu_calibration_instance_for_test(&self) -> Option<uuid::Uuid> {
+        self.backend
+            .try_read()
+            .ok()?
+            .resident_cpu_calibration_instance()
     }
 
     /// Opt into bounded selected-text phase observations. The backend and target
@@ -364,6 +486,16 @@ impl InferenceGateway {
             recorder,
         ));
         self
+    }
+
+    /// Same live clock domain as this gateway's opt-in service observations.
+    /// Absent instrumentation preserves the disabled default without reading time.
+    pub fn runtime_service_timing_clock_snapshot(
+        &self,
+    ) -> Option<pantograph_timing_contracts::RuntimeServiceTimingClockSnapshot> {
+        self.service_timing
+            .as_ref()
+            .map(|timing| timing.clock_snapshot())
     }
 
     /// Set the process spawner
@@ -1356,12 +1488,14 @@ impl InferenceGateway {
         let mut timing = self.service_timing.as_ref().map(|instrumentation| {
             crate::service_timing::SelectedTextServiceTimingAttempt::new(
                 instrumentation,
+                self.service_timing_owner_provenance,
                 &self.resident_source_id,
                 &request,
                 &artifact_load_target,
                 &backend_decision,
             )
         });
+        let timing_cancellation = timing.as_ref().map(|_| cancellation.clone());
         let result = self
             .execute_selected_text_inner(
                 request,
@@ -1372,7 +1506,15 @@ impl InferenceGateway {
             )
             .await;
         if let Some(timing) = timing.as_mut() {
-            timing.finish(result.is_ok());
+            // A cancellation requested during successful worker drain still
+            // excludes this observation. It does not change the execution result.
+            timing.finish(
+                result.is_ok()
+                    && timing_cancellation.as_ref().is_some_and(|handle| {
+                        handle.snapshot().state
+                            == crate::InferenceExecutionCancellationState::Running
+                    }),
+            );
         }
         result
     }
@@ -1436,6 +1578,9 @@ impl InferenceGateway {
             } else {
                 Outcome::Failed
             });
+            if let Ok(outcome) = &outcome {
+                timing.bind_load_outcome(outcome);
+            }
         }
         if let Err(error) = outcome {
             let ready = backend.is_ready();
@@ -1526,6 +1671,29 @@ impl InferenceGateway {
         backend_decision: crate::BackendExecutionDecision,
         cancellation: InferenceExecutionCancellationHandle,
     ) -> Result<InferenceExecutionResult, GatewayError> {
+        Ok(self
+            .execute_selected_embedding_owned(
+                request,
+                artifact_load_target,
+                backend_decision,
+                cancellation,
+                None,
+                #[cfg(feature = "backend-candle")]
+                None,
+            )
+            .await?
+            .result)
+    }
+
+    async fn execute_selected_embedding_owned(
+        &self,
+        request: InferenceExecutionRequest,
+        artifact_load_target: crate::PumasArtifactLoadTarget,
+        backend_decision: crate::BackendExecutionDecision,
+        cancellation: InferenceExecutionCancellationHandle,
+        prepared_backend: Option<tokio::sync::OwnedRwLockWriteGuard<Box<dyn InferenceBackend>>>,
+        #[cfg(feature = "backend-candle")] mut attempt: Option<cpu_warm_attempt::AttemptBinding>,
+    ) -> Result<SelectedEmbeddingOwnedOutcome, GatewayError> {
         let selected = crate::selected_embedding_execution::SelectedEmbeddingLoad::validate(
             &request,
             &artifact_load_target,
@@ -1547,8 +1715,19 @@ impl InferenceGateway {
             _ => unreachable!("validated embedding input"),
         };
         reject_cancelled_execution_handle("selected embedding", &cancellation)?;
-        self.embedding_replacement.drain().await?;
-        let mut backend = self.backend.clone().write_owned().await;
+        let mut backend = match prepared_backend {
+            Some(backend) => backend,
+            None => {
+                self.embedding_replacement.drain().await?;
+                self.backend.clone().write_owned().await
+            }
+        };
+        #[cfg(feature = "backend-candle")]
+        if let Some(attempt) = attempt.as_mut() {
+            attempt
+                .preflight(backend.as_ref(), &artifact_load_target)
+                .await?;
+        }
         reject_cancelled_execution_handle("selected embedding", &cancellation)?;
         if canonical_backend_key(backend.name()) != "candle" {
             backend = self
@@ -1562,15 +1741,37 @@ impl InferenceGateway {
                 )
                 .await?;
         } else {
-            let start_outcome = match backend
+            #[cfg(feature = "backend-candle")]
+            let start = if let Some(attempt) = attempt.as_mut() {
+                attempt.begin_custodied_execution();
+                backend
+                    .load_verified_cpu_warm_embedding(
+                        &request,
+                        &artifact_load_target,
+                        &backend_decision,
+                        cancellation.clone(),
+                    )
+                    .await
+            } else {
+                backend
+                    .load_selected_embedding_with_cancellation(
+                        &request,
+                        &artifact_load_target,
+                        &backend_decision,
+                        cancellation.clone(),
+                    )
+                    .await
+            };
+            #[cfg(not(feature = "backend-candle"))]
+            let start = backend
                 .load_selected_embedding_with_cancellation(
                     &request,
                     &artifact_load_target,
                     &backend_decision,
                     cancellation.clone(),
                 )
-                .await
-            {
+                .await;
+            let start_outcome = match start {
                 Ok(outcome) => outcome,
                 Err(error) => {
                     let ready = backend.is_ready();
@@ -1607,11 +1808,37 @@ impl InferenceGateway {
             };
             drop(lifecycle);
         }
+        #[cfg(feature = "backend-candle")]
+        if let Some(attempt) = attempt.as_mut() {
+            attempt.adopt_verified_load(backend.as_mut())?;
+        }
         reject_cancelled_execution_handle("selected embedding", &cancellation)?;
+        #[cfg(feature = "backend-candle")]
+        let mut cpu_observation = self.candle_cpu_calibration.as_ref().and_then(|owner| {
+            owner.begin_service(
+                backend.resident_cpu_calibration_instance()?,
+                &texts,
+                cancellation.clone(),
+            )
+        });
         let result = backend
             .selected_embeddings(texts, cancellation.clone())
             .await;
+        #[cfg(feature = "backend-candle")]
+        if let Some(observation) = cpu_observation.as_mut() {
+            observation.execution_finished();
+        }
+        #[cfg(all(test, feature = "backend-candle"))]
+        if attempt.is_some() {
+            if let Some(owner) = &self.candle_cpu_calibration {
+                owner.test_attempt_phase("drain");
+            }
+        }
         let cleanup = backend.finish_selected_embedding(result.is_err()).await;
+        #[cfg(feature = "backend-candle")]
+        if let Some(observation) = cpu_observation.as_mut() {
+            observation.drain_finished();
+        }
         cleanup?;
         reject_cancelled_execution_handle("selected embedding", &cancellation)?;
         let embeddings = result?
@@ -1624,10 +1851,33 @@ impl InferenceGateway {
             })
             .collect::<Vec<_>>();
         let usage = embedding_usage_from_results(&embeddings)?;
-        Ok(InferenceExecutionResult::Embedding {
-            embeddings,
-            usage,
-            option_diagnostics,
+        #[cfg(feature = "backend-candle")]
+        if let Some(observation) = cpu_observation {
+            observation.completed();
+        }
+        #[cfg(feature = "backend-candle")]
+        if attempt.is_some() {
+            reject_cancelled_execution_handle("selected embedding receipt", &cancellation)?;
+        }
+        #[cfg(feature = "backend-candle")]
+        let drained_attempt = attempt
+            .map(|attempt| attempt.drained(backend.as_ref()))
+            .transpose()?;
+        #[cfg(feature = "backend-candle")]
+        if drained_attempt.is_some() {
+            reject_cancelled_execution_handle(
+                "selected embedding receipt publication",
+                &cancellation,
+            )?;
+        }
+        Ok(SelectedEmbeddingOwnedOutcome {
+            result: InferenceExecutionResult::Embedding {
+                embeddings,
+                usage,
+                option_diagnostics,
+            },
+            #[cfg(feature = "backend-candle")]
+            drained_attempt,
         })
     }
 
