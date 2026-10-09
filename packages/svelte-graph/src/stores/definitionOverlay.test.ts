@@ -1,9 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { get, writable } from 'svelte/store';
 
 import type { NodeDefinition } from '../types/workflow.ts';
 import { resolveNodeDefinitionOverlay } from './definitionOverlay.ts';
+import { createWorkflowStoreGraphState } from './workflowStoreGraphState.ts';
 
 test('resolveNodeDefinitionOverlay preserves additive descriptor ports from backend data', () => {
   const baseDefinitions: NodeDefinition[] = [
@@ -189,4 +191,80 @@ test('saved embedding descriptor ports retain embedding and JSON types in the gr
   ]);
   assert.equal(resolved.outputs[0].data_type, 'embedding');
   assert.notEqual(resolved.outputs[0].data_type, 'tensor');
+});
+
+const dependencySidecar = {
+  id: 'dependency_environment_sidecar', label: 'Dependency Environment',
+  data_type: 'dependency_environment_sidecar', required: false, multiple: false,
+  description: 'Typed dependency control',
+} as const;
+
+function embeddingSnapshot() {
+  return JSON.parse(readFileSync(new URL(
+    '../../../../crates/pantograph-inference-interface-contracts/tests/fixtures/authored_snapshot_embedding.json',
+    import.meta.url,
+  ), 'utf8'));
+}
+
+function inferenceDefinition(): NodeDefinition {
+  return {
+    node_type: 'llm-inference', category: 'processing', label: 'Inference',
+    description: 'Run inference', io_binding_origin: 'integrated', execution_mode: 'manual',
+    inputs: [
+      { id: 'pumas_model_ref', label: 'Model', data_type: 'json', required: true, multiple: false },
+      dependencySidecar,
+    ],
+    outputs: [{ id: 'diagnostics', label: 'Diagnostics', data_type: 'json', required: false, multiple: false }],
+  };
+}
+
+test('authored inference payload ports retain only the registered dependency control', () => {
+  const snapshot = embeddingSnapshot();
+  const definition = inferenceDefinition();
+  const before = JSON.stringify({ snapshot, definition });
+  const resolved = resolveNodeDefinitionOverlay('llm-inference', {
+    inference_interface_snapshot: snapshot,
+  }, [definition]);
+  assert.ok(resolved);
+  assert.deepEqual(resolved.inputs.map(port => port.id), ['text', 'dependency_environment_sidecar']);
+  assert.equal(resolved.inputs[1], dependencySidecar);
+  assert.deepEqual(resolved.outputs.map(port => port.id), ['embedding', 'metadata', 'usage']);
+  assert.equal(JSON.stringify({ snapshot, definition }), before);
+});
+
+test('an authored dependency control is not duplicated by the registered control', () => {
+  const snapshot = embeddingSnapshot();
+  snapshot.inputs.push({
+    port_id: dependencySidecar.id, label: 'Authored control', direction: 'input',
+    requirement: 'optional', value_type: { category: 'structured', kind: 'json' },
+    availability: { status: 'available' },
+  });
+  const resolved = resolveNodeDefinitionOverlay('llm-inference', {
+    inference_interface_snapshot: snapshot,
+  }, [inferenceDefinition()]);
+  assert.ok(resolved);
+  assert.equal(resolved.inputs.filter(port => port.id === dependencySidecar.id).length, 1);
+  assert.equal(resolved.inputs[1].label, 'Authored control');
+});
+
+test('saved dependency edge keeps its target handle after load and definition refresh', () => {
+  const nodeDefinitions = writable<NodeDefinition[]>([]);
+  const state = createWorkflowStoreGraphState({ nodeDefinitions, selectedNodeIds: writable([]) });
+  const graph = JSON.parse(JSON.stringify({
+    nodes: [{ id: 'infer', node_type: 'llm-inference', position: { x: 300, y: 100 },
+      data: { inference_interface_snapshot: embeddingSnapshot() } }],
+    edges: [{ id: 'deps-to-infer', source: 'deps', source_handle: dependencySidecar.id,
+      target: 'infer', target_handle: dependencySidecar.id }],
+  }));
+  state.applyWorkflowGraph(graph);
+  nodeDefinitions.set([inferenceDefinition()]);
+  const target = get(state.nodes)[0].data.definition as NodeDefinition;
+  assert.ok(target.inputs.some(port => port.id === get(state.edges)[0].targetHandle));
+  state.updateNodeRuntimeData('infer', { streamContent: 'runtime overlay' });
+  nodeDefinitions.set([{ ...inferenceDefinition(), label: 'Refreshed definition' }]);
+  const refreshed = get(state.nodes)[0];
+  assert.deepEqual((refreshed.data.definition as NodeDefinition).inputs.map(port => port.id),
+    ['text', dependencySidecar.id]);
+  assert.equal(refreshed.data.streamContent, 'runtime overlay');
+  assert.deepEqual(get(state.workflowGraph).edges, graph.edges);
 });
