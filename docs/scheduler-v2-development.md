@@ -130,6 +130,40 @@ can copy strings before Python checks their size, so these limits do not prove a
 universal refusal-work or allocation bound. A bounded native export API or proof
 of bounded loader-consumed input would be required for that stronger contract.
 This opt-in observer is advisory and supplies no deterministic dispatch guarantee.
+
+`RuntimeServiceTimingInspectionLedger` adds a separate pure pre-call contract in
+`pantograph-timing-contracts`. It reserves caller-selected aggregate call, declared
+work and temporary-copy budgets atomically before invoking an adapter. Unknown
+bounds or overflow/exceeded ceilings refuse without invoking the callback body or
+changing accounting. A call ceiling also bounds zero-cost declarations. Failed and unwound
+callbacks keep their full reservations; reserved versus completed calls exposes
+incomplete observations. Fixed operation enums and constant-size accounting avoid
+unbounded diagnostic metadata or a new telemetry store.
+Reservations cover adapter calls; the constant-work gate and caller retry loops
+are not represented as measured native cost in those counters.
+The constant-work claim covers the ledger-owned decision/accounting only. Caller
+closure construction and destruction are outside it: a refused consumed closure
+is still dropped, and arbitrary captured Drop code can run or panic. Callback
+noninvocation does not establish a universal bound on that caller-owned work.
+
+Declared maxima are an adapter contract, not proof about a native implementation
+or resource capacity. The current `NativeOwnerSnapshot` profile is explicitly
+refused even if a caller supplies declared maxima: tokenizer strings/export,
+AddedToken/configuration and build getters lack a proven pre-call copy/work bound.
+`inspect_native_owner` consequently never invokes the snapshot callback body.
+The existing advisory
+observer is unchanged; this new strict contract is not wired into collection,
+history estimation or selection and does not retroactively qualify their costs.
+
+Elapsed ns are separately supplied observations for completed calls, including
+failures. Missing values or cumulative overflow stay unknown, while an unwound
+call remains incomplete; neither elapsed nor returned byte counts refund a
+reservation or establish a wall-time deadline. The source-only synthetic tests
+exercise accounting/refusal, not native dispatch performance. A genuinely bounded
+native exporter or loader-consumed input proof and a decision on strict collection
+integration remain required before a native profile can pass this contract. All
+existing inspection/estimation caps and default scheduling remain unchanged.
+
 The CPU domain is process-local, not portable hardware equivalence or capacity.
 The native fixtures use small locally generated untrained models; they establish
 identity/ACK semantics, not trained-model quality or performance. Retained aliases

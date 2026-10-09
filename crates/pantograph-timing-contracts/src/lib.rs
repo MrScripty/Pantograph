@@ -6,6 +6,8 @@ use uuid::Uuid;
 
 mod service;
 pub use service::*;
+mod inspection;
+pub use inspection::*;
 
 const TIMING_ATTEMPT_ID_PREFIX: &str = "timing_attempt_";
 const MAX_TIMING_ATTEMPT_ID_LEN: usize = 128;
