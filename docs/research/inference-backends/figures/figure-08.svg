@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="575" viewBox="0 0 1000 575">
+<rect width="1000" height="575" fill="white"/>
+<defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#526d7a"/></marker></defs>
+<text x="30" y="36.0" text-anchor="start" font-family="DejaVu Sans, sans-serif" font-size="25" font-weight="bold" fill="#152b38">Output completion and resource drain are different observations</text>
+<text x="30" y="65.0" text-anchor="start" font-family="DejaVu Sans, sans-serif" font-size="17" font-weight="normal" fill="#52616a">Proposed task-session lifecycle</text>
+<rect x="45" y="110" width="420" height="108" rx="8" fill="#eaf1f5" stroke="#748994" stroke-width="1.5"/>
+<text x="255.0" y="140.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38">Resident object</text>
+<text x="255.0" y="169.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">Shared weights / compiled components</text>
+<text x="255.0" y="192.76" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">Lease retained while work uses them</text>
+<rect x="535" y="110" width="420" height="108" rx="8" fill="#eaf3ee" stroke="#748994" stroke-width="1.5"/>
+<text x="745.0" y="140.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38">Request state</text>
+<text x="745.0" y="169.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">Caches / inputs / RNG / output queue</text>
+<text x="745.0" y="192.76" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">Never implicitly shared across requests</text>
+<path d="M465,165 L527,165" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+<rect x="35" y="300" width="210" height="63" rx="8" fill="#eaf1f5" stroke="#748994" stroke-width="1.5"/>
+<text x="140.0" y="330.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38">Accepted</text>
+<rect x="265" y="300" width="210" height="63" rx="8" fill="#eaf1f5" stroke="#748994" stroke-width="1.5"/>
+<text x="370.0" y="330.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38">Running</text>
+<rect x="495" y="300" width="210" height="63" rx="8" fill="#eaf1f5" stroke="#748994" stroke-width="1.5"/>
+<text x="600.0" y="330.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38">Output final</text>
+<rect x="735" y="300" width="210" height="63" rx="8" fill="#eaf3ee" stroke="#748994" stroke-width="1.5"/>
+<text x="840.0" y="330.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38">Drained</text>
+<path d="M245,332 L258,332" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+<path d="M475,332 L488,332" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+<path d="M705,332 L718,332" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+<rect x="275" y="438" width="440" height="73" rx="8" fill="#f5f0e5" stroke="#748994" stroke-width="1.5"/>
+<text x="495.0" y="468.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38">Cancellation requested</text>
+<text x="495.0" y="497.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">Cooperative stop or governed termination</text>
+<path d="M370,363 L410,431" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+<polyline points="715,475 840,475 840,371" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+<text x="505" y="557.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">Caller disconnect or final output alone does not prove producer quiescence</text>
+</svg>
