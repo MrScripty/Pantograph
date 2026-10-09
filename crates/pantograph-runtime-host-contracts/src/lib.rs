@@ -13,6 +13,12 @@ mod reservation_lifecycle;
 mod runtime_host_dispatch;
 mod runtime_host_execution;
 mod runtime_session_load;
+mod serial_runtime_host;
+
+pub use serial_runtime_host::{
+    SerialRuntimeHostBatchExecutionPort, SerialRuntimeHostCleanupReceipt,
+    SerialRuntimeHostCpuOwnerEvidence, SerialRuntimeHostDrainedExecution,
+};
 
 pub use reservation_lifecycle::{
     ReservationLifecycleApplication, ReservationLifecycleApplicationState,
@@ -25,7 +31,8 @@ pub use reservation_lifecycle::{
 pub use runtime_host_dispatch::{
     RuntimeHostBatchExecutionPort, RuntimeHostDispatchError,
     RuntimeHostExecutionCancellationHandle, RuntimeHostExecutionCancellationSignal,
-    RuntimeHostExecutionPort, RuntimeHostExecutionPortError, SchedulerRuntimeHostBatchDispatcher,
+    RuntimeHostExecutionPort, RuntimeHostExecutionPortError, RuntimeHostTaskStartAuthority,
+    RuntimeHostTaskStartDisposition, SchedulerRuntimeHostBatchDispatcher,
     SchedulerRuntimeHostDispatcher,
 };
 pub use runtime_host_execution::{

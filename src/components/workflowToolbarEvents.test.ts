@@ -1,5 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import vm from 'node:vm';
+import { parse } from 'svelte/compiler';
+import ts from 'typescript';
 import type { Edge } from '@xyflow/svelte';
 
 import {
@@ -10,10 +14,95 @@ import {
   nextWorkflowPatchSemanticVersion,
   shouldRefreshValidationFromLifecycleEvent,
   workflowSubmitSuccessWorkbenchPage,
+  workflowSubmitTextInputs,
   workflowSubmitDisabledReason,
   workflowValidationRefreshKey,
 } from './workflowToolbarEvents.ts';
 import type { NodeExecutionState, WorkflowEvent } from '../services/workflow/types.ts';
+
+test('Submit captures authored text for the native embedding graph and preserves exact values', () => {
+  const graph = {
+    nodes: [
+      { id: 'prompt', node_type: 'text-input', position: { x: 0, y: 0 }, data: { text: 'hello world' } },
+      { id: 'infer', node_type: 'llm-inference', position: { x: 0, y: 0 }, data: {} },
+      { id: 'vectors', node_type: 'vector-output', position: { x: 0, y: 0 }, data: {} },
+      { id: 'deps', node_type: 'dependency-environment', position: { x: 0, y: 0 }, data: { mode: 'manual' } },
+    ],
+    edges: [
+      { id: 'text', source: 'prompt', source_handle: 'text', target: 'infer', target_handle: 'text' },
+      { id: 'vector', source: 'infer', source_handle: 'embedding', target: 'vectors', target_handle: 'vector' },
+      { id: 'control', source: 'deps', source_handle: 'dependency_environment_sidecar', target: 'infer', target_handle: 'dependency_environment_sidecar' },
+    ],
+  };
+  const before = structuredClone(graph);
+  const inputs = workflowSubmitTextInputs(graph);
+  assert.deepEqual(inputs, [{ node_id: 'prompt', port_id: 'text', value: 'hello world' }]);
+  assert.deepEqual(graph, before);
+  graph.nodes[0].data.text = 'later edit';
+  assert.equal(inputs[0].value, 'hello world');
+  for (const text of ['', '  hello\nworld  ']) {
+    graph.nodes[0].data.text = text;
+    assert.equal(workflowSubmitTextInputs(graph)[0].value, text);
+  }
+});
+
+test('Submit excludes bound text, missing or wrong-type values, and other node types', () => {
+  const graph = {
+    nodes: [
+      { id: 'bound', node_type: 'text-input', position: { x: 0, y: 0 }, data: { text: 'must not override upstream' } },
+      { id: 'missing', node_type: 'text-input', position: { x: 0, y: 0 }, data: {} },
+      { id: 'wrong', node_type: 'text-input', position: { x: 0, y: 0 }, data: { text: 7 } },
+      { id: 'other', node_type: 'dependency-environment', position: { x: 0, y: 0 }, data: { text: 'control metadata' } },
+    ],
+    edges: [{ id: 'incoming', source: 'source', source_handle: 'text', target: 'bound', target_handle: 'text' }],
+  };
+  assert.deepEqual(workflowSubmitTextInputs(graph), []);
+  assert.deepEqual(workflowSubmitTextInputs({ nodes: [], edges: [] }), []);
+});
+
+test('ordinary Toolbar Submit sends captured typed text through the execution-session request', async () => {
+  const source = readFileSync(new URL('./WorkflowToolbar.svelte', import.meta.url), 'utf8');
+  const script = parse(source, { modern: true }).instance;
+  const handler = script?.content.body.find(node => node.type === 'FunctionDeclaration' && node.id?.name === 'handleSubmit');
+  assert.ok(handler && 'start' in handler && 'end' in handler);
+  assert.ok(typeof handler.start === 'number' && typeof handler.end === 'number');
+  const code = ts.transpileModule(source.slice(handler.start, handler.end), {
+    compilerOptions: { target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const graph = { nodes: [{ id: 'prompt', node_type: 'text-input', position: { x: 0, y: 0 }, data: { text: 'hello world' } }], edges: [] };
+  const requests: Array<{ inputs: unknown }> = [];
+  const failures: unknown[] = [];
+  const context = {
+    $isExecuting: false, $isReadOnly: false, $isDirty: false,
+    $currentGraphId: 'workflow-native', $currentSessionId: 'graph-native', $workflowGraph: graph,
+    currentSavedWorkflow: { id: 'workflow-native' },
+    currentValidationSummary: { submit_gate: { allowed: true }, validation_session_id: 'validation-native' },
+    workflowSemanticVersion: '0.1.0', AUDIO_RUNTIME_DATA_KEYS: [],
+    isExecuting: { set() {} }, clearNodeRuntimeData() {}, resetExecutionStates() {}, clearStreamContent() {},
+    assertDesktopSeedInputs() {}, isNumericWorkflowSemanticVersion,
+    workflowSubmitTextInputs, workflowSubmitSuccessWorkbenchPage,
+    workflowService: {
+      async createWorkflowExecutionSession() {
+        graph.nodes[0].data.text = 'later edit during async session creation';
+        return { session_id: 'execution-native' };
+      },
+      async publishGraphSessionExecutableValidationSnapshot() {},
+      async runWorkflowExecutionSession(request: { inputs: unknown }) {
+        requests.push(request);
+        return { workflow_run_id: 'run-native', outputs: [] };
+      },
+    },
+    async closeExecutionSession() {}, persistWorkflowSemanticVersion() {}, selectActiveWorkflowRun() {}, setWorkbenchPage() {},
+    normalizeWorkflowServiceError(error: unknown) { return error; },
+    console: { error(...errors: unknown[]) { failures.push(errors); } },
+    MAX_WORKFLOW_VERSION_CONFLICT_RETRIES: 0,
+  };
+  const submit = vm.runInNewContext(`${code}\nhandleSubmit`, context) as () => Promise<void>;
+  await submit();
+  assert.deepEqual(failures, []);
+  assert.equal(requests.length, 1);
+  assert.deepEqual(requests[0].inputs, [{ node_id: 'prompt', port_id: 'text', value: 'hello world' }]);
+});
 
 function createWorkflowActions() {
   const stateCalls: Array<{ nodeId: string; state: NodeExecutionState; message?: string }> = [];

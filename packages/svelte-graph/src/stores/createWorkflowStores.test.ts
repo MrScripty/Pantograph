@@ -830,3 +830,77 @@ test('createWorkflowStores ignores stale group mutation responses', async () => 
     ['a', 'b'],
   );
 });
+
+test('group property Apply forwards frozen owner expectations and publishes only its acknowledged graph', async () => {
+  const initial: WorkflowGraph = { nodes: [], edges: [] };
+  const backend = createBackendStub(initial);
+  const pending = createDeferred<WorkflowGraphMutationResponse>();
+  const expected = { path: 'old', unrelated: { keep: true } };
+  const patch = { path: 'new' };
+  let submitted: unknown[] = [];
+  backend.updateGroupNodeData = async (...args) => { submitted = args; return pending.promise; };
+  const stores = createWorkflowStores(backend);
+  stores.loadWorkflow(initial);
+  stores.setActiveSessionId('owner-session');
+  const before = get(stores.workflowGraph);
+  const applying = stores.updateGroupNodeData('group', 'inner', 'json-filter', expected, patch, 'owner-session');
+  expected.path = 'later local value'; patch.path = 'later local patch';
+  assert.deepEqual(submitted, ['group', 'inner', 'json-filter', {path:'old',unrelated:{keep:true}}, {path:'new'}, 'owner-session']);
+  assert.deepEqual(get(stores.workflowGraph), before);
+  const changed: WorkflowGraph = {nodes:[{id:'group',node_type:'node-group',position:{x:0,y:0},data:{group:{nodes:[{id:'inner',data:{path:'new'}}]}}}],edges:[]};
+  pending.resolve({graph:changed});
+  const result = await applying;
+  assert.equal(result.status, 'applied');
+  assert.deepEqual((get(stores.workflowGraph) as WorkflowGraph).nodes[0].data.group, changed.nodes[0].data.group);
+  assert.equal(get(stores.isDirty), true);
+});
+
+test('unsupported or rejecting group property hosts do not change the local graph', async () => {
+  const initial: WorkflowGraph = { nodes: [], edges: [] };
+  for (const unsupported of [true, false]) {
+    const backend = createBackendStub(initial);
+    if (!unsupported) backend.updateGroupNodeData = async () => {throw new Error('internal node changed');};
+    const stores=createWorkflowStores(backend);stores.loadWorkflow(initial);stores.setActiveSessionId('owner');
+    const before = get(stores.workflowGraph);
+    const result=await stores.updateGroupNodeData('group','inner','json-filter',{path:'old'},{path:'draft'}, 'owner');
+    assert.equal(result.status,'failed');
+    assert.deepEqual(get(stores.workflowGraph),before);
+    assert.match(String(result.error),unsupported ? /does not support/ : /node changed/);
+  }
+});
+
+test('group property acknowledgment cannot replace the graph after a session switch', async () => {
+  const backend=createBackendStub({nodes:[],edges:[]});
+  const pending=createDeferred<WorkflowGraphMutationResponse>();
+  backend.updateGroupNodeData=async()=>pending.promise;
+  const stores=createWorkflowStores(backend);stores.setActiveSessionId('old-session');
+  const applying=stores.updateGroupNodeData('group','inner','json-filter',{path:'old'},{path:'draft'}, 'old-session');
+  stores.setActiveSessionId('new-session');
+  const current:WorkflowGraph={nodes:[{id:'current',node_type:'json-filter',position:{x:0,y:0},data:{path:'keep'}}],edges:[]};
+  stores.loadWorkflow(current);
+  const before = get(stores.workflowGraph);
+  pending.resolve({graph:{nodes:[],edges:[]}});
+  assert.equal((await applying).status,'stale');
+  assert.deepEqual(get(stores.workflowGraph),before);
+});
+
+test('group property Apply detaches proxy-backed JSON and contains serialization failures',async()=>{
+  const initial:WorkflowGraph={nodes:[],edges:[]};const backend=createBackendStub(initial);
+  const calls:unknown[][]=[];backend.updateGroupNodeData=async(...args)=>{calls.push(args);return {graph:initial};};
+  const stores=createWorkflowStores(backend);stores.setActiveSessionId('owner');
+  const saved=new Proxy({path:'old',nested:{keep:true}},{});
+  const patch=new Proxy({path:'new'},{});
+  assert.equal((await stores.updateGroupNodeData('group','inner','json-filter',saved,patch,'owner')).status,'applied');
+  assert.deepEqual(calls[0],['group','inner','json-filter',{path:'old',nested:{keep:true}},{path:'new'},'owner']);
+  const cyclic:Record<string,unknown>={};cyclic.self=cyclic;
+  assert.equal((await stores.updateGroupNodeData('group','inner','json-filter',cyclic,patch,'owner')).status,'failed');
+  assert.equal(calls.length,1);
+});
+
+test('a stale opening session refuses group Apply before any host call',async()=>{
+  const backend=createBackendStub({nodes:[],edges:[]});let calls=0;
+  backend.updateGroupNodeData=async()=>{calls++;return {graph:{nodes:[],edges:[]}};};
+  const stores=createWorkflowStores(backend);stores.setActiveSessionId('new-session');
+  const result=await stores.updateGroupNodeData('group','inner','json-filter',{path:'old'},{path:'draft'},'opening-session');
+  assert.equal(result.status,'failed');assert.match(String(result.error),/session changed/);assert.equal(calls,0);
+});

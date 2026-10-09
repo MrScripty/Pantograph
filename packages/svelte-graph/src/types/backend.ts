@@ -171,6 +171,12 @@ export interface WorkflowBackend {
     sessionId: string,
   ): Promise<WorkflowGraphMutationResponse>;
 
+  /** Scoped owner edit. Optional; unsupported hosts must refuse without local mutation. */
+  updateGroupNodeData?(
+    groupId: string, nodeId: string, expectedNodeType: string,
+    expectedNodeData: unknown, data: Record<string, unknown>, sessionId: string,
+  ): Promise<WorkflowGraphMutationResponse>;
+
   /** Update a node's position. Returns the updated graph for frontend sync. */
   updateNodePosition(
     nodeId: string,

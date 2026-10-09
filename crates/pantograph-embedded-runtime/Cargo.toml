@@ -25,7 +25,9 @@ backend-candle = [
     "dep:tokio-stream",
     "dep:tower-http",
 ]
-standalone = ["inference/std-process"]
+native-task-release = ["backend-candle", "pantograph-workflow-service/native-task-release"]
+host-dependency-inventory = []
+standalone = ["inference/std-process", "host-dependency-inventory"]
 
 [dependencies]
 inference = { path = "../inference", default-features = false }

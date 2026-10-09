@@ -123,6 +123,9 @@ impl WorkflowExecutionSessionStore {
         queue_id: &str,
     ) -> Result<Option<WorkflowExecutionSessionDequeuedRun>, WorkflowServiceError> {
         let tick = self.next_tick();
+        if !self.queue_progress_preflight() {
+            return Ok(None);
+        }
         let capacity_blocked = {
             let state = self.active.get(session_id).ok_or_else(|| {
                 WorkflowServiceError::SessionNotFound(format!("session '{}' not found", session_id))
@@ -132,6 +135,12 @@ impl WorkflowExecutionSessionStore {
                 && self.loaded_session_count() >= self.max_loaded_sessions
                 && self.runtime_unload_candidates(session_id).is_empty()
         };
+        // Observe current owner time/evidence under the same store lock as the
+        // removal below. No stored selection ticket can authorize commitment.
+        let progress_choice = self.queue_progress_choice(session_id, queue_id)?;
+        if matches!(progress_choice, super::WorkflowQueueProgressChoice::Hold) {
+            return Ok(None);
+        }
         let state = self.active.get_mut(session_id).ok_or_else(|| {
             WorkflowServiceError::SessionNotFound(format!("session '{}' not found", session_id))
         })?;
@@ -171,7 +180,17 @@ impl WorkflowExecutionSessionStore {
             Self::mark_session_access(state, tick);
             return Ok(None);
         }
-        let decision = policy.admission_decision(&admission_input, queue_id)?;
+        let decision = if matches!(
+            progress_choice,
+            super::WorkflowQueueProgressChoice::Protected
+        ) {
+            super::super::policy::WorkflowExecutionSessionAdmissionDecision {
+                admitted_workflow_run_id: Some(queue_id.to_string()),
+                reason: Some(WorkflowSchedulerDecisionReason::StarvationProtection),
+            }
+        } else {
+            policy.admission_decision(&admission_input, queue_id)?
+        };
         let Some(admitted_workflow_run_id) = decision.admitted_workflow_run_id.as_deref() else {
             return Ok(None);
         };
@@ -186,6 +205,11 @@ impl WorkflowExecutionSessionStore {
                 ))
             })?;
 
+        // End the mutable borrow before the final monotonic expiry/deadline check.
+        if !self.queue_progress_final_check().unwrap_or(false) {
+            return Ok(None);
+        }
+        let state = self.active.get_mut(session_id).expect("verified session");
         let queued = state.queue.remove(admitted_index);
         for item in &mut state.queue {
             item.starvation_bypass_count = item.starvation_bypass_count.saturating_add(1);
@@ -213,6 +237,7 @@ impl WorkflowExecutionSessionStore {
             scheduler_task_results: Default::default(),
             scheduler_task_attempts: Default::default(),
             runtime_dispatch_readiness_proofs: Default::default(),
+            completion_cleanup_gate: None,
         });
         Self::mark_session_access(state, tick);
         Ok(Some(WorkflowExecutionSessionDequeuedRun {

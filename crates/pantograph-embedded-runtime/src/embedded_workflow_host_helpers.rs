@@ -167,6 +167,7 @@ impl EmbeddedWorkflowHost {
             .any(|node| is_canonical_llamacpp_inference_node(&node.node_type, &node.data)))
     }
 
+    #[cfg(test)]
     pub(crate) fn record_session_runtime_reservation(
         &self,
         session_id: &str,
@@ -177,24 +178,6 @@ impl EmbeddedWorkflowHost {
         })?;
 
         Ok(reservations.insert(session_id.to_string(), reservation_id))
-    }
-
-    pub(crate) fn restore_session_runtime_reservation(
-        &self,
-        session_id: &str,
-        previous_reservation_id: Option<u64>,
-    ) -> Result<(), WorkflowServiceError> {
-        let mut reservations = self.session_runtime_reservations.lock().map_err(|_| {
-            WorkflowServiceError::Internal("session runtime reservation lock poisoned".to_string())
-        })?;
-
-        if let Some(previous_reservation_id) = previous_reservation_id {
-            reservations.insert(session_id.to_string(), previous_reservation_id);
-        } else {
-            reservations.remove(session_id);
-        }
-
-        Ok(())
     }
 
     pub(crate) fn sync_loaded_session_runtime_retention_hint(
@@ -282,28 +265,75 @@ impl EmbeddedWorkflowHost {
             requirements,
             Self::runtime_retention_hint(retention_hint),
         );
+        #[cfg(feature = "backend-candle")]
+        let reservation_request = {
+            let mut request = reservation_request;
+            if let Some(profile) = &self.retained_cpu_session {
+                profile
+                    .apply_request(self, workflow_id, &mut request)
+                    .await?;
+            }
+            request
+        };
         let descriptor = runtime_registry::active_runtime_descriptor(&host_runtime_mode_info);
-        let lease = runtime_registry
-            .acquire_reservation(reservation_request)
-            .map_err(runtime_registry_errors::workflow_service_error_from_runtime_registry)?;
+        let observed = runtime_registry
+            .evaluate_reservation(reservation_request.clone())
+            .map_err(runtime_registry_errors::workflow_service_error_from_runtime_registry)?
+            .observation()
+            .clone();
+        let (lease, custody) = runtime_registry
+            .acquire_reservation_provisional(reservation_request, &observed, |lease| {
+                Ok::<_, pantograph_runtime_registry::RuntimeRegistryError>(lease.clone())
+            })
+            .map_err(|error| match error {
+                pantograph_runtime_registry::RuntimeReservationPublicationError::Registry(
+                    error,
+                )
+                | pantograph_runtime_registry::RuntimeReservationPublicationError::Validation(
+                    error,
+                ) => runtime_registry_errors::workflow_service_error_from_runtime_registry(error),
+            })?;
 
-        let previous_reservation_id =
-            self.record_session_runtime_reservation(session_id, lease.reservation_id)?;
+        // Keep rollback ownership through warmup. Cancellation or failure must
+        // restore the original claim without publishing a dangling session ID.
         if let Err(error) = self
             .consume_runtime_warmup_disposition(runtime_registry.as_ref(), &descriptor.runtime_id)
             .await
         {
-            self.restore_session_runtime_reservation(session_id, previous_reservation_id)?;
-            if previous_reservation_id != Some(lease.reservation_id) {
-                runtime_registry::release_reservation_and_reconcile_runtime_registry(
+            drop(custody);
+            let disposition = runtime_registry
+                .retention_disposition(&descriptor.runtime_id)
+                .map_err(runtime_registry_errors::workflow_service_error_from_runtime_registry)?;
+            if disposition.decision == pantograph_runtime_registry::RuntimeRetentionDecision::Evict
+            {
+                runtime_registry::reclaim_runtime_and_reconcile_runtime_registry(
                     self.gateway.as_ref(),
                     runtime_registry.as_ref(),
-                    lease.reservation_id,
+                    &descriptor.runtime_id,
                 )
                 .await
                 .map_err(|error| WorkflowServiceError::Internal(error.to_string()))?;
             }
             return Err(error);
+        }
+
+        // Publish and transfer without an await while holding the cache lock.
+        let mut reservations = self.session_runtime_reservations.lock().map_err(|_| {
+            WorkflowServiceError::Internal("session runtime reservation lock poisoned".to_string())
+        })?;
+        let previous = reservations.insert(session_id.to_string(), lease.reservation_id);
+        if let Err(error) = custody.transfer() {
+            match previous.filter(|id| runtime_registry.reservation_lease(*id).is_some()) {
+                Some(previous) => {
+                    reservations.insert(session_id.to_string(), previous);
+                }
+                None => {
+                    reservations.remove(session_id);
+                }
+            }
+            return Err(
+                runtime_registry_errors::workflow_service_error_from_runtime_registry(error),
+            );
         }
 
         Ok(())
@@ -318,12 +348,12 @@ impl EmbeddedWorkflowHost {
         };
 
         let reservation_id = {
-            let mut reservations = self.session_runtime_reservations.lock().map_err(|_| {
+            let reservations = self.session_runtime_reservations.lock().map_err(|_| {
                 WorkflowServiceError::Internal(
                     "session runtime reservation lock poisoned".to_string(),
                 )
             })?;
-            reservations.remove(session_id)
+            reservations.get(session_id).copied()
         };
 
         if let Some(reservation_id) = reservation_id {
@@ -334,6 +364,16 @@ impl EmbeddedWorkflowHost {
             )
             .await
             .map_err(|error| WorkflowServiceError::Internal(error.to_string()))?;
+            let mut reservations = self.session_runtime_reservations.lock().map_err(|_| {
+                WorkflowServiceError::Internal(
+                    "session runtime reservation lock poisoned".to_string(),
+                )
+            })?;
+            // A pending predecessor refuses release. Keep its cache entry on
+            // that error; a successful old release must not erase a new owner.
+            if reservations.get(session_id) == Some(&reservation_id) {
+                reservations.remove(session_id);
+            }
         }
 
         Ok(())

@@ -20,6 +20,22 @@ impl runtime_registry::HostRuntimeRegistryController for inference::InferenceGat
         inference::InferenceGateway::resident_lifecycle_snapshots(self).await
     }
 
+    async fn stop_runtime_producer_and_publish(
+        &self,
+        producer: runtime_registry::HostRuntimeProducer,
+        registry: &pantograph_runtime_registry::RuntimeRegistry,
+    ) -> Result<(), inference::GatewayError> {
+        #[cfg(not(feature = "backend-candle"))]
+        let _ = registry;
+        match producer {
+            #[cfg(feature = "backend-candle")]
+            runtime_registry::HostRuntimeProducer::Active => {
+                self.stop_and_publish_cpu_retirement(registry).await
+            }
+            _ => self.stop_runtime_producer(producer).await,
+        }
+    }
+
     async fn stop_runtime_producer(
         &self,
         producer: runtime_registry::HostRuntimeProducer,
@@ -44,6 +60,21 @@ impl runtime_registry::HostRuntimeRegistryController for inference::InferenceGat
 impl runtime_registry::HostRuntimeRegistryLifecycleController for inference::InferenceGateway {
     async fn stop_all_runtime_producers(&self) -> Result<(), inference::GatewayError> {
         self.stop().await
+    }
+
+    async fn stop_all_runtime_producers_and_publish(
+        &self,
+        registry: &pantograph_runtime_registry::RuntimeRegistry,
+    ) -> Result<(), inference::GatewayError> {
+        #[cfg(feature = "backend-candle")]
+        {
+            self.stop_and_publish_cpu_retirement(registry).await
+        }
+        #[cfg(not(feature = "backend-candle"))]
+        {
+            let _ = registry;
+            self.stop().await
+        }
     }
 
     async fn restore_runtime(

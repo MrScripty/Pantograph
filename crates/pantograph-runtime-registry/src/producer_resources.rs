@@ -87,6 +87,40 @@ impl RuntimeRegistry {
         &self,
         frame: RuntimeProducerObservation,
     ) -> Result<RuntimeRegistryRuntimeSnapshot, RuntimeRegistryError> {
+        self.observe_runtime_producer_owned(frame, None)
+    }
+
+    /// Minimal current accounting query: no registry/model/lease snapshot copy.
+    /// A false result is absence of a charged/uncertain record, not stop evidence.
+    pub fn requires_resident_retirement_ack(&self, runtime_id: &str) -> bool {
+        let runtime_id = canonical_runtime_id(runtime_id);
+        let state = self
+            .state
+            .lock()
+            .expect("runtime registry state lock poisoned");
+        state.runtimes.get(&runtime_id).is_some_and(|record| {
+            record.model_resource_residency.is_some() || record.resident_resources_uncertain
+        })
+    }
+
+    /// Trusted producer retirement, with exact prior resident identity checked
+    /// under the same admission lock as apply. Labels are not stop evidence:
+    /// the caller must own the actual native stop acknowledgement throughout.
+    /// Existing execution fences can convert release to Unknown; inspect the
+    /// returned snapshot before treating this as an accepted retirement ACK.
+    pub fn observe_runtime_producer_release_for_owner(
+        &self,
+        frame: RuntimeProducerObservation,
+        owner: crate::RuntimeRetainedOwnerIdentity<'_>,
+    ) -> Result<RuntimeRegistryRuntimeSnapshot, RuntimeRegistryError> {
+        self.observe_runtime_producer_owned(frame, Some(owner))
+    }
+
+    fn observe_runtime_producer_owned(
+        &self,
+        mut frame: RuntimeProducerObservation,
+        owner: Option<crate::RuntimeRetainedOwnerIdentity<'_>>,
+    ) -> Result<RuntimeRegistryRuntimeSnapshot, RuntimeRegistryError> {
         let runtime_id = canonical_runtime_id(&frame.observation.runtime_id);
         let invalid = || RuntimeRegistryError::ModelResidencyObservationChanged(runtime_id.clone());
         if frame.source_id.trim().is_empty() || frame.sequence == 0 {
@@ -118,10 +152,41 @@ impl RuntimeRegistry {
             .state
             .lock()
             .expect("runtime registry state lock poisoned");
-        let configured = state
-            .resident_estimates
-            .keys()
-            .any(|(runtime, _)| runtime == &runtime_id)
+        crate::reject_eviction_pending(&state, &runtime_id)?;
+        if let Some(owner) = owner {
+            let matching = state.runtimes.get(&runtime_id).is_some_and(|record| {
+                !record.resident_resources_uncertain
+                    && record.runtime_instance_id.as_deref() == Some(owner.runtime_instance_id)
+                    && record
+                        .model_resource_residency
+                        .as_ref()
+                        .is_some_and(|resident| {
+                            resident.model_id == owner.model_target
+                                && resident.runtime_instance_id.as_deref()
+                                    == Some(owner.runtime_instance_id)
+                                && resident.requirements.is_some()
+                        })
+            });
+            if frame.allocation_state != RuntimeProducerAllocationState::Released
+                || frame.observation.status != RuntimeRegistryStatus::Stopped
+                || canonical_runtime_id(owner.runtime_id) != runtime_id
+                || frame.source_id != owner.source_id
+                || frame.observation.runtime_instance_id.as_deref()
+                    != Some(owner.runtime_instance_id)
+                || !matching
+                || state
+                    .producer_observations
+                    .get(&runtime_id)
+                    .is_none_or(|(source, _)| source != owner.source_id)
+            {
+                return Err(invalid());
+            }
+        }
+        let configured = state.producer_observations.contains_key(&runtime_id)
+            || state
+                .resident_estimates
+                .keys()
+                .any(|(runtime, _)| runtime == &runtime_id)
             || state.resource_domains.values().any(|domain| {
                 domain
                     .bindings
@@ -138,6 +203,21 @@ impl RuntimeRegistry {
         if let Some((source, sequence)) = state.producer_observations.get(&runtime_id) {
             if *source != frame.source_id || *sequence >= frame.sequence {
                 return Err(invalid());
+            }
+        }
+        // A prepared/started envelope owns the previous resident charge. An
+        // out-of-band release/replacement cannot erase it: record uncertainty
+        // and keep the charge until actual custody recovery reconciles it.
+        if state.retained_envelope_fences.contains_key(&runtime_id) {
+            let same = state.runtimes.get(&runtime_id).is_some_and(|r| {
+                frame.allocation_state == RuntimeProducerAllocationState::Resident
+                    && r.runtime_instance_id == frame.observation.runtime_instance_id
+                    && r.model_resource_residency.as_ref().is_some_and(|resident| {
+                        Some(&resident.model_id) == frame.observation.model_id.as_ref()
+                    })
+            });
+            if !same {
+                frame.allocation_state = RuntimeProducerAllocationState::Unknown;
             }
         }
         let mut observation = frame.observation;

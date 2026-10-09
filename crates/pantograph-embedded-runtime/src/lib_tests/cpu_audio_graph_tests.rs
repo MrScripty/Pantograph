@@ -70,7 +70,7 @@ fn install_audio_readiness(
         vec![DependencyBindingId::parse("pytorch-audio").unwrap()],
     );
     planning.task_id = DependencyTaskId::parse("audio_transcription").unwrap();
-    planning.task_type = Some(planning.task_id.clone());
+    planning.task_type = None;
     planning.scheduler_intent.requested_runtime_id =
         Some(RuntimeIntentId::parse("pytorch").unwrap());
     planning.scheduler_intent.requested_device_id = Some(DeviceIntentId::parse("cpu").unwrap());

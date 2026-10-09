@@ -1,5 +1,6 @@
 use std::{
     collections::{HashMap, HashSet, VecDeque},
+    future::Future,
     sync::Arc,
 };
 
@@ -12,6 +13,10 @@ use tokio::sync::{watch, RwLock};
 
 pub(crate) struct WorkflowGraphValidationLifecycleOwner {
     active: RwLock<HashMap<WorkflowGraphSessionId, WorkflowGraphValidationLifecycleRecord>>,
+    // IDs identify generations, not replaceable record keys. Keep bounded replay
+    // history for the live graph session even after cancellation/completion.
+    used_generations:
+        RwLock<HashMap<WorkflowGraphSessionId, HashSet<DraftGraphValidationSessionId>>>,
     closed_sessions: RwLock<HashSet<WorkflowGraphSessionId>>,
     events: RwLock<HashMap<WorkflowGraphSessionId, WorkflowGraphValidationLifecycleEventLog>>,
     event_sink: RwLock<Option<Arc<dyn WorkflowGraphValidationLifecycleEventSink>>>,
@@ -22,6 +27,7 @@ impl WorkflowGraphValidationLifecycleOwner {
     pub(crate) fn new() -> Self {
         Self {
             active: RwLock::new(HashMap::new()),
+            used_generations: RwLock::new(HashMap::new()),
             closed_sessions: RwLock::new(HashSet::new()),
             events: RwLock::new(HashMap::new()),
             event_sink: RwLock::new(None),
@@ -36,6 +42,7 @@ impl WorkflowGraphValidationLifecycleOwner {
         *self.event_sink.write().await = event_sink;
     }
 
+    #[cfg(test)]
     pub(crate) async fn begin_validation(
         &self,
         graph_session_id: WorkflowGraphSessionId,
@@ -45,12 +52,68 @@ impl WorkflowGraphValidationLifecycleOwner {
         watch::Receiver<Option<WorkflowGraphValidationCancellationReason>>,
         WorkflowGraphValidationLifecycleError,
     > {
-        if self
-            .closed_sessions
-            .read()
-            .await
-            .contains(&graph_session_id)
-        {
+        self.begin_validation_with_invalidation(
+            graph_session_id,
+            graph_revision,
+            validation_session_id,
+            || async {},
+        )
+        .await
+    }
+
+    pub(crate) async fn begin_validation_with_invalidation<F, Fut, R>(
+        &self,
+        graph_session_id: WorkflowGraphSessionId,
+        graph_revision: WorkflowGraphRevision,
+        validation_session_id: DraftGraphValidationSessionId,
+        invalidate: F,
+    ) -> Result<
+        watch::Receiver<Option<WorkflowGraphValidationCancellationReason>>,
+        WorkflowGraphValidationLifecycleError,
+    >
+    where
+        F: FnOnce() -> Fut,
+        Fut: Future<Output = R>,
+    {
+        let (cancellation, kind) = self
+            .begin_validation_with_invalidation_deferred_event(
+                graph_session_id.clone(),
+                graph_revision.clone(),
+                validation_session_id.clone(),
+                invalidate,
+            )
+            .await?;
+        self.validation_started_event(
+            graph_session_id,
+            graph_revision,
+            validation_session_id,
+            kind,
+        )
+        .await;
+        Ok(cancellation)
+    }
+
+    /// Caller may retain its producer-owner guard; this method invokes no external
+    /// event sink. Emit the returned Pending event only after releasing that guard.
+    pub(crate) async fn begin_validation_with_invalidation_deferred_event<F, Fut, R>(
+        &self,
+        graph_session_id: WorkflowGraphSessionId,
+        graph_revision: WorkflowGraphRevision,
+        validation_session_id: DraftGraphValidationSessionId,
+        invalidate: F,
+    ) -> Result<
+        (
+            watch::Receiver<Option<WorkflowGraphValidationCancellationReason>>,
+            WorkflowGraphValidationLifecycleEventKind,
+        ),
+        WorkflowGraphValidationLifecycleError,
+    >
+    where
+        F: FnOnce() -> Fut,
+        Fut: Future<Output = R>,
+    {
+        let closed = self.closed_sessions.read().await;
+        if closed.contains(&graph_session_id) {
             return Err(WorkflowGraphValidationLifecycleError::GraphSessionClosed);
         }
 
@@ -60,11 +123,22 @@ impl WorkflowGraphValidationLifecycleOwner {
             validation_session_id: validation_session_id.clone(),
             cancellation_tx,
         };
-        let previous = self
-            .active
-            .write()
-            .await
-            .insert(graph_session_id.clone(), record);
+        let previous = {
+            let mut active = self.active.write().await;
+            let mut history = self.used_generations.write().await;
+            let used = history.entry(graph_session_id.clone()).or_default();
+            if used.contains(&validation_session_id) {
+                return Err(WorkflowGraphValidationLifecycleError::ValidationSessionReused);
+            }
+            if used.len() >= MAX_VALIDATION_GENERATIONS_PER_SESSION {
+                return Err(WorkflowGraphValidationLifecycleError::ValidationGenerationLimit);
+            }
+            used.insert(validation_session_id.clone());
+            drop(history);
+            invalidate().await;
+            active.insert(graph_session_id.clone(), record)
+        };
+        drop(closed);
         if let Some(previous) = previous.as_ref() {
             let _ = previous
                 .cancellation_tx
@@ -76,16 +150,69 @@ impl WorkflowGraphValidationLifecycleOwner {
             },
             None => WorkflowGraphValidationLifecycleEventKind::ValidationPending,
         };
+        Ok((cancellation, kind))
+    }
+
+    pub(crate) async fn validation_started_event(
+        &self,
+        graph_session_id: WorkflowGraphSessionId,
+        graph_revision: WorkflowGraphRevision,
+        validation_session_id: DraftGraphValidationSessionId,
+        kind: WorkflowGraphValidationLifecycleEventKind,
+    ) {
         self.push_event(
-            graph_session_id.clone(),
+            graph_session_id,
             graph_revision,
             validation_session_id,
             kind,
         )
         .await;
-        Ok(cancellation)
     }
 
+    pub(crate) async fn with_current_generation<F, Fut, R>(
+        &self,
+        graph_session_id: &WorkflowGraphSessionId,
+        graph_revision: &WorkflowGraphRevision,
+        expected: Option<&DraftGraphValidationSessionId>,
+        handoff: F,
+    ) -> Result<R, WorkflowGraphValidationLifecycleError>
+    where
+        F: FnOnce(DraftGraphValidationSessionId) -> Fut,
+        Fut: Future<Output = R>,
+    {
+        let closed = self.closed_sessions.read().await;
+        if closed.contains(graph_session_id) {
+            return Err(WorkflowGraphValidationLifecycleError::GraphSessionClosed);
+        }
+        let active = self.active.read().await;
+        let record = active
+            .get(graph_session_id)
+            .ok_or(WorkflowGraphValidationLifecycleError::ValidationSessionMissing)?;
+        if &record.graph_revision != graph_revision {
+            return Err(WorkflowGraphValidationLifecycleError::GraphRevisionChanged);
+        }
+        if expected.is_some_and(|id| id != &record.validation_session_id) {
+            return Err(WorkflowGraphValidationLifecycleError::ValidationSessionSuperseded);
+        }
+        Ok(handoff(record.validation_session_id.clone()).await)
+    }
+
+    pub(crate) async fn publication_accepted_event(
+        &self,
+        graph_session_id: WorkflowGraphSessionId,
+        graph_revision: WorkflowGraphRevision,
+        validation_session_id: DraftGraphValidationSessionId,
+    ) {
+        self.push_event(
+            graph_session_id,
+            graph_revision,
+            validation_session_id,
+            WorkflowGraphValidationLifecycleEventKind::PublicationAccepted,
+        )
+        .await;
+    }
+
+    #[cfg(test)]
     pub(crate) async fn accept_publication(
         &self,
         graph_session_id: &WorkflowGraphSessionId,
@@ -130,7 +257,7 @@ impl WorkflowGraphValidationLifecycleOwner {
         Ok(())
     }
 
-    async fn record_publication_rejection(
+    pub(crate) async fn record_publication_rejection(
         &self,
         graph_session_id: WorkflowGraphSessionId,
         graph_revision: WorkflowGraphRevision,
@@ -156,6 +283,7 @@ impl WorkflowGraphValidationLifecycleOwner {
             .await
             .insert(graph_session_id.clone());
         let closed = self.active.write().await.remove(graph_session_id);
+        self.used_generations.write().await.remove(graph_session_id);
         if let Some(record) = closed.as_ref() {
             let _ = record.cancellation_tx.send(Some(
                 WorkflowGraphValidationCancellationReason::GraphSessionClosed,
@@ -163,6 +291,24 @@ impl WorkflowGraphValidationLifecycleOwner {
         }
         self.events.write().await.remove(graph_session_id);
         closed.map(|record| record.validation_session_id)
+    }
+
+    pub(crate) async fn cancel_all_active_validations(
+        &self,
+        reason: WorkflowGraphValidationCancellationReason,
+    ) {
+        let canceled = self.active.write().await.drain().collect::<Vec<_>>();
+        // Keep replay history; callbacks run after the generation guard is released.
+        for (graph_session_id, record) in canceled {
+            let _ = record.cancellation_tx.send(Some(reason));
+            self.push_event(
+                graph_session_id,
+                record.graph_revision,
+                record.validation_session_id,
+                WorkflowGraphValidationLifecycleEventKind::ValidationCancelled { reason },
+            )
+            .await;
+        }
     }
 
     pub(crate) async fn cancel_active_validation_for_graph_change(
@@ -250,6 +396,9 @@ impl WorkflowGraphValidationLifecycleOwner {
 }
 
 const DEFAULT_MAX_LIFECYCLE_EVENTS_PER_SESSION: usize = 128;
+// Explicit safe refusal instead of evicting replay evidence and reviving an old ID.
+// Reopening a graph creates a new edit session and a fresh generation budget.
+pub(crate) const MAX_VALIDATION_GENERATIONS_PER_SESSION: usize = 16_384;
 
 impl Default for WorkflowGraphValidationLifecycleOwner {
     fn default() -> Self {
@@ -332,12 +481,99 @@ pub enum WorkflowGraphValidationLifecycleError {
     GraphRevisionChanged,
     #[error("validation session was superseded")]
     ValidationSessionSuperseded,
+    #[error("validation generation ID was already used; publish a fresh validation session ID")]
+    ValidationSessionReused,
+    #[error("validation generation limit reached; reopen the graph in a new edit session")]
+    ValidationGenerationLimit,
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::sync::Mutex;
+
+    #[tokio::test]
+    async fn generation_replay_and_budget_refuse_without_invalidating_current_authority() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let owner = WorkflowGraphValidationLifecycleOwner::new();
+        let graph_session_id: WorkflowGraphSessionId = "generation-budget".parse().unwrap();
+        let revision: WorkflowGraphRevision = "aaaaaaaaaaaaaaaa".parse().unwrap();
+        let invalidations = AtomicUsize::new(0);
+        let mut last = None;
+        for i in 0..MAX_VALIDATION_GENERATIONS_PER_SESSION {
+            let generation: DraftGraphValidationSessionId =
+                format!("validation.budget.{i}").parse().unwrap();
+            owner
+                .begin_validation_with_invalidation(
+                    graph_session_id.clone(),
+                    revision.clone(),
+                    generation.clone(),
+                    || async {
+                        invalidations.fetch_add(1, Ordering::SeqCst);
+                    },
+                )
+                .await
+                .unwrap();
+            last = Some(generation);
+        }
+        let retained = last.unwrap();
+        let count = invalidations.load(Ordering::SeqCst);
+        let replay = owner
+            .begin_validation_with_invalidation(
+                graph_session_id.clone(),
+                revision.clone(),
+                retained.clone(),
+                || async {
+                    invalidations.fetch_add(1, Ordering::SeqCst);
+                },
+            )
+            .await;
+        assert_eq!(
+            replay.unwrap_err(),
+            WorkflowGraphValidationLifecycleError::ValidationSessionReused
+        );
+        let exhausted = owner
+            .begin_validation_with_invalidation(
+                graph_session_id.clone(),
+                revision.clone(),
+                "validation.budget.new".parse().unwrap(),
+                || async {
+                    invalidations.fetch_add(1, Ordering::SeqCst);
+                },
+            )
+            .await;
+        assert_eq!(
+            exhausted.unwrap_err(),
+            WorkflowGraphValidationLifecycleError::ValidationGenerationLimit
+        );
+        assert_eq!(invalidations.load(Ordering::SeqCst), count);
+        assert_eq!(
+            owner
+                .with_current_generation(
+                    &graph_session_id,
+                    &revision,
+                    Some(&retained),
+                    |id| async { id }
+                )
+                .await
+                .unwrap(),
+            retained
+        );
+        owner.close_graph_session(&graph_session_id).await;
+        assert!(owner
+            .used_generations
+            .read()
+            .await
+            .get(&graph_session_id)
+            .is_none());
+        assert_eq!(
+            owner
+                .begin_validation(graph_session_id, revision, retained)
+                .await
+                .unwrap_err(),
+            WorkflowGraphValidationLifecycleError::GraphSessionClosed
+        );
+    }
 
     #[derive(Default)]
     struct RecordingLifecycleEventSink {

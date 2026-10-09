@@ -11,8 +11,6 @@ use crate::scheduler::{WorkflowExecutionSessionDequeuedRun, WorkflowExecutionSes
 use crate::workflow::{WorkflowSchedulerTaskGraph, WorkflowServiceError};
 use pantograph_scheduler::SchedulerTaskStateRecord;
 
-use super::store::WORKFLOW_SESSION_QUEUE_POLL_MS;
-
 /// Workflow-service owner for the scheduler queue worker lifecycle.
 ///
 /// The worker owns queue lifecycle state and the queue admission polling loop.
@@ -77,21 +75,20 @@ impl WorkflowSchedulerQueueWorker {
         command: WorkflowSchedulerQueueAdmissionCommand,
     ) -> Result<WorkflowExecutionSessionDequeuedRun, WorkflowServiceError> {
         loop {
-            let maybe_queued = {
+            let (maybe_queued, retry_after) = {
                 let mut store = command.session_store.lock().map_err(|_| {
                     WorkflowServiceError::Internal(
                         "workflow execution session store lock poisoned".to_string(),
                     )
                 })?;
-                store.begin_queued_run(&command.session_id, &command.workflow_run_id)?
+                let queued =
+                    store.begin_queued_run(&command.session_id, &command.workflow_run_id)?;
+                (queued, store.queue_progress_retry_after())
             };
             if let Some(queued) = maybe_queued {
                 return Ok(queued);
             }
-            tokio::time::sleep(std::time::Duration::from_millis(
-                WORKFLOW_SESSION_QUEUE_POLL_MS,
-            ))
-            .await;
+            tokio::time::sleep(retry_after).await;
         }
     }
 

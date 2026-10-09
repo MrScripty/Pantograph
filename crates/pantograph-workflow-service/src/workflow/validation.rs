@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use crate::graph::{
-    validate_workflow_graph_contract_diagnostics, NodeRegistry, WorkflowGraph,
+    lower_groups, validate_workflow_graph_contract_diagnostics, NodeRegistry, WorkflowGraph,
     WorkflowGraphDiagnostic, WorkflowGraphDiagnosticScope,
 };
 
@@ -47,7 +47,10 @@ pub(crate) fn validate_workflow_semantic_version(
 pub(super) fn validate_workflow_graph_submit_readiness(
     graph: &WorkflowGraph,
 ) -> Result<(), WorkflowServiceError> {
-    let diagnostics = validate_workflow_graph_contract_diagnostics(graph, &NodeRegistry::new());
+    let registry = NodeRegistry::new();
+    let projection = lower_groups(graph, &registry)?;
+    let diagnostics =
+        validate_workflow_graph_contract_diagnostics(&projection.executable_graph, &registry);
     let blocking_diagnostics = diagnostics
         .into_iter()
         .filter(|diagnostic| diagnostic.blocking_submission)

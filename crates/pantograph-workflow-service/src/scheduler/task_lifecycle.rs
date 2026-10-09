@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex};
 use pantograph_runtime_host_contracts::{
     RuntimeHostExecutionCancellationContext, RuntimeHostExecutionCancellationHandle,
     RuntimeHostExecutionCancellationSignal, RuntimeHostExecutionCancellationSnapshot,
-    RuntimeHostExecutionCancellationState,
+    RuntimeHostExecutionCancellationState, RuntimeHostTaskStartAuthority,
 };
 use pantograph_scheduler::SchedulerTaskId;
 use tokio::task::AbortHandle;
@@ -140,14 +140,31 @@ impl WorkflowSchedulerTaskLifecycleManager {
 
         let record = WorkflowSchedulerTaskLifecycleHandleRecord {
             owner_id: self.owner_id.clone(),
-            task_id,
-            attempt_id,
+            task_id: task_id.clone(),
+            attempt_id: attempt_id.clone(),
             runtime_host_cancellation_state: RuntimeHostExecutionCancellationState::Running,
             runtime_host_cancellation_reason: None,
             runtime_host_cancellation_signal: None,
             task_supervisor_abort_handle: None,
+            start_authority: RuntimeHostTaskStartAuthority::new(
+                task_id.as_str(),
+                attempt_id.as_str(),
+            ),
         };
         self.active_task_handles.insert(task_key, record.clone());
+        Ok(record)
+    }
+
+    /// Recovered Running metadata cannot recreate physical-start permission.
+    pub(crate) fn track_rehydrated_task_handle(
+        &mut self,
+        task_id: SchedulerTaskId,
+        attempt_id: WorkflowSchedulerTaskAttemptId,
+    ) -> Result<WorkflowSchedulerTaskLifecycleHandleRecord, WorkflowServiceError> {
+        let record = self.track_task_handle(task_id, attempt_id)?;
+        if let Some(a) = &record.start_authority {
+            a.revoke();
+        }
         Ok(record)
     }
 
@@ -183,6 +200,7 @@ impl WorkflowSchedulerTaskLifecycleManager {
             RuntimeHostExecutionCancellationContext::workflow_service(execution_request_id);
         let pending_state = tracked.runtime_host_cancellation_state.clone();
         let pending_reason = tracked.runtime_host_cancellation_reason.clone();
+        let authority = tracked.start_authority.clone();
         let signal = tracked
             .runtime_host_cancellation_signal
             .get_or_insert_with(|| {
@@ -190,6 +208,7 @@ impl WorkflowSchedulerTaskLifecycleManager {
                     cancellation_context.cancellation_context_id.clone(),
                     pending_state,
                     pending_reason,
+                    authority,
                 ))
             })
             .clone();
@@ -206,6 +225,9 @@ impl WorkflowSchedulerTaskLifecycleManager {
         reason: impl Into<String>,
     ) -> Result<(), WorkflowServiceError> {
         let tracked = self.matching_task_handle_mut(task_id, attempt_id)?;
+        if let Some(a) = &tracked.start_authority {
+            a.revoke();
+        }
         let reason = Some(reason.into());
         tracked.runtime_host_cancellation_state =
             RuntimeHostExecutionCancellationState::CancellationRequested;
@@ -252,6 +274,9 @@ impl WorkflowSchedulerTaskLifecycleManager {
             ));
         }
 
+        if let Some(a) = &tracked.start_authority {
+            a.revoke();
+        }
         let completed = self
             .active_task_handles
             .remove(&handle_key)
@@ -277,6 +302,9 @@ impl WorkflowSchedulerTaskLifecycleManager {
                 WorkflowSchedulerLifecycleComponentState::ShuttingDown,
             );
             for record in self.active_task_handles.values_mut() {
+                if let Some(a) = &record.start_authority {
+                    a.revoke();
+                }
                 let reason =
                     Some("workflow-service task lifecycle owner is shutting down".to_string());
                 record.runtime_host_cancellation_state =
@@ -473,11 +501,13 @@ pub(crate) struct WorkflowSchedulerTaskLifecycleHandleRecord {
     runtime_host_cancellation_signal:
         Option<Arc<WorkflowSchedulerTaskRuntimeHostCancellationSignal>>,
     task_supervisor_abort_handle: Option<AbortHandle>,
+    start_authority: Option<RuntimeHostTaskStartAuthority>,
 }
 
 #[derive(Debug)]
 struct WorkflowSchedulerTaskRuntimeHostCancellationSignal {
     snapshot: Mutex<RuntimeHostExecutionCancellationSnapshot>,
+    start_authority: Option<RuntimeHostTaskStartAuthority>,
 }
 
 impl WorkflowSchedulerTaskRuntimeHostCancellationSignal {
@@ -485,8 +515,10 @@ impl WorkflowSchedulerTaskRuntimeHostCancellationSignal {
         cancellation_context_id: String,
         state: RuntimeHostExecutionCancellationState,
         reason: Option<String>,
+        start_authority: Option<RuntimeHostTaskStartAuthority>,
     ) -> Self {
         Self {
+            start_authority,
             snapshot: Mutex::new(RuntimeHostExecutionCancellationSnapshot {
                 cancellation_context_id,
                 state,
@@ -514,6 +546,9 @@ impl WorkflowSchedulerTaskRuntimeHostCancellationSignal {
 }
 
 impl RuntimeHostExecutionCancellationSignal for WorkflowSchedulerTaskRuntimeHostCancellationSignal {
+    fn task_start_authority(&self) -> Option<RuntimeHostTaskStartAuthority> {
+        self.start_authority.clone()
+    }
     fn snapshot(&self) -> RuntimeHostExecutionCancellationSnapshot {
         self.snapshot
             .lock()

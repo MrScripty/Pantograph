@@ -154,6 +154,16 @@ impl WorkflowHost for EmbeddedWorkflowHost {
             requirements,
             Self::runtime_retention_hint(retention_hint),
         );
+        #[cfg(feature = "backend-candle")]
+        let reservation_request = {
+            let mut request = reservation_request;
+            if let Some(profile) = &self.retained_cpu_session {
+                profile
+                    .apply_request(self, workflow_id, &mut request)
+                    .await?;
+            }
+            request
+        };
 
         match runtime_registry.can_acquire_reservation(&reservation_request) {
             Ok(()) => Ok(true),

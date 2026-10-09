@@ -30,6 +30,12 @@ impl EmbeddedRuntime {
         embedding_request: inference::EmbeddingStartRequest,
         event_sink: Arc<dyn EventSink>,
     ) -> Result<EditSessionGraphExecutionOutcome, String> {
+        // Pure group refusal must precede model/runtime preparation and ledger start.
+        pantograph_workflow_service::graph::lower_groups(
+            session_graph,
+            &pantograph_workflow_service::NodeRegistry::new(),
+        )
+        .map_err(|error| error.to_envelope_json())?;
         let runtime_ext = RuntimeExtensionsSnapshot::from_shared_with_workflow_service(
             &self.extensions,
             self.workflow_service.clone(),

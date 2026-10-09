@@ -4,12 +4,11 @@ use pantograph_dependency_planning::{
     produce_dependency_requirements_proof, DependencyBindingId, DependencyEnvironmentRequest,
     DependencyNodeTypeId, DependencyOverrideFingerprint, DependencyOverridePatchV1,
     DependencyPlanningCallerContext, DependencyPlanningDiagnostic, DependencyPlanningIdentityKey,
-    DependencyPlanningPlatformContext, DependencyPlanningRequest,
-    DependencyReadinessDescriptorFingerprint, DependencyReadinessGraphRevision,
-    DependencyReadinessValidationSessionId, DependencyRequirementsId, DependencyRequirementsProof,
-    DependencyRequirementsProofStatus, DependencyTaskId, DeviceIntentId, PumasModelRef,
-    RuntimeIntentId, SchedulerIntent, ValidatedDependencyEnvironmentRequest,
-    ValidatedDependencyPlanningRequest,
+    DependencyPlanningRequest, DependencyReadinessDescriptorFingerprint,
+    DependencyReadinessGraphRevision, DependencyReadinessValidationSessionId,
+    DependencyRequirementsId, DependencyRequirementsProof, DependencyRequirementsProofStatus,
+    DependencyTaskId, DeviceIntentId, PumasModelRef, RuntimeIntentId, SchedulerIntent,
+    ValidatedDependencyEnvironmentRequest, ValidatedDependencyPlanningRequest,
 };
 use pantograph_inference_interface_contracts::{
     DependencyEnvironmentAction, DependencyEnvironmentActionIntent,
@@ -35,7 +34,7 @@ use super::inference_interface_publication::connection_surface_for_projection;
 use super::inference_interface_validation::{
     InferenceInterfaceValidationSessionError, WorkflowGraphInferenceValidationSession,
 };
-use super::InferenceInterfaceNodeProjectionRecord;
+use super::{InferenceInterfaceNodeProjectionRecord, WorkflowGroupPreflight};
 use crate::workflow::{
     WorkflowSchedulerBlockedInferenceTaskProjection,
     WorkflowSchedulerBlockedInferenceTaskProjectionReason,
@@ -66,6 +65,7 @@ impl CurrentInferenceValidationStateStore {
         }
     }
 
+    #[cfg(test)]
     pub(crate) async fn record_validation_session(
         &self,
         graph_session_id: pantograph_inference_interface_contracts::WorkflowGraphSessionId,
@@ -75,13 +75,54 @@ impl CurrentInferenceValidationStateStore {
             .await
     }
 
+    #[cfg(test)]
     pub(crate) async fn record_validation_publication(
         &self,
         graph_session_id: pantograph_inference_interface_contracts::WorkflowGraphSessionId,
         session: WorkflowGraphInferenceValidationSession,
         node_projections: Vec<InferenceInterfaceNodeProjectionRecord>,
     ) -> Result<(), InferenceInterfaceValidationSessionError> {
+        self.record_validation_publication_with_group_preflight(
+            graph_session_id,
+            session,
+            node_projections,
+            None,
+        )
+        .await
+    }
+
+    pub(crate) async fn record_validation_publication_with_group_preflight(
+        &self,
+        graph_session_id: WorkflowGraphSessionId,
+        session: WorkflowGraphInferenceValidationSession,
+        node_projections: Vec<InferenceInterfaceNodeProjectionRecord>,
+        group_preflight: Option<WorkflowGroupPreflight>,
+    ) -> Result<(), InferenceInterfaceValidationSessionError> {
         session.validate()?;
+        if let Some(facts) = &group_preflight {
+            if facts.graph_session_id != graph_session_id
+                || facts.graph_revision != session.graph_revision
+                || facts.validation_session_id != session.validation_session_id
+            {
+                return Err(InferenceInterfaceValidationSessionError::InvalidField {
+                    field: "group_preflight",
+                    reason: "captured group identity must match the validation publication",
+                });
+            }
+        }
+        if group_preflight.as_ref().is_some_and(|facts| !facts.failures.is_empty())
+            && (session.summary.executable
+                || session.summary.status != DraftGraphValidationStatus::Blocked
+                || !session.summary.enqueue_disabled_reasons.contains(
+                    &pantograph_inference_interface_contracts::DraftGraphEnqueueDisabledReason::BlockingDiagnostics,
+                )
+                || session.summary.blocking_diagnostics_count == 0)
+        {
+            return Err(InferenceInterfaceValidationSessionError::InvalidField {
+                field: "group_preflight",
+                reason: "blocking group failures require a blocked validation summary",
+            });
+        }
         let key = CurrentInferenceValidationStateKey {
             graph_session_id,
             graph_revision: session.graph_revision.clone(),
@@ -89,6 +130,7 @@ impl CurrentInferenceValidationStateStore {
         let record = CurrentInferenceValidationStateRecord {
             validation_session_id: session.validation_session_id,
             summary: session.summary,
+            group_preflight,
             nodes: node_projections
                 .into_iter()
                 .map(|projection| {
@@ -176,6 +218,31 @@ impl CurrentInferenceValidationStateStore {
             Some(record.summary.clone()),
             bounded_current_validation_diagnostics(record),
         )
+        .with_group_preflight(record.group_preflight.clone())
+    }
+
+    /// Keep the validation generation stable through a synchronous owner handoff.
+    /// The graph owner holds its session lock while calling this method.
+    pub(crate) async fn with_current_validation<R>(
+        &self,
+        key: WorkflowGraphCurrentValidationSummaryStateRequest,
+        expected_session: Option<&DraftGraphValidationSessionId>,
+        handoff: impl FnOnce() -> R,
+    ) -> Option<R> {
+        if key.requested_graph_revision != key.current_graph_revision {
+            return None;
+        }
+        let summaries = self.summaries.read().await;
+        let record = summaries.get(&CurrentInferenceValidationStateKey {
+            graph_session_id: key.graph_session_id,
+            graph_revision: key.current_graph_revision,
+        })?;
+        if expected_session != Some(&record.validation_session_id)
+            || !summary_is_executable(&record.summary)
+        {
+            return None;
+        }
+        Some(handoff())
     }
 
     pub(crate) async fn current_validation_projection(
@@ -236,7 +303,8 @@ impl CurrentInferenceValidationStateStore {
                 current_validation_summary_state(record.summary.status),
                 Some(record.summary.clone()),
                 bounded_current_validation_diagnostics(record),
-            ),
+            )
+            .with_group_preflight(record.group_preflight.clone()),
             node_projections: record
                 .nodes
                 .values()
@@ -375,7 +443,7 @@ impl CurrentInferenceValidationStateStore {
             return Err(CurrentDependencyRequirementsProofError::ValidationSessionMismatch);
         }
 
-        if !record.summary.executable {
+        if !summary_is_executable(&record.summary) {
             return Err(
                 CurrentDependencyRequirementsProofError::ValidationSummaryNotExecutable {
                     status: record.summary.status,
@@ -499,7 +567,7 @@ impl CurrentInferenceValidationStateStore {
             );
         }
 
-        if !record.summary.executable {
+        if !summary_is_executable(&record.summary) {
             return blocked_dependency_environment_action_resolution(
                 &intent,
                 diagnostic_code_for_summary_status(record.summary.status),
@@ -647,7 +715,7 @@ impl CurrentInferenceValidationStateStore {
             return Err(CurrentInferenceSchedulerProjectionError::ValidationSessionMismatch);
         }
 
-        if !record.summary.executable {
+        if !summary_is_executable(&record.summary) {
             return Err(
                 CurrentInferenceSchedulerProjectionError::ValidationSummaryNotExecutable {
                     status: record.summary.status,
@@ -738,7 +806,7 @@ impl CurrentInferenceValidationStateStore {
             return Err(CurrentExecutableValidationSnapshotSourceError::ValidationSessionMismatch);
         }
 
-        if !record.summary.executable {
+        if !summary_is_executable(&record.summary) {
             return Err(
                 CurrentExecutableValidationSnapshotSourceError::ValidationSummaryNotExecutable {
                     status: record.summary.status,
@@ -872,6 +940,8 @@ pub struct WorkflowGraphCurrentValidationSummaryResponse {
     pub submit_gate: WorkflowGraphValidationSubmitGate,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub diagnostics: Vec<InferenceInterfaceDiagnostic>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group_preflight: Option<WorkflowGroupPreflight>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -932,6 +1002,37 @@ fn current_validation_summary_response(
         summary,
         submit_gate,
         diagnostics,
+        group_preflight: None,
+    }
+}
+
+fn summary_is_executable(summary: &DraftGraphValidationSummary) -> bool {
+    summary.executable
+        && summary.status == DraftGraphValidationStatus::Executable
+        && summary.blocking_diagnostics_count == 0
+        && summary.enqueue_disabled_reasons.is_empty()
+}
+
+impl WorkflowGraphCurrentValidationSummaryResponse {
+    fn with_group_preflight(mut self, facts: Option<WorkflowGroupPreflight>) -> Self {
+        self.group_preflight = facts;
+        self
+    }
+    pub(crate) fn refuse_authority(&mut self, code: InferenceDiagnosticCode) {
+        self.state = WorkflowGraphCurrentValidationSummaryState::Missing;
+        self.summary = None;
+        self.validation_session_id = None;
+        self.group_preflight = None;
+        self.submit_gate = submit_gate_for_current_validation_summary(self.state, None);
+        let message = match code {
+            InferenceDiagnosticCode::GroupContractBlocked => "Validation lacks matching authored group preflight; this result cannot authorize submission.",
+            _ => "Validation generation is stale, canceled or superseded; this result cannot authorize submission.",
+        };
+        self.diagnostics = vec![summary_diagnostic(
+            code,
+            message,
+            Some("Refresh validation for the current authored graph before submitting."),
+        )];
     }
 }
 
@@ -976,7 +1077,9 @@ fn submit_gate_for_current_validation_summary(
     state: WorkflowGraphCurrentValidationSummaryState,
     summary: Option<&DraftGraphValidationSummary>,
 ) -> WorkflowGraphValidationSubmitGate {
-    if summary.is_some_and(|summary| summary.executable) {
+    if state == WorkflowGraphCurrentValidationSummaryState::Current
+        && summary.is_some_and(summary_is_executable)
+    {
         return WorkflowGraphValidationSubmitGate {
             allowed: true,
             reason_code: None,
@@ -1105,9 +1208,15 @@ fn bounded_current_validation_diagnostics(
     record: &CurrentInferenceValidationStateRecord,
 ) -> Vec<InferenceInterfaceDiagnostic> {
     record
-        .nodes
-        .values()
-        .flat_map(|node| node.projection.descriptor.diagnostics.iter().cloned())
+        .group_preflight
+        .iter()
+        .flat_map(WorkflowGroupPreflight::diagnostics)
+        .chain(
+            record
+                .nodes
+                .values()
+                .flat_map(|node| node.projection.descriptor.diagnostics.iter().cloned()),
+        )
         .take(CURRENT_VALIDATION_SUMMARY_MAX_DIAGNOSTICS)
         .collect()
 }
@@ -1265,6 +1374,7 @@ struct CurrentInferenceValidationStateKey {
 struct CurrentInferenceValidationStateRecord {
     validation_session_id: DraftGraphValidationSessionId,
     summary: DraftGraphValidationSummary,
+    group_preflight: Option<WorkflowGroupPreflight>,
     nodes: BTreeMap<WorkflowNodeId, CurrentInferenceValidationNodeRecord>,
 }
 
@@ -1587,28 +1697,22 @@ impl CurrentInferenceValidationNodeRecord {
         DependencyPlanningRequest,
         pantograph_dependency_planning::DependencyPlanningContractError,
     > {
-        Ok(DependencyPlanningRequest {
-            model_ref: path_free_model_ref(&self.pumas_model_ref),
-            task_id: DependencyTaskId::parse(self.task_kind.as_str())?,
-            task_type: None,
-            expected_artifact_kind: None,
-            scheduler_intent: SchedulerIntent {
+        crate::inference_dependency_planning::inference_dependency_planning_request(
+            path_free_model_ref(&self.pumas_model_ref),
+            DependencyTaskId::parse(self.task_kind.as_str())?,
+            SchedulerIntent {
                 requested_runtime_id: self.runtime_constraint.clone(),
                 requested_device_id: self.device_constraint.clone(),
             },
-            platform_context: Some(DependencyPlanningPlatformContext::from_os_arch(
-                std::env::consts::OS,
-                std::env::consts::ARCH,
-            )?),
             selected_binding_ids,
             dependency_override_patches,
-            trait_intents: Vec::new(),
-            caller_context: DependencyPlanningCallerContext {
+            Vec::new(),
+            DependencyPlanningCallerContext {
                 source_node_type: Some(DependencyNodeTypeId::parse("llm-inference")?),
                 node_id: Some(self.node_id.as_str().to_string()),
                 ..Default::default()
             },
-        })
+        )
     }
 
     fn derive_current_dependency_environment_request(
@@ -1868,6 +1972,7 @@ fn request_ready_dependency_environment_action_result(
 
 #[cfg(test)]
 mod tests {
+    use pantograph_dependency_planning::DependencyPlanningPlatformContext;
     use pantograph_inference_interface_contracts::{
         AuthoredInferenceInterfaceSnapshot, DependencyEnvironmentAction,
         DraftGraphValidationStatus, InferenceAvailability, InferenceConnectionSurfaceStatus,
@@ -1876,6 +1981,273 @@ mod tests {
     use pantograph_scheduler::SchedulerEstimateHintKind;
 
     use super::*;
+
+    #[tokio::test]
+    async fn graph_produced_dependency_proof_matches_scheduler_admission() {
+        use crate::scheduler::{
+            WorkflowDependencyReadinessLifecycle, WorkflowDependencyReadinessLifecycleError,
+            WorkflowExecutionSessionStore, WorkflowSchedulerTaskOrchestrator,
+        };
+        use crate::workflow::{
+            workflow_scheduler_task_graph_with_inference_projections,
+            WorkflowExecutionSessionRunRequest, WorkflowServiceError,
+        };
+
+        struct UnreachableRuntimePort;
+        #[async_trait::async_trait]
+        impl pantograph_runtime_host_contracts::RuntimeHostExecutionPort for UnreachableRuntimePort {
+            async fn execute_runtime_host_request(
+                &self,
+                _: pantograph_runtime_host_contracts::RuntimeHostExecutionRequest,
+                _: pantograph_runtime_host_contracts::RuntimeHostExecutionCancellationHandle,
+            ) -> Result<
+                pantograph_runtime_host_contracts::RuntimeHostExecutionResponse,
+                pantograph_runtime_host_contracts::RuntimeHostExecutionPortError,
+            > {
+                panic!("planning boundary must not execute a runtime");
+            }
+        }
+
+        let validation_store = CurrentInferenceValidationStateStore::new();
+        validation_store
+            .record_validation_publication(
+                "graph-session-1".parse().unwrap(),
+                validation_session(
+                    "aaaaaaaaaaaaaaaa",
+                    DraftGraphValidationStatus::Executable,
+                    true,
+                ),
+                vec![node_projection(DraftGraphValidationStatus::Executable)],
+            )
+            .await
+            .unwrap();
+        let resolution = validation_store
+            .resolve_dependency_environment_action_request(state_request_with_validation_session(
+                "graph-session-1",
+                "aaaaaaaaaaaaaaaa",
+                "aaaaaaaaaaaaaaaa",
+                "validation.session.1",
+                "dependency-node-1",
+                true,
+            ))
+            .await;
+        let DependencyEnvironmentActionIntentStateResolution::RequestReady {
+            environment_request,
+            ..
+        } = resolution
+        else {
+            panic!("real graph Resolve must produce a current requirements proof");
+        };
+        let producer_request = &environment_request.as_request().planning_request;
+        // This literal is the pre-change graph producer policy, independent of
+        // the shared constructor. Its proof identity must stay unchanged.
+        let projection = node_projection(DraftGraphValidationStatus::Executable);
+        let legacy_producer_request = DependencyPlanningRequest {
+            model_ref: path_free_model_ref(&projection.descriptor.model_ref),
+            task_id: DependencyTaskId::parse(projection.descriptor.task_kind.as_str()).unwrap(),
+            task_type: None,
+            expected_artifact_kind: None,
+            scheduler_intent: SchedulerIntent {
+                requested_runtime_id: projection.runtime_constraint,
+                requested_device_id: projection.device_constraint,
+            },
+            platform_context: Some(
+                DependencyPlanningPlatformContext::from_os_arch(
+                    std::env::consts::OS,
+                    std::env::consts::ARCH,
+                )
+                .unwrap(),
+            ),
+            selected_binding_ids: Vec::new(),
+            dependency_override_patches: Vec::new(),
+            trait_intents: Vec::new(),
+            caller_context: DependencyPlanningCallerContext {
+                source_node_type: Some(DependencyNodeTypeId::parse("llm-inference").unwrap()),
+                node_id: Some("infer".into()),
+                ..Default::default()
+            },
+        };
+        assert_eq!(*producer_request, legacy_producer_request);
+        let producer_proof = produce_dependency_requirements_proof(
+            &ValidatedDependencyPlanningRequest::try_from(producer_request.clone()).unwrap(),
+            None,
+        )
+        .unwrap();
+        let legacy_proof = produce_dependency_requirements_proof(
+            &ValidatedDependencyPlanningRequest::try_from(legacy_producer_request).unwrap(),
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            producer_proof.dependency_requirements_id,
+            legacy_proof.dependency_requirements_id
+        );
+        assert!(producer_request.task_type.is_none());
+        assert!(producer_request.expected_artifact_kind.is_none());
+        assert_eq!(
+            producer_request.platform_context,
+            Some(
+                DependencyPlanningPlatformContext::from_os_arch(
+                    std::env::consts::OS,
+                    std::env::consts::ARCH
+                )
+                .unwrap()
+            )
+        );
+
+        let projections = validation_store
+            .scheduler_inference_task_projections(scheduler_projection_request(
+                "graph-session-1",
+                "aaaaaaaaaaaaaaaa",
+                Some("validation.session.1"),
+            ))
+            .await
+            .unwrap();
+        let graph = crate::WorkflowGraph {
+            nodes: vec![crate::GraphNode {
+                id: "infer".into(),
+                node_type: "llm-inference".into(),
+                position: crate::Position::default(),
+                data: serde_json::json!({}),
+            }],
+            ..Default::default()
+        };
+        let task_graph = workflow_scheduler_task_graph_with_inference_projections(
+            &crate::WorkflowId::try_from("workflow.proof-boundary".to_string()).unwrap(),
+            &crate::WorkflowRunId::try_from("run.proof-boundary".to_string()).unwrap(),
+            &graph,
+            &projections,
+        )
+        .unwrap();
+        assert_eq!(task_graph.tasks.len(), 1);
+        let source = &task_graph.tasks[0]
+            .schedulable_intent_template
+            .as_ref()
+            .unwrap()
+            .dependency_readiness_source;
+        assert_eq!(
+            source.dependency_requirements_id,
+            producer_proof.dependency_requirements_id
+        );
+        let orchestrator = WorkflowSchedulerTaskOrchestrator::new(
+            pantograph_runtime_host_contracts::SchedulerRuntimeHostDispatcher::new(
+                std::sync::Arc::new(UnreachableRuntimePort),
+            ),
+        );
+        let mut store = WorkflowExecutionSessionStore::new(4, 2);
+        let session_id = store
+            .create_session(
+                task_graph.workflow_id.as_str().into(),
+                None,
+                None,
+                Vec::new(),
+                Vec::new(),
+                true,
+            )
+            .unwrap();
+        let run_id = store
+            .enqueue_run_with_id(
+                &session_id,
+                &WorkflowExecutionSessionRunRequest {
+                    session_id: session_id.clone(),
+                    workflow_semantic_version: "0.1.0".into(),
+                    inputs: Vec::new(),
+                    output_targets: None,
+                    override_selection: None,
+                    timeout_ms: None,
+                    priority: None,
+                },
+                task_graph.workflow_run_id.as_str().into(),
+            )
+            .unwrap();
+        store
+            .begin_queued_run(&session_id, &run_id)
+            .unwrap()
+            .unwrap();
+        orchestrator
+            .initialize_active_run_task_state(&mut store, &session_id, &run_id, task_graph)
+            .unwrap();
+        let lifecycle = WorkflowDependencyReadinessLifecycle::new(orchestrator);
+        let admission = lifecycle.readiness_request_for_active_runtime_task(
+            &store,
+            &session_id,
+            &run_id,
+            "infer",
+            pantograph_dependency_planning::DependencyReadinessPolicy::CheckOnly,
+        );
+        let admission = match admission {
+            Ok(admission) => admission,
+            Err(WorkflowDependencyReadinessLifecycleError::WorkflowService(
+                WorkflowServiceError::InvalidRequest(inner),
+            )) => {
+                // Print only the known safe inner guard message; never dump a request or model path.
+                assert_eq!(inner, "scheduler task 'infer' dependency requirements id does not match the saved validation proof");
+                panic!("safe inner readiness cause: {inner}");
+            }
+            Err(_) => panic!("unexpected readiness failure category"),
+        };
+        let admitted = &admission.as_envelope().readiness_request;
+        assert_eq!(admitted.identity_key, producer_proof.identity_key);
+        assert_eq!(
+            admitted.planning_request.task_type,
+            producer_request.task_type
+        );
+        assert_eq!(
+            admitted.planning_request.platform_context,
+            producer_request.platform_context
+        );
+        assert_eq!(
+            admitted.planning_request.model_ref,
+            producer_request.model_ref
+        );
+        assert_eq!(
+            admitted.planning_request.scheduler_intent,
+            producer_request.scheduler_intent
+        );
+        assert_eq!(
+            admitted.planning_request.selected_binding_ids,
+            producer_request.selected_binding_ids
+        );
+        assert_eq!(
+            admitted.planning_request.dependency_override_patches,
+            producer_request.dependency_override_patches
+        );
+        assert_eq!(
+            admitted.planning_request.trait_intents,
+            producer_request.trait_intents
+        );
+        let context = &admission.as_envelope().execution_context;
+        assert_eq!(context.workflow_run_id.as_str(), run_id);
+        assert_eq!(context.graph_revision.as_str(), "aaaaaaaaaaaaaaaa");
+        assert_eq!(
+            context.validation_session_id.as_ref().unwrap().as_str(),
+            "validation.session.1"
+        );
+        assert_eq!(
+            context.descriptor_fingerprint.as_str(),
+            "iface.scheduler.v1"
+        );
+        assert_eq!(
+            context.dependency_requirements_id,
+            producer_proof.dependency_requirements_id
+        );
+        assert_eq!(
+            admitted.planning_request.caller_context.run_id.as_deref(),
+            Some(run_id.as_str())
+        );
+        assert_eq!(
+            admitted
+                .planning_request
+                .caller_context
+                .workflow_id
+                .as_deref(),
+            Some("workflow.proof-boundary")
+        );
+        assert_eq!(
+            admitted.planning_request.caller_context.node_id.as_deref(),
+            Some("infer")
+        );
+    }
 
     #[test]
     fn action_resolution_keeps_validated_environment_request_indirect() {

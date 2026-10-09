@@ -33,6 +33,7 @@ use super::inference_validation_lifecycle::{
 use super::inference_validation_state::{
     CurrentInferenceValidationStateStore, DependencyEnvironmentActionIntentStateRequest,
     DependencyEnvironmentActionIntentStateResolution,
+    WorkflowGraphCurrentValidationSummaryStateRequest,
 };
 use super::inference_validation_task_owner::WorkflowGraphValidationTaskOwner;
 use super::memory_impact::graph_memory_impact_from_graph_change;
@@ -63,6 +64,7 @@ mod session_inference_validation_api;
 mod session_node_api;
 
 pub(crate) type GraphSessionHandle = Arc<Mutex<GraphEditSession>>;
+pub(crate) type GraphSessionMap = Arc<RwLock<HashMap<String, GraphSessionHandle>>>;
 
 fn dirty_tasks_from_seed_nodes_unique(graph: &WorkflowGraph, node_ids: &[String]) -> Vec<String> {
     let mut seen = HashSet::new();
@@ -74,7 +76,7 @@ fn dirty_tasks_from_seed_nodes_unique(graph: &WorkflowGraph, node_ids: &[String]
 }
 
 pub struct GraphSessionStore {
-    sessions: RwLock<HashMap<String, GraphSessionHandle>>,
+    sessions: GraphSessionMap,
     validation_state: Arc<CurrentInferenceValidationStateStore>,
     validation_lifecycle: Arc<WorkflowGraphValidationLifecycleOwner>,
     validation_tasks: WorkflowGraphValidationTaskOwner,
@@ -135,7 +137,7 @@ impl GraphSessionStore {
         dependency_provider: SharedDependencyEnvironmentProvider,
     ) -> Self {
         Self {
-            sessions: RwLock::new(HashMap::new()),
+            sessions: Arc::new(RwLock::new(HashMap::new())),
             validation_state: Arc::new(CurrentInferenceValidationStateStore::new()),
             validation_lifecycle: Arc::new(WorkflowGraphValidationLifecycleOwner::new()),
             validation_tasks: WorkflowGraphValidationTaskOwner::new(),
@@ -306,6 +308,25 @@ impl GraphSessionStore {
         &self,
         intent: DependencyEnvironmentActionIntent,
     ) -> Result<DependencyEnvironmentActionIntentResult, WorkflowServiceError> {
+        Ok(self
+            .resolve_dependency_environment_action_with_result(intent, |_| Ok(()))
+            .await?
+            .0)
+    }
+
+    pub(crate) async fn resolve_dependency_environment_action_with_result(
+        &self,
+        intent: DependencyEnvironmentActionIntent,
+        handoff: impl FnOnce(
+            &pantograph_dependency_planning::ValidatedDependencyEnvironmentResult,
+        ) -> Result<(), WorkflowServiceError>,
+    ) -> Result<
+        (
+            DependencyEnvironmentActionIntentResult,
+            Option<pantograph_dependency_planning::ValidatedDependencyEnvironmentResult>,
+        ),
+        WorkflowServiceError,
+    > {
         let intent = ValidatedDependencyEnvironmentActionIntent::try_from(intent)
             .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
         let session_id = intent.as_intent().graph_session_id.as_str();
@@ -313,6 +334,7 @@ impl GraphSessionStore {
         let mut state = handle.lock().await;
         state.touch();
         state.canonicalize_graph();
+        super::lower_groups(&state.graph, &super::NodeRegistry::new())?;
         let current_revision = state.graph.compute_fingerprint();
         let current_graph_revision = WorkflowGraphRevision::parse(&current_revision)
             .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
@@ -326,6 +348,15 @@ impl GraphSessionStore {
         );
         drop(state);
 
+        let validation_key = WorkflowGraphCurrentValidationSummaryStateRequest {
+            graph_session_id: intent.as_intent().graph_session_id.clone(),
+            requested_graph_revision: intent.as_intent().graph_revision.clone(),
+            current_graph_revision: current_graph_revision.clone(),
+        };
+        let validation_before = self
+            .validation_state
+            .current_validation_summary(validation_key.clone())
+            .await;
         let resolution = self
             .validation_state
             .resolve_dependency_environment_action_request(
@@ -341,23 +372,123 @@ impl GraphSessionStore {
             .await;
 
         let (intent, environment_request) = match resolution {
-            DependencyEnvironmentActionIntentStateResolution::Blocked(result) => return Ok(result),
+            DependencyEnvironmentActionIntentStateResolution::Blocked(result) => {
+                return Ok((result, None))
+            }
             DependencyEnvironmentActionIntentStateResolution::RequestReady {
                 intent,
                 environment_request,
             } => (intent, environment_request),
         };
 
-        match self
-            .dependency_environment_service
-            .handle(&environment_request)
-        {
-            Ok(_result) => Ok(request_ready_dependency_environment_action_result(&intent)),
-            Err(error) => Ok(blocked_dependency_environment_action_result(
-                &intent,
-                InferenceDiagnosticCode::DependencySidecarDescriptorInvalid,
-                "Dependency environment service rejected provider output.",
-                Some(error.to_string()),
+        let resolved = if matches!(
+            intent.action,
+            pantograph_dependency_planning::DependencyEnvironmentAction::Resolve
+        ) {
+            self.inference_interface_facts_provider
+                .resolved_dependency_requirements(&environment_request)
+                .await
+                .map_err(|error| WorkflowServiceError::Internal(error.to_string()))?
+        } else {
+            None
+        };
+        let result = match resolved {
+            Some(result) => Ok(result),
+            None => self
+                .dependency_environment_service
+                .handle(&environment_request),
+        };
+        match result {
+            Ok(result) => {
+                let expected = environment_request.as_request();
+                let actual = result.as_result();
+                if actual.action != expected.action
+                    || actual.identity_key != expected.identity_key
+                    || actual.dependency_requirements_id != expected.dependency_requirements_id
+                    || (!expected.identity_key.selected_binding_ids.is_empty()
+                        && actual.selected_binding_ids
+                            != expected.identity_key.selected_binding_ids)
+                    || expected
+                        .environment_ref
+                        .as_ref()
+                        .is_some_and(|value| actual.environment_ref.as_ref() != Some(value))
+                {
+                    return Ok((blocked_dependency_environment_action_result(
+                        &intent, InferenceDiagnosticCode::DependencySidecarDescriptorInvalid,
+                        "Dependency environment result does not match its authoritative request.", None), None));
+                }
+                // The async resolver may outlive an edit or validation refresh.
+                // Recheck both the graph and the current validation session before
+                // handing its requirements to workflow ownership.
+                // Keep both graph revision and validation generation locked
+                // through the synchronous checked handoff.
+                let sessions = self.sessions.read().await;
+                let handle = sessions
+                    .get(intent.graph_session_id.as_str())
+                    .ok_or_else(|| {
+                        WorkflowServiceError::SessionNotFound(format!(
+                            "edit session '{}' not found",
+                            intent.graph_session_id.as_str()
+                        ))
+                    })?;
+                let state = handle.lock().await;
+                if state.graph.compute_fingerprint() != intent.graph_revision.as_str() {
+                    return Ok((
+                        blocked_dependency_environment_action_result(
+                            &intent,
+                            InferenceDiagnosticCode::DescriptorStale,
+                            "Graph changed while dependency requirements were resolving.",
+                            None,
+                        ),
+                        None,
+                    ));
+                }
+                let published = self
+                    .validation_lifecycle
+                    .with_current_generation(
+                        &intent.graph_session_id,
+                        &intent.graph_revision,
+                        validation_before.validation_session_id.as_ref(),
+                        |_| async {
+                            self.validation_state
+                                .with_current_validation(
+                                    validation_key,
+                                    validation_before.validation_session_id.as_ref(),
+                                    || handoff(&result),
+                                )
+                                .await
+                        },
+                    )
+                    .await
+                    .ok()
+                    .flatten();
+                match published {
+                    Some(result) => result?,
+                    None => {
+                        return Ok((
+                            blocked_dependency_environment_action_result(
+                                &intent,
+                                InferenceDiagnosticCode::DescriptorStale,
+                                "Validation changed while dependency requirements were resolving.",
+                                None,
+                            ),
+                            None,
+                        ))
+                    }
+                }
+                Ok((
+                    request_ready_dependency_environment_action_result(&intent),
+                    Some(result),
+                ))
+            }
+            Err(error) => Ok((
+                blocked_dependency_environment_action_result(
+                    &intent,
+                    InferenceDiagnosticCode::DependencySidecarDescriptorInvalid,
+                    "Dependency environment service rejected provider output.",
+                    Some(error.to_string()),
+                ),
+                None,
             )),
         }
     }

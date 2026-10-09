@@ -1066,6 +1066,30 @@ pub type ImageResult = ImageGenerationResult;
 /// which backend is active.
 #[async_trait]
 pub trait InferenceBackend: Send + Sync {
+    /// Strict native receipt route. Ordinary backends cannot assert verified reuse.
+    #[cfg(feature = "backend-candle")]
+    async fn load_verified_cpu_warm_embedding(
+        &mut self,
+        _request: &crate::InferenceExecutionRequest,
+        _target: &crate::PumasArtifactLoadTarget,
+        _decision: &crate::BackendExecutionDecision,
+        _cancellation: crate::InferenceExecutionCancellationHandle,
+    ) -> Result<BackendStartOutcome, BackendError> {
+        Err(BackendError::Config(
+            "actual verified CPU warm-load capability required".into(),
+        ))
+    }
+
+    #[cfg(feature = "backend-candle")]
+    fn take_verified_cpu_warm_load(&mut self) -> Option<crate::CandleCpuVerifiedWarmLoad> {
+        None
+    }
+    /// Opaque identity of the actual opt-in loaded CPU model instance.
+    /// Built-in Candle supplies it; injected owners do not enable calibration.
+    #[cfg(feature = "backend-candle")]
+    fn resident_cpu_calibration_instance(&self) -> Option<uuid::Uuid> {
+        None
+    }
     // ─── IDENTITY ───────────────────────────────────────────────────
 
     /// Human-readable name for UI display
@@ -1233,6 +1257,16 @@ pub trait InferenceBackend: Send + Sync {
     /// Failure preserves the backend for inspection or retry; non-returning work
     /// keeps this operation pending.
     async fn stop(&mut self) -> Result<(), BackendError>;
+
+    /// Only the built-in calibrated native owner can issue a sealed receipt.
+    /// Ordinary stop success does not acknowledge protected CPU residency.
+    #[cfg(feature = "backend-candle")]
+    async fn stop_with_cpu_retirement(
+        &mut self,
+    ) -> Result<Option<crate::CandleCpuRetirementProof>, BackendError> {
+        self.stop().await?;
+        Ok(None)
+    }
 
     /// Is the backend ready to accept requests?
     fn is_ready(&self) -> bool;

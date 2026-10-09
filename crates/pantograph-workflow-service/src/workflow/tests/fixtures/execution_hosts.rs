@@ -24,6 +24,7 @@ pub(in crate::workflow::tests) struct RecordingRuntimeHost {
 
 pub(in crate::workflow::tests) struct FailingRunSnapshotHost {
     pub(in crate::workflow::tests) inner: MockWorkflowHost,
+    pub(in crate::workflow::tests) fail_graph_read: AtomicBool,
 }
 
 pub(in crate::workflow::tests) struct FailingUnloadWithPoisonedDiagnosticsHost {
@@ -67,6 +68,7 @@ impl FailingRunSnapshotHost {
     pub(in crate::workflow::tests) fn new() -> Self {
         Self {
             inner: MockWorkflowHost::new(8, 1024),
+            fail_graph_read: AtomicBool::new(false),
         }
     }
 }
@@ -298,11 +300,15 @@ impl WorkflowHost for FailingRunSnapshotHost {
 
     async fn workflow_graph(
         &self,
-        _workflow_id: &str,
+        workflow_id: &str,
     ) -> Result<WorkflowGraph, WorkflowServiceError> {
-        Err(WorkflowServiceError::Internal(
-            "snapshot graph read failed".to_string(),
-        ))
+        if self.fail_graph_read.load(Ordering::SeqCst) {
+            Err(WorkflowServiceError::Internal(
+                "snapshot graph read failed".to_string(),
+            ))
+        } else {
+            self.inner.workflow_graph(workflow_id).await
+        }
     }
 
     async fn workflow_capabilities(

@@ -251,6 +251,7 @@ pub fn run_app() -> AppStartupResult<()> {
                             HOSTED_DISPATCH_SOURCE_SNAPSHOT_MAX_AGE_MS,
                     },
                 )
+                .with_dependency_inventory_app_data_dir(app_data_dir.clone())
                 .with_workflow_service(workflow_service);
                 let startup_output = tauri::async_runtime::block_on(
                     EmbeddedWorkflowServiceComposition::resource_backed_hosted_startup(
@@ -540,6 +541,7 @@ pub fn run_app() -> AppStartupResult<()> {
             crate::workflow::workflow_execution_tauri_commands::undo_workflow,
             crate::workflow::workflow_execution_tauri_commands::redo_workflow,
             crate::workflow::workflow_execution_tauri_commands::update_node_data,
+            crate::workflow::workflow_execution_tauri_commands::update_group_node_data,
             crate::workflow::workflow_execution_tauri_commands::apply_inference_interface_update_proposal,
             crate::workflow::workflow_execution_tauri_commands::update_node_position_in_execution,
             crate::workflow::workflow_execution_tauri_commands::add_node_to_execution,

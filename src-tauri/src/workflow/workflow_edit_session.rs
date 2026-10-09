@@ -13,8 +13,8 @@ use pantograph_workflow_service::{
     WorkflowGraphPreviewNodeInsertOnEdgeRequest, WorkflowGraphRemoveEdgeRequest,
     WorkflowGraphRemoveEdgesRequest, WorkflowGraphRemoveNodeRequest,
     WorkflowGraphUndoRedoStateRequest, WorkflowGraphUngroupRequest,
-    WorkflowGraphUpdateGroupPortsRequest, WorkflowGraphUpdateNodeDataRequest,
-    WorkflowGraphUpdateNodePositionRequest,
+    WorkflowGraphUpdateGroupNodeDataRequest, WorkflowGraphUpdateGroupPortsRequest,
+    WorkflowGraphUpdateNodeDataRequest, WorkflowGraphUpdateNodePositionRequest,
 };
 
 use super::commands::SharedWorkflowService;
@@ -72,6 +72,16 @@ pub async fn update_node_data(
             node_id,
             data,
         })
+        .await
+        .map_err(|e| e.to_envelope_json())
+}
+
+pub async fn update_group_node_data(
+    request: WorkflowGraphUpdateGroupNodeDataRequest,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<WorkflowGraphEditSessionGraphResponse, String> {
+    workflow_service
+        .workflow_graph_update_group_node_data(request)
         .await
         .map_err(|e| e.to_envelope_json())
 }

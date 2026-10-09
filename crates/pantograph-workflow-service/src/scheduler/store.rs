@@ -25,13 +25,22 @@ use super::{
 
 pub(crate) const WORKFLOW_SESSION_QUEUE_POLL_MS: u64 = 10;
 
+#[path = "store_cohort_snapshot.rs"]
+mod store_cohort_snapshot;
+#[path = "store_completion_lookahead.rs"]
+mod store_completion_lookahead;
 #[path = "store_diagnostics.rs"]
 mod store_diagnostics;
+#[path = "store_progress_commit.rs"]
+mod store_progress_commit;
 #[path = "store_queue.rs"]
 mod store_queue;
+#[path = "store_serial_ready.rs"]
+mod store_serial_ready;
 #[path = "store_task_results.rs"]
 mod store_task_results;
 
+pub(crate) use store_progress_commit::*;
 pub(crate) use store_task_results::WorkflowSchedulerTaskTerminalMutation;
 
 #[derive(Debug, Clone)]
@@ -47,6 +56,14 @@ pub(crate) struct WorkflowExecutionSessionQueuedRun {
     pub(super) scheduler_decision_reason: WorkflowSchedulerDecisionReason,
     pub(crate) enqueued_tick: u64,
     pub(super) starvation_bypass_count: u32,
+}
+
+#[derive(Debug, Clone)]
+struct WorkflowCompletionCleanupGate {
+    first_task_id: String,
+    first_attempt_id: WorkflowSchedulerTaskAttemptId,
+    successor_task_id: String,
+    reservation_lease_id: Option<SchedulerReservationLeaseId>,
 }
 
 #[derive(Debug, Clone)]
@@ -69,6 +86,7 @@ struct WorkflowExecutionSessionActiveRun {
     scheduler_task_results: BTreeMap<String, WorkflowSchedulerTaskResult>,
     scheduler_task_attempts: BTreeMap<String, WorkflowExecutionSessionTaskAttempt>,
     runtime_dispatch_readiness_proofs: BTreeMap<String, DependencyReadinessProofEnvelope>,
+    completion_cleanup_gate: Option<WorkflowCompletionCleanupGate>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -79,7 +97,7 @@ impl WorkflowSchedulerTaskAttemptId {
         Self(format!("scheduler-task-attempt.{}", Uuid::new_v4()))
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, all(feature = "test-support", feature = "native-task-release")))]
     pub(crate) fn parse(value: impl Into<String>) -> Result<Self, WorkflowServiceError> {
         let value = value.into();
         if value.trim().is_empty() {
@@ -241,6 +259,7 @@ pub(crate) struct WorkflowExecutionSessionStore {
     pub(crate) max_sessions: usize,
     pub(crate) max_loaded_sessions: usize,
     tick: u64,
+    progress_commit: Option<WorkflowQueueProgressCommit>,
     pub(crate) active: HashMap<String, WorkflowExecutionSessionRecord>,
 }
 
@@ -252,6 +271,7 @@ impl WorkflowExecutionSessionStore {
             max_sessions,
             max_loaded_sessions,
             tick: 0,
+            progress_commit: None,
             active: HashMap::new(),
         }
     }

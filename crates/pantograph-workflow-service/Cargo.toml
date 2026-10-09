@@ -13,8 +13,11 @@ workspace = true
 
 [features]
 test-support = []
+native-task-release = ["dep:inference", "inference/backend-candle", "dep:pantograph-runtime-registry"]
 
 [dependencies]
+inference = { path = "../inference", default-features = false, optional = true }
+pantograph-runtime-registry = { path = "../pantograph-runtime-registry", optional = true }
 async-trait.workspace = true
 blake3.workspace = true
 serde.workspace = true

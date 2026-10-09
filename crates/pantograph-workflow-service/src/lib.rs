@@ -10,6 +10,7 @@ extern crate workflow_nodes;
 
 pub mod capabilities;
 pub mod graph;
+mod inference_dependency_planning;
 mod scheduler;
 pub mod technical_fit;
 pub mod trace;
@@ -27,7 +28,7 @@ pub use graph::{
     ConnectionCandidatesResponse, ConnectionCommitResponse, ConnectionRejection,
     ConnectionRejectionReason, ConnectionTargetAnchorCandidate, ConnectionTargetNodeCandidate,
     EdgeInsertionBridge, EdgeInsertionPreviewResponse, ExecutionMode, FileSystemWorkflowGraphStore,
-    GraphEdge, GraphNode, InferenceInterfaceAppliedProposalOperation,
+    GraphEdge, GraphNode, GroupRejectionKind, InferenceInterfaceAppliedProposalOperation,
     InferenceInterfaceApplyProposalRequest, InferenceInterfaceApplyProposalResponse,
     InferenceInterfaceProposalApplyConfirmation, InsertNodeConnectionResponse,
     InsertNodeOnEdgeResponse, InsertNodePositionHint, InsertableNodeTypeCandidate, IoBindingOrigin,
@@ -52,11 +53,12 @@ pub use graph::{
     WorkflowGraphRemoveEdgesRequest, WorkflowGraphRemoveNodeRequest, WorkflowGraphRunSettings,
     WorkflowGraphRunSettingsNode, WorkflowGraphSaveRequest, WorkflowGraphSaveResponse,
     WorkflowGraphStore, WorkflowGraphUndoRedoStateRequest, WorkflowGraphUndoRedoStateResponse,
-    WorkflowGraphUngroupRequest, WorkflowGraphUpdateGroupPortsRequest,
-    WorkflowGraphUpdateNodeDataRequest, WorkflowGraphUpdateNodePositionRequest,
-    WorkflowGraphValidationLifecycleEvent, WorkflowGraphValidationLifecycleEventKind,
-    WorkflowGraphValidationLifecycleEventSink, WorkflowGraphValidationLifecycleEventSnapshot,
-    WorkflowGraphValidationSubmitGate, WorkflowGraphValidationSubmitGateReason,
+    WorkflowGraphUngroupRequest, WorkflowGraphUpdateGroupNodeDataRequest,
+    WorkflowGraphUpdateGroupPortsRequest, WorkflowGraphUpdateNodeDataRequest,
+    WorkflowGraphUpdateNodePositionRequest, WorkflowGraphValidationLifecycleEvent,
+    WorkflowGraphValidationLifecycleEventKind, WorkflowGraphValidationLifecycleEventSink,
+    WorkflowGraphValidationLifecycleEventSnapshot, WorkflowGraphValidationSubmitGate,
+    WorkflowGraphValidationSubmitGateReason, WorkflowGroupFailureFact, WorkflowGroupPreflight,
     WorkflowPresentationEdge, WorkflowPresentationMetadata, WorkflowPresentationNode,
 };
 pub use pantograph_diagnostics_ledger::WorkflowExecutionSessionResumeState;

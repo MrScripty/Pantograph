@@ -24,6 +24,9 @@ impl WorkflowHost for CapacityFaultHost {
     async fn validate_workflow(&self, id: &str) -> Result<(), WorkflowServiceError> {
         self.inner.validate_workflow(id).await
     }
+    async fn workflow_graph(&self, id: &str) -> Result<WorkflowGraph, WorkflowServiceError> {
+        self.inner.workflow_graph(id).await
+    }
     async fn workflow_graph_fingerprint(&self, id: &str) -> Result<String, WorkflowServiceError> {
         self.inner.workflow_graph_fingerprint(id).await
     }

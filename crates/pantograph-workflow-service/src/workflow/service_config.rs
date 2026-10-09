@@ -52,6 +52,8 @@ impl WorkflowService {
 
     pub fn with_capacity_limits(max_sessions: usize, max_loaded_sessions: usize) -> Self {
         Self {
+            serial_ready_mode: None,
+            cohort_coverage_provider: None,
             session_store: Arc::new(Mutex::new(WorkflowExecutionSessionStore::new(
                 max_sessions,
                 max_loaded_sessions,
@@ -98,6 +100,10 @@ impl WorkflowService {
         mut self,
         port: Arc<dyn RuntimeHostBatchExecutionPort>,
     ) -> Self {
+        assert!(
+            self.serial_ready_mode.is_none(),
+            "serial constructor owns its execution port"
+        );
         self.scheduler_task_orchestrator = self
             .scheduler_task_orchestrator
             .with_runtime_host_batch_dispatcher(SchedulerRuntimeHostBatchDispatcher::new(port));
@@ -109,6 +115,10 @@ impl WorkflowService {
         mut self,
         port: Arc<dyn ReservationLifecyclePort>,
     ) -> Self {
+        assert!(
+            self.serial_ready_mode.is_none(),
+            "serial constructor owns its cleanup port"
+        );
         self.scheduler_task_orchestrator = self
             .scheduler_task_orchestrator
             .with_reservation_lifecycle_port(port);

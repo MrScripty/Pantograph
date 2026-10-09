@@ -142,8 +142,26 @@ impl InferenceExecutionCancellationSnapshot {
 }
 
 /// Host-owned cancellation signal exposed to backend execution code.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InferenceTaskStartDisposition {
+    Prepared,
+    NoStartAuthorized,
+    StartedOrUncertain,
+}
 pub trait InferenceExecutionCancellationSignal: Send + Sync {
+    fn task_start_matches_attempt(&self, _task_id: &str, _attempt_id: &str) -> bool {
+        false
+    }
+    fn task_start_disposition(&self) -> Option<InferenceTaskStartDisposition> {
+        None
+    }
     fn snapshot(&self) -> InferenceExecutionCancellationSnapshot;
+    /// Optional existing task-owner authority, forwarded unchanged by adapters.
+    /// Some(false) refuses. None is legacy/unqualified, never a start proof.
+    fn commit_task_start(&self, _task_id: &str, _attempt_id: &str) -> Option<bool> {
+        None
+    }
+    fn revoke_task_start(&self) {}
 }
 
 #[derive(Clone)]
@@ -188,6 +206,19 @@ impl InferenceExecutionCancellationHandle {
     }
 
     #[must_use]
+    pub fn commit_task_start(&self, task_id: &str, attempt_id: &str) -> Option<bool> {
+        self.signal.commit_task_start(task_id, attempt_id)
+    }
+    pub fn task_start_matches_attempt(&self, task_id: &str, attempt_id: &str) -> bool {
+        self.signal.task_start_matches_attempt(task_id, attempt_id)
+    }
+    pub fn task_start_disposition(&self) -> Option<InferenceTaskStartDisposition> {
+        self.signal.task_start_disposition()
+    }
+    pub fn revoke_task_start(&self) {
+        self.signal.revoke_task_start();
+    }
+
     pub fn rejection_message(&self, operation: &str) -> Option<String> {
         let snapshot = self.snapshot();
         let reason = snapshot.reason.as_deref().unwrap_or("no reason provided");

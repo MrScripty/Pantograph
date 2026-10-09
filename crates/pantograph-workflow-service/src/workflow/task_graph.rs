@@ -22,7 +22,14 @@ use super::task_graph_contracts::{
     WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION,
 };
 use super::WorkflowServiceError;
-use crate::graph::{workflow_executable_topology, WorkflowGraph, WorkflowRuntimeSourceContext};
+use crate::graph::dependency_environment_subject::{
+    resolve_dependency_environment_action_subject, DependencyEnvironmentActionSubjectResolution,
+    DEPENDENCY_ENVIRONMENT_NODE_TYPE,
+};
+use crate::graph::{
+    lower_groups, workflow_executable_topology, NodeRegistry, WorkflowGraph,
+    WorkflowRuntimeSourceContext,
+};
 
 const PORT_TEXT: &str = "text";
 const PORT_VALUE: &str = "value";
@@ -131,6 +138,8 @@ pub fn workflow_scheduler_task_graph_with_inference_projections(
     graph: &WorkflowGraph,
     inference_task_projections: &WorkflowSchedulerInferenceTaskProjections,
 ) -> Result<WorkflowSchedulerTaskGraph, WorkflowServiceError> {
+    let projection = lower_groups(graph, &NodeRegistry::new())?;
+    let graph = &projection.executable_graph;
     let workflow_id = scheduler_workflow_id(workflow_id)?;
     let workflow_run_id = scheduler_workflow_run_id(workflow_run_id)?;
     let topology = workflow_executable_topology(graph)?;
@@ -146,6 +155,9 @@ pub fn workflow_scheduler_task_graph_with_inference_projections(
 
     let mut tasks = Vec::with_capacity(topology.nodes.len());
     for node in &topology.nodes {
+        if is_dependency_environment_control_node(graph, &node.node_id, &node.node_type) {
+            continue;
+        }
         let node_id = scheduler_node_id(&node.node_id)?;
         let task_id = scheduler_task_id(&node.node_id)?;
         let input_bindings = input_bindings(node.node_id.as_str(), &incoming_edges)?;
@@ -205,6 +217,25 @@ pub fn workflow_scheduler_task_graph_with_inference_projections(
         });
     }
 
+    // Grouped CPU primitives must have valid materialized templates before
+    // submission reaches the queue. Keep existing flat/root diagnostic policy.
+    for task in &tasks {
+        if projection
+            .parent_by_node
+            .contains_key(task.node_id.as_str())
+        {
+            if let Some(diagnostic) = task.diagnostics.iter().find(|diagnostic| {
+                diagnostic.severity == WorkflowSchedulerTaskProjectionDiagnosticSeverity::Error
+            }) {
+                return Err(WorkflowServiceError::InvalidRequest(format!(
+                    "grouped primitive '{}' cannot materialize its CPU task: {}",
+                    task.node_id.as_str(),
+                    diagnostic.message
+                )));
+            }
+        }
+    }
+
     Ok(WorkflowSchedulerTaskGraph {
         schema_version: WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION,
         workflow_id,
@@ -254,6 +285,36 @@ fn input_bindings(
             .then_with(|| left.target_port_id.cmp(&right.target_port_id))
     });
     Ok(bindings)
+}
+
+fn is_dependency_environment_control_node(
+    graph: &WorkflowGraph,
+    node_id: &str,
+    node_type: &str,
+) -> bool {
+    if node_type != DEPENDENCY_ENVIRONMENT_NODE_TYPE {
+        return false;
+    }
+    let Ok(target_node_id) = node_id.parse() else {
+        return false;
+    };
+    if !matches!(
+        resolve_dependency_environment_action_subject(graph, &target_node_id),
+        DependencyEnvironmentActionSubjectResolution::Resolved { .. }
+    ) {
+        return false;
+    }
+    // Workflow-service owns the validated control association and dependency
+    // proof. It is not a dataflow task. Bound/malformed controls stay fail-closed.
+    graph
+        .edges
+        .iter()
+        .filter(|edge| edge.source == node_id || edge.target == node_id)
+        .all(|edge| {
+            edge.source == node_id
+                && edge.source_handle == DEPENDENCY_ENVIRONMENT_SIDECAR_PORT_ID
+                && edge.target_handle == DEPENDENCY_ENVIRONMENT_SIDECAR_PORT_ID
+        })
 }
 
 fn is_control_association_edge(edge: &crate::graph::WorkflowExecutableTopologyEdge) -> bool {

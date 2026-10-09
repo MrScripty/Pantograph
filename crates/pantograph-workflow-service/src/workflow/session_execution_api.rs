@@ -175,6 +175,12 @@ impl WorkflowService {
     ) -> Result<WorkflowExecutionSessionCreateResponse, WorkflowServiceError> {
         validate_workflow_id(&workflow_id)?;
         host.validate_workflow(&workflow_id).await?;
+        // Ephemeral creation may own metadata before a graph is available. Run
+        // submission checks the actual graph; KeepAlive acquires resources now.
+        if keep_alive {
+            let authored_graph = host.workflow_graph(&workflow_id).await?;
+            crate::graph::lower_groups(&authored_graph, &crate::graph::NodeRegistry::new())?;
+        }
 
         let session_id = {
             let mut store = self.session_store_guard()?;

@@ -701,7 +701,7 @@ fn image_runtime_dependency_planning_request(
     DependencyPlanningRequest {
         model_ref: model_ref.clone(),
         task_id: DependencyTaskId::parse("image_generation").expect("valid task id"),
-        task_type: Some(DependencyTaskId::parse("image_generation").expect("valid task type")),
+        task_type: None,
         expected_artifact_kind: None,
         scheduler_intent: SchedulerIntent {
             requested_runtime_id: Some(
@@ -709,7 +709,13 @@ fn image_runtime_dependency_planning_request(
             ),
             requested_device_id: Some(DeviceIntentId::parse("cuda:0").expect("valid device id")),
         },
-        platform_context: None,
+        platform_context: Some(
+            pantograph_dependency_planning::DependencyPlanningPlatformContext::from_os_arch(
+                std::env::consts::OS,
+                std::env::consts::ARCH,
+            )
+            .expect("producer-aligned platform context"),
+        ),
         selected_binding_ids,
         dependency_override_patches: Vec::new(),
         trait_intents: Vec::new(),
@@ -799,7 +805,7 @@ fn runtime_dependency_environment_request(
         vec![DependencyBindingId::parse(binding_id).expect("valid dependency binding id")],
     );
     planning.task_id = DependencyTaskId::parse(task_type).expect("valid dependency task id");
-    planning.task_type = Some(planning.task_id.clone());
+    planning.task_type = None;
     planning.scheduler_intent.requested_device_id =
         Some(DeviceIntentId::parse(device_id).expect("valid dependency device id"));
     planning.caller_context.node_id = Some(node_id.to_string());
@@ -2467,7 +2473,7 @@ async fn run_selected_text_workflow_with_text_controls(
             vec![DependencyBindingId::parse("torch-transformers").unwrap()],
         );
         planning.task_id = DependencyTaskId::parse("text_generation").unwrap();
-        planning.task_type = Some(planning.task_id.clone());
+        planning.task_type = None;
         planning.scheduler_intent.requested_device_id = Some(DeviceIntentId::parse("cpu").unwrap());
         planning.caller_context.node_id = Some(node_id.into());
         let proof = produce_dependency_requirements_proof(
@@ -3935,6 +3941,12 @@ mod cpu_embedding_graph_tests;
 #[path = "cpu_chat_graph_tests.rs"]
 mod cpu_chat_graph_tests;
 
+#[path = "completion_session_tests.rs"]
+mod completion_session_tests;
+
+#[path = "dependency_completion_session_tests.rs"]
+mod dependency_completion_session_tests;
+
 #[cfg(feature = "backend-candle")]
 #[path = "cpu_rerank_graph_tests.rs"]
 mod cpu_rerank_graph_tests;
@@ -3946,3 +3958,7 @@ mod cpu_rerank_graph_tests;
 ))]
 #[path = "cpu_audio_graph_tests.rs"]
 mod cpu_audio_graph_tests;
+
+#[cfg(feature = "backend-candle")]
+#[path = "native_serial_worker_tests.rs"]
+mod native_serial_worker_tests;

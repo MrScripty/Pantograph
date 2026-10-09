@@ -475,3 +475,78 @@ fn runtime_host_batch_diagnostic(
         hint: None,
     }
 }
+
+#[test]
+fn task_start_authority_linearizes_competing_start_and_revocation() {
+    use crate::{RuntimeHostTaskStartAuthority, RuntimeHostTaskStartDisposition as D};
+    use std::sync::{Arc, Barrier};
+    for _ in 0..128 {
+        let a = RuntimeHostTaskStartAuthority::new("task", "attempt").unwrap();
+        assert!(!a.try_start("other", "attempt"));
+        assert!(!a.try_start("task", "old"));
+        assert_eq!(a.disposition(), D::Prepared);
+        let barrier = Arc::new(Barrier::new(3));
+        let started = std::thread::scope(|s| {
+            let t = a.clone();
+            let b = barrier.clone();
+            let first = s.spawn(move || {
+                b.wait();
+                t.try_start("task", "attempt")
+            });
+            let t = a.clone();
+            let b = barrier.clone();
+            let second = s.spawn(move || {
+                b.wait();
+                t.try_start("task", "attempt")
+            });
+            barrier.wait();
+            let revoked = a.revoke();
+            let count = usize::from(first.join().unwrap()) + usize::from(second.join().unwrap());
+            assert!(count <= 1);
+            assert_eq!(revoked == D::StartedOrUncertain, count == 1);
+            count
+        });
+        assert_eq!(
+            a.disposition(),
+            if started == 1 {
+                D::StartedOrUncertain
+            } else {
+                D::NoStartAuthorized
+            }
+        );
+        assert!(!a.try_start("task", "attempt"));
+    }
+}
+
+#[test]
+fn cancellation_handle_freezes_authority_even_if_signal_later_withholds_it() {
+    use crate::{RuntimeHostExecutionCancellationSignal, RuntimeHostTaskStartAuthority};
+    use std::sync::atomic::{AtomicBool, Ordering};
+    struct Rotating {
+        first: AtomicBool,
+        authority: RuntimeHostTaskStartAuthority,
+    }
+    impl RuntimeHostExecutionCancellationSignal for Rotating {
+        fn snapshot(&self) -> RuntimeHostExecutionCancellationSnapshot {
+            RuntimeHostExecutionCancellationSnapshot {
+                cancellation_context_id: "frozen".into(),
+                state: RuntimeHostExecutionCancellationState::Running,
+                reason: None,
+            }
+        }
+        fn task_start_authority(&self) -> Option<RuntimeHostTaskStartAuthority> {
+            self.first
+                .swap(false, Ordering::AcqRel)
+                .then(|| self.authority.clone())
+        }
+    }
+    let a = RuntimeHostTaskStartAuthority::new("task", "attempt").unwrap();
+    let handle = RuntimeHostExecutionCancellationHandle::with_signal(Arc::new(Rotating {
+        first: AtomicBool::new(true),
+        authority: a.clone(),
+    }));
+    let captured = handle.clone().task_start_authority().unwrap();
+    a.revoke();
+    assert!(!captured.try_start("task", "attempt"));
+    assert!(handle.task_start_authority().is_some());
+}

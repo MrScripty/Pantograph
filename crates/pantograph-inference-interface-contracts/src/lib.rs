@@ -474,6 +474,16 @@ pub enum InferenceDiagnosticCode {
     InferenceConnectionSurfaceMissing,
     InferenceConnectionSurfaceStale,
     InferenceConnectionSurfaceBlocked,
+    GroupSchemaInvalid,
+    GroupIdentityInvalid,
+    GroupChildUnsupported,
+    GroupEffectivePortsUnsupported,
+    GroupMappingInvalid,
+    GroupCompositionInvalid,
+    GroupConnectionInvalid,
+    GroupContractBlocked,
+    ValidationSessionCancelled,
+    ValidationSessionSuperseded,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

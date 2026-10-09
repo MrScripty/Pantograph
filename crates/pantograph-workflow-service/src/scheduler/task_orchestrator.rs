@@ -68,6 +68,23 @@ use super::{
     WorkflowSchedulerTaskTerminalMutation,
 };
 
+/// Minted only after applying an owned cleanup release event and validating its exact
+/// echoed event/lease. Cannot be constructed from a DispatchStarted application.
+#[derive(Debug, Clone)]
+pub(crate) struct WorkflowReservationCleanupAcknowledgement {
+    application: ValidatedReservationLifecycleApplication,
+    pub(crate) workflow_run_id: String,
+    pub(crate) task_id: String,
+    pub(crate) cleanup_release: bool,
+}
+impl AsRef<pantograph_runtime_host_contracts::ReservationLifecycleApplication>
+    for WorkflowReservationCleanupAcknowledgement
+{
+    fn as_ref(&self) -> &pantograph_runtime_host_contracts::ReservationLifecycleApplication {
+        self.application.as_ref()
+    }
+}
+
 /// Workflow-service async shell for scheduler task orchestration.
 ///
 /// This type owns application-layer calls into lower-level scheduler and
@@ -357,7 +374,7 @@ impl WorkflowSchedulerTaskOrchestrator {
             return Ok(());
         }
         task_lifecycle
-            .track_task_handle(task_id.clone(), attempt_id.clone())
+            .track_rehydrated_task_handle(task_id.clone(), attempt_id.clone())
             .map(|_record| ())
             .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
     }
@@ -802,11 +819,14 @@ impl WorkflowSchedulerTaskOrchestrator {
         task: &WorkflowSchedulerTask,
         mutation: &WorkflowSchedulerTaskTerminalMutation,
         result: &WorkflowSchedulerTaskResult,
-    ) -> Result<(), WorkflowSchedulerTaskOrchestratorError> {
+    ) -> Result<
+        Option<WorkflowReservationCleanupAcknowledgement>,
+        WorkflowSchedulerTaskOrchestratorError,
+    > {
         let Some(release_intent) = mutation.reservation_release_intent.as_ref() else {
-            return Ok(());
+            return Ok(None);
         };
-        let _ = self
+        let application = self
             .apply_reservation_cleanup_lifecycle_event(runtime_host_terminal_lifecycle_event(
                 task,
                 release_intent.reservation_lease_id.clone(),
@@ -814,7 +834,7 @@ impl WorkflowSchedulerTaskOrchestrator {
                 result,
             )?)
             .await?;
-        Ok(())
+        Ok(Some(application))
     }
 
     pub(crate) async fn apply_runtime_task_dispatch_error_reservation_lifecycle(
@@ -822,11 +842,14 @@ impl WorkflowSchedulerTaskOrchestrator {
         task: &WorkflowSchedulerTask,
         mutation: &WorkflowSchedulerTaskTerminalMutation,
         error: &WorkflowSchedulerTaskOrchestratorError,
-    ) -> Result<(), WorkflowSchedulerTaskOrchestratorError> {
+    ) -> Result<
+        Option<WorkflowReservationCleanupAcknowledgement>,
+        WorkflowSchedulerTaskOrchestratorError,
+    > {
         let Some(release_intent) = mutation.reservation_release_intent.as_ref() else {
-            return Ok(());
+            return Ok(None);
         };
-        let _ = self
+        let application = self
             .apply_reservation_cleanup_lifecycle_event(reservation_lifecycle_event(
                 task,
                 release_intent.reservation_lease_id.clone(),
@@ -839,7 +862,7 @@ impl WorkflowSchedulerTaskOrchestrator {
                 )],
             )?)
             .await?;
-        Ok(())
+        Ok(Some(application))
     }
 
     pub(crate) async fn apply_runtime_task_cancellation_reservation_lifecycle(
@@ -847,11 +870,14 @@ impl WorkflowSchedulerTaskOrchestrator {
         task: &WorkflowSchedulerTask,
         mutation: &WorkflowSchedulerTaskTerminalMutation,
         reason: &str,
-    ) -> Result<(), WorkflowSchedulerTaskOrchestratorError> {
+    ) -> Result<
+        Option<WorkflowReservationCleanupAcknowledgement>,
+        WorkflowSchedulerTaskOrchestratorError,
+    > {
         let Some(release_intent) = mutation.reservation_release_intent.as_ref() else {
-            return Ok(());
+            return Ok(None);
         };
-        let _ = self
+        let application = self
             .apply_reservation_cleanup_lifecycle_event(reservation_lifecycle_event(
                 task,
                 release_intent.reservation_lease_id.clone(),
@@ -864,7 +890,7 @@ impl WorkflowSchedulerTaskOrchestrator {
                 )],
             )?)
             .await?;
-        Ok(())
+        Ok(Some(application))
     }
 
     #[allow(dead_code)]
@@ -872,7 +898,7 @@ impl WorkflowSchedulerTaskOrchestrator {
         &self,
         member: &StartedRuntimeTaskBatchMember,
         response: &RuntimeHostBatchExecutionMemberResponse,
-    ) -> Result<ValidatedReservationLifecycleApplication, WorkflowSchedulerTaskOrchestratorError>
+    ) -> Result<WorkflowReservationCleanupAcknowledgement, WorkflowSchedulerTaskOrchestratorError>
     {
         validate_runtime_batch_member_response_correlation(member, response)?;
         self.apply_reservation_cleanup_lifecycle_event(runtime_host_batch_member_lifecycle_event(
@@ -929,15 +955,33 @@ impl WorkflowSchedulerTaskOrchestrator {
     async fn apply_reservation_cleanup_lifecycle_event(
         &self,
         event: ReservationLifecycleEvent,
-    ) -> Result<ValidatedReservationLifecycleApplication, WorkflowSchedulerTaskOrchestratorError>
+    ) -> Result<WorkflowReservationCleanupAcknowledgement, WorkflowSchedulerTaskOrchestratorError>
     {
+        let workflow_run_id = event.workflow_run_id.to_string();
+        let task_id = event.task_id.to_string();
+        let cleanup_release = matches!(
+            event.outcome,
+            ReservationLifecycleOutcome::RuntimeHostCompleted
+                | ReservationLifecycleOutcome::RuntimeHostFailed
+                | ReservationLifecycleOutcome::RuntimeHostDispatchRejected
+                | ReservationLifecycleOutcome::WorkflowCancelled
+                // Existing singleton batch Completed responses delegate reservation
+                // release with RetryDeferred. The cleanup owner applies that
+                // release/reconcile event; task input readiness remains separate.
+                | ReservationLifecycleOutcome::RetryDeferred
+        );
         self.mark_reservation_cleanup_lifecycle(WorkflowSchedulerLifecycleComponentState::Running)?;
         let result = self.apply_reservation_lifecycle_event(event).await;
         let reset_result = self.mark_reservation_cleanup_lifecycle(
             WorkflowSchedulerLifecycleComponentState::NotStarted,
         );
         match (result, reset_result) {
-            (Ok(application), Ok(())) => Ok(application),
+            (Ok(application), Ok(())) => Ok(WorkflowReservationCleanupAcknowledgement {
+                application,
+                workflow_run_id,
+                task_id,
+                cleanup_release,
+            }),
             (Err(error), Ok(())) => Err(error),
             (Ok(_application), Err(error)) => Err(error),
             (Err(error), Err(_reset_error)) => Err(error),
@@ -1811,6 +1855,9 @@ impl WorkflowSchedulerTaskOrchestrator {
         workflow_run_id: &str,
         task_id: &str,
     ) -> Result<Option<SchedulerTaskStateRecord>, WorkflowSchedulerTaskOrchestratorError> {
+        if store.completion_cleanup_pending(session_id, workflow_run_id, task_id) {
+            return Ok(None);
+        }
         let (task_graph, records) = store
             .active_run_scheduler_task_state(session_id, workflow_run_id)
             .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)?

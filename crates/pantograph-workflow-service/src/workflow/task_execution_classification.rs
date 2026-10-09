@@ -14,7 +14,7 @@ const NODE_TYPE_MERGE: &str = "merge";
 const NODE_TYPE_JSON_FILTER: &str = "json-filter";
 const NODE_TYPE_SELECTION_INPUT: &str = "selection-input";
 
-pub(super) fn classify_workflow_scheduler_task(
+pub fn classify_workflow_scheduler_task(
     node_type: &str,
     contract: Option<&NodeTypeContract>,
 ) -> WorkflowSchedulerTaskExecutionClass {

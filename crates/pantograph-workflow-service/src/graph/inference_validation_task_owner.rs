@@ -19,7 +19,7 @@ use super::inference_validation_publisher::{
     WorkflowGraphValidationPublishAttemptOutcome,
 };
 use super::inference_validation_state::CurrentInferenceValidationStateStore;
-use super::session::GraphSessionHandle;
+use super::session::GraphSessionMap;
 use super::types::WorkflowGraph;
 
 pub(crate) struct WorkflowGraphValidationTaskOwner {
@@ -43,7 +43,7 @@ impl WorkflowGraphValidationTaskOwner {
         facts_provider: Arc<dyn InferenceInterfaceFactsProvider>,
         validation_lifecycle: Arc<WorkflowGraphValidationLifecycleOwner>,
         validation_state: Arc<CurrentInferenceValidationStateStore>,
-        session_handle: GraphSessionHandle,
+        sessions: GraphSessionMap,
     ) -> Result<(), WorkflowServiceError> {
         let WorkflowGraphValidationTaskStartRequest {
             graph_session_id,
@@ -52,13 +52,54 @@ impl WorkflowGraphValidationTaskOwner {
             graph,
         } = request;
         self.drain_finished_tasks().await;
-        let previous = {
-            let mut state = self.state.write().await;
-            if !state.accepting_work {
-                return Err(validation_task_owner_shutdown_error());
-            }
-            state.active.remove(&graph_session_id)
+        // Serialize producer replacement with accepting-work and generation
+        // establishment. A refused Begin leaves the existing producer intact.
+        let mut owner = self.state.write().await;
+        if !owner.accepting_work {
+            return Err(validation_task_owner_shutdown_error());
+        }
+        let (cancellation, pending_event) = validation_lifecycle
+            .begin_validation_with_invalidation_deferred_event(
+                graph_session_id.clone(),
+                graph_revision.clone(),
+                validation_session_id.clone(),
+                || validation_state.clear_graph_session(&graph_session_id),
+            )
+            .await
+            .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
+
+        let task_graph_session_id = graph_session_id.clone();
+        let task_graph_revision = graph_revision.clone();
+        let task_validation_session_id = validation_session_id.clone();
+        let task_lifecycle = Arc::clone(&validation_lifecycle);
+        let (start_tx, start_rx) = tokio::sync::oneshot::channel();
+        let handle = tokio::spawn(async move {
+            start_rx
+                .await
+                .map_err(|_| validation_task_owner_shutdown_error())?;
+            publish_workflow_graph_validation_attempt(
+                WorkflowGraphValidationPublishAttempt {
+                    graph_session_id: task_graph_session_id,
+                    graph_revision: task_graph_revision,
+                    validation_session_id: task_validation_session_id,
+                    graph,
+                    cancellation: Some(cancellation),
+                },
+                facts_provider.as_ref(),
+                task_lifecycle.as_ref(),
+                validation_state.as_ref(),
+                &sessions,
+            )
+            .await
+        });
+
+        let record = WorkflowGraphValidationTaskRecord {
+            graph_revision: graph_revision.clone(),
+            validation_session_id: validation_session_id.clone(),
+            handle,
         };
+        let previous = owner.active.insert(graph_session_id.clone(), record);
+        drop(owner);
         if let Some(record) = previous {
             self.abort_task_record(
                 graph_session_id.clone(),
@@ -69,64 +110,17 @@ impl WorkflowGraphValidationTaskOwner {
             )
             .await;
         }
-
-        let task_graph_session_id = graph_session_id.clone();
-        let task_graph_revision = graph_revision.clone();
-        let task_validation_session_id = validation_session_id.clone();
-        let shutdown_race_lifecycle = Arc::clone(&validation_lifecycle);
-        let handle = tokio::spawn(async move {
-            publish_workflow_graph_validation_attempt(
-                WorkflowGraphValidationPublishAttempt {
-                    graph_session_id: task_graph_session_id,
-                    graph_revision: task_graph_revision,
-                    validation_session_id: task_validation_session_id,
-                    graph,
-                },
-                facts_provider.as_ref(),
-                validation_lifecycle.as_ref(),
-                validation_state.as_ref(),
-                || async {
-                    let mut state = session_handle.lock().await;
-                    state.touch();
-                    state.canonicalize_graph();
-                    WorkflowGraphRevision::parse(state.graph.compute_fingerprint())
-                        .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))
-                },
-            )
-            .await
-        });
-
-        let record = WorkflowGraphValidationTaskRecord {
-            graph_revision,
-            validation_session_id,
-            handle,
-        };
-        let rejected = {
-            let mut state = self.state.write().await;
-            if !state.accepting_work {
-                Some(record)
-            } else {
-                state.active.insert(graph_session_id.clone(), record);
-                None
-            }
-        };
-        if let Some(record) = rejected {
-            shutdown_race_lifecycle
-                .cancel_active_validation(
-                    &graph_session_id,
-                    WorkflowGraphValidationCancellationReason::Shutdown,
-                )
-                .await;
-            self.abort_task_record(
+        validation_lifecycle
+            .validation_started_event(
                 graph_session_id,
-                record,
-                WorkflowGraphValidationTaskTerminalState::Cancelled {
-                    reason: WorkflowGraphValidationCancellationReason::Shutdown,
-                },
+                graph_revision,
+                validation_session_id,
+                pending_event,
             )
             .await;
-            return Err(validation_task_owner_shutdown_error());
-        }
+        // Pending is observable before the producer can publish. Shutdown/close
+        // can cancel/abort during the callback; no canceled producer gains authority.
+        let _ = start_tx.send(());
         Ok(())
     }
 
@@ -145,14 +139,11 @@ impl WorkflowGraphValidationTaskOwner {
         validation_lifecycle: &WorkflowGraphValidationLifecycleOwner,
     ) {
         let active = self.stop_accepting_and_drain_active_tasks().await;
-        for (graph_session_id, _) in active.iter() {
-            validation_lifecycle
-                .cancel_active_validation(
-                    graph_session_id,
-                    WorkflowGraphValidationCancellationReason::Shutdown,
-                )
-                .await;
-        }
+        // Finished task handles are drained above; their accepted lifecycle
+        // generations (and synchronous publications) must be canceled too.
+        validation_lifecycle
+            .cancel_all_active_validations(WorkflowGraphValidationCancellationReason::Shutdown)
+            .await;
         for (graph_session_id, record) in active {
             self.abort_task_record(
                 graph_session_id,

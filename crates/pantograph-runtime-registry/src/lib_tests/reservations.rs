@@ -1,7 +1,56 @@
 use super::*;
 
 #[test]
-fn acquire_reservation_reuses_existing_owner_binding() {
+fn exhausted_incarnation_and_custody_sequence_refuses_without_state_mutation() {
+    let registry = Arc::new(RuntimeRegistry::new());
+    registry.register_runtime(RuntimeRegistration::new("candle", "Candle"));
+    let request = RuntimeReservationRequest {
+        runtime_id: "candle".into(),
+        workflow_id: "workflow".into(),
+        reservation_owner_id: Some("owner".into()),
+        usage_profile: None,
+        model_id: None,
+        pin_runtime: false,
+        requirements: None,
+        retention_hint: RuntimeRetentionHint::Ephemeral,
+    };
+    let lease = registry.acquire_reservation(request.clone()).unwrap();
+    let observed = registry
+        .evaluate_reservation(request.clone())
+        .unwrap()
+        .observation()
+        .clone();
+    let before = registry.snapshot();
+    registry
+        .reservation_sequence
+        .store(u64::MAX, Ordering::Relaxed);
+    assert!(matches!(
+        registry.acquire_reservation(request.clone()),
+        Err(RuntimeRegistryError::ReservationSequenceExhausted)
+    ));
+    assert!(matches!(
+        registry.acquire_reservation_provisional(request, &observed, |_| Ok::<_, ()>(())),
+        Err(RuntimeReservationPublicationError::Registry(
+            RuntimeRegistryError::ReservationSequenceExhausted
+        ))
+    ));
+    assert!(matches!(
+        registry.acquire_execution_custody(&lease),
+        Err(RuntimeRegistryError::ReservationSequenceExhausted)
+    ));
+    assert_eq!(registry.snapshot().reservations, before.reservations);
+    assert_eq!(
+        registry.snapshot().runtimes[0].active_reservation_ids,
+        before.runtimes[0].active_reservation_ids
+    );
+    assert_eq!(
+        registry.reservation_sequence.load(Ordering::Relaxed),
+        u64::MAX
+    );
+}
+
+#[test]
+fn acquire_reservation_preserves_owner_binding_with_fresh_incarnation() {
     let registry = RuntimeRegistry::new();
     registry.observe_runtimes(vec![
         RuntimeObservation {
@@ -50,7 +99,9 @@ fn acquire_reservation_reuses_existing_owner_binding() {
         })
         .expect("second owner reservation should reuse existing lease");
 
-    assert_eq!(first.reservation_id, reused.reservation_id);
+    assert_ne!(first.reservation_id, reused.reservation_id);
+    assert_eq!(first.created_at_ms, reused.created_at_ms);
+    assert!(registry.reservation_lease(first.reservation_id).is_none());
     assert_eq!(
         reused.reservation_owner_id.as_deref(),
         Some("session-owner")
@@ -150,7 +201,7 @@ fn owner_reservation_reuse_recomputes_admission_against_other_claims_only() {
         })
         .expect("owner reuse should exclude existing claim when rechecking admission");
 
-    assert_eq!(reused.reservation_id, first.reservation_id);
+    assert_ne!(reused.reservation_id, first.reservation_id);
     assert_eq!(reused.model_id.as_deref(), Some("model-a-v2"));
     assert_eq!(reused.retention_hint, RuntimeRetentionHint::KeepAlive);
 
@@ -158,7 +209,7 @@ fn owner_reservation_reuse_recomputes_admission_against_other_claims_only() {
     let updated = snapshot
         .reservations
         .iter()
-        .find(|reservation| reservation.reservation_id == first.reservation_id)
+        .find(|reservation| reservation.reservation_id == reused.reservation_id)
         .expect("updated reservation");
     assert_eq!(updated.model_id.as_deref(), Some("model-a-v2"));
     assert_eq!(updated.retention_hint, RuntimeRetentionHint::KeepAlive);

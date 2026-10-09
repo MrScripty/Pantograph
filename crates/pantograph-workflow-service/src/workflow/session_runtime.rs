@@ -79,6 +79,12 @@ impl WorkflowService {
         session_id: &str,
         diagnostics_context: Option<WorkflowSessionRuntimeAdmissionDiagnosticContext<'_>>,
     ) -> Result<(), WorkflowServiceError> {
+        let workflow_id = self
+            .session_store_guard()?
+            .session_summary(session_id)?
+            .workflow_id;
+        let authored_graph = host.workflow_graph(&workflow_id).await?;
+        crate::graph::lower_groups(&authored_graph, &crate::graph::NodeRegistry::new())?;
         enum RuntimeDecision {
             Ready,
             SelectUnloadCandidate {
@@ -242,6 +248,13 @@ impl WorkflowService {
                     usage_profile,
                     retention_hint,
                 } => {
+                    // Capacity selection and unloading await host callbacks. Re-read the
+                    // authored graph at the target load boundary after those awaits.
+                    let authored_graph = host.workflow_graph(&workflow_id).await?;
+                    crate::graph::lower_groups(
+                        &authored_graph,
+                        &crate::graph::NodeRegistry::new(),
+                    )?;
                     host.load_session_runtime(
                         session_id,
                         &workflow_id,

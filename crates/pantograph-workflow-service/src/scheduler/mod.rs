@@ -36,7 +36,7 @@ pub use contracts::{
     WorkflowSchedulerRuntimeWarmupReason, WorkflowSchedulerSnapshotDiagnostics,
     WorkflowSchedulerSnapshotRequest, WorkflowSchedulerSnapshotResponse,
 };
-#[cfg(test)]
+#[cfg(any(test, all(feature = "test-support", feature = "native-task-release")))]
 pub(crate) use lifecycle::WorkflowSchedulerLifecycleOwnerId;
 pub(crate) use lifecycle::{
     WorkflowSchedulerLifecycleComponentKind, WorkflowSchedulerLifecycleComponentRegistryHandle,
@@ -63,4 +63,13 @@ pub(crate) use store::{
 };
 pub(crate) use task_orchestrator::{
     WorkflowSchedulerTaskOrchestrator, WorkflowSchedulerTaskOrchestratorError,
+};
+
+#[cfg(feature = "native-task-release")]
+pub(crate) use store::{WorkflowNativeReleaseBinding, WorkflowNativeReleaseSink};
+
+#[cfg(all(feature = "native-task-release", any(test, feature = "test-support")))]
+pub(crate) use store::{
+    WorkflowQueueProgressBinding, WorkflowQueueProgressClock, WorkflowQueueProgressFacts,
+    WorkflowQueueProgressOpportunity, WorkflowQueueProgressProvider, WorkflowQueueProgressView,
 };

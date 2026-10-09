@@ -1,3 +1,5 @@
+#[cfg(feature = "native-task-release")]
+pub mod native_task_release;
 #[cfg(test)]
 use async_trait::async_trait;
 use std::path::PathBuf;
@@ -29,6 +31,7 @@ mod artifact_settings_api;
 mod artifact_store;
 mod artifact_writer;
 mod attribution_api;
+mod cohort_coverage;
 mod contracts;
 mod dependency_readiness_composition;
 #[allow(dead_code)]
@@ -54,6 +57,7 @@ mod runtime_branch_run_finalization;
 mod runtime_branch_task_event;
 #[allow(dead_code)]
 mod runtime_dispatch_assignment;
+mod runtime_dispatch_lookahead;
 mod runtime_dispatch_selection;
 mod runtime_host_observation;
 mod runtime_host_task_input_mapping;
@@ -61,7 +65,10 @@ mod runtime_host_task_result_mapping;
 mod runtime_preflight;
 #[allow(dead_code)]
 mod runtime_task_attempt_fact;
+mod serial_ready;
 mod service_config;
+pub use serial_ready::WorkflowSerialReadyConfig;
+pub(crate) use serial_ready::{WorkflowSerialReadyMember, WorkflowSerialReadyPair};
 mod session_execution_api;
 mod session_io_artifacts;
 mod session_lifecycle_api;
@@ -70,6 +77,7 @@ mod session_runtime;
 mod session_scheduler_runner;
 mod task_binding_resolution;
 mod task_execution_classification;
+pub use task_execution_classification::classify_workflow_scheduler_task;
 #[allow(dead_code)]
 mod task_execution_facade;
 mod task_execution_owner;
@@ -93,6 +101,8 @@ pub use self::artifact_store::{
     ArtifactWriteRequest, VerifiedArtifactSnapshot,
 };
 pub use self::artifact_writer::WorkflowArtifactWriter;
+pub(crate) use self::cohort_coverage::cohort_fingerprint;
+pub use self::cohort_coverage::*;
 pub use self::contracts::*;
 pub use self::dependency_readiness_composition::WorkflowDependencyReadinessComponents;
 pub use self::diagnostics_api::{
@@ -160,6 +170,10 @@ pub(crate) use self::non_runtime_task_adapter::{
     execute_non_runtime_scheduler_task, is_bounded_vector_json,
     WorkflowSchedulerNonRuntimeTaskAdapterError,
 };
+pub use self::runtime_dispatch_lookahead::WorkflowCompletionSuccessorSnapshot;
+pub(crate) use self::runtime_dispatch_lookahead::{
+    bounded_proof, bounded_serialized, bounded_task, equivalent_environment,
+};
 pub(crate) use self::runtime_dispatch_selection::{
     NoRuntimeDispatchCandidatesProvider, NoRuntimeDispatchSourceRefresher,
     WorkflowRuntimeDispatchPreselectionError, WorkflowRuntimeDispatchSelectionBoundary,
@@ -176,7 +190,8 @@ pub use self::runtime_dispatch_selection::{
 };
 pub use self::runtime_host_observation::WorkflowRuntimeHostObservationRecorder;
 pub(crate) use self::runtime_host_task_input_mapping::{
-    materialize_runtime_host_inputs, WorkflowRuntimeHostTaskInputMappingError,
+    materialize_runtime_host_inputs, runtime_host_input_value,
+    WorkflowRuntimeHostTaskInputMappingError,
 };
 pub(crate) use self::runtime_host_task_result_mapping::{
     runtime_host_batch_member_response_to_task_result, runtime_host_response_to_task_result,
@@ -281,6 +296,8 @@ pub use crate::scheduler::{
 /// Service entrypoint for workflow API operations.
 #[derive(Clone)]
 pub struct WorkflowService {
+    serial_ready_mode: Option<Arc<serial_ready::SerialReadyMode>>,
+    cohort_coverage_provider: Option<Arc<dyn WorkflowCohortCoverageProvider>>,
     session_store: Arc<Mutex<WorkflowExecutionSessionStore>>,
     runtime_branch_task_event_repository:
         Arc<Mutex<runtime_branch_task_event::InMemoryWorkflowRuntimeBranchTaskEventRepository>>,
@@ -309,3 +326,8 @@ pub struct WorkflowService {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(all(feature = "native-task-release", any(test, feature = "test-support")))]
+mod native_worker_episode_test_support;
+#[cfg(all(feature = "native-task-release", any(test, feature = "test-support")))]
+pub use native_worker_episode_test_support::WorkflowControlledNativeWorkerEpisode;

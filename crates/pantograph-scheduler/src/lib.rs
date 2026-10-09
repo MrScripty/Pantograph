@@ -7,6 +7,9 @@
 
 mod batching;
 mod capability;
+mod cohort_completion;
+mod completion_ranking;
+mod dependency_completion;
 mod dispatch;
 mod dispatch_selection;
 mod dispatch_selection_policy;
@@ -16,11 +19,37 @@ mod handoff;
 mod intent;
 mod lifecycle;
 mod ownership;
+mod progress_protection;
 mod queue;
 mod readiness;
 mod resource;
 mod resource_types;
+mod serial_admission;
+mod serial_dispatch;
 mod supervision;
+mod two_completion;
+
+pub use progress_protection::{
+    SchedulerProgressProtection, SchedulerProtectedBlockingContinuation,
+    SchedulerProtectedDecision, SchedulerProtectedEligibility, SchedulerProtectedEpisode,
+    SchedulerProtectedEvent, SchedulerProtectedFeasibility, SchedulerProtectedOpportunity,
+    SchedulerProtectedOutcome, SchedulerProtectedPermission, SchedulerProtectedPhase,
+    SchedulerProtectedRelation, SchedulerProtectedSnapshot, SchedulerProtectedTarget,
+    SchedulerProtectionRefusal, SCHEDULER_PROTECTION_MAX_APPS,
+    SCHEDULER_PROTECTION_MAX_OPPORTUNITIES, SCHEDULER_PROTECTION_MAX_WORK,
+};
+
+pub use serial_admission::{
+    SchedulerSerialAdmission, SchedulerSerialAdmissionRefusal, SchedulerSerialDispatch,
+    SchedulerSerialPreparation,
+};
+pub use serial_dispatch::{
+    SchedulerSerialAttemptIdentity, SchedulerSerialBoundDispatch, SchedulerSerialCleanupEvent,
+    SchedulerSerialCleanupPending, SchedulerSerialCleanupState, SchedulerSerialDispatchRefusal,
+    SchedulerSerialDrainState, SchedulerSerialDrainedDispatch, SchedulerSerialExecutingDispatch,
+    SchedulerSerialOwnerSnapshot, SchedulerSerialRuntimeOwnerLease,
+    SchedulerSerialVerifiedWarmDrain,
+};
 
 pub use batching::{
     SchedulerBatchCandidate, SchedulerBatchDiagnostic, SchedulerBatchDiagnosticCode,
@@ -33,6 +62,41 @@ pub use capability::{
     SchedulerCapabilityHintSnapshot, SchedulerCapabilitySeverity, SchedulerDeviceCapabilityHint,
     SchedulerRuntimeCapabilityHint, SchedulerTraitOptionHint, SchedulerTraitOptionValue,
     ValidatedSchedulerCapabilityHintSnapshot, SCHEDULER_CAPABILITY_HINT_CONTRACT_VERSION,
+};
+pub use cohort_completion::{
+    evaluate_scheduler_cohort_completion, evaluate_scheduler_cohort_workflow_objective,
+    SchedulerCohortAction, SchedulerCohortBudget, SchedulerCohortCompletion, SchedulerCohortCosts,
+    SchedulerCohortEvidence, SchedulerCohortIncomplete, SchedulerCohortPlacement,
+    SchedulerCohortResult, SchedulerCohortSample, SchedulerCohortScore, SchedulerCohortTask,
+    SchedulerCohortTaskRequest, SchedulerCohortTransition, SchedulerCohortWork,
+    SchedulerCohortWorkflowCompletion, SchedulerCohortWorkflowIncomplete,
+    SchedulerCohortWorkflowObjective, SchedulerCohortWorkflowObligation,
+    SchedulerCohortWorkflowProfile, SchedulerCohortWorkflowRelease, SchedulerCohortWorkflowResult,
+    SchedulerCohortWorkflowScore, SchedulerFrozenCohort, SCHEDULER_COHORT_MAX_BRANCHES,
+    SCHEDULER_COHORT_MAX_EVENTS, SCHEDULER_COHORT_MAX_EVIDENCE, SCHEDULER_COHORT_MAX_PLACEMENTS,
+    SCHEDULER_COHORT_MAX_TASKS, SCHEDULER_COHORT_MAX_WORK,
+    SCHEDULER_COHORT_WORKFLOW_OUTPUT_CONVENTION,
+};
+
+pub use completion_ranking::{
+    completion_diagnostics_bounded, select_scheduler_candidate_with_completion,
+    SchedulerCompletionContext, SchedulerCompletionEvidence, SchedulerCompletionEvidenceSource,
+    SchedulerCompletionRankingDiagnostic, SchedulerCompletionRankingPolicy,
+    SchedulerCompletionRankingResult, SchedulerCompletionRefusalReason, SchedulerCompletionSample,
+    SCHEDULER_COMPLETION_MAX_CANDIDATES,
+};
+
+pub use two_completion::{
+    select_scheduler_candidate_with_two_completions, SchedulerTwoCompletionBudget,
+    SchedulerTwoCompletionContinuation, SchedulerTwoCompletionDiagnostic,
+    SchedulerTwoCompletionFallback, SchedulerTwoCompletionPrefix, SchedulerTwoCompletionResult,
+    SchedulerTwoCompletionScore, SCHEDULER_TWO_COMPLETION_MAX_EVENTS,
+    SCHEDULER_TWO_COMPLETION_MAX_OFFERS, SCHEDULER_TWO_COMPLETION_MAX_PLANS,
+};
+
+pub use dependency_completion::{
+    select_scheduler_candidate_with_dependency_completion, SchedulerCompletionSuccessorRequest,
+    SchedulerDependencyCompletionEvidence, ValidatedSchedulerCompletionSuccessor,
 };
 pub use dispatch::{
     SchedulerBatchingGroupId, SchedulerDispatchDecision, SchedulerDispatchDiagnostic,

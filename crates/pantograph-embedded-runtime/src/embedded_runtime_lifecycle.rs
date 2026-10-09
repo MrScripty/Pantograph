@@ -42,6 +42,8 @@ impl EmbeddedRuntime {
             .set_loaded_runtime_capacity_limit(config.max_loaded_sessions)
             .expect("embedded runtime should apply the configured loaded-session capacity limit");
         Self {
+            #[cfg(feature = "backend-candle")]
+            retained_cpu_session: None,
             config,
             gateway,
             extensions,
@@ -107,6 +109,8 @@ impl EmbeddedRuntime {
             .unwrap_or_default();
 
         Self {
+            #[cfg(feature = "backend-candle")]
+            retained_cpu_session: None,
             config,
             gateway,
             extensions,
@@ -390,6 +394,8 @@ impl EmbeddedRuntime {
 
     pub(crate) fn host(&self) -> EmbeddedWorkflowHost {
         EmbeddedWorkflowHost {
+            #[cfg(feature = "backend-candle")]
+            retained_cpu_session: self.retained_cpu_session.clone(),
             app_data_dir: self.config.app_data_dir.clone(),
             project_root: self.config.project_root.clone(),
             workflow_roots: self.config.workflow_roots.clone(),

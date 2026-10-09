@@ -541,3 +541,78 @@ fn task_id(value: &str) -> SchedulerTaskId {
 fn attempt_id(value: &str) -> WorkflowSchedulerTaskAttemptId {
     WorkflowSchedulerTaskAttemptId::parse(value).expect("attempt id")
 }
+
+#[test]
+fn task_lifecycle_start_cell_survives_clones_and_cannot_be_recreated_by_rehydration() {
+    use pantograph_runtime_host_contracts::RuntimeHostTaskStartDisposition as D;
+    let mut manager = lifecycle_manager();
+    let task_id = SchedulerTaskId::parse("task.start").unwrap();
+    let attempt_id = WorkflowSchedulerTaskAttemptId::new();
+    manager
+        .track_task_handle(task_id.clone(), attempt_id.clone())
+        .unwrap();
+    let (_, first) = manager
+        .runtime_host_cancellation(&task_id, &attempt_id, "batch.one")
+        .unwrap();
+    let (_, second) = manager
+        .runtime_host_cancellation(&task_id, &attempt_id, "batch.two")
+        .unwrap();
+    let first = first.task_start_authority().unwrap();
+    let second = second.task_start_authority().unwrap();
+    manager.complete_task_handle(&task_id, &attempt_id).unwrap();
+    assert_eq!(first.disposition(), D::NoStartAuthorized);
+    assert!(!second.try_start(task_id.as_str(), attempt_id.as_str()));
+    manager
+        .track_rehydrated_task_handle(task_id.clone(), attempt_id.clone())
+        .unwrap();
+    let (_, recovered) = manager
+        .runtime_host_cancellation(&task_id, &attempt_id, "batch.recovered")
+        .unwrap();
+    assert!(!recovered
+        .task_start_authority()
+        .unwrap()
+        .try_start(task_id.as_str(), attempt_id.as_str()));
+    manager.complete_task_handle(&task_id, &attempt_id).unwrap();
+    let next = WorkflowSchedulerTaskAttemptId::new();
+    manager
+        .track_task_handle(task_id.clone(), next.clone())
+        .unwrap();
+    let (_, handle) = manager
+        .runtime_host_cancellation(&task_id, &next, "batch.retry")
+        .unwrap();
+    let a = handle.task_start_authority().unwrap();
+    assert!(a.try_start(task_id.as_str(), next.as_str()));
+    manager
+        .request_task_cancellation(&task_id, &next, "after start")
+        .unwrap();
+    assert_eq!(a.disposition(), D::StartedOrUncertain);
+    assert!(!a.try_start(task_id.as_str(), next.as_str()));
+    manager.complete_task_handle(&task_id, &next).unwrap();
+}
+#[test]
+fn task_lifecycle_cancel_and_shutdown_revoke_retained_start_clones() {
+    for shutdown in [false, true] {
+        let mut manager = lifecycle_manager();
+        let task = SchedulerTaskId::parse("task.start").unwrap();
+        let attempt = WorkflowSchedulerTaskAttemptId::new();
+        manager
+            .track_task_handle(task.clone(), attempt.clone())
+            .unwrap();
+        let (_, h) = manager
+            .runtime_host_cancellation(&task, &attempt, "batch")
+            .unwrap();
+        let a = h.task_start_authority().unwrap();
+        if shutdown {
+            manager.begin_shutdown();
+        } else {
+            manager
+                .request_task_cancellation(&task, &attempt, "before start")
+                .unwrap();
+        }
+        assert!(!a.try_start(task.as_str(), attempt.as_str()));
+        assert_eq!(
+            a.disposition(),
+            pantograph_runtime_host_contracts::RuntimeHostTaskStartDisposition::NoStartAuthorized
+        );
+    }
+}

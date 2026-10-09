@@ -381,3 +381,30 @@ pub(crate) fn validate_domain_admission(
     }
     Ok(())
 }
+
+/// Existing live declared ledger, not a new allocation. Caller bounds the
+/// complete population before these folds and holds the admission lock.
+pub(crate) fn validate_retained_domain_ledger(
+    state: &RuntimeRegistryState,
+    runtime: &str,
+) -> Result<(), RuntimeRegistryError> {
+    for domain in state
+        .resource_domains
+        .values()
+        .filter(|d| d.bindings.iter().any(|b| b.runtime_id == runtime))
+    {
+        let held = reserved_bytes(state, domain, None, true)?;
+        let ceiling = capacity(state, domain)
+            .0
+            .saturating_sub(domain.safety_margin_bytes);
+        if held > ceiling {
+            return Err(RuntimeRegistryError::ResourceDomainAdmissionRejected {
+                runtime_id: runtime.into(),
+                domain_id: domain.domain_id.clone(),
+                requested_bytes: held,
+                available_bytes: ceiling,
+            });
+        }
+    }
+    Ok(())
+}

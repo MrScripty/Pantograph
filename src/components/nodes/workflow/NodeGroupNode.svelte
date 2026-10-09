@@ -2,7 +2,9 @@
   import { Handle, Position } from '@xyflow/svelte';
   import type { PortDefinition } from '../../../services/workflow/types';
   import type { PortMapping, NodeGroup } from '../../../services/workflow/groupTypes';
-  import { expandedGroupId, tabIntoGroup } from '../../../stores/workflowStore';
+  import GroupJsonFilterPathEditor from './GroupJsonFilterPathEditor.svelte';
+  import { currentSessionId, isReadOnly } from '../../../stores/graphSessionStore';
+  import { expandedGroupId, isEditing, tabIntoGroup } from '../../../stores/workflowStore';
 
   interface Props {
     id: string;
@@ -15,6 +17,7 @@
 
   let { id, data, selected = false }: Props = $props();
 
+  let editPaths = $state(false);
   let group = $derived(data.group);
   let label = $derived(data.label || group?.name || 'Group');
   let nodeCount = $derived(group?.nodes?.length || 0);
@@ -114,6 +117,23 @@
       Open
     </button>
   </div>
+
+  {#if $isEditing && !$isReadOnly && group?.nodes?.some(node => node.node_type === 'json-filter')}
+    <div class="nodrag nopan nowheel px-3 py-2 border-t border-purple-700/30">
+      <button type="button" class="open-group-btn text-xs" onclick={() => { editPaths = !editPaths; }}
+        aria-expanded={editPaths}>JSON Filter paths</button>
+      {#if editPaths}
+        {#each group.nodes.filter(node => node.node_type === 'json-filter') as node (node.id)}
+          {#key JSON.stringify([$currentSessionId, id, node.id, node.node_type])}
+            <div class="mt-3 space-y-2" data-testid="group-json-filter-editor">
+              <p class="text-xs text-purple-200">{node.id}</p>
+              <GroupJsonFilterPathEditor groupId={id} {node} sessionId={$currentSessionId} />
+            </div>
+          {/key}
+        {/each}
+      {/if}
+    </div>
+  {/if}
 
   <!-- Handles positioned absolutely on edges -->
   {#each inputs as input, i (input.id)}

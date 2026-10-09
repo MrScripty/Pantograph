@@ -27,6 +27,55 @@ pub(crate) struct WorkflowSchedulerTaskTerminalMutation {
 }
 
 impl WorkflowExecutionSessionStore {
+    /// Read-only fence, called under the same store lock as Ready -> Running.
+    /// A changed snapshot must drop the prepared provisional custody, never
+    /// silently reinterpret timing evidence against a newer task or workload.
+    #[allow(clippy::too_many_arguments)] // Explicit snapshot fence, all consumed under the start lock.
+    pub(crate) fn validate_ready_dispatch_snapshot(
+        &self,
+        session_id: &str,
+        workflow_run_id: &str,
+        task: &crate::workflow::WorkflowSchedulerTask,
+        ready: &pantograph_scheduler::SchedulerTaskStateRecord,
+        proof: &DependencyReadinessProofEnvelope,
+        inputs: Option<&[pantograph_runtime_host_contracts::RuntimeHostExecutionInput]>,
+        check_inputs: bool,
+    ) -> Result<(), WorkflowServiceError> {
+        if self.completion_cleanup_pending(session_id, workflow_run_id, task.task_id.as_str()) {
+            return Err(WorkflowServiceError::InvalidRequest(
+                "owned successor is waiting for acknowledged predecessor cleanup".into(),
+            ));
+        }
+        let unchanged = self
+            .active
+            .get(session_id)
+            .and_then(|state| state.active_run.as_ref())
+            .is_some_and(|run| {
+                run.workflow_run_id == workflow_run_id
+                    && run.scheduler_task_graph.as_ref().is_some_and(|graph| {
+                        graph.tasks.iter().find(|t| t.task_id == task.task_id) == Some(task)
+                    })
+                    && run.scheduler_task_records.get(task.task_id.as_str()) == Some(ready)
+                    && ready.state.kind() == SchedulerTaskStateKind::Ready
+                    && run
+                        .runtime_dispatch_readiness_proofs
+                        .get(task.task_id.as_str())
+                        == Some(proof)
+            })
+            && (!check_inputs
+                || self
+                    .active_run_completion_inputs(session_id, workflow_run_id, task)
+                    .as_deref()
+                    == inputs);
+        if unchanged {
+            Ok(())
+        } else {
+            Err(WorkflowServiceError::InvalidRequest(
+                "runtime dispatch Ready/task/readiness/input snapshot changed before start".into(),
+            ))
+        }
+    }
+
     /// Stage scheduler task results on the active run until durable ledger
     /// replay replaces this storage boundary.
     #[allow(dead_code)]
@@ -108,6 +157,8 @@ impl WorkflowExecutionSessionStore {
         transition: SchedulerTaskStateTransition,
         result: WorkflowSchedulerTaskResult,
     ) -> Result<WorkflowSchedulerTaskTerminalMutation, WorkflowServiceError> {
+        #[cfg(feature = "native-task-release")]
+        self.preflight_native_output_result(&result, &transition)?;
         let tick = self.next_tick();
         validate_task_result_for_active_run(&result, workflow_run_id)?;
         validate_completion_transition_for_result(&transition, &result)?;
@@ -159,6 +210,25 @@ impl WorkflowExecutionSessionStore {
             )));
         }
 
+        #[cfg(feature = "native-task-release")]
+        let accept_native_output = match self
+            .progress_commit
+            .as_ref()
+            .and_then(|p| p.native_release.as_ref())
+        {
+            Some(binding) => binding.validate_output_commit(
+                attempt_id,
+                active_run
+                    .scheduler_task_attempts
+                    .get(&task_id)
+                    .and_then(|a| a.reservation.as_ref()),
+                current,
+                &transition,
+                &result,
+            )?,
+            None => false,
+        };
+
         let apply_result = apply_scheduler_task_state_transition(Some(current), transition)
             .map_err(|error| {
                 WorkflowServiceError::Internal(format!(
@@ -181,6 +251,17 @@ impl WorkflowExecutionSessionStore {
             .and_then(release_intent_from_attempt);
         active_run.scheduler_task_results.insert(task_id, result);
         Self::mark_session_access(state, tick);
+        #[cfg(feature = "native-task-release")]
+        if accept_native_output {
+            // Same store transaction; no fallible work after result insertion.
+            self.progress_commit
+                .as_mut()
+                .unwrap()
+                .native_release
+                .as_mut()
+                .unwrap()
+                .output_accepted = true;
+        }
         Ok(WorkflowSchedulerTaskTerminalMutation {
             apply_result,
             reservation_release_intent,
@@ -230,9 +311,15 @@ impl WorkflowExecutionSessionStore {
         }
         attempt.reservation = Some(WorkflowSchedulerTaskReservationBinding {
             task_id: task_id.clone(),
-            reservation_lease_id,
+            reservation_lease_id: reservation_lease_id.clone(),
             candidate_id,
         });
+        if let Some(gate) = active_run.completion_cleanup_gate.as_mut() {
+            if gate.first_task_id == task_id.as_str() && gate.first_attempt_id == *attempt_id {
+                gate.reservation_lease_id = Some(reservation_lease_id.clone());
+            }
+        }
+
         Self::mark_session_access(state, tick);
         Ok(())
     }
@@ -252,6 +339,12 @@ impl WorkflowExecutionSessionStore {
         ),
         WorkflowServiceError,
     > {
+        if self.completion_cleanup_pending(session_id, workflow_run_id, transition.task_id.as_str())
+        {
+            return Err(WorkflowServiceError::InvalidRequest(
+                "owned successor is waiting for acknowledged predecessor cleanup".into(),
+            ));
+        }
         let tick = self.next_tick();
         validate_start_attempt_transition(&transition)?;
 
@@ -746,6 +839,67 @@ impl WorkflowExecutionSessionStore {
         }
         Self::mark_session_access(state, tick);
         Ok(apply_result)
+    }
+
+    /// Bounded opt-in view of already validated persisted inputs. No result-wide
+    /// clones, status changes or access tick; conversion is the host mapper's.
+    pub(crate) fn active_run_completion_inputs(
+        &self,
+        session_id: &str,
+        workflow_run_id: &str,
+        task: &crate::workflow::WorkflowSchedulerTask,
+    ) -> Option<Vec<pantograph_runtime_host_contracts::RuntimeHostExecutionInput>> {
+        use crate::workflow::runtime_host_input_value;
+        use crate::workflow::{
+            WorkflowSchedulerTaskResultStatus, WorkflowSchedulerTaskResultValue as Value,
+        };
+        if task.input_bindings.len() > 16 {
+            return None;
+        }
+        let run = self.active.get(session_id)?.active_run.as_ref()?;
+        if run.workflow_run_id != workflow_run_id {
+            return None;
+        }
+        let mut remaining = 64 * 1024usize;
+        let mut inputs = Vec::new();
+        for binding in &task.input_bindings {
+            if binding.target_port_id.len() > 128 || binding.source_port_id.len() > 128 {
+                return None;
+            }
+            let result = run
+                .scheduler_task_results
+                .get(binding.source_task_id.as_str())?;
+            if result.status != WorkflowSchedulerTaskResultStatus::Completed
+                || result.outputs.len() > 32
+            {
+                return None;
+            }
+            let value = &result
+                .outputs
+                .iter()
+                .find(|o| o.port_id == binding.source_port_id)?
+                .value;
+            let bytes = match value {
+                Value::String(v) => v.len(),
+                Value::MediaArtifactRef(v) => v
+                    .artifact_id
+                    .len()
+                    .checked_add(v.media_type.as_ref().map_or(0, String::len))?,
+                Value::PumasModelRef(_) | Value::Bool(_) | Value::I64(_) | Value::U64(_) => 0,
+                Value::Json(serde_json::Value::Number(_)) => 0,
+                _ => return None,
+            };
+            remaining = remaining.checked_sub(bytes)?;
+            if let Some(value) = runtime_host_input_value(task, binding, value).ok()? {
+                inputs.push(
+                    pantograph_runtime_host_contracts::RuntimeHostExecutionInput {
+                        port_id: binding.target_port_id.clone(),
+                        value,
+                    },
+                );
+            }
+        }
+        Some(inputs)
     }
 
     /// Read staged scheduler task results for the active run.

@@ -17,9 +17,9 @@ use crate::graph::{
     WorkflowGraphRemoveEdgesRequest, WorkflowGraphRemoveNodeRequest, WorkflowGraphSaveRequest,
     WorkflowGraphSaveResponse, WorkflowGraphStore, WorkflowGraphUndoRedoStateRequest,
     WorkflowGraphUndoRedoStateResponse, WorkflowGraphUngroupRequest,
-    WorkflowGraphUpdateGroupPortsRequest, WorkflowGraphUpdateNodeDataRequest,
-    WorkflowGraphUpdateNodePositionRequest, WorkflowGraphValidationLifecycleEventSink,
-    WorkflowGraphValidationLifecycleEventSnapshot,
+    WorkflowGraphUpdateGroupNodeDataRequest, WorkflowGraphUpdateGroupPortsRequest,
+    WorkflowGraphUpdateNodeDataRequest, WorkflowGraphUpdateNodePositionRequest,
+    WorkflowGraphValidationLifecycleEventSink, WorkflowGraphValidationLifecycleEventSnapshot,
 };
 use crate::WorkflowRunId;
 use pantograph_inference_interface_contracts::{
@@ -72,9 +72,19 @@ impl WorkflowService {
         &self,
         request: DependencyEnvironmentActionIntent,
     ) -> Result<DependencyEnvironmentActionIntentResult, WorkflowServiceError> {
-        self.graph_session_store
-            .resolve_dependency_environment_action_intent(request)
-            .await
+        let (action, _) = self
+            .graph_session_store
+            .resolve_dependency_environment_action_with_result(request, |result| {
+                if matches!(result.as_result().readiness_state,
+                    pantograph_dependency_planning::DependencyEnvironmentReadinessState::Resolved
+                    | pantograph_dependency_planning::DependencyEnvironmentReadinessState::Ready)
+                {
+                    self.store_dependency_requirements_payload_from_result(result)?;
+                }
+                Ok(())
+            })
+            .await?;
+        Ok(action)
     }
 
     pub async fn workflow_graph_current_validation_summary(
@@ -156,6 +166,15 @@ impl WorkflowService {
         request: WorkflowGraphUpdateNodeDataRequest,
     ) -> Result<WorkflowGraphEditSessionGraphResponse, WorkflowServiceError> {
         self.graph_session_store.update_node_data(request).await
+    }
+
+    pub async fn workflow_graph_update_group_node_data(
+        &self,
+        request: WorkflowGraphUpdateGroupNodeDataRequest,
+    ) -> Result<WorkflowGraphEditSessionGraphResponse, WorkflowServiceError> {
+        self.graph_session_store
+            .update_group_node_data(request)
+            .await
     }
 
     pub async fn workflow_graph_update_node_position(

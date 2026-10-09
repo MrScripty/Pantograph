@@ -1,14 +1,16 @@
 mod canonicalization;
 mod connection_intent;
 mod contract_validation;
-mod dependency_environment_subject;
+pub(crate) mod dependency_environment_subject;
 mod diagnostics;
 mod effective_definition;
 #[cfg(test)]
 mod effective_definition_tests;
 mod executable_topology;
 mod executable_validation_snapshot_source;
+mod group_execution_projection;
 mod group_mutation;
+mod group_preflight;
 mod inference_interface_facts;
 mod inference_interface_patch;
 mod inference_interface_projection;
@@ -62,6 +64,11 @@ pub use executable_topology::{
 pub(crate) use executable_validation_snapshot_source::{
     CurrentExecutableValidationSnapshotNodeSource, CurrentExecutableValidationSnapshotSource,
 };
+pub use group_execution_projection::{
+    lower_groups, preflight_groups, GroupExecutionProjection, GroupPreflightError,
+    GroupRejectionKind, WorkflowGroupFailureFact,
+};
+pub use group_preflight::WorkflowGroupPreflight;
 pub use inference_interface_facts::{
     InferenceInterfaceFactsProvider, InferenceInterfaceFactsProviderError,
     UnavailableInferenceInterfaceFactsProvider,
@@ -150,8 +157,8 @@ pub use session_types::{
     WorkflowGraphRemoveEdgeRequest, WorkflowGraphRemoveEdgesRequest,
     WorkflowGraphRemoveNodeRequest, WorkflowGraphUndoRedoStateRequest,
     WorkflowGraphUndoRedoStateResponse, WorkflowGraphUngroupRequest,
-    WorkflowGraphUpdateGroupPortsRequest, WorkflowGraphUpdateNodeDataRequest,
-    WorkflowGraphUpdateNodePositionRequest,
+    WorkflowGraphUpdateGroupNodeDataRequest, WorkflowGraphUpdateGroupPortsRequest,
+    WorkflowGraphUpdateNodeDataRequest, WorkflowGraphUpdateNodePositionRequest,
 };
 pub use types::{
     ConnectionAnchor, ConnectionCandidatesResponse, ConnectionCommitResponse, ConnectionRejection,

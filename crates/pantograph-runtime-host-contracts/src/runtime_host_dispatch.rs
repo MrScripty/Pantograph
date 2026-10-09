@@ -1,4 +1,7 @@
-use std::sync::Arc;
+use std::sync::{
+    atomic::{AtomicU8, Ordering},
+    Arc,
+};
 
 use async_trait::async_trait;
 use pantograph_scheduler::SchedulerRuntimeHandoff;
@@ -34,14 +37,87 @@ pub trait RuntimeHostBatchExecutionPort: Send + Sync {
     ) -> Result<RuntimeHostBatchExecutionResponse, RuntimeHostExecutionPortError>;
 }
 
+/// Exact-attempt start permission carried by the existing cancellation route.
+/// A state is historical permission, never a drain/release/no-effect receipt.
+#[derive(Debug, Clone)]
+pub struct RuntimeHostTaskStartAuthority {
+    inner: Arc<TaskStartCell>,
+}
+#[derive(Debug)]
+struct TaskStartCell {
+    task_id: String,
+    attempt_id: String,
+    state: AtomicU8,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RuntimeHostTaskStartDisposition {
+    Prepared,
+    NoStartAuthorized,
+    StartedOrUncertain,
+}
+impl RuntimeHostTaskStartAuthority {
+    /// Trusted lifecycle owner only. Reuse this SAME cell for an exact attempt;
+    /// never reconstruct permission from a Running record or cancellation DTO.
+    pub fn new(task_id: &str, attempt_id: &str) -> Option<Self> {
+        if [task_id, attempt_id]
+            .iter()
+            .any(|s| s.is_empty() || s.len() > 128)
+        {
+            return None;
+        }
+        Some(Self {
+            inner: Arc::new(TaskStartCell {
+                task_id: task_id.into(),
+                attempt_id: attempt_id.into(),
+                state: AtomicU8::new(0),
+            }),
+        })
+    }
+    pub fn matches_attempt(&self, task_id: &str, attempt_id: &str) -> bool {
+        task_id == self.inner.task_id && attempt_id == self.inner.attempt_id
+    }
+    /// Fixed-work final producer seam, under actual exclusive lease custody.
+    /// Exactly one clone can authorize start; no callbacks, locks or reset.
+    pub fn try_start(&self, task_id: &str, attempt_id: &str) -> bool {
+        task_id == self.inner.task_id
+            && attempt_id == self.inner.attempt_id
+            && self
+                .inner
+                .state
+                .compare_exchange(0, 1, Ordering::AcqRel, Ordering::Acquire)
+                .is_ok()
+    }
+    /// Revocation competes on the SAME atomic as start. Once start wins,
+    /// cancellation/retirement cannot imply no effect or erase custody.
+    pub fn revoke(&self) -> RuntimeHostTaskStartDisposition {
+        let prior = self.inner.state.fetch_or(2, Ordering::AcqRel);
+        if prior & 1 != 0 {
+            RuntimeHostTaskStartDisposition::StartedOrUncertain
+        } else {
+            RuntimeHostTaskStartDisposition::NoStartAuthorized
+        }
+    }
+    pub fn disposition(&self) -> RuntimeHostTaskStartDisposition {
+        match self.inner.state.load(Ordering::Acquire) {
+            0 => RuntimeHostTaskStartDisposition::Prepared,
+            2 => RuntimeHostTaskStartDisposition::NoStartAuthorized,
+            _ => RuntimeHostTaskStartDisposition::StartedOrUncertain,
+        }
+    }
+}
 pub trait RuntimeHostExecutionCancellationSignal: Send + Sync {
     fn snapshot(&self) -> RuntimeHostExecutionCancellationSnapshot;
+    /// None preserves legacy cooperative cancellation without a permission claim.
+    fn task_start_authority(&self) -> Option<RuntimeHostTaskStartAuthority> {
+        None
+    }
 }
 
 #[derive(Clone)]
 #[must_use]
 pub struct RuntimeHostExecutionCancellationHandle {
     signal: Arc<dyn RuntimeHostExecutionCancellationSignal>,
+    start_authority: Option<RuntimeHostTaskStartAuthority>,
 }
 
 impl RuntimeHostExecutionCancellationHandle {
@@ -53,15 +129,23 @@ impl RuntimeHostExecutionCancellationHandle {
         };
         Self {
             signal: Arc::new(StaticRuntimeHostExecutionCancellationSignal { snapshot }),
+            start_authority: None,
         }
     }
 
     pub fn with_signal(signal: Arc<dyn RuntimeHostExecutionCancellationSignal>) -> Self {
-        Self { signal }
+        let start_authority = signal.task_start_authority();
+        Self {
+            signal,
+            start_authority,
+        }
     }
 
     pub fn snapshot(&self) -> RuntimeHostExecutionCancellationSnapshot {
         self.signal.snapshot()
+    }
+    pub fn task_start_authority(&self) -> Option<RuntimeHostTaskStartAuthority> {
+        self.start_authority.clone()
     }
 }
 

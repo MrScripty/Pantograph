@@ -128,6 +128,7 @@ impl<'a> WorkflowPreDispatchPreparationBoundary<'a> {
         })
     }
 
+    #[allow(clippy::too_many_arguments)] // Explicit bounded final Start fences.
     pub(super) async fn start_runtime_branch_dispatch_attempt(
         &self,
         session_id: &str,
@@ -135,6 +136,8 @@ impl<'a> WorkflowPreDispatchPreparationBoundary<'a> {
         task_id: &str,
         admitted_runtime_readiness: &[AdmittedRuntimeTaskReadiness],
         attempt_start_transition: SchedulerTaskAttemptLifecycleTransition,
+        serial_pair: Option<&super::WorkflowSerialReadyPair>,
+        serial_owner: Option<&pantograph_runtime_host_contracts::SerialRuntimeHostCpuOwnerEvidence>,
     ) -> Result<WorkflowStartedRuntimeDispatchAttempt, WorkflowServiceError> {
         let readiness_proof = runtime_dispatch_readiness_proof(
             self.service,
@@ -143,28 +146,72 @@ impl<'a> WorkflowPreDispatchPreparationBoundary<'a> {
             task_id,
             admitted_runtime_readiness,
         )?;
-        let dispatch_context =
-            ready_runtime_dispatch_context(self.service, session_id, workflow_run_id, task_id)?;
+        let dispatch_context = ready_runtime_dispatch_context(
+            self.service,
+            session_id,
+            workflow_run_id,
+            task_id,
+            &readiness_proof,
+        )?;
         let runtime_dispatch_selection_boundary =
             WorkflowRuntimeDispatchSelectionBoundary::from_service(self.service);
         let prepared_dispatch_selection = runtime_dispatch_selection_boundary
-            .prepare_ready_runtime_task_dispatch(
+            .prepare_ready_runtime_task_dispatch_with_successor(
                 &dispatch_context.task,
                 &dispatch_context.ready_record,
-                readiness_proof,
+                readiness_proof.clone(),
+                dispatch_context.materialized_inputs.as_deref(),
+                dispatch_context.successor.as_ref(),
             )
             .await
             .map_err(runtime_dispatch_preselection_invalid_request)?;
         let started_runtime_task = {
             let mut store = self.service.session_store_guard()?;
-            self.service
+            if let Some(pair) = serial_pair {
+                store.validate_serial_ready_pair(session_id, workflow_run_id, pair)?;
+            }
+            if serial_owner.is_some_and(|owner| !owner.is_current()) {
+                return Err(WorkflowServiceError::InvalidRequest(
+                    "serial CPU owner changed before Start".into(),
+                ));
+            }
+            store.validate_ready_dispatch_snapshot(
+                session_id,
+                workflow_run_id,
+                &dispatch_context.task,
+                &dispatch_context.ready_record,
+                &readiness_proof,
+                dispatch_context.materialized_inputs.as_deref(),
+                dispatch_context.materialized_inputs_requested,
+            )?;
+            if let Some(pair) = &dispatch_context.successor {
+                store.validate_completion_successor_snapshot(
+                    session_id,
+                    workflow_run_id,
+                    &dispatch_context.task,
+                    &dispatch_context.ready_record,
+                    &readiness_proof,
+                    pair,
+                )?;
+            }
+            let started = self
+                .service
                 .scheduler_task_orchestrator
                 .start_ready_runtime_task(&mut store, session_id, workflow_run_id, task_id)
                 .map_err(|error| {
                     WorkflowServiceError::InvalidRequest(format!(
                         "scheduler runtime task start failed: {error}"
                     ))
-                })?
+                })?;
+            if let Some(pair) = &dispatch_context.successor {
+                store.install_completion_cleanup_gate(
+                    session_id,
+                    workflow_run_id,
+                    pair,
+                    started.attempt_id(),
+                );
+            }
+            started
         };
         WorkflowSchedulerSessionRunner::new(self.service).record_scheduler_task_attempt_started(
             session_id,
@@ -245,6 +292,9 @@ pub(super) struct WorkflowSchedulerRunContext<'a> {
 struct ReadyRuntimeDispatchContext {
     task: WorkflowSchedulerTask,
     ready_record: SchedulerTaskStateRecord,
+    materialized_inputs: Option<Vec<pantograph_runtime_host_contracts::RuntimeHostExecutionInput>>,
+    materialized_inputs_requested: bool,
+    successor: Option<super::WorkflowCompletionSuccessorSnapshot>,
 }
 
 impl<'a> WorkflowSchedulerSessionRunner<'a> {
@@ -599,31 +649,36 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                     )
                     .map_err(dependency_readiness_error)?
             };
-            let seed_result = match lifecycle
-                .resolve_dependency_requirements_seed(
-                    self.service.dependency_readiness_provider.as_ref(),
-                    &request,
-                )
-                .map_err(dependency_readiness_error)?
-            {
-                Some(seed_result) => seed_result,
-                None => {
-                    self.defer_runtime_dependency_readiness(
-                        &lifecycle,
-                        session_id,
-                        workflow_run_id,
-                        &task_id,
-                        &request,
-                    )?;
-                    deferred_task_ids.push(task_id);
-                    continue;
+            let environment_request =
+                dependency_environment_request_from_readiness_envelope(&request)
+                    .map_err(dependency_readiness_work_queue_error)?;
+            let payload_available = match pantograph_dependency_environment_service::resolve_dependency_requirements_payload(
+                self.service.dependency_requirements_registry.as_ref(), &environment_request,
+            ) {
+                Ok(_) => true,
+                Err(pantograph_dependency_environment_service::DependencyRequirementsRegistryError::MissingPayload { .. }) => {
+                    let seed = lifecycle.resolve_dependency_requirements_seed(
+                        self.service.dependency_readiness_provider.as_ref(), &request,
+                    ).map_err(dependency_readiness_error)?;
+                    match seed {
+                        Some(seed) => {
+                            let expected = environment_request.as_request();
+                            let actual = seed.as_result();
+                            actual.action == DependencyEnvironmentAction::Resolve
+                                && actual.identity_key == expected.identity_key
+                                && actual.dependency_requirements_id == expected.dependency_requirements_id
+                                && (expected.identity_key.selected_binding_ids.is_empty() || actual.selected_binding_ids == expected.identity_key.selected_binding_ids)
+                                && expected.environment_ref.as_ref().is_none_or(|value| actual.environment_ref.as_ref() == Some(value))
+                                && self.service.store_dependency_requirements_payload_from_result(&seed).is_ok()
+                        }
+                        None => false,
+                    }
                 }
+                // Stale or foreign payloads cannot be silently replaced by a
+                // readiness snapshot. Refresh their authoritative producer first.
+                Err(_) => false,
             };
-            if self
-                .service
-                .store_dependency_requirements_payload_from_result(&seed_result)
-                .is_err()
-            {
+            if !payload_available {
                 self.defer_runtime_dependency_readiness(
                     &lifecycle,
                     session_id,
@@ -638,8 +693,7 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                 session_id,
                 workflow_run_id,
                 &task_id,
-                dependency_environment_request_from_readiness_envelope(&request)
-                    .map_err(dependency_readiness_work_queue_error)?,
+                environment_request,
             )
             .map_err(dependency_readiness_work_queue_error)?;
             self.service
@@ -812,6 +866,11 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
         admitted_runtime_readiness: &[AdmittedRuntimeTaskReadiness],
         attempt_start_transition: SchedulerTaskAttemptLifecycleTransition,
     ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
+        if self.service.serial_ready_mode.is_some() {
+            return Err(WorkflowServiceError::InvalidRequest(
+                "serial Ready mode requires the supervised TaskWorker route".into(),
+            ));
+        }
         let WorkflowSchedulerRunContext {
             session_id,
             workflow_run_id,
@@ -834,26 +893,62 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                 task_id,
                 admitted_runtime_readiness,
             )?;
-            let dispatch_context =
-                ready_runtime_dispatch_context(self.service, session_id, workflow_run_id, task_id)?;
+            let dispatch_context = ready_runtime_dispatch_context(
+                self.service,
+                session_id,
+                workflow_run_id,
+                task_id,
+                &readiness_proof,
+            )?;
             let prepared_dispatch_selection = runtime_dispatch_selection_boundary
-                .prepare_ready_runtime_task_dispatch(
+                .prepare_ready_runtime_task_dispatch_with_successor(
                     &dispatch_context.task,
                     &dispatch_context.ready_record,
-                    readiness_proof,
+                    readiness_proof.clone(),
+                    dispatch_context.materialized_inputs.as_deref(),
+                    dispatch_context.successor.as_ref(),
                 )
                 .await
                 .map_err(runtime_dispatch_preselection_invalid_request)?;
             let started_runtime_task = {
                 let mut store = self.service.session_store_guard()?;
-                self.service
+                store.validate_ready_dispatch_snapshot(
+                    session_id,
+                    workflow_run_id,
+                    &dispatch_context.task,
+                    &dispatch_context.ready_record,
+                    &readiness_proof,
+                    dispatch_context.materialized_inputs.as_deref(),
+                    dispatch_context.materialized_inputs_requested,
+                )?;
+                if let Some(pair) = &dispatch_context.successor {
+                    store.validate_completion_successor_snapshot(
+                        session_id,
+                        workflow_run_id,
+                        &dispatch_context.task,
+                        &dispatch_context.ready_record,
+                        &readiness_proof,
+                        pair,
+                    )?;
+                }
+                let started = self
+                    .service
                     .scheduler_task_orchestrator
                     .start_ready_runtime_task(&mut store, session_id, workflow_run_id, task_id)
                     .map_err(|error| {
                         WorkflowServiceError::InvalidRequest(format!(
                             "scheduler runtime task start failed: {error}"
                         ))
-                    })?
+                    })?;
+                if let Some(pair) = &dispatch_context.successor {
+                    store.install_completion_cleanup_gate(
+                        session_id,
+                        workflow_run_id,
+                        pair,
+                        started.attempt_id(),
+                    );
+                }
+                started
             };
             self.record_scheduler_task_attempt_started(
                 session_id,
@@ -996,6 +1091,9 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                 }
             }
         }
+        // Runtime completion materializes inputs for downstream non-runtime
+        // tasks; settle those tasks before projecting the workflow response.
+        self.run_progress_loop(session_id, workflow_run_id).await?;
         completed_scheduler_run_response(
             self.service,
             host,
@@ -1209,38 +1307,40 @@ fn ready_runtime_dispatch_context(
     session_id: &str,
     workflow_run_id: &str,
     task_id: &str,
+    proof: &DependencyReadinessProofEnvelope,
 ) -> Result<ReadyRuntimeDispatchContext, WorkflowServiceError> {
+    // Capability calls may read service state. Never call provider/owner code
+    // while holding the session store lock.
+    let materialized_inputs_requested = service
+        .runtime_dispatch_candidate_provider
+        .requires_materialized_inputs();
+    let dependency_lookahead_requested = service
+        .runtime_dispatch_candidate_provider
+        .requires_dependency_lookahead();
     let store = service.session_store_guard()?;
-    let (task_graph, records) = store
-        .active_run_scheduler_task_state(session_id, workflow_run_id)?
-        .ok_or_else(|| {
-            WorkflowServiceError::Internal(format!(
-                "active workflow run '{}' has no scheduler task state",
-                workflow_run_id
-            ))
-        })?;
-    let task = task_graph
-        .tasks
-        .iter()
-        .find(|task| task.task_id.as_str() == task_id)
-        .ok_or_else(|| {
-            WorkflowServiceError::InvalidRequest(format!(
-                "runtime scheduler task '{}' is not in active workflow run '{}'",
-                task_id, workflow_run_id
-            ))
-        })?
-        .clone();
-    let ready_record = records
-        .iter()
-        .find(|record| record.task_id.as_str() == task_id)
-        .ok_or_else(|| {
-            WorkflowServiceError::InvalidRequest(format!(
-                "runtime scheduler task '{}' has no active task-state record",
-                task_id
-            ))
-        })?
-        .clone();
-    Ok(ReadyRuntimeDispatchContext { task, ready_record })
+    let (task, ready_record) =
+        store.active_run_runtime_task_snapshot(session_id, workflow_run_id, task_id)?;
+    let materialized_inputs = materialized_inputs_requested
+        .then(|| store.active_run_completion_inputs(session_id, workflow_run_id, &task))
+        .flatten();
+    let successor = dependency_lookahead_requested
+        .then(|| {
+            store.completion_successor_snapshot(
+                session_id,
+                workflow_run_id,
+                &task,
+                &ready_record,
+                proof,
+            )
+        })
+        .flatten();
+    Ok(ReadyRuntimeDispatchContext {
+        task,
+        ready_record,
+        materialized_inputs,
+        materialized_inputs_requested,
+        successor,
+    })
 }
 
 fn runtime_task_ids_in_state(
@@ -1342,4 +1442,59 @@ fn active_run_scheduler_task_state_required(
                 workflow_run_id
             ))
         })
+}
+
+#[cfg(test)]
+mod completion_capability_lock_tests {
+    use super::*;
+    use crate::workflow::{
+        WorkflowRuntimeDispatchCandidateProvider, WorkflowRuntimeDispatchCandidateProviderError,
+        WorkflowRuntimeDispatchCandidateSet,
+    };
+    struct Provider(
+        std::sync::Arc<std::sync::Mutex<crate::scheduler::WorkflowExecutionSessionStore>>,
+    );
+    impl WorkflowRuntimeDispatchCandidateProvider for Provider {
+        fn requires_materialized_inputs(&self) -> bool {
+            assert!(
+                self.0.try_lock().is_ok(),
+                "input capability called under store lock"
+            );
+            true
+        }
+        fn requires_dependency_lookahead(&self) -> bool {
+            assert!(
+                self.0.try_lock().is_ok(),
+                "lookahead capability called under store lock"
+            );
+            true
+        }
+        fn runtime_dispatch_candidates(
+            &self,
+            _: &WorkflowSchedulerTask,
+            _: &SchedulerTaskStateRecord,
+            _: &DependencyReadinessProofEnvelope,
+        ) -> Result<
+            WorkflowRuntimeDispatchCandidateSet,
+            WorkflowRuntimeDispatchCandidateProviderError,
+        > {
+            unreachable!()
+        }
+    }
+    #[test]
+    fn dependency_capability_callbacks_run_outside_session_store_guard() {
+        let service = WorkflowService::with_ephemeral_attribution_store().unwrap();
+        let provider = Provider(service.session_store.clone());
+        let service =
+            service.with_runtime_dispatch_candidate_provider(std::sync::Arc::new(provider));
+        let request: pantograph_scheduler::SchedulerDispatchSelectionRequest=serde_json::from_str(include_str!("../../../pantograph-scheduler/tests/fixtures/dispatch_selection_request_valid.json")).unwrap();
+        assert!(ready_runtime_dispatch_context(
+            &service,
+            "missing-session",
+            "run.001",
+            "task.001",
+            &request.readiness_proof
+        )
+        .is_err());
+    }
 }

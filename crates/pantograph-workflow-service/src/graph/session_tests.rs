@@ -1636,7 +1636,7 @@ async fn scheduler_inference_task_projections_reject_semantic_node_data_stale_su
     assert!(
         error
             .message()
-            .contains("validation summary is missing for the current graph revision"),
+            .contains("validation session was superseded"),
         "unexpected error: {error}"
     );
 }
@@ -1674,13 +1674,14 @@ async fn executable_validation_snapshot_source_rejects_semantic_node_data_stale_
     assert_ne!(updated.graph_revision, session.graph_revision);
 
     let error = store
-        .executable_validation_snapshot_source_for_session(
+        .with_executable_validation_snapshot_source_for_session(
             &session.session_id,
             Some(
                 "validation.session.snapshot.stale"
                     .parse()
                     .expect("valid validation session id"),
             ),
+            |graph, source| Ok((graph, source)),
         )
         .await
         .expect_err("stale validation summary should not produce snapshot source");
@@ -1688,7 +1689,7 @@ async fn executable_validation_snapshot_source_rejects_semantic_node_data_stale_
     assert!(
         error
             .message()
-            .contains("validation summary is missing for the current graph revision"),
+            .contains("validation session was superseded"),
         "unexpected error: {error}"
     );
 }
@@ -2045,36 +2046,89 @@ async fn publish_inference_validation_session_rejects_create_group_changed_durin
     );
 }
 
+// Race fixtures must pass the production preflight to reach delayed facts I/O.
+// Native/dependency children are intentionally refused before that lookup.
+async fn supported_cpu_group_race_fixture() -> (WorkflowGraph, String) {
+    let registry = super::super::NodeRegistry::new();
+    let nodes = [
+        ("source", "text-input"),
+        ("a", "merge"),
+        ("b", "merge"),
+        ("sink", "text-output"),
+    ]
+    .into_iter()
+    .map(|(id, kind)| GraphNode {
+        id: id.into(),
+        node_type: kind.into(),
+        position: Position { x: 0.0, y: 0.0 },
+        data: if matches!(kind, "text-input" | "text-output") {
+            serde_json::json!({"definition": registry.get_definition(kind).unwrap()})
+        } else {
+            serde_json::json!({})
+        },
+    })
+    .collect();
+    let edges = [
+        ("in", "source", "text", "a", "inputs"),
+        ("middle", "a", "merged", "b", "inputs"),
+        ("out", "b", "merged", "sink", "text"),
+    ]
+    .into_iter()
+    .map(
+        |(id, source, source_handle, target, target_handle)| GraphEdge {
+            id: id.into(),
+            source: source.into(),
+            source_handle: source_handle.into(),
+            target: target.into(),
+            target_handle: target_handle.into(),
+        },
+    )
+    .collect();
+    let author = GraphSessionStore::new();
+    let edit = author
+        .create_session(
+            WorkflowGraph {
+                nodes,
+                edges,
+                derived_graph: None,
+            },
+            None,
+        )
+        .await;
+    let graph = author
+        .create_group(WorkflowGraphCreateGroupRequest {
+            session_id: edit.session_id.clone(),
+            name: "Processing".into(),
+            selected_node_ids: vec!["a".into(), "b".into()],
+        })
+        .await
+        .unwrap()
+        .graph;
+    author.close_session(&edit.session_id).await.unwrap();
+    super::super::lower_groups(&graph, &registry).expect("fixture must reach external lookup");
+    let id = graph
+        .nodes
+        .iter()
+        .find(|node| node.node_type == "node-group")
+        .unwrap()
+        .id
+        .clone();
+    (graph, id)
+}
+
 #[tokio::test]
 async fn publish_inference_validation_session_rejects_ungroup_changed_during_fact_lookup() {
     let entered = Arc::new(Notify::new());
     let release = Arc::new(Notify::new());
     let store = Arc::new(GraphSessionStore::with_inference_interface_facts_provider(
         Arc::new(BlockingInferenceFactsProvider {
-            facts: BTreeMap::from([("infer".to_string(), ready_inference_facts())]),
+            facts: BTreeMap::new(),
             entered: Arc::clone(&entered),
             release: Arc::clone(&release),
         }),
     ));
-    let session = store
-        .create_session(dependency_inference_graph(), None)
-        .await;
-    let grouped = store
-        .create_group(WorkflowGraphCreateGroupRequest {
-            session_id: session.session_id.clone(),
-            name: "Model Inputs".to_string(),
-            selected_node_ids: vec!["model".to_string(), "dep-env".to_string()],
-        })
-        .await
-        .expect("create group before validation starts");
-    let group_id = grouped
-        .graph
-        .nodes
-        .iter()
-        .find(|node| node.node_type == "node-group")
-        .expect("group node")
-        .id
-        .clone();
+    let (graph, group_id) = supported_cpu_group_race_fixture().await;
+    let session = store.create_session(graph, None).await;
 
     let publish_store = Arc::clone(&store);
     let session_id = session.session_id.clone();
@@ -2087,7 +2141,9 @@ async fn publish_inference_validation_session_rejects_ungroup_changed_during_fac
             )
             .await
     });
-    entered.notified().await;
+    tokio::time::timeout(std::time::Duration::from_secs(5), entered.notified())
+        .await
+        .unwrap();
 
     store
         .ungroup(WorkflowGraphUngroupRequest {
@@ -2098,8 +2154,9 @@ async fn publish_inference_validation_session_rejects_ungroup_changed_during_fac
         .expect("mutate graph while validation facts are pending");
     release.notify_one();
 
-    let error = publish
+    let error = tokio::time::timeout(std::time::Duration::from_secs(5), publish)
         .await
+        .expect("publication cancellation must complete")
         .expect("publish task should not panic")
         .expect_err("publish should reject cancelled validation session");
     assert!(
@@ -2117,30 +2174,13 @@ async fn publish_inference_validation_session_rejects_update_group_ports_changed
     let release = Arc::new(Notify::new());
     let store = Arc::new(GraphSessionStore::with_inference_interface_facts_provider(
         Arc::new(BlockingInferenceFactsProvider {
-            facts: BTreeMap::from([("infer".to_string(), ready_inference_facts())]),
+            facts: BTreeMap::new(),
             entered: Arc::clone(&entered),
             release: Arc::clone(&release),
         }),
     ));
-    let session = store
-        .create_session(dependency_inference_graph(), None)
-        .await;
-    let grouped = store
-        .create_group(WorkflowGraphCreateGroupRequest {
-            session_id: session.session_id.clone(),
-            name: "Model Inputs".to_string(),
-            selected_node_ids: vec!["model".to_string(), "dep-env".to_string()],
-        })
-        .await
-        .expect("create group before validation starts");
-    let group_id = grouped
-        .graph
-        .nodes
-        .iter()
-        .find(|node| node.node_type == "node-group")
-        .expect("group node")
-        .id
-        .clone();
+    let (graph, group_id) = supported_cpu_group_race_fixture().await;
+    let session = store.create_session(graph, None).await;
 
     let publish_store = Arc::clone(&store);
     let session_id = session.session_id.clone();
@@ -2153,7 +2193,9 @@ async fn publish_inference_validation_session_rejects_update_group_ports_changed
             )
             .await
     });
-    entered.notified().await;
+    tokio::time::timeout(std::time::Duration::from_secs(5), entered.notified())
+        .await
+        .unwrap();
 
     store
         .update_group_ports(WorkflowGraphUpdateGroupPortsRequest {
@@ -2161,10 +2203,10 @@ async fn publish_inference_validation_session_rejects_update_group_ports_changed
             group_id,
             exposed_inputs: Vec::new(),
             exposed_outputs: vec![PortMapping {
-                internal_node_id: "model".to_string(),
-                internal_port_id: "pumas_model_ref".to_string(),
-                group_port_id: "out-model-ref-updated".to_string(),
-                group_port_label: "Model Ref Updated".to_string(),
+                internal_node_id: "b".to_string(),
+                internal_port_id: "merged".to_string(),
+                group_port_id: "out-merged-updated".to_string(),
+                group_port_label: "Merged Updated".to_string(),
                 data_type: PortDataType::Any,
             }],
         })
@@ -2172,8 +2214,9 @@ async fn publish_inference_validation_session_rejects_update_group_ports_changed
         .expect("mutate graph while validation facts are pending");
     release.notify_one();
 
-    let error = publish
+    let error = tokio::time::timeout(std::time::Duration::from_secs(5), publish)
         .await
+        .expect("publication cancellation must complete")
         .expect("publish task should not panic")
         .expect_err("publish should reject cancelled validation session");
     assert!(
@@ -3838,4 +3881,231 @@ impl DependencyEnvironmentProvider for InvalidDependencyEnvironmentProvider {
     ) -> DependencyEnvironmentResult {
         self.resolve(request)
     }
+}
+
+#[derive(Debug)]
+struct PausedRequirementsFacts {
+    entered: tokio::sync::Notify,
+    release: tokio::sync::Notify,
+    foreign: bool,
+}
+
+#[async_trait::async_trait]
+impl InferenceInterfaceFactsProvider for PausedRequirementsFacts {
+    async fn facts_for_resolution_inputs(
+        &self,
+        _inputs: &[InferenceInterfaceGraphResolutionInput],
+    ) -> Result<
+        BTreeMap<String, InferenceInterfaceResolverFacts>,
+        InferenceInterfaceFactsProviderError,
+    > {
+        Ok(BTreeMap::from([("infer".into(), ready_inference_facts())]))
+    }
+    async fn resolved_dependency_requirements(
+        &self,
+        request: &pantograph_dependency_planning::ValidatedDependencyEnvironmentRequest,
+    ) -> Result<
+        Option<pantograph_dependency_planning::ValidatedDependencyEnvironmentResult>,
+        InferenceInterfaceFactsProviderError,
+    > {
+        self.entered.notify_one();
+        self.release.notified().await;
+        let mut result: pantograph_dependency_planning::DependencyEnvironmentResult = serde_json::from_str(include_str!(
+            "../../../pantograph-dependency-planning/tests/fixtures/dependency_environment_ready_result.json")).unwrap();
+        result.action = request.as_request().action;
+        result.identity_key = request.as_request().identity_key.clone();
+        result.dependency_requirements_id = request.as_request().dependency_requirements_id.clone();
+        result.environment_ref = request.as_request().environment_ref.clone();
+        result.readiness_state =
+            pantograph_dependency_planning::DependencyEnvironmentReadinessState::Resolved;
+        result.install_state =
+            pantograph_dependency_planning::DependencyEnvironmentInstallState::NotRequested;
+        result.binding_statuses.clear();
+        result.operation = None;
+        if self.foreign {
+            result.identity_key.model_ref.model_id = "image/foreign/model".into();
+        }
+        Ok(Some(
+            pantograph_dependency_planning::ValidatedDependencyEnvironmentResult::try_from(result)
+                .unwrap(),
+        ))
+    }
+}
+
+#[tokio::test]
+async fn requirements_handoff_rejects_async_graph_validation_close_and_foreign_races() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    for race in ["graph", "validation", "close", "foreign", "none"] {
+        let provider = Arc::new(PausedRequirementsFacts {
+            entered: Default::default(),
+            release: Default::default(),
+            foreign: race == "foreign",
+        });
+        let store = Arc::new(GraphSessionStore::with_inference_interface_facts_provider(
+            provider.clone(),
+        ));
+        let session = store
+            .create_session(dependency_inference_graph(), None)
+            .await;
+        store
+            .publish_inference_validation_session(
+                &session.session_id,
+                "validation.before".parse().unwrap(),
+            )
+            .await
+            .unwrap();
+        let calls = Arc::new(AtomicUsize::new(0));
+        let task = tokio::spawn({
+            let store = store.clone();
+            let calls = calls.clone();
+            let session = session.clone();
+            async move {
+                store
+                    .resolve_dependency_environment_action_with_result(
+                        DependencyEnvironmentActionIntent {
+                            contract_version: 1,
+                            graph_session_id: session.session_id.parse().unwrap(),
+                            graph_revision: session.graph_revision.parse().unwrap(),
+                            validation_session_id: Some("validation.before".parse().unwrap()),
+                            target_node_id: "dep-env".parse().unwrap(),
+                            action: DependencyEnvironmentAction::Resolve,
+                        },
+                        move |_| {
+                            calls.fetch_add(1, Ordering::SeqCst);
+                            Ok(())
+                        },
+                    )
+                    .await
+            }
+        });
+        provider.entered.notified().await;
+        match race {
+            "graph" => {
+                store
+                    .update_node_data(WorkflowGraphUpdateNodeDataRequest {
+                        session_id: session.session_id.clone(),
+                        node_id: "infer".into(),
+                        data: serde_json::json!({"runtime":"other"}),
+                    })
+                    .await
+                    .unwrap();
+            }
+            "validation" => {
+                store
+                    .publish_inference_validation_session(
+                        &session.session_id,
+                        "validation.after".parse().unwrap(),
+                    )
+                    .await
+                    .unwrap();
+            }
+            "close" => {
+                store.close_session(&session.session_id).await.unwrap();
+            }
+            _ => {}
+        }
+        provider.release.notify_one();
+        let result = tokio::time::timeout(std::time::Duration::from_secs(2), task)
+            .await
+            .expect("no lock-order deadlock")
+            .unwrap();
+        if race == "none" {
+            let (action, result) = result.unwrap();
+            assert_eq!(
+                action.status,
+                DependencyEnvironmentActionIntentStatus::RequestReady
+            );
+            assert!(result.is_some());
+            assert_eq!(calls.load(Ordering::SeqCst), 1);
+        } else {
+            assert_eq!(
+                calls.load(Ordering::SeqCst),
+                0,
+                "{race} must never hand off requirements"
+            );
+            if race == "close" {
+                assert!(matches!(
+                    result,
+                    Err(WorkflowServiceError::SessionNotFound(_))
+                ));
+            } else {
+                let (action, result) = result.unwrap();
+                assert_eq!(
+                    action.status,
+                    DependencyEnvironmentActionIntentStatus::Blocked,
+                    "{race}"
+                );
+                assert!(result.is_none());
+            }
+        }
+        store.shutdown_validation_tasks().await;
+    }
+}
+
+#[tokio::test]
+async fn exhausted_background_start_preserves_inflight_producer_until_publication() {
+    use super::super::inference_validation_lifecycle::MAX_VALIDATION_GENERATIONS_PER_SESSION;
+    let entered = Arc::new(Notify::new());
+    let release = Arc::new(Notify::new());
+    let store = GraphSessionStore::with_inference_interface_facts_provider(Arc::new(
+        BlockingInferenceFactsProvider {
+            facts: BTreeMap::from([("infer".to_string(), ready_inference_facts())]),
+            entered: entered.clone(),
+            release: release.clone(),
+        },
+    ));
+    let edit = store
+        .create_session(dependency_inference_graph(), None)
+        .await;
+    let graph_session_id: WorkflowGraphSessionId = edit.session_id.parse().unwrap();
+    let graph_revision: WorkflowGraphRevision = edit.graph_revision.parse().unwrap();
+    for i in 0..MAX_VALIDATION_GENERATIONS_PER_SESSION - 1 {
+        store
+            .validation_lifecycle
+            .begin_validation(
+                graph_session_id.clone(),
+                graph_revision.clone(),
+                format!("validation.seed.{i}").parse().unwrap(),
+            )
+            .await
+            .unwrap();
+    }
+    let request = WorkflowGraphCurrentValidationRefreshRequest {
+        graph_session_id: edit.session_id.clone(),
+        graph_revision,
+    };
+    let current = store
+        .start_current_validation_task(request.clone())
+        .await
+        .unwrap();
+    tokio::time::timeout(std::time::Duration::from_secs(5), entered.notified())
+        .await
+        .unwrap();
+    let error = store
+        .start_current_validation_task(request)
+        .await
+        .unwrap_err();
+    assert!(error
+        .message()
+        .contains("validation generation limit reached"));
+    assert_eq!(store.active_validation_task_count_for_tests().await, 1);
+    release.notify_one();
+    tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        store.drain_validation_tasks_for_tests(),
+    )
+    .await
+    .unwrap();
+    let summary = store
+        .current_validation_summary(WorkflowGraphCurrentValidationSummaryRequest {
+            graph_session_id: edit.session_id,
+            graph_revision: edit.graph_revision.parse().unwrap(),
+        })
+        .await
+        .unwrap();
+    assert!(
+        summary.submit_gate.allowed,
+        "refused replacement must not kill the retained producer"
+    );
+    assert_eq!(summary.validation_session_id, Some(current));
 }

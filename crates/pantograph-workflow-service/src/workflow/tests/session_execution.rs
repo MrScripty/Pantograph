@@ -4257,6 +4257,9 @@ async fn workflow_execution_session_run_snapshot_failure_records_canonical_error
         )
         .await
         .expect("create session");
+    // Admission must read the actual graph successfully; inject the fault at
+    // the snapshot-read stage this test is intended to qualify.
+    host.fail_graph_read.store(true, Ordering::SeqCst);
 
     let error = service
         .run_workflow_execution_session(
@@ -5232,26 +5235,20 @@ fn runtime_dependency_planning_request(
     model_ref: &PumasModelRef,
     selected_binding_ids: Vec<pantograph_dependency_planning::DependencyBindingId>,
 ) -> DependencyPlanningRequest {
-    DependencyPlanningRequest {
-        model_ref: model_ref.clone(),
-        task_id: pantograph_dependency_planning::DependencyTaskId::parse("image_generation")
+    crate::inference_dependency_planning::inference_dependency_planning_request(
+        model_ref.clone(),
+        pantograph_dependency_planning::DependencyTaskId::parse("image_generation")
             .expect("valid task id"),
-        task_type: Some(
-            pantograph_dependency_planning::DependencyTaskId::parse("image_generation")
-                .expect("valid task type"),
-        ),
-        expected_artifact_kind: None,
-        scheduler_intent: SchedulerIntent {
+        SchedulerIntent {
             requested_runtime_id: Some(
                 RuntimeIntentId::parse("pytorch").expect("valid runtime id"),
             ),
             requested_device_id: Some(DeviceIntentId::parse("cuda:0").expect("valid device id")),
         },
-        platform_context: None,
         selected_binding_ids,
-        dependency_override_patches: Vec::new(),
-        trait_intents: Vec::new(),
-        caller_context: DependencyPlanningCallerContext {
+        Vec::new(),
+        Vec::new(),
+        DependencyPlanningCallerContext {
             source_node_type: Some(
                 DependencyNodeTypeId::parse("llm-inference").expect("valid node type"),
             ),
@@ -5260,7 +5257,8 @@ fn runtime_dependency_planning_request(
             port_id: None,
             run_id: None,
         },
-    }
+    )
+    .expect("producer-aligned dependency planning request")
 }
 
 fn runtime_source_context() -> crate::graph::WorkflowRuntimeSourceContext {

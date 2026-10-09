@@ -4,6 +4,7 @@ use pantograph_node_contracts::NodeBehaviorVersion;
 use serde::{Deserialize, Serialize};
 
 use super::types::{GraphEdge, WorkflowGraph};
+use super::{lower_groups, NodeRegistry};
 use crate::workflow::WorkflowServiceError;
 
 const EXECUTABLE_TOPOLOGY_SCHEMA_VERSION: u32 = 1;
@@ -59,6 +60,8 @@ pub fn workflow_executable_topology_with_node_versions(
     graph: &WorkflowGraph,
     node_versions: impl IntoIterator<Item = NodeBehaviorVersion>,
 ) -> Result<WorkflowExecutableTopology, WorkflowServiceError> {
+    let projection = lower_groups(graph, &NodeRegistry::new())?;
+    let graph = &projection.executable_graph;
     let node_version_by_type = node_versions
         .into_iter()
         .map(|version| (version.node_type.as_str().to_string(), version))

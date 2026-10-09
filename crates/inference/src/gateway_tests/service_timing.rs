@@ -67,7 +67,10 @@ struct Backend {
     shared_facts: Option<Arc<Mutex<Option<crate::RuntimeServiceTimingOwnerFacts>>>>,
     fail_load: bool,
     rewind_load_clock: bool,
+    rewind_owner_clock: bool,
+    load_reuse: Option<bool>,
     fail_cleanup: bool,
+    cancel_at_cleanup: Option<Arc<AtomicBool>>,
     load_started: Option<Arc<tokio::sync::Notify>>,
     load_request_ids: Arc<Mutex<Vec<Option<String>>>>,
 }
@@ -81,7 +84,10 @@ impl Backend {
             shared_facts: None,
             fail_load: false,
             rewind_load_clock: false,
+            rewind_owner_clock: false,
+            load_reuse: Some(false),
             fail_cleanup: false,
+            cancel_at_cleanup: None,
             load_started: None,
             load_request_ids: Arc::new(Mutex::new(Vec::new())),
         }
@@ -128,6 +134,9 @@ impl InferenceBackend for Backend {
         self.inner.stop().await
     }
     fn runtime_service_timing_owner_facts(&self) -> Option<crate::RuntimeServiceTimingOwnerFacts> {
+        if self.rewind_owner_clock {
+            self.clock.value.store(0, Ordering::SeqCst);
+        }
         self.owner_reads.fetch_add(1, Ordering::SeqCst);
         match &self.shared_facts {
             Some(facts) => facts.lock().unwrap().clone(),
@@ -155,12 +164,18 @@ impl InferenceBackend for Backend {
         if self.fail_load {
             return Err(BackendError::Inference("controlled load failure".into()));
         }
-        self.inner
+        let mut outcome = self
+            .inner
             .load_selected_text(request, target, decision)
-            .await
+            .await?;
+        outcome.runtime_reused = self.load_reuse;
+        Ok(outcome)
     }
     async fn finish_selected_text(&self, cancel: bool) -> Result<(), BackendError> {
         self.clock.advance(7);
+        if let Some(cancelled) = &self.cancel_at_cleanup {
+            cancelled.store(true, Ordering::SeqCst);
+        }
         if self.fail_cleanup {
             return Err(BackendError::Inference("controlled cleanup failure".into()));
         }
@@ -242,7 +257,7 @@ async fn service_timing_measures_distinct_owner_bound_phases_and_runtime_generat
     assert!(!wire.contains("exact prompt"));
     assert!(!wire.contains(&target.local_load_path));
     assert!(!wire.contains("controlled-effective-config"));
-    assert_eq!(clock.reads.load(Ordering::SeqCst), 16);
+    assert_eq!(clock.reads.load(Ordering::SeqCst), 18);
 }
 
 #[tokio::test]
@@ -257,6 +272,7 @@ async fn service_timing_disabled_defaults_do_not_read_phase_clock_or_owner_facts
     let backend = Backend::new(clock.clone());
     let reads = backend.owner_reads.clone();
     let gateway = InferenceGateway::with_backend(Box::new(backend), "PyTorch");
+    assert!(gateway.runtime_service_timing_clock_snapshot().is_none());
     execute(&gateway, request, target, decision).await.unwrap();
     assert_eq!(clock.reads.load(Ordering::SeqCst), 0);
     assert_eq!(reads.load(Ordering::SeqCst), 0);
@@ -538,7 +554,9 @@ async fn service_timing_bounds_retained_request_correlation_without_changing_exe
         );
         assert_eq!(
             rows[0].execution_request_id_digest.as_deref(),
-            Some(blake3::hash(original_id.as_bytes()).to_hex().as_str())
+            (original_id.len() <= 64 * 1024)
+                .then(|| blake3::hash(original_id.as_bytes()).to_hex().to_string())
+                .as_deref()
         );
         assert!(!serialized.contains(original_id.trim()));
     }
@@ -579,6 +597,7 @@ async fn service_timing_rejected_calls_bound_correlation_before_validation() {
             rows[0].execution_request_id_digest,
             original_id
                 .as_ref()
+                .filter(|id| id.len() <= 64 * 1024)
                 .map(|id| blake3::hash(id.as_bytes()).to_hex().to_string())
         );
         let serialized = serde_json::to_string(&rows[0]).unwrap();
@@ -590,4 +609,168 @@ async fn service_timing_rejected_calls_bound_correlation_before_validation() {
         assert!(!serialized.contains("rejected-caller-payload"));
         assert!(!serialized.contains("rejected-padded-id"));
     }
+}
+
+#[tokio::test]
+async fn service_timing_capture_uses_owner_clock_and_actual_load_disposition() {
+    use crate::{
+        RuntimeServiceTimingLoadDisposition as Load, RuntimeServiceTimingOwnerProvenance as Source,
+    };
+    for (reuse, expected) in [
+        (Some(false), Load::Reloaded),
+        (Some(true), Load::Reused),
+        (None, Load::Unknown),
+    ] {
+        let (_directory, request, mut target, decision) = crate::selected_text_execution::fixture();
+        target.content_fingerprint = Some("controlled-content-v1".into());
+        let clock = Arc::new(Clock::default());
+        let recorder = Arc::new(Recorder::default());
+        let mut backend = Backend::new(clock.clone());
+        backend.load_reuse = reuse;
+        let mut gateway = instrument(backend, recorder.clone(), clock.clone());
+        // Even an internal built-in marker cannot promote a controlled clock.
+        gateway.service_timing_owner_provenance = Source::BuiltIn;
+        execute(&gateway, request, target, decision).await.unwrap();
+        clock.advance(9);
+        let snapshot = gateway.runtime_service_timing_clock_snapshot().unwrap();
+        let rows = recorder.rows.lock().unwrap();
+        let capture = rows[0].capture.as_ref().unwrap();
+        assert_eq!(capture.clock_epoch, snapshot.clock_epoch);
+        assert_eq!(capture.observed_at_ns, 41);
+        assert_eq!(snapshot.now_ns, 50);
+        assert_eq!(capture.owner_provenance, Source::Injected);
+        assert_eq!(capture.load_disposition, expected);
+        assert!(rows[0]
+            .fresh_production_observation(&exact_profile(&rows[0]), &snapshot, 10)
+            .is_none());
+    }
+}
+
+#[tokio::test]
+async fn service_timing_clock_regression_between_phases_invalidates_capture() {
+    let (_directory, request, mut target, decision) = crate::selected_text_execution::fixture();
+    target.content_fingerprint = Some("controlled-content-v1".into());
+    let clock = Arc::new(Clock::default());
+    let recorder = Arc::new(Recorder::default());
+    let mut backend = Backend::new(clock.clone());
+    backend.rewind_owner_clock = true;
+    let gateway = instrument(backend, recorder.clone(), clock);
+    execute(&gateway, request, target, decision).await.unwrap();
+    let rows = recorder.rows.lock().unwrap();
+    assert!(rows[0].capture.is_none());
+    assert!(matches!(
+        value(&rows[0], Phase::TextExecution),
+        Value::Unknown {
+            reason: Unknown::ClockDiscontinuity
+        }
+    ));
+}
+
+#[tokio::test]
+async fn service_timing_cancelled_before_load_never_qualifies_observation() {
+    let (_directory, request, mut target, decision) = crate::selected_text_execution::fixture();
+    target.content_fingerprint = Some("controlled-content-v1".into());
+    let clock = Arc::new(Clock::default());
+    let recorder = Arc::new(Recorder::default());
+    let gateway = instrument(Backend::new(clock.clone()), recorder.clone(), clock.clone());
+    assert!(gateway
+        .execute_selected_text_with_cancellation(
+            request,
+            target,
+            decision,
+            InferenceExecutionCancellationHandle::cancellation_requested("controlled cancellation")
+        )
+        .await
+        .is_err());
+    let rows = recorder.rows.lock().unwrap();
+    assert_eq!(rows[0].outcome, Outcome::Failed);
+    assert!(rows[0].capture.is_none());
+    assert_eq!(clock.reads.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn service_timing_oversized_workload_omits_identity_without_changing_execution() {
+    let (_directory, mut request, mut target, decision) = crate::selected_text_execution::fixture();
+    target.content_fingerprint = Some("controlled-content-v1".into());
+    let crate::InferenceExecutionInput::TextGeneration { system_prompt, .. } = &mut request.input
+    else {
+        unreachable!()
+    };
+    let oversized = "x".repeat(64 * 1024 + 1);
+    *system_prompt = Some(oversized.clone());
+    let clock = Arc::new(Clock::default());
+    let recorder = Arc::new(Recorder::default());
+    let mut backend = Backend::new(clock.clone());
+    backend.inner.expected_system_prompt = Some(oversized);
+    let gateway = instrument(backend, recorder.clone(), clock);
+    execute(&gateway, request, target, decision).await.unwrap();
+    let rows = recorder.rows.lock().unwrap();
+    assert_eq!(rows[0].outcome, Outcome::Completed);
+    assert!(matches!(
+        rows[0].identity,
+        RuntimeServiceTimingIdentity::Unknown {
+            reason: Unknown::IdentityBudgetExceeded
+        }
+    ));
+}
+
+#[test]
+fn service_timing_injected_owner_never_promotes_by_backend_label() {
+    use crate::RuntimeServiceTimingOwnerProvenance as Source;
+    let gateway =
+        InferenceGateway::with_backend(Box::new(SelectedTextBackend::default()), "PyTorch");
+    assert_eq!(gateway.service_timing_owner_provenance, Source::Injected);
+    #[cfg(feature = "backend-llamacpp")]
+    assert_eq!(
+        InferenceGateway::new().service_timing_owner_provenance,
+        Source::BuiltIn
+    );
+}
+
+#[tokio::test]
+async fn service_timing_cancellation_during_successful_cleanup_excludes_sample() {
+    struct Signal(Arc<AtomicBool>);
+    impl crate::InferenceExecutionCancellationSignal for Signal {
+        fn snapshot(&self) -> crate::InferenceExecutionCancellationSnapshot {
+            if self.0.load(Ordering::SeqCst) {
+                crate::InferenceExecutionCancellationSnapshot::cancellation_requested(None)
+            } else {
+                crate::InferenceExecutionCancellationSnapshot::running()
+            }
+        }
+    }
+    let (_directory, request, mut target, decision) = crate::selected_text_execution::fixture();
+    target.content_fingerprint = Some("controlled-content-v1".into());
+    let clock = Arc::new(Clock::default());
+    let recorder = Arc::new(Recorder::default());
+    let cancelled = Arc::new(AtomicBool::new(false));
+    let mut backend = Backend::new(clock.clone());
+    backend.cancel_at_cleanup = Some(cancelled.clone());
+    let gateway = instrument(backend, recorder.clone(), clock);
+    let result = gateway
+        .execute_selected_text_with_cancellation(
+            request,
+            target,
+            decision,
+            InferenceExecutionCancellationHandle::with_signal(Arc::new(Signal(cancelled))),
+        )
+        .await;
+    assert!(matches!(
+        result,
+        Err(GatewayError::Backend(BackendError::Cancelled(_)))
+    ));
+    let snapshot = gateway.runtime_service_timing_clock_snapshot().unwrap();
+    let rows = recorder.rows.lock().unwrap();
+    assert_eq!(rows[0].outcome, Outcome::Failed);
+    assert!(rows[0]
+        .fresh_production_observation(&exact_profile(&rows[0]), &snapshot, 10)
+        .is_none());
+    // Distinct completed drain evidence remains available for diagnostics.
+    assert!(matches!(
+        value(&rows[0], Phase::WorkerCleanup),
+        Value::Observed {
+            outcome: Outcome::Completed,
+            ..
+        }
+    ));
 }

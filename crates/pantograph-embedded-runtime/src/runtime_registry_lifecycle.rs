@@ -39,6 +39,15 @@ pub trait HostRuntimeRegistryController {
         &self,
         producer: HostRuntimeProducer,
     ) -> Result<(), inference::GatewayError>;
+    /// Default preserves legacy producers; native owners can publish their
+    /// accepted retirement synchronously before releasing the owner lock.
+    async fn stop_runtime_producer_and_publish(
+        &self,
+        producer: HostRuntimeProducer,
+        _registry: &RuntimeRegistry,
+    ) -> Result<(), inference::GatewayError> {
+        self.stop_runtime_producer(producer).await
+    }
     async fn runtime_health_assessment_snapshot(&self) -> RuntimeHealthAssessmentSnapshot {
         RuntimeHealthAssessmentSnapshot::default()
     }
@@ -47,6 +56,12 @@ pub trait HostRuntimeRegistryController {
 #[async_trait]
 pub trait HostRuntimeRegistryLifecycleController: HostRuntimeRegistryController {
     async fn stop_all_runtime_producers(&self) -> Result<(), inference::GatewayError>;
+    async fn stop_all_runtime_producers_and_publish(
+        &self,
+        _registry: &RuntimeRegistry,
+    ) -> Result<(), inference::GatewayError> {
+        self.stop_all_runtime_producers().await
+    }
     async fn restore_runtime(
         &self,
         restore_config: Option<inference::BackendConfig>,
@@ -254,7 +269,9 @@ pub async fn stop_all_runtime_producers_and_reconcile_runtime_registry<
     controller: &C,
     registry: &RuntimeRegistry,
 ) -> Result<(), RuntimeLifecycleCoordinationError> {
-    let result = controller.stop_all_runtime_producers().await;
+    let result = controller
+        .stop_all_runtime_producers_and_publish(registry)
+        .await;
     sync_runtime_registry(controller, registry).await;
     result.map_err(Into::into)
 }
@@ -304,7 +321,11 @@ pub async fn reclaim_runtime_and_reconcile_runtime_registry<
                 }
             });
             if let Some(producer) = producer {
-                Some(controller.stop_runtime_producer(producer).await)
+                Some(
+                    controller
+                        .stop_runtime_producer_and_publish(producer, registry)
+                        .await,
+                )
             } else {
                 Some(Err(inference::GatewayError::SwitchFailed(format!(
                     "cannot reclaim runtime '{runtime_id}' without its lifecycle owner"
