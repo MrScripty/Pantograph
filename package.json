@@ -24,6 +24,7 @@
     "lint:no-new": "npm run lint:critical && npm run lint:a11y && npm run traceability",
     "format:check": "cargo fmt --all -- --check",
     "test:frontend": "node scripts/run-frontend-tests.mjs",
+    "test:group-validation-browser": "node scripts/check-group-validation-browser.mjs",
     "typecheck": "tsc --project tsconfig.json --noEmit --pretty false",
     "test": "cargo test -p node-engine --lib && cargo test -p workflow-nodes --lib",
     "traceability": "./scripts/check-decision-traceability.sh",

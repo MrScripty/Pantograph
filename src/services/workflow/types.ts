@@ -1320,6 +1320,35 @@ export interface WorkflowGraphValidationDiagnostic {
   port_id?: string | null;
 }
 
+export type WorkflowGroupDiagnosticCode =
+  | 'group_schema_invalid'
+  | 'group_identity_invalid'
+  | 'group_child_unsupported'
+  | 'group_effective_ports_unsupported'
+  | 'group_mapping_invalid'
+  | 'group_composition_invalid'
+  | 'group_connection_invalid'
+  | 'group_contract_blocked';
+
+export interface WorkflowGroupFailureFact {
+  code: WorkflowGroupDiagnosticCode;
+  rejection_kind: 'malformed' | 'unsupported' | 'invalid';
+  group_id?: string | null;
+  child_id?: string | null;
+  field: string;
+  message: string;
+  repair_hint: string;
+  blocking_submission: boolean;
+}
+
+export interface WorkflowGroupPreflight {
+  graph_session_id: string;
+  graph_revision: string;
+  validation_session_id: string;
+  group_count: number;
+  failures?: WorkflowGroupFailureFact[];
+}
+
 export interface WorkflowGraphCurrentValidationSummaryResponse {
   graph_session_id: string;
   requested_graph_revision: string;
@@ -1329,6 +1358,7 @@ export interface WorkflowGraphCurrentValidationSummaryResponse {
   summary?: WorkflowGraphValidationSummary | null;
   submit_gate: WorkflowGraphValidationSubmitGate;
   diagnostics?: WorkflowGraphValidationDiagnostic[];
+  group_preflight?: WorkflowGroupPreflight | null;
 }
 
 export interface WorkflowGraphCurrentValidationRefreshResponse {
@@ -1340,12 +1370,15 @@ export type WorkflowGraphValidationLifecycleError =
   | 'graph_session_closed'
   | 'validation_session_missing'
   | 'validation_session_superseded'
+  | 'validation_session_reused'
+  | 'validation_generation_limit'
   | 'graph_revision_changed';
 
 export type WorkflowGraphValidationCancellationReason =
   | 'graph_revision_changed'
-  | 'validation_superseded'
-  | 'graph_session_closed';
+  | 'superseded'
+  | 'graph_session_closed'
+  | 'shutdown';
 
 export type WorkflowGraphValidationLifecycleEventKind =
   | {

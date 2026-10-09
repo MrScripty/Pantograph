@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { parse } from 'svelte/compiler';
 import ts from 'typescript';
+import { WorkflowValidationReadFence, executableWorkflowValidation } from './workflowValidationAuthority.ts';
 import type { Edge } from '@xyflow/svelte';
 
 import {
@@ -69,14 +70,19 @@ test('ordinary Toolbar Submit sends captured typed text through the execution-se
   const code = ts.transpileModule(source.slice(handler.start, handler.end), {
     compilerOptions: { target: ts.ScriptTarget.ES2022 },
   }).outputText;
-  const graph = { nodes: [{ id: 'prompt', node_type: 'text-input', position: { x: 0, y: 0 }, data: { text: 'hello world' } }], edges: [] };
+  const graph = { nodes: [{ id: 'prompt', node_type: 'text-input', position: { x: 0, y: 0 }, data: { text: 'hello world' } }], edges: [], derived_graph: { graph_fingerprint: 'revision-native' } };
+  const validationReadFence = new WorkflowValidationReadFence();
+  const acceptedValidationRead = validationReadFence.begin('graph-native:revision-native');
+  const validation = { graph_session_id: 'graph-native', requested_graph_revision: 'revision-native', current_graph_revision: 'revision-native',
+    submit_gate: { allowed: true }, validation_session_id: 'validation-native', state: 'current',
+    summary: { status: 'executable', executable: true, diagnostics_count: 0, blocking_diagnostics_count: 0 } };
   const requests: Array<{ inputs: unknown }> = [];
   const failures: unknown[] = [];
   const context = {
     $isExecuting: false, $isReadOnly: false, $isDirty: false,
     $currentGraphId: 'workflow-native', $currentSessionId: 'graph-native', $workflowGraph: graph,
     currentSavedWorkflow: { id: 'workflow-native' },
-    currentValidationSummary: { submit_gate: { allowed: true }, validation_session_id: 'validation-native' },
+    currentValidationSummary: validation, activeValidationSummary: validation, validationReadFence, acceptedValidationRead, executableWorkflowValidation,
     workflowSemanticVersion: '0.1.0', AUDIO_RUNTIME_DATA_KEYS: [],
     isExecuting: { set() {} }, clearNodeRuntimeData() {}, resetExecutionStates() {}, clearStreamContent() {},
     assertDesktopSeedInputs() {}, isNumericWorkflowSemanticVersion,

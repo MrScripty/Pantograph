@@ -67,8 +67,11 @@ saved files across arbitrary host callbacks.
 Only the first deterministic group failure is reported. The new failure facts
 have bounded text and identity fields; graph parsing and lowering remain
 graph-sized. Broad native/group execution and browser/desktop GUI behavior are
-not established by the backend tests. A later diagnostics UI is a separate
-integration and is not included here.
+not established by the backend tests. The composed diagnostics UI renders typed
+group/child/field identities and the backend's repair hints. Refresh and
+lifecycle reads share one invalidation epoch; Submit requires the same accepted
+response identity before publication and Run, including after asynchronous
+session creation. Lifecycle events invalidate authority rather than granting it.
 
 ## Verification and remaining rollout gates
 
@@ -85,6 +88,18 @@ must be available; a missing dependency is a failed gate. Set
 inputs permit locked/offline Cargo checks; no model download is required by the
 synthetic fixtures. See [development](development.md) and
 [runtime operations](runtime-operations.md) for repository procedures.
+
+`npm run test:group-validation-browser` freshly runs the public Rust validation
+tests, hashes their serialized responses/authored graphs/lifecycle events, then
+runs the frontend aggregate including compiled Svelte in installed Chromium.
+The browser replays actual producer responses through a controlled transport and
+stores. It covers rendering, disabled Submit, lifecycle/edit races and calls
+refused before frontend effects. The fresh Rust tests separately verify backend
+publication/acquisition refusal. This is producer-response-to-browser contract
+qualification, not live Tauri RPC, desktop GUI or successful native inference
+submission. Chromium and existing Cargo/native prerequisites must be available;
+the check does not install them or download models. Without fresh producer
+evidence, the ordinary frontend aggregate explicitly skips this replay test.
 
 Default rollout still requires qualified real timing coverage, resource and
 adapter capabilities, measured dispatch overhead and completion quality, and

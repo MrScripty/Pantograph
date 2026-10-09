@@ -37,6 +37,11 @@
   } from '../stores/workbenchStore';
   import { formatWorkflowCommandError } from './workbench/workflowErrorPresenters';
   import WorkflowPersistenceControls from './WorkflowPersistenceControls.svelte';
+  import WorkflowValidationDiagnostics from './WorkflowValidationDiagnostics.svelte';
+  import {
+    currentWorkflowValidation, currentWorkflowSubmitGate, executableWorkflowValidation,
+    WorkflowValidationReadFence, type WorkflowValidationReadTicket,
+  } from './workflowValidationAuthority';
   import { assertDesktopSeedInputs, desktopSeedInputError } from './nodes/workflow/primitiveInputMetadata';
   import {
     applyWorkflowToolbarEvent,
@@ -67,6 +72,12 @@
   let waitingForInput = $state(false);
   let currentValidationSummary = $state<WorkflowGraphCurrentValidationSummaryResponse | null>(null);
   let currentValidationSummaryKey = $state<string | null>(null);
+  const validationReadFence = new WorkflowValidationReadFence();
+  let acceptedValidationRead: WorkflowValidationReadTicket | null = null;
+  let activeValidationSummary = $derived(currentWorkflowValidation(
+    currentValidationSummary, $currentSessionId,
+    $workflowGraph.derived_graph?.graph_fingerprint ?? null,
+  ));
 
   let currentSavedWorkflow = $derived(
     $currentGraphType === 'workflow'
@@ -85,7 +96,10 @@
       hasSavedWorkflow: Boolean(currentSavedWorkflow),
       hasWorkflowId: Boolean($currentGraphId),
       semanticVersionInvalid: workflowSemanticVersionInvalid,
-      submitGate: currentValidationSummary?.submit_gate ?? null,
+      submitGate: currentWorkflowSubmitGate(
+        activeValidationSummary, $currentSessionId,
+        $workflowGraph.derived_graph?.graph_fingerprint ?? null,
+      ),
     }) ?? desktopSeedInputError($workflowGraph),
   );
   let submitDisabled = $derived(submitDisabledReason !== null);
@@ -152,17 +166,12 @@
       graphSessionId,
       graphRevision,
     });
-    if (!requestKey) {
-      currentValidationSummary = null;
-      currentValidationSummaryKey = null;
-      clearNodeRuntimeData([...INFERENCE_INTERFACE_VALIDATION_RUNTIME_KEYS]);
-      return;
-    }
-
-    if (currentValidationSummaryKey !== requestKey) {
-      clearNodeRuntimeData([...INFERENCE_INTERFACE_VALIDATION_RUNTIME_KEYS]);
-    }
+    const ticket = validationReadFence.begin(requestKey);
+    currentValidationSummary = null;
+    acceptedValidationRead = null;
     currentValidationSummaryKey = requestKey;
+    clearNodeRuntimeData([...INFERENCE_INTERFACE_VALIDATION_RUNTIME_KEYS]);
+    if (!requestKey) return;
     let cancelled = false;
 
     void workflowService
@@ -171,23 +180,28 @@
         graph_revision: graphRevision,
       })
       .then((refresh) => {
-        if (!cancelled && currentValidationSummaryKey === requestKey) {
-          currentValidationSummary = refresh.summary;
-          for (const overlay of workflowValidationProjectionOverlays(
-            refresh.node_projections ?? [],
-          )) {
-            updateNodeRuntimeData(overlay.nodeId, overlay.data);
+        if (!cancelled && validationReadFence.isCurrent(ticket)) {
+          currentValidationSummary = currentWorkflowValidation(refresh.summary, graphSessionId, graphRevision);
+          acceptedValidationRead = currentValidationSummary ? ticket : null;
+          if (currentValidationSummary) {
+            for (const overlay of workflowValidationProjectionOverlays(refresh.node_projections ?? [])) {
+              updateNodeRuntimeData(overlay.nodeId, overlay.data);
+            }
           }
         }
       })
       .catch(() => {
-        if (!cancelled && currentValidationSummaryKey === requestKey) {
+        if (!cancelled && validationReadFence.isCurrent(ticket)) {
           currentValidationSummary = null;
+          acceptedValidationRead = null;
         }
       });
 
     return () => {
       cancelled = true;
+      validationReadFence.begin(null);
+      currentValidationSummary = null;
+      acceptedValidationRead = null;
     };
   });
 
@@ -231,16 +245,21 @@
         })) {
           return;
         }
+        const ticket = validationReadFence.begin(`${graphSessionId}:${graphRevision}`);
+        currentValidationSummary = null;
+        acceptedValidationRead = null;
+        clearNodeRuntimeData([...INFERENCE_INTERFACE_VALIDATION_RUNTIME_KEYS]);
         const projection = await workflowService.currentGraphValidationProjection({
           graph_session_id: graphSessionId,
           graph_revision: graphRevision,
         });
-        if (!cancelled && currentValidationSummaryKey === `${graphSessionId}:${graphRevision}`) {
-          currentValidationSummary = projection.summary;
-          for (const overlay of workflowValidationProjectionOverlays(
-            projection.node_projections ?? [],
-          )) {
-            updateNodeRuntimeData(overlay.nodeId, overlay.data);
+        if (!cancelled && validationReadFence.isCurrent(ticket)) {
+          currentValidationSummary = currentWorkflowValidation(projection.summary, graphSessionId, graphRevision);
+          acceptedValidationRead = currentValidationSummary ? ticket : null;
+          if (currentValidationSummary) {
+            for (const overlay of workflowValidationProjectionOverlays(projection.node_projections ?? [])) {
+              updateNodeRuntimeData(overlay.nodeId, overlay.data);
+            }
           }
         }
       },
@@ -254,6 +273,9 @@
 
     return () => {
       cancelled = true;
+      validationReadFence.begin(null);
+      currentValidationSummary = null;
+      acceptedValidationRead = null;
       unlisten?.();
     };
   });
@@ -279,7 +301,20 @@
     clearStreamContent();
     const submittedWorkflowId = $currentGraphId;
     const submittedGraphSessionId = $currentSessionId;
-    const submittedValidationSummary = currentValidationSummary;
+    const submittedValidationSummary = activeValidationSummary;
+    const submittedValidationRead = acceptedValidationRead;
+    const submittedGraphRevision = $workflowGraph.derived_graph?.graph_fingerprint ?? null;
+    function assertCurrentSubmissionValidation(): void {
+      if (!validationReadFence.isCurrent(submittedValidationRead) ||
+          currentValidationSummary !== submittedValidationSummary ||
+          $currentSessionId !== submittedGraphSessionId || $currentGraphId !== submittedWorkflowId ||
+          $isDirty || $isReadOnly ||
+          !executableWorkflowValidation(submittedValidationSummary, $currentSessionId,
+            $workflowGraph.derived_graph?.graph_fingerprint ?? null) ||
+          $workflowGraph.derived_graph?.graph_fingerprint !== submittedGraphRevision) {
+        throw new Error('Workflow validation changed; wait for current validation before submitting');
+      }
+    }
 
     try {
       if ($isReadOnly) {
@@ -309,6 +344,7 @@
       }
 
       const submittedInputs = workflowSubmitTextInputs($workflowGraph);
+      assertCurrentSubmissionValidation();
       const executionSession = await workflowService.createWorkflowExecutionSession({
         workflow_id: submittedWorkflowId,
         usage_profile: null,
@@ -316,6 +352,7 @@
       });
 
       try {
+        assertCurrentSubmissionValidation();
         const runRequestBase = {
           session_id: executionSession.session_id,
           inputs: submittedInputs,
@@ -333,6 +370,7 @@
             workflowSemanticVersion = submittedVersion;
           }
           try {
+            assertCurrentSubmissionValidation();
             await workflowService.publishGraphSessionExecutableValidationSnapshot({
               workflow_id: submittedWorkflowId,
               workflow_semantic_version: submittedVersion,
@@ -340,6 +378,7 @@
               validation_session_id: submittedValidationSummary.validation_session_id,
               validation_snapshot_id: null,
             });
+            assertCurrentSubmissionValidation();
             response = await workflowService.runWorkflowExecutionSession({
               ...runRequestBase,
               workflow_semantic_version: submittedVersion,
@@ -464,6 +503,12 @@
       Submit unavailable: {submitDisabledReason}
     </div>
   {/if}
+
+  <WorkflowValidationDiagnostics
+    validation={activeValidationSummary}
+    graphSessionId={$currentSessionId}
+    graphRevision={$workflowGraph.derived_graph?.graph_fingerprint ?? null}
+  />
 
   {#if workflowErrorMessage}
     <div class="flex items-center justify-between gap-3 border-b border-red-700 bg-red-900/70 px-4 py-2 text-xs text-red-200">

@@ -1,5 +1,5 @@
 //! Real backend preflight through the existing public current-validation API.
-//! These tests do not compose the separate group UI successor.
+//! Optional evidence is consumed by the producer-response/browser replay qualification.
 use async_trait::async_trait;
 use pantograph_inference_interface_contracts::{
     DraftGraphValidationSessionId, DraftGraphValidationStatus, InferenceDiagnosticCode as Code,
@@ -453,6 +453,18 @@ async fn public_preflight_reports_typed_malformed_unsupported_and_mapping_failur
             current
         );
         evidence(name, &encoded);
+        let authored = service
+            .workflow_graph_get_edit_session_graph(WorkflowGraphEditSessionGraphRequest {
+                session_id: edit.session_id.clone(),
+            })
+            .await
+            .unwrap()
+            .graph;
+        assert_eq!(authored.compute_fingerprint(), edit.graph_revision);
+        evidence(
+            &format!("ui-{name}"),
+            &json!({"summary":current,"authored":authored}),
+        );
         service
             .workflow_graph_close_edit_session(WorkflowGraphEditSessionCloseRequest {
                 session_id: edit.session_id,
@@ -500,7 +512,9 @@ async fn starting_background_generation_synchronously_revokes_previous_allowed_s
     assert!(!canceled.submit_gate.allowed);
     evidence(
         "start-and-cancel",
-        &json!({"previous":previous.summary,"pending":current,"canceled":canceled}),
+        &json!({"previous":previous.summary,"pending":current,"canceled":canceled,
+            "events":service.workflow_graph_validation_lifecycle_event_snapshot(&edit.session_id).await.unwrap(),
+            "authored":service.workflow_graph_get_edit_session_graph(WorkflowGraphEditSessionGraphRequest {session_id:edit.session_id.clone()}).await.unwrap().graph}),
     );
 }
 
@@ -537,7 +551,9 @@ async fn superseded_refresh_never_inherits_newer_executable_generation() {
     assert_eq!(current, newer.summary);
     evidence(
         "superseded",
-        &json!({"superseded":superseded.summary,"newer":current}),
+        &json!({"superseded":superseded.summary,"newer":current,
+            "events":service.workflow_graph_validation_lifecycle_event_snapshot(&edit.session_id).await.unwrap(),
+            "authored":service.workflow_graph_get_edit_session_graph(WorkflowGraphEditSessionGraphRequest {session_id:edit.session_id.clone()}).await.unwrap().graph}),
     );
 }
 
@@ -587,13 +603,102 @@ async fn semantic_group_edit_blocks_stale_summary_and_old_snapshot_generation() 
     assert!(service
         .publish_graph_session_executable_validation_snapshot(publish_request(
             &edit,
-            previous.summary.validation_session_id
+            previous.summary.validation_session_id.clone()
         ))
         .await
         .is_err());
     evidence(
         "semantic-edit",
-        &json!({"stale":stale,"current_authored":changed.graph}),
+        &json!({"stale":stale,"current_authored":changed.graph,"previous":previous.summary,"previous_authored":before,
+            "events":service.workflow_graph_validation_lifecycle_event_snapshot(&edit.session_id).await.unwrap()}),
+    );
+    service.workflow_graph_shutdown_validation_tasks().await;
+}
+
+#[tokio::test]
+async fn semantic_group_aba_requires_a_fresh_generation_before_snapshot_publication() {
+    let service = WorkflowService::with_ephemeral_attribution_store().unwrap();
+    let edit = open(&service, authored().await).await;
+    let before = service
+        .workflow_graph_get_edit_session_graph(WorkflowGraphEditSessionGraphRequest {
+            session_id: edit.session_id.clone(),
+        })
+        .await
+        .unwrap()
+        .graph;
+    let previous = refresh(&service, &edit).await;
+    let wrapper = before
+        .nodes
+        .iter()
+        .find(|node| node.node_type == "node-group")
+        .unwrap();
+    let old_data = wrapper.data["group"]["nodes"][0]["data"].clone();
+    let new_data = json!({"separator":"ABA semantic edit"});
+    let changed = service
+        .workflow_graph_update_group_node_data(WorkflowGraphUpdateGroupNodeDataRequest {
+            session_id: edit.session_id.clone(),
+            group_id: wrapper.id.clone(),
+            node_id: "a".into(),
+            expected_node_type: "merge".into(),
+            expected_node_data: old_data,
+            data: new_data,
+        })
+        .await
+        .unwrap();
+    assert_ne!(changed.graph_revision, edit.graph_revision);
+    let changed_summary = service
+        .workflow_graph_refresh_current_validation_summary(
+            WorkflowGraphCurrentValidationRefreshRequest {
+                graph_session_id: edit.session_id.clone(),
+                graph_revision: changed.graph_revision.parse().unwrap(),
+            },
+        )
+        .await
+        .unwrap();
+    // Group data updates are additive patches; Undo restores the exact authored A.
+    let returned = service
+        .workflow_graph_undo(WorkflowGraphEditSessionGraphRequest {
+            session_id: edit.session_id.clone(),
+        })
+        .await
+        .unwrap();
+    assert_eq!(returned.graph_revision, edit.graph_revision);
+    let returned_summary = refresh(&service, &edit).await;
+    assert!(previous.summary.submit_gate.allowed);
+    assert!(changed_summary.summary.submit_gate.allowed);
+    assert!(returned_summary.summary.submit_gate.allowed);
+    assert_ne!(
+        previous.summary.validation_session_id,
+        returned_summary.summary.validation_session_id
+    );
+    assert_ne!(
+        changed_summary.summary.validation_session_id,
+        returned_summary.summary.validation_session_id
+    );
+    assert!(service
+        .publish_graph_session_executable_validation_snapshot(publish_request(
+            &edit,
+            previous.summary.validation_session_id.clone(),
+        ))
+        .await
+        .is_err());
+    let snapshot = service
+        .publish_graph_session_executable_validation_snapshot(publish_request(
+            &edit,
+            returned_summary.summary.validation_session_id.clone(),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(returned.graph.nodes, before.nodes);
+    assert_eq!(returned.graph.edges, before.edges);
+    evidence(
+        "semantic-aba",
+        &json!({
+            "previous":previous.summary,"changed":changed_summary.summary,"returned":returned_summary.summary,
+            "authored":before,"changed_authored":changed.graph,"returned_authored":returned.graph,
+            "old_snapshot_refused":true,"snapshot":snapshot.as_record(),
+            "events":service.workflow_graph_validation_lifecycle_event_snapshot(&edit.session_id).await.unwrap(),
+        }),
     );
     service.workflow_graph_shutdown_validation_tasks().await;
 }
@@ -724,7 +829,7 @@ async fn scheduler_projection_refuses_superseded_and_canceled_completed_generati
         .refresh_current_validation_summary(request.clone())
         .await
         .unwrap();
-    let previous_id = previous.summary.validation_session_id.unwrap();
+    let previous_id = previous.summary.validation_session_id.clone().unwrap();
     let current_id = sessions
         .start_current_validation_task(request)
         .await
@@ -760,6 +865,10 @@ async fn scheduler_projection_refuses_superseded_and_canceled_completed_generati
         )
         .await
         .is_ok());
+    let current = sessions
+        .current_validation_summary(key.clone())
+        .await
+        .unwrap();
     sessions.shutdown_validation_tasks().await;
     let canceled = sessions.current_validation_summary(key).await.unwrap();
     assert!(!canceled.submit_gate.allowed);
@@ -777,7 +886,9 @@ async fn scheduler_projection_refuses_superseded_and_canceled_completed_generati
         .is_err());
     evidence(
         "canceled-scheduler-projections",
-        &json!({"summary":canceled,"projection_refused":true}),
+        &json!({"summary":canceled,"projection_refused":true,"previous":previous.summary,"current":current,
+            "events":sessions.validation_lifecycle_event_snapshot(&edit.session_id).await.unwrap(),
+            "authored":sessions.get_session_graph(&edit.session_id).await.unwrap().graph}),
     );
 }
 
