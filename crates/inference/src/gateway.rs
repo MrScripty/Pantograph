@@ -1519,11 +1519,10 @@ impl InferenceGateway {
             // A cancellation requested during successful worker drain still
             // excludes this observation. It does not change the execution result.
             timing.finish(
-                result.is_ok()
-                    && timing_cancellation.as_ref().is_some_and(|handle| {
-                        handle.snapshot().state
-                            == crate::InferenceExecutionCancellationState::Running
-                    }),
+                result.is_ok(),
+                timing_cancellation
+                    .as_ref()
+                    .map(|handle| handle.snapshot().state),
             );
         }
         result

@@ -60,11 +60,12 @@ pub mod resource_monitor;
 mod service_timing;
 pub use pantograph_timing_contracts::{
     RuntimeServiceTimingAttempt, RuntimeServiceTimingCapture, RuntimeServiceTimingClockSnapshot,
-    RuntimeServiceTimingIdentity, RuntimeServiceTimingLoadDisposition, RuntimeServiceTimingOutcome,
+    RuntimeServiceTimingIdentity, RuntimeServiceTimingInterval, RuntimeServiceTimingLifecycle,
+    RuntimeServiceTimingLoadDisposition, RuntimeServiceTimingOutcome,
     RuntimeServiceTimingOwnerProvenance, RuntimeServiceTimingPhase,
     RuntimeServiceTimingPhaseEvidence, RuntimeServiceTimingProfile,
-    RuntimeServiceTimingQualifiedObservation, RuntimeServiceTimingUnavailableReason,
-    RuntimeServiceTimingValue,
+    RuntimeServiceTimingQualifiedObservation, RuntimeServiceTimingTermination,
+    RuntimeServiceTimingUnavailableReason, RuntimeServiceTimingValue,
 };
 pub use service_timing::{RuntimeServiceTimingOwnerFacts, RuntimeServiceTimingRecorder};
 pub mod resource_observation;

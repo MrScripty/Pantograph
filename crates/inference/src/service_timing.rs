@@ -5,10 +5,12 @@ use std::time::Instant;
 
 use pantograph_timing_contracts::{
     RuntimeServiceTimingAttempt, RuntimeServiceTimingCapture, RuntimeServiceTimingClockSnapshot,
-    RuntimeServiceTimingIdentity, RuntimeServiceTimingLoadDisposition, RuntimeServiceTimingOutcome,
+    RuntimeServiceTimingIdentity, RuntimeServiceTimingInterval, RuntimeServiceTimingLifecycle,
+    RuntimeServiceTimingLoadDisposition, RuntimeServiceTimingOutcome,
     RuntimeServiceTimingOwnerProvenance, RuntimeServiceTimingPhase,
     RuntimeServiceTimingPhaseEvidence, RuntimeServiceTimingProfile,
-    RuntimeServiceTimingUnavailableReason, RuntimeServiceTimingValue,
+    RuntimeServiceTimingTermination, RuntimeServiceTimingUnavailableReason,
+    RuntimeServiceTimingValue,
 };
 use serde::Serialize;
 #[path = "service_timing_bounds.rs"]
@@ -88,6 +90,9 @@ pub(crate) struct SelectedTextServiceTimingAttempt<'a> {
     load_disposition: RuntimeServiceTimingLoadDisposition,
     last_clock_ns: Option<u64>,
     clock_valid: bool,
+    interval_started_at_ns: Option<u64>,
+    worker_drained_at_ns: Option<u64>,
+    termination: RuntimeServiceTimingTermination,
 }
 
 impl<'a> SelectedTextServiceTimingAttempt<'a> {
@@ -157,8 +162,12 @@ impl<'a> SelectedTextServiceTimingAttempt<'a> {
             load_disposition: RuntimeServiceTimingLoadDisposition::Unknown,
             last_clock_ns: None,
             clock_valid: true,
+            interval_started_at_ns: None,
+            worker_drained_at_ns: None,
+            termination: RuntimeServiceTimingTermination::Abandoned,
             record: Some(RuntimeServiceTimingAttempt {
                 capture: None,
+                lifecycle: None,
                 attempt_id: uuid::Uuid::new_v4().to_string(),
                 // Validation may reject the call after this guard is created.
                 // Never retain or normalize arbitrary caller identity payloads.
@@ -248,13 +257,23 @@ impl<'a> SelectedTextServiceTimingAttempt<'a> {
 
     pub(crate) fn begin(&mut self, phase: RuntimeServiceTimingPhase) {
         let started = self.read_clock();
+        if phase == RuntimeServiceTimingPhase::GatewayCustodyWait {
+            self.interval_started_at_ns = Some(started);
+        }
         self.pending = Some((phase, started));
     }
     pub(crate) fn end(&mut self, outcome: RuntimeServiceTimingOutcome) {
         let Some((phase, started)) = self.pending.take() else {
             return;
         };
-        let elapsed = self.read_clock().checked_sub(started);
+        let ended = self.read_clock();
+        let elapsed = ended.checked_sub(started);
+        if phase == RuntimeServiceTimingPhase::WorkerCleanup
+            && outcome == RuntimeServiceTimingOutcome::Completed
+            && self.clock_valid
+        {
+            self.worker_drained_at_ns = Some(ended);
+        }
         let value = match elapsed.filter(|_| self.clock_valid) {
             Some(elapsed_ns) => RuntimeServiceTimingValue::Observed {
                 elapsed_ns,
@@ -273,8 +292,21 @@ impl<'a> SelectedTextServiceTimingAttempt<'a> {
             .unwrap()
             .value = value;
     }
-    pub(crate) fn finish(&mut self, succeeded: bool) {
-        let outcome = if succeeded {
+    pub(crate) fn finish(
+        &mut self,
+        succeeded: bool,
+        cancellation: Option<crate::InferenceExecutionCancellationState>,
+    ) {
+        use crate::InferenceExecutionCancellationState as State;
+        self.termination = match cancellation {
+            Some(State::CancellationRequested) => {
+                RuntimeServiceTimingTermination::CancellationRequested
+            }
+            Some(State::ShutdownRequested) => RuntimeServiceTimingTermination::ShutdownRequested,
+            Some(State::Running) if succeeded => RuntimeServiceTimingTermination::Completed,
+            _ => RuntimeServiceTimingTermination::Failed,
+        };
+        let outcome = if self.termination == RuntimeServiceTimingTermination::Completed {
             RuntimeServiceTimingOutcome::Completed
         } else {
             RuntimeServiceTimingOutcome::Failed
@@ -290,6 +322,20 @@ impl Drop for SelectedTextServiceTimingAttempt<'_> {
         let observed_at_ns = self.last_clock_ns.map(|_| self.read_clock());
         if let Some(record) = self.record.take() {
             let mut record = record;
+            record.lifecycle = Some(RuntimeServiceTimingLifecycle {
+                termination: self.termination,
+                interval: if self.clock_valid {
+                    self.interval_started_at_ns.zip(self.last_clock_ns).map(
+                        |(started_at_ns, observed_through_ns)| RuntimeServiceTimingInterval {
+                            started_at_ns,
+                            observed_through_ns,
+                            worker_drained_at_ns: self.worker_drained_at_ns,
+                        },
+                    )
+                } else {
+                    None
+                },
+            });
             if let Some(observed_at_ns) = observed_at_ns.filter(|_| self.clock_valid) {
                 record.capture = Some(RuntimeServiceTimingCapture {
                     clock_epoch: self.instrumentation.clock_epoch.clone(),

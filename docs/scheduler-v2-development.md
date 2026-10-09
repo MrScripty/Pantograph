@@ -47,6 +47,35 @@ units; the hard population guard precedes row inspection. An incomplete estimate
 requires existing safe fallback. No default selector, timing source, store,
 native phase observer, lease or runtime/session behavior uses this helper yet.
 
+The existing opt-in selected-text recorder now retains additive lifecycle
+metadata: completed/failed, cancellation/shutdown requested, or abandoned. A
+monotonic interval starts at gateway custody entry after validation and ends at
+the successful worker-cleanup acknowledgement while the backend is owned. It
+includes inter-phase gaps; classification/publication/Drop do not move its drain
+endpoint. Failed or dropped attempts retain partial intervals and phase evidence
+without asserting physical release or successful service. Legacy phase records
+remain readable but cannot supply a whole interval.
+
+`estimate_selected_text_empirical_service_duration` is a pure opt-in bridge to
+`estimate_scheduler_empirical_service_total_duration`, with a distinct whole
+custody-through-worker-drain convention. It rounds each measured total to us once
+and validates both capture and actual drain freshness in the original clock
+domain. Its core sample timestamp is the actual drain event, so later publication
+cannot refresh old service evidence. The raw interval getter retains capture-age
+semantics for diagnostics. All supplied attempts must
+qualify; failed/canceled/abandoned rows refuse the estimate rather than being
+filtered out. Returned termination counts describe only the supplied window.
+The existing best-effort recorder can drop any outcome under saturation; neither
+these counts nor success quantiles establish unbiased coverage or failure rates.
+Its bounded prequalification is separate from the quantile kernel work counters.
+
+No selector or new telemetry store consumes this bridge. Built-in text backends
+currently lack qualified owner fingerprints, and gateway runtime identities
+change after each selected load. Genuine production history therefore remains
+unqualified. The bridge refuses unknown/injected evidence and cannot substitute
+labels for owner facts, merge runtime generations, qualify running elapsed time,
+or reinterpret these observations as six separate native service phases.
+
 Embedded completion timing is a trusted in-process opt-in through
 `EmbeddedCompletionTimingOptIn` and hosted startup's `with_completion_timing`.
 It does not accept timing authority from workflow/session JSON. The separate

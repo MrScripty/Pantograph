@@ -88,13 +88,15 @@ pub use completion_ranking::{
 };
 
 pub use empirical_timing::{
-    estimate_scheduler_empirical_service_duration, SchedulerEmpiricalQuantile,
+    estimate_scheduler_empirical_service_duration,
+    estimate_scheduler_empirical_service_total_duration, SchedulerEmpiricalQuantile,
     SchedulerEmpiricalServiceBudget, SchedulerEmpiricalServiceCondition,
     SchedulerEmpiricalServiceEstimate, SchedulerEmpiricalServiceIncomplete,
     SchedulerEmpiricalServiceObservation, SchedulerEmpiricalServiceOutcome,
-    SchedulerEmpiricalServiceResult, SchedulerEmpiricalServiceWork,
-    SCHEDULER_EMPIRICAL_MAX_OBSERVATIONS, SCHEDULER_EMPIRICAL_MAX_WORK,
-    SCHEDULER_EMPIRICAL_SERVICE_CONVENTION,
+    SchedulerEmpiricalServiceResult, SchedulerEmpiricalServiceTotalObservation,
+    SchedulerEmpiricalServiceWork, SCHEDULER_EMPIRICAL_MAX_OBSERVATIONS,
+    SCHEDULER_EMPIRICAL_MAX_WORK, SCHEDULER_EMPIRICAL_SERVICE_CONVENTION,
+    SCHEDULER_EMPIRICAL_SERVICE_TOTAL_CONVENTION,
 };
 
 pub use two_completion::{

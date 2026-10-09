@@ -34,6 +34,51 @@ pub struct SchedulerEmpiricalServiceObservation<'a> {
     pub costs: SchedulerCohortCosts,
 }
 
+/// Whole observed selected-text custody-through-worker-drain total. This distinct
+/// scope includes inter-phase gaps and is not the six-stage serialized convention.
+pub const SCHEDULER_EMPIRICAL_SERVICE_TOTAL_CONVENTION: &str =
+    "selected-text-custody-through-worker-drain-total-us.v1";
+
+#[derive(Debug, Clone, Copy)]
+pub struct SchedulerEmpiricalServiceTotalObservation<'a> {
+    pub attempt_id: &'a str,
+    pub context: SchedulerCompletionContext<'a>,
+    pub source: SchedulerCompletionEvidenceSource,
+    pub observed_at_ms: u64,
+    pub outcome: SchedulerEmpiricalServiceOutcome,
+    pub duration_us: Option<u64>,
+}
+
+trait Observation {
+    fn sample(&self) -> SchedulerEmpiricalServiceObservation<'_>;
+}
+impl Observation for SchedulerEmpiricalServiceObservation<'_> {
+    fn sample(&self) -> SchedulerEmpiricalServiceObservation<'_> {
+        *self
+    }
+}
+impl Observation for SchedulerEmpiricalServiceTotalObservation<'_> {
+    fn sample(&self) -> SchedulerEmpiricalServiceObservation<'_> {
+        // Private arithmetic encoding of ONE known total under its own convention.
+        // These additive identities do not assert any observed phase was zero.
+        SchedulerEmpiricalServiceObservation {
+            attempt_id: self.attempt_id,
+            context: self.context,
+            source: self.source,
+            observed_at_ms: self.observed_at_ms,
+            outcome: self.outcome,
+            costs: SchedulerCohortCosts {
+                execution_us: self.duration_us,
+                setup_us: Some(0),
+                transfer_us: Some(0),
+                cleanup_us: Some(0),
+                retention_us: Some(0),
+                reload_us: Some(0),
+            },
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SchedulerEmpiricalServiceCondition {
     NotStarted,
@@ -156,6 +201,49 @@ pub fn estimate_scheduler_empirical_service_duration<'a>(
     policy: SchedulerCompletionRankingPolicy,
     budget: SchedulerEmpiricalServiceBudget,
 ) -> SchedulerEmpiricalServiceResult<'a> {
+    estimate_duration(
+        current_context,
+        observations,
+        quantile,
+        condition,
+        policy,
+        budget,
+        SCHEDULER_EMPIRICAL_SERVICE_CONVENTION,
+    )
+}
+
+/// Bounded quantile/residual of explicit whole service totals. Same admission,
+/// identity, support, work and success-conditioned semantics as the six-stage API.
+/// The total convention is distinct; elapsed must share its custody origin.
+/// Missing totals refuse; no missing native phase is invented or zero-filled.
+pub fn estimate_scheduler_empirical_service_total_duration<'a>(
+    current_context: SchedulerCompletionContext<'a>,
+    observations: &[SchedulerEmpiricalServiceTotalObservation<'_>],
+    quantile: SchedulerEmpiricalQuantile,
+    condition: SchedulerEmpiricalServiceCondition,
+    policy: SchedulerCompletionRankingPolicy,
+    budget: SchedulerEmpiricalServiceBudget,
+) -> SchedulerEmpiricalServiceResult<'a> {
+    estimate_duration(
+        current_context,
+        observations,
+        quantile,
+        condition,
+        policy,
+        budget,
+        SCHEDULER_EMPIRICAL_SERVICE_TOTAL_CONVENTION,
+    )
+}
+
+fn estimate_duration<'a, O: Observation>(
+    current_context: SchedulerCompletionContext<'a>,
+    observations: &[O],
+    quantile: SchedulerEmpiricalQuantile,
+    condition: SchedulerEmpiricalServiceCondition,
+    policy: SchedulerCompletionRankingPolicy,
+    budget: SchedulerEmpiricalServiceBudget,
+    convention: &str,
+) -> SchedulerEmpiricalServiceResult<'a> {
     use SchedulerEmpiricalServiceIncomplete as R;
     let mut meter = Meter {
         limit: budget.max_work_units,
@@ -180,16 +268,21 @@ pub fn estimate_scheduler_empirical_service_duration<'a>(
         if !current_context.valid() {
             return Err(R::InvalidContext);
         }
-        if current_context.timing_convention != SCHEDULER_EMPIRICAL_SERVICE_CONVENTION {
+        if current_context.timing_convention != convention {
             return Err(R::UnsupportedConvention);
         }
-        let source = observations.first().ok_or(R::InsufficientSamples)?.source;
+        let source = observations
+            .first()
+            .ok_or(R::InsufficientSamples)?
+            .sample()
+            .source;
         if source == SchedulerCompletionEvidenceSource::Synthetic && !policy.allow_synthetic {
             return Err(R::SyntheticEvidenceDisabled);
         }
         let mut durations = Vec::with_capacity(observations.len());
         for (index, observation) in observations.iter().enumerate() {
             meter.charge()?;
+            let observation = observation.sample();
             if !bounded_identity(observation.attempt_id) {
                 return Err(R::InvalidAttemptIdentity);
             }
@@ -212,7 +305,7 @@ pub fn estimate_scheduler_empirical_service_duration<'a>(
             for prior in &observations[..index] {
                 meter.charge()?;
                 meter.work.identity_comparisons += 1;
-                if prior.attempt_id == observation.attempt_id {
+                if prior.sample().attempt_id == observation.attempt_id {
                     return Err(R::DuplicateAttempt);
                 }
             }

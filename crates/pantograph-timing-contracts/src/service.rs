@@ -106,6 +106,36 @@ pub enum RuntimeServiceTimingOutcome {
     Abandoned,
 }
 
+/// Observed caller termination, not proof of backend stop or capacity release.
+/// Cancellation/shutdown requests remain distinct from failure and abandonment.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RuntimeServiceTimingTermination {
+    Completed,
+    Failed,
+    CancellationRequested,
+    ShutdownRequested,
+    Abandoned,
+}
+
+/// Same monotonic clock domain as capture. Intrinsic service ends at the actual
+/// successful worker-drain ACK, not classification, publication or guard Drop.
+/// A partial interval is retained without asserting acknowledged drain.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RuntimeServiceTimingInterval {
+    pub started_at_ns: u64,
+    pub observed_through_ns: u64,
+    pub worker_drained_at_ns: Option<u64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RuntimeServiceTimingLifecycle {
+    pub termination: RuntimeServiceTimingTermination,
+    pub interval: Option<RuntimeServiceTimingInterval>,
+}
+
 /// Configured estimates are explicitly authored values, never observed samples.
 /// Unknown is distinct from a measured or configured zero. Failed and abandoned
 /// elapsed observations describe partial work, not successful service latency.
@@ -192,9 +222,44 @@ pub struct RuntimeServiceTimingAttempt {
     /// Missing legacy metadata cannot qualify as fresh production evidence.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub capture: Option<RuntimeServiceTimingCapture>,
+    /// Missing legacy metadata cannot supply a whole through-drain interval.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lifecycle: Option<RuntimeServiceTimingLifecycle>,
 }
 
 impl RuntimeServiceTimingAttempt {
+    /// Whole custody-through-worker-drain interval, including inter-phase gaps.
+    /// Freshness here uses capture age, preserving the phase accessor contract.
+    /// Predictors must separately qualify the actual drain age.
+    /// Successful exact built-in evidence only; preserves the raw attempt and
+    /// never turns partial/canceled service or four phase subtotals into a total.
+    pub fn fresh_production_service_interval_ns(
+        &self,
+        profile: &RuntimeServiceTimingProfile,
+        clock: &RuntimeServiceTimingClockSnapshot,
+        max_age_ns: u64,
+    ) -> Option<u64> {
+        let phases = self.fresh_production_observation(profile, clock, max_age_ns)?;
+        let lifecycle = self.lifecycle.as_ref()?;
+        if lifecycle.termination != RuntimeServiceTimingTermination::Completed {
+            return None;
+        }
+        let interval = lifecycle.interval.as_ref()?;
+        let drain = interval.worker_drained_at_ns?;
+        let capture = self.capture.as_ref()?;
+        if drain > interval.observed_through_ns
+            || interval.observed_through_ns > capture.observed_at_ns
+        {
+            return None;
+        }
+        let duration = drain.checked_sub(interval.started_at_ns)?;
+        let phase_sum = phases
+            .custody_wait_ns
+            .checked_add(phases.selected_model_load_ns)?
+            .checked_add(phases.text_execution_ns)?
+            .checked_add(phases.worker_cleanup_ns)?;
+        (phase_sum <= duration).then_some(duration)
+    }
     /// Exact, fresh, fully successful built-in evidence only. Refusal preserves
     /// the caller's fallback. This does not qualify scheduler transfer, host
     /// preparation, reservation release or reuse across runtime generations.
@@ -297,6 +362,7 @@ mod tests {
     fn service_matching_excludes_other_identity_estimates_partial_and_duplicate_phases() {
         let mut attempt = RuntimeServiceTimingAttempt {
             capture: None,
+            lifecycle: None,
             attempt_id: "attempt".into(),
             execution_request_id_digest: Some("c".repeat(64)),
             identity: RuntimeServiceTimingIdentity::Exact { profile: profile() },
@@ -382,6 +448,7 @@ mod tests {
 
     fn complete_observation() -> RuntimeServiceTimingAttempt {
         RuntimeServiceTimingAttempt {
+            lifecycle: None,
             attempt_id: "synthetic-test-attempt".into(),
             execution_request_id_digest: None,
             identity: RuntimeServiceTimingIdentity::Exact { profile: profile() },
@@ -545,5 +612,104 @@ mod tests {
                 .capture
                 .is_none()
         );
+    }
+    #[test]
+    fn whole_service_interval_requires_ack_and_includes_unmeasured_gaps() {
+        let mut attempt = complete_observation();
+        assert_eq!(
+            attempt.fresh_production_service_interval_ns(&profile(), &clock(110), 10),
+            None
+        );
+        attempt.lifecycle = Some(RuntimeServiceTimingLifecycle {
+            termination: RuntimeServiceTimingTermination::Completed,
+            interval: Some(RuntimeServiceTimingInterval {
+                started_at_ns: 10,
+                worker_drained_at_ns: Some(60),
+                observed_through_ns: 90,
+            }),
+        });
+        assert_eq!(
+            attempt.fresh_production_service_interval_ns(&profile(), &clock(110), 10),
+            Some(50)
+        );
+        // Publication/Drop may be later; neither substitutes for intrinsic drain.
+        attempt
+            .lifecycle
+            .as_mut()
+            .unwrap()
+            .interval
+            .as_mut()
+            .unwrap()
+            .observed_through_ns = 100;
+        assert_eq!(
+            attempt.fresh_production_service_interval_ns(&profile(), &clock(110), 10),
+            Some(50)
+        );
+        for interval in [
+            RuntimeServiceTimingInterval {
+                started_at_ns: 10,
+                worker_drained_at_ns: None,
+                observed_through_ns: 90,
+            },
+            RuntimeServiceTimingInterval {
+                started_at_ns: 61,
+                worker_drained_at_ns: Some(60),
+                observed_through_ns: 90,
+            },
+            RuntimeServiceTimingInterval {
+                started_at_ns: 10,
+                worker_drained_at_ns: Some(60),
+                observed_through_ns: 59,
+            },
+            RuntimeServiceTimingInterval {
+                started_at_ns: 10,
+                worker_drained_at_ns: Some(60),
+                observed_through_ns: 101,
+            },
+            RuntimeServiceTimingInterval {
+                started_at_ns: 10,
+                worker_drained_at_ns: Some(11),
+                observed_through_ns: 90,
+            },
+        ] {
+            attempt.lifecycle.as_mut().unwrap().interval = Some(interval);
+            assert_eq!(
+                attempt.fresh_production_service_interval_ns(&profile(), &clock(110), 10),
+                None
+            );
+        }
+    }
+    #[test]
+    fn termination_and_legacy_phase_evidence_remain_distinct() {
+        let mut attempt = complete_observation();
+        for termination in [
+            RuntimeServiceTimingTermination::Failed,
+            RuntimeServiceTimingTermination::CancellationRequested,
+            RuntimeServiceTimingTermination::ShutdownRequested,
+            RuntimeServiceTimingTermination::Abandoned,
+        ] {
+            attempt.lifecycle = Some(RuntimeServiceTimingLifecycle {
+                termination,
+                interval: Some(RuntimeServiceTimingInterval {
+                    started_at_ns: 0,
+                    worker_drained_at_ns: Some(100),
+                    observed_through_ns: 100,
+                }),
+            });
+            assert!(attempt
+                .fresh_production_service_interval_ns(&profile(), &clock(100), 10)
+                .is_none());
+        }
+        // A missing additive field retains legacy phase access, never whole totals.
+        attempt.lifecycle = None;
+        let wire = serde_json::to_value(&attempt).unwrap();
+        assert!(wire.get("lifecycle").is_none());
+        let legacy: RuntimeServiceTimingAttempt = serde_json::from_value(wire).unwrap();
+        assert!(legacy
+            .fresh_production_observation(&profile(), &clock(100), 10)
+            .is_some());
+        assert!(legacy
+            .fresh_production_service_interval_ns(&profile(), &clock(100), 10)
+            .is_none());
     }
 }

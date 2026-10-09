@@ -71,6 +71,10 @@ struct Backend {
     load_reuse: Option<bool>,
     fail_cleanup: bool,
     cancel_at_cleanup: Option<Arc<AtomicBool>>,
+    owner_clock_gap_ns: u64,
+    fail_compute: bool,
+    cleanup_started: Option<Arc<tokio::sync::Notify>>,
+    cleanup_continue: Option<Arc<tokio::sync::Notify>>,
     load_started: Option<Arc<tokio::sync::Notify>>,
     load_request_ids: Arc<Mutex<Vec<Option<String>>>>,
 }
@@ -88,6 +92,10 @@ impl Backend {
             load_reuse: Some(false),
             fail_cleanup: false,
             cancel_at_cleanup: None,
+            owner_clock_gap_ns: 0,
+            fail_compute: false,
+            cleanup_started: None,
+            cleanup_continue: None,
             load_started: None,
             load_request_ids: Arc::new(Mutex::new(Vec::new())),
         }
@@ -134,6 +142,7 @@ impl InferenceBackend for Backend {
         self.inner.stop().await
     }
     fn runtime_service_timing_owner_facts(&self) -> Option<crate::RuntimeServiceTimingOwnerFacts> {
+        self.clock.advance(self.owner_clock_gap_ns);
         if self.rewind_owner_clock {
             self.clock.value.store(0, Ordering::SeqCst);
         }
@@ -172,6 +181,12 @@ impl InferenceBackend for Backend {
         Ok(outcome)
     }
     async fn finish_selected_text(&self, cancel: bool) -> Result<(), BackendError> {
+        if let Some(started) = &self.cleanup_started {
+            started.notify_one();
+        }
+        if let Some(continue_cleanup) = &self.cleanup_continue {
+            continue_cleanup.notified().await;
+        }
         self.clock.advance(7);
         if let Some(cancelled) = &self.cancel_at_cleanup {
             cancelled.store(true, Ordering::SeqCst);
@@ -187,6 +202,9 @@ impl InferenceBackend for Backend {
     ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, BackendError>> + Send>>, BackendError>
     {
         self.clock.advance(23);
+        if self.fail_compute {
+            return Err(BackendError::Inference("controlled compute failure".into()));
+        }
         self.inner.chat_completion_stream(request).await
     }
 }
@@ -774,3 +792,6 @@ async fn service_timing_cancellation_during_successful_cleanup_excludes_sample()
         }
     ));
 }
+
+#[path = "service_timing_lifecycle_oracle.rs"]
+mod lifecycle_oracle;
