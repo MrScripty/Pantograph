@@ -131,6 +131,29 @@ an incorrect registry environment variable and failed on the read-only home
 registry path; rerunning with `PUMAS_REGISTRY_DB_PATH` in a fresh workspace test
 directory passed without changing filesystem permissions.
 
+## Local CI pin and ONNX feature qualification
+
+Commit `424783bf6fc722cb1c9dc5fbc0658ee957883eae` aligns the CI checkout with
+Cargo's exact public Pumas pin `aa1d79ae2d53f0acb088bc85223ecc2ff46af12b`.
+The unchanged guard completed with exit status 0 on 2026-10-11 after permitted
+Cargo registry fetching:
+
+```sh
+CARGO_NET_OFFLINE=false ORT_SKIP_DOWNLOAD=1 \
+python3 scripts/check-onnx-no-build-download.py
+```
+
+All nine combinations passed: Linux, Windows and macOS target triples, each with
+workspace defaults, workspace all-features, and the reduced embedded-runtime
+`backend-llamacpp,backend-pytorch` profile. The guard verifies manifest/lock/CI
+pin consistency, rejects forbidden ONNX download features, and requires dynamic
+loading/disabled linking. See the [complete local log](../../docs/evidence/onnx-feature-guard-424783bf.txt).
+No manifest, lockfile, dependency pin, or workflow trigger was changed by this
+verification. This checks Cargo feature graphs; it does not qualify ONNX model
+inference, cross-platform builds, or hosted CI. Hosted workflows remain
+untriggered while PR creation awaits approval, and browser qualification remains
+paused pending its separate approval.
+
 ## Browser environment inspection
 
 No browser, Playwright, or computer automation tool is exposed in this selected
