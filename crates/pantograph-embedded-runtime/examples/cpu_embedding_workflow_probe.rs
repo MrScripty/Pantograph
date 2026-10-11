@@ -33,6 +33,8 @@ type ProbeResult<T> = Result<T, Box<dyn std::error::Error>>;
 const MODEL_ID: &str = "embedding/qualification/synthetic-bert-8";
 const WORKFLOW_ID: &str = "cpu-embedding-probe";
 
+#[path = "cpu_embedding_workflow_probe/browser_host.rs"]
+mod browser_host;
 #[path = "cpu_embedding_workflow_probe/target_observation.rs"]
 mod target_observation;
 
@@ -82,7 +84,9 @@ fn seed_fixture(
     Ok(model_dir)
 }
 
-async fn create_runtime(root: &Path) -> ProbeResult<EmbeddedRuntime> {
+async fn create_runtime(
+    root: &Path,
+) -> ProbeResult<(EmbeddedRuntime, Arc<pumas_library::PumasApi>)> {
     seed_fixture(root, MODEL_ID, Some(&["model.safetensors"]))?;
     for directory in [
         "launcher-data/metadata",
@@ -123,7 +127,7 @@ async fn create_runtime(root: &Path) -> ProbeResult<EmbeddedRuntime> {
             runtime_registry_controller: gateway.clone(),
             gateway: gateway.clone(),
             pumas_selector_source: Some(EmbeddedHostedStartupPumasSelectorSource::Provided(
-                Arc::new(PumasSelectorAccess::Owner(api)),
+                Arc::new(PumasSelectorAccess::Owner(api.clone())),
             )),
             project_root: root.to_path_buf(),
             kv_cache_dir: root.join("kv-cache"),
@@ -141,17 +145,20 @@ async fn create_runtime(root: &Path) -> ProbeResult<EmbeddedRuntime> {
         ),
     )
     .await?;
-    Ok(EmbeddedRuntime::from_hosted_composition(
-        EmbeddedRuntimeConfig::new(root.join("app-data"), root.to_path_buf()),
-        gateway,
-        composition.shared_extensions,
-        composition.workflow_service,
-        None,
-        Some(registry),
-        None,
-    )
-    .with_dependency_readiness_snapshot_producer(
-        composition.dependency_readiness_snapshot_producer,
+    Ok((
+        EmbeddedRuntime::from_hosted_composition(
+            EmbeddedRuntimeConfig::new(root.join("app-data"), root.to_path_buf()),
+            gateway,
+            composition.shared_extensions,
+            composition.workflow_service,
+            None,
+            Some(registry),
+            None,
+        )
+        .with_dependency_readiness_snapshot_producer(
+            composition.dependency_readiness_snapshot_producer,
+        ),
+        api,
     ))
 }
 
@@ -159,6 +166,7 @@ async fn author_workflow(
     runtime: &EmbeddedRuntime,
     root: &Path,
     stage: &mut &str,
+    publish: bool,
 ) -> ProbeResult<String> {
     let service = runtime.workflow_service();
     *stage = "graph_authoring";
@@ -217,14 +225,12 @@ async fn author_workflow(
             session_id: preview.session_id,
         })
         .await?;
-    let workflow_dir = root.join(".pantograph/workflows");
-    std::fs::create_dir_all(&workflow_dir)?;
-    save(
-        &workflow_dir,
-        &format!("{WORKFLOW_ID}.json"),
-        &json!({
-            "version":"1.0", "metadata":{"name":"CPU embedding probe"}, "graph":graph,
-        }),
+    service.workflow_graph_save(
+        &pantograph_workflow_service::FileSystemWorkflowGraphStore::new(root),
+        pantograph_workflow_service::WorkflowGraphSaveRequest {
+            name: WORKFLOW_ID.into(),
+            graph: graph.clone(),
+        },
     )?;
     let session = service
         .workflow_graph_create_edit_session(WorkflowGraphEditSessionCreateRequest {
@@ -276,6 +282,9 @@ async fn author_workflow(
             "backend dependency Resolve is blocking; inspect dependency-resolve.json".into(),
         );
     }
+    if !publish {
+        return Ok(session.session_id);
+    }
     *stage = "publish_validation";
     let published = service
         .publish_graph_session_executable_validation_snapshot(
@@ -295,7 +304,7 @@ async fn author_workflow(
 }
 
 async fn execute(runtime: &EmbeddedRuntime, root: &Path, stage: &mut &str) -> ProbeResult<Value> {
-    let graph_session_id = author_workflow(runtime, root, stage).await?;
+    let graph_session_id = author_workflow(runtime, root, stage, true).await?;
     *stage = "session_create";
     let session = runtime
         .create_workflow_execution_session(WorkflowExecutionSessionCreateRequest {
@@ -405,9 +414,13 @@ async fn execute(runtime: &EmbeddedRuntime, root: &Path, stage: &mut &str) -> Pr
 #[tokio::main]
 async fn main() -> ProbeResult<()> {
     let args: Vec<_> = std::env::args_os().skip(1).collect();
-    if args.len() > 2 || args.get(1).is_some_and(|mode| mode != "--inspect-targets") {
+    if args.len() > 2
+        || args
+            .get(1)
+            .is_some_and(|mode| mode != "--inspect-targets" && mode != "--serve-stdio")
+    {
         return Err(
-            "usage: cpu_embedding_workflow_probe <new absolute directory> [--inspect-targets]"
+            "usage: cpu_embedding_workflow_probe <new absolute directory> [--inspect-targets|--serve-stdio]"
                 .into(),
         );
     }
@@ -421,10 +434,13 @@ async fn main() -> ProbeResult<()> {
         return Err("set PUMAS_REGISTRY_DB_PATH to <new absolute probe directory>/registry.db; existing catalogs are never opened".into());
     }
     std::fs::create_dir(&root)?; // Refuse existing directories, including previous evidence.
-    if args.len() == 2 {
+    if args.get(1).is_some_and(|mode| mode == "--inspect-targets") {
         return target_observation::inspect(&root).await;
     }
-    let runtime = create_runtime(&root).await?;
+    let (runtime, library) = create_runtime(&root).await?;
+    if args.get(1).is_some_and(|mode| mode == "--serve-stdio") {
+        return browser_host::serve(runtime, library, &root).await;
+    }
     let mut stage = "initialization";
     let result = tokio::time::timeout(
         Duration::from_secs(60),

@@ -1,10 +1,14 @@
 # CPU inference workflow qualification
 
-The native scheduler-to-model path **passes** with public Pumas correction
+The native scheduler-to-model path and live HTTP command lifecycle **pass** with public Pumas correction
 `aa1d79ae2d53f0acb088bc85223ecc2ff46af12b`. The editor-to-scheduler-to-model demo
 still needs browser qualification. The native probe uses existing public APIs
 without changing Pumas, opening an existing catalog, downloading a model, or
 substituting successful validation.
+
+The [CPU embedding browser-host guide](../examples/cpu-embedding-demo/README.md)
+contains the integrated PR71 transport, supported editor command bindings,
+reproduction commands, HTTP evidence, and exact browser/projection blockers.
 
 ## Model and acquisition
 
@@ -116,10 +120,11 @@ cargo test --locked -p inference --features backend-candle \
    exposing the editor's command/event API. Plain Vite/Chromium is not an
    integrated native host. A native desktop host needs GTK3/WebKitGTK 4.1 build
    prerequisites, WebKitWebDriver, tauri-driver and a display for GUI automation.
-3. Qualify the workflow on the separately owned PR71 browser transport and real
-   workbench at verified revision `7fc3584cca8bef647b60ebf303c4b5d6b37d98bd`.
-   Its baseline host supports graph inspection; the inference host must connect
-   editor sessions and Submit to the actual embedded runtime. Capture
+3. PR71's verified revision `7fc3584cca8bef647b60ebf303c4b5d6b37d98bd` is now merged
+   into this feature branch. The new fixture host connects editor commands and
+   Submit to the actual embedded runtime and passes live HTTP tests. Qualify the
+   actual browser interaction on a host with a usable Chromium sandbox, resolve
+   the runtime node-status owner-event gap described in the host guide, and capture
    one run identity from editor Submit through scheduler dispatch, actual model
    output and visible I/O Inspector content, plus the screenshot. Preserve the
    model revision, backend/device selection, timing and cleanup evidence.

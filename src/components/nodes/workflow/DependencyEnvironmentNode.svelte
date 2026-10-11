@@ -52,6 +52,7 @@
   } from '../../dependencyEnvironmentActionContext.ts';
   import { edges, nodes, updateNodeData } from '../../../stores/workflowStore';
   import { listen } from '@tauri-apps/api/event';
+  import { getWorkflowBrowserHost } from '../../../services/workflow/workflowBrowserTransport';
 
   let { id, data, selected = false }: DependencyEnvironmentNodeProps = $props();
 
@@ -290,6 +291,9 @@
   }
 
   onMount(() => {
+    // HTTP hosts return action results directly; native activity streaming is
+    // available only in the desktop transport. Validation is polled separately.
+    if (getWorkflowBrowserHost()) return;
     let unlisten: (() => void) | null = null;
 
     setupDependencyEnvironmentActivityListener({

@@ -4,7 +4,7 @@
  * This is the Pantograph-specific backend implementation. Each method maps
  * directly to a Tauri command defined in src-tauri/src/commands/.
  */
-import { invoke } from '@tauri-apps/api/core';
+import { invokeWorkflowCommand as invoke } from '../services/workflow/workflowServiceErrors';
 import type {
   WorkflowBackend,
   UndoRedoState,
