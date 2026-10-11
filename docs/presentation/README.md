@@ -18,7 +18,7 @@ six reading pages (five manuscripts plus the research index), and copies real
 screenshots, recording JSON, original Markdown and research figures. Generated
 output remains under ignored `dist/`; original research editions are unchanged.
 
-The landing page supports keyboard-accessible perspective tabs, success/failure
+The landing page supports keyboard-accessible perspective tabs, success/expected-rejection
 recording selection, inspection of original diagnostic event payloads, raw JSON
 downloads, and manuscript contents navigation. All assets are local and work
 under a project subpath such as `/Pantograph/`.
@@ -76,7 +76,7 @@ The gallery images and matching execution JSON are copied byte-for-byte from
 approved PR #71 revision `7fc3584cca8bef647b60ebf303c4b5d6b37d98bd`. The
 workbench at that revision queries a persistent Rust service over loopback HTTP
 and reads retained scalar output artifacts. The Model Library capture shows a
-real isolated empty Pumas catalog. Graph editor submission remains outside the
+real isolated empty Pumas catalog. At that capture revision Graph editor submission was outside the
 demo host, and these captures establish neither native Tauri nor model inference.
 The separate Node Lab authoring surface remains unavailable.
 
@@ -88,3 +88,23 @@ The capture refresh passed 1,220 combined portfolio/presentation checks. All 14
 copied image/recording instances match the approved source bytes. The existing
 `gh-pages` deployment workflow completed successfully at the commit above; the
 public host remains blocked by this environment’s outbound proxy.
+
+## Source-only presentation clarification
+
+This revision has not been published. Appearance review and clear approval are
+required before another Pages update. The three perspectives are labeled Graph
+screenshot, Recorded run, and Architecture diagram. The recording controls inspect
+saved JSON; the architecture is authored HTML, not inference evidence. The normal
+gallery begins with the genuine retained-output I/O Inspector. The earlier Graph
+capture and intentional rejection remain visible and explicitly identified.
+
+`IMAGE_AUDIT.md` records the exact visible messages and deployed/source byte
+comparison. Content-derived asset query strings are cache hygiene; a public CDN
+or browser-cache mismatch cannot be confirmed in this environment. All eight
+workbench views have concise coverage labels. New app source `679622e9` adds
+saved-workflow submission and a Network metrics adapter, but no new captures have
+been delivered; Settings and Node Editor authoring remain unqualified.
+
+The revised source passed 1,262 combined static and browser checks, and all 22
+GitHub destinations on the two landing pages returned HTTP 200. The original
+manuscript hashes, bibliography anchors, mobile wrapping and SVG icons are intact.

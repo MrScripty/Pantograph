@@ -44,13 +44,29 @@ that is cache hygiene, not a claim that caching caused the reported messages.
 ## All eight workbench views
 
 Graph, Diagnostics, I/O Inspector and Library have genuine reviewed captures.
-Scheduler is a functional read view awaiting a matching capture. Network lacks
-the relevant host command; Settings needs real service support. Node Editor
-is a separate, unqualified authoring surface. Runtime fixes and new captures require separate qualification; presentation
-changes must not pretend to implement them.
+Scheduler is a functional read view awaiting a matching capture. At the audited
+`7fc3584` capture revision Network lacked the relevant host command. The later
+app source [`679622e9`](https://github.com/MrScripty/Pantograph/commit/679622e9d8b17e87a278b81b60194d31ee4f4981) adds a real Network metrics adapter, fixes Graph
+transport/native-channel defects, and supports editing, saving, reloading,
+validating and submitting a saved TextInput → TextOutput workflow with retained
+Unicode output. That is a different graph from the JSON-extraction recording on
+this page. No replacement screenshot from that revision has been delivered.
+
+Settings needs real service support. Node Editor / Node Lab remains a separate,
+unqualified authoring surface. The static source keeps the original captures and
+identifies the Graph image as earlier evidence; it does not visually claim to
+show the newer implementation. New capture permission is pending with the app
+worker. These presentation edits neither implement nor requalify app behavior.
 
 The portfolio's Rheon image separately retains: `Accepted times differ; these
 are not equal physical horizons.` Its capture is an exploratory fixed-box solver
 comparison, not qualified full 3D fluid physics. Kenoma's current schematic poser
 has no application-error banner; visible joint creasing is preserved. Eidetic's
 native authored-demo screenshot has no model-inference qualification.
+
+## Research figures
+
+The six reading pages reference 17 original research figures. All 17 source
+figure hashes match the currently deployed branch. They are unchanged manuscript
+illustrations, not workbench screenshots or app-runtime qualification. The build
+also verifies the original manuscript source hashes.
