@@ -36,9 +36,9 @@ async function navigate(url) {
   await call('Page.navigate', { url });
   await wait(2500);
 }
-async function screenshot(name, fullPage = false) {
+async function screenshot(name, fullPage = false, cropHeight) {
   const { cssContentSize } = await call('Page.getLayoutMetrics');
-  const clip = fullPage ? { x: 0, y: 0, width: 1600, height: cssContentSize.height, scale: 1 } : undefined;
+  const clip = fullPage || cropHeight ? { x: 0, y: 0, width: 1600, height: cropHeight ?? cssContentSize.height, scale: 1 } : undefined;
   const image = await call('Page.captureScreenshot', { format: 'png', captureBeyondViewport: fullPage, ...(clip ? { clip } : {}) });
   await fs.writeFile(path.join(output, `${name}.png`), Buffer.from(image.data, 'base64'));
 }
@@ -60,6 +60,9 @@ try {
       success = report;
       assert.equal(report.execution.result.outputs[0].value, report.input.items[0].prompt);
       assert.ok(report.diagnostics.some(event => event.node_id === 'filter' && event.event_kind === 'scheduler_task_attempt_lifecycle_changed'));
+      assert.equal(report.projections.queryRunDetail.run.workflow_run_id, report.execution.result.workflow_run_id);
+      assert.ok(report.projections.queryIoArtifacts.artifacts.length >= 3);
+      assert.ok(report.projections.queryRunInspection.run_graph);
     }
     await fs.writeFile(path.join(output, `scheduler-demo-${name}.json`), JSON.stringify(report, null, 2) + '\n');
     await screenshot(`scheduler-demo-${name}`, true);
@@ -86,5 +89,51 @@ try {
   assert.equal(counts.edges, 2);
   assert.deepEqual(counts.alignedFilters, [null, null], 'aligned wires must not disappear inside zero-area SVG filters');
   await screenshot('node-editor');
+  // Replay only native query responses into the real workbench components.
+  // This is recorded backend evidence, not a live Tauri connection. Native
+  // event subscriptions and Pumas IPC remain unavailable and visibly report it.
+  await evaluate(`
+    const projections = ${JSON.stringify(success.projections)};
+    const { workflowService } = await import('/src/services/workflow/WorkflowService.ts');
+    for (const [method, response] of Object.entries(projections)) {
+      workflowService[method] = async () => structuredClone(response);
+    }
+    const originalInspection = workflowService.queryRunInspection;
+    workflowService.queryRunInspection = async () => {
+      const response = await originalInspection();
+      return { ...response, node_statuses: response.node_statuses ?? [],
+        io_artifacts: response.io_artifacts ?? [], retention_summary: response.retention_summary ?? [] };
+    };
+    const workbench = await import('/src/stores/workbenchStore.ts');
+    workbench.selectActiveWorkflowRun(projections.queryRunDetail.run);
+  `);
+  for (const [page, name, expected] of [
+    ['diagnostics', 'execution-ledger', 'Diagnostics'],
+    ['io_inspector', 'workflow-run-inspector', 'I/O Inspector'],
+    ['library', 'model-library', 'Pumas Models'],
+    ['node_lab', 'node-editor-status', 'Node Editor'],
+  ]) {
+    const text = await evaluate(`
+      (await import('/src/stores/workbenchStore.ts')).setWorkbenchPage('${page}');
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      return document.body.innerText;
+    `);
+    assert.ok(text.includes(expected), name + ' page did not render');
+    if (page === 'io_inspector') {
+      await evaluate(`
+        [...document.querySelectorAll('svg g[role="button"]')].find(node => node.textContent.trim().startsWith('out'))?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        await new Promise(resolve => setTimeout(resolve, 300));
+      `);
+    }
+    await screenshot(name, false, page === 'node_lab' ? 400 : page === 'library' ? 700 : undefined);
+    console.log(name + ': ' + text.slice(0, 350));
+    if (page === 'diagnostics') {
+      await evaluate(`
+        [...document.querySelectorAll('h2')].find(node => node.textContent === 'Scheduler Timeline')?.scrollIntoView({ block: 'start' });
+        await new Promise(resolve => setTimeout(resolve, 300));
+      `);
+      await screenshot('execution-ledger-timeline');
+    }
+  }
   console.log('Captured native success/rejection with raw JSON and real editor rendering (3 nodes, 2 edges).');
 } finally { ws.close(); }

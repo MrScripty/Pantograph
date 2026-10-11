@@ -126,9 +126,37 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             },
         )
         .await?;
-    drop(service);
     let ledger = SqliteDiagnosticsLedger::open(&ledger_path)?;
     let events = ledger.diagnostic_events_after(0, 500)?;
+    // Preserve real backend projections for browser-only inspection captures.
+    // No display data, completion states, or model records are fabricated here.
+    let run_id = events
+        .iter()
+        .find_map(|event| event.workflow_run_id.clone())
+        .ok_or("demo did not record a workflow run")?;
+    for projection in [
+        "run_list",
+        "run_detail",
+        "node_status",
+        "scheduler_timeline",
+        "io_artifact",
+        "library_usage",
+    ] {
+        service.workflow_projection_rebuild(WorkflowProjectionRebuildRequest {
+            projection_name: projection.into(),
+            batch_size: Some(500),
+        })?;
+    }
+    let request = json!({"workflow_run_id": run_id});
+    let projections = json!({
+        "queryRunDetail": service.workflow_run_detail_query(serde_json::from_value(request.clone())?)?,
+        "queryRunInspection": service.workflow_run_inspection_query(serde_json::from_value(request.clone())?)?,
+        "queryRunList": service.workflow_run_list_query(Default::default())?,
+        "queryNodeStatus": service.workflow_node_status_query(serde_json::from_value(request.clone())?)?,
+        "querySchedulerTimeline": service.workflow_scheduler_timeline_query(serde_json::from_value(request.clone())?)?,
+        "queryIoArtifacts": service.workflow_io_artifact_query(serde_json::from_value(request)?)?,
+        "queryLibraryUsage": service.workflow_library_usage_query(Default::default())?,
+    });
     let report = match result {
         Ok(response) => json!({"ok": true, "result": response}),
         Err(error) => json!({"ok": false, "error": error.to_string()}),
@@ -142,6 +170,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "input": input,
             "execution": report,
             "diagnostics": events,
+            "projections": projections,
         }))?
     );
     Ok(())

@@ -1,6 +1,6 @@
 # GitHub Pages presentation source
 
-This is a static presentation of the node editor, real scheduler recordings,
+This is a static presentation with a workbench gallery, real scheduler recordings,
 inference ownership boundaries, and the repository's five research manuscripts.
 It does not execute Rust, load models, or simulate live scheduler state.
 
@@ -40,5 +40,7 @@ change, so pushing the branch does not publish a site.
 
 The expected project URL would be `https://mrscripty.github.io/Pantograph/` once
 enabled and successfully deployed. It is not currently presented as a live link.
-The GitHub source links target `main` for use after merge; the new demo links do
-not become available on `main` until then.
+Demo links target the PR #71 branch while review is pending. The gallery is near
+the top of that branch’s README and in the presentation navigation; it is not
+available on `main` until merge. See the demo guide for capture provenance and
+which views lack native connectivity.

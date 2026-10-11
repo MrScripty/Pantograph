@@ -88,3 +88,28 @@ printf '%s' '{"items":[{"prompt":"Check the fixture."}]}' | \
 
 The executable returns a JSON `execution.ok` flag for scheduler success/failure.
 Malformed JSON or setup failures instead exit nonzero with an error on stderr.
+
+## Workbench gallery provenance
+
+The capture script also renders the actual Diagnostics, I/O Inspector, Library,
+and Node Editor workbench pages. It assigns the native example's recorded query
+responses to the browser service's read methods; it does not fabricate ledger
+records or install fake Tauri IPC. Empty-vector normalization matches the normal
+frontend service adapter. The example explicitly rebuilds projections from its
+SQLite event log before querying them. The same raw response is saved beside the
+screenshots, including the run graph, resolved I/O, statuses and projection cursors.
+
+Native event subscriptions remain unavailable in Chromium. The Library's Pumas
+calls also remain unavailable, so its error/empty view is not evidence of a
+working catalog. The sidebar's Node Editor is the current Node Lab unavailable
+page; Graph is the separate working workflow canvas. GTK3 and WebKitGTK 4.1 were
+not available in the capture environment. No native Tauri window was run, no
+model weights were downloaded, and no private user library was accessed.
+
+The gallery captures source commit `7c9cc6d94da0f4612d5240967bcc5e0aaafa6a9b`
+plus the projection export and capture/docs changes in this gallery commit.
+No application components or runtime validation were changed for these captures.
+
+The recorded node-status projection is empty for this non-runtime run, although
+the ledger contains two task-attempt start/completion pairs. The gallery preserves
+that distinction. I/O artifacts retain metadata only; previews are unavailable.

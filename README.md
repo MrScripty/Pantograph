@@ -9,6 +9,56 @@ runtime scheduling, real-time observability, and diagnostic tracing for AI
 pipelines. Host integrations consume the native Rust interface or projections
 through UniFFI, Rustler, and optional HTTP adapters.
 
+## Application gallery
+
+**Review branch:** [PR #71](https://github.com/MrScripty/Pantograph/pull/71).
+These assets are on the demo branch until review and merge; no Pages site is deployed.
+All captures use the actual Svelte application in Chromium, **not a running native
+Tauri window**. Diagnostics and I/O inspection replay query responses recorded
+from the real deterministic Rust run. Native event subscriptions and Pumas IPC
+are unavailable in this browser and their errors remain visible.
+
+### Workflow graph
+
+![Actual workflow canvas with Selection Input, JSON Filter, and Text Output](docs/images/node-editor.png)
+
+The **Graph** page renders backend-produced definitions and the real demo graph.
+Editor submission is unavailable here; native execution is demonstrated separately below.
+
+### Execution ledger and diagnostics
+
+![Actual Diagnostics page displaying recorded native run projections](docs/images/execution-ledger.png)
+
+The **Diagnostics** page displays the service's run facts, node status and ledger
+timeline. Its data comes from [the captured native response](docs/images/scheduler-demo-success.json),
+not authored success states or model-inference fixtures.
+
+![Recorded native events in the actual Diagnostics scheduler timeline](docs/images/execution-ledger-timeline.png)
+
+### Workflow-run inspection
+
+![Actual I/O Inspector displaying the recorded deterministic workflow run](docs/images/workflow-run-inspector.png)
+
+The **I/O Inspector** uses the backend's run-graph and resolved-I/O projections.
+Missing artifact previews remain missing; this is not proof of native window or
+model execution.
+
+### Model library
+
+![Actual Library page with unavailable native Pumas access](docs/images/model-library.png)
+
+The **Library** page includes Pumas model browsing, model search/download controls,
+and usage accounting. This capture has no Pumas IPC connection; no model catalog
+or inference output was fabricated, and no weights were downloaded.
+
+### Node authoring status
+
+![Actual Node Editor page explicitly reporting that node authoring is unavailable](docs/images/node-editor-status.png)
+
+The sidebar's **Node Editor** is a separate Node Lab page. The current source
+explicitly reports authoring, local agent and runtime publishing as unavailable;
+it must not be confused with the functioning workflow **Graph** canvas.
+
 ## Demonstration and research
 
 A small deterministic workflow now exercises the native scheduler without model
@@ -27,11 +77,6 @@ for prerequisites, exact scope, raw execution records, and screenshot reproducti
 
 This is real deterministic Rust execution, not model inference. The minimal
 browser host is separate from the desktop editor.
-
-![Actual Svelte editor rendering the demo graph; desktop submission is unavailable in this browser capture](docs/images/node-editor.png)
-
-The editor capture shows the same graph in the actual Svelte application;
-native desktop save/edit/submit was not tested here.
 
 The [GitHub Pages presentation source](docs/presentation/README.md) combines
 screenshots, an interactive viewer of recorded scheduler events, inference
