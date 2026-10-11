@@ -18,7 +18,7 @@ struct DemoHost(PathBuf);
 #[async_trait]
 impl WorkflowHost for DemoHost {
     fn workflow_roots(&self) -> Vec<PathBuf> {
-        vec![self.0.clone()]
+        vec![self.0.join(".pantograph/workflows"), self.0.clone()]
     }
 
     async fn run_workflow(
@@ -69,6 +69,18 @@ impl DemoRuntime {
         )?;
         FileSystemWorkflowGraphStore::new(directory.path())
             .save_workflow("scheduler-demo".into(), graph.clone())?;
+        let mut editor_graph: WorkflowGraph = serde_json::from_str(include_str!(
+            "../../../examples/scheduler-demo/editor-graph.json"
+        ))?;
+        for node in &mut editor_graph.nodes {
+            node.data["definition"] = serde_json::to_value(
+                registry
+                    .get_definition(&node.node_type)
+                    .ok_or("missing editor node")?,
+            )?;
+        }
+        FileSystemWorkflowGraphStore::new(directory.path())
+            .save_workflow("editor-demo".into(), editor_graph)?;
         let ledger_path = directory.path().join("diagnostics.sqlite");
         let service = WorkflowService::with_ephemeral_attribution_store()?
             .with_diagnostics_ledger(SqliteDiagnosticsLedger::open(&ledger_path)?)
@@ -151,7 +163,18 @@ impl DemoRuntime {
         let host = &self.host;
         let graph = &self.graph;
         let ledger = SqliteDiagnosticsLedger::open(&self.ledger_path)?;
-        let prior = self.event_cursor.load(Ordering::Relaxed);
+        let mut prior = self.event_cursor.load(Ordering::Relaxed);
+        // Editor-submitted runs share this ledger. Start this report after every
+        // already recorded event, not only after the previous /run request.
+        loop {
+            let batch = ledger.diagnostic_events_after(prior, 500)?;
+            if let Some(last) = batch.last() {
+                prior = last.event_seq;
+            }
+            if batch.len() < 500 {
+                break;
+            }
+        }
         let session = service
             .create_workflow_execution_session(
                 host,
@@ -242,6 +265,8 @@ impl DemoRuntime {
 
 #[path = "scheduler_demo/commands.rs"]
 mod commands;
+#[path = "scheduler_demo/graph_commands.rs"]
+mod graph_commands;
 
 #[tokio::main]
 async fn main() -> DemoResult<()> {

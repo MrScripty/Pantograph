@@ -55,6 +55,69 @@ class LiveHostTests(unittest.TestCase):
     def command(self, command, args):
         return self.post("/api/workflow/commands/" + command, args)
 
+    def test_editor_save_validate_submit_executes_real_text_binding(self):
+        status, saved = self.command("load_workflow", {"path": "editor-demo.json"})
+        self.assertEqual(status, 200, saved)
+        self.assertTrue(saved["graph"]["derived_graph"]["graph_fingerprint"])
+        status, edit = self.command("create_workflow_execution_session", {"graph": saved["graph"], "workflowId": "editor-demo"})
+        self.assertEqual(status, 200, edit)
+        session_id = edit["session_id"]
+        message = "Edited canvas text — preserved\n exactly."
+        data = dict(saved["graph"]["nodes"][0]["data"], text=message)
+        status, changed = self.command("update_node_data", {"executionId": session_id, "nodeId": "source", "data": data})
+        self.assertEqual(status, 200, changed)
+        graph = changed["graph"]
+        status, path = self.command("save_workflow", {"name": "editor-demo", "graph": graph})
+        self.assertEqual(status, 200, path)
+        status, reloaded = self.command("load_workflow", {"path": path})
+        self.assertEqual(status, 200, reloaded)
+        self.assertEqual(reloaded["graph"]["nodes"][0]["data"]["text"], message)
+        revision = graph["derived_graph"]["graph_fingerprint"]
+        status, validation = self.command("refresh_current_graph_validation_summary", {"request": {"graph_session_id": session_id, "graph_revision": revision}})
+        self.assertEqual(status, 200, validation)
+        self.assertTrue(validation["summary"]["submit_gate"]["allowed"])
+        status, execution = self.command("workflow_create_execution_session", {"request": {"workflow_id": "editor-demo", "keep_alive": False}})
+        self.assertEqual(status, 200, execution)
+        status, snapshot = self.command("publish_graph_session_executable_validation_snapshot", {"request": {
+            "workflow_id": "editor-demo", "workflow_semantic_version": "1.0.0", "graph_session_id": session_id,
+            "validation_session_id": validation["summary"]["validation_session_id"],
+        }})
+        self.assertEqual(status, 200, snapshot)
+        status, run = self.command("workflow_run_execution_session", {"request": {
+            "session_id": execution["session_id"], "workflow_semantic_version": "1.0.0",
+            "inputs": [{"node_id": "source", "port_id": "text", "value": message}], "timeout_ms": 10000,
+        }})
+        self.assertEqual(status, 200, run)
+        self.assertEqual(next(output["value"] for output in run["outputs"] if output["node_id"] == "out"), message)
+        status, artifacts = self.command("workflow_io_artifact_query", {"request": {"workflow_run_id": run["workflow_run_id"]}})
+        self.assertEqual(status, 200)
+        output = next(item for item in artifacts["artifacts"] if item["artifact_role"] == "workflow_output")
+        status, body = self.command("workflow_read_artifact_body", {"request": {"artifact_id": output["artifact_id"]}})
+        self.assertEqual(status, 200)
+        self.assertEqual(bytes(body["body"]).decode(), message)
+        self.assertEqual(self.command("workflow_close_execution_session", {"request": {"session_id": execution["session_id"]}})[0], 200)
+        self.assertEqual(self.command("remove_execution", {"executionId": session_id})[0], 200)
+
+    def test_editor_boundaries_reject_arbitrary_nodes_paths_and_api_overwrite(self):
+        _, saved = self.command("load_workflow", {"path": "editor-demo"})
+        for name in ["../private", "scheduler-demo"]:
+            status, error = self.command("save_workflow", {"name": name, "graph": saved["graph"]})
+            self.assertEqual(status, 400)
+            self.assertEqual(error["code"], "capability_violation")
+        graph = saved["graph"]
+        graph["nodes"][0]["node_type"] = "process"
+        status, error = self.command("create_workflow_execution_session", {"graph": graph, "workflowId": "unsafe"})
+        self.assertEqual(status, 400)
+        self.assertEqual(error["code"], "capability_violation")
+
+    def test_network_status_uses_actual_local_metrics(self):
+        status, network = self.command("workflow_local_network_status_query", {"request": {}})
+        self.assertEqual(status, 200, network)
+        local = network["local_node"]
+        self.assertEqual(local["transport_state"], "local_only")
+        self.assertGreater(local["system"]["memory"]["total_bytes"], 0)
+        self.assertGreater(local["captured_at_ms"], 0)
+
     def test_idle_preconnect_does_not_block_active_command(self):
         with socket.create_connection(("127.0.0.1", self.server.server_port), timeout=2):
             started = time.monotonic()
@@ -124,7 +187,7 @@ class LiveHostTests(unittest.TestCase):
     def test_saved_graph_reads_are_real_and_path_scoped(self):
         status, workflows = self.command("list_workflows", {})
         self.assertEqual(status, 200)
-        self.assertEqual([item["id"] for item in workflows], ["scheduler-demo"])
+        self.assertEqual(sorted(item["id"] for item in workflows), ["editor-demo", "scheduler-demo"])
         status, graph = self.command("load_workflow", {"path": ".pantograph/workflows/scheduler-demo.json"})
         self.assertEqual(status, 200)
         self.assertEqual(len(graph["graph"]["nodes"]), 3)

@@ -15,6 +15,14 @@ run in Scheduler to inspect it. The workbench URL explicitly selects the host:
 The first build needs the repository's pinned Rust toolchain and Cargo dependencies.
 Stop with Ctrl+C. Both servers bind to loopback.
 
+For a saved, editable workflow, open the workbench's **Graph** tab and load
+**editor-demo**. Edit Text Input, click **Save**, then **Submit**. This separate
+Text Input → Text Output graph uses authored text bindings and the real scheduler;
+its returned output and recorded node status are shown when returning to Graph.
+The original JSON extraction example remains available through the demo controls.
+Selection Input is a metadata-driven selector, not a general JSON editor, and
+Text Input does not implicitly parse JSON.
+
 ## What actually executes
 
 The Rust example uses the production workflow service and supported scheduler APIs:
@@ -45,15 +53,31 @@ download and delete are disabled with an explanation because this demonstration
 host does not support them. No model weights are downloaded and no inference is
 claimed. Pumas source and unpublished fixes are untouched.
 
-The **Graph** page renders the backend's canonical node definitions and graph.
-Editor mutation/submission is outside this host's supported capabilities; execute
-from the demo host and inspect the result in the workbench. The sidebar's separate
+The **Graph** page supports the saved text example through existing graph-edit,
+validation, save, and scheduler-session APIs. This bounded demo host accepts only
+Text Input, Text Output, Selection Input, and JSON Filter, with at most 32 nodes
+and 64 edges. Saves live in its temporary directory; restarting resets them.
+The **Scheduler** tab reads real runs, estimates, and artifacts. **Network** reads
+actual local system metrics and scheduler load; peer discovery and GPU metrics
+are not implemented by that service and remain explicitly unavailable.
+
+The sidebar's separate
 **Node Editor** / Node Lab currently has no authoring API, local agent or runtime
 publishing implementation. This change does not pretend to supply those features.
+The complete **Settings** view is also unqualified for this host: it mounts native
+server/model/device configuration, RAG indexing, sandbox configuration and managed
+runtime/binary owners, in addition to artifact retention and format services.
+Those owners are not connected by this deterministic example. Unsupported commands
+remain errors; no healthy Settings screenshot is claimed.
 
 These are real Chromium application captures over HTTP, not native Tauri windows.
 The capture environment lacks GTK3/WebKitGTK. A native desktop application and
 editor-to-model execution require separate qualification.
+
+The existing PNG gallery was captured at `7fc3584c`, before saved editor submission
+was added. Its Graph image still shows the earlier save/submit limitation; it must
+not be relabelled as a completed editor run. New editor, Scheduler and Network
+captures require the follow-up capture script below and a permitted browser.
 
 ## Capture evidence
 
@@ -88,6 +112,12 @@ executes successful and rejected runs, loads the actual application, queries its
 live host, checks completed node statuses and reads the retained output bytes.
 It checks the healthy gallery for transport failures before saving genuine PNGs.
 No errors are hidden or cropped to simulate success. Stop the processes you start.
+
+`node examples/scheduler-demo/capture-editor.mjs` drives the actual saved editor
+load, text edit, Save and Submit actions, then checks returned output and captures
+Graph, Scheduler and Network. This follow-up script has not yet been browser-
+qualified: this environment's Chromium SUID sandbox is misconfigured. No new PNGs
+are supplied until a supported sandboxed browser or explicit approval is available.
 
 For the original one-shot JSON interface:
 
