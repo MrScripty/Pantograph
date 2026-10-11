@@ -1,10 +1,10 @@
 /**
- * TauriWorkflowBackend — implements WorkflowBackend using Tauri invoke calls.
+ * TauriWorkflowBackend — implements WorkflowBackend using the configured native or loopback transport.
  *
  * This is the Pantograph-specific backend implementation. Each method maps
- * directly to a Tauri command defined in src-tauri/src/commands/.
+ * to the same command contract used by src-tauri/src/commands/.
  */
-import { invokeWorkflowCommand as invoke } from '../services/workflow/workflowServiceErrors';
+import { invokeWorkflowCommand as invoke } from '../services/workflow/workflowServiceErrors.ts';
 import type {
   WorkflowBackend,
   UndoRedoState,
@@ -34,8 +34,8 @@ import {
   normalizeInsertNodeConnectionResponse,
   normalizeInsertNodeOnEdgeResponse,
   serializeConnectionAnchor,
-} from '../lib/tauriConnectionIntentWire';
-import { parseWorkflowGraphMutationResponse } from '../lib/workflowGraphMutationResponse';
+} from '../lib/tauriConnectionIntentWire.ts';
+import { parseWorkflowGraphMutationResponse } from '../lib/workflowGraphMutationResponse.ts';
 
 export class TauriWorkflowBackend implements WorkflowBackend {
   private eventListeners: Set<(event: WorkflowEvent) => void> = new Set();

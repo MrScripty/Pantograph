@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
+import { workflowSubmitOutputOverlays, workflowSubmitStatusOverlays } from './workflowSubmitResult.ts';
 import { parse } from 'svelte/compiler';
 import ts from 'typescript';
 import type { Edge } from '@xyflow/svelte';
@@ -81,11 +82,13 @@ test('ordinary Toolbar Submit sends captured typed text through the execution-se
     isExecuting: { set() {} }, clearNodeRuntimeData() {}, resetExecutionStates() {}, clearStreamContent() {},
     assertDesktopSeedInputs() {}, isNumericWorkflowSemanticVersion,
     workflowSubmitTextInputs, workflowSubmitSuccessWorkbenchPage,
+    workflowSubmitOutputOverlays, workflowSubmitStatusOverlays,
     workflowService: {
       async createWorkflowExecutionSession() {
         graph.nodes[0].data.text = 'later edit during async session creation';
         return { session_id: 'execution-native' };
       },
+      async queryNodeStatus() { return { nodes: [] }; },
       async publishGraphSessionExecutableValidationSnapshot() {},
       async runWorkflowExecutionSession(request: { inputs: unknown }) {
         requests.push(request);

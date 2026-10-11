@@ -23,8 +23,11 @@ Pumas library. No service mocks or recorded-response injection are used.
 
 ![Actual workflow canvas with Selection Input, JSON Filter, and Text Output](docs/images/node-editor.png)
 
-The **Graph** page renders backend-produced definitions and the real demo graph.
-Editor submission is unavailable here; native execution is demonstrated separately below.
+This historical capture from `7fc3584c` renders the JSON demo before editor
+submission support. The follow-up host also provides **editor-demo**, a saved
+Text Input → Text Output workflow with real edit/save/validate/submit APIs.
+Its HTTP integration tests pass; a new browser capture is pending a permitted
+Chromium sandbox. See the [demo guide](examples/scheduler-demo/README.md).
 
 ### Execution ledger and diagnostics
 

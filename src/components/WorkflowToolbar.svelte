@@ -1,5 +1,6 @@
 <script lang="ts">
   import { AlertTriangle, Loader2, Send } from 'lucide-svelte';
+  import { workflowSubmitOutputOverlays, workflowSubmitStatusOverlays } from './workflowSubmitResult';
   import {
     isDirty,
     isExecuting,
@@ -59,6 +60,7 @@
   const WORKFLOW_SEMANTIC_VERSION_STORAGE_KEY_PREFIX = 'pantograph.workflowSemanticVersion.';
   const MAX_WORKFLOW_VERSION_CONFLICT_RETRIES = 25;
 
+  let runProjectionError = $state<string | null>(null);
   let validationSubscriptionError = $state<string | null>(null);
   let workflowError = $state<WorkflowServiceError | null>(null);
   let workflowErrorWorkflowId = $state<string | null>(null);
@@ -282,8 +284,10 @@
     clearNodeRuntimeData([...AUDIO_RUNTIME_DATA_KEYS]);
     resetExecutionStates();
     clearStreamContent();
+    runProjectionError = null;
     const submittedWorkflowId = $currentGraphId;
     const submittedGraphSessionId = $currentSessionId;
+    const submittedGraphRevision = $workflowGraph.derived_graph?.graph_fingerprint;
     const submittedValidationSummary = currentValidationSummary;
 
     try {
@@ -363,6 +367,25 @@
           throw lastConflictError ?? new Error('Workflow submit failed');
         }
 
+        const matchesSubmittedGraph = () => $currentGraphId === submittedWorkflowId
+          && $currentSessionId === submittedGraphSessionId && !$isDirty
+          && $workflowGraph.derived_graph?.graph_fingerprint === submittedGraphRevision;
+        if (matchesSubmittedGraph()) {
+          for (const overlay of workflowSubmitOutputOverlays($workflowGraph, response)) {
+            updateNodeRuntimeData(overlay.nodeId, overlay.data);
+          }
+        }
+        try {
+          const statuses = await workflowService.queryNodeStatus({ workflow_run_id: response.workflow_run_id });
+          if (matchesSubmittedGraph()) {
+            for (const overlay of workflowSubmitStatusOverlays($workflowGraph, response.workflow_run_id, statuses.nodes ?? [])) {
+              setNodeExecutionState(overlay.nodeId, overlay.state, overlay.message);
+            }
+          }
+        } catch (error) {
+          // Submission succeeded; a diagnostic read failure must not relabel it as failed.
+          runProjectionError = formatWorkflowCommandError(error);
+        }
         persistWorkflowSemanticVersion(submittedWorkflowId, submittedVersion);
         selectActiveWorkflowRun({
           workflow_run_id: response.workflow_run_id,
@@ -470,6 +493,11 @@
     </div>
   {/if}
 
+  {#if runProjectionError}
+    <div class="border border-red-900 bg-red-950/50 px-3 py-2 text-sm text-red-200" role="alert">
+      Run completed, but node status could not be refreshed: {runProjectionError}
+    </div>
+  {/if}
   {#if validationSubscriptionError}
     <div class="border border-red-900 bg-red-950/50 px-3 py-2 text-sm text-red-200" role="alert">
       Validation updates failed: {validationSubscriptionError}

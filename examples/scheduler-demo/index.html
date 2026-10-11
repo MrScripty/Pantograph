@@ -17,7 +17,7 @@
       "prompt": "Inspect fixture alignment before the next operation."
     }
   ]
-}</textarea><button id="run" class="primary">Run workflow</button><div class="subactions"><button id="valid">Valid input</button><button id="invalid">Missing path</button></div><p class="note">The persistent Rust host validates the graph, creates a scheduler session, runs the nodes, reads its SQLite diagnostics, and closes the session.</p><p class="note">Deterministic JSON extraction. No generated text, model weights, GPU, or Pumas runtime is involved.</p></section>
+}</textarea><button id="run" class="primary">Run workflow</button><div class="subactions"><button id="valid">Valid input</button><button id="invalid">Test expected rejection</button></div><p class="note">The persistent Rust host validates the graph, creates a scheduler session, runs the nodes, reads its SQLite diagnostics, and closes the session.</p><p class="note">Deterministic JSON extraction. No generated text, model weights, GPU, or Pumas runtime is involved.</p></section>
 <section class="panel"><h2>02 / Executed graph</h2><div id="graph" class="graph"><div class="empty">Run to load graph facts from Rust.</div></div><div class="facts"><span>Execution <strong id="outcome">—</strong></span><span>Elapsed <strong id="timing">—</strong></span><span>Diagnostic events <strong id="count">—</strong></span></div><h2>03 / Output · out.text</h2><div id="output" class="result" aria-live="polite">No execution yet.</div><footer id="runid">Run identity appears after execution.</footer></section>
 </div>
 <section class="panel trace"><div class="tracehead"><h2>04 / Scheduler diagnostics</h2><button id="download" disabled>Download execution JSON</button></div><table><thead><tr><th>Sequence</th><th>Recorded event</th><th>Node</th><th>Source</th></tr></thead><tbody id="events"><tr><td colspan="4" class="muted">No diagnostic events yet.</td></tr></tbody></table><details><summary>Inspect the complete backend response, inputs, and event payloads</summary><pre id="raw"></pre></details></section>
@@ -27,8 +27,10 @@
 const el = id => document.getElementById(id);
 const initial = el('input').value;
 let report;
-el('valid').onclick = () => { el('input').value = initial; };
-el('invalid').onclick = () => { el('input').value = JSON.stringify({items: []}, null, 2); };
+let expectedRejection = false;
+el('valid').onclick = () => { el('input').value = initial; expectedRejection = false; };
+el('invalid').onclick = () => { el('input').value = JSON.stringify({items: []}, null, 2); expectedRejection = true; };
+el('input').oninput = () => { expectedRejection = false; };
 function textElement(tag, text, className) {
   const node = document.createElement(tag); node.textContent = text;
   if (className) node.className = className;
@@ -47,7 +49,9 @@ el('run').onclick = async () => {
     if (!response.ok) throw new Error(await response.text());
     report = await response.json();
     const execution = report.execution;
-    el('status').textContent = execution.ok ? 'Completed · native execution' : 'Rejected · inspect diagnostics';
+    el('status').textContent = execution.ok ? 'Completed · native execution' : expectedRejection
+      ? 'Expected rejection · deliberately missing JSON path'
+      : 'Rejected · inspect diagnostics';
     el('status').className = execution.ok ? 'status' : 'status error';
     el('outcome').textContent = execution.ok ? 'Completed' : 'Failed';
     el('timing').textContent = execution.ok ? execution.result.timing_ms + ' ms' : '—';
