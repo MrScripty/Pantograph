@@ -40,9 +40,9 @@ The credential needs Pages write and Administration write. Do not grant new
 permissions or bypass a denial without specific authorization.
 
 GitHub reports successful Pages deployment of static commit
-`487bb534cefdea2fbf9a9c11c3d9b0e56126ebce`:
+`6630f0777e06ff0411085304131be78352dc5e5a`:
 
-- Deployment: https://github.com/MrScripty/Pantograph/actions/runs/38173980146
+- Deployment: https://github.com/MrScripty/Pantograph/actions/runs/38175628066
 - GitHub-reported public URL: https://mrscripty.github.io/Pantograph/
 - Source: `gh-pages`, `/(root)`; public; HTTPS enforced.
 
@@ -83,3 +83,8 @@ The separate Node Lab authoring surface remains unavailable.
 Use the pinned linked demo guide for the runnable host; this isolated publication
 branch imports presentation assets only and does not import the runtime changes.
 Citation-anchor, mobile reader, and inline-icon fixes remain intact.
+
+The capture refresh passed 1,220 combined portfolio/presentation checks. All 14
+copied image/recording instances match the approved source bytes. The existing
+`gh-pages` deployment workflow completed successfully at the commit above; the
+public host remains blocked by this environment’s outbound proxy.
