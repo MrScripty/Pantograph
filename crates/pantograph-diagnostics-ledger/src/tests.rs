@@ -3584,6 +3584,145 @@ fn io_artifact_projection_applies_retention_state_changes() {
 }
 
 #[test]
+fn node_status_projection_tracks_non_runtime_attempts_and_resets_retry_details() {
+    use SchedulerTaskAttemptLifecycleTransition as Transition;
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().unwrap();
+    let transitions = [
+        (
+            "attempt-1",
+            Transition::Started,
+            1100,
+            None,
+            NodeExecutionProjectionStatus::Running,
+        ),
+        (
+            "attempt-1",
+            Transition::Failed,
+            1100,
+            Some(1350),
+            NodeExecutionProjectionStatus::Failed,
+        ),
+        (
+            "attempt-2",
+            Transition::Redispatched,
+            1400,
+            None,
+            NodeExecutionProjectionStatus::Running,
+        ),
+        (
+            "attempt-2",
+            Transition::Cancelled,
+            1400,
+            Some(1450),
+            NodeExecutionProjectionStatus::Cancelled,
+        ),
+        (
+            "attempt-3",
+            Transition::Started,
+            1500,
+            None,
+            NodeExecutionProjectionStatus::Running,
+        ),
+        (
+            "attempt-3",
+            Transition::Completed,
+            1500,
+            Some(1600),
+            NodeExecutionProjectionStatus::Completed,
+        ),
+    ];
+    for (attempt_id, transition, started, ended, status) in transitions {
+        let mut event = sample_scheduler_task_attempt_event("workflow_run_alpha", transition);
+        event.node_id = Some("filter".into());
+        event.node_type = Some("json-filter".into());
+        event.runtime_id = None;
+        event.runtime_version = None;
+        event.model_id = None;
+        event.model_version = None;
+        event.occurred_at_ms = ended.unwrap_or(started);
+        let DiagnosticEventPayload::SchedulerTaskAttemptLifecycleChanged(payload) =
+            &mut event.payload
+        else {
+            unreachable!()
+        };
+        payload.execution_class = SchedulerTaskAttemptExecutionClass::NonRuntimeNodeEngine;
+        payload.scheduler_task_id = "filter".into();
+        payload.scheduler_attempt_id = attempt_id.into();
+        payload.started_at_ms = Some(started);
+        payload.ended_at_ms = ended;
+        payload.duration_ms = ended.map(|end| (end - started) as u64);
+        payload.selected_runtime_id = None;
+        payload.selected_runtime_variant_id = None;
+        payload.selected_backend_key = None;
+        payload.selected_device_class = None;
+        payload.selected_device_id = None;
+        payload.selected_network_node_id = None;
+        payload.reservation_id = None;
+        payload.canonical_error_event_id =
+            (transition == Transition::Failed).then(|| "canonical-error-1".into());
+        let appended = ledger.append_diagnostic_event(event).unwrap();
+        ledger.drain_node_status_projection(10).unwrap();
+        let rows = ledger
+            .query_node_status_projection(NodeStatusProjectionQuery::default())
+            .unwrap();
+        assert_eq!(rows.len(), 1);
+        let row = &rows[0];
+        assert_eq!(row.status, status);
+        assert_eq!(row.task_id.as_deref(), Some("filter"));
+        assert_eq!(row.node_type.as_deref(), Some("json-filter"));
+        assert_eq!(row.runtime_id, None);
+        assert_eq!(row.started_at_ms, Some(started));
+        assert_eq!(row.completed_at_ms, ended);
+        assert_eq!(row.duration_ms, ended.map(|end| (end - started) as u64));
+        assert_eq!(row.error.is_some(), transition == Transition::Failed);
+        assert_eq!(
+            row.canonical_error_event_id.as_deref(),
+            (transition == Transition::Failed).then_some("canonical-error-1")
+        );
+        assert_eq!(row.last_event_seq, appended.event_seq);
+    }
+    let before = ledger
+        .query_node_status_projection(NodeStatusProjectionQuery::default())
+        .unwrap();
+    ledger
+        .rebuild_projection(NODE_STATUS_PROJECTION_NAME, 2)
+        .unwrap();
+    let rebuilt = ledger
+        .query_node_status_projection(NodeStatusProjectionQuery::default())
+        .unwrap();
+    assert_eq!(before, rebuilt);
+}
+
+#[test]
+fn node_status_projection_does_not_substitute_runtime_attempts_for_owner_status() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().unwrap();
+    ledger
+        .append_diagnostic_event(sample_scheduler_task_attempt_event(
+            "workflow_run_alpha",
+            SchedulerTaskAttemptLifecycleTransition::Completed,
+        ))
+        .unwrap();
+    // Attempt events may legitimately have run scope only. Do not invent a
+    // node identity from scheduler_task_id, or make the projection undrainable.
+    let mut unscoped = sample_scheduler_task_attempt_event(
+        "workflow_run_alpha",
+        SchedulerTaskAttemptLifecycleTransition::Completed,
+    );
+    unscoped.node_id = None;
+    if let DiagnosticEventPayload::SchedulerTaskAttemptLifecycleChanged(payload) =
+        &mut unscoped.payload
+    {
+        payload.execution_class = SchedulerTaskAttemptExecutionClass::NonRuntimeNodeEngine;
+    }
+    ledger.append_diagnostic_event(unscoped).unwrap();
+    ledger.drain_node_status_projection(10).unwrap();
+    assert!(ledger
+        .query_node_status_projection(NodeStatusProjectionQuery::default())
+        .unwrap()
+        .is_empty());
+}
+
+#[test]
 fn node_status_projection_keeps_latest_status_per_node() {
     let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
     ledger

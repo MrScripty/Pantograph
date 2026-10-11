@@ -2447,7 +2447,15 @@ mod tests {
                 assert!(rows[0].observed_completed_ns(profile, phase).is_some());
             }
             assert_eq!(
-                registry.snapshot().runtimes[0].active_reservation_claims[0].claims[0].bytes,
+                registry
+                    .snapshot()
+                    .runtimes
+                    .iter()
+                    .find(|runtime| runtime.runtime_id == "pytorch")
+                    .expect("selected PyTorch runtime remains registered")
+                    .active_reservation_claims[0]
+                    .claims[0]
+                    .bytes,
                 PEAK_BYTES
             );
         }
@@ -2715,7 +2723,7 @@ mod tests {
             task_id: intent.task_id.clone(),
             state: SchedulerTaskState::Ready {
                 execution_intent: SchedulerTaskExecutionIntent::Runtime {
-                    task_intent: intent.clone(),
+                    task_intent: Box::new(intent.clone()),
                 },
             },
             state_version: 1,

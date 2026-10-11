@@ -9,6 +9,7 @@
 <header><b>⌁ Pantograph</b><span class="tag">LOCAL RUST DEMO · NO MODEL REQUIRED</span></header>
 <main>
 <div class="intro"><div><div class="eyebrow">Scheduler-owned execution</div><h1>From structured input to useful output.</h1><p>Three built-in nodes. A validated graph. An inspectable execution record.</p></div><span id="status" class="status" role="status">Ready to run</span></div>
+<p><a href="http://127.0.0.1:3001/?workflowHost=http%3A%2F%2F127.0.0.1%3A8765" target="_blank" rel="noopener">Open the live workbench</a> · Start <code>npm run dev</code> first. Select a run in Scheduler to inspect it.</p>
 <div class="layout">
 <section class="panel"><h2>01 / Input</h2><label for="input" class="muted">JSON bound to source.value</label><textarea id="input" spellcheck="false">{
   "items": [
@@ -16,7 +17,7 @@
       "prompt": "Inspect fixture alignment before the next operation."
     }
   ]
-}</textarea><button id="run" class="primary">Run workflow</button><div class="subactions"><button id="valid">Valid input</button><button id="invalid">Missing path</button></div><p class="note">Each click starts a Rust process, validates the graph, creates a scheduler session, runs the nodes, reads its SQLite diagnostics, and closes the session.</p><p class="note">Deterministic JSON extraction. No generated text, model weights, GPU, or Pumas runtime is involved.</p></section>
+}</textarea><button id="run" class="primary">Run workflow</button><div class="subactions"><button id="valid">Valid input</button><button id="invalid">Missing path</button></div><p class="note">The persistent Rust host validates the graph, creates a scheduler session, runs the nodes, reads its SQLite diagnostics, and closes the session.</p><p class="note">Deterministic JSON extraction. No generated text, model weights, GPU, or Pumas runtime is involved.</p></section>
 <section class="panel"><h2>02 / Executed graph</h2><div id="graph" class="graph"><div class="empty">Run to load graph facts from Rust.</div></div><div class="facts"><span>Execution <strong id="outcome">—</strong></span><span>Elapsed <strong id="timing">—</strong></span><span>Diagnostic events <strong id="count">—</strong></span></div><h2>03 / Output · out.text</h2><div id="output" class="result" aria-live="polite">No execution yet.</div><footer id="runid">Run identity appears after execution.</footer></section>
 </div>
 <section class="panel trace"><div class="tracehead"><h2>04 / Scheduler diagnostics</h2><button id="download" disabled>Download execution JSON</button></div><table><thead><tr><th>Sequence</th><th>Recorded event</th><th>Node</th><th>Source</th></tr></thead><tbody id="events"><tr><td colspan="4" class="muted">No diagnostic events yet.</td></tr></tbody></table><details><summary>Inspect the complete backend response, inputs, and event payloads</summary><pre id="raw"></pre></details></section>

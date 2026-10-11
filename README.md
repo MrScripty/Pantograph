@@ -12,11 +12,12 @@ through UniFFI, Rustler, and optional HTTP adapters.
 ## Application gallery
 
 **Review branch:** [PR #71](https://github.com/MrScripty/Pantograph/pull/71).
-These assets are on the demo branch until review and merge; no Pages site is deployed.
-All captures use the actual Svelte application in Chromium, **not a running native
-Tauri window**. Diagnostics and I/O inspection replay query responses recorded
-from the real deterministic Rust run. Native event subscriptions and Pumas IPC
-are unavailable in this browser and their errors remain visible.
+These assets are tracked on the demo branch pending review and merge.
+All captures use the actual Svelte application in Chromium, connected to a
+persistent Rust workflow service through an explicit loopback HTTP host. These
+are **not native Tauri windows**. The host executes the deterministic graph,
+serves live diagnostic queries and retained artifact bytes, and reads an isolated
+Pumas library. No service mocks or recorded-response injection are used.
 
 ### Workflow graph
 
@@ -27,37 +28,39 @@ Editor submission is unavailable here; native execution is demonstrated separate
 
 ### Execution ledger and diagnostics
 
-![Actual Diagnostics page displaying recorded native run projections](docs/images/execution-ledger.png)
+![Actual Diagnostics page querying the live native workflow service](docs/images/execution-ledger.png)
 
-The **Diagnostics** page displays the service's run facts, node status and ledger
-timeline. Its data comes from [the captured native response](docs/images/scheduler-demo-success.json),
-not authored success states or model-inference fixtures.
+The **Diagnostics** page queries real run facts, node status and ledger events
+from the running Rust service. [The matching native response](docs/images/scheduler-demo-success.json)
+preserves the capture evidence; the application does not replay that file.
 
-![Recorded native events in the actual Diagnostics scheduler timeline](docs/images/execution-ledger-timeline.png)
+![Actual native events in the live Diagnostics scheduler timeline](docs/images/execution-ledger-timeline.png)
+
+The [node-status view](docs/images/execution-node-status.png) reports both executed
+tasks completed and all three small payloads retained.
 
 ### Workflow-run inspection
 
-![Actual I/O Inspector displaying the recorded deterministic workflow run](docs/images/workflow-run-inspector.png)
+![Actual I/O Inspector reading the retained output of the deterministic workflow run](docs/images/workflow-run-inspector.png)
 
-The **I/O Inspector** uses the backend's run-graph and resolved-I/O projections.
-Missing artifact previews remain missing; this is not proof of native window or
-model execution.
+The **I/O Inspector** queries the backend run graph and resolved I/O, then reads
+the actual retained text through the artifact API. No model inference is claimed.
 
 ### Model library
 
-![Actual Library page with unavailable native Pumas access](docs/images/model-library.png)
+![Actual Library page reading the isolated empty Pumas model catalog](docs/images/model-library.png)
 
-The **Library** page includes Pumas model browsing, model search/download controls,
-and usage accounting. This capture has no Pumas IPC connection; no model catalog
-or inference output was fabricated, and no weights were downloaded.
+The **Library** page reads a real, isolated empty Pumas catalog and usage ledger.
+This limited host disables model search/download/delete with an explanation. No
+models were invented or downloaded and no private user library was accessed.
 
-### Node authoring status
+### Scope
 
-![Actual Node Editor page explicitly reporting that node authoring is unavailable](docs/images/node-editor-status.png)
-
-The sidebar's **Node Editor** is a separate Node Lab page. The current source
-explicitly reports authoring, local agent and runtime publishing as unavailable;
-it must not be confused with the functioning workflow **Graph** canvas.
+The sidebar's **Node Editor** is a separate Node Lab page whose authoring API,
+local agent and runtime publishing remain unavailable in current source. It is
+not the workflow **Graph** canvas. This change fixes browser transport and
+inspection, not node authoring or editor-to-model inference. Native Tauri capture
+still requires GTK/WebKit dependencies unavailable in this environment.
 
 ## Demonstration and research
 

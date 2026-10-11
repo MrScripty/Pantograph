@@ -1,71 +1,81 @@
 # Deterministic scheduler demonstration
 
-Run a real three-node Pantograph graph without model weights, an inference
-server, or a desktop display:
+Run a real Pantograph workflow without model weights or an inference server:
 
 ```bash
-# From the repository root, with its pinned Rust toolchain and Python 3:
 python3 examples/scheduler-demo/serve.py
+# In another terminal, for the actual workbench UI:
+npm run dev
 ```
 
-Open `http://127.0.0.1:8765`. Run the supplied JSON, edit its prompt and run again,
-then choose **Missing path** and run. The first build needs Cargo dependencies;
-subsequent runs use the compiled example. The server binds only to loopback.
-Stop with Ctrl+C. It creates an isolated temporary workflow and SQLite stores
-for each request; it does not change saved user workflows or Pumas data.
+Open `http://127.0.0.1:8765`. Run the supplied JSON, change its prompt and run
+again, then try **Missing path**. Follow **Open the live workbench** and select a
+run in Scheduler to inspect it. The workbench URL explicitly selects the host:
+`http://127.0.0.1:3001/?workflowHost=http%3A%2F%2F127.0.0.1%3A8765`.
+The first build needs the repository's pinned Rust toolchain and Cargo dependencies.
+Stop with Ctrl+C. Both servers bind to loopback.
 
 ## What actually executes
 
-The [Rust example](../../crates/pantograph-workflow-service/examples/scheduler_demo.rs)
-uses the same JSON-extraction path covered by the service's
-`scheduler_session_extracts_json_prompt_into_downstream_text_output` test:
+The Rust example uses the production workflow service and supported scheduler APIs:
 
-1. Load canonical built-in definitions and validate the three-node graph.
-2. Publish an executable validation snapshot to the local service's store.
-3. Create a workflow execution session and submit through the scheduler API.
-4. Materialize `source.value`; execute `json-filter` and `text-output` as
-   scheduler-owned non-runtime tasks.
-5. Close the session and read the actual SQLite diagnostic event records.
+1. Validate the canonical Selection Input → JSON Filter → Text Output graph.
+2. Publish its executable validation snapshot inside the local service.
+3. Create and run a scheduler execution session with the submitted JSON binding.
+4. Execute JSON Filter and Text Output as scheduler-owned non-runtime tasks.
+5. Record diagnostics in SQLite and retain small scalar artifact bodies using the
+   normal bounded artifact store; close the execution session.
 
-“Publish” in step 2 is an internal snapshot operation, not network publication.
-The host's legacy `run_workflow` method deliberately errors if called. There is
-no substitute executor returning canned outputs. The browser draws the returned
-graph and displays the Rust result; **Download execution JSON** preserves it.
-The three-node graph has two executed processing/output tasks: the input binding
-is materialized, rather than counted as an extra task attempt.
+The source binding is materialized, not counted as a third executed task. The
+legacy host `run_workflow` method deliberately fails if called. Missing input
+paths produce real scheduler rejection, not a canned error response.
 
-The missing-path case is a real failure: the filter has no value suitable for
-the downstream text task, and the service reports that `out` ended `Invalid`.
-The generic scheduler estimate may still mention `inference_gateway`; the
-recording preserves that reason as returned. It is not proof of inference use.
+The Python HTTP bridge keeps one native Rust service alive. Workbench commands
+query that live service; there is no browser service replacement, fake Tauri IPC,
+or recorded-response injection. Diagnostic refreshes poll real queries. Retained
+text is read through the artifact API and shown in the actual I/O Inspector.
+The host accepts only allowed loopback origins and an explicit command set;
+unsupported commands and transport failures remain errors.
 
-## Evidence and limits
+## Model library and scope
 
-- [Successful execution screenshot](../../docs/images/scheduler-demo-success.png)
-  and [matching raw JSON](../../docs/images/scheduler-demo-success.json).
-- [Rejected execution screenshot](../../docs/images/scheduler-demo-rejection.png)
-  and [matching raw JSON](../../docs/images/scheduler-demo-rejection.json).
-- [Actual node editor screenshot](../../docs/images/node-editor.png): Chromium
-  renders the backend-produced graph and definitions in Pantograph's existing
-  Svelte editor. The capture loads the graph through `loadWorkflow`, adjusts
-  only node positions, and does not fake IPC, execution states, or output.
-  The screenshot visibly retains **Submit unavailable** and **No output yet**.
-  Desktop save/edit/submit behavior is not qualified by this capture.
+The host opens a real, isolated, initially empty Pumas library with its published
+repository pin. It never connects to the user's model library. Model search,
+download and delete are disabled with an explanation because this demonstration
+host does not support them. No model weights are downloaded and no inference is
+claimed. Pumas source and unpublished fixes are untouched.
 
-These are genuine Chromium screenshots, not generated images. The native demo
-and editor rendering are separately verified surfaces; they are not a claim of
-end-to-end Tauri execution. No model inference, GPU behavior, cache reuse,
-learning-policy performance, or unpublished Pumas fixes are demonstrated.
-Recorded elapsed times are local observations, not benchmark results.
+The **Graph** page renders the backend's canonical node definitions and graph.
+Editor mutation/submission is outside this host's supported capabilities; execute
+from the demo host and inspect the result in the workbench. The sidebar's separate
+**Node Editor** / Node Lab currently has no authoring API, local agent or runtime
+publishing implementation. This change does not pretend to supply those features.
 
-Captured against main `256b6b94ece4dbbaa1fb236bc4092ad08aa63525` plus this branch's
-example, JSON Filter renderer registration, and aligned-edge visibility fix, on 11 October 2026. The runtime
-uses the repository's existing published Pumas pin; Pumas source was not edited.
+These are real Chromium application captures over HTTP, not native Tauri windows.
+The capture environment lacks GTK3/WebKitGTK. A native desktop application and
+editor-to-model execution require separate qualification.
+
+## Capture evidence
+
+- [Successful native execution](../../docs/images/scheduler-demo-success.png) and
+  [its raw response](../../docs/images/scheduler-demo-success.json).
+- [Deliberate missing-path rejection](../../docs/images/scheduler-demo-rejection.png)
+  and [its raw response](../../docs/images/scheduler-demo-rejection.json).
+- [Workflow Graph](../../docs/images/node-editor.png),
+  [Diagnostics](../../docs/images/execution-ledger.png),
+  [timeline](../../docs/images/execution-ledger-timeline.png),
+  [completed node statuses](../../docs/images/execution-node-status.png),
+  [I/O Inspector](../../docs/images/workflow-run-inspector.png), and
+  [isolated Model Library](../../docs/images/model-library.png).
+
+The static presentation reads these recordings; the runnable workbench queries
+Rust. Recorded durations are observations, not benchmarks. Generic scheduler
+estimate reasons may mention `inference_gateway`; that does not establish model
+inference. Missing bodies and genuine failures remain visible when they occur.
 
 ## Reproduce screenshots
 
-Start the demo above and `npm run dev`. Start Chromium with a temporary profile
-and the DevTools endpoint bound to loopback:
+Start the two servers above, then a temporary Chromium DevTools session:
 
 ```bash
 chromium --headless --remote-debugging-port=9222 \
@@ -73,43 +83,18 @@ chromium --headless --remote-debugging-port=9222 \
 node examples/scheduler-demo/capture.mjs
 ```
 
-Use the browser sandbox configuration required by your execution environment.
-The capture script drives actual UI actions, checks successful and rejected
-native responses, and checks that the editor renders three nodes and two edges.
-It refreshes the PNGs and their matching JSON records in `docs/images/`.
-Stop the processes you started after capture.
+Use the browser sandbox configuration required by your environment. The script
+executes successful and rejected runs, loads the actual application, queries its
+live host, checks completed node statuses and reads the retained output bytes.
+It checks the healthy gallery for transport failures before saving genuine PNGs.
+No errors are hidden or cropped to simulate success. Stop the processes you start.
 
-For a JSON-only run:
+For the original one-shot JSON interface:
 
 ```bash
-printf '%s' '{"items":[{"prompt":"Check the fixture."}]}' | \
+printf '%s' '{"items":[{"prompt":"Inspect the fixture."}]}' | \
   cargo run --quiet --locked -p pantograph-workflow-service --example scheduler_demo
 ```
 
-The executable returns a JSON `execution.ok` flag for scheduler success/failure.
-Malformed JSON or setup failures instead exit nonzero with an error on stderr.
-
-## Workbench gallery provenance
-
-The capture script also renders the actual Diagnostics, I/O Inspector, Library,
-and Node Editor workbench pages. It assigns the native example's recorded query
-responses to the browser service's read methods; it does not fabricate ledger
-records or install fake Tauri IPC. Empty-vector normalization matches the normal
-frontend service adapter. The example explicitly rebuilds projections from its
-SQLite event log before querying them. The same raw response is saved beside the
-screenshots, including the run graph, resolved I/O, statuses and projection cursors.
-
-Native event subscriptions remain unavailable in Chromium. The Library's Pumas
-calls also remain unavailable, so its error/empty view is not evidence of a
-working catalog. The sidebar's Node Editor is the current Node Lab unavailable
-page; Graph is the separate working workflow canvas. GTK3 and WebKitGTK 4.1 were
-not available in the capture environment. No native Tauri window was run, no
-model weights were downloaded, and no private user library was accessed.
-
-The gallery captures source commit `7c9cc6d94da0f4612d5240967bcc5e0aaafa6a9b`
-plus the projection export and capture/docs changes in this gallery commit.
-No application components or runtime validation were changed for these captures.
-
-The recorded node-status projection is empty for this non-runtime run, although
-the ledger contains two task-attempt start/completion pairs. The gallery preserves
-that distinction. I/O artifacts retain metadata only; previews are unavailable.
+The JSON `execution.ok` flag distinguishes scheduler success and failure;
+malformed JSON or setup failures instead exit nonzero with an error on stderr.

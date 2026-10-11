@@ -62,12 +62,13 @@ try {
       assert.ok(report.diagnostics.some(event => event.node_id === 'filter' && event.event_kind === 'scheduler_task_attempt_lifecycle_changed'));
       assert.equal(report.projections.queryRunDetail.run.workflow_run_id, report.execution.result.workflow_run_id);
       assert.ok(report.projections.queryIoArtifacts.artifacts.length >= 3);
+      assert.equal(report.projections.queryNodeStatus.nodes.filter(node => node.status === 'completed').length, 2);
       assert.ok(report.projections.queryRunInspection.run_graph);
     }
     await fs.writeFile(path.join(output, `scheduler-demo-${name}.json`), JSON.stringify(report, null, 2) + '\n');
     await screenshot(`scheduler-demo-${name}`, true);
   }
-  await navigate('http://127.0.0.1:3001');
+  await navigate('http://127.0.0.1:3001/?workflowHost=http%3A%2F%2F127.0.0.1%3A8765');
   // Load actual backend graph/definitions through the app's normal store action.
   // Only layout is adjusted; do not inject execution states, IPC, or output overlays.
   const counts = await evaluate(`
@@ -77,7 +78,7 @@ try {
     const session = await import('/src/stores/graphSessionStore.ts');
     stores.nodeDefinitions.set(graph.nodes.map(node => node.data.definition));
     stores.loadWorkflow(graph);
-    session.currentGraphName.set('Scheduler JSON extraction · browser rendering');
+    session.currentGraphName.set('Scheduler JSON extraction · loopback host');
     session.currentGraphType.set('workflow');
     (await import('/src/stores/workbenchStore.ts')).setWorkbenchPage('graph');
     await new Promise(resolve => setTimeout(resolve, 1200));
@@ -89,23 +90,12 @@ try {
   assert.equal(counts.edges, 2);
   assert.deepEqual(counts.alignedFilters, [null, null], 'aligned wires must not disappear inside zero-area SVG filters');
   await screenshot('node-editor');
-  // Replay only native query responses into the real workbench components.
-  // This is recorded backend evidence, not a live Tauri connection. Native
-  // event subscriptions and Pumas IPC remain unavailable and visibly report it.
+  // Select the actual run; all components query the live Rust host via HTTP.
+  // No service replacement, fake IPC, or recorded-response injection.
   await evaluate(`
-    const projections = ${JSON.stringify(success.projections)};
     const { workflowService } = await import('/src/services/workflow/WorkflowService.ts');
-    for (const [method, response] of Object.entries(projections)) {
-      workflowService[method] = async () => structuredClone(response);
-    }
-    const originalInspection = workflowService.queryRunInspection;
-    workflowService.queryRunInspection = async () => {
-      const response = await originalInspection();
-      return { ...response, node_statuses: response.node_statuses ?? [],
-        io_artifacts: response.io_artifacts ?? [], retention_summary: response.retention_summary ?? [] };
-    };
-    const workbench = await import('/src/stores/workbenchStore.ts');
-    workbench.selectActiveWorkflowRun(projections.queryRunDetail.run);
+    const response = await workflowService.queryRunDetail({ workflow_run_id: ${JSON.stringify(success.execution.result.workflow_run_id)} });
+    (await import('/src/stores/workbenchStore.ts')).selectActiveWorkflowRun(response.run);
   `);
   for (const [page, name, expected] of [
     ['diagnostics', 'execution-ledger', 'Diagnostics'],
@@ -119,10 +109,14 @@ try {
       return document.body.innerText;
     `);
     assert.ok(text.includes(expected), name + ' page did not render');
+    assert.ok(!/Transport error|Cannot read properties|Validation updates failed/.test(text), name + ' has a host error');
     if (page === 'io_inspector') {
       await evaluate(`
         [...document.querySelectorAll('svg g[role="button"]')].find(node => node.textContent.trim().startsWith('out'))?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
         await new Promise(resolve => setTimeout(resolve, 300));
+        [...document.querySelectorAll('button')].find(button => button.textContent.trim() === 'Read' && !button.disabled)?.click();
+        await new Promise(resolve => setTimeout(resolve, 500));
+        if (!document.body.innerText.includes(${JSON.stringify(success.input.items[0].prompt)})) throw new Error('Actual artifact preview did not load');
       `);
     }
     await screenshot(name, false, page === 'node_lab' ? 400 : page === 'library' ? 700 : undefined);
@@ -133,6 +127,11 @@ try {
         await new Promise(resolve => setTimeout(resolve, 300));
       `);
       await screenshot('execution-ledger-timeline');
+      await evaluate(`
+        [...document.querySelectorAll('h2')].find(node => node.textContent.trim() === 'Execution Facets')?.scrollIntoView({ block: 'start' });
+        await new Promise(resolve => setTimeout(resolve, 300));
+      `);
+      await screenshot('execution-node-status');
     }
   }
   console.log('Captured native success/rejection with raw JSON and real editor rendering (3 nodes, 2 edges).');
