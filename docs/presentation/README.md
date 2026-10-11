@@ -23,24 +23,38 @@ recording selection, inspection of original diagnostic event payloads, raw JSON
 downloads, and manuscript contents navigation. All assets are local and work
 under a project subpath such as `/Pantograph/`.
 
-## Publication state and next step
+## Publication without an application merge
 
-At preparation time, GitHub's repository metadata reported `has_pages: false`
-and an empty homepage. No existing Pages workflow or book-building configuration
-was found. The Pages settings endpoint was unavailable in this environment.
-No Pages settings were enabled or changed, and nothing was deployed.
+The approved static presentation can be published independently of PR #71 and
+application CI. Build it, copy only the generated public files to the root of a
+separate `gh-pages` branch, omit this preparation README, and retain `.nojekyll`.
+No application source, `.github` workflows, private files or local QA logs belong
+in that branch. The public recorded-demo JSON and research sources remain part
+of the approved presentation.
 
-After the branch is reviewed and merged, the repository owner can enable GitHub
-Pages with **GitHub Actions** as its source, then add a reviewed deployment
-workflow that runs `npm ci` and `node scripts/build-presentation.mjs`, uploads
-`dist/presentation` with `actions/upload-pages-artifact`, and deploys it with
-`actions/deploy-pages` using the `github-pages` environment. That deployment needs
-`pages: write` and `id-token: write`. No auto-deploy workflow is included in this
-change, so pushing the branch does not publish a site.
+In repository **Settings → Pages**, select **Deploy from a branch**, branch
+**gh-pages**, folder **/(root)**, then **Save**. This requires no `main` merge and
+no custom workflow. The REST equivalent is `POST /repos/MrScripty/Pantograph/pages`
+with `{"build_type":"legacy","source":{"branch":"gh-pages","path":"/"}}`.
+The credential needs Pages write and Administration write. Do not grant new
+permissions or bypass a denial without specific authorization.
 
-The expected project URL would be `https://mrscripty.github.io/Pantograph/` once
-enabled and successfully deployed. It is not currently presented as a live link.
-Demo links target the PR #71 branch while review is pending. The gallery is near
-the top of that branch’s README and in the presentation navigation; it is not
-available on `main` until merge. See the demo guide for capture provenance and
-which views lack native connectivity.
+Both repositories reported Pages disabled before this publication work. The
+expected project URL is `https://mrscripty.github.io/Pantograph/`; it is not a
+verified live URL until the Pages deployment succeeds and the public site is
+checked. Demo links continue to identify the PR #71 branch while review is
+pending. Its application code and shared workflows are unchanged by publication.
+
+## Publication validation
+
+Local Chromium checks cover 1440, 768, 390 and 320 px, resource loads, keyboard
+tabs, both recordings, event inspection, raw JSON links and no-JavaScript reading.
+All six research reading pages are checked at 390 and 1440 px, including contents
+navigation and horizontal overflow. Every local file link and HTML fragment is
+checked, including the inference book's bibliography anchors.
+
+The renderer preserves only paired empty `ref-NNN` anchors while retaining
+CommonMark's safe handling of other raw HTML. The original manuscript hashes
+remain unchanged. Reader text wraps long source identifiers on narrow screens;
+contents links use a vertical layout. Inline SVG avoids missing external-arrow
+glyphs in Chromium. These changes concern the static presentation only.

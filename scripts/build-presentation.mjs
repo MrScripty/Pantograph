@@ -23,6 +23,19 @@ await fs.writeFile(path.join(output, '.nojekyll'), '');
 const escape = text => text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
 const manuscripts = ['README.md', ...manifest.files.filter(file => file.path.endsWith('.md')).map(file => file.path)];
 const parser = new commonmark.Parser();
+const renderer = new commonmark.HtmlRenderer({ safe: true });
+const renderInlineHtml = renderer.html_inline;
+renderer.html_inline = function (node) {
+  // Preserve only paired, empty bibliography anchors; all other raw HTML stays
+  // subject to CommonMark's safe renderer. Manuscript bytes remain unchanged.
+  const reference = /^<a id="(ref-[0-9]+)">$/.exec(node.literal);
+  if (reference && node.next?.type === 'html_inline' && node.next.literal === '</a>') {
+    this.lit(`<a id="${reference[1]}"></a>`);
+  } else if (node.literal !== '</a>' || node.prev?.type !== 'html_inline'
+    || !/^<a id="ref-[0-9]+">$/.test(node.prev.literal)) {
+    renderInlineHtml.call(this, node);
+  }
+};
 for (const file of manuscripts) {
   const target = path.join(output, 'research', file.replace(/\.md$/, '.html'));
   const prefix = path.relative(path.dirname(target), output).split(path.sep).join('/');
@@ -43,7 +56,7 @@ for (const file of manuscripts) {
   }
   const headings = [];
   const used = new Map();
-  const html = new commonmark.HtmlRenderer({ safe: true }).render(tree).replace(/<h([1-6])>([\s\S]*?)<\/h\1>/g, (_, level, text) => {
+  const html = renderer.render(tree).replace(/<h([1-6])>([\s\S]*?)<\/h\1>/g, (_, level, text) => {
     const plain = text.replace(/<[^>]*>/g, '').replaceAll('&amp;', '&');
     const base = plain.toLowerCase().replace(/[^\p{L}\p{N}\s_-]/gu, '').replace(/\s/g, '-');
     const count = used.get(base) ?? 0; used.set(base, count + 1);
