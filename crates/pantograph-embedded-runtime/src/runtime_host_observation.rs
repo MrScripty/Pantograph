@@ -51,6 +51,7 @@ impl RuntimeHostExecutionPort for ObservedRuntimeHostExecutionPort {
                 Ok(profile) => Some(RuntimeHostObservationAttempt {
                     recorder: self.recorder.clone(),
                     started: Instant::now(),
+                    started_at_ms: chrono::Utc::now().timestamp_millis(),
                     observation: Some(RuntimeHostRequestObservation {
                         observation_id: uuid::Uuid::new_v4().to_string(),
                         execution_request_id: request.execution_request_id.clone(),
@@ -76,7 +77,9 @@ impl RuntimeHostExecutionPort for ObservedRuntimeHostExecutionPort {
             .execute_runtime_host_request(request.clone(), cancellation)
             .await;
         if let Some(mut observation) = observation {
-            if let Some(recording) = observation.finish(observation_outcome(&request, &result)) {
+            if let Some(recording) =
+                observation.finish(observation_outcome(&request, &result), Some(&request))
+            {
                 if let Err(error) = recording.await {
                     log::warn!("runtime-host observation recording task failed: {error}");
                 }
@@ -167,18 +170,35 @@ fn observation_outcome(
 struct RuntimeHostObservationAttempt {
     recorder: WorkflowRuntimeHostObservationRecorder,
     started: Instant,
+    started_at_ms: i64,
     observation: Option<RuntimeHostRequestObservation>,
 }
 
 impl RuntimeHostObservationAttempt {
-    fn finish(&mut self, outcome: RuntimeHostObservationOutcome) -> Option<JoinHandle<()>> {
+    fn finish(
+        &mut self,
+        outcome: RuntimeHostObservationOutcome,
+        request: Option<&RuntimeHostExecutionRequest>,
+    ) -> Option<JoinHandle<()>> {
         let mut observation = self.observation.take()?;
         observation.outcome = outcome;
         observation.host_elapsed_ms =
             u64::try_from(self.started.elapsed().as_millis()).unwrap_or(u64::MAX);
         observation.recorded_at_ms = chrono::Utc::now().timestamp_millis();
+        let status = request.and_then(|request| {
+            super::runtime_host_node_status::terminal_node_status(
+                request,
+                &observation,
+                self.started_at_ms,
+            )
+        });
         let recorder = self.recorder.clone();
         spawn_observation_recording(&OBSERVATION_RECORDING_SLOTS, move || {
+            if let Some(status) = status {
+                if let Err(error) = recorder.record_execution_status(status) {
+                    log::warn!("runtime-host node status recording failed: {error}");
+                }
+            }
             if let Err(error) = recorder.record(observation) {
                 // Observation failure never changes the execution result. Queries
                 // remain fallible and missing data cannot authorize prediction.
@@ -192,7 +212,7 @@ impl Drop for RuntimeHostObservationAttempt {
     fn drop(&mut self) {
         // Never wait for SQLite from Drop, including cancellation on a Tokio
         // worker. The submitted write retains its admission permit until done.
-        drop(self.finish(RuntimeHostObservationOutcome::Abandoned));
+        drop(self.finish(RuntimeHostObservationOutcome::Abandoned, None));
     }
 }
 
@@ -306,6 +326,133 @@ mod tests {
         assert_eq!(summary.observed_count, 1);
         assert_eq!(summary.completed_count, 1);
         assert!(summary.median_completed_host_elapsed_ms.is_some());
+    }
+
+    #[tokio::test]
+    async fn host_owned_terminal_status_preserves_response_and_negative_cases() {
+        use pantograph_diagnostics_ledger::NodeExecutionProjectionStatus as Status;
+        use pantograph_workflow_service::{
+            WorkflowDiagnosticsProjectionKind, WorkflowDiagnosticsProjectionRefreshReason,
+            WorkflowDiagnosticsProjectionRefreshRequest, WorkflowDiagnosticsProjectionRefreshSink,
+            WorkflowNodeStatusQueryRequest,
+        };
+
+        #[derive(Default)]
+        struct Refreshes(std::sync::Mutex<Vec<WorkflowDiagnosticsProjectionRefreshRequest>>);
+        impl WorkflowDiagnosticsProjectionRefreshSink for Refreshes {
+            fn request_projection_refresh(
+                &self,
+                request: WorkflowDiagnosticsProjectionRefreshRequest,
+            ) {
+                self.0.lock().unwrap().push(request);
+            }
+        }
+
+        for (case, expected) in [
+            ("completed", Some(Status::Completed)),
+            ("failed", Some(Status::Failed)),
+            ("rejected", Some(Status::Failed)),
+            ("cancelled", Some(Status::Cancelled)),
+            ("shutdown", Some(Status::Cancelled)),
+            ("mismatched", Some(Status::Failed)),
+            ("invalid_response", Some(Status::Failed)),
+            ("accepted", None),
+            ("invalid_request", None),
+        ] {
+            let mut response = response();
+            match case {
+                "failed" => response.state = RuntimeHostExecutionState::Failed,
+                "rejected" | "cancelled" | "shutdown" => {
+                    response.state = RuntimeHostExecutionState::Rejected;
+                }
+                "accepted" => {
+                    response.state = RuntimeHostExecutionState::Accepted;
+                    response.terminal_metadata = None;
+                }
+                "mismatched" => response.execution_request_id = "unrelated.request".into(),
+                "invalid_response" => response.contract_version = 0,
+                _ => {}
+            }
+            if !matches!(response.state, RuntimeHostExecutionState::Completed) {
+                response.outputs.clear();
+            }
+            response.diagnostics[0].code = match case {
+                "cancelled" => RuntimeHostExecutionDiagnosticCode::CancellationRequested,
+                "shutdown" => RuntimeHostExecutionDiagnosticCode::ShutdownRequested,
+                "failed" => RuntimeHostExecutionDiagnosticCode::ExecutionFailed,
+                "rejected" => RuntimeHostExecutionDiagnosticCode::HandoffRejected,
+                "accepted" => RuntimeHostExecutionDiagnosticCode::HandoffAccepted,
+                _ => RuntimeHostExecutionDiagnosticCode::ExecutionCompleted,
+            };
+            let service = WorkflowService::with_ephemeral_diagnostics_ledger().unwrap();
+            let refreshes = Arc::new(Refreshes::default());
+            service
+                .set_diagnostics_projection_refresh_sink(Some(refreshes.clone()))
+                .unwrap();
+            let port = ObservedRuntimeHostExecutionPort::new(
+                Arc::new(ControlledPort {
+                    response: response.clone(),
+                }),
+                service.runtime_host_observation_recorder().unwrap(),
+            );
+            let mut request = request();
+            if case == "invalid_request" {
+                request.contract_version = 0;
+            }
+            let returned = port
+                .execute_runtime_host_request(
+                    request.clone(),
+                    RuntimeHostExecutionCancellationHandle::running(
+                        request.cancellation_context.clone(),
+                    ),
+                )
+                .await
+                .unwrap();
+            assert_eq!(
+                returned, response,
+                "{case}: observer must not change execution"
+            );
+            let queued = refreshes.0.lock().unwrap().clone();
+            assert_eq!(queued.len(), usize::from(expected.is_some()), "{case}");
+            if let Some(refresh) = queued.first() {
+                assert!(refresh
+                    .projections
+                    .contains(&WorkflowDiagnosticsProjectionKind::NodeStatus));
+                assert_eq!(
+                    refresh.workflow_run_id.as_deref(),
+                    Some(request.handoff.workflow_run_id.as_str())
+                );
+            }
+            service
+                .workflow_diagnostics_projection_refresh(
+                    WorkflowDiagnosticsProjectionRefreshRequest {
+                        projections: vec![WorkflowDiagnosticsProjectionKind::NodeStatus],
+                        workflow_run_id: Some(request.handoff.workflow_run_id.to_string()),
+                        workflow_id: None,
+                        reason: WorkflowDiagnosticsProjectionRefreshReason::ExplicitRefresh,
+                        batch_size: 100,
+                    },
+                )
+                .unwrap();
+            let nodes = service
+                .workflow_node_status_query(WorkflowNodeStatusQueryRequest {
+                    workflow_run_id: Some(request.handoff.workflow_run_id.to_string()),
+                    ..Default::default()
+                })
+                .unwrap()
+                .nodes;
+            assert_eq!(nodes.len(), usize::from(expected.is_some()), "{case}");
+            if let Some(expected) = expected {
+                assert_eq!(nodes[0].status, expected, "{case}");
+                assert_eq!(nodes[0].node_id, request.handoff.node_id.as_str());
+                assert!(nodes[0].duration_ms.is_some());
+                assert_eq!(nodes[0].runtime_id.as_deref(), Some("diffusers-pytorch"));
+                assert_eq!(
+                    nodes[0].model_id.as_deref(),
+                    Some("pumas://models/juggernaut-xl-v10")
+                );
+            }
+        }
     }
 
     #[tokio::test]

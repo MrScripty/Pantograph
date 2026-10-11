@@ -1,0 +1,29 @@
+{
+  "editor_qualified": false,
+  "screenshots": [],
+  "browser_automation_tools_exposed": [],
+  "browser_binary": "/usr/bin/chromium",
+  "setuid_helper_observed": "-rwsr-xr-x 1 nobody nogroup /usr/lib/chromium/chrome-sandbox",
+  "launch_attempts": [
+    {
+      "mode": "default sandbox",
+      "command": "chromium --headless --remote-debugging-port=9222 --remote-debugging-address=127.0.0.1 --user-data-dir=/tmp/pantograph-inference-chromium about:blank",
+      "exit_code": 134,
+      "stderr": "chrome_crashpad_handler: --database is required\nTry 'chrome_crashpad_handler --help' for more information.\n[14936:14936:1011/212010.096272:ERROR:third_party/crashpad/crashpad/util/file/filesystem_posix.cc:63] mkdir : No such file or directory (2)\n[14936:14936:1011/212010.106818:FATAL:sandbox/linux/suid/client/setuid_sandbox_host.cc:166] The SUID sandbox helper binary was found, but is not configured correctly. Rather than run without sandboxing I'm aborting now. You need to make sure that /usr/lib/chromium/chrome-sandbox is owned by root and has mode 4755.\n[14954:14954:0100/000000.165390:ERROR:content/zygote/zygote_linux.cc:662] write: Broken pipe (32)\n"
+    },
+    {
+      "mode": "user namespace sandbox; setuid helper disabled only",
+      "command": "XDG_CONFIG_HOME=/tmp/pantograph-inference-browser-config chromium --headless --disable-setuid-sandbox --remote-debugging-port=9222 --remote-debugging-address=127.0.0.1 --user-data-dir=/tmp/pantograph-inference-chromium-userns about:blank",
+      "exit_code": 1,
+      "stderr": "[15015:15015:1011/212036.299561:ERROR:content/browser/zygote_host/zygote_host_impl_linux.cc:128] No usable sandbox! If this is a Debian system, please install the chromium-sandbox package to solve this problem. If you are running on Ubuntu 23.10+ or another Linux distro that has disabled unprivileged user namespaces with AppArmor, see https://chromium.googlesource.com/chromium/src/+/main/docs/security/apparmor-userns-restrictions.md. If you want to live dangerously and need an immediate workaround, you can try using --no-sandbox.\n"
+    }
+  ],
+  "existing_capture_setup": {
+    "pr71_capture": "examples/scheduler-demo/capture.mjs requires existing CDP browser on port 9222",
+    "passing_seed_harness": "scripts/check-desktop-seed-precision-browser.mjs:161 uses --no-sandbox; not used in this task"
+  },
+  "remaining_blocker": "No usable sandboxed Chromium or exposed browser automation service; actual editor DOM acceptance and screenshots remain unqualified.",
+  "acceptance_script": "examples/cpu-embedding-demo/capture.mjs",
+  "security_escalated": false,
+  "browser_sandbox_disabled": false
+}

@@ -95,6 +95,10 @@ try {
   assert.equal(vector.length, 8);
   assert.ok(vector.every((value, index) => Math.abs(value - golden[index]) < 1e-4));
   await click('[data-testid="workbench-nav-io_inspector"]');
+  await until(() => {
+    const nodes = received('workflow_node_status_query')?.body.nodes ?? [];
+    return ['infer', 'vectors'].every(id => nodes.some(node => node.node_id === id && node.status === 'completed'));
+  }, 'actual inference and output node completion');
   await until(() => evaluate(`[...document.querySelectorAll('svg g[role="button"]')].some(node => node.textContent.trim().startsWith('vectors'))`), 'real run graph');
   await evaluate(`[...document.querySelectorAll('svg g[role="button"]')].find(node => node.textContent.trim().startsWith('vectors')).dispatchEvent(new MouseEvent('click', { bubbles: true }))`);
   await wait(300);

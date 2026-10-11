@@ -106,8 +106,10 @@ class InferenceHostTests(unittest.TestCase):
         run_request = {"request": {"workflow_run_id": result["workflow_run_id"]}}
         nodes = self.command("workflow_node_status_query", run_request)
         self.assertEqual(next(node["status"] for node in nodes["nodes"] if node["node_id"] == "vectors"), "completed")
-        # Runtime attempts are not yet included in PR71's node-status projection.
-        # Verify actual inference via its authoritative scheduler attempt instead.
+        inference = next(node for node in nodes["nodes"] if node["node_id"] == "infer")
+        self.assertEqual(inference["status"], "completed")
+        self.assertEqual(inference["runtime_id"], "candle")
+        self.assertIsNotNone(inference["duration_ms"])
         timeline = self.command("workflow_scheduler_timeline_query", run_request)
         completed = next(event for event in timeline["events"] if event.get("scheduler_task_id") == "infer"
                          and event.get("scheduler_attempt_transition") == "completed")
@@ -122,7 +124,6 @@ class InferenceHostTests(unittest.TestCase):
             "editor_qualified": False, "model_training": "untrained", "model_acquisition_bytes": 0,
             "input": "hello", "max_reference_error": max(abs(a-b) for a, b in zip(actual, expected)),
             "response": result, "scheduler_timeline": timeline, "node_status": nodes,
-            "known_projection_gap": "Runtime inference node absent; PR71 projects scheduler attempts only for non-runtime tasks",
             "artifacts": artifacts, "retained_output_body": body,
         })
 

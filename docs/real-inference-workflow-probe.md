@@ -8,7 +8,7 @@ substituting successful validation.
 
 The [CPU embedding browser-host guide](../examples/cpu-embedding-demo/README.md)
 contains the integrated PR71 transport, supported editor command bindings,
-reproduction commands, HTTP evidence, and exact browser/projection blockers.
+reproduction commands, HTTP evidence, and the resolved runtime status gap and exact remaining browser blocker.
 
 ## Model and acquisition
 
@@ -115,19 +115,21 @@ cargo test --locked -p inference --features backend-candle \
    Direct owner API observations and actual scheduler inference both pass, without
    changing the Pantograph adapter or directory guard. See the
    [pinned diagnosis and corrected responses](pumas-hf-target-diagnosis.md).
-2. The actual editor currently uses Tauri commands and subscriptions. The
-   `pantograph-frontend-http-adapter` is an outbound host adapter, not a server
-   exposing the editor's command/event API. Plain Vite/Chromium is not an
-   integrated native host. A native desktop host needs GTK3/WebKitGTK 4.1 build
-   prerequisites, WebKitWebDriver, tauri-driver and a display for GUI automation.
-3. PR71's verified revision `7fc3584cca8bef647b60ebf303c4b5d6b37d98bd` is now merged
-   into this feature branch. The new fixture host connects editor commands and
-   Submit to the actual embedded runtime and passes live HTTP tests. Qualify the
-   actual browser interaction on a host with a usable Chromium sandbox, resolve
-   the runtime node-status owner-event gap described in the host guide, and capture
-   one run identity from editor Submit through scheduler dispatch, actual model
-   output and visible I/O Inspector content, plus the screenshot. Preserve the
-   model revision, backend/device selection, timing and cleanup evidence.
+2. PR71's verified revision `7fc3584cca8bef647b60ebf303c4b5d6b37d98bd` is merged
+   into this feature branch. The fixture host connects editor commands and Submit
+   to the actual embedded runtime and passes live HTTP tests. The runtime host
+   now emits its own terminal node-status event; real HTTP evidence confirms
+   completed `infer` and `vectors` rows while preserving the ledger's separation
+   between scheduler attempts and runtime-owner status.
+3. Qualify actual browser interaction on a host with a usable Chromium sandbox.
+   Capture one run identity from editor Submit through scheduler dispatch, real
+   model output and visible I/O Inspector content, with screenshots. The checked-in
+   capture script requires that complete chain and both completed node statuses.
+   Tool discovery found no exposed browser automation service; both sandboxed
+   Chromium modes failed here. The repository's earlier successful browser harness
+   uses `--no-sandbox`, which was not used for this task. The native Tauri GUI is
+   another possible host but requires GTK3/WebKitGTK 4.1, WebKitWebDriver,
+   tauri-driver and a display; it has not been qualified here.
 
 No screenshot of model output in the actual editor exists from this cloud
 qualification. A terminal vector, a mocked transport, or a static results page

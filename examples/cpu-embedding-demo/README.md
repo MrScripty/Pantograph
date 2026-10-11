@@ -50,11 +50,11 @@ eight-dimensional normalized embeddings on Candle `0.9.2-alpha.2`, locked at
 useful semantic embedding quality. See the [model hashes and license scope](../../docs/real-inference-workflow-probe.md#model-and-acquisition).
 
 The [recorded live HTTP receipt](../../docs/evidence/cpu-embedding-http-aa1d79ae.json)
-contains run `run_d7e4597c-526a-47a1-9250-15e5b577cf2b`, input `hello`, its actual
+contains run `run_b88f6784-46fc-4ce0-92aa-45cd20632e0d`, input `hello`, its actual
 eight-dimensional output, scheduler timeline and exact retained artifact bytes.
 Maximum absolute error against the independent Transformers reference is
-`5.960464477539063e-8`. The backend run reports 114 ms and the host's complete
-submit/resume/response observation is 166.43 ms. Cleanup succeeds. These are
+`5.960464477539063e-8`. The backend run reports 117 ms and the host's complete
+submit/resume/response observation is 169.58 ms. Cleanup succeeds. These are
 single observations, not benchmarks. This acceptance covers scalar text; batch
 and ONNX execution are not exercised.
 
@@ -64,12 +64,18 @@ Tests:
 cargo build --locked -p pantograph-embedded-runtime \
   --features host-dependency-inventory --example cpu_embedding_workflow_probe
 python3 -m unittest discover -s examples/cpu-embedding-demo -p test_host.py
+status_registry_root="$(mktemp -d)"
+PUMAS_REGISTRY_DB_PATH="$status_registry_root/registry.db" \
+cargo test --locked -p pantograph-embedded-runtime \
+  --features host-dependency-inventory --lib
+cargo test --locked -p pantograph-diagnostics-ledger --lib node_status_projection
 ```
 
 Set `PANTOGRAPH_HTTP_EVIDENCE_PATH` to a new file path to retain the real HTTP test
 receipt; existing files are refused. The tests use the real native service and
 the unchanged PR71 HTTP transport. They verify expected numerical output,
-readback equality, successful scheduler runtime identity and cleanup, plus
+readback equality, successful scheduler runtime identity, completed `infer` and
+`vectors` node statuses, and cleanup, plus
 forbidden origins, path traversal, changed runtime bindings, installation,
 unsupported commands and invalid publication. They do not render a browser.
 
@@ -96,14 +102,46 @@ root, inside this environment. Selecting the user-namespace sandbox instead
 also failed with `No usable sandbox!`. Browser sandboxing was not disabled, no
 system permission was escalated, and no substitute screenshot was created.
 
-## Remaining runtime status projection gap
+## Runtime status ownership
 
-The real scheduler records the `infer` runtime attempt as completed with Candle
-CPU identity and duration. PR71's node-status projection intentionally maps
-scheduler lifecycle events only for `NonRuntimeNodeEngine` tasks, leaving runtime
-tasks to an owner-status event path. This embedded execution supplies no separate
-owner-status event, so `workflow_node_status_query` contains `vectors` but no
-`infer` row. The raw node-status and scheduler-timeline responses are both retained
-in the receipt. No status is synthesized and the other worker's projection code
-is unchanged. Resolving that ownership gap and completing browser capture remain
-necessary before presenting a complete editor-visible demo.
+The real single-request runtime-host boundary now records the existing
+`NodeExecutionStatus` event after a terminal result and requests projection
+refresh. The live receipt contains both `infer` and `vectors` as completed.
+The `infer` owner status records Candle and the actual fixture model, with 28 ms
+of host-boundary elapsed time; the scheduler attempt records 30 ms. Host duration
+includes resolution, gateway waiting, model loading and output publication; it
+is not an isolated model forward benchmark.
+
+The ledger still refuses to substitute scheduler runtime-attempt events for
+node-owner status. Its existing non-runtime retry/reset, cache, runtime settings
+and negative runtime-attempt tests all pass unchanged. The host observer checks
+response identity and validity: mismatched/invalid responses become failed
+observations, never completed statuses. Acknowledged cancellation/shutdown maps
+to cancelled; accepted responses and abandoned futures emit no terminal status.
+Execution responses and strict capability checks are unchanged. Writes retain
+the existing bounded, best-effort diagnostics recording policy; overload or a
+ledger failure is logged and cannot authorize execution or invent completion.
+This change covers the single-request host path, not batch member status.
+
+The new regression exercises nine response/request cases, including projection
+refresh and response preservation. Full embedded runtime tests pass (590 passed,
+2 ignored); five node-status ledger regressions, two real inference HTTP tests
+and nine existing PR71 transport tests pass. The first full-suite attempt used
+an incorrect registry environment variable and failed on the read-only home
+registry path; rerunning with `PUMAS_REGISTRY_DB_PATH` in a fresh workspace test
+directory passed without changing filesystem permissions.
+
+## Browser environment inspection
+
+No browser, Playwright, or computer automation tool is exposed in this selected
+environment. PR71's capture script expects an already running CDP browser; its
+README does not supply a separate supported browser service. The repository's
+previously passing desktop seed precision harness launches Chromium using
+`--no-sandbox` at `scripts/check-desktop-seed-precision-browser.mjs:161`.
+That launch mode was not used for this task. The two sandboxed startup failures
+above remain the blocker under the instruction to preserve security boundaries.
+See the [recorded browser inspection](../../docs/evidence/cpu-embedding-browser-environment.json).
+
+`capture.mjs` is syntax checked and now also requires actual completed statuses
+for both inference and output nodes. It remains unexecuted here. No actual
+editor-visible model-output screenshot or completed integrated demo is claimed.
