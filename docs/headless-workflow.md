@@ -59,6 +59,8 @@ Consumer examples and packaging notes live beside the binding:
 - [C# direct-runtime quickstart](../bindings/csharp/Pantograph.DirectRuntimeQuickstart/README.md)
 - [BEAM/Rustler binding](../bindings/beam/README.md)
 - `crates/pantograph-workflow-service/examples/rust_host_workflow_run.rs`
+- [Isolated CPU inference workflow probe](real-inference-workflow-probe.md),
+  including the published Pumas blocker and the separate editor qualification gate.
 
 The Rust types are authoritative. Copied JSON examples, generated bindings,
 and host wrappers must be regenerated or updated with the producer contract and
