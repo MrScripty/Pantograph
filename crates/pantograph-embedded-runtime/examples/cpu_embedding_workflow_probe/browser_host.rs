@@ -348,6 +348,7 @@ impl BrowserHost<'_> {
             "workflow_library_usage_query" => query!(workflow_library_usage_query),
             "workflow_run_graph_query" => query!(workflow_run_graph_query),
             "workflow_scheduler_estimate_query" => query!(workflow_scheduler_estimate_query),
+            "workflow_local_network_status_query" => query!(workflow_local_network_status_query),
             "workflow_projection_rebuild" => query!(workflow_projection_rebuild),
             "workflow_artifact_descriptor" => query!(artifact_descriptor),
             "workflow_read_artifact_body" => query!(read_artifact_body),

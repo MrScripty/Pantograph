@@ -68,6 +68,12 @@ class InferenceHostTests(unittest.TestCase):
         capabilities = self.command("workflow_browser_host_capabilities")
         self.assertTrue(capabilities["graph_edit"])
         self.assertFalse(capabilities["model_library_write"])
+        network = self.command("workflow_local_network_status_query", {"request": {
+            "include_disks": True, "include_network_interfaces": True}})
+        self.assertEqual(network["local_node"]["transport_state"], "local_only")
+        self.assertGreater(network["local_node"]["system"]["cpu"]["logical_core_count"], 0)
+        self.assertGreater(network["local_node"]["system"]["memory"]["total_bytes"], 0)
+        self.assertEqual(network["peer_nodes"], [])
         models = self.command("query_port_options", {"nodeType": "puma-lib", "portId": "pumas_model_ref"})
         self.assertEqual(len(models["options"]), 1)
         file = self.command("load_workflow", {"path": f".pantograph/workflows/{WORKFLOW}.json"})
