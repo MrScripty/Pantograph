@@ -2,3 +2,5 @@
 
 /* Distinguish captured UI, recorded evidence, and authored architecture. */
 .view-coverage{margin:24px 0 8px;border:1px solid #344d50;border-radius:6px;padding:17px 20px;color:#a7bfc3}.view-coverage summary{cursor:pointer;font-size:13px}.coverage-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:18px}.coverage-grid>a,.coverage-grid>div{background:#15292d;padding:15px;border:1px solid #31494d;border-radius:4px;text-decoration:none}.coverage-grid b{display:block;color:#c9e6dc;font-size:13px;margin-bottom:7px}.coverage-grid span{display:block;font-size:11px;line-height:1.6;color:#a0b8bf}.panel-heading .badge{white-space:normal;line-height:1.5}.tabs button{line-height:1.5}@media(max-width:800px){.coverage-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:400px){.coverage-grid{grid-template-columns:1fr}.view-coverage{padding:16px}}
+
+.trace-controls select{max-width:100%;min-width:0}

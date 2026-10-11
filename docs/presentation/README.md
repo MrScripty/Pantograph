@@ -105,6 +105,6 @@ workbench views have concise coverage labels. New app source `679622e9` adds
 saved-workflow submission and a Network metrics adapter, but no new captures have
 been delivered; Settings and Node Editor authoring remain unqualified.
 
-The revised source passed 1,262 combined static and browser checks, and all 22
+The revised source passed 1,266 combined static and browser checks, and all 22
 GitHub destinations on the two landing pages returned HTTP 200. The original
 manuscript hashes, bibliography anchors, mobile wrapping and SVG icons are intact.
