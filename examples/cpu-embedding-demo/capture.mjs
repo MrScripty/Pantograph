@@ -13,7 +13,7 @@ const textOnly = process.argv.includes('--text');
 const host = `http://127.0.0.1:${textOnly ? 8765 : 8766}`;
 const workflow = textOnly ? 'editor-demo' : 'cpu-embedding-probe';
 const inputText = textOnly ? 'Inspect fixture alignment before the next operation.' : 'hello';
-const outputNode = textOnly ? 'output' : 'vectors';
+const outputNode = textOnly ? 'out' : 'vectors';
 const tabs = await (await fetch('http://127.0.0.1:9222/json')).json();
 const ws = new WebSocket(tabs.find(tab => tab.type === 'page').webSocketDebuggerUrl);
 await new Promise(resolve => ws.addEventListener('open', resolve, { once: true }));
@@ -56,8 +56,8 @@ ws.onmessage = async event => {
   if (message.method === 'Runtime.consoleAPICalled' && message.params.type === 'error') {
     consoleErrors.push(message.params.args.map(arg => arg.value ?? arg.description));
   }
-  if (message.method === 'Network.requestWillBeSent' && message.params.request.url.includes('/api/workflow/commands/')) {
-    requests.set(message.params.requestId, { url: message.params.request.url, request_body: message.params.request.postData });
+  if (message.method === 'Network.requestWillBeSent' && message.params.request.method === 'POST' && message.params.request.url.includes('/api/workflow/commands/')) {
+    requests.set(message.params.requestId, { url: message.params.request.url, request_body: message.params.request.postData, started_at: new Date().toISOString(), started_ms: performance.now() });
   }
   if (message.method === 'Network.responseReceived' && requests.has(message.params.requestId)) {
     Object.assign(requests.get(message.params.requestId), { status: message.params.response.status });
@@ -65,6 +65,8 @@ ws.onmessage = async event => {
   if (message.method === 'Network.loadingFinished' && requests.has(message.params.requestId)) {
     const response = requests.get(message.params.requestId);
     requests.delete(message.params.requestId);
+    response.elapsed_ms = performance.now() - response.started_ms;
+    delete response.started_ms;
     try {
       const body = await call('Network.getResponseBody', { requestId: message.params.requestId });
       receipts.push({ ...response, body: JSON.parse(body.body) });
@@ -113,15 +115,24 @@ try {
   await call('Emulation.setDeviceMetricsOverride', { width: 1800, height: 1200, deviceScaleFactor: 1, mobile: false });
   await call('Page.navigate', { url: `http://127.0.0.1:3001/?workflowHost=${encodeURIComponent(host)}` });
   await click('[data-testid="workbench-nav-graph"]');
+  await until(() => received('create_workflow_execution_session')?.status === 200, 'host-scoped startup graph');
+  const startupSession = received('create_workflow_execution_session');
   await click('[data-testid="workflow-graph-selector-toggle"]');
   await click(`[data-workflow-id="${workflow}"]`);
+  await until(() => received('create_workflow_execution_session') !== startupSession, 'selected graph session');
+  await wait(300);
   const input = '.text-input-node-wrapper textarea';
   await until(() => evaluate(`Boolean(document.querySelector(${JSON.stringify(input)}))`), 'real prompt editor');
   await evaluate(`{ const input = document.querySelector(${JSON.stringify(input)}); input.value = ${JSON.stringify(inputText)}; input.dispatchEvent(new Event('input', { bubbles: true })); }`);
   await until(() => received('update_node_data')?.status === 200, 'backend prompt mutation');
+  await until(() => {
+    const summary = received('refresh_current_graph_validation_summary')?.body.summary;
+    return summary && summary.state !== 'stale' && summary.current_graph_revision === received('update_node_data').body.graph_revision;
+  }, 'current authored graph validation');
   if (!textOnly) {
     await evaluate(`[...document.querySelectorAll('.svelte-flow__node[data-id="deps"] button')].find(button => button.textContent.trim() === 'Resolve')?.click()`);
     await until(() => received('resolve_dependency_environment_action_intent')?.status === 200, 'real dependency Resolve');
+    assert.notEqual(received('resolve_dependency_environment_action_intent').body.status, 'blocked');
     await wait(400);
   }
   await evaluate(`[...document.querySelectorAll('button')].find(button => button.title === 'Save Workflow').click()`);
@@ -131,7 +142,11 @@ try {
   await wait(500);
   await screenshot('graph-before-submit');
   await click('[data-testid="workflow-submit-button"]');
-  await until(() => received('workflow_run_execution_session') !== undefined, 'real scheduler response');
+  await until(() => {
+    const publication = received('publish_graph_session_executable_validation_snapshot');
+    if (publication?.status >= 400) throw new Error(JSON.stringify(publication.body));
+    return received('workflow_run_execution_session') !== undefined;
+  }, 'real scheduler response');
   const runReceipt = received('workflow_run_execution_session');
   assert.equal(runReceipt.status, 200, JSON.stringify(runReceipt));
   const result = runReceipt.body;
@@ -146,8 +161,11 @@ try {
     const nodes = received('workflow_node_status_query')?.body.nodes ?? [];
     return (textOnly ? [outputNode] : ['infer', outputNode]).every(id => nodes.some(node => node.node_id === id && node.status === 'completed' && node.workflow_run_id === result.workflow_run_id));
   }, 'actual completed node statuses');
+  // Submit selects the completed run in Scheduler; return via the real sidebar
+  // to verify its output overlay on the original authored Graph.
+  await click('[data-testid="workbench-nav-graph"]');
   const graphPreview = textOnly ? actual : actual.slice(0, 8).map(value => value.toFixed(4)).join(', ');
-  await until(() => evaluate(`document.querySelector('.${textOnly ? 'text' : 'vector'}-output-node-wrapper .copyable-output')?.textContent.includes(${JSON.stringify(graphPreview)})`), 'actual output rendered in Graph');
+  await until(() => evaluate(`document.querySelector('.svelte-flow__node[data-id="${outputNode}"] .copyable-output')?.textContent.includes(${JSON.stringify(graphPreview)})`), 'actual output rendered in Graph');
   await screenshot('graph-completed');
   await click('[data-testid="workbench-nav-scheduler"]');
   await until(() => received('workflow_run_list_query')?.body.runs?.some(run => run.workflow_run_id === result.workflow_run_id && run.status === 'completed'), 'actual completed scheduler run');
@@ -184,6 +202,13 @@ try {
     source_worktree_status: execFileSync('git', ['status', '--porcelain'], { cwd: root, encoding: 'utf8' }),
     browser, browser_sandbox_disabled_with_user_approval: true, isolated_profile: true,
     local_only_navigation: true, model_training: textOnly ? null : 'untrained', model_acquisition_bytes: 0,
+    model: textOnly ? null : {
+      id: 'embedding/qualification/synthetic-bert-8', architecture: 'BERT, one layer, hidden size 8',
+      weights_bytes: (await fs.stat(path.join(root, 'crates/inference/tests/fixtures/candle_bert/bert-8/model.safetensors'))).size,
+      weights_sha256: createHash('sha256').update(await fs.readFile(path.join(root, 'crates/inference/tests/fixtures/candle_bert/bert-8/model.safetensors'))).digest('hex'),
+      backend: 'Candle', version: '0.9.2-alpha.2', commit: '88ed7911de9e88196b1f55b199145d22647f415e', device: 'CPU', dtype: 'F32',
+      pumas_commit: 'aa1d79ae2d53f0acb088bc85223ecc2ff46af12b',
+    },
     input: inputText, result, retained, max_reference_error: textOnly ? 0 : Math.max(...actual.map((value, index) => Math.abs(value - golden[index]))),
     screenshots, consoleErrors, exceptions, blockedRequests, receipts,
   }, null, 2) + '\n');

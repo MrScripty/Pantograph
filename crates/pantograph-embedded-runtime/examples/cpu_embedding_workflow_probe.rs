@@ -173,10 +173,11 @@ async fn author_workflow(
     let mut graph: WorkflowGraph = serde_json::from_value(json!({"nodes": [
         {"id":"prompt", "node_type":"text-input", "position":{"x":0,"y":100}, "data":{"text":"hello world"}},
         {"id":"infer", "node_type":"llm-inference", "position":{"x":300,"y":100}, "data":{
+            "label":"CPU Embedding", "modelName":"Untrained BERT-8",
             "task_kind":"embedding", "runtime":"candle", "device":"cpu",
             "runtime_source_context":{"operation_type":"embedding.text", "context_shape_key":"embedding.one-text", "cancellation_mode":"run_scoped"},
             "pumas_model_ref":{"model_id":MODEL_ID, "selected_artifact_id":"main"}}},
-        {"id":"vectors", "node_type":"vector-output", "position":{"x":600,"y":100}, "data":{}},
+        {"id":"vectors", "node_type":"vector-output", "position":{"x":740,"y":100}, "data":{}},
         {"id":"deps", "node_type":"dependency-environment", "position":{"x":300,"y":450}, "data":{"mode":"manual"}}
     ], "edges": [
         {"id":"text-to-infer", "source":"prompt", "source_handle":"text", "target":"infer", "target_handle":"text"},
