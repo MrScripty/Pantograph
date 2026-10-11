@@ -52,6 +52,7 @@ export const workflowNodeTypes: NodeTypes = {
   'linked-input': LinkedInputNode,
   'masked-text-input': MaskedTextInputNode,
   'image-input': GenericNode,
+  'json-filter': GenericNode,
   'rag-search': GenericNode,
   'read-file': GenericNode,
   'write-file': GenericNode,

@@ -1811,7 +1811,23 @@ async fn scheduler_run_retains_detail_and_terminal_output_projection() {
         run.status,
         pantograph_workflow_service::RunListProjectionStatus::Completed
     );
-    assert!(detail.node_statuses.is_empty());
+    // The client input is materialized, while the output node has one actual
+    // non-runtime scheduler attempt. It must appear without inventing a runtime.
+    assert_eq!(detail.node_statuses.len(), 1);
+    let output_status = &detail.node_statuses[0];
+    assert_eq!(output_status.node_id, "text-output-1");
+    assert_eq!(output_status.node_type.as_deref(), Some("text-output"));
+    assert_eq!(output_status.task_id.as_deref(), Some("text-output-1"));
+    assert_eq!(
+        output_status.status,
+        pantograph_diagnostics_ledger::NodeExecutionProjectionStatus::Completed
+    );
+    assert!(output_status.runtime_id.is_none());
+    assert!(output_status.selected_backend_key.is_none());
+    assert!(output_status.error.is_none());
+    assert!(output_status.started_at_ms.is_some());
+    assert!(output_status.completed_at_ms.is_some());
+    assert!(output_status.duration_ms.is_some());
 
     let artifacts = workflow_service
         .workflow_io_artifact_query(WorkflowIoArtifactQueryRequest {

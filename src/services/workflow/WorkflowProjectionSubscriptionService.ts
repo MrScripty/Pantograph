@@ -1,4 +1,5 @@
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { getWorkflowBrowserHost } from './workflowBrowserTransport.ts';
 import type {
   DiagnosticsProjectionInvalidation,
   DiagnosticsProjectionInvalidationEvent,
@@ -22,8 +23,10 @@ export interface DiagnosticsProjectionSubscriptionOptions {
 
 export async function subscribeDiagnosticsProjectionInvalidations(
   options: DiagnosticsProjectionSubscriptionOptions,
-  listenEvent: WorkflowProjectionInvalidationListener = listen,
+  listenEvent?: WorkflowProjectionInvalidationListener,
 ): Promise<UnlistenFn> {
+  if (!listenEvent && getWorkflowBrowserHost()) return pollDiagnosticsProjections(options);
+  const listener = listenEvent ?? listen;
   const projections = new Set(options.projections);
   const pending = new Map<string, DiagnosticsProjectionInvalidation>();
   let scheduled = false;
@@ -51,7 +54,7 @@ export async function subscribeDiagnosticsProjectionInvalidations(
     });
   };
 
-  const unlisten = await listenEvent<DiagnosticsProjectionInvalidationEvent>(
+  const unlisten = await listener<DiagnosticsProjectionInvalidationEvent>(
     WORKFLOW_DIAGNOSTICS_PROJECTION_INVALIDATED_EVENT,
     (event) => {
       for (const invalidation of normalizeInvalidations(event.payload)) {
@@ -91,4 +94,36 @@ function invalidationKey(invalidation: DiagnosticsProjectionInvalidation): strin
     invalidation.workflow_run_id ?? '',
     invalidation.workflow_id ?? '',
   ].join('\u{1f}');
+}
+
+/** Browser hosts refresh projections through their real query APIs, without native IPC. */
+export function pollDiagnosticsProjections(
+  options: DiagnosticsProjectionSubscriptionOptions,
+  intervalMs = 2000,
+): UnlistenFn {
+  let closed = false;
+  let timer: ReturnType<typeof setTimeout>;
+  const refresh = async () => {
+    for (const projection of new Set(options.projections)) {
+      if (closed) return;
+      try {
+        await options.refresh({
+          projection_kind: projection,
+          workflow_run_id: options.getActiveRunId?.() ?? null,
+          // Explicit refresh carries no fabricated ledger sequence or backend event.
+          last_event_seq: 0,
+          reason: 'explicit_refresh',
+          updated_at_ms: Date.now(),
+        });
+      } catch (error) {
+        if (!closed) options.onRefreshError?.(error);
+      }
+    }
+    if (!closed) timer = setTimeout(() => { void refresh(); }, intervalMs);
+  };
+  timer = setTimeout(() => { void refresh(); }, intervalMs);
+  return () => {
+    closed = true;
+    clearTimeout(timer);
+  };
 }

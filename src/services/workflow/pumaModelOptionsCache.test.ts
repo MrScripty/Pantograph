@@ -362,3 +362,13 @@ test('loadPumasModelOptions forceRefresh bypasses cached rows', async () => {
     ],
   );
 });
+
+test('catalog read failures remain errors instead of becoming an empty library', async () => {
+  invalidatePumasModelOptionsCache();
+  const failure = new Error('Pumas catalog database unavailable');
+  const invoker: WorkflowInvoker = async () => { throw failure; };
+  await assert.rejects(loadPumasModelOptions(invoker), (error) => error === failure);
+  const recovered: WorkflowInvoker = async () => ({ options: [] } as never);
+  assert.deepEqual(await loadPumasModelOptions(recovered), []);
+  invalidatePumasModelOptionsCache();
+});

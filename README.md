@@ -9,6 +9,94 @@ runtime scheduling, real-time observability, and diagnostic tracing for AI
 pipelines. Host integrations consume the native Rust interface or projections
 through UniFFI, Rustler, and optional HTTP adapters.
 
+## Application gallery
+
+**Review branch:** [PR #71](https://github.com/MrScripty/Pantograph/pull/71).
+These assets are tracked on the demo branch pending review and merge.
+All captures use the actual Svelte application in Chromium, connected to a
+persistent Rust workflow service through an explicit loopback HTTP host. These
+are **not native Tauri windows**. The host executes the deterministic graph,
+serves live diagnostic queries and retained artifact bytes, and reads an isolated
+Pumas library. No service mocks or recorded-response injection are used.
+
+### Workflow graph
+
+![Actual workflow canvas with Selection Input, JSON Filter, and Text Output](docs/images/node-editor.png)
+
+The **Graph** page renders backend-produced definitions and the real demo graph.
+Editor submission is unavailable here; native execution is demonstrated separately below.
+
+### Execution ledger and diagnostics
+
+![Actual Diagnostics page querying the live native workflow service](docs/images/execution-ledger.png)
+
+The **Diagnostics** page queries real run facts, node status and ledger events
+from the running Rust service. [The matching native response](docs/images/scheduler-demo-success.json)
+preserves the capture evidence; the application does not replay that file.
+
+![Actual native events in the live Diagnostics scheduler timeline](docs/images/execution-ledger-timeline.png)
+
+The [node-status view](docs/images/execution-node-status.png) reports both executed
+tasks completed and all three small payloads retained.
+
+### Workflow-run inspection
+
+![Actual I/O Inspector reading the retained output of the deterministic workflow run](docs/images/workflow-run-inspector.png)
+
+The **I/O Inspector** queries the backend run graph and resolved I/O, then reads
+the actual retained text through the artifact API. No model inference is claimed.
+
+### Model library
+
+![Actual Library page reading the isolated empty Pumas model catalog](docs/images/model-library.png)
+
+The **Library** page reads a real, isolated empty Pumas catalog and usage ledger.
+This limited host disables model search/download/delete with an explanation. No
+models were invented or downloaded and no private user library was accessed.
+
+### Scope
+
+The sidebar's **Node Editor** is a separate Node Lab page whose authoring API,
+local agent and runtime publishing remain unavailable in current source. It is
+not the workflow **Graph** canvas. This change fixes browser transport and
+inspection, not node authoring or editor-to-model inference. Native Tauri capture
+still requires GTK/WebKit dependencies unavailable in this environment.
+
+## Demonstration and research
+
+A small deterministic workflow now exercises the native scheduler without model
+weights: **Selection Input → JSON Filter → Text Output**. It validates a graph,
+submits an execution session, extracts text from JSON, and records task lifecycle
+and I/O diagnostics in SQLite. Try both successful extraction and a missing path:
+
+```bash
+python3 examples/scheduler-demo/serve.py
+```
+
+Open `http://127.0.0.1:8765`. See the [demo guide](examples/scheduler-demo/README.md)
+for prerequisites, exact scope, raw execution records, and screenshot reproduction.
+
+![Real native scheduler execution shown in the local demo host](docs/images/scheduler-demo-success.png)
+
+This is real deterministic Rust execution, not model inference. The minimal
+browser host is separate from the desktop editor.
+
+The [GitHub Pages presentation source](docs/presentation/README.md) combines
+screenshots, an interactive viewer of recorded scheduler events, inference
+ownership boundaries, and readable research editions. It is prepared for local
+preview and review; Pages has not been enabled or deployed by this change.
+
+| Area | Research |
+| --- | --- |
+| Nodes and extensions | [Node Execution and Dynamic Extensions](docs/research/node-execution-and-dynamic-extensions.md) |
+| Scheduling | [A Resource Safe Learning Scheduler](docs/research/scheduler/resource-safe-learning-scheduler.md) and [v2 simulation evaluation](docs/research/scheduler/v2-evaluation.md) |
+| Inference backends | [Designing Compatible Inference Backends](docs/research/inference-backends/manuscript/designing-compatible-inference-backends.md) |
+| Diagnostics and provenance | [Execution Ledger and Provenance](docs/research/execution-ledger-and-provenance.md) |
+
+These are source audits, research proposals, and separately labeled simulations;
+they do not establish production or GPU performance. The
+[research index](docs/research/README.md) records their pinned editions and limits.
+
 ## Architecture
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the current module map, target

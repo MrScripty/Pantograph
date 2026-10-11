@@ -1,5 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { getWorkflowBrowserHost } from '../../services/workflow/workflowBrowserTransport';
+  import { loadWorkflowBrowserCapabilities, browserLibraryActionAllowed, type WorkflowBrowserCapabilities } from '../../services/workflow/workflowBrowserCapabilities';
   import { Download, RefreshCw, Search, Trash2 } from 'lucide-svelte';
   import type {
     LibraryUsageProjectionRecord,
@@ -21,6 +23,11 @@
     isLibraryAssetLastUsedByRun,
   } from './libraryUsagePresenters';
   import { formatWorkflowCommandError } from './workflowErrorPresenters';
+
+  const browserHost = getWorkflowBrowserHost();
+  let hostCapabilities = $state<WorkflowBrowserCapabilities | null>(null);
+  const canSearch = $derived(browserLibraryActionAllowed(Boolean(browserHost), hostCapabilities, 'search'));
+  const canWrite = $derived(browserLibraryActionAllowed(Boolean(browserHost), hostCapabilities, 'write'));
 
   let assets = $state<LibraryUsageProjectionRecord[]>([]);
   let pumasModels = $state<PortOption[]>([]);
@@ -102,6 +109,7 @@
   }
 
   async function searchHfModels(): Promise<void> {
+    if (!canSearch) return;
     actionBusy = 'search';
     actionError = null;
     actionMessage = null;
@@ -123,6 +131,7 @@
   }
 
   async function startHfDownload(): Promise<void> {
+    if (!canWrite) return;
     actionBusy = 'download';
     actionError = null;
     actionMessage = null;
@@ -144,6 +153,7 @@
   }
 
   async function deletePumasModel(): Promise<void> {
+    if (!canWrite) return;
     actionBusy = 'delete';
     actionError = null;
     actionMessage = null;
@@ -162,6 +172,11 @@
 
   onMount(() => {
     let disposed = false;
+    void loadWorkflowBrowserCapabilities().then((capabilities) => {
+      if (!disposed) hostCapabilities = capabilities;
+    }).catch((hostError) => {
+      if (!disposed) actionError = formatWorkflowCommandError(hostError);
+    });
     void refreshLibraryPage();
     void subscribeDiagnosticsProjectionInvalidations({
       projections: ['library_usage'],
@@ -212,6 +227,15 @@
     {formatLibraryProjectionFreshness(projectionState)}
   </div>
 
+  {#if browserHost}
+    <div class="border-b border-cyan-900 bg-cyan-950/30 px-4 py-2 text-sm text-cyan-100" data-testid="library-host-notice">
+      {hostCapabilities?.description ?? 'Checking browser host capabilities…'}
+      {#if hostCapabilities && (!canSearch || !canWrite)}
+        Search, download and deletion require a host that enables these actions.
+      {/if}
+    </div>
+  {/if}
+
   {#if error}
     <div class="border-b border-red-900 bg-red-950/50 px-4 py-2 text-sm text-red-200">{error}</div>
   {/if}
@@ -248,7 +272,7 @@
           aria-label="Search HuggingFace"
           class="inline-flex h-9 items-center justify-center rounded border border-neutral-700 text-neutral-300 transition-colors hover:border-cyan-500 hover:text-cyan-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
           onclick={() => void searchHfModels()}
-          disabled={actionBusy !== null}
+          disabled={!canSearch || actionBusy !== null}
         >
           <Search size={16} aria-hidden="true" />
         </button>
@@ -283,7 +307,7 @@
         aria-label="Start HuggingFace download"
         class="inline-flex h-9 items-center justify-center rounded border border-neutral-700 text-neutral-300 transition-colors hover:border-cyan-500 hover:text-cyan-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
         onclick={() => void startHfDownload()}
-        disabled={actionBusy !== null || downloadRepoId.trim().length === 0}
+        disabled={!canWrite || actionBusy !== null || downloadRepoId.trim().length === 0}
       >
         <Download size={16} aria-hidden="true" />
       </button>
@@ -314,7 +338,7 @@
         aria-label="Delete Pumas model"
         class="inline-flex h-9 items-center justify-center rounded border border-neutral-700 text-neutral-300 transition-colors hover:border-red-500 hover:text-red-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-400 disabled:opacity-50"
         onclick={() => void deletePumasModel()}
-        disabled={actionBusy !== null || deleteModelId.trim().length === 0}
+        disabled={!canWrite || actionBusy !== null || deleteModelId.trim().length === 0}
       >
         <Trash2 size={16} aria-hidden="true" />
       </button>

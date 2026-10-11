@@ -1,6 +1,9 @@
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { getWorkflowBrowserHost } from './workflowBrowserTransport.ts';
+import { invokeWorkflowCommand } from './workflowServiceErrors.ts';
 import type {
   WorkflowGraphValidationLifecycleEvent,
+  WorkflowGraphValidationLifecycleEventSnapshot,
   WorkflowGraphValidationLifecycleTransportEvent,
 } from './types.ts';
 
@@ -20,12 +23,15 @@ export interface WorkflowGraphValidationLifecycleSubscriptionOptions {
 
 export async function subscribeGraphValidationLifecycleEvents(
   options: WorkflowGraphValidationLifecycleSubscriptionOptions,
-  listenEvent: WorkflowGraphValidationLifecycleListener = listen,
+  listenEvent?: WorkflowGraphValidationLifecycleListener,
 ): Promise<UnlistenFn> {
+  const listener = listenEvent ?? (getWorkflowBrowserHost()
+    ? browserValidationListener(options)
+    : listen);
   const lastSequenceByGraphSession = new Map<string, number>();
   let closed = false;
 
-  const unlisten = await listenEvent<WorkflowGraphValidationLifecycleTransportEvent>(
+  const unlisten = await listener<WorkflowGraphValidationLifecycleTransportEvent>(
     WORKFLOW_GRAPH_VALIDATION_LIFECYCLE_EVENT,
     (event) => {
       const lifecycleEvent = normalizeLifecycleEvent(event.payload);
@@ -70,4 +76,31 @@ function matchesActiveGraphSession(
 ): boolean {
   const activeGraphSessionId = getActiveGraphSessionId?.() ?? null;
   return !activeGraphSessionId || event.graph_session_id === activeGraphSessionId;
+}
+
+function browserValidationListener(
+  options: WorkflowGraphValidationLifecycleSubscriptionOptions,
+): WorkflowGraphValidationLifecycleListener {
+  return async <Payload>(_eventName: string, handler: (event: { payload: Payload }) => void) => {
+    let closed = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      const graphSessionId = options.getActiveGraphSessionId?.();
+      if (graphSessionId) {
+        try {
+          const snapshot = await invokeWorkflowCommand<WorkflowGraphValidationLifecycleEventSnapshot>(
+            'graph_validation_lifecycle_event_snapshot', { graphSessionId },
+          );
+          if (!closed && options.getActiveGraphSessionId?.() === graphSessionId) {
+            for (const event of snapshot.events) handler({ payload: { event } as Payload });
+          }
+        } catch (error) {
+          if (!closed) options.onEventError?.(error);
+        }
+      }
+      if (!closed) timer = setTimeout(() => { void poll(); }, 2000);
+    };
+    timer = setTimeout(() => { void poll(); }, 2000);
+    return () => { closed = true; clearTimeout(timer); };
+  };
 }

@@ -1,0 +1,11 @@
+{
+  "nodes": [
+    {"id": "source", "node_type": "selection-input", "position": {"x": 0, "y": 0}, "data": {}},
+    {"id": "filter", "node_type": "json-filter", "position": {"x": 360, "y": 0}, "data": {"path": "items[0].prompt"}},
+    {"id": "out", "node_type": "text-output", "position": {"x": 720, "y": 0}, "data": {}}
+  ],
+  "edges": [
+    {"id": "source-filter", "source": "source", "source_handle": "value", "target": "filter", "target_handle": "json"},
+    {"id": "filter-out", "source": "filter", "source_handle": "value", "target": "out", "target_handle": "text"}
+  ]
+}
