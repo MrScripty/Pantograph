@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="590" viewBox="0 0 1000 590">
+<rect width="1000" height="590" fill="white"/>
+<defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#526d7a"/></marker></defs>
+<text x="30" y="36.0" text-anchor="start" font-family="DejaVu Sans, sans-serif" font-size="25" font-weight="bold" fill="#152b38">Three places to put model knowledge</text>
+<text x="30" y="65.0" text-anchor="start" font-family="DejaVu Sans, sans-serif" font-size="17" font-weight="normal" fill="#52616a">Source based synthesis of different runtime construction paths</text>
+<rect x="70" y="95" width="860" height="73" rx="8" fill="#f5f0e5" stroke="#748994" stroke-width="1.5"/>
+<text x="500.0" y="125.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38">Task meaning travels with every route</text>
+<text x="500.0" y="154.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">Processor · output head interpretation · postprocessing · state procedure</text>
+<rect x="40" y="210" width="280" height="90" rx="8" fill="#eaf1f5" stroke="#748994" stroke-width="1.5"/>
+<text x="180.0" y="240.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38"></text>
+<text x="180.0" y="250.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="19" font-weight="normal" fill="#152b38">GGUF metadata</text>
+<text x="180.0" y="275.08" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="19" font-weight="normal" fill="#152b38">and named tensors</text>
+<rect x="360" y="210" width="280" height="90" rx="8" fill="#eaf3ee" stroke="#748994" stroke-width="1.5"/>
+<text x="500.0" y="240.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38"></text>
+<text x="500.0" y="250.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="19" font-weight="normal" fill="#152b38">Implemented</text>
+<text x="500.0" y="275.08" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="19" font-weight="normal" fill="#152b38">llama.cpp family</text>
+<rect x="680" y="210" width="280" height="90" rx="8" fill="#eaf1f5" stroke="#748994" stroke-width="1.5"/>
+<text x="820.0" y="240.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38"></text>
+<text x="820.0" y="250.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="19" font-weight="normal" fill="#152b38">GGML graph</text>
+<text x="820.0" y="275.08" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="19" font-weight="normal" fill="#152b38">and kernels</text>
+<path d="M320,255 L352,255" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+<path d="M640,255 L672,255" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+<rect x="40" y="340" width="280" height="90" rx="8" fill="#eaf1f5" stroke="#748994" stroke-width="1.5"/>
+<text x="180.0" y="370.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38"></text>
+<text x="180.0" y="380.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="19" font-weight="normal" fill="#152b38">Source model</text>
+<text x="180.0" y="405.08" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="19" font-weight="normal" fill="#152b38">and exporter</text>
+<rect x="360" y="340" width="280" height="90" rx="8" fill="#eaf3ee" stroke="#748994" stroke-width="1.5"/>
+<text x="500.0" y="370.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38"></text>
+<text x="500.0" y="380.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="19" font-weight="normal" fill="#152b38">ONNX graph of</text>
+<text x="500.0" y="405.08" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="19" font-weight="normal" fill="#152b38">versioned operators</text>
+<rect x="680" y="340" width="280" height="90" rx="8" fill="#eaf1f5" stroke="#748994" stroke-width="1.5"/>
+<text x="820.0" y="370.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38"></text>
+<text x="820.0" y="380.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="19" font-weight="normal" fill="#152b38">ORT provider</text>
+<text x="820.0" y="405.08" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="19" font-weight="normal" fill="#152b38">partition and kernels</text>
+<path d="M320,385 L352,385" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+<path d="M640,385 L672,385" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+<rect x="40" y="470" width="280" height="90" rx="8" fill="#eaf1f5" stroke="#748994" stroke-width="1.5"/>
+<text x="180.0" y="500.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38"></text>
+<text x="180.0" y="510.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="19" font-weight="normal" fill="#152b38">Supported source</text>
+<text x="180.0" y="535.08" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="19" font-weight="normal" fill="#152b38">representation</text>
+<rect x="360" y="470" width="280" height="90" rx="8" fill="#eaf3ee" stroke="#748994" stroke-width="1.5"/>
+<text x="500.0" y="500.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38"></text>
+<text x="500.0" y="510.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="19" font-weight="normal" fill="#152b38">OpenVINO frontend</text>
+<text x="500.0" y="535.08" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="19" font-weight="normal" fill="#152b38">and model</text>
+<rect x="680" y="470" width="280" height="90" rx="8" fill="#eaf1f5" stroke="#748994" stroke-width="1.5"/>
+<text x="820.0" y="500.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38"></text>
+<text x="820.0" y="510.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="19" font-weight="normal" fill="#152b38">Device compilation</text>
+<text x="820.0" y="535.08" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="19" font-weight="normal" fill="#152b38">and infer request</text>
+<path d="M320,515 L352,515" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+<path d="M640,515 L672,515" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+</svg>

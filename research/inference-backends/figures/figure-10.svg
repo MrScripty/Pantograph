@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="655" viewBox="0 0 1000 655">
+<rect width="1000" height="655" fill="white"/>
+<defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#526d7a"/></marker></defs>
+<text x="30" y="36.0" text-anchor="start" font-family="DejaVu Sans, sans-serif" font-size="25" font-weight="bold" fill="#152b38">Qualified fallback preserves the requested computation</text>
+<text x="30" y="65.0" text-anchor="start" font-family="DejaVu Sans, sans-serif" font-size="17" font-weight="normal" fill="#52616a">Proposed policy gate; every answer must be established</text>
+<rect x="75" y="105" width="690" height="70" rx="8" fill="#eaf1f5" stroke="#748994" stroke-width="1.5"/>
+<text x="420.0" y="135.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="bold" fill="#152b38">Same lineage and qualified task semantics?</text>
+<path d="M420,175 L420,203" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+<path d="M765,140 L824,140" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+<text x="805" y="128.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="16" font-weight="normal" fill="#152b38">No</text>
+<rect x="75" y="210" width="690" height="70" rx="8" fill="#eaf1f5" stroke="#748994" stroke-width="1.5"/>
+<text x="420.0" y="240.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="bold" fill="#152b38">Same permitted trust, privacy and network policy?</text>
+<path d="M420,280 L420,308" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+<path d="M765,245 L824,245" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+<text x="805" y="233.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="16" font-weight="normal" fill="#152b38">No</text>
+<rect x="75" y="315" width="690" height="70" rx="8" fill="#eaf1f5" stroke="#748994" stroke-width="1.5"/>
+<text x="420.0" y="345.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="bold" fill="#152b38">Qualified alternative for options and input envelope?</text>
+<path d="M420,385 L420,413" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+<path d="M765,350 L824,350" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+<text x="805" y="338.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="16" font-weight="normal" fill="#152b38">No</text>
+<rect x="75" y="420" width="690" height="70" rx="8" fill="#eaf1f5" stroke="#748994" stroke-width="1.5"/>
+<text x="420.0" y="450.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="bold" fill="#152b38">Safe output commitment or explicit replay / resume rule?</text>
+<path d="M765,455 L824,455" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+<text x="805" y="443.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="16" font-weight="normal" fill="#152b38">No</text>
+<rect x="835" y="190" width="140" height="180" rx="8" fill="#f7e9e5" stroke="#748994" stroke-width="1.5"/>
+<text x="905.0" y="220.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38">Stop</text>
+<text x="905.0" y="249.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">Specific</text>
+<text x="905.0" y="272.76" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">blocker or</text>
+<text x="905.0" y="296.52" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">user decision</text>
+<path d="M825,140 L825,455" stroke="#526d7a" stroke-width="2"/>
+<rect x="160" y="552" width="625" height="63" rx="8" fill="#eaf3ee" stroke="#748994" stroke-width="1.5"/>
+<text x="472.5" y="582.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="bold" fill="#152b38">Admit the alternative and record the effective route</text>
+<path d="M420,490 L420,545" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+<text x="100" y="630.0" text-anchor="start" font-family="DejaVu Sans, sans-serif" font-size="17" font-weight="normal" fill="#152b38">No automatic switch of model, custom-code trust or external data destination</text>
+</svg>

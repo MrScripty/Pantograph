@@ -1,0 +1,82 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Research sources · Pantograph</title><link rel="stylesheet" href="../style.css"><body><main class="reader"><a href="../index.html#research">← Pantograph research</a><p class="reader-notice">Research edition: 2 October 2026. Source inspection is pinned to 4938e405. Proposals and standalone simulations are not production qualification. <a href="README.md">Original Markdown</a></p><details><summary>Contents</summary><nav class="reader-toc"><a href="#pantograph-research-sources">Pantograph Research Sources</a><a href="#editions-and-evidence">Editions And Evidence</a><a href="#read-against-the-active-acceptance-criteria">Read Against The Active Acceptance Criteria</a><a href="#scheduler-results-need-their-denominators">Scheduler Results Need Their Denominators</a><a href="#reproduction-and-maintenance-boundary">Reproduction And Maintenance Boundary</a></nav></details><h1 id="pantograph-research-sources">Pantograph Research Sources</h1>
+<p>These books and papers inform development; they do not admit implementation
+work or change Pantograph's supported capabilities. Start with the
+<a href="https://github.com/MrScripty/Pantograph/blob/main/docs/plans/domain-architecture-and-multimodal/plan.md">active domain-architecture plan</a>
+for scope and acceptance, the <a href="https://github.com/MrScripty/Pantograph/blob/main/docs/adr/README.md">ADR index</a> for accepted
+decisions, and <a href="https://github.com/MrScripty/Pantograph/blob/main/ARCHITECTURE.md">Architecture</a> for current ownership.</p>
+<h2 id="editions-and-evidence">Editions And Evidence</h2>
+<p>All five manuscripts are the 2 October 2026 research editions. Their Pantograph
+source inspection is pinned to
+<a href="https://github.com/MrScripty/Pantograph/commit/4938e405c7f656365eefdca492774ccae110c90d"><code>4938e405c7f656365eefdca492774ccae110c90d</code></a>.
+Statements such as &quot;current&quot; or &quot;already implements&quot; describe that snapshot,
+not later revisions. Source inspection is not build, deployment, crash-test,
+security-containment, or hardware-performance evidence.</p>
+<p>| Reading | Status and use |
+| --- | --- |
+| <a href="inference-backends/manuscript/designing-compatible-inference-backends.html">Designing Compatible Inference Backends</a> | Book: source-grounded comparison and proposed compatibility architecture. Chapter 9 audits Pantograph; chapters 10–16 propose contracts, qualification and a native roadmap. |
+| <a href="node-execution-and-dynamic-extensions.html">Pantograph Node Execution and Dynamic Extensions</a> | Paper: section 5 audits the node boundary; sections 6–14 propose managed invocation, lifecycle, extension admission and qualification. |
+| <a href="execution-ledger-and-provenance.html">Pantograph Execution Ledger and Provenance</a> | Paper: section 3 audits existing evidence/artifact paths; later sections propose identity, commitment, retention and evaluation contracts. |
+| <a href="scheduler/resource-safe-learning-scheduler.html">A Resource Safe Learning Scheduler for Pantograph</a> | Revised paper: inspected production constraints, audited v1 simulation findings, and a proposed v2 research contract. It predates the v2 evaluation below. |
+| <a href="scheduler/v2-evaluation.html">Pantograph scheduler v2 evaluation</a> | Later C3-corrected standalone simulation report, with historical C1/O1 results and C3 regression evidence kept separate. No Pantograph implementation or GPU benchmark. |</p>
+<p>The <a href="source-manifest.json">source manifest</a> records exact SHA-256 identities,
+edition information and the separate C3 simulator fingerprint. Manuscripts,
+their linked figures and the inference book's
+<a href="inference-backends/references/primary-source-index.json">primary-source index</a>
+are byte-for-byte copies of the supplied research editions. Bibliographies,
+pinned source links, original diagram sources and limits remain with each work.
+No third-party papers, upstream source snapshots or PDF editions are bundled.</p>
+<h2 id="read-against-the-active-acceptance-criteria">Read Against The Active Acceptance Criteria</h2>
+<p>The following links are design inputs to the plan's existing DA criteria,
+not new acceptance criteria or claims that an item is satisfied.</p>
+<p>| Active obligation | Relevant research |
+| --- | --- |
+| DA-01 review and DA-02 domain ownership | Inference <a href="inference-backends/manuscript/designing-compatible-inference-backends.html#9-what-pantograph-has-today">chapter 9 source audit</a> and <a href="inference-backends/manuscript/designing-compatible-inference-backends.html#10-separating-identity-capability-and-execution">chapter 10 contract owners</a>; node <a href="node-execution-and-dynamic-extensions.html#5-current-implementation-and-integration-gaps">section 5 integration gaps</a>. |
+| DA-03 real dependent text-to-image workflow | Inference <a href="inference-backends/manuscript/designing-compatible-inference-backends.html#12-data-contracts-across-modalities">chapter 12 data contracts</a> and <a href="inference-backends/manuscript/designing-compatible-inference-backends.html#13-qualification-before-promises">chapter 13 qualification</a>. A simulation or independent text/image runs cannot satisfy the real mixed-workflow criterion. |
+| DA-04 failure, cancellation and resource ownership | Node <a href="node-execution-and-dynamic-extensions.html#7-lifecycle-cancellation-retry-cache-and-state">section 7 lifecycle</a> and <a href="node-execution-and-dynamic-extensions.html#13-qualification-claims-and-falsifiers">section 13 falsifiers</a>; scheduler <a href="scheduler/resource-safe-learning-scheduler.html#4-state-and-authority-at-node-and-stage-boundaries">sections 4–6</a>. |
+| DA-05 retained-output lifetime and cold reopen | Ledger <a href="execution-ledger-and-provenance.html#7-crash-consistency-and-result-commitment">section 7 commitment</a>, <a href="execution-ledger-and-provenance.html#8-retention-deletion-and-privacy">section 8 retention</a> and <a href="execution-ledger-and-provenance.html#14-validation-criteria-before-stronger-guarantees">section 14 validation</a>. |
+| DA-06 measured orchestration and resource budgets | Scheduler <a href="scheduler/resource-safe-learning-scheduler.html#9-learn-host-and-phase-behavior-without-future-leakage">section 9 measurement</a>, <a href="scheduler/resource-safe-learning-scheduler.html#10-completion-oriented-multi-event-planning">section 10 planning cost</a> and v2 <a href="scheduler/v2-evaluation.html#planning-time-and-unfinished-experiments">real planning overhead</a>. |
+| DA-07 final integrated evidence | Inference <a href="inference-backends/manuscript/designing-compatible-inference-backends.html#13-qualification-before-promises">chapter 13</a>, node <a href="node-execution-and-dynamic-extensions.html#13-qualification-claims-and-falsifiers">section 13</a>, and ledger <a href="execution-ledger-and-provenance.html#14-validation-criteria-before-stronger-guarantees">section 14</a> supply possible falsifiers. Each required production claim still needs its own environment-qualified evidence. |</p>
+<p>For the selected Pumas owner/client integration, preserve the
+<a href="https://github.com/MrScripty/Pantograph/blob/main/docs/plans/domain-architecture-and-multimodal/plan.md#pumas-ownerclient-integration--selected-design">plan's producer/consumer contract</a>.
+The inference book distinguishes Pantograph's consumed Pumas revision
+<code>f87c3da8276a914a54c6f4f36d617bef9d9f424e</code> from its separately inspected newer
+upstream snapshot. Neither a newer producer nor a research proposal silently
+replaces the application's dependency pin, artifact identity, or load-target
+authority.</p>
+<h2 id="scheduler-results-need-their-denominators">Scheduler Results Need Their Denominators</h2>
+<p>The <a href="scheduler/v2-evaluation.html#final-c3-visibility-correction-and-fresh-holdout">C3 fresh holdout</a>
+has 56 runs: 55 terminal and one budget-exceeded run. Search versus
+earliest-finish has nine wins and one loss across ten complete pairs; the
+iterative search run did not complete. This is one fresh seed, not broad
+generalization evidence. The earlier C1/O1 complete-pair comparison has 27
+wins, one tie and two losses, with three of 33 search runs budget-exceeded.</p>
+<p>C3 search averaged <strong>116.72 seconds of planner CPU</strong> and <strong>116.79 seconds of
+whole-run CPU</strong>; earliest-finish averaged <strong>0.19 seconds of whole-run CPU</strong>.
+These are real CPU costs on the evaluation host. Modeled execution seconds
+are synthetic and are not hardware-calibrated. Planner columns omit
+interrupted calls and therefore understate planning cost for interrupted runs.
+The report preserves losing batching/split cases and the tiny oracle's missed
+batch-of-three optimum. Favorable simulated schedules do not establish useful
+production throughput.</p>
+<p>C2/C3 corrected hidden-demand and forecast-metadata leakage, then cleanup-event
+ordering that could reveal latent state. The interrupted seed-9001 population,
+fresh seed-9029 population, and historical regression are separately disclosed.
+Do not use pre-correction results as evidence for the corrected information
+boundary or describe historical reruns as unseen holdouts.</p>
+<h2 id="reproduction-and-maintenance-boundary">Reproduction And Maintenance Boundary</h2>
+<p>This is a reading collection, not a self-contained experiment package. The
+scheduler manuscripts refer to their original standalone companions: simulator
+source, frozen contracts, raw runs, traces, tests and independent review files.
+Those companions are not bundled here, and no public download location is
+established by this import. Their reproduction commands and relative evidence
+filenames refer to those packages, not this repository checkout. This import
+checks manuscript/asset fidelity and links; it does not rerun their experiments
+or independently certify all reported results.</p>
+<p>The inference book retains its 15 linked PNG diagrams and editable SVG
+originals; the v2 report retains both linked figures and their SVG originals.
+PDFs, covers, rendering tools and unused companion figures are omitted.
+Research recommendations remain proposals until adopted through the owning
+plan or ADR. When development invalidates a dated observation, update current
+guides and acceptance evidence rather than silently rewriting the research
+edition. Git history preserves replaced editions without a parallel archive.</p>
+</main></body></html>

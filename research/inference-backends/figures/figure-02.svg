@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="670" viewBox="0 0 1000 670">
+<rect width="1000" height="670" fill="white"/>
+<defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#526d7a"/></marker></defs>
+<text x="30" y="36.0" text-anchor="start" font-family="DejaVu Sans, sans-serif" font-size="25" font-weight="bold" fill="#152b38">The loading sequence</text>
+<text x="30" y="65.0" text-anchor="start" font-family="DejaVu Sans, sans-serif" font-size="17" font-weight="normal" fill="#52616a">A proposed plan separates passive inspection from materialization and execution</text>
+<rect x="180" y="90" width="640" height="69" rx="8" fill="#eaf1f5" stroke="#748994" stroke-width="1.5"/>
+<text x="500.0" y="120.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38">1  Resolve identity</text>
+<text x="500.0" y="149.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">Approved artifact closure and immutable revision</text>
+<path d="M500,160 L500,172" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+<rect x="180" y="178" width="640" height="69" rx="8" fill="#eaf1f5" stroke="#748994" stroke-width="1.5"/>
+<text x="500.0" y="208.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38">2  Inspect package</text>
+<text x="500.0" y="237.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">Bounded metadata, graph or tensor inventory</text>
+<path d="M500,248 L500,260" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+<rect x="180" y="266" width="640" height="69" rx="8" fill="#eaf1f5" stroke="#748994" stroke-width="1.5"/>
+<text x="500.0" y="296.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38">3  Resolve semantics</text>
+<text x="500.0" y="325.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">Known family / operators, task head and recipe</text>
+<path d="M500,336 L500,348" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+<rect x="180" y="354" width="640" height="69" rx="8" fill="#eaf1f5" stroke="#748994" stroke-width="1.5"/>
+<text x="500.0" y="384.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38">4  Validate plan</text>
+<text x="500.0" y="413.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">Bindings, processors, numeric profile and policy</text>
+<path d="M500,424 L500,436" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+<rect x="180" y="442" width="640" height="69" rx="8" fill="#eaf3ee" stroke="#748994" stroke-width="1.5"/>
+<text x="500.0" y="472.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38">5  Materialize and publish</text>
+<text x="500.0" y="501.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">Resource lease, model construction, readiness</text>
+<path d="M500,512 L500,524" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+<rect x="180" y="530" width="640" height="69" rx="8" fill="#eaf3ee" stroke="#748994" stroke-width="1.5"/>
+<text x="500.0" y="560.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38">6  Execute and qualify</text>
+<text x="500.0" y="589.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">Task output, numerical evidence and lifecycle</text>
+<text x="42" y="175.0" text-anchor="start" font-family="DejaVu Sans, sans-serif" font-size="17" font-weight="normal" fill="#152b38">No repository</text>
+<text x="42" y="197.44" text-anchor="start" font-family="DejaVu Sans, sans-serif" font-size="17" font-weight="normal" fill="#152b38">code execution</text>
+<text x="42" y="451.0" text-anchor="start" font-family="DejaVu Sans, sans-serif" font-size="17" font-weight="normal" fill="#152b38">Own allocated</text>
+<text x="42" y="473.44" text-anchor="start" font-family="DejaVu Sans, sans-serif" font-size="17" font-weight="normal" fill="#152b38">resources</text>
+</svg>

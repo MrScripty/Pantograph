@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="610" viewBox="0 0 1000 610">
+<rect width="1000" height="610" fill="white"/>
+<defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#526d7a"/></marker></defs>
+<text x="30" y="36.0" text-anchor="start" font-family="DejaVu Sans, sans-serif" font-size="25" font-weight="bold" fill="#152b38">ONNX Runtime has two different fallback mechanisms</text>
+<text x="30" y="65.0" text-anchor="start" font-family="DejaVu Sans, sans-serif" font-size="17" font-weight="normal" fill="#52616a">Initial graph partitioning is separate from Python wrapper recovery</text>
+<text x="30" y="110.0" text-anchor="start" font-family="DejaVu Sans, sans-serif" font-size="22" font-weight="bold" fill="#152b38">1  Provider partitioning during preparation</text>
+<rect x="30" y="143" width="255" height="95" rx="8" fill="#eaf1f5" stroke="#748994" stroke-width="1.5"/>
+<text x="157.5" y="173.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38">Provider capabilities</text>
+<text x="157.5" y="202.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">Ordered eligible providers</text>
+<rect x="345" y="155" width="185" height="70" rx="8" fill="#eaf3ee" stroke="#748994" stroke-width="1.5"/>
+<text x="437.5" y="185.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="bold" fill="#152b38">GPU subgraph</text>
+<rect x="565" y="155" width="185" height="70" rx="8" fill="#f5f0e5" stroke="#748994" stroke-width="1.5"/>
+<text x="657.5" y="185.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="bold" fill="#152b38">CPU nodes</text>
+<rect x="785" y="155" width="185" height="70" rx="8" fill="#eaf3ee" stroke="#748994" stroke-width="1.5"/>
+<text x="877.5" y="185.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="bold" fill="#152b38">GPU subgraph</text>
+<path d="M285,189 L337,189" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+<path d="M530,189 L557,189" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+<path d="M750,189 L777,189" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+<text x="650" y="263.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="17" font-weight="normal" fill="#152b38">Boundaries may require transfer / synchronization</text>
+<text x="650" y="290.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="17" font-weight="bold" fill="#152b38">No CPU policy rejects a plan requiring CPU nodes</text>
+<path d="M30,327 L970,327" stroke="#b0bec6"/>
+<text x="30" y="376.0" text-anchor="start" font-family="DejaVu Sans, sans-serif" font-size="22" font-weight="bold" fill="#152b38">2  Python wrapper recovery after an EP failure</text>
+<rect x="30" y="417" width="285" height="93" rx="8" fill="#eaf1f5" stroke="#748994" stroke-width="1.5"/>
+<text x="172.5" y="447.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="19" font-weight="bold" fill="#152b38">Run session</text>
+<text x="172.5" y="476.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="17" font-weight="normal" fill="#152b38">Existing provider setup</text>
+<rect x="355" y="417" width="285" height="93" rx="8" fill="#eaf1f5" stroke="#748994" stroke-width="1.5"/>
+<text x="497.5" y="447.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="19" font-weight="bold" fill="#152b38">EP failure</text>
+<text x="497.5" y="476.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="17" font-weight="normal" fill="#152b38">Wrapper recovery policy</text>
+<rect x="680" y="417" width="285" height="93" rx="8" fill="#eaf1f5" stroke="#748994" stroke-width="1.5"/>
+<text x="822.5" y="447.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="19" font-weight="bold" fill="#152b38">Reconfigure and retry</text>
+<text x="822.5" y="476.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="17" font-weight="normal" fill="#152b38">A distinct execution attempt</text>
+<path d="M315,463 L347,463" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+<path d="M640,463 L672,463" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+<text x="500" y="560.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="17" font-weight="normal" fill="#152b38">Unsupported operators still fail; a Rust or C API adapter defines its own recovery policy</text>
+</svg>

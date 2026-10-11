@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="640" viewBox="0 0 1000 640">
+<rect width="1000" height="640" fill="white"/>
+<defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#526d7a"/></marker></defs>
+<text x="30" y="36.0" text-anchor="start" font-family="DejaVu Sans, sans-serif" font-size="25" font-weight="bold" fill="#152b38">Components do not replace the execution recipe</text>
+<text x="30" y="65.0" text-anchor="start" font-family="DejaVu Sans, sans-serif" font-size="17" font-weight="normal" fill="#52616a">Two forms of composition</text>
+<text x="245" y="110.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="23" font-weight="bold" fill="#152b38">Diffusion</text>
+<text x="750" y="110.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="23" font-weight="bold" fill="#152b38">Sentence embedding</text>
+<rect x="45" y="140" width="400" height="73" rx="8" fill="#eaf1f5" stroke="#748994" stroke-width="1.5"/>
+<text x="245.0" y="170.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38">Component manifest</text>
+<text x="245.0" y="199.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">Pipeline and component identities</text>
+<rect x="45" y="248" width="400" height="73" rx="8" fill="#eaf3ee" stroke="#748994" stroke-width="1.5"/>
+<text x="245.0" y="278.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38">Tokenizer and text encoder</text>
+<text x="245.0" y="307.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">Produce conditioning</text>
+<rect x="45" y="356" width="190" height="100" rx="8" fill="#eaf3ee" stroke="#748994" stroke-width="1.5"/>
+<text x="140.0" y="386.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38">Denoiser</text>
+<text x="140.0" y="415.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">Latents + timestep</text>
+<text x="140.0" y="438.76" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">+ conditioning</text>
+<rect x="275" y="356" width="170" height="100" rx="8" fill="#f5f0e5" stroke="#748994" stroke-width="1.5"/>
+<text x="360.0" y="386.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38">Scheduler</text>
+<text x="360.0" y="415.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">Update latent</text>
+<text x="360.0" y="438.76" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">state</text>
+<path d="M245,213 L245,241" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+<path d="M160,321 L140,349" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+<path d="M235,404 L268,404" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+<polyline points="360,456 360,475 140,475 140,465" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+<rect x="45" y="510" width="400" height="73" rx="8" fill="#eaf1f5" stroke="#748994" stroke-width="1.5"/>
+<text x="245.0" y="540.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38">Decoder and output transform</text>
+<text x="245.0" y="569.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">Latents → image / audio / video</text>
+<path d="M245,475 L245,503" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+<rect x="550" y="140" width="400" height="73" rx="8" fill="#eaf1f5" stroke="#748994" stroke-width="1.5"/>
+<text x="750.0" y="170.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38">Module manifest</text>
+<text x="750.0" y="199.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">Ordered supported recipe</text>
+<rect x="550" y="248" width="400" height="73" rx="8" fill="#eaf3ee" stroke="#748994" stroke-width="1.5"/>
+<text x="750.0" y="278.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38">Encoder</text>
+<text x="750.0" y="307.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">Tokenizer + model + masks</text>
+<path d="M750,213 L750,241" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+<rect x="550" y="356" width="400" height="73" rx="8" fill="#eaf3ee" stroke="#748994" stroke-width="1.5"/>
+<text x="750.0" y="386.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38">Pooling and optional projection</text>
+<text x="750.0" y="415.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">Prompt and padding policies matter</text>
+<path d="M750,321 L750,349" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+<rect x="550" y="464" width="400" height="73" rx="8" fill="#eaf3ee" stroke="#748994" stroke-width="1.5"/>
+<text x="750.0" y="494.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38">Optional normalization</text>
+<text x="750.0" y="523.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">Embedding representation and recipe ID</text>
+<path d="M750,429 L750,457" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+<text x="750" y="583.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">Equal vector width does not imply</text>
+<text x="750" y="606.76" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">the same embedding space</text>
+</svg>
