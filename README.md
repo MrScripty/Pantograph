@@ -9,6 +9,46 @@ runtime scheduling, real-time observability, and diagnostic tracing for AI
 pipelines. Host integrations consume the native Rust interface or projections
 through UniFFI, Rustler, and optional HTTP adapters.
 
+## Demonstration and research
+
+A small deterministic workflow now exercises the native scheduler without model
+weights: **Selection Input → JSON Filter → Text Output**. It validates a graph,
+submits an execution session, extracts text from JSON, and records task lifecycle
+and I/O diagnostics in SQLite. Try both successful extraction and a missing path:
+
+```bash
+python3 examples/scheduler-demo/serve.py
+```
+
+Open `http://127.0.0.1:8765`. See the [demo guide](examples/scheduler-demo/README.md)
+for prerequisites, exact scope, raw execution records, and screenshot reproduction.
+
+![Real native scheduler execution shown in the local demo host](docs/images/scheduler-demo-success.png)
+
+This is real deterministic Rust execution, not model inference. The minimal
+browser host is separate from the desktop editor.
+
+![Actual Svelte editor rendering the demo graph; desktop submission is unavailable in this browser capture](docs/images/node-editor.png)
+
+The editor capture shows the same graph in the actual Svelte application;
+native desktop save/edit/submit was not tested here.
+
+The [GitHub Pages presentation source](docs/presentation/README.md) combines
+screenshots, an interactive viewer of recorded scheduler events, inference
+ownership boundaries, and readable research editions. It is prepared for local
+preview and review; Pages has not been enabled or deployed by this change.
+
+| Area | Research |
+| --- | --- |
+| Nodes and extensions | [Node Execution and Dynamic Extensions](docs/research/node-execution-and-dynamic-extensions.md) |
+| Scheduling | [A Resource Safe Learning Scheduler](docs/research/scheduler/resource-safe-learning-scheduler.md) and [v2 simulation evaluation](docs/research/scheduler/v2-evaluation.md) |
+| Inference backends | [Designing Compatible Inference Backends](docs/research/inference-backends/manuscript/designing-compatible-inference-backends.md) |
+| Diagnostics and provenance | [Execution Ledger and Provenance](docs/research/execution-ledger-and-provenance.md) |
+
+These are source audits, research proposals, and separately labeled simulations;
+they do not establish production or GPU performance. The
+[research index](docs/research/README.md) records their pinned editions and limits.
+
 ## Architecture
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the current module map, target

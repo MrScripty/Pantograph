@@ -1,0 +1,380 @@
+{
+  "diagnostics": [
+    {
+      "bucket_id": null,
+      "client_id": null,
+      "client_session_id": null,
+      "event_id": "devent_36a726f5faec489db7a1a5111e69c309",
+      "event_kind": "run_snapshot_accepted",
+      "event_seq": 1,
+      "model_id": null,
+      "model_version": null,
+      "node_id": null,
+      "node_type": null,
+      "node_version": null,
+      "occurred_at_ms": 1791744138871,
+      "payload_hash": "diagnostic-event-blake3:b884bcd0131f213bc7406f8ed25a489ade52378634e2bdfc5f65a9e401f49736",
+      "payload_json": "{\"payload_type\":\"run_snapshot_accepted\",\"workflow_run_snapshot_id\":\"runsnap_f37fa5b5-3eb4-49e4-bcaf-2545dbf417bb\",\"workflow_presentation_revision_id\":\"wfpres_d36733c8-5efb-43fd-9e55-0cec1f9e42ef\",\"workflow_execution_session_id\":\"c2f75480-6230-4b3b-a5b1-9ff8c97e92ff\",\"node_versions\":[{\"node_id\":\"filter\",\"node_type\":\"json-filter\",\"contract_version\":\"1.0.0\",\"behavior_digest\":\"contract-blake3:23cc21587e7208d6677043d92f78450e18fc87a9c18c47dd33515be6890568b9\"},{\"node_id\":\"out\",\"node_type\":\"text-output\",\"contract_version\":\"1.0.0\",\"behavior_digest\":\"contract-blake3:77e57c0227b4bfe10adc2a70c0b9e04e13b02e4e4af0bf60590fc2a898f5dc72\"},{\"node_id\":\"source\",\"node_type\":\"selection-input\",\"contract_version\":\"1.0.0\",\"behavior_digest\":\"contract-blake3:340e4e7f0ce3528bac73c631284fa0067a9681bbd4eb3012963b731ed742dd36\"}]}",
+      "payload_ref": null,
+      "payload_size_bytes": 811,
+      "privacy_class": "system_metadata",
+      "recorded_at_ms": 1791744138874,
+      "retention_class": "audit_metadata",
+      "retention_policy_id": "ephemeral",
+      "runtime_id": null,
+      "runtime_version": null,
+      "scheduler_policy_id": "priority_then_fifo",
+      "schema_version": 1,
+      "source_component": "workflow_service",
+      "source_instance_id": "workflow-service",
+      "workflow_id": "scheduler-demo",
+      "workflow_run_id": "run_c0b8014e-8b87-445b-8858-8b6f83f72747",
+      "workflow_semantic_version": "1.0.0",
+      "workflow_version_id": "wfver_31099b14-731a-4dec-8ab1-747312cb131a"
+    },
+    {
+      "bucket_id": null,
+      "client_id": null,
+      "client_session_id": null,
+      "event_id": "devent_ba5c696212ff4b99aa88771018ffd303",
+      "event_kind": "scheduler_estimate_produced",
+      "event_seq": 2,
+      "model_id": null,
+      "model_version": null,
+      "node_id": null,
+      "node_type": null,
+      "node_version": null,
+      "occurred_at_ms": 1791744138884,
+      "payload_hash": "diagnostic-event-blake3:85a6f3b3b6795318e6335cd834f71f46f4c6b3951deb8a8df061998ed97c0847",
+      "payload_json": "{\"payload_type\":\"scheduler_estimate_produced\",\"estimate_version\":\"session-scheduler-v1\",\"confidence\":\"estimated\",\"estimated_queue_wait_ms\":null,\"estimated_duration_ms\":null,\"model_cache_state\":\"not_required\",\"blocking_conditions\":[\"runtime_admission_pending\"],\"missing_asset_ids\":[],\"candidate_runtime_ids\":[],\"candidate_device_ids\":[],\"candidate_network_node_ids\":[],\"reasons\":[\"next admission candidate pending runtime readiness\",\"requires extension(s): inference_gateway\",\"estimated peak memory: 0 bytes peak VRAM, 0 bytes peak RAM\"]}",
+      "payload_ref": null,
+      "payload_size_bytes": 537,
+      "privacy_class": "system_metadata",
+      "recorded_at_ms": 1791744138884,
+      "retention_class": "audit_metadata",
+      "retention_policy_id": "ephemeral",
+      "runtime_id": null,
+      "runtime_version": null,
+      "scheduler_policy_id": "priority_then_fifo",
+      "schema_version": 1,
+      "source_component": "scheduler",
+      "source_instance_id": "workflow-session-scheduler",
+      "workflow_id": "scheduler-demo",
+      "workflow_run_id": "run_c0b8014e-8b87-445b-8858-8b6f83f72747",
+      "workflow_semantic_version": "1.0.0",
+      "workflow_version_id": "wfver_31099b14-731a-4dec-8ab1-747312cb131a"
+    },
+    {
+      "bucket_id": null,
+      "client_id": null,
+      "client_session_id": null,
+      "event_id": "devent_c0d85351bff3471eb9df29dea7cfc488",
+      "event_kind": "scheduler_queue_placement",
+      "event_seq": 3,
+      "model_id": null,
+      "model_version": null,
+      "node_id": null,
+      "node_type": null,
+      "node_version": null,
+      "occurred_at_ms": 1791744138884,
+      "payload_hash": "diagnostic-event-blake3:58edc7d5eb072915d2ff24bec9503666091b470022f9399d993551587984ae4e",
+      "payload_json": "{\"payload_type\":\"scheduler_queue_placement\",\"queue_position\":0,\"priority\":0,\"scheduler_policy_id\":\"priority_then_fifo\"}",
+      "payload_ref": null,
+      "payload_size_bytes": 119,
+      "privacy_class": "system_metadata",
+      "recorded_at_ms": 1791744138884,
+      "retention_class": "audit_metadata",
+      "retention_policy_id": "ephemeral",
+      "runtime_id": null,
+      "runtime_version": null,
+      "scheduler_policy_id": "priority_then_fifo",
+      "schema_version": 1,
+      "source_component": "scheduler",
+      "source_instance_id": "workflow-session-scheduler",
+      "workflow_id": "scheduler-demo",
+      "workflow_run_id": "run_c0b8014e-8b87-445b-8858-8b6f83f72747",
+      "workflow_semantic_version": "1.0.0",
+      "workflow_version_id": "wfver_31099b14-731a-4dec-8ab1-747312cb131a"
+    },
+    {
+      "bucket_id": null,
+      "client_id": null,
+      "client_session_id": null,
+      "event_id": "devent_516bad75c4f04737962ccfdf5eff317f",
+      "event_kind": "run_started",
+      "event_seq": 4,
+      "model_id": null,
+      "model_version": null,
+      "node_id": null,
+      "node_type": null,
+      "node_version": null,
+      "occurred_at_ms": 1791744138884,
+      "payload_hash": "diagnostic-event-blake3:2ab6e9a1a14937ecde1695e55915b3982fbacf0d0c379977a29083334650c911",
+      "payload_json": "{\"payload_type\":\"run_started\",\"queue_wait_ms\":0,\"scheduler_decision_reason\":\"cold_start_required\"}",
+      "payload_ref": null,
+      "payload_size_bytes": 98,
+      "privacy_class": "system_metadata",
+      "recorded_at_ms": 1791744138885,
+      "retention_class": "audit_metadata",
+      "retention_policy_id": "ephemeral",
+      "runtime_id": null,
+      "runtime_version": null,
+      "scheduler_policy_id": "priority_then_fifo",
+      "schema_version": 1,
+      "source_component": "scheduler",
+      "source_instance_id": "workflow-session-scheduler",
+      "workflow_id": "scheduler-demo",
+      "workflow_run_id": "run_c0b8014e-8b87-445b-8858-8b6f83f72747",
+      "workflow_semantic_version": "1.0.0",
+      "workflow_version_id": "wfver_31099b14-731a-4dec-8ab1-747312cb131a"
+    },
+    {
+      "bucket_id": null,
+      "client_id": null,
+      "client_session_id": null,
+      "event_id": "devent_ea88666dbafb432db2928d6044a9180a",
+      "event_kind": "scheduler_task_attempt_lifecycle_changed",
+      "event_seq": 5,
+      "model_id": null,
+      "model_version": null,
+      "node_id": "filter",
+      "node_type": "json-filter",
+      "node_version": null,
+      "occurred_at_ms": 1791744138885,
+      "payload_hash": "diagnostic-event-blake3:68422f484069ec7cdaef96a73aa2abf09bf2379ec1e9ed6d7b697c010750ab4b",
+      "payload_json": "{\"payload_type\":\"scheduler_task_attempt_lifecycle_changed\",\"scheduler_task_id\":\"filter\",\"scheduler_attempt_id\":\"scheduler-task-attempt.c351bcf4-2d57-409b-b74e-6e9fe9bd251a\",\"execution_class\":\"non_runtime_node_engine\",\"transition\":\"started\",\"started_at_ms\":1791744138885,\"ended_at_ms\":null,\"duration_ms\":null,\"selected_runtime_id\":null,\"selected_device_class\":null,\"selected_device_id\":null,\"selected_network_node_id\":null,\"reason\":\"scheduler task attempt started\"}",
+      "payload_ref": null,
+      "payload_size_bytes": 464,
+      "privacy_class": "system_metadata",
+      "recorded_at_ms": 1791744138885,
+      "retention_class": "audit_metadata",
+      "retention_policy_id": null,
+      "runtime_id": null,
+      "runtime_version": null,
+      "scheduler_policy_id": "priority_then_fifo",
+      "schema_version": 1,
+      "source_component": "scheduler",
+      "source_instance_id": "workflow-session-scheduler",
+      "workflow_id": "scheduler-demo",
+      "workflow_run_id": "run_c0b8014e-8b87-445b-8858-8b6f83f72747",
+      "workflow_semantic_version": null,
+      "workflow_version_id": null
+    },
+    {
+      "bucket_id": null,
+      "client_id": null,
+      "client_session_id": null,
+      "event_id": "devent_b78b221182434037a4f73056eb6f3502",
+      "event_kind": "scheduler_task_attempt_lifecycle_changed",
+      "event_seq": 6,
+      "model_id": null,
+      "model_version": null,
+      "node_id": "filter",
+      "node_type": "json-filter",
+      "node_version": null,
+      "occurred_at_ms": 1791744138886,
+      "payload_hash": "diagnostic-event-blake3:1c7a6ff468fd48744243a5fad9ca50c27ca2f4a2276909f0ff64c355ffb8fddb",
+      "payload_json": "{\"payload_type\":\"scheduler_task_attempt_lifecycle_changed\",\"scheduler_task_id\":\"filter\",\"scheduler_attempt_id\":\"scheduler-task-attempt.c351bcf4-2d57-409b-b74e-6e9fe9bd251a\",\"execution_class\":\"non_runtime_node_engine\",\"transition\":\"completed\",\"started_at_ms\":1791744138885,\"ended_at_ms\":1791744138886,\"duration_ms\":1,\"selected_runtime_id\":null,\"selected_device_class\":null,\"selected_device_id\":null,\"selected_network_node_id\":null,\"reason\":\"scheduler task attempt completed\"}",
+      "payload_ref": null,
+      "payload_size_bytes": 474,
+      "privacy_class": "system_metadata",
+      "recorded_at_ms": 1791744138886,
+      "retention_class": "audit_metadata",
+      "retention_policy_id": null,
+      "runtime_id": null,
+      "runtime_version": null,
+      "scheduler_policy_id": "priority_then_fifo",
+      "schema_version": 1,
+      "source_component": "scheduler",
+      "source_instance_id": "workflow-session-scheduler",
+      "workflow_id": "scheduler-demo",
+      "workflow_run_id": "run_c0b8014e-8b87-445b-8858-8b6f83f72747",
+      "workflow_semantic_version": null,
+      "workflow_version_id": null
+    },
+    {
+      "bucket_id": null,
+      "client_id": null,
+      "client_session_id": null,
+      "event_id": "devent_7da06a602ab346648172636ac0be1eb8",
+      "event_kind": "run_terminal",
+      "event_seq": 7,
+      "model_id": null,
+      "model_version": null,
+      "node_id": null,
+      "node_type": null,
+      "node_version": null,
+      "occurred_at_ms": 1791744138886,
+      "payload_hash": "diagnostic-event-blake3:dba033cab2fd1ad149f813354127e1d6687b026996222dc563df5ad91e0fd9ae",
+      "payload_json": "{\"payload_type\":\"run_terminal\",\"status\":\"failed\",\"duration_ms\":null,\"error\":\"invalid_request: scheduler task 'out' did not complete; final state was Invalid\"}",
+      "payload_ref": null,
+      "payload_size_bytes": 158,
+      "privacy_class": "system_metadata",
+      "recorded_at_ms": 1791744138886,
+      "retention_class": "audit_metadata",
+      "retention_policy_id": "ephemeral",
+      "runtime_id": null,
+      "runtime_version": null,
+      "scheduler_policy_id": "priority_then_fifo",
+      "schema_version": 1,
+      "source_component": "workflow_service",
+      "source_instance_id": "workflow-service",
+      "workflow_id": "scheduler-demo",
+      "workflow_run_id": "run_c0b8014e-8b87-445b-8858-8b6f83f72747",
+      "workflow_semantic_version": "1.0.0",
+      "workflow_version_id": "wfver_31099b14-731a-4dec-8ab1-747312cb131a"
+    }
+  ],
+  "execution": {
+    "error": "invalid_request: scheduler task 'out' did not complete; final state was Invalid",
+    "ok": false
+  },
+  "graph": {
+    "edges": [
+      {
+        "id": "source-filter",
+        "source": "source",
+        "source_handle": "value",
+        "target": "filter",
+        "target_handle": "json"
+      },
+      {
+        "id": "filter-out",
+        "source": "filter",
+        "source_handle": "value",
+        "target": "out",
+        "target_handle": "text"
+      }
+    ],
+    "nodes": [
+      {
+        "data": {
+          "definition": {
+            "category": "input",
+            "description": "Provides a metadata-driven selected value to the workflow",
+            "execution_mode": "reactive",
+            "inputs": [
+              {
+                "data_type": "any",
+                "id": "value",
+                "label": "Value",
+                "multiple": false,
+                "required": false
+              }
+            ],
+            "io_binding_origin": "client_session",
+            "label": "Selection Input",
+            "node_type": "selection-input",
+            "outputs": [
+              {
+                "data_type": "any",
+                "id": "value",
+                "label": "Value",
+                "multiple": false,
+                "required": false
+              }
+            ]
+          }
+        },
+        "id": "source",
+        "node_type": "selection-input",
+        "position": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "data": {
+          "definition": {
+            "category": "processing",
+            "description": "Extracts values from JSON using path expressions",
+            "execution_mode": "reactive",
+            "inputs": [
+              {
+                "data_type": "json",
+                "id": "json",
+                "label": "JSON",
+                "multiple": false,
+                "required": true
+              }
+            ],
+            "io_binding_origin": "integrated",
+            "label": "JSON Filter",
+            "node_type": "json-filter",
+            "outputs": [
+              {
+                "data_type": "any",
+                "id": "value",
+                "label": "Value",
+                "multiple": false,
+                "required": false
+              },
+              {
+                "data_type": "boolean",
+                "id": "found",
+                "label": "Found",
+                "multiple": false,
+                "required": false
+              }
+            ]
+          },
+          "path": "items[0].prompt"
+        },
+        "id": "filter",
+        "node_type": "json-filter",
+        "position": {
+          "x": 360,
+          "y": 0
+        }
+      },
+      {
+        "data": {
+          "definition": {
+            "category": "output",
+            "description": "Displays text output from the workflow",
+            "execution_mode": "reactive",
+            "inputs": [
+              {
+                "data_type": "string",
+                "id": "text",
+                "label": "Text",
+                "multiple": false,
+                "required": false
+              },
+              {
+                "data_type": "stream",
+                "id": "stream",
+                "label": "Stream",
+                "multiple": false,
+                "required": false
+              }
+            ],
+            "io_binding_origin": "client_session",
+            "label": "Text Output",
+            "node_type": "text-output",
+            "outputs": [
+              {
+                "data_type": "string",
+                "id": "text",
+                "label": "Text",
+                "multiple": false,
+                "required": false
+              }
+            ]
+          }
+        },
+        "id": "out",
+        "node_type": "text-output",
+        "position": {
+          "x": 720,
+          "y": 0
+        }
+      }
+    ]
+  },
+  "input": {
+    "items": []
+  },
+  "scope": "scheduler-owned deterministic workflow; no model inference",
+  "session_id": "c2f75480-6230-4b3b-a5b1-9ff8c97e92ff"
+}
