@@ -69,3 +69,17 @@ CommonMark's safe handling of other raw HTML. The original manuscript hashes
 remain unchanged. Reader text wraps long source identifiers on narrow screens;
 contents links use a vertical layout. Inline SVG avoids missing external-arrow
 glyphs in Chromium. These changes concern the static presentation only.
+
+## Refreshed live-host captures
+
+The gallery images and matching execution JSON are copied byte-for-byte from
+approved PR #71 revision `7fc3584cca8bef647b60ebf303c4b5d6b37d98bd`. The
+workbench at that revision queries a persistent Rust service over loopback HTTP
+and reads retained scalar output artifacts. The Model Library capture shows a
+real isolated empty Pumas catalog. Graph editor submission remains outside the
+demo host, and these captures establish neither native Tauri nor model inference.
+The separate Node Lab authoring surface remains unavailable.
+
+Use the pinned linked demo guide for the runnable host; this isolated publication
+branch imports presentation assets only and does not import the runtime changes.
+Citation-anchor, mobile reader, and inline-icon fixes remain intact.
