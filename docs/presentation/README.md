@@ -39,11 +39,22 @@ with `{"build_type":"legacy","source":{"branch":"gh-pages","path":"/"}}`.
 The credential needs Pages write and Administration write. Do not grant new
 permissions or bypass a denial without specific authorization.
 
-Both repositories reported Pages disabled before this publication work. The
-expected project URL is `https://mrscripty.github.io/Pantograph/`; it is not a
-verified live URL until the Pages deployment succeeds and the public site is
-checked. Demo links continue to identify the PR #71 branch while review is
-pending. Its application code and shared workflows are unchanged by publication.
+GitHub reports successful Pages deployment of static commit
+`487bb534cefdea2fbf9a9c11c3d9b0e56126ebce`:
+
+- Deployment: https://github.com/MrScripty/Pantograph/actions/runs/38173980146
+- GitHub-reported public URL: https://mrscripty.github.io/Pantograph/
+- Source: `gh-pages`, `/(root)`; public; HTTPS enforced.
+
+The publication environment's outbound proxy rejects `mrscripty.github.io`,
+including an approved escalated fetch. The web fetch tool also could not access
+it. Public HTTP content and assets therefore remain unverified independently of
+GitHub's successful deployment result. Open the returned URL in an authorized
+browser to finish public desktop/mobile verification. Local Chromium checks
+passed against the exact static bundle.
+
+Demo links continue to identify the PR #71 branch while review is pending. Its
+application code and shared workflows are unchanged by publication.
 
 ## Publication validation
 
