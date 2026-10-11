@@ -88,19 +88,24 @@ cargo test --locked -p inference --features backend-candle \
 
 ## Remaining integrated-demo gates
 
-1. Published Pumas `26a84e323cae566a46a8f76bef48fa1010aed48b` must supply a valid
-   directory load target for the HF directory artifact. The current native
-   qualification is explicitly ignored on that pin because of this owner defect.
-   [The existing qualification record](scheduler-v2-readiness-bootstrap-cpu-results.md#pumas-owner-boundary)
-   explains the mismatch. Do not apply its historical unpublished override to
-   qualify the published dependency.
+1. Pantograph's Pumas pin `26a84e323cae566a46a8f76bef48fa1010aed48b` returns an
+   incoherent HF directory load target. Direct owner-API calls reproduce this
+   before the Pantograph adapter. The correction is **already public** in Pumas
+   commit `aa1d79ae2d53f0acb088bc85223ecc2ff46af12b`, and is included in public main
+   `ad31e391dcd94c204b3fcd748cc98d27b3281e65`. Integration of a corrected published
+   dependency and its contract changes still needs qualification; this branch
+   does not change the dependency. See the [pinned reproducer and exact response](pumas-hf-target-diagnosis.md).
+   Do not apply the historical unpublished override described in the
+   [earlier qualification record](scheduler-v2-readiness-bootstrap-cpu-results.md#pumas-owner-boundary).
 2. The actual editor currently uses Tauri commands and subscriptions. The
    `pantograph-frontend-http-adapter` is an outbound host adapter, not a server
    exposing the editor's command/event API. Plain Vite/Chromium is not an
    integrated native host. A native desktop host needs GTK3/WebKitGTK 4.1 build
    prerequisites, WebKitWebDriver, tauri-driver and a display for GUI automation.
-3. After the owner correction is published and selected through the normal
-   dependency process, qualify a desktop workflow on a supported host. Capture
+3. After the public owner correction is integrated through the normal dependency
+   process, qualify the workflow on a supported editor host. The separate PR71
+   worker owns the real Rust browser host; reuse its verified published revision
+   when available instead of creating another host here. Capture
    one run identity from editor Submit through scheduler dispatch, actual model
    output and visible I/O Inspector content, plus the screenshot. Preserve the
    model revision, backend/device selection, timing and cleanup evidence.

@@ -33,6 +33,9 @@ type ProbeResult<T> = Result<T, Box<dyn std::error::Error>>;
 const MODEL_ID: &str = "embedding/qualification/synthetic-bert-8";
 const WORKFLOW_ID: &str = "cpu-embedding-probe";
 
+#[path = "cpu_embedding_workflow_probe/target_observation.rs"]
+mod target_observation;
+
 fn save(root: &Path, name: &str, value: &impl serde::Serialize) -> ProbeResult<()> {
     std::fs::write(root.join(name), serde_json::to_vec_pretty(value)?)?;
     Ok(())
@@ -52,8 +55,12 @@ fn copy_fixture(source: &Path, destination: &Path) -> ProbeResult<()> {
     Ok(())
 }
 
-async fn create_runtime(root: &Path) -> ProbeResult<EmbeddedRuntime> {
-    let model_dir = root.join("shared-resources/models").join(MODEL_ID);
+fn seed_fixture(
+    root: &Path,
+    model_id: &str,
+    selected_files: Option<&[&str]>,
+) -> ProbeResult<PathBuf> {
+    let model_dir = root.join("shared-resources/models").join(model_id);
     let source = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../inference/tests/fixtures/candle_bert/bert-8");
     copy_fixture(&source, &model_dir)?;
@@ -61,17 +68,22 @@ async fn create_runtime(root: &Path) -> ProbeResult<EmbeddedRuntime> {
         &model_dir,
         "metadata.json",
         &json!({
-            "schema_version": 2, "model_id": MODEL_ID, "family": "qualification",
+            "schema_version": 2, "model_id": model_id, "family": "qualification",
             "model_type": "embedding", "official_name": "Synthetic-BERT-8",
             "cleaned_name": "synthetic-bert-8", "source_path": model_dir,
             "entry_path": model_dir, "storage_kind": "library_owned",
-            "selected_artifact_id": "main", "selected_artifact_files": ["model.safetensors"],
+            "selected_artifact_id": "main", "selected_artifact_files": selected_files,
             "import_state": "ready", "validation_state": "valid",
             "pipeline_tag": "feature-extraction", "task_type_primary": "embedding",
             "input_modalities": ["text"], "output_modalities": ["embedding"],
             "recommended_backend": "candle", "runtime_engine_hints": ["candle"]
         }),
     )?;
+    Ok(model_dir)
+}
+
+async fn create_runtime(root: &Path) -> ProbeResult<EmbeddedRuntime> {
+    seed_fixture(root, MODEL_ID, Some(&["model.safetensors"]))?;
     for directory in [
         "launcher-data/metadata",
         "launcher-data/cache",
@@ -392,11 +404,14 @@ async fn execute(runtime: &EmbeddedRuntime, root: &Path, stage: &mut &str) -> Pr
 
 #[tokio::main]
 async fn main() -> ProbeResult<()> {
-    let root = PathBuf::from(
-        std::env::args_os()
-            .nth(1)
-            .ok_or("pass a new absolute probe directory")?,
-    );
+    let args: Vec<_> = std::env::args_os().skip(1).collect();
+    if args.len() > 2 || args.get(1).is_some_and(|mode| mode != "--inspect-targets") {
+        return Err(
+            "usage: cpu_embedding_workflow_probe <new absolute directory> [--inspect-targets]"
+                .into(),
+        );
+    }
+    let root = PathBuf::from(args.first().ok_or("pass a new absolute probe directory")?);
     if !root.is_absolute()
         || std::env::var_os("PUMAS_REGISTRY_DB_PATH")
             .map(PathBuf::from)
@@ -406,6 +421,9 @@ async fn main() -> ProbeResult<()> {
         return Err("set PUMAS_REGISTRY_DB_PATH to <new absolute probe directory>/registry.db; existing catalogs are never opened".into());
     }
     std::fs::create_dir(&root)?; // Refuse existing directories, including previous evidence.
+    if args.len() == 2 {
+        return target_observation::inspect(&root).await;
+    }
     let runtime = create_runtime(&root).await?;
     let mut stage = "initialization";
     let result = tokio::time::timeout(
