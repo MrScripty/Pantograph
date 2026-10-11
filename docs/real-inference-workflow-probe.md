@@ -1,14 +1,16 @@
 # CPU inference workflow qualification
 
-The native scheduler-to-model path and live HTTP command lifecycle **pass** with public Pumas correction
-`aa1d79ae2d53f0acb088bc85223ecc2ff46af12b`. The editor-to-scheduler-to-model demo
-still needs browser qualification. The native probe uses existing public APIs
-without changing Pumas, opening an existing catalog, downloading a model, or
-substituting successful validation.
+The complete Graph editor → scheduler → actual Candle CPU model → visible output
+path **passes** on the loopback Chromium host with public Pumas correction
+`aa1d79ae2d53f0acb088bc85223ecc2ff46af12b`. The
+[inspected browser evidence](images/real-inference-demo-2026-10-11/README.md)
+records one run identity through editing, validation, execution, displayed vector
+and exact retained readback. It uses existing public owner APIs without changing
+Pumas, opening a private catalog, acquiring a model or substituting validation.
 
-The [CPU embedding browser-host guide](../examples/cpu-embedding-demo/README.md)
-contains the integrated PR71 transport, supported editor command bindings,
-reproduction commands, HTTP evidence, and the resolved runtime status gap and exact remaining browser blocker.
+The [browser-host guide](../examples/cpu-embedding-demo/README.md) gives
+reproduction commands, scope, tests and the browser's approved isolated launch.
+The native and HTTP-only observations below remain distinct supporting evidence.
 
 ## Model and acquisition
 
@@ -108,32 +110,28 @@ cargo test --locked -p inference --features backend-candle \
   real_candle_forward_matches_two_independent_transformers_references -- --nocapture
 ```
 
-## Remaining integrated-demo gates
+## Integrated browser qualification
 
-1. The Pumas directory-target gate is resolved by the branch's ordinary dependency
-   update from `26a84e32` to exact public correction `aa1d79ae2d53f0acb088bc85223ecc2ff46af12b`.
-   Direct owner API observations and actual scheduler inference both pass, without
-   changing the Pantograph adapter or directory guard. See the
-   [pinned diagnosis and corrected responses](pumas-hf-target-diagnosis.md).
-2. PR71's verified revision `7fc3584cca8bef647b60ebf303c4b5d6b37d98bd` is merged
-   into this feature branch. The fixture host connects editor commands and Submit
-   to the actual embedded runtime and passes live HTTP tests. The runtime host
-   now emits its own terminal node-status event; real HTTP evidence confirms
-   completed `infer` and `vectors` rows while preserving the ledger's separation
-   between scheduler attempts and runtime-owner status.
-3. Qualify actual browser interaction on a host with a usable Chromium sandbox.
-   Capture one run identity from editor Submit through scheduler dispatch, real
-   model output and visible I/O Inspector content, with screenshots. The checked-in
-   capture script requires that complete chain and both completed node statuses.
-   Tool discovery found no exposed browser automation service; both sandboxed
-   Chromium modes failed here. The repository's earlier successful browser harness
-   uses `--no-sandbox`, which was not used for this task. The native Tauri GUI is
-   another possible host but requires GTK3/WebKitGTK 4.1, WebKitWebDriver,
-   tauri-driver and a display; it has not been qualified here.
+The feature integrates PR71 `7fc3584cca8bef647b60ebf303c4b5d6b37d98bd` and Graph
+follow-up `679622e9d8b17e87a278b81b60194d31ee4f4981`. Its fixture HTTP host
+connects actual editor commands to the embedded runtime; terminal node statuses
+come from the runtime owner rather than inferred scheduler-attempt events.
 
-No screenshot of model output in the actual editor exists from this cloud
-qualification. A terminal vector, a mocked transport, or a static results page
-must not be presented as that evidence.
+At clean code commit `12fa09a685a4ccc44edf992ba117648f8fa367ef`, Chromium
+151.0.7922.173 edited `hello`, resolved dependencies, saved and submitted
+`cpu-embedding-probe`. Run `run_92d972df-730e-4412-88d0-b568b5d37c49` completed:
+29 ms owner duration, 121 ms workflow duration, 191.28 ms observed HTTP response.
+The actual eight-dimensional vector appeared in Graph and was read from its
+retained artifact with exact equality. Reference error was `5.960464477539063e-8`.
+See the [receipt](images/real-inference-demo-2026-10-11/inference/receipt.json)
+and [Graph screenshot](images/real-inference-demo-2026-10-11/inference/graph-completed.png).
+
+The browser ran with explicit user approval for `--no-sandbox`, isolated profile
+and config/cache, loopback-only navigation and no personal data. No denied OS
+operation was bypassed. Native GTK/WebKit remains unqualified. The proof is for
+this supported browser host, scalar fixture inference, Graph, Scheduler, Network,
+Diagnostics and I/O readback; it makes no Settings, separate NodeEditor,
+pretrained quality, batch or ONNX-inference claim.
 
 ## Original blocked qualification, 2026-10-11
 
