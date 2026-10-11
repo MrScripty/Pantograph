@@ -1,10 +1,10 @@
 # CPU inference workflow qualification
 
-The editor-to-scheduler-to-model demo is **not qualified** on the published
-dependency pin. The native probe below makes the remaining boundary repeatable
+The native scheduler-to-model path **passes** with public Pumas correction
+`aa1d79ae2d53f0acb088bc85223ecc2ff46af12b`. The editor-to-scheduler-to-model demo
+still needs browser qualification. The native probe uses existing public APIs
 without changing Pumas, opening an existing catalog, downloading a model, or
-substituting successful validation. It is a diagnostic consumer of existing
-public APIs, not another execution implementation or an HTTP editor host.
+substituting successful validation.
 
 ## Model and acquisition
 
@@ -62,6 +62,24 @@ The default supported backend profile includes Candle. The reduced
 does not compile because it lacks `InferenceGateway::new`; it is not a verified
 alternative host.
 
+With public Pumas `aa1d79ae`, the real scheduler run
+`run_e0267526-7200-4cbe-ad98-61de20937397` completed on Candle `candle.cpu` / CPU
+F32. Its inference task took 28 ms, backend run timing was 111 ms, and total
+submit-to-response wall time was 158.11 ms. These are single observations,
+including workflow/runtime overhead, not an isolated forward benchmark. Session
+close and runtime shutdown both succeeded. The actual returned vector was:
+
+```json
+[0.13531816005706787, -0.5401950478553772, 0.3139018416404724,
+ 0.4897967278957367, -0.14633086323738098, 0.257649689912796,
+ 0.0033145255874842405, -0.5134549736976624]
+```
+
+The [full native result and diagnostic events](evidence/cpu-embedding-public-aa1d79ae.json)
+preserve this output and its run identity. Both existing real CPU qualification
+tests (cold cleanup and resident-owner reuse) now pass and are enabled on the
+published dependency pin. Browser qualification remains separate.
+
 ## Independent model forward
 
 The separate reference probe reads and verifies the committed fixture hashes,
@@ -88,24 +106,20 @@ cargo test --locked -p inference --features backend-candle \
 
 ## Remaining integrated-demo gates
 
-1. Pantograph's Pumas pin `26a84e323cae566a46a8f76bef48fa1010aed48b` returns an
-   incoherent HF directory load target. Direct owner-API calls reproduce this
-   before the Pantograph adapter. The correction is **already public** in Pumas
-   commit `aa1d79ae2d53f0acb088bc85223ecc2ff46af12b`, and is included in public main
-   `ad31e391dcd94c204b3fcd748cc98d27b3281e65`. Integration of a corrected published
-   dependency and its contract changes still needs qualification; this branch
-   does not change the dependency. See the [pinned reproducer and exact response](pumas-hf-target-diagnosis.md).
-   Do not apply the historical unpublished override described in the
-   [earlier qualification record](scheduler-v2-readiness-bootstrap-cpu-results.md#pumas-owner-boundary).
+1. The Pumas directory-target gate is resolved by the branch's ordinary dependency
+   update from `26a84e32` to exact public correction `aa1d79ae2d53f0acb088bc85223ecc2ff46af12b`.
+   Direct owner API observations and actual scheduler inference both pass, without
+   changing the Pantograph adapter or directory guard. See the
+   [pinned diagnosis and corrected responses](pumas-hf-target-diagnosis.md).
 2. The actual editor currently uses Tauri commands and subscriptions. The
    `pantograph-frontend-http-adapter` is an outbound host adapter, not a server
    exposing the editor's command/event API. Plain Vite/Chromium is not an
    integrated native host. A native desktop host needs GTK3/WebKitGTK 4.1 build
    prerequisites, WebKitWebDriver, tauri-driver and a display for GUI automation.
-3. After the public owner correction is integrated through the normal dependency
-   process, qualify the workflow on a supported editor host. The separate PR71
-   worker owns the real Rust browser host; reuse its verified published revision
-   when available instead of creating another host here. Capture
+3. Qualify the workflow on the separately owned PR71 browser transport and real
+   workbench at verified revision `7fc3584cca8bef647b60ebf303c4b5d6b37d98bd`.
+   Its baseline host supports graph inspection; the inference host must connect
+   editor sessions and Submit to the actual embedded runtime. Capture
    one run identity from editor Submit through scheduler dispatch, actual model
    output and visible I/O Inspector content, plus the screenshot. Preserve the
    model revision, backend/device selection, timing and cleanup evidence.
@@ -114,7 +128,7 @@ No screenshot of model output in the actual editor exists from this cloud
 qualification. A terminal vector, a mocked transport, or a static results page
 must not be presented as that evidence.
 
-## Observed qualification, 2026-10-11
+## Original blocked qualification, 2026-10-11
 
 The cloud run used Pantograph main `256b6b94ece4dbbaa1fb236bc4092ad08aa63525`
 plus this probe, published Pumas `26a84e32`, and locked Candle

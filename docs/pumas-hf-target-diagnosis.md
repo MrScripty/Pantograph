@@ -1,6 +1,6 @@
 # Pinned Pumas HF load-target diagnosis
 
-Observed on 2026-10-11 with Pantograph's unchanged Pumas pin
+Original diagnosis on 2026-10-11 at Pantograph commit `5cd83456`, with Pumas pin
 `26a84e323cae566a46a8f76bef48fa1010aed48b` and the committed untrained BERT-8
 fixture. The three selected-artifact cases return a ready directory target whose
 path is an existing weight **file**. This contradiction is present in direct
@@ -10,7 +10,8 @@ be counted as a fourth reproduction of the directory mismatch.
 
 ## Reproduce without an existing catalog
 
-From this branch, with ordinary Rust build dependencies available:
+From Pantograph commit `5cd834560333991827dd6406cf61ebf559bfc3eb`, with ordinary
+Rust build dependencies available (the current branch now selects the public fix):
 
 ```sh
 probe_parent="$(mktemp -d)"
@@ -141,8 +142,8 @@ already changes managed HF packages to use the package directory and adds owner
 coherence checks and tests. The public GitHub comparison confirms this commit is
 an ancestor of observed public main
 [`ad31e391dcd94c204b3fcd748cc98d27b3281e65`](https://github.com/MrScripty/Pumas-Library/compare/aa1d79ae2d53f0acb088bc85223ecc2ff46af12b...ad31e391dcd94c204b3fcd748cc98d27b3281e65)
-(ahead 134, behind 0). Its source and tests were inspected read-only; neither
-public revision was built or qualified by this probe. The fix also changes
+(ahead 134, behind 0). At the diagnosis checkpoint its source and tests were
+inspected read-only; neither public revision was built at that point. The fix changes
 observation/coherence contracts, so changing the dependency requires coordinated
 consumer integration rather than assuming a one-line pin bump is sufficient.
 
@@ -151,7 +152,7 @@ launcher metadata/cache/log directories before calling the public importer.
 After that correction import succeeds and the separate identity rejection above
 is observable. No provider, adapter or runtime validation was patched.
 
-## Validation and remaining work
+## Original diagnosis validation
 
 The probe's redaction and filesystem distinction tests pass. The inspection run
 captures three directory/file contradictions and the separate import ambiguity.
@@ -160,9 +161,27 @@ dispatch, then fails the unchanged existing-directory guard; this repeat attempt
 took 22 ms and is **failure latency**, not model inference latency. Session close
 and runtime shutdown succeeded.
 
-The editor-to-model demo remains pending. Integrate and qualify a corrected
-published Pumas revision, then reuse the separately owned PR71 Rust browser host
-once its verified revision is published. One successful editor run must connect
+## Public dependency integration
+
+The branch now pins the exact public correction
+`aa1d79ae2d53f0acb088bc85223ecc2ff46af12b`, the earliest revision containing that
+commit, rather than current Pumas main. It is 70 commits ahead of the previous
+pin. The enabled dependency graph requires no additional packages, consumer API
+adaptation, or guard changes. The target now supplies the existing package
+directory and a `pumas-package-observation-v1:sha256:` observation token through
+the already supported `content_fingerprint` field. This token observes package
+metadata and file size/mtime; it is not a complete package byte digest.
+
+The [direct API rerun](evidence/pumas-hf-targets-aa1d79ae.json) confirms all three
+selected-artifact variants return coherent directory targets in both resolution
+modes and with the explicit expected kind. The importer case retains the distinct
+missing-artifact-identity rejection. The [native scheduler rerun](evidence/cpu-embedding-public-aa1d79ae.json)
+also passes: actual Candle CPU inference matches the independent reference, the
+inference task completes in 28 ms, and the session and runtime close cleanly.
+No Pumas source or unpublished override is used.
+
+The editor-to-model demo remains pending browser qualification using the
+separately owned PR71 Rust browser host. One successful editor run must connect
 Submit, scheduler run identity, actual model output and visible I/O Inspector
 content, with screenshot evidence. Separate numerical forwards and this API
 diagnosis do not satisfy that gate.
