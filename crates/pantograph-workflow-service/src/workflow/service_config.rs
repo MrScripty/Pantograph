@@ -46,6 +46,15 @@ impl WorkflowService {
         Self::with_capacity_limits(DEFAULT_MAX_SESSIONS, DEFAULT_MAX_SESSIONS)
     }
 
+    /// Whether dedicated construction installed the serial CPU execution owner.
+    ///
+    /// Hosted composition uses this read-only fact to preserve its execution and
+    /// cleanup ports. It does not attest readiness, residency or host identity.
+    #[must_use]
+    pub fn is_serial_ready_cpu(&self) -> bool {
+        self.serial_ready_mode.is_some()
+    }
+
     pub fn with_max_sessions(max_sessions: usize) -> Self {
         Self::with_capacity_limits(max_sessions, max_sessions)
     }

@@ -203,6 +203,14 @@ impl EmbeddedRuntime {
         &self,
         request: WorkflowExecutionSessionResumeRequest,
     ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
+        if self.workflow_service.is_serial_ready_cpu() {
+            return WorkflowSessionExecutionRuntime::from_shared_service(
+                self.workflow_service.clone(),
+                Arc::new(self.host()),
+            )
+            .resume_workflow_execution_session_runtime_dependency_readiness(request)
+            .await;
+        }
         self.workflow_service
             .resume_workflow_execution_session_runtime_dependency_readiness(&self.host(), request)
             .await

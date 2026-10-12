@@ -72,6 +72,41 @@ struct Observation {
     owner: SerialRuntimeHostCpuOwnerEvidence,
     at: Instant,
     cost_ns: u64,
+    #[cfg(any(test, feature = "test-support"))]
+    task_id: String,
+}
+/// A bounded proposal, never execution or cleanup authority.
+#[derive(Clone, Copy, Debug, serde::Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum SerialReadyReason {
+    OwnerUnavailable,
+    IncomparableOwners,
+    UnsupportedInputs,
+    HistoryUnavailable,
+    InvalidClock,
+    InsufficientFreshSamples,
+    OwnerChanged,
+    Ranked,
+}
+pub(crate) struct SerialReadyDecision {
+    pub(crate) position: usize,
+    pub(crate) owner: Option<SerialRuntimeHostCpuOwnerEvidence>,
+    pub(crate) reason: SerialReadyReason,
+    pub(crate) counts: [usize; 2],
+    pub(crate) maxima_ns: [u64; 2],
+    pub(crate) oldest_age_ns: [u64; 2],
+}
+impl SerialReadyDecision {
+    fn fifo(reason: SerialReadyReason) -> Self {
+        Self {
+            position: 0,
+            owner: None,
+            reason,
+            counts: [0; 2],
+            maxima_ns: [0; 2],
+            oldest_age_ns: [0; 2],
+        }
+    }
 }
 pub(crate) struct SerialReadyContext {
     preparation: Option<SchedulerSerialPreparation>,
@@ -169,42 +204,65 @@ impl SerialReadyMode {
             && (1..=4).contains(&evidence.snapshot.cpu_threads))
         .then_some(evidence)
     }
-    pub(crate) fn select(
-        &self,
-        pair: &super::WorkflowSerialReadyPair,
-    ) -> Option<(usize, SerialRuntimeHostCpuOwnerEvidence)> {
-        let first = self.owner_for(&pair.members[0].task)?;
-        let second = self.owner_for(&pair.members[1].task)?;
+    pub(crate) fn select(&self, pair: &super::WorkflowSerialReadyPair) -> SerialReadyDecision {
+        let mut decision = SerialReadyDecision::fifo(SerialReadyReason::OwnerUnavailable);
+        let (Some(first), Some(second)) = (
+            self.owner_for(&pair.members[0].task),
+            self.owner_for(&pair.members[1].task),
+        ) else {
+            return decision;
+        };
         if first.snapshot != second.snapshot || !Arc::ptr_eq(&first.generation, &second.generation)
         {
-            return None;
+            decision.reason = SerialReadyReason::IncomparableOwners;
+            return decision;
         }
-        let keys = [
-            observation_key(&pair.members[0])?,
-            observation_key(&pair.members[1])?,
-        ];
+        let (Some(first_key), Some(second_key)) = (
+            observation_key(&pair.members[0]),
+            observation_key(&pair.members[1]),
+        ) else {
+            decision.reason = SerialReadyReason::UnsupportedInputs;
+            return decision;
+        };
+        let keys = [first_key, second_key];
         let now = Instant::now();
-        let samples = self.observations.lock().ok()?;
-        let mut counts = [0usize; 2];
-        let mut costs = [0u64; 2];
+        let Ok(samples) = self.observations.lock() else {
+            decision.reason = SerialReadyReason::HistoryUnavailable;
+            return decision;
+        };
         for sample in samples.iter() {
+            let Some(age) = now.checked_duration_since(sample.at) else {
+                return SerialReadyDecision::fifo(SerialReadyReason::InvalidClock);
+            };
             if sample.owner.snapshot != first.snapshot
                 || !Arc::ptr_eq(&sample.owner.generation, &first.generation)
-                || now.checked_duration_since(sample.at)? > self.config.maximum_age
+                || age > self.config.maximum_age
             {
                 continue;
             }
-            for i in 0..2 {
-                if sample.key == keys[i] {
-                    counts[i] += 1;
-                    costs[i] = costs[i].max(sample.cost_ns);
+            for (i, key) in keys.iter().enumerate() {
+                if sample.key == *key {
+                    decision.counts[i] += 1;
+                    decision.maxima_ns[i] = decision.maxima_ns[i].max(sample.cost_ns);
+                    decision.oldest_age_ns[i] =
+                        decision.oldest_age_ns[i].max(age.as_nanos().min(u64::MAX as u128) as u64);
                 }
             }
         }
-        if counts.iter().any(|c| *c < self.config.minimum_samples) || !first.is_current() {
-            return None;
+        if decision
+            .counts
+            .iter()
+            .any(|c| *c < self.config.minimum_samples)
+        {
+            decision.reason = SerialReadyReason::InsufficientFreshSamples;
+        } else if !first.is_current() {
+            decision.reason = SerialReadyReason::OwnerChanged;
+        } else {
+            decision.reason = SerialReadyReason::Ranked;
+            decision.position = usize::from(decision.maxima_ns[1] < decision.maxima_ns[0]);
+            decision.owner = Some(first);
         }
-        Some((usize::from(costs[1] < costs[0]), first))
+        decision
     }
     fn migrate_verified_reuse(
         &self,
@@ -226,7 +284,13 @@ impl SerialReadyMode {
             }
         }
     }
-    fn record(&self, key: [u8; 32], owner: SerialRuntimeHostCpuOwnerEvidence, started: Instant) {
+    fn record(
+        &self,
+        key: [u8; 32],
+        owner: SerialRuntimeHostCpuOwnerEvidence,
+        started: Instant,
+        _task: &WorkflowSchedulerTask,
+    ) {
         let now = Instant::now();
         let Some(elapsed) = now.checked_duration_since(started) else {
             return;
@@ -264,6 +328,8 @@ impl SerialReadyMode {
             owner,
             at: now,
             cost_ns,
+            #[cfg(any(test, feature = "test-support"))]
+            task_id: _task.task_id.to_string(),
         });
     }
 }
@@ -577,7 +643,7 @@ impl ReservationLifecyclePort for SerialReadyPortAdapter {
                 if let Some(previous) = predecessor.as_ref() {
                     self.0.migrate_verified_reuse(previous, &expected);
                 }
-                self.0.record(key, expected, started);
+                self.0.record(key, expected, started, &task);
             }
         }
         Ok(application)
@@ -654,8 +720,35 @@ impl WorkflowService {
         }
         counts.into_iter().collect()
     }
+    /// Read-only, bounded raw observations for an independent qualification oracle.
+    /// Tuples contain task identity, exact workload digest, duration ns and age ns.
+    /// Does not inject history or expose native owner/generation capabilities.
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn serial_ready_samples_for_test(&self) -> Vec<(String, [u8; 32], u64, u64)> {
+        let Some(mode) = &self.serial_ready_mode else {
+            return Vec::new();
+        };
+        let now = Instant::now();
+        mode.observations
+            .lock()
+            .expect("serial observations lock")
+            .iter()
+            .map(|s| {
+                (
+                    s.task_id.clone(),
+                    s.key,
+                    s.cost_ns,
+                    now.saturating_duration_since(s.at)
+                        .as_nanos()
+                        .min(u64::MAX as u128) as u64,
+                )
+            })
+            .collect()
+    }
     /// Dedicated construction, before any store/repository escapes. The supplied
     /// port owns ALL serial fallback/ranked execution, drain and cleanup.
+    /// Workflow deadlines are unsupported: run/resume reject `Some(timeout_ms)`.
+    /// Dropping a caller wait does not stop native execution or release custody.
     pub fn new_serial_ready_cpu(
         port: Arc<dyn SerialRuntimeHostBatchExecutionPort>,
         config: WorkflowSerialReadyConfig,
@@ -672,5 +765,64 @@ impl WorkflowService {
         service.runtime_dispatch_assignment_repository = Arc::new(Mutex::new(super::runtime_dispatch_assignment::InMemoryWorkflowRuntimeDispatchAssignmentRepository::new_serial_singleton()));
         service.serial_ready_mode = Some(mode);
         service
+    }
+}
+
+#[cfg(test)]
+pub(super) mod tests {
+    use super::*;
+
+    /// Assertion-only helper for the worker fixture: keep clock corruption and
+    /// private history access out of production and the test-support API.
+    pub(in crate::workflow) fn assert_invalid_clock_clears_partial_ranking(
+        mode: &SerialReadyMode,
+        pair: &WorkflowSerialReadyPair,
+    ) {
+        let ranked = mode.select(pair);
+        assert_eq!(ranked.reason, SerialReadyReason::Ranked);
+        assert_eq!(ranked.position, 1);
+        assert_eq!(ranked.counts, [3, 3]);
+        assert!(ranked.maxima_ns[0] > ranked.maxima_ns[1]);
+        assert!(ranked.owner.is_some());
+
+        // All six valid samples are visited before this impossible future
+        // observation, so returning a partially accumulated proposal would fail.
+        let previous_len = {
+            let mut samples = mode.observations.lock().unwrap();
+            let previous_len = samples.len();
+            let first = samples.front().unwrap();
+            let future = Observation {
+                key: first.key,
+                owner: first.owner.clone(),
+                at: Instant::now()
+                    .checked_add(Duration::from_secs(3600))
+                    .unwrap(),
+                cost_ns: first.cost_ns,
+                task_id: first.task_id.clone(),
+            };
+            samples.push_back(future);
+            previous_len
+        };
+        let fallback = mode.select(pair);
+        assert_eq!(fallback.reason, SerialReadyReason::InvalidClock);
+        assert_eq!(fallback.position, 0);
+        assert!(fallback.owner.is_none());
+        assert_eq!(fallback.counts, [0, 0]);
+        assert_eq!(fallback.maxima_ns, [0, 0]);
+        assert_eq!(fallback.oldest_age_ns, [0, 0]);
+        {
+            let mut samples = mode.observations.lock().unwrap();
+            assert_eq!(samples.len(), previous_len + 1);
+            samples.pop_back();
+        }
+        let recovered = mode.select(pair);
+        assert_eq!(recovered.reason, SerialReadyReason::Ranked);
+        assert_eq!(recovered.position, ranked.position);
+        assert_eq!(recovered.counts, ranked.counts);
+        assert_eq!(recovered.maxima_ns, ranked.maxima_ns);
+        assert_eq!(
+            recovered.owner.unwrap().snapshot,
+            ranked.owner.unwrap().snapshot
+        );
     }
 }

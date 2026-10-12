@@ -53,6 +53,18 @@ fn observe_runtime_host_port(
     }
 }
 
+fn validate_hosted_scheduler_modes(
+    service: &WorkflowService,
+    completion_timing: Option<&EmbeddedCompletionTimingOptIn>,
+) -> Result<(), WorkflowServiceError> {
+    if service.is_serial_ready_cpu() && completion_timing.is_some() {
+        return Err(WorkflowServiceError::InvalidRequest(
+            "serial Ready CPU mode cannot be combined with completion timing".into(),
+        ));
+    }
+    Ok(())
+}
+
 /// Builds embedded-runtime workflow services before sharing them across hosts.
 ///
 /// This composition boundary keeps infrastructure wiring at the embedded
@@ -340,13 +352,19 @@ impl EmbeddedWorkflowServiceDispatchDependencies {
 
     #[must_use]
     fn configure_workflow_service(self, service: WorkflowService) -> WorkflowService {
+        let service = service
+            .with_runtime_dispatch_source_refresher(self.runtime_dispatch_source_refresher)
+            .with_runtime_dispatch_candidate_provider(self.runtime_dispatch_candidate_provider);
+        if service.is_serial_ready_cpu() {
+            // Dedicated construction already owns execution, drain and cleanup.
+            // Missing timing evidence changes order, never the execution port.
+            return service;
+        }
         let service = match self.runtime_host_batch_execution_port {
             Some(port) => service.with_runtime_host_batch_execution_port(port),
             None => service,
         };
         service
-            .with_runtime_dispatch_source_refresher(self.runtime_dispatch_source_refresher)
-            .with_runtime_dispatch_candidate_provider(self.runtime_dispatch_candidate_provider)
             .with_runtime_host_execution_port(self.runtime_host_execution_port)
             .with_reservation_lifecycle_port(self.reservation_lifecycle_port)
     }
@@ -396,6 +414,7 @@ impl EmbeddedWorkflowServiceComposition {
     where
         C: HostRuntimeRegistryController + Send + Sync + 'static,
     {
+        validate_hosted_scheduler_modes(&input.workflow_service, input.completion_timing.as_ref())?;
         let pumas_access = match input.pumas_selector_access.as_ref() {
             PumasSelectorAccess::Owner(_) | PumasSelectorAccess::LocalClient(_) => {
                 input.pumas_selector_access.clone()
@@ -477,6 +496,13 @@ impl EmbeddedWorkflowServiceComposition {
     where
         C: HostRuntimeRegistryController + Send + Sync + 'static,
     {
+        validate_hosted_scheduler_modes(
+            &input.factory_input.workflow_service,
+            input.factory_input.completion_timing.as_ref(),
+        )
+        .map_err(|error| EmbeddedRuntimeError::Initialization {
+            message: error.to_string(),
+        })?;
         let pumas_access = match input.factory_input.pumas_selector_access.as_ref() {
             PumasSelectorAccess::Owner(_) | PumasSelectorAccess::LocalClient(_) => {
                 input.factory_input.pumas_selector_access.clone()
@@ -605,6 +631,10 @@ impl EmbeddedWorkflowServiceComposition {
     where
         C: HostRuntimeRegistryController + Send + Sync + 'static,
     {
+        validate_hosted_scheduler_modes(&input.workflow_service, input.completion_timing.as_ref())
+            .map_err(|error| EmbeddedRuntimeError::Initialization {
+                message: error.to_string(),
+            })?;
         let shared_extensions: SharedExtensions =
             Arc::new(tokio::sync::RwLock::new(ExecutorExtensions::new()));
         let pumas_selector_access = Self::initialize_hosted_startup_extensions(
@@ -752,14 +782,19 @@ mod tests {
     };
     use pantograph_runtime_host_contracts::{
         ReservationLifecycleApplication, ReservationLifecycleEvent, ReservationLifecyclePortError,
+        RuntimeHostBatchExecutionRequest, RuntimeHostBatchExecutionResponse,
         RuntimeHostExecutionCancellationHandle, RuntimeHostExecutionPortError,
         RuntimeHostExecutionRequest, RuntimeHostExecutionResponse,
+        SerialRuntimeHostBatchExecutionPort, SerialRuntimeHostCpuOwnerEvidence,
     };
     use pantograph_runtime_registry::{
         RuntimeDispatchIdentity, RuntimeRegistration, RuntimeRegistry, RuntimeTransition,
         SharedRuntimeRegistry,
     };
-    use pantograph_scheduler::{SchedulerEstimateHintKind, SchedulerTaskStateRecord};
+    use pantograph_scheduler::{
+        SchedulableTaskIntent, SchedulerEstimateHintKind, SchedulerSerialBoundDispatch,
+        SchedulerSerialDrainedDispatch, SchedulerSerialOwnerSnapshot, SchedulerTaskStateRecord,
+    };
     use pantograph_workflow_service::graph::{GraphEdge, GraphNode, Position, WorkflowGraph};
     use pantograph_workflow_service::workflow::{
         WorkflowGraphSessionExecutableValidationSnapshotPublishRequest,
@@ -901,6 +936,88 @@ mod tests {
         }
     }
 
+    #[async_trait]
+    impl RuntimeHostBatchExecutionPort for RejectingRuntimeHostPort {
+        async fn execute_runtime_host_batch_request(
+            &self,
+            _request: RuntimeHostBatchExecutionRequest,
+            _cancellation: RuntimeHostExecutionCancellationHandle,
+        ) -> Result<RuntimeHostBatchExecutionResponse, RuntimeHostExecutionPortError> {
+            panic!("composition tests must not execute a batch")
+        }
+    }
+
+    #[async_trait]
+    impl ReservationLifecyclePort for RejectingRuntimeHostPort {
+        async fn apply_reservation_lifecycle(
+            &self,
+            _event: ReservationLifecycleEvent,
+        ) -> Result<ReservationLifecycleApplication, ReservationLifecyclePortError> {
+            panic!("composition tests must not release a reservation")
+        }
+    }
+
+    #[async_trait]
+    impl SerialRuntimeHostBatchExecutionPort for RejectingRuntimeHostPort {
+        fn resident_serial_cpu_owner(
+            &self,
+            _intent: &SchedulableTaskIntent,
+        ) -> Option<SerialRuntimeHostCpuOwnerEvidence> {
+            panic!("composition tests must not query a loaded owner")
+        }
+
+        async fn execute_serial_singleton(
+            &self,
+            _request: RuntimeHostBatchExecutionRequest,
+            _cancellation: RuntimeHostExecutionCancellationHandle,
+            _ownership: SchedulerSerialBoundDispatch,
+        ) -> Result<
+            (
+                RuntimeHostBatchExecutionResponse,
+                SchedulerSerialDrainedDispatch,
+                Option<SerialRuntimeHostCpuOwnerEvidence>,
+            ),
+            RuntimeHostExecutionPortError,
+        > {
+            panic!("composition tests must not execute a serial attempt")
+        }
+
+        async fn apply_serial_cleanup(
+            &self,
+            _event: ReservationLifecycleEvent,
+            _expected_owner: Option<SchedulerSerialOwnerSnapshot>,
+        ) -> Result<ReservationLifecycleApplication, ReservationLifecyclePortError> {
+            panic!("composition tests must not apply serial cleanup")
+        }
+    }
+
+    fn serial_workflow_service() -> WorkflowService {
+        WorkflowService::new_serial_ready_cpu(
+            Arc::new(RejectingRuntimeHostPort),
+            pantograph_workflow_service::workflow::WorkflowSerialReadyConfig::default(),
+        )
+    }
+
+    struct UnqueriedCompletionTimingSource;
+
+    impl crate::EmbeddedCompletionTimingSource for UnqueriedCompletionTimingSource {
+        fn timing_for(
+            &self,
+            _query: &crate::EmbeddedCompletionTimingQuery,
+        ) -> Option<crate::EmbeddedCompletionTimingRecord> {
+            panic!("composition must not query completion timing")
+        }
+    }
+
+    fn completion_timing_opt_in() -> EmbeddedCompletionTimingOptIn {
+        EmbeddedCompletionTimingOptIn {
+            source: Arc::new(UnqueriedCompletionTimingSource),
+            owner_epoch: "composition.test-owner".into(),
+            max_sample_age_ms: 1_000,
+            allow_configured_estimates: false,
+        }
+    }
+
     #[derive(Debug)]
     struct RejectingReservationLifecyclePort;
 
@@ -964,19 +1081,96 @@ mod tests {
 
     #[test]
     fn builds_with_paired_runtime_dispatch_dependencies() {
+        let execution = Arc::new(RejectingRuntimeHostPort);
+        let batch = Arc::new(RejectingRuntimeHostPort);
+        let cleanup = Arc::new(RejectingReservationLifecyclePort);
         let dependencies = EmbeddedWorkflowServiceDispatchDependencies::new(
             Arc::new(EmbeddedRuntimeDispatchCandidateProvider::new()),
             Arc::new(AcceptingDispatchSourceRefresher),
-            Arc::new(RejectingRuntimeHostPort),
-            Arc::new(RejectingReservationLifecyclePort),
-        );
+            execution.clone(),
+            cleanup.clone(),
+        )
+        .with_runtime_host_batch_execution_port(batch.clone());
 
         let shared = EmbeddedWorkflowServiceComposition::new()
             .with_runtime_dispatch_dependencies(dependencies)
             .into_shared_workflow_service(Some(1))
             .expect("paired dependencies should build workflow service");
 
+        assert!(!shared.is_serial_ready_cpu());
+        assert!(Arc::strong_count(&execution) > 1);
+        assert!(Arc::strong_count(&batch) > 1);
+        assert!(Arc::strong_count(&cleanup) > 1);
         drop(shared);
+        assert_eq!(Arc::strong_count(&execution), 1);
+        assert_eq!(Arc::strong_count(&batch), 1);
+        assert_eq!(Arc::strong_count(&cleanup), 1);
+    }
+
+    #[test]
+    fn serial_composition_preserves_owned_ports_and_installs_dispatch_and_readiness() {
+        let serial_owner = Arc::new(RejectingRuntimeHostPort);
+        let original_execution = Arc::new(RejectingRuntimeHostPort);
+        let service = WorkflowService::new_serial_ready_cpu(
+            serial_owner.clone(),
+            pantograph_workflow_service::workflow::WorkflowSerialReadyConfig::default(),
+        )
+        .with_runtime_host_execution_port(original_execution.clone());
+        let candidate_provider = Arc::new(EmbeddedRuntimeDispatchCandidateProvider::new());
+        let refresher = Arc::new(AcceptingDispatchSourceRefresher);
+        let ordinary_execution = Arc::new(RejectingRuntimeHostPort);
+        let ordinary_batch = Arc::new(RejectingRuntimeHostPort);
+        let ordinary_cleanup = Arc::new(RejectingReservationLifecyclePort);
+        let dependencies = EmbeddedWorkflowServiceDispatchDependencies::new(
+            candidate_provider.clone(),
+            refresher.clone(),
+            ordinary_execution.clone(),
+            ordinary_cleanup.clone(),
+        )
+        .with_runtime_host_batch_execution_port(ordinary_batch.clone());
+        let composition = EmbeddedWorkflowServiceComposition::new()
+            .with_runtime_dispatch_dependencies(dependencies);
+        let snapshots = composition.dependency_readiness().snapshot_provider();
+        let queue = composition.dependency_readiness().work_queue();
+        let requirements = composition.dependency_readiness().requirements_registry();
+
+        let shared = composition
+            .into_shared_configured_workflow_service(service, Some(1))
+            .expect("serial composition preserves constructor-owned ports");
+
+        assert!(shared.is_serial_ready_cpu());
+        assert!(Arc::strong_count(&serial_owner) > 1);
+        assert!(Arc::strong_count(&original_execution) > 1);
+        assert_eq!(Arc::strong_count(&ordinary_execution), 1);
+        assert_eq!(Arc::strong_count(&ordinary_batch), 1);
+        assert_eq!(Arc::strong_count(&ordinary_cleanup), 1);
+        assert!(Arc::strong_count(&candidate_provider) > 1);
+        assert!(Arc::strong_count(&refresher) > 1);
+        assert!(Arc::strong_count(&snapshots) > 1);
+        assert!(Arc::strong_count(&queue) > 1);
+        assert!(Arc::strong_count(&requirements) > 1);
+        drop(shared);
+        assert_eq!(Arc::strong_count(&serial_owner), 1);
+        assert_eq!(Arc::strong_count(&original_execution), 1);
+        assert_eq!(Arc::strong_count(&candidate_provider), 1);
+        assert_eq!(Arc::strong_count(&refresher), 1);
+        assert_eq!(Arc::strong_count(&snapshots), 1);
+        assert_eq!(Arc::strong_count(&queue), 1);
+        assert_eq!(Arc::strong_count(&requirements), 1);
+    }
+
+    #[test]
+    #[should_panic(expected = "serial constructor owns its execution port")]
+    fn serial_batch_port_replacement_still_refuses() {
+        let _ = serial_workflow_service()
+            .with_runtime_host_batch_execution_port(Arc::new(RejectingRuntimeHostPort));
+    }
+
+    #[test]
+    #[should_panic(expected = "serial constructor owns its cleanup port")]
+    fn serial_cleanup_port_replacement_still_refuses() {
+        let _ = serial_workflow_service()
+            .with_reservation_lifecycle_port(Arc::new(RejectingReservationLifecyclePort));
     }
 
     #[test]
@@ -1835,6 +2029,100 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn hosted_factories_reject_serial_completion_timing_before_registry_mutation() {
+        let temp_dir = tempfile::tempdir().expect("tempdir");
+        let pumas_api = Arc::new(
+            crate::pumas_test_support::builder(temp_dir.path())
+                .with_hf_client(false)
+                .with_process_manager(false)
+                .build()
+                .await
+                .expect("pumas api"),
+        );
+        for bundle in [false, true] {
+            let registry: SharedRuntimeRegistry = Arc::new(RuntimeRegistry::new());
+            let gateway = Arc::new(inference::InferenceGateway::new());
+            let mut input = EmbeddedHostedWorkflowServiceFactoryInput::new(
+                registry.clone(),
+                gateway.clone(),
+                gateway,
+                Arc::new(PumasSelectorAccess::Owner(pumas_api.clone())),
+                Some(1),
+                1_000,
+            )
+            .with_workflow_service(serial_workflow_service());
+            input.completion_timing = Some(completion_timing_opt_in());
+            // No artifact writer is configured: the scheduler-mode conflict must
+            // win before normal setup observes artifacts or enrolls runtimes.
+            let message = if bundle {
+                let input = EmbeddedHostedWorkflowServiceCompositionInput::new(
+                    input,
+                    tokio::runtime::Handle::current(),
+                );
+                match EmbeddedWorkflowServiceComposition::resource_backed_hosted_bundle(input) {
+                    Ok(_) => panic!("conflicting modes must reject bundle composition"),
+                    Err(error) => error.to_string(),
+                }
+            } else {
+                match EmbeddedWorkflowServiceComposition::resource_backed_hosted(input) {
+                    Ok(_) => panic!("conflicting modes must reject factory composition"),
+                    Err(error) => error.to_string(),
+                }
+            };
+            assert!(
+                message.contains("serial Ready CPU mode cannot be combined with completion timing")
+            );
+            let snapshot = registry.snapshot();
+            assert!(snapshot.runtimes.is_empty());
+            assert!(snapshot.reservations.is_empty());
+        }
+    }
+
+    #[tokio::test]
+    async fn hosted_startup_rejects_serial_completion_timing_before_selector_setup() {
+        let temp_dir = tempfile::tempdir().expect("tempdir");
+        let registry: SharedRuntimeRegistry = Arc::new(RuntimeRegistry::new());
+        let gateway = Arc::new(inference::InferenceGateway::new());
+        let kv_cache_dir = temp_dir.path().join("kv-cache");
+        let input = EmbeddedHostedStartupCompositionInput::new(EmbeddedHostedStartupConfig {
+            runtime_registry: registry.clone(),
+            runtime_registry_controller: gateway.clone(),
+            gateway,
+            // Setup itself would fail. Mode validation must happen before it.
+            pumas_selector_source: None,
+            project_root: temp_dir.path().to_path_buf(),
+            kv_cache_dir: kv_cache_dir.clone(),
+            dependency_readiness_runtime_handle: tokio::runtime::Handle::current(),
+            max_loaded_sessions: Some(1),
+            max_dispatch_source_snapshot_age_ms: 1_000,
+        })
+        .with_workflow_service(serial_workflow_service())
+        .with_completion_timing(completion_timing_opt_in());
+
+        let error =
+            match EmbeddedWorkflowServiceComposition::resource_backed_hosted_startup(input).await {
+                Ok(_) => panic!("conflicting modes must reject startup composition"),
+                Err(error) => error,
+            };
+        assert!(error
+            .to_string()
+            .contains("serial Ready CPU mode cannot be combined with completion timing"));
+        assert!(registry.snapshot().runtimes.is_empty());
+        assert!(!kv_cache_dir.exists());
+    }
+
+    #[test]
+    fn default_scheduler_accepts_optional_completion_timing() {
+        let service = WorkflowService::new();
+        assert!(!service.is_serial_ready_cpu());
+        validate_hosted_scheduler_modes(&service, None).expect("default mode");
+        validate_hosted_scheduler_modes(&service, Some(&completion_timing_opt_in()))
+            .expect("existing completion-timing opt-in remains available");
+        validate_hosted_scheduler_modes(&serial_workflow_service(), None)
+            .expect("serial mode alone is supported");
+    }
+
+    #[tokio::test]
     async fn hosted_startup_named_config_preserves_owned_values_and_defaults() {
         let registry: SharedRuntimeRegistry = Arc::new(RuntimeRegistry::new());
         let gateway = Arc::new(inference::InferenceGateway::new());
@@ -1861,6 +2149,8 @@ mod tests {
         assert_eq!(input.kv_cache_dir, PathBuf::from("kv-root"));
         assert_eq!(input.max_loaded_sessions, Some(7));
         assert_eq!(input.max_dispatch_source_snapshot_age_ms, 2_345);
+        assert!(!input.workflow_service.is_serial_ready_cpu());
+        assert!(input.completion_timing.is_none());
         assert!(input.dependency_inventory_app_data_dir.is_none());
         assert_eq!(
             input.dependency_readiness_producer_config,

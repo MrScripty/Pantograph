@@ -1434,8 +1434,20 @@ async fn claim_and_execute_runtime_branch_event(
         });
         if let Some(pair) = pair {
             if pair.members[0].task.task_id.as_str() == task_id {
-                if let Some((position, owner)) = mode.select(&pair) {
-                    selected_task_id = pair.members[position].task.task_id.to_string();
+                let decision_started = std::time::Instant::now();
+                let decision = mode.select(&pair);
+                let decision_ns =
+                    decision_started.elapsed().as_nanos().min(u64::MAX as u128) as u64;
+                log::info!(target: "workflow::serial_ready", "{}", serde_json::json!({
+                    "phase": "proposal", "workflow_id": command.workflow_id,
+                    "workflow_run_id": command.workflow_run_id,
+                    "task_ids": [&pair.members[0].task.task_id, &pair.members[1].task.task_id],
+                    "selected_position": decision.position, "reason": decision.reason,
+                    "sample_counts": decision.counts, "maxima_ns": decision.maxima_ns,
+                    "oldest_age_ns": decision.oldest_age_ns, "decision_ns": decision_ns,
+                }));
+                if let Some(owner) = decision.owner {
+                    selected_task_id = pair.members[decision.position].task.task_id.to_string();
                     serial_owner = Some(owner);
                     serial_pair = Some(pair);
                 }

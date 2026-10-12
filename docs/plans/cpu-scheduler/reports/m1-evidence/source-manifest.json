@@ -1,0 +1,32 @@
+{
+  "base_commit": "42d03b3fb65f5172be8c956af6e880c1255b354b",
+  "source_sha256": {
+    "Cargo.lock": "42c43401def2b14f41eead4f533f3b48f463a80602271d87602cec705d0ac002",
+    "crates/pantograph-embedded-runtime/examples/cpu_embedding_workflow_probe.rs": "0dbd6d64f67f314c67cc6efed231d4ca6f4738cb56f1021ab3b4f3de62ca4d08",
+    "crates/pantograph-embedded-runtime/examples/cpu_embedding_workflow_probe/serial_ready_probe.rs": "314fc60cca54e20ee48539368079439c75b1eaac6bec32df3ac9a76c9400e4f0",
+    "crates/pantograph-embedded-runtime/src/embedded_workflow_service_api.rs": "aa55f4eb7a225d3dcb4416467cd57df600bbc864511680cfd0c524f5ceb58b06",
+    "crates/pantograph-embedded-runtime/src/lib_tests/native_serial_worker_tests.rs": "dbc9827774de214bbd213d04eebe6bcb730d32e2a1f20e8207025b7dad119510",
+    "crates/pantograph-embedded-runtime/src/workflow_service_composition.rs": "0eabadc2366ee0a636842f80a31a859dc7a3cbc92fd43e314a1814ebde96a56f",
+    "crates/pantograph-workflow-service/Cargo.toml": "f6cc71a423bf4207ea24fb7cf3b03adcb23dd7bc2e6c11bbb3723d9422d3a9cb",
+    "crates/pantograph-workflow-service/src/workflow/serial_ready.rs": "27ba76f8443aad4b5a783340fe9343d65c6cd892c263b349abd6a9461e14a6bb",
+    "crates/pantograph-workflow-service/src/workflow/serial_ready_worker_tests.rs": "af469ad67fa0828c6c302e63eb71ea55a416b19954a8bfaf655448413b7e9213",
+    "crates/pantograph-workflow-service/src/workflow/service_config.rs": "87ea04438b58adb34e9742da45b5c753b78ea91b321b016f65f5f6e2c0b201cb",
+    "crates/pantograph-workflow-service/src/workflow/session_execution_api.rs": "aab47f452a41f0ccb372958cd7da64fd9be9a7218702b5bbb7f5fed7084f5192",
+    "crates/pantograph-workflow-service/src/workflow/task_execution_facade.rs": "348bd11e08cc71933a6e04b51ef3dc242aff975ce0cb66a73e4611694dee49c6",
+    "crates/pantograph-workflow-service/src/workflow/task_execution_worker.rs": "355a42b3667ef179bb1600e4d6a3d7e3385737359b1c78e65e8a4d3473895eba"
+  },
+  "binary_sha256": "0f79b0db89e9ac9f39a32cf0b0a092c9372c4cd9f841d2efa5f20751c89db5e4",
+  "fixture_manifest_sha256": "ae1644b099d946e03e75a1b75c65593bd2fcee0aa03df31aa79fb5fb94e2bd39",
+  "build_profile": "release",
+  "rust": "1.92.0",
+  "features": [
+    "backend-candle",
+    "host-dependency-inventory"
+  ],
+  "default_features": false,
+  "model_download_bytes": 0,
+  "paid_inference": false,
+  "concurrent_build_or_model_work_during_release_cohort": false,
+  "final_release_probe_exit_code": 1,
+  "exit_reason": "pending_no_observed_second_winner"
+}

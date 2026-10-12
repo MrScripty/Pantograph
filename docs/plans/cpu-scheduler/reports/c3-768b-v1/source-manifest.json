@@ -1,0 +1,29 @@
+{
+  "protocol_commit": "b158dc24e959924bb0481ef18d1be35705833bfd",
+  "measurement_commit": "09b1aaa58c39fdf976e98aaa130abda890fd3776",
+  "measurement_tree": "8479f35b5b8f857a7419372d4aca53c45ab0b5a5",
+  "source_files": {
+    "crates/pantograph-embedded-runtime/examples/cpu_embedding_workflow_probe.rs": "851866cc256e3858f39c062fff8f7d2dca865c8bc54fb2e137941156cf852257",
+    "crates/pantograph-embedded-runtime/examples/cpu_embedding_workflow_probe/c3_reference.py": "e4157f1b34a77a7f61051e3a855d79d4ae790936a34b172882d76a62193f4be4",
+    "crates/pantograph-embedded-runtime/examples/cpu_embedding_workflow_probe/serial_ready_probe.rs": "2a11f9f1db7ed8fb669450abac404ce4d1b780a876ef839a8ea14f55836e6d17"
+  },
+  "release_binary_sha256": "029984a94409dac33f43a25b3c0ae6ef0bf44570b51526a391f5fe24419c1bc7",
+  "original_evidence_sha256": {
+    "dev-serial-events.json.gz": "e4a7a6a88a64adae34d45c3f63db11892ec794883f6f7a4c9259026906efa6ff",
+    "release-serial-result.json.gz": "e9c90727e7266e94df2b47826f69d8ae185aea7b993b5ba1d4542de9ab3f9159",
+    "dev-registry-after-shutdown.json.gz": "6aabe59d4f6facb3fdf1d72cdd43f45e07a57f3dbaa240e23fd9ccec8d869a6e",
+    "release-summary.json": "da875a5f0e379e84901962cab630f4d1bc02923f580c44846372801a852169a1",
+    "release-serial-proposals.jsonl.gz": "2bd4186d67e26e8213861716f50caa8a56860a27020b431cc1b1ad41815b7daf",
+    "dev-baseline-events.json.gz": "420777c8a03c5ec7fd554bb26a3735cf814b840dec52cfd8644e66cdbc358dfe",
+    "release-baseline-events.json.gz": "29cafa8da044f6b9cf2c644a46c57238282c663d556288aa2e711e1f72023bfe",
+    "release-serial-events.json.gz": "50a6a896f6836616e99a28d9d27efe376c18e47d8c4c96df8b9d519400f2ab45",
+    "source-manifest.json": "8f0d7e752453a23be574c9bc0a1c8e017fc083748b862c2aaccde87e71eeb546",
+    "dev-serial-result.json.gz": "b7b52592d0eb64b6ce6fa0ee89320301d05b07177aa0fce887169f764081ecbc",
+    "dev-serial-proposals.jsonl.gz": "ac9ba2d055b9cdd8ea480e77d96e6929d55a9894788e5073e79c3270364d6f8d",
+    "SHA256SUMS": "ab21e23b763a79e8118df9ea058aa426f8fde5a92747964da245fd2966796f3b",
+    "release-registry-after-shutdown.json.gz": "901db1e01a8bc675404e8a17156dec8f077dcd402bf310b8417fd1f6fe2fa32d",
+    "dev-summary.json": "b2c2a26f8dcb615d0c222b471768a20a8122af7863bf7f3c95119464151f31cc"
+  },
+  "preexecution_review": "independent published protocol and implementation reviews passed",
+  "recovery_check": "executor succeeded16:16:29UTC; no experiment had started; corrected build succeeded; no restart"
+}
