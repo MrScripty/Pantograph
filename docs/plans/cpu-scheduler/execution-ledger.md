@@ -140,3 +140,24 @@ coordination; parent owns its later disposition after reachable handoff.
   manifests remain bound to the initial qualified snapshot; no new model cohort
   is run for this test-only correction. Independent review and targeted lint/tests
   precede the ordinary fast-forward publication. C3 remains Partial.
+
+## 2026-10-12 — C3 causal review and prospective supplement
+
+- Final published implementation `938bc89ea381e089ecf4273d578324698959ddb4` passed
+  all four ordinary CI workflows; independent review confirmed C6. C3 stayed
+  partial. The worktree and remote draft PR #73 matched, with no merge/deployment.
+- A bounded read-only causal audit independently recomputed all eight release
+  raw sample/proposal/Start oracles and verified all 13 preserved checksums.
+  All five ranked choices followed the lower observed maximum; no policy or
+  wiring defect was found. Phase-specific causes remain unisolated.
+- Independent standards review rejected oversized raw-input proposals after
+  finding the stricter 1,024-byte ordinary String embedding limit. No capability
+  change, TranscriptText workaround or exploratory inference was performed.
+- The user authorized one supplemental protocol, `c3-768b-v1`: exactly 768-byte A
+  and five-byte B, independent reference verification, eight baseline then eight
+  serial runs, raw duration/output/order evidence, and an unconditional stop with
+  no retries or tuning. The original exit-1 and slower serial baseline remain
+  unchanged and visible. The full prospective amendment is in the canonical plan.
+- This documentation publication precedes any new reference/model execution.
+  Independent confirmation of the published amendment is required before the
+  fixed experiment. C3 remains partial; no further milestone is admitted.

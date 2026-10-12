@@ -4,12 +4,14 @@
 
 **Current phase:** M1 — retained CPU composition and real two-Ready qualification.
 
-**Next slice:** Finish M1 qualification disposition: final-source second-position
-evidence remains pending; publish the reviewed implementation as a draft for CI.
+**Next slice:** Publish and independently admit the fixed C3 supplemental
+768-byte/5-byte coverage protocol below, then execute it once and report every
+result. The original failed cohort and slower baseline remain unchanged.
 
 **Acceptance status:** `partial` for M1: actual hosted CPU output, independent
-ranking and measured comparison pass; final release second-position proof and
-normal CI disposition remain pending. No full research scheduler/default change.
+ranking and measured comparison pass; final release second-position proof remains
+pending. Ordinary CI passed at `938bc89e`; future changes require their applicable
+gates. No full research scheduler/default change.
 
 **Execution ledger:** [execution-ledger.md](execution-ledger.md)
 
@@ -217,7 +219,7 @@ native action remains advisory/Blocked; contract tests never substitute for it.
 | C4a | Missing/stale/foreign-generation observations use explicit FIFO or fail closed as declared; owner replacement after ranking, cancellation, dropped receiver and failed cleanup retain custody and exclude training. | focused / simulated protocol / automated | passed | Full workflow-service 979 tests pass, including private InvalidClock partial-state reset and direct/supervised timed run/resume no-side-effect refusal. |
 | C4b | Actual CPU cancellation preserves custody and prevents cancelled training. Reuse requires matched cleanup; otherwise the correct result is fenced/poisoned and the next attempt refuses. No new recovery is authorized. | integration / required-real CPU / automated | passed | Two actual native post-drain cancellation/next-attempt regressions pass; controlled metadata remains separate from C2; matched cleanup or conservative fencing, no compute-cancellation claim. |
 | C5 | Record a representative paired-workload baseline and opt-in comparison: outputs, selected order, sample provenance, queue/service/workflow elapsed times, selector-only scheduling cost and environment (total scheduler CPU remains unisolated). Repeated release observations disclose variability; do not promise general speedup. | integration / required-real CPU / automated | passed (scoped) | Fixed final release 8+8 comparison, all raw values and min/median/max in [M1 report](reports/2026-10-12-retained-ready-m1.md). Selector-only cost disclosed; total scheduler CPU unisolated, no speedup observed. |
-| C6 | Independent review and applicable repository gates pass on the published feature head. Normal CI validates broad regressions; it does not establish GUI/GPU or native batching. | contract / representative / automated + review | pending publication/CI | Independent source and saved output/order evidence reviewed; local gates recorded in report. Publish draft for normal CI and verify exact head/tree; do not infer full M1 acceptance. |
+| C6 | Independent review and applicable repository gates pass on the published feature head. Normal CI validates broad regressions; it does not establish GUI/GPU or native batching. | contract / representative / automated + review | passed at `938bc89e`; recheck changed head | Independent source/evidence review, local gates and all four ordinary CI workflows passed on draft PR #73. Later changes must receive applicable checks; this does not close C3. |
 
 Predeclare the real run count and use the same unchanged graph throughout: two
 independent embedding tasks, exact texts, same model/environment/descriptor, with
@@ -356,10 +358,11 @@ ceremonies. GPU/remote remain Deferred until the stated environment and authorit
 ## Final Acceptance
 
 M0 is accepted. M1 implementation and actual CPU/ranking/measurement subcriteria
-are reviewed, but final release second-position evidence and C6 remain pending.
+are reviewed, but final release second-position evidence remains pending. C6
+passed at `938bc89e`; later changes require their applicable gates.
 The fixed cohort correctly chose position zero and exited 1 for that missing
-criterion; do not rerun for a preferred winner or weaken the oracle. Publish the
-reviewed implementation as a draft with this limitation. M2 is not admitted by
+criterion; do not rerun for a preferred winner or weaken the oracle. The
+reviewed implementation remains draft PR #73 with this limitation. M2 is not admitted by
 these partial results. See the [M1 report](reports/2026-10-12-retained-ready-m1.md).
 
 ### M1 resident-accounting qualification correction (2026-10-12)
@@ -388,3 +391,72 @@ behavior is unchanged. Focused no-side-effect run/resume tests qualify refusal.
 The probe uses `None` and a 30-second caller watchdog; caller cancellation/drop
 is not evidence of native stop or permission to release custody. No new deadline
 machinery, recovery, or deadline-performance claim is admitted.
+
+### M1 C3 supplemental coverage amendment (2026-10-12)
+
+The user authorized exactly one bounded supplemental coverage experiment after
+the [causal investigation](reports/2026-10-12-c3-causal-investigation.md). The
+original release result remains negative: eight baseline plus eight serial runs,
+all five ranked decisions correctly selecting position zero, probe exit 1,
+baseline median 54.031291 ms and serial median 63.954510 ms. Preserve all 13
+original evidence checksums under `reports/m1-evidence/SHA256SUMS`; do not replace
+those exports, summaries, manifests or the original report.
+
+**Protocol `c3-768b-v1`, frozen before execution:**
+
+- A, bound to `prompt_a` / `infer_a`: ASCII `"hello world "` repeated exactly 64
+  times, including its trailing space; 768 UTF-8 bytes; SHA-256
+  `37abb1bb44478b85ca20fe74213169f68d833875a43317f10d76733465ef82b1`.
+- B, bound to `prompt_b` / `infer_b`: ASCII `"hello"`, no trailing space;
+  five UTF-8 bytes; SHA-256
+  `2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824`.
+- Preserve graph/task IDs, candidate order, exact model/weights, tokenizer, one
+  configured private CPU thread, ordinary hosted providers, retaining owner
+  prerequisites, cleanup validation and all capability limits. In particular,
+  String embedding text is limited to 1,024 bytes. No TranscriptText substitution.
+- Before hosted execution, use the cached independent Transformers reference with
+  the unchanged BERT-8 fixture. Verify exact new input token IDs, attention masks
+  and type IDs against the committed truncation reference, then execute a CPU
+  reference forward and compare all eight output dimensions within `1e-5`.
+  Record package/model/input hashes and actual reference vectors. No weights are
+  regenerated and no model/package acquisition is permitted for this protocol.
+- One fresh isolated Pumas owner, registry, gateway and empty serial history;
+  ordinary retaining bootstrap; exactly eight baseline runs followed by eight
+  serial runs with unchanged graph/texts. Keep both hosted compositions/readiness
+  producers alive throughout both phases. Use the release binary; finish builds
+  and reference execution before measurement and avoid concurrent model work.
+- Three successful fresh samples per exact workload before ranking. Capture every
+  successful raw per-sample dispatch-through-matched-cleanup duration through the
+  existing read-only observation view, all proposals, both actual Start IDs,
+  outputs, run/resume IDs and shutdown state. Independently recompute counts and
+  maxima from raw samples and compare proposed winner and actual order.
+- Preserve the existing numerical, readiness, owner, freshness and cleanup
+  oracles. Use `timeout_ms: None` and the existing 30-second caller watchdog,
+  which confers no native cancellation or resource-release authority.
+- Store new inputs, reference, source/binary hashes and full raw baseline/serial
+  records in a separate `c3-768b-v1` evidence directory. Report every run and
+  measurement regardless of ordering. This supplement neither replaces C5's
+  negative/slower comparison nor establishes general speedup or isolated
+  preprocessing cost. The tensor input shapes remain 16 and three tokens.
+
+Hypothesis: the supported 3.2-fold raw-input increase for A may create a measured
+service-cost contrast that covers second-position selection. This is conditional,
+not an assumed faster-text oracle. The selection policy and C3 criterion do not
+change. The original negative cohort remains negative even if the supplement
+passes the missing second-position case.
+
+**Unconditional stop:** this protocol allows at most one hosted cohort. Complete
+the fixed run count regardless of winner unless capability/reference/readiness,
+execution, freshness, oracle or infrastructure failure stops it earlier; preserve
+partial evidence and do not restart. Do not tune inputs, choose seeds, inject
+delays/history/clocks, swap positions, or retry to seek a desired order. If C3 is
+still unmet, retain it as an open coverage limitation and propose no further
+experiment without a materially different reason. A discovered code defect
+requires targeted regression/review; no automatic second cohort is admitted.
+
+Publish this investigation and amendment, then obtain independent confirmation of
+the published protocol before execution. An explicitly selected example mode and
+reference/evidence scripts may implement this fixed protocol; production policy,
+defaults and original `--serial-ready` behavior remain unchanged. Independent
+review of the resulting implementation and evidence is required. No M2, merge,
+GPU, remote worker or deployment is admitted by this amendment.
