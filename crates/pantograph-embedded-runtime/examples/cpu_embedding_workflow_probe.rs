@@ -35,6 +35,8 @@ const WORKFLOW_ID: &str = "cpu-embedding-probe";
 
 #[path = "cpu_embedding_workflow_probe/browser_host.rs"]
 mod browser_host;
+#[path = "cpu_embedding_workflow_probe/rich_workflow.rs"]
+mod rich_workflow;
 #[path = "cpu_embedding_workflow_probe/target_observation.rs"]
 mod target_observation;
 
@@ -63,16 +65,21 @@ fn seed_fixture(
     selected_files: Option<&[&str]>,
 ) -> ProbeResult<PathBuf> {
     let model_dir = root.join("shared-resources/models").join(model_id);
-    let source = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../inference/tests/fixtures/candle_bert/bert-8");
+    let source = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(
+        if model_id == rich_workflow::SECOND_MODEL {
+            "../inference/tests/fixtures/candle_bert/bert-12"
+        } else {
+            "../inference/tests/fixtures/candle_bert/bert-8"
+        },
+    );
     copy_fixture(&source, &model_dir)?;
     save(
         &model_dir,
         "metadata.json",
         &json!({
             "schema_version": 2, "model_id": model_id, "family": "qualification",
-            "model_type": "embedding", "official_name": "Synthetic-BERT-8",
-            "cleaned_name": "synthetic-bert-8", "source_path": model_dir,
+            "model_type": "embedding", "official_name": model_id.rsplit('/').next(),
+            "cleaned_name": model_id.rsplit('/').next(), "source_path": model_dir,
             "entry_path": model_dir, "storage_kind": "library_owned",
             "selected_artifact_id": "main", "selected_artifact_files": selected_files,
             "import_state": "ready", "validation_state": "valid",
@@ -86,8 +93,16 @@ fn seed_fixture(
 
 async fn create_runtime(
     root: &Path,
+    rich: bool,
 ) -> ProbeResult<(EmbeddedRuntime, Arc<pumas_library::PumasApi>)> {
     seed_fixture(root, MODEL_ID, Some(&["model.safetensors"]))?;
+    if rich {
+        seed_fixture(
+            root,
+            rich_workflow::SECOND_MODEL,
+            Some(&["model.safetensors"]),
+        )?;
+    }
     for directory in [
         "launcher-data/metadata",
         "launcher-data/cache",
@@ -132,7 +147,7 @@ async fn create_runtime(
             project_root: root.to_path_buf(),
             kv_cache_dir: root.join("kv-cache"),
             dependency_readiness_runtime_handle: tokio::runtime::Handle::current(),
-            max_loaded_sessions: Some(1),
+            max_loaded_sessions: Some(if rich { 2 } else { 1 }),
             max_dispatch_source_snapshot_age_ms: 1000,
         })
         .with_workflow_service(service)
@@ -168,9 +183,8 @@ async fn author_workflow(
     stage: &mut &str,
     publish: bool,
 ) -> ProbeResult<String> {
-    let service = runtime.workflow_service();
     *stage = "graph_authoring";
-    let mut graph: WorkflowGraph = serde_json::from_value(json!({"nodes": [
+    let graph: WorkflowGraph = serde_json::from_value(json!({"nodes": [
         {"id":"prompt", "node_type":"text-input", "position":{"x":0,"y":100}, "data":{"text":"hello world"}},
         {"id":"infer", "node_type":"llm-inference", "position":{"x":300,"y":100}, "data":{
             "label":"CPU Embedding", "modelName":"Untrained BERT-8",
@@ -184,9 +198,22 @@ async fn author_workflow(
         {"id":"infer-to-vector", "source":"infer", "source_handle":"embedding", "target":"vectors", "target_handle":"vector"},
         {"id":"deps-to-infer", "source":"deps", "source_handle":"dependency_environment_sidecar", "target":"infer", "target_handle":"dependency_environment_sidecar"}
     ]}))?;
+    author_graph(runtime, root, stage, graph, WORKFLOW_ID, &["deps"], publish).await
+}
+
+async fn author_graph(
+    runtime: &EmbeddedRuntime,
+    root: &Path,
+    stage: &mut &str,
+    mut graph: WorkflowGraph,
+    workflow_id: &str,
+    dependency_nodes: &[&str],
+    publish: bool,
+) -> ProbeResult<String> {
+    let service = runtime.workflow_service();
     let registry = NodeRegistry::new();
     for node in &mut graph.nodes {
-        if matches!(node.node_type.as_str(), "text-input" | "vector-output") {
+        if node.node_type != "llm-inference" {
             node.data["definition"] = serde_json::to_value(
                 registry
                     .get_definition(&node.node_type)
@@ -209,18 +236,19 @@ async fn author_workflow(
         )
         .await?;
     save(root, "descriptor-validation.json", &validation)?;
-    let projection = validation
-        .node_projections
-        .iter()
-        .find(|node| node.node_id.as_str() == "infer")
-        .ok_or("backend did not return an inference descriptor")?;
-    graph
+    for node in graph
         .nodes
         .iter_mut()
-        .find(|node| node.id == "infer")
-        .ok_or("missing inference node")?
-        .data["inference_interface_snapshot"] =
-        serde_json::to_value(authored_snapshot_from_descriptor(&projection.descriptor)?)?;
+        .filter(|node| node.node_type == "llm-inference")
+    {
+        let projection = validation
+            .node_projections
+            .iter()
+            .find(|projection| projection.node_id.as_str() == node.id)
+            .ok_or("backend did not return an inference descriptor")?;
+        node.data["inference_interface_snapshot"] =
+            serde_json::to_value(authored_snapshot_from_descriptor(&projection.descriptor)?)?;
+    }
     service
         .workflow_graph_close_edit_session(WorkflowGraphEditSessionCloseRequest {
             session_id: preview.session_id,
@@ -229,14 +257,14 @@ async fn author_workflow(
     service.workflow_graph_save(
         &pantograph_workflow_service::FileSystemWorkflowGraphStore::new(root),
         pantograph_workflow_service::WorkflowGraphSaveRequest {
-            name: WORKFLOW_ID.into(),
+            name: workflow_id.into(),
             graph: graph.clone(),
         },
     )?;
     let session = service
         .workflow_graph_create_edit_session(WorkflowGraphEditSessionCreateRequest {
             graph,
-            workflow_id: Some(WORKFLOW_ID.into()),
+            workflow_id: Some(workflow_id.into()),
         })
         .await?;
     *stage = "executable_validation";
@@ -265,23 +293,32 @@ async fn author_workflow(
         .validation_session_id
         .ok_or("missing validation identity")?;
     *stage = "dependency_resolve";
-    let action = service
-        .workflow_graph_resolve_dependency_environment_action_intent(
-            DependencyEnvironmentActionIntent {
-                contract_version: 1,
-                graph_session_id: session.session_id.parse()?,
-                graph_revision: session.graph_revision.parse()?,
-                validation_session_id: Some(validation_id.clone()),
-                target_node_id: "deps".parse()?,
-                action: DependencyEnvironmentAction::Resolve,
-            },
-        )
-        .await?;
-    save(root, "dependency-resolve.json", &action)?;
-    if action.status != DependencyEnvironmentActionIntentStatus::RequestReady {
-        return Err(
-            "backend dependency Resolve is blocking; inspect dependency-resolve.json".into(),
-        );
+    for dependency_node in dependency_nodes {
+        let action = service
+            .workflow_graph_resolve_dependency_environment_action_intent(
+                DependencyEnvironmentActionIntent {
+                    contract_version: 1,
+                    graph_session_id: session.session_id.parse()?,
+                    graph_revision: session.graph_revision.parse()?,
+                    validation_session_id: Some(validation_id.clone()),
+                    target_node_id: dependency_node.parse()?,
+                    action: DependencyEnvironmentAction::Resolve,
+                },
+            )
+            .await?;
+        save(
+            root,
+            &format!("dependency-resolve-{dependency_node}.json"),
+            &action,
+        )?;
+        if *dependency_node == "deps" {
+            save(root, "dependency-resolve.json", &action)?;
+        }
+        if action.status != DependencyEnvironmentActionIntentStatus::RequestReady {
+            return Err(
+                "backend dependency Resolve is blocking; inspect dependency-resolve.json".into(),
+            );
+        }
     }
     if !publish {
         return Ok(session.session_id);
@@ -290,7 +327,7 @@ async fn author_workflow(
     let published = service
         .publish_graph_session_executable_validation_snapshot(
             WorkflowGraphSessionExecutableValidationSnapshotPublishRequest {
-                workflow_id: WORKFLOW_ID.into(),
+                workflow_id: workflow_id.into(),
                 workflow_semantic_version: "1.0.0".into(),
                 graph_session_id: session.session_id.clone(),
                 validation_session_id: Some(validation_id),
@@ -416,12 +453,12 @@ async fn execute(runtime: &EmbeddedRuntime, root: &Path, stage: &mut &str) -> Pr
 async fn main() -> ProbeResult<()> {
     let args: Vec<_> = std::env::args_os().skip(1).collect();
     if args.len() > 2
-        || args
-            .get(1)
-            .is_some_and(|mode| mode != "--inspect-targets" && mode != "--serve-stdio")
+        || args.get(1).is_some_and(|mode| {
+            mode != "--inspect-targets" && mode != "--serve-stdio" && mode != "--serve-rich-stdio"
+        })
     {
         return Err(
-            "usage: cpu_embedding_workflow_probe <new absolute directory> [--inspect-targets|--serve-stdio]"
+            "usage: cpu_embedding_workflow_probe <new absolute directory> [--inspect-targets|--serve-stdio|--serve-rich-stdio]"
                 .into(),
         );
     }
@@ -438,9 +475,10 @@ async fn main() -> ProbeResult<()> {
     if args.get(1).is_some_and(|mode| mode == "--inspect-targets") {
         return target_observation::inspect(&root).await;
     }
-    let (runtime, library) = create_runtime(&root).await?;
-    if args.get(1).is_some_and(|mode| mode == "--serve-stdio") {
-        return browser_host::serve(runtime, library, &root).await;
+    let rich = args.get(1).is_some_and(|mode| mode == "--serve-rich-stdio");
+    let (runtime, library) = create_runtime(&root, rich).await?;
+    if rich || args.get(1).is_some_and(|mode| mode == "--serve-stdio") {
+        return browser_host::serve(runtime, library, &root, rich).await;
     }
     let mut stage = "initialization";
     let result = tokio::time::timeout(

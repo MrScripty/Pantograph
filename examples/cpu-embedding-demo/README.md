@@ -181,3 +181,55 @@ No manifest, lockfile, dependency pin, or workflow trigger was changed by this
 verification. This checks Cargo feature graphs; it does not qualify ONNX model
 inference or cross-platform builds. Hosted CI runs on the separately approved
 [draft PR #72](https://github.com/MrScripty/Pantograph/pull/72).
+
+## Multi-branch CPU workflow
+
+Run `python3 examples/cpu-embedding-demo/serve.py --rich --output-dir /tmp/pantograph-rich-new`
+with a **new** absolute output directory, alongside the Vite server above. Select
+`cpu-multibranch-probe`, edit Prompt to `hello`, Resolve both dependency nodes,
+Save under the same name, and Submit. The normal editor issues every command.
+
+The 13-node graph composes Context (`different world`) and Prompt into text, sends
+that text through the untrained BERT-8 fixture, independently embeds Context with
+untrained BERT-12, extracts Candle's actual runtime identity, and joins text,
+capability limitations and that identity into a visible report. The scheduler
+sorts Merge inputs by source task ID, so composed text is `different world\nhello`.
+It retains both vectors and the report under one run ID. Two models may remain
+loaded; the catalog, graph topology, model bindings and supported commands are fixed.
+
+Both models use Candle CPU F32 at the same pinned version as the original demo.
+Weights are 6,464 and 10,992 bytes (17,456 total), already committed. No model is
+downloaded and no paid inference is used. They are repository-generated untrained
+fixtures under the repository license material described above, not pretrained
+models or evidence of semantic quality.
+
+`python3 examples/cpu-embedding-demo/reference.py` independently computes both
+vectors with actual local Transformers BERT forwards. It requires installed Torch,
+Transformers and Tokenizers, uses local files only, and never regenerates fixtures.
+`python3 -m unittest discover -s examples/cpu-embedding-demo -p 'test*host.py'`
+checks both HTTP workflows, exact retained readback and rejected scope changes.
+The browser procedure is `node examples/cpu-embedding-demo/capture.mjs /tmp/rich-captures --rich`
+with a fresh host/catalog and capture directory. Browser sandbox permission must
+be established for the specific host; the prior isolated capture approval is not
+a blanket permission for future environments.
+
+Text generation remains **unqualified** in this host. A real GPT-2 attempt reached
+public owner model and dependency-profile resolution but stopped at scheduler
+readiness: `Dependency requirements payload is missing`, followed by the bounded
+20-second deadline. The editor facts provider's dependency handoff currently only
+implements native Candle. No Python Ready state was injected and no GPT-2 output
+is claimed. The attempted 23,024-byte untrained GPT-2 weights were already committed;
+only the ordinary SoundFile dependency (1.3 MiB) was installed during investigation.
+
+Image generation is **unavailable** without diffusion weights. External image
+transport is also unqualified: image-input is not a supported scheduler source,
+selection strings are bounded at 2 KB, and image-output requires a typed media
+artifact reference rather than a base64 string. These checks remain intact. No
+image branch, generated image, or image-passthrough success is claimed. The actual
+report shows these limitations explicitly. No Pumas source, private catalog or
+user-local environment was changed.
+
+Merge now uses the existing generic workflow renderer, exposing its real ports
+and connections. Toolbar submission also materializes the scheduler's supported
+integer, boolean and selection sources; unsafe/fractional integer values are
+rejected before submission and structured selection values are captured by value.

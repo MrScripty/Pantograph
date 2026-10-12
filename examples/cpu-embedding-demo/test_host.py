@@ -26,7 +26,7 @@ class InferenceHostTests(unittest.TestCase):
         cls.directory = tempfile.TemporaryDirectory(prefix="pantograph-inference-http-test-")
         cls.output = Path(cls.directory.name) / "run"
         cls.evidence = {}
-        cls.native = InferenceService(binary, cls.output)
+        cls.native = InferenceService(binary, cls.output, getattr(cls, 'rich', False))
         cls.origin = "http://127.0.0.1:3001"
         cls.server = ThreadingHTTPServer(("127.0.0.1", 0), transport.handler_for(cls.native, b"fixture", {cls.origin}))
         cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True)

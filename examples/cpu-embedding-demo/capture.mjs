@@ -10,8 +10,10 @@ import { createHash } from 'node:crypto';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const output = path.resolve(process.argv[2] ?? path.join(root, 'docs/images/cpu-embedding-demo'));
 const textOnly = process.argv.includes('--text');
+const rich = process.argv.includes('--rich');
+const reference = rich ? JSON.parse(execFileSync('python3', [path.join(root, 'examples/cpu-embedding-demo/reference.py')], { encoding: 'utf8' })) : null;
 const host = `http://127.0.0.1:${textOnly ? 8765 : 8766}`;
-const workflow = textOnly ? 'editor-demo' : 'cpu-embedding-probe';
+const workflow = textOnly ? 'editor-demo' : rich ? 'cpu-multibranch-probe' : 'cpu-embedding-probe';
 const inputText = textOnly ? 'Inspect fixture alignment before the next operation.' : 'hello';
 const outputNode = textOnly ? 'out' : 'vectors';
 const tabs = await (await fetch('http://127.0.0.1:9222/json')).json();
@@ -92,7 +94,7 @@ async function click(selector) {
 }
 async function healthy() {
   const text = await evaluate('document.body.innerText');
-  assert.ok(!/Transport error|Cannot read properties|Validation updates failed|Workflow submit failed/.test(text), text);
+  assert.ok(!/Transport error|Cannot read properties|Validation updates failed|Workflow submit failed|Submit unavailable: Workflow validation summary unavailable/.test(text), text);
   const alerts = await evaluate(`[...document.querySelectorAll('[role="alert"]')].map(node => node.textContent.trim()).filter(Boolean)`);
   assert.deepEqual(alerts, [], 'visible application alerts');
 }
@@ -112,7 +114,7 @@ try {
   await call('Network.enable');
   await call('Fetch.enable', { patterns: [{ urlPattern: '*' }] });
   const browser = await call('Browser.getVersion');
-  await call('Emulation.setDeviceMetricsOverride', { width: 1800, height: 1200, deviceScaleFactor: 1, mobile: false });
+  await call('Emulation.setDeviceMetricsOverride', { width: rich ? 2560 : 1800, height: rich ? 1800 : 1200, deviceScaleFactor: 1, mobile: false });
   await call('Page.navigate', { url: `http://127.0.0.1:3001/?workflowHost=${encodeURIComponent(host)}` });
   await click('[data-testid="workbench-nav-graph"]');
   await until(() => received('create_workflow_execution_session')?.status === 200, 'host-scoped startup graph');
@@ -121,7 +123,7 @@ try {
   await click(`[data-workflow-id="${workflow}"]`);
   await until(() => received('create_workflow_execution_session') !== startupSession, 'selected graph session');
   await wait(300);
-  const input = '.text-input-node-wrapper textarea';
+  const input = rich ? '.svelte-flow__node[data-id="prompt"] textarea' : '.text-input-node-wrapper textarea';
   await until(() => evaluate(`Boolean(document.querySelector(${JSON.stringify(input)}))`), 'real prompt editor');
   await evaluate(`{ const input = document.querySelector(${JSON.stringify(input)}); input.value = ${JSON.stringify(inputText)}; input.dispatchEvent(new Event('input', { bubbles: true })); }`);
   await until(() => received('update_node_data')?.status === 200, 'backend prompt mutation');
@@ -130,10 +132,14 @@ try {
     return summary && summary.state !== 'stale' && summary.current_graph_revision === received('update_node_data').body.graph_revision;
   }, 'current authored graph validation');
   if (!textOnly) {
-    await evaluate(`[...document.querySelectorAll('.svelte-flow__node[data-id="deps"] button')].find(button => button.textContent.trim() === 'Resolve')?.click()`);
-    await until(() => received('resolve_dependency_environment_action_intent')?.status === 200, 'real dependency Resolve');
-    assert.notEqual(received('resolve_dependency_environment_action_intent').body.status, 'blocked');
-    await wait(400);
+    for (const dependency of rich ? ['context-deps', 'deps'] : ['deps']) {
+      const previous = received('resolve_dependency_environment_action_intent');
+      await evaluate(`[...document.querySelectorAll('.svelte-flow__node[data-id="${dependency}"] button')].find(button => button.textContent.trim() === 'Resolve')?.click()`);
+      await until(() => received('resolve_dependency_environment_action_intent') !== previous, 'real dependency Resolve');
+      assert.equal(received('resolve_dependency_environment_action_intent').status, 200);
+      assert.equal(received('resolve_dependency_environment_action_intent').body.status, 'request_ready');
+      await wait(400);
+    }
   }
   await evaluate(`[...document.querySelectorAll('button')].find(button => button.title === 'Save Workflow').click()`);
   await until(() => received('save_workflow')?.status === 200, 'backend workflow save');
@@ -151,22 +157,35 @@ try {
   assert.equal(runReceipt.status, 200, JSON.stringify(runReceipt));
   const result = runReceipt.body;
   const actual = result.outputs.find(item => item.node_id === outputNode)?.value;
-  const golden = textOnly ? inputText : JSON.parse(await fs.readFile(path.join(root, 'crates/inference/tests/fixtures/candle_bert/bert-8/golden.json'), 'utf8')).single_vectors[1];
+  const golden = textOnly ? inputText : rich ? reference.models['8'].vector : JSON.parse(await fs.readFile(path.join(root, 'crates/inference/tests/fixtures/candle_bert/bert-8/golden.json'), 'utf8')).single_vectors[1];
   if (textOnly) assert.equal(actual, golden);
   else {
     assert.equal(actual.length, 8);
     assert.ok(actual.every((value, index) => Math.abs(value - golden[index]) < 1e-4));
   }
+  if (rich) {
+    const contextVector = result.outputs.find(item => item.node_id === 'context-vector')?.value;
+    assert.equal(contextVector.length, 12);
+    assert.ok(contextVector.every((value, index) => Math.abs(value - reference.models['12'].vector[index]) < 1e-4));
+    const report = result.outputs.find(item => item.node_id === 'report')?.value;
+    assert.ok(report.includes(reference.models['8'].text) && report.includes('candle.cpu') && report.includes('Image unavailable:'));
+  }
   await until(() => {
     const nodes = received('workflow_node_status_query')?.body.nodes ?? [];
-    return (textOnly ? [outputNode] : ['infer', outputNode]).every(id => nodes.some(node => node.node_id === id && node.status === 'completed' && node.workflow_run_id === result.workflow_run_id));
+    return (textOnly ? [outputNode] : rich ? ['infer', 'context-infer', 'context-vector', 'report', outputNode] : ['infer', outputNode]).every(id => nodes.some(node => node.node_id === id && node.status === 'completed' && node.workflow_run_id === result.workflow_run_id));
   }, 'actual completed node statuses');
   // Submit selects the completed run in Scheduler; return via the real sidebar
   // to verify its output overlay on the original authored Graph.
   await click('[data-testid="workbench-nav-graph"]');
   const graphPreview = textOnly ? actual : actual.slice(0, 8).map(value => value.toFixed(4)).join(', ');
   await until(() => evaluate(`document.querySelector('.svelte-flow__node[data-id="${outputNode}"] .copyable-output')?.textContent.includes(${JSON.stringify(graphPreview)})`), 'actual output rendered in Graph');
+  await until(() => evaluate(`document.querySelector('[data-testid="workflow-submit-button"]')?.disabled === false`), 'current Graph validation after returning');
+  await evaluate(`document.querySelector('.svelte-flow__controls-fitview')?.click()`);
+  await wait(500);
   await screenshot('graph-completed');
+  if (rich) {
+    await until(() => evaluate(`document.querySelector('.svelte-flow__node[data-id="report"] .copyable-output')?.textContent.includes('candle.cpu')`), 'combined report rendered in Graph');
+  }
   await click('[data-testid="workbench-nav-scheduler"]');
   await until(() => received('workflow_run_list_query')?.body.runs?.some(run => run.workflow_run_id === result.workflow_run_id && run.status === 'completed'), 'actual completed scheduler run');
   await wait(500);
@@ -209,6 +228,9 @@ try {
       backend: 'Candle', version: '0.9.2-alpha.2', commit: '88ed7911de9e88196b1f55b199145d22647f415e', device: 'CPU', dtype: 'F32',
       pumas_commit: 'aa1d79ae2d53f0acb088bc85223ecc2ff46af12b',
     },
+    qualified_capabilities: rich ? ['text composition', 'Candle BERT-8 embedding', 'Candle BERT-12 embedding', 'metadata extraction', 'combined text report'] : null,
+    text_generation_executed: false, image_generation_executed: false, image_transport_executed: false,
+    independent_reference: reference,
     input: inputText, result, retained, max_reference_error: textOnly ? 0 : Math.max(...actual.map((value, index) => Math.abs(value - golden[index]))),
     screenshots, consoleErrors, exceptions, blockedRequests, receipts,
   }, null, 2) + '\n');

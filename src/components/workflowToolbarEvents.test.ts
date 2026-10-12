@@ -16,6 +16,7 @@ import {
   shouldRefreshValidationFromLifecycleEvent,
   workflowSubmitSuccessWorkbenchPage,
   workflowSubmitTextInputs,
+  workflowSubmitInputs,
   workflowSubmitDisabledReason,
   workflowValidationRefreshKey,
 } from './workflowToolbarEvents.ts';
@@ -61,6 +62,38 @@ test('Submit excludes bound text, missing or wrong-type values, and other node t
   assert.deepEqual(workflowSubmitTextInputs({ nodes: [], edges: [] }), []);
 });
 
+test('Submit retains scheduler source values and does not override wired sources', () => {
+  const nodes = [
+    ['limit', 'number-input', 4], ['seed', 'number-input', Number.MAX_SAFE_INTEGER],
+    ['flag', 'boolean-input', false], ['choice', 'selection-input', { exact: [1, 'two'] }],
+    ['temperature', 'selection-input', 0.7], ['unset', 'selection-input', undefined],
+    ['bound', 'number-input', 'ignored'], ['output', 'text-output', 'ignored'],
+  ].map(([id, node_type, value]) => ({
+    id: String(id), node_type: String(node_type), position: { x: 0, y: 0 }, data: { value },
+  }));
+  const graph = { nodes, edges: [{ id: 'wire', source: 'limit', source_handle: 'value', target: 'bound', target_handle: 'value' }] };
+  const original = structuredClone(graph);
+  assert.deepEqual(workflowSubmitInputs(graph), [
+    { node_id: 'limit', port_id: 'value', value: 4 },
+    { node_id: 'seed', port_id: 'value', value: Number.MAX_SAFE_INTEGER },
+    { node_id: 'flag', port_id: 'value', value: false },
+    { node_id: 'choice', port_id: 'value', value: { exact: [1, 'two'] } },
+    { node_id: 'temperature', port_id: 'value', value: 0.7 },
+  ]);
+  assert.deepEqual(graph, original);
+});
+
+test('Submit rejects lossy integer and wrong boolean sources before invoking the scheduler', () => {
+  for (const value of [0.5, '42', Number.MAX_SAFE_INTEGER + 1, NaN, Infinity, true]) {
+    assert.throws(() => workflowSubmitInputs({ nodes: [
+      { id: 'seed', node_type: 'number-input', position: { x: 0, y: 0 }, data: { value } },
+    ], edges: [] }), /safe integer/);
+  }
+  assert.throws(() => workflowSubmitInputs({ nodes: [
+    { id: 'flag', node_type: 'boolean-input', position: { x: 0, y: 0 }, data: { value: 'false' } },
+  ], edges: [] }), /requires a boolean/);
+});
+
 test('ordinary Toolbar Submit sends captured typed text through the execution-session request', async () => {
   const source = readFileSync(new URL('./WorkflowToolbar.svelte', import.meta.url), 'utf8');
   const script = parse(source, { modern: true }).instance;
@@ -81,7 +114,7 @@ test('ordinary Toolbar Submit sends captured typed text through the execution-se
     workflowSemanticVersion: '0.1.0', AUDIO_RUNTIME_DATA_KEYS: [],
     isExecuting: { set() {} }, clearNodeRuntimeData() {}, resetExecutionStates() {}, clearStreamContent() {},
     assertDesktopSeedInputs() {}, isNumericWorkflowSemanticVersion,
-    workflowSubmitTextInputs, workflowSubmitSuccessWorkbenchPage,
+    workflowSubmitInputs, workflowSubmitSuccessWorkbenchPage,
     workflowSubmitOutputOverlays, workflowSubmitStatusOverlays,
     workflowService: {
       async createWorkflowExecutionSession() {

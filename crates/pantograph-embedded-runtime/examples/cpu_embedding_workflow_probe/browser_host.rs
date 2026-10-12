@@ -7,6 +7,7 @@ struct BrowserHost<'a> {
     runtime: &'a EmbeddedRuntime,
     library: Arc<pumas_library::PumasApi>,
     root: &'a Path,
+    rich: bool,
 }
 
 fn required_string<'a>(args: &'a Value, key: &str) -> ProbeResult<&'a str> {
@@ -15,8 +16,16 @@ fn required_string<'a>(args: &'a Value, key: &str) -> ProbeResult<&'a str> {
         .ok_or_else(|| format!("{key} is required").into())
 }
 
-fn require_workflow(id: &str) -> ProbeResult<()> {
-    if id != WORKFLOW_ID {
+fn workflow_id(rich: bool) -> &'static str {
+    if rich {
+        rich_workflow::WORKFLOW
+    } else {
+        WORKFLOW_ID
+    }
+}
+
+fn require_workflow(id: &str, rich: bool) -> ProbeResult<()> {
+    if id != workflow_id(rich) {
         return Err(WorkflowServiceError::CapabilityViolation(
             "This host owns only the committed CPU embedding fixture workflow".into(),
         )
@@ -25,9 +34,10 @@ fn require_workflow(id: &str) -> ProbeResult<()> {
     Ok(())
 }
 
-fn graph_path(path: &str) -> ProbeResult<String> {
-    if path == WORKFLOW_ID || path == format!(".pantograph/workflows/{WORKFLOW_ID}.json") {
-        Ok(format!(".pantograph/workflows/{WORKFLOW_ID}.json"))
+fn graph_path(path: &str, rich: bool) -> ProbeResult<String> {
+    let id = workflow_id(rich);
+    if path == id || path == format!(".pantograph/workflows/{id}.json") {
+        Ok(format!(".pantograph/workflows/{id}.json"))
     } else {
         Err(WorkflowServiceError::CapabilityViolation(
             "Workflow path is outside this fixture host".into(),
@@ -36,7 +46,11 @@ fn graph_path(path: &str) -> ProbeResult<String> {
     }
 }
 
-fn require_fixture_graph(graph: &WorkflowGraph) -> ProbeResult<()> {
+fn require_fixture_graph(graph: &WorkflowGraph, rich: bool) -> ProbeResult<()> {
+    if rich {
+        return rich_workflow::validate(graph)
+            .map_err(|error| WorkflowServiceError::CapabilityViolation(error.to_string()).into());
+    }
     let expected = [
         ("prompt", "text-input"),
         ("infer", "llm-inference"),
@@ -142,7 +156,9 @@ impl BrowserHost<'_> {
             "browser-last-run.json",
             &json!({
                 "scope":"live_browser_host_native_result", "model_training":"untrained",
-                "backend":"candle", "device":"cpu_f32", "model_id":MODEL_ID,
+                "backend":"candle", "backends":vec!["candle"],
+                "model_ids":if self.rich { vec![MODEL_ID, rich_workflow::SECOND_MODEL] } else { vec![MODEL_ID] },
+                "device":"cpu_f32", "model_id":MODEL_ID, "image_generation_executed":false,
                 "model_acquisition_bytes":0, "submit_to_response_wall_ms":started.elapsed().as_secs_f64()*1000.0,
                 "response":response,
             }),
@@ -172,7 +188,7 @@ impl BrowserHost<'_> {
         match command {
             "workflow_browser_host_capabilities" => Ok(json!({"model_library_read":true,
                 "model_library_write":false,"model_search":false,"graph_edit":true,
-                "description":"Untrained BERT-8 fixture: edit prompt, save and submit through the real Candle CPU scheduler. No model downloads."})),
+                "description": if self.rich { "Untrained BERT-8/BERT-12 CPU fixtures: text composition and two embedding branches. Text generation unqualified; image unavailable. Zero model downloads." } else { "Untrained BERT-8 fixture: edit prompt, save and submit through the real Candle CPU scheduler. No model downloads." }})),
             "get_node_definitions" => {
                 Ok(serde_json::to_value(NodeRegistry::new().all_definitions())?)
             }
@@ -182,19 +198,19 @@ impl BrowserHost<'_> {
             "load_workflow" => Ok(serde_json::to_value(service.workflow_graph_load(
                 &store,
                 WorkflowGraphLoadRequest {
-                    path: graph_path(required_string(&args, "path")?)?,
+                    path: graph_path(required_string(&args, "path")?, self.rich)?,
                 },
             )?)?),
             "save_workflow" => {
-                require_workflow(required_string(&args, "name")?)?;
+                require_workflow(required_string(&args, "name")?, self.rich)?;
                 let graph = serde_json::from_value(args["graph"].clone())?;
-                require_fixture_graph(&graph)?;
+                require_fixture_graph(&graph, self.rich)?;
                 Ok(json!(
                     service
                         .workflow_graph_save(
                             &store,
                             WorkflowGraphSaveRequest {
-                                name: WORKFLOW_ID.into(),
+                                name: workflow_id(self.rich).into(),
                                 graph
                             }
                         )?
@@ -202,14 +218,14 @@ impl BrowserHost<'_> {
                 ))
             }
             "create_workflow_execution_session" => {
-                require_workflow(required_string(&args, "workflowId")?)?;
+                require_workflow(required_string(&args, "workflowId")?, self.rich)?;
                 let graph = serde_json::from_value(args["graph"].clone())?;
-                require_fixture_graph(&graph)?;
+                require_fixture_graph(&graph, self.rich)?;
                 Ok(serde_json::to_value(
                     service
                         .workflow_graph_create_edit_session(WorkflowGraphEditSessionCreateRequest {
                             graph,
-                            workflow_id: Some(WORKFLOW_ID.into()),
+                            workflow_id: Some(workflow_id(self.rich).into()),
                         })
                         .await?,
                 )?)
@@ -239,12 +255,14 @@ impl BrowserHost<'_> {
             )?),
             "update_node_data" => {
                 let data = args["data"].as_object().ok_or("data must be an object")?;
-                let prompt = args["nodeId"] == "prompt"
+                let prompt = (args["nodeId"] == "prompt"
+                    || (self.rich && args["nodeId"] == "context"))
                     && data.keys().all(|key| key == "text")
                     && data.get("text").is_some_and(Value::is_string);
                 // These are ordinary authored UI fields. Readiness remains an
                 // owner-produced service fact; authored status never admits work.
-                let dependency_state = args["nodeId"] == "deps"
+                let dependency_state = (args["nodeId"] == "deps"
+                    || (self.rich && args["nodeId"] == "context-deps"))
                     && data.keys().all(|key| {
                         matches!(
                             key.as_str(),
@@ -312,7 +330,7 @@ impl BrowserHost<'_> {
             "publish_graph_session_executable_validation_snapshot" => {
                 let request: WorkflowGraphSessionExecutableValidationSnapshotPublishRequest =
                     serde_json::from_value(request)?;
-                require_workflow(&request.workflow_id)?;
+                require_workflow(&request.workflow_id, self.rich)?;
                 Ok(serde_json::to_value(
                     service
                         .publish_graph_session_executable_validation_snapshot(request)
@@ -323,7 +341,7 @@ impl BrowserHost<'_> {
             "workflow_create_execution_session" => {
                 let request: WorkflowExecutionSessionCreateRequest =
                     serde_json::from_value(request)?;
-                require_workflow(&request.workflow_id)?;
+                require_workflow(&request.workflow_id, self.rich)?;
                 Ok(serde_json::to_value(
                     self.runtime
                         .create_workflow_execution_session(request)
@@ -406,9 +424,23 @@ pub(super) async fn serve(
     runtime: EmbeddedRuntime,
     library: Arc<pumas_library::PumasApi>,
     root: &Path,
+    rich: bool,
 ) -> ProbeResult<()> {
     let mut stage = "startup";
-    let initial = super::author_workflow(&runtime, root, &mut stage, false).await?;
+    let initial = if rich {
+        super::author_graph(
+            &runtime,
+            root,
+            &mut stage,
+            rich_workflow::graph()?,
+            rich_workflow::WORKFLOW,
+            &["context-deps", "deps"],
+            false,
+        )
+        .await?
+    } else {
+        super::author_workflow(&runtime, root, &mut stage, false).await?
+    };
     runtime
         .workflow_service()
         .workflow_graph_close_edit_session(WorkflowGraphEditSessionCloseRequest {
@@ -419,6 +451,7 @@ pub(super) async fn serve(
         runtime: &runtime,
         library,
         root,
+        rich,
     };
     for line in std::io::stdin().lock().lines() {
         let request: Value = serde_json::from_str(&line?)?;
