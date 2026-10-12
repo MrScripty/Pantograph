@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import * as commonmark from 'commonmark';
+import { escapeHtml as escape, renderResearchMarkdown } from './render-research-markdown.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const output = path.join(root, 'dist', 'presentation');
@@ -20,7 +21,6 @@ await fs.cp(path.join(root, 'docs', 'presentation'), output, { recursive: true }
 await fs.cp(researchRoot, path.join(output, 'research'), { recursive: true });
 await fs.cp(path.join(root, 'docs', 'images'), path.join(output, 'images'), { recursive: true });
 await fs.writeFile(path.join(output, '.nojekyll'), '');
-const escape = text => text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
 const manuscripts = ['README.md', ...manifest.files.filter(file => file.path.endsWith('.md')).map(file => file.path)];
 const parser = new commonmark.Parser();
 for (const file of manuscripts) {
@@ -41,16 +41,7 @@ for (const file of manuscripts) {
       node.destination = `https://github.com/MrScripty/Pantograph/blob/main/${path.relative(root, resolved).split(path.sep).join('/')}${anchor ? `#${anchor}` : ''}`;
     }
   }
-  const headings = [];
-  const used = new Map();
-  const html = new commonmark.HtmlRenderer({ safe: true }).render(tree).replace(/<h([1-6])>([\s\S]*?)<\/h\1>/g, (_, level, text) => {
-    const plain = text.replace(/<[^>]*>/g, '').replaceAll('&amp;', '&');
-    const base = plain.toLowerCase().replace(/[^\p{L}\p{N}\s_-]/gu, '').replace(/\s/g, '-');
-    const count = used.get(base) ?? 0; used.set(base, count + 1);
-    const id = base + (count ? `-${count}` : '');
-    if (Number(level) <= 2) headings.push(`<a href="#${escape(id)}">${text}</a>`);
-    return `<h${level} id="${escape(id)}">${text}</h${level}>`;
-  });
+  const { html, headings } = renderResearchMarkdown(tree);
   const title = file === 'README.md' ? 'Research sources' : file.split('/').at(-1).replace('.md', '').replaceAll('-', ' ');
   await fs.writeFile(target, `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escape(title)} · Pantograph</title><link rel="stylesheet" href="${prefix}/style.css"><body><main class="reader"><a href="${prefix}/index.html#research">← Pantograph research</a><p class="reader-notice">Research edition: 2 October 2026. Source inspection is pinned to 4938e405. Proposals and standalone simulations are not production qualification. <a href="${escape(file.split('/').at(-1))}">Original Markdown</a></p><details><summary>Contents</summary><nav class="reader-toc">${headings.join('')}</nav></details>${html}</main></body></html>`);
 }

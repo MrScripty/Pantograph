@@ -7,6 +7,7 @@ isolated empty Pumas library. No recorded responses or model weights are loaded.
 import argparse
 import json
 import os
+import re
 import select
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -14,6 +15,7 @@ import subprocess
 import tempfile
 import time
 import threading
+from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[2]
 MAX_REQUEST_BYTES = 8192
@@ -85,6 +87,15 @@ class NativeService:
 
 
 def handler_for(service, page, allowed_origins):
+    # Keep response values independent of request bytes, including folded or
+    # duplicate headers. Configuration must itself be a single loopback origin.
+    trusted_origins = tuple(allowed_origins)
+    for origin in trusted_origins:
+        if not isinstance(origin, str) or not re.fullmatch(
+            r"http://(?:127\.0\.0\.1|localhost|\[::1\])(?::[1-9][0-9]{0,4})?", origin,
+        ) or (urlsplit(origin).port is not None and not 1 <= urlsplit(origin).port <= 65535):
+            raise ValueError("Allowed origins must be exact HTTP loopback origins")
+
     class Handler(BaseHTTPRequestHandler):
         def setup(self):
             super().setup()
@@ -92,14 +103,20 @@ def handler_for(service, page, allowed_origins):
             # Bound those sockets independently of active command connections.
             self.connection.settimeout(10)
 
+        def allowed_origin(self):
+            origins = self.headers.get_all("Origin", [])
+            if len(origins) != 1 or any(ord(char) < 33 or ord(char) > 126 for char in origins[0]):
+                return None
+            return next((origin for origin in trusted_origins if origins[0] == origin), None)
+
         def respond(self, status, body, content_type="application/json"):
             self.send_response(status)
             self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Cache-Control", "no-store")
             self.send_header("Vary", "Origin")
-            origin = self.headers.get("Origin")
-            if origin in allowed_origins:
+            origin = self.allowed_origin()
+            if origin is not None:
                 self.send_header("Access-Control-Allow-Origin", origin)
             self.end_headers()
             self.wfile.write(body)
@@ -116,14 +133,15 @@ def handler_for(service, page, allowed_origins):
                 self.error(404, "not_found", "No such demo route")
 
         def do_OPTIONS(self):
-            if self.headers.get("Origin") not in allowed_origins:
+            origin = self.allowed_origin()
+            if origin is None:
                 self.error(403, "capability_violation", "Use an allowed loopback browser origin")
                 return
             if self.path != "/run" and not self.path.startswith(COMMAND_PREFIX):
                 self.error(404, "not_found", "No such demo route")
                 return
             self.send_response(204)
-            self.send_header("Access-Control-Allow-Origin", self.headers["Origin"])
+            self.send_header("Access-Control-Allow-Origin", origin)
             self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
             self.send_header("Access-Control-Allow-Headers", "Content-Type")
             self.send_header("Vary", "Origin")
@@ -131,7 +149,7 @@ def handler_for(service, page, allowed_origins):
             self.end_headers()
 
         def do_POST(self):
-            if self.headers.get("Origin") not in allowed_origins:
+            if self.allowed_origin() is None:
                 self.error(403, "capability_violation", "Use an allowed loopback browser origin")
                 return
             if self.path == "/run":

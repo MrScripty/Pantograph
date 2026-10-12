@@ -17,15 +17,24 @@ for (const [index, tab] of tabs.entries()) {
   });
 }
 let latestRequest = 0;
+const recordingPaths = new Map([
+  ['success', 'images/scheduler-demo-success.json'],
+  ['rejection', 'images/scheduler-demo-rejection.json'],
+]);
 async function loadRecording() {
   const request = ++latestRequest;
   const name = document.getElementById('recording').value;
-  const path = `images/scheduler-demo-${name}.json`;
-  document.getElementById('download').href = path;
+  const path = recordingPaths.get(name);
   const list = document.getElementById('event-list');
   list.replaceChildren();
   document.getElementById('event-detail').textContent = '';
   document.getElementById('trace-summary').textContent = 'Loading recorded evidence…';
+  if (!path) {
+    document.getElementById('download').removeAttribute('href');
+    document.getElementById('trace-summary').textContent = 'Recording unavailable: unknown recording';
+    return;
+  }
+  document.getElementById('download').href = path;
   try {
     const response = await fetch(path);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);

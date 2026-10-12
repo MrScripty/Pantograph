@@ -112,6 +112,10 @@ jobs:
 
       - name: Run frontend tests
         run: npm run test:frontend
+      - name: Check presentation and demo security boundaries
+        run: |
+          node --test scripts/render-research-markdown.test.mjs scripts/presentation-recording.test.mjs scripts/cdp-browser-function.test.mjs
+          python3 -m unittest discover -s examples/scheduler-demo -p test_header_security.py
 
   dependency-audit:
     name: Dependency audit
