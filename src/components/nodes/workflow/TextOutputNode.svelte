@@ -74,6 +74,7 @@
 <style>
   .output-node-wrapper :global(.base-node) {
     border-color: rgba(8, 145, 178, 0.5);
+    width: 360px;
   }
 
   .output-node-wrapper :global(.node-header) {
@@ -82,6 +83,7 @@
   }
 
   .copyable-output {
+    overflow-wrap: anywhere;
     user-select: text;
     -webkit-user-select: text;
     cursor: text;
