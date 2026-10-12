@@ -771,6 +771,105 @@ mod tests {
         WorkflowGraphEditSessionCreateRequest,
     };
 
+    // Only declares controlled owner facts. These composition tests must never
+    // start a runtime or infer; real compiled-owner coverage remains below.
+    struct CompositionCapabilityBackend {
+        supports_images: bool,
+    }
+
+    #[async_trait]
+    impl inference::InferenceBackend for CompositionCapabilityBackend {
+        fn name(&self) -> &'static str {
+            "Composition capability fixture"
+        }
+        fn description(&self) -> &'static str {
+            "Controlled descriptor-only owner"
+        }
+        fn capabilities(&self) -> inference::BackendCapabilities {
+            if !self.supports_images {
+                return Default::default();
+            }
+            inference::BackendCapabilities {
+                image_generation: true,
+                device_selection: true,
+                facts: inference::BackendCapabilityFacts {
+                    tasks: vec![inference::BackendTaskCapability::stable(
+                        inference::InferenceTaskId::ImageGeneration,
+                        vec![inference::InferenceModality::Text],
+                        vec![inference::InferenceModality::Image],
+                    )],
+                    model_sources: inference::BackendModelSourceCapabilityFacts {
+                        artifact_kinds: vec![inference::ModelArtifactKind::DiffusersBundle],
+                        backend_hints: vec![inference::BackendHintLabel::Diffusers],
+                        ..Default::default()
+                    },
+                    runtime_variants: vec![inference::RuntimeVariantCapability {
+                        runtime_variant_id: "pytorch.cpu".parse().unwrap(),
+                        device_class: inference::InferenceDeviceClass::Cpu,
+                        available: true,
+                        diagnostics: Vec::new(),
+                    }],
+                    ..Default::default()
+                },
+                ..Default::default()
+            }
+        }
+        async fn start(
+            &mut self,
+            _: &inference::BackendConfig,
+            _: Arc<dyn inference::ProcessSpawner>,
+        ) -> Result<inference::backend::BackendStartOutcome, inference::BackendError> {
+            panic!("descriptor validation must not start a runtime")
+        }
+        async fn stop(&mut self) -> Result<(), inference::BackendError> {
+            Ok(())
+        }
+        fn is_ready(&self) -> bool {
+            false
+        }
+        async fn health_check(&self) -> bool {
+            false
+        }
+        fn base_url(&self) -> Option<String> {
+            None
+        }
+        async fn chat_completion_stream(
+            &self,
+            _: String,
+        ) -> Result<
+            std::pin::Pin<
+                Box<
+                    dyn futures_util::Stream<
+                            Item = Result<inference::ChatChunk, inference::BackendError>,
+                        > + Send,
+                >,
+            >,
+            inference::BackendError,
+        > {
+            panic!("descriptor validation must not infer")
+        }
+        async fn embeddings(
+            &self,
+            _: Vec<String>,
+            _: &str,
+        ) -> Result<Vec<inference::EmbeddingResult>, inference::BackendError> {
+            panic!("descriptor validation must not infer")
+        }
+        async fn rerank(
+            &self,
+            _: inference::RerankRequest,
+        ) -> Result<inference::RerankResponse, inference::BackendError> {
+            panic!("descriptor validation must not infer")
+        }
+    }
+
+    fn composition_capability_gateway(supports_images: bool) -> Arc<inference::InferenceGateway> {
+        Arc::new(inference::InferenceGateway::with_backend(
+            Box::new(CompositionCapabilityBackend { supports_images }),
+            "PyTorch",
+        ))
+    }
+
     #[derive(Debug)]
     struct RejectingRuntimeHostPort;
 
@@ -1063,7 +1162,26 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn resource_backed_hosted_service_refreshes_validation_from_production_facts() {
+    async fn resource_backed_hosted_service_refreshes_validation_from_controlled_owner_facts() {
+        assert_resource_backed_validation(composition_capability_gateway(true), true).await;
+    }
+
+    #[tokio::test]
+    async fn resource_backed_hosted_service_rejects_registered_runtime_without_owner_capabilities()
+    {
+        assert_resource_backed_validation(composition_capability_gateway(false), false).await;
+    }
+
+    #[cfg(feature = "backend-pytorch")]
+    #[tokio::test]
+    async fn resource_backed_hosted_service_refreshes_validation_from_compiled_pytorch_facts() {
+        assert_resource_backed_validation(Arc::new(inference::InferenceGateway::new()), true).await;
+    }
+
+    async fn assert_resource_backed_validation(
+        gateway: Arc<inference::InferenceGateway>,
+        available: bool,
+    ) {
         let temp_dir = create_test_env();
         let model_id = "diffusion/imported/test-bundle";
         let model_dir = temp_dir
@@ -1098,7 +1216,6 @@ mod tests {
                 },
             )
             .expect("ready runtime transition");
-        let gateway = Arc::new(inference::InferenceGateway::new());
         let input = EmbeddedHostedWorkflowServiceFactoryInput::new(
             registry,
             gateway.clone(),
@@ -1132,6 +1249,22 @@ mod tests {
             .await
             .expect("refresh validation summary");
 
+        if !available {
+            assert!(
+                validation
+                    .summary
+                    .diagnostics
+                    .iter()
+                    .any(|diagnostic| diagnostic.code == pantograph_inference_interface_contracts::InferenceDiagnosticCode::InvalidRuntimeConstraint),
+                "expected unavailable-owner diagnostics: {:?}",
+                validation.summary.diagnostics
+            );
+            assert_ne!(
+                validation.summary.summary.as_ref().unwrap().status,
+                DraftGraphValidationStatus::Executable
+            );
+            return;
+        }
         assert!(
             validation.summary.diagnostics.is_empty(),
             "validation diagnostics: {:?}",
@@ -1164,7 +1297,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn resource_backed_hosted_service_publishes_executable_snapshot_from_production_facts() {
+    async fn resource_backed_hosted_service_publishes_executable_snapshot_from_controlled_owner_facts(
+    ) {
         let temp_dir = create_test_env();
         let model_id = "diffusion/imported/test-bundle";
         let model_dir = temp_dir
@@ -1199,7 +1333,7 @@ mod tests {
                 },
             )
             .expect("ready runtime transition");
-        let gateway = Arc::new(inference::InferenceGateway::new());
+        let gateway = composition_capability_gateway(true);
         let input = EmbeddedHostedWorkflowServiceFactoryInput::new(
             registry,
             gateway.clone(),

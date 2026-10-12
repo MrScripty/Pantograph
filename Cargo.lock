@@ -7574,6 +7574,7 @@ dependencies = [
  "pantograph-scheduler",
  "pantograph-timing-contracts",
  "parking_lot",
+ "pumas-library",
  "rusqlite",
  "serde",
  "serde_json",

@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { getWorkflowBrowserHost } from '../../services/workflow/workflowBrowserTransport';
+  const browserHost = getWorkflowBrowserHost();
   import {
     Activity,
     Boxes,
@@ -84,6 +86,9 @@
       </div>
 
       <div class="flex min-w-0 items-center gap-3">
+        {#if browserHost}
+          <span class="rounded border border-cyan-900 px-2 py-1 text-xs text-cyan-200" title={browserHost}>Loopback browser host</span>
+        {/if}
         <div class="hidden min-w-0 flex-col items-end md:flex">
           <div class="text-[11px] uppercase tracking-[0.2em] text-neutral-500">Active Run</div>
           <div class="max-w-[28rem] truncate text-sm text-neutral-200" title={activeRunLabel()}>

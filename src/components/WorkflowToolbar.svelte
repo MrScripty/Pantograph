@@ -59,6 +59,7 @@
   const WORKFLOW_SEMANTIC_VERSION_STORAGE_KEY_PREFIX = 'pantograph.workflowSemanticVersion.';
   const MAX_WORKFLOW_VERSION_CONFLICT_RETRIES = 25;
 
+  let validationSubscriptionError = $state<string | null>(null);
   let workflowError = $state<WorkflowServiceError | null>(null);
   let workflowErrorWorkflowId = $state<string | null>(null);
   let workflowSemanticVersion = $state(DEFAULT_WORKFLOW_SEMANTIC_VERSION);
@@ -216,7 +217,9 @@
 
     void subscribeGraphValidationLifecycleEvents({
       getActiveGraphSessionId: () => $currentSessionId,
+      onEventError: (error) => { validationSubscriptionError = formatWorkflowCommandError(error); },
       handleEvent: async (event) => {
+        validationSubscriptionError = null;
         const graphSessionId = $currentSessionId;
         const graphRevision = $workflowGraph.derived_graph?.graph_fingerprint ?? null;
         if (!graphSessionId || !graphRevision) {
@@ -250,6 +253,8 @@
       } else {
         unlisten = nextUnlisten;
       }
+    }).catch((error) => {
+      if (!cancelled) validationSubscriptionError = formatWorkflowCommandError(error);
     });
 
     return () => {
@@ -465,6 +470,11 @@
     </div>
   {/if}
 
+  {#if validationSubscriptionError}
+    <div class="border border-red-900 bg-red-950/50 px-3 py-2 text-sm text-red-200" role="alert">
+      Validation updates failed: {validationSubscriptionError}
+    </div>
+  {/if}
   {#if workflowErrorMessage}
     <div class="flex items-center justify-between gap-3 border-b border-red-700 bg-red-900/70 px-4 py-2 text-xs text-red-200">
       <div class="min-w-0 truncate" title={workflowErrorMessage} data-testid="workflow-submit-error">

@@ -5,7 +5,6 @@ use crate::runtime_dispatch_completion_timing::{
 use crate::runtime_dispatch_dependency_timing::{
     EmbeddedCompletionSuccessorPlacement, EmbeddedSuccessorOffers,
 };
-use std::collections::BTreeSet;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use pantograph_dependency_planning::{
@@ -2091,12 +2090,18 @@ mod tests {
     #[test]
     fn cpu_discovery_preserves_explicit_device_and_authoritative_admission() {
         let registry = dispatch_registry();
-        let provider =
-            EmbeddedRuntimeDispatchCandidateProvider::with_source_snapshot(source_snapshot(
-                vec![cpu_runtime_capability("pytorch")],
-                vec![load_target("diffusers")],
-            ))
-            .with_resource_facts_source(RuntimeDispatchResourceFactsSource::new(registry.clone()));
+        let mut capability = cpu_runtime_capability("pytorch");
+        capability.device_ids.push("cuda:0".parse().unwrap());
+        capability.backend_capabilities.runtime_variants.push(
+            runtime_capability("pytorch", vec!["diffusers"])
+                .backend_capabilities
+                .runtime_variants
+                .remove(0),
+        );
+        let provider = EmbeddedRuntimeDispatchCandidateProvider::with_source_snapshot(
+            source_snapshot(vec![capability], vec![load_target("diffusers")]),
+        )
+        .with_resource_facts_source(RuntimeDispatchResourceFactsSource::new(registry.clone()));
         let result = provider
             .runtime_dispatch_candidates(
                 &workflow_task(Some("cuda:0")),
@@ -2109,8 +2114,24 @@ mod tests {
             result.candidates[0].selected_device_ids[0].as_str(),
             "cuda:0"
         );
-        assert!(result.candidates[0].selected_runtime_variant_id.is_none());
+        assert_eq!(
+            result.candidates[0]
+                .selected_runtime_variant_id
+                .as_ref()
+                .unwrap()
+                .as_str(),
+            "pytorch.cuda"
+        );
         drop(result);
+        let unobserved = provider
+            .runtime_dispatch_candidates(
+                &workflow_task(Some("cuda:1")),
+                &ready_record(),
+                &readiness_proof(),
+            )
+            .unwrap();
+        assert!(unobserved.candidates.is_empty());
+        assert!(registry.snapshot().reservations.is_empty());
         let mut task = workflow_task(None);
         task.schedulable_intent.as_mut().unwrap().estimate_hints[0].value = 17 * mib();
         let result = provider
@@ -2436,6 +2457,21 @@ mod tests {
             ids.iter()
                 .map(|id| {
                     let mut facts = runtime_capability(id, vec![backend]);
+                    facts.device_ids = vec!["cpu".parse().unwrap()];
+                    facts.backend_capabilities.runtime_variants[0].device_class =
+                        inference::InferenceDeviceClass::Cpu;
+                    facts.backend_capabilities.runtime_variants[0].runtime_variant_id =
+                        "pytorch.cpu".parse().unwrap();
+                    if backend == "transformers" {
+                        facts.backend_capabilities.tasks =
+                            vec![inference::BackendTaskCapability::stable(
+                                inference::InferenceTaskId::TextGeneration,
+                                vec![inference::InferenceModality::Text],
+                                vec![inference::InferenceModality::Text],
+                            )];
+                        facts.backend_capabilities.model_sources.backend_hints =
+                            vec![inference::BackendHintLabel::Transformers];
+                    }
                     facts.runtime_family = backend.into();
                     facts.runtime_residency_key = format!("runtime.{backend}.{id}.shared");
                     facts.automatic_device_candidates.push(

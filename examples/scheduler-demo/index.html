@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pantograph · Scheduler demo</title>
+<style>
+:root{color-scheme:dark;font-family:Inter,system-ui,sans-serif;background:#101619;color:#e5edee}*{box-sizing:border-box}body{margin:0}header{padding:24px 42px;border-bottom:1px solid #2d393e;display:flex;justify-content:space-between;align-items:center}header b{font-size:23px;letter-spacing:-.8px}small,.muted{color:#95a9b0}.tag{color:#83dbc2;background:#18372f;padding:7px 11px;border-radius:5px;font-size:12px;letter-spacing:1px}main{max-width:1520px;margin:auto;padding:30px 42px}h1{font-size:34px;letter-spacing:-1.1px;margin:8px 0}h2{font-size:16px;margin:0 0 16px}.intro{display:flex;justify-content:space-between;align-items:center;margin-bottom:26px}p{line-height:1.55}.intro p{color:#95a9b0;margin:8px 0}.panel{background:#172024;border:1px solid #304047;border-radius:10px;padding:22px}.layout{display:grid;grid-template-columns:380px 1fr;gap:20px}.eyebrow{font-size:11px;letter-spacing:1.8px;color:#83dbc2;text-transform:uppercase}textarea{width:100%;height:236px;resize:vertical;background:#0e1518;color:#d9e7eb;border:1px solid #40545d;border-radius:6px;padding:16px;font:14px/1.7 ui-monospace,monospace;margin:12px 0}button{border:1px solid #426359;border-radius:6px;background:#213b33;color:#abf1d9;padding:10px 16px;font:inherit;cursor:pointer}button.primary{background:#8ee3c6;color:#102720;font-weight:650;width:100%;border:none}button:disabled{opacity:.5;cursor:wait}button:focus-visible,a:focus-visible{outline:3px solid #8ee3c6;outline-offset:3px}.subactions{display:flex;gap:8px;margin-top:12px}.subactions button{flex:1;font-size:12px}.graph{display:flex;align-items:stretch;gap:14px;margin:24px 0}.node{flex:1;min-width:0;border:1px solid #42605c;border-top:3px solid #8ee3c6;background:#1a2a2b;border-radius:7px;padding:16px}.node h3{font-size:16px;margin:12px 0}.node code{font-size:12px;color:#afc8ce;overflow-wrap:anywhere}.arrow{align-self:center;color:#8ee3c6;font-size:25px}.port{border-top:1px solid #38504f;margin-top:22px;padding-top:12px;color:#95b6b4;font:12px ui-monospace,monospace}.result{min-height:95px;background:#0e181b;border:1px solid #30454b;border-radius:6px;padding:16px;overflow-wrap:anywhere;white-space:pre-wrap;font:16px/1.65 ui-monospace,monospace}.facts{display:flex;gap:26px;margin-bottom:14px;font-size:12px;color:#9eb4bc}.facts strong{color:#b5e5d5}.status{font-size:13px;color:#8ee3c6}.error{color:#ffb299}.trace{margin-top:20px}.tracehead{display:flex;justify-content:space-between;align-items:center}table{width:100%;border-collapse:collapse;font-size:12px}th{text-align:left;color:#88a1aa;font-weight:500;padding:9px;border-bottom:1px solid #33464e}td{padding:9px;border-bottom:1px solid #26373e;vertical-align:top}td:first-child{color:#8ed9c3}td:nth-child(2){font-family:ui-monospace,monospace}pre{font:12px/1.55 ui-monospace,monospace;white-space:pre-wrap;overflow-wrap:anywhere;max-height:350px;overflow:auto}details{margin-top:18px}summary{cursor:pointer;color:#b7cbd1}footer{font-size:12px;color:#8ba2ab;margin-top:18px}.note{font-size:12px;margin-top:18px;color:#95a9b0}.empty{padding:35px;color:#8ba2ab}a{color:#a9e8d3}@media(max-width:1000px){.layout{grid-template-columns:1fr}.graph{flex-wrap:wrap}main{padding:24px}.intro{display:block}.facts{flex-wrap:wrap}}
+</style>
+<header><b>⌁ Pantograph</b><span class="tag">LOCAL RUST DEMO · NO MODEL REQUIRED</span></header>
+<main>
+<div class="intro"><div><div class="eyebrow">Scheduler-owned execution</div><h1>From structured input to useful output.</h1><p>Three built-in nodes. A validated graph. An inspectable execution record.</p></div><span id="status" class="status" role="status">Ready to run</span></div>
+<p><a href="http://127.0.0.1:3001/?workflowHost=http%3A%2F%2F127.0.0.1%3A8765" target="_blank" rel="noopener">Open the live workbench</a> · Start <code>npm run dev</code> first. Select a run in Scheduler to inspect it.</p>
+<div class="layout">
+<section class="panel"><h2>01 / Input</h2><label for="input" class="muted">JSON bound to source.value</label><textarea id="input" spellcheck="false">{
+  "items": [
+    {
+      "prompt": "Inspect fixture alignment before the next operation."
+    }
+  ]
+}</textarea><button id="run" class="primary">Run workflow</button><div class="subactions"><button id="valid">Valid input</button><button id="invalid">Missing path</button></div><p class="note">The persistent Rust host validates the graph, creates a scheduler session, runs the nodes, reads its SQLite diagnostics, and closes the session.</p><p class="note">Deterministic JSON extraction. No generated text, model weights, GPU, or Pumas runtime is involved.</p></section>
+<section class="panel"><h2>02 / Executed graph</h2><div id="graph" class="graph"><div class="empty">Run to load graph facts from Rust.</div></div><div class="facts"><span>Execution <strong id="outcome">—</strong></span><span>Elapsed <strong id="timing">—</strong></span><span>Diagnostic events <strong id="count">—</strong></span></div><h2>03 / Output · out.text</h2><div id="output" class="result" aria-live="polite">No execution yet.</div><footer id="runid">Run identity appears after execution.</footer></section>
+</div>
+<section class="panel trace"><div class="tracehead"><h2>04 / Scheduler diagnostics</h2><button id="download" disabled>Download execution JSON</button></div><table><thead><tr><th>Sequence</th><th>Recorded event</th><th>Node</th><th>Source</th></tr></thead><tbody id="events"><tr><td colspan="4" class="muted">No diagnostic events yet.</td></tr></tbody></table><details><summary>Inspect the complete backend response, inputs, and event payloads</summary><pre id="raw"></pre></details></section>
+<footer>This is a minimal browser host for Pantograph’s native workflow service, separate from the Tauri desktop editor. Timings describe this local run, not a benchmark.</footer>
+</main>
+<script type="module">
+const el = id => document.getElementById(id);
+const initial = el('input').value;
+let report;
+el('valid').onclick = () => { el('input').value = initial; };
+el('invalid').onclick = () => { el('input').value = JSON.stringify({items: []}, null, 2); };
+function textElement(tag, text, className) {
+  const node = document.createElement(tag); node.textContent = text;
+  if (className) node.className = className;
+  return node;
+}
+el('run').onclick = async () => {
+  el('run').disabled = true; el('download').disabled = true; report = undefined;
+  el('status').textContent = 'Running native scheduler…';
+  el('status').className = 'status';
+  el('output').textContent = 'Waiting for native output…';
+  el('outcome').textContent = 'Running'; el('timing').textContent = '—'; el('count').textContent = '—';
+  el('runid').textContent = ''; el('raw').textContent = ''; el('events').replaceChildren(); el('graph').replaceChildren();
+  try {
+    JSON.parse(el('input').value);
+    const response = await fetch('/run', {method:'POST', headers:{'Content-Type':'application/json'}, body:el('input').value});
+    if (!response.ok) throw new Error(await response.text());
+    report = await response.json();
+    const execution = report.execution;
+    el('status').textContent = execution.ok ? 'Completed · native execution' : 'Rejected · inspect diagnostics';
+    el('status').className = execution.ok ? 'status' : 'status error';
+    el('outcome').textContent = execution.ok ? 'Completed' : 'Failed';
+    el('timing').textContent = execution.ok ? execution.result.timing_ms + ' ms' : '—';
+    el('count').textContent = report.diagnostics.length;
+    el('output').textContent = execution.ok ? execution.result.outputs.map(p => typeof p.value === 'string' ? p.value : JSON.stringify(p.value)).join('\n') : execution.error;
+    el('output').className = execution.ok ? 'result' : 'result error';
+    el('runid').textContent = execution.ok ? 'Run / ' + execution.result.workflow_run_id : 'Session / ' + report.session_id;
+    for (const [index, node] of report.graph.nodes.entries()) {
+      if (index) el('graph').append(textElement('div', '→', 'arrow'));
+      const card = textElement('div', '', 'node');
+      card.append(textElement('small', node.id), textElement('h3', node.data.definition?.label || node.node_type), textElement('code', node.node_type));
+      const edge = report.graph.edges.find(edge => edge.source === node.id);
+      card.append(textElement('div', node.data.path || (edge ? edge.source_handle + ' → ' + edge.target_handle : 'text'), 'port'));
+      el('graph').append(card);
+    }
+    for (const event of report.diagnostics) {
+      const row = document.createElement('tr');
+      for (const value of [event.event_seq, event.event_kind, event.node_id || '—', event.source_component]) row.append(textElement('td', String(value)));
+      el('events').append(row);
+    }
+    el('raw').textContent = JSON.stringify(report, null, 2);
+    el('download').disabled = false;
+  } catch(error) {
+    el('status').textContent = 'Unable to run'; el('status').className = 'status error';
+    el('output').textContent = error.message; el('outcome').textContent = 'Unavailable';
+  } finally { el('run').disabled = false; }
+};
+el('download').onclick = () => {
+  const url = URL.createObjectURL(new Blob([JSON.stringify(report, null, 2)], {type:'application/json'}));
+  const a = document.createElement('a'); a.href = url; a.download = 'pantograph-execution.json'; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+};
+</script>
+</html>
