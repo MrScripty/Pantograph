@@ -1,5 +1,11 @@
 # Scheduler v2 production migration
 
+Current execution authority (2026-10-12): [CPU scheduler completion and fair
+progress](plans/cpu-scheduler/plan.md). The user authorized independently reviewed
+CPU implementation stages and commit/push, while deferring GPU/split and remote
+workers. This document remains the historical migration rationale and gap map;
+its old publication restrictions and milestone status are not current authority.
+
 Plan checkpoint: 2026-10-07. Base: remote `main` verified by `git ls-remote`
 and fetched at `a8483e511dcec4f36e269e6e4debf181a318222f`.
 

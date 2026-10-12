@@ -4,6 +4,7 @@ Only current or recently accepted plan authorities live here:
 
 | Plan | Status and purpose |
 | --- | --- |
+| [CPU scheduler completion and fair progress](cpu-scheduler/plan.md) | User-authorized CPU scheduler policy rollout; independently reviewed opt-in stages, with GPU/split and remote work deferred. |
 | [Domain architecture and multimodal workflows](domain-architecture-and-multimodal/plan.md) | Active authority for current-standards review, domain ownership and real text/image workflows; milestone evidence and current model routing live in the plan. |
 | [Current-standards remediation](current-standards-remediation/plan.md) | Superseded; audit findings and unresolved claims transfer to the active plan. |
 | [Image-generation workflow](current-image-generation-graphs/plan.md) | Superseded; the real editor-to-artifact objective transfers to the active mixed-workflow plan. |

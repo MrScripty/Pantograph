@@ -2,6 +2,13 @@
 
 **Plan status:** `Active`
 
+**CPU scheduler policy authority (2026-10-12):** The user separately authorized
+the phased [CPU scheduler plan](../cpu-scheduler/plan.md). It owns current
+completion-ranking, bounded ready-frontier, residency-policy, app-fairness and
+supported CPU batching sequencing/acceptance. This plan retains graph/inference
+feature ownership, historical evidence and paused multimodal work; its standards
+baseline is unchanged. GPU/split and remote-worker implementation are deferred.
+
 **Current phase:** M3 owner/client consumer source is implemented. Native CPU sampling and the supported inference/embedded host route are qualified separately; the desktop-authored dependent text-to-image graph and full review remain open.
 
 **Preservation successor:** The user selected preservation of functioning rerank
