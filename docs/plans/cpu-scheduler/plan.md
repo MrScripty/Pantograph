@@ -1,14 +1,15 @@
 # Plan: CPU Scheduler Completion And Fair Progress
 
-**Plan status:** `Planned` — user-authorized direction; independent design review approved.
+**Plan status:** `Active` — M1 implementation and qualification; independent design approved.
 
-**Current phase:** M1 — reviewed and ready to start; implementation pending.
+**Current phase:** M1 — retained CPU composition and real two-Ready qualification.
 
-**Next slice:** M1 — compose the existing retained CPU serial service with normal
-hosted readiness/candidate providers and prove actual first-two-Ready execution.
+**Next slice:** Finish M1 qualification disposition: final-source second-position
+evidence remains pending; publish the reviewed implementation as a draft for CI.
 
-**Acceptance status:** `pending`; neither this plan nor prior demos establish a
-complete research scheduler or a default-policy change.
+**Acceptance status:** `partial` for M1: actual hosted CPU output, independent
+ranking and measured comparison pass; final release second-position proof and
+normal CI disposition remain pending. No full research scheduler/default change.
 
 **Execution ledger:** [execution-ledger.md](execution-ledger.md)
 
@@ -157,6 +158,28 @@ persistence/evolution even when no new IPC endpoint is added. Prefer an existing
 bounded diagnostic slot where its current contract fits; do not silently change
 durable consumers under the label of an internal observation.
 
+M1 projection review (2026-10-12): the private typed proposal uses the existing
+`log` facade under `workflow::serial_ready`; authoritative Start/cleanup remain
+the existing ledger events. The workflow crate adds a direct dependency on the
+already locked workspace log facade, without a new dependency version. Existing
+ledger payloads cannot hold the full proposal without changing semantics or
+schema. The isolated qualification example collects a bounded in-memory log and
+writes JSONL after execution; this is invocation evidence, not production state.
+It correlates workflow/run/task IDs, refuses overflow/missing evidence, and emits
+outside owner/store/ring locks. Independent standards review accepted this small
+projection correction; no durable schema or public IPC is changed.
+
+Actual hosted probing also exposed a readiness-resume gap: initial submission
+uses the supervised TaskWorker, but EmbeddedRuntime's resume path passes no runtime
+owner. Add a facade resume method forwarding the existing private owner-aware
+resume implementation, and select it only for serial mode in EmbeddedRuntime.
+The ordinary resume branch is preserved. Independent review admitted this narrow
+addition before edits; it reuses the same active run, inputs and proofs, without
+new request/schema/storage or a readiness bypass. The additional write set is
+`task_execution_facade.rs`, `session_execution_api.rs` and embedded
+`embedded_workflow_service_api.rs`, with delegation and actual same-run resume
+verification.
+
 Missing/stale/incomparable samples retain explicit FIFO on the same serial port;
 ranked owner mismatch refuses before execution. Ties preserve first position.
 Poison/cleanup uncertainty stays fenced. Samples are recorded only after actual
@@ -172,7 +195,7 @@ and write sets receive an independent review before their first code change.
 | Milestone / state | Usable result and bounded write set | Dependencies and acceptance gate |
 | --- | --- | --- |
 | M0 / Accepted on publication | Reviewed plan, source/hardware facts, ledger/issues; navigation pointers in `docs/plans/README.md`, broad plan and scheduler migration notes. No production code. | Two independent reviewers approved M1's shared interface decisions; links, exact scope and history reviewed. This plan commit is the publication checkpoint. |
-| M1 / Planned | Existing retained CPU first-two-Ready mode composes with ordinary hosted providers. Writes: embedded `workflow_service_composition.rs` and its focused tests; workflow `serial_ready.rs`, `task_execution_worker.rs`, relevant tests/exports; new focused native integration test and registration; bounded CPU example/guide only if needed for repeatable invocation; this plan's evidence. | M0; real resident CPU owner and retaining lease. Actual public sessions with two ready embeddings and retained outputs; measured sample-driven order; no injected candidate/readiness/timing/outputs; default and negative lifecycle regressions. Exact-head local gates, independent source/evidence review, normal CI. |
+| M1 / In progress | Existing retained CPU first-two-Ready mode composes with ordinary hosted providers. Writes: embedded `workflow_service_composition.rs` and its focused tests; workflow `serial_ready.rs`, `task_execution_worker.rs`, relevant tests/exports; new focused native integration test and registration; bounded CPU example/guide only if needed for repeatable invocation; this plan's evidence. | M0; real resident CPU owner and retaining lease. Actual public sessions with two ready embeddings and retained outputs; measured sample-driven order; no injected candidate/readiness/timing/outputs; default and negative lifecycle regressions. Exact-head local gates, independent source/evidence review, normal CI. |
 | M2 / Planned | Bounded completion lookahead for a disclosed CPU cohort, initially advisory on actual work. Extend existing scheduler kernels, workflow capture and native evidence producer only. | M1; complete comparable evidence for every admitted alternative/transition, including unfinished obligations. Hand-computed independent oracles, work-budget refusal, missing/stale evidence, owner invalidation and actual CPU trace correspondence. No forecasts authorize execution. Promote only a separately qualified action subset; do not fill missing cold/transfer costs with zero. |
 | M3 / Planned | Explicit per-app/bucket service opportunities at an authoritative ready-work boundary, alongside priorities. Writes confined to scheduler/workflow queue/attribution integration and tests after its design review. | M1 and a bounded eligible population; use authenticated existing attribution, not arbitrary caller identities. Fixed modeled traces prove opportunity/order, then two actual CPU sessions prove progress under repeated foreground arrival and cancellation. No wall-clock guarantee for unbounded nonpreemptible jobs. Missing entitlement identity has an explicit owned disposition. |
 | M4 / Planned | CPU residency actions improve a specified repeated-model workflow without violating cleanup; serial preparation/eviction only. Writes scheduler policy, registry/host action integration and tests after review. | M2 evidence, M3 fairness obligations where actions delay other apps. Measure load/unload/reload separately; full charge remains until acknowledged stop; pinned/live allocations protected. Actual two-model CPU alternation, pressure, cancellation and failed-stop cases. No overlapping loads, speculative lease release or automatic recovery of unknown execution. |
@@ -188,13 +211,13 @@ native action remains advisory/Blocked; contract tests never substitute for it.
 
 | ID | Observable criterion / deciding oracle | Kind / environment / mode | Status | Evidence |
 | --- | --- | --- | --- | --- |
-| C1 | Default construction/dispatch remains unchanged; serial port replacement still refuses; conflicting modes reject before composition. Existing default tests plus focused composition regressions. | contract / representative / automated | pending | M1 focused composition and service-config tests; exact command/results to be recorded. |
-| C2 | From public graph/session submission, ordinary readiness/candidate providers dispatch real resident Candle CPU forwards for both Ready tasks and retain exact numerical outputs. Committed fixture/independent reference vectors and actual ledger owner events are oracles. | integration / required-real CPU / automated | pending | M1 native hosted integration run, actual output vectors and owner ledger; existing one-task test is only a starting checkpoint. |
-| C3 | After at least three fresh successful samples per exact workload, the recorded first-two decision matches independently calculated maxima and actual start order. Use real monotonic measurements; assert the observed winner, not an assumed faster text. If ties/no usable separation prevent proving second-position selection, record that claim pending; never inject clocks/delays or retry until a desired winner. | integration / required-real CPU / automated | pending | Fixed run set, bounded raw sample timings, independent aggregation and decision/Start/cleanup trace, as specified below. |
-| C4a | Missing/stale/foreign-generation observations use explicit FIFO or fail closed as declared; owner replacement after ranking, cancellation, dropped receiver and failed cleanup retain custody and exclude training. | focused / simulated protocol / automated | pending | Existing controlled serial protocol tests plus focused regression coverage; no native-performance claim. |
-| C4b | Actual CPU cancellation preserves custody and prevents cancelled training. Reuse requires matched cleanup; otherwise the correct result is fenced/poisoned and the next attempt refuses. No new recovery is authorized. | integration / required-real CPU / automated | pending | Focused native cancellation/next-attempt execution and owner events; cannot be replaced by C4a. |
-| C5 | Record a representative paired-workload baseline and opt-in comparison: outputs, selected order, sample provenance, queue/service/workflow elapsed times, scheduling overhead and environment. Repeated release observations disclose variability; do not promise general speedup. | integration / required-real CPU / automated | pending | Same fixed inputs, retained-owner setup, thread budget, declared resource envelope and run counts; no concurrent compilation/model work. Record actual distributions and measurement method. |
-| C6 | Independent review and applicable repository gates pass on the published feature head. Normal CI validates broad regressions; it does not establish GUI/GPU or native batching. | contract / representative / automated + review | pending | Exact commit/tree, reviewer findings/disposition, local gate logs and normal CI run URLs. |
+| C1 | Default construction/dispatch remains unchanged; serial port replacement still refuses; conflicting modes reject before composition. Existing default tests plus focused composition regressions. | contract / representative / automated | passed | 25 focused composition tests; default/port protection/early conflicts pass. See [M1 report](reports/2026-10-12-retained-ready-m1.md). |
+| C2 | From public graph/session submission, ordinary readiness/candidate providers dispatch real resident Candle CPU forwards for both Ready tasks and retain exact numerical outputs. Committed fixture/independent reference vectors and actual ledger owner events are oracles. | integration / required-real CPU / automated | passed | Final corrected-source release: all 32 vectors from public hosted 8+8 runs match independent reference; ordinary readiness/candidates, same-run resume and native output verified. |
+| C3 | After at least three fresh successful samples per exact workload, the recorded first-two decision matches independently calculated maxima and actual start order. Use real monotonic measurements; assert the observed winner, not an assumed faster text. If ties/no usable separation prevent proving second-position selection, record that claim pending; never inject clocks/delays or retry until a desired winner. | integration / required-real CPU / automated | partial | Final release raw counts/maxima, chosen winner and actual Start order pass. All five ranked runs choose position zero; second-position criterion remains pending (probe exit 1). Earlier dev five second starts are supporting evidence only; no winner-seeking rerun. |
+| C4a | Missing/stale/foreign-generation observations use explicit FIFO or fail closed as declared; owner replacement after ranking, cancellation, dropped receiver and failed cleanup retain custody and exclude training. | focused / simulated protocol / automated | passed | Full workflow-service 979 tests pass, including private InvalidClock partial-state reset and direct/supervised timed run/resume no-side-effect refusal. |
+| C4b | Actual CPU cancellation preserves custody and prevents cancelled training. Reuse requires matched cleanup; otherwise the correct result is fenced/poisoned and the next attempt refuses. No new recovery is authorized. | integration / required-real CPU / automated | passed | Two actual native post-drain cancellation/next-attempt regressions pass; controlled metadata remains separate from C2; matched cleanup or conservative fencing, no compute-cancellation claim. |
+| C5 | Record a representative paired-workload baseline and opt-in comparison: outputs, selected order, sample provenance, queue/service/workflow elapsed times, selector-only scheduling cost and environment (total scheduler CPU remains unisolated). Repeated release observations disclose variability; do not promise general speedup. | integration / required-real CPU / automated | passed (scoped) | Fixed final release 8+8 comparison, all raw values and min/median/max in [M1 report](reports/2026-10-12-retained-ready-m1.md). Selector-only cost disclosed; total scheduler CPU unisolated, no speedup observed. |
+| C6 | Independent review and applicable repository gates pass on the published feature head. Normal CI validates broad regressions; it does not establish GUI/GPU or native batching. | contract / representative / automated + review | pending publication/CI | Independent source and saved output/order evidence reviewed; local gates recorded in report. Publish draft for normal CI and verify exact head/tree; do not infer full M1 acceptance. |
 
 Predeclare the real run count and use the same unchanged graph throughout: two
 independent embedding tasks, exact texts, same model/environment/descriptor, with
@@ -332,6 +355,36 @@ ceremonies. GPU/remote remain Deferred until the stated environment and authorit
 
 ## Final Acceptance
 
-Pending. M0 acceptance means the plan/design is reviewed and published, not that
-M1 or the researched scheduler is implemented. Report the reviewed plan and M1
-promptly before substantial implementation; then execute only the admitted slice.
+M0 is accepted. M1 implementation and actual CPU/ranking/measurement subcriteria
+are reviewed, but final release second-position evidence and C6 remain pending.
+The fixed cohort correctly chose position zero and exited 1 for that missing
+criterion; do not rerun for a preferred winner or weaken the oracle. Publish the
+reviewed implementation as a draft with this limitation. M2 is not admitted by
+these partial results. See the [M1 report](reports/2026-10-12-retained-ready-m1.md).
+
+### M1 resident-accounting qualification correction (2026-10-12)
+
+The first genuinely Ready native pair refused with `UnknownResidentAccounting`: the
+ordinary candidate conservatively claims RAM and VRAM, while the probe declared
+only RAM for its retained allocation. Independent review confirmed the existing
+registry contract distinguishes omitted/unknown from explicit known zero. The
+probe now declares 32 MiB RAM (an operator envelope, not an allocator measurement)
+and zero VRAM for the exact calibrated Candle CPU F32 backend, whose tensors use
+`Device::Cpu`. It preserves the ordinary task claims and matched cleanup checks.
+No candidate, validator, registry algorithm, Pumas contract or default was changed.
+The caller must share the same gateway, registry and selector across the retaining
+bootstrap, native serial port and hosted composition. The composition does not
+claim to infer or prove identity for arbitrary user-supplied port implementations.
+
+### M1 timeout capability correction (2026-10-12)
+
+Independent implementation review found the supervised worker path carries
+`timeout_ms` without the direct resume path's deadline enforcement; native serial
+execution does not implement that deadline. Before editing, standards review
+approved an explicit fail-closed restriction in the already admitted execution
+API: serial runs reject `Some(timeout_ms)` before admission/host calls; resume
+rejects stored timed runs before recovery-event creation/worker enqueue. Default
+behavior is unchanged. Focused no-side-effect run/resume tests qualify refusal.
+The probe uses `None` and a 30-second caller watchdog; caller cancellation/drop
+is not evidence of native stop or permission to release custody. No new deadline
+machinery, recovery, or deadline-performance claim is admitted.

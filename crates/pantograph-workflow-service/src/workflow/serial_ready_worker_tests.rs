@@ -936,6 +936,218 @@ mod serial_ready_tests {
             ["task.cpu.0", "task.cpu.1"]
         );
     }
+    struct TimedSerialRejectHost;
+    #[async_trait::async_trait]
+    impl WorkflowHost for TimedSerialRejectHost {
+        fn workflow_roots(&self) -> Vec<std::path::PathBuf> {
+            panic!("timed serial refusal must precede host graph access")
+        }
+        async fn run_workflow(
+            &self,
+            _: &str,
+            _: &[WorkflowPortBinding],
+            _: Option<&[WorkflowOutputTarget]>,
+            _: WorkflowRunOptions,
+            _: WorkflowRunHandle,
+        ) -> Result<Vec<WorkflowPortBinding>, WorkflowServiceError> {
+            panic!("timed serial refusal must precede host execution")
+        }
+    }
+
+    fn assert_serial_timeout_refused(error: WorkflowServiceError) {
+        assert!(
+            matches!(error, WorkflowServiceError::InvalidRequest(message)
+            if message == "serial Ready CPU mode does not support workflow timeout_ms; use None")
+        );
+    }
+
+    #[tokio::test]
+    async fn serial_ready_timed_submission_refuses_before_host_or_admission() {
+        let port = CpuPort::new();
+        let service = service(port.clone(), WorkflowSerialReadyConfig::default());
+        let session = service
+            .session_store_guard()
+            .unwrap()
+            .create_session(
+                WORKER_BATCH_WORKFLOW_ID.into(),
+                None,
+                None,
+                Vec::new(),
+                Vec::new(),
+                false,
+            )
+            .unwrap();
+        let before = service
+            .session_store_guard()
+            .unwrap()
+            .session_summary(&session)
+            .unwrap();
+        let runtime = WorkflowSessionExecutionRuntime::from_shared_service(
+            service.clone(),
+            Arc::new(TimedSerialRejectHost),
+        );
+        for supervised in [false, true] {
+            let request = WorkflowExecutionSessionRunRequest {
+                session_id: session.clone(),
+                workflow_semantic_version: "1.0.0".into(),
+                inputs: Vec::new(),
+                output_targets: None,
+                override_selection: None,
+                timeout_ms: Some(500),
+                priority: None,
+            };
+            let result = if supervised {
+                runtime.run_workflow_execution_session(request).await
+            } else {
+                service
+                    .run_workflow_execution_session(&TimedSerialRejectHost, request)
+                    .await
+            };
+            assert_serial_timeout_refused(
+                result.expect_err("unsupported timeout must be explicit"),
+            );
+            let store = service.session_store_guard().unwrap();
+            assert_eq!(
+                serde_json::to_value(store.session_summary(&session).unwrap()).unwrap(),
+                serde_json::to_value(&before).unwrap(),
+            );
+            assert!(store.list_queue(&session).unwrap().is_empty());
+            assert_eq!(store.active_run_count(), 0);
+            drop(store);
+            assert!(port.tasks().is_empty());
+            assert!(port.cleanups.lock().unwrap().is_empty());
+            assert!(service.serial_ready_observations_for_test().is_empty());
+            let scope = tokio::time::timeout(
+                Duration::from_secs(1),
+                service.serial_ready_mode.as_ref().unwrap().enter(),
+            )
+            .await
+            .unwrap()
+            .expect("refused submission cannot claim or poison serial admission");
+            drop(scope);
+        }
+    }
+
+    #[tokio::test]
+    async fn serial_ready_timed_stored_resume_refuses_before_events_or_worker_admission() {
+        let port = CpuPort::new();
+        let service = service(port.clone(), WorkflowSerialReadyConfig::default());
+        let id = "run.timed.resume";
+        // This existing fixture represents a persisted active timed run. New
+        // serial submission no longer admits this unsupported timeout contract.
+        let session = cpu_run(&service, id);
+        let before = service
+            .session_store_guard()
+            .unwrap()
+            .active_run_scheduler_task_state(&session, id)
+            .unwrap();
+        assert_eq!(
+            service
+                .session_store_guard()
+                .unwrap()
+                .active_run_context(&session, id)
+                .unwrap()
+                .timeout_ms,
+            Some(500)
+        );
+        let event_ids: Vec<_> = (0..2)
+            .map(|i| WorkflowRuntimeBranchTaskEventId::parse(format!("event.{id}.{i}")).unwrap())
+            .collect();
+        let events_before: Vec<_> = event_ids
+            .iter()
+            .map(|event| {
+                service
+                    .runtime_branch_task_event_repository
+                    .lock()
+                    .unwrap()
+                    .get(event)
+                    .unwrap()
+            })
+            .collect();
+        let runtime = WorkflowSessionExecutionRuntime::from_shared_service(
+            service.clone(),
+            Arc::new(TimedSerialRejectHost),
+        );
+        for supervised in [false, true] {
+            let request = WorkflowExecutionSessionResumeRequest {
+                session_id: session.clone(),
+                workflow_run_id: id.into(),
+            };
+            let result = if supervised {
+                runtime
+                    .resume_workflow_execution_session_runtime_dependency_readiness(request)
+                    .await
+            } else {
+                service
+                    .resume_workflow_execution_session_runtime_dependency_readiness(
+                        &TimedSerialRejectHost,
+                        request,
+                    )
+                    .await
+            };
+            assert_serial_timeout_refused(result.expect_err("stored timed run must not enqueue"));
+            assert_eq!(
+                service
+                    .session_store_guard()
+                    .unwrap()
+                    .active_run_scheduler_task_state(&session, id)
+                    .unwrap(),
+                before
+            );
+            let events_after: Vec<_> = event_ids
+                .iter()
+                .map(|event| {
+                    service
+                        .runtime_branch_task_event_repository
+                        .lock()
+                        .unwrap()
+                        .get(event)
+                        .unwrap()
+                })
+                .collect();
+            assert_eq!(events_after, events_before);
+            assert!(port.tasks().is_empty());
+            assert!(port.cleanups.lock().unwrap().is_empty());
+            assert!(service.serial_ready_observations_for_test().is_empty());
+            let scope = tokio::time::timeout(
+                Duration::from_secs(1),
+                service.serial_ready_mode.as_ref().unwrap().enter(),
+            )
+            .await
+            .unwrap()
+            .expect("refused resume cannot claim or poison serial admission");
+            drop(scope);
+        }
+    }
+
+    #[tokio::test]
+    async fn serial_ready_invalid_clock_discards_partial_ranking_and_reports_typed_fifo_reason() {
+        let service = service(CpuPort::new(), WorkflowSerialReadyConfig::default());
+        let id = "run.clock.empty";
+        let session = cpu_run(&service, id);
+        let pair = service
+            .session_store_guard()
+            .unwrap()
+            .serial_ready_pair(&session, id)
+            .unwrap();
+        let mode = service.serial_ready_mode.as_ref().unwrap();
+        let initial = mode.select(&pair);
+        assert_eq!(
+            initial.reason,
+            crate::workflow::serial_ready::SerialReadyReason::InsufficientFreshSamples
+        );
+        assert_eq!(initial.position, 0);
+        assert!(initial.owner.is_none());
+        assert_eq!(initial.counts, [0, 0]);
+        for i in 0..3 {
+            let id = format!("run.clock.warm.{i}");
+            let session = cpu_run(&service, &id);
+            run(service.clone(), &session, &id).await;
+        }
+        crate::workflow::serial_ready::tests::assert_invalid_clock_clears_partial_ranking(
+            mode, &pair,
+        );
+    }
     #[tokio::test]
     async fn serial_ready_worker_selection_cost_reports_actual_bounded_policy_cpu() {
         let port = CpuPort::new();
@@ -959,8 +1171,7 @@ mod serial_ready_tests {
                     .as_ref()
                     .unwrap()
                     .select(&pair)
-                    .unwrap()
-                    .0,
+                    .position,
                 1
             );
         }

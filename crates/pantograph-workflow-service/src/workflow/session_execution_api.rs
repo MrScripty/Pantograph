@@ -235,6 +235,11 @@ impl WorkflowService {
         }
         validate_workflow_semantic_version(&request.workflow_semantic_version)?;
         validate_timeout_ms(request.timeout_ms)?;
+        if self.is_serial_ready_cpu() && request.timeout_ms.is_some() {
+            return Err(WorkflowServiceError::InvalidRequest(
+                "serial Ready CPU mode does not support workflow timeout_ms; use None".into(),
+            ));
+        }
         validate_bindings(&request.inputs, "inputs")?;
         if let Some(targets) = request.output_targets.as_ref() {
             validate_output_targets(targets)?;
@@ -483,7 +488,7 @@ impl WorkflowService {
         .await
     }
 
-    async fn resume_workflow_execution_session_runtime_dependency_readiness_with_attempt_transition<
+    pub(super) async fn resume_workflow_execution_session_runtime_dependency_readiness_with_attempt_transition<
         H: WorkflowHost + ?Sized,
     >(
         &self,
@@ -530,6 +535,12 @@ impl WorkflowService {
                 "workflow run '{}' is not a runtime inference run",
                 workflow_run_id
             )));
+        }
+
+        if self.is_serial_ready_cpu() && active_run.timeout_ms.is_some() {
+            return Err(WorkflowServiceError::InvalidRequest(
+                "serial Ready CPU mode does not support workflow timeout_ms; use None".into(),
+            ));
         }
 
         if let Some(task_execution_runtime_owner) = task_execution_runtime_owner {

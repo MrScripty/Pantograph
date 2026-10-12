@@ -2,10 +2,10 @@
 
 | ID | Finding / evidence | Owner / disposition |
 | --- | --- | --- |
-| CPU-01 | Hosted dispatch composition unconditionally replaces batch/cleanup ports protected by serial constructor assertions. | Embedded composition; fix and prove in M1, preserve assertions. |
-| CPU-02 | Existing actual native serial test uses injected readiness/candidates and a one-task graph; first-two ranking is only controlled protocol evidence. | Workflow/embedded integration; real hosted two-Ready acceptance in M1. |
+| CPU-01 | Hosted dispatch composition unconditionally replaces batch/cleanup ports protected by serial constructor assertions. | M1 implemented; 25 composition regressions passed, protected assertions remain. |
+| CPU-02 | Existing actual native serial test uses injected readiness/candidates and a one-task graph; first-two ranking is only controlled protocol evidence. | M1 provider/output/observed-order checks passed; final-release second-position evidence remains pending under C3. Raw samples and real outputs independently checked; controlled lifecycle tests remain separately labelled. |
 | CPU-03 | Serial observations cover dispatch-through-drain/cleanup, not full cold/preparation/transfer phases. | Timing owner; explicit serial-only mode in M1, richer evidence prerequisite for M2/M4. Never label missing costs zero. |
-| CPU-04 | Opaque serial selection Option does not distinguish FIFO reasons from ranked selection to consumers. | Workflow policy; bounded typed decision projected through existing diagnostics in M1. No duplicate store or new IPC. |
+| CPU-04 | Opaque serial selection Option does not distinguish FIFO reasons from ranked selection to consumers. | M1 implemented private typed proposal through existing log facade; read-only raw sample view, no durable event change/duplicate store/new IPC. |
 | CPU-05 | Retained port needs actual resident CPU owner and a separate live retaining successor. Separate last-lease eviction does not authorize sole-lease bootstrap or generic recovery. | Native owner/registry; preserve preconditions in M1, bounded policy work in M4. |
 | CPU-06 | App-wide protected service, joint ready-frontier ranking and full phase capacity are incomplete. | Scheduler policy; M2/M3 with scoped opportunity claims, no hard wall-time guarantee. |
 | CPU-07 | Text/chat/embedding/rerank/audio envelopes are sequential; backend-native/continuous batching is not established. | Batch owner; M5 supports only executable capabilities. |
@@ -13,3 +13,7 @@
 | CPU-09 | Python simulator archive/hash and differential acceptance unavailable in historical migration evidence. | Research qualification; not a prerequisite for independent narrow CPU integration; no equivalence/full-v2 claim. |
 | CPU-10 | CLI Git authentication unavailable; authoritative read/write connector works. | Integrator; publish through supported connector with normal verification and exact remote SHA/tree checks. No credential/security changes. |
 | CPU-11 | Existing repository fixture-license ambiguity remains documented in CPU guide. | Repository licensing owner; preserve qualification, no new model acquisition/distribution claim. |
+| CPU-12 | Serial-mode public readiness resume used the unsupervised legacy service path and refused owned serial execution. | M1 reviewed correction routes the same run through the TaskWorker facade; actual resume identity checked, default route unchanged. |
+| CPU-13 | Omitted retained VRAM accounting correctly refuses ordinary RAM+VRAM claims. | Probe declares known zero only for calibrated CPU tensors; RAM 32 MiB remains operator declared. Strict candidate/cleanup checks unchanged. |
+| CPU-14 | Completed shutdown leaves conservative stopping/resident accounting in the registry, despite no reservations or native serial owner. | Disclosed existing registry lifecycle limit; no automatic recovery or accounting erasure added in M1. |
+| CPU-15 | Supervised runtime execution carries workflow timeout metadata but native serial execution does not enforce it. | M1 rejects timed serial run/resume requests before admission or enqueue, with independent review and no-side-effect tests; default behavior unchanged. Probe caller watchdog does not stop native work or release custody. |

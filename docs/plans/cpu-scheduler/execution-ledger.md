@@ -48,3 +48,82 @@
 
 This worktree is retained-protected for the plan's continuing implementation
 coordination; parent owns its later disposition after reachable handoff.
+
+## 2026-10-12 — M1 implementation and first runnable result
+
+- Created isolated feature worktree/branch
+  `feat/cpu-scheduler-retained-ready-2026-10-12` from reviewed/published plan
+  `42d03b3fb65f5172be8c956af6e880c1255b354b`. Paused multimodal, PR71, main,
+  Pumas and the original plan worktrees remain untouched. The user's continuation
+  also authorizes a draft PR for ordinary CI; no merge/deployment/release.
+- Preserved constructor-owned execution/batch/cleanup ports through hosted
+  composition; ordinary facts/readiness/candidates still install. Mode conflicts
+  reject before startup side effects. Shared gateway/registry/selector and a live
+  retaining bootstrap session are explicit caller prerequisites.
+- Replaced the opaque selection result with a private bounded typed reason and
+  proposal, projected through the existing log facade outside store/history
+  locks. Added only a read-only test-support view of the existing raw sample ring.
+  No durable event/version, IPC, default, Pumas, or execution authority changed.
+- Actual qualification exposed a public readiness-resume path that bypassed
+  supervised TaskWorker ownership. Before editing that API boundary, independent
+  review approved delegating the same existing run through the runtime facade
+  only for serial mode. The ordinary path stays unchanged.
+- Actual Ready execution then refused omitted VRAM accounting. Before changing
+  the probe declaration, review confirmed existing known-zero semantics and the
+  calibrated backend's CPU-only tensors. Kept all candidate claims and validation;
+  declared retained RAM 32 MiB (operator envelope), VRAM 0. No free-capacity guess.
+- First completed dev cohort: eight identical baseline runs and eight serial
+  runs; all 32 returned vectors match independent reference (maximum absolute
+  error `8.940696716308594e-08`). Three FIFO training runs, then five observed
+  second-position starts, independently matching raw maxima and actual ledger
+  order. Serial run 0 resumes readiness with the same final run identity. No
+  adaptive retries/winner selection; earlier failed integrations are not accepted
+  cohorts. Completed evidence root: `cpu-m1-real-20261012g`.
+- Independent review recomputed output/sample/order oracles and found no material
+  implementation blocker. A clock regression now checks typed InvalidClock
+  discards partially accumulated ranking evidence; injection is private cfg(test).
+- New native cancellation tests request cancellation after actual native drain
+  and before cleanup, using the untouched real response/receipt. Matched cleanup
+  allows another real forward; a deliberately lost receipt preserves charge and
+  fences the next attempt. Metadata is controlled and explicitly separate from
+  ordinary hosted C2 proof; no cancellation-during-computation claim from these
+  new wrappers. Both passed, as did 25 focused composition tests.
+- Shutdown returns with no reservations/native serial owner. Registry status can
+  conservatively remain `stopping` with declared resident accounting; do not
+  mistake `shutdown_ok` for complete accounting-row removal.
+- Release cohort, final broader gates, publication and CI are recorded in the
+  [M1 report](reports/2026-10-12-retained-ready-m1.md) and final handoff once
+  complete. C5 measures selector-only scheduling cost alongside task/queue/wall
+  times; total scheduler CPU remains unisolated.
+- Final independent source review identified unsupported supervised serial
+  deadlines. Standards review approved fail-closed timed run/resume refusal
+  before admission/enqueue; default EmbeddedRuntime resume retains its old path.
+  The new public facade adds no deadline enforcement to generic supervised
+  recovery. The final probe uses no workflow timeout and labels its caller
+  watchdog separately. The earlier dev cohort proves output/order, not deadlines.
+- Final optimized build used cached dependencies (14m 24s; exact-source rebuild
+  0.43s), then one predeclared release cohort with no concurrent compilation/model
+  work. Both compositions/producers were alive for baseline and serial phases.
+  All 32 vectors and all raw-sample/proposal/actual-order oracles pass. However,
+  all five ranked runs correctly choose position zero from observed maxima. The
+  final-source second-position criterion remains pending and the probe exits 1;
+  no cohort retry, graph/input alteration or oracle weakening follows. Both
+  reviewers require C3 Partial and M1 not fully accepted.
+- Release measurements: baseline wall median 54.031 ms, serial 63.955 ms; selector
+  cost 16.505–41.403 µs. C5 passes as a descriptive scoped report, not a speedup.
+  Total scheduling CPU is unisolated. Raw compressed JSON/JSONL, per-run summaries
+  and SHA-256 manifest are retained under the report's `m1-evidence` directory.
+- Full final workflow-service suite: 979 passed, including new clock and timeout
+  regressions. Final embedded/pre-push gates and external CI follow in handoff.
+- Full final embedded-runtime suite: 592 passed, two existing tests ignored;
+  this includes the new actual native cancellation and composition regressions.
+  Independent reviewer inspected final release originals/hashes and 979-test log,
+  approved source/report with C3 Partial and C5 scoped acceptance.
+- Final declared pre-push `npm test`: node-engine 261 passed/one existing ignored;
+  workflow-nodes 168 passed. Workspace rustfmt, staged whitespace and decision
+  traceability pass; no hook was disabled. Remaining ignores are existing cost
+  probes/node-engine exclusions. No new ignore/suppression/dependency acquisition.
+- Two independent reviewers approve draft publication with M1 Partial: C3 final
+  second-position criterion remains open, C5's measurement obligation is accepted,
+  and C6 awaits exact published-head/ordinary CI evidence. Source/evidence remain
+  reviewable; no further milestone is started by this draft.

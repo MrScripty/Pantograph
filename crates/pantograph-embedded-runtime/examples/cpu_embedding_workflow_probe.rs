@@ -37,6 +37,8 @@ const WORKFLOW_ID: &str = "cpu-embedding-probe";
 mod browser_host;
 #[path = "cpu_embedding_workflow_probe/rich_workflow.rs"]
 mod rich_workflow;
+#[path = "cpu_embedding_workflow_probe/serial_ready_probe.rs"]
+mod serial_ready_probe;
 #[path = "cpu_embedding_workflow_probe/target_observation.rs"]
 mod target_observation;
 
@@ -120,7 +122,13 @@ async fn create_runtime(
     );
     api.rebuild_model_index().await?;
     let registry = Arc::new(RuntimeRegistry::new());
+    #[cfg(feature = "backend-llamacpp")]
     let gateway = Arc::new(inference::InferenceGateway::new());
+    #[cfg(not(feature = "backend-llamacpp"))]
+    let gateway = Arc::new(inference::InferenceGateway::with_backend(
+        Box::new(inference::CandleBackend::new()),
+        "Candle",
+    ));
     let service = WorkflowService::with_ephemeral_attribution_store()?
         .with_diagnostics_ledger(SqliteDiagnosticsLedger::open(root.join("diagnostics.db"))?)
         .with_artifact_store(ArtifactStore::open(
@@ -454,11 +462,14 @@ async fn main() -> ProbeResult<()> {
     let args: Vec<_> = std::env::args_os().skip(1).collect();
     if args.len() > 2
         || args.get(1).is_some_and(|mode| {
-            mode != "--inspect-targets" && mode != "--serve-stdio" && mode != "--serve-rich-stdio"
+            mode != "--inspect-targets"
+                && mode != "--serve-stdio"
+                && mode != "--serve-rich-stdio"
+                && mode != "--serial-ready"
         })
     {
         return Err(
-            "usage: cpu_embedding_workflow_probe <new absolute directory> [--inspect-targets|--serve-stdio|--serve-rich-stdio]"
+            "usage: cpu_embedding_workflow_probe <new absolute directory> [--inspect-targets|--serve-stdio|--serve-rich-stdio|--serial-ready]"
                 .into(),
         );
     }
@@ -472,6 +483,9 @@ async fn main() -> ProbeResult<()> {
         return Err("set PUMAS_REGISTRY_DB_PATH to <new absolute probe directory>/registry.db; existing catalogs are never opened".into());
     }
     std::fs::create_dir(&root)?; // Refuse existing directories, including previous evidence.
+    if args.get(1).is_some_and(|mode| mode == "--serial-ready") {
+        return serial_ready_probe::qualify(&root).await;
+    }
     if args.get(1).is_some_and(|mode| mode == "--inspect-targets") {
         return target_observation::inspect(&root).await;
     }

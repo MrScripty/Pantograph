@@ -1,0 +1,895 @@
+{
+  "backend": "candle",
+  "decision_ns_scope": "mode.select only; excludes pair capture, log projection and Start fencing",
+  "declared_resident_ram_bytes": 33554432,
+  "declared_resident_vram_bytes": 0,
+  "default_policy_changed": false,
+  "device": "cpu_f32",
+  "fixed_runs_per_mode": 8,
+  "gui_qualified": false,
+  "model": "embedding/qualification/synthetic-bert-8",
+  "model_acquisition_bytes": 0,
+  "oracle": {
+    "first_two_order_matches_raw_sample_maxima": true,
+    "ranked_runs": 5,
+    "second_position_claim": "pending_no_observed_second_winner",
+    "second_position_starts": 0
+  },
+  "profile": "release",
+  "resident_bytes_are_measured": false,
+  "scope": "actual_hosted_retained_cpu_first_two_ready",
+  "shutdown_ok": true,
+  "shutdown_scope": "shutdown calls returned; no reservation or native serial owner; registry may retain stopping state and declared resident accounting",
+  "threads": 1,
+  "training": "untrained",
+  "vram_basis": "calibrated Candle embedding tensors are Device::Cpu only",
+  "weights_bytes": 6464,
+  "raw_file_sha256": {
+    "baseline-events.json": "aa1019dd136940c12c2de065219e9bd7199af9be5058b1f2cc883e6aca21df49",
+    "bootstrap.json": "a6a0099fdde45f96567fc8e3b02ee3f3d48a455ec174908f2563b03854b6ff20",
+    "registry-after-shutdown.json": "d94d33864516142b52e37b84047252078b95bfe41678e5124915f3c9179bf615",
+    "serial-events.json": "d92397cfbcd1b05f1c8d0829db36519b21dde30c77afb8bae318a61807b4f973",
+    "serial-result.json": "532d29b13f3d3145109e4d5cb8d6f880a98bf52fa819182255b2c4924c797dc3",
+    "serial-proposals.jsonl": "34902b056285bc9e9dac6b7401aa7eaf8f9cac27460d0673dbffb621e72e87bc"
+  },
+  "samples": [
+    {
+      "task_id": "infer_a",
+      "workload_digest_hex": "c3ca2565a4714fa9f3081827704b0d900bd3f18b4ae82d2b157081cc711ab072",
+      "service_ns": 13054876
+    },
+    {
+      "task_id": "infer_b",
+      "workload_digest_hex": "7a83b575f180b5b3905eb1e3c43fbfabed4b0f247141e30f579c980f12148782",
+      "service_ns": 10842255
+    },
+    {
+      "task_id": "infer_a",
+      "workload_digest_hex": "c3ca2565a4714fa9f3081827704b0d900bd3f18b4ae82d2b157081cc711ab072",
+      "service_ns": 9945788
+    },
+    {
+      "task_id": "infer_b",
+      "workload_digest_hex": "7a83b575f180b5b3905eb1e3c43fbfabed4b0f247141e30f579c980f12148782",
+      "service_ns": 11516652
+    },
+    {
+      "task_id": "infer_a",
+      "workload_digest_hex": "c3ca2565a4714fa9f3081827704b0d900bd3f18b4ae82d2b157081cc711ab072",
+      "service_ns": 11103851
+    },
+    {
+      "task_id": "infer_b",
+      "workload_digest_hex": "7a83b575f180b5b3905eb1e3c43fbfabed4b0f247141e30f579c980f12148782",
+      "service_ns": 13102873
+    },
+    {
+      "task_id": "infer_a",
+      "workload_digest_hex": "c3ca2565a4714fa9f3081827704b0d900bd3f18b4ae82d2b157081cc711ab072",
+      "service_ns": 15165646
+    },
+    {
+      "task_id": "infer_b",
+      "workload_digest_hex": "7a83b575f180b5b3905eb1e3c43fbfabed4b0f247141e30f579c980f12148782",
+      "service_ns": 16592732
+    },
+    {
+      "task_id": "infer_a",
+      "workload_digest_hex": "c3ca2565a4714fa9f3081827704b0d900bd3f18b4ae82d2b157081cc711ab072",
+      "service_ns": 14313882
+    },
+    {
+      "task_id": "infer_b",
+      "workload_digest_hex": "7a83b575f180b5b3905eb1e3c43fbfabed4b0f247141e30f579c980f12148782",
+      "service_ns": 13317888
+    },
+    {
+      "task_id": "infer_a",
+      "workload_digest_hex": "c3ca2565a4714fa9f3081827704b0d900bd3f18b4ae82d2b157081cc711ab072",
+      "service_ns": 11318386
+    },
+    {
+      "task_id": "infer_b",
+      "workload_digest_hex": "7a83b575f180b5b3905eb1e3c43fbfabed4b0f247141e30f579c980f12148782",
+      "service_ns": 12668810
+    },
+    {
+      "task_id": "infer_a",
+      "workload_digest_hex": "c3ca2565a4714fa9f3081827704b0d900bd3f18b4ae82d2b157081cc711ab072",
+      "service_ns": 11514799
+    },
+    {
+      "task_id": "infer_b",
+      "workload_digest_hex": "7a83b575f180b5b3905eb1e3c43fbfabed4b0f247141e30f579c980f12148782",
+      "service_ns": 10258712
+    },
+    {
+      "task_id": "infer_a",
+      "workload_digest_hex": "c3ca2565a4714fa9f3081827704b0d900bd3f18b4ae82d2b157081cc711ab072",
+      "service_ns": 12131171
+    },
+    {
+      "task_id": "infer_b",
+      "workload_digest_hex": "7a83b575f180b5b3905eb1e3c43fbfabed4b0f247141e30f579c980f12148782",
+      "service_ns": 12277933
+    }
+  ],
+  "actual_vectors": [
+    {
+      "node_id": "vectors_a",
+      "port_id": "vector",
+      "value": [
+        0.2630266547203064,
+        -0.4409548342227936,
+        0.5591548681259155,
+        0.28143635392189026,
+        -0.4465087652206421,
+        0.22029370069503784,
+        -0.24442006647586823,
+        -0.19202794134616852
+      ]
+    },
+    {
+      "node_id": "vectors_b",
+      "port_id": "vector",
+      "value": [
+        0.14047904312610626,
+        -0.5287753939628601,
+        0.09859264642000198,
+        0.2963152229785919,
+        0.061696670949459076,
+        0.4760826528072357,
+        0.06283976137638092,
+        -0.6072306036949158
+      ]
+    }
+  ],
+  "baseline": [
+    {
+      "index": 0,
+      "workflow_run_id": "run_becc43bb-5b42-45eb-9d0a-3f000184b78a",
+      "wall_ms": 56.181117,
+      "readiness_resume_run_ids": [],
+      "queue_to_start_ms": {
+        "infer_a": 12,
+        "infer_b": 36
+      },
+      "attempt_ms": {
+        "infer_a": 13,
+        "infer_b": 13
+      },
+      "starts": [
+        {
+          "task_id": "infer_a",
+          "event_seq": 18,
+          "occurred_at_ms": 1791817976755
+        },
+        {
+          "task_id": "infer_b",
+          "event_seq": 22,
+          "occurred_at_ms": 1791817976779
+        }
+      ]
+    },
+    {
+      "index": 1,
+      "workflow_run_id": "run_9a46c3d5-0a13-435a-92bd-c001a518b653",
+      "wall_ms": 55.685338,
+      "readiness_resume_run_ids": [],
+      "queue_to_start_ms": {
+        "infer_a": 10,
+        "infer_b": 35
+      },
+      "attempt_ms": {
+        "infer_a": 14,
+        "infer_b": 12
+      },
+      "starts": [
+        {
+          "task_id": "infer_a",
+          "event_seq": 37,
+          "occurred_at_ms": 1791817976810
+        },
+        {
+          "task_id": "infer_b",
+          "event_seq": 41,
+          "occurred_at_ms": 1791817976835
+        }
+      ]
+    },
+    {
+      "index": 2,
+      "workflow_run_id": "run_edbd78df-b62f-46ec-b2de-455c0e35bfcf",
+      "wall_ms": 66.31654400000001,
+      "readiness_resume_run_ids": [],
+      "queue_to_start_ms": {
+        "infer_a": 13,
+        "infer_b": 42
+      },
+      "attempt_ms": {
+        "infer_a": 13,
+        "infer_b": 14
+      },
+      "starts": [
+        {
+          "task_id": "infer_a",
+          "event_seq": 56,
+          "occurred_at_ms": 1791817976871
+        },
+        {
+          "task_id": "infer_b",
+          "event_seq": 60,
+          "occurred_at_ms": 1791817976900
+        }
+      ]
+    },
+    {
+      "index": 3,
+      "workflow_run_id": "run_60bb271c-077c-44e3-a3e5-d27c758c2a0b",
+      "wall_ms": 71.099018,
+      "readiness_resume_run_ids": [],
+      "queue_to_start_ms": {
+        "infer_a": 12,
+        "infer_b": 34
+      },
+      "attempt_ms": {
+        "infer_a": 11,
+        "infer_b": 11
+      },
+      "starts": [
+        {
+          "task_id": "infer_a",
+          "event_seq": 75,
+          "occurred_at_ms": 1791817976942
+        },
+        {
+          "task_id": "infer_b",
+          "event_seq": 79,
+          "occurred_at_ms": 1791817976964
+        }
+      ]
+    },
+    {
+      "index": 4,
+      "workflow_run_id": "run_10bef49c-719e-4813-838b-02f104fb8e53",
+      "wall_ms": 50.706791,
+      "readiness_resume_run_ids": [],
+      "queue_to_start_ms": {
+        "infer_a": 9,
+        "infer_b": 29
+      },
+      "attempt_ms": {
+        "infer_a": 10,
+        "infer_b": 12
+      },
+      "starts": [
+        {
+          "task_id": "infer_a",
+          "event_seq": 94,
+          "occurred_at_ms": 1791817977004
+        },
+        {
+          "task_id": "infer_b",
+          "event_seq": 98,
+          "occurred_at_ms": 1791817977024
+        }
+      ]
+    },
+    {
+      "index": 5,
+      "workflow_run_id": "run_fe8544c5-66c0-4791-a89f-80fdfd1527f3",
+      "wall_ms": 49.646951,
+      "readiness_resume_run_ids": [],
+      "queue_to_start_ms": {
+        "infer_a": 9,
+        "infer_b": 31
+      },
+      "attempt_ms": {
+        "infer_a": 12,
+        "infer_b": 11
+      },
+      "starts": [
+        {
+          "task_id": "infer_a",
+          "event_seq": 113,
+          "occurred_at_ms": 1791817977055
+        },
+        {
+          "task_id": "infer_b",
+          "event_seq": 117,
+          "occurred_at_ms": 1791817977077
+        }
+      ]
+    },
+    {
+      "index": 6,
+      "workflow_run_id": "run_bc669261-1fa0-49be-b676-09b3d15e8738",
+      "wall_ms": 52.377244000000005,
+      "readiness_resume_run_ids": [],
+      "queue_to_start_ms": {
+        "infer_a": 10,
+        "infer_b": 32
+      },
+      "attempt_ms": {
+        "infer_a": 13,
+        "infer_b": 11
+      },
+      "starts": [
+        {
+          "task_id": "infer_a",
+          "event_seq": 132,
+          "occurred_at_ms": 1791817977106
+        },
+        {
+          "task_id": "infer_b",
+          "event_seq": 136,
+          "occurred_at_ms": 1791817977128
+        }
+      ]
+    },
+    {
+      "index": 7,
+      "workflow_run_id": "run_fe80d224-37fe-44b0-a7c6-fb2fd7d01b34",
+      "wall_ms": 50.597199,
+      "readiness_resume_run_ids": [],
+      "queue_to_start_ms": {
+        "infer_a": 11,
+        "infer_b": 32
+      },
+      "attempt_ms": {
+        "infer_a": 10,
+        "infer_b": 10
+      },
+      "starts": [
+        {
+          "task_id": "infer_a",
+          "event_seq": 151,
+          "occurred_at_ms": 1791817977160
+        },
+        {
+          "task_id": "infer_b",
+          "event_seq": 155,
+          "occurred_at_ms": 1791817977181
+        }
+      ]
+    }
+  ],
+  "baseline_wall_ms": {
+    "n": 8,
+    "min": 49.646951,
+    "median": 54.031291,
+    "max": 71.099018
+  },
+  "baseline_queue_to_start_ms": {
+    "n": 16,
+    "min": 9,
+    "median": 21.0,
+    "max": 42
+  },
+  "baseline_attempt_ms": {
+    "n": 16,
+    "min": 10,
+    "median": 12.0,
+    "max": 14
+  },
+  "serial": [
+    {
+      "index": 0,
+      "workflow_run_id": "run_6ee660eb-542b-49ea-bcfc-3f09ca4e1489",
+      "wall_ms": 108.31121300000001,
+      "readiness_resume_run_ids": [
+        "run_6ee660eb-542b-49ea-bcfc-3f09ca4e1489"
+      ],
+      "queue_to_start_ms": {
+        "infer_a": 64,
+        "infer_b": 89
+      },
+      "attempt_ms": {
+        "infer_a": 13,
+        "infer_b": 11
+      },
+      "starts": [
+        {
+          "task_id": "infer_a",
+          "event_seq": 5,
+          "occurred_at_ms": 1791817977298
+        },
+        {
+          "task_id": "infer_b",
+          "event_seq": 9,
+          "occurred_at_ms": 1791817977323
+        }
+      ],
+      "proposal": {
+        "decision_ns": 41403,
+        "maxima_ns": [
+          0,
+          0
+        ],
+        "oldest_age_ns": [
+          0,
+          0
+        ],
+        "reason": "insufficient_fresh_samples",
+        "sample_counts": [
+          0,
+          0
+        ],
+        "selected_position": 0
+      },
+      "raw_sample_ages_ns": [],
+      "service_ns": {
+        "infer_a": 13054876,
+        "infer_b": 10842255
+      },
+      "wall_minus_service_ms": 84.41408200000001
+    },
+    {
+      "index": 1,
+      "workflow_run_id": "run_4d157f8c-7010-4bfd-9c32-ddbc81d8355f",
+      "wall_ms": 50.218826,
+      "readiness_resume_run_ids": [],
+      "queue_to_start_ms": {
+        "infer_a": 11,
+        "infer_b": 30
+      },
+      "attempt_ms": {
+        "infer_a": 10,
+        "infer_b": 12
+      },
+      "starts": [
+        {
+          "task_id": "infer_a",
+          "event_seq": 24,
+          "occurred_at_ms": 1791817977352
+        },
+        {
+          "task_id": "infer_b",
+          "event_seq": 28,
+          "occurred_at_ms": 1791817977371
+        }
+      ],
+      "proposal": {
+        "decision_ns": 17106,
+        "maxima_ns": [
+          13054876,
+          10842255
+        ],
+        "oldest_age_ns": [
+          30851453,
+          7858893
+        ],
+        "reason": "insufficient_fresh_samples",
+        "sample_counts": [
+          1,
+          1
+        ],
+        "selected_position": 0
+      },
+      "raw_sample_ages_ns": [
+        25539756,
+        2547196
+      ],
+      "service_ns": {
+        "infer_a": 9945788,
+        "infer_b": 11516652
+      },
+      "wall_minus_service_ms": 28.756386
+    },
+    {
+      "index": 2,
+      "workflow_run_id": "run_46bf69ff-1edd-4e31-9f72-361ad612f920",
+      "wall_ms": 84.968547,
+      "readiness_resume_run_ids": [],
+      "queue_to_start_ms": {
+        "infer_a": 11,
+        "infer_b": 36
+      },
+      "attempt_ms": {
+        "infer_a": 11,
+        "infer_b": 13
+      },
+      "starts": [
+        {
+          "task_id": "infer_a",
+          "event_seq": 43,
+          "occurred_at_ms": 1791817977403
+        },
+        {
+          "task_id": "infer_b",
+          "event_seq": 47,
+          "occurred_at_ms": 1791817977428
+        }
+      ],
+      "proposal": {
+        "decision_ns": 16505,
+        "maxima_ns": [
+          13054876,
+          11516652
+        ],
+        "oldest_age_ns": [
+          81587818,
+          58595258
+        ],
+        "reason": "insufficient_fresh_samples",
+        "sample_counts": [
+          2,
+          2
+        ],
+        "selected_position": 0
+      },
+      "raw_sample_ages_ns": [
+        76134021,
+        53141461,
+        24529618,
+        3758284
+      ],
+      "service_ns": {
+        "infer_a": 11103851,
+        "infer_b": 13102873
+      },
+      "wall_minus_service_ms": 60.761823
+    },
+    {
+      "index": 3,
+      "workflow_run_id": "run_737b08b6-5e1d-4b20-a009-bfb31ed53d95",
+      "wall_ms": 69.581772,
+      "readiness_resume_run_ids": [],
+      "queue_to_start_ms": {
+        "infer_a": 14,
+        "infer_b": 43
+      },
+      "attempt_ms": {
+        "infer_a": 15,
+        "infer_b": 17
+      },
+      "starts": [
+        {
+          "task_id": "infer_a",
+          "event_seq": 62,
+          "occurred_at_ms": 1791817977493
+        },
+        {
+          "task_id": "infer_b",
+          "event_seq": 66,
+          "occurred_at_ms": 1791817977522
+        }
+      ],
+      "proposal": {
+        "decision_ns": 25739,
+        "maxima_ns": [
+          13054876,
+          13102873
+        ],
+        "oldest_age_ns": [
+          168585573,
+          145593013
+        ],
+        "reason": "ranked",
+        "sample_counts": [
+          3,
+          3
+        ],
+        "selected_position": 0
+      },
+      "raw_sample_ages_ns": [
+        161599972,
+        138607412,
+        109995569,
+        89224235,
+        58147261,
+        31345482
+      ],
+      "service_ns": {
+        "infer_a": 15165646,
+        "infer_b": 16592732
+      },
+      "wall_minus_service_ms": 37.823394
+    },
+    {
+      "index": 4,
+      "workflow_run_id": "run_3dabd698-2497-4402-afe1-9e3c19756442",
+      "wall_ms": 68.779437,
+      "readiness_resume_run_ids": [],
+      "queue_to_start_ms": {
+        "infer_a": 13,
+        "infer_b": 41
+      },
+      "attempt_ms": {
+        "infer_a": 14,
+        "infer_b": 19
+      },
+      "starts": [
+        {
+          "task_id": "infer_a",
+          "event_seq": 81,
+          "occurred_at_ms": 1791817977560
+        },
+        {
+          "task_id": "infer_b",
+          "event_seq": 85,
+          "occurred_at_ms": 1791817977588
+        }
+      ],
+      "proposal": {
+        "decision_ns": 17897,
+        "maxima_ns": [
+          15165646,
+          16592732
+        ],
+        "oldest_age_ns": [
+          237122698,
+          214130138
+        ],
+        "reason": "ranked",
+        "sample_counts": [
+          4,
+          4
+        ],
+        "selected_position": 0
+      },
+      "raw_sample_ages_ns": [
+        231581439,
+        208588879,
+        179977036,
+        159205702,
+        128128728,
+        101326949,
+        34260636,
+        3796037
+      ],
+      "service_ns": {
+        "infer_a": 14313882,
+        "infer_b": 13317888
+      },
+      "wall_minus_service_ms": 41.147667
+    },
+    {
+      "index": 5,
+      "workflow_run_id": "run_a5617fcb-24ce-460d-aa49-0fb9326ab944",
+      "wall_ms": 59.129583,
+      "readiness_resume_run_ids": [],
+      "queue_to_start_ms": {
+        "infer_a": 12,
+        "infer_b": 35
+      },
+      "attempt_ms": {
+        "infer_a": 11,
+        "infer_b": 13
+      },
+      "starts": [
+        {
+          "task_id": "infer_a",
+          "event_seq": 100,
+          "occurred_at_ms": 1791817977631
+        },
+        {
+          "task_id": "infer_b",
+          "event_seq": 104,
+          "occurred_at_ms": 1791817977654
+        }
+      ],
+      "proposal": {
+        "decision_ns": 22965,
+        "maxima_ns": [
+          15165646,
+          16592732
+        ],
+        "oldest_age_ns": [
+          308548737,
+          285556177
+        ],
+        "reason": "ranked",
+        "sample_counts": [
+          5,
+          5
+        ],
+        "selected_position": 0
+      },
+      "raw_sample_ages_ns": [
+        300753940,
+        277761380,
+        249149537,
+        228378203,
+        197301229,
+        170499450,
+        103433137,
+        72968538,
+        37193064,
+        3640296
+      ],
+      "service_ns": {
+        "infer_a": 11318386,
+        "infer_b": 12668810
+      },
+      "wall_minus_service_ms": 35.142387
+    },
+    {
+      "index": 6,
+      "workflow_run_id": "run_29027249-bd66-4e0e-b194-c63c7452e608",
+      "wall_ms": 54.622527999999996,
+      "readiness_resume_run_ids": [],
+      "queue_to_start_ms": {
+        "infer_a": 12,
+        "infer_b": 35
+      },
+      "attempt_ms": {
+        "infer_a": 12,
+        "infer_b": 11
+      },
+      "starts": [
+        {
+          "task_id": "infer_a",
+          "event_seq": 119,
+          "occurred_at_ms": 1791817977688
+        },
+        {
+          "task_id": "infer_b",
+          "event_seq": 123,
+          "occurred_at_ms": 1791817977711
+        }
+      ],
+      "proposal": {
+        "decision_ns": 20281,
+        "maxima_ns": [
+          15165646,
+          16592732
+        ],
+        "oldest_age_ns": [
+          365837933,
+          342845373
+        ],
+        "reason": "ranked",
+        "sample_counts": [
+          6,
+          6
+        ],
+        "selected_position": 0
+      },
+      "raw_sample_ages_ns": [
+        360299693,
+        337307133,
+        308695290,
+        287923956,
+        256846982,
+        230045203,
+        162978890,
+        132514291,
+        96738817,
+        63186049,
+        28748300,
+        3710042
+      ],
+      "service_ns": {
+        "infer_a": 11514799,
+        "infer_b": 10258712
+      },
+      "wall_minus_service_ms": 32.849016999999996
+    },
+    {
+      "index": 7,
+      "workflow_run_id": "run_db0a4596-528e-40f3-950d-3bd40ab0788a",
+      "wall_ms": 55.887964,
+      "readiness_resume_run_ids": [],
+      "queue_to_start_ms": {
+        "infer_a": 11,
+        "infer_b": 35
+      },
+      "attempt_ms": {
+        "infer_a": 12,
+        "infer_b": 13
+      },
+      "starts": [
+        {
+          "task_id": "infer_a",
+          "event_seq": 138,
+          "occurred_at_ms": 1791817977742
+        },
+        {
+          "task_id": "infer_b",
+          "event_seq": 142,
+          "occurred_at_ms": 1791817977766
+        }
+      ],
+      "proposal": {
+        "decision_ns": 17266,
+        "maxima_ns": [
+          15165646,
+          16592732
+        ],
+        "oldest_age_ns": [
+          420608145,
+          397615585
+        ],
+        "reason": "ranked",
+        "sample_counts": [
+          7,
+          7
+        ],
+        "selected_position": 0
+      },
+      "raw_sample_ages_ns": [
+        415436509,
+        392443949,
+        363832106,
+        343060772,
+        311983798,
+        285182019,
+        218115706,
+        187651107,
+        151875633,
+        118322865,
+        83885116,
+        58846858,
+        26752081,
+        4041603
+      ],
+      "service_ns": {
+        "infer_a": 12131171,
+        "infer_b": 12277933
+      },
+      "wall_minus_service_ms": 31.478859999999997
+    }
+  ],
+  "serial_wall_ms": {
+    "n": 8,
+    "min": 50.218826,
+    "median": 63.95451,
+    "max": 108.31121300000001
+  },
+  "serial_queue_to_start_ms": {
+    "n": 16,
+    "min": 11,
+    "median": 32.5,
+    "max": 89
+  },
+  "serial_attempt_ms": {
+    "n": 16,
+    "min": 10,
+    "median": 12.5,
+    "max": 19
+  },
+  "serial_service_ms": {
+    "n": 16,
+    "min": 9.945788,
+    "median": 12.204552,
+    "max": 16.592732
+  },
+  "serial_selector_ns": {
+    "n": 8,
+    "min": 16505,
+    "median": 19089.0,
+    "max": 41403
+  },
+  "serial_wall_minus_service_ms": {
+    "n": 8,
+    "min": 28.756386,
+    "median": 36.482890499999996,
+    "max": 84.41408200000001
+  },
+  "measurement_notes": {
+    "wall_ms": "Monotonic public submit/resume through response; includes readiness wait, excludes session creation/close and later vector checking.",
+    "queue_to_start_ms": "Diagnostic wall-clock milliseconds: queue placement to each inference Start; includes preceding work and readiness, not a pure scheduling CPU measurement.",
+    "attempt_ms": "Existing Started-to-Completed diagnostic duration in wall-clock milliseconds; includes task lifecycle. Not directly equivalent to serial ring service duration.",
+    "service_ns": "Monotonic serial dispatch-through-drain and matched cleanup; independent ring durations.",
+    "selector_ns": "mode.select only; excludes pair capture, log projection and Start fencing",
+    "wall_minus_service_ms": "Residual includes readiness, orchestration, outputs/diagnostics, and scheduling. It does not isolate full scheduler overhead."
+  },
+  "final_reservations": 0,
+  "final_runtime_accounting": [
+    {
+      "runtime_id": "candle",
+      "status": "stopping",
+      "resident_claims": [
+        {
+          "kind": "ram_bytes",
+          "bytes": 33554432
+        },
+        {
+          "kind": "vram_bytes",
+          "bytes": 0
+        }
+      ]
+    }
+  ]
+}
