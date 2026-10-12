@@ -1,0 +1,174 @@
+{
+  "protocol_id": "c3-768b-v1",
+  "reference_packages": {
+    "torch": "2.14.1+cpu",
+    "transformers": "4.53.3",
+    "tokenizers": "0.21.4",
+    "safetensors": "0.8.0"
+  },
+  "device": "cpu",
+  "cpu_threads": 1,
+  "texts": [
+    "hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world ",
+    "hello"
+  ],
+  "text_sha256": [
+    "37abb1bb44478b85ca20fe74213169f68d833875a43317f10d76733465ef82b1",
+    "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+  ],
+  "utf8_bytes": [
+    768,
+    5
+  ],
+  "input_ids": [
+    [
+      2,
+      4,
+      5,
+      4,
+      5,
+      4,
+      5,
+      4,
+      5,
+      4,
+      5,
+      4,
+      5,
+      4,
+      5,
+      3
+    ],
+    [
+      2,
+      4,
+      3,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  ],
+  "attention_mask": [
+    [
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+    ],
+    [
+      1,
+      1,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  ],
+  "token_type_ids": [
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  ],
+  "vectors": [
+    [
+      0.26302674412727356,
+      -0.4409548342227936,
+      0.5591548085212708,
+      0.28143635392189026,
+      -0.4465087652206421,
+      0.22029370069503784,
+      -0.24442005157470703,
+      -0.1920279562473297
+    ],
+    [
+      0.14047904312610626,
+      -0.5287753343582153,
+      0.09859263151884079,
+      0.2963152229785919,
+      0.06169668957591057,
+      0.4760827124118805,
+      0.06283978372812271,
+      -0.6072306036949158
+    ]
+  ],
+  "max_absolute_reference_error": 0.0,
+  "reference_oracle_passed": true,
+  "actual_reference_cpu_forward_executed": true,
+  "fixture_file_sha256": {
+    "bert-8/1_Pooling/config.json": "f3471ef375e135a24ebbc10fb48ae1d4a0c8271f75ad9f2c566f391b6bde3892",
+    "bert-8/config.json": "379d188d421d6eb8a5429fc8241b7006495d316bf51955425679975f580a2308",
+    "bert-8/golden.json": "903e306675f766e9835375931b96efebb94097b80275220e3c80a76af04daa9c",
+    "bert-8/model.safetensors": "549cf713305780cd5af92cf397e6be34ada0e3650f967bb9772fa08ba9cedd44",
+    "bert-8/modules.json": "21ddb3037a55ebf4549eb5c1dc44c3f28f10b56ec7f1335c92fd90e5b30d88ac",
+    "bert-8/sentence_bert_config.json": "1a8ca78fce4e36626d2b3eef2336842e8b2a502c963cd01ef271d44da0a741df",
+    "bert-8/tokenizer.json": "36baeedee0eb6001cd65282d64683b33a17e9a9491f80720ab5d9d85eb55e719"
+  },
+  "reference_manifest_sha256": "ae1644b099d946e03e75a1b75c65593bd2fcee0aa03df31aa79fb5fb94e2bd39",
+  "model_downloads": false,
+  "fixture_modified": false
+}

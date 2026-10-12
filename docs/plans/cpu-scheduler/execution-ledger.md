@@ -161,3 +161,36 @@ coordination; parent owns its later disposition after reachable handoff.
 - This documentation publication precedes any new reference/model execution.
   Independent confirmation of the published amendment is required before the
   fixed experiment. C3 remains partial; no further milestone is admitted.
+
+## 2026-10-12 — single c3-768b-v1 execution and review
+
+- Published the prospective amendment at `b158dc24e959924bb0481ef18d1be35705833bfd`,
+  tree `cc507dd52b4811ec1183919e1a456a1774f15b75`. Independent review verified the
+  remote commit/tree/parent and exact document blobs before reference execution.
+- Added only an explicit supplemental example mode and independent reference
+  script; no production/default/capability change. Review caught a failure-recording
+  gap and approved saving captured attempts/reference outputs before propagating
+  failure. Published reviewed source `09b1aaa58c39fdf976e98aaa130abda890fd3776`,
+  tree `8479f35b5b8f857a7419372d4aca53c45ab0b5a5`, before execution.
+- Corrected release build succeeded in 1m30s; formatting, whitespace, traceability,
+  declared pre-push tests (261 + 168 passed, one existing ignore) and focused
+  warning-deny example Clippy pass. A 16:15 disconnect notification did not
+  interrupt an experiment: the 16:16:29 command succeeded, build was finished and
+  no invocation marker existed. No build or experiment was restarted in response.
+- One independent reference execution passed exact input IDs/masks/types and one
+  CPU forward, error 0. One fresh hosted owner/bootstrap then completed exactly
+  eight baseline plus eight serial runs. Exclusive invocation markers and exit
+  records prevent accidental retry. No tuning, seed choice or subsequent cohort.
+- All 32 hosted vectors pass (max error `8.940696716308594e-08`). Independent review
+  checked all 32 retained input bodies, every sample/count/maximum, both Starts
+  and append-only history. Runs 0–2 were FIFO; runs 3–4 selected B then A from
+  maxima 13.471875/12.854651 ms. Run 4's B sample 21.126173 ms caused runs 5–7 to
+  correctly select A then B. Probe exit 0; reviewer accepts the missing C3 case.
+- Supplemental wall medians: baseline 55.0731265 ms, serial 58.903377 ms. No speedup
+  or isolated preprocessing-causality claim. Original exit-1 cohort, slower
+  54.031291/63.954510 ms medians, original report and all 13 checksums are unchanged.
+- New summary/reference/source manifest and full raw exports/retained bodies are
+  packaged separately under `reports/c3-768b-v1`; every run is reported in the
+  [supplemental report](reports/2026-10-12-c3-768b-results.md). Final source/evidence
+  review, published-head verification and normal CI govern handoff. No further
+  experiment, M2, GUI, merge/deployment, GPU or remote work is admitted.

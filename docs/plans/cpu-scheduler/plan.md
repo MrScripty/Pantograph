@@ -4,14 +4,15 @@
 
 **Current phase:** M1 — retained CPU composition and real two-Ready qualification.
 
-**Next slice:** Publish and independently admit the fixed C3 supplemental
-768-byte/5-byte coverage protocol below, then execute it once and report every
-result. The original failed cohort and slower baseline remain unchanged.
+**Next slice:** Finish publication gates and hand off the independently reviewed
+single C3 supplement. The original failed cohort and slower baseline remain
+unchanged. No further experiment or M2 work is admitted.
 
-**Acceptance status:** `partial` for M1: actual hosted CPU output, independent
-ranking and measured comparison pass; final release second-position proof remains
-pending. Ordinary CI passed at `938bc89e`; future changes require their applicable
-gates. No full research scheduler/default change.
+**Acceptance status:** M1 evidence reviewed, final publication gates pending:
+actual hosted CPU output, independent ranking and measured comparison pass;
+second-position coverage passes in the separately admitted `c3-768b-v1` cohort.
+The original release result stays negative. Ordinary CI passed at `938bc89e`;
+changed heads require their applicable gates. No full research scheduler/default change.
 
 **Execution ledger:** [execution-ledger.md](execution-ledger.md)
 
@@ -215,7 +216,7 @@ native action remains advisory/Blocked; contract tests never substitute for it.
 | --- | --- | --- | --- | --- |
 | C1 | Default construction/dispatch remains unchanged; serial port replacement still refuses; conflicting modes reject before composition. Existing default tests plus focused composition regressions. | contract / representative / automated | passed | 25 focused composition tests; default/port protection/early conflicts pass. See [M1 report](reports/2026-10-12-retained-ready-m1.md). |
 | C2 | From public graph/session submission, ordinary readiness/candidate providers dispatch real resident Candle CPU forwards for both Ready tasks and retain exact numerical outputs. Committed fixture/independent reference vectors and actual ledger owner events are oracles. | integration / required-real CPU / automated | passed | Final corrected-source release: all 32 vectors from public hosted 8+8 runs match independent reference; ordinary readiness/candidates, same-run resume and native output verified. |
-| C3 | After at least three fresh successful samples per exact workload, the recorded first-two decision matches independently calculated maxima and actual start order. Use real monotonic measurements; assert the observed winner, not an assumed faster text. If ties/no usable separation prevent proving second-position selection, record that claim pending; never inject clocks/delays or retry until a desired winner. | integration / required-real CPU / automated | partial | Final release raw counts/maxima, chosen winner and actual Start order pass. All five ranked runs choose position zero; second-position criterion remains pending (probe exit 1). Earlier dev five second starts are supporting evidence only; no winner-seeking rerun. |
+| C3 | After at least three fresh successful samples per exact workload, the recorded first-two decision matches independently calculated maxima and actual start order. Use real monotonic measurements; assert the observed winner, not an assumed faster text. If ties/no usable separation prevent proving second-position selection, record that claim pending; never inject clocks/delays or retry until a desired winner. | integration / required-real CPU / automated | passed by admitted supplement; original cohort negative | Original release raw counts/maxima/order pass but no second-position Start (exit 1), unchanged. One prospectively published `c3-768b-v1` cohort independently verifies all raw samples/outputs and two actual second-position Starts, followed by three correct first-position Starts; exit 0, no retry. See [supplement](reports/2026-10-12-c3-768b-results.md). |
 | C4a | Missing/stale/foreign-generation observations use explicit FIFO or fail closed as declared; owner replacement after ranking, cancellation, dropped receiver and failed cleanup retain custody and exclude training. | focused / simulated protocol / automated | passed | Full workflow-service 979 tests pass, including private InvalidClock partial-state reset and direct/supervised timed run/resume no-side-effect refusal. |
 | C4b | Actual CPU cancellation preserves custody and prevents cancelled training. Reuse requires matched cleanup; otherwise the correct result is fenced/poisoned and the next attempt refuses. No new recovery is authorized. | integration / required-real CPU / automated | passed | Two actual native post-drain cancellation/next-attempt regressions pass; controlled metadata remains separate from C2; matched cleanup or conservative fencing, no compute-cancellation claim. |
 | C5 | Record a representative paired-workload baseline and opt-in comparison: outputs, selected order, sample provenance, queue/service/workflow elapsed times, selector-only scheduling cost and environment (total scheduler CPU remains unisolated). Repeated release observations disclose variability; do not promise general speedup. | integration / required-real CPU / automated | passed (scoped) | Fixed final release 8+8 comparison, all raw values and min/median/max in [M1 report](reports/2026-10-12-retained-ready-m1.md). Selector-only cost disclosed; total scheduler CPU unisolated, no speedup observed. |
@@ -357,13 +358,15 @@ ceremonies. GPU/remote remain Deferred until the stated environment and authorit
 
 ## Final Acceptance
 
-M0 is accepted. M1 implementation and actual CPU/ranking/measurement subcriteria
-are reviewed, but final release second-position evidence remains pending. C6
-passed at `938bc89e`; later changes require their applicable gates.
-The fixed cohort correctly chose position zero and exited 1 for that missing
-criterion; do not rerun for a preferred winner or weaken the oracle. The
-reviewed implementation remains draft PR #73 with this limitation. M2 is not admitted by
-these partial results. See the [M1 report](reports/2026-10-12-retained-ready-m1.md).
+M0 is accepted. M1 implementation and CPU/ranking/measurement evidence are
+independently reviewed. The original release cohort remains negative for
+second-position coverage and retains exit 1. The separately admitted single
+`c3-768b-v1` supplement closes that C3 case with two real second-position Starts
+and independent raw sample/output/order verification; neither cohort shows
+speedup. C6 passed at `938bc89e`; final changed-head gates still govern handoff.
+The implementation remains draft PR #73. No M2 or broader scheduler completion is
+admitted by these results. See the original [M1 report](reports/2026-10-12-retained-ready-m1.md)
+and the separate [supplement](reports/2026-10-12-c3-768b-results.md).
 
 ### M1 resident-accounting qualification correction (2026-10-12)
 
