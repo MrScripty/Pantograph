@@ -113,6 +113,7 @@ mod runtime_host_load_target;
 mod runtime_host_media_artifact_sink;
 mod runtime_host_owned_audio;
 pub use runtime_host_owned_audio::OwnedAudioInputStore;
+mod runtime_host_node_status;
 mod runtime_host_observation;
 #[allow(dead_code)]
 mod runtime_host_package_facts;

@@ -1,0 +1,60 @@
+{
+  "backend": "candle",
+  "backends": [
+    "candle"
+  ],
+  "device": "cpu_f32",
+  "image_generation_executed": false,
+  "model_acquisition_bytes": 0,
+  "model_id": "embedding/qualification/synthetic-bert-8",
+  "model_ids": [
+    "embedding/qualification/synthetic-bert-8",
+    "embedding/qualification/synthetic-bert-12"
+  ],
+  "model_training": "untrained",
+  "response": {
+    "outputs": [
+      {
+        "node_id": "context-vector",
+        "port_id": "vector",
+        "value": [
+          -0.2625748813152313,
+          -0.1011393666267395,
+          -0.15393216907978058,
+          -0.12632633745670319,
+          -0.19659502804279327,
+          0.5189638733863831,
+          0.43231022357940674,
+          -0.09220199286937714,
+          -0.08725330978631973,
+          0.10668134689331055,
+          0.40417203307151794,
+          -0.44210436940193176
+        ]
+      },
+      {
+        "node_id": "report",
+        "port_id": "text",
+        "value": "different world\nhello\nImage unavailable: no diffusion weights or typed external image source. Text generation is unqualified: Python dependency handoff is not implemented in this host.\ncandle.cpu"
+      },
+      {
+        "node_id": "vectors",
+        "port_id": "vector",
+        "value": [
+          0.39243683218955994,
+          -0.5832244753837585,
+          0.2374337762594223,
+          0.369176983833313,
+          -0.3816801607608795,
+          0.3008309304714203,
+          -0.06527791917324066,
+          -0.2696959674358368
+        ]
+      }
+    ],
+    "timing_ms": 189,
+    "workflow_run_id": "run_b7478981-5ac7-4a93-8546-2d34a1456caf"
+  },
+  "scope": "live_browser_host_native_result",
+  "submit_to_response_wall_ms": 293.119665
+}

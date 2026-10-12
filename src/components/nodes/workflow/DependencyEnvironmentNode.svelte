@@ -50,8 +50,9 @@
     DEPENDENCY_ENVIRONMENT_ACTION_COORDINATOR_CONTEXT,
     type DependencyEnvironmentActionCoordinator,
   } from '../../dependencyEnvironmentActionContext.ts';
-  import { edges, nodes, updateNodeData } from '../../../stores/workflowStore';
+  import { edges, nodes, updateNodeData, updateNodeRuntimeData } from '../../../stores/workflowStore';
   import { listen } from '@tauri-apps/api/event';
+  import { getWorkflowBrowserHost } from '../../../services/workflow/workflowBrowserTransport';
 
   let { id, data, selected = false }: DependencyEnvironmentNodeProps = $props();
 
@@ -102,6 +103,12 @@
     updateNodeData(id, buildDependencyEnvironmentNodeData(currentNodeState()));
   }
 
+  function displayActivityState() {
+    // Activity is runtime display data. Writing it as an authored mutation after
+    // Resolve would advance the graph revision and invalidate the owner's proof.
+    updateNodeRuntimeData(id, { activity_log: activityLog });
+  }
+
   async function runDependencyEnvironmentAction(
     action: DependencyEnvironmentNodeAction
   ) {
@@ -137,7 +144,7 @@
     );
     if (next === activityLog) return;
     activityLog = next;
-    persistNodeState();
+    displayActivityState();
   }
 
   function matchesActivityEvent(payload: DependencyActivityEvent): boolean {
@@ -217,7 +224,7 @@
 
   function clearActivityLog() {
     activityLog = [];
-    persistNodeState();
+    displayActivityState();
   }
 
   function handleBindingPythonExecutableChange(bindingId: string, event: Event) {
@@ -290,6 +297,9 @@
   }
 
   onMount(() => {
+    // HTTP hosts return action results directly; native activity streaming is
+    // available only in the desktop transport. Validation is polled separately.
+    if (getWorkflowBrowserHost()) return;
     let unlisten: (() => void) | null = null;
 
     setupDependencyEnvironmentActivityListener({
@@ -297,7 +307,7 @@
       matchesActivityEvent,
       renderActivityEvent,
       appendActivityLine,
-      persistNodeState,
+      persistNodeState: displayActivityState,
       shouldRunModeAction: () => mode === 'auto' && hasSidecarAssociation,
       runModeAction,
     })

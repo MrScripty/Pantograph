@@ -1,0 +1,1669 @@
+{
+  "cases": [
+    {
+      "case": "weights-only",
+      "observation": {
+        "execution_descriptor_response": {
+          "dependency_resolution": {
+            "backend_key": "candle",
+            "bindings": [],
+            "dependency_contract_version": 1,
+            "model_id": "embedding/qualification/weights-only",
+            "platform_key": "linux",
+            "validation_errors": [],
+            "validation_state": "resolved"
+          },
+          "entry_path": "<probe_root>/shared-resources/models/embedding/qualification/weights-only/model.safetensors",
+          "execution_contract_version": 1,
+          "model_id": "embedding/qualification/weights-only",
+          "model_type": "embedding",
+          "recommended_backend": "candle",
+          "runtime_engine_hints": [
+            "candle"
+          ],
+          "storage_kind": "library_owned",
+          "task_type_primary": "feature-extraction",
+          "validation_state": "valid"
+        },
+        "expected_kind_response": {
+          "artifact_state": "ready",
+          "entry_path_state": "ready",
+          "target": {
+            "artifact_kind": "hf_compatible_directory",
+            "load_path_kind": "directory",
+            "local_load_path": "<probe_root>/shared-resources/models/embedding/qualification/weights-only/model.safetensors",
+            "model_ref": {
+              "model_id": "embedding/qualification/weights-only",
+              "model_ref_contract_version": 1,
+              "selected_artifact_id": "main",
+              "selected_artifact_path": "<probe_root>/shared-resources/models/embedding/qualification/weights-only/model.safetensors"
+            },
+            "package_facts_contract_version": 3,
+            "storage_kind": "library_owned",
+            "validation_state": "valid"
+          }
+        },
+        "filesystem": {
+          "components": [
+            {
+              "absolute": true,
+              "bytes": 6464,
+              "exists": true,
+              "is_directory": false,
+              "is_file": true,
+              "path": "<probe_root>/shared-resources/models/embedding/qualification/weights-only/model.safetensors"
+            },
+            {
+              "absolute": true,
+              "bytes": 573,
+              "exists": true,
+              "is_directory": false,
+              "is_file": true,
+              "path": "<probe_root>/shared-resources/models/embedding/qualification/weights-only/config.json"
+            },
+            {
+              "absolute": true,
+              "bytes": 1028,
+              "exists": true,
+              "is_directory": false,
+              "is_file": true,
+              "path": "<probe_root>/shared-resources/models/embedding/qualification/weights-only/tokenizer.json"
+            },
+            {
+              "absolute": true,
+              "bytes": 350,
+              "exists": true,
+              "is_directory": false,
+              "is_file": true,
+              "path": "<probe_root>/shared-resources/models/embedding/qualification/weights-only/modules.json"
+            },
+            {
+              "absolute": true,
+              "bytes": 46,
+              "exists": true,
+              "is_directory": false,
+              "is_file": true,
+              "path": "<probe_root>/shared-resources/models/embedding/qualification/weights-only/sentence_bert_config.json"
+            },
+            {
+              "absolute": true,
+              "bytes": 295,
+              "exists": true,
+              "is_directory": false,
+              "is_file": true,
+              "path": "<probe_root>/shared-resources/models/embedding/qualification/weights-only/1_Pooling/config.json"
+            }
+          ],
+          "model_root": {
+            "absolute": true,
+            "bytes": 4096,
+            "exists": true,
+            "is_directory": true,
+            "is_file": false,
+            "path": "<probe_root>/shared-resources/models/embedding/qualification/weights-only"
+          },
+          "returned_target": {
+            "absolute": true,
+            "bytes": 6464,
+            "exists": true,
+            "is_directory": false,
+            "is_file": true,
+            "path": "<probe_root>/shared-resources/models/embedding/qualification/weights-only/model.safetensors"
+          }
+        },
+        "indexed_record": {
+          "cleanedName": "synthetic-bert-8",
+          "hashes": {},
+          "id": "embedding/qualification/weights-only",
+          "metadata": {
+            "added_date": null,
+            "architecture_family": null,
+            "base_model": null,
+            "bundle_format": null,
+            "config_model_type": null,
+            "custom_code_sources": null,
+            "dependency_bindings": [],
+            "download_has_part_files": false,
+            "download_incomplete": false,
+            "download_missing_expected_files": 0,
+            "download_progress": null,
+            "download_url": null,
+            "downloaded_size_bytes": 12866,
+            "entry_path": "<probe_root>/shared-resources/models/embedding/qualification/weights-only",
+            "expected_files": null,
+            "family": "qualification",
+            "files": null,
+            "huggingface_evidence": null,
+            "import_state": "ready",
+            "inference_settings": null,
+            "input_modalities": [
+              "text"
+            ],
+            "license_status": null,
+            "lookup_attempts": null,
+            "match_confidence": null,
+            "match_method": null,
+            "match_source": null,
+            "metadata_needs_review": true,
+            "model_card": null,
+            "model_type_resolution_confidence": 0.65,
+            "model_type_resolution_source": "model-type-resolver-medium-hints",
+            "notes": null,
+            "output_modalities": [
+              "embedding"
+            ],
+            "pending_online_lookup": null,
+            "pipeline_class": null,
+            "pipeline_tag": "feature-extraction",
+            "preview_image": null,
+            "primary_format": null,
+            "publisher": null,
+            "quantization": null,
+            "recommended_backend": "candle",
+            "release_date": null,
+            "repo_id": null,
+            "requires_custom_code": null,
+            "review_reasons": [
+              "model-type-low-confidence"
+            ],
+            "review_status": "pending",
+            "runtime_engine_hints": [
+              "candle"
+            ],
+            "schema_version": 2,
+            "selected_artifact_files": [
+              "model.safetensors"
+            ],
+            "selected_artifact_id": "main",
+            "selected_artifact_quant": null,
+            "size_bytes": null,
+            "source_path": "<probe_root>/shared-resources/models/embedding/qualification/weights-only",
+            "storage_kind": "library_owned",
+            "task_classification_confidence": 1.0,
+            "task_classification_source": "hf-pipeline-tag",
+            "task_type_primary": "feature-extraction",
+            "task_type_secondary": null,
+            "updated_date": "2026-10-11T21:09:16.894430063+00:00",
+            "upstream_revision": null,
+            "validation_errors": null,
+            "validation_state": "valid"
+          },
+          "modelType": "embedding",
+          "officialName": "Synthetic-BERT-8",
+          "path": "<probe_root>/shared-resources/models/embedding/qualification/weights-only",
+          "tags": [],
+          "updatedAt": "2026-10-11T21:09:16.894430063+00:00"
+        },
+        "load_target_request": {
+          "consumer": {
+            "consumer_name": "pantograph-embedded-runtime",
+            "runtime_family": "candle.cpu",
+            "task_kind": "embedding"
+          },
+          "model_ref": {
+            "model_id": "embedding/qualification/weights-only",
+            "model_ref_contract_version": 1,
+            "selected_artifact_id": "main"
+          },
+          "resolution_mode": "owner_fresh"
+        },
+        "model_id": "embedding/qualification/weights-only",
+        "owner_fresh_response": {
+          "artifact_state": "ready",
+          "entry_path_state": "ready",
+          "target": {
+            "artifact_kind": "hf_compatible_directory",
+            "load_path_kind": "directory",
+            "local_load_path": "<probe_root>/shared-resources/models/embedding/qualification/weights-only/model.safetensors",
+            "model_ref": {
+              "model_id": "embedding/qualification/weights-only",
+              "model_ref_contract_version": 1,
+              "selected_artifact_id": "main",
+              "selected_artifact_path": "<probe_root>/shared-resources/models/embedding/qualification/weights-only/model.safetensors"
+            },
+            "package_facts_contract_version": 3,
+            "storage_kind": "library_owned",
+            "validation_state": "valid"
+          }
+        },
+        "package_facts_response": {
+          "artifact": {
+            "artifact_kind": "hf_compatible_directory",
+            "entry_path": "<probe_root>/shared-resources/models/embedding/qualification/weights-only/model.safetensors",
+            "logical_size": {
+              "files": [
+                {
+                  "relative_path": "config.json",
+                  "role": "component_config",
+                  "size_bytes": 573,
+                  "status": "present",
+                  "value_source": "filesystem_metadata"
+                },
+                {
+                  "relative_path": "model.safetensors",
+                  "role": "weight",
+                  "size_bytes": 6464,
+                  "status": "present",
+                  "value_source": "filesystem_metadata"
+                },
+                {
+                  "relative_path": "tokenizer.json",
+                  "role": "tokenizer",
+                  "size_bytes": 1028,
+                  "status": "present",
+                  "value_source": "filesystem_metadata"
+                }
+              ],
+              "total_size_bytes": 8065,
+              "value_source": "component_layout"
+            },
+            "selected_files": [
+              "config.json",
+              "model.safetensors",
+              "tokenizer.json"
+            ],
+            "storage_kind": "library_owned",
+            "validation_state": "valid"
+          },
+          "backend_hints": {
+            "accepted": [
+              "candle"
+            ],
+            "raw": [
+              "candle"
+            ]
+          },
+          "components": [
+            {
+              "class_name": "BertModel",
+              "kind": "config",
+              "relative_path": "config.json",
+              "status": "present"
+            },
+            {
+              "kind": "tokenizer",
+              "message": "version=1.0; model=WordPiece; normalizer=BertNormalizer; pre_tokenizer=BertPreTokenizer",
+              "relative_path": "tokenizer.json",
+              "status": "present"
+            },
+            {
+              "kind": "weights",
+              "relative_path": "model.safetensors",
+              "status": "present"
+            }
+          ],
+          "custom_code": {
+            "class_references": [
+              {
+                "class_name": "BertModel",
+                "kind": "config",
+                "source_path": "config.json"
+              }
+            ],
+            "requires_custom_code": false
+          },
+          "generation_defaults": {
+            "defaults": {
+              "pad_token_id": 0,
+              "use_cache": false
+            },
+            "diagnostics": [
+              {
+                "code": "legacy_config_generation_defaults",
+                "message": "generation defaults were extracted from config.json because generation_config.json is absent",
+                "path": "config.json"
+              }
+            ],
+            "source_path": "config.json",
+            "status": "present"
+          },
+          "inspection_manifest": {
+            "entries": [
+              {
+                "relative_path": "config.json",
+                "size_bytes": 573,
+                "status": "present",
+                "value_source": "filesystem_metadata"
+              },
+              {
+                "relative_path": "model.safetensors",
+                "size_bytes": 6464,
+                "status": "present",
+                "value_source": "filesystem_metadata"
+              },
+              {
+                "relative_path": "tokenizer.json",
+                "size_bytes": 1028,
+                "status": "present",
+                "value_source": "filesystem_metadata"
+              }
+            ]
+          },
+          "model_ref": {
+            "model_id": "embedding/qualification/weights-only",
+            "model_ref_contract_version": 1,
+            "selected_artifact_id": "main",
+            "selected_artifact_path": "<probe_root>/shared-resources/models/embedding/qualification/weights-only/model.safetensors"
+          },
+          "package_facts_contract_version": 3,
+          "task": {
+            "input_modalities": [
+              "text"
+            ],
+            "output_modalities": [
+              "embedding"
+            ],
+            "pipeline_tag": "feature-extraction",
+            "task_type_primary": "feature-extraction"
+          },
+          "transformers": {
+            "architectures": [
+              "BertModel"
+            ],
+            "config_model_type": "bert",
+            "config_status": "present",
+            "generation_config_status": "missing",
+            "selected_files": [
+              "config.json"
+            ],
+            "torch_dtype": "float32"
+          }
+        },
+        "read_only_indexed_response": {
+          "artifact_state": "ready",
+          "entry_path_state": "ready",
+          "target": {
+            "artifact_kind": "hf_compatible_directory",
+            "load_path_kind": "directory",
+            "local_load_path": "<probe_root>/shared-resources/models/embedding/qualification/weights-only/model.safetensors",
+            "model_ref": {
+              "model_id": "embedding/qualification/weights-only",
+              "model_ref_contract_version": 1,
+              "selected_artifact_id": "main",
+              "selected_artifact_path": "<probe_root>/shared-resources/models/embedding/qualification/weights-only/model.safetensors"
+            },
+            "package_facts_contract_version": 3,
+            "storage_kind": "library_owned",
+            "validation_state": "valid"
+          }
+        }
+      },
+      "setup": "seeded library-owned metadata + rebuild_model_index"
+    },
+    {
+      "case": "complete-files",
+      "observation": {
+        "execution_descriptor_response": {
+          "dependency_resolution": {
+            "backend_key": "candle",
+            "bindings": [],
+            "dependency_contract_version": 1,
+            "model_id": "embedding/qualification/complete-files",
+            "platform_key": "linux",
+            "validation_errors": [],
+            "validation_state": "resolved"
+          },
+          "entry_path": "<probe_root>/shared-resources/models/embedding/qualification/complete-files/model.safetensors",
+          "execution_contract_version": 1,
+          "model_id": "embedding/qualification/complete-files",
+          "model_type": "embedding",
+          "recommended_backend": "candle",
+          "runtime_engine_hints": [
+            "candle"
+          ],
+          "storage_kind": "library_owned",
+          "task_type_primary": "feature-extraction",
+          "validation_state": "valid"
+        },
+        "expected_kind_response": {
+          "artifact_state": "ready",
+          "entry_path_state": "ready",
+          "target": {
+            "artifact_kind": "hf_compatible_directory",
+            "load_path_kind": "directory",
+            "local_load_path": "<probe_root>/shared-resources/models/embedding/qualification/complete-files/model.safetensors",
+            "model_ref": {
+              "model_id": "embedding/qualification/complete-files",
+              "model_ref_contract_version": 1,
+              "selected_artifact_id": "main",
+              "selected_artifact_path": "<probe_root>/shared-resources/models/embedding/qualification/complete-files/model.safetensors"
+            },
+            "package_facts_contract_version": 3,
+            "storage_kind": "library_owned",
+            "validation_state": "valid"
+          }
+        },
+        "filesystem": {
+          "components": [
+            {
+              "absolute": true,
+              "bytes": 6464,
+              "exists": true,
+              "is_directory": false,
+              "is_file": true,
+              "path": "<probe_root>/shared-resources/models/embedding/qualification/complete-files/model.safetensors"
+            },
+            {
+              "absolute": true,
+              "bytes": 573,
+              "exists": true,
+              "is_directory": false,
+              "is_file": true,
+              "path": "<probe_root>/shared-resources/models/embedding/qualification/complete-files/config.json"
+            },
+            {
+              "absolute": true,
+              "bytes": 1028,
+              "exists": true,
+              "is_directory": false,
+              "is_file": true,
+              "path": "<probe_root>/shared-resources/models/embedding/qualification/complete-files/tokenizer.json"
+            },
+            {
+              "absolute": true,
+              "bytes": 350,
+              "exists": true,
+              "is_directory": false,
+              "is_file": true,
+              "path": "<probe_root>/shared-resources/models/embedding/qualification/complete-files/modules.json"
+            },
+            {
+              "absolute": true,
+              "bytes": 46,
+              "exists": true,
+              "is_directory": false,
+              "is_file": true,
+              "path": "<probe_root>/shared-resources/models/embedding/qualification/complete-files/sentence_bert_config.json"
+            },
+            {
+              "absolute": true,
+              "bytes": 295,
+              "exists": true,
+              "is_directory": false,
+              "is_file": true,
+              "path": "<probe_root>/shared-resources/models/embedding/qualification/complete-files/1_Pooling/config.json"
+            }
+          ],
+          "model_root": {
+            "absolute": true,
+            "bytes": 4096,
+            "exists": true,
+            "is_directory": true,
+            "is_file": false,
+            "path": "<probe_root>/shared-resources/models/embedding/qualification/complete-files"
+          },
+          "returned_target": {
+            "absolute": true,
+            "bytes": 6464,
+            "exists": true,
+            "is_directory": false,
+            "is_file": true,
+            "path": "<probe_root>/shared-resources/models/embedding/qualification/complete-files/model.safetensors"
+          }
+        },
+        "indexed_record": {
+          "cleanedName": "synthetic-bert-8",
+          "hashes": {},
+          "id": "embedding/qualification/complete-files",
+          "metadata": {
+            "added_date": null,
+            "architecture_family": null,
+            "base_model": null,
+            "bundle_format": null,
+            "config_model_type": null,
+            "custom_code_sources": null,
+            "dependency_bindings": [],
+            "download_has_part_files": false,
+            "download_incomplete": false,
+            "download_missing_expected_files": 0,
+            "download_progress": null,
+            "download_url": null,
+            "downloaded_size_bytes": 12866,
+            "entry_path": "<probe_root>/shared-resources/models/embedding/qualification/complete-files",
+            "expected_files": null,
+            "family": "qualification",
+            "files": null,
+            "huggingface_evidence": null,
+            "import_state": "ready",
+            "inference_settings": null,
+            "input_modalities": [
+              "text"
+            ],
+            "license_status": null,
+            "lookup_attempts": null,
+            "match_confidence": null,
+            "match_method": null,
+            "match_source": null,
+            "metadata_needs_review": true,
+            "model_card": null,
+            "model_type_resolution_confidence": 0.65,
+            "model_type_resolution_source": "model-type-resolver-medium-hints",
+            "notes": null,
+            "output_modalities": [
+              "embedding"
+            ],
+            "pending_online_lookup": null,
+            "pipeline_class": null,
+            "pipeline_tag": "feature-extraction",
+            "preview_image": null,
+            "primary_format": null,
+            "publisher": null,
+            "quantization": null,
+            "recommended_backend": "candle",
+            "release_date": null,
+            "repo_id": null,
+            "requires_custom_code": null,
+            "review_reasons": [
+              "model-type-low-confidence"
+            ],
+            "review_status": "pending",
+            "runtime_engine_hints": [
+              "candle"
+            ],
+            "schema_version": 2,
+            "selected_artifact_files": [
+              "model.safetensors",
+              "config.json",
+              "tokenizer.json",
+              "modules.json",
+              "sentence_bert_config.json",
+              "1_Pooling/config.json"
+            ],
+            "selected_artifact_id": "main",
+            "selected_artifact_quant": null,
+            "size_bytes": null,
+            "source_path": "<probe_root>/shared-resources/models/embedding/qualification/complete-files",
+            "storage_kind": "library_owned",
+            "task_classification_confidence": 1.0,
+            "task_classification_source": "hf-pipeline-tag",
+            "task_type_primary": "feature-extraction",
+            "task_type_secondary": null,
+            "updated_date": "2026-10-11T21:09:16.957399574+00:00",
+            "upstream_revision": null,
+            "validation_errors": null,
+            "validation_state": "valid"
+          },
+          "modelType": "embedding",
+          "officialName": "Synthetic-BERT-8",
+          "path": "<probe_root>/shared-resources/models/embedding/qualification/complete-files",
+          "tags": [],
+          "updatedAt": "2026-10-11T21:09:16.957399574+00:00"
+        },
+        "load_target_request": {
+          "consumer": {
+            "consumer_name": "pantograph-embedded-runtime",
+            "runtime_family": "candle.cpu",
+            "task_kind": "embedding"
+          },
+          "model_ref": {
+            "model_id": "embedding/qualification/complete-files",
+            "model_ref_contract_version": 1,
+            "selected_artifact_id": "main"
+          },
+          "resolution_mode": "owner_fresh"
+        },
+        "model_id": "embedding/qualification/complete-files",
+        "owner_fresh_response": {
+          "artifact_state": "ready",
+          "entry_path_state": "ready",
+          "target": {
+            "artifact_kind": "hf_compatible_directory",
+            "load_path_kind": "directory",
+            "local_load_path": "<probe_root>/shared-resources/models/embedding/qualification/complete-files/model.safetensors",
+            "model_ref": {
+              "model_id": "embedding/qualification/complete-files",
+              "model_ref_contract_version": 1,
+              "selected_artifact_id": "main",
+              "selected_artifact_path": "<probe_root>/shared-resources/models/embedding/qualification/complete-files/model.safetensors"
+            },
+            "package_facts_contract_version": 3,
+            "storage_kind": "library_owned",
+            "validation_state": "valid"
+          }
+        },
+        "package_facts_response": {
+          "artifact": {
+            "artifact_kind": "hf_compatible_directory",
+            "entry_path": "<probe_root>/shared-resources/models/embedding/qualification/complete-files/model.safetensors",
+            "logical_size": {
+              "files": [
+                {
+                  "relative_path": "1_Pooling/config.json",
+                  "role": "component_config",
+                  "size_bytes": 295,
+                  "status": "present",
+                  "value_source": "filesystem_metadata"
+                },
+                {
+                  "relative_path": "config.json",
+                  "role": "component_config",
+                  "size_bytes": 573,
+                  "status": "present",
+                  "value_source": "filesystem_metadata"
+                },
+                {
+                  "relative_path": "model.safetensors",
+                  "role": "weight",
+                  "size_bytes": 6464,
+                  "status": "present",
+                  "value_source": "filesystem_metadata"
+                },
+                {
+                  "relative_path": "tokenizer.json",
+                  "role": "tokenizer",
+                  "size_bytes": 1028,
+                  "status": "present",
+                  "value_source": "filesystem_metadata"
+                }
+              ],
+              "total_size_bytes": 8360,
+              "value_source": "component_layout"
+            },
+            "selected_files": [
+              "1_Pooling/config.json",
+              "config.json",
+              "model.safetensors",
+              "modules.json",
+              "sentence_bert_config.json",
+              "tokenizer.json"
+            ],
+            "storage_kind": "library_owned",
+            "validation_state": "valid"
+          },
+          "backend_hints": {
+            "accepted": [
+              "candle"
+            ],
+            "raw": [
+              "candle"
+            ]
+          },
+          "components": [
+            {
+              "class_name": "BertModel",
+              "kind": "config",
+              "relative_path": "config.json",
+              "status": "present"
+            },
+            {
+              "kind": "tokenizer",
+              "message": "version=1.0; model=WordPiece; normalizer=BertNormalizer; pre_tokenizer=BertPreTokenizer",
+              "relative_path": "tokenizer.json",
+              "status": "present"
+            },
+            {
+              "kind": "weights",
+              "relative_path": "model.safetensors",
+              "status": "present"
+            }
+          ],
+          "custom_code": {
+            "class_references": [
+              {
+                "class_name": "BertModel",
+                "kind": "config",
+                "source_path": "config.json"
+              }
+            ],
+            "requires_custom_code": false
+          },
+          "generation_defaults": {
+            "defaults": {
+              "pad_token_id": 0,
+              "use_cache": false
+            },
+            "diagnostics": [
+              {
+                "code": "legacy_config_generation_defaults",
+                "message": "generation defaults were extracted from config.json because generation_config.json is absent",
+                "path": "config.json"
+              }
+            ],
+            "source_path": "config.json",
+            "status": "present"
+          },
+          "inspection_manifest": {
+            "entries": [
+              {
+                "relative_path": "1_Pooling/config.json",
+                "size_bytes": 295,
+                "status": "present",
+                "value_source": "filesystem_metadata"
+              },
+              {
+                "relative_path": "config.json",
+                "size_bytes": 573,
+                "status": "present",
+                "value_source": "filesystem_metadata"
+              },
+              {
+                "relative_path": "model.safetensors",
+                "size_bytes": 6464,
+                "status": "present",
+                "value_source": "filesystem_metadata"
+              },
+              {
+                "relative_path": "modules.json",
+                "size_bytes": 350,
+                "status": "present",
+                "value_source": "filesystem_metadata"
+              },
+              {
+                "relative_path": "sentence_bert_config.json",
+                "size_bytes": 46,
+                "status": "present",
+                "value_source": "filesystem_metadata"
+              },
+              {
+                "relative_path": "tokenizer.json",
+                "size_bytes": 1028,
+                "status": "present",
+                "value_source": "filesystem_metadata"
+              }
+            ]
+          },
+          "model_ref": {
+            "model_id": "embedding/qualification/complete-files",
+            "model_ref_contract_version": 1,
+            "selected_artifact_id": "main",
+            "selected_artifact_path": "<probe_root>/shared-resources/models/embedding/qualification/complete-files/model.safetensors"
+          },
+          "package_facts_contract_version": 3,
+          "task": {
+            "input_modalities": [
+              "text"
+            ],
+            "output_modalities": [
+              "embedding"
+            ],
+            "pipeline_tag": "feature-extraction",
+            "task_type_primary": "feature-extraction"
+          },
+          "transformers": {
+            "architectures": [
+              "BertModel"
+            ],
+            "config_model_type": "bert",
+            "config_status": "present",
+            "generation_config_status": "missing",
+            "selected_files": [
+              "config.json"
+            ],
+            "torch_dtype": "float32"
+          }
+        },
+        "read_only_indexed_response": {
+          "artifact_state": "ready",
+          "entry_path_state": "ready",
+          "target": {
+            "artifact_kind": "hf_compatible_directory",
+            "load_path_kind": "directory",
+            "local_load_path": "<probe_root>/shared-resources/models/embedding/qualification/complete-files/model.safetensors",
+            "model_ref": {
+              "model_id": "embedding/qualification/complete-files",
+              "model_ref_contract_version": 1,
+              "selected_artifact_id": "main",
+              "selected_artifact_path": "<probe_root>/shared-resources/models/embedding/qualification/complete-files/model.safetensors"
+            },
+            "package_facts_contract_version": 3,
+            "storage_kind": "library_owned",
+            "validation_state": "valid"
+          }
+        }
+      },
+      "setup": "seeded library-owned metadata + rebuild_model_index"
+    },
+    {
+      "case": "owner-inferred",
+      "observation": {
+        "execution_descriptor_response": {
+          "dependency_resolution": {
+            "backend_key": "candle",
+            "bindings": [],
+            "dependency_contract_version": 1,
+            "model_id": "embedding/qualification/owner-inferred",
+            "platform_key": "linux",
+            "validation_errors": [],
+            "validation_state": "resolved"
+          },
+          "entry_path": "<probe_root>/shared-resources/models/embedding/qualification/owner-inferred/model.safetensors",
+          "execution_contract_version": 1,
+          "model_id": "embedding/qualification/owner-inferred",
+          "model_type": "embedding",
+          "recommended_backend": "candle",
+          "runtime_engine_hints": [
+            "candle"
+          ],
+          "storage_kind": "library_owned",
+          "task_type_primary": "feature-extraction",
+          "validation_state": "valid"
+        },
+        "expected_kind_response": {
+          "artifact_state": "ready",
+          "entry_path_state": "ready",
+          "target": {
+            "artifact_kind": "hf_compatible_directory",
+            "load_path_kind": "directory",
+            "local_load_path": "<probe_root>/shared-resources/models/embedding/qualification/owner-inferred/model.safetensors",
+            "model_ref": {
+              "model_id": "embedding/qualification/owner-inferred",
+              "model_ref_contract_version": 1,
+              "selected_artifact_id": "main",
+              "selected_artifact_path": "<probe_root>/shared-resources/models/embedding/qualification/owner-inferred/model.safetensors"
+            },
+            "package_facts_contract_version": 3,
+            "storage_kind": "library_owned",
+            "validation_state": "valid"
+          }
+        },
+        "filesystem": {
+          "components": [
+            {
+              "absolute": true,
+              "bytes": 6464,
+              "exists": true,
+              "is_directory": false,
+              "is_file": true,
+              "path": "<probe_root>/shared-resources/models/embedding/qualification/owner-inferred/model.safetensors"
+            },
+            {
+              "absolute": true,
+              "bytes": 573,
+              "exists": true,
+              "is_directory": false,
+              "is_file": true,
+              "path": "<probe_root>/shared-resources/models/embedding/qualification/owner-inferred/config.json"
+            },
+            {
+              "absolute": true,
+              "bytes": 1028,
+              "exists": true,
+              "is_directory": false,
+              "is_file": true,
+              "path": "<probe_root>/shared-resources/models/embedding/qualification/owner-inferred/tokenizer.json"
+            },
+            {
+              "absolute": true,
+              "bytes": 350,
+              "exists": true,
+              "is_directory": false,
+              "is_file": true,
+              "path": "<probe_root>/shared-resources/models/embedding/qualification/owner-inferred/modules.json"
+            },
+            {
+              "absolute": true,
+              "bytes": 46,
+              "exists": true,
+              "is_directory": false,
+              "is_file": true,
+              "path": "<probe_root>/shared-resources/models/embedding/qualification/owner-inferred/sentence_bert_config.json"
+            },
+            {
+              "absolute": true,
+              "bytes": 295,
+              "exists": true,
+              "is_directory": false,
+              "is_file": true,
+              "path": "<probe_root>/shared-resources/models/embedding/qualification/owner-inferred/1_Pooling/config.json"
+            }
+          ],
+          "model_root": {
+            "absolute": true,
+            "bytes": 4096,
+            "exists": true,
+            "is_directory": true,
+            "is_file": false,
+            "path": "<probe_root>/shared-resources/models/embedding/qualification/owner-inferred"
+          },
+          "returned_target": {
+            "absolute": true,
+            "bytes": 6464,
+            "exists": true,
+            "is_directory": false,
+            "is_file": true,
+            "path": "<probe_root>/shared-resources/models/embedding/qualification/owner-inferred/model.safetensors"
+          }
+        },
+        "indexed_record": {
+          "cleanedName": "synthetic-bert-8",
+          "hashes": {},
+          "id": "embedding/qualification/owner-inferred",
+          "metadata": {
+            "added_date": null,
+            "architecture_family": null,
+            "base_model": null,
+            "bundle_format": null,
+            "config_model_type": null,
+            "custom_code_sources": null,
+            "dependency_bindings": [],
+            "download_has_part_files": false,
+            "download_incomplete": false,
+            "download_missing_expected_files": 0,
+            "download_progress": null,
+            "download_url": null,
+            "downloaded_size_bytes": 12866,
+            "entry_path": "<probe_root>/shared-resources/models/embedding/qualification/owner-inferred",
+            "expected_files": null,
+            "family": "qualification",
+            "files": null,
+            "huggingface_evidence": null,
+            "import_state": "ready",
+            "inference_settings": null,
+            "input_modalities": [
+              "text"
+            ],
+            "license_status": null,
+            "lookup_attempts": null,
+            "match_confidence": null,
+            "match_method": null,
+            "match_source": null,
+            "metadata_needs_review": true,
+            "model_card": null,
+            "model_type_resolution_confidence": 0.65,
+            "model_type_resolution_source": "model-type-resolver-medium-hints",
+            "notes": null,
+            "output_modalities": [
+              "embedding"
+            ],
+            "pending_online_lookup": null,
+            "pipeline_class": null,
+            "pipeline_tag": "feature-extraction",
+            "preview_image": null,
+            "primary_format": null,
+            "publisher": null,
+            "quantization": null,
+            "recommended_backend": "candle",
+            "release_date": null,
+            "repo_id": null,
+            "requires_custom_code": null,
+            "review_reasons": [
+              "model-type-low-confidence"
+            ],
+            "review_status": "pending",
+            "runtime_engine_hints": [
+              "candle"
+            ],
+            "schema_version": 2,
+            "selected_artifact_files": null,
+            "selected_artifact_id": "main",
+            "selected_artifact_quant": null,
+            "size_bytes": null,
+            "source_path": "<probe_root>/shared-resources/models/embedding/qualification/owner-inferred",
+            "storage_kind": "library_owned",
+            "task_classification_confidence": 1.0,
+            "task_classification_source": "hf-pipeline-tag",
+            "task_type_primary": "feature-extraction",
+            "task_type_secondary": null,
+            "updated_date": "2026-10-11T21:09:16.927044464+00:00",
+            "upstream_revision": null,
+            "validation_errors": null,
+            "validation_state": "valid"
+          },
+          "modelType": "embedding",
+          "officialName": "Synthetic-BERT-8",
+          "path": "<probe_root>/shared-resources/models/embedding/qualification/owner-inferred",
+          "tags": [],
+          "updatedAt": "2026-10-11T21:09:16.927044464+00:00"
+        },
+        "load_target_request": {
+          "consumer": {
+            "consumer_name": "pantograph-embedded-runtime",
+            "runtime_family": "candle.cpu",
+            "task_kind": "embedding"
+          },
+          "model_ref": {
+            "model_id": "embedding/qualification/owner-inferred",
+            "model_ref_contract_version": 1,
+            "selected_artifact_id": "main"
+          },
+          "resolution_mode": "owner_fresh"
+        },
+        "model_id": "embedding/qualification/owner-inferred",
+        "owner_fresh_response": {
+          "artifact_state": "ready",
+          "entry_path_state": "ready",
+          "target": {
+            "artifact_kind": "hf_compatible_directory",
+            "load_path_kind": "directory",
+            "local_load_path": "<probe_root>/shared-resources/models/embedding/qualification/owner-inferred/model.safetensors",
+            "model_ref": {
+              "model_id": "embedding/qualification/owner-inferred",
+              "model_ref_contract_version": 1,
+              "selected_artifact_id": "main",
+              "selected_artifact_path": "<probe_root>/shared-resources/models/embedding/qualification/owner-inferred/model.safetensors"
+            },
+            "package_facts_contract_version": 3,
+            "storage_kind": "library_owned",
+            "validation_state": "valid"
+          }
+        },
+        "package_facts_response": {
+          "artifact": {
+            "artifact_kind": "hf_compatible_directory",
+            "entry_path": "<probe_root>/shared-resources/models/embedding/qualification/owner-inferred/model.safetensors",
+            "logical_size": {
+              "files": [
+                {
+                  "relative_path": "config.json",
+                  "role": "component_config",
+                  "size_bytes": 573,
+                  "status": "present",
+                  "value_source": "filesystem_metadata"
+                },
+                {
+                  "relative_path": "tokenizer.json",
+                  "role": "tokenizer",
+                  "size_bytes": 1028,
+                  "status": "present",
+                  "value_source": "filesystem_metadata"
+                }
+              ],
+              "total_size_bytes": 1601,
+              "value_source": "component_layout"
+            },
+            "selected_files": [
+              "config.json",
+              "tokenizer.json"
+            ],
+            "storage_kind": "library_owned",
+            "validation_state": "valid"
+          },
+          "backend_hints": {
+            "accepted": [
+              "candle"
+            ],
+            "raw": [
+              "candle"
+            ]
+          },
+          "components": [
+            {
+              "class_name": "BertModel",
+              "kind": "config",
+              "relative_path": "config.json",
+              "status": "present"
+            },
+            {
+              "kind": "tokenizer",
+              "message": "version=1.0; model=WordPiece; normalizer=BertNormalizer; pre_tokenizer=BertPreTokenizer",
+              "relative_path": "tokenizer.json",
+              "status": "present"
+            }
+          ],
+          "custom_code": {
+            "class_references": [
+              {
+                "class_name": "BertModel",
+                "kind": "config",
+                "source_path": "config.json"
+              }
+            ],
+            "requires_custom_code": false
+          },
+          "generation_defaults": {
+            "defaults": {
+              "pad_token_id": 0,
+              "use_cache": false
+            },
+            "diagnostics": [
+              {
+                "code": "legacy_config_generation_defaults",
+                "message": "generation defaults were extracted from config.json because generation_config.json is absent",
+                "path": "config.json"
+              }
+            ],
+            "source_path": "config.json",
+            "status": "present"
+          },
+          "inspection_manifest": {
+            "entries": [
+              {
+                "relative_path": "config.json",
+                "size_bytes": 573,
+                "status": "present",
+                "value_source": "filesystem_metadata"
+              },
+              {
+                "relative_path": "tokenizer.json",
+                "size_bytes": 1028,
+                "status": "present",
+                "value_source": "filesystem_metadata"
+              }
+            ]
+          },
+          "model_ref": {
+            "model_id": "embedding/qualification/owner-inferred",
+            "model_ref_contract_version": 1,
+            "selected_artifact_id": "main",
+            "selected_artifact_path": "<probe_root>/shared-resources/models/embedding/qualification/owner-inferred/model.safetensors"
+          },
+          "package_facts_contract_version": 3,
+          "task": {
+            "input_modalities": [
+              "text"
+            ],
+            "output_modalities": [
+              "embedding"
+            ],
+            "pipeline_tag": "feature-extraction",
+            "task_type_primary": "feature-extraction"
+          },
+          "transformers": {
+            "architectures": [
+              "BertModel"
+            ],
+            "config_model_type": "bert",
+            "config_status": "present",
+            "generation_config_status": "missing",
+            "selected_files": [
+              "config.json"
+            ],
+            "torch_dtype": "float32"
+          }
+        },
+        "read_only_indexed_response": {
+          "artifact_state": "ready",
+          "entry_path_state": "ready",
+          "target": {
+            "artifact_kind": "hf_compatible_directory",
+            "load_path_kind": "directory",
+            "local_load_path": "<probe_root>/shared-resources/models/embedding/qualification/owner-inferred/model.safetensors",
+            "model_ref": {
+              "model_id": "embedding/qualification/owner-inferred",
+              "model_ref_contract_version": 1,
+              "selected_artifact_id": "main",
+              "selected_artifact_path": "<probe_root>/shared-resources/models/embedding/qualification/owner-inferred/model.safetensors"
+            },
+            "package_facts_contract_version": 3,
+            "storage_kind": "library_owned",
+            "validation_state": "valid"
+          }
+        }
+      },
+      "setup": "seeded library-owned metadata + rebuild_model_index"
+    },
+    {
+      "case": "owner-imported",
+      "import_request": {
+        "compute_hashes": true,
+        "download_request": null,
+        "download_url": null,
+        "expected_files": [
+          "model.safetensors",
+          "config.json",
+          "tokenizer.json",
+          "modules.json",
+          "sentence_bert_config.json",
+          "1_Pooling/config.json"
+        ],
+        "family": "qualification",
+        "huggingface_evidence": null,
+        "known_sha256": null,
+        "license_status": null,
+        "model_card_json": null,
+        "model_dir": "<probe_root>/shared-resources/models/embedding/qualification/imported-bert-8",
+        "model_type": "embedding",
+        "official_name": "Imported BERT 8",
+        "pipeline_tag": "feature-extraction",
+        "release_date": null,
+        "repo_id": null
+      },
+      "import_response": {
+        "error": null,
+        "model_id": "embedding/qualification/imported-bert-8",
+        "model_path": "embedding/qualification/imported-bert-8",
+        "path": "<probe_root>/shared-resources/models/embedding/qualification/imported-bert-8",
+        "security_tier": "safe",
+        "success": true
+      },
+      "observation": {
+        "execution_descriptor_response": {
+          "dependency_resolution": {
+            "backend_key": null,
+            "bindings": [],
+            "dependency_contract_version": 1,
+            "model_id": "embedding/qualification/imported-bert-8",
+            "platform_key": "linux",
+            "validation_errors": [],
+            "validation_state": "resolved"
+          },
+          "entry_path": "<probe_root>/shared-resources/models/embedding/qualification/imported-bert-8/model.safetensors",
+          "execution_contract_version": 1,
+          "model_id": "embedding/qualification/imported-bert-8",
+          "model_type": "embedding",
+          "recommended_backend": null,
+          "runtime_engine_hints": [],
+          "storage_kind": "library_owned",
+          "task_type_primary": "feature-extraction",
+          "validation_state": "valid"
+        },
+        "expected_kind_response": {
+          "artifact_state": "ambiguous",
+          "diagnostics": [
+            {
+              "code": "missing_selected_artifact",
+              "field_path": "model_ref.selected_artifact_id",
+              "message": "model_ref must identify one selected artifact before load-target resolution"
+            }
+          ],
+          "entry_path_state": "ambiguous"
+        },
+        "filesystem": {
+          "components": [
+            {
+              "absolute": true,
+              "bytes": 6464,
+              "exists": true,
+              "is_directory": false,
+              "is_file": true,
+              "path": "<probe_root>/shared-resources/models/embedding/qualification/imported-bert-8/model.safetensors"
+            },
+            {
+              "absolute": true,
+              "bytes": 573,
+              "exists": true,
+              "is_directory": false,
+              "is_file": true,
+              "path": "<probe_root>/shared-resources/models/embedding/qualification/imported-bert-8/config.json"
+            },
+            {
+              "absolute": true,
+              "bytes": 1028,
+              "exists": true,
+              "is_directory": false,
+              "is_file": true,
+              "path": "<probe_root>/shared-resources/models/embedding/qualification/imported-bert-8/tokenizer.json"
+            },
+            {
+              "absolute": true,
+              "bytes": 350,
+              "exists": true,
+              "is_directory": false,
+              "is_file": true,
+              "path": "<probe_root>/shared-resources/models/embedding/qualification/imported-bert-8/modules.json"
+            },
+            {
+              "absolute": true,
+              "bytes": 46,
+              "exists": true,
+              "is_directory": false,
+              "is_file": true,
+              "path": "<probe_root>/shared-resources/models/embedding/qualification/imported-bert-8/sentence_bert_config.json"
+            },
+            {
+              "absolute": true,
+              "bytes": 295,
+              "exists": true,
+              "is_directory": false,
+              "is_file": true,
+              "path": "<probe_root>/shared-resources/models/embedding/qualification/imported-bert-8/1_Pooling/config.json"
+            }
+          ],
+          "model_root": {
+            "absolute": true,
+            "bytes": 4096,
+            "exists": true,
+            "is_directory": true,
+            "is_file": false,
+            "path": "<probe_root>/shared-resources/models/embedding/qualification/imported-bert-8"
+          },
+          "returned_target": null
+        },
+        "indexed_record": {
+          "cleanedName": "imported_bert_8",
+          "hashes": {
+            "blake3": "48f4dd9c7cfc9c2f7a2c38db3e4397068bfc2a5e6ebd9b16431162d86c732b09",
+            "sha256": "549cf713305780cd5af92cf397e6be34ada0e3650f967bb9772fa08ba9cedd44"
+          },
+          "id": "embedding/qualification/imported-bert-8",
+          "metadata": {
+            "added_date": "2026-10-11T21:09:17.195707040+00:00",
+            "architecture_family": null,
+            "base_model": null,
+            "bundle_format": null,
+            "config_model_type": null,
+            "custom_code_sources": null,
+            "dependency_bindings": [],
+            "download_has_part_files": false,
+            "download_incomplete": false,
+            "download_missing_expected_files": 0,
+            "download_progress": 0.680553396549044,
+            "download_url": null,
+            "downloaded_size_bytes": 8756,
+            "entry_path": null,
+            "expected_files": [
+              "model.safetensors",
+              "config.json",
+              "tokenizer.json",
+              "modules.json",
+              "sentence_bert_config.json",
+              "1_Pooling/config.json"
+            ],
+            "family": "qualification",
+            "files": [
+              {
+                "blake3": null,
+                "name": "1_Pooling/config.json",
+                "original_name": "1_Pooling/config.json",
+                "sha256": null,
+                "size": 295
+              },
+              {
+                "blake3": null,
+                "name": "config.json",
+                "original_name": "config.json",
+                "sha256": null,
+                "size": 573
+              },
+              {
+                "blake3": null,
+                "name": "golden.json",
+                "original_name": "golden.json",
+                "sha256": null,
+                "size": 4110
+              },
+              {
+                "blake3": null,
+                "name": "model.safetensors",
+                "original_name": "model.safetensors",
+                "sha256": null,
+                "size": 6464
+              },
+              {
+                "blake3": null,
+                "name": "modules.json",
+                "original_name": "modules.json",
+                "sha256": null,
+                "size": 350
+              },
+              {
+                "blake3": null,
+                "name": "sentence_bert_config.json",
+                "original_name": "sentence_bert_config.json",
+                "sha256": null,
+                "size": 46
+              },
+              {
+                "blake3": null,
+                "name": "tokenizer.json",
+                "original_name": "tokenizer.json",
+                "sha256": null,
+                "size": 1028
+              }
+            ],
+            "huggingface_evidence": null,
+            "import_state": null,
+            "inference_settings": null,
+            "input_modalities": [
+              "text"
+            ],
+            "license_status": "license_unknown",
+            "lookup_attempts": 0,
+            "match_confidence": null,
+            "match_method": null,
+            "match_source": "orphan_recovery",
+            "metadata_needs_review": true,
+            "model_card": null,
+            "model_type_resolution_confidence": 0.65,
+            "model_type_resolution_source": "model-type-resolver-medium-hints",
+            "notes": null,
+            "output_modalities": [
+              "embedding"
+            ],
+            "pending_online_lookup": true,
+            "pipeline_class": null,
+            "pipeline_tag": "feature-extraction",
+            "preview_image": null,
+            "primary_format": "safetensors",
+            "publisher": null,
+            "quantization": null,
+            "recommended_backend": null,
+            "release_date": null,
+            "repo_id": null,
+            "requires_custom_code": false,
+            "review_reasons": [
+              "model-type-low-confidence"
+            ],
+            "review_status": "pending",
+            "runtime_engine_hints": null,
+            "schema_version": 2,
+            "selected_artifact_files": null,
+            "selected_artifact_id": null,
+            "selected_artifact_quant": null,
+            "size_bytes": 12866,
+            "source_path": null,
+            "storage_kind": null,
+            "task_classification_confidence": 1.0,
+            "task_classification_source": "hf-pipeline-tag",
+            "task_type_primary": "feature-extraction",
+            "task_type_secondary": null,
+            "updated_date": "2026-10-11T21:09:17.195707040+00:00",
+            "upstream_revision": null,
+            "validation_errors": null,
+            "validation_state": null
+          },
+          "modelType": "embedding",
+          "officialName": "Imported BERT 8",
+          "path": "<probe_root>/shared-resources/models/embedding/qualification/imported-bert-8",
+          "tags": [],
+          "updatedAt": "2026-10-11T21:09:17.195707040+00:00"
+        },
+        "load_target_request": {
+          "consumer": {
+            "consumer_name": "pantograph-embedded-runtime",
+            "runtime_family": "candle.cpu",
+            "task_kind": "embedding"
+          },
+          "model_ref": {
+            "model_id": "embedding/qualification/imported-bert-8",
+            "model_ref_contract_version": 1
+          },
+          "resolution_mode": "owner_fresh"
+        },
+        "model_id": "embedding/qualification/imported-bert-8",
+        "owner_fresh_response": {
+          "artifact_state": "ambiguous",
+          "diagnostics": [
+            {
+              "code": "missing_selected_artifact",
+              "field_path": "model_ref.selected_artifact_id",
+              "message": "model_ref must identify one selected artifact before load-target resolution"
+            }
+          ],
+          "entry_path_state": "ambiguous"
+        },
+        "package_facts_response": {
+          "artifact": {
+            "artifact_kind": "hf_compatible_directory",
+            "entry_path": "<probe_root>/shared-resources/models/embedding/qualification/imported-bert-8/model.safetensors",
+            "logical_size": {
+              "diagnostics": [
+                {
+                  "code": "logical_size_total_mismatch",
+                  "message": "summed logical size (8360) differs from model metadata total (12866)"
+                }
+              ],
+              "files": [
+                {
+                  "relative_path": "1_Pooling/config.json",
+                  "role": "component_config",
+                  "size_bytes": 295,
+                  "status": "present",
+                  "value_source": "filesystem_metadata"
+                },
+                {
+                  "relative_path": "config.json",
+                  "role": "component_config",
+                  "size_bytes": 573,
+                  "status": "present",
+                  "value_source": "filesystem_metadata"
+                },
+                {
+                  "relative_path": "model.safetensors",
+                  "role": "weight",
+                  "size_bytes": 6464,
+                  "status": "present",
+                  "value_source": "filesystem_metadata"
+                },
+                {
+                  "relative_path": "tokenizer.json",
+                  "role": "tokenizer",
+                  "size_bytes": 1028,
+                  "status": "present",
+                  "value_source": "filesystem_metadata"
+                }
+              ],
+              "total_size_bytes": 8360,
+              "value_source": "component_layout"
+            },
+            "selected_files": [
+              "1_Pooling/config.json",
+              "config.json",
+              "golden.json",
+              "model.safetensors",
+              "modules.json",
+              "sentence_bert_config.json",
+              "tokenizer.json"
+            ],
+            "storage_kind": "library_owned",
+            "validation_state": "valid"
+          },
+          "backend_hints": {},
+          "components": [
+            {
+              "class_name": "BertModel",
+              "kind": "config",
+              "relative_path": "config.json",
+              "status": "present"
+            },
+            {
+              "kind": "tokenizer",
+              "message": "version=1.0; model=WordPiece; normalizer=BertNormalizer; pre_tokenizer=BertPreTokenizer",
+              "relative_path": "tokenizer.json",
+              "status": "present"
+            },
+            {
+              "kind": "weights",
+              "relative_path": "model.safetensors",
+              "status": "present"
+            }
+          ],
+          "custom_code": {
+            "class_references": [
+              {
+                "class_name": "BertModel",
+                "kind": "config",
+                "source_path": "config.json"
+              }
+            ],
+            "requires_custom_code": false
+          },
+          "generation_defaults": {
+            "defaults": {
+              "pad_token_id": 0,
+              "use_cache": false
+            },
+            "diagnostics": [
+              {
+                "code": "legacy_config_generation_defaults",
+                "message": "generation defaults were extracted from config.json because generation_config.json is absent",
+                "path": "config.json"
+              }
+            ],
+            "source_path": "config.json",
+            "status": "present"
+          },
+          "inspection_manifest": {
+            "entries": [
+              {
+                "relative_path": "1_Pooling/config.json",
+                "size_bytes": 295,
+                "status": "present",
+                "value_source": "filesystem_metadata"
+              },
+              {
+                "relative_path": "config.json",
+                "size_bytes": 573,
+                "status": "present",
+                "value_source": "filesystem_metadata"
+              },
+              {
+                "relative_path": "golden.json",
+                "size_bytes": 4110,
+                "status": "present",
+                "value_source": "filesystem_metadata"
+              },
+              {
+                "relative_path": "model.safetensors",
+                "size_bytes": 6464,
+                "status": "present",
+                "value_source": "filesystem_metadata"
+              },
+              {
+                "relative_path": "modules.json",
+                "size_bytes": 350,
+                "status": "present",
+                "value_source": "filesystem_metadata"
+              },
+              {
+                "relative_path": "sentence_bert_config.json",
+                "size_bytes": 46,
+                "status": "present",
+                "value_source": "filesystem_metadata"
+              },
+              {
+                "relative_path": "tokenizer.json",
+                "size_bytes": 1028,
+                "status": "present",
+                "value_source": "filesystem_metadata"
+              }
+            ]
+          },
+          "model_ref": {
+            "model_id": "embedding/qualification/imported-bert-8",
+            "model_ref_contract_version": 1,
+            "selected_artifact_path": "<probe_root>/shared-resources/models/embedding/qualification/imported-bert-8/model.safetensors"
+          },
+          "package_facts_contract_version": 3,
+          "task": {
+            "input_modalities": [
+              "text"
+            ],
+            "output_modalities": [
+              "embedding"
+            ],
+            "pipeline_tag": "feature-extraction",
+            "task_type_primary": "feature-extraction"
+          },
+          "transformers": {
+            "architectures": [
+              "BertModel"
+            ],
+            "config_model_type": "bert",
+            "config_status": "present",
+            "generation_config_status": "missing",
+            "selected_files": [
+              "config.json"
+            ],
+            "torch_dtype": "float32"
+          }
+        },
+        "read_only_indexed_response": {
+          "artifact_state": "ambiguous",
+          "diagnostics": [
+            {
+              "code": "missing_selected_artifact",
+              "field_path": "model_ref.selected_artifact_id",
+              "message": "model_ref must identify one selected artifact before load-target resolution"
+            }
+          ],
+          "entry_path_state": "ambiguous"
+        }
+      },
+      "setup": "public import_model_in_place; no seeded metadata"
+    }
+  ],
+  "editor_qualified": false,
+  "pumas_lock_source": "git+https://github.com/MrScripty/Pumas-Library.git?rev=26a84e323cae566a46a8f76bef48fa1010aed48b#26a84e323cae566a46a8f76bef48fa1010aed48b",
+  "scope": "provider_contract_observation_only"
+}

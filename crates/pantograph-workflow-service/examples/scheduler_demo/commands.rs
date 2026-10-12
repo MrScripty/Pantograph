@@ -1,4 +1,4 @@
-//! Explicit read-only application commands for the loopback demonstration host.
+//! Explicit, bounded application commands for the loopback demonstration host.
 use super::*;
 use serde_json::Value;
 
@@ -54,6 +54,9 @@ impl DemoRuntime {
     }
 
     async fn command(&self, command: &str, args: Value) -> DemoResult<Value> {
+        if let Some(result) = self.graph_command(command, args.clone()).await? {
+            return Ok(result);
+        }
         let service = &self.service;
         let request = args.get("request").cloned().unwrap_or_else(|| json!({}));
         self.refresh_projections()?;
@@ -67,9 +70,10 @@ impl DemoRuntime {
         match command {
             "workflow_browser_host_capabilities" => Ok(json!({
                 "model_library_read": true, "model_library_write": false,
-                "model_search": false, "graph_edit": false,
-                "description": "Local demo host: real scheduler and diagnostics; isolated model library."
+                "model_search": false, "graph_edit": true,
+                "description": "Local demo host: real deterministic graph editing, scheduler and diagnostics; isolated model library."
             })),
+            "workflow_local_network_status_query" => query!(workflow_local_network_status_query),
             "workflow_scheduler_estimate_query" => query!(workflow_scheduler_estimate_query),
             "list_workflows" => Ok(serde_json::to_value(
                 service
@@ -176,12 +180,23 @@ impl DemoRuntime {
 }
 
 fn demo_graph_path(path: Option<&str>) -> Result<String, WorkflowServiceError> {
-    match path {
-        Some("scheduler-demo" | ".pantograph/workflows/scheduler-demo.json") => {
-            Ok(".pantograph/workflows/scheduler-demo.json".into())
-        }
-        _ => Err(WorkflowServiceError::CapabilityViolation(
-            "Only the built-in scheduler-demo graph is available in this loopback host".into(),
-        )),
+    let name = path
+        .unwrap_or("")
+        .strip_prefix(".pantograph/workflows/")
+        .unwrap_or(path.unwrap_or(""));
+    let name = name.strip_suffix(".json").unwrap_or(name);
+    validate_demo_name(name)?;
+    Ok(format!(".pantograph/workflows/{name}.json"))
+}
+
+pub(super) fn validate_demo_name(name: &str) -> Result<(), WorkflowServiceError> {
+    if name.is_empty()
+        || name.len() > 80
+        || !name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+    {
+        return Err(WorkflowServiceError::CapabilityViolation("Use a workflow name of 1–80 ASCII letters, numbers, hyphens or underscores; only this host's temporary workflow directory is accessible".into()));
     }
+    Ok(())
 }

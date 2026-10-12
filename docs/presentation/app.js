@@ -43,7 +43,7 @@ async function loadRecording() {
     const result = report.execution;
     document.getElementById('trace-summary').textContent = result.ok
       ? `Recorded output: ${result.result.outputs[0].value} · ${report.diagnostics.length} events · ${result.result.workflow_run_id}`
-      : `Recorded failure: ${result.error} · ${report.diagnostics.length} events`;
+      : `${name === 'rejection' ? 'Expected rejection of deliberately invalid input' : 'Recorded failure'}: ${result.error} · ${report.diagnostics.length} events`;
     for (const event of report.diagnostics) {
       const button = document.createElement('button');
       button.textContent = `${event.event_seq.toString().padStart(2, '0')}  ${event.event_kind}${event.node_id ? ' / ' + event.node_id : ''}`;

@@ -18,7 +18,8 @@
 
   let executionInfo = $derived($nodeExecutionStates.get(id));
   let executionState = $derived(executionInfo?.state || 'idle');
-  let text = $derived(data.text || '');
+  let hasTextOutput = $derived(typeof data.text === 'string');
+  let text = $derived(data.text ?? '');
   let streamContent = $derived(data.streamContent || '');
   let displayText = $derived(streamContent || text);
   let isStreaming = $derived(executionState === 'running' && streamContent.length > 0);
@@ -60,6 +61,8 @@
           bind:this={outputContainer}
           class="copyable-output nodrag nopan nowheel p-2 bg-neutral-900 rounded text-xs text-neutral-300 max-h-32 overflow-y-auto whitespace-pre-wrap"
         >{displayText}{#if isStreaming}<span class="animate-pulse">|</span>{/if}</div>
+      {:else if hasTextOutput && executionState === 'success'}
+        <div class="text-xs text-neutral-500 italic">Empty text output</div>
       {:else}
         <div class="text-xs text-neutral-500 italic">
           No output yet
@@ -71,6 +74,7 @@
 <style>
   .output-node-wrapper :global(.base-node) {
     border-color: rgba(8, 145, 178, 0.5);
+    width: 360px;
   }
 
   .output-node-wrapper :global(.node-header) {
@@ -79,6 +83,7 @@
   }
 
   .copyable-output {
+    overflow-wrap: anywhere;
     user-select: text;
     -webkit-user-select: text;
     cursor: text;

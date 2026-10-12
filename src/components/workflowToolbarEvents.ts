@@ -81,6 +81,31 @@ export function workflowSubmitTextInputs(graph: WorkflowGraph): WorkflowPortBind
   });
 }
 
+/** Materialize only the scheduler's supported authored source types. */
+export function workflowSubmitInputs(graph: WorkflowGraph): WorkflowPortBinding[] {
+  const inputs = workflowSubmitTextInputs(graph);
+  for (const node of graph.nodes) {
+    if (graph.edges.some(edge => edge.target === node.id)) continue;
+    const value = node.data?.value;
+    if (value === undefined || value === null) continue;
+    if (node.node_type === 'number-input') {
+      // Number sources are integer-only in the scheduler. Never coerce authored
+      // text or serialize a rounded integer across the JavaScript boundary.
+      if (typeof value !== 'number' || !Number.isSafeInteger(value)) {
+        throw new Error(`Number input '${node.id}' requires a safe integer for scheduler submission.`);
+      }
+    } else if (node.node_type === 'boolean-input') {
+      if (typeof value !== 'boolean') {
+        throw new Error(`Boolean input '${node.id}' requires a boolean for scheduler submission.`);
+      }
+    } else if (node.node_type !== 'selection-input') {
+      continue;
+    }
+    inputs.push({ node_id: node.id, port_id: 'value', value: structuredClone(value) });
+  }
+  return inputs;
+}
+
 export function isNumericWorkflowSemanticVersion(version: string): boolean {
   const parts = version.split('.');
   return (

@@ -88,7 +88,6 @@ fn copy_fixture(source: &std::path::Path, destination: &std::path::Path) {
 }
 
 #[tokio::test]
-#[ignore = "Requires the reviewed Pumas HF-directory owner fix; published 26a84 pin returns a file target"]
 async fn empty_hosted_readiness_bootstrap_completes_actual_cpu_embedding_and_reuses_owner() {
     tokio::time::timeout(Duration::from_secs(45), qualify_cpu_workflow(true))
         .await
@@ -96,7 +95,6 @@ async fn empty_hosted_readiness_bootstrap_completes_actual_cpu_embedding_and_reu
 }
 
 #[tokio::test]
-#[ignore = "Requires the reviewed Pumas HF-directory owner fix; published 26a84 pin returns a file target"]
 async fn empty_hosted_readiness_bootstrap_completes_cold_cpu_embedding_and_cleans_owner() {
     tokio::time::timeout(Duration::from_secs(45), qualify_cpu_workflow(false))
         .await
