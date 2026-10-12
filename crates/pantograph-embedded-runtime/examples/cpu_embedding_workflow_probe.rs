@@ -466,10 +466,11 @@ async fn main() -> ProbeResult<()> {
                 && mode != "--serve-stdio"
                 && mode != "--serve-rich-stdio"
                 && mode != "--serial-ready"
+                && mode != "--serial-ready-c3-768b"
         })
     {
         return Err(
-            "usage: cpu_embedding_workflow_probe <new absolute directory> [--inspect-targets|--serve-stdio|--serve-rich-stdio|--serial-ready]"
+            "usage: cpu_embedding_workflow_probe <new absolute directory> [--inspect-targets|--serve-stdio|--serve-rich-stdio|--serial-ready|--serial-ready-c3-768b]"
                 .into(),
         );
     }
@@ -485,6 +486,12 @@ async fn main() -> ProbeResult<()> {
     std::fs::create_dir(&root)?; // Refuse existing directories, including previous evidence.
     if args.get(1).is_some_and(|mode| mode == "--serial-ready") {
         return serial_ready_probe::qualify(&root).await;
+    }
+    if args
+        .get(1)
+        .is_some_and(|mode| mode == "--serial-ready-c3-768b")
+    {
+        return serial_ready_probe::qualify_c3_768b(&root).await;
     }
     if args.get(1).is_some_and(|mode| mode == "--inspect-targets") {
         return target_observation::inspect(&root).await;

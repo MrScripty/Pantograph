@@ -230,6 +230,8 @@ async fn cohort(
     root: &Path,
     name: &str,
     golden: &Value,
+    texts: &[String; 2],
+    preserve_failed_attempts: bool,
 ) -> ProbeResult<Vec<Value>> {
     let mut stage = "pair_authoring";
     let graph_session = author_graph(
@@ -262,7 +264,7 @@ async fn cohort(
                 .map(|(j, s)| WorkflowPortBinding {
                     node_id: format!("prompt_{s}"),
                     port_id: "text".into(),
-                    value: golden["truncation_texts"][j].clone(),
+                    value: json!(texts[j]),
                 })
                 .collect(),
             ["a", "b"]
@@ -281,6 +283,20 @@ async fn cohort(
                 session_id: session.session_id,
             })
             .await;
+        if preserve_failed_attempts {
+            // Preserve returned outputs and raw samples even when an oracle or
+            // execution error ends the one admitted supplemental cohort.
+            save(
+                root,
+                &format!("{name}-attempt-{i}.json"),
+                &json!({"index":i,"wall_ms":wall_ms,
+                    "response":result.as_ref().ok().map(|(response, _)| response),
+                    "readiness_resume_run_ids":result.as_ref().ok().map(|(_, ids)| ids),
+                    "execution_error":result.as_ref().err().map(ToString::to_string),
+                    "close_error":close.as_ref().err().map(ToString::to_string),
+                    "samples_before":samples_before,"samples_after":samples_after}),
+            )?;
+        }
         let (response, resumed_runs) = result?;
         close?;
         verify_vectors(&response, &golden["truncation_vectors"])?;
@@ -402,9 +418,37 @@ fn independent_oracle(runs: &[Value], proposals: &[Value], events: &[Value]) -> 
 }
 
 pub(super) async fn qualify(root: &Path) -> ProbeResult<()> {
+    qualify_workload(root, false).await
+}
+
+pub(super) async fn qualify_c3_768b(root: &Path) -> ProbeResult<()> {
+    qualify_workload(root, true).await
+}
+
+async fn qualify_workload(root: &Path, c3_768b: bool) -> ProbeResult<()> {
     log::set_logger(&PROPOSALS).map_err(|_| "example requires exclusive logger ownership")?;
     log::set_max_level(log::LevelFilter::Info);
     seed_fixture(root, MODEL_ID, Some(&["model.safetensors"]))?;
+    let golden: Value = serde_json::from_slice(&std::fs::read(
+        root.join("shared-resources/models")
+            .join(MODEL_ID)
+            .join("golden.json"),
+    )?)?;
+    let texts: [String; 2] = if c3_768b {
+        // Frozen published protocol c3-768b-v1; no configurable size or retry.
+        ["hello world ".repeat(64), "hello".into()]
+    } else {
+        serde_json::from_value(golden["truncation_texts"].clone())?
+    };
+    if c3_768b {
+        save(
+            root,
+            "workload.json",
+            &json!({"protocol_id":"c3-768b-v1","texts":texts,
+                "utf8_bytes":[texts[0].len(),texts[1].len()],
+                "fixed_runs_per_mode":RUNS,"original_negative_evidence_preserved":true}),
+        )?;
+    }
     for directory in [
         "launcher-data/metadata",
         "launcher-data/cache",
@@ -495,11 +539,6 @@ pub(super) async fn qualify(root: &Path) -> ProbeResult<()> {
         "bootstrap.json",
         &json!({"response":bootstrap,"readiness_resume_run_ids":bootstrap_resumed_runs,"registry":registry.snapshot()}),
     )?;
-    let golden: Value = serde_json::from_slice(&std::fs::read(
-        root.join("shared-resources/models")
-            .join(MODEL_ID)
-            .join("golden.json"),
-    )?)?;
     let serial = compose(
         root,
         "serial",
@@ -510,8 +549,24 @@ pub(super) async fn qualify(root: &Path) -> ProbeResult<()> {
     )
     .await?;
     // Keep the same two live compositions/producers during both measurements.
-    let baseline_runs = cohort(&baseline, root, "baseline", &golden).await?;
-    let serial_result = cohort(&serial, root, "serial", &golden).await;
+    let baseline_result = cohort(&baseline, root, "baseline", &golden, &texts, c3_768b).await;
+    if c3_768b && baseline_result.is_err() {
+        save(
+            root,
+            "baseline-execution-status.json",
+            &json!({"ok":false,
+            "error":baseline_result.as_ref().err().map(ToString::to_string),
+            "shutdown_qualified":false,"cohort_restart_allowed":false}),
+        )?;
+        collect_events(root, "baseline")?;
+        save(
+            root,
+            "registry-at-baseline-failure.json",
+            &registry.snapshot(),
+        )?;
+    }
+    let baseline_runs = baseline_result?;
+    let serial_result = cohort(&serial, root, "serial", &golden, &texts, c3_768b).await;
     save(
         root,
         "serial-execution-status.json",
@@ -560,7 +615,7 @@ pub(super) async fn qualify(root: &Path) -> ProbeResult<()> {
         .map(|line| serde_json::from_str(line))
         .collect::<Result<_, _>>()?;
     let oracle = independent_oracle(&serial_runs, &proposals, &events)?;
-    let report = json!({"scope":"actual_hosted_retained_cpu_first_two_ready","backend":"candle","device":"cpu_f32","threads":1,
+    let mut report = json!({"scope":"actual_hosted_retained_cpu_first_two_ready","backend":"candle","device":"cpu_f32","threads":1,
         "model":MODEL_ID,"training":"untrained","weights_bytes":6464,"model_acquisition_bytes":0,
         "declared_resident_ram_bytes":RESIDENT_ENVELOPE,"resident_bytes_are_measured":false,"declared_resident_vram_bytes":0,"vram_basis":"calibrated Candle embedding tensors are Device::Cpu only",
         "fixed_runs_per_mode":RUNS,"baseline":baseline_runs,"serial":serial_runs,"oracle":oracle,
@@ -568,6 +623,11 @@ pub(super) async fn qualify(root: &Path) -> ProbeResult<()> {
         "shutdown_scope":"shutdown calls returned; no reservation or native serial owner; registry may retain stopping state and declared resident accounting",
         "decision_ns_scope":"mode.select only; excludes pair capture, log projection and Start fencing",
         "profile":if cfg!(debug_assertions) {"dev"} else {"release"}});
+    if c3_768b {
+        report["supplemental_protocol"] = json!("c3-768b-v1");
+        report["workload_texts"] = json!(texts);
+        report["original_negative_evidence_preserved"] = json!(true);
+    }
     save(root, "serial-result.json", &report)?;
     println!("{}", serde_json::to_string_pretty(&report["oracle"])?);
     if report["oracle"]["second_position_claim"] != "passed" {
