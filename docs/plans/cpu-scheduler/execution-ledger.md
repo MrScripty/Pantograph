@@ -127,3 +127,16 @@ coordination; parent owns its later disposition after reachable handoff.
   second-position criterion remains open, C5's measurement obligation is accepted,
   and C6 awaits exact published-head/ordinary CI evidence. Source/evidence remain
   reviewable; no further milestone is started by this draft.
+
+## 2026-10-12 — published draft CI correction
+
+- Published and independently verified draft PR #73 at
+  `743e783cad979940bb0eea12fb642d36bd1614f2`, tree
+  `67f4d8127c3758afa4f501227185c77428d0654e`. All blobs/tree/ref and local
+  fast-forward matched; published main-to-head traceability passed 34 paths.
+- Normal CI found one new test-only `await_holding_lock` lint at timeout-refusal
+  assertions. Replaced explicit guard drop with a lexical assertion block,
+  preserving production behavior and adding no suppression. Measurement/source
+  manifests remain bound to the initial qualified snapshot; no new model cohort
+  is run for this test-only correction. Independent review and targeted lint/tests
+  precede the ordinary fast-forward publication. C3 remains Partial.

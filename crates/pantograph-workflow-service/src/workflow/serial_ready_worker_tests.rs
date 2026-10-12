@@ -1006,14 +1006,15 @@ mod serial_ready_tests {
             assert_serial_timeout_refused(
                 result.expect_err("unsupported timeout must be explicit"),
             );
-            let store = service.session_store_guard().unwrap();
-            assert_eq!(
-                serde_json::to_value(store.session_summary(&session).unwrap()).unwrap(),
-                serde_json::to_value(&before).unwrap(),
-            );
-            assert!(store.list_queue(&session).unwrap().is_empty());
-            assert_eq!(store.active_run_count(), 0);
-            drop(store);
+            {
+                let store = service.session_store_guard().unwrap();
+                assert_eq!(
+                    serde_json::to_value(store.session_summary(&session).unwrap()).unwrap(),
+                    serde_json::to_value(&before).unwrap(),
+                );
+                assert!(store.list_queue(&session).unwrap().is_empty());
+                assert_eq!(store.active_run_count(), 0);
+            }
             assert!(port.tasks().is_empty());
             assert!(port.cleanups.lock().unwrap().is_empty());
             assert!(service.serial_ready_observations_for_test().is_empty());

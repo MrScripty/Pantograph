@@ -179,3 +179,18 @@ added. External CI is recorded in the final handoff. Normal CI must still run on
 the published draft head; C6 is not marked complete before that evidence exists.
 No merge, deployment, GPU, remote-worker, native batching, full research scheduler
 or default-policy activation is implied.
+
+### CI test-scope correction
+
+Initial published head `743e783cad979940bb0eea12fb642d36bd1614f2` failed the
+warning-deny Clippy audit on the new timeout-refusal test: an explicit
+`drop(store)` did not express the mutex guard's lexical lifetime to Clippy.
+The follow-up encloses only those store assertions in a block before awaiting
+serial admission. It changes no production/inference behavior and adds no lint
+suppression. Focused warning-deny Clippy and the two timeout tests validate the
+correction; normal CI runs again on the successor head.
+
+The [measurement source manifest](m1-evidence/source-manifest.json) and raw
+evidence remain unchanged and bind the qualified source snapshot at `743e783c`.
+The later delta is test scope plus this publication record; it is not a new
+measurement cohort, and the C3 pending disposition remains unchanged.
