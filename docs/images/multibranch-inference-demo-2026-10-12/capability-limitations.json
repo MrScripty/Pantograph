@@ -1,0 +1,126 @@
+{
+  "scope": "Observed unsupported-capability attempts; not successful branches of the qualified demo",
+  "pumas_commit": "aa1d79ae2d53f0acb088bc85223ecc2ff46af12b",
+  "model_download_bytes": 0,
+  "text_generation_executed": false,
+  "image_generation_executed": false,
+  "image_transport_executed": false,
+  "attempts": [
+    {
+      "development_attempt": "rich-probe-4",
+      "editor_qualified": false,
+      "failed_commands": [
+        {
+          "command": "workflow_run_execution_session",
+          "response": {
+            "error": {
+              "code": "internal_error",
+              "details": null,
+              "diagnostics": null,
+              "message": "capability_violation: runtime scheduler task 'image' cannot continue from Invalid"
+            },
+            "ok": false
+          }
+        }
+      ]
+    },
+    {
+      "development_attempt": "rich-probe-8",
+      "editor_qualified": false,
+      "failed_commands": [
+        {
+          "command": "workflow_run_execution_session",
+          "response": {
+            "error": {
+              "code": "invalid_request",
+              "details": null,
+              "diagnostics": null,
+              "message": "deadline has elapsed"
+            },
+            "ok": false
+          }
+        }
+      ]
+    },
+    {
+      "development_attempt": "rich-probe-9",
+      "editor_qualified": false,
+      "failed_commands": [
+        {
+          "command": "workflow_run_execution_session",
+          "response": {
+            "error": {
+              "code": "invalid_request",
+              "details": null,
+              "diagnostics": null,
+              "message": "deadline has elapsed"
+            },
+            "ok": false
+          }
+        }
+      ]
+    }
+  ],
+  "readiness_snapshot_diagnostic": "Dependency requirements payload is missing for dependency-requirements-blake3:961c53a0a9a72461210a9c7b324ba405d3120718f40f76bc159ae38ae83c24ee.",
+  "public_owner_gpt2_requirements": {
+    "model_id": "llm/qualification/synthetic-gpt2-11",
+    "platform_key": "linux-x86_64",
+    "backend_key": "pytorch",
+    "dependency_contract_version": 1,
+    "validation_state": "resolved",
+    "validation_errors": [],
+    "bindings": [
+      {
+        "binding_id": "pantograph-untrained-gpt2-python",
+        "profile_id": "pantograph-untrained-gpt2",
+        "profile_version": 1,
+        "profile_hash": "2f359d8651c3b97bafe25da0761b0afd66fa6f07af34ac3e2c225c0e3e965363",
+        "backend_key": "pytorch",
+        "platform_selector": null,
+        "environment_kind": "python-venv",
+        "env_id": "python-venv:pantograph-untrained-gpt2:1:2f359d8651c3b97bafe25da0761b0afd66fa6f07af34ac3e2c225c0e3e965363:linux-x86_64:pytorch",
+        "validation_state": "resolved",
+        "validation_errors": [],
+        "requirements": [
+          {
+            "kind": "python_package",
+            "name": "accelerate",
+            "exact_pin": "==1.15.0"
+          },
+          {
+            "kind": "python_package",
+            "name": "diffusers",
+            "exact_pin": "==0.39.0"
+          },
+          {
+            "kind": "python_package",
+            "name": "safetensors",
+            "exact_pin": "==0.8.0"
+          },
+          {
+            "kind": "python_package",
+            "name": "soundfile",
+            "exact_pin": "==0.13.1"
+          },
+          {
+            "kind": "python_package",
+            "name": "tokenizers",
+            "exact_pin": "==0.21.4"
+          },
+          {
+            "kind": "python_package",
+            "name": "torch",
+            "exact_pin": "==2.14.1+cpu"
+          },
+          {
+            "kind": "python_package",
+            "name": "transformers",
+            "exact_pin": "==4.53.3"
+          }
+        ]
+      }
+    ]
+  },
+  "investigation_source": "Development prototype preserved locally at /workspace/pantograph-cache/attempted-pytorch-rich-workflow.rs; not part of the accepted runnable graph",
+  "interpretation": "Public dependency resolution succeeded after declaring the fixture profile, but the Pantograph facts-provider dependency handoff supports native Candle only. Missing-payload and typed-media guards were preserved."
+}

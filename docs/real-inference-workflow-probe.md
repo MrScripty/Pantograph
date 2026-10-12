@@ -12,6 +12,10 @@ The [browser-host guide](../examples/cpu-embedding-demo/README.md) gives
 reproduction commands, scope, tests and the browser's approved isolated launch.
 The native and HTTP-only observations below remain distinct supporting evidence.
 
+The [richer 13-node qualification](images/multibranch-inference-demo-2026-10-12/README.md)
+adds two actual Candle model branches, text composition, metadata extraction and
+a combined report. Text/image generation remain explicitly unqualified or unavailable.
+
 ## Model and acquisition
 
 The probe uses the repository's [untrained BERT-8 fixture](../crates/inference/tests/fixtures/candle_bert/README.md):
