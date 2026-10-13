@@ -1,17 +1,18 @@
 # Plan: CPU Scheduler Completion And Fair Progress
 
-**Plan status:** `Active` — M1 merged; M2 CPU qualification in progress.
+**Plan status:** `Active` — M1 merged; M2 actual CPU evidence passed, CI verification in progress.
 
-**Current phase:** M2 verification — bounded advisory retained-CPU completion lookahead.
+**Current phase:** M2-C4 verification — actual CPU qualification passed; final PR CI pending.
 
-**Next slice:** Freeze the reviewed singleton/pair source and release binary, then run the
-single admitted CPU cohort.
+**Next slice:** Publish reviewed CPU evidence and collect ordinary final-head PR CI.
 
 **Acceptance status:** M1 merged as PR73 in main `07b23d47`; the original
 negative cohort and the separately accepted C3 supplement remain unchanged.
 M2-C1/C2 core evidence and independent source review pass; M2-C3 actual CPU
-qualification is pending on the reviewed construction correction below.
-M2-C4 requires the affected CPU example lint gate and final PR CI. See the [core report](reports/2026-10-13-m2-core.md).
+qualification and independent raw-evidence review pass. M2-C4 local affected
+CPU example compile/lint gates pass; final PR CI is pending. See the
+[actual CPU report](reports/2026-10-13-m2-cpu-results.md) and historical
+[core report](reports/2026-10-13-m2-core.md).
 No default-policy or speedup claim.
 
 **Execution ledger:** [execution-ledger.md](execution-ledger.md)
@@ -199,7 +200,7 @@ and write sets receive an independent review before their first code change.
 | --- | --- | --- |
 | M0 / Accepted on publication | Reviewed plan, source/hardware facts, ledger/issues; navigation pointers in `docs/plans/README.md`, broad plan and scheduler migration notes. No production code. | Two independent reviewers approved M1's shared interface decisions; links, exact scope and history reviewed. This plan commit is the publication checkpoint. |
 | M1 / Accepted; merged PR73 | Existing retained CPU first-two-Ready mode composes with ordinary hosted providers. Writes: embedded `workflow_service_composition.rs` and its focused tests; workflow `serial_ready.rs`, `task_execution_worker.rs`, relevant tests/exports; new focused native integration test and registration; bounded CPU example/guide only if needed for repeatable invocation; this plan's evidence. | M0; real resident CPU owner and retaining lease. Actual public sessions with two ready embeddings and retained outputs; measured sample-driven order; no injected candidate/readiness/timing/outputs; default and negative lifecycle regressions. Exact-head local gates, independent source/evidence review, normal CI. |
-| M2 / Verifying; CPU cohort admitted | Bounded completion lookahead for a disclosed CPU cohort, initially advisory on actual work. Extend existing scheduler kernels, workflow capture and native evidence producer only. | M1; complete comparable evidence for every admitted alternative/transition, including unfinished obligations. Hand-computed independent oracles, work-budget refusal, missing/stale evidence, owner invalidation and actual CPU trace correspondence. No forecasts authorize execution. Promote only a separately qualified action subset; do not fill missing cold/transfer costs with zero. |
+| M2 / Verifying; actual CPU cohort passed | Bounded completion lookahead for a disclosed CPU cohort, initially advisory on actual work. Extend existing scheduler kernels, workflow capture and native evidence producer only. | M1; complete comparable evidence for every admitted alternative/transition, including unfinished obligations. Hand-computed independent oracles, work-budget refusal, missing/stale evidence, owner invalidation and actual CPU trace correspondence. No forecasts authorize execution. Promote only a separately qualified action subset; do not fill missing cold/transfer costs with zero. |
 | M3 / Planned | Explicit per-app/bucket service opportunities at an authoritative ready-work boundary, alongside priorities. Writes confined to scheduler/workflow queue/attribution integration and tests after its design review. | M1 and a bounded eligible population; use authenticated existing attribution, not arbitrary caller identities. Fixed modeled traces prove opportunity/order, then two actual CPU sessions prove progress under repeated foreground arrival and cancellation. No wall-clock guarantee for unbounded nonpreemptible jobs. Missing entitlement identity has an explicit owned disposition. |
 | M4 / Planned | CPU residency actions improve a specified repeated-model workflow without violating cleanup; serial preparation/eviction only. Writes scheduler policy, registry/host action integration and tests after review. | M2 evidence, M3 fairness obligations where actions delay other apps. Measure load/unload/reload separately; full charge remains until acknowledged stop; pinned/live allocations protected. Actual two-model CPU alternation, pressure, cancellation and failed-stop cases. No overlapping loads, speculative lease release or automatic recovery of unknown execution. |
 | M5 / Planned | Fair bounded grouping on the existing supported sequential CPU batch envelope; optimize only demonstrated scheduler overhead/reuse. Writes existing batch policy/broker and tests after review. | M3/M4 where grouping changes retention or fairness. Group 1..8 compatible members without waiting indefinitely, preserve per-member outputs/attempts/cancellation, mixed/incompatible tasks refuse grouping. Compare actual CPU grouped versus singleton runs. Label sequential envelope honestly; native/continuous execution remains Deferred unless independently capable and exercised. |
@@ -542,7 +543,7 @@ Verification claims (admission states and current disposition):
 - **M2-C2**, `satisfied`, focused/simulated/automated: freshness, exact owner/predecessor association,
   invalidation after cancellation/failure, remaining-obligation exclusion, and
   unchanged M1 decisions/custody. Existing lifecycle regressions remain required.
-- **M2-C3**, `pending: corrected singleton construction`, integration/required-real CPU/automated: one fresh isolated service, retaining
+- **M2-C3**, `satisfied: one corrected actual CPU cohort, independently reviewed`, integration/required-real CPU/automated: one fresh isolated service, retaining
   lease and committed BERT-8 fixture; exactly 13 singleton public-session runs
   A,A,B,B,A,A,B,B,A,A,B,B,A then one genuine two-Ready A/B run. This yields three
   each AA,AB,BB,BA transitions without forcing a scheduling decision. Every
@@ -555,7 +556,7 @@ Verification claims (admission states and current disposition):
   Recompute all row maxima and both complete scores independently from raw
   observations. No injected times/history, delays or retry for a winner. A
   failure preserves partial evidence and blocks this claim.
-- **M2-C4**, `partial: CPU example and final PR CI pending`, supporting gates/representative/automated + review: scheduler and workflow-service suites, affected native
+- **M2-C4**, `partial: local affected gates/source/evidence review pass; final PR CI pending`, supporting gates/representative/automated + review: scheduler and workflow-service suites, affected native
   example compile, formatting, Clippy with intended CPU features, independent
   whole-range source/evidence review, and ordinary PR CI. CPU service ranking
   does not qualify GPU, native desktop, general speedup or default activation.
@@ -574,9 +575,10 @@ The probe is qualification-only and cannot authorize production work.
 
 
 M2 verification details are in the [core report](reports/2026-10-13-m2-core.md).
-Shared probe authority is resolved by the published PR75 scope below. No actual
-M2 CPU cohort has run. The exact affected CPU example warning-deny Clippy gate
-passes with `--no-deps`; dependency-wide Candle-only lint still fails unchanged
+Shared probe authority is resolved by the published PR75 scope below. The one
+actual M2 cohort ran from frozen/pushed source `7a7165d4` and passed; independent
+whole-range and raw-evidence review agrees. See the actual report above.
+The exact affected CPU example warning-deny Clippy gate passes with `--no-deps`; dependency-wide Candle-only lint still fails unchanged
 optional-consumer items (CPU-17). Ordinary final-head CI remains required.
 
 
@@ -623,3 +625,25 @@ The prior command additionally linted unchanged inference under a Candle-only
 configuration and failed unused optional-consumer items. Preserve that failure
 as outside-slice source debt (CPU-17); it does not replace or waive the exact
 CPU example gate, and no suppression or PR75-owned edit is admitted.
+
+
+### M2 actual CPU qualification result (2026-10-13)
+
+The single admitted cohort completed without retry. All 13 singleton Starts and
+samples correspond to the declared sequence; the original pair has two actual
+Ready CPU Starts and exactly matched singleton/pair workload keys. Four
+conditioned rows each have three fresh comparable observations. Independent
+raw-only arithmetic selects A→B: terminal service 35,474,725 ns and completion
+sum 51,214,065 ns, versus B→A 36,273,953 ns and 56,009,338 ns. The unchanged M1
+policy also selects A→B; this establishes advice/dispatch correspondence, not a
+native order reversal or speedup. All 15 vectors match the independently
+executed reference; no reservation/native serial owner remains after shutdown.
+Existing stopping/residency accounting is disclosed, not erased or interpreted
+as measured memory reclamation.
+
+Independent GPT-6.1 Sol / High `m2_final_review` approved the full source range
+and independently checked raw observations, exact inputs/keys, output vectors,
+CPU-only events and cleanup. The archive and per-member/source/fixture/binary
+hashes are verified. M2 remains Verifying for final normal PR CI. M3–M6 require
+their own admitted contracts; no new milestone implementation is authorized by
+this result alone.

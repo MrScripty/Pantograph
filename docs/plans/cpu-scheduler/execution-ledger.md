@@ -303,3 +303,42 @@ coordination; parent owns its later disposition after reachable handoff.
   changes. Freeze this source and compiled binary before exactly one fresh
   isolated AABBAABBAABBA singleton calibration plus one actual two-Ready pair.
   Preserve all raw failures; no timing/winner tuning or automatic retry.
+
+
+## 2026-10-13 — one actual M2 CPU cohort and independent evidence review
+
+- Executed exactly one invocation from clean frozen/pushed `7a7165d4`, release
+  binary SHA `dd6c01eb30bb11c8b71c3d528532a10d109155dbe840ccfefdad292292d25fc2`.
+  Four CPU equivalents /16 GiB, no accessible GPU; calibrated Candle CPU F32
+  and one private thread. No model acquisition or winner retry.
+- AABBAABBAABBA singleton calibration plus one two-Ready pair passed. Exact
+  task/sample/Start populations and workload digests match, generation30,
+  four conditioned counts3 each. Raw-only maxima yield A→B terminal35,474,725ns,
+  sum51,214,065ns versus B→A terminal36,273,953ns, sum56,009,338ns. Advice and
+  unchanged M1 actual dispatch both select A. No order-reversal/speedup claim.
+- All15 cohort vectors pass the separate original numerical reference, maximum
+  absolute error8.940696716308594e-08. All15 CPU Starts have successful matching
+  completions and all14 runs succeed. No cleanup errors/reservations/native
+  serial owner remain. Existing registry stopping/residency metadata persists;
+  physical eviction is unqualified.
+- Independent GPT-6.1 Sol / High `m2_final_review` approved whole-range source,
+  task/digest/owner/freshness/output/cleanup evidence and raw-only hand arithmetic
+  without consulting producer oracle/summary. All35 archive files match raw
+  originals/member hashes; archive SHA
+  `4a5eb82caac045ac2c864b904d2add515944395379585640208f755c0c16dd42`.
+- The [actual report](reports/2026-10-13-m2-cpu-results.md) supersedes the core
+  checkpoint's coordination/unexecuted-producer handoff; original M1 evidence
+  and hashes remain unchanged. M2-C1/C2/C3 satisfied; C4 awaits final ordinary
+  PR CI. PR75 sources remain untouched; CPU-17 remains disclosed source debt.
+
+- Final supporting logs are packaged with the actual report. Scheduler205
+  (one existing ignore) and workflow988 (zero ignores) pass again; their
+  respective all-target warning-deny owner Clippy gates pass. Three existing
+  actual native worker lifecycle regressions pass, separately from the fixed
+  cohort: normal linear cleanup, post-drain cancellation without training and
+  lost-receipt fencing. No wider native/desktop qualification is inferred.
+
+- Final independent report/plan/ledger publication review approved: arithmetic,
+  truthful scope/supersession, all12 delivered-file checksums, ten supporting-log
+  hashes and32 relative links pass. Staged traceability and range no-new lint
+  pass. M2 remains Verifying solely for ordinary final-head PR76 CI.
