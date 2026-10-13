@@ -1,7 +1,7 @@
 // Actual ImageOutputNode and decoder; controlled graph shell/store/artifact transport.
 // CPU/browser presentation evidence only. No Tauri, inference, model, or GPU runtime.
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -13,6 +13,7 @@ import { evaluateBrowserFunction } from '../../../scripts/cdp-browser-function.m
 
 const testDir = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(testDir, '../../..');
+const sourceRevision = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf8' }).trim();
 const scratch = await mkdtemp(path.join(tmpdir(), 'pantograph-image-output-'));
 const noSandbox = process.env.PANTOGRAPH_IMAGE_BROWSER_NO_SANDBOX === '1';
 const sandboxMode = noSandbox ? 'disabled-explicit-opt-in' : 'enabled';
@@ -20,6 +21,7 @@ let server;
 let browser;
 let socket;
 let evaluate;
+let evidence;
 const passed = [];
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 try {
@@ -288,12 +290,15 @@ try {
   await delay(80);
   assert.equal((await snapshot()).created.length, beforeCompletion.created.length, 'unmounted read created a URL');
   assert.equal(await preview(), null);
+  const finalSnapshot = await snapshot();
+  assert.ok(finalSnapshot.created.every(entry => finalSnapshot.revoked.includes(entry.url)), 'fixture left an owned URL live');
   passed.push('pending retained read completion after unmount cannot publish');
   const version = await send('Browser.getVersion');
-  console.log(JSON.stringify({ ok: true, environment: {
+  evidence = { ok: true, sourceRevision, environment: {
     browser: version.product, sandboxMode, headless: true, gpuDisabled: true,
+    profile: 'fresh temporary profile/config/cache', host: 'loopback-only fixture',
     scope: 'CPU browser presentation; controlled transport/shell/store; actual Svelte component and browser raster decoder/downloads',
-  }, passed }, null, 2));
+  }, passed };
 } finally {
   if (evaluate && socket?.readyState === WebSocket.OPEN) {
     await evaluate(async () => window.imageArtifactFixture?.unmount()).catch(() => {});
@@ -312,3 +317,5 @@ try {
   if (server) await new Promise((resolve) => server.close(resolve));
   await rm(scratch, { recursive: true, force: true });
 }
+// Success is published only after the owned process/server/temporary root end.
+console.log(JSON.stringify({ ...evidence, cleanup: 'completed' }, null, 2));

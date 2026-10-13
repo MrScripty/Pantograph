@@ -1,8 +1,9 @@
 # CPU image result verification — 2026-10-13
 
-Implementation is complete and independently reviewed. Acceptance remains blocked
-on C3: the representative browser fixture cannot start with Chromium's sandbox in
-this environment. No browser assertion or generated-image capability is claimed.
+Implementation is complete and independently reviewed. C3 is pending sandboxed
+hosted acceptance through the existing Actions frontend job after local Chromium
+sandbox startup failed. No browser assertion or generated-image capability is
+claimed until that exact-source run completes successfully.
 
 ## Passed evidence
 

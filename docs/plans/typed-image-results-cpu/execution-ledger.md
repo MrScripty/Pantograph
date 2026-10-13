@@ -45,3 +45,13 @@ Current next slice is browser acceptance; source is ready for a draft PR.
 and staged decision traceability passed (16 paths, zero mapped architecture impacts).
 Create a Conventional Commit for this coherent reviewed implementation with browser
 acceptance explicitly pending. Draft PR is the review handoff, not final acceptance.
+
+2026-10-13 hosted acceptance follow-up: user explicitly directed use of existing
+Actions capabilities with ordinary sandboxing, exact-head checks and ready-only
+merge. Adjacent scope admitted: existing Quality Gates frontend job and fixture
+reporter. Independent GPT-6.1 Sol High reviewer approved the bounded proposal.
+No schema, credentials, permissions, security configuration or new workflow changes.
+The existing frontend job now checks out and verifies the requested source head,
+uses preinstalled google-chrome, rejects sandbox override, and uploads its log.
+Fixture success records source/browser/sandbox/scope and occurs after cleanup.
+Other required jobs retain their established PR integration-tree checkout semantics.

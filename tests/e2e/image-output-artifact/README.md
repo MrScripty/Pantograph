@@ -1,5 +1,13 @@
 # Image Output retained artifact browser check
 
+The existing Quality Gates `frontend-tests` job runs this fixture in hosted
+Google Chrome with ordinary sandboxing. It checks out and verifies the exact
+requested source SHA, rejects the sandbox override, and uploads
+`image-output-browser-qualification` with the complete test log. Successful JSON
+includes the actual source revision, browser version, sandbox mode, scope and
+completed cleanup. The log, rather than workflow metadata alone, binds evidence
+to the source that was executed.
+
 Run from the repository root:
 
 ```sh

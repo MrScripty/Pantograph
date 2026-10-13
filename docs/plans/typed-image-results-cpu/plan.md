@@ -1,7 +1,7 @@
 # Typed image results on CPU
 
-Status: Verifying. Acceptance: blocked. Phase: browser acceptance.
-Next slice: run the Chromium fixture in an approved isolated procedure or a sandbox-capable environment.
+Status: Verifying. Acceptance: partial. Phase: browser acceptance.
+Next slice: qualify sandboxed Chrome in the existing Actions frontend job and inspect final-head checks.
 
 ## Objective and scope
 
@@ -41,10 +41,12 @@ User authorization selects this plan and the start operation after independent r
 Write set: `src/components/nodes/workflow/ImageOutputNode.svelte`, adjacent
 `imageOutput*.ts`, `src/components/workflowToolbarEvents.ts` and its tests,
 `tests/e2e/image-output-artifact/`, and this plan directory. No shared types,
-Rust, lockfiles, runtime workers, or CI workflow changes.
+Rust, lockfiles or runtime worker changes. Adjacent CI write set: the existing
+`frontend-tests` job in `.github/workflows/quality-gates.yml` and fixture evidence
+reporting; user requested hosted sandbox acceptance after local startup was blocked.
 
 Claims (all automated): C1, C2 and C4 satisfied by [verification](reports/verification.md);
-C3 blocked before browser startup. Source implementation and independent review are complete.
+C3 pending hosted sandboxed browser acceptance. Source implementation and independent review are complete.
 
 | ID | Criterion | Kind | Environment |
 | --- | --- | --- | --- |
@@ -65,7 +67,11 @@ Documentation, Contracts, Security, Concurrency, Accessibility, Frontend,
 TypeScript and TypeScript Async.
 
 Blockers: Chromium setuid and user-namespace sandbox probes both failed. C3
-requires an approved isolated browser procedure or a sandbox-capable environment.
+will use the existing GitHub-hosted Ubuntu frontend job with preinstalled Chrome
+and its ordinary sandbox; no override, security setting, permission or credential
+change. The job checks out and verifies the requested source head, preserves
+pipefail, and uploads the test log through the existing artifact action convention.
+Hosted failure leaves C3 blocked. Independent reviewer approved this bounded route.
 Replan if shared schema changes, unsupported source execution, runtime host work,
 or broader media families become necessary. Do not weaken sandbox silently.
 
