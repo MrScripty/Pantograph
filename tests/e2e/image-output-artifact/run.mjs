@@ -190,8 +190,11 @@ try {
   assert.equal(await evaluate(() => document.activeElement?.textContent.trim()), 'Expand');
   await key('Enter', 'Enter', 13);
   await waitFor(() => document.querySelector('dialog')?.open, [], 'modal open');
+  await waitFor(() => {
+    const image = document.querySelector('dialog img');
+    return image?.complete && image.naturalWidth > 0;
+  }, [], 'decoded modal image');
   assert.equal(await evaluate(() => document.activeElement?.textContent.trim()), 'Close');
-  await waitFor(() => document.querySelector('dialog img')?.naturalWidth > 0, [], 'expanded image decode');
   assert.equal(await evaluate(() => document.querySelector('dialog img')?.naturalWidth), images.jpeg.width);
   await key('Escape', 'Escape', 27);
   await waitFor(() => !document.querySelector('dialog')?.open, [], 'Escape dismissal');

@@ -254,7 +254,8 @@
     showModal = true;
   }
 
-  function closeModal() {
+  function closeModal(event?: Event) {
+    event?.stopPropagation();
     showModal = false;
   }
 
@@ -368,36 +369,33 @@
         <div class="space-y-1">
           <button type="button"
             class="nodrag nopan nowheel w-full cursor-pointer border-0 bg-transparent p-0"
-            onclick={openModal}
+            onclickcapture={openModal}
             aria-label="Open output image preview"
-            onmousedown={stopControlEvent}
-            onmouseup={stopControlEvent}
-            onpointerdown={stopControlEvent}
-            onpointerup={stopControlEvent}
-            onclickcapture={stopControlEvent}
+            onmousedowncapture={stopControlEvent}
+            onmouseupcapture={stopControlEvent}
+            onpointerdowncapture={stopControlEvent}
+            onpointerupcapture={stopControlEvent}
           >
             <img src={imageSrc} alt="Output" class="max-h-40 w-full object-contain rounded" />
           </button>
           <div class="flex justify-end gap-1">
             <button type="button"
               class="nodrag nopan nowheel text-[10px] text-neutral-400 hover:text-neutral-200 bg-transparent border-0 cursor-pointer px-1"
-              onclick={downloadImage}
-              onmousedown={stopControlEvent}
-              onmouseup={stopControlEvent}
-              onpointerdown={stopControlEvent}
-              onpointerup={stopControlEvent}
-              onclickcapture={stopControlEvent}
+              onclickcapture={downloadImage}
+              onmousedowncapture={stopControlEvent}
+              onmouseupcapture={stopControlEvent}
+              onpointerdowncapture={stopControlEvent}
+              onpointerupcapture={stopControlEvent}
             >
               Download
             </button>
             <button type="button"
               class="nodrag nopan nowheel text-[10px] text-neutral-400 hover:text-neutral-200 bg-transparent border-0 cursor-pointer px-1"
-              onclick={openModal}
-              onmousedown={stopControlEvent}
-              onmouseup={stopControlEvent}
-              onpointerdown={stopControlEvent}
-              onpointerup={stopControlEvent}
-              onclickcapture={stopControlEvent}
+              onclickcapture={openModal}
+              onmousedowncapture={stopControlEvent}
+              onmouseupcapture={stopControlEvent}
+              onpointerdowncapture={stopControlEvent}
+              onpointerupcapture={stopControlEvent}
             >
               Expand
             </button>
@@ -426,10 +424,10 @@
           value={formatOverride?.format_id ?? DEFAULT_SELECTION_VALUE}
           disabled={!defaultFormat && !formatOverride}
           onchange={handleFormatChange}
-          onmousedown={stopControlEvent}
-          onmouseup={stopControlEvent}
-          onpointerdown={stopControlEvent}
-          onpointerup={stopControlEvent}
+          onmousedowncapture={stopControlEvent}
+          onmouseupcapture={stopControlEvent}
+          onpointerdowncapture={stopControlEvent}
+          onpointerupcapture={stopControlEvent}
           onclickcapture={stopControlEvent}
         >
           <option value={DEFAULT_SELECTION_VALUE}>
@@ -457,10 +455,10 @@
                 disabled={!supportsQuality}
                 aria-describedby={`${qualityInputId}-range`}
                 onchange={handleQualityChange}
-                onmousedown={stopControlEvent}
-                onmouseup={stopControlEvent}
-                onpointerdown={stopControlEvent}
-                onpointerup={stopControlEvent}
+                onmousedowncapture={stopControlEvent}
+                onmouseupcapture={stopControlEvent}
+                onpointerdowncapture={stopControlEvent}
+                onpointerupcapture={stopControlEvent}
                 onclickcapture={stopControlEvent}
               />
               <span id={`${qualityInputId}-range`} class="text-[10px] text-neutral-500">
@@ -477,10 +475,10 @@
                 value={formatOverride.color_profile_id}
                 disabled={colorProfileOptions.length === 0}
                 onchange={handleColorProfileChange}
-                onmousedown={stopControlEvent}
-                onmouseup={stopControlEvent}
-                onpointerdown={stopControlEvent}
-                onpointerup={stopControlEvent}
+                onmousedowncapture={stopControlEvent}
+                onmouseupcapture={stopControlEvent}
+                onpointerdowncapture={stopControlEvent}
+                onpointerupcapture={stopControlEvent}
                 onclickcapture={stopControlEvent}
               >
                 {#each colorProfileOptions as profileId (profileId)}
@@ -507,7 +505,13 @@
 >
   {#if imageSrc}
     <div class="dialog-content">
-      <button type="button" class="nodrag nopan nowheel dialog-close" onclick={closeModal}>
+      <button type="button" class="nodrag nopan nowheel dialog-close"
+        onclickcapture={closeModal}
+        onmousedowncapture={stopControlEvent}
+        onmouseupcapture={stopControlEvent}
+        onpointerdowncapture={stopControlEvent}
+        onpointerupcapture={stopControlEvent}
+      >
         Close
       </button>
       <img src={imageSrc} alt="Full resolution output" class="dialog-image" />

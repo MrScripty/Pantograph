@@ -11,3 +11,9 @@
   Revisit with sandbox-capable environment or explicit scoped test-run authorization.
 - IMG-5 (resolved in slice): local unsupported error previously became transport_error
   at Toolbar catch; now uses existing capability_violation with unsupported details.
+- IMG-6 (P1, fixed in follow-up): inherited capture-phase click suppression prevented
+  Svelte delegated Download/Expand actions from running. Actual installed compiler
+  and event-dispatch source prove the failure. This image node's controls now use
+  a single direct capture action and capture-phase pointer/mouse isolation; browser
+  assertions must verify both activation and ancestor isolation. Other node owners
+  are outside this bounded image-control family and unchanged.

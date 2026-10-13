@@ -55,3 +55,12 @@ The existing frontend job now checks out and verifies the requested source head,
 uses preinstalled google-chrome, rejects sandbox override, and uploads its log.
 Fixture success records source/browser/sandbox/scope and occurs after cleanup.
 Other required jobs retain their established PR integration-tree checkout semantics.
+
+2026-10-13 image-control repair: while hosted jobs were queued, independent review
+proved an inherited event defect from actual Svelte compilation/runtime dispatch:
+click capture suppression stopped events before delegated Download/Expand actions.
+The owned image-control family now uses direct capture action handlers and captures
+pointer/mouse isolation before native ancestors. Close uses the same mechanism;
+native dialog Escape/onclose behavior remains. Independent reviewer approved this
+bounded replacement, preserving the admitted frontend write set. Browser acceptance
+still depends on final-source hosted assertions; compiler proof is not GUI evidence.
