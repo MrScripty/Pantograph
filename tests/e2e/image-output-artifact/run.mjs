@@ -134,7 +134,12 @@ try {
     return image?.complete && image.naturalWidth > 0;
   }, [], 'decoded preview');
   const key = async (name, code, virtualKeyCode) => {
-    await send('Input.dispatchKeyEvent', { type: 'keyDown', key: name, code, windowsVirtualKeyCode: virtualKeyCode });
+    // Enter needs character text for Chromium's native keypress/button activation.
+    const text = name === 'Enter' ? '\r' : '';
+    await send('Input.dispatchKeyEvent', {
+      type: text ? 'keyDown' : 'rawKeyDown', key: name, code,
+      windowsVirtualKeyCode: virtualKeyCode, text, unmodifiedText: text,
+    });
     await send('Input.dispatchKeyEvent', { type: 'keyUp', key: name, code, windowsVirtualKeyCode: virtualKeyCode });
   };
   const clickButton = async (text) => {

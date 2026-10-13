@@ -74,3 +74,12 @@ uses bounded group/main termination, distinguishes inert PID-1-owned zombie reco
 from live members through existing procps, and removes temporary state only after
 live effects end. Primary and cleanup failures are preserved together. A local
 sandbox-failure probe now preserves its startup error without cleanup failure.
+
+2026-10-13 keyboard-driver repair: superseded d0b92652 job 115574792903 passed
+its raster/download assertions, then reached the keyboard stage; ENOTEMPTY masked
+its precise primary error. Independent GPT-6.1 Sol High review established a
+current fixture protocol defect: Enter lacked character text, so Chromium skipped
+keypress dispatch. The admitted fixture slice now sends Enter text/unmodifiedText
+CR and rawKeyDown for Tab/Escape, matching Chromium and Puppeteer sources. Native
+button/modal/focus assertions remain intact. This does not identify the masked
+old assertion or establish final-source browser acceptance. C3 remains pending.

@@ -41,9 +41,23 @@ built the actual component successfully, then exited 1 before browser assertions
 
 The worker also tested user-namespace sandboxing with `--disable-setuid-sandbox`;
 Chromium reported no usable sandbox. No sandbox override has been executed.
-The runner retains sandboxing by default and exposes an explicit approved-test-only
-opt-in. A pending approval request covers a fresh credential-free profile,
-loopback-only fixture, CPU rendering and full owned process cleanup for this run.
+The runner retains sandboxing by default. The user selected hosted ordinary
+sandboxing; no override has been executed or is needed for that route.
+
+Hosted Google Chrome 154.0.8037.97 started with sandboxing enabled in superseded
+[f9d46511 job 115573112824](https://github.com/MrScripty/Pantograph/actions/runs/38477919111/job/115573112824).
+[d0b92652 job 115574792903](https://github.com/MrScripty/Pantograph/actions/runs/38478429385/job/115574792903)
+advanced past real raster/download assertions into keyboard checks, then failed;
+old cleanup masked the precise primary assertion with ENOTEMPTY. Neither run
+establishes C3 or final-source acceptance. The runner now owns browser-group
+shutdown through profile release and preserves primary failures.
+
+Independent review also established a keyboard-driver defect from Chromium's
+[keypress dispatch](https://github.com/chromium/chromium/blob/main/third_party/blink/renderer/core/input/keyboard_event_manager.cc)
+and [Puppeteer's CDP driver](https://github.com/puppeteer/puppeteer/blob/main/packages/puppeteer-core/src/cdp/Input.ts).
+Enter now carries CR text/unmodifiedText; Tab/Escape use rawKeyDown. All native
+modal/focus assertions remain. The next exact-source hosted run must pass them
+and cleanup before C3 can be accepted.
 
 ## Independent review
 
