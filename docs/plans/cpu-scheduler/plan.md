@@ -1,17 +1,17 @@
 # Plan: CPU Scheduler Completion And Fair Progress
 
-**Plan status:** `Active` — M1 merged; M2 core implemented, qualification blocked.
+**Plan status:** `Active` — M1 merged; M2 CPU qualification in progress.
 
 **Current phase:** M2 verification — bounded advisory retained-CPU completion lookahead.
 
-**Next slice:** Resolve shared probe ownership with the text worker, compile
-the reviewed qualification mode, then run the single admitted CPU cohort.
+**Next slice:** Compile and review the corrected singleton/pair qualification
+mode, then run the single admitted CPU cohort.
 
 **Acceptance status:** M1 merged as PR73 in main `07b23d47`; the original
 negative cohort and the separately accepted C3 supplement remain unchanged.
 M2-C1/C2 core evidence and independent source review pass; M2-C3 actual CPU
-qualification is blocked on probe coordination. M2-C4 has a blocked composed
-inference lint gate and pending PR CI. See the [core report](reports/2026-10-13-m2-core.md).
+qualification is pending on the reviewed construction correction below.
+M2-C4 requires the affected CPU example lint gate and final PR CI. See the [core report](reports/2026-10-13-m2-core.md).
 No default-policy or speedup claim.
 
 **Execution ledger:** [execution-ledger.md](execution-ledger.md)
@@ -542,12 +542,11 @@ Verification claims (admission states and current disposition):
 - **M2-C2**, `satisfied`, focused/simulated/automated: freshness, exact owner/predecessor association,
   invalidation after cancellation/failure, remaining-obligation exclusion, and
   unchanged M1 decisions/custody. Existing lifecycle regressions remain required.
-- **M2-C3**, `blocked: shared probe coordination`, integration/required-real CPU/automated: one fresh isolated service, retaining
+- **M2-C3**, `pending: corrected singleton construction`, integration/required-real CPU/automated: one fresh isolated service, retaining
   lease and committed BERT-8 fixture; exactly 13 singleton public-session runs
   A,A,B,B,A,A,B,B,A,A,B,B,A then one genuine two-Ready A/B run. This yields three
   each AA,AB,BB,BA transitions without forcing a scheduling decision. Every
-  singleton uses the same authored pair graph and exact inputs, targeting only
-  its A or B output; verify that its actual observed workload key matches the
+  singleton uses its preserved branch graph and matching exact input; verify that its actual observed workload key matches the
   later pair. Graph/proof context differences must refuse qualification rather
   than be normalized away. Use the
   existing independently checked short/truncation fixture texts/vectors and one
@@ -556,7 +555,7 @@ Verification claims (admission states and current disposition):
   Recompute all row maxima and both complete scores independently from raw
   observations. No injected times/history, delays or retry for a winner. A
   failure preserves partial evidence and blocks this claim.
-- **M2-C4**, `partial: composed lint blocked; PR CI pending`, supporting gates/representative/automated + review: scheduler and workflow-service suites, affected native
+- **M2-C4**, `partial: CPU example and final PR CI pending`, supporting gates/representative/automated + review: scheduler and workflow-service suites, affected native
   example compile, formatting, Clippy with intended CPU features, independent
   whole-range source/evidence review, and ordinary PR CI. CPU service ranking
   does not qualify GPU, native desktop, general speedup or default activation.
@@ -581,3 +580,48 @@ pending. Source-only independent review approves the core, but actual CPU
 qualification has not run. The composed inference CPU lint command also hits
 existing other-owner unused items; no suppression or cross-owner repair is
 admitted here. Resolve both blockers and ordinary CI before accepting M2.
+
+
+### M2 pre-execution construction correction (2026-10-13)
+
+The continued end-to-end CPU task is authorized by the parent. PR75 at
+`2f1e38fd846ae089b47c5a2ba4dccf1fcf892cc1` explicitly excludes the embedding
+probe and scheduler files and records M2 probe ownership. Its actual write set
+is disjoint from this branch. Preserve its dependency adapters and text contract;
+no merge, overwrite or source edit to those files is needed for M2 qualification.
+This published authority resolves CPU-16's earlier coordination blocker.
+
+Independent Sol / High review found before any cohort execution that output
+targets only project returned outputs: the scheduler compiles and executes the
+full graph. The original proposed singleton-output construction would execute
+both runtime tasks. It is superseded prospectively, before any model cohort:
+
+- Derive two singleton graphs from the existing pair graph by deleting only the
+  opposite branch's four nodes and three edges. Preserve every retained node's
+  identity, data, model/task/runtime/device and bindings. Author them once as
+  `cpu-serial-lookahead-a` / `cpu-serial-lookahead-b`.
+- Run the fixed 13-member AABBAABBAABBA sequence on those one-runtime-task graphs,
+  supplying only the matching original input. Then run one unchanged two-Ready
+  pair on the original graph. All actual Starts and sample additions must match
+  the declared one/two runtime task populations.
+- The same immutable workload is established by the observation digest, not a
+  graph label. Descriptor resolution, native requirement identity and binding
+  construction exclude graph/run attribution in current source. Nonetheless,
+  singleton/pair digest equality remains a hard real-evidence gate. Never drop,
+  rename or normalize a hashed field to pass it. A mismatch fails qualification.
+- Counts, owner prerequisites, exact fixtures/vectors, clocks, fixed budget,
+  no retry for a winner and all cleanup/cancellation invariants are unchanged.
+  This is qualification construction only; no production pruning is introduced.
+
+Reviewer `m2_qualification_review`, explicitly GPT-6.1 Sol / High, admitted this
+replacement before code changes. Publish this correction before implementation
+and freeze the compiled/reviewed source before the single actual cohort.
+
+The acceptance lint gate is the primary affected embedded CPU example with
+`--no-default-features --features backend-candle,host-dependency-inventory` and
+warnings denied, plus existing scheduler/workflow package gates. A separate
+supported default-plus-PyTorch owner/library/test gate may cover composition.
+The prior command additionally linted unchanged inference under a Candle-only
+configuration and failed unused optional-consumer items. Preserve that failure
+as outside-slice source debt (CPU-17); it does not replace or waive the exact
+CPU example gate, and no suppression or PR75-owned edit is admitted.

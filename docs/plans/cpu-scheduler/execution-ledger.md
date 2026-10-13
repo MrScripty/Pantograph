@@ -265,3 +265,21 @@ coordination; parent owns its later disposition after reachable handoff.
   boundaries and blockers. No M3–M6, GPU, remote, default activation, general
   completion or speedup claim is made. The feature branch is retained for PR
   review/qualification; parent is integration owner and main is unchanged.
+
+
+## 2026-10-13 — continued native qualification admission
+
+- Parent explicitly resumed end-to-end CPU qualification under Sol / High.
+  PR75's published plan and diff at `2f1e38fd` exclude the embedding probe and
+  scheduler write set. Preserve all text-dependency changes; no PR75 merge or
+  file replacement is needed. This resolves the prior shared-scope blocker.
+- Pre-run independent review found the original singleton-target design invalid:
+  target selection does not prune scheduler tasks. No cohort was executed.
+  Prospectively replace it with two derived one-branch graphs, preserving exact
+  node/data/binding identity and retaining actual workload digest equality as a
+  hard acceptance gate. The sequence and one-cohort stop rule remain unchanged.
+- Independent `m2_qualification_review` admitted the replacement and the exact
+  affected-owner CPU lint gate before code changes. The historical inference
+  optional-consumer warning remains outside-slice debt, not a repaired config.
+  The compiled source and numerical/evidence producer still require review before
+  any model cohort. No GPU/remote or broader scheduler action is admitted.
