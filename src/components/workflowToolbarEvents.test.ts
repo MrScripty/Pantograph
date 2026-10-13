@@ -17,10 +17,13 @@ import {
   workflowSubmitSuccessWorkbenchPage,
   workflowSubmitTextInputs,
   workflowSubmitInputs,
+  UnsupportedWorkflowInputError,
   workflowSubmitDisabledReason,
   workflowValidationRefreshKey,
 } from './workflowToolbarEvents.ts';
 import type { NodeExecutionState, WorkflowEvent } from '../services/workflow/types.ts';
+import { normalizeWorkflowServiceError } from '../services/workflow/workflowServiceErrors.ts';
+import { formatWorkflowCommandError } from './workbench/workflowErrorPresenters.ts';
 
 test('Submit captures authored text for the native embedding graph and preserves exact values', () => {
   const graph = {
@@ -92,6 +95,27 @@ test('Submit rejects lossy integer and wrong boolean sources before invoking the
   assert.throws(() => workflowSubmitInputs({ nodes: [
     { id: 'flag', node_type: 'boolean-input', position: { x: 0, y: 0 }, data: { value: 'false' } },
   ], edges: [] }), /requires a boolean/);
+});
+
+test('Submit rejects unsupported image sources without silently dropping authored bytes', () => {
+  for (const data of [{}, { image: 'aW1hZ2U=' }, { value: { artifact_id: 'image' } }]) {
+    const graph = {
+      nodes: [{ id: 'source-image', node_type: 'image-input', position: { x: 0, y: 0 }, data }],
+      edges: [],
+    };
+    const original = structuredClone(graph);
+    assert.throws(() => workflowSubmitInputs(graph), error => {
+      assert.ok(error instanceof UnsupportedWorkflowInputError);
+      assert.equal(error.code, 'capability_violation');
+      assert.deepEqual(error.details, { status: 'unsupported', node_type: 'image-input', node_id: 'source-image' });
+      assert.equal(error.message, "Image input 'source-image' is unsupported by scheduler submission.");
+      assert.equal(normalizeWorkflowServiceError(error), error);
+      assert.equal(formatWorkflowCommandError(normalizeWorkflowServiceError(error)),
+        "Capability violation: Image input 'source-image' is unsupported by scheduler submission.");
+      return true;
+    });
+    assert.deepEqual(graph, original);
+  }
 });
 
 test('ordinary Toolbar Submit sends captured typed text through the execution-session request', async () => {
