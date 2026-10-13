@@ -226,3 +226,42 @@ coordination; parent owns its later disposition after reachable handoff.
 - Plan operation is `continue`. M2-C1..C4 remain pending; one fixed actual
   calibration cohort is prospectively defined. Implementation admission does
   not imply successful CPU evidence, speedup, default activation or M3–M6.
+
+
+## 2026-10-13 — M2 core implementation and blocked qualification handoff
+
+- Implemented the admitted pure numeric kernel and private serial policy in
+  disjoint worker write sets. The host explicitly enables advice; default/M1
+  dispatch remain unchanged. One bounded history owns samples and predecessor,
+  and only real matched cleanup/current owner restores conditioning.
+- Scheduler205 tests pass (one existing ignored probe); workflow-service988
+  tests pass (28 serial tests, no ignores). Tests cover the independent hand
+  oracle and failure/owner/freshness/population/cancellation invariants with
+  controlled protocol fixtures. No actual new model cohort ran.
+- Independent GPT-6.1 Sol / High reviewer `m2_source_review` approved the whole
+  core source range and final lint-only corrections. Final serial policy
+  SHA-256 `f35be2e7e9f7f986906d6670c47e4d74a97968df13c97e24c6caf65fc0ff7df6`.
+  No model execution occurred during review.
+- Scheduler all-target warning-deny Clippy and workflow package all-target
+  `--no-deps` warning-deny Clippy pass. Composed CPU Clippy targeting inference
+  fails on unchanged selected-text fields/OpenAI helper dead-code warnings;
+  no suppression or other-owner edit was made. CPU-17 tracks the blocker.
+- Declared pre-push `npm test`: node-engine261 passed / one existing ignored,
+  workflow-nodes168 passed. Workspace formatting/whitespace pass. Exact local
+  logs are retained in `/tmp/m2-policy-full-tests.log`,
+  `/tmp/m2-policy-package-clippy.log`, `/tmp/m2-policy-cpu-clippy.log` and
+  `/tmp/m2-declared-prepush-tests.log` in this saved environment.
+- Independent producer review identified and resolved task/Start/key association,
+  age coverage and explicit error teardown before any native cohort. The source
+  and exact root/helper wiring patch are retained under
+  `/workspace/scheduler-m2-pending/`; patch application check passes. Shared
+  root/helper files remain unchanged pending required text-worker coordination.
+- Cross-thread messaging could not address the supplied text-worker ID. Parent
+  relay was requested; no answer arrived before this handoff. M2-C3 remains
+  blocked and the scheduler worker retains its qualification responsibility
+  after that shared boundary is settled. This is a reviewable core commit,
+  not M2 acceptance. Ordinary PR CI also remains pending at publication.
+- The [core report](reports/2026-10-13-m2-core.md) records commands, evidence
+  boundaries and blockers. No M3–M6, GPU, remote, default activation, general
+  completion or speedup claim is made. The feature branch is retained for PR
+  review/qualification; parent is integration owner and main is unchanged.

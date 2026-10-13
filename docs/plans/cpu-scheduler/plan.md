@@ -1,16 +1,18 @@
 # Plan: CPU Scheduler Completion And Fair Progress
 
-**Plan status:** `Active` — M1 merged; bounded M2 design admitted.
+**Plan status:** `Active` — M1 merged; M2 core implemented, qualification blocked.
 
-**Current phase:** M2 — bounded advisory retained-CPU completion lookahead.
+**Current phase:** M2 verification — bounded advisory retained-CPU completion lookahead.
 
-**Next slice:** Implement the admitted bounded M2 policy and qualify its
-actual CPU advisory; coordinate shared probe edits with the text worker.
+**Next slice:** Resolve shared probe ownership with the text worker, compile
+the reviewed qualification mode, then run the single admitted CPU cohort.
 
 **Acceptance status:** M1 merged as PR73 in main `07b23d47`; the original
 negative cohort and the separately accepted C3 supplement remain unchanged.
-M2 design admitted by independent review; required acceptance evidence is
-pending. No default-policy or speedup claim.
+M2-C1/C2 core evidence and independent source review pass; M2-C3 actual CPU
+qualification is blocked on probe coordination. M2-C4 has a blocked composed
+inference lint gate and pending PR CI. See the [core report](reports/2026-10-13-m2-core.md).
+No default-policy or speedup claim.
 
 **Execution ledger:** [execution-ledger.md](execution-ledger.md)
 
@@ -197,7 +199,7 @@ and write sets receive an independent review before their first code change.
 | --- | --- | --- |
 | M0 / Accepted on publication | Reviewed plan, source/hardware facts, ledger/issues; navigation pointers in `docs/plans/README.md`, broad plan and scheduler migration notes. No production code. | Two independent reviewers approved M1's shared interface decisions; links, exact scope and history reviewed. This plan commit is the publication checkpoint. |
 | M1 / Accepted; merged PR73 | Existing retained CPU first-two-Ready mode composes with ordinary hosted providers. Writes: embedded `workflow_service_composition.rs` and its focused tests; workflow `serial_ready.rs`, `task_execution_worker.rs`, relevant tests/exports; new focused native integration test and registration; bounded CPU example/guide only if needed for repeatable invocation; this plan's evidence. | M0; real resident CPU owner and retaining lease. Actual public sessions with two ready embeddings and retained outputs; measured sample-driven order; no injected candidate/readiness/timing/outputs; default and negative lifecycle regressions. Exact-head local gates, independent source/evidence review, normal CI. |
-| M2 / Active (bounded advisory subset) | Bounded completion lookahead for a disclosed CPU cohort, initially advisory on actual work. Extend existing scheduler kernels, workflow capture and native evidence producer only. | M1; complete comparable evidence for every admitted alternative/transition, including unfinished obligations. Hand-computed independent oracles, work-budget refusal, missing/stale evidence, owner invalidation and actual CPU trace correspondence. No forecasts authorize execution. Promote only a separately qualified action subset; do not fill missing cold/transfer costs with zero. |
+| M2 / Verifying; CPU qualification blocked | Bounded completion lookahead for a disclosed CPU cohort, initially advisory on actual work. Extend existing scheduler kernels, workflow capture and native evidence producer only. | M1; complete comparable evidence for every admitted alternative/transition, including unfinished obligations. Hand-computed independent oracles, work-budget refusal, missing/stale evidence, owner invalidation and actual CPU trace correspondence. No forecasts authorize execution. Promote only a separately qualified action subset; do not fill missing cold/transfer costs with zero. |
 | M3 / Planned | Explicit per-app/bucket service opportunities at an authoritative ready-work boundary, alongside priorities. Writes confined to scheduler/workflow queue/attribution integration and tests after its design review. | M1 and a bounded eligible population; use authenticated existing attribution, not arbitrary caller identities. Fixed modeled traces prove opportunity/order, then two actual CPU sessions prove progress under repeated foreground arrival and cancellation. No wall-clock guarantee for unbounded nonpreemptible jobs. Missing entitlement identity has an explicit owned disposition. |
 | M4 / Planned | CPU residency actions improve a specified repeated-model workflow without violating cleanup; serial preparation/eviction only. Writes scheduler policy, registry/host action integration and tests after review. | M2 evidence, M3 fairness obligations where actions delay other apps. Measure load/unload/reload separately; full charge remains until acknowledged stop; pinned/live allocations protected. Actual two-model CPU alternation, pressure, cancellation and failed-stop cases. No overlapping loads, speculative lease release or automatic recovery of unknown execution. |
 | M5 / Planned | Fair bounded grouping on the existing supported sequential CPU batch envelope; optimize only demonstrated scheduler overhead/reuse. Writes existing batch policy/broker and tests after review. | M3/M4 where grouping changes retention or fairness. Group 1..8 compatible members without waiting indefinitely, preserve per-member outputs/attempts/cancellation, mixed/incompatible tasks refuse grouping. Compare actual CPU grouped versus singleton runs. Label sequential envelope honestly; native/continuous execution remains Deferred unless independently capable and exercised. |
@@ -531,16 +533,16 @@ The numeric kernel and policy workers use disjoint write sets; one integrator
 owns plan and evidence reconciliation. Shared probe edits remain coordinated
 with the text worker; no readiness-provider edits are admitted.
 
-Verification claims (all `pending` at admission):
+Verification claims (admission states and current disposition):
 
-- **M2-C1**, focused/not-applicable/automated: hand oracle P=A, A|A=7, B|A=3,
+- **M2-C1**, `satisfied`, focused/not-applicable/automated: hand oracle P=A, A|A=7, B|A=3,
   A|B=20 gives A→B completions [7,10], sum17, versus B→A [3,23], sum26.
   Lookahead selects A though immediate service selects B. Cover ties, missing
   rows, budget refusal and overflow without a partial winner.
-- **M2-C2**, focused/simulated/automated: freshness, exact owner/predecessor association,
+- **M2-C2**, `satisfied`, focused/simulated/automated: freshness, exact owner/predecessor association,
   invalidation after cancellation/failure, remaining-obligation exclusion, and
   unchanged M1 decisions/custody. Existing lifecycle regressions remain required.
-- **M2-C3**, integration/required-real CPU/automated: one fresh isolated service, retaining
+- **M2-C3**, `blocked: shared probe coordination`, integration/required-real CPU/automated: one fresh isolated service, retaining
   lease and committed BERT-8 fixture; exactly 13 singleton public-session runs
   A,A,B,B,A,A,B,B,A,A,B,B,A then one genuine two-Ready A/B run. This yields three
   each AA,AB,BB,BA transitions without forcing a scheduling decision. Every
@@ -554,7 +556,7 @@ Verification claims (all `pending` at admission):
   Recompute all row maxima and both complete scores independently from raw
   observations. No injected times/history, delays or retry for a winner. A
   failure preserves partial evidence and blocks this claim.
-- **M2-C4**, supporting gates/representative/automated + review: scheduler and workflow-service suites, affected native
+- **M2-C4**, `partial: composed lint blocked; PR CI pending`, supporting gates/representative/automated + review: scheduler and workflow-service suites, affected native
   example compile, formatting, Clippy with intended CPU features, independent
   whole-range source/evidence review, and ordinary PR CI. CPU service ranking
   does not qualify GPU, native desktop, general speedup or default activation.
@@ -570,3 +572,12 @@ predecessor state loses truthful transition identity. One bounded predecessor
 and per-row optional identity are the only permanent new state; no history
 store, generic search framework, worker daemon or recovery mechanism is added.
 The probe is qualification-only and cannot authorize production work.
+
+
+M2 verification details are in the [core report](reports/2026-10-13-m2-core.md).
+The user requires shared probe coordination with the text worker. Cross-thread
+messaging is unavailable in the exposed collaboration API; parent relay remains
+pending. Source-only independent review approves the core, but actual CPU
+qualification has not run. The composed inference CPU lint command also hits
+existing other-owner unused items; no suppression or cross-owner repair is
+admitted here. Resolve both blockers and ordinary CI before accepting M2.

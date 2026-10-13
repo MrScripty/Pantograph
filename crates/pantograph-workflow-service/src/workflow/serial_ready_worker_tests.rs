@@ -2,7 +2,9 @@ mod serial_ready_tests {
     use super::*;
     use crate::workflow::*;
     use pantograph_runtime_host_contracts::{
-        SerialRuntimeHostBatchExecutionPort, SerialRuntimeHostCpuOwnerEvidence,
+        RuntimeHostExecutionDiagnostic, RuntimeHostExecutionDiagnosticCode,
+        RuntimeHostExecutionDiagnosticSeverity, SerialRuntimeHostBatchExecutionPort,
+        SerialRuntimeHostCpuOwnerEvidence,
     };
     use pantograph_scheduler::{
         SchedulerSerialBoundDispatch, SchedulerSerialDrainState, SchedulerSerialDrainedDispatch,
@@ -24,6 +26,7 @@ mod serial_ready_tests {
         cleanup_release: tokio::sync::Notify,
         block_cleanup: AtomicBool,
         fail_cleanup: AtomicBool,
+        fail_execution: AtomicBool,
         started: tokio::sync::Notify,
         release: tokio::sync::Notify,
         block: AtomicBool,
@@ -49,6 +52,7 @@ mod serial_ready_tests {
                 cleanup_release: tokio::sync::Notify::new(),
                 block_cleanup: AtomicBool::new(false),
                 fail_cleanup: AtomicBool::new(false),
+                fail_execution: AtomicBool::new(false),
                 started: tokio::sync::Notify::new(),
                 release: tokio::sync::Notify::new(),
                 block: AtomicBool::new(false),
@@ -179,16 +183,19 @@ mod serial_ready_tests {
             {
                 tokio::time::sleep(Duration::from_millis(25)).await;
             }
+            let failed = self.fail_execution.swap(false, Ordering::AcqRel);
+            let drain_state = if failed {
+                SchedulerSerialDrainState::Failed
+            } else {
+                SchedulerSerialDrainState::Completed
+            };
             let drained = match executing {
                 Some(executing) => executing
-                    .record_drained_response(identity, SchedulerSerialDrainState::Completed)
+                    .record_drained_response(identity, drain_state)
                     .unwrap(),
                 None => unranked
                     .unwrap()
-                    .record_unranked_drained_response(
-                        identity,
-                        SchedulerSerialDrainState::Completed,
-                    )
+                    .record_unranked_drained_response(identity, drain_state)
                     .unwrap(),
             };
             let evidence =
@@ -208,36 +215,89 @@ mod serial_ready_tests {
                     .unwrap()
                     .store(guard.generation, Ordering::Release);
             }
-            Ok((
-                runtime_host_batch_response_from_request(&request),
-                drained,
-                evidence,
-            ))
+            let mut response = runtime_host_batch_response_from_request(&request);
+            if failed {
+                response.state = RuntimeHostBatchExecutionState::Failed;
+                response.members[0].state = RuntimeHostBatchExecutionMemberState::Failed;
+                response.members[0].outputs.clear();
+                response.diagnostics = vec![RuntimeHostExecutionDiagnostic {
+                    severity: RuntimeHostExecutionDiagnosticSeverity::Info,
+                    code: RuntimeHostExecutionDiagnosticCode::HandoffRejected,
+                    message: "synthetic terminal execution failure".into(),
+                    hint: None,
+                }];
+                response.members[0].diagnostics = response.diagnostics.clone();
+                response.members[0].retry_disposition =
+                    RuntimeHostBatchMemberRetryDisposition::NotRetryable;
+                response
+                    .validate()
+                    .expect("valid synthetic failed host response");
+            }
+            Ok((response, drained, evidence))
         }
         async fn execute_serial_singleton_with_cleanup(
-            &self, request: RuntimeHostBatchExecutionRequest, cancellation: RuntimeHostExecutionCancellationHandle,
+            &self,
+            request: RuntimeHostBatchExecutionRequest,
+            cancellation: RuntimeHostExecutionCancellationHandle,
             bound: SchedulerSerialBoundDispatch,
-        ) -> Result<pantograph_runtime_host_contracts::SerialRuntimeHostDrainedExecution, RuntimeHostExecutionPortError> {
+        ) -> Result<
+            pantograph_runtime_host_contracts::SerialRuntimeHostDrainedExecution,
+            RuntimeHostExecutionPortError,
+        > {
             let candidate = bound.identity().candidate_id.to_owned();
-            let (response, drained, old) = self.execute_serial_singleton(request.clone(), cancellation, bound).await?;
+            let (response, drained, old) = self
+                .execute_serial_singleton(request.clone(), cancellation, bound)
+                .await?;
             if !self.verified_reuse.load(Ordering::Acquire) {
-                return Ok(pantograph_runtime_host_contracts::SerialRuntimeHostDrainedExecution { response, drained, owner: old, cleanup: None });
+                return Ok(
+                    pantograph_runtime_host_contracts::SerialRuntimeHostDrainedExecution {
+                        response,
+                        drained,
+                        owner: old,
+                        cleanup: None,
+                    },
+                );
             }
             // Synthetic protocol fixture only; actual native publication/drain
             // authority is exercised by the embedded real CPU worker tests.
             let old = old.unwrap();
             let mut owner = self.owner.lock().await;
             owner.generation += 2;
-            let new = SerialRuntimeHostCpuOwnerEvidence { snapshot: *owner, generation: old.generation.clone() };
-            new.generation.store(new.snapshot.generation, Ordering::Release);
+            let new = SerialRuntimeHostCpuOwnerEvidence {
+                snapshot: *owner,
+                generation: old.generation.clone(),
+            };
+            new.generation
+                .store(new.snapshot.generation, Ordering::Release);
             drop(owner);
             let member = &request.members[0];
-            let receipt = SyntheticWarmCleanup { old, new: new.clone(), owner: self.owner.clone(),
-                cleanups: self.cleanups.clone(), fail: self.fail_cleanup.load(Ordering::Acquire),
-                workflow: member.handoff.workflow_id.to_string(), run: member.handoff.workflow_run_id.to_string(),
-                node: member.handoff.node_id.to_string(), task: member.handoff.task_id.to_string(), candidate,
-                lease: member.handoff.dispatch_decision.as_ref().unwrap().reservation_lease_id.to_string() };
-            Ok(pantograph_runtime_host_contracts::SerialRuntimeHostDrainedExecution { response, drained, owner: Some(new), cleanup: Some(Box::new(receipt)) })
+            let receipt = SyntheticWarmCleanup {
+                old,
+                new: new.clone(),
+                owner: self.owner.clone(),
+                cleanups: self.cleanups.clone(),
+                fail: self.fail_cleanup.load(Ordering::Acquire),
+                workflow: member.handoff.workflow_id.to_string(),
+                run: member.handoff.workflow_run_id.to_string(),
+                node: member.handoff.node_id.to_string(),
+                task: member.handoff.task_id.to_string(),
+                candidate,
+                lease: member
+                    .handoff
+                    .dispatch_decision
+                    .as_ref()
+                    .unwrap()
+                    .reservation_lease_id
+                    .to_string(),
+            };
+            Ok(
+                pantograph_runtime_host_contracts::SerialRuntimeHostDrainedExecution {
+                    response,
+                    drained,
+                    owner: Some(new),
+                    cleanup: Some(Box::new(receipt)),
+                },
+            )
         }
         async fn apply_serial_cleanup(
             &self,
@@ -260,21 +320,44 @@ mod serial_ready_tests {
     }
 
     struct SyntheticWarmCleanup {
-        old: SerialRuntimeHostCpuOwnerEvidence, new: SerialRuntimeHostCpuOwnerEvidence,
-        owner: Arc<tokio::sync::Mutex<SchedulerSerialOwnerSnapshot>>, cleanups: Arc<Mutex<Vec<ReservationLifecycleEvent>>>,
-        fail: bool, workflow: String, run: String, node: String, task: String, candidate: String, lease: String,
+        old: SerialRuntimeHostCpuOwnerEvidence,
+        new: SerialRuntimeHostCpuOwnerEvidence,
+        owner: Arc<tokio::sync::Mutex<SchedulerSerialOwnerSnapshot>>,
+        cleanups: Arc<Mutex<Vec<ReservationLifecycleEvent>>>,
+        fail: bool,
+        workflow: String,
+        run: String,
+        node: String,
+        task: String,
+        candidate: String,
+        lease: String,
     }
     #[async_trait::async_trait]
     impl pantograph_runtime_host_contracts::SerialRuntimeHostCleanupReceipt for SyntheticWarmCleanup {
-        fn previous_owner(&self) -> SerialRuntimeHostCpuOwnerEvidence { self.old.clone() }
-        fn current_owner(&self) -> SerialRuntimeHostCpuOwnerEvidence { self.new.clone() }
-        async fn apply(self: Box<Self>, event: ReservationLifecycleEvent) -> Result<ReservationLifecycleApplication, ReservationLifecyclePortError> {
+        fn previous_owner(&self) -> SerialRuntimeHostCpuOwnerEvidence {
+            self.old.clone()
+        }
+        fn current_owner(&self) -> SerialRuntimeHostCpuOwnerEvidence {
+            self.new.clone()
+        }
+        async fn apply(
+            self: Box<Self>,
+            event: ReservationLifecycleEvent,
+        ) -> Result<ReservationLifecycleApplication, ReservationLifecyclePortError> {
             let owner = self.owner.lock().await;
-            if self.fail || *owner != self.new.snapshot || event.workflow_id.as_str() != self.workflow
-                || event.workflow_run_id.as_str() != self.run || event.node_id.as_str() != self.node
-                || event.task_id.as_str() != self.task || event.reservation_lease_id.as_str() != self.lease
-                || event.candidate_id.as_ref().map(|id| id.as_str()) != Some(self.candidate.as_str()) {
-                return Err(ReservationLifecyclePortError::Failed { message: "synthetic linear receipt refused".into() });
+            if self.fail
+                || *owner != self.new.snapshot
+                || event.workflow_id.as_str() != self.workflow
+                || event.workflow_run_id.as_str() != self.run
+                || event.node_id.as_str() != self.node
+                || event.task_id.as_str() != self.task
+                || event.reservation_lease_id.as_str() != self.lease
+                || event.candidate_id.as_ref().map(|id| id.as_str())
+                    != Some(self.candidate.as_str())
+            {
+                return Err(ReservationLifecyclePortError::Failed {
+                    message: "synthetic linear receipt refused".into(),
+                });
             }
             self.cleanups.lock().unwrap().push(event.clone());
             Ok(application(event))
@@ -284,6 +367,9 @@ mod serial_ready_tests {
         cpu_run_with_texts(service, run, ["slow", "fast"])
     }
     fn cpu_run_with_texts(service: &WorkflowService, run: &str, texts: [&str; 2]) -> String {
+        cpu_run_with_inputs(service, run, &texts)
+    }
+    fn cpu_run_with_inputs(service: &WorkflowService, run: &str, texts: &[&str]) -> String {
         let session = prepare_ready_runtime_branch_run(service, run);
         let mut graph = ready_runtime_task_graph(run);
         let mut records = vec![];
@@ -611,6 +697,11 @@ mod serial_ready_tests {
             ]
         );
         assert_eq!(port.cleanups.lock().unwrap().len(), 8);
+        assert!(service.serial_ready_predecessor_for_test().is_none());
+        assert!(service
+            .serial_ready_conditioned_samples_for_test()
+            .iter()
+            .all(|s| s.2.is_none()));
     }
     #[tokio::test]
     async fn serial_ready_worker_stale_samples_keep_fifo() {
@@ -1188,9 +1279,24 @@ mod serial_ready_tests {
             let session = cpu_run(&service, &id);
             run(service.clone(), &session, &id).await;
             let generation = port.owner.lock().await.generation;
-            assert_eq!(service.serial_ready_observations_for_test(), vec![(generation, (i + 1) * 2)]);
+            assert_eq!(
+                service.serial_ready_observations_for_test(),
+                vec![(generation, (i + 1) * 2)]
+            );
         }
-        assert_eq!(port.tasks(), vec!["task.cpu.0", "task.cpu.1", "task.cpu.0", "task.cpu.1", "task.cpu.0", "task.cpu.1", "task.cpu.1", "task.cpu.0"]);
+        assert_eq!(
+            port.tasks(),
+            vec![
+                "task.cpu.0",
+                "task.cpu.1",
+                "task.cpu.0",
+                "task.cpu.1",
+                "task.cpu.0",
+                "task.cpu.1",
+                "task.cpu.1",
+                "task.cpu.0"
+            ]
+        );
         assert_eq!(port.cleanups.lock().unwrap().len(), 8);
     }
     #[tokio::test]
@@ -1210,7 +1316,267 @@ mod serial_ready_tests {
         assert_eq!(service.serial_ready_observations_for_test(), prior);
         assert_eq!(port.cleanups.lock().unwrap().len(), 4);
         assert_eq!(port.tasks().len(), 5);
-        assert!(service.serial_ready_mode.as_ref().unwrap().enter().await.is_err());
+        assert!(service
+            .serial_ready_mode
+            .as_ref()
+            .unwrap()
+            .enter()
+            .await
+            .is_err());
     }
 
+    #[tokio::test]
+    async fn serial_ready_completion_advisory_hand_oracle_preserves_immediate_policy() {
+        let port = CpuPort::new();
+        let service = service(
+            port,
+            WorkflowSerialReadyConfig::default().with_completion_lookahead(),
+        );
+        let session = cpu_run(&service, "run.lookahead.oracle");
+        let pair = service
+            .session_store_guard()
+            .unwrap()
+            .serial_ready_pair(&session, "run.lookahead.oracle")
+            .unwrap();
+        crate::workflow::serial_ready::tests::assert_conditioned_hand_oracle_and_refusals(
+            service.serial_ready_mode.as_ref().unwrap(),
+            &pair,
+        );
+    }
+
+    #[tokio::test]
+    async fn serial_ready_conditioned_history_follows_real_cleanup_transitions_and_reuse() {
+        let port = CpuPort::new();
+        port.verified_reuse.store(true, Ordering::Release);
+        let service = service(
+            port.clone(),
+            WorkflowSerialReadyConfig::default().with_completion_lookahead(),
+        );
+        // This fixed protocol needs thirteen completed sessions plus its pair.
+        service.session_store_guard().unwrap().max_sessions = 14;
+        let sequence = [
+            "slow", "slow", "fast", "fast", "slow", "slow", "fast", "fast", "slow", "slow", "fast",
+            "fast", "slow",
+        ];
+        let mut expected_predecessor = None;
+        let mut workload_keys = std::collections::BTreeMap::new();
+        for (i, text) in sequence.iter().enumerate() {
+            let id = format!("run.transition.{i}");
+            let session = cpu_run_with_inputs(&service, &id, &[*text]);
+            run(service.clone(), &session, &id).await;
+            let samples = service.serial_ready_conditioned_samples_for_test();
+            assert_eq!(samples.len(), i + 1);
+            let sample = samples.last().unwrap();
+            assert_eq!(sample.2, expected_predecessor);
+            assert!(sample.3 > 0);
+            assert_eq!(sample.5, port.owner.lock().await.generation);
+            assert!(samples.iter().all(|s| s.5 == sample.5));
+            if let Some(key) = workload_keys.insert(*text, sample.1) {
+                assert_eq!(key, sample.1);
+            }
+            expected_predecessor = Some(sample.1);
+            assert_eq!(
+                service.serial_ready_predecessor_for_test(),
+                Some((sample.1, sample.5))
+            );
+        }
+        let session = cpu_run(&service, "run.transition.pair");
+        let pair = service
+            .session_store_guard()
+            .unwrap()
+            .serial_ready_pair(&session, "run.transition.pair")
+            .unwrap();
+        crate::workflow::serial_ready::tests::assert_real_conditioned_advice(
+            service.serial_ready_mode.as_ref().unwrap(),
+            &pair,
+        );
+        assert_eq!(port.requests.lock().unwrap().len(), 13);
+        assert_eq!(port.cleanups.lock().unwrap().len(), 13);
+    }
+
+    #[tokio::test]
+    async fn serial_ready_unsupported_execution_invalidates_conditioned_predecessor() {
+        let port = CpuPort::new();
+        let service = service(
+            port.clone(),
+            WorkflowSerialReadyConfig::default().with_completion_lookahead(),
+        );
+        let session = cpu_run_with_inputs(&service, "run.supported", &["fast"]);
+        run(service.clone(), &session, "run.supported").await;
+        assert!(service.serial_ready_predecessor_for_test().is_some());
+        let session = cpu_run_with_inputs(&service, "run.unsupported", &[""]);
+        run(service.clone(), &session, "run.unsupported").await;
+        assert_eq!(port.requests.lock().unwrap().len(), 2);
+        assert_eq!(port.cleanups.lock().unwrap().len(), 2);
+        assert!(service.serial_ready_predecessor_for_test().is_none());
+        let session = cpu_run_with_inputs(&service, "run.after.unsupported", &["fast"]);
+        run(service.clone(), &session, "run.after.unsupported").await;
+        assert_eq!(service.serial_ready_conditioned_samples_for_test().len(), 2);
+        assert!(service
+            .serial_ready_conditioned_samples_for_test()
+            .last()
+            .unwrap()
+            .2
+            .is_none());
+    }
+
+    #[tokio::test]
+    async fn serial_ready_unrelated_owner_cannot_relabel_consumed_predecessor() {
+        let port = CpuPort::new();
+        port.verified_reuse.store(true, Ordering::Release);
+        let service = service(
+            port.clone(),
+            WorkflowSerialReadyConfig::default().with_completion_lookahead(),
+        );
+        let session = cpu_run_with_inputs(&service, "run.owner.original", &["fast"]);
+        run(service.clone(), &session, "run.owner.original").await;
+        // An unrelated authority with identical scalar snapshot is a new owner.
+        let generation = port.owner.lock().await.generation;
+        *port.generation.lock().unwrap() = Arc::new(AtomicU64::new(generation));
+        let session = cpu_run_with_inputs(&service, "run.owner.replaced", &["fast"]);
+        run(service.clone(), &session, "run.owner.replaced").await;
+        let samples = service.serial_ready_conditioned_samples_for_test();
+        assert_eq!(samples.len(), 2);
+        assert!(samples[1].2.is_none());
+        assert_ne!(samples[0].5, samples[1].5);
+        assert_eq!(port.cleanups.lock().unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn serial_ready_failed_cleanup_clears_conditioned_predecessor_without_training() {
+        let port = CpuPort::new();
+        port.verified_reuse.store(true, Ordering::Release);
+        let service = service(
+            port.clone(),
+            WorkflowSerialReadyConfig::default().with_completion_lookahead(),
+        );
+        let session = cpu_run_with_inputs(&service, "run.cleanup.seed", &["fast"]);
+        run(service.clone(), &session, "run.cleanup.seed").await;
+        let prior = service.serial_ready_conditioned_samples_for_test();
+        assert!(service.serial_ready_predecessor_for_test().is_some());
+        port.fail_cleanup.store(true, Ordering::Release);
+        let session = cpu_run_with_inputs(&service, "run.cleanup.fail", &["fast"]);
+        run(service.clone(), &session, "run.cleanup.fail").await;
+        assert!(service.serial_ready_predecessor_for_test().is_none());
+        let samples = service.serial_ready_conditioned_samples_for_test();
+        assert_eq!(samples.len(), prior.len());
+        assert_eq!(samples[0].5, prior[0].5);
+        assert_eq!(port.cleanups.lock().unwrap().len(), 1);
+        assert!(service
+            .serial_ready_mode
+            .as_ref()
+            .unwrap()
+            .enter()
+            .await
+            .is_err());
+    }
+
+    #[tokio::test]
+    async fn serial_ready_cancelled_execution_clears_conditioned_predecessor_without_training() {
+        let port = CpuPort::new();
+        let service = service(
+            port.clone(),
+            WorkflowSerialReadyConfig::default().with_completion_lookahead(),
+        );
+        let session = cpu_run_with_inputs(&service, "run.cancel.seed", &["fast"]);
+        run(service.clone(), &session, "run.cancel.seed").await;
+        assert!(service.serial_ready_predecessor_for_test().is_some());
+        // Consume the seed notification before observing the blocked dispatch.
+        port.started.notified().await;
+        port.block.store(true, Ordering::Release);
+        let session = cpu_run_with_inputs(&service, "run.cancel.conditioned", &["fast"]);
+        let handle = tokio::spawn({
+            let service = service.clone();
+            let session = session.clone();
+            async move { run(service, &session, "run.cancel.conditioned").await }
+        });
+        tokio::time::timeout(Duration::from_secs(2), port.started.notified())
+            .await
+            .unwrap();
+        assert!(service.serial_ready_predecessor_for_test().is_none());
+        let attempt = service
+            .session_store_guard()
+            .unwrap()
+            .active_run_scheduler_task_attempt_id(&session, "run.cancel.conditioned", "task.cpu.0")
+            .unwrap();
+        service
+            .scheduler_task_orchestrator
+            .request_started_runtime_task_cancellation(
+                &SchedulerTaskId::parse("task.cpu.0").unwrap(),
+                &attempt,
+                "fixture cancellation invalidates predecessor",
+            )
+            .unwrap();
+        port.block.store(false, Ordering::Release);
+        port.release.notify_one();
+        tokio::time::timeout(Duration::from_secs(2), handle)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(service.serial_ready_conditioned_samples_for_test().len(), 1);
+        assert!(service.serial_ready_predecessor_for_test().is_none());
+        assert_eq!(port.cleanups.lock().unwrap().len(), 2);
+    }
+    #[tokio::test]
+    async fn serial_ready_failed_execution_clears_conditioned_predecessor_without_training() {
+        let port = CpuPort::new();
+        let service = service(
+            port.clone(),
+            WorkflowSerialReadyConfig::default().with_completion_lookahead(),
+        );
+        let session = cpu_run_with_inputs(&service, "run.failure.seed", &["fast"]);
+        run(service.clone(), &session, "run.failure.seed").await;
+        assert!(service.serial_ready_predecessor_for_test().is_some());
+        port.fail_execution.store(true, Ordering::Release);
+        let session = cpu_run_with_inputs(&service, "run.failure.actual", &["fast"]);
+        run(service.clone(), &session, "run.failure.actual").await;
+        assert_eq!(service.serial_ready_conditioned_samples_for_test().len(), 1);
+        assert!(service.serial_ready_predecessor_for_test().is_none());
+        assert_eq!(port.requests.lock().unwrap().len(), 2);
+        assert_eq!(port.cleanups.lock().unwrap().len(), 2);
+        let session = cpu_run_with_inputs(&service, "run.failure.next", &["fast"]);
+        run(service.clone(), &session, "run.failure.next").await;
+        assert!(service
+            .serial_ready_conditioned_samples_for_test()
+            .last()
+            .unwrap()
+            .2
+            .is_none());
+    }
+
+    #[tokio::test]
+    async fn serial_ready_preflight_refusal_preserves_unconsumed_predecessor() {
+        use crate::workflow::serial_ready::SerialReadyPortAdapter;
+        let port = CpuPort::new();
+        let service = service(
+            port.clone(),
+            WorkflowSerialReadyConfig::default().with_completion_lookahead(),
+        );
+        let session = cpu_run_with_inputs(&service, "run.preflight.seed", &["fast"]);
+        run(service.clone(), &session, "run.preflight.seed").await;
+        let previous = service.serial_ready_predecessor_for_test().unwrap();
+        let session = cpu_run(&service, "run.preflight.current");
+        let pair = service
+            .session_store_guard()
+            .unwrap()
+            .serial_ready_pair(&session, "run.preflight.current")
+            .unwrap();
+        let mode = service.serial_ready_mode.as_ref().unwrap();
+        let scope = mode.enter().await.unwrap();
+        scope.capture(&pair.members[0], None).unwrap();
+        let request = port.requests.lock().unwrap()[0].clone();
+        let cancellation =
+            RuntimeHostExecutionCancellationHandle::running(request.cancellation_context.clone());
+        let error = SerialReadyPortAdapter(mode.clone())
+            .execute_runtime_host_batch_request(request, cancellation)
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(error, RuntimeHostExecutionPortError::ExecutionFailed { message }
+            if message == "serial admitted handoff changed before owner execution")
+        );
+        assert_eq!(service.serial_ready_predecessor_for_test(), Some(previous));
+        assert_eq!(port.requests.lock().unwrap().len(), 1);
+        drop(scope);
+    }
 }
