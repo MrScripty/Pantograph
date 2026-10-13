@@ -297,20 +297,27 @@ fn dependency_environment_result_from_inventory_observation(
     DependencyEnvironmentSnapshotStoreError,
 > {
     let request = item.request.as_request();
+    let environment_ref = if request.environment_ref.is_none()
+        && crate::inference_dependency_requirements::is_native_payload(request, &payload)
+    {
+        crate::inference_dependency_requirements::native_environment_ref()
+    } else {
+        environment_ref_for_request(item)
+    };
+    #[cfg(feature = "backend-pytorch")]
+    let environment_ref = if request.environment_ref.is_none()
+        && crate::inference_text_dependency_requirements::is_text_payload(request, &payload)
+    {
+        crate::inference_text_dependency_requirements::environment_ref()
+    } else {
+        environment_ref
+    };
     let projection = DependencyInventoryObservationProjection {
         contract_version: 1,
         action: request.action,
         identity_key: request.identity_key.clone(),
         dependency_requirements_id: Some(payload.dependency_requirements_id.clone()),
-        environment_ref: Some(
-            if request.environment_ref.is_none()
-                && crate::inference_dependency_requirements::is_native_payload(request, &payload)
-            {
-                crate::inference_dependency_requirements::native_environment_ref()
-            } else {
-                environment_ref_for_request(item)
-            },
-        ),
+        environment_ref: Some(environment_ref),
         requirements: payload.requirements,
         bindings: payload.bindings,
         selected_binding_ids: payload.selected_binding_ids,

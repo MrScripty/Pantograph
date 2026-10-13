@@ -213,13 +213,21 @@ with a fresh host/catalog and capture directory. Browser sandbox permission must
 be established for the specific host; the prior isolated capture approval is not
 a blanket permission for future environments.
 
-Text generation remains **unqualified** in this host. A real GPT-2 attempt reached
-public owner model and dependency-profile resolution but stopped at scheduler
-readiness: `Dependency requirements payload is missing`, followed by the bounded
-20-second deadline. The editor facts provider's dependency handoff currently only
-implements native Candle. No Python Ready state was injected and no GPT-2 output
-is claimed. The attempted 23,024-byte untrained GPT-2 weights were already committed;
-only the ordinary SoundFile dependency (1.3 MiB) was installed during investigation.
+Text generation remains **unqualified** in this browser host. PR72's GPT-2
+attempt stopped at `Dependency requirements payload is missing`. The
+[CPU text dependency repair](../../docs/plans/text-generation-readiness/plan.md)
+adds a narrow `text_generation` / `pytorch` / `cpu` prerequisite handoff for
+models without additional Pumas dependency declarations or custom code. Resolve
+supplies requirements; inventory Check observes distribution presence in the
+same linked PyO3 interpreter as execution. Package presence does not certify
+version compatibility, successful imports, model quality or actual generation.
+
+Trained-model CPU generation remains blocked on model access: the selected
+DistilGPT2 safetensors are approximately 353 MB, but environment requests to
+Hugging Face returned proxy HTTP 403. No weights were downloaded. The committed
+23,024-byte untrained GPT-2 fixture is used only for package/graph contract tests;
+no useful-model output, browser text-generation success, GPU or native desktop
+qualification follows from those tests.
 
 Image generation is **unavailable** without diffusion weights. External image
 transport is also unqualified: image-input is not a supported scheduler source,
