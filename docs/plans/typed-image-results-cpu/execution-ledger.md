@@ -64,3 +64,13 @@ pointer/mouse isolation before native ancestors. Close uses the same mechanism;
 native dialog Escape/onclose behavior remains. Independent reviewer approved this
 bounded replacement, preserving the admitted frontend write set. Browser acceptance
 still depends on final-source hosted assertions; compiler proof is not GUI evidence.
+
+2026-10-13 hosted observation: superseded f9d46511 job 115573112824 started
+Google Chrome 154.0.8037.97 with ordinary sandboxing and reached raster checks.
+No sandbox override is needed. Its known old action failure was masked by ENOTEMPTY
+from teardown: Chrome child profile writers outlived parent exit. Fixture lifecycle
+now owns a detached Linux browser process group, requests orderly Browser.close,
+uses bounded group/main termination, distinguishes inert PID-1-owned zombie records
+from live members through existing procps, and removes temporary state only after
+live effects end. Primary and cleanup failures are preserved together. A local
+sandbox-failure probe now preserves its startup error without cleanup failure.

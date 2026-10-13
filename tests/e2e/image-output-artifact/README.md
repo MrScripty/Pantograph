@@ -8,7 +8,8 @@ includes the actual source revision, browser version, sandbox mode, scope and
 completed cleanup. The log, rather than workflow metadata alone, binds evidence
 to the source that was executed.
 
-Run from the repository root:
+The fixture requires Linux process groups and the existing `ps` (procps) tool
+to establish browser shutdown. Run from the repository root:
 
 ```sh
 node tests/e2e/image-output-artifact/run.mjs
@@ -35,8 +36,12 @@ Each invocation owns a temporary build, browser profile, download directory,
 loopback HTTP port, CDP connection, and browser process, and releases them on exit.
 The HTTP server serves only a preloaded allowlist of build outputs; request URLs
 never select filesystem paths. Cleanup attempts component unmount before closing
-CDP, terminates the browser with a bounded graceful wait and forced exit if needed,
-closes the server, and removes the temporary root. Browser termination also ends
+CDP, requests orderly browser closure, then terminates and observes the owned
+process group with bounded graceful/forced waits,
+closes the server, and removes the temporary root. Inert zombie records are left for PID 1 to reap; they have no execution or profile
+write authority. Temporary files are retained if live group shutdown cannot be
+proved, and a primary assertion plus cleanup failure are reported together.
+Browser termination also ends
 fixture-local transport promises, URL instrumentation, and event listeners.
 
 The fixture substitutes only the graph shell, workflow store, and artifact

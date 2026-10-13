@@ -13,6 +13,7 @@ import { evaluateBrowserFunction } from '../../../scripts/cdp-browser-function.m
 
 const testDir = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(testDir, '../../..');
+assert.equal(process.platform, 'linux', 'Image browser fixture requires Linux process-group ownership');
 const sourceRevision = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf8' }).trim();
 const scratch = await mkdtemp(path.join(tmpdir(), 'pantograph-image-output-'));
 const noSandbox = process.env.PANTOGRAPH_IMAGE_BROWSER_NO_SANDBOX === '1';
@@ -21,7 +22,10 @@ let server;
 let browser;
 let socket;
 let evaluate;
+let send;
 let evidence;
+let executionFailed = false;
+let executionError;
 const passed = [];
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 try {
@@ -71,7 +75,7 @@ try {
     ...(noSandbox ? ['--no-sandbox'] : []),
     '--headless=new', '--disable-gpu', '--disable-background-networking', '--no-first-run',
     '--no-default-browser-check', '--user-data-dir=' + profile, '--remote-debugging-port=0', 'about:blank',
-  ], { stdio: ['ignore', 'ignore', 'pipe'], env: {
+  ], { detached: true, stdio: ['ignore', 'ignore', 'pipe'], env: {
     ...process.env, XDG_CONFIG_HOME: path.join(scratch, 'config'), XDG_CACHE_HOME: path.join(scratch, 'cache'),
   } });
   let browserError;
@@ -104,7 +108,7 @@ try {
     if (message.error) request.reject(new Error(JSON.stringify(message.error)));
     else request.resolve(message.result);
   });
-  const send = (method, params = {}) => new Promise((resolve, reject) => {
+  send = (method, params = {}) => new Promise((resolve, reject) => {
     const id = ++sequence;
     const timer = setTimeout(() => { pending.delete(id); reject(new Error(method + ' timed out')); }, 15_000);
     pending.set(id, { resolve, reject, timer });
@@ -302,23 +306,63 @@ try {
     profile: 'fresh temporary profile/config/cache', host: 'loopback-only fixture',
     scope: 'CPU browser presentation; controlled transport/shell/store; actual Svelte component and browser raster decoder/downloads',
   }, passed };
+} catch (error) {
+  executionFailed = true;
+  executionError = error;
+  console.error('Image browser qualification failed:', error);
 } finally {
-  if (evaluate && socket?.readyState === WebSocket.OPEN) {
-    await evaluate(async () => window.imageArtifactFixture?.unmount()).catch(() => {});
-  }
-  socket?.close();
-  if (browser?.pid && browser.exitCode === null && browser.signalCode === null) {
-    const exited = new Promise((resolve) => browser.once('exit', resolve));
-    browser.kill('SIGTERM');
-    await Promise.race([exited, delay(2_000)]);
-    if (browser.exitCode === null && browser.signalCode === null) {
-      browser.kill('SIGKILL');
-      await exited;
+  let cleanupError;
+  try {
+    if (evaluate && socket?.readyState === WebSocket.OPEN) {
+      await evaluate(async () => window.imageArtifactFixture?.unmount()).catch(() => {});
+      await send('Browser.close').catch(() => {});
     }
-  }
+    socket?.close();
+    if (browser?.pid) {
+      // The hosted Linux browser owns a separate group, including its renderers.
+      // Parent exit alone does not prove that profile writers have stopped.
+      const groupId = -browser.pid;
+      const signalGroup = (signal) => {
+        try { process.kill(groupId, signal); return true; }
+        catch (error) { if (error.code === 'ESRCH') return false; throw error; }
+      };
+      const groupHasLiveMembers = () => {
+        // PID 1 owns reaping orphan zombies. They have no execution or write
+        // authority; kill(group, 0) alone also sees these inert process records.
+        const states = execFileSync('ps', ['-eo', 'pgid=,stat='], { encoding: 'utf8' });
+        return states.split('\n').some(line => {
+          const [pgid, state] = line.trim().split(/\s+/);
+          return Number(pgid) === browser.pid && state && !state.startsWith('Z') && !state.startsWith('X');
+        });
+      };
+      const exited = browser.exitCode === null && browser.signalCode === null
+        ? new Promise((resolve) => browser.once('exit', resolve)) : Promise.resolve();
+      signalGroup('SIGTERM');
+      await Promise.race([exited, delay(2_000)]);
+      const gracefulDeadline = Date.now() + 2_000;
+      while (groupHasLiveMembers() && Date.now() < gracefulDeadline) await delay(20);
+      if (groupHasLiveMembers()) {
+        signalGroup('SIGKILL');
+        await Promise.race([exited, delay(2_000)]);
+        const forcedDeadline = Date.now() + 2_000;
+        while (groupHasLiveMembers() && Date.now() < forcedDeadline) await delay(20);
+      }
+      assert.equal(groupHasLiveMembers(), false, 'Browser process group did not stop; retaining temporary profile');
+      assert.ok(browser.exitCode !== null || browser.signalCode !== null, 'Browser parent exit was not observed');
+    }
+  } catch (error) { cleanupError = error; }
   server?.closeAllConnections();
   if (server) await new Promise((resolve) => server.close(resolve));
-  await rm(scratch, { recursive: true, force: true });
+  if (!cleanupError) {
+    try { await rm(scratch, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); }
+    catch (error) { cleanupError = error; }
+  }
+  if (cleanupError) {
+    throw executionFailed
+      ? new AggregateError([executionError, cleanupError], 'Image browser assertions and cleanup failed', { cause: executionError })
+      : cleanupError;
+  }
 }
+if (executionFailed) throw executionError;
 // Success is published only after the owned process/server/temporary root end.
 console.log(JSON.stringify({ ...evidence, cleanup: 'completed' }, null, 2));

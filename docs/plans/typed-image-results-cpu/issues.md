@@ -17,3 +17,7 @@
   a single direct capture action and capture-phase pointer/mouse isolation; browser
   assertions must verify both activation and ancestor isolation. Other node owners
   are outside this bounded image-control family and unchanged.
+- IMG-7 (fix in follow-up): hosted fixture teardown raced Chrome profile writers and
+  masked the original assertion with ENOTEMPTY. Owner: fixture lifecycle; Linux
+  process-group shutdown, primary-error preservation and bounded rm retry replace
+  parent-only termination. Final hosted cleanup must pass before acceptance.
