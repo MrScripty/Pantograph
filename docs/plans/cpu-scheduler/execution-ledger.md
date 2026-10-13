@@ -194,3 +194,35 @@ coordination; parent owns its later disposition after reachable handoff.
   [supplemental report](reports/2026-10-12-c3-768b-results.md). Final source/evidence
   review, published-head verification and normal CI govern handoff. No further
   experiment, M2, GUI, merge/deployment, GPU or remote work is admitted.
+
+
+## 2026-10-13 — M1 reconciliation and bounded M2 admission
+
+- Fetched main and independently confirmed PR73 is merged, merge commit
+  `07b23d47b2cdfae5669bbda78515c9c728081031`, final M1 head `8ca768e2`.
+  GitHub metadata confirms all four final M1 workflows passed. The original
+  negative/slower cohort and one accepted C3 supplement remain unchanged.
+- The new saved checkout uses branch `feat/cpu-scheduler-m2-lookahead` at that
+  main base. Initial worktree/index were clean; original `work` and integration
+  branches are preserved. No applicable AGENTS.md exists. Current canonical
+  standards `188beda1` remain the selected baseline.
+- Independent GPT-6.1 Sol / High reviewer `m2_contract_review` admitted the
+  bounded predecessor-conditioned retained-CPU service advisory in the current
+  plan. It required exact owner snapshot + generation Arc association,
+  read-only workload/predecessor evidence, and all remaining runtime obligations
+  checked inside advice. These conditions were recorded before source changes.
+- The existing phase-cost lookahead kernels cannot consume service-only samples;
+  no cold/preparation/transfer phase is assigned zero. This M2 subset remains a
+  first-order service approximation with two complete orders and unchanged M1
+  actual dispatch; general cohort completion is unqualified.
+- Workers explicitly use GPT-6.1 Sol / High, with disjoint numeric-kernel and
+  serial-policy write sets. This integrator owns the one current plan/evidence.
+  The prior turn checkpointed when its model was unverifiable; the fresh turn
+  was explicitly configured by the parent, so no model-inspection loop is used.
+- Cross-thread messaging to text worker `01a1374d-c69c-74e4-aeab-98aaccad303d`
+  is unavailable in the exposed collaboration tool. Requested parent relay of
+  the small probe module/argument boundary. No shared readiness-provider edit
+  or native owner contract change is planned.
+- Plan operation is `continue`. M2-C1..C4 remain pending; one fixed actual
+  calibration cohort is prospectively defined. Implementation admission does
+  not imply successful CPU evidence, speedup, default activation or M3–M6.
