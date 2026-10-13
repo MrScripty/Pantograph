@@ -4,8 +4,8 @@
 
 **Current phase:** M2 verification — bounded advisory retained-CPU completion lookahead.
 
-**Next slice:** Compile and review the corrected singleton/pair qualification
-mode, then run the single admitted CPU cohort.
+**Next slice:** Freeze the reviewed singleton/pair source and release binary, then run the
+single admitted CPU cohort.
 
 **Acceptance status:** M1 merged as PR73 in main `07b23d47`; the original
 negative cohort and the separately accepted C3 supplement remain unchanged.
@@ -199,7 +199,7 @@ and write sets receive an independent review before their first code change.
 | --- | --- | --- |
 | M0 / Accepted on publication | Reviewed plan, source/hardware facts, ledger/issues; navigation pointers in `docs/plans/README.md`, broad plan and scheduler migration notes. No production code. | Two independent reviewers approved M1's shared interface decisions; links, exact scope and history reviewed. This plan commit is the publication checkpoint. |
 | M1 / Accepted; merged PR73 | Existing retained CPU first-two-Ready mode composes with ordinary hosted providers. Writes: embedded `workflow_service_composition.rs` and its focused tests; workflow `serial_ready.rs`, `task_execution_worker.rs`, relevant tests/exports; new focused native integration test and registration; bounded CPU example/guide only if needed for repeatable invocation; this plan's evidence. | M0; real resident CPU owner and retaining lease. Actual public sessions with two ready embeddings and retained outputs; measured sample-driven order; no injected candidate/readiness/timing/outputs; default and negative lifecycle regressions. Exact-head local gates, independent source/evidence review, normal CI. |
-| M2 / Verifying; CPU qualification blocked | Bounded completion lookahead for a disclosed CPU cohort, initially advisory on actual work. Extend existing scheduler kernels, workflow capture and native evidence producer only. | M1; complete comparable evidence for every admitted alternative/transition, including unfinished obligations. Hand-computed independent oracles, work-budget refusal, missing/stale evidence, owner invalidation and actual CPU trace correspondence. No forecasts authorize execution. Promote only a separately qualified action subset; do not fill missing cold/transfer costs with zero. |
+| M2 / Verifying; CPU cohort admitted | Bounded completion lookahead for a disclosed CPU cohort, initially advisory on actual work. Extend existing scheduler kernels, workflow capture and native evidence producer only. | M1; complete comparable evidence for every admitted alternative/transition, including unfinished obligations. Hand-computed independent oracles, work-budget refusal, missing/stale evidence, owner invalidation and actual CPU trace correspondence. No forecasts authorize execution. Promote only a separately qualified action subset; do not fill missing cold/transfer costs with zero. |
 | M3 / Planned | Explicit per-app/bucket service opportunities at an authoritative ready-work boundary, alongside priorities. Writes confined to scheduler/workflow queue/attribution integration and tests after its design review. | M1 and a bounded eligible population; use authenticated existing attribution, not arbitrary caller identities. Fixed modeled traces prove opportunity/order, then two actual CPU sessions prove progress under repeated foreground arrival and cancellation. No wall-clock guarantee for unbounded nonpreemptible jobs. Missing entitlement identity has an explicit owned disposition. |
 | M4 / Planned | CPU residency actions improve a specified repeated-model workflow without violating cleanup; serial preparation/eviction only. Writes scheduler policy, registry/host action integration and tests after review. | M2 evidence, M3 fairness obligations where actions delay other apps. Measure load/unload/reload separately; full charge remains until acknowledged stop; pinned/live allocations protected. Actual two-model CPU alternation, pressure, cancellation and failed-stop cases. No overlapping loads, speculative lease release or automatic recovery of unknown execution. |
 | M5 / Planned | Fair bounded grouping on the existing supported sequential CPU batch envelope; optimize only demonstrated scheduler overhead/reuse. Writes existing batch policy/broker and tests after review. | M3/M4 where grouping changes retention or fairness. Group 1..8 compatible members without waiting indefinitely, preserve per-member outputs/attempts/cancellation, mixed/incompatible tasks refuse grouping. Compare actual CPU grouped versus singleton runs. Label sequential envelope honestly; native/continuous execution remains Deferred unless independently capable and exercised. |
@@ -574,12 +574,10 @@ The probe is qualification-only and cannot authorize production work.
 
 
 M2 verification details are in the [core report](reports/2026-10-13-m2-core.md).
-The user requires shared probe coordination with the text worker. Cross-thread
-messaging is unavailable in the exposed collaboration API; parent relay remains
-pending. Source-only independent review approves the core, but actual CPU
-qualification has not run. The composed inference CPU lint command also hits
-existing other-owner unused items; no suppression or cross-owner repair is
-admitted here. Resolve both blockers and ordinary CI before accepting M2.
+Shared probe authority is resolved by the published PR75 scope below. No actual
+M2 CPU cohort has run. The exact affected CPU example warning-deny Clippy gate
+passes with `--no-deps`; dependency-wide Candle-only lint still fails unchanged
+optional-consumer items (CPU-17). Ordinary final-head CI remains required.
 
 
 ### M2 pre-execution construction correction (2026-10-13)
@@ -619,7 +617,7 @@ and freeze the compiled/reviewed source before the single actual cohort.
 
 The acceptance lint gate is the primary affected embedded CPU example with
 `--no-default-features --features backend-candle,host-dependency-inventory` and
-warnings denied, plus existing scheduler/workflow package gates. A separate
+`--no-deps` and warnings denied, plus existing scheduler/workflow package gates. A separate
 supported default-plus-PyTorch owner/library/test gate may cover composition.
 The prior command additionally linted unchanged inference under a Candle-only
 configuration and failed unused optional-consumer items. Preserve that failure

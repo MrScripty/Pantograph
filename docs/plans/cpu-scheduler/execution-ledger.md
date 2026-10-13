@@ -283,3 +283,23 @@ coordination; parent owns its later disposition after reachable handoff.
   optional-consumer warning remains outside-slice debt, not a repaired config.
   The compiled source and numerical/evidence producer still require review before
   any model cohort. No GPU/remote or broader scheduler action is admitted.
+
+
+## 2026-10-13 — reviewed producer source freeze before one CPU cohort
+
+- Applied the admitted embedding probe mode and singleton/pair construction.
+  Independent GPT-6.1 Sol / High `m2_qualification_review` approved final producer,
+  exact task/digest/Start association, separate numerical references, bounded
+  log collection and explicit teardown on execution/export failure. This is
+  pre-run source review; no actual cohort evidence yet.
+- Release CPU build passed with locked dependencies, no model download and
+  `backend-candle,host-dependency-inventory` only. Primary affected example
+  Clippy passes with `--no-deps -- -D warnings` under the identical CPU features.
+  The first dependency-wide invocation failed in unchanged inference before
+  reaching the example; retain `/tmp/m2-native-example-clippy.log` and CPU-17.
+  Reviewer admitted scoped owner lint consistent with existing workflow gate;
+  it does not claim the dependency configuration is lint-clean.
+- The corrected admission was published as `cccf299c` before construction code
+  changes. Freeze this source and compiled binary before exactly one fresh
+  isolated AABBAABBAABBA singleton calibration plus one actual two-Ready pair.
+  Preserve all raw failures; no timing/winner tuning or automatic retry.

@@ -467,10 +467,11 @@ async fn main() -> ProbeResult<()> {
                 && mode != "--serve-rich-stdio"
                 && mode != "--serial-ready"
                 && mode != "--serial-ready-c3-768b"
+                && mode != "--serial-lookahead"
         })
     {
         return Err(
-            "usage: cpu_embedding_workflow_probe <new absolute directory> [--inspect-targets|--serve-stdio|--serve-rich-stdio|--serial-ready|--serial-ready-c3-768b]"
+            "usage: cpu_embedding_workflow_probe <new absolute directory> [--inspect-targets|--serve-stdio|--serve-rich-stdio|--serial-ready|--serial-ready-c3-768b|--serial-lookahead]"
                 .into(),
         );
     }
@@ -492,6 +493,9 @@ async fn main() -> ProbeResult<()> {
         .is_some_and(|mode| mode == "--serial-ready-c3-768b")
     {
         return serial_ready_probe::qualify_c3_768b(&root).await;
+    }
+    if args.get(1).is_some_and(|mode| mode == "--serial-lookahead") {
+        return serial_ready_probe::qualify_m2(&root).await;
     }
     if args.get(1).is_some_and(|mode| mode == "--inspect-targets") {
         return target_observation::inspect(&root).await;
