@@ -1,0 +1,26 @@
+[
+  {
+    "decision_ns": 62925,
+    "maxima_ns": [
+      16538568,
+      19735385
+    ],
+    "oldest_age_ns": [
+      514599039,
+      442703959
+    ],
+    "phase": "proposal",
+    "reason": "ranked",
+    "sample_counts": [
+      7,
+      6
+    ],
+    "selected_position": 0,
+    "task_ids": [
+      "infer_a",
+      "infer_b"
+    ],
+    "workflow_id": "cpu-serial-ready-pair",
+    "workflow_run_id": "run_8639c390-14e0-4bcd-8b58-4a4b2035dc94"
+  }
+]

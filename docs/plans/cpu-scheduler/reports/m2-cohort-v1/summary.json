@@ -1,0 +1,133 @@
+{
+  "backend": "candle_cpu_f32",
+  "declared_resident_ram_bytes": 33554432,
+  "full_completion_or_gpu_or_gui_claim": false,
+  "model_acquisition_bytes": 0,
+  "oracle": {
+    "actual_m1_position": 0,
+    "advisory_position": 0,
+    "all_vectors_match_reference": true,
+    "cold_transfer_wall_clock_speedup_qualified": false,
+    "completion_sums_ns": [
+      51214065,
+      56009338
+    ],
+    "completions_ns": [
+      [
+        15739340,
+        35474725
+      ],
+      [
+        19735385,
+        36273953
+      ]
+    ],
+    "owner_generation": 30,
+    "transition_counts": [
+      3,
+      3,
+      3,
+      3
+    ],
+    "transition_maxima_ns": [
+      15739340,
+      19735385,
+      19735385,
+      16538568
+    ],
+    "workload_keys": [
+      [
+        195,
+        202,
+        37,
+        101,
+        164,
+        113,
+        79,
+        169,
+        243,
+        8,
+        24,
+        39,
+        112,
+        75,
+        13,
+        144,
+        11,
+        211,
+        241,
+        139,
+        74,
+        232,
+        45,
+        43,
+        21,
+        112,
+        129,
+        204,
+        113,
+        26,
+        176,
+        114
+      ],
+      [
+        122,
+        131,
+        181,
+        117,
+        241,
+        128,
+        181,
+        179,
+        144,
+        94,
+        177,
+        227,
+        196,
+        63,
+        191,
+        171,
+        237,
+        75,
+        15,
+        36,
+        113,
+        65,
+        227,
+        15,
+        87,
+        156,
+        152,
+        15,
+        18,
+        20,
+        135,
+        130
+      ]
+    ]
+  },
+  "outputs": 15,
+  "pair_runs": 1,
+  "performance_improvement_claim": false,
+  "protocol": "m2-conditional-service-v1",
+  "resident_bytes_measured": false,
+  "scope": "actual retained CPU first-order conditioned service advice",
+  "singleton_runs": 13,
+  "threads": 1,
+  "wall_ns": [
+    82838207,
+    36289997,
+    34910494,
+    34042087,
+    27472310,
+    36268990,
+    54826127,
+    53010985,
+    37983721,
+    37375967,
+    59691290,
+    42199608,
+    46113519,
+    90603549
+  ]
+}
