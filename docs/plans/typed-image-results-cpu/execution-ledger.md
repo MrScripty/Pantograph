@@ -138,3 +138,21 @@ failure, old-dialog authority revocation/remount ownership and three mandatory
 native cycles. Syntax, strict fixture TypeScript, actual Vite fixture build and
 whitespace checks passed. Publish the coherent fixture/status repair; C3 remains
 unsatisfied until its new exact-head hosted assertions and terminal gates pass.
+
+2026-10-14 repair-head C3 acceptance: 3b9be35a frontend job 115618408967 passed
+731 tests and all 18 actual browser outcomes, including three settled native
+Escape/pointer-reopen cycles. Source/hash, Chrome 154.0.8037.97, enabled sandbox,
+exact PNG/JPEG downloads, error/stale/URL checks and completed cleanup were verified
+from the real receipt, independently by GPT-6.1 Sol High review. Artifact 11861867732
+uploaded. C3 is satisfied on this repaired source; remaining gates/publication are
+pending. No old-head success replaces final committed-head qualification.
+
+2026-10-14 main authority refresh: fetched current main
+0f6972af3f70da75479f176d12c3bc57ea0d318e, accepted PR76 CPU scheduler work.
+Incoming paths are disjoint from all 17 image-branch paths; image DTO/schema files
+are unchanged. Admit receipt publication followed by a history-preserving merge
+of accepted main into this published proposal, with no edits to scheduler-owner
+work and no rewriting of the pushed source history. Require fresh terminal gates
+and exact-head browser evidence on the combined tree before ready-only integration.
+Saved user branches remain preserved; current partial receipt does not claim that
+the still-running old-source contract/parity/CodeQL jobs or new combined gates passed.

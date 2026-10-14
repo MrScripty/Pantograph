@@ -1,9 +1,9 @@
 # Typed image results on CPU
 
-Status: Verifying. Acceptance: partial. Phase: native dialog completion.
-Next slice: observe native close plus Svelte completion before fixture reopening,
-retain every input/focus assertion, and require terminal final-head CI/browser
-acceptance before integration and main verification in
+Status: Verifying. Acceptance: partial. Phase: final required gates.
+Next slice: publish the repair receipt, merge accepted main 0f6972af into this
+published feature branch without rewriting history, and require terminal combined-head
+CI/browser acceptance before integration and main verification in
 [PR74](https://github.com/MrScripty/Pantograph/pull/74).
 
 ## Objective and scope
@@ -19,6 +19,9 @@ User authorization selects this plan and the start operation after independent r
 - Frontend owner: this branch, `feat/typed-image-results-cpu-2026-10-13`, based on
   `07b23d47`, targeting main by PR; retain until integration/rejection. Parent owns
   integration and all shared workflow schema changes. No shared schema change needed.
+  Main advanced through accepted PR76 to 0f6972af; its scheduler changes are disjoint
+  from this branch's 17 changed paths. Adopt that authority by merge, preserve it
+  exactly, and verify the combined tree before PR74 integration.
 - Preserve Rust `WorkflowSchedulerTaskMediaArtifactRef` authority: artifact_id and
   optional media_type only. Decode at the frontend presentation boundary; fetch by ID
   through existing artifact APIs, never interpret a reference as base64 or a path.
@@ -53,9 +56,9 @@ on implementation source 051b08ed. Independent review verified the actual hosted
 browser receipt. All 21 checks attached to 051b08ed passed, including Quality
 summary. Publication and integration still require the final committed-head gates.
 Repeated qualification on d9e52e51 failed pointer reopening after native Escape;
-C3 is unsatisfied for the current head until the fixture observes completed native
-close-event delivery and Svelte updates and passes again. Prior 051b08ed evidence
-remains an actual observation; it does not qualify a failing successor.
+The repaired 3b9be35a browser run passed all 18 outcomes, including three complete
+settled native reopen cycles. C3 is satisfied on that source with independent log
+review; remaining required gates and final publication checks are pending.
 
 | ID | Criterion | Kind | Environment |
 | --- | --- | --- | --- |
@@ -69,8 +72,9 @@ lint, production build, staged diff review. No tests claim diffusion execution.
 
 ## Constraints, blockers and replanning
 
-The approved fixture repair observes each real native close event, waits for Svelte
-completion, then permits the next CDP action. Three complete Escape/pointer-reopen
+The approved fixture repair observes each real native close event after the
+component's own handler, waits for Svelte completion, then permits the next CDP
+action. Three complete Escape/pointer-reopen
 cycles must all pass with existing decode/focus/isolation assertions; they are not
 retries. No production or workflow-schema change is admitted from this failure.
 

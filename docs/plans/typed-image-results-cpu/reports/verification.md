@@ -3,9 +3,10 @@
 Implementation is complete and independently reviewed. C3 passed on exact source
 051b08ed774c7b22f22c6242bacc8fb16d4238e2 through the existing sandboxed Actions
 frontend job. All 21 checks attached to that head passed, including Quality summary.
-Repeated final-head qualification on d9e52e51 failed pointer reopening after native
-Escape. Current acceptance is partial until that failure is repaired and the new
-head passes; publication/integration remains gated in
+Repeated qualification on d9e52e51 exposed incomplete native-dismissal observation.
+The repaired 3b9be35a3b7bd8fc4e4dfd8d795b25992fd36e84 browser run passed all 18
+outcomes, including three settled reopen cycles and cleanup. Remaining required
+gates and final publication/integration checks remain pending in
 [PR74](https://github.com/MrScripty/Pantograph/pull/74).
 This qualifies controlled CPU browser presentation, not generated-image capability.
 
@@ -19,6 +20,7 @@ Environment: saved Codex Cloud CPU workspace; Node v24.12.0, npm 11.6.2, Chromiu
 | C1 | `node --experimental-strip-types --test src/components/nodes/workflow/imageOutputArtifact.test.ts src/components/workflowToolbarEvents.test.ts` | 33 passing tests; actual committed Rust host reference fixture traverses toolbar output projection; strict ref/descriptor/read/byte rejection |
 | C2 | Same focused suite | Unsupported image-input rejection preserves authored data and existing capability_violation / unsupported details through normalization and visible error formatter |
 | C3 | [Hosted frontend job 115599420788](https://github.com/MrScripty/Pantograph/actions/runs/38485919458/job/115599420788) | Exact-source Chrome 154.0.8037.97, sandbox enabled, all 18 browser outcomes and cleanup passed; actual downloaded PNG/JPEG bytes match retained artifacts |
+| C3 | [Repair-head frontend job 115618408967](https://github.com/MrScripty/Pantograph/actions/runs/38491778442/job/115618408967) | Exact 3b9be35a source, ordinary sandbox, all 18 outcomes including three completed native dismissal/reopen cycles and cleanup passed |
 | C4 | `npm run test:frontend` | 731 passed, zero failures/skips |
 | C4 | `npm run typecheck` | Passed |
 | C4 | `npm run lint:full` and `npm run lint:critical` | Passed |
@@ -38,6 +40,16 @@ shell, store and artifact transport. It does not qualify the full workflow edito
 Tauri, runtime inference, diffusion generation, native desktop or GPU behavior.
 
 ## Hosted browser acceptance — 2026-10-14
+
+The repaired [3b9be35a browser job](https://github.com/MrScripty/Pantograph/actions/runs/38491778442/job/115618408967)
+recorded exact source 3b9be35a3b7bd8fc4e4dfd8d795b25992fd36e84, Chrome
+154.0.8037.97, `sandboxMode: enabled`, all 18 outcomes including three settled
+Escape/pointer-reopen cycles, and `cleanup: completed`. [Artifact 11861867732](https://github.com/MrScripty/Pantograph/actions/runs/38491778442/artifacts/11861867732)
+uploaded successfully. Independent GPT-6.1 Sol High review parsed the actual log.
+All image dimensions/downloaded bytes/MIME and error/stale/URL checks matched the
+declared controlled presentation scope. No production change was made for this
+fixture repair; exact trusted close events are observed after the component handler
+and Svelte completion, with explicit settlement errors and mount-lifetime ownership.
 
 The frontend job in [Quality Gates run 38485919458](https://github.com/MrScripty/Pantograph/actions/runs/38485919458)
 checked out and verified source 051b08ed774c7b22f22c6242bacc8fb16d4238e2.
