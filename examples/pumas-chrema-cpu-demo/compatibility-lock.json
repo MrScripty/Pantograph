@@ -1,7 +1,7 @@
 {
   "contract_version": 1,
   "pantograph_base": "2253cbe6fe8f1969b347c61fccba31859b13a4ba",
-  "pumas_revision": "aa1d79ae2d53f0acb088bc85223ecc2ff46af12b",
+  "pumas_revision": "df53db08e2ba224edfaf713522ddd410f7d4ac44",
   "candle_revision": "88ed7911de9e88196b1f55b199145d22647f415e",
   "chrema_repository": "https://github.com/MrScripty/Chrema.git",
   "chrema_revision": "508c8b8cb724b49c655dab8bc4c8336190e516c7",
