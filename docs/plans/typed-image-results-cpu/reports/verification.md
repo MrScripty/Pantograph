@@ -1,9 +1,11 @@
 # CPU image result verification — 2026-10-13
 
-Implementation is complete and independently reviewed. C3 is pending sandboxed
-hosted acceptance through the existing Actions frontend job after local Chromium
-sandbox startup failed. No browser assertion or generated-image capability is
-claimed until that exact-source run completes successfully.
+Implementation is complete and independently reviewed. C3 passed on exact source
+051b08ed774c7b22f22c6242bacc8fb16d4238e2 through the existing sandboxed Actions
+frontend job. All 21 checks attached to that head passed, including Quality summary.
+Implementation acceptance is complete; publication/integration requires the final
+committed-head gates, recorded in [PR74](https://github.com/MrScripty/Pantograph/pull/74).
+This qualifies controlled CPU browser presentation, not generated-image capability.
 
 ## Passed evidence
 
@@ -14,6 +16,7 @@ Environment: saved Codex Cloud CPU workspace; Node v24.12.0, npm 11.6.2, Chromiu
 | --- | --- | --- |
 | C1 | `node --experimental-strip-types --test src/components/nodes/workflow/imageOutputArtifact.test.ts src/components/workflowToolbarEvents.test.ts` | 33 passing tests; actual committed Rust host reference fixture traverses toolbar output projection; strict ref/descriptor/read/byte rejection |
 | C2 | Same focused suite | Unsupported image-input rejection preserves authored data and existing capability_violation / unsupported details through normalization and visible error formatter |
+| C3 | [Hosted frontend job 115599420788](https://github.com/MrScripty/Pantograph/actions/runs/38485919458/job/115599420788) | Exact-source Chrome 154.0.8037.97, sandbox enabled, all 18 browser outcomes and cleanup passed; actual downloaded PNG/JPEG bytes match retained artifacts |
 | C4 | `npm run test:frontend` | 731 passed, zero failures/skips |
 | C4 | `npm run typecheck` | Passed |
 | C4 | `npm run lint:full` and `npm run lint:critical` | Passed |
@@ -22,6 +25,7 @@ Environment: saved Codex Cloud CPU workspace; Node v24.12.0, npm 11.6.2, Chromiu
 | C4 | Browser runner syntax and strict fixture TypeScript | Passed |
 | C4 | Staged decision traceability | Passed; 16 changed paths, zero mapped impacts |
 | C4 | Independent source review and `git diff --check` | Passed; no unresolved code findings |
+| C4 | [Quality Gates](https://github.com/MrScripty/Pantograph/actions/runs/38485919458) and checks attached to source 051b08ed | All 21 completed successfully, including Quality summary, CodeQL, runtime separation, contract/parity and existing native text controls; other jobs retain their established checkout semantics |
 
 Focused evidence deliberately does not claim the short unit byte fixture decodes
 as an image. Real PNG/JPEG canvas encoding, browser decoding, downloaded bytes,
@@ -31,7 +35,31 @@ That fixture uses the actual image component and decoder with a controlled graph
 shell, store and artifact transport. It does not qualify the full workflow editor,
 Tauri, runtime inference, diffusion generation, native desktop or GPU behavior.
 
-## Browser blocker
+## Hosted browser acceptance — 2026-10-14
+
+The frontend job in [Quality Gates run 38485919458](https://github.com/MrScripty/Pantograph/actions/runs/38485919458)
+checked out and verified source 051b08ed774c7b22f22c6242bacc8fb16d4238e2.
+The actual success receipt records `sandboxMode: enabled`, headless CPU rendering,
+GPU disabled, fresh temporary profile/config/cache, loopback-only fixture, and
+`cleanup: completed`. [Evidence artifact 11860640474](https://github.com/MrScripty/Pantograph/actions/runs/38485919458/artifacts/11860640474)
+uploaded successfully. An independent GPT-6.1 Sol High reviewer parsed the actual
+job log and verified its source, environment, all 18 outcomes and cleanup.
+
+- PNG: native decode 48×32, 226 exact bytes downloaded as output.png (image/png).
+- JPEG: native decode 64×40, 1168 exact bytes downloaded as output.jpg (image/jpeg).
+- Native Tab/Enter expansion, modal focus, Escape, restored Expand focus and pointer
+  Expand/Close passed; image control events did not escape into the parent shell.
+- Replacement/clearing closes the modal and releases the old preview URL.
+- Malformed refs, partial/nonimage/unreadable data, descriptor/read identity mismatch,
+  MIME mismatch, read failure and native raster decode failure show errors.
+- Superseded read success/failure and descriptor success cannot publish; unmount
+  releases every live URL and pending read completion cannot publish afterward.
+
+The fixture uses the actual Svelte image component and decoder with controlled
+transport/store/shell and real canvas-encoded raster bytes. It does not qualify
+the full editor, native desktop, diffusion execution, model usefulness or GPU.
+
+## Superseded startup and failure observations
 
 `env -u PANTOGRAPH_IMAGE_BROWSER_NO_SANDBOX node tests/e2e/image-output-artifact/run.mjs`
 built the actual component successfully, then exited 1 before browser assertions:
@@ -55,9 +83,10 @@ shutdown through profile release and preserves primary failures.
 Independent review also established a keyboard-driver defect from Chromium's
 [keypress dispatch](https://github.com/chromium/chromium/blob/main/third_party/blink/renderer/core/input/keyboard_event_manager.cc)
 and [Puppeteer's CDP driver](https://github.com/puppeteer/puppeteer/blob/main/packages/puppeteer-core/src/cdp/Input.ts).
-Enter now carries CR text/unmodifiedText; Tab/Escape use rawKeyDown. All native
-modal/focus assertions remain. The next exact-source hosted run must pass them
-and cleanup before C3 can be accepted.
+Enter now carries CR text/unmodifiedText; Tab/Escape use rawKeyDown. Superseded
+[d45b0e89 job 115580714200](https://github.com/MrScripty/Pantograph/actions/runs/38480225647/job/115580714200)
+preserved the precise modal-open timeout without a masking cleanup error.
+All native modal/focus assertions and cleanup then passed on 051b08ed.
 
 ## Independent review
 
@@ -70,4 +99,5 @@ One finding was fixed: a plain local unsupported Error was being normalized to
 transport_error by the toolbar. `UnsupportedWorkflowInputError` now uses the
 existing WorkflowServiceError capability_violation category with unsupported
 status details. The reviewer verified the actual normalization and display path.
-Final review: no unresolved production code findings; C3 remains unverified.
+Final review: no unresolved production code findings. Follow-up review verified
+the complete actual hosted C3 success receipt; no browser acceptance blocker remains.

@@ -83,3 +83,24 @@ keypress dispatch. The admitted fixture slice now sends Enter text/unmodifiedTex
 CR and rawKeyDown for Tab/Escape, matching Chromium and Puppeteer sources. Native
 button/modal/focus assertions remain intact. This does not identify the masked
 old assertion or establish final-source browser acceptance. C3 remains pending.
+
+2026-10-14 hosted acceptance: exact-source 051b08ed frontend job 115599420788
+passed all 731 frontend tests and all 18 actual browser outcomes under Chrome
+154.0.8037.97 with ordinary sandboxing enabled. PNG/JPEG decode and exact downloads,
+native keyboard/modal/focus, invalid/failure results, stale-read fencing and URL
+lifecycle passed; cleanup completed and artifact 11860640474 uploaded. Independent
+GPT-6.1 Sol High reviewer parsed the actual log and confirmed the complete receipt.
+C3 is satisfied within the declared controlled CPU browser scope. All C1–C4 claims
+are now evidenced; remaining required CI gates and final committed-head qualification
+are pending. Parent explicitly delegated ready-only merge and main verification;
+no GPU/native image/model-usefulness qualification or shared schema change is claimed.
+
+2026-10-14 implementation acceptance: all 21 checks attached to 051b08ed completed
+successfully, including Quality summary, CodeQL, runtime separation, contract/parity,
+frontend/browser, lint/typecheck/audit and established Rust/native-text-control gates.
+No mandatory gate was weakened. C1–C4 are accepted with actual evidence and no
+unresolved independent-review findings; implementation milestone M1 is Accepted.
+This publication slice changes only the four plan/evidence documents. Its final
+head must pass CI/browser acceptance before delegated integration. PR74 owns the
+final-head receipt, merge and main-verification record, avoiding a self-referencing
+source hash in the committed acceptance evidence. Preserve the saved user branches.

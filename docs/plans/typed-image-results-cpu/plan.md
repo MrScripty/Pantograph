@@ -1,7 +1,9 @@
 # Typed image results on CPU
 
-Status: Verifying. Acceptance: partial. Phase: browser acceptance.
-Next slice: qualify sandboxed Chrome in the existing Actions frontend job and inspect final-head checks.
+Status: Accepted. Acceptance: complete. Phase: implementation complete.
+Next slice: publish this acceptance record, require final-head CI/browser acceptance,
+then integrate under parent authority and record main verification in
+[PR74](https://github.com/MrScripty/Pantograph/pull/74).
 
 ## Objective and scope
 
@@ -36,7 +38,7 @@ User authorization selects this plan and the start operation after independent r
   public contracts remain intact; a small presentation decoder replaces an invalid
   string interpretation. No new service, persistence, or orchestration mechanism.
 
-## Milestone M1 — typed result presentation (Verifying)
+## Milestone M1 — typed result presentation (Accepted)
 
 Write set: `src/components/nodes/workflow/ImageOutputNode.svelte`, adjacent
 `imageOutput*.ts`, `src/components/workflowToolbarEvents.ts` and its tests,
@@ -45,8 +47,10 @@ Rust, lockfiles or runtime worker changes. Adjacent CI write set: the existing
 `frontend-tests` job in `.github/workflows/quality-gates.yml` and fixture evidence
 reporting; user requested hosted sandbox acceptance after local startup was blocked.
 
-Claims (all automated): C1, C2 and C4 satisfied by [verification](reports/verification.md);
-C3 pending hosted sandboxed browser acceptance. Source implementation and independent review are complete.
+Claims (all automated): C1–C4 satisfied by [verification](reports/verification.md)
+on implementation source 051b08ed. Independent review verified the actual hosted
+browser receipt. All 21 checks attached to 051b08ed passed, including Quality
+summary. Publication and integration still require the final committed-head gates.
 
 | ID | Criterion | Kind | Environment |
 | --- | --- | --- | --- |
@@ -66,12 +70,12 @@ Implementation, Planning, Proportionality, Verification/GUI/Oracles, Commit,
 Documentation, Contracts, Security, Concurrency, Accessibility, Frontend,
 TypeScript and TypeScript Async.
 
-Blockers: Chromium setuid and user-namespace sandbox probes both failed. C3
-will use the existing GitHub-hosted Ubuntu frontend job with preinstalled Chrome
-and its ordinary sandbox; no override, security setting, permission or credential
-change. The job checks out and verifies the requested source head, preserves
-pipefail, and uploads the test log through the existing artifact action convention.
-Hosted failure leaves C3 blocked. Independent reviewer approved this bounded route.
+Local Chromium setuid and user-namespace sandbox probes both failed. C3 passed
+in the existing GitHub-hosted Ubuntu frontend job with preinstalled Chrome and
+its ordinary sandbox; no override, security setting, permission or credential
+change. The job checked out and verified source 051b08ed, preserved pipefail,
+and uploaded the successful test receipt. Independent review verified all 18
+outcomes and completed cleanup. Final committed-head gates remain required for merge.
 Replan if shared schema changes, unsupported source execution, runtime host work,
 or broader media families become necessary. Do not weaken sandbox silently.
 
