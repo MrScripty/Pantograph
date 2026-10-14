@@ -39,6 +39,16 @@ Root Cargo.lock SHA256:
 `42c43401def2b14f41eead4f533f3b48f463a80602271d87602cec705d0ac002`.
 The full source/package/binary receipt is inside the bundle.
 
+Archive disclosure check: opened the extracted databases read-only and counted
+their actual rows. Attribution `client_credentials`, `clients`, `client_sessions`,
+`buckets`, `default_bucket_assignments` and `session_lifecycle_records` all
+contain **zero rows**. Credential column names are empty standard schema, not
+credential data. Populated records are the isolated synthetic model, one graph
+version/validation/run snapshot, 13 diagnostic events and their projections.
+The registry has one synthetic library and zero live instances/config rows.
+The GitHub connector verified destination `MrScripty/Pantograph` (public,
+repository ID 1133193034) and authenticated push/admin permission.
+
 ## Evidence and reproduction
 
 [Raw archive](cpu-evidence-6f16d9f6.tar.gz): 177,493 bytes, 53 regular files,

@@ -45,3 +45,13 @@ release, independent review or hosted CI acceptance is inferred. No upstream
 changes are required for this pin set. Parent owns successor Pumas adoption,
 draft integration and the compatible release checkpoint. The evidence commit
 changes documentation/archive only; no binary is committed or release tagged.
+
+Publication: feature branch push succeeded at evidence head `09e8e0e4`.
+Automatic approval review rejected draft PR creation because the archive's
+standard SQLite schema includes a `client_credentials` table and the destination
+was considered unverified. The PR was not created. Read-only checks of the actual
+extracted archive prove zero credential/client/session rows; populated records
+are isolated synthetic workflow/model evidence. GitHub metadata verifies the
+specified public Pantograph repository and authenticated push/admin permission.
+Those materially new facts support one retry through the same PR creation tool;
+no alternate route, history rewrite, privilege escalation or permission bypass.
