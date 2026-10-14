@@ -35,6 +35,8 @@ const WORKFLOW_ID: &str = "cpu-embedding-probe";
 
 #[path = "cpu_embedding_workflow_probe/browser_host.rs"]
 mod browser_host;
+#[path = "cpu_embedding_workflow_probe/retained_inspection.rs"]
+mod retained_inspection;
 #[path = "cpu_embedding_workflow_probe/rich_workflow.rs"]
 mod rich_workflow;
 #[path = "cpu_embedding_workflow_probe/serial_ready_probe.rs"]
@@ -67,13 +69,22 @@ fn seed_fixture(
     selected_files: Option<&[&str]>,
 ) -> ProbeResult<PathBuf> {
     let model_dir = root.join("shared-resources/models").join(model_id);
-    let source = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(
-        if model_id == rich_workflow::SECOND_MODEL {
-            "../inference/tests/fixtures/candle_bert/bert-12"
-        } else {
-            "../inference/tests/fixtures/candle_bert/bert-8"
-        },
-    );
+    let fixture_root = match std::env::var_os("PANTOGRAPH_CPU_EMBEDDING_FIXTURE_ROOT") {
+        Some(path) => {
+            let path = PathBuf::from(path);
+            if !path.is_absolute() || !path.is_dir() {
+                return Err("CPU fixture root must be an existing absolute directory".into());
+            }
+            path
+        }
+        None => PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../inference/tests/fixtures/candle_bert"),
+    };
+    let source = fixture_root.join(if model_id == rich_workflow::SECOND_MODEL {
+        "bert-12"
+    } else {
+        "bert-8"
+    });
     copy_fixture(&source, &model_dir)?;
     save(
         &model_dir,
@@ -129,7 +140,12 @@ async fn create_runtime(
         Box::new(inference::CandleBackend::new()),
         "Candle",
     ));
-    let service = WorkflowService::with_ephemeral_attribution_store()?
+    let service = WorkflowService::new()
+        .with_attribution_store(
+            pantograph_runtime_attribution::SqliteAttributionStore::open(
+                root.join("attribution.db"),
+            )?,
+        )
         .with_diagnostics_ledger(SqliteDiagnosticsLedger::open(root.join("diagnostics.db"))?)
         .with_artifact_store(ArtifactStore::open(
             root.join("artifacts"),
@@ -460,6 +476,17 @@ async fn execute(runtime: &EmbeddedRuntime, root: &Path, stage: &mut &str) -> Pr
 #[tokio::main]
 async fn main() -> ProbeResult<()> {
     let args: Vec<_> = std::env::args_os().skip(1).collect();
+    if args.len() == 2 && args[1] == "--inspect-retained" {
+        let root = PathBuf::from(&args[0]);
+        if !root.is_absolute() {
+            return Err("retained inspection requires an absolute directory".into());
+        }
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&retained_inspection::inspect(&root)?)?
+        );
+        return Ok(());
+    }
     if args.len() > 2
         || args.get(1).is_some_and(|mode| {
             mode != "--inspect-targets"
@@ -504,6 +531,14 @@ async fn main() -> ProbeResult<()> {
     let (runtime, library) = create_runtime(&root, rich).await?;
     if rich || args.get(1).is_some_and(|mode| mode == "--serve-stdio") {
         return browser_host::serve(runtime, library, &root, rich).await;
+    }
+    let model_observation = retained_inspection::observe_model(&library)
+        .await
+        .and_then(|value| save(&root, "pumas-model.json", &value));
+    // Always drain the native runtime if owner inspection fails after startup.
+    if let Err(error) = model_observation {
+        runtime.shutdown().await?;
+        return Err(error);
     }
     let mut stage = "initialization";
     let result = tokio::time::timeout(
