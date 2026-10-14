@@ -35,6 +35,8 @@ const WORKFLOW_ID: &str = "cpu-embedding-probe";
 
 #[path = "cpu_embedding_workflow_probe/browser_host.rs"]
 mod browser_host;
+#[path = "cpu_embedding_workflow_probe/retained_inspection.rs"]
+mod retained_inspection;
 #[path = "cpu_embedding_workflow_probe/rich_workflow.rs"]
 mod rich_workflow;
 #[path = "cpu_embedding_workflow_probe/serial_ready_probe.rs"]
@@ -129,7 +131,12 @@ async fn create_runtime(
         Box::new(inference::CandleBackend::new()),
         "Candle",
     ));
-    let service = WorkflowService::with_ephemeral_attribution_store()?
+    let service = WorkflowService::new()
+        .with_attribution_store(
+            pantograph_runtime_attribution::SqliteAttributionStore::open(
+                root.join("attribution.db"),
+            )?,
+        )
         .with_diagnostics_ledger(SqliteDiagnosticsLedger::open(root.join("diagnostics.db"))?)
         .with_artifact_store(ArtifactStore::open(
             root.join("artifacts"),
@@ -460,6 +467,17 @@ async fn execute(runtime: &EmbeddedRuntime, root: &Path, stage: &mut &str) -> Pr
 #[tokio::main]
 async fn main() -> ProbeResult<()> {
     let args: Vec<_> = std::env::args_os().skip(1).collect();
+    if args.len() == 2 && args[1] == "--inspect-retained" {
+        let root = PathBuf::from(&args[0]);
+        if !root.is_absolute() {
+            return Err("retained inspection requires an absolute directory".into());
+        }
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&retained_inspection::inspect(&root)?)?
+        );
+        return Ok(());
+    }
     if args.len() > 2
         || args.get(1).is_some_and(|mode| {
             mode != "--inspect-targets"
@@ -504,6 +522,14 @@ async fn main() -> ProbeResult<()> {
     let (runtime, library) = create_runtime(&root, rich).await?;
     if rich || args.get(1).is_some_and(|mode| mode == "--serve-stdio") {
         return browser_host::serve(runtime, library, &root, rich).await;
+    }
+    let model_observation = retained_inspection::observe_model(&library)
+        .await
+        .and_then(|value| save(&root, "pumas-model.json", &value));
+    // Always drain the native runtime if owner inspection fails after startup.
+    if let Err(error) = model_observation {
+        runtime.shutdown().await?;
+        return Err(error);
     }
     let mut stage = "initialization";
     let result = tokio::time::timeout(

@@ -1,0 +1,14 @@
+{
+  "contract_version": 1,
+  "pantograph_base": "2253cbe6fe8f1969b347c61fccba31859b13a4ba",
+  "pumas_revision": "aa1d79ae2d53f0acb088bc85223ecc2ff46af12b",
+  "candle_revision": "88ed7911de9e88196b1f55b199145d22647f415e",
+  "chrema_repository": "https://github.com/MrScripty/Chrema.git",
+  "chrema_revision": "508c8b8cb724b49c655dab8bc4c8336190e516c7",
+  "chrema_entrypoint": "agent-platform/journal",
+  "native_example": "cpu_embedding_workflow_probe",
+  "native_features": "backend-candle,host-dependency-inventory",
+  "model_id": "embedding/qualification/synthetic-bert-8",
+  "model_training": "untrained",
+  "weights_blake3": "48f4dd9c7cfc9c2f7a2c38db3e4397068bfc2a5e6ebd9b16431162d86c732b09"
+}
