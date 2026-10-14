@@ -1,8 +1,8 @@
 # Pumas, Pantograph and public Chrema CPU composition
 
-Plan status: `Verifying` under the parent's explicit continuation. Acceptance:
-`partial`. Current phase: independent-review correction and hosted qualification.
-Next slice: publish the reviewed repair and qualify its exact head through CI.
+Plan status: `Accepted` under the parent's explicit continuation. Acceptance:
+`satisfied` for the bounded CPU fixture composition. Current phase: handoff.
+Next slice: `none`; source 0dc45263 passed independent review and hosted CI.
 Parent continues to own integration and coordinated release checkpoints.
 
 ## Objective and scope
@@ -77,7 +77,7 @@ production scheduler policy, Chrema/private Nearwork source, tag or release.
 | C2 | Actual Pumas-indexed Candle CPU graph output matches independent reference | [Exact committed candidate and raw bundle](reports/verification.md), Linux CPU, automated | satisfied |
 | C3 | Fresh native process reads run/model provenance and retained output after producer exit | [Real SQLite/artifact reopening and fresh CLI inspector](reports/verification.md), Linux CPU, automated | satisfied |
 | C4 | Failure, timeout, corrupted evidence and reused output refuse success while preserving prior evidence; every terminal leader outcome retires executing descendants | [19 reviewed integration contracts](reports/review-and-hosted.md), Linux CPU, automated | satisfied |
-| C5 | Independent review accepts current source and exact-head hosted workflows pass | [Review and hosted evidence](reports/review-and-hosted.md), read-only review plus Linux CI | pending |
+| C5 | Independent review accepts current source and exact-head hosted workflows pass | [Review and hosted evidence](reports/review-and-hosted.md), exact 0dc45263 read-only review plus Linux CI | satisfied |
 
 ## Blockers and replan triggers
 
@@ -98,7 +98,8 @@ Task-owned branch `feat/pumas-pantograph-chrema-cpu-demo-2026-10-14` targets mai
 Saved `work` at `ca9edde6850cd58ade0b7e534bb4f58e704c2c64` remains untouched.
 Parent owns integration and compatible release checkpoints. Retain the branch
 while its draft PR is under review; retire only after parent disposition and
-verified commit reachability. No task-created worktree. No release tags.
+verified commit reachability. Baseline has no task-created worktree; the separate
+candidate owns its worktree retirement and retained branch. No release tags.
 
 Standards read from public Coding-Standards
 `188beda1fa477d21d576c233dd8c7f4c4c267d23`: Core/Router, Planning/discovery,

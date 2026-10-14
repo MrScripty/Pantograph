@@ -82,4 +82,36 @@ own committed-head hosted CI; original-head passes do not qualify changed source
 Separate candidate worktree owns Pumas PR70 df53db08 qualification. Manifest,
 lock/CI/demo pin move together there only. Candidate source compiles and initial
 owner API/native run/inspection smoke passes; final minimal-lock/repaired-source
-candidate gates remain pending. PR78 retains aa1d79ae. No release tags.
+candidate gates remained pending at that observation. PR78 retains aa1d79ae.
+No release tags.
+
+Final repaired-source acceptance: exact 0dc45263 passed independent review and
+all four hosted workflows (CPU 38525390950, Quality 38525391091, Headless
+38525390920, Runtime Separation 38525391006). CPU ran all 19 contracts with zero
+skips/failures, completed a workflow and reopened actual owner stores in a fresh
+process. Quality passed all 13 jobs, including sandboxed Chrome outcomes/cleanup.
+CodeRabbit combined status is success. Corrected local raw archive and actual
+hosted CPU/frontend logs are recorded in [review/hosted report](reports/review-and-hosted.md).
+Hosted artifact metadata was obtained; signed ZIP download was denied by proxy
+CONNECT 403 Forbidden. Its bytes/digest were not independently inspected.
+
+Candidate exact source 039cee07 passed 19 integration contracts, 598 default
+embedded-runtime tests (2 existing ignores), 4 HTTP contracts, relevant static
+and pin gates, and independent read-only review. No API repair was needed.
+Candidate handoff commit `3649df2d3c4c718aa278e809f27cbc2a915f8c47` is pushed
+on `qualification/pumas-pr70-cpu-consumer-2026-10-14`; PR78 stays on aa1d79ae.
+Verified clean worktree, exact local/remote candidate head and no active process
+cwd before removing its task-owned node_modules symlink (target preserved), then
+`git worktree remove /workspace/Pantograph-pumas-pr70` succeeded. Exact source
+039cee07 remains reachable from that retained branch. No other checkout removed.
+
+After retirement, a byte-identical copied candidate CLI inspector reopened the
+sealed candidate bundle using its prepared native binary and a private verified
+owner-store copy. Status verified; original bundle hashes unchanged, Chrema run
+7b34a1b3-c3a6-4d8a-abd5-f8d797418c3a / Pantograph
+run_06240efc-a381-4967-b6fe-280c14a59375, same eight-value vector and artifact.
+Actual receipt: `/workspace/scratch/pumas-pr70-inspection-after-retirement.json`.
+This confirms fresh inspection after the compile-time candidate checkout is gone.
+Parent retains adoption, hosted candidate/migration/pretrained gates and release
+coordination. No tag was created. Final documentation leaves executable source
+0dc45263 unchanged; ordinary final-head CI is observed separately after push.
