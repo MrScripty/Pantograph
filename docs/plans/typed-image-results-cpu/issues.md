@@ -25,3 +25,9 @@
   text, suppressing native keypress/button activation. Independent source review
   established the driver defect. Enter now supplies CR text/unmodifiedText and
   Tab/Escape use rawKeyDown; actual hosted keyboard/modal/focus assertions passed.
+- IMG-9 (blocking qualification, fix now): d9e52e51 browser job 115613091802
+  timed out reopening via pointer Expand after Escape/focus checks passed. The
+  fixture waits for native open=false, which precedes queued close-event delivery
+  and component updates. Observe real close plus Svelte completion before the next
+  action; preserve all native input/focus/reopen assertions. Exact old event order
+  and a production defect are not established by that log. Owner: browser fixture.

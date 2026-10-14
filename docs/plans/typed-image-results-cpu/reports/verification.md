@@ -3,8 +3,10 @@
 Implementation is complete and independently reviewed. C3 passed on exact source
 051b08ed774c7b22f22c6242bacc8fb16d4238e2 through the existing sandboxed Actions
 frontend job. All 21 checks attached to that head passed, including Quality summary.
-Implementation acceptance is complete; publication/integration requires the final
-committed-head gates, recorded in [PR74](https://github.com/MrScripty/Pantograph/pull/74).
+Repeated final-head qualification on d9e52e51 failed pointer reopening after native
+Escape. Current acceptance is partial until that failure is repaired and the new
+head passes; publication/integration remains gated in
+[PR74](https://github.com/MrScripty/Pantograph/pull/74).
 This qualifies controlled CPU browser presentation, not generated-image capability.
 
 ## Passed evidence
@@ -60,6 +62,16 @@ transport/store/shell and real canvas-encoded raster bytes. It does not qualify
 the full editor, native desktop, diffusion execution, model usefulness or GPU.
 
 ## Superseded startup and failure observations
+
+[d9e52e51 frontend job 115613091802](https://github.com/MrScripty/Pantograph/actions/runs/38490127635/job/115613091802)
+passed all 731 frontend tests and started sandboxed Chrome, then timed out waiting
+for pointer reopening after keyboard expansion, Escape and focus restoration.
+The primary failure survived cleanup. Native closure removes open/restores focus
+before queuing close; see the [HTML dialog lifecycle](https://html.spec.whatwg.org/multipage/interactive-elements.html#close-the-dialog).
+The fixture must observe that event and completed Svelte updates before its next
+action. This is a demonstrated completion gap in the driver; the log does not
+establish its precise event order or a production defect. No final-head acceptance
+or integration is claimed from the earlier successful 051b08ed run.
 
 `env -u PANTOGRAPH_IMAGE_BROWSER_NO_SANDBOX node tests/e2e/image-output-artifact/run.mjs`
 built the actual component successfully, then exited 1 before browser assertions:

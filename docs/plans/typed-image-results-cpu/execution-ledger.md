@@ -104,3 +104,37 @@ This publication slice changes only the four plan/evidence documents. Its final
 head must pass CI/browser acceptance before delegated integration. PR74 owns the
 final-head receipt, merge and main-verification record, avoiding a self-referencing
 source hash in the committed acceptance evidence. Preserve the saved user branches.
+
+2026-10-14 qualification reopened: final-head d9e52e51 browser job 115613091802
+failed pointer Expand after successful Enter/modal decoding/Escape/restored-focus
+assertions. Sandbox remained enabled and cleanup preserved the primary timeout.
+The native dialog contract removes open/restores focus before queuing close;
+the fixture's open=false wait does not prove the component close handler/Svelte
+updates completed. Admit a bounded fixture repair observing the actual close event
+and Svelte completion before subsequent actions, without sleeps, synthetic DOM
+activation or removed assertions. Precise old event order/production fault remains
+unestablished. Reopen M1 Verifying/partial until final-source browser/CI succeeds;
+prior 051b08ed evidence remains historical observation. No production/schema change
+is admitted from this evidence; independent review required before repair/publication.
+
+2026-10-14 repair admission: independent GPT-6.1 Sol High reviewer approved the
+bounded replan and real close-event/Svelte settlement observation. Browser worker
+owns fixture.ts/run.mjs/README; root owns this four-document status correction.
+Each of three Escape/pointer-reopen cycles remains a required native interaction
+assertion, not a retry. Preserve sandboxing, cleanup, all prior assertions and
+production/schema source; require reviewed repair and new exact-head hosted proof.
+
+2026-10-14 settlement-proof correction: native event dispatch can checkpoint
+microtasks between listeners, so ancestor capture plus tick does not alone prove
+the target close handler ran. Independent review required a raw noncapture observer
+on each dialog installed after component mount/tick, ordered after its existing
+onclose handler, with teardown/remount ownership. Only then record that exact native
+event's completed Svelte tick; explicit bounded settlement failure remains fatal.
+This correction is confined to the unpublished fixture repair and its documentation.
+
+2026-10-14 repair publication: independent GPT-6.1 Sol High reviewer approved all
+seven changed paths, including target-listener ordering, explicit bounded tick
+failure, old-dialog authority revocation/remount ownership and three mandatory
+native cycles. Syntax, strict fixture TypeScript, actual Vite fixture build and
+whitespace checks passed. Publish the coherent fixture/status repair; C3 remains
+unsatisfied until its new exact-head hosted assertions and terminal gates pass.

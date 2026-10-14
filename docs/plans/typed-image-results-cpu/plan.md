@@ -1,8 +1,9 @@
 # Typed image results on CPU
 
-Status: Accepted. Acceptance: complete. Phase: implementation complete.
-Next slice: publish this acceptance record, require final-head CI/browser acceptance,
-then integrate under parent authority and record main verification in
+Status: Verifying. Acceptance: partial. Phase: native dialog completion.
+Next slice: observe native close plus Svelte completion before fixture reopening,
+retain every input/focus assertion, and require terminal final-head CI/browser
+acceptance before integration and main verification in
 [PR74](https://github.com/MrScripty/Pantograph/pull/74).
 
 ## Objective and scope
@@ -38,7 +39,7 @@ User authorization selects this plan and the start operation after independent r
   public contracts remain intact; a small presentation decoder replaces an invalid
   string interpretation. No new service, persistence, or orchestration mechanism.
 
-## Milestone M1 — typed result presentation (Accepted)
+## Milestone M1 — typed result presentation (Verifying)
 
 Write set: `src/components/nodes/workflow/ImageOutputNode.svelte`, adjacent
 `imageOutput*.ts`, `src/components/workflowToolbarEvents.ts` and its tests,
@@ -51,6 +52,10 @@ Claims (all automated): C1–C4 satisfied by [verification](reports/verification
 on implementation source 051b08ed. Independent review verified the actual hosted
 browser receipt. All 21 checks attached to 051b08ed passed, including Quality
 summary. Publication and integration still require the final committed-head gates.
+Repeated qualification on d9e52e51 failed pointer reopening after native Escape;
+C3 is unsatisfied for the current head until the fixture observes completed native
+close-event delivery and Svelte updates and passes again. Prior 051b08ed evidence
+remains an actual observation; it does not qualify a failing successor.
 
 | ID | Criterion | Kind | Environment |
 | --- | --- | --- | --- |
@@ -63,6 +68,11 @@ Gates: focused Node tests, Chromium fixture, frontend suite, typecheck, full/cri
 lint, production build, staged diff review. No tests claim diffusion execution.
 
 ## Constraints, blockers and replanning
+
+The approved fixture repair observes each real native close event, waits for Svelte
+completion, then permits the next CDP action. Three complete Escape/pointer-reopen
+cycles must all pass with existing decode/focus/isolation assertions; they are not
+retries. No production or workflow-schema change is admitted from this failure.
 
 No AGENTS.md present in repo/workspace at inspection. Standards read from
 Coding-Standards `188beda1fa477d21d576c233dd8c7f4c4c267d23`: Core/Router,

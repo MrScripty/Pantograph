@@ -6,6 +6,7 @@ import type { WorkflowArtifactBodyRead, WorkflowArtifactDescriptorQueryResponse 
 
 type EncodedImage = { body: number[]; mediaType: string; width: number; height: number };
 type Pending = { resolve: (value: unknown) => void; reject: (reason: Error) => void };
+type DialogCloseEvent = { sequence: number; trusted: boolean; settled: boolean; settlementError: string | null };
 
 async function encode(mediaType: string, width: number, height: number): Promise<EncodedImage> {
   const canvas = document.createElement('canvas');
@@ -32,8 +33,39 @@ async function bootstrap() {
   const revoked: string[] = [];
   const downloads: { url: string; filename: string }[] = [];
   const parentEvents: string[] = [];
+  const dialogCloseEvents: DialogCloseEvent[] = [];
+  const app = document.querySelector('#app')!;
+  let removeCloseObserver: (() => void) | null = null;
+  function observeDialogClose() {
+    if (removeCloseObserver) throw new Error('Previous dialog close observer is still installed');
+    const dialog = app.querySelector('dialog');
+    if (!dialog) throw new Error('Mounted image output fixture has no dialog');
+    let current = true;
+    // Install after mount/tick: the component's own same-target onclose listener
+    // runs first. stopPropagation does not prevent this later raw listener.
+    const observeClose = async (event: Event) => {
+      if (!current) return;
+      const closeEvent: DialogCloseEvent = {
+        sequence: dialogCloseEvents.length + 1, trusted: event.isTrusted,
+        settled: false, settlementError: null,
+      };
+      dialogCloseEvents.push(closeEvent);
+      try {
+        await tick();
+        if (current) closeEvent.settled = true;
+      } catch (error: unknown) {
+        closeEvent.settlementError = error instanceof Error && error.message
+          ? error.message.slice(0, 512) : 'Unknown Svelte tick failure';
+      }
+    };
+    dialog.addEventListener('close', observeClose);
+    removeCloseObserver = () => {
+      current = false;
+      dialog.removeEventListener('close', observeClose);
+    };
+  }
   for (const eventName of ['pointerdown', 'pointerup', 'mousedown', 'mouseup', 'click']) {
-    document.querySelector('#app')!.addEventListener(eventName, () => parentEvents.push(eventName));
+    app.addEventListener(eventName, () => parentEvents.push(eventName));
   }
   const pending = new Map<string, Pending>();
   const nativeCreate = URL.createObjectURL.bind(URL);
@@ -85,10 +117,11 @@ async function bootstrap() {
   };
   let component: ReturnType<typeof mount> | null = mount(Harness, { target: document.querySelector('#app')! });
   await tick();
+  observeDialogClose();
   Object.assign(window, { imageArtifactFixture: {
     ready: true,
     images,
-    snapshot: () => ({ descriptors: [...descriptors], reads: [...reads], created: [...created], revoked: [...revoked], downloads: [...downloads], parentEvents: [...parentEvents], pending: [...pending.keys()] }),
+    snapshot: () => ({ descriptors: [...descriptors], reads: [...reads], created: [...created], revoked: [...revoked], downloads: [...downloads], parentEvents: [...parentEvents], dialogCloseEvents: dialogCloseEvents.map((event) => ({ ...event })), pending: [...pending.keys()] }),
     set: async (image: unknown) => { nodeData.set({ label: 'Image artifact fixture', image }); await tick(); },
     resolve: async (id: string) => {
       const request = pending.get(id);
@@ -104,12 +137,18 @@ async function bootstrap() {
       request.reject(new Error('fixture stale request failed'));
       await tick();
     },
-    unmount: async () => { if (component) await unmount(component); component = null; },
+    unmount: async () => {
+      removeCloseObserver?.();
+      removeCloseObserver = null;
+      if (component) await unmount(component);
+      component = null;
+    },
     remount: async () => {
       if (component) throw new Error('Unmount before starting a fresh component scope');
       nodeData.set({ label: 'Image artifact fixture' });
       component = mount(Harness, { target: document.querySelector('#app')! });
       await tick();
+      observeDialogClose();
     },
   } });
 }

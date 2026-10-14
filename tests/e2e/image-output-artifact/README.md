@@ -52,6 +52,24 @@ input checks Download, Expand, Close, Escape, focus restoration, and isolation
 of control pointer events from the surrounding shell. This does not qualify
 the full workflow editor's dragging, panning, or pointer capture behavior.
 
+After each mount and Svelte `tick`, the fixture attaches a raw noncapture `close`
+observer directly to the actual dialog, after the component's existing close
+listener has been registered. The component's listener runs before the observer;
+its `stopPropagation` allows later listeners on the same target to run. The
+observer records each event's sequence and trust state, awaits another Svelte
+`tick`, then marks that exact event settled or records a bounded settlement error.
+Unmount removes the observer and prevents pending old-dialog work from marking
+events settled; remount installs an observer on the fresh dialog. Before each
+Escape, pointer Close, or open-dialog reference clearing, the runner records the close sequence
+baseline and requires the next native close event to settle before further input.
+Three complete native Escape-to-pointer-Expand reopen cycles must all pass,
+including modal decode, focus restoration, and parent event isolation. These are
+required cycles with state-based waits; failed actions are not retried, and no
+fixed sleep or synthetic click is used to permit reopening. Timeout diagnostics
+include the observed close sequences, settlement states, dialog state, and focus.
+This observes completed dismissal; it does not identify a production defect or
+establish the exact cause of an earlier timing failure.
+
 Negative cases isolate malformed scheduler references, incomplete reads,
 nonimage/unreadable artifacts, descriptor/read ID mismatch, MIME mismatch,
 read failure, and invalid raster bytes. Exact visible diagnostics identify the

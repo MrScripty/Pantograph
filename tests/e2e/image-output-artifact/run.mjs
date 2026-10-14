@@ -121,9 +121,25 @@ try {
       if (await evaluate(callback, args)) return;
       await delay(20);
     }
-    throw new Error('Timed out waiting for ' + description + ': ' + await evaluate(() => document.body.innerText));
+    const observed = await evaluate(() => ({
+      text: document.body.innerText,
+      dialogOpen: document.querySelector('dialog')?.open ?? null,
+      activeControl: document.activeElement?.textContent.trim(),
+      dialogCloseEvents: window.imageArtifactFixture?.snapshot().dialogCloseEvents ?? [],
+    }));
+    throw new Error('Timed out waiting for ' + description + ': ' + JSON.stringify(observed));
   };
   const snapshot = () => evaluate(() => window.imageArtifactFixture.snapshot());
+  const waitForSettledClose = async (baseline, action) => {
+    const expectedSequence = baseline + 1;
+    await waitFor((sequence) => {
+      const event = window.imageArtifactFixture.snapshot().dialogCloseEvents.find((entry) => entry.sequence === sequence);
+      if (event?.settlementError) {
+        throw new Error(`Native dialog close event ${sequence} Svelte tick failed: ${event.settlementError}`);
+      }
+      return event?.trusted && event.settled && !document.querySelector('dialog')?.open;
+    }, [expectedSequence], `${action}: native close event ${expectedSequence} delivered and Svelte tick settled`);
+  };
   const set = (image) => evaluate(async (value) => window.imageArtifactFixture.set(value), [image]);
   const preview = () => evaluate(() => {
     const image = document.querySelector('img[alt="Output"]');
@@ -205,15 +221,26 @@ try {
   }, [], 'decoded modal image');
   assert.equal(await evaluate(() => document.activeElement?.textContent.trim()), 'Close');
   assert.equal(await evaluate(() => document.querySelector('dialog img')?.naturalWidth), images.jpeg.width);
-  await key('Escape', 'Escape', 27);
-  await waitFor(() => !document.querySelector('dialog')?.open, [], 'Escape dismissal');
-  assert.equal(await evaluate(() => document.activeElement?.textContent.trim()), 'Expand');
-  await clickButton('Expand');
-  await waitFor(() => document.querySelector('dialog')?.open);
+  for (let cycle = 1; cycle <= 3; cycle++) {
+    const closeBaseline = (await snapshot()).dialogCloseEvents.length;
+    await key('Escape', 'Escape', 27);
+    await waitForSettledClose(closeBaseline, `Escape/reopen cycle ${cycle} dismissal`);
+    assert.equal(await evaluate(() => document.activeElement?.textContent.trim()), 'Expand', `cycle ${cycle} did not restore Expand focus`);
+    await clickButton('Expand');
+    await waitFor(() => document.querySelector('dialog')?.open, [], `Escape/reopen cycle ${cycle} pointer Expand opened modal`);
+    await waitFor(() => {
+      const image = document.querySelector('dialog img');
+      return image?.complete && image.naturalWidth > 0;
+    }, [], `Escape/reopen cycle ${cycle} decoded modal image`);
+    assert.equal(await evaluate(() => document.activeElement?.textContent.trim()), 'Close', `cycle ${cycle} did not focus modal Close`);
+    assert.equal(await evaluate(() => document.querySelector('dialog img')?.naturalWidth), images.jpeg.width, `cycle ${cycle} modal image width changed`);
+    assert.deepEqual((await snapshot()).parentEvents, [], `cycle ${cycle} Expand pointer events escaped into the parent shell`);
+  }
+  const pointerCloseBaseline = (await snapshot()).dialogCloseEvents.length;
   await clickButton('Close');
-  await waitFor(() => !document.querySelector('dialog')?.open);
+  await waitForSettledClose(pointerCloseBaseline, 'pointer Close dismissal');
   assert.deepEqual((await snapshot()).parentEvents, [], 'Expand pointer events escaped into the parent shell');
-  passed.push('native keyboard Expand/Enter, modal focus, Escape, restored Expand focus; pointer Expand/Close');
+  passed.push('native keyboard Expand/Enter, modal decode/focus, 3 settled native Escape/pointer Expand reopen cycles, restored Expand focus; pointer Close');
 
   console.log('checking replacement and clearing lifecycle');
   const oldUrl = (await preview()).src;
@@ -221,10 +248,12 @@ try {
   await waitPreview();
   assert.ok((await snapshot()).revoked.includes(oldUrl), 'replacement must revoke the old preview URL');
   await clickButton('Expand');
-  await waitFor(() => document.querySelector('dialog')?.open);
+  await waitFor(() => document.querySelector('dialog')?.open, [], 'PNG pointer Expand opened modal before reference clearing');
   const pngUrl = (await preview()).src;
+  const clearCloseBaseline = (await snapshot()).dialogCloseEvents.length;
   await set(null);
-  await waitFor(() => !document.querySelector('img[alt="Output"]') && !document.querySelector('dialog')?.open);
+  await waitFor(() => !document.querySelector('img[alt="Output"]') && !document.querySelector('dialog')?.open, [], 'cleared reference removed preview and closed modal');
+  await waitForSettledClose(clearCloseBaseline, 'reference clearing dismissal');
   assert.ok((await snapshot()).revoked.includes(pngUrl), 'clearing must revoke the preview URL');
   assert.ok((await evaluate(() => document.body.innerText)).includes('No image yet'));
   passed.push('changed/cleared reference removes preview, closes modal, and revokes owned URLs');
