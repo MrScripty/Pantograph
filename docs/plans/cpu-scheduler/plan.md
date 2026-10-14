@@ -1,16 +1,17 @@
 # Plan: CPU Scheduler Completion And Fair Progress
 
-**Plan status:** `Active` — M1 merged; M2 actual CPU evidence passed, CI verification in progress.
+**Plan status:** `Active` — M1/M2 accepted and merged; later milestone contracts remain unadmitted.
 
-**Current phase:** M2-C4 verification — actual CPU qualification passed; final PR CI pending.
+**Current phase:** M2 acceptance closure — bounded advisory CPU scope accepted.
 
-**Next slice:** Publish reviewed CPU evidence and collect ordinary final-head PR CI.
+**Next slice:** Review and admit a bounded M3 fairness contract before implementation.
 
 **Acceptance status:** M1 merged as PR73 in main `07b23d47`; the original
 negative cohort and the separately accepted C3 supplement remain unchanged.
-M2-C1/C2 core evidence and independent source review pass; M2-C3 actual CPU
-qualification and independent raw-evidence review pass. M2-C4 local affected
-CPU example compile/lint gates pass; final PR CI is pending. See the
+M2-C1/C2/C3/C4 pass, including all required CI at reviewed head `8f9afd72`.
+PR76 merged as `0f6972af`; main has the exact reviewed source/evidence tree.
+Post-merge push CI is recorded separately in the
+[integration report](reports/2026-10-14-m2-integration.md). See the
 [actual CPU report](reports/2026-10-13-m2-cpu-results.md) and historical
 [core report](reports/2026-10-13-m2-core.md).
 No default-policy or speedup claim.
@@ -37,8 +38,11 @@ and dated slice reports are source/evidence, not a second execution authority.
 
 Implementation admission is this exact path, operation `start` after M0 review;
 subsequent work uses `continue` while Active. User authorization covers that
-transition without another permission request. Main merges, deployments,
-security-setting changes and release remain unauthorized.
+transition without another permission request. The user explicitly approved
+merging ready PR76 into main; that merge completed on 2026-10-14 after its
+required CI and independent reviews passed. Deployment, security-setting changes,
+release, default activation and later milestone implementation remain outside
+this approval. The documentation follow-up is a separate publication proposal.
 
 ## Standards Route And Design Decision
 
@@ -200,7 +204,7 @@ and write sets receive an independent review before their first code change.
 | --- | --- | --- |
 | M0 / Accepted on publication | Reviewed plan, source/hardware facts, ledger/issues; navigation pointers in `docs/plans/README.md`, broad plan and scheduler migration notes. No production code. | Two independent reviewers approved M1's shared interface decisions; links, exact scope and history reviewed. This plan commit is the publication checkpoint. |
 | M1 / Accepted; merged PR73 | Existing retained CPU first-two-Ready mode composes with ordinary hosted providers. Writes: embedded `workflow_service_composition.rs` and its focused tests; workflow `serial_ready.rs`, `task_execution_worker.rs`, relevant tests/exports; new focused native integration test and registration; bounded CPU example/guide only if needed for repeatable invocation; this plan's evidence. | M0; real resident CPU owner and retaining lease. Actual public sessions with two ready embeddings and retained outputs; measured sample-driven order; no injected candidate/readiness/timing/outputs; default and negative lifecycle regressions. Exact-head local gates, independent source/evidence review, normal CI. |
-| M2 / Verifying; actual CPU cohort passed | Bounded completion lookahead for a disclosed CPU cohort, initially advisory on actual work. Extend existing scheduler kernels, workflow capture and native evidence producer only. | M1; complete comparable evidence for every admitted alternative/transition, including unfinished obligations. Hand-computed independent oracles, work-budget refusal, missing/stale evidence, owner invalidation and actual CPU trace correspondence. No forecasts authorize execution. Promote only a separately qualified action subset; do not fill missing cold/transfer costs with zero. |
+| M2 / Accepted; merged PR76 | Bounded completion lookahead for a disclosed CPU cohort, initially advisory on actual work. Extend existing scheduler kernels, workflow capture and native evidence producer only. | M1; complete comparable evidence for every admitted alternative/transition, including unfinished obligations. Hand-computed independent oracles, work-budget refusal, missing/stale evidence, owner invalidation and actual CPU trace correspondence. No forecasts authorize execution. Promote only a separately qualified action subset; do not fill missing cold/transfer costs with zero. |
 | M3 / Planned | Explicit per-app/bucket service opportunities at an authoritative ready-work boundary, alongside priorities. Writes confined to scheduler/workflow queue/attribution integration and tests after its design review. | M1 and a bounded eligible population; use authenticated existing attribution, not arbitrary caller identities. Fixed modeled traces prove opportunity/order, then two actual CPU sessions prove progress under repeated foreground arrival and cancellation. No wall-clock guarantee for unbounded nonpreemptible jobs. Missing entitlement identity has an explicit owned disposition. |
 | M4 / Planned | CPU residency actions improve a specified repeated-model workflow without violating cleanup; serial preparation/eviction only. Writes scheduler policy, registry/host action integration and tests after review. | M2 evidence, M3 fairness obligations where actions delay other apps. Measure load/unload/reload separately; full charge remains until acknowledged stop; pinned/live allocations protected. Actual two-model CPU alternation, pressure, cancellation and failed-stop cases. No overlapping loads, speculative lease release or automatic recovery of unknown execution. |
 | M5 / Planned | Fair bounded grouping on the existing supported sequential CPU batch envelope; optimize only demonstrated scheduler overhead/reuse. Writes existing batch policy/broker and tests after review. | M3/M4 where grouping changes retention or fairness. Group 1..8 compatible members without waiting indefinitely, preserve per-member outputs/attempts/cancellation, mixed/incompatible tasks refuse grouping. Compare actual CPU grouped versus singleton runs. Label sequential envelope honestly; native/continuous execution remains Deferred unless independently capable and exercised. |
@@ -556,7 +560,7 @@ Verification claims (admission states and current disposition):
   Recompute all row maxima and both complete scores independently from raw
   observations. No injected times/history, delays or retry for a winner. A
   failure preserves partial evidence and blocks this claim.
-- **M2-C4**, `partial: local affected gates/source/evidence review pass; final PR CI pending`, supporting gates/representative/automated + review: scheduler and workflow-service suites, affected native
+- **M2-C4**, `satisfied: exact-head local gates, independent reviews and all required PR CI pass`, supporting gates/representative/automated + review: scheduler and workflow-service suites, affected native
   example compile, formatting, Clippy with intended CPU features, independent
   whole-range source/evidence review, and ordinary PR CI. CPU service ranking
   does not qualify GPU, native desktop, general speedup or default activation.
@@ -579,7 +583,9 @@ Shared probe authority is resolved by the published PR75 scope below. The one
 actual M2 cohort ran from frozen/pushed source `7a7165d4` and passed; independent
 whole-range and raw-evidence review agrees. See the actual report above.
 The exact affected CPU example warning-deny Clippy gate passes with `--no-deps`; dependency-wide Candle-only lint still fails unchanged
-optional-consumer items (CPU-17). Ordinary final-head CI remains required.
+optional-consumer items (CPU-17). Ordinary final-head PR CI passed at `8f9afd72`;
+all 13 Quality jobs, Headless and Runtime Separation succeeded. See the
+integration report for the merge and separate post-merge push CI.
 
 
 ### M2 pre-execution construction correction (2026-10-13)
@@ -644,6 +650,7 @@ as measured memory reclamation.
 Independent GPT-6.1 Sol / High `m2_final_review` approved the full source range
 and independently checked raw observations, exact inputs/keys, output vectors,
 CPU-only events and cleanup. The archive and per-member/source/fixture/binary
-hashes are verified. M2 remains Verifying for final normal PR CI. M3–M6 require
+hashes are verified. Final normal PR CI passed and PR76 merged at `0f6972af`.
+M2 is accepted only for this advisory CPU scope. M3–M6 require
 their own admitted contracts; no new milestone implementation is authorized by
 this result alone.

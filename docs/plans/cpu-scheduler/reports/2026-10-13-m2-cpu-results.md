@@ -1,7 +1,9 @@
 # M2 actual retained CPU completion advice
 
-Status: M2-C3 actual CPU cohort passed; independent whole-range/source and raw-evidence review
-passed; ordinary final-head CI is pending. M2 remains Verifying. The core
+Status: bounded advisory CPU M2 accepted; independent source/raw-evidence/report
+review and all required PR CI passed at `8f9afd72`. PR76 merged as `0f6972af`.
+The [integration report](2026-10-14-m2-integration.md) records verified main
+identity and separately observed post-merge push CI. The core
 [report](2026-10-13-m2-core.md) owns the controlled kernel/policy regression
 results; this report owns actual CPU observations. No speedup or policy
 activation is claimed.
@@ -142,5 +144,7 @@ The affected example's scoped warning-deny Clippy gate passes. The first
 command without `--no-deps` stopped in unchanged inference optional-consumer
 items before reaching the example; preserve that failed invocation as CPU-17,
 not a repaired Candle-only dependency configuration. No warning suppression,
-PR75-owned source edit, manifest or lockfile change was made. Current normal CI
-remains required and pending; local CPU fixtures do not replace it.
+PR75-owned source edit, manifest or lockfile change was made. Required exact-head
+PR CI passed: all13 Quality jobs, Headless and Runtime Separation. Local CPU
+fixtures qualify their stated scope; ordinary CI supplies separate supporting
+checks. No second model cohort was run for integration.
