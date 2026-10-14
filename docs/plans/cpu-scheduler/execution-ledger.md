@@ -342,3 +342,45 @@ coordination; parent owns its later disposition after reachable handoff.
   truthful scope/supersession, all12 delivered-file checksums, ten supporting-log
   hashes and32 relative links pass. Staged traceability and range no-new lint
   pass. M2 remains Verifying solely for ordinary final-head PR76 CI.
+
+
+## 2026-10-14 — accepted M2 and authorized PR76 integration
+
+- Exact reviewed head `8f9afd72a9e4b83b43e049722161eeaac5e933d3` passed all
+  required CI: [Quality, all13 jobs](https://github.com/MrScripty/Pantograph/actions/runs/38484792616),
+  [Headless](https://github.com/MrScripty/Pantograph/actions/runs/38484792619),
+  [Runtime Separation](https://github.com/MrScripty/Pantograph/actions/runs/38484792765).
+  Independent fresh integration review confirmed unchanged base `07b23d47`,
+  coherent branch history and disjoint PR74/75 scopes. M2-C1/C2/C3/C4 satisfied.
+- Earlier merge attempts were rejected by automatic approval review because
+  generalized or quoted delegation did not establish trusted user authority.
+  No alternative route or main mutation followed those denials. A fresh user
+  approval specifically answered the PR76-to-main question; the normal pinned
+  GitHub merge then succeeded. This does not authorize merging other proposals.
+- PR76 merge commit `0f6972af3f70da75479f176d12c3bc57ea0d318e` preserves parents
+  `07b23d47b2cdfae5669bbda78515c9c728081031` and
+  `8f9afd72a9e4b83b43e049722161eeaac5e933d3`. Remote main, exact ancestry and
+  tree `129c5471ced07a4ce1f2adb637d64ca7860a75c2` match. The entire merge tree
+  equals the reviewed PR head; all12 delivered-file checksums remain valid.
+- The feature branch is integrated; no history rewrite, source changes, extra
+  model cohort, prediction-authorized cleanup or default activation occurred.
+  PR75 remains draft with its T3 real-model hold; no text-owner code was edited.
+  CPU-17 and existing conservative stopping/residency accounting stay disclosed.
+- This documentation-only follow-up owns acceptance/authority reconciliation
+  and actual merge identity. Overall plan stays Active; M3–M6 need separately
+  reviewed contracts. [Integration report](reports/2026-10-14-m2-integration.md)
+  separates successful PR CI from post-merge push CI; no unavailable check is
+  reported as passed. Follow-up merge permission is not inferred from PR76.
+
+- Independent GPT-6.1 Sol / High `m2_final_review` approved the four-file
+  documentation-only publication: all36 relative links resolve, source/raw
+  evidence is unchanged, acceptance/authority/PR75 hold and separate main CI
+  observation are accurate. Formatting, whitespace, staged traceability and
+  no-new lint pass. This review approves publication, not the follow-up merge.
+
+- Final post-merge verification: exact main `0f6972af` also passes all normal
+  push workflows: [Quality, all13 jobs](https://github.com/MrScripty/Pantograph/actions/runs/38492288367),
+  [Headless](https://github.com/MrScripty/Pantograph/actions/runs/38492288374),
+  [Runtime Separation](https://github.com/MrScripty/Pantograph/actions/runs/38492288359).
+  Remote main remained the recorded merge; no code/evidence change or new
+  qualification claim. The approved follow-up records these final observations.
