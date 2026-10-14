@@ -1,7 +1,7 @@
 # Candidate issues
 
 - Resolved: inherited PR78 ownership/isolation findings are repaired in baseline
-  0dc45263 and incorporated by normal history-preserving merge039cee07.
+  0dc45263 and incorporated by normal history-preserving merge 039cee07.
 - Resolved: initial Cargo update reselected three unrelated existing socket2
   edges. Restored their original bindings; `--locked` build and metadata checks
   passed. Parsed lock comparison confirms only the Pumas package changed.

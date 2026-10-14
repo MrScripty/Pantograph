@@ -34,9 +34,9 @@ fresh separate-process read; relevant owner tests. Record failed
 API/build/runtime attempts as failures. A successful receipt identifies all
 consumed commits, binary/source hashes and observed gates, not release approval.
 All selected gates passed: 19 integration contracts, 598 embedded-runtime tests
-with2 existing ignores, 4 HTTP host contracts, example Clippy/format/ESLint and
+with 2 existing ignores, 4 HTTP host contracts, example Clippy/format/ESLint and
 pin/no-build-download metadata checks. Independent GPT-6.1 Sol High review
-accepted exact039cee07 with no functional findings. [Receipt and raw evidence](reports/consumer-compatibility.md).
+accepted exact 039cee07 with no functional findings. [Receipt and raw evidence](reports/consumer-compatibility.md).
 
 ## Composition and isolation
 

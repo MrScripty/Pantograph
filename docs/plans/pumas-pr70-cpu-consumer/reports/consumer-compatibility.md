@@ -13,7 +13,7 @@ This is not release approval or a replacement for PR78's baseline pin.
 
 Source branch `qualification/pumas-pr70-cpu-consumer-2026-10-14`. Compared with
 the reviewed baseline, four dependency authorities move together: manifest,
-Cargo.lock, quality CI checkout and demo lock. Of1,116 parsed locked packages,
+Cargo.lock, quality CI checkout and demo lock. Of 1,116 parsed locked packages,
 only Pumas version/source changed (`0.7.0` -> `0.8.0-rc.1`); other bindings and
 checksums remain intact. No consumer API source repair was necessary.
 
@@ -24,7 +24,7 @@ empty diff against `ef9eead9fe6595f5b3152ef8df19c5dace30190b`.
 
 ## Actual producer/consumer observations
 
-Linux x86_64, Rust/Cargo1.92.0 and Node24.12.0. No Python/model provisioning.
+Linux x86_64, Rust/Cargo 1.92.0 and Node 24.12.0. No Python/model provisioning.
 `prepare.mjs` compiled only `backend-candle,host-dependency-inventory` with
 `--locked`, built/audited public Chrema, and sealed fixture inputs. The public
 Pumas owner indexed the untrained BERT-8 fixture and returned execution
@@ -35,7 +35,7 @@ owner dependency readiness, scheduler dispatch and CPU output completed.
 Chrema run `7b34a1b3-c3a6-4d8a-abd5-f8d797418c3a` completed both components;
 Pantograph run `run_06240efc-a381-4967-b6fe-280c14a59375` retained output artifact
 `workflow-io-3d1762151f832acb8d076e2a0a4beea3e781b25b4a5b775b28e2e9f5bd39a562`.
-The eight CPU floats match the independent fixture reference within1e-4 and
+The eight CPU floats match the independent fixture reference within 1e-4 and
 the sealed retained artifact matches the scheduler response exactly. Fresh
 native/CLI inspection verified original run graph/model/runtime/library usage
 links, while repeated inspection preserves original bytes. Shutdown passed;
@@ -49,7 +49,7 @@ Candidate Cargo.lock SHA256:
 
 ## Evidence and tests
 
-[Raw candidate archive](candidate-evidence-039cee07.tar.gz):154,745 bytes,
+[Raw candidate archive](candidate-evidence-039cee07.tar.gz): 154,745 bytes,
 48 regular files, SHA256
 `f03d51e5f22c32558dda7ae4922f4cf623e0c5d830b491893cfb3f8c3656b41a`.
 Includes complete sealed bundle, isolated owner databases, artifacts, source/
@@ -57,19 +57,19 @@ package/binary receipts and actual supporting logs. Credential/client/session/
 bucket tables were checked read-only and contain zero rows; populated data are
 only synthetic fixture/workflow records. No binary/package redistribution.
 
-- Exact source19 integration contracts passed, zero failures/skips.
-- Embedded-runtime default-feature suite with isolated registry:598 passed,
-  zero failures,2 existing ignores.
-- Existing single/rich HTTP host contracts:4 passed.
+- Exact source 19 integration contracts passed, zero failures/skips.
+- Embedded-runtime default-feature suite with isolated registry: 598 passed,
+  zero failures, 2 existing ignores.
+- Existing single/rich HTTP host contracts: 4 passed.
 - Example warning-deny Clippy, workspace rustfmt, example ESLint, whitespace/
   traceability and manifest/lock/CI plus ONNX no-build-download metadata passed.
-- Independent reviewer reran all19 contracts and fresh inspection, confirmed
+- Independent reviewer reran all 19 contracts and fresh inspection, confirmed
   source receipt/current native hashes, exact owner schemas and minimal lock
   update, and found no functional issue. Documentation handoff findings were
   corrected without changing executable source.
 
-Preserved prequalification observations on older34dfedd consumer code are not
-substituted for this reviewed039cee07 candidate. The new worktree initially
+Preserved prequalification observations on older 34dfedd consumer code are not
+substituted for this reviewed 039cee07 candidate. The new worktree initially
 lacked commonmark; after linking the existing same-lock tooling cache, staged
 traceability passed. No installation, permission escalation or hook bypass.
 
