@@ -21,8 +21,11 @@ Use a clean public Chrema checkout at the exact revision in
 or substitute the current main branch. Prepare explicitly builds and audits the
 public package and builds Pantograph with `--locked` and only
 `backend-candle,host-dependency-inventory`. It copies the built executable and
-records source, package, lockfile and binary hashes. It never installs tools or
-weights. Cargo may acquire its pinned dependencies using the configured cache.
+records source, package, lockfile, fixture and binary hashes. It copies the full
+CPU fixture input set and passes that sealed directory to the native producer;
+execution does not read model inputs from the original compile-time checkout.
+It never installs tools or weights. Cargo may acquire its pinned dependencies
+using the configured cache.
 
 From the Pantograph repository, with the pinned toolchains on PATH:
 
@@ -77,6 +80,15 @@ and run, retains diagnostic files, and exits nonzero. A deadline terminates the
 owned process group, escalates to SIGKILL after one second and awaits exit.
 An abruptly killed native process cannot certify native shutdown; its partial
 owner stores remain evidence, and no inspection/completion claim is made.
+Leader exit does not cancel the grace/escalation obligation. The helper awaits
+the direct child and observes that its Linux process group has no executing
+members; orphan zombies are terminal execution state, not active workers.
+Evidence and prepared trees reject symlinks in every ancestor and descendant.
+The private inspection copy is dereferenced and checked against the original
+file hashes before owner APIs open it.
+Earlier exact prepared receipts remain valid for retained-state inspection,
+which reads no model fixture. New execution requires sealed fixture inputs;
+older preparations must be rebuilt before producing another workflow.
 
 ## Integration contracts
 

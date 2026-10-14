@@ -1,8 +1,9 @@
 # Pumas, Pantograph and public Chrema CPU composition
 
-Plan status: `Accepted` for the bounded CPU fixture composition. Acceptance:
-`satisfied`. Current phase: local CPU acceptance complete. Next slice: `none`.
-Draft PR review, hosted CI and coordinated release checkpoint remain with parent.
+Plan status: `Verifying` under the parent's explicit continuation. Acceptance:
+`partial`. Current phase: independent-review correction and hosted qualification.
+Next slice: publish the reviewed repair and qualify its exact head through CI.
+Parent continues to own integration and coordinated release checkpoints.
 
 ## Objective and scope
 
@@ -75,7 +76,8 @@ production scheduler policy, Chrema/private Nearwork source, tag or release.
 | C1 | Exact pins and clean Chrema package resolve; wrong pins fail closed | [Integration contracts](../../../examples/pumas-chrema-cpu-demo/composition.test.mjs), Linux CPU, automated | satisfied |
 | C2 | Actual Pumas-indexed Candle CPU graph output matches independent reference | [Exact committed candidate and raw bundle](reports/verification.md), Linux CPU, automated | satisfied |
 | C3 | Fresh native process reads run/model provenance and retained output after producer exit | [Real SQLite/artifact reopening and fresh CLI inspector](reports/verification.md), Linux CPU, automated | satisfied |
-| C4 | Failure, timeout, corrupted evidence and reused output refuse success while preserving prior evidence | [Integration contracts](../../../examples/pumas-chrema-cpu-demo/composition.test.mjs), Linux CPU, automated | satisfied |
+| C4 | Failure, timeout, corrupted evidence and reused output refuse success while preserving prior evidence; every terminal leader outcome retires executing descendants | [19 reviewed integration contracts](reports/review-and-hosted.md), Linux CPU, automated | satisfied |
+| C5 | Independent review accepts current source and exact-head hosted workflows pass | [Review and hosted evidence](reports/review-and-hosted.md), read-only review plus Linux CI | pending |
 
 ## Blockers and replan triggers
 
@@ -85,6 +87,10 @@ If a qualified trained model/runtime is actually available, record a distinct
 result. Replan if the fixture cannot execute on current pinned APIs, reopened
 artifacts lack attribution, or substantial upstream changes become necessary.
 Report minimal upstream requirements to parent; do not collide with owners.
+The parent separately authorized qualification against Pumas PR70
+`df53db08e2ba224edfaf713522ddd410f7d4ac44` in an isolated consumer branch;
+that branch owns manifest/lock/CI/demo-pin changes and does not replace PR78's
+baseline `aa1d79ae` tuple. The baseline plan owns only its read-only handoff report.
 
 ## Isolation and publication
 

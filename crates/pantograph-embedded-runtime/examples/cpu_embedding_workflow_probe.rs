@@ -69,13 +69,22 @@ fn seed_fixture(
     selected_files: Option<&[&str]>,
 ) -> ProbeResult<PathBuf> {
     let model_dir = root.join("shared-resources/models").join(model_id);
-    let source = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(
-        if model_id == rich_workflow::SECOND_MODEL {
-            "../inference/tests/fixtures/candle_bert/bert-12"
-        } else {
-            "../inference/tests/fixtures/candle_bert/bert-8"
-        },
-    );
+    let fixture_root = match std::env::var_os("PANTOGRAPH_CPU_EMBEDDING_FIXTURE_ROOT") {
+        Some(path) => {
+            let path = PathBuf::from(path);
+            if !path.is_absolute() || !path.is_dir() {
+                return Err("CPU fixture root must be an existing absolute directory".into());
+            }
+            path
+        }
+        None => PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../inference/tests/fixtures/candle_bert"),
+    };
+    let source = fixture_root.join(if model_id == rich_workflow::SECOND_MODEL {
+        "bert-12"
+    } else {
+        "bert-8"
+    });
     copy_fixture(&source, &model_dir)?;
     save(
         &model_dir,

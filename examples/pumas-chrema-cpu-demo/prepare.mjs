@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import console from 'node:console';
 import process from 'node:process';
-import { chmodSync, copyFileSync, mkdirSync, readFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, cpSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { absoluteDirectory, checkDependencies, git, inventory, lock, options, repository, save, sha256, sourceIdentity } from './contracts.mjs';
 import { command, loggedJson } from './process.mjs';
@@ -23,6 +23,8 @@ try {
   mkdirSync(join(out, 'bin'));
   copyFileSync(join(target, 'debug/examples', lock.native_example), join(out, 'bin', lock.native_example));
   chmodSync(join(out, 'bin', lock.native_example), 0o755);
+  mkdirSync(join(out, 'fixtures'));
+  cpSync(join(repository, 'crates/inference/tests/fixtures/candle_bert'), join(out, 'fixtures/candle_bert'), { recursive: true, dereference: true });
   assert.deepEqual(sourceIdentity(), source, 'native source changed during build');
   checkDependencies(chrema);
   save(join(out, 'prepared.json'), {

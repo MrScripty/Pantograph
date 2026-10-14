@@ -55,3 +55,31 @@ are isolated synthetic workflow/model evidence. GitHub metadata verifies the
 specified public Pantograph repository and authenticated push/admin permission.
 Those materially new facts support one retry through the same PR creation tool;
 no alternate route, history rewrite, privilege escalation or permission bypass.
+
+Continuation explicitly authorized by parent: PR78 was created successfully;
+baseline source 34dfedd hosted CPU Composition, Headless and Runtime Separation
+passed. Quality's initial Chrome startup timed out before browser acceptance;
+one ordinary failed-job rerun passed all 13 jobs, including sandboxed Chrome.
+No unrelated browser harness or sandbox setting changed.
+
+Independent GPT-6.1 Sol High review found three P2 classes: leader close could
+cancel deadline escalation, ancestor symlinks could redirect owner writes outside
+the private inspection copy, and prepared fixture inputs still depended on the
+compile-time checkout. Reopened C4 and repaired the owning families. All terminal
+leader outcomes now drain executing group members while preserving failure
+meaning; prepared fixtures are copied/hashed and explicitly selected by the host;
+whole-tree/ancestor symlinks are rejected and the dereferenced copy is checksum
+verified before owner APIs. Inspection retains support for prior exact receipts
+without execution-only fixture inputs. New production requires sealed fixtures.
+
+Reviewer independently reproduced exit-7/exit-0 cleanup, reran all 19 contracts
+with zero failures/skips, and verified original-bundle inspection compatibility.
+Reviewed working-diff SHA256: 8d49380e076f56dbb918b8d87ee5ca1915015b200886c117bd4f46c33e8a9c5a;
+no remaining concrete findings. Local 19 contracts, ESLint, rustfmt, example
+Clippy and existing 4 HTTP contracts pass. The current repair still requires its
+own committed-head hosted CI; original-head passes do not qualify changed source.
+
+Separate candidate worktree owns Pumas PR70 df53db08 qualification. Manifest,
+lock/CI/demo pin move together there only. Candidate source compiles and initial
+owner API/native run/inspection smoke passes; final minimal-lock/repaired-source
+candidate gates remain pending. PR78 retains aa1d79ae. No release tags.

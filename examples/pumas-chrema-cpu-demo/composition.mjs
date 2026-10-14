@@ -7,13 +7,14 @@ import { pathToFileURL } from 'node:url';
 import { absoluteDirectory, inventory, json, lock, save, sha256, validateNative, verifyInventory } from './contracts.mjs';
 import { command, loggedJson } from './process.mjs';
 
-export function verifyPrepared(prepared) {
+export function verifyPrepared(prepared, { forExecution = false } = {}) {
   const receipt = json(join(prepared, 'prepared.json'));
   assert.equal(receipt.contract_version, 1);
   assert.deepEqual(receipt.compatibility, lock, 'prepared compatibility mismatch');
   verifyInventory(prepared, receipt.files);
   assert.ok(receipt.files[`bin/${lock.native_example}`], 'prepared binary identity missing');
   assert.ok(receipt.files['packages/agent-platform/package.json'], 'prepared Chrema package missing');
+  if (forExecution) assert.ok(receipt.files['fixtures/candle_bert/bert-8/model.safetensors'], 'prepared CPU fixture identity missing');
   return receipt;
 }
 
@@ -26,7 +27,7 @@ export async function runComposition({ prepared, out, timeoutMs = 60_000 }) {
   prepared = absoluteDirectory(prepared);
   out = absoluteDirectory(out);
   if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 60_000) throw new Error('invalid_native_deadline');
-  const receipt = verifyPrepared(prepared);
+  const receipt = verifyPrepared(prepared, { forExecution: true });
   mkdirSync(out); // Preserve every previous candidate, including failed ones.
   save(join(out, 'dependency-receipt.json'), receipt);
   // Resolve the package's public export; internal Chrema paths are not a contract.
@@ -73,7 +74,8 @@ export async function runComposition({ prepared, out, timeoutMs = 60_000 }) {
       });
       if (step === 'native-inference') {
         await command(join(prepared, 'bin', lock.native_example), [native], {
-          env: { ...process.env, PUMAS_REGISTRY_DB_PATH: join(native, 'registry.db') },
+          env: { ...process.env, PUMAS_REGISTRY_DB_PATH: join(native, 'registry.db'),
+            PANTOGRAPH_CPU_EMBEDDING_FIXTURE_ROOT: join(prepared, 'fixtures/candle_bert') },
           log: join(out, step), timeoutMs,
         });
         const result = json(join(native, 'result.json'));
@@ -136,8 +138,12 @@ export async function inspectBundle({ prepared, out }) {
   const scratch = mkdtempSync(join(tmpdir(), 'pantograph-retained-inspection-'));
   try {
     for (const path of ['result.json', 'diagnostics.db', 'attribution.db', 'artifacts']) {
-      cpSync(join(out, 'native', path), join(scratch, path), { recursive: true });
+      cpSync(join(out, 'native', path), join(scratch, path), { recursive: true, dereference: true });
     }
+    const copiedFiles = Object.fromEntries(Object.entries(bundle.files)
+      .filter(([path]) => /^native\/(result\.json|diagnostics\.db|attribution\.db|artifacts\/)/.test(path))
+      .map(([path, digest]) => [path.slice('native/'.length), digest]));
+    verifyInventory(scratch, copiedFiles);
     const inspection = await inspectNative(prepared, scratch, join(scratch, 'inspection'));
     const summary = { ...validateNative(json(join(out, 'native/result.json')), json(join(out, 'native/pumas-model.json')), inspection), modelQualification: 'untrained-fixture' };
     assert.deepEqual(summary, bundle.summary, 'fresh retained-state inspection differs');
