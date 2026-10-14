@@ -54,6 +54,11 @@ export function sourceIdentity() {
 }
 
 export function inventory(root) {
+  for (let parent = resolve(root); ; parent = dirname(parent)) {
+    const stat = lstatSync(parent);
+    if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error('bundle_requires_regular_directories');
+    if (parent === dirname(parent)) break;
+  }
   const files = {};
   function visit(path) {
     for (const entry of readdirSync(path, { withFileTypes: true })) {
@@ -72,9 +77,12 @@ export function verifyInventory(root, files) {
   for (const [path, digest] of Object.entries(files)) {
     assert.ok(path && !isAbsolute(path) && !path.split(/[\\/]/).includes('..'), 'invalid bundle path');
     assert.match(digest, /^[0-9a-f]{64}$/);
-    const full = join(root, path);
-    assert.ok(lstatSync(full).isFile() && !lstatSync(full).isSymbolicLink(), 'bundle file is not regular');
-    assert.equal(sha256(readFileSync(full)), digest, `bundle checksum mismatch: ${path}`);
+  }
+  // Walk the complete selected tree. A regular final file beneath a symlinked
+  // ancestor is not a private regular-file bundle, even when its hash matches.
+  const actual = inventory(root);
+  for (const [path, digest] of Object.entries(files)) {
+    assert.equal(actual[path], digest, `bundle checksum mismatch: ${path}`);
   }
 }
 

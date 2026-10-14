@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import process from 'node:process';
 import { execFileSync } from 'node:child_process';
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { checkDependencies, directory, inventory, json, lock, validateNative, verifyInventory } from './contracts.mjs';
+import { checkDependencies, directory, inventory, json, lock, sha256, validateNative, verifyInventory } from './contracts.mjs';
 import { inspectBundle, runComposition } from './composition.mjs';
 import { command, loggedJson } from './process.mjs';
 
@@ -106,6 +106,128 @@ test('deadline escalates to kill and waits for a child that ignores termination'
   const pid = Number(readFileSync(`${log}.stdout`, 'utf8').trim());
   assert.ok(pid > 0, 'child reached its termination-ignore handler');
   assert.throws(() => process.kill(pid, 0), { code: 'ESRCH' });
+});
+
+test('leader exit preserves escalation and retires its termination-ignoring descendant', async t => {
+  const log = join(root, 'leader-exits-first');
+  const descendant = 'process.on("SIGTERM",()=>{}); console.log("ready"); setInterval(()=>{},1000)';
+  const leader = `
+    const { spawn } = require('node:child_process');
+    const child = spawn(process.execPath, ['-e', ${JSON.stringify(descendant)}], { stdio: ['ignore','pipe','inherit'] });
+    child.stdout.once('data', () => console.log(child.pid));
+    process.on('SIGTERM', () => process.exit(0));
+    setInterval(()=>{},1000);
+  `;
+  let pid;
+  t.after(() => {
+    pid ??= Number(readFileSync(`${log}.stdout`, 'utf8').trim());
+    if (pid > 0) {
+      try { process.kill(pid, 'SIGKILL'); } catch (error) { if (error.code !== 'ESRCH') throw error; }
+    }
+  });
+    await assert.rejects(command(process.execPath, ['-e', leader], { log, timeoutMs: 1_500 }), error => {
+      assert.equal(error.message, 'child_deadline_exceeded');
+      assert.equal(error.details.code, 0, 'leader exited gracefully before escalation');
+      return true;
+    });
+    pid = Number(readFileSync(`${log}.stdout`, 'utf8').trim());
+    assert.ok(pid > 0, 'descendant reached its termination-ignore handler');
+    try {
+      const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
+      assert.ok(['Z', 'X'].includes(stat.slice(stat.lastIndexOf(') ') + 2).split(' ')[0]), 'descendant no longer executes');
+    } catch (error) {
+      if (error.code !== 'ENOENT' && error.code !== 'ESRCH') throw error;
+    }
+});
+
+test('failed and successful leaders cannot leave executing descendants after command returns', async t => {
+  for (const code of [7, 0]) {
+    const log = join(root, `early-leader-${code}`);
+    const descendant = 'process.on("SIGTERM",()=>{}); console.log("ready"); setInterval(()=>{},1000)';
+    const leader = `
+      const { spawn } = require('node:child_process');
+      const child = spawn(process.execPath, ['-e', ${JSON.stringify(descendant)}], { stdio: ['ignore','pipe','inherit'] });
+      child.stdout.once('data', () => { console.log(child.pid); process.exit(${code}); });
+    `;
+    let pid;
+    t.after(() => {
+      pid ??= Number(readFileSync(`${log}.stdout`, 'utf8').trim());
+      if (pid > 0) {
+        try { process.kill(pid, 'SIGKILL'); } catch (error) { if (error.code !== 'ESRCH') throw error; }
+      }
+    });
+    await assert.rejects(command(process.execPath, ['-e', leader], { log }), error => {
+      assert.equal(error.message, code === 7 ? 'child_execution_failed' : 'child_group_outlived_leader');
+      assert.equal(error.details.code, code);
+      assert.equal(error.details.timedOut, false);
+      assert.equal(error.details.outlivedLeader, true);
+      return true;
+    });
+    pid = Number(readFileSync(`${log}.stdout`, 'utf8').trim());
+    assert.ok(pid > 0, 'descendant reached its termination-ignore handler');
+    try {
+      const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
+      assert.ok(['Z', 'X'].includes(stat.slice(stat.lastIndexOf(') ') + 2).split(' ')[0]), 'descendant no longer executes');
+    } catch (error) {
+      if (error.code !== 'ENOENT' && error.code !== 'ESRCH') throw error;
+    }
+  }
+});
+
+test('ancestor symlink cannot redirect retained-store inspection outside its private copy', async () => {
+  assert.ok(completed, 'real composition precondition');
+  const linked = join(root, 'linked-artifacts');
+  cpSync(out, linked, { recursive: true });
+  const external = join(root, 'external-artifacts');
+  renameSync(join(linked, 'native/artifacts'), external);
+  symlinkSync(external, join(linked, 'native/artifacts'), 'dir');
+  const before = inventory(external);
+  const modified = statSync(join(external, 'manifest.json'), { bigint: true }).mtimeNs;
+  await assert.rejects(inspectBundle({ prepared, out: linked }), /bundle_requires_regular_files/);
+  assert.deepEqual(inventory(external), before);
+  assert.equal(statSync(join(external, 'manifest.json'), { bigint: true }).mtimeNs, modified);
+  const alias = join(root, 'evidence-alias');
+  symlinkSync(out, alias, 'dir');
+  await assert.rejects(inspectBundle({ prepared, out: alias }), /bundle_requires_regular_directories/);
+});
+
+test('prepared fixture corruption refuses execution before a new evidence root exists', async () => {
+  const corrupt = join(root, 'corrupt-prepared-fixture');
+  cpSync(prepared, corrupt, { recursive: true });
+  writeFileSync(join(corrupt, 'fixtures/candle_bert/bert-8/config.json'), '{}\n');
+  const candidateOut = join(root, 'unexecuted');
+  await assert.rejects(runComposition({ prepared: corrupt, out: candidateOut }), /bundle checksum mismatch: fixtures\/candle_bert\/bert-8\/config.json/);
+  assert.throws(() => statSync(candidateOut), { code: 'ENOENT' });
+});
+
+test('legacy prepared receipt without execution-only fixtures can inspect retained evidence', async () => {
+  assert.ok(completed, 'real composition precondition');
+  const legacyPrepared = join(root, 'legacy-prepared');
+  cpSync(prepared, legacyPrepared, { recursive: true });
+  rmSync(join(legacyPrepared, 'fixtures'), { recursive: true });
+  const receipt = json(join(legacyPrepared, 'prepared.json'));
+  for (const path of Object.keys(receipt.files)) if (path.startsWith('fixtures/')) delete receipt.files[path];
+  writeFileSync(join(legacyPrepared, 'prepared.json'), JSON.stringify(receipt));
+  const legacyOut = join(root, 'legacy-out');
+  cpSync(out, legacyOut, { recursive: true });
+  writeFileSync(join(legacyOut, 'dependency-receipt.json'), JSON.stringify(receipt));
+  const bundle = json(join(legacyOut, 'bundle.json'));
+  bundle.files['dependency-receipt.json'] = sha256(readFileSync(join(legacyOut, 'dependency-receipt.json')));
+  writeFileSync(join(legacyOut, 'bundle.json'), JSON.stringify(bundle));
+  const inspected = await inspectBundle({ prepared: legacyPrepared, out: legacyOut });
+  assert.equal(inspected.pantographRunId, completed.pantographRunId);
+  await assert.rejects(runComposition({ prepared: legacyPrepared, out: join(root, 'legacy-production-refused') }), /prepared CPU fixture identity missing/);
+});
+
+test('explicit unavailable native fixture root fails instead of using the compile-time checkout', async () => {
+  const native = join(root, 'invalid-fixture-root');
+  const log = join(root, 'invalid-fixture');
+  await assert.rejects(command(join(prepared, 'bin', lock.native_example), [native], {
+    log, env: { ...process.env, PUMAS_REGISTRY_DB_PATH: join(native, 'registry.db'),
+      PANTOGRAPH_CPU_EMBEDDING_FIXTURE_ROOT: join(root, 'missing-fixture-root') },
+  }), /child_execution_failed/);
+  assert.match(readFileSync(`${log}.stderr`, 'utf8'), /CPU fixture root must be an existing absolute directory/);
+  assert.deepEqual(inventory(native), {}, 'fixture refusal precedes owner store creation');
 });
 
 test('corrupted retained output is rejected by bundle checksums before native inspection', async () => {
