@@ -7,8 +7,8 @@
 - IMG-3 (deferred): diffusion execution and useful generated images need weights
   and runtime qualification. Owner: runtime integration; revisit when supplied.
 - IMG-4 (resolved by hosted acceptance): local sandbox startup is unavailable;
-  ordinary hosted sandbox acceptance passed on 051b08ed, including all browser
-  assertions and cleanup. Final committed-head checks remain required for merge.
+  ordinary hosted sandbox acceptance passed on combined 97ff1ed0, including all
+  browser assertions and cleanup. Final committed-head checks remain required.
 - IMG-5 (resolved in slice): local unsupported error previously became transport_error
   at Toolbar catch; now uses existing capability_violation with unsupported details.
 - IMG-6 (resolved): inherited capture-phase click suppression prevented
@@ -25,10 +25,10 @@
   text, suppressing native keypress/button activation. Independent source review
   established the driver defect. Enter now supplies CR text/unmodifiedText and
   Tab/Escape use rawKeyDown; actual hosted keyboard/modal/focus assertions passed.
-- IMG-9 (resolved on repair head): d9e52e51 browser job 115613091802
+- IMG-9 (resolved on combined head): d9e52e51 browser job 115613091802
   timed out reopening via pointer Expand after Escape/focus checks passed. The
   fixture waits for native open=false, which precedes queued close-event delivery
   and component updates. Observe real close plus Svelte completion before the next
-  action; all native input/focus/reopen assertions remain. The 3b9be35a browser
+  action; all native input/focus/reopen assertions remain. The 97ff1ed0 browser
   receipt passed three completed cycles and all other outcomes. Exact old event
   order and a production defect are not established by the earlier log.

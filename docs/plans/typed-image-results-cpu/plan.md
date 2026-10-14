@@ -1,10 +1,10 @@
 # Typed image results on CPU
 
-Status: Verifying. Acceptance: partial. Phase: final required gates.
-Next slice: publish the repair receipt, merge accepted main 0f6972af into this
-published feature branch without rewriting history, and require terminal combined-head
-CI/browser acceptance before integration and main verification in
-[PR74](https://github.com/MrScripty/Pantograph/pull/74).
+Status: Accepted. Acceptance: C1–C4 satisfied. Phase: accepted implementation.
+Next slice: none. [PR74](https://github.com/MrScripty/Pantograph/pull/74) owns final
+publication-head gates, delegated ready-only integration, main verification and
+terminal branch disposition. This committed record pins the verified implementation
+source; it does not assert that its own later publication head has passed.
 
 ## Objective and scope
 
@@ -42,7 +42,7 @@ User authorization selects this plan and the start operation after independent r
   public contracts remain intact; a small presentation decoder replaces an invalid
   string interpretation. No new service, persistence, or orchestration mechanism.
 
-## Milestone M1 — typed result presentation (Verifying)
+## Milestone M1 — typed result presentation (Accepted)
 
 Write set: `src/components/nodes/workflow/ImageOutputNode.svelte`, adjacent
 `imageOutput*.ts`, `src/components/workflowToolbarEvents.ts` and its tests,
@@ -52,13 +52,13 @@ Rust, lockfiles or runtime worker changes. Adjacent CI write set: the existing
 reporting; user requested hosted sandbox acceptance after local startup was blocked.
 
 Claims (all automated): C1–C4 satisfied by [verification](reports/verification.md)
-on implementation source 051b08ed. Independent review verified the actual hosted
-browser receipt. All 21 checks attached to 051b08ed passed, including Quality
-summary. Publication and integration still require the final committed-head gates.
-Repeated qualification on d9e52e51 failed pointer reopening after native Escape;
-The repaired 3b9be35a browser run passed all 18 outcomes, including three complete
-settled native reopen cycles. C3 is satisfied on that source with independent log
-review; remaining required gates and final publication checks are pending.
+on combined source 97ff1ed0da20325eeaa0270df0bf2afae25c9a38, which incorporates
+accepted main 0f6972af without changing its scheduler paths. All 21 checks attached
+to that source completed successfully, including Quality summary and CodeQL.
+Independent review verified preservation, all 18 actual sandboxed browser outcomes,
+three settled native reopen cycles and completed cleanup. No unresolved review
+finding remains. Publication and integration still require final committed-head
+gates; earlier source receipts and the d9e52e51 failure remain historical evidence.
 
 | ID | Criterion | Kind | Environment |
 | --- | --- | --- | --- |

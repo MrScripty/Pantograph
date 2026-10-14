@@ -1,13 +1,14 @@
 # CPU image result verification — 2026-10-13
 
-Implementation is complete and independently reviewed. C3 passed on exact source
-051b08ed774c7b22f22c6242bacc8fb16d4238e2 through the existing sandboxed Actions
-frontend job. All 21 checks attached to that head passed, including Quality summary.
-Repeated qualification on d9e52e51 exposed incomplete native-dismissal observation.
-The repaired 3b9be35a3b7bd8fc4e4dfd8d795b25992fd36e84 browser run passed all 18
-outcomes, including three settled reopen cycles and cleanup. Remaining required
-gates and final publication/integration checks remain pending in
-[PR74](https://github.com/MrScripty/Pantograph/pull/74).
+Implementation is accepted and independently reviewed on combined source
+97ff1ed0da20325eeaa0270df0bf2afae25c9a38, incorporating accepted main 0f6972af.
+All 21 attached checks completed successfully, including Quality summary and
+CodeQL. The exact-source sandboxed browser receipt passed all 18 outcomes,
+including three settled reopen cycles and cleanup. Final publication-head gates,
+integration and main verification remain owned by
+[PR74](https://github.com/MrScripty/Pantograph/pull/74); this record does not claim
+that its own later publication head has passed. Earlier success/failure receipts
+below remain historical observations.
 This qualifies controlled CPU browser presentation, not generated-image capability.
 
 ## Passed evidence
@@ -40,6 +41,23 @@ shell, store and artifact transport. It does not qualify the full workflow edito
 Tauri, runtime inference, diffusion generation, native desktop or GPU behavior.
 
 ## Hosted browser acceptance — 2026-10-14
+
+The combined [97ff1ed0 frontend job](https://github.com/MrScripty/Pantograph/actions/runs/38494559044/job/115627259836)
+passed all 731 frontend tests and recorded exact source
+97ff1ed0da20325eeaa0270df0bf2afae25c9a38, Chrome 154.0.8037.97,
+`sandboxMode: enabled`, all 18 outcomes including three settled native reopen
+cycles, and `cleanup: completed`. PNG 48×32/226 bytes and JPEG 64×40/1168 bytes
+downloaded as output.png (image/png) and output.jpg (image/jpeg), exactly matching
+retained bytes. [Artifact 11862654090](https://github.com/MrScripty/Pantograph/actions/runs/38494559044/artifacts/11862654090)
+uploaded successfully. Independent GPT-6.1 Sol High review inspected the actual log
+and confirmed all outcomes and teardown. All 21 attached checks completed
+successfully by 2026-10-14 01:38:47 UTC, including
+[Quality summary](https://github.com/MrScripty/Pantograph/actions/runs/38494559044/job/115634356036)
+and CodeQL. Other jobs retain their established checkout semantics; the image
+browser job verifies the exact source revision. All 25 incoming scheduler files
+equal accepted main, all 17 owned image paths equal the reviewed first parent,
+and all 13 image production/fixture/CI paths equal repaired source 3b9be35a.
+Saved user branch work remains ca9edde6. No image review blocker remains.
 
 The repaired [3b9be35a browser job](https://github.com/MrScripty/Pantograph/actions/runs/38491778442/job/115618408967)
 recorded exact source 3b9be35a3b7bd8fc4e4dfd8d795b25992fd36e84, Chrome

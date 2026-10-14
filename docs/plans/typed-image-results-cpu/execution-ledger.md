@@ -156,3 +156,20 @@ work and no rewriting of the pushed source history. Require fresh terminal gates
 and exact-head browser evidence on the combined tree before ready-only integration.
 Saved user branches remain preserved; current partial receipt does not claim that
 the still-running old-source contract/parity/CodeQL jobs or new combined gates passed.
+
+2026-10-14 combined-tree acceptance: published 97ff1ed0da20325eeaa0270df0bf2afae25c9a38
+after a clean history-preserving merge of exact accepted main 0f6972af. Independent
+blob/tree review verified all 25 incoming files unchanged, all 17 owned image paths
+equal the reviewed first parent, all 13 image production/fixture/CI paths unchanged
+from repair 3b9be35a, and saved work branch ca9edde6 preserved. Local combined-tree
+frontend verification passed 731 tests. Hosted frontend job 115627259836 passed
+731 tests and all 18 sandboxed browser outcomes, including three settled native
+reopen cycles and completed cleanup; artifact 11862654090 uploaded. Independent
+GPT-6.1 Sol High review inspected the actual receipt with no blockers. By
+01:38:47 UTC all 21 attached checks completed successfully, including Quality
+summary and CodeQL. C1–C4 and M1 are Accepted on that pinned source. This four-document
+acceptance publication requires fresh final-head gates before ready-only merge.
+PR74 owns the final-head/merge/main verification and retained-source branch
+disposition record; no self-referencing publication hash or premature final-head
+success claim is committed. GPU, native image, runtime/model-usefulness and remote
+worker scope remain excluded/deferred.
