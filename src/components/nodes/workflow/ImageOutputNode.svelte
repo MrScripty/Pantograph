@@ -8,6 +8,12 @@
   } from '../../../services/workflow/types';
   import { workflowService } from '../../../services/workflow/WorkflowService';
   import { nodeExecutionStates, updateNodeData } from '../../../stores/workflowStore';
+  import {
+    decodeImageArtifactReference,
+    ImageOutputError,
+    readImageArtifact,
+    type ImageArtifactBody,
+  } from './imageOutputArtifact.ts';
 
   interface ImageArtifactFormatOverride {
     format_id: string;
@@ -20,7 +26,7 @@
     data: {
       definition?: NodeDefinition;
       label?: string;
-      image?: string;
+      image?: unknown;
       streamContent?: string;
       artifact_format_override?: ImageArtifactFormatOverride | null;
     };
@@ -54,8 +60,10 @@
 
   let executionInfo = $derived($nodeExecutionStates.get(id));
   let executionState = $derived(executionInfo?.state || 'idle');
-  let imageData = $derived(data.image || '');
-  let imageSrc = $derived(imageData ? `data:image/png;base64,${imageData}` : '');
+  let imagePreview = $state<(ImageArtifactBody & { src: string }) | null>(null);
+  let imageLoading = $state(false);
+  let imageError = $state<string | null>(null);
+  let imageSrc = $derived(imagePreview?.src ?? '');
   let formatOverride = $derived(normalizeFormatOverride(data.artifact_format_override));
   let selectedFormatId = $derived(formatOverride?.format_id ?? defaultFormat?.format_id ?? '');
   let selectedFormat = $derived(findFormatOption(formatOptions, selectedFormatId));
@@ -242,29 +250,69 @@
 
   function openModal(event?: Event) {
     event?.stopPropagation();
+    if (!imagePreview) return;
     showModal = true;
   }
 
-  function closeModal() {
+  function closeModal(event?: Event) {
+    event?.stopPropagation();
     showModal = false;
   }
 
   function downloadImage(event?: Event) {
     event?.stopPropagation();
-    if (!imageData) return;
-    const byteChars = atob(imageData);
-    const bytes = new Uint8Array(byteChars.length);
-    for (let i = 0; i < byteChars.length; i++) {
-      bytes[i] = byteChars.charCodeAt(i);
-    }
-    const blob = new Blob([bytes], { type: 'image/png' });
-    const url = URL.createObjectURL(blob);
+    if (!imagePreview) return;
     const a = document.createElement('a');
-    a.href = url;
-    a.download = 'output.png';
+    a.href = imagePreview.src;
+    a.download = imagePreview.downloadName;
     a.click();
-    requestAnimationFrame(() => URL.revokeObjectURL(url));
   }
+
+  $effect(() => {
+    const value = data.image;
+    let current = true;
+    let objectUrl: string | null = null;
+    imagePreview = null;
+    imageError = null;
+    imageLoading = false;
+    showModal = false;
+
+    if (value !== undefined && value !== null && value !== '') {
+      imageLoading = true;
+      // Artifact commands have no cancellation API. Observe their completion,
+      // while this effect's lifetime fences publication after replacement/unmount.
+      async function loadPreview() {
+        try {
+          const reference = decodeImageArtifactReference(value);
+          const body = await readImageArtifact(reference, workflowService);
+          if (!current) return;
+          objectUrl = URL.createObjectURL(body.blob);
+          const image = new Image();
+          image.src = objectUrl;
+          try {
+            await image.decode();
+          } catch {
+            throw new ImageOutputError('invalid', 'Image artifact could not be decoded.');
+          }
+          if (current) imagePreview = { ...body, src: objectUrl };
+        } catch (error: unknown) {
+          if (current) {
+            if (objectUrl) URL.revokeObjectURL(objectUrl);
+            objectUrl = null;
+            imageError = error instanceof Error ? error.message : 'Image artifact read failed.';
+          }
+        } finally {
+          if (current) imageLoading = false;
+        }
+      }
+      void loadPreview();
+    }
+
+    return () => {
+      current = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  });
 
   onMount(() => {
     let disposed = false;
@@ -321,44 +369,43 @@
         <div class="space-y-1">
           <button type="button"
             class="nodrag nopan nowheel w-full cursor-pointer border-0 bg-transparent p-0"
-            onclick={openModal}
+            onclickcapture={openModal}
             aria-label="Open output image preview"
-            onmousedown={stopControlEvent}
-            onmouseup={stopControlEvent}
-            onpointerdown={stopControlEvent}
-            onpointerup={stopControlEvent}
-            onclickcapture={stopControlEvent}
+            onmousedowncapture={stopControlEvent}
+            onmouseupcapture={stopControlEvent}
+            onpointerdowncapture={stopControlEvent}
+            onpointerupcapture={stopControlEvent}
           >
             <img src={imageSrc} alt="Output" class="max-h-40 w-full object-contain rounded" />
           </button>
           <div class="flex justify-end gap-1">
             <button type="button"
               class="nodrag nopan nowheel text-[10px] text-neutral-400 hover:text-neutral-200 bg-transparent border-0 cursor-pointer px-1"
-              onclick={downloadImage}
-              onmousedown={stopControlEvent}
-              onmouseup={stopControlEvent}
-              onpointerdown={stopControlEvent}
-              onpointerup={stopControlEvent}
-              onclickcapture={stopControlEvent}
+              onclickcapture={downloadImage}
+              onmousedowncapture={stopControlEvent}
+              onmouseupcapture={stopControlEvent}
+              onpointerdowncapture={stopControlEvent}
+              onpointerupcapture={stopControlEvent}
             >
               Download
             </button>
             <button type="button"
               class="nodrag nopan nowheel text-[10px] text-neutral-400 hover:text-neutral-200 bg-transparent border-0 cursor-pointer px-1"
-              onclick={openModal}
-              onmousedown={stopControlEvent}
-              onmouseup={stopControlEvent}
-              onpointerdown={stopControlEvent}
-              onpointerup={stopControlEvent}
-              onclickcapture={stopControlEvent}
+              onclickcapture={openModal}
+              onmousedowncapture={stopControlEvent}
+              onmouseupcapture={stopControlEvent}
+              onpointerdowncapture={stopControlEvent}
+              onpointerupcapture={stopControlEvent}
             >
               Expand
             </button>
           </div>
         </div>
+      {:else if imageError}
+        <div role="alert" class="text-xs text-red-300">{imageError}</div>
       {:else}
         <div class="text-xs text-neutral-500 italic">
-          No image yet
+          {imageLoading ? 'Loading image…' : 'No image yet'}
         </div>
       {/if}
 
@@ -377,10 +424,10 @@
           value={formatOverride?.format_id ?? DEFAULT_SELECTION_VALUE}
           disabled={!defaultFormat && !formatOverride}
           onchange={handleFormatChange}
-          onmousedown={stopControlEvent}
-          onmouseup={stopControlEvent}
-          onpointerdown={stopControlEvent}
-          onpointerup={stopControlEvent}
+          onmousedowncapture={stopControlEvent}
+          onmouseupcapture={stopControlEvent}
+          onpointerdowncapture={stopControlEvent}
+          onpointerupcapture={stopControlEvent}
           onclickcapture={stopControlEvent}
         >
           <option value={DEFAULT_SELECTION_VALUE}>
@@ -408,10 +455,10 @@
                 disabled={!supportsQuality}
                 aria-describedby={`${qualityInputId}-range`}
                 onchange={handleQualityChange}
-                onmousedown={stopControlEvent}
-                onmouseup={stopControlEvent}
-                onpointerdown={stopControlEvent}
-                onpointerup={stopControlEvent}
+                onmousedowncapture={stopControlEvent}
+                onmouseupcapture={stopControlEvent}
+                onpointerdowncapture={stopControlEvent}
+                onpointerupcapture={stopControlEvent}
                 onclickcapture={stopControlEvent}
               />
               <span id={`${qualityInputId}-range`} class="text-[10px] text-neutral-500">
@@ -428,10 +475,10 @@
                 value={formatOverride.color_profile_id}
                 disabled={colorProfileOptions.length === 0}
                 onchange={handleColorProfileChange}
-                onmousedown={stopControlEvent}
-                onmouseup={stopControlEvent}
-                onpointerdown={stopControlEvent}
-                onpointerup={stopControlEvent}
+                onmousedowncapture={stopControlEvent}
+                onmouseupcapture={stopControlEvent}
+                onpointerdowncapture={stopControlEvent}
+                onpointerupcapture={stopControlEvent}
                 onclickcapture={stopControlEvent}
               >
                 {#each colorProfileOptions as profileId (profileId)}
@@ -452,12 +499,19 @@
 <dialog
   bind:this={modalElement}
   class="image-preview-dialog"
+  aria-label="Output image preview"
   onclick={(event) => event.target === modalElement && closeModal()}
   onclose={closeModal}
 >
   {#if imageSrc}
     <div class="dialog-content">
-      <button type="button" class="nodrag nopan nowheel dialog-close" onclick={closeModal}>
+      <button type="button" class="nodrag nopan nowheel dialog-close"
+        onclickcapture={closeModal}
+        onmousedowncapture={stopControlEvent}
+        onmouseupcapture={stopControlEvent}
+        onpointerdowncapture={stopControlEvent}
+        onpointerupcapture={stopControlEvent}
+      >
         Close
       </button>
       <img src={imageSrc} alt="Full resolution output" class="dialog-image" />

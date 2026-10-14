@@ -1,5 +1,6 @@
 import type { Edge } from '@xyflow/svelte';
 import { applyWorkflowExecutionEvent } from '../../packages/svelte-graph/src/stores/workflowExecutionEvents.ts';
+import { WorkflowServiceError } from '../services/workflow/workflowServiceErrors.ts';
 
 import {
   buildAudioRuntimeDataFromCompletedOutputs,
@@ -69,6 +70,15 @@ export interface WorkflowValidationLifecycleRefreshInput extends WorkflowValidat
 
 type WorkflowSubmitSuccessWorkbenchPage = 'scheduler' | 'io_inspector';
 
+export class UnsupportedWorkflowInputError extends WorkflowServiceError {
+  constructor(nodeId: string) {
+    super('capability_violation', `Image input '${nodeId}' is unsupported by scheduler submission.`, {
+      details: { status: 'unsupported', node_type: 'image-input', node_id: nodeId },
+    });
+    this.name = 'UnsupportedWorkflowInputError';
+  }
+}
+
 /** Capture authored text sources at the request boundary, before async submission. */
 export function workflowSubmitTextInputs(graph: WorkflowGraph): WorkflowPortBinding[] {
   return graph.nodes.flatMap((node) => {
@@ -83,6 +93,10 @@ export function workflowSubmitTextInputs(graph: WorkflowGraph): WorkflowPortBind
 
 /** Materialize only the scheduler's supported authored source types. */
 export function workflowSubmitInputs(graph: WorkflowGraph): WorkflowPortBinding[] {
+  const imageInput = graph.nodes.find(node => node.node_type === 'image-input');
+  if (imageInput) {
+    throw new UnsupportedWorkflowInputError(imageInput.id);
+  }
   const inputs = workflowSubmitTextInputs(graph);
   for (const node of graph.nodes) {
     if (graph.edges.some(edge => edge.target === node.id)) continue;
