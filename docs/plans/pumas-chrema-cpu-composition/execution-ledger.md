@@ -33,3 +33,15 @@ the read-only platform registry path; providing `PUMAS_REGISTRY_DB_PATH` under
 the writable scratch directory resolves them without source or sandbox changes.
 These attempts are not reported as passing tests. Source is now Verifying while
 the exact committed candidate's retained evidence is captured.
+
+Implementation commit `6f16d9f6dad7bf763088528addf185a2e6a9cced` was prepared
+from clean source, with public Chrema package audit and locked CPU native build.
+All 13 integration contracts passed again with zero skips. Its concrete workflow
+completed, and a fresh CLI/native inspector verified the original output and
+provenance after producer exit. The complete bundle and all relevant successful
+and failed-attempt logs are retained in the [verification archive/report](reports/verification.md).
+Bounded fixture-composition C1-C4 are satisfied; no trained-model, broader
+release, independent review or hosted CI acceptance is inferred. No upstream
+changes are required for this pin set. Parent owns successor Pumas adoption,
+draft integration and the compatible release checkpoint. The evidence commit
+changes documentation/archive only; no binary is committed or release tagged.

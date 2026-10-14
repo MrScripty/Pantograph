@@ -1,9 +1,8 @@
 # Pumas, Pantograph and public Chrema CPU composition
 
-Plan status: `Verifying`. Operation: `verify` under the delegated instruction to
-implement, test, commit, push and open a draft PR. Acceptance: `partial`.
-Current phase: committed-candidate evidence capture. Next slice: prepare the
-implementation commit, retain its complete CPU bundle, and publish a draft PR.
+Plan status: `Accepted` for the bounded CPU fixture composition. Acceptance:
+`satisfied`. Current phase: local CPU acceptance complete. Next slice: `none`.
+Draft PR review, hosted CI and coordinated release checkpoint remain with parent.
 
 ## Objective and scope
 
@@ -62,7 +61,7 @@ it is not adopted without compatibility qualification coordinated by parent.
 8. Necessary complexity is child lifecycle and retained-state identity; keep
    it in this example. Existing inference and persistence APIs remain intact.
 
-## Milestone M1: runnable and retained composition (`Verifying`)
+## Milestone M1: runnable and retained composition (`Accepted`)
 
 Write set: `examples/pumas-chrema-cpu-demo/**`,
 `crates/pantograph-embedded-runtime/examples/cpu_embedding_workflow_probe.rs`,
@@ -74,8 +73,8 @@ production scheduler policy, Chrema/private Nearwork source, tag or release.
 | Claim | Criterion | Evidence/environment/mode | Status |
 | --- | --- | --- | --- |
 | C1 | Exact pins and clean Chrema package resolve; wrong pins fail closed | [Integration contracts](../../../examples/pumas-chrema-cpu-demo/composition.test.mjs), Linux CPU, automated | satisfied |
-| C2 | Actual Pumas-indexed Candle CPU graph output matches independent reference | Native binary + Chrema composition, Linux CPU, automated; post-commit bundle next | pending |
-| C3 | Fresh native process reads run/model provenance and retained output after producer exit | Real SQLite/artifact reopening + bundle inspector, Linux CPU, automated; post-commit bundle next | pending |
+| C2 | Actual Pumas-indexed Candle CPU graph output matches independent reference | [Exact committed candidate and raw bundle](reports/verification.md), Linux CPU, automated | satisfied |
+| C3 | Fresh native process reads run/model provenance and retained output after producer exit | [Real SQLite/artifact reopening and fresh CLI inspector](reports/verification.md), Linux CPU, automated | satisfied |
 | C4 | Failure, timeout, corrupted evidence and reused output refuse success while preserving prior evidence | [Integration contracts](../../../examples/pumas-chrema-cpu-demo/composition.test.mjs), Linux CPU, automated | satisfied |
 
 ## Blockers and replan triggers
@@ -101,4 +100,4 @@ Implementation, Verification/oracles, Commit, Development Proportionality,
 Architecture, Dependencies, Rust, IPC and Persistence. No AGENTS.md or relevant
 `.agents/skills` exists in the workspace/Pantograph/public Chrema checkouts.
 
-[Ledger](execution-ledger.md) · [Issues](issues.md)
+[Ledger](execution-ledger.md) · [Issues](issues.md) · [Verification](reports/verification.md)
