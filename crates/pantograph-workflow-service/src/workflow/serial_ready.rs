@@ -8,6 +8,8 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+const MAX_LOOKAHEAD_DIAGNOSTIC_BYTES: usize = 8192;
+
 #[derive(Clone, PartialEq, Eq)]
 pub(crate) struct WorkflowSerialReadyMember {
     pub(crate) task: WorkflowSchedulerTask,
@@ -30,6 +32,7 @@ pub(crate) struct WorkflowSerialReadyPair {
 pub struct WorkflowSerialReadyConfig {
     minimum_samples: usize,
     maximum_age: Duration,
+    completion_lookahead: bool,
 }
 impl WorkflowSerialReadyConfig {
     pub fn new(
@@ -47,7 +50,14 @@ impl WorkflowSerialReadyConfig {
         Ok(Self {
             minimum_samples,
             maximum_age,
+            completion_lookahead: false,
         })
+    }
+    /// Enable bounded predecessor-conditioned completion advice. Actual dispatch
+    /// still follows the existing immediate serial Ready service policy.
+    pub fn with_completion_lookahead(mut self) -> Self {
+        self.completion_lookahead = true;
+        self
     }
 }
 impl Default for WorkflowSerialReadyConfig {
@@ -55,6 +65,7 @@ impl Default for WorkflowSerialReadyConfig {
         Self {
             minimum_samples: 3,
             maximum_age: Duration::from_secs(60),
+            completion_lookahead: false,
         }
     }
 }
@@ -64,14 +75,24 @@ pub(crate) struct SerialReadyMode {
     admission: SchedulerSerialAdmission,
     semaphore: Arc<tokio::sync::Semaphore>,
     active: Mutex<Option<Arc<Mutex<SerialReadyContext>>>>,
-    observations: Mutex<VecDeque<Observation>>,
+    history: Mutex<SerialReadyHistory>,
     config: WorkflowSerialReadyConfig,
+}
+#[derive(Default)]
+struct SerialReadyHistory {
+    samples: VecDeque<Observation>,
+    predecessor: Option<OwnerBoundWorkload>,
+}
+struct OwnerBoundWorkload {
+    key: [u8; 32],
+    owner: SerialRuntimeHostCpuOwnerEvidence,
 }
 struct Observation {
     key: [u8; 32],
     owner: SerialRuntimeHostCpuOwnerEvidence,
     at: Instant,
     cost_ns: u64,
+    predecessor_key: Option<[u8; 32]>,
     #[cfg(any(test, feature = "test-support"))]
     task_id: String,
 }
@@ -108,6 +129,65 @@ impl SerialReadyDecision {
         }
     }
 }
+/// Diagnostic projection only; no dispatch, lease, or owner capability.
+#[derive(Clone, Copy, Debug, serde::Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+enum SerialLookaheadReason {
+    DiagnosticTooLarge,
+    RemainingObligations,
+    OwnerUnavailable,
+    IncomparableOwners,
+    UnsupportedInputs,
+    HistoryUnavailable,
+    PredecessorUnavailable,
+    PredecessorOwnerChanged,
+    InvalidClock,
+    InsufficientFreshSamples,
+    OwnerChanged,
+    MissingEvidence,
+    BudgetExhausted,
+    DurationOverflow,
+    Ranked,
+}
+struct SerialLookaheadDecision {
+    reason: SerialLookaheadReason,
+    workload_keys: Option<[[u8; 32]; 2]>,
+    predecessor_key: Option<[u8; 32]>,
+    owner_generation: Option<u64>,
+    // Row order is [A|P, B|P], [B|A, A|B].
+    counts: [[usize; 2]; 2],
+    maxima_ns: [[u64; 2]; 2],
+    oldest_age_ns: [[u64; 2]; 2],
+    selected_position: Option<usize>,
+    completions_ns: Option<[[u64; 2]; 2]>,
+    completion_sums_ns: Option<[u64; 2]>,
+    plans_evaluated: usize,
+    completion_events_evaluated: usize,
+}
+impl SerialLookaheadDecision {
+    fn refused(reason: SerialLookaheadReason) -> Self {
+        Self {
+            reason,
+            workload_keys: None,
+            predecessor_key: None,
+            owner_generation: None,
+            counts: [[0; 2]; 2],
+            maxima_ns: [[0; 2]; 2],
+            oldest_age_ns: [[0; 2]; 2],
+            selected_position: None,
+            completions_ns: None,
+            completion_sums_ns: None,
+            plans_evaluated: 0,
+            completion_events_evaluated: 0,
+        }
+    }
+}
+fn same_owner(
+    a: &SerialRuntimeHostCpuOwnerEvidence,
+    b: &SerialRuntimeHostCpuOwnerEvidence,
+) -> bool {
+    a.snapshot == b.snapshot && Arc::ptr_eq(&a.generation, &b.generation)
+}
 pub(crate) struct SerialReadyContext {
     preparation: Option<SchedulerSerialPreparation>,
     dispatch: Option<SchedulerSerialDispatch>,
@@ -121,6 +201,7 @@ pub(crate) struct SerialReadyContext {
     member: Option<WorkflowSerialReadyMember>,
     pub(crate) owner: Option<SerialRuntimeHostCpuOwnerEvidence>,
     key: Option<[u8; 32]>,
+    predecessor: Option<OwnerBoundWorkload>,
     started: Option<Instant>,
     attempt_id: String,
     candidate_id: String,
@@ -141,7 +222,7 @@ impl SerialReadyMode {
             admission: SchedulerSerialAdmission::new(),
             semaphore: Arc::new(tokio::sync::Semaphore::new(1)),
             active: Mutex::new(None),
-            observations: Mutex::new(VecDeque::new()),
+            history: Mutex::new(SerialReadyHistory::default()),
             config,
         })
     }
@@ -167,6 +248,7 @@ impl SerialReadyMode {
             member: None,
             owner: None,
             key: None,
+            predecessor: None,
             started: None,
             attempt_id: String::new(),
             candidate_id: String::new(),
@@ -205,6 +287,42 @@ impl SerialReadyMode {
         .then_some(evidence)
     }
     pub(crate) fn select(&self, pair: &super::WorkflowSerialReadyPair) -> SerialReadyDecision {
+        let immediate = self.select_immediate(pair);
+        if self.config.completion_lookahead {
+            let advisory = self.completion_lookahead(pair);
+            // Projection and logger callbacks run after the history guard drops.
+            let diagnostic = serde_json::json!({
+                "phase": "completion_advisory",
+                "workflow_run_id": pair.members[0].task.workflow_run_id.as_str(),
+                "task_ids": pair.members.each_ref().map(|m| m.task.task_id.as_str()),
+                "immediate_position": immediate.position,
+                "reason": advisory.reason,
+                "workload_keys": advisory.workload_keys,
+                "predecessor_key": advisory.predecessor_key,
+                "owner_generation": advisory.owner_generation,
+                "first_counts": advisory.counts[0],
+                "successor_counts": advisory.counts[1],
+                "first_ns": advisory.maxima_ns[0],
+                "successor_ns": advisory.maxima_ns[1],
+                "first_oldest_age_ns": advisory.oldest_age_ns[0],
+                "successor_oldest_age_ns": advisory.oldest_age_ns[1],
+                "selected_position": advisory.selected_position,
+                "completions_ns": advisory.completions_ns,
+                "completion_sums_ns": advisory.completion_sums_ns,
+                "plans_evaluated": advisory.plans_evaluated,
+                "completion_events_evaluated": advisory.completion_events_evaluated,
+            })
+            .to_string();
+            if diagnostic.len() <= MAX_LOOKAHEAD_DIAGNOSTIC_BYTES {
+                log::info!(target: "workflow::serial_lookahead", "{}", diagnostic);
+            } else {
+                log::info!(target: "workflow::serial_lookahead", "{}",
+                    serde_json::json!({"reason": SerialLookaheadReason::DiagnosticTooLarge}));
+            }
+        }
+        immediate
+    }
+    fn select_immediate(&self, pair: &super::WorkflowSerialReadyPair) -> SerialReadyDecision {
         let mut decision = SerialReadyDecision::fifo(SerialReadyReason::OwnerUnavailable);
         let (Some(first), Some(second)) = (
             self.owner_for(&pair.members[0].task),
@@ -226,11 +344,11 @@ impl SerialReadyMode {
         };
         let keys = [first_key, second_key];
         let now = Instant::now();
-        let Ok(samples) = self.observations.lock() else {
+        let Ok(history) = self.history.lock() else {
             decision.reason = SerialReadyReason::HistoryUnavailable;
             return decision;
         };
-        for sample in samples.iter() {
+        for sample in history.samples.iter() {
             let Some(age) = now.checked_duration_since(sample.at) else {
                 return SerialReadyDecision::fifo(SerialReadyReason::InvalidClock);
             };
@@ -264,25 +382,117 @@ impl SerialReadyMode {
         }
         decision
     }
-    fn migrate_verified_reuse(
-        &self,
-        previous: &SerialRuntimeHostCpuOwnerEvidence,
-        current: &SerialRuntimeHostCpuOwnerEvidence,
-    ) {
-        // Only after consumed actual receipt cleanup and a fresh private-owner
-        // query. Preserve freshness/counts; never carry across arbitrary reload.
-        if !current.is_current() {
-            return;
+    fn completion_lookahead(&self, pair: &WorkflowSerialReadyPair) -> SerialLookaheadDecision {
+        use SerialLookaheadReason as Reason;
+        let mut advice = SerialLookaheadDecision::refused(Reason::RemainingObligations);
+        let remaining = pair
+            .population
+            .iter()
+            .filter(|(_, class, state, _)| {
+                *class == super::WorkflowSchedulerTaskExecutionClass::RuntimeInference
+                    && !matches!(
+                        state,
+                        SchedulerTaskStateKind::Completed | SchedulerTaskStateKind::TerminalFailed
+                    )
+            })
+            .count();
+        if remaining != 2 {
+            return advice;
         }
-        if let Ok(mut samples) = self.observations.lock() {
-            for sample in samples.iter_mut() {
-                if sample.owner.snapshot == previous.snapshot
-                    && Arc::ptr_eq(&sample.owner.generation, &previous.generation)
-                {
-                    sample.owner = current.clone();
+        let (Some(first), Some(second)) = (
+            self.owner_for(&pair.members[0].task),
+            self.owner_for(&pair.members[1].task),
+        ) else {
+            advice.reason = Reason::OwnerUnavailable;
+            return advice;
+        };
+        if !same_owner(&first, &second) {
+            advice.reason = Reason::IncomparableOwners;
+            return advice;
+        }
+        let (Some(a), Some(b)) = (
+            observation_key(&pair.members[0]),
+            observation_key(&pair.members[1]),
+        ) else {
+            advice.reason = Reason::UnsupportedInputs;
+            return advice;
+        };
+        advice.workload_keys = Some([a, b]);
+        advice.owner_generation = Some(first.snapshot.generation);
+        let now = Instant::now();
+        let Ok(history) = self.history.lock() else {
+            advice.reason = Reason::HistoryUnavailable;
+            return advice;
+        };
+        let Some(previous) = history.predecessor.as_ref() else {
+            advice.reason = Reason::PredecessorUnavailable;
+            return advice;
+        };
+        if !same_owner(&previous.owner, &first) {
+            advice.reason = Reason::PredecessorOwnerChanged;
+            return advice;
+        }
+        advice.predecessor_key = Some(previous.key);
+        let rows = [[(a, previous.key), (b, previous.key)], [(b, a), (a, b)]];
+        for sample in history.samples.iter() {
+            let Some(age) = now.checked_duration_since(sample.at) else {
+                return SerialLookaheadDecision::refused(Reason::InvalidClock);
+            };
+            if !same_owner(&sample.owner, &first) || age > self.config.maximum_age {
+                continue;
+            }
+            for (row, cells) in rows.iter().enumerate() {
+                for (column, (key, predecessor)) in cells.iter().enumerate() {
+                    if sample.key == *key && sample.predecessor_key == Some(*predecessor) {
+                        advice.counts[row][column] += 1;
+                        advice.maxima_ns[row][column] =
+                            advice.maxima_ns[row][column].max(sample.cost_ns);
+                        advice.oldest_age_ns[row][column] = advice.oldest_age_ns[row][column]
+                            .max(age.as_nanos().min(u64::MAX as u128) as u64);
+                    }
                 }
             }
         }
+        // Release state before the numeric sibling kernel and any diagnostics.
+        drop(history);
+        if advice
+            .counts
+            .iter()
+            .flatten()
+            .any(|c| *c < self.config.minimum_samples)
+        {
+            advice.reason = Reason::InsufficientFreshSamples;
+            return advice;
+        }
+        if !first.is_current() || !second.is_current() {
+            advice.reason = Reason::OwnerChanged;
+            return advice;
+        }
+        match evaluate_serial_service_completion(
+            advice.maxima_ns[0].map(Some),
+            advice.maxima_ns[1].map(Some),
+            SchedulerSerialServiceBudget {
+                max_plans: 2,
+                max_completion_events: 4,
+            },
+        ) {
+            Ok(completion) => {
+                advice.reason = Reason::Ranked;
+                advice.selected_position = Some(completion.selected_position);
+                advice.completions_ns = Some(completion.completions_ns);
+                advice.completion_sums_ns = Some(completion.completion_sums_ns);
+                advice.plans_evaluated = completion.plans_evaluated;
+                advice.completion_events_evaluated = completion.completion_events_evaluated;
+            }
+            Err(refusal) => {
+                advice.reason = match refusal {
+                    SchedulerSerialServiceRefusal::MissingEvidence => Reason::MissingEvidence,
+                    SchedulerSerialServiceRefusal::BudgetExhausted => Reason::BudgetExhausted,
+                    SchedulerSerialServiceRefusal::DurationOverflow => Reason::DurationOverflow,
+                };
+            }
+        }
+        advice
     }
     fn record(
         &self,
@@ -290,6 +500,8 @@ impl SerialReadyMode {
         owner: SerialRuntimeHostCpuOwnerEvidence,
         started: Instant,
         _task: &WorkflowSchedulerTask,
+        predecessor_key: Option<[u8; 32]>,
+        reuse_previous: Option<&SerialRuntimeHostCpuOwnerEvidence>,
     ) {
         let now = Instant::now();
         let Some(elapsed) = now.checked_duration_since(started) else {
@@ -298,9 +510,25 @@ impl SerialReadyMode {
         let Ok(cost_ns) = u64::try_from(elapsed.as_nanos()) else {
             return;
         };
-        let Ok(mut samples) = self.observations.lock() else {
+        let Ok(mut history) = self.history.lock() else {
             return;
         };
+        // This is reached only after consumed actual receipt cleanup and a
+        // fresh private-owner query. Never migrate from a forecast or reload.
+        if let Some(previous) = reuse_previous.filter(|_| owner.is_current()) {
+            for sample in history.samples.iter_mut() {
+                if same_owner(&sample.owner, previous) {
+                    sample.owner = owner.clone();
+                }
+            }
+        }
+        if self.config.completion_lookahead && owner.is_current() {
+            history.predecessor = Some(OwnerBoundWorkload {
+                key,
+                owner: owner.clone(),
+            });
+        }
+        let samples = &mut history.samples;
         if samples.iter().filter(|s| s.key == key).count() >= 8 {
             if let Some(position) = samples.iter().position(|s| s.key == key) {
                 samples.remove(position);
@@ -328,6 +556,7 @@ impl SerialReadyMode {
             owner,
             at: now,
             cost_ns,
+            predecessor_key,
             #[cfg(any(test, feature = "test-support"))]
             task_id: _task.task_id.to_string(),
         });
@@ -468,6 +697,17 @@ impl RuntimeHostBatchExecutionPort for SerialReadyPortAdapter {
             None => dispatch.bind_unranked_attempt(identity),
         }
         .map_err(|e| execution_error(format!("serial binding refused: {e:?}")))?;
+        if self.0.config.completion_lookahead {
+            let mut attempt = context
+                .lock()
+                .map_err(|_| execution_error("serial context lock poisoned"))?;
+            let mut history = self
+                .0
+                .history
+                .lock()
+                .map_err(|_| execution_error("serial history lock poisoned"))?;
+            attempt.predecessor = history.predecessor.take();
+        }
         let execution = self
             .0
             .port
@@ -512,6 +752,16 @@ impl RuntimeHostBatchExecutionPort for SerialReadyPortAdapter {
                     "ranked actual owner evidence changed after drain",
                 ));
             }
+        }
+        // The consumed transition belongs to the owner that actually executed,
+        // including the receipt's real pre-reuse generation. Never relabel it.
+        if self.0.config.completion_lookahead {
+            context.predecessor = context.predecessor.take().filter(|previous| {
+                predecessor
+                    .as_ref()
+                    .or(actual_owner.as_ref())
+                    .is_some_and(|actual| same_owner(&previous.owner, actual))
+            });
         }
         context.owner = actual_owner;
         context.successful = cancellation.snapshot().state
@@ -558,11 +808,22 @@ impl ReservationLifecyclePort for SerialReadyPortAdapter {
                     c.started,
                     c.task.clone(),
                     c.successful,
+                    c.predecessor.as_ref().map(|p| p.key),
                 )
             })
         };
-        let Some((drained, cleanup, expected, attempt, request_id, key, started, task, successful)) =
-            data
+        let Some((
+            drained,
+            cleanup,
+            expected,
+            attempt,
+            request_id,
+            key,
+            started,
+            task,
+            successful,
+            predecessor_key,
+        )) = data
         else {
             return self.0.port.apply_reservation_lifecycle(event).await;
         };
@@ -640,10 +901,14 @@ impl ReservationLifecyclePort for SerialReadyPortAdapter {
                 })
             });
             if owner_matches && running {
-                if let Some(previous) = predecessor.as_ref() {
-                    self.0.migrate_verified_reuse(previous, &expected);
-                }
-                self.0.record(key, expected, started, &task);
+                self.0.record(
+                    key,
+                    expected,
+                    started,
+                    &task,
+                    predecessor_key,
+                    predecessor.as_ref(),
+                );
             }
         }
         Ok(application)
@@ -706,6 +971,9 @@ fn cleanup_error(message: impl Into<String>) -> ReservationLifecyclePortError {
     }
 }
 
+#[cfg(any(test, feature = "test-support"))]
+type SerialReadyConditionedSample = (String, [u8; 32], Option<[u8; 32]>, u64, u64, u64);
+
 impl WorkflowService {
     /// Test-only acceptance evidence from the actual cleanup-qualified ring.
     #[cfg(any(test, feature = "test-support"))]
@@ -713,9 +981,9 @@ impl WorkflowService {
         let Some(mode) = &self.serial_ready_mode else {
             return Vec::new();
         };
-        let samples = mode.observations.lock().expect("serial observations lock");
+        let samples = mode.history.lock().expect("serial history lock");
         let mut counts = std::collections::BTreeMap::new();
-        for sample in samples.iter() {
+        for sample in samples.samples.iter() {
             *counts.entry(sample.owner.snapshot.generation).or_insert(0) += 1;
         }
         counts.into_iter().collect()
@@ -729,9 +997,10 @@ impl WorkflowService {
             return Vec::new();
         };
         let now = Instant::now();
-        mode.observations
+        mode.history
             .lock()
-            .expect("serial observations lock")
+            .expect("serial history lock")
+            .samples
             .iter()
             .map(|s| {
                 (
@@ -744,6 +1013,41 @@ impl WorkflowService {
                 )
             })
             .collect()
+    }
+    /// Read-only transition evidence: task, workload digest, predecessor digest,
+    /// observed cost ns, age ns, and scalar owner generation. No owner capability.
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn serial_ready_conditioned_samples_for_test(&self) -> Vec<SerialReadyConditionedSample> {
+        let Some(mode) = &self.serial_ready_mode else {
+            return Vec::new();
+        };
+        let now = Instant::now();
+        mode.history
+            .lock()
+            .expect("serial history lock")
+            .samples
+            .iter()
+            .map(|sample| {
+                (
+                    sample.task_id.clone(),
+                    sample.key,
+                    sample.predecessor_key,
+                    sample.cost_ns,
+                    now.saturating_duration_since(sample.at)
+                        .as_nanos()
+                        .min(u64::MAX as u128) as u64,
+                    sample.owner.snapshot.generation,
+                )
+            })
+            .collect()
+    }
+    /// Read-only current predecessor digest and scalar owner association.
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn serial_ready_predecessor_for_test(&self) -> Option<([u8; 32], u64)> {
+        let mode = self.serial_ready_mode.as_ref()?;
+        let history = mode.history.lock().expect("serial history lock");
+        let previous = history.predecessor.as_ref()?;
+        Some((previous.key, previous.owner.snapshot.generation))
     }
     /// Dedicated construction, before any store/repository escapes. The supplied
     /// port owns ALL serial fallback/ranked execution, drain and cleanup.
@@ -772,6 +1076,172 @@ impl WorkflowService {
 pub(super) mod tests {
     use super::*;
 
+    #[test]
+    fn completion_lookahead_requires_explicit_construction() {
+        assert!(!WorkflowSerialReadyConfig::default().completion_lookahead);
+        assert!(
+            !WorkflowSerialReadyConfig::new(3, Duration::from_secs(60))
+                .unwrap()
+                .completion_lookahead
+        );
+        assert!(
+            WorkflowSerialReadyConfig::default()
+                .with_completion_lookahead()
+                .completion_lookahead
+        );
+    }
+
+    pub(in crate::workflow) fn assert_conditioned_hand_oracle_and_refusals(
+        mode: &SerialReadyMode,
+        pair: &WorkflowSerialReadyPair,
+    ) {
+        let owner = mode.owner_for(&pair.members[0].task).unwrap();
+        let a = observation_key(&pair.members[0]).unwrap();
+        let b = observation_key(&pair.members[1]).unwrap();
+        let at = Instant::now();
+        {
+            let mut history = mode.history.lock().unwrap();
+            history.predecessor = Some(OwnerBoundWorkload {
+                key: a,
+                owner: owner.clone(),
+            });
+            for (key, predecessor_key, cost_ns) in [(a, a, 7), (b, a, 3), (a, b, 20)] {
+                for _ in 0..3 {
+                    history.samples.push_back(Observation {
+                        key,
+                        predecessor_key: Some(predecessor_key),
+                        owner: owner.clone(),
+                        at,
+                        cost_ns,
+                        task_id: "private hand oracle".into(),
+                    });
+                }
+            }
+        }
+        let immediate = mode.select(pair);
+        assert_eq!(immediate.reason, SerialReadyReason::Ranked);
+        assert_eq!(immediate.position, 1);
+        assert_eq!(immediate.counts, [6, 3]);
+        assert_eq!(immediate.maxima_ns, [20, 3]);
+        let advice = mode.completion_lookahead(pair);
+        assert_eq!(advice.reason, SerialLookaheadReason::Ranked);
+        assert_eq!(advice.selected_position, Some(0));
+        assert_eq!(advice.counts, [[3, 3], [3, 3]]);
+        assert_eq!(advice.maxima_ns, [[7, 3], [3, 20]]);
+        assert_eq!(advice.completions_ns, Some([[7, 10], [3, 23]]));
+        assert_eq!(advice.completion_sums_ns, Some([17, 26]));
+        assert_eq!(
+            (advice.plans_evaluated, advice.completion_events_evaluated),
+            (2, 4)
+        );
+
+        let mut blocked = pair.clone();
+        blocked.population.push((
+            "extra.blocked.runtime".into(),
+            super::super::WorkflowSchedulerTaskExecutionClass::RuntimeInference,
+            SchedulerTaskStateKind::AwaitingInputs,
+            0,
+        ));
+        let refusal = mode.completion_lookahead(&blocked);
+        assert_eq!(refusal.reason, SerialLookaheadReason::RemainingObligations);
+        assert!(refusal.selected_position.is_none());
+        assert_eq!(mode.select(&blocked).position, immediate.position);
+        blocked.population.last_mut().unwrap().2 = SchedulerTaskStateKind::Completed;
+        assert_eq!(
+            mode.completion_lookahead(&blocked).reason,
+            SerialLookaheadReason::Ranked
+        );
+
+        // A sufficient unconditioned M1 population cannot replace a missing row.
+        mode.history.lock().unwrap().samples[6].predecessor_key = None;
+        assert_eq!(
+            mode.completion_lookahead(pair).reason,
+            SerialLookaheadReason::InsufficientFreshSamples
+        );
+        assert_eq!(mode.select(pair).position, immediate.position);
+        mode.history.lock().unwrap().samples[6].predecessor_key = Some(b);
+        mode.history.lock().unwrap().samples[6].at =
+            at.checked_sub(Duration::from_secs(120)).unwrap();
+        assert_eq!(
+            mode.completion_lookahead(pair).reason,
+            SerialLookaheadReason::InsufficientFreshSamples
+        );
+        mode.history.lock().unwrap().samples[6].at = at;
+        mode.history.lock().unwrap().samples[6]
+            .owner
+            .snapshot
+            .loaded_instance = [9; 16];
+        assert_eq!(
+            mode.completion_lookahead(pair).reason,
+            SerialLookaheadReason::InsufficientFreshSamples
+        );
+        mode.history.lock().unwrap().samples[6].owner = owner.clone();
+        mode.history.lock().unwrap().samples[6].owner.generation =
+            Arc::new(std::sync::atomic::AtomicU64::new(owner.snapshot.generation));
+        assert_eq!(
+            mode.completion_lookahead(pair).reason,
+            SerialLookaheadReason::InsufficientFreshSamples
+        );
+        mode.history.lock().unwrap().samples[6].owner = owner.clone();
+
+        mode.history
+            .lock()
+            .unwrap()
+            .predecessor
+            .as_mut()
+            .unwrap()
+            .owner
+            .snapshot
+            .generation += 2;
+        assert_eq!(
+            mode.completion_lookahead(pair).reason,
+            SerialLookaheadReason::PredecessorOwnerChanged
+        );
+        mode.history.lock().unwrap().predecessor = None;
+        assert_eq!(
+            mode.completion_lookahead(pair).reason,
+            SerialLookaheadReason::PredecessorUnavailable
+        );
+        mode.history.lock().unwrap().predecessor = Some(OwnerBoundWorkload { key: a, owner });
+        mode.history.lock().unwrap().samples[0].cost_ns = u64::MAX;
+        let refusal = mode.completion_lookahead(pair);
+        assert_eq!(refusal.reason, SerialLookaheadReason::DurationOverflow);
+        assert!(refusal.selected_position.is_none());
+        assert!(refusal.completions_ns.is_none());
+        assert_eq!(
+            (refusal.plans_evaluated, refusal.completion_events_evaluated),
+            (0, 0)
+        );
+        for sample in mode.history.lock().unwrap().samples.iter_mut() {
+            sample.cost_ns = 7;
+        }
+        let tied = mode.completion_lookahead(pair);
+        assert_eq!(tied.reason, SerialLookaheadReason::Ranked);
+        assert_eq!(tied.selected_position, Some(0));
+        assert_eq!(tied.completions_ns, Some([[7, 14], [7, 14]]));
+        mode.history.lock().unwrap().samples[0].at =
+            at.checked_add(Duration::from_secs(3600)).unwrap();
+        let refusal = mode.completion_lookahead(pair);
+        assert_eq!(refusal.reason, SerialLookaheadReason::InvalidClock);
+        assert_eq!(refusal.counts, [[0; 2]; 2]);
+        assert!(refusal.selected_position.is_none());
+    }
+
+    pub(in crate::workflow) fn assert_real_conditioned_advice(
+        mode: &SerialReadyMode,
+        pair: &WorkflowSerialReadyPair,
+    ) {
+        let advice = mode.completion_lookahead(pair);
+        assert_eq!(advice.reason, SerialLookaheadReason::Ranked);
+        assert_eq!(advice.counts, [[3, 3], [3, 3]]);
+        let a = observation_key(&pair.members[0]).unwrap();
+        assert_eq!(advice.predecessor_key, Some(a));
+        assert_eq!(
+            mode.select(pair).position,
+            mode.select_immediate(pair).position
+        );
+    }
+
     /// Assertion-only helper for the worker fixture: keep clock corruption and
     /// private history access out of production and the test-support API.
     pub(in crate::workflow) fn assert_invalid_clock_clears_partial_ranking(
@@ -788,9 +1258,9 @@ pub(super) mod tests {
         // All six valid samples are visited before this impossible future
         // observation, so returning a partially accumulated proposal would fail.
         let previous_len = {
-            let mut samples = mode.observations.lock().unwrap();
-            let previous_len = samples.len();
-            let first = samples.front().unwrap();
+            let mut samples = mode.history.lock().unwrap();
+            let previous_len = samples.samples.len();
+            let first = samples.samples.front().unwrap();
             let future = Observation {
                 key: first.key,
                 owner: first.owner.clone(),
@@ -798,9 +1268,10 @@ pub(super) mod tests {
                     .checked_add(Duration::from_secs(3600))
                     .unwrap(),
                 cost_ns: first.cost_ns,
+                predecessor_key: first.predecessor_key,
                 task_id: first.task_id.clone(),
             };
-            samples.push_back(future);
+            samples.samples.push_back(future);
             previous_len
         };
         let fallback = mode.select(pair);
@@ -811,9 +1282,9 @@ pub(super) mod tests {
         assert_eq!(fallback.maxima_ns, [0, 0]);
         assert_eq!(fallback.oldest_age_ns, [0, 0]);
         {
-            let mut samples = mode.observations.lock().unwrap();
-            assert_eq!(samples.len(), previous_len + 1);
-            samples.pop_back();
+            let mut samples = mode.history.lock().unwrap();
+            assert_eq!(samples.samples.len(), previous_len + 1);
+            samples.samples.pop_back();
         }
         let recovered = mode.select(pair);
         assert_eq!(recovered.reason, SerialReadyReason::Ranked);

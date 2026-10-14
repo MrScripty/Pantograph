@@ -25,6 +25,7 @@ mod resource;
 mod resource_types;
 mod serial_admission;
 mod serial_dispatch;
+mod serial_service_completion;
 mod supervision;
 mod two_completion;
 
@@ -38,6 +39,10 @@ pub use serial_dispatch::{
     SchedulerSerialDrainState, SchedulerSerialDrainedDispatch, SchedulerSerialExecutingDispatch,
     SchedulerSerialOwnerSnapshot, SchedulerSerialRuntimeOwnerLease,
     SchedulerSerialVerifiedWarmDrain,
+};
+pub use serial_service_completion::{
+    evaluate_serial_service_completion, SchedulerSerialServiceBudget,
+    SchedulerSerialServiceCompletion, SchedulerSerialServiceRefusal,
 };
 
 pub use batching::{

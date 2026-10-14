@@ -194,3 +194,151 @@ coordination; parent owns its later disposition after reachable handoff.
   [supplemental report](reports/2026-10-12-c3-768b-results.md). Final source/evidence
   review, published-head verification and normal CI govern handoff. No further
   experiment, M2, GUI, merge/deployment, GPU or remote work is admitted.
+
+
+## 2026-10-13 — M1 reconciliation and bounded M2 admission
+
+- Fetched main and independently confirmed PR73 is merged, merge commit
+  `07b23d47b2cdfae5669bbda78515c9c728081031`, final M1 head `8ca768e2`.
+  GitHub metadata confirms all four final M1 workflows passed. The original
+  negative/slower cohort and one accepted C3 supplement remain unchanged.
+- The new saved checkout uses branch `feat/cpu-scheduler-m2-lookahead` at that
+  main base. Initial worktree/index were clean; original `work` and integration
+  branches are preserved. No applicable AGENTS.md exists. Current canonical
+  standards `188beda1` remain the selected baseline.
+- Independent GPT-6.1 Sol / High reviewer `m2_contract_review` admitted the
+  bounded predecessor-conditioned retained-CPU service advisory in the current
+  plan. It required exact owner snapshot + generation Arc association,
+  read-only workload/predecessor evidence, and all remaining runtime obligations
+  checked inside advice. These conditions were recorded before source changes.
+- The existing phase-cost lookahead kernels cannot consume service-only samples;
+  no cold/preparation/transfer phase is assigned zero. This M2 subset remains a
+  first-order service approximation with two complete orders and unchanged M1
+  actual dispatch; general cohort completion is unqualified.
+- Workers explicitly use GPT-6.1 Sol / High, with disjoint numeric-kernel and
+  serial-policy write sets. This integrator owns the one current plan/evidence.
+  The prior turn checkpointed when its model was unverifiable; the fresh turn
+  was explicitly configured by the parent, so no model-inspection loop is used.
+- Cross-thread messaging to text worker `01a1374d-c69c-74e4-aeab-98aaccad303d`
+  is unavailable in the exposed collaboration tool. Requested parent relay of
+  the small probe module/argument boundary. No shared readiness-provider edit
+  or native owner contract change is planned.
+- Plan operation is `continue`. M2-C1..C4 remain pending; one fixed actual
+  calibration cohort is prospectively defined. Implementation admission does
+  not imply successful CPU evidence, speedup, default activation or M3–M6.
+
+
+## 2026-10-13 — M2 core implementation and blocked qualification handoff
+
+- Implemented the admitted pure numeric kernel and private serial policy in
+  disjoint worker write sets. The host explicitly enables advice; default/M1
+  dispatch remain unchanged. One bounded history owns samples and predecessor,
+  and only real matched cleanup/current owner restores conditioning.
+- Scheduler205 tests pass (one existing ignored probe); workflow-service988
+  tests pass (28 serial tests, no ignores). Tests cover the independent hand
+  oracle and failure/owner/freshness/population/cancellation invariants with
+  controlled protocol fixtures. No actual new model cohort ran.
+- Independent GPT-6.1 Sol / High reviewer `m2_source_review` approved the whole
+  core source range and final lint-only corrections. Final serial policy
+  SHA-256 `f35be2e7e9f7f986906d6670c47e4d74a97968df13c97e24c6caf65fc0ff7df6`.
+  No model execution occurred during review.
+- Scheduler all-target warning-deny Clippy and workflow package all-target
+  `--no-deps` warning-deny Clippy pass. Composed CPU Clippy targeting inference
+  fails on unchanged selected-text fields/OpenAI helper dead-code warnings;
+  no suppression or other-owner edit was made. CPU-17 tracks the blocker.
+- Declared pre-push `npm test`: node-engine261 passed / one existing ignored,
+  workflow-nodes168 passed. Workspace formatting/whitespace pass. Exact local
+  logs are retained in `/tmp/m2-policy-full-tests.log`,
+  `/tmp/m2-policy-package-clippy.log`, `/tmp/m2-policy-cpu-clippy.log` and
+  `/tmp/m2-declared-prepush-tests.log` in this saved environment.
+- Independent producer review identified and resolved task/Start/key association,
+  age coverage and explicit error teardown before any native cohort. The source
+  and exact root/helper wiring patch are retained under
+  `/workspace/scheduler-m2-pending/`; patch application check passes. Shared
+  root/helper files remain unchanged pending required text-worker coordination.
+- Cross-thread messaging could not address the supplied text-worker ID. Parent
+  relay was requested; no answer arrived before this handoff. M2-C3 remains
+  blocked and the scheduler worker retains its qualification responsibility
+  after that shared boundary is settled. This is a reviewable core commit,
+  not M2 acceptance. Ordinary PR CI also remains pending at publication.
+- The [core report](reports/2026-10-13-m2-core.md) records commands, evidence
+  boundaries and blockers. No M3–M6, GPU, remote, default activation, general
+  completion or speedup claim is made. The feature branch is retained for PR
+  review/qualification; parent is integration owner and main is unchanged.
+
+
+## 2026-10-13 — continued native qualification admission
+
+- Parent explicitly resumed end-to-end CPU qualification under Sol / High.
+  PR75's published plan and diff at `2f1e38fd` exclude the embedding probe and
+  scheduler write set. Preserve all text-dependency changes; no PR75 merge or
+  file replacement is needed. This resolves the prior shared-scope blocker.
+- Pre-run independent review found the original singleton-target design invalid:
+  target selection does not prune scheduler tasks. No cohort was executed.
+  Prospectively replace it with two derived one-branch graphs, preserving exact
+  node/data/binding identity and retaining actual workload digest equality as a
+  hard acceptance gate. The sequence and one-cohort stop rule remain unchanged.
+- Independent `m2_qualification_review` admitted the replacement and the exact
+  affected-owner CPU lint gate before code changes. The historical inference
+  optional-consumer warning remains outside-slice debt, not a repaired config.
+  The compiled source and numerical/evidence producer still require review before
+  any model cohort. No GPU/remote or broader scheduler action is admitted.
+
+
+## 2026-10-13 — reviewed producer source freeze before one CPU cohort
+
+- Applied the admitted embedding probe mode and singleton/pair construction.
+  Independent GPT-6.1 Sol / High `m2_qualification_review` approved final producer,
+  exact task/digest/Start association, separate numerical references, bounded
+  log collection and explicit teardown on execution/export failure. This is
+  pre-run source review; no actual cohort evidence yet.
+- Release CPU build passed with locked dependencies, no model download and
+  `backend-candle,host-dependency-inventory` only. Primary affected example
+  Clippy passes with `--no-deps -- -D warnings` under the identical CPU features.
+  The first dependency-wide invocation failed in unchanged inference before
+  reaching the example; retain `/tmp/m2-native-example-clippy.log` and CPU-17.
+  Reviewer admitted scoped owner lint consistent with existing workflow gate;
+  it does not claim the dependency configuration is lint-clean.
+- The corrected admission was published as `cccf299c` before construction code
+  changes. Freeze this source and compiled binary before exactly one fresh
+  isolated AABBAABBAABBA singleton calibration plus one actual two-Ready pair.
+  Preserve all raw failures; no timing/winner tuning or automatic retry.
+
+
+## 2026-10-13 — one actual M2 CPU cohort and independent evidence review
+
+- Executed exactly one invocation from clean frozen/pushed `7a7165d4`, release
+  binary SHA `dd6c01eb30bb11c8b71c3d528532a10d109155dbe840ccfefdad292292d25fc2`.
+  Four CPU equivalents /16 GiB, no accessible GPU; calibrated Candle CPU F32
+  and one private thread. No model acquisition or winner retry.
+- AABBAABBAABBA singleton calibration plus one two-Ready pair passed. Exact
+  task/sample/Start populations and workload digests match, generation30,
+  four conditioned counts3 each. Raw-only maxima yield A→B terminal35,474,725ns,
+  sum51,214,065ns versus B→A terminal36,273,953ns, sum56,009,338ns. Advice and
+  unchanged M1 actual dispatch both select A. No order-reversal/speedup claim.
+- All15 cohort vectors pass the separate original numerical reference, maximum
+  absolute error8.940696716308594e-08. All15 CPU Starts have successful matching
+  completions and all14 runs succeed. No cleanup errors/reservations/native
+  serial owner remain. Existing registry stopping/residency metadata persists;
+  physical eviction is unqualified.
+- Independent GPT-6.1 Sol / High `m2_final_review` approved whole-range source,
+  task/digest/owner/freshness/output/cleanup evidence and raw-only hand arithmetic
+  without consulting producer oracle/summary. All35 archive files match raw
+  originals/member hashes; archive SHA
+  `4a5eb82caac045ac2c864b904d2add515944395379585640208f755c0c16dd42`.
+- The [actual report](reports/2026-10-13-m2-cpu-results.md) supersedes the core
+  checkpoint's coordination/unexecuted-producer handoff; original M1 evidence
+  and hashes remain unchanged. M2-C1/C2/C3 satisfied; C4 awaits final ordinary
+  PR CI. PR75 sources remain untouched; CPU-17 remains disclosed source debt.
+
+- Final supporting logs are packaged with the actual report. Scheduler205
+  (one existing ignore) and workflow988 (zero ignores) pass again; their
+  respective all-target warning-deny owner Clippy gates pass. Three existing
+  actual native worker lifecycle regressions pass, separately from the fixed
+  cohort: normal linear cleanup, post-drain cancellation without training and
+  lost-receipt fencing. No wider native/desktop qualification is inferred.
+
+- Final independent report/plan/ledger publication review approved: arithmetic,
+  truthful scope/supersession, all12 delivered-file checksums, ten supporting-log
+  hashes and32 relative links pass. Staged traceability and range no-new lint
+  pass. M2 remains Verifying solely for ordinary final-head PR76 CI.

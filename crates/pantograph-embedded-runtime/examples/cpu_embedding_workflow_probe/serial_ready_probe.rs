@@ -11,6 +11,9 @@ use pumas_library::models::{
 };
 use std::sync::Mutex;
 
+#[path = "m2_lookahead_probe.rs"]
+mod m2_lookahead_probe;
+
 const RUNS: usize = 8; // Three training runs and five observations, never retry for a winner.
 const PAIR_WORKFLOW: &str = "cpu-serial-ready-pair";
 const RESIDENT_ENVELOPE: u64 = 32 * 1024 * 1024; // Explicit declaration, not allocator measurement.
@@ -47,14 +50,33 @@ async fn compose(
     selector: Arc<PumasSelectorAccess>,
     serial: bool,
 ) -> ProbeResult<EmbeddedRuntime> {
-    let service = if serial {
+    compose_with_serial_config(
+        root,
+        name,
+        gateway,
+        registry,
+        selector,
+        serial.then(WorkflowSerialReadyConfig::default),
+    )
+    .await
+}
+
+async fn compose_with_serial_config(
+    root: &Path,
+    name: &str,
+    gateway: Arc<inference::InferenceGateway>,
+    registry: Arc<RuntimeRegistry>,
+    selector: Arc<PumasSelectorAccess>,
+    serial_config: Option<WorkflowSerialReadyConfig>,
+) -> ProbeResult<EmbeddedRuntime> {
+    let service = if let Some(config) = serial_config {
         WorkflowService::new_serial_ready_cpu(
             Arc::new(EmbeddedRetainedCpuSerialPort::new(
                 gateway.clone(),
                 registry.clone(),
                 selector.clone(),
             )),
-            WorkflowSerialReadyConfig::default(),
+            config,
         )
         .with_attribution_store(
             pantograph_workflow_service::workflow::SqliteAttributionStore::open_in_memory()?,
@@ -415,6 +437,10 @@ fn independent_oracle(runs: &[Value], proposals: &[Value], events: &[Value]) -> 
         json!({"ranked_runs":ranked,"second_position_starts":second,"first_two_order_matches_raw_sample_maxima":true,
         "second_position_claim":if second > 0 {"passed"} else {"pending_no_observed_second_winner"}}),
     )
+}
+
+pub(super) async fn qualify_m2(root: &Path) -> ProbeResult<()> {
+    m2_lookahead_probe::qualify(root).await
 }
 
 pub(super) async fn qualify(root: &Path) -> ProbeResult<()> {
