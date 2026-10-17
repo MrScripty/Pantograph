@@ -62,6 +62,17 @@ impl InferenceInterfaceFactsProvider for EmbeddedInferenceInterfaceFactsProvider
         Option<pantograph_dependency_planning::ValidatedDependencyEnvironmentResult>,
         InferenceInterfaceFactsProviderError,
     > {
+        #[cfg(feature = "backend-pytorch")]
+        if let Some(result) =
+            crate::inference_text_dependency_requirements::resolve_text_requirements(
+                &self.pumas_source,
+                &self.runtime_capability_source,
+                request,
+            )
+            .await?
+        {
+            return Ok(Some(result));
+        }
         crate::inference_dependency_requirements::resolve_native_candle_requirements(
             &self.pumas_source,
             &self.runtime_capability_source,
