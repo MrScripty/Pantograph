@@ -19,6 +19,9 @@ mod m3_fair_service_probe;
 pub(super) async fn qualify_m3(root: &Path) -> ProbeResult<()> {
     m3_fair_service_probe::qualify(root).await
 }
+pub(super) fn reanalyze_m3(root: &Path) -> ProbeResult<()> {
+    m3_fair_service_probe::reanalyze(root)
+}
 
 const RUNS: usize = 8; // Three training runs and five observations, never retry for a winner.
 const PAIR_WORKFLOW: &str = "cpu-serial-ready-pair";

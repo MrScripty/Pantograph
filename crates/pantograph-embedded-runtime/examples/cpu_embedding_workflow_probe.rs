@@ -487,6 +487,13 @@ async fn main() -> ProbeResult<()> {
         );
         return Ok(());
     }
+    if args.len() == 2 && args[1] == "--reanalyze-fair-service" {
+        let root = PathBuf::from(&args[0]);
+        if !root.is_absolute() {
+            return Err("M3 reanalysis requires an absolute existing evidence directory".into());
+        }
+        return serial_ready_probe::reanalyze_m3(&root);
+    }
     if args.len() > 2
         || args.get(1).is_some_and(|mode| {
             mode != "--inspect-targets"

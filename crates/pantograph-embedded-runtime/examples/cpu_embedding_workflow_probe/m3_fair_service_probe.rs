@@ -738,34 +738,210 @@ fn check_evidence(
     {
         return Err("public cancellation did not follow the eighth actual foreground drain".into());
     }
-    let returned = native
+    let returns: Vec<_> = native
         .iter()
-        .find(|r| r["phase"] == "native_return" && &r["identity"] == cancelled)
-        .ok_or("missing native cancellation observation")?;
-    if returned["cancellation"]["state"] != "cancellation_requested"
-        || samples.len() != CALLS - 1
-        || samples.iter().any(|s| json!(s.0) == cancelled["task_id"])
-    {
-        return Err("cancelled attempt trained, cancellation unobserved, or successful sample count differs".into());
-    }
-    for sample in samples {
-        if results
-            .iter()
-            .filter(|r| r["identity"]["task_id"] == json!(sample.0))
-            .count()
-            != 1
-        {
-            return Err("cleanup-qualified sample lacks unique actual native attempt".into());
-        }
-    }
+        .filter(|row| row["phase"] == "native_return")
+        .collect();
+    verify_sample_sequence(&results, &returns, cancelled, samples)?;
     Ok(
         json!({"public_sessions":rows.len(),"authenticated_units":2,"native_outputs":CALLS,
         "public_vectors":CALLS,"matched_cleanup_receipts":CALLS,"background_grant_positions":background_positions,
         "protected_background_bypasses":2,"competing_foreground_priority":100,"background_priority":-100,
-        "successful_uncancelled_samples":samples.len(),"cancelled_attempt_excluded_from_training":true,
+        "successful_uncancelled_samples":samples.len(),"cancelled_attempt_excluded_from_training_source_assisted":true,
+        "sample_run_attempt_identity_available":false,
         "cancellation_phase":"after_actual_native_drain_before_receipt_return",
         "in_flight_compute_cancellation_claim":false,"all_vectors_match_reference":true}),
     )
+}
+
+/// The ring exposes local task names, digest, cost and age, not run/attempt IDs.
+/// Frozen source appends successful uncancelled matched-cleanup observations in
+/// serial order, with no eviction in this five-per-key cohort. Check aggregate
+/// order/multiplicity; never infer per-attempt timing identity from a local name.
+fn verify_sample_sequence(
+    results: &[&Value],
+    returns: &[&Value],
+    cancelled: &Value,
+    samples: &RawSamples,
+) -> ProbeResult<()> {
+    if results.len() != returns.len()
+        || results
+            .iter()
+            .zip(returns)
+            .enumerate()
+            .any(|(index, (result, returned))| {
+                result["identity"] != returned["identity"]
+                    || returns[..index]
+                        .iter()
+                        .any(|earlier| earlier["identity"] == returned["identity"])
+            })
+    {
+        return Err(
+            "native returns do not uniquely match completed result identities in serial order"
+                .into(),
+        );
+    }
+    let mut expected = Vec::new();
+    let mut cancelled_count = 0;
+    for returned in returns {
+        if &returned["identity"] == cancelled {
+            cancelled_count += 1;
+            if returned["cancellation"]["state"] != "cancellation_requested" {
+                return Err("cancelled native attempt did not observe cancellation".into());
+            }
+        } else {
+            if returned["cancellation"]["state"] != "running" {
+                return Err("unexpected cancellation state on other native attempt".into());
+            }
+            expected.push(
+                returned["identity"]["task_id"]
+                    .as_str()
+                    .ok_or("native local task ID missing")?,
+            );
+        }
+    }
+    if cancelled_count != 1 || !samples.iter().map(|sample| sample.0.as_str()).eq(expected) {
+        return Err("aggregate ring sequence differs from uncancelled native returns".into());
+    }
+    Ok(())
+}
+
+/// Re-evaluate saved data only. Preserve original native/oracle status and binary.
+pub(super) fn reanalyze(root: &Path) -> ProbeResult<()> {
+    fn read(root: &Path, name: &str) -> ProbeResult<Value> {
+        Ok(serde_json::from_slice(&std::fs::read(root.join(name))?)?)
+    }
+    let rows = read(root, "m3-cohort-results.json")?["rows"]
+        .as_array()
+        .ok_or("missing saved cohort rows")?
+        .clone();
+    let sessions: Vec<WorkflowExecutionSessionCreateResponse> =
+        serde_json::from_value(read(root, "m3-sessions.json")?)?;
+    let native = read(root, "m3-native.json")?
+        .as_array()
+        .ok_or("missing native rows")?
+        .clone();
+    let service_log = read(root, "m3-service-log.json")?
+        .as_array()
+        .ok_or("missing grant rows")?
+        .clone();
+    let events = read(root, "m3-events.json")?
+        .as_array()
+        .ok_or("missing ledger rows")?
+        .clone();
+    let samples: RawSamples = serde_json::from_value(read(root, "m3-samples.json")?)?;
+    let golden: Value = serde_json::from_str(include_str!(
+        "../../../inference/tests/fixtures/candle_bert/bert-8/golden.json"
+    ))?;
+    let result = check_evidence(
+        &rows,
+        &sessions,
+        &native,
+        &service_log,
+        &events,
+        &samples,
+        &golden,
+    );
+    let output = json!({"kind":"read_only_reanalysis_of_original_cohort","passed":result.is_ok(),
+        "result":result.as_ref().ok(),"error":result.as_ref().err().map(ToString::to_string),
+        "original_oracle_status":read(root,"m3-oracle-status.json")?,
+        "native_reexecuted":false,"sample_timing_attempt_attribution_claim":false,
+        "training_evidence":"aggregate ring correspondence plus frozen serial append/cancellation source and native regressions"});
+    let target = root
+        .parent()
+        .ok_or("reanalysis root lacks parent")?
+        .join("reanalysis.json");
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(target)?;
+    use std::io::Write;
+    file.write_all(&serde_json::to_vec_pretty(&output)?)?;
+    println!("{}", serde_json::to_string_pretty(&output)?);
+    result.map(|_| ())
+}
+
+#[cfg(test)]
+mod sample_oracle_tests {
+    use super::*;
+    fn returned(run: &str, state: &str) -> Value {
+        json!({"identity":{"workflow_run_id":run,"task_id":"infer_b","attempt_id":format!("attempt.{run}")},"cancellation":{"state":state}})
+    }
+    #[test]
+    fn repeated_local_names_allow_prior_successes_and_exclude_only_cancelled_identity() {
+        let rows = [
+            returned("a", "running"),
+            returned("b", "running"),
+            returned("c", "cancellation_requested"),
+        ];
+        let samples = vec![
+            ("infer_b".into(), [1; 32], 10, 20),
+            ("infer_b".into(), [1; 32], 10, 10),
+        ];
+        assert!(verify_sample_sequence(
+            &rows.iter().collect::<Vec<_>>(),
+            &rows.iter().collect::<Vec<_>>(),
+            &rows[2]["identity"],
+            &samples
+        )
+        .is_ok());
+    }
+    #[test]
+    fn missing_or_extra_sample_rejects_even_with_identical_local_names() {
+        let rows = [
+            returned("a", "running"),
+            returned("b", "running"),
+            returned("c", "cancellation_requested"),
+        ];
+        let sample = ("infer_b".into(), [1; 32], 10, 10);
+        for samples in [
+            vec![sample.clone()],
+            vec![sample.clone(), sample.clone(), sample],
+        ] {
+            assert!(verify_sample_sequence(
+                &rows.iter().collect::<Vec<_>>(),
+                &rows.iter().collect::<Vec<_>>(),
+                &rows[2]["identity"],
+                &samples
+            )
+            .is_err());
+        }
+    }
+    #[test]
+    fn matching_local_names_cannot_hide_foreign_or_duplicate_native_returns() {
+        let rows = [
+            returned("a", "running"),
+            returned("b", "cancellation_requested"),
+        ];
+        let samples = vec![("infer_b".into(), [1; 32], 10, 10)];
+        for bad in [
+            vec![
+                rows[0].clone(),
+                returned("foreign", "cancellation_requested"),
+            ],
+            vec![rows[0].clone(), rows[0].clone()],
+        ] {
+            assert!(verify_sample_sequence(
+                &rows.iter().collect::<Vec<_>>(),
+                &bad.iter().collect::<Vec<_>>(),
+                &rows[1]["identity"],
+                &samples
+            )
+            .is_err());
+        }
+    }
+    #[test]
+    fn matching_name_and_count_cannot_replace_actual_cancellation_observation() {
+        let rows = [returned("a", "running"), returned("b", "running")];
+        let samples = vec![("infer_b".into(), [1; 32], 10, 10)];
+        assert!(verify_sample_sequence(
+            &rows.iter().collect::<Vec<_>>(),
+            &rows.iter().collect::<Vec<_>>(),
+            &rows[1]["identity"],
+            &samples
+        )
+        .is_err());
+    }
 }
 
 pub(super) async fn qualify(root: &Path) -> ProbeResult<()> {

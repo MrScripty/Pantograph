@@ -1,0 +1,21 @@
+{
+  "reference_status": {
+    "command": [
+      "/workspace/Pantograph/.venv/bin/python",
+      "/workspace/pantograph-m3/crates/pantograph-embedded-runtime/examples/cpu_embedding_workflow_probe/c3_reference.py",
+      "/workspace/m3-authenticated-service-v1/reference.json"
+    ],
+    "exit_code": 0,
+    "finished_utc": "2026-10-19T23:19:57.142712+00:00"
+  },
+  "reference_packages": {
+    "torch": "2.14.1+cpu",
+    "transformers": "4.53.3",
+    "tokenizers": "0.21.4",
+    "safetensors": "0.8.0"
+  },
+  "fixture_manifest_sha256": "ae1644b099d946e03e75a1b75c65593bd2fcee0aa03df31aa79fb5fb94e2bd39",
+  "reference_script": "crates/pantograph-embedded-runtime/examples/cpu_embedding_workflow_probe/c3_reference.py",
+  "reference_protocol_name": "c3-768b-v1 reused unchanged for its original BERT8 inputs/reference, not a new C3 cohort",
+  "network_or_model_download": false
+}

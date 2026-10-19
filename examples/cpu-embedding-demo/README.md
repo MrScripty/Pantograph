@@ -260,3 +260,12 @@ The [M3 contract](../../docs/plans/cpu-scheduler/plan.md#m3-bounded-service-cont
 owns the fixed protocol and acceptance gates. Reproduce only in a fresh isolated
 project with the existing BERT fixture and CPU build features; retain failed
 outcomes, source/binary hashes, ledger events and teardown records.
+
+Saved M3 evidence can be checked with
+`cpu_embedding_workflow_probe <absolute existing run directory> --reanalyze-fair-service`.
+This synchronous mode reads saved JSON and committed golden bytes, creates a
+separate `reanalysis.json` in the run directory's parent with create-new semantics,
+and starts no host, runtime or model. It preserves the original failed oracle and
+exit status. Aggregate training checks use frozen-source assistance; local sample
+task names do not independently identify run/attempt timings. See the M3 report
+for the original checker defect and exact-source evidence.

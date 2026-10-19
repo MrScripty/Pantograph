@@ -1,7 +1,7 @@
 # M3: Bounded Authenticated CPU Service Opportunities
 
 Status: **Verifying**. Source and deterministic evidence independently reviewed;
-fixed native cohort and published-head CI remain pending. M1/M2 remain accepted.
+fixed native cohort completed once; published-head CI remains pending. M1/M2 remain accepted.
 No default activation, speedup, GUI/GPU, native batching or model-quality claim.
 
 ## Owned change
@@ -52,30 +52,85 @@ following the final-Start correction. Workflow all-target and CPU-example scoped
 pass. Scheduler205 tests pass with one existing ignored cost probe; declared
 pre-push tests pass261+168 with one existing node-engine ignore. Workspace
 formatting, whitespace, critical/accessibility lint and explicit staged
-traceability pass. Native lifecycle and normal CI remain pending. Existing
+traceability pass. Three existing actual native lifecycle regressions pass. Normal PR CI remains pending. Existing
 Candle-only inference optional-consumer warnings (CPU-17) remain outside-slice
 debt; no suppression or PR75-owned repair is claimed.
 
 ## Fixed actual CPU evidence
 
-Pending: five sessions from two authenticated units;4 foreground pairs at100,
-1 background pair at-100. First foreground Running call pauses before native
-forward until4 actual Ready waiters register. The third opportunity after
-registration must protect B despite a high-priority A waiter. Minimum8 samples
-keeps M1 on untrained FIFO for all five samples per workload, fixing the grant
-representative/Start correspondence without changing policy.
+The fixed cohort executed exactly once from clean source commit
+`e9d89eacf686b163539c08ebc6225a6c2750bc96`, tree
+`f7ec94bd6f550975b58f30b96603bf0b80401ec7`. Release binary SHA256:
+`74ad1349267b2251299e10c7c6b650575669893402b0fd00009db380766cb756`.
+The original binary remains frozen outside Git at
+`/workspace/m3-authenticated-service-v1/frozen-cpu_embedding_workflow_probe`.
+[Source manifest](m3-service-v1/source-manifest.json),
+[original invocation status](m3-service-v1/invocation-status.json),
+[corrected analysis](m3-service-v1/reanalysis.json), and
+[archive hashes](m3-service-v1/SHA256SUMS) retain exact provenance.
 
-The eighth foreground call pauses after actual native drain with its genuine
-result/linear receipt held. A public Running cancellation request must retain
-its exact charged lease until matched cleanup. Results/receipts return unchanged;
-completed output may win and no interrupted compute is claimed. There is one
-fixed ten-call cohort, no winner retries, timing tuning or speedup threshold.
+Five public sessions used two real authenticated `(client,bucket)` units:
+four foreground pairs at priority100 and one background pair at priority-100.
+The first foreground Running call paused before native forward until four actual
+Ready waiters registered. The two background grants were positions3 and7
+(zero-based), both protected at bypass2 with competing foreground priority100.
+Ten distinct grants, actual Starts, completed native results, public vectors and
+applied matching cleanup receipts agree. The independently recomputed Transformers
+reference passed; maximum absolute native/reference error was
+`8.940696716308594e-08`, below the declared `1e-5` bound. The environment had a
+4-CPU-equivalent/16GiB limit and no accessible GPU interface. This is CPU protocol
+and numerical evidence, with no speedup threshold or performance conclusion.
 
-Independent producer pre-run review admitted SHA256
-`864d371a4d5c5abb90186b9deef2859a14e86c9ec99862b7d3e44a8170b18d1e` after checking
-actual attribution grouping, charged cancellation lease and
-native-drain/request/return/cleanup ordering. Build/source/binary freeze and
-independent numerical reference precede the one admitted model invocation.
+The eighth foreground call (tenth overall) paused after actual native drain while
+holding its genuine result and linear receipt. Public Running cancellation
+succeeded; the exact lease remained charged at request and until matched cleanup.
+All ten calls retained536895107 charged bytes in each RAM/VRAM resource kind at the
+pre-native and post-drain barriers. Completed output won as allowed. No interrupted
+compute or public Ready cancellation is claimed. Shutdown has no cleanup errors,
+no reservations and no native serial owner; conservative stopping/resident registry
+metadata remains the already disclosed CPU-14 limitation.
+
+### Original failed oracle and read-only correction
+
+The original native process exited1 after all work and teardown because its final
+checker incorrectly treated local `task_id` as globally unique across runs.
+`infer_a`/`infer_b` intentionally repeat in five sessions. It rejected prior
+successful `infer_b` observations when the last `infer_b` was cancelled. Preserve
+that failed oracle and process status: they have not been rewritten as success.
+
+Independent source and design reviewers verified the original raw data and
+admitted a data-only correction, with no native/model retry. The corrected checker
+first joins unique full native identities in serial result/return order, then
+compares ring sequence/multiplicity with the nine uncancelled returns. Four pure
+regressions cover repeated local names, missing/extra samples, foreign/duplicate
+full identities and actual cancellation observation. Scoped warning-deny Clippy
+and the read-only debug build pass. The separately created `reanalysis.json`
+passes all original grant/Start/result/receipt/numerical gates plus this correction;
+it embeds the original failed oracle and explicitly says native reexecution=false.
+
+There are nine fresh positive observations (five `infer_a`, four `infer_b`) with
+two workload digests and no possible ring eviction at five-per-key below eight.
+Exclusion of the final cancelled attempt is **source-assisted aggregate evidence**:
+frozen source checks the cancellation handle and Running state before appending,
+and native lifecycle regressions cover cancellation training exclusion. The sample
+API has no run/attempt identity. Neither the checker nor this report claims
+independent per-attempt sample-duration attribution. This narrower evidence was
+independently approved; no production scheduler correction followed the cohort.
+
+The immutable raw JSON, wrapper, original status/stdout/stderr, reference and
+manifests are in [raw-evidence.tar.gz](m3-service-v1/raw-evidence.tar.gz), with
+member hashes in [raw-file-sha256.json](m3-service-v1/raw-file-sha256.json).
+[Supporting gates](m3-service-v1/supporting-gates.json) and their logs include the
+unsupported Candle-only whole-library test build failure (missing optional default
+APIs), followed by the accepted default-feature native-test configuration passing
+all three lifecycle tests. No hidden successful rerun of the fixed cohort occurred.
+
+M3-C1/C2/C3/C4 are satisfied within these opportunity, ownership and evidence
+limits. Independent `m3_source_review` verified all41 raw archive members against the
+retained originals, all bundle/log hashes, the unchanged frozen production source
+and report scope. Independent `m3_design_review` approved corrected producer
+SHA256 `8fa52e568df966dd783d0d3f6930a17789765667b371e0e04e8276525e626820`.
+M3-C5 remains pending exact published-head required CI. Parent retains merge/integration authority.
 
 ## M4 dependency boundary
 

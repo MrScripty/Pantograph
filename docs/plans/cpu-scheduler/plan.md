@@ -2,9 +2,9 @@
 
 **Plan status:** `Active` — M1/M2 accepted and merged; bounded M3 admitted; M4–M6 unadmitted.
 
-**Current phase:** M3 implementation and fixed native qualification; M1/M2 remain accepted.
+**Current phase:** M3 fixed native evidence completed and independently reviewed; exact published-head gates pending.
 
-**Next slice:** Verify the M3 source/tests and execute the frozen reviewed native cohort once. M4 remains unadmitted.
+**Next slice:** Publish the focused M3 source/tests/report PR and verify its exact-head required CI. M4 remains unadmitted.
 
 **Acceptance status:** M1 merged as PR73 in main `07b23d47`; the original
 negative cohort and the separately accepted C3 supplement remain unchanged.
@@ -308,7 +308,7 @@ and source rustdoc own the opt-in consumer semantics; no duplicate policy databa
 | M3-C4 | Actual authenticated CPU sessions from two units make progress with repeated high-priority foreground arrivals and one actual cancellation request; exact grants, Starts, results and cleanup agree. | One prospectively fixed isolated cohort after producer review; retain every outcome and source/binary/input/environment hashes. No winner retries or latency/speedup threshold. Missing native behavior stays Partial/Blocked. |
 | M3-C5 | Source/tests/report independently reviewed and exact published head passes normal required CI. | Affected package tests/Clippy, formatting, declared hooks, traceability, review and remote SHA/tree evidence. |
 
-#### M3 Fixed Native Cohort (prospective; no execution yet)
+#### M3 Fixed Native Cohort (prospectively fixed; executed once)
 
 One isolated invocation, frozen reviewed release source/binary, existing untrained
 BERT-8 fixture and independent numerical reference. Two real authenticated
@@ -344,6 +344,15 @@ expansion, timing tuning, downloaded model, missing-phase zero or speedup thresh
 Any missing native criterion remains Partial/Blocked; unit tests cannot replace it.
 After source review and fixed-protocol review, publish/checkpoint source before
 executing once. Explicit teardown still runs after producer errors.
+
+Outcome: M3-C1/C2/C3/C4 satisfied within the admitted limits. The one native
+invocation completed all ten results/receipts and shutdown, then exited1 due to a
+local-task-name oracle defect. Original failure retained; independently reviewed
+JSON-only reanalysis passes with source-assisted aggregate training evidence and
+no per-attempt sample timing attribution. See the [M3 report](reports/2026-10-19-m3-service-opportunities.md)
+and its exact-source archives. M3-C5 remains pending
+published-head required CI; no native retry or M4 implementation is authorized by
+this outcome.
 
 M4 follows only after these gates: identify a dependency-ready, separately reviewed
 serial residency subset using actual load/unload/reload evidence, M2 service-cost
