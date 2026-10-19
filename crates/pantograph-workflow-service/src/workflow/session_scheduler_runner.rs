@@ -138,6 +138,7 @@ impl<'a> WorkflowPreDispatchPreparationBoundary<'a> {
         attempt_start_transition: SchedulerTaskAttemptLifecycleTransition,
         serial_pair: Option<&super::WorkflowSerialReadyPair>,
         serial_owner: Option<&pantograph_runtime_host_contracts::SerialRuntimeHostCpuOwnerEvidence>,
+        fair_admission: Option<&super::WorkflowSerialServiceAdmission>,
     ) -> Result<WorkflowStartedRuntimeDispatchAttempt, WorkflowServiceError> {
         let readiness_proof = runtime_dispatch_readiness_proof(
             self.service,
@@ -167,6 +168,9 @@ impl<'a> WorkflowPreDispatchPreparationBoundary<'a> {
             .map_err(runtime_dispatch_preselection_invalid_request)?;
         let started_runtime_task = {
             let mut store = self.service.session_store_guard()?;
+            if let Some(admission) = fair_admission {
+                store.validate_serial_service_admission(session_id, workflow_run_id, admission)?;
+            }
             if let Some(pair) = serial_pair {
                 store.validate_serial_ready_pair(session_id, workflow_run_id, pair)?;
             }

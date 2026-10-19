@@ -7,6 +7,86 @@ use crate::workflow::{
 use pantograph_scheduler::SchedulerTaskStateKind;
 
 impl WorkflowExecutionSessionStore {
+    pub(crate) fn validate_serial_service_admission(
+        &self,
+        session: &str,
+        run: &str,
+        admission: &crate::workflow::WorkflowSerialServiceAdmission,
+    ) -> Result<(), WorkflowServiceError> {
+        if self.serial_service_identity(session, run)? == admission.identity
+            && self
+                .serial_service_ready_member(session, run, admission.member.task.task_id.as_str())
+                .as_ref()
+                == Some(&admission.member)
+        {
+            Ok(())
+        } else {
+            Err(WorkflowServiceError::InvalidRequest(
+                "fair serial Ready representative changed before Start".into(),
+            ))
+        }
+    }
+    pub(crate) fn serial_service_identity(
+        &self,
+        session: &str,
+        run: &str,
+    ) -> Result<
+        (
+            super::super::service_opportunities::ServiceOpportunityKey,
+            i32,
+        ),
+        WorkflowServiceError,
+    > {
+        let state = self.active.get(session).ok_or_else(|| {
+            WorkflowServiceError::SessionNotFound("serial service session not found".into())
+        })?;
+        let active = state
+            .active_run
+            .as_ref()
+            .filter(|active| active.workflow_run_id == run)
+            .ok_or_else(|| {
+                WorkflowServiceError::InvalidRequest("serial service active run changed".into())
+            })?;
+        // Only attributed session creation populates this context, after backend
+        // credential/session/bucket ownership checks. Session IDs are not units.
+        let attribution = state.attribution.as_ref().ok_or_else(|| {
+            WorkflowServiceError::InvalidRequest(
+                "fair serial service requires authenticated client/bucket session attribution"
+                    .into(),
+            )
+        })?;
+        Ok((
+            super::super::service_opportunities::ServiceOpportunityKey {
+                client_id: attribution.client_id.clone(),
+                bucket_id: attribution.bucket_id.clone(),
+            },
+            active.priority,
+        ))
+    }
+
+    pub(crate) fn serial_service_ready_member(
+        &self,
+        session: &str,
+        run: &str,
+        task: &str,
+    ) -> Option<WorkflowSerialReadyMember> {
+        let active = self.active.get(session)?.active_run.as_ref()?;
+        let graph = active.scheduler_task_graph.as_ref()?;
+        // Check before walking/cloning the graph. Never skip the first Ready task.
+        if graph.tasks.len() > 128 || active.scheduler_task_records.len() > 128 {
+            return None;
+        }
+        let first = graph.tasks.iter().find(|candidate| {
+            candidate.execution_class == WorkflowSchedulerTaskExecutionClass::RuntimeInference
+                && active
+                    .scheduler_task_records
+                    .get(candidate.task_id.as_str())
+                    .is_some_and(|record| record.state.kind() == SchedulerTaskStateKind::Ready)
+        })?;
+        (first.task_id.as_str() == task).then_some(())?;
+        self.serial_ready_member(session, run, task)
+    }
+
     pub(crate) fn serial_ready_member(
         &self,
         session: &str,

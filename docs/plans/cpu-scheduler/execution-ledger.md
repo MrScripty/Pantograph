@@ -409,3 +409,35 @@ coordination; parent owns its later disposition after reachable handoff.
 - M3-C1..C5 remain pending. No native cohort, speedup/default, M4 or PR75
   adapter/model work is claimed. User authorizes focused PR publication; parent
   coordinates integration and no merge/branch deletion is performed.
+
+
+## 2026-10-19 — M3 source and deterministic review
+
+- Implemented bounded entitlement policy and owned async waiters in separate
+  scheduler/workflow owners. The native serial permit is released before the
+  fairness turn wakes another waiter. No physical accounting or cleanup contract
+  changed. Missing attribution refuses before preparation/runtime claims.
+- Independent GPT-6.1 Sol / High `m3_source_review` found a final-Start gap after
+  awaited candidate preparation. Fixed it by carrying the original attribution,
+  priority and first Ready member through to the existing final store lock,
+  alongside the current M1 pair and selected-task fences. Its no-pair async
+  mutation regression proves refusal with no attempt/native forward/cleanup.
+- Reviewer approved the corrected source and deterministic evidence: workflow
+  library1008 passed,0 failed,0 ignored. This includes13 hand-oracle policy tests,
+  2 async registration tests and5 fair-worker tests. Existing priority/FIFO/boost,
+  M1 ranking, M2 advisory and native-owner controlled regressions remain green.
+- Native producer review exposed that cancellation before forwarding yields no
+  drain receipt. Prospectively choose a genuine post-drain public cancellation
+  request instead; do not claim compute interruption or fabricate Cancelled.
+  Five sessions across two authenticated units (4 foreground pairs+1 background
+  pair) ensure a competing foreground waiter at protected background selection.
+  Minimum8 samples fixes M1 to insufficient-sample FIFO for this cohort.
+- Independent `m3_design_review` admitted the final producer SHA256
+  `6d4e4d4a2cb512c44a661c56b032217c40f67e39a9701fb1f74cee0ce603fdc6`,
+  including direct attribution, charged-lease and cancellation/cleanup ordering
+  oracles. Release build/affected lint/source freeze precede any model execution.
+- The initial documentation checkpoint had no installed Git hooks in this saved
+  checkout. Its manual traceability call first failed due to missing node_modules;
+  linked the existing pinned dependency directory and reran the declared range
+  check successfully. No hook was disabled, credentials/settings changed, or
+  unrelated product work overwritten. Subsequent checks use explicit inputs.

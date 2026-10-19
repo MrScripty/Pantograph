@@ -28,11 +28,21 @@ pub(crate) struct WorkflowSerialReadyPair {
     )>,
 }
 
+#[derive(PartialEq, Eq)]
+pub(crate) struct WorkflowSerialServiceAdmission {
+    pub(crate) identity: (
+        crate::scheduler::service_opportunities::ServiceOpportunityKey,
+        i32,
+    ),
+    pub(crate) member: WorkflowSerialReadyMember,
+}
+
 #[derive(Clone, Copy)]
 pub struct WorkflowSerialReadyConfig {
     minimum_samples: usize,
     maximum_age: Duration,
     completion_lookahead: bool,
+    fair_service_opportunities: bool,
 }
 impl WorkflowSerialReadyConfig {
     pub fn new(
@@ -51,12 +61,23 @@ impl WorkflowSerialReadyConfig {
             minimum_samples,
             maximum_age,
             completion_lookahead: false,
+            fair_service_opportunities: false,
         })
     }
     /// Enable bounded predecessor-conditioned completion advice. Actual dispatch
     /// still follows the existing immediate serial Ready service policy.
     pub fn with_completion_lookahead(mut self) -> Self {
         self.completion_lookahead = true;
+        self
+    }
+    /// Protect authenticated client/bucket units after two other-unit grants.
+    /// This opt-in admits at most 64 Ready waiters across 32 units. Missing
+    /// attributed-session identity and overflow refuse before runtime claims.
+    /// Priorities still order ordinary opportunities; protected units may override
+    /// them. Existing session admission boosts remain at their original boundary.
+    /// A turn lasts through native drain/cleanup; no wall-time bound is promised.
+    pub fn with_fair_service_opportunities(mut self) -> Self {
+        self.fair_service_opportunities = true;
         self
     }
 }
@@ -66,6 +87,7 @@ impl Default for WorkflowSerialReadyConfig {
             minimum_samples: 3,
             maximum_age: Duration::from_secs(60),
             completion_lookahead: false,
+            fair_service_opportunities: false,
         }
     }
 }
@@ -77,6 +99,7 @@ pub(crate) struct SerialReadyMode {
     active: Mutex<Option<Arc<Mutex<SerialReadyContext>>>>,
     history: Mutex<SerialReadyHistory>,
     config: WorkflowSerialReadyConfig,
+    service_opportunities: Arc<super::serial_service_opportunities::SerialServiceOpportunities>,
 }
 #[derive(Default)]
 struct SerialReadyHistory {
@@ -211,6 +234,8 @@ pub(crate) struct SerialReadyScope {
     mode: Arc<SerialReadyMode>,
     context: Arc<Mutex<SerialReadyContext>>,
     _permit: tokio::sync::OwnedSemaphorePermit,
+    // Field drop order releases the serial permit before waking a new fair turn.
+    service_turn: Option<super::serial_service_opportunities::SerialServiceTurn>,
 }
 impl SerialReadyMode {
     pub(crate) fn new(
@@ -224,6 +249,7 @@ impl SerialReadyMode {
             active: Mutex::new(None),
             history: Mutex::new(SerialReadyHistory::default()),
             config,
+            service_opportunities: Arc::default(),
         })
     }
     pub(crate) async fn enter(self: &Arc<Self>) -> Result<SerialReadyScope, WorkflowServiceError> {
@@ -259,7 +285,21 @@ impl SerialReadyMode {
             mode: self.clone(),
             context,
             _permit: permit,
+            service_turn: None,
         })
+    }
+    pub(crate) fn fair_service_enabled(&self) -> bool {
+        self.config.fair_service_opportunities
+    }
+    pub(crate) async fn enter_fair(
+        self: &Arc<Self>,
+        key: crate::scheduler::service_opportunities::ServiceOpportunityKey,
+        priority: i32,
+    ) -> Result<SerialReadyScope, WorkflowServiceError> {
+        let turn = self.service_opportunities.enter(key, priority).await?;
+        let mut scope = self.enter().await?;
+        scope.service_turn = Some(turn);
+        Ok(scope)
     }
     fn context(&self) -> Result<Arc<Mutex<SerialReadyContext>>, String> {
         self.active
@@ -563,6 +603,11 @@ impl SerialReadyMode {
     }
 }
 impl SerialReadyScope {
+    pub(crate) fn service_grant(
+        &self,
+    ) -> Option<crate::scheduler::service_opportunities::ServiceOpportunityGrant> {
+        self.service_turn.as_ref()?.grant()
+    }
     pub(crate) fn claim(&self) -> Result<(), WorkflowServiceError> {
         let mut context = self.context.lock().map_err(lock_error)?;
         context.dispatch = Some(
@@ -975,6 +1020,15 @@ fn cleanup_error(message: impl Into<String>) -> ReservationLifecyclePortError {
 type SerialReadyConditionedSample = (String, [u8; 32], Option<[u8; 32]>, u64, u64, u64);
 
 impl WorkflowService {
+    /// Number of registered Ready waiters, excluding the active service turn.
+    /// Read-only qualification observation; it grants no execution capability.
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn serial_service_pending_for_test(&self) -> Result<usize, WorkflowServiceError> {
+        match &self.serial_ready_mode {
+            Some(mode) => mode.service_opportunities.pending_len(),
+            None => Ok(0),
+        }
+    }
     /// Test-only acceptance evidence from the actual cleanup-qualified ring.
     #[cfg(any(test, feature = "test-support"))]
     pub fn serial_ready_observations_for_test(&self) -> Vec<(u64, usize)> {
