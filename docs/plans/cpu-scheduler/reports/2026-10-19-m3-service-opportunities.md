@@ -48,8 +48,13 @@ and abort/poison refusal without another forward. Controlled test ports remain
 protocol evidence, not real CPU execution.
 
 Independent GPT-6.1 Sol / High `m3_source_review` approved source and these tests
-following the final-Start correction. Exact affected lint, native lifecycle,
-formatting/hooks and normal CI results will be recorded before closure.
+following the final-Start correction. Workflow all-target and CPU-example scoped `--no-deps` warning-deny Clippy
+pass. Scheduler205 tests pass with one existing ignored cost probe; declared
+pre-push tests pass261+168 with one existing node-engine ignore. Workspace
+formatting, whitespace, critical/accessibility lint and explicit staged
+traceability pass. Native lifecycle and normal CI remain pending. Existing
+Candle-only inference optional-consumer warnings (CPU-17) remain outside-slice
+debt; no suppression or PR75-owned repair is claimed.
 
 ## Fixed actual CPU evidence
 
@@ -67,7 +72,7 @@ completed output may win and no interrupted compute is claimed. There is one
 fixed ten-call cohort, no winner retries, timing tuning or speedup threshold.
 
 Independent producer pre-run review admitted SHA256
-`6d4e4d4a2cb512c44a661c56b032217c40f67e39a9701fb1f74cee0ce603fdc6` after checking
+`864d371a4d5c5abb90186b9deef2859a14e86c9ec99862b7d3e44a8170b18d1e` after checking
 actual attribution grouping, charged cancellation lease and
 native-drain/request/return/cleanup ordering. Build/source/binary freeze and
 independent numerical reference precede the one admitted model invocation.

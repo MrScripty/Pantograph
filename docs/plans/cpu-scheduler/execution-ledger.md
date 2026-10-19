@@ -441,3 +441,19 @@ coordination; parent owns its later disposition after reachable handoff.
   linked the existing pinned dependency directory and reran the declared range
   check successfully. No hook was disabled, credentials/settings changed, or
   unrelated product work overwritten. Subsequent checks use explicit inputs.
+
+- Core checkpoint `dd9b800cc0dc2ee7169235e67fb1a5526b1f5f25` is pushed and
+  remote SHA verified; workflow all-target `--no-deps -D warnings` Clippy passes.
+  Declared pre-push tests pass261+168 (one existing node-engine ignore);
+  scheduler205 pass with one existing cost probe ignored. Formatting, critical/
+  accessibility lint and explicit staged traceability pass.
+- The saved environment disconnect callback at23:07 was checked against actual
+  shell/repository/process state. Access remained intact, local+remote checkpoint
+  matched, producer edits were preserved and the original release/lint processes
+  continued. No duplicate worker or test restart occurred because of the callback.
+- The affected CPU example warning-deny Clippy passes after one lint-only nested
+  if collapse. Independent reviewer verified reversing only that edit reproduces
+  the prior reviewed digest; final producer SHA256 is
+  `864d371a4d5c5abb90186b9deef2859a14e86c9ec99862b7d3e44a8170b18d1e`.
+  This remains pre-run admission. Existing inference optional-consumer warnings
+  CPU-17 are unchanged; no other-owner code or suppression was added.
