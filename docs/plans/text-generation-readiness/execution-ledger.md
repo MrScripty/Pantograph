@@ -101,3 +101,14 @@
   workflow `15b59d51dc098b4f99d7c175b6252f1b0714e5e9112763a030e18785a3522516`.
   Clean-commit script verification follows this checkpoint; no trained/T4
   acceptance is inferred from these review or supporting checks.
+- Clean exact-source script at `271eadfd01718a3a83747be7666aadb813b6cfb2` completed with exit 0;
+  source status empty; all three runtime-effects and cleanup observations pass.
+  Failure/cancel public projection remains false. Archived exact script inputs,
+  logs and JSON; source hashes match independent review. No source changes follow.
+- Worktree resource `/workspace/pantograph-text`: retained-protected;
+  reachability retained-ref `qualify/cpu-text-generation-2026-10-19`, commit
+  disposition retained. Continuing owner CPU text integration delegate; purpose
+  blocked T3/T4 follow-up and draft review. Synchronization is by future parent-
+  coordinated patches only, with no automatic rebase/merge. Parent decides
+  retirement after integration or explicit supersession. Saved work/PR75 and
+  other-owner resources remain untouched.

@@ -31,6 +31,12 @@ Baseline main: `4aec0d5c4927a6af2832d40e224be5c2136fc9ef`. PR75 adapter source
 `2f1e38fd846ae089b47c5a2ba4dccf1fcf892cc1` was selectively reused as
 `7a78625bb9cb18dd01462b4d5295583ef1b787cf` without rewriting the original branch.
 The source was reverified on current main; existing PR75 remains untouched.
+Clean-checkpoint script run at `271eadfd01718a3a83747be7666aadb813b6cfb2`
+completed with exit 0 and all three runtime-effects/cleanup observations. The
+source status was empty. Negative public projection and trained T3 remain
+unqualified. Subsequent changes retain evidence/documentation only; relevant
+source hashes remain identical.
+
 Source hashes, outcomes and evidence are in
 [source-and-results-2026-10-19.json](source-and-results-2026-10-19.json) and
 [evidence/2026-10-19](evidence/2026-10-19/). Evidence copies contain only isolated

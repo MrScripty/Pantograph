@@ -98,7 +98,7 @@
               "bucket_id": null,
               "client_id": null,
               "client_session_id": null,
-              "event_id": "devent_81e7f443c9014b24b21c3d2660c11897",
+              "event_id": "devent_e27432ac3e114adc9b59a95b425a5b72",
               "event_kind": "scheduler_task_attempt_lifecycle_changed",
               "event_seq": 7,
               "model_id": null,
@@ -106,13 +106,13 @@
               "node_id": "infer",
               "node_type": "llm-inference",
               "node_version": null,
-              "occurred_at_ms": 1792451526449,
-              "payload_hash": "diagnostic-event-blake3:f15c08badcf21b7d4bf492d24663e2094ca98a3d5ee5be8a43704507381432e5",
-              "payload_json": "{\"payload_type\":\"scheduler_task_attempt_lifecycle_changed\",\"scheduler_task_id\":\"infer\",\"scheduler_attempt_id\":\"scheduler-task-attempt.cea05d60-3f40-4cf1-8427-b4056daa1e30\",\"execution_class\":\"runtime\",\"transition\":\"failed\",\"started_at_ms\":1792451518930,\"ended_at_ms\":1792451526449,\"duration_ms\":7519,\"selected_runtime_id\":\"pytorch\",\"selected_runtime_variant_id\":\"pytorch.cpu\",\"selected_device_class\":null,\"selected_device_id\":\"cpu\",\"selected_network_node_id\":null,\"reservation_id\":\"runtime-registry.1\",\"reason\":\"scheduler runtime task result failed\",\"error_summary\":\"embedded runtime-host text gateway execution failed: Backend error: Startup failed: PyTorch worker pytorch_worker_model_load_failed for workflow-runtime-task:run_901d2c74-d0c6-4763-adf6-2a1d83754b56:infer: Error while deserializing header: header too large\"}",
+              "occurred_at_ms": 1792451649120,
+              "payload_hash": "diagnostic-event-blake3:ee0b119298d97fcd00c7eeef085b34cd9921d9343e240f852783aa07eaeb9d2f",
+              "payload_json": "{\"payload_type\":\"scheduler_task_attempt_lifecycle_changed\",\"scheduler_task_id\":\"infer\",\"scheduler_attempt_id\":\"scheduler-task-attempt.25899804-d083-4500-bc39-f8ab49e42501\",\"execution_class\":\"runtime\",\"transition\":\"failed\",\"started_at_ms\":1792451642799,\"ended_at_ms\":1792451649120,\"duration_ms\":6321,\"selected_runtime_id\":\"pytorch\",\"selected_runtime_variant_id\":\"pytorch.cpu\",\"selected_device_class\":null,\"selected_device_id\":\"cpu\",\"selected_network_node_id\":null,\"reservation_id\":\"runtime-registry.1\",\"reason\":\"scheduler runtime task result failed\",\"error_summary\":\"embedded runtime-host text gateway execution failed: Backend error: Startup failed: PyTorch worker pytorch_worker_model_load_failed for workflow-runtime-task:run_f695202f-ca45-4752-aac3-9c5e670f1a80:infer: Error while deserializing header: header too large\"}",
               "payload_ref": null,
               "payload_size_bytes": 824,
               "privacy_class": "system_metadata",
-              "recorded_at_ms": 1792451526450,
+              "recorded_at_ms": 1792451649121,
               "retention_class": "audit_metadata",
               "retention_policy_id": null,
               "runtime_id": "pytorch",
@@ -122,13 +122,13 @@
               "source_component": "scheduler",
               "source_instance_id": "workflow-session-scheduler",
               "workflow_id": "cpu-text-probe",
-              "workflow_run_id": "run_901d2c74-d0c6-4763-adf6-2a1d83754b56",
+              "workflow_run_id": "run_f695202f-ca45-4752-aac3-9c5e670f1a80",
               "workflow_semantic_version": null,
               "workflow_version_id": null
             }
           ],
           "runtime_effect_observed": true,
-          "workflow_run_id": "run_901d2c74-d0c6-4763-adf6-2a1d83754b56"
+          "workflow_run_id": "run_f695202f-ca45-4752-aac3-9c5e670f1a80"
         },
         "public_error": {
           "code": "InvalidRequest",
@@ -167,7 +167,7 @@
               "bucket_id": null,
               "client_id": null,
               "client_session_id": null,
-              "event_id": "devent_b095da201f6a451588e4af2c8a2593ca",
+              "event_id": "devent_876032bc1fa948e98360462d111d874c",
               "event_kind": "node_execution_status",
               "event_seq": 6,
               "model_id": "llm/qualification/local-text",
@@ -175,13 +175,13 @@
               "node_id": "infer",
               "node_type": null,
               "node_version": null,
-              "occurred_at_ms": 1792451518857,
-              "payload_hash": "diagnostic-event-blake3:4fa56002c15c6f2e95923a0eb0eaaade59535e3dfe47dbdc1e48de47e032c5d9",
-              "payload_json": "{\"payload_type\":\"node_execution_status\",\"status\":\"cancelled\",\"started_at_ms\":1792451518856,\"completed_at_ms\":1792451518857,\"duration_ms\":0,\"error\":\"runtime-host cancellation or shutdown acknowledged\",\"task_id\":\"text_generation\"}",
+              "occurred_at_ms": 1792451650564,
+              "payload_hash": "diagnostic-event-blake3:f8c1bb7012fbc1fb54c08e2ed4dd0e25edf9fef538bd35e9297aa9be83ad9664",
+              "payload_json": "{\"payload_type\":\"node_execution_status\",\"status\":\"cancelled\",\"started_at_ms\":1792451650564,\"completed_at_ms\":1792451650564,\"duration_ms\":0,\"error\":\"runtime-host cancellation or shutdown acknowledged\",\"task_id\":\"text_generation\"}",
               "payload_ref": null,
               "payload_size_bytes": 228,
               "privacy_class": "system_metadata",
-              "recorded_at_ms": 1792451518857,
+              "recorded_at_ms": 1792451650564,
               "retention_class": "audit_metadata",
               "retention_policy_id": null,
               "runtime_id": "pytorch",
@@ -191,7 +191,7 @@
               "source_component": "node_execution",
               "source_instance_id": "embedded-runtime-host",
               "workflow_id": "cpu-text-probe",
-              "workflow_run_id": "run_36030fad-1dab-4ee9-baa5-1084d9b738ce",
+              "workflow_run_id": "run_21ea8279-ef88-431f-904c-f42bc6cd6e15",
               "workflow_semantic_version": null,
               "workflow_version_id": null
             },
@@ -199,7 +199,7 @@
               "bucket_id": null,
               "client_id": null,
               "client_session_id": null,
-              "event_id": "devent_7fccc77d449a47e1bf0f40529fb15bf0",
+              "event_id": "devent_c9c0e018000b4c75aa09369466c8efc9",
               "event_kind": "scheduler_task_attempt_lifecycle_changed",
               "event_seq": 7,
               "model_id": null,
@@ -207,13 +207,13 @@
               "node_id": "infer",
               "node_type": "llm-inference",
               "node_version": null,
-              "occurred_at_ms": 1792451518860,
-              "payload_hash": "diagnostic-event-blake3:53224b5de9668f69967827e61e07773d46479ab77d05e452bd2ec5e864f638d7",
-              "payload_json": "{\"payload_type\":\"scheduler_task_attempt_lifecycle_changed\",\"scheduler_task_id\":\"infer\",\"scheduler_attempt_id\":\"scheduler-task-attempt.9c9a9776-2a91-4a6f-81b1-2449332a0cfb\",\"execution_class\":\"runtime\",\"transition\":\"failed\",\"started_at_ms\":1792451518853,\"ended_at_ms\":1792451518860,\"duration_ms\":7,\"selected_runtime_id\":\"pytorch\",\"selected_runtime_variant_id\":\"pytorch.cpu\",\"selected_device_class\":null,\"selected_device_id\":\"cpu\",\"selected_network_node_id\":null,\"reservation_id\":\"runtime-registry.1\",\"reason\":\"scheduler runtime task result failed\",\"error_summary\":\"embedded runtime-host execution cancelled before completion: bounded CPU text probe cancellation\"}",
+              "occurred_at_ms": 1792451650567,
+              "payload_hash": "diagnostic-event-blake3:8bc55bce26843ebcde8426124a22730b50a7b46bb9dc77b1b7e37b6f8bf54cfe",
+              "payload_json": "{\"payload_type\":\"scheduler_task_attempt_lifecycle_changed\",\"scheduler_task_id\":\"infer\",\"scheduler_attempt_id\":\"scheduler-task-attempt.6b79b580-69ef-4292-aff8-795932fb337a\",\"execution_class\":\"runtime\",\"transition\":\"failed\",\"started_at_ms\":1792451650558,\"ended_at_ms\":1792451650567,\"duration_ms\":9,\"selected_runtime_id\":\"pytorch\",\"selected_runtime_variant_id\":\"pytorch.cpu\",\"selected_device_class\":null,\"selected_device_id\":\"cpu\",\"selected_network_node_id\":null,\"reservation_id\":\"runtime-registry.1\",\"reason\":\"scheduler runtime task result failed\",\"error_summary\":\"embedded runtime-host execution cancelled before completion: bounded CPU text probe cancellation\"}",
               "payload_ref": null,
               "payload_size_bytes": 661,
               "privacy_class": "system_metadata",
-              "recorded_at_ms": 1792451518861,
+              "recorded_at_ms": 1792451650567,
               "retention_class": "audit_metadata",
               "retention_policy_id": null,
               "runtime_id": "pytorch",
@@ -223,13 +223,13 @@
               "source_component": "scheduler",
               "source_instance_id": "workflow-session-scheduler",
               "workflow_id": "cpu-text-probe",
-              "workflow_run_id": "run_36030fad-1dab-4ee9-baa5-1084d9b738ce",
+              "workflow_run_id": "run_21ea8279-ef88-431f-904c-f42bc6cd6e15",
               "workflow_semantic_version": null,
               "workflow_version_id": null
             }
           ],
           "runtime_effect_observed": true,
-          "workflow_run_id": "run_36030fad-1dab-4ee9-baa5-1084d9b738ce"
+          "workflow_run_id": "run_21ea8279-ef88-431f-904c-f42bc6cd6e15"
         },
         "public_error": {
           "code": "InvalidRequest",
@@ -256,7 +256,15 @@
     "T3": "blocked: sanctioned trained weights/config/tokenizer/license inputs unavailable (proxy CONNECT HTTP403)",
     "T4": "blocked: public terminal result loses runtime loader/cancellation cause"
   },
-  "exact_source_script": "pending clean checkpoint run",
+  "exact_source_script": {
+    "command": "bash scripts/qualify-cpu-text-workflow.sh 271eadfd01718a3a83747be7666aadb813b6cfb2 /workspace/text-evidence/exact-checkpoint",
+    "exit": 0,
+    "clean_checkout": true,
+    "observations": 3,
+    "runtime_effects_and_cleanup_observed": true,
+    "negative_public_projection_qualified": false,
+    "t3_qualified": false
+  },
   "standards_revision": "0fc92a24279f3a4574c80af0a2f31ea347a21597",
   "claim_limits": [
     "untrained synthetic fixture; no trained-model quality/readiness claim",
@@ -269,5 +277,6 @@
     "reasoning": "High",
     "decision": "admitted; no remaining material source/evidence findings",
     "probe_sha256": "6b5fd58a5737060a0d1b02f39c05dcb154c8c6940a6f77abc3112ea5e8ee8ed5"
-  }
+  },
+  "source_checkpoint": "271eadfd01718a3a83747be7666aadb813b6cfb2"
 }
