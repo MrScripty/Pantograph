@@ -1,8 +1,8 @@
 # Plan: CPU text dependency readiness handoff
 
 **Plan status:** `Blocked`
-**Current phase:** M1 dependency adapter verified; trained-model qualification blocked
-**Next slice:** M1 trained-model qualification (M2 owner; blocked on model access)
+**Current phase:** M1 runtime-effects observation; public terminal-result and trained-model qualification blocked
+**Next slice:** coordinate a public failure/cancellation result-projection fix with the workflow finalization owner
 **Acceptance status:** `blocked`
 **Execution ledger:** [execution-ledger.md](execution-ledger.md)
 **Issues:** [issues.md](issues.md)
@@ -29,6 +29,7 @@ Dependencies and Licensing. Apply existing ownership and bounded evidence.
 | T1 | Supported text Resolve supplies nonempty, identity-bound Python prerequisites without asserting Ready; unsupported inputs and declared model constraints are refused | contract | not-applicable | automated | satisfied |
 | T2 | Real Pumas graph action registers payload without a Ready snapshot; actual inventory Check observes the linked interpreter and preserves its environment identity | integration | representative | automated | satisfied |
 | T3 | A trained, licensed, bounded local model generates nonempty text through the public hosted CPU workflow; model identity, resource limits, output and cleanup recorded | system | required-real | automated | blocked |
+| T4 | Committed untrained weights exercise public hosted generation, loader failure, active cancellation and owned cleanup while preserving public failure/cancellation meaning | integration | representative | automated | blocked |
 
 Formatting, affected Rust tests and Clippy are supporting gates. Synthetic model
 output is only contract evidence and cannot close T3. No GPU, browser GUI,
@@ -49,7 +50,7 @@ Support explicit text-generation / pytorch / cpu with current host platform,
 no custom code, no overrides/traits, and no foreign bindings or environments.
 Preserve proof identity checks and existing Candle behavior. Unsupported requests
 return the existing no-resolution outcome, never a fabricated Ready result.
-No dependency/lockfile changes, implicit package installs or user catalog edits.
+No product dependency/lockfile changes, implicit package installs or user catalog edits. The 2026-10-19 delegation explicitly authorizes normal environment setup from official registries.
 Tests create isolated Pumas catalogs through its public APIs.
 
 ## Constraints and discovery
@@ -107,14 +108,37 @@ Model download or native build unavailability leaves T3 unsatisfied.
 - `docs/plans/text-generation-readiness/**`
 - `examples/cpu-embedding-demo/README.md` (link qualification scope)
 
-One implementation owner edits the dependency adapters; the external M2 worker
-`01a1374d-a8fa-77bc-afca-fbc96e7a8021` owns the text probe. No local probe
-file edits are authorized by this write set. Reviewer is read-only, explicitly
-GPT-6.1 Sol / High. Cross-thread messaging is unavailable in this tool context;
-this ownership declaration and final handoff coordinate the boundary.
-Scheduler files, shared contracts, Cargo manifests and the existing embedding
-probe are excluded. Coordinate
-any required expansion with delegation parent rather than silently editing it.
+The 2026-10-19 continuation owns the standalone text probe, its Cargo example
+registration, `scripts/qualify-cpu-text-workflow.sh`, the separate
+`.github/workflows/cpu-text-integration.yml` (avoids shared M3 CI edits),
+`docs/cpu-text-generation-workflow-probe.md`, and this plan directory.
+The historical M2 worker wrote no probe files; this delegation supersedes its
+probe reservation. No scheduler files, fairness policy, shared contracts, root
+README (including PR79), or embedding probe files are edited. The new scheduler
+M3 owner has a disjoint write set. Expand ownership only through the parent.
+
+Isolation: owner is the CPU text integration delegate; branch
+`qualify/cpu-text-generation-2026-10-19` in `/workspace/pantograph-text`, based on
+main `4aec0d5c`. PR75 adapter commit `2f1e38fd` is reused as `7a78625b` by selective
+cherry-pick, without rewriting PR75. Target is main; parent coordinates integration.
+Retain this protected branch/worktree for blocked T3 follow-up and review, then
+parent decides retirement. No other branches or worktrees are deleted.
+
+Independent GPT-6.1 Sol / High reviewer `text_review` admitted a cfg-gated local
+probe using real Pumas, graph Resolve/Check and scheduler output. It adds no new
+runtime authority. Fixed CPU, local-only artifacts, no remote model code, 24 new
+tokens, deterministic temperature 0, one loaded model, bounded run and external
+600s watchdog preserve scope. New probe code owns only fixture/evidence setup
+and public API orchestration. Source file identities are recorded to bind outputs
+to exact local inputs; no generic integrity service is introduced. Synthetic
+untrained fixtures can prove integration only and cannot satisfy T3. Resolve
+must not fabricate Ready; actual Check observations and shutdown are retained.
+Cancellation observation requires public Running, acknowledged intent, matching
+run/node/attempt runtime cancellation diagnostics, an empty queue and cleanup.
+The public API currently flattens cancellation and loader errors into generic
+`InvalidRequest` / `TerminalFailed`; observation success does not qualify that
+projection or T4. The shared finalization-owner correction is excluded pending
+parent coordination. A dropped future cannot supply cancellation evidence.
 
 Gates: independent plan admission, focused adapter regressions, actual hosted
 probe with bounded trained model, affected crate tests/Clippy, staged diff and
