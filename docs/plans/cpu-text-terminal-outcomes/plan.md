@@ -1,12 +1,12 @@
 # Plan: preserve CPU text terminal outcomes
 
-**Plan status:** Verifying
-**Current phase:** clean-checkpoint public-path qualification
-**Next slice:** run the exact-checkpoint probe and independent evidence review
-**Acceptance status:** partial: F1/F3 satisfied; F2 pending; trained T3 blocked
+**Plan status:** Blocked
+**Current phase:** bounded T4 qualified; trained T3 input blocked
+**Next slice:** parent-coordinated integration/CI; trained run when verified inputs arrive
+**Acceptance status:** F1/F2/F3 and bounded T4 satisfied; trained T3 blocked
 **Execution ledger:** [execution-ledger.md](execution-ledger.md)
 **Issues:** [issues.md](issues.md)
-**Reports:** pending clean-checkpoint qualification
+**Reports:** [qualified T4 evidence](reports/2026-10-19-public-terminal-outcomes.md)
 **Related ADRs:** [index](../../adr/README.md)
 
 ## Objective and authority
@@ -38,7 +38,7 @@ contracts, concurrency, code design and tooling. No new dependency is introduced
 | ID | Observable claim | Kind | Environment | Mode | Status |
 | --- | --- | --- | --- | --- | --- |
 | F1 | Coherent staged runtime failures preserve code/message; exact cancellation/shutdown diagnostics produce public Cancelled; incomplete/incoherent facts fail closed | focused | not-applicable | automated | satisfied |
-| F2 | Public Pumas/Resolve/Check/scheduler CPU probe returns generation, loader failure cause and typed cancellation, with completed cleanup, on exact new source | integration | representative | automated | pending |
+| F2 | Public Pumas/Resolve/Check/scheduler CPU probe returns generation, loader failure cause and typed cancellation, with completed cleanup, on exact new source | integration | representative | automated | satisfied |
 | F3 | Shared finalization regressions and affected crate/static gates pass; M3 callers and frozen PR80 source/evidence unchanged | integration | representative | automated | satisfied |
 | T3 | Licensed trained-model public CPU generation | system | required-real | automated | blocked |
 
@@ -69,7 +69,7 @@ success alone. PR80 artifacts remain their original baseline evidence.
 
 ## M1: projection and qualification
 
-State: Active. Write set:
+State: Complete for bounded T4. Write set:
 
 - crates/pantograph-workflow-service/src/workflow/runtime_branch_run_finalization.rs
   (production projection and inline regressions)

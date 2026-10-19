@@ -46,3 +46,21 @@
 - Before source checkpoint, the staged diff contains exactly six declared text
   files, no credentials/configuration/weights/binary artifacts, and no unrelated
   or M3 edits. Independent source review admitted this exact owner/probe pair.
+- Source checkpoint 511374122d82a07d953baf322bbd137a5002bad7 committed and pushed
+  on retained branch fix/cpu-text-terminal-outcomes-2026-10-19. Exact script
+  confirmed clean status and completed exit 0 for generate/failure/cancel.
+  All three public integration/projection/cleanup/shutdown flags true; trained
+  T3 false. Public loader failure retains InternalError and canonical cause;
+  active cancellation returns typed Cancelled with matched task/attempt evidence.
+- Independent reviewer read actual exact-source result/diagnostic/ack/cleanup
+  evidence and admitted F1/F2/F3 plus bounded T4 with no material findings.
+  Early cancellation and untrained limitations retained. New reports preserve
+  raw public JSON/logs as gzip plus SHA256 manifest; no weights/databases copied.
+- PR80 CI advanced: Composition success; Headless/Runtime Separation in progress;
+  Quality/CPU Text queued. No source failure or all-green conclusion observed.
+  The focused PR will be stacked on PR80 and left unmerged for parent integration.
+- Final retained-artifact review independently verified all 62 gzip copies
+  byte-for-byte against raw records, exhaustive SHA256/size manifest, report
+  observations and all five source hashes. No material findings. Evidence-only
+  checkpoint contains declared docs/log records, no model weights/databases or
+  unrelated configuration. Current code hashes remain those qualified at 51137412.
