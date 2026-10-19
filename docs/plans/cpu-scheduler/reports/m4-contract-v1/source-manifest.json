@@ -1,0 +1,11 @@
+{
+  "kind": "M4 contract/fixture-only checkpoint; no native run",
+  "m3_preserved_head": "b63aa3ebe5fab1531aef952a35ce74932bf76b30",
+  "m3_acceptance": "pending parent confirmation",
+  "script_sha256": "d35d1ee9a406640cc65186775e17ba098891788d0c8f774589b432fe7e880a97",
+  "fixture_admission_sha256": "c3903dd0cd9ee74e043a5341e73b8b83feef1dd914a58c7df6c68ae97e0c5683",
+  "reference_manifest_sha256": "ae1644b099d946e03e75a1b75c65593bd2fcee0aa03df31aa79fb5fb94e2bd39",
+  "model_invocations": 0,
+  "production_changes": false,
+  "fixture_review": "independent m3_cpu_producer: all14hashes and exported originalgolden/text/tolerance data verified"
+}

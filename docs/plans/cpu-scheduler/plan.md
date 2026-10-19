@@ -1,10 +1,10 @@
 # Plan: CPU Scheduler Completion And Fair Progress
 
-**Plan status:** `Active` — M1/M2 accepted and merged; bounded M3 admitted; M4–M6 unadmitted.
+**Plan status:** `Active` — M1/M2 accepted; M3 verifying; bounded M4 contract admitted with implementation dependency pending; M5/M6 unadmitted.
 
-**Current phase:** M3 fixed native evidence completed and independently reviewed; exact published-head gates pending.
+**Current phase:** M4 admitted contract/fixture checkpoint; production blocked on parent-confirmed M3 acceptance.
 
-**Next slice:** Publish the focused M3 source/tests/report PR and verify its exact-head required CI. M4 remains unadmitted.
+**Next slice:** Publish/checkpoint the admitted M4 contract/fixture package; parent-confirmed M3 acceptance is required before its production slice.
 
 **Acceptance status:** M1 merged as PR73 in main `07b23d47`; the original
 negative cohort and the separately accepted C3 supplement remain unchanged.
@@ -206,7 +206,7 @@ and write sets receive an independent review before their first code change.
 | M1 / Accepted; merged PR73 | Existing retained CPU first-two-Ready mode composes with ordinary hosted providers. Writes: embedded `workflow_service_composition.rs` and its focused tests; workflow `serial_ready.rs`, `task_execution_worker.rs`, relevant tests/exports; new focused native integration test and registration; bounded CPU example/guide only if needed for repeatable invocation; this plan's evidence. | M0; real resident CPU owner and retaining lease. Actual public sessions with two ready embeddings and retained outputs; measured sample-driven order; no injected candidate/readiness/timing/outputs; default and negative lifecycle regressions. Exact-head local gates, independent source/evidence review, normal CI. |
 | M2 / Accepted; merged PR76 | Bounded completion lookahead for a disclosed CPU cohort, initially advisory on actual work. Extend existing scheduler kernels, workflow capture and native evidence producer only. | M1; complete comparable evidence for every admitted alternative/transition, including unfinished obligations. Hand-computed independent oracles, work-budget refusal, missing/stale evidence, owner invalidation and actual CPU trace correspondence. No forecasts authorize execution. Promote only a separately qualified action subset; do not fill missing cold/transfer costs with zero. |
 | M3 / Implemented; Verifying | Explicit per-app/bucket service opportunities at an authoritative ready-work boundary, alongside priorities. Writes confined to scheduler/workflow queue/attribution integration and tests after its design review. | M1 and a bounded eligible population; use authenticated existing attribution, not arbitrary caller identities. Fixed modeled traces prove opportunity/order, then actual CPU sessions from two authenticated units prove progress under repeated foreground arrival and cancellation. No wall-clock guarantee for unbounded nonpreemptible jobs. Missing entitlement identity has an explicit owned disposition. |
-| M4 / Planned | CPU residency actions improve a specified repeated-model workflow without violating cleanup; serial preparation/eviction only. Writes scheduler policy, registry/host action integration and tests after review. | M2 evidence, M3 fairness obligations where actions delay other apps. Measure load/unload/reload separately; full charge remains until acknowledged stop; pinned/live allocations protected. Actual two-model CPU alternation, pressure, cancellation and failed-stop cases. No overlapping loads, speculative lease release or automatic recovery of unknown execution. |
+| M4 / Planned; contract admitted, M3 gate pending | CPU residency actions improve a specified repeated-model workflow without violating cleanup; serial preparation/eviction only. Writes scheduler policy, registry/host action integration and tests after review. | M2 evidence, M3 fairness obligations where actions delay other apps. Measure load/unload/reload separately; full charge remains until acknowledged stop; pinned/live allocations protected. Actual two-model CPU alternation, pressure, cancellation and failed-stop cases. No overlapping loads, speculative lease release or automatic recovery of unknown execution. |
 | M5 / Planned | Fair bounded grouping on the existing supported sequential CPU batch envelope; optimize only demonstrated scheduler overhead/reuse. Writes existing batch policy/broker and tests after review. | M3/M4 where grouping changes retention or fairness. Group 1..8 compatible members without waiting indefinitely, preserve per-member outputs/attempts/cancellation, mixed/incompatible tasks refuse grouping. Compare actual CPU grouped versus singleton runs. Label sequential envelope honestly; native/continuous execution remains Deferred unless independently capable and exercised. |
 | M6 / Planned | Qualified modes become an explicit documented host/application choice with truthful diagnostics and bounded rollback. | Accepted upstream milestones; exact consumer contract and UI/IPC/persistence routing reviewed if added. Real consuming-path evidence, regression and performance report, normal CI. Default activation is a separate decision; no main merge/deployment authorized. |
 
@@ -358,6 +358,247 @@ M4 follows only after these gates: identify a dependency-ready, separately revie
 serial residency subset using actual load/unload/reload evidence, M2 service-cost
 limits, M3 delay obligations and owner-acknowledged full-charge retention. No M4
 action or native batching claim is admitted here.
+
+### M4 Serial Residency Contract (2026-10-19; independently admitted, M3 gate pending)
+
+Operation `continue` under this canonical plan. Parent continuation explicitly
+admits contract/research/fixture work on dependent branch
+`feat/cpu-scheduler-m4-serial-residency`, worktree `/workspace/pantograph-m4`,
+from preserved M3 head `b63aa3ebe5fab1531aef952a35ce74932bf76b30` (PR81).
+M3 acceptance is still pending its exact published-head CI, monitored by parent.
+M4 production edits and native qualification wait for M3 acceptance AND independent
+admission of this contract. The older M3 admission did not authorize M4; this
+parent continuation does, subject to these gates. No merge/deletion is authorized.
+
+#### Objective, next slice and dependency gates
+
+For the already selected authenticated CPU task, retain the same actual model;
+otherwise acknowledge the old owner's stop before cold-loading the selected model.
+Reduce redundant loads/stops in fixed BERT8/BERT12 `A,A,B,B,A` work while preserving
+M3 service order, task outcomes and full physical ownership/accounting. Measure
+load, forward/drain, stop and reload separately. Counts and resource/ownership
+traces decide acceptance; there is no speedup, semantic-quality or latency claim.
+
+Current phase: admitted contract and verified fixture checkpoint. Independent
+GPT-6.1 Sol High source/design reviewers admitted this bounded contract. Exactly
+one next slice: publish the contract/fixture checkpoint, then wait for the
+parent-confirmed M3 acceptance gate before production edits.
+No native cohort or M4 implementation is claimed yet.
+
+#### Binding decisions and authority
+
+1. Explicit constructor/config only, requiring M3 fair service mode. Ordinary
+   construction and retained-only M1/M2 ports stay unchanged. No default activation,
+   persistence/IPC/UI, GPU, distributed execution or native batching.
+2. M3 chooses the actual next eligible service unit/member first. Its owned serial
+   turn covers residency preparation, final Start, native forward and matched
+   cleanup. Preparation runs after grant and before incoming provisional candidate
+   reservation. No model-affinity reordering, future-output prediction, TTL, speculative
+   next-task selection or extra forward within one opportunity.
+3. Retain is decided for the actual selected task. A different model stops first;
+   incoming task reservation/load cannot precede old stop ACK. The original
+   authenticated identity/priority/Ready proof and inputs survive preparation
+   awaits and are checked again under the final Start lock. M1 selection stays
+   compatible; two different models have no comparable common warm owner and
+   retain FIFO. Prepared native owner is fenced at Start and native entry.
+4. Add one native-owned linear idle-residency capability. Current successful task
+   cleanup consumes its drained receipt, so that receipt cannot authorize a later
+   switch. A read-only next-same peek is insufficient when priorities/arrivals
+   change. Do not fake started execution on an idle reservation to reuse the
+   existing last-lease drained-task ticket.
+5. The capability owns an exact service-owned unpinned Ephemeral guard lease,
+   gateway/registry identity, source, runtime instance, canonical model target,
+   profile/settings and current private native owner. No public constructor,
+   Clone, serialized reconstruction, caller stamp or snapshot recovery exists.
+   Acquire guard execution custody before loading and call its begin_execution
+   immediately before ACTUAL supervised cold-load physical work. Hold that exact
+   custody across idle turns, so ordinary release/replacement cannot erase its
+   charge. Mint the native capability after completed load/drain and accounting
+   publication under the backend writer. Do not hold that writer between turns.
+6. The capability is unavailable/in-flight during warm execution and cleanup.
+   The actual receipt's previous owner must match it; only consumed matching task
+   cleanup ACK returns the capability updated from the receipt's actual current
+   private owner after the verified warm `+2` transition. This ACK is the actual
+   registry task-release ACK; the returned capability remains inaccessible to a
+   new turn until the existing scheduler cleanup acknowledgement/scope release.
+   Every source/instance/target/guard-incarnation identity must remain exact.
+   Copying an observed
+   generation into stale authority is forbidden. Task cleanup releases only its
+   exact task lease; the mode guard and resident envelope remain charged.
+7. Stop consumes the typed native idle-resident capability, whose load/drain proof
+   and updated actual warm lineage authorize use of its original load-started
+   guard custody. Reuse existing RuntimeLastLeaseEviction admission/ACK internally;
+   never fabricate a task CandleCpuDrainedAttempt or start an unproven idle lease.
+   Under the same native writer and registry fence, require the exact sole mode lease, no other
+   active/provisional/executing reservations, no pins, known accounting and exact
+   current native identity. A user's KeepAlive lease is never removed to enable
+   stop. Mark stopping before awaits; actual stop and a newer producer sequence
+   allocated under that writer precede ACK and charge/fence removal. Undelivered
+   old observations must refuse after ACK. No new registry authority is required
+   unless implementation demonstrates an invariant missing from those checks.
+8. Cold preparation is supervised **load-only** on a fresh or exactly acknowledged
+   stopped calibrated Candle CPU backend. It performs no embedding forward and
+   produces no invented warm ancestry. After actual owner publication, the existing
+   warm forward/drain path produces its genuine receipt. Generic selected embedding
+   performs a forward and generic replacement loads before retirement; neither is
+   an acceptable shortcut for this preparation.
+9. Known configured resident RAM/VRAM AND cold-load peak claims are required before
+   load. Reserve the complete declared peak, including headroom for subsequent
+   resident accounting publication, before physical work. Keep the conservative
+   guard charge throughout residency; no phase-based shrinking is admitted.
+   Runtime declared resident resources remain additive to task/guard claims; do
+   not infer aliasing. Missing resource kind is unknown. CPU VRAM0 requires the
+   calibrated CPU-tensor basis. Capacity is operator declared, not allocator/RSS
+   qualification. No awaited work under scheduler-store/queue/context locks.
+10. Preparation failure/drop, failed stop/ACK or lost capability leaves explicit
+    fenced state and full uncertain charges. No automatic reconstruction/recovery,
+    direct reservation erase, generic reconciliation, fallback forward or retry.
+    If Ready proof becomes stale after a successful load, refuse Start and retain
+    the actual idle capability/charge or stop through its genuine path.
+11. The M4 owner must exclude writable gateway aliases. Use a narrow owning facade
+    with a constructor-created calibrated gateway and private embedded runtime;
+    expose authorized session/run/resume/cancel/output/read-only diagnostic methods
+    and acknowledged shutdown only. No `gateway()`, `host()`, `Deref`, inner-runtime
+    accessor, writable WorkflowService/shared-extensions/registry alias, equivalent
+   generic execution escape or caller-supplied gateway Arc. The constructor owns
+   mutable infrastructure; public methods return values/read-only snapshots.
+   Internal hosted composition may reuse
+    read-only facts but must not expose ordinary execution/shutdown escape routes.
+    Shutdown closes facade admission and auto-resume, invokes existing
+   shutdown_workflow_execution_runtime to drain supervised work/worker, consumes
+   the actual idle capability through stop+ACK, THEN performs remaining embedded
+   teardown. EmbeddedRuntime::shutdown alone is insufficient. Session KeepAlive/native
+   bootstrap is explicitly rejected before a reservation
+    or pre-grant native work; metadata-only ephemeral sessions stay supported.
+    The ordinary host helpers do not themselves cold-load Candle, but session
+    retention/readiness paths must still be routed honestly. No global sentinel
+    edits to PR75 text execution are admitted.
+12. Switch/reload invalidates M1/M2 owner-bound observations and predecessor context.
+    Preparation/stop costs are recorded separately from existing warm service
+    samples. M2 remains advisory; missing cold/stop forecasts stay unavailable.
+    A residency action cannot fabricate an execution/cleanup grant or sample.
+
+#### Frozen write set and ownership
+
+These are conditional implementation paths after both admission/dependency gates.
+Any added production path or material authority change requires a recorded narrow
+re-plan and independent review before that change. No broad scheduler policy layer
+is needed for the retain/switch decision; the native residency owner contains it.
+
+| Owner | Exact paths / purpose |
+| --- | --- |
+| Native lifecycle | `crates/inference/src/gateway_cpu_residency.rs` and `gateway_cpu_residency_tests.rs` (new): linear idle capability, supervised load-only/stop. `gateway.rs`: module registration and bounded private delegation only; no text adapter/model changes. `gateway_cpu_warm_attempt.rs`: consumed receipt/capability handoff. Existing `gateway_cpu_warm_attempt_tests.rs` and `gateway_cpu_last_lease_eviction.rs` only for matching helper reuse/regressions. |
+| Registry | `crates/pantograph-runtime-registry/src/retained_cleanup_tests.rs`: actual-load-started guard custody, sole-lease stop and delayed-frame regressions. Existing `execution_custody.rs` / `last_lease_eviction.rs` only if a documented narrowly shared helper/comment is required. No new idle module, state/token domain, generic reclaim or recovery policy. A missing invariant triggers re-admission. |
+| Serial host contract | `crates/pantograph-runtime-host-contracts/src/serial_runtime_host.rs`: additive preparation method returning actual prepared owner; default unsupported. No serialized IPC/schema change. |
+| Workflow | `crates/pantograph-workflow-service/src/workflow/serial_ready.rs`, `task_execution_worker.rs`, `serial_ready_worker_tests.rs`: explicit mode, prepare under granted scope, final proof/owner fence, history invalidation. `workflow.rs` only required exports. M3 policy and session runner ordering are unchanged. |
+| Embedded owner/composition | New `crates/pantograph-embedded-runtime/src/serial_cpu_residency.rs` and `serial_cpu_residency_tests.rs`: private owning facade/lifecycle. `serial_cpu_port.rs`, `serial_cpu_port_tests.rs`: capability transfer and prepared-owner query. `workflow_service_composition.rs`, `embedded_workflow_host.rs`, `embedded_runtime_lifecycle.rs`, `lib.rs` only bounded explicit owner wiring/ephemeral-session admission/owned shutdown; no generic runtime default behavior. |
+| Native evidence | New `crates/pantograph-embedded-runtime/src/lib_tests/native_serial_residency_tests.rs` plus registration in `lib_tests/workflow_run_execution_tests.rs`. New example module `examples/cpu_embedding_workflow_probe/m4_residency_probe.rs` and fixture-only `m4_fixture_contract.py`; root probe and `serial_ready_probe.rs` wiring only. `examples/cpu-embedding-demo/README.md` and this plan/ledger/issues/report evidence. |
+
+Reserved: T4 `runtime_branch_run_finalization.rs`, all CPU text probes/docs,
+PR75 adapter/model code, PR79 root README, default policies, dependency updates,
+model acquisition and generated/native UI files. Parent owns cross-branch integration.
+The new facade must not force semantic edits outside this write set; if it does,
+record a contract re-plan rather than silently adding adapters.
+
+#### Fixed evidence contract
+
+Use checked-in untrained BERT widths8 and12 and the existing independent
+Transformers goldens. Verify every tensor/config/tokenizer/golden hash first; do
+not regenerate/download models. Read-only fixture preparation performs no forward.
+
+After production/source and producer review, freeze source/tree/binary/input/env
+and execute exactly one retained protocol and one explicit stop-between-tasks
+comparison, each fixed `A,A,B,B,A` with one public embedding call per task. Fresh
+isolated owners; same CPU threads and inputs; no retries for a winner. Expected
+retained protocol:3 cold loads (A,B,A),2 exact same-owner retains,2 switch stops,
+then1 explicit final idle stop. Comparison:5 loads and5 explicit stops including
+final teardown. Compare all5 outputs per protocol against the independent golden;
+report separately measured load/forward/drain/stop durations with no speedup gate.
+Cold reload of A must have a fresh native instance and empty old owner history.
+Reload is a subtype of the third load, never an additional fourth load. Define
+load as native load submission through actual blocking join/publication; define
+forward-and-drain as actual forward submission through its worker join (split
+only if independently observable); stop as physical stop entry through completion,
+with registry ACK separately recorded. Never infer absent subphases as zero.
+Producer admission must map aliases to exact full model/artifact/runtime identities.
+Pressure, native cancellation and fault cases use fixed separately named owners
+and counts outside the3vs5 cohort; no fenced owner is recovered or rerun. Freeze
+all case counts and phase intervals prospectively before any native invocation.
+
+
+Configure explicit bounded RAM/VRAM admission and record the actual consumed
+resource claims and observed identities. A fixed pressure refusal must show no
+load/forward/claim mutation before admission; a fitting serial switch must show
+old charges present until ACK and only then incoming load/candidate reservation.
+Do not invent small task estimates to make a desired budget fit. Freeze numeric
+capacity after confirming its exact authoritative estimate source in the producer
+review; this is a required pre-run gate, not post-outcome tuning.
+
+Native cancellation evidence: one fixed qualification-only native cancellation
+signal at a real blocking load or post-load/before-Start barrier, with its signal
+source and supervision/drain/charges recorded. It is NOT public active-task
+cancellation: no Running attempt exists at that phase. Caller wait drop does not
+abort supervised work. Separately, one public Running post-drain cancellation
+request before exact task cleanup. Record actual public terminal
+outcomes; completion may win. No interrupted-compute claim. Controlled pre-stop,
+after-stop, caller-drop, stale proof, foreign capability, pin/retainer, failed stop
+and failed ACK branches remain labelled protocol/fault-injection evidence. A
+simulated backend stop failure is never described as actual Candle failure.
+Native failure/refusal records and teardown are retained even when a gate fails.
+
+| Gate | Deciding evidence / acceptance |
+| --- | --- |
+| M4-C1 | Independent contract admission, preserved M3 accepted exact head, fixed write set, explicit constructor/default refusal and no writable owner escape. |
+| M4-C2 | Deterministic transition traces preserve M3 priority/FIFO/opportunity order; prepare before provisional reservation; final Ready/input/owner changes refuse Start. Same owner retains, reload invalidates M1/M2. |
+| M4-C3 | Registry/native ownership tests: linear cap handoff/incarnation, full additive charge, sole-lease idle stop, pins/retainers, cancellation/drop/failed stop/ACK retain custody; old delayed observations refuse. |
+| M4-C4 | Frozen actual BERT8/12 protocols show3vs5 loads and3vs5 total stops, real outputs, phase records, pressure and cancellation custody; no hidden retry or missing-phase zero. Controlled failures clearly separated. Any missing native behavior stays Partial/Blocked. |
+| M4-C5 | Independent source/producer/evidence review, affected tests/lint/format/traceability, focused dependent PR and exact published-head required CI; parent owns merge. |
+
+#### Composed design admission (applicable)
+
+1. Concerns: M3/workflow owns who/when/which authoritative Ready task; native owner
+   owns how/where resident load/forward/stop completes; registry owns claims and
+   exact acknowledged release; facade owns exclusive composition and lifetime.
+   Evidence producer observes these facts and owns no production authority.
+2. Required interleavings: grant→prepare→candidate→final Start→forward/drain→task
+   ACK→updated idle cap; switch stop→fresh sequence ACK→new load. Accidental
+   priority/model-affinity coupling and prediction-as-authority are excluded.
+3. Callers know one explicit constructor, declared budgets and session API. Peer
+   workflow code sees typed prepared-owner evidence, never backend/registry internals.
+   Composition knows dedicated gateway lifetime and routes only approved native work.
+4. Changing model/profile evidence is native+producer work; changing capacity is
+   registry/config+producer work; changing fairness remains M3 workflow/policy
+   work. A new backend/device is outside this contract, not a generic trait promise.
+5. Stable values: existing task intents, exact session attribution, owner generation
+   snapshots and lifecycle applications. Hidden native identity and lease tokens
+   remain in the capability; callers cannot depend on numeric token layouts.
+6. Registry/native failure tests can run independently; only cross-boundary real
+   protocols establish objective acceptance. Either layer refuses uncertainty.
+7. Deleting idle capability reintroduces lost stop authority or unsafe snapshots;
+   deleting facade reintroduces writable aliases; deleting preparation restores
+   cold-owner refusal. These contain necessary lifecycle/ownership constraints.
+   A separate generic residency policy/module is declined as incidental machinery.
+8. Necessary new complexity is one native idle capability over existing registry
+   custody/stop obligation and a narrow composition owner; no new durable database, duplicated
+   source of truth, generic orchestration engine, recovery framework or forecast
+   optimizer. If implementation requires more, revisit admission before expansion.
+
+Resource sources before production: immutable operator-configured resident/load
+peak envelopes, plus existing SchedulableTaskIntent.estimate_hints consumed by
+runtime_dispatch_candidate_provider::reservation_requirements_from_estimate_hints.
+The static [accounting witness](reports/m4-contract-v1/accounting-witness.json)
+shows a feasible full additive envelope without shrinking existing task estimates;
+its upper bounds are conditional on checking actual per-kind intent hints before
+physical work, and are not a native cohort budget or allocator measurement.
+Numeric native cohort capacity/pressure values freeze only in producer admission
+before execution, using those verified sources; no post-outcome tuning.
+
+Blockers: parent-confirmed M3-C5/acceptance; independent admission; feasible additive
+accounting and enforceable dedicated facade verified before production.
+Re-plan triggers: writable gateway/ordinary execution escape, production path outside
+write set, inability to reserve full load/registration envelope, inability to preserve
+M3 final Start/turn ordering, unsupported native stop/load ownership or missing actual
+phase evidence. Do not call any of these gates accepted from planned tests alone.
 
 ### M1 Evidence And Oracle Plan
 

@@ -496,3 +496,44 @@ coordination; parent owns its later disposition after reachable handoff.
   limits are accurate. Design review approved corrected producer SHA256
   `8fa52e568df966dd783d0d3f6930a17789765667b371e0e04e8276525e626820`.
   Final staged traceability, formatting and whitespace checks pass.
+
+## 2026-10-19 — M4 dependent contract and fixture preparation
+
+- Parent explicitly authorized the next bounded retain/acknowledged-stop/cold-load
+  slice on a separate dependent branch. Created `feat/cpu-scheduler-m4-serial-residency`
+  in `/workspace/pantograph-m4` from preserved PR81/M3 head
+  `b63aa3ebe5fab1531aef952a35ce74932bf76b30`. Parent monitors M3 CI;
+  production edits wait for M3 acceptance and independently admitted M4 contract.
+- Independent source/design research found consumed-task-receipt and cold-load
+  authority gaps. Chose one native idle capability over actual cold-load-started
+  guard custody, preserving existing registry last-lease stop/ACK invariants.
+  No stale next-task peek, fake warm drain or separate generic registry is needed.
+- Canonical draft records exact write set, actual post-grant/pre-candidate load-only
+  preparation, prepared-owner final Start fencing, private facade exclusion,
+  explicit ephemeral-session disposition and shutdown ordering. T4 helper/text
+  paths, M3 tested head, PR75 model/adapters and PR79 root README remain untouched.
+- Read-only fixture script verified all14 original manifest files and BERT8/12
+  golden shapes/finite normalization, recording exact hashes and prospective
+  A,A,B,B,A load/retain/stop oracle. No model forward, acquisition or regeneration.
+- The23:33:44 disconnect callback was checked against actual shell/worktree/process
+  state. Executor remained available, all heads/branch files intact, and no duplicate
+  workers, builds or model invocations were started.
+
+- Independent GPT-6.1 Sol High source/design reviewers admitted the revised M4
+  contract after load-started guard reuse, private-facade exclusion, ordered
+  shutdown and separate pre-Start native cancellation clarifications. Source
+  reviewer checked plan SHA256 `aeb814ad14428783bf1366f422562e61891b1e16653f8076270de961af4ba2a3`
+  before admission-status edits. Producer reviewer verified fixture script SHA256
+  `d35d1ee9a406640cc65186775e17ba098891788d0c8f774589b432fe7e880a97`.
+- Static accounting witness preserves existing per-kind conservative task hints
+  and proves a conditional fitting additive envelope; it is not a native capacity
+  freeze or memory measurement. Actual hints/future resident headroom must be
+  validated before physical work. Producer phase boundaries and separate case
+  owners/counts freeze before any native invocation. M3 acceptance still pending.
+
+- Final source reviewer approved the conditional accounting witness and checked
+  RAM32+48+1024=1104MiB and VRAM0+0+1024=1024MiB arithmetic against exact
+  existing estimator/consumer source. It is a logical admission witness, not
+  discovered hardware capacity or native memory qualification. All14 original
+  fixture hashes and helper/manifest hashes match; Python parses and staged
+  traceability/whitespace checks pass. No Rust production/test source changed.
