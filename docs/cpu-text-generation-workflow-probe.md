@@ -92,13 +92,19 @@ For independent integration evidence, replace the model directory with
   Acknowledgment alone cannot pass. This observes early active cancellation;
   it does not prove interruption after generation begins.
 
-The public workflow API currently loses both negative causes and returns
-`InvalidRequest` / `TerminalFailed`. The probe records this as
-`public_result_projection_qualified: false`; `runtime_effect_observed: true`
-means the canonical runtime effect occurred. `probe_passed` and a green runtime-
-effects CI observation do not qualify public terminal semantics, T4 or trained
-T3. Missing, truncated, unrelated or contradictory diagnostics fail observation.
-The production projection fix remains a separately coordinated owner slice.
+The probe requires public terminal semantics as well as canonical runtime
+observations and cleanup. A loader failure must return `InternalError` retaining
+`pytorch_worker_model_load_failed` and its header-deserialization cause; an
+acknowledged runtime cancellation must return typed `Cancelled`. Missing,
+truncated, unrelated or contradictory diagnostics fail observation. A generic
+`InvalidRequest` / `TerminalFailed` result fails `probe_passed` and the process.
+This qualifies the bounded T4 behavior in
+[the terminal-outcome plan](plans/cpu-text-terminal-outcomes/plan.md), never T3.
+
+The frozen PR80 source and reports in `plans/text-generation-readiness` retain
+the earlier observational behavior and the demonstrated projection defect.
+Those historical observations do not qualify the repaired public semantics;
+new-source exact-checkpoint evidence belongs to the terminal-outcome plan.
 
 The run timeout is 60 seconds, the probe watchdog is 120 seconds, and cleanup
 and shutdown each have a 30-second observation bound. An expired watchdog is

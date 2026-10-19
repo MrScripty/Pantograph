@@ -604,12 +604,16 @@ async fn execute(
             let public_projection = if mode == "cancel" {
                 error.code() == pantograph_workflow_service::WorkflowErrorCode::Cancelled
             } else {
-                error.runtime_diagnostic_phase_hint()==Some(pantograph_workflow_service::WorkflowRuntimeDiagnosticPhaseHint::RuntimeModelLoad) && error.to_string().contains("pytorch_worker_model_load_failed")
+                error.code() == pantograph_workflow_service::WorkflowErrorCode::InternalError
+                    && error
+                        .to_string()
+                        .contains("pytorch_worker_model_load_failed")
+                    && error.to_string().contains("header too large")
             };
             let public_error = json!({"code":format!("{:?}",error.code()),"phase":format!("{:?}",error.runtime_diagnostic_phase_hint()),"message":error.to_string()});
             save(root, "public-negative-result.json", &public_error)?;
             Ok(
-                json!({"scope":"runtime_effect_observation_only","runtime_effect_observed":true,"public_result_projection_qualified":public_projection,"public_error":public_error,"observation":observation}),
+                json!({"scope":"public_cpu_text_terminal_integration","runtime_effect_observed":true,"public_result_projection_qualified":public_projection,"public_error":public_error,"observation":observation}),
             )
         }
         Err(error) => Err(error.into()),
@@ -709,8 +713,8 @@ async fn main() -> ProbeResult<()> {
         Ok(Err(error)) => json!({"error":error.to_string()}),
         Err(_) => json!({"error":"probe watchdog expired"}),
     };
-    let passed = matches!(result, Ok(Ok(_))) && cleanup_ok;
     let public_projection = output["public_result_projection_qualified"] == true;
+    let passed = matches!(result, Ok(Ok(_))) && cleanup_ok && public_projection;
     let report = json!({"probe_passed":passed,"runtime_effect_observed":matches!(result,Ok(Ok(_))),"public_result_projection_qualified":public_projection,"integration_passed":passed && public_projection,"stage":stage,"scenario":args[2],"synthetic":synthetic,"t3_qualified":false,
         "cleanup_ok":cleanup_ok,"shutdown_ok":matches!(shutdown,Ok(Ok(()))),"output":output,"diagnostics_may_be_truncated":events.len()==500,
         "limits":{"device":"cpu","max_new_tokens":MAX_NEW_TOKENS,"temperature":TEMPERATURE,"max_model_bytes":600*1024*1024,"timeout_ms":60000,"max_loaded_sessions":1}});
