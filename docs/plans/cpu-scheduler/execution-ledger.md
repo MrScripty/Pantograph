@@ -384,3 +384,28 @@ coordination; parent owns its later disposition after reachable handoff.
   [Runtime Separation](https://github.com/MrScripty/Pantograph/actions/runs/38492288359).
   Remote main remained the recorded merge; no code/evidence change or new
   qualification claim. The approved follow-up records these final observations.
+
+
+## 2026-10-19 — bounded M3 admission
+
+- Fetched current main `4aec0d5c4927a6af2832d40e224be5c2136fc9ef`; original
+  clean `work` checkout at `ca9edde6` remains untouched. Created separate
+  `feat/cpu-scheduler-m3-bounded-service` worktree `/workspace/pantograph-m3`.
+  No applicable AGENTS.md exists; standards `188beda1` read from exact checkout.
+- Independent GPT-6.1 Sol / High reviewer `m3_design_review` admitted the M3
+  contract before production edits. It identified a concrete stale-key-ticket
+  starvation counterexample: three backlogged keys can cycle forever ahead of
+  a fourth. The contract refreshes service-order tickets per grant separately
+  from member FIFO, and includes an explicit regression trace.
+- Opt-in post-Ready entitlement opportunities use existing authenticated
+  client/bucket session attribution, 64 pending registrations / 32 units and
+  two other-unit bypasses. Active-run base priority applies at this boundary;
+  existing per-session priority/FIFO/starvation/warm policy stays intact.
+- Preparation is outside the serial permit in this opt-in only. Its CheckOnly
+  readiness/non-runtime progression grants no native execution authority. The
+  waiter bound does not bound all supervised preparations. Source review must
+  prove RAII removal, no lost wakeups, checked identities, final representative
+  fences and turn retention through serial scope release/poison.
+- M3-C1..C5 remain pending. No native cohort, speedup/default, M4 or PR75
+  adapter/model work is claimed. User authorizes focused PR publication; parent
+  coordinates integration and no merge/branch deletion is performed.
