@@ -331,13 +331,19 @@ Existing directories,
 fixture overrides, missing evidence and log overflow refuse; failed cohorts
 are preserved and never restarted to obtain a desired result.
 
-A successful exit covers only `main-counts-v1+pressure`. Full M4-C4 remains
-Partial while separately admitted native cancellation, public Running
-cancellation and controlled fault evidence is pending. No missing phase is
+A successful exit covers only `main-counts-v2+pressure`. Full M4-C4 requires
+independent review together with the separately preserved cancellation and
+controlled fault evidence. The two once-only cancellation cases at `96691fd7`
+are not invoked by this producer. No missing phase is
 assigned zero, and no general speedup, useful embedding quality, default
 activation or M4 acceptance follows from this invocation.
 
 The original frozen `7139b2ad` main attempt exited after its first A result
 because diagnostic projections had not been advanced. Its source, binaries and
-failed evidence remain preserved. The prospective projection/readback and
-lifecycle-oracle repairs authorize no main retry or continuation.
+failed evidence remain preserved. Parent subsequently authorized exactly one new
+`m4-serial-residency-v2-readback` main cohort after independent causal-fix review
+and a deterministic saved-event/artifact replay proves all required projections
+are populated. See the [prospective protocol](../../docs/plans/cpu-scheduler/reports/2026-10-20-m4-main-v2.md).
+All original retention/switching/pressure/3-versus-5 criteria and budgets remain
+binding. This admission does not restart or continue the original failed owner,
+and allows no winner retry or new cancellation execution. Publication stays held.

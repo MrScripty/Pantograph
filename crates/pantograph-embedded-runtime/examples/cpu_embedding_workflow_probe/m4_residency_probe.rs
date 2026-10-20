@@ -13,7 +13,7 @@ use pantograph_workflow_service::*;
 use std::process::Command;
 use std::sync::Mutex;
 
-const PROTOCOL: &str = "m4-serial-residency-v1";
+const PROTOCOL: &str = "m4-serial-residency-v2-readback";
 const FIXED_WORK: [usize; 5] = [8, 8, 12, 12, 8];
 const MIB: u64 = 1024 * 1024;
 const RAM_CAPACITY: u64 = 1104 * MIB;
@@ -59,6 +59,14 @@ impl log::Log for NativeLog {
         );
     }
     fn flush(&self) {}
+}
+
+fn require_evidence_log_capacity() -> ProbeResult<()> {
+    let overflow = NATIVE_LOG.0.lock().expect("M4 evidence log").overflow;
+    if overflow {
+        return Err("M4 bounded evidence collector overflow; cohort stopped".into());
+    }
+    Ok(())
 }
 
 fn workflow(width: usize) -> String {
@@ -658,6 +666,7 @@ async fn owner_protocol(
     ram: u64,
     pressure: bool,
 ) -> ProbeResult<Value> {
+    require_evidence_log_capacity()?;
     let log_start = NATIVE_LOG.0.lock().expect("M4 evidence log").rows.len();
     let root = top.join(name);
     let facade = construct(&root, ram).await?;
@@ -690,6 +699,7 @@ async fn owner_protocol(
                 "diagnostics_before":diagnostics_before,"diagnostics_after":facade.residency_diagnostics()});
             save(&root,&format!("step-{index}.json"),&row)?;
             runs.push(row);
+            require_evidence_log_capacity()?;
             if pressure {
                 if outcome.is_ok() {return Err("M4 fixed pressure request unexpectedly executed".into());}
                 let diagnostics=facade.residency_diagnostics().ok_or("M4 diagnostics missing")?;
@@ -761,6 +771,7 @@ async fn owner_protocol(
     save(&root, "owner-result.json", &result)?;
     // Drop all old facade/Pumas/native owners before constructing the next one.
     drop(facade);
+    require_evidence_log_capacity()?;
     protocol?;
     shutdown?;
     let events = events?;
@@ -1115,7 +1126,7 @@ fn verify_native_records(result: &Value, events: &[Value], pressure: bool) -> Pr
             );
         }
         return Ok(
-            json!({"scope":"main-counts-v1+pressure","actual_pressure_refusal_before_native":true,
+            json!({"scope":"main-counts-v2+pressure","actual_pressure_refusal_before_native":true,
             "actual_task_claims":plans,"native_actions":0}),
         );
     }
@@ -1336,7 +1347,7 @@ fn verify_native_records(result: &Value, events: &[Value], pressure: bool) -> Pr
         verify_charges(&stop["charged_after_ack"], true)?;
     }
     Ok(
-        json!({"scope":"main-counts-v1+pressure","raw_loads":cold.len(),"raw_retains":retained.len(),
+        json!({"scope":"main-counts-v2+pressure","raw_loads":cold.len(),"raw_retains":retained.len(),
         "raw_native_forwards_and_drains":drained.len(),"raw_task_registry_acks":acknowledgements.len(),
         "raw_switch_stops":switches.len(),"raw_final_stops":shutdown.len(),"forward_and_drain_ns":forward_ns,
         "native_instances":seen_instances,"actual_task_claims":plans,"latency_or_speedup_claim":false}),
@@ -1359,8 +1370,8 @@ pub(super) async fn qualify(root: &Path) -> ProbeResult<()> {
         "resource_declarations":{"ram_capacity_bytes":RAM_CAPACITY,"vram_capacity_bytes":VRAM_CAPACITY,
             "resident_ram_bytes":RESIDENT_RAM,"resident_vram_bytes":0,"guard_load_peak_ram_bytes":LOAD_PEAK_RAM,
             "guard_load_peak_vram_bytes":0,"cpu_threads":1,"estimates_are_operator_declarations":true},
-        "native_postload_cancellation_case":"pending separately reviewed sealed-facade/native protocol; not silently substituted",
-        "public_running_postdrain_cancellation_case":"pending reviewed observation barrier; no racing cancellation claim",
+        "native_postload_cancellation_case":"separate once-only 96691fd7 cancellation supplement; not invoked by this producer",
+        "public_running_postdrain_cancellation_case":"separate once-only 96691fd7 public Running cancellation supplement; not invoked by this producer",
         "controlled_fault_cases":"supporting named native/registry tests; not main-cohort native failure",
         "retries":0,"model_acquisition_bytes":0,"performance_claim":false,"default_activation":false}),
     )?;
@@ -1419,11 +1430,11 @@ pub(super) async fn qualify(root: &Path) -> ProbeResult<()> {
         "native-and-service-log.json",
         &json!({"rows":log.rows,"overflow":log.overflow,"bytes":log.bytes}),
     )?;
-    let report = json!({"protocol":PROTOCOL,"scope":"main-counts-v1+pressure","main_and_pressure_protocols_ok":execution.is_ok(),
+    let report = json!({"protocol":PROTOCOL,"scope":"main-counts-v2+pressure","main_and_pressure_protocols_ok":execution.is_ok(),
         "execution_error":execution.as_ref().err().map(ToString::to_string),"owners":outcomes,"log_overflow":log.overflow,
         "native_cohort_retries":0,"native_forward_and_drain_timing":"actual native receipt scalar at admitted submission-to-join/drain seam",
-        "cancellation_qualification":"pending separately admitted native and public Running observation cases",
-        "M4_C4_acceptance":"partial; fixed counts do not replace pending cancellation/fault qualification"});
+        "cancellation_qualification":"separate two once-only cases from source 96691fd7; no invocation by this producer",
+        "M4_C4_acceptance":"bounded/provisional; combined evidence awaits independent review; producer success is not M4 acceptance"});
     save(root, "m4-result.json", &report)?;
     if log.overflow {
         return Err("M4 evidence log bound exceeded".into());
@@ -1435,6 +1446,196 @@ pub(super) async fn qualify(root: &Path) -> ProbeResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn saved_first_a_metadata_readback_preflight() -> ProbeResult<()> {
+        // Replay only the already recorded first A call. This constructs a
+        // metadata WorkflowService, never a facade, gateway, runtime or model.
+        // Passing cannot turn the original failed five-call cohort into a pass.
+        let archive = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(
+            "../../docs/plans/cpu-scheduler/reports/m4-main-failure-v1/original-main-evidence.tar.gz",
+        );
+        let original_archive = std::fs::read(&archive)?;
+        let directory = tempfile::tempdir()?;
+        let root = directory.path();
+        let extraction = Command::new("python3")
+            .arg("-c")
+            .arg(r#"import hashlib,pathlib,sys,tarfile
+archive=pathlib.Path(sys.argv[1]); root=pathlib.Path(sys.argv[2])
+assert hashlib.sha256(archive.read_bytes()).hexdigest()=='d6780daaa309f1e00b31f03e695c3bc5bed1ad2633ff68fd224bb276581b85fc'
+names=[
+ 'app-data/serial-cpu-diagnostics.db',
+ 'app-data/serial-cpu-artifacts/manifest.json',
+ 'app-data/serial-cpu-artifacts/bodies/workflow-io-84a3b342c4aea45eb1ad7e694c7f2d526a543bcd3ffbc59603eb7e301fbe790a.bin',
+ 'app-data/serial-cpu-artifacts/bodies/workflow-io-c956b745ba9bfdf83b1a417a88f4f53ff430c43eaf26c4aad57214c18cf2f5dd.bin',
+ 'step-0.json','owner-result.json','events.json']
+pairs=[('main/retained/'+name,name) for name in names]
+pairs.append(('main/fixture-admission.json','fixture-admission.json'))
+pairs.append(('main-execution-status.json','original-main-execution-status.json'))
+with tarfile.open(archive) as source:
+ total=0
+ for source_name,destination_name in pairs:
+  member=source.getmember(source_name)
+  assert member.isfile() and member.size<=1024*1024
+  total+=member.size
+  assert total<=1024*1024
+  body=source.extractfile(member)
+  assert body is not None
+  data=body.read()
+  assert len(data)==member.size
+  destination=root/destination_name
+  destination.parent.mkdir(parents=True,exist_ok=True)
+  destination.write_bytes(data)
+print('Extracted nine fixed metadata/artifact members; no model files or execution')
+"#)
+            .arg(&archive)
+            .arg(root)
+            .output()?;
+        assert!(
+            extraction.status.success(),
+            "metadata fixture extraction failed: {}",
+            String::from_utf8_lossy(&extraction.stderr)
+        );
+        let ledger_path = root.join("app-data/serial-cpu-diagnostics.db");
+        let ledger = SqliteDiagnosticsLedger::open(&ledger_path)?;
+        let original_events = ledger.diagnostic_events_after(0, 500)?;
+        assert_eq!(original_events.len(), 12);
+        let saved: Value = serde_json::from_slice(&std::fs::read(root.join("step-0.json"))?)?;
+        let response: WorkflowRunResponse = serde_json::from_value(saved["response"].clone())?;
+        let artifacts = root.join("app-data/serial-cpu-artifacts");
+        let manifest: Value =
+            serde_json::from_slice(&std::fs::read(artifacts.join("manifest.json"))?)?;
+        let policy: ArtifactPolicy = serde_json::from_value(manifest["policy"].clone())?;
+        let service = WorkflowService::with_ephemeral_attribution_store()?
+            .with_diagnostics_ledger(SqliteDiagnosticsLedger::open(&ledger_path)?)
+            .with_artifact_store(ArtifactStore::open_with_default_policy(&artifacts, policy)?);
+        let query = || WorkflowRunInspectionQueryRequest {
+            workflow_run_id: response.workflow_run_id.clone(),
+            artifact_limit: Some(128),
+            projection_batch_size: Some(500),
+        };
+        let stale = service.workflow_run_inspection_query(query())?;
+        assert!(stale.run.is_none());
+        assert!(stale.node_statuses.is_empty());
+        assert!(stale.io_artifacts.is_empty());
+        let refresh = service.workflow_diagnostics_projection_refresh(
+            WorkflowDiagnosticsProjectionRefreshRequest {
+                projections: vec![
+                    WorkflowDiagnosticsProjectionKind::RunDetail,
+                    WorkflowDiagnosticsProjectionKind::NodeStatus,
+                    WorkflowDiagnosticsProjectionKind::IoArtifact,
+                ],
+                workflow_run_id: Some(response.workflow_run_id.clone()),
+                workflow_id: Some(workflow(8)),
+                reason: WorkflowDiagnosticsProjectionRefreshReason::ExplicitRefresh,
+                batch_size: 500,
+            },
+        )?;
+        let boundary = read_projection_boundary(root)?;
+        assert_eq!(
+            boundary["required_cursors"],
+            json!({"run_detail":12,"node_status":8,"io_artifact":12})
+        );
+        verify_projection_catchup(&refresh, &boundary)?;
+        let visible = service.workflow_run_inspection_query(query())?;
+        assert_eq!(
+            visible.run.as_ref().unwrap().status,
+            pantograph_diagnostics_ledger::RunListProjectionStatus::Completed
+        );
+        // Runtime scheduler attempts are not native owner NodeStatus evidence.
+        // The actual infer attempt is joined separately by the native oracle.
+        assert_eq!(visible.node_statuses.len(), 1);
+        assert!(visible
+            .node_statuses
+            .iter()
+            .all(|node| node.node_id != "infer"));
+        assert!(visible.node_statuses.iter().all(|node| node.status
+            == pantograph_diagnostics_ledger::NodeExecutionProjectionStatus::Completed));
+        assert_eq!(
+            visible
+                .node_statuses
+                .iter()
+                .map(|node| node.node_id.as_str())
+                .collect::<std::collections::BTreeSet<_>>(),
+            ["vectors"].into_iter().collect()
+        );
+        let outputs: Vec<_> = visible
+            .io_artifacts
+            .iter()
+            .filter(|artifact| {
+                artifact.producer_node_id.as_deref() == Some("vectors")
+                    && artifact.producer_port_id.as_deref() == Some("vector")
+            })
+            .collect();
+        assert_eq!(outputs.len(), 2); // WorkflowOutput and NodeOutput share a body.
+        assert_eq!(
+            outputs
+                .iter()
+                .map(|artifact| artifact.artifact_role.as_str())
+                .collect::<std::collections::BTreeSet<_>>(),
+            ["node_output", "workflow_output"].into_iter().collect()
+        );
+        assert_eq!(
+            outputs[0].payload_artifact_id,
+            outputs[1].payload_artifact_id
+        );
+        assert!(outputs
+            .iter()
+            .all(|artifact| artifact.workflow_run_id.as_str() == response.workflow_run_id));
+        let body = service.read_artifact_body(ArtifactReadRequest {
+            artifact_id: outputs[0].payload_artifact_id.clone(),
+            byte_range_start: None,
+            byte_range_end_exclusive: None,
+        })?;
+        assert_eq!(body.body.len(), 160);
+        assert_eq!(
+            blake3::hash(&body.body).to_hex().as_str(),
+            "c9a9095a9c811810af9136c65eb421a16b9bc52e30145051fb02e05b5f2280b6"
+        );
+        let vector: Value = serde_json::from_slice(&body.body)?;
+        assert_eq!(vector, response.outputs[0].value);
+        let fixture: Value =
+            serde_json::from_slice(&std::fs::read(root.join("fixture-admission.json"))?)?;
+        verify_vector(&response, &fixture["models"]["bert-8"])?;
+        let mut first_a: Value =
+            serde_json::from_slice(&std::fs::read(root.join("owner-result.json"))?)?;
+        assert_eq!(first_a["fixed_work"], json!(FIXED_WORK));
+        assert_eq!(first_a["execution_ok"], false);
+        assert_eq!(
+            first_a["execution_error"],
+            "M4 retained vector artifact missing"
+        );
+        assert_eq!(first_a["rows"].as_array().unwrap().len(), 1);
+        // This local single-call view is only a regression input. Neither the
+        // archive nor its original failed fixed_work/outcome is changed.
+        first_a["fixed_work"] = json!([8]);
+        let events = collect_events(root)?;
+        let oracle = verify_native_records(&first_a, &events, false)?;
+        assert_eq!(oracle["raw_loads"], 1);
+        assert_eq!(oracle["raw_native_forwards_and_drains"], 1);
+        assert_eq!(oracle["raw_task_registry_acks"], 1);
+        assert_eq!(oracle["raw_final_stops"], 1);
+        assert_eq!(original_events, ledger.diagnostic_events_after(0, 500)?);
+        assert_eq!(original_archive, std::fs::read(&archive)?);
+        let original_status: Value = serde_json::from_slice(&std::fs::read(
+            root.join("original-main-execution-status.json"),
+        )?)?;
+        assert_eq!(original_status["exit_code"], 1);
+        assert_eq!(original_status["attempt"], 1);
+        assert_eq!(original_status["retry_allowed"], false);
+        println!(
+            "{}",
+            json!({"preflight":"saved-first-A-metadata-readback","scope":"metadata replay only; not main qualification",
+            "stale_projection_rows":{"run_detail":0,"node_status":0,"io_artifact":0},
+            "populated_projection_rows":{"run_detail":1,"node_status":visible.node_statuses.len(),"io_artifact":visible.io_artifacts.len()},
+            "populated_node_ids":visible.node_statuses.iter().map(|node|&node.node_id).collect::<Vec<_>>(),
+            "verified_relevant_cursors":boundary["required_cursors"],"vector_output_facts":outputs.len(),"distinct_vector_bodies":1,
+            "body_bytes":body.body.len(),"body_blake3":blake3::hash(&body.body).to_hex().to_string(),
+            "saved_single_call_native_oracle_joined":true,"new_native_invocations":0,"raw_events_unchanged":true,
+            "original_archive_unchanged":true,"original_main_exit_code":original_status["exit_code"],"original_main_attempt":original_status["attempt"]})
+        );
+        Ok(())
+    }
 
     fn owner(generation: u64) -> Value {
         json!({"loaded_instance":vec![7_u8;16],"loaded_profile":vec![8_u8;32],
@@ -1813,3 +2014,7 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "m4_residency_probe_aabba_tests.rs"]
+mod m4_residency_probe_aabba_tests;

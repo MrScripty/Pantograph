@@ -2,9 +2,9 @@
 
 **Plan status:** `Active` — M1/M2/M3 accepted; M4 implemented locally, native qualification Partial; M5/M6 unadmitted.
 
-**Current phase:** M4 metadata repair and two cancellation cases passed local review/checks; preserve the failed one-shot main protocol. Publication remains blocked.
+**Current phase:** One new M4 main protocol is prospectively authorized after causal-fix review and deterministic projection preflight; preserve the failed original protocol. Publication remains blocked.
 
-**Next slice:** Parent must prospectively coordinate any new main protocol after reviewing the preserved failure and repaired source. No main retry is authorized; M5/M6 remain unadmitted.
+**Next slice:** Review and freeze `m4-serial-residency-v2-readback`, then execute it once with unchanged retention/switching/pressure/3-versus-5 criteria. M5/M6 remain unadmitted.
 
 **Acceptance status:** M1 merged as PR73 in main `07b23d47`; the original
 negative cohort and the separately accepted C3 supplement remain unchanged.
@@ -653,6 +653,42 @@ the two cancellation cases with this metadata correction; their counts, owners,
 native boundaries and cancellation semantics remain as declared above. This
 correction cannot qualify missing main outcomes. See the
 [preserved main failure](reports/2026-10-20-m4-fixed-protocol.md).
+
+Prospective main-v2 continuation2026-10-20: parent explicitly authorized one new
+main-cohort protocol under the existing development authorization, after
+independent causal-fix review and deterministic preflight proving the required
+projections are populated. This replaces the previous prospective main hold only
+for `m4-serial-residency-v2-readback`; the original7139b2ad attempt and its failed
+results remain unchanged. The causal changes are explicit bounded diagnostics
+refresh/readback and realistic Started/Completed lease joins, not native policy,
+budget or acceptance changes. Replay saved original events/artifacts into isolated
+metadata storage without model execution; require stale inspection before refresh,
+then populated RunDetail/NodeStatus/IoArtifact and exact artifact/public/golden
+agreement after refresh. The existing no-model facade regression separately
+proves the guarded forwarder and unchanged raw evidence/native charges.
+
+After that preflight and independent review, freeze clean source/tree, the rebuilt
+release binary,14 original fixture hashes, exact input, numeric accounting and
+environment before any new main native invocation. Use fresh
+`/workspace/m4-main-v2/main` with its own registry. Retained and comparison work
+remain exactly `A,A,B,B,A`, one retained facade versus five fresh acknowledged
+comparison facades; pressure remains one fresh BERT8 request. Retained must show
+3loads/2retains/3stops, comparison5loads/5stops,10golden outputs, exact genuine
+lineages/phase records/task cleanup/full charges and fresh reload history. Pressure
+must refuse before load/forward/claim mutation. Existing resource declarations,
+actual per-kind MAX estimates,1CPU thread and all original oracles remain binding.
+No new cancellation execution is authorized or needed: the separate96691fd7
+two-case supplement is preserved with its disclosed observation limits.
+
+Stop before native work if any preflight/review/hash/environment gate fails.
+During execution, any original oracle error, unexpected Start/load/forward/count,
+missing phase, identity/charge mismatch, collector overflow or shutdown watchdog
+ends the protocol after supervised bounded teardown; no subsequent owner starts
+after uncertainty. Preserve all errors and raw data. Run this new cohort once;
+no winner retry, continuation of failed owners, post-outcome tuning or acceptance
+relaxation. Independent raw review decides qualified versus still-blocked claims.
+Publication/merge holds remain unchanged; parent owns any later consolidated
+destination/payload approval. See [main-v2 protocol](reports/2026-10-20-m4-main-v2.md).
 
 | Gate | Deciding evidence / acceptance |
 | --- | --- |
