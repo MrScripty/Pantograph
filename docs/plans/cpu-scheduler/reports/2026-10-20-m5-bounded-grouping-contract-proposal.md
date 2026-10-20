@@ -1,7 +1,11 @@
 # M5 bounded grouping contract proposal
 
-Status: review candidate. This proposal prepares the next shared-contract review;
-it does not admit M5 implementation or change milestone acceptance.
+Status: initial contract review checkpoint. The later explicit implementation
+continuation admits the production C1 delivery in the [current plan](../plan.md#m5-c1-bounded-grouping-kernel-admission)
+and [scheduler contract](../../../../crates/pantograph-scheduler/README.md).
+That admission supersedes this report's test-only delivery choice and adds full
+bounded raw-candidate preflight. Historical findings and C2 execution limits below
+remain relevant; this report does not establish overall M5 acceptance.
 
 The first M5 slice should define a bounded test-only grouping prototype and independent
 oracles before proposing a production advisory API or connecting it to execution. Runtime integration must settle how

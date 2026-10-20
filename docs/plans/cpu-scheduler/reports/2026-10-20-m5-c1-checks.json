@@ -1,0 +1,89 @@
+{
+  "scope": "M5 C1 pure nonserialized bounded grouping library policy",
+  "dependent_base": "bd66da4e0ba20d17f30a70140a448b55d57fce1e",
+  "accepted_m3_base": "b63aa3ebe5fab1531aef952a35ce74932bf76b30",
+  "source_sha256": {
+    "crates/pantograph-scheduler/src/batching.rs": "c0e0aa89c42e4f678dc3e418722177acaf7dc6b4c6b978aac929491cc94a3a50",
+    "crates/pantograph-scheduler/src/batching/bounded_grouping.rs": "8ffea8371221ea6dbe14baca0445213469d9c85eb31b0f7e39126e1456d46b21",
+    "crates/pantograph-scheduler/src/lib.rs": "77589f154feb18d90875092d7b39a70dd14655ec9433705d8bffe974330e13a1",
+    "crates/pantograph-scheduler/tests/bounded_grouping.rs": "f0b96db1d3f1d81f3a959c67ad05adfb20c64381c8257be1bbbebdbb632ec74f"
+  },
+  "toolchain": "Rust 1.92.0",
+  "build_jobs": 2,
+  "checks": [
+    {
+      "check": "rustfmt",
+      "command": [
+        "/workspace/pantograph-tools/cargo/bin/cargo",
+        "fmt",
+        "--package",
+        "pantograph-scheduler",
+        "--",
+        "--check"
+      ],
+      "exit_code": 0
+    },
+    {
+      "check": "scheduler-package",
+      "command": [
+        "/workspace/pantograph-tools/cargo/bin/cargo",
+        "test",
+        "--locked",
+        "--offline",
+        "-p",
+        "pantograph-scheduler"
+      ],
+      "exit_code": 0
+    },
+    {
+      "check": "scheduler-clippy",
+      "command": [
+        "/workspace/pantograph-tools/cargo/bin/cargo",
+        "clippy",
+        "--locked",
+        "--offline",
+        "-p",
+        "pantograph-scheduler",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0
+    },
+    {
+      "check": "scheduler-rustdoc",
+      "command": [
+        "/workspace/pantograph-tools/cargo/bin/cargo",
+        "doc",
+        "--locked",
+        "--offline",
+        "-p",
+        "pantograph-scheduler",
+        "--no-deps"
+      ],
+      "exit_code": 0
+    }
+  ],
+  "scheduler_tests": {
+    "passed": 222,
+    "failed": 0,
+    "ignored_existing_cost_probe": 1,
+    "new_public_api_cases": 17
+  },
+  "independent_contract_and_source_review": "approved; no blocking findings for C1 kernel and dependent draft only",
+  "initial_failures_preserved": [
+    "offline workspace dependency source unavailable before bounded successful preparation",
+    "two Clippy test-table type-complexity findings corrected without suppression"
+  ],
+  "claims_not_established": [
+    "workflow Ready grouping integration",
+    "per-member M3 execution qualification for a group",
+    "actual CPU grouped-versus-singleton comparison",
+    "performance improvement",
+    "overall M5 acceptance",
+    "M6",
+    "real-model qualification"
+  ],
+  "browser_status": "blocked separately; no sandbox/security setting change or denied log retry"
+}
