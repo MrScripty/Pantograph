@@ -689,3 +689,40 @@ coordination; parent owns its later disposition after reachable handoff.
   fabricatedStart/release. Reserved T4 file unchanged. No further workflow attempt
   is authorized. C5 publication/exact-headCI remains held; later consolidated
   destination/payload approval must cover finalsource/tests/rawreports scope.
+
+## 2026-10-20 — Composed main-v4 and combined local C4; C5 handoff held
+
+- Parent admitted reviewed PR84 preparation-refusal repair onto public M4base5b4:
+  e8d5d20d imports exact three-file patch;9ce4ca8a adds one model-free exact M4
+  before-event regression. Full workflow1020library+65integration, focused8+1,
+  pure producer12+4 and scoped/supported lint pass in retained logs; broad Candle
+  dependency lint exit101 remains explicit. Reserved T4/README/text paths unchanged.
+- Fresh v3 stopped BEFORE models because independent wrapper review rejected
+  post-spawn observer ownership. Failure marker/old runtime unchanged. Separately
+  reviewed cd085 runtime repair retained non-daemon owned supervision and actual
+  outer-exit/failure-artifact veto;11model-free fault methods pass. No silent fix
+  or reuse of stopped admission occurred.
+- Parent conditionally admitted one fresh v4 at unchanged9ce/tree05c47e8c and
+  release binary6335eedf. Independent source/binary/env/accounting/14fixture/
+  637history checks plus24-input final readback passed before formalverify0 and
+  exactly one native invocation. Actual wrappertool/child exit0, no errors/signals
+  or retained owner. RetainedAABBA3loads2retains5drains3stops;5freshcomparisons
+  eachload/drain/stop1. Ten goldens match maxabs5.960464477539063e-08. Pressure
+  refuses before effects and has exactly1Failedterminal, closes and emptyregistry.
+- Independent main review passes61rows/8nativeinstances/11runs/full native joins,
+  charges/phases/ACKs;360postfiles and637historical hashes unchanged. Combined
+  independent review accepts bounded LOCAL C4 using separate966 cancellation
+  evidence within original source-assisted limits. Native paths unchanged; no9ce
+  cancellation run or new metadata-terminal observation is invented. Original
+  v1/v2 failures and stoppedv3 remain preserved. No model reruns during review.
+- C5/overallM4 remain blocked. Read-only hosted evidence finds QualityGates failure
+  on both PR83/5b4 and PR84/9e: embedded600pass3fail2ignored, facadeTerminalFailed
+  and two cancellationElapsed results; awaited step/cause unknown (CPU-28).
+  Other three workflows pass only their actual published heads. Exact composed/
+  proposed-head CI is unavailable, and broad-suite reliability is unqualified.
+- Prepare only local focused fast-forward payload5b4..e8..9ce plus one evidence/
+  documentation commit; parent coordinates PR84 equivalent repair/dependency
+  order and any later publication authorization. No push/PRmetadata/merge/delete
+  or environment change occurred. Synthetic fixtures establish no trained-model,
+  production/default activation, GPU, native batching or performance qualification.
+- See [combined evidence and C5 handoff](reports/2026-10-20-m4-combined-c4.md).

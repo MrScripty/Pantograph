@@ -1,10 +1,10 @@
 # Plan: CPU Scheduler Completion And Fair Progress
 
-**Plan status:** `Active` — M1/M2/M3 accepted; M4 implemented locally, native qualification Partial; M5/M6 unadmitted.
+**Plan status:** `Active` — M1/M2/M3 accepted; M4 C4 locally qualified with source-assisted cancellation limits, C5 blocked; M5/M6 unadmitted.
 
-**Current phase:** Main-v2 ran once: retention/switch/reload/comparison evidence passes; pressure run/session finalization fails. M4-C4 remains Partial and publication remains blocked.
+**Current phase:** Independently reviewed main-v4 and separate cancellation evidence satisfy the original bounded local C4 contract. Overall M4 remains unaccepted: published-head embedded-runtime CI failures (CPU-28), exact composed/publication-head CI and coordinated integration remain C5 blockers.
 
-**Next slice:** Coordinate pre-Start preparation-error terminalization with the parent/T4 owner. Preserve both failed protocols and all criteria; no further native cohort is authorized. M5/M6 remain unadmitted.
+**Next slice:** Hand the exact local composition/evidence delta to the parent for narrow publication permission and PR83/PR84 equivalent-patch coordination. Retain all failed/stopped attempts and investigate CPU-28 under a separately bounded plan before overall acceptance. No further model work, repair expansion, publication or merge is authorized by this handoff. M5/M6 remain unadmitted.
 
 **Acceptance status:** M1 merged as PR73 in main `07b23d47`; the original
 negative cohort and the separately accepted C3 supplement remain unchanged.
@@ -15,6 +15,10 @@ Post-merge push CI is recorded separately in the
 [actual CPU report](reports/2026-10-13-m2-cpu-results.md) and historical
 [core report](reports/2026-10-13-m2-core.md).
 No default-policy or speedup claim.
+M3 is accepted at preserved exact head `b63aa3ebe5fab1531aef952a35ce74932bf76b30`.
+M4 local C4 combines main source9ce4ca8a with separate96691fd7 cancellation only
+within its disclosed source-assisted scope; C5 and overall M4 remain unaccepted.
+See the [combined C4 report](reports/2026-10-20-m4-combined-c4.md).
 
 **Execution ledger:** [execution-ledger.md](execution-ledger.md)
 
@@ -206,7 +210,7 @@ and write sets receive an independent review before their first code change.
 | M1 / Accepted; merged PR73 | Existing retained CPU first-two-Ready mode composes with ordinary hosted providers. Writes: embedded `workflow_service_composition.rs` and its focused tests; workflow `serial_ready.rs`, `task_execution_worker.rs`, relevant tests/exports; new focused native integration test and registration; bounded CPU example/guide only if needed for repeatable invocation; this plan's evidence. | M0; real resident CPU owner and retaining lease. Actual public sessions with two ready embeddings and retained outputs; measured sample-driven order; no injected candidate/readiness/timing/outputs; default and negative lifecycle regressions. Exact-head local gates, independent source/evidence review, normal CI. |
 | M2 / Accepted; merged PR76 | Bounded completion lookahead for a disclosed CPU cohort, initially advisory on actual work. Extend existing scheduler kernels, workflow capture and native evidence producer only. | M1; complete comparable evidence for every admitted alternative/transition, including unfinished obligations. Hand-computed independent oracles, work-budget refusal, missing/stale evidence, owner invalidation and actual CPU trace correspondence. No forecasts authorize execution. Promote only a separately qualified action subset; do not fill missing cold/transfer costs with zero. |
 | M3 / Accepted; PR81 unmerged | Explicit per-app/bucket service opportunities at an authoritative ready-work boundary, alongside priorities. Writes confined to scheduler/workflow queue/attribution integration and tests after its design review. | M1 and a bounded eligible population; use authenticated existing attribution, not arbitrary caller identities. Fixed modeled traces prove opportunity/order, then actual CPU sessions from two authenticated units prove progress under repeated foreground arrival and cancellation. No wall-clock guarantee for unbounded nonpreemptible jobs. Missing entitlement identity has an explicit owned disposition. |
-| M4 / Implemented locally; C4 Partial, C5 blocked | CPU residency actions improve a specified repeated-model workflow without violating cleanup; serial preparation/eviction only. Writes scheduler policy, registry/host action integration and tests after review. | M2 evidence, M3 fairness obligations where actions delay other apps. Measure load/unload/reload separately; full charge remains until acknowledged stop; pinned/live allocations protected. Actual two-model CPU alternation, pressure, cancellation and failed-stop cases. No overlapping loads, speculative lease release or automatic recovery of unknown execution. |
+| M4 / C4 locally qualified with source-assisted cancellation; C5 blocked | CPU residency actions improve a specified repeated-model workflow without violating cleanup; serial preparation/eviction only. Writes scheduler policy, registry/host action integration and tests after review. | M2 evidence, M3 fairness obligations where actions delay other apps. Measure load/unload/reload separately; full charge remains until acknowledged stop; pinned/live allocations protected. Actual two-model CPU alternation, pressure, separately scoped cancellation and controlled failed-stop cases. No overlapping loads, speculative lease release or automatic recovery of unknown execution. Overall M4 remains unaccepted; see combined local C4 report and unresolved C5 CI failures. |
 | M5 / Planned | Fair bounded grouping on the existing supported sequential CPU batch envelope; optimize only demonstrated scheduler overhead/reuse. Writes existing batch policy/broker and tests after review. | M3/M4 where grouping changes retention or fairness. Group 1..8 compatible members without waiting indefinitely, preserve per-member outputs/attempts/cancellation, mixed/incompatible tasks refuse grouping. Compare actual CPU grouped versus singleton runs. Label sequential envelope honestly; native/continuous execution remains Deferred unless independently capable and exercised. |
 | M6 / Planned | Qualified modes become an explicit documented host/application choice with truthful diagnostics and bounded rollback. | Accepted upstream milestones; exact consumer contract and UI/IPC/persistence routing reviewed if added. Real consuming-path evidence, regression and performance report, normal CI. Default activation is a separate decision; no main merge/deployment authorized. |
 
@@ -748,6 +752,27 @@ Re-plan triggers: writable gateway/ordinary execution escape, production path ou
 write set, inability to reserve full load/registration envelope, inability to preserve
 M3 final Start/turn ordering, unsupported native stop/load ownership or missing actual
 phase evidence. Do not call any of these gates accepted from planned tests alone.
+
+#### Combined local M4 C4 disposition (2026-10-20)
+
+The later independently admitted main-v4 attempt at clean9ce4ca8a passed once:
+retained AABBA3loads/2retains/3stops versus five fresh comparisons5loads/5stops,
+ten matching goldens, actual lineage/charge/phase/ACK checks, and complete pressure
+Failed terminal/session-close/empty-registry evidence. Independent combined review
+accepts the original bounded LOCAL C4 evidence contract with the separate96691fd7
+cancellation supplement's source-assisted limits. The unchanged native custody
+code supports transfer; neither cancellation case is claimed executed at9ce.
+Original failed v1/v2 and rejected-before-model v3 remain immutable failures.
+No model work was rerun during combination. This later disposition supersedes
+earlier current-status C4 Partial statements without rewriting their history.
+
+Overall M4 and C5 remain unaccepted. Published PR83 and PR84 Quality Gates both
+fail three embedded-runtime tests (facade TerminalFailed and two cancellation
+Elapsed results); cause is unestablished. Exact composed/publication-head CI is
+unavailable. Local isolated qualification does not resolve broad-suite reliability.
+Publication/integration requires separate narrow authorization and parent-owned
+PR84-equivalent-patch coordination; no additional production change is proposed.
+See [combined C4 evidence and C5 handoff](reports/2026-10-20-m4-combined-c4.md).
 
 ### M1 Evidence And Oracle Plan
 

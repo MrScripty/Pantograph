@@ -1,0 +1,51 @@
+{
+  "all_code_changes_between_sources": {
+    "crates/pantograph-embedded-runtime/examples/cpu_embedding_workflow_probe/m4_residency_probe.rs": {
+      "96691fd764ddf6af838e66c3b064cd34f419b1c5": "76140b04a4f5826b716d361f7f13a3a5d1d460e1",
+      "9ce4ca8aca004cf51782c59e91dd9fd7af5beed5": "73c35007e828c7abffd0b1d3e503087c15437b75"
+    },
+    "crates/pantograph-embedded-runtime/examples/cpu_embedding_workflow_probe/m4_residency_probe_aabba_tests.rs": {
+      "96691fd764ddf6af838e66c3b064cd34f419b1c5": null,
+      "9ce4ca8aca004cf51782c59e91dd9fd7af5beed5": "288485fadfd786c6d705e6ee020e0bd4f9df43e0"
+    },
+    "crates/pantograph-workflow-service/src/workflow/preparation_terminal_lifecycle_tests.rs": {
+      "96691fd764ddf6af838e66c3b064cd34f419b1c5": null,
+      "9ce4ca8aca004cf51782c59e91dd9fd7af5beed5": "fbb916038feb0e68885d59df51fcfbf3dbb1c486"
+    },
+    "crates/pantograph-workflow-service/src/workflow/serial_ready_worker_tests.rs": {
+      "96691fd764ddf6af838e66c3b064cd34f419b1c5": "756c40ff459271c9e0439360410a6a2fb5c847dc",
+      "9ce4ca8aca004cf51782c59e91dd9fd7af5beed5": "7b03b7fa1fc96dacff27dd2f7c801cc4ddf5b690"
+    },
+    "crates/pantograph-workflow-service/src/workflow/task_execution_worker.rs": {
+      "96691fd764ddf6af838e66c3b064cd34f419b1c5": "b56a939a810a3b35c9f90fa7dc617ba4e0461476",
+      "9ce4ca8aca004cf51782c59e91dd9fd7af5beed5": "53e4929d809b5e3aa20298249c8d3d850b85324a"
+    },
+    "crates/pantograph-workflow-service/src/workflow/workflow_run_finalization.rs": {
+      "96691fd764ddf6af838e66c3b064cd34f419b1c5": "f00c05badbf39160d56e37aa9b4bf6edee6c63b8",
+      "9ce4ca8aca004cf51782c59e91dd9fd7af5beed5": "a76f19fad48a930a65bd5e657dd32e4fb75daf06"
+    }
+  },
+  "equivalent_repair_commit": "e8d5d20dd78cb93cfb08b1ea2d7b214ae8b093d1",
+  "exact_m4_model_free_regression_commit": "9ce4ca8aca004cf51782c59e91dd9fd7af5beed5",
+  "no_model_execution_in_combined_review": true,
+  "pr84_evidence_head": "9e068bbc2a040f20de88dfc70d914339cd5a8910",
+  "pr84_source": "a8a9f1055910be2999f0b3ab4c138be39c15087d",
+  "public_pr83_base": "5b4fc6dda17342e6b27f90ebb852ffd2b7ea47eb",
+  "qualified_main_source": "9ce4ca8aca004cf51782c59e91dd9fd7af5beed5",
+  "qualified_main_tree": "05c47e8ca113fcd400d9c21bf9b6eb121555f1bc",
+  "repair_patch_sha256": "a259c5226d666f1070bbcbc746b9e7e1633116f9acf7bd8677a5700bef893daf",
+  "separate_cancellation_source": "96691fd764ddf6af838e66c3b064cd34f419b1c5",
+  "separate_cancellation_tree": "00103d81a0926035d5a2127239a86db8d7d959a6",
+  "unchanged_native_custody_and_case_source_blobs": {
+    "crates/inference/src/gateway.rs": "0bb96250c631a037d81df5890e86bced219d0fb7",
+    "crates/inference/src/gateway_cpu_residency.rs": "ec6c1985ffc306b9568d99be1d88e438dc8c4714",
+    "crates/inference/src/gateway_cpu_warm_attempt.rs": "19c260b9865344d650935ea1769b13ff6423c5cf",
+    "crates/pantograph-embedded-runtime/src/lib_tests/native_serial_residency_tests.rs": "0b255cdc1ee0c1ca17a3abc226bf45fb3c651837",
+    "crates/pantograph-embedded-runtime/src/serial_cpu_port.rs": "b495eb6cec27d7ee404300e98c8f254053f74347",
+    "crates/pantograph-embedded-runtime/src/serial_cpu_residency.rs": "f21bfbe3aba7a26f373bd831333e9c3b1d6722d5",
+    "crates/pantograph-embedded-runtime/src/serial_cpu_residency_tests.rs": "830c5c781c00165b42a5acc67df609deb3d0d27c",
+    "crates/pantograph-runtime-registry/src/execution_custody.rs": "5c3f64eb58168bb38fdec8de48eb4708d3896462",
+    "crates/pantograph-runtime-registry/src/last_lease_eviction.rs": "bb77d5c3270b7747fd037cdf802b9244efcce5d0",
+    "crates/pantograph-runtime-registry/src/retained_cleanup_tests.rs": "0b281f821c10d53c114ba28ed44e8b26bf2784b1"
+  }
+}
