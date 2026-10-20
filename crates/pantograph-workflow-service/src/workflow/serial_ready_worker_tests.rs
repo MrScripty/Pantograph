@@ -904,6 +904,109 @@ mod serial_ready_tests {
     }
 
     #[tokio::test]
+    async fn serial_residency_preparation_refusal_finishes_run_but_preserves_native_fence() {
+        use pantograph_diagnostics_ledger::{
+            DiagnosticEventKind, DiagnosticsLedgerRepository, RunTerminalStatus,
+            SqliteDiagnosticsLedger,
+        };
+        let port = CpuPort::new();
+        port.fail_preparation.store(true, Ordering::Release);
+        let service = Arc::new(
+            WorkflowService::new_serial_ready_cpu(port.clone(), residency_config())
+                .with_runtime_dispatch_candidate_provider(Arc::new(SyntheticCpuCandidateProvider))
+                .with_diagnostics_ledger(SqliteDiagnosticsLedger::open_in_memory().unwrap()),
+        );
+        let id = "run.residency.refused.terminal";
+        let session = attributed_single_cpu_run(&service, id);
+        let environment =
+            WorkflowTaskExecutionWorkerRuntimeBranchEnvironment::new(service.clone(), test_host());
+        let command = runtime_branch_command_for_session_run(&session, id);
+        let registry = WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistry::new();
+        let (responder, receiver) =
+            WorkflowTaskExecutionWorkerRuntimeBranchCompletionResponder::channel();
+        let registration = registry.register_workflow_run(&command, responder).unwrap();
+        drive_runtime_branch_continuations(
+            &environment,
+            &registry,
+            vec![WorkflowRuntimeBranchContinuation {
+                command,
+                registration,
+            }],
+        )
+        .await;
+        let WorkflowTaskExecutionWorkerOutcome::RuntimeBranchFailed(failed) =
+            receiver.await.unwrap()
+        else {
+            panic!("expected serial preparation refusal")
+        };
+        assert!(failed
+            .error_message
+            .contains("controlled native preparation failure"));
+        assert!(failed.diagnostics.is_empty(), "{failed:?}");
+        assert_eq!(port.preparations.lock().unwrap().len(), 1);
+        assert!(port.requests.lock().unwrap().is_empty());
+        assert!(port.cleanups.lock().unwrap().is_empty());
+        assert_eq!(registry.active_responder_count(), 0);
+        // Preparation refuses before claiming the queued event or creating Start.
+        assert_eq!(
+            runtime_branch_event_state(
+                &service,
+                &WorkflowRuntimeBranchTaskEventId::parse(format!("event.{id}.0")).unwrap()
+            ),
+            WorkflowRuntimeBranchTaskEventState::Ready
+        );
+        let events = service
+            .diagnostics_ledger_guard()
+            .unwrap()
+            .diagnostic_events_after(0, 500)
+            .unwrap();
+        assert!(!events
+            .iter()
+            .any(|event| event.event_kind
+                == DiagnosticEventKind::SchedulerTaskAttemptLifecycleChanged));
+        let terminals = preparation_run_terminals(&service, id);
+        assert_eq!(terminals.len(), 1);
+        assert_eq!(terminals[0].status, RunTerminalStatus::Failed);
+        assert!(terminals[0]
+            .error
+            .as_ref()
+            .unwrap()
+            .contains("controlled native preparation failure"));
+        assert!(service
+            .session_store_guard()
+            .unwrap()
+            .active_run_context(&session, id)
+            .is_err());
+        assert!(service
+            .session_store_guard()
+            .unwrap()
+            .list_queue(&session)
+            .unwrap()
+            .is_empty());
+        assert!(
+            service
+                .close_workflow_execution_session(
+                    &WorkerHost,
+                    WorkflowExecutionSessionCloseRequest {
+                        session_id: session
+                    },
+                )
+                .await
+                .unwrap()
+                .ok
+        );
+        // Finishing a workflow supplies no native cleanup ACK or new admission.
+        assert!(service
+            .serial_ready_mode
+            .as_ref()
+            .unwrap()
+            .enter()
+            .await
+            .is_err());
+        assert_eq!(service.serial_service_pending_for_test().unwrap(), 0);
+    }
+
+    #[tokio::test]
     async fn serial_residency_failed_preparation_fences_next_turn_without_forward() {
         let port = CpuPort::new();
         port.fail_preparation.store(true, Ordering::Release);
