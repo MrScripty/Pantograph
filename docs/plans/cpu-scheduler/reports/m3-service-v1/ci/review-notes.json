@@ -1,0 +1,16 @@
+{
+  "published_head": "b63aa3ebe5fab1531aef952a35ce74932bf76b30",
+  "published_tree": "defca3d306f4824726fa6094b2bba04a3128e570",
+  "pr_merge_commit": "a9292d48a49ac05ddec711397159077b3e68f9f0",
+  "pr_merge_tree": "defca3d306f4824726fa6094b2bba04a3128e570",
+  "merge_tree_equals_published_head": true,
+  "substantive_jobs_successful": 15,
+  "quality_summary_job": 118394536482,
+  "quality_summary_observed": "queued/null",
+  "accepted": false,
+  "reviewer": "independent GPT-6.1 Sol High m3_source_review",
+  "review_scope": "actual checkout/tree, relevant raw CI logs including actual advisory audit results, retained original failed oracle and successful read-only reanalysis, all evidence hashes and clean frozen head",
+  "review_conclusion": "C1-C4 satisfied; C5 and M4 production gate pending actual Quality summary success",
+  "normal_ci_scope": "existing repository workflows; no additional GPU/native batching/model-quality/performance qualification",
+  "m3_branch_changed": false
+}

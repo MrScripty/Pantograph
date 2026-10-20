@@ -2,9 +2,9 @@
 
 **Plan status:** `Active` — M1/M2 accepted; M3 verifying; bounded M4 contract admitted with implementation dependency pending; M5/M6 unadmitted.
 
-**Current phase:** M4 admitted contract/fixture checkpoint; production blocked on parent-confirmed M3 acceptance.
+**Current phase:** M3 final published-head acceptance review; independent M4 fixtures verified, production gate pending.
 
-**Next slice:** Publish/checkpoint the admitted M4 contract/fixture package; parent-confirmed M3 acceptance is required before its production slice.
+**Next slice:** After observed PR81 Quality summary success and recorded M3 acceptance, implement the admitted M4 native residency capability and its ownership tests. Until then, fixture work only.
 
 **Acceptance status:** M1 merged as PR73 in main `07b23d47`; the original
 negative cohort and the separately accepted C3 supplement remain unchanged.
@@ -381,8 +381,9 @@ traces decide acceptance; there is no speedup, semantic-quality or latency claim
 
 Current phase: admitted contract and verified fixture checkpoint. Independent
 GPT-6.1 Sol High source/design reviewers admitted this bounded contract. Exactly
-one next slice: publish the contract/fixture checkpoint, then wait for the
-parent-confirmed M3 acceptance gate before production edits.
+one next slice: after observed exact-head M3 acceptance, implement the native
+residency capability and ownership tests. That dependency remains pending; no
+production edits are allowed while final Quality summary is queued.
 No native cohort or M4 implementation is claimed yet.
 
 #### Binding decisions and authority
@@ -462,6 +463,11 @@ No native cohort or M4 implementation is claimed yet.
     accessor, writable WorkflowService/shared-extensions/registry alias, equivalent
    generic execution escape or caller-supplied gateway Arc. The constructor owns
    mutable infrastructure; public methods return values/read-only snapshots.
+   Retain one WorkflowSessionExecutionRuntime owner from construction for every
+   run/resume and shutdown; generic embedded helpers create new owners per call
+   and are not used. Keep generic auto-resume disabled in this explicit mode;
+   resume explicitly through that retained owner. Diagnostic projections contain
+   scalar values, never writable atomic-generation evidence.
    Internal hosted composition may reuse
     read-only facts but must not expose ordinary execution/shutdown escape routes.
     Shutdown closes facade admission and auto-resume, invokes existing
@@ -489,9 +495,10 @@ is needed for the retain/switch decision; the native residency owner contains it
 | --- | --- |
 | Native lifecycle | `crates/inference/src/gateway_cpu_residency.rs` and `gateway_cpu_residency_tests.rs` (new): linear idle capability, supervised load-only/stop. `gateway.rs`: module registration and bounded private delegation only; no text adapter/model changes. `gateway_cpu_warm_attempt.rs`: consumed receipt/capability handoff. Existing `gateway_cpu_warm_attempt_tests.rs` and `gateway_cpu_last_lease_eviction.rs` only for matching helper reuse/regressions. |
 | Registry | `crates/pantograph-runtime-registry/src/retained_cleanup_tests.rs`: actual-load-started guard custody, sole-lease stop and delayed-frame regressions. Existing `execution_custody.rs` / `last_lease_eviction.rs` only if a documented narrowly shared helper/comment is required. No new idle module, state/token domain, generic reclaim or recovery policy. A missing invariant triggers re-admission. |
-| Serial host contract | `crates/pantograph-runtime-host-contracts/src/serial_runtime_host.rs`: additive preparation method returning actual prepared owner; default unsupported. No serialized IPC/schema change. |
+| Serial host contract | `crates/pantograph-runtime-host-contracts/src/serial_runtime_host.rs`: additive preparation request/validator/method returning actual prepared owner; default unsupported. `src/lib.rs` only its Rust export. No serialized IPC/schema change. |
 | Workflow | `crates/pantograph-workflow-service/src/workflow/serial_ready.rs`, `task_execution_worker.rs`, `serial_ready_worker_tests.rs`: explicit mode, prepare under granted scope, final proof/owner fence, history invalidation. `workflow.rs` only required exports. M3 policy and session runner ordering are unchanged. |
 | Embedded owner/composition | New `crates/pantograph-embedded-runtime/src/serial_cpu_residency.rs` and `serial_cpu_residency_tests.rs`: private owning facade/lifecycle. `serial_cpu_port.rs`, `serial_cpu_port_tests.rs`: capability transfer and prepared-owner query. `workflow_service_composition.rs`, `embedded_workflow_host.rs`, `embedded_runtime_lifecycle.rs`, `lib.rs` only bounded explicit owner wiring/ephemeral-session admission/owned shutdown; no generic runtime default behavior. |
+| Model metadata adapters | `crates/pantograph-embedded-runtime/src/runtime_host_package_facts.rs`, `runtime_host_load_target.rs`, `runtime_host_load_target_tests.rs`: additive crate-private model-reference resolvers and parity/negative tests, independently admitted2026-10-20 before source changes. Existing request wrappers delegate with their selected decision model/runtime family; legacy trait/mock behavior unchanged. |
 | Native evidence | New `crates/pantograph-embedded-runtime/src/lib_tests/native_serial_residency_tests.rs` plus registration in `lib_tests/workflow_run_execution_tests.rs`. New example module `examples/cpu_embedding_workflow_probe/m4_residency_probe.rs` and fixture-only `m4_fixture_contract.py`; root probe and `serial_ready_probe.rs` wiring only. `examples/cpu-embedding-demo/README.md` and this plan/ledger/issues/report evidence. |
 
 Reserved: T4 `runtime_branch_run_finalization.rs`, all CPU text probes/docs,
@@ -499,6 +506,30 @@ PR75 adapter/model code, PR79 root README, default policies, dependency updates,
 model acquisition and generated/native UI files. Parent owns cross-branch integration.
 The new facade must not force semantic edits outside this write set; if it does,
 record a contract re-plan rather than silently adding adapters.
+
+#### Preparation interface amendment (2026-10-20; independently admitted)
+
+Existing embedded metadata wrappers require a Started/selected-dispatch request,
+although their PUMAS owners resolve actual model references directly. Add the four
+narrow paths listed above (host-contract export plus three metadata-adapter paths)
+rather than fabricating a handoff/candidate/task lease or duplicating validation.
+Independent design review admitted this amendment before any production edit.
+
+The in-process preparation request contains a bounded correlation ID, actual
+SchedulableTaskIntent and actual captured materialized inputs. It has no attempt,
+candidate, execution lease, Started handoff or public cancellation context. The
+private facade supplies the real native preparation/shutdown signal. Validate the
+single actual text input (nonempty, at most4096 bytes), explicit embedding/Candle
+CPU intent and no trait override before preparation copying, PUMAS or native work,
+including old-owner stop. Do not add a generic execution validator path.
+
+Model-reference helpers reuse current-contract decoding, full canonical model/
+revision/artifact checks, logical-size checks, OwnerFresh errors and path-privacy
+normalization. Existing validated wrappers use their SELECTED decision model and
+variant-or-runtime consumer family exactly as before, including image/text cases.
+The prepared resolved model/config and actual inputs must match eventual selected
+native execution; an unranked task still receives prepared-owner fencing. This
+metadata/readiness data grants no task execution or cleanup authority.
 
 #### Fixed evidence contract
 

@@ -110,3 +110,38 @@ claim on CPU, rather than silently rewriting that claim to zero. Actual consumed
 claims and complete future-publication headroom must be checked before physical
 work; missing or larger-than-witness claims refuse. Numeric native protocol
 budgets/pressure cases remain a prospective producer admission gate.
+
+## 2026-10-20 facade and native API feasibility refinement
+
+Independent design review confirmed the facade can fit the admitted write set.
+It must retain ONE `WorkflowSessionExecutionRuntime` from construction: ordinary
+embedded run/resume helpers create a fresh owner per call, so delegating to them
+would leave shutdown unable to drain prior workers. The existing public shutdown
+method on that retained owner is sufficient; no new workflow-owner API is needed.
+Keep ordinary auto-resume disabled for this mode and resume through the retained
+owner. Scalar diagnostics must not leak `SerialRuntimeHostCpuOwnerEvidence`, whose
+atomic generation handle is writable. A crate-private remaining-teardown helper
+in the already admitted lifecycle file avoids generic duplicate stop/reconciliation
+after genuine idle StopACK. Existing embedded graph/service API files need no edit.
+
+Native source research confirmed calibrated Candle's load-selected method performs
+actual supervised load/join and publishes a cold owner without a forward. M4 can
+invoke that load-only primitive on an exactly stopped backend under its writer,
+then publish gateway/registry state without recursively taking the same writer.
+Capability transfer through the actual warm AttemptBinding/receipt supplies the
+real updated private owner. Existing retained-only APIs stay unchanged; an ordinary
+cleanup path must refuse a receipt carrying residency custody rather than discard
+that custody and acknowledge success. These are API feasibility findings only;
+no production source or models were changed/executed.
+
+PUMAS preparation research found one narrow API amendment: lower selector APIs
+resolve real model references directly, while embedded wrappers currently require
+a selected dispatch request only to extract model/task/runtime family. Independent
+design review admitted exactly four added paths: host-contract Rust export,
+package facts resolver, load-target resolver and existing load-target tests.
+Crate-private model-reference helpers reuse all current decode/identity/OwnerFresh/
+privacy behavior; existing wrappers continue using their selected decision model
+and exact variant-or-runtime family. The new preparation request contains actual
+intent/inputs and correlation only, with no invented candidate, Started lease or
+public Running cancellation. Native4096-byte/single-text validation occurs before
+stop/load. No source implementation of this amendment has begun.

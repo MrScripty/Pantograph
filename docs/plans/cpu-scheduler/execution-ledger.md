@@ -537,3 +537,42 @@ coordination; parent owns its later disposition after reachable handoff.
   discovered hardware capacity or native memory qualification. All14 original
   fixture hashes and helper/manifest hashes match; Python parses and staged
   traceability/whitespace checks pass. No Rust production/test source changed.
+
+## 2026-10-20 — Exact-head M3 review and independent M4 fixtures
+
+- Retained all15 successful substantive CI job logs for PR81 head
+  `b63aa3ebe5fab1531aef952a35ce74932bf76b30`. Fetched PR merge
+  `a9292d48a49ac05ddec711397159077b3e68f9f0` has identical tree
+  `defca3d306f4824726fa6094b2bba04a3128e570`; source-pinned CPU jobs check out
+  the head directly. Actual format/Clippy command outcomes are success, despite
+  advisory wrappers. Independent final source/evidence review approved C1–C4;
+  all original native data/failure/reanalysis hashes remain intact.
+- Quality summary118394536482 is still queued/null. M3 acceptance and M4 production
+  remain pending; no status is promoted from queued to success. Detailed review
+  and complete CI logs are in the2026-10-20 acceptance report and M3 CI bundle.
+- Independent fixture work added one controlled registry composition regression:
+  original load-started guard custody survives two separate task cleanups, full
+  charges150running/140idle, mutation refusal, sole guard stopACK and stale frame
+  rejection. Sole guard retained-task validation correctly refuses LastLease;
+  native cap minting needs successor-free proof. This performs no native actions.
+  Scoped registry13 tests pass; tests warning-deny Clippy, rustfmt and whitespace
+  checks pass. Independent source reviewer approved SHA256
+  `7eba158fe0e825beda3fac8c2295b9f44a09c81c16e6f95d6c49a6ff330bf298`.
+- Facade feasibility refinement retains one execution-runtime owner across all
+  calls/shutdown and keeps ordinary auto-resume disabled; scalar diagnostics leak
+  no writable generation evidence. Native API research found existing supervised
+  load-only Candle primitive and exact private receipt transfer path. All remain
+  within the admitted write set; no M4 production code or model run occurred.
+
+- Independent design review admitted a narrow four-path preparation amendment:
+  host-contract Rust export, existing PUMAS package/load-target wrappers and target
+  tests. Model-reference methods preserve all legacy selected-model/runtime-family,
+  identity/OwnerFresh/error/privacy behavior. Actual intent+bounded text goes into
+  preparation without a fake Started/candidate/lease/public-cancellation context.
+  This closes the pre-candidate resolver feasibility gap before production edits.
+
+- Independent final packaging review approved the pending-evidence checkpoint:
+  all15CI log hashes/original bytes, compact and archived queued-summary metadata,
+  fixture source/log hashes and unchanged original M3 bundle verified. Explicit
+  staged traceability and whitespace checks pass. Final summary remained queued
+  at01:22:35 UTC; no M3 acceptance or M4 production start is claimed.

@@ -595,3 +595,171 @@ fn pending_stop_keeps_shared_ram_charged_until_exact_ack() {
     assert_eq!(after.resident_bytes, 0);
     assert_eq!(after.available_bytes, 1000);
 }
+
+#[test]
+fn controlled_load_started_guard_survives_two_task_cleanups_then_exact_stop_ack() {
+    // Controlled registry protocol only: begin_execution and producer frames
+    // model a completed load/drain. No native load, forward or stop occurs here.
+    let registry = Arc::new(RuntimeRegistry::new());
+    let requirements = |ram| {
+        RuntimeReservationRequirements::from_claims(vec![
+            RuntimeReservationResourceClaim::ram_bytes(ram),
+            RuntimeReservationResourceClaim::vram_bytes(0),
+        ])
+    };
+    registry.register_runtime(
+        crate::RuntimeRegistration::new("candle", "Controlled CPU owner").with_admission_budget(
+            crate::RuntimeAdmissionBudget::from_resources(vec![
+                crate::RuntimeAdmissionResourceBudget::ram_bytes(Some(1000)),
+                crate::RuntimeAdmissionResourceBudget::vram_bytes(Some(0)),
+            ]),
+        ),
+    );
+    registry
+        .configure_model_resident_estimates(vec![RuntimeModelResidentEstimate {
+            runtime_id: "candle".into(),
+            model_id: "controlled-model-target".into(),
+            requirements: requirements(100),
+        }])
+        .unwrap();
+    let mut guard_request = request("controlled-mode-guard");
+    guard_request.requirements = Some(requirements(40));
+    let guard_lease = registry.acquire_reservation(guard_request.clone()).unwrap();
+    let mut guard_custody = registry.acquire_execution_custody(&guard_lease).unwrap();
+    guard_custody.begin_execution();
+
+    let controlled_frame = |sequence| RuntimeProducerObservation {
+        source_id: "controlled-registry-producer".into(),
+        sequence,
+        allocation_state: RuntimeProducerAllocationState::Resident,
+        observation: RuntimeObservation {
+            runtime_id: "candle".into(),
+            display_name: "Controlled CPU owner".into(),
+            backend_keys: vec!["candle".into()],
+            model_id: Some("controlled-model-target".into()),
+            runtime_instance_id: Some("controlled-instance".into()),
+            status: RuntimeRegistryStatus::Ready,
+            last_error: None,
+        },
+    };
+    registry
+        .observe_runtime_producer(controlled_frame(1))
+        .unwrap();
+    let controlled_owner = || RuntimeRetainedOwnerIdentity {
+        runtime_id: "candle",
+        source_id: "controlled-registry-producer",
+        runtime_instance_id: "controlled-instance",
+        model_target: "controlled-model-target",
+    };
+    let assert_ram_charge = |reserved, resident| {
+        let mut probe = request("controlled-read-only-accounting");
+        probe.requirements = Some(requirements(0));
+        let evaluation = registry.evaluate_reservation(probe).unwrap();
+        let ram = &evaluation.observation().resources[0];
+        assert_eq!(ram.kind, crate::RuntimeAdmissionResourceKind::RamBytes);
+        assert_eq!(ram.reserved_bytes, reserved);
+        assert_eq!(ram.resident_bytes, resident);
+        assert_eq!(ram.available_bytes, Some(1000 - reserved));
+        let vram = &evaluation.observation().resources[1];
+        assert_eq!(vram.kind, crate::RuntimeAdmissionResourceKind::VramBytes);
+        assert_eq!(vram.reserved_bytes, 0);
+        assert_eq!(vram.resident_bytes, 0);
+        assert_eq!(vram.available_bytes, Some(0));
+    };
+    let idle = state(&registry);
+    assert_eq!(idle.1, vec![guard_lease.clone()]);
+    assert_ram_charge(140, 100);
+    // This existing retained-task API requires a successor even for validation;
+    // it cannot be the sole idle guard's capability-minting preflight.
+    assert!(matches!(
+        guard_custody.validate_retained_owner(controlled_owner()),
+        Err(RuntimeRetainedCleanupError::Refused {
+            reason: RuntimeRetainedCleanupRefusal::LastLease,
+            ..
+        })
+    ));
+    assert_eq!(idle, state(&registry));
+
+    for task_owner in ["controlled-first-task", "controlled-second-task"] {
+        // The original guard stays custodied between independently admitted
+        // tasks; ordinary release, replacement and retention changes all refuse.
+        for mutation in [
+            registry.release_reservation(guard_lease.reservation_id),
+            registry
+                .update_reservation_retention_hint(
+                    guard_lease.reservation_id,
+                    RuntimeRetentionHint::KeepAlive,
+                )
+                .map(|_| ()),
+            registry
+                .acquire_reservation(guard_request.clone())
+                .map(|_| ()),
+        ] {
+            assert!(matches!(
+                mutation,
+                Err(crate::RuntimeRegistryError::ReservationCustodyPending(id))
+                    if id == guard_lease.reservation_id
+            ));
+        }
+        assert_eq!(idle, state(&registry));
+
+        let mut task_request = request(task_owner);
+        task_request.requirements = Some(requirements(10));
+        let task_lease = registry.acquire_reservation(task_request).unwrap();
+        assert_ne!(task_lease.reservation_id, guard_lease.reservation_id);
+        let mut task_custody = registry.acquire_execution_custody(&task_lease).unwrap();
+        task_custody.begin_execution();
+        assert!(guard_custody.matches(&registry, &guard_lease));
+        assert!(!guard_custody.matches(&registry, &task_lease));
+        assert_ram_charge(150, 100);
+
+        let cleanup = task_custody.release_retained(controlled_owner()).unwrap();
+        assert_eq!(cleanup.decision, RuntimeRetentionDecision::Retain);
+        assert_eq!(cleanup.reason, RuntimeRetentionReason::ActiveReservations);
+        assert!(registry
+            .reservation_lease(task_lease.reservation_id)
+            .is_none());
+        assert_eq!(state(&registry), idle);
+        assert_ram_charge(140, 100);
+    }
+
+    // The original load-started custody, not either consumed task custody,
+    // authorizes this sole-guard stop obligation. Sequence 2 was sampled but
+    // deliberately undelivered before the controlled stop ACK at sequence 3.
+    let delayed = controlled_frame(2);
+    let ticket = guard_custody
+        .begin_last_lease_eviction(controlled_owner())
+        .unwrap();
+    let stopping = state(&registry);
+    assert_eq!(stopping.0[0].status, RuntimeRegistryStatus::Stopping);
+    assert_eq!(stopping.1, idle.1);
+    assert_eq!(
+        stopping.0[0].active_reservation_claims,
+        idle.0[0].active_reservation_claims
+    );
+    assert_eq!(
+        stopping.0[0].model_resource_residency,
+        idle.0[0].model_resource_residency
+    );
+    assert!(registry.observe_runtime_producer(delayed.clone()).is_err());
+    assert_eq!(stopping, state(&registry));
+    assert_eq!(
+        ticket.acknowledge_stopped(3).unwrap().decision,
+        RuntimeRetentionDecision::Evict
+    );
+    let stopped = state(&registry);
+    assert!(stopped.1.is_empty());
+    assert_eq!(stopped.0[0].status, RuntimeRegistryStatus::Stopped);
+    assert!(stopped.0[0].active_reservation_claims.is_empty());
+    assert!(stopped.0[0].model_resource_residency.is_none());
+    assert!(stopped.0[0].runtime_instance_id.is_none());
+    assert_ram_charge(0, 0);
+    for frame in [controlled_frame(1), delayed, controlled_frame(3)] {
+        assert!(matches!(
+            registry.observe_runtime_producer(frame),
+            Err(crate::RuntimeRegistryError::ModelResidencyObservationChanged(id))
+                if id == "candle"
+        ));
+    }
+    assert_eq!(stopped, state(&registry));
+}

@@ -1,0 +1,151 @@
+{
+  "kind": "compact review view; full API responses preserved in logs.tar.gz",
+  "head": "b63aa3ebe5fab1531aef952a35ce74932bf76b30",
+  "tree": "defca3d306f4824726fa6094b2bba04a3128e570",
+  "full_metadata_members": [
+    "checkpoint.json",
+    "latest-quality-jobs.json"
+  ],
+  "workflow_runs": [
+    {
+      "id": 39341838040,
+      "name": "Runtime Separation Check",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 39341838018,
+      "name": "Headless Workflow Contract",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 39341838081,
+      "name": "Quality Gates",
+      "status": "queued",
+      "conclusion": null
+    },
+    {
+      "id": 39341838152,
+      "name": "CPU Composition Contract",
+      "status": "completed",
+      "conclusion": "success"
+    }
+  ],
+  "jobs": [
+    {
+      "id": 118365003562,
+      "name": "Dependency audit",
+      "status": "completed",
+      "conclusion": "success",
+      "run_id": 39341838081
+    },
+    {
+      "id": 118365003820,
+      "name": "TypeScript typecheck",
+      "status": "completed",
+      "conclusion": "success",
+      "run_id": 39341838081
+    },
+    {
+      "id": 118365003859,
+      "name": "Rust format audit",
+      "status": "completed",
+      "conclusion": "success",
+      "run_id": 39341838081
+    },
+    {
+      "id": 118365003903,
+      "name": "Rust clippy warning audit",
+      "status": "completed",
+      "conclusion": "success",
+      "run_id": 39341838081
+    },
+    {
+      "id": 118365003930,
+      "name": "Critical lint and traceability",
+      "status": "completed",
+      "conclusion": "success",
+      "run_id": 39341838081
+    },
+    {
+      "id": 118365003941,
+      "name": "Full lint",
+      "status": "completed",
+      "conclusion": "success",
+      "run_id": 39341838081
+    },
+    {
+      "id": 118365003944,
+      "name": "Rust doc tests",
+      "status": "completed",
+      "conclusion": "success",
+      "run_id": 39341838081
+    },
+    {
+      "id": 118365003970,
+      "name": "Rustler BEAM smoke",
+      "status": "completed",
+      "conclusion": "success",
+      "run_id": 39341838081
+    },
+    {
+      "id": 118365003971,
+      "name": "Rust focused tests",
+      "status": "completed",
+      "conclusion": "success",
+      "run_id": 39341838081
+    },
+    {
+      "id": 118365004002,
+      "name": "Rust workspace check",
+      "status": "completed",
+      "conclusion": "success",
+      "run_id": 39341838081
+    },
+    {
+      "id": 118365004016,
+      "name": "Frontend tests",
+      "status": "completed",
+      "conclusion": "success",
+      "run_id": 39341838081
+    },
+    {
+      "id": 118365004057,
+      "name": "Exact-head native text controls",
+      "status": "completed",
+      "conclusion": "success",
+      "run_id": 39341838081
+    },
+    {
+      "id": 118394536482,
+      "name": "Quality summary",
+      "status": "queued",
+      "conclusion": null,
+      "run_id": 39341838081
+    },
+    {
+      "id": 118365003037,
+      "name": "contract-and-parity",
+      "status": "completed",
+      "conclusion": "success",
+      "run_id": 39341838018
+    },
+    {
+      "id": 118365003129,
+      "name": "no-python-linkage",
+      "status": "completed",
+      "conclusion": "success",
+      "run_id": 39341838040
+    },
+    {
+      "id": 118365003627,
+      "name": "cpu-composition",
+      "status": "completed",
+      "conclusion": "success",
+      "run_id": 39341838152
+    }
+  ],
+  "quality_summary_state": "queued/null; not accepted",
+  "observed_utc": "2026-10-20 01:21 UTC"
+}
