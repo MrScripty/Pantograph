@@ -1,8 +1,8 @@
 # Issues
 
-- L-01 (fix-now): registered worker preparation refusal settles event/response but
-  skips workflow finish/terminal. Canonical workflow/worker finalization owner.
-  Requires one terminal, released session, zero native/Start work and close proof.
+- L-01 (resolved locally): registered worker preparation refusal now uses guarded
+  canonical workflow finish/terminal. Source a8a9f105 passes one terminal,
+  released session, controlled zero native/Start work and public close proof.
 - L-02 (deferred, existing): post-Start/assigned failures may need task/reservation/
   batch cleanup; never finish them through this zero-active-custody repair. Parent
   and cleanup owner must admit a separate lifecycle slice if reproduction needs it.

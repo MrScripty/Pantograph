@@ -52,3 +52,22 @@
   and full affected suite, source review, affected formatting, staged traceability,
   whitespace and exact PR83 patch-application checks passed. No credentials,
   weights, databases, M4 native/Start policy or unrelated files are staged.
+- Source checkpoint a8a9f1055910be2999f0b3ab4c138be39c15087d committed clean
+  and pushed to its own protected repair branch. At that exact clean checkpoint,
+  focused regressions passed 4/4 and parent invalid-dispatch regression 1/1.
+  Reviewer independently confirmed clean HEAD, all three hashes, both logs and
+  supported-feature Clippy completion. No duplicate builds or M4 cohort run.
+- Retained original red, full-suite, Clippy and clean-checkpoint logs with
+  compressed/uncompressed hashes and explicit provenance in reports/a8a9f105.
+  Rechecked structural patch application against public PR83 5b4fc6dd. No merge,
+  source composition, actual native rerun or trained-model acceptance occurred.
+- Independent archive review admitted all six compressed/raw log hashes, source
+  manifest and checkpoint identity, patch identity, zero gzip timestamps and
+  bounded report claims. A provenance concern was resolved by independently
+  checking c25fd49d is reachable from approved public PR83 and its two affected
+  production files equal 5b4fc6dd; report now states that exact public-source
+  comparison. Final review has no remaining findings; reviewer changed no files.
+- Existing Quality Gates workflow selects task_execution_worker::tests, so the
+  four new preparation regressions and extended parent regression enter the
+  existing hosted test job without workflow policy edits. Hosted results remain
+  separate from retained local qualification.

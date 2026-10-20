@@ -1,0 +1,44 @@
+{
+  "source_checkpoint": "a8a9f1055910be2999f0b3ab4c138be39c15087d",
+  "source_base": "2da63ae9908572905a98c0c3b5a14e6952e5d3e3",
+  "public_compatibility_target": "5b4fc6dda17342e6b27f90ebb852ffd2b7ea47eb",
+  "source_manifest_sha256": "71200072c3089bb37425ac13865776f62ba30255d03be246866c866ced495304",
+  "logs": [
+    {
+      "path": "preparation-focused.log.gz",
+      "sha256": "ca715d5fdc2c67ce5ace2f71ba120f0832157fbc7149b0492eb2da9e57bab5da",
+      "uncompressed_sha256": "faed9cd0c6a8fc1aa9d885391a14505b05740b3052f20c8d73217cc3e1ff0788",
+      "provenance": "clean source checkpoint a8a9f105"
+    },
+    {
+      "path": "public-invalid-dispatch.log.gz",
+      "sha256": "bf5207ac96b8fec89785d4faf120b420156a995e7cfaf3dcbd8e2d19b843011a",
+      "uncompressed_sha256": "e83864e69bc00bc995e7c0a727ee8496c4b20eae95783e9a49cf14346fbf5906",
+      "provenance": "clean source checkpoint a8a9f105"
+    },
+    {
+      "path": "workflow-library.log.gz",
+      "sha256": "e5da90da51b70bc0c09c9c287877bd3e13c2bdc3db0d850db248e0d130fe1289",
+      "uncompressed_sha256": "befcb5c53490d704f898d462b04532a933a887f51e2842e08e40ea82f1bac0f6",
+      "provenance": "precommit; same three qualified source hashes"
+    },
+    {
+      "path": "clippy-pytorch.log.gz",
+      "sha256": "137d25e6bd704041d5d9bf7eefb4245722e4877b9bb94fe5b128def5fa74117e",
+      "uncompressed_sha256": "50f3050d4d0dd2e3816fca75f3fd2eb251d1791bbd232237aecb7c7bd08e2e9c",
+      "provenance": "precommit; same three qualified source hashes"
+    },
+    {
+      "path": "clippy-default-backend.log.gz",
+      "sha256": "8e7b2c68d0ed90a48013f82f77ba33b16639277175f5843f2304ea464da61b4c",
+      "uncompressed_sha256": "600c8d1f7222b51d5fbb478d0b79909d8e39897889229b9ff83fa9c0bab84c9d",
+      "provenance": "known disabled-backend dead-code gate failure; not accepted gate"
+    },
+    {
+      "path": "public-baseline-red.log.gz",
+      "sha256": "54910bc53b760b9c477dba34b345b5e625427d3b36675c08e4eeadd1c833a584",
+      "uncompressed_sha256": "4f14863d44b3b33d5dead0960a6bf5792a6b35dede957db962f83a99399c9654",
+      "provenance": "public2da production unchanged; initial regression added; test later extended"
+    }
+  ]
+}

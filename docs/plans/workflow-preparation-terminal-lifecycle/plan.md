@@ -1,13 +1,13 @@
 # Preparation-refusal workflow finalization
 
-**Plan status:** Verifying
+**Plan status:** Blocked
 **Operation:** start, authorized by parent delegation 2026-10-20
-**Current phase:** exact-checkpoint regression capture and handoff
-**Next slice:** retain clean-checkpoint evidence and focused public repair proposal
+**Current phase:** bounded local repair qualified; M4 protocol handoff
+**Next slice:** parent-coordinated composition and prospective M4 protocol
 **Acceptance status:** L1/L2/L3 locally satisfied; actual M4 frozen
 **Ledger:** [execution-ledger.md](execution-ledger.md)
 **Issues:** [issues.md](issues.md)
-**Reports:** pending qualification
+**Reports:** [local qualification](reports/a8a9f105/qualification.md)
 **Related ADRs:** [index](../../adr/README.md)
 
 The M4 owner reported safe pressure refusal with no native work/claims, but no
