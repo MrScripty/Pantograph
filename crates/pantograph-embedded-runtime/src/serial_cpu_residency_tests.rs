@@ -1,0 +1,393 @@
+use super::*;
+use pantograph_workflow_service::graph::{
+    authored_snapshot_from_descriptor, NodeRegistry, WorkflowGraph,
+};
+use serde_json::json;
+
+const MODEL: &str = "embedding/qualification/synthetic-bert-8";
+
+pub(crate) fn config(root: &std::path::Path) -> EmbeddedSerialCpuResidencyConfig {
+    EmbeddedSerialCpuResidencyConfig {
+        runtime: EmbeddedRuntimeConfig::new(root.join("app-data"), root.to_path_buf()),
+        pumas_library_root: root.to_path_buf(),
+        models: vec![EmbeddedSerialCpuModelDeclaration {
+            model_ref: serde_json::from_value(
+                json!({"model_id":MODEL,"selected_artifact_id":"main"}),
+            )
+            .unwrap(),
+            resident_ram_bytes: 32 * 1024 * 1024,
+            load_peak_ram_bytes: 600 * 1024 * 1024,
+            load_peak_vram_bytes: 0,
+        }],
+        ram_capacity_bytes: 2 * 1024 * 1024 * 1024,
+        vram_capacity_bytes: 1024 * 1024 * 1024,
+        ram_safety_margin_bytes: 0,
+        vram_safety_margin_bytes: 0,
+        cpu_threads: 1,
+        readiness_poll_interval: Duration::from_millis(20),
+    }
+}
+
+pub(crate) fn seed(root: &std::path::Path) {
+    fn copy(source: &std::path::Path, target: &std::path::Path) {
+        std::fs::create_dir_all(target).unwrap();
+        for entry in std::fs::read_dir(source).unwrap() {
+            let entry = entry.unwrap();
+            let target = target.join(entry.file_name());
+            if entry.file_type().unwrap().is_dir() {
+                copy(&entry.path(), &target);
+            } else {
+                std::fs::copy(entry.path(), target).unwrap();
+            }
+        }
+    }
+    let target = root.join("shared-resources/models").join(MODEL);
+    copy(
+        &PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../inference/tests/fixtures/candle_bert/bert-8"),
+        &target,
+    );
+    std::fs::write(target.join("metadata.json"),json!({
+        "schema_version":2,"model_id":MODEL,"family":"qualification","model_type":"embedding",
+        "official_name":"synthetic-bert-8","cleaned_name":"synthetic-bert-8","source_path":target,"entry_path":target,
+        "storage_kind":"library_owned","selected_artifact_id":"main","selected_artifact_files":["model.safetensors"],
+        "import_state":"ready","validation_state":"valid","pipeline_tag":"feature-extraction",
+        "task_type_primary":"embedding","input_modalities":["text"],"output_modalities":["embedding"],
+        "recommended_backend":"candle","runtime_engine_hints":["candle"]
+    }).to_string()).unwrap();
+}
+
+#[tokio::test]
+async fn invalid_facade_configuration_refuses_before_owner_or_filesystem_startup() {
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path().join("not-created");
+    let mut configuration = config(&root);
+    configuration.ram_capacity_bytes = 0;
+    assert!(matches!(
+        EmbeddedSerialCpuResidency::new(configuration).await,
+        Err(EmbeddedRuntimeError::Config { .. })
+    ));
+    assert!(!root.exists());
+}
+
+#[tokio::test]
+async fn metadata_sessions_never_load_reserve_or_mint_physical_load_proof() {
+    use pantograph_workflow_service::{
+        WorkflowExecutionSessionRetentionHint as Retention, WorkflowHost,
+    };
+    let directory = tempfile::tempdir().unwrap();
+    seed(directory.path());
+    let facade = EmbeddedSerialCpuResidency::new(config(directory.path()))
+        .await
+        .unwrap();
+    let result = async {
+        let host = facade.runtime.host();
+        assert!(
+            host.can_load_session_runtime(
+                "metadata",
+                "missing-workflow",
+                None,
+                Retention::Ephemeral
+            )
+            .await?
+        );
+        host.load_session_runtime("metadata", "missing-workflow", None, Retention::Ephemeral)
+            .await?;
+        assert!(host
+            .session_runtime_load_proof("metadata", "missing-workflow")
+            .await?
+            .is_none());
+        assert!(host
+            .load_session_runtime("metadata", "missing-workflow", None, Retention::KeepAlive)
+            .await
+            .is_err());
+        assert!(facade.registry_snapshot().reservations.is_empty());
+        let diagnostic = facade.residency_diagnostics().unwrap();
+        assert_eq!(
+            (diagnostic.loads, diagnostic.stops, diagnostic.retains),
+            (0, 0, 0)
+        );
+        assert!(!diagnostic.has_idle_owner);
+        Ok::<_, WorkflowServiceError>(())
+    }
+    .await;
+    let shutdown = facade.shutdown().await;
+    result.unwrap();
+    shutdown.unwrap();
+    facade.shutdown().await.unwrap();
+    assert!(facade
+        .register_attribution_client(ClientRegistrationRequest {
+            display_name: None,
+            metadata_json: None
+        })
+        .is_err());
+}
+
+pub(crate) async fn author(
+    facade: &EmbeddedSerialCpuResidency,
+) -> Result<String, Box<dyn std::error::Error>> {
+    let mut graph: WorkflowGraph = serde_json::from_value(json!({"nodes":[
+        {"id":"deps","node_type":"dependency-environment","position":{"x":0,"y":0},"data":{"mode":"manual"}},
+        {"id":"prompt","node_type":"text-input","position":{"x":0,"y":100},"data":{}},
+        {"id":"infer","node_type":"llm-inference","position":{"x":300,"y":100},"data":{
+            "task_kind":"embedding","runtime":"candle","device":"cpu",
+            "runtime_source_context":{"operation_type":"embedding.text","context_shape_key":"embedding.one-text","cancellation_mode":"run_scoped"},
+            "pumas_model_ref":{"model_id":MODEL,"selected_artifact_id":"main"}}},
+        {"id":"vectors","node_type":"vector-output","position":{"x":600,"y":100},"data":{}}
+    ],"edges":[
+        {"id":"text","source":"prompt","source_handle":"text","target":"infer","target_handle":"text"},
+        {"id":"vector","source":"infer","source_handle":"embedding","target":"vectors","target_handle":"vector"},
+        {"id":"dep","source":"deps","source_handle":"dependency_environment_sidecar","target":"infer","target_handle":"dependency_environment_sidecar"}
+    ]}))?;
+    let registry = NodeRegistry::new();
+    for node in &mut graph.nodes {
+        if node.node_type != "llm-inference" {
+            node.data["definition"] = serde_json::to_value(
+                registry
+                    .get_definition(&node.node_type)
+                    .ok_or("missing node")?,
+            )?;
+        }
+    }
+    let preview = facade
+        .workflow_graph_create_edit_session(WorkflowGraphEditSessionCreateRequest {
+            graph: graph.clone(),
+            workflow_id: None,
+        })
+        .await?;
+    let validation = facade
+        .workflow_graph_refresh_current_validation_summary(
+            WorkflowGraphCurrentValidationRefreshRequest {
+                graph_session_id: preview.session_id.clone(),
+                graph_revision: preview.graph_revision.parse()?,
+            },
+        )
+        .await?;
+    let projection = validation
+        .node_projections
+        .iter()
+        .find(|node| node.node_id.as_str() == "infer")
+        .ok_or("missing descriptor")?;
+    graph
+        .nodes
+        .iter_mut()
+        .find(|node| node.id == "infer")
+        .unwrap()
+        .data["inference_interface_snapshot"] =
+        serde_json::to_value(authored_snapshot_from_descriptor(&projection.descriptor)?)?;
+    facade
+        .workflow_graph_close_edit_session(WorkflowGraphEditSessionCloseRequest {
+            session_id: preview.session_id,
+        })
+        .await?;
+    facade.workflow_graph_save(WorkflowGraphSaveRequest {
+        name: "serial-residency-test".into(),
+        graph: graph.clone(),
+    })?;
+    let edit = facade
+        .workflow_graph_create_edit_session(WorkflowGraphEditSessionCreateRequest {
+            graph,
+            workflow_id: Some("serial-residency-test".into()),
+        })
+        .await?;
+    let validation = facade
+        .workflow_graph_refresh_current_validation_summary(
+            WorkflowGraphCurrentValidationRefreshRequest {
+                graph_session_id: edit.session_id.clone(),
+                graph_revision: edit.graph_revision.parse()?,
+            },
+        )
+        .await?;
+    let action = facade
+        .workflow_graph_resolve_dependency_environment_action_intent(
+            pantograph_inference_interface_contracts::DependencyEnvironmentActionIntent {
+                contract_version: 1,
+                graph_session_id: edit.session_id.parse()?,
+                graph_revision: edit.graph_revision.parse()?,
+                validation_session_id: validation.summary.validation_session_id.clone(),
+                target_node_id: "deps".parse()?,
+                action:
+                    pantograph_inference_interface_contracts::DependencyEnvironmentAction::Resolve,
+            },
+        )
+        .await?;
+    assert_eq!(action.status,pantograph_inference_interface_contracts::DependencyEnvironmentActionIntentStatus::RequestReady);
+    facade
+        .publish_graph_session_executable_validation_snapshot(
+            WorkflowGraphSessionExecutableValidationSnapshotPublishRequest {
+                workflow_id: "serial-residency-test".into(),
+                workflow_semantic_version: "1.0.0".into(),
+                graph_session_id: edit.session_id.clone(),
+                validation_snapshot_id: None,
+                validation_session_id: Some(
+                    validation
+                        .summary
+                        .validation_session_id
+                        .ok_or("missing validation")?,
+                ),
+            },
+        )
+        .await?;
+    Ok(edit.session_id)
+}
+
+#[tokio::test]
+async fn actual_facade_session_uses_private_load_owner_and_acknowledged_shutdown() {
+    let directory = tempfile::tempdir().unwrap();
+    seed(directory.path());
+    let facade = EmbeddedSerialCpuResidency::new(config(directory.path()))
+        .await
+        .unwrap();
+    let result = async {
+        let edit = author(&facade).await?;
+        let registered = facade.register_attribution_client(ClientRegistrationRequest {
+            display_name: Some("CPU fixture".into()),
+            metadata_json: None,
+        })?;
+        let client = facade.open_client_session(ClientSessionOpenRequest {
+            credential: registered.credential_proof_request(),
+            takeover: false,
+            reason: None,
+        })?;
+        let attribution = WorkflowExecutionSessionAttributionRequest {
+            credential: registered.credential_proof_request(),
+            client_session_id: client.session.client_session_id.as_str().into(),
+            bucket_selection: pantograph_runtime_attribution::BucketSelection::Default,
+        };
+        assert!(matches!(
+            facade
+                .create_attributed_workflow_execution_session(
+                    WorkflowExecutionSessionAttributedCreateRequest {
+                        workflow_id: "serial-residency-test".into(),
+                        usage_profile: None,
+                        keep_alive: true,
+                        attribution: attribution.clone(),
+                    }
+                )
+                .await,
+            Err(WorkflowServiceError::InvalidRequest(_))
+        ));
+        assert!(facade.registry_snapshot().reservations.is_empty());
+        let session = facade
+            .create_attributed_workflow_execution_session(
+                WorkflowExecutionSessionAttributedCreateRequest {
+                    workflow_id: "serial-residency-test".into(),
+                    usage_profile: None,
+                    keep_alive: false,
+                    attribution,
+                },
+            )
+            .await?;
+        let mut runs = Vec::new();
+        for round in 0..2 {
+            let execution = async {
+                let mut result = facade
+                    .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
+                        session_id: session.session_id.clone(),
+                        workflow_semantic_version: "1.0.0".into(),
+                        inputs: vec![WorkflowPortBinding {
+                            node_id: "prompt".into(),
+                            port_id: "text".into(),
+                            value: json!("hello world"),
+                        }],
+                        output_targets: Some(vec![WorkflowOutputTarget {
+                            node_id: "vectors".into(),
+                            port_id: "vector".into(),
+                        }]),
+                        override_selection: None,
+                        timeout_ms: None,
+                        priority: Some(0),
+                    })
+                    .await;
+                while matches!(
+                    result,
+                    Err(WorkflowServiceError::RuntimeDependencyReadinessPending { .. })
+                ) {
+                    tokio::time::sleep(Duration::from_millis(20)).await;
+                    if let Some(request) = facade
+                        .workflow_execution_session_runtime_dependency_readiness_resume_candidates(
+                        )?
+                        .into_iter()
+                        .find(|request| request.session_id == session.session_id)
+                    {
+                        result = facade
+                            .resume_workflow_execution_session_runtime_dependency_readiness(request)
+                            .await;
+                    }
+                }
+                result
+            };
+            let response = tokio::time::timeout(Duration::from_secs(30), execution).await??;
+            let golden: serde_json::Value = serde_json::from_slice(&std::fs::read(
+                directory
+                    .path()
+                    .join("shared-resources/models")
+                    .join(MODEL)
+                    .join("golden.json"),
+            )?)?;
+            let actual = response
+                .outputs
+                .iter()
+                .find(|output| output.node_id == "vectors")
+                .ok_or("missing actual vector")?
+                .value
+                .as_array()
+                .ok_or("vector shape")?;
+            let expected = golden["single_vectors"][0].as_array().unwrap();
+            assert_eq!(actual.len(), expected.len());
+            for (actual, expected) in actual.iter().zip(expected) {
+                assert!((actual.as_f64().unwrap() - expected.as_f64().unwrap()).abs() < 1e-5);
+            }
+            assert!(!runs.contains(&response.workflow_run_id));
+            runs.push(response.workflow_run_id);
+            let diagnostic = facade.residency_diagnostics().unwrap();
+            assert_eq!(
+                (diagnostic.loads, diagnostic.retains, diagnostic.stops),
+                (1, round, 0)
+            );
+            assert!(diagnostic.has_idle_owner);
+            assert_eq!(
+                facade.registry_snapshot().reservations.len(),
+                1,
+                "only genuine mode guard remains after task receipt ACK"
+            );
+        }
+        facade
+            .close_workflow_execution_session(WorkflowExecutionSessionCloseRequest {
+                session_id: session.session_id,
+            })
+            .await?;
+        facade
+            .workflow_graph_close_edit_session(WorkflowGraphEditSessionCloseRequest {
+                session_id: edit,
+            })
+            .await?;
+        Ok::<_, Box<dyn std::error::Error>>(())
+    }
+    .await;
+    let operations = facade.operations.read().await;
+    let mut first = Box::pin(facade.shutdown());
+    assert!(futures_util::poll!(first.as_mut()).is_pending());
+    drop(first);
+    // The retained shutdown supervisor is blocked before native stop by the
+    // controlled operation lifetime, even after its original caller disappeared.
+    tokio::task::yield_now().await;
+    assert!(facade.shutdown_state.lock().await.task.is_some());
+    assert_eq!(facade.residency_diagnostics().unwrap().stops, 0);
+    drop(operations);
+    let shutdown = facade.shutdown().await;
+    result.unwrap();
+    shutdown.unwrap();
+    facade.shutdown().await.unwrap();
+    assert!(facade.shutdown_state.lock().await.task.is_none());
+    assert!(facade.registry_snapshot().reservations.is_empty());
+    assert_eq!(facade.residency_diagnostics().unwrap().stops, 1);
+    assert!(!facade.residency_diagnostics().unwrap().has_idle_owner);
+    let model: inference::PumasModelRef =
+        serde_json::from_value(json!({"model_id":MODEL,"selected_artifact_id":"main"})).unwrap();
+    assert!(facade
+        .runtime
+        .gateway
+        .resident_cpu_serial_owner(&model)
+        .is_none());
+}

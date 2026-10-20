@@ -53,7 +53,7 @@ def prepare(output):
     result = {
         "kind": "M4 fixture admission; no native/reference execution",
         "m3_preserved_head": M3_HEAD,
-        "m3_acceptance": "pending parent confirmation",
+        "m3_acceptance": "accepted exact head after final Quality summary and independent review2026-10-20; local M4 only",
         "native_invocations": 0,
         "reference_manifest_sha256": REFERENCE_MANIFEST_SHA256,
         "fixture_file_sha256": checked,

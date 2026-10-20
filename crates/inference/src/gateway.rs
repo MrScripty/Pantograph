@@ -1829,6 +1829,10 @@ impl InferenceGateway {
                 cancellation.clone(),
             )
         });
+        #[cfg(feature = "backend-candle")]
+        if let Some(attempt) = attempt.as_mut() {
+            attempt.forward_submitted();
+        }
         let result = backend
             .selected_embeddings(texts, cancellation.clone())
             .await;
@@ -1843,6 +1847,10 @@ impl InferenceGateway {
             }
         }
         let cleanup = backend.finish_selected_embedding(result.is_err()).await;
+        #[cfg(feature = "backend-candle")]
+        if let Some(attempt) = attempt.as_mut() {
+            attempt.forward_drained();
+        }
         #[cfg(feature = "backend-candle")]
         if let Some(observation) = cpu_observation.as_mut() {
             observation.drain_finished();

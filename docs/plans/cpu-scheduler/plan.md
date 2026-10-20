@@ -518,8 +518,8 @@ The in-process preparation request contains a bounded correlation ID, actual
 SchedulableTaskIntent and actual captured materialized inputs. It has no attempt,
 candidate, execution lease, Started handoff or public cancellation context. The
 private facade supplies the real native preparation/shutdown signal. Validate the
-single actual text input (nonempty, at most4096 bytes), explicit embedding/Candle
-CPU intent and no trait override before preparation copying, PUMAS or native work,
+single actual text input (nonempty, String at most1024 bytes or TranscriptText
+at most4096 bytes), explicit embedding/Candle CPU intent and no trait override before preparation copying, PUMAS or native work,
 including old-owner stop. Do not add a generic execution validator path.
 
 Model-reference helpers reuse current-contract decoding, full canonical model/
@@ -529,6 +529,36 @@ variant-or-runtime consumer family exactly as before, including image/text cases
 The prepared resolved model/config and actual inputs must match eventual selected
 native execution; an unranked task still receives prepared-owner fencing. This
 metadata/readiness data grants no task execution or cleanup authority.
+
+Input-bound refinement independently admitted2026-10-20 before qualification:
+preparation validates the supported intersection of existing consumers, String
+at most1024 bytes (embedding projection's semantic string limit) and TranscriptText
+at most4096 bytes (native warm-attempt limit). The overall4096-byte upper bound
+never promised every variant accepts4096. Shared borrowed construction and public-
+field revalidation enforce the same byte bounds before copies/PUMAS/old-owner stop;
+no text adapter, default execution or model code changes are admitted.
+
+#### Narrow phase-observation amendment (2026-10-20; independently admitted)
+
+The existing native embedding seam may record an optional elapsed interval on the
+already genuine AttemptBinding/receipt: immediately before selected_embeddings
+submission through completed finish_selected_embedding/drain. Expose a copied
+Option<Duration>; it excludes cold load and task/registry ACK, is never split into
+compute-only subphases, and absence is never replaced by zero. Two observation
+hooks in the existing gateway.rs embedding path are admitted; no text hook,
+new authority, history, ranking or custody change is authorized.
+
+The port may emit bounded scalar phase logs carrying actual intent per-kind MAX
+claims, package floor, immutable operator declarations/headroom, full logical
+workflow/run/node/task/attempt/request/candidate/lease joins and copied native
+instance/profile/settings/generation facts. Distinguish declared arithmetic from
+acquired charges, native drain from registry task ACK, and that ACK from later
+scheduler cleanup. Capture bounded values under existing ownership but log only
+after releasing native/cell/owner/context/store locks. No input text, local paths,
+writable atomic handles or infrastructure aliases escape. The isolated collector
+must enforce at most128 events and less than8KiB each; overflow is explicit failure
+or Partial. Pressure records identify refusal before guard/native acquisition.
+These observations require final source/producer review before frozen execution.
 
 #### Fixed evidence contract
 
@@ -587,6 +617,22 @@ after-stop, caller-drop, stale proof, foreign capability, pin/retainer, failed s
 and failed ACK branches remain labelled protocol/fault-injection evidence. A
 simulated backend stop failure is never described as actual Candle failure.
 Native failure/refusal records and teardown are retained even when a gate fails.
+
+Prospective native cancellation supplement: exactly two additional ordinary Rust
+qualification tests on separate fresh owners, written before execution. The
+post-load/pre-Start case performs one actual load/publication and zero forwards;
+a qualification-only pause releases after the facade's real owned shutdown signal
+is set. The common production handle recheck must refuse Start and leave complete
+guard/resident custody fenced, with actual run/shutdown errors retained. The public
+Running post-drain case performs one load and one genuine forward/drain, pauses
+before receipt cleanup, requests cancellation through the public typed API, then
+records actual terminal outcome and exact cleanup or conservative fence. Completion
+may win; no interrupted-compute or per-attempt training inference is admitted.
+These use test-only pause hooks, with common production refusal/cleanup behavior;
+no public native-mutation API is added. Capture full identities/task states/charges,
+all errors and bounded teardown outcomes even when an oracle fails. No recovery,
+retry or model regeneration is permitted. Source/binary/input/environment freeze
+and independent fixture review precede first execution of these two cases.
 
 | Gate | Deciding evidence / acceptance |
 | --- | --- |

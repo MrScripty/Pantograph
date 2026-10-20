@@ -50,6 +50,11 @@ pub struct CandleCpuDrainedAttempt {
     binding: AttemptBinding,
 }
 impl CandleCpuDrainedAttempt {
+    /// Actual embedding submission through backend finish/drain. Cold load and
+    /// registry/task release ACK are outside this interval. No compute-only split.
+    pub fn forward_and_drain_duration(&self) -> Option<std::time::Duration> {
+        self.binding.forward_and_drain
+    }
     pub fn previous_owner_facts(&self) -> crate::CandleCpuSerialOwnerFacts {
         self.binding.previous_owner.serial_facts()
     }
@@ -144,6 +149,8 @@ pub(super) struct AttemptBinding {
     input: blake3::Hash,
     model_target: String,
     runtime_instance_id: Option<String>,
+    forward_started: Option<std::time::Instant>,
+    forward_and_drain: Option<std::time::Duration>,
 }
 impl AttemptBinding {
     fn bind(
@@ -217,6 +224,8 @@ impl AttemptBinding {
             input: blake3::hash(text.as_bytes()),
             model_target: input.target.local_load_path.clone(),
             runtime_instance_id: None,
+            forward_started: None,
+            forward_and_drain: None,
         })
     }
 
@@ -318,6 +327,12 @@ impl AttemptBinding {
         } else {
             Err(refusal())
         }
+    }
+    pub(super) fn forward_submitted(&mut self) {
+        self.forward_started = Some(std::time::Instant::now());
+    }
+    pub(super) fn forward_drained(&mut self) {
+        self.forward_and_drain = self.forward_started.take().map(|start| start.elapsed());
     }
     pub(super) fn drained(
         self,

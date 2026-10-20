@@ -184,7 +184,10 @@ async fn actual_load_only_capability_survives_two_warm_task_acks_then_stops_orig
             first_owner.loaded_instance
         );
         let snapshot = f.registry.snapshot();
-        assert_eq!(snapshot.reservations, [f.guard.clone()]);
+        assert_eq!(
+            snapshot.reservations.as_slice(),
+            std::slice::from_ref(&f.guard)
+        );
         assert_eq!(snapshot.runtimes[0].active_reservation_claims, idle_claims);
         assert_eq!(snapshot.runtimes[0].model_resource_residency, resident);
         outputs.push(output);
@@ -371,7 +374,10 @@ async fn controlled_post_load_loss(abandon: bool) {
     assert!(backend.resident_cpu_calibration_instance().is_some());
     drop(backend);
     let snapshot = f.registry.snapshot();
-    assert_eq!(snapshot.reservations, [f.guard.clone()]);
+    assert_eq!(
+        snapshot.reservations.as_slice(),
+        std::slice::from_ref(&f.guard)
+    );
     assert_eq!(
         snapshot.runtimes[0].active_reservation_claims[0].claims,
         requirements(8 * 1024 * 1024).claims

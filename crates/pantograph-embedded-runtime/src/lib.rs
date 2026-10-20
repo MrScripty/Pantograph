@@ -74,7 +74,13 @@ mod reservation_lifecycle;
 #[cfg(feature = "backend-candle")]
 mod serial_cpu_port;
 #[cfg(feature = "backend-candle")]
-pub use serial_cpu_port::EmbeddedRetainedCpuSerialPort;
+pub use serial_cpu_port::{EmbeddedRetainedCpuSerialPort, SerialCpuResidencyDiagnostics};
+#[cfg(feature = "backend-candle")]
+mod serial_cpu_residency;
+#[cfg(feature = "backend-candle")]
+pub use serial_cpu_residency::{
+    EmbeddedSerialCpuModelDeclaration, EmbeddedSerialCpuResidency, EmbeddedSerialCpuResidencyConfig,
+};
 pub mod runtime_capabilities;
 mod runtime_config;
 #[allow(dead_code)]

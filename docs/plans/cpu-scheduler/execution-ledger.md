@@ -615,3 +615,17 @@ coordination; parent owns its later disposition after reachable handoff.
 - Private facade integration and fixed producer are in progress. No fixed M4 native
   protocol has run; source/producer/input/environment freeze and independent review
   are still required. Local-only publication restriction remains unchanged.
+
+## 2026-10-20 — Local source/producer gate complete, execution not started
+
+- Current contracts65, metadata/package14, port/facade11, native26 and workflow
+  1015+65 regressions pass. Producer8pure saved-JSON oracle tests pass after
+  independent findings corrected acquired claims, exact ACK, identities/order,
+  pressure terminal/refusal-stage and bounded shutdown evidence.
+- Independent source reviews accept private facade/supervised shutdown, common
+  real-signal preparation refusal, optional native timing and scalar logs, typed
+  input-bound refinement and the two prospective cancellation fixtures.
+- All local failures/success logs retained in m4-local-v1 pre-qualification archive.
+  No fixed protocol or either new qualification case has executed. Clean tracked
+  source/tree, binary/input/environment freeze is the next gate. Local-only hold
+  remains; no publication retry or alternative route is authorized.

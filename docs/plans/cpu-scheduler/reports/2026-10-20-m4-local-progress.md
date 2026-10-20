@@ -37,3 +37,38 @@ model quality qualification is made.
 Publication remains blocked by the unanswered automatic-review rejection for
 12-file07138639 payload to MrScripty/Pantograph. No retry, alternate upload, merge
 or branch deletion is authorized. This checkpoint is local only.
+
+## Pre-qualification source gate
+
+Local implementation/source review is complete. Current affected regressions:
+contracts65, resolver/package14, port/facade11, nativeCPU26, workflow1015library
+plus65integration, fixed-producer pure oracles8 all pass. The facade test performs
+two genuine authenticated embedding calls, verifies golden outputs, one load,
+one retain and one acknowledged final stop; dropped shutdown wait retains the
+same supervised completion. It is separate from the unexecuted fixed protocol.
+
+Warning-deny no-dependencies Clippy passes for embedded lib/tests and workflow,
+host contracts and registry all-targets. The existing optional inference text
+consumer dead-code warning remains disclosed. Affected Rust formatting and
+whitespace checks pass. All original local compilation/fixture/oracle failures
+and corrected successful runs are preserved in the pre-qualification log archive.
+The two port review corrections and typed preparation bounds now have passing
+regressions. Source-reviewed cancellation fixtures compiled but have not run.
+
+The independently reviewed producer now checks actual acquired task-kind maxima,
+exact task-only ACK removal, full identity/run joins, true phase ordering, exact
+headroom-refused pressure terminal outcome, and bounded acknowledged shutdown.
+Its8pure tests pass. Failed-run readiness resume IDs are not returned by the
+helper; raw errors and matching plan/terminal identities remain available.
+
+Source/tree, binary, fixtures and environment must now be frozen before the first
+execution of fixed retained5/comparison5/pressure1 and the two separately declared
+cancellation cases. No fixed M4 protocol or cancellation case has executed.
+Publication and merge restrictions remain unchanged.
+
+Final pre-freeze checks: workspace format and critical/a11y/staged traceability
+pass. The first aggregate lint command omitted the explicit traceability mode;
+its failure is preserved and the corrected staged-mode aggregate passes. Native
+Clippy audit passes with only existing optional-consumer dead-code warnings after
+fixing two test-only cloned-reference lint suggestions. Final scoped native26
+tests pass again; no new qualification case or fixed protocol ran.

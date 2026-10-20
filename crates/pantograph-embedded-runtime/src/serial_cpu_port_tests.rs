@@ -121,6 +121,9 @@ async fn selected_incarnation_replaced_during_awaited_resolver_refuses_native_fo
         let entered = Arc::new(tokio::sync::Notify::new());
         let proceed = Arc::new(tokio::sync::Notify::new());
         let port = Arc::new(EmbeddedRetainedCpuSerialPort {
+            residency: None,
+            after_load_gate: std::sync::Mutex::new(None),
+            after_drain_gate: std::sync::Mutex::new(None),
             gateway: f.port.gateway.clone(),
             registry: f.port.registry.clone(),
             package: Arc::new(PausedPackage {
@@ -232,6 +235,9 @@ pub(crate) async fn fixture() -> Fixture {
         .await
         .unwrap();
     let port = Arc::new(EmbeddedRetainedCpuSerialPort {
+        residency: None,
+        after_load_gate: std::sync::Mutex::new(None),
+        after_drain_gate: std::sync::Mutex::new(None),
         gateway,
         registry,
         package: Arc::new(Package(package.clone())),
@@ -537,4 +543,183 @@ async fn abandoned_receipt_foreign_cleanup_and_intervening_reload_leave_selected
         assert!(admission.try_prepare().is_err());
         f.port.gateway.stop().await.unwrap();
     }
+}
+
+/// Controlled admission metadata; this test does not qualify physical memory.
+#[tokio::test]
+async fn cold_residency_headroom_requires_both_additive_kinds_and_no_old_lease() {
+    let f = fixture().await;
+    let declaration = CpuResidencyDeclaration {
+        target: f.target.clone(),
+        resident_ram_bytes: 100,
+        load_peak_ram_bytes: 40,
+        load_peak_vram_bytes: 0,
+    };
+    let registry = Arc::new(RuntimeRegistry::new());
+    let register = |ram, vram| {
+        let mut resources = vec![RuntimeAdmissionResourceBudget::ram_bytes(ram)];
+        if let Some(vram) = vram {
+            resources.push(RuntimeAdmissionResourceBudget::vram_bytes(Some(vram)));
+        }
+        registry.register_runtime(
+            RuntimeRegistration::new("candle", "controlled CPU")
+                .with_admission_budget(RuntimeAdmissionBudget::from_resources(resources)),
+        );
+    };
+    register(Some(150), Some(10));
+    assert!(validate_residency_headroom(&registry, &declaration, (10, 10)).is_ok());
+    register(Some(149), Some(10));
+    assert!(validate_residency_headroom(&registry, &declaration, (10, 10)).is_err());
+    register(Some(150), None);
+    assert!(validate_residency_headroom(&registry, &declaration, (10, 10)).is_err());
+    register(Some(150), Some(9));
+    assert!(validate_residency_headroom(&registry, &declaration, (10, 10)).is_err());
+    register(Some(150), Some(10));
+    assert!(validate_residency_headroom(&registry, &declaration, (u64::MAX, u64::MAX)).is_err());
+    let old = registry
+        .acquire_reservation(RuntimeReservationRequest {
+            runtime_id: "candle".into(),
+            workflow_id: "controlled".into(),
+            reservation_owner_id: None,
+            usage_profile: None,
+            model_id: None,
+            pin_runtime: true,
+            requirements: Some(RuntimeReservationRequirements::from_claims(vec![
+                RuntimeReservationResourceClaim::ram_bytes(1),
+                RuntimeReservationResourceClaim::vram_bytes(0),
+            ])),
+            retention_hint: RuntimeRetentionHint::KeepAlive,
+        })
+        .unwrap();
+    assert!(validate_residency_headroom(&registry, &declaration, (10, 10)).is_err());
+    assert_eq!(registry.reservation_lease(old.reservation_id).unwrap(), old);
+    f.port.gateway.stop().await.unwrap();
+}
+
+#[tokio::test]
+async fn preparation_uses_actual_per_kind_maxima_and_refuses_unknown_or_shrunk_claims() {
+    let f = fixture().await;
+    let mut package = f.package.clone();
+    package.artifact.logical_size = Some(inference::PackageLogicalSizeFacts {
+        total_size_bytes: Some(1024),
+        files: Vec::new(),
+        diagnostics: Vec::new(),
+        value_source: inference::PackageFactValueSource::FilesystemMetadata,
+    });
+    let floor =
+        crate::inference_resource_estimator::conservative_loaded_runtime_memory_estimate_bytes(
+            package.artifact.logical_size.as_ref().unwrap(),
+        )
+        .unwrap()
+            + 512 * 1024 * 1024;
+    let mut intent = f.request.handoff.task_intent.clone();
+    intent.estimate_hints = vec![
+        SchedulerEstimateHint {
+            kind: SchedulerEstimateHintKind::PeakRamBytes,
+            value: floor + 111,
+        },
+        SchedulerEstimateHint {
+            kind: SchedulerEstimateHintKind::PeakRamBytes,
+            value: floor + 222,
+        },
+        SchedulerEstimateHint {
+            kind: SchedulerEstimateHintKind::PeakVramBytes,
+            value: floor + 333,
+        },
+    ];
+    assert_eq!(
+        cpu_task_claims(&intent, &package).unwrap(),
+        (floor + 222, floor + 333)
+    );
+    intent.estimate_hints.pop();
+    assert!(cpu_task_claims(&intent, &package).is_err());
+    intent.estimate_hints.push(SchedulerEstimateHint {
+        kind: SchedulerEstimateHintKind::PeakVramBytes,
+        value: floor - 1,
+    });
+    assert!(cpu_task_claims(&intent, &package).is_err());
+    f.port.gateway.stop().await.unwrap();
+}
+
+#[tokio::test]
+async fn residency_started_ack_does_not_release_and_unstarted_refusal_cannot_stop_or_release_guard()
+{
+    let f = fixture().await;
+    let task = &f.request.handoff;
+    let owner = format!("{}:{}", task.workflow_run_id, task.task_id);
+    let lease = task_lease(&f, task.workflow_id.as_str(), &owner);
+    let request = batch(&f, &lease);
+    let before = f
+        .port
+        .gateway
+        .resident_cpu_serial_owner(&f.target.model_ref)
+        .unwrap()
+        .serial_facts();
+    let mut event = cleanup_event(&request);
+    event.outcome = ReservationLifecycleOutcome::DispatchStarted;
+    assert_eq!(
+        f.port
+            .apply_residency_task_lifecycle(event.clone())
+            .unwrap()
+            .state,
+        ReservationLifecycleApplicationState::Applied
+    );
+    assert_eq!(
+        f.port.registry.reservation_lease(lease.reservation_id),
+        Some(lease.clone())
+    );
+    event.outcome = ReservationLifecycleOutcome::DuplicateReplay;
+    assert_eq!(
+        f.port
+            .apply_residency_task_lifecycle(event.clone())
+            .unwrap()
+            .state,
+        ReservationLifecycleApplicationState::AlreadyApplied
+    );
+    event.outcome = ReservationLifecycleOutcome::RuntimeHostCompleted;
+    assert!(f
+        .port
+        .apply_residency_task_lifecycle(event.clone())
+        .is_err());
+    assert_eq!(
+        f.port.registry.reservation_lease(lease.reservation_id),
+        Some(lease.clone())
+    );
+    event.outcome = ReservationLifecycleOutcome::RuntimeHostDispatchRejected;
+    event.diagnostics.push(ReservationLifecycleDiagnostic {
+        severity: ReservationLifecycleDiagnosticSeverity::Info,
+        code: ReservationLifecycleDiagnosticCode::RuntimeHostRejected,
+        message: "controlled unstarted host refusal".into(),
+        hint: None,
+    });
+    let mut foreign = event.clone();
+    foreign.reservation_lease_id = SchedulerReservationLeaseId::parse(format!(
+        "runtime-registry.{}",
+        f.successor.reservation_id
+    ))
+    .unwrap();
+    assert!(f.port.apply_residency_task_lifecycle(foreign).is_err());
+    assert!(f
+        .port
+        .registry
+        .reservation_lease(f.successor.reservation_id)
+        .is_some());
+    f.port.apply_residency_task_lifecycle(event).unwrap();
+    assert!(f
+        .port
+        .registry
+        .reservation_lease(lease.reservation_id)
+        .is_none());
+    let after = f
+        .port
+        .gateway
+        .resident_cpu_serial_owner(&f.target.model_ref)
+        .unwrap()
+        .serial_facts();
+    assert_eq!(before.loaded_instance, after.loaded_instance);
+    assert_eq!(before.generation, after.generation);
+    assert!(f.port.registry.snapshot().runtimes[0]
+        .model_resource_residency
+        .is_some());
+    f.port.gateway.stop().await.unwrap();
 }

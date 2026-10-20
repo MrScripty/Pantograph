@@ -388,6 +388,30 @@ impl EmbeddedRuntime {
         stop_result
     }
 
+    /// Final metadata teardown only after the dedicated serial owner has drained
+    /// its worker and consumed its actual idle capability through stop and ACK.
+    /// Generic gateway stop/reconciliation must not replace that linear path.
+    #[cfg(feature = "backend-candle")]
+    pub(crate) async fn finish_serial_residency_teardown(
+        &self,
+    ) -> Result<(), pantograph_workflow_service::WorkflowServiceError> {
+        if !self.workflow_service.is_serial_cpu_residency()
+            || self.dependency_readiness_auto_resume.is_some()
+        {
+            return Err(pantograph_workflow_service::WorkflowServiceError::Internal(
+                "serial residency metadata teardown requires its dedicated owner without auto-resume".into(),
+            ));
+        }
+        self.workflow_service
+            .workflow_graph_shutdown_validation_tasks()
+            .await;
+        let invalidation = self.workflow_service.invalidate_all_session_runtimes();
+        if let Some(producer) = &self.dependency_readiness_snapshot_producer {
+            producer.shutdown().await;
+        }
+        invalidation.map(|_| ())
+    }
+
     pub(crate) fn host(&self) -> EmbeddedWorkflowHost {
         EmbeddedWorkflowHost {
             app_data_dir: self.config.app_data_dir.clone(),

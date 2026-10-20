@@ -24,6 +24,8 @@ const MAX_PREPARATION_METADATA_BYTES: usize = 32 * 1024;
 /// request carries no candidate, execution lease, handoff or public cancellation
 /// context. The port owns its native preparation/shutdown signal. Workflow
 /// readiness and prepared-owner evidence must still be fenced at final Start.
+/// Exactly one nonblank `text` input is supported: `String` up to 1024 bytes or
+/// `TranscriptText` up to 4096 bytes, matching the existing execution limits.
 #[derive(Debug)]
 pub struct SerialRuntimeHostPreparationRequest {
     pub preparation_request_id: String,
@@ -119,18 +121,18 @@ fn validate_preparation(
             "serial CPU preparation requires one actual text input",
         ));
     };
-    let text = match &input.value {
-        RuntimeHostExecutionInputValue::String(text)
-        | RuntimeHostExecutionInputValue::TranscriptText(text) => text,
+    let (text, max_bytes) = match &input.value {
+        RuntimeHostExecutionInputValue::String(text) => (text, 1024),
+        RuntimeHostExecutionInputValue::TranscriptText(text) => (text, 4096),
         _ => {
             return Err(preparation_error(
                 "serial CPU preparation requires an actual text input",
             ))
         }
     };
-    if input.port_id != "text" || text.len() > 4096 || text.trim().is_empty() {
+    if input.port_id != "text" || text.len() > max_bytes || text.trim().is_empty() {
         return Err(preparation_error(
-            "serial CPU preparation text must be nonblank and at most 4096 bytes",
+            "serial CPU preparation requires nonblank text: String at most 1024 bytes or TranscriptText at most 4096 bytes",
         ));
     }
     // Bound borrowed serialization before validating/cloning variable metadata.
@@ -302,17 +304,17 @@ mod tests {
     }
 
     #[test]
-    fn preparation_enforces_text_byte_limit_and_actual_single_input_shape() {
+    fn preparation_enforces_actual_single_nonblank_text_input_shape() {
         let intent = intent();
-        assert!(SerialRuntimeHostPreparationRequest::new(
-            "prepare.1",
-            &intent,
-            &inputs(&"é".repeat(2048))
-        )
-        .is_ok());
-        for text in [String::new(), " \t\n".into(), "é".repeat(2049)] {
+        for text in [String::new(), " \t\n".into()] {
             assert!(
                 SerialRuntimeHostPreparationRequest::new("prepare.1", &intent, &inputs(&text))
+                    .is_err()
+            );
+            let mut transcript = inputs(&text);
+            transcript[0].value = RuntimeHostExecutionInputValue::TranscriptText(text);
+            assert!(
+                SerialRuntimeHostPreparationRequest::new("prepare.1", &intent, &transcript)
                     .is_err()
             );
         }
@@ -327,6 +329,63 @@ mod tests {
         assert!(
             SerialRuntimeHostPreparationRequest::new("prepare.1", &intent, &wrong_value).is_err()
         );
+    }
+
+    #[test]
+    fn preparation_string_limit_matches_embedding_semantics_in_bytes() {
+        let intent = intent();
+        for text in ["x".repeat(1024), "é".repeat(512)] {
+            assert!(
+                SerialRuntimeHostPreparationRequest::new("prepare.1", &intent, &inputs(&text))
+                    .is_ok()
+            );
+        }
+        for text in ["x".repeat(1025), format!("{}x", "é".repeat(512))] {
+            assert!(
+                SerialRuntimeHostPreparationRequest::new("prepare.1", &intent, &inputs(&text))
+                    .is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn preparation_transcript_limit_matches_native_warm_semantics_in_bytes() {
+        let intent = intent();
+        for (text, accepted) in [
+            ("x".repeat(4096), true),
+            ("é".repeat(2048), true),
+            ("x".repeat(4097), false),
+            (format!("{}x", "é".repeat(2048)), false),
+        ] {
+            let mut transcript = inputs("unused");
+            transcript[0].value = RuntimeHostExecutionInputValue::TranscriptText(text);
+            assert_eq!(
+                SerialRuntimeHostPreparationRequest::new("prepare.1", &intent, &transcript).is_ok(),
+                accepted
+            );
+        }
+    }
+
+    #[test]
+    fn preparation_rechecks_mutated_public_text_type_and_size() {
+        let mut request = SerialRuntimeHostPreparationRequest::new(
+            "prepare.1",
+            &intent(),
+            &inputs(&"x".repeat(1024)),
+        )
+        .unwrap();
+        request.materialized_inputs[0].value =
+            RuntimeHostExecutionInputValue::String("x".repeat(1025));
+        assert!(request.validate().is_err());
+        request.materialized_inputs[0].value =
+            RuntimeHostExecutionInputValue::TranscriptText("x".repeat(4096));
+        assert!(request.validate().is_ok());
+        request.materialized_inputs[0].value =
+            RuntimeHostExecutionInputValue::String("x".repeat(4096));
+        assert!(request.validate().is_err());
+        request.materialized_inputs[0].value =
+            RuntimeHostExecutionInputValue::TranscriptText("x".repeat(4097));
+        assert!(request.validate().is_err());
     }
 
     #[test]
