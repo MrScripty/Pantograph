@@ -396,9 +396,10 @@ async fn unchanged_execution_facts(
         ),
         (0, 0, 0, 0)
     );
-    assert!(facade.registry_snapshot().reservations.is_empty());
+    let registry = facade.registry_snapshot();
+    assert!(registry.reservations.is_empty());
     json!({"session":snapshot.session,"workflow_run_id":snapshot.workflow_run_id,"queue":snapshot.items,
-        "ledger":events,"native":native,"registry":format!("{:?}",facade.registry_snapshot())})
+        "ledger":events,"native":native,"registry":registry})
 }
 
 #[cfg(not(feature = "host-dependency-inventory"))]
@@ -436,7 +437,19 @@ async fn inventory_rejection_case(resume: bool) {
         if message == "serial CPU residency execution requires host-dependency-inventory")
     );
     let after = unchanged_execution_facts(directory.path(), &facade, &session_id).await;
-    assert_eq!(before, after);
+    // Collection time changes on every registry query. Keep the actual raw
+    // snapshots in evidence, and compare every state field, including runtime
+    // transition timestamps, without this observation-only timestamp.
+    let mut before_state = before.clone();
+    let mut after_state = after.clone();
+    for state in [&mut before_state, &mut after_state] {
+        state["registry"]
+            .as_object_mut()
+            .unwrap()
+            .remove("generated_at_ms")
+            .unwrap();
+    }
+    assert_eq!(before_state, after_state);
     // The rejected request cannot reach either genuine native boundary.
     assert!(futures_util::poll!(Box::pin(load_entered.notified())).is_pending());
     assert!(futures_util::poll!(Box::pin(drain_entered.notified())).is_pending());
