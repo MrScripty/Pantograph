@@ -1,5 +1,10 @@
 # M4 local implementation checkpoint
 
+**Current evidence update:** the one-shot fixed main protocol subsequently failed
+after its first genuine embedding task. M4-C4 remains Partial/Blocked. See the
+[preserved failure report](2026-10-20-m4-fixed-protocol.md). The statements below
+describe the pre-qualification checkpoint, not current unexecuted status.
+
 Status: **In progress; not qualified or published**. M3 exact-head acceptance is
 complete at preserved b63aa3eb/tree defca3d3. This checkpoint implements the
 independently admitted native and workflow lanes. It does not accept M4-C1–C5.

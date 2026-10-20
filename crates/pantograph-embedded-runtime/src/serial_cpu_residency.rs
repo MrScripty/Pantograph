@@ -476,6 +476,19 @@ impl EmbeddedSerialCpuResidency {
             .workflow_service
             .workflow_run_inspection_query(request)
     }
+    /// Advance one bounded page for each requested diagnostic projection entry.
+    ///
+    /// The service validates the existing request bounds and returns the actual
+    /// projection cursors and failures. This does not execute or resume a run.
+    pub fn workflow_diagnostics_projection_refresh(
+        &self,
+        request: WorkflowDiagnosticsProjectionRefreshRequest,
+    ) -> Result<WorkflowDiagnosticsProjectionRefreshResponse, WorkflowServiceError> {
+        let _admission = self.admit_now()?;
+        self.runtime
+            .workflow_service
+            .workflow_diagnostics_projection_refresh(request)
+    }
     pub async fn workflow_get_scheduler_task_state_read_models(
         &self,
         request: WorkflowSchedulerTaskStateReadModelQueryRequest,

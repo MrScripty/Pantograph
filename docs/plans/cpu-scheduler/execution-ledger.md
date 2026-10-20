@@ -629,3 +629,18 @@ coordination; parent owns its later disposition after reachable handoff.
   No fixed protocol or either new qualification case has executed. Clean tracked
   source/tree, binary/input/environment freeze is the next gate. Local-only hold
   remains; no publication retry or alternative route is authorized.
+
+## 2026-10-20 — Fixed M4 main failed; native prefix preserved
+
+- Frozen7139b2ad/tree75852b54 release binaryc10590a7 ran the main protocol once
+  at03:22UTC and exited1 after first A: `M4 retained vector artifact missing`.
+  All71 original nonbinary files are archived with hashes in m4-main-failure-v1.
+- Independent read-only review confirms a valid golden-matching vector, one
+  load/forward/taskACK/finalstopACK and zero final charges. Empty projections
+  caused the readback failure; optional Started lease assumptions were also wrong.
+  No remaining main steps, comparison owners or pressure ran. C4 is Partial/Blocked.
+- Metadata-only explicit refresh and corrected Started/Completed joins are under
+  local repair/review. The two separately admitted cancellation cases have never
+  run and require a new reviewed source/binary/input/environment freeze. Original
+  failed main evidence stays unchanged; no main retry/continuation is authorized.
+- Publication remains blocked by the same unanswered automatic-review rejection.

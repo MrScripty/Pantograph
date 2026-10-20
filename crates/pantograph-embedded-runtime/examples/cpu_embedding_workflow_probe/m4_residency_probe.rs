@@ -1,5 +1,6 @@
 //! Fixed M4 qualification producer. No execution is implied by compiling it.
-//! Uses only the sealed facade, public sessions and read-only evidence stores.
+//! Uses the sealed facade, public sessions and explicit bounded diagnostics
+//! projection refresh/readback; no native owner authority escapes.
 use super::*;
 use pantograph_embedded_runtime::{
     EmbeddedSerialCpuModelDeclaration, EmbeddedSerialCpuResidency, EmbeddedSerialCpuResidencyConfig,
@@ -448,14 +449,45 @@ fn verify_vector(response: &WorkflowRunResponse, reference: &Value) -> ProbeResu
 
 async fn retain_readback(
     facade: &EmbeddedSerialCpuResidency,
+    root: &Path,
+    index: usize,
     session: &str,
     response: &WorkflowRunResponse,
 ) -> ProbeResult<Value> {
+    // Inspection reads derived tables. Its projection_batch_size validates a
+    // bound but does not advance them. Refresh only diagnostics, explicitly,
+    // before relying on the projected artifact identity.
+    let refresh = facade.workflow_diagnostics_projection_refresh(
+        WorkflowDiagnosticsProjectionRefreshRequest {
+            projections: vec![
+                WorkflowDiagnosticsProjectionKind::RunDetail,
+                WorkflowDiagnosticsProjectionKind::NodeStatus,
+                WorkflowDiagnosticsProjectionKind::IoArtifact,
+            ],
+            workflow_run_id: Some(response.workflow_run_id.clone()),
+            workflow_id: None,
+            reason: WorkflowDiagnosticsProjectionRefreshReason::ExplicitRefresh,
+            batch_size: 500,
+        },
+    )?;
+    save(
+        root,
+        &format!("step-{index}-projection-refresh.json"),
+        &refresh,
+    )?;
     let inspection = facade.workflow_run_inspection_query(WorkflowRunInspectionQueryRequest {
         workflow_run_id: response.workflow_run_id.clone(),
         artifact_limit: Some(128),
         projection_batch_size: Some(500),
     })?;
+    save(root, &format!("step-{index}-inspection.json"), &inspection)?;
+    let boundary = read_projection_boundary(root)?;
+    save(
+        root,
+        &format!("step-{index}-projection-boundary.json"),
+        &boundary,
+    )?;
+    verify_projection_catchup(&refresh, &boundary)?;
     let task_states = facade
         .workflow_get_scheduler_task_state_read_models(
             WorkflowSchedulerTaskStateReadModelQueryRequest {
@@ -470,13 +502,20 @@ async fn retain_readback(
         .find(|port| port.node_id == "vectors" && port.port_id == "vector")
         .ok_or("returned M4 vector absent")?;
     let mut bodies = Vec::new();
-    for artifact in inspection
-        .io_artifacts
-        .iter()
-        .filter(|artifact| artifact.producer_node_id.as_deref() == Some("vectors"))
-    {
+    let mut seen = std::collections::BTreeSet::new();
+    for artifact in inspection.io_artifacts.iter().filter(|artifact| {
+        artifact.producer_node_id.as_deref() == Some("vectors")
+            && artifact.producer_port_id.as_deref() == Some("vector")
+            && matches!(
+                artifact.artifact_role.as_str(),
+                "workflow_output" | "node_output"
+            )
+    }) {
         if artifact.workflow_run_id.as_str() != response.workflow_run_id {
             return Err("retained artifact belongs to another M4 run".into());
+        }
+        if !seen.insert(artifact.payload_artifact_id.clone()) {
+            continue;
         }
         let body = facade.workflow_read_artifact_body(ArtifactReadRequest {
             artifact_id: artifact.payload_artifact_id.clone(),
@@ -492,7 +531,95 @@ async fn retain_readback(
     if bodies.is_empty() {
         return Err("M4 retained vector artifact missing".into());
     }
-    Ok(json!({"inspection":inspection,"task_states":task_states,"retained_vectors":bodies}))
+    Ok(
+        json!({"projection_refresh":refresh,"projection_boundary":boundary,"inspection":inspection,"task_states":task_states,"retained_vectors":bodies}),
+    )
+}
+
+fn read_projection_boundary(root: &Path) -> ProbeResult<Value> {
+    use pantograph_diagnostics_ledger::DiagnosticEventKind::*;
+    let ledger = SqliteDiagnosticsLedger::open(root.join("app-data/serial-cpu-diagnostics.db"))?;
+    let events = ledger.diagnostic_events_after(0, 500)?;
+    if events.len() >= 500 {
+        return Err("M4 projection evidence history exceeds its single-page bound".into());
+    }
+    let (mut detail, mut node, mut io) = (0, 0, 0);
+    // These relevant-event sets follow the existing three ledger projection
+    // readers. Their cursors need not reach the latest unrelated event.
+    for event in &events {
+        if matches!(
+            event.event_kind,
+            SchedulerEstimateProduced
+                | SchedulerQueuePlacement
+                | SchedulerQueueControl
+                | SchedulerRunDelayed
+                | SchedulerModelLifecycleChanged
+                | SchedulerRunAdmitted
+                | RunStarted
+                | RunTerminal
+                | RunSnapshotAccepted
+                | NodeExecutionStatus
+                | InferenceExecutionDiagnosticObserved
+                | IoArtifactObserved
+                | DiagnosticErrorOccurred
+        ) {
+            detail = event.event_seq;
+        }
+        if matches!(
+            event.event_kind,
+            NodeExecutionStatus
+                | SchedulerTaskAttemptLifecycleChanged
+                | DiagnosticErrorOccurred
+                | InferenceExecutionDiagnosticObserved
+        ) {
+            node = event.event_seq;
+        }
+        if matches!(
+            event.event_kind,
+            IoArtifactObserved | RetentionArtifactStateChanged
+        ) {
+            io = event.event_seq;
+        }
+    }
+    Ok(
+        json!({"visible_event_count":events.len(),"visible_latest_event_seq":events.last().map(|event|event.event_seq).unwrap_or(0),
+        "required_cursors":{"run_detail":detail,"node_status":node,"io_artifact":io},"single_page_limit":500}),
+    )
+}
+
+fn verify_projection_catchup(
+    refresh: &WorkflowDiagnosticsProjectionRefreshResponse,
+    boundary: &Value,
+) -> ProbeResult<()> {
+    if !refresh.failed.is_empty() || refresh.advanced.len() != 3 {
+        return Err(
+            "M4 bounded diagnostics projection refresh did not advance every requested projection"
+                .into(),
+        );
+    }
+    for (kind, name) in [
+        (WorkflowDiagnosticsProjectionKind::RunDetail, "run_detail"),
+        (WorkflowDiagnosticsProjectionKind::NodeStatus, "node_status"),
+        (WorkflowDiagnosticsProjectionKind::IoArtifact, "io_artifact"),
+    ] {
+        let states: Vec<_> = refresh
+            .advanced
+            .iter()
+            .filter(|advance| advance.projection_kind == kind)
+            .collect();
+        if states.len() != 1
+            || states[0].projection_state.status
+                != pantograph_diagnostics_ledger::ProjectionStatus::Current
+            || Some(states[0].projection_state.last_applied_event_seq)
+                != boundary["required_cursors"][name].as_i64()
+        {
+            return Err(format!(
+                "M4 projection {name} did not reach its exact visible relevant-event boundary"
+            )
+            .into());
+        }
+    }
+    Ok(())
 }
 
 fn collect_events(root: &Path) -> ProbeResult<Vec<Value>> {
@@ -574,7 +701,7 @@ async fn owner_protocol(
             } else {
                 let (response,_)=outcome?;
                 verify_vector(&response,reference)?;
-                let retained=retain_readback(&facade,&session.session_id,&response).await?;
+                let retained=retain_readback(&facade,&root,index,&session.session_id,&response).await?;
                 save(&root,&format!("step-{index}-retained-readback.json"),&retained)?;
                 let snapshot=facade.registry_snapshot();
                 if snapshot.reservations.len()!=1||snapshot.runtimes.iter().filter(|runtime|runtime.model_resource_residency.is_some()).count()!=1 {
@@ -1145,13 +1272,38 @@ fn verify_native_records(result: &Value, events: &[Value], pressure: bool) -> Pr
         if starts.len() != 1
             || starts[0]["payload"]["scheduler_task_id"] != native["task_id"]
             || starts[0]["payload"]["scheduler_attempt_id"] != native["attempt_id"]
-            || starts[0]["payload"]["reservation_id"]
+            || starts[0]["payload"]["execution_class"] != "runtime"
+        {
+            return Err("M4 native receipt identity does not match actual ledger Start".into());
+        }
+        // Started records identify the scheduler attempt before selected lease,
+        // runtime and device are emitted. Completed carries that dispatch
+        // evidence; do not invent it on the earlier Start observation.
+        let completed: Vec<_> = events
+            .iter()
+            .filter(|event| {
+                event["workflow_run_id"] == run
+                    && event["node_id"] == "infer"
+                    && event["payload"]["payload_type"]
+                        == "scheduler_task_attempt_lifecycle_changed"
+                    && event["payload"]["transition"] == "completed"
+            })
+            .collect();
+        if completed.len() != 1
+            || completed[0]["payload"]["scheduler_task_id"] != native["task_id"]
+            || completed[0]["payload"]["scheduler_attempt_id"] != native["attempt_id"]
+            || completed[0]["payload"]["execution_class"] != "runtime"
+            || completed[0]["payload"]["reservation_id"]
                 != format!(
                     "runtime-registry.{}",
                     integer(native, "reservation_lease_id")?
                 )
+            || completed[0]["payload"]["selected_runtime_id"] != "candle"
+            || completed[0]["payload"]["selected_runtime_variant_id"] != "candle.cpu"
+            || completed[0]["payload"]["selected_device_id"] != "cpu"
+            || integer(starts[0], "event_seq")? >= integer(completed[0], "event_seq")?
         {
-            return Err("M4 native receipt identity does not match actual ledger Start".into());
+            return Err("M4 native receipt identity does not match actual ledger Completed".into());
         }
         forward_ns.push(integer(native, "forward_and_drain_ns")?);
         prior_owner = Some(&native["current_owner"]);
@@ -1339,9 +1491,14 @@ mod tests {
         let result = json!({"fixed_work":[8],"rows":[{"model_id":MODEL_ID,"model_alias":"bert-8","response":{"workflow_run_id":"run-1"}}],
             "native_records":records.into_iter().map(|record|json!({"target":"embedded::serial_cpu_residency","record":record})).collect::<Vec<_>>()});
         let events = vec![
-            json!({"workflow_run_id":"run-1","node_id":"infer","payload":{
+            json!({"event_seq":5,"workflow_run_id":"run-1","node_id":"infer","payload":{
             "payload_type":"scheduler_task_attempt_lifecycle_changed","transition":"started",
-            "scheduler_task_id":"runtime:infer","scheduler_attempt_id":"attempt-1","reservation_id":"runtime-registry.42"}}),
+            "execution_class":"runtime","scheduler_task_id":"runtime:infer","scheduler_attempt_id":"attempt-1",
+            "selected_runtime_id":null,"selected_device_id":null}}),
+            json!({"event_seq":6,"workflow_run_id":"run-1","node_id":"infer","payload":{
+            "payload_type":"scheduler_task_attempt_lifecycle_changed","transition":"completed","execution_class":"runtime",
+            "scheduler_task_id":"runtime:infer","scheduler_attempt_id":"attempt-1","reservation_id":"runtime-registry.42",
+            "selected_runtime_id":"candle","selected_runtime_variant_id":"candle.cpu","selected_device_id":"cpu"}}),
         ];
         (result, events)
     }
@@ -1356,6 +1513,74 @@ mod tests {
                 .unwrap_err()
                 .to_string(),
             "M4 native receipt identity does not match actual ledger Start"
+        );
+    }
+
+    #[test]
+    fn raw_oracle_accepts_start_without_lease_and_joins_the_completed_dispatch() {
+        let (result, events) = recorded_singleton();
+        assert!(events[0]["payload"].get("reservation_id").is_none());
+        assert!(events[0]["payload"]["selected_runtime_id"].is_null());
+        assert_eq!(
+            events[1]["payload"]["reservation_id"],
+            "runtime-registry.42"
+        );
+        assert!(verify_native_records(&result, &events, false).is_ok());
+    }
+
+    #[test]
+    fn raw_oracle_refuses_completed_foreign_lease_attempt_or_target() {
+        let (result, base) = recorded_singleton();
+        assert!(verify_native_records(&result, &base, false).is_ok());
+        for (field, value) in [
+            ("reservation_id", "runtime-registry.99"),
+            ("scheduler_attempt_id", "foreign-attempt"),
+            ("selected_runtime_id", "foreign-runtime"),
+            ("selected_runtime_variant_id", "foreign-variant"),
+            ("selected_device_id", "gpu"),
+        ] {
+            let mut events = base.clone();
+            events[1]["payload"][field] = json!(value);
+            assert_eq!(
+                verify_native_records(&result, &events, false)
+                    .unwrap_err()
+                    .to_string(),
+                "M4 native receipt identity does not match actual ledger Completed",
+                "accepted foreign {field}"
+            );
+        }
+        let mut reversed = base;
+        reversed[1]["event_seq"] = json!(4);
+        assert!(verify_native_records(&result, &reversed, false).is_err());
+    }
+
+    #[test]
+    fn projection_evidence_requires_each_relevant_cursor_not_an_unrelated_global_cursor() {
+        // Controlled projection DTOs only; no native load or actual run occurs.
+        let advanced:Vec<_>=[("run_detail",12),("node_status",8),("io_artifact",12)].into_iter().map(|(name,seq)|json!({
+            "projection_kind":name,"projection_state":{"projection_name":name,"projection_version":1,
+                "last_applied_event_seq":seq,"status":"current","rebuilt_at_ms":null,"updated_at_ms":0,
+                "last_error":null,"last_error_at_ms":null,"last_failed_event_seq":null}})).collect();
+        let mut refresh: WorkflowDiagnosticsProjectionRefreshResponse =
+            serde_json::from_value(json!({"advanced":advanced,"failed":[],"invalidations":[]}))
+                .unwrap();
+        let boundary = json!({"visible_event_count":12,"visible_latest_event_seq":12,
+            "required_cursors":{"run_detail":12,"node_status":8,"io_artifact":12},"single_page_limit":500});
+        assert!(verify_projection_catchup(&refresh, &boundary).is_ok());
+        refresh.advanced[2].projection_state.last_applied_event_seq = 0;
+        assert_eq!(
+            verify_projection_catchup(&refresh, &boundary)
+                .unwrap_err()
+                .to_string(),
+            "M4 projection io_artifact did not reach its exact visible relevant-event boundary"
+        );
+        refresh.advanced[2].projection_state.last_applied_event_seq = 12;
+        refresh.advanced[1].projection_state.last_applied_event_seq = 12;
+        assert_eq!(
+            verify_projection_catchup(&refresh, &boundary)
+                .unwrap_err()
+                .to_string(),
+            "M4 projection node_status did not reach its exact visible relevant-event boundary"
         );
     }
     #[test]
@@ -1563,8 +1788,13 @@ mod tests {
         let mut second_start = events[0].clone();
         second_start["workflow_run_id"] = json!("run-2");
         second_start["payload"]["scheduler_attempt_id"] = json!("attempt-2");
-        second_start["payload"]["reservation_id"] = json!("runtime-registry.43");
-        events.push(second_start);
+        second_start["event_seq"] = json!(15);
+        let mut second_completed = events[1].clone();
+        second_completed["workflow_run_id"] = json!("run-2");
+        second_completed["payload"]["scheduler_attempt_id"] = json!("attempt-2");
+        second_completed["payload"]["reservation_id"] = json!("runtime-registry.43");
+        second_completed["event_seq"] = json!(16);
+        events.extend([second_start, second_completed]);
         assert!(verify_native_records(&pair, &events, false).is_ok());
         let mut duplicate = pair.clone();
         duplicate["rows"][1]["response"]["workflow_run_id"] = json!("run-1");

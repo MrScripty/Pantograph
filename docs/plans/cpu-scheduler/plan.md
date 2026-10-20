@@ -1,10 +1,10 @@
 # Plan: CPU Scheduler Completion And Fair Progress
 
-**Plan status:** `Active` — M1/M2 accepted; M3 verifying; bounded M4 contract admitted with implementation dependency pending; M5/M6 unadmitted.
+**Plan status:** `Active` — M1/M2/M3 accepted; M4 implemented locally, native qualification Partial; M5/M6 unadmitted.
 
-**Current phase:** M3 final published-head acceptance review; independent M4 fixtures verified, production gate pending.
+**Current phase:** Preserve the failed one-shot M4 main protocol; repair diagnostic readback and review the never-run cancellation supplement. Publication remains blocked.
 
-**Next slice:** After observed PR81 Quality summary success and recorded M3 acceptance, implement the admitted M4 native residency capability and its ownership tests. Until then, fixture work only.
+**Next slice:** Review and freeze the bounded metadata repair before the two separately admitted cancellation cases. A new main cohort requires prospective parent coordination; no main retry is authorized.
 
 **Acceptance status:** M1 merged as PR73 in main `07b23d47`; the original
 negative cohort and the separately accepted C3 supplement remain unchanged.
@@ -379,11 +379,14 @@ M3 service order, task outcomes and full physical ownership/accounting. Measure
 load, forward/drain, stop and reload separately. Counts and resource/ownership
 traces decide acceptance; there is no speedup, semantic-quality or latency claim.
 
-Current phase: admitted local production implementation. Independent GPT-6.1 Sol
+Implementation admission: independent GPT-6.1 Sol
 High source/design reviewers admitted this bounded contract and accepted M3-C1–C5
-after actual final CI success. Exactly one next slice: implement the native
-residency capability and ownership tests, then integrate the private owner/port
-and granted-turn preparation. No M4 native cohort or acceptance is claimed yet.
+after actual final CI success. Local source checkpoint7139b2ad implemented the
+native capability, private facade/port and granted-turn preparation. Its fixed
+main execution failed after the first genuine embedding task at artifact readback:
+diagnostic projections had not been refreshed. Preserve that exit1 and all raw
+evidence. Native prefix evidence does not qualify the missing AABBA, comparison or
+pressure cases. M4-C4 remains Partial/Blocked; M4 acceptance is not claimed.
 
 #### Binding decisions and authority
 
@@ -634,6 +637,23 @@ all errors and bounded teardown outcomes even when an oracle fails. No recovery,
 retry or model regeneration is permitted. Source/binary/input/environment freeze
 and independent fixture review precede first execution of these two cases.
 
+Prospective diagnostic-readback correction2026-10-20: the original7139b2ad
+main attempt exited1 after its first successful native task because inspection
+read unrefreshed materialized projections. Preserve this failed attempt and all
+raw evidence; no main retry is admitted. A narrow facade method may forward the
+existing typed diagnostics refresh under the same admission guard, with no
+writable alias or native authority. Evidence queries explicitly refresh only
+needed projections using one bounded page per requested projection entry
+(maximum500events per page), save the response,
+and refuse incomplete/failed readback. Correct the producer's Started/Completed
+join to require shared actual run/node/task/attempt identity and Completed's exact
+lease, without inventing optional Started fields. Add no-model and pure-oracle
+regressions. Before their first invocation, independently review and re-freeze
+the two cancellation cases with this metadata correction; their counts, owners,
+native boundaries and cancellation semantics remain as declared above. This
+correction cannot qualify missing main outcomes. See the
+[preserved main failure](reports/2026-10-20-m4-fixed-protocol.md).
+
 | Gate | Deciding evidence / acceptance |
 | --- | --- |
 | M4-C1 | Independent contract admission, preserved M3 accepted exact head, fixed write set, explicit constructor/default refusal and no writable owner escape. |
@@ -682,8 +702,10 @@ Numeric native cohort capacity/pressure values freeze only in producer admission
 before execution, using those verified sources; no post-outcome tuning.
 
 Dependency gates: parent-confirmed exact-head M3-C5/acceptance and independent
-contract admission are satisfied. Feasible additive accounting and the dedicated
-facade are under implementation/review; M4 acceptance and publication remain gated.
+contract admission are satisfied. Feasible additive accounting, the dedicated
+facade and affected source tests passed local review at7139b2ad. The fixed main
+qualification failed on diagnostic readback after one task; acceptance and
+publication remain gated.
 Re-plan triggers: writable gateway/ordinary execution escape, production path outside
 write set, inability to reserve full load/registration envelope, inability to preserve
 M3 final Start/turn ordering, unsupported native stop/load ownership or missing actual

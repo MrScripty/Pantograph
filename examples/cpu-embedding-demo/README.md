@@ -278,15 +278,16 @@ and the committed untrained BERT-8/BERT-12 fixtures. Construction performs no
 native bootstrap. The constructor owns its gateway and runtime registry; no
 writable runtime or owner capability is exposed to the producer.
 
-After independent source/producer review and source/binary/environment freeze,
-the admitted invocation is:
+The build command and invocation shape below require independent
+source/producer review, source/binary/environment freeze, and separate
+authorization of a future protocol:
 
 ```sh
 ORT_SKIP_DOWNLOAD=1 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
   cargo build --locked -p pantograph-embedded-runtime --no-default-features \
   --features backend-candle,host-dependency-inventory --release \
   --example cpu_embedding_workflow_probe
-# Execute only after the M4 producer admission gate, in one new directory:
+# Execution requires separate prospective protocol admission:
 PUMAS_REGISTRY_DB_PATH=/tmp/pantograph-m4-new/registry.db \
   "${CARGO_TARGET_DIR:-target}/release/examples/cpu_embedding_workflow_probe" \
   /tmp/pantograph-m4-new --serial-residency
@@ -312,7 +313,8 @@ these declarations are neither allocator measurements nor GPU qualification.
 
 The producer first verifies all fourteen committed fixture hashes using the
 read-only `m4_fixture_contract.py` helper. It saves every public result/error,
-successful-run readiness resumes, retained vector readback, ledger Start, native
+successful-run readiness resumes, retained vector readback, ledger Start and
+Completed observations, native
 identity, resource claim, phase observation and teardown outcome. Load,
 publication, forward-and-drain, physical stop and registry ACK are distinct
 observations. The registry task ACK is not labelled a scheduler cleanup ACK.
@@ -321,6 +323,10 @@ Outer request time and shutdown watchdog timeouts are labelled separately;
 an uncertain shutdown ends the cohort without constructing another owner.
 Failed-run resume history is not returned by the helper; public errors and
 matching preparation/terminal identities remain in raw native/ledger evidence.
+Readback explicitly refreshes the three diagnostic projections with a 500-event
+page bound, checks each cursor against its relevant visible raw events, and
+saves inspection before artifact assertions. Start identifies run/node/task/
+attempt; Completed supplies the matching selected lease, runtime and device.
 Existing directories,
 fixture overrides, missing evidence and log overflow refuse; failed cohorts
 are preserved and never restarted to obtain a desired result.
@@ -330,3 +336,8 @@ Partial while separately admitted native cancellation, public Running
 cancellation and controlled fault evidence is pending. No missing phase is
 assigned zero, and no general speedup, useful embedding quality, default
 activation or M4 acceptance follows from this invocation.
+
+The original frozen `7139b2ad` main attempt exited after its first A result
+because diagnostic projections had not been advanced. Its source, binaries and
+failed evidence remain preserved. The prospective projection/readback and
+lifecycle-oracle repairs authorize no main retry or continuation.

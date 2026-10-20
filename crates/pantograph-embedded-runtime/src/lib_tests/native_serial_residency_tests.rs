@@ -11,7 +11,8 @@ use pantograph_workflow_service::workflow::{
     WorkflowSchedulerTaskStateReadModelQueryResponse,
 };
 use pantograph_workflow_service::{
-    ClientRegistrationRequest, ClientSessionOpenRequest,
+    ClientRegistrationRequest, ClientSessionOpenRequest, WorkflowDiagnosticsProjectionKind,
+    WorkflowDiagnosticsProjectionRefreshReason, WorkflowDiagnosticsProjectionRefreshRequest,
     WorkflowExecutionSessionActiveTaskCancelRequest,
     WorkflowExecutionSessionActiveTaskCancelStatus,
     WorkflowExecutionSessionAttributedCreateRequest, WorkflowExecutionSessionAttributionRequest,
@@ -378,6 +379,38 @@ async fn actual_public_running_post_drain_cancellation_preserves_cap_and_exact_c
         let diagnostic = facade.residency_diagnostics().ok_or("missing final diagnostics")?;
         evidence["run"] = record_result(&run_result);
         evidence["after_run"] = json!({"registry":registry_facts(&after),"native":diagnostic});
+        // Inspection reads persisted projections. Advance only the two needed
+        // for terminal observation, once, after the actual execution has joined.
+        // This metadata operation cannot supply a native completion or ACK.
+        let refresh = facade.workflow_diagnostics_projection_refresh(
+            WorkflowDiagnosticsProjectionRefreshRequest {
+                projections: vec![WorkflowDiagnosticsProjectionKind::RunDetail, WorkflowDiagnosticsProjectionKind::NodeStatus],
+                workflow_run_id: Some(states.workflow_run_id.clone()),
+                workflow_id: Some(task.workflow_id.clone()),
+                reason: WorkflowDiagnosticsProjectionRefreshReason::ExplicitRefresh,
+                batch_size: 128,
+            },
+        );
+        evidence["terminal_projection_refresh"] = match &refresh {
+            Ok(refresh) => json!({"ok":true,"response":refresh}),
+            Err(error) => json!({"ok":false,"error":error.to_string()}),
+        };
+        let refresh = refresh?;
+        require(refresh.failed.is_empty() && refresh.advanced.len() == 2
+            && [WorkflowDiagnosticsProjectionKind::RunDetail, WorkflowDiagnosticsProjectionKind::NodeStatus].iter().all(|kind|refresh.advanced.iter().filter(|advanced|advanced.projection_kind == *kind).count() == 1),
+            "explicit terminal metadata refresh must advance both requested projections without failure")?;
+        // Both projections start empty in this fresh owner. Each positive
+        // cursor below 128 implies fewer than 128 distinct relevant events in
+        // its first page. Their event-kind filters may end at different cursors.
+        let page_caught_up = refresh.advanced.iter().all(|advanced| {
+            let cursor = advanced.projection_state.last_applied_event_seq;
+            cursor > 0 && cursor < 128
+        });
+        evidence["terminal_projection_page_caught_up"] = json!(page_caught_up);
+        require(page_caught_up, "fresh terminal projections must catch up within their one explicit 128-event page")?;
+        let metadata_preserved_charges = same_charges(&after, &facade.registry_snapshot());
+        evidence["metadata_refresh_preserved_charges"] = json!(metadata_preserved_charges);
+        require(metadata_preserved_charges, "terminal metadata refresh must preserve every native charge")?;
         let inspection = facade.workflow_run_inspection_query(WorkflowRunInspectionQueryRequest {
             workflow_run_id:states.workflow_run_id.clone(), artifact_limit:Some(1), projection_batch_size:Some(128),
         });

@@ -71,6 +71,159 @@ async fn invalid_facade_configuration_refuses_before_owner_or_filesystem_startup
 }
 
 #[tokio::test]
+async fn projection_refresh_publishes_existing_raw_evidence_without_native_work() {
+    use pantograph_diagnostics_ledger::{
+        DiagnosticEventAppendRequest, DiagnosticsLedgerRepository, NodeExecutionProjectionStatus,
+        RunListProjectionStatus,
+    };
+
+    let directory = tempfile::tempdir().unwrap();
+    seed(directory.path());
+    let facade = EmbeddedSerialCpuResidency::new(config(directory.path()))
+        .await
+        .unwrap();
+    let refresh = |batch_size| WorkflowDiagnosticsProjectionRefreshRequest {
+        projections: vec![
+            WorkflowDiagnosticsProjectionKind::RunDetail,
+            WorkflowDiagnosticsProjectionKind::NodeStatus,
+            WorkflowDiagnosticsProjectionKind::IoArtifact,
+        ],
+        workflow_run_id: Some("run-projection-fixture".into()),
+        workflow_id: Some("workflow-projection-fixture".into()),
+        reason: WorkflowDiagnosticsProjectionRefreshReason::ExplicitRefresh,
+        batch_size,
+    };
+    let inspection = || WorkflowRunInspectionQueryRequest {
+        workflow_run_id: "run-projection-fixture".into(),
+        artifact_limit: Some(10),
+        projection_batch_size: Some(10),
+    };
+    let result = async {
+        let service = &facade.runtime.workflow_service;
+        let body = b"retained projection fixture body";
+        let artifact = service.write_artifact(ArtifactWriteRequest {
+            artifact_id: Some("artifact-projection-fixture".into()),
+            payload_kind: ArtifactPayloadKind::Text,
+            media_type: "text/plain".into(),
+            format: None,
+            attribution: ArtifactAttribution {
+                workflow_run_id: "run-projection-fixture".into(),
+                workflow_id: Some("workflow-projection-fixture".into()),
+                workflow_version_id: None,
+                node_id: Some("fixture-output".into()),
+                port_id: Some("text".into()),
+                model_id: None,
+                runtime_id: None,
+            },
+            artifact_role: Some("node_output".into()),
+            parent_artifact_id: None,
+            revision_index: None,
+            body: body.to_vec(),
+        })?;
+        // These are diagnostic fixtures, not fabricated native/run evidence.
+        // The regression exercises projection visibility with no workflow run.
+        for (index, payload) in [
+            json!({"payload_type":"run_snapshot_accepted",
+                "workflow_run_snapshot_id":"snapshot-projection-fixture",
+                "workflow_presentation_revision_id":"presentation-projection-fixture",
+                "workflow_execution_session_id":"session-projection-fixture",
+                "node_versions":[]}),
+            json!({"payload_type":"run_terminal","status":"completed","duration_ms":2}),
+            json!({"payload_type":"node_execution_status","status":"completed",
+                "started_at_ms":1,"completed_at_ms":3,"duration_ms":2}),
+            json!({"payload_type":"io_artifact_observed","artifact_id":artifact.artifact_id,
+                "artifact_role":"node_output","producer_node_id":"fixture-output",
+                "producer_port_id":"text","media_type":"text/plain",
+                "size_bytes":body.len(),"retention_state":"retained"}),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let event: DiagnosticEventAppendRequest = serde_json::from_value(json!({
+                "source_component":if index == 2 { "node_execution" } else { "workflow_service" },
+                "occurred_at_ms":index + 1,
+                "workflow_run_id":"run-projection-fixture",
+                "workflow_id":"workflow-projection-fixture","node_id":"fixture-output",
+                "privacy_class":"system_metadata","retention_class":"audit_metadata",
+                "payload":payload
+            }))?;
+            service.workflow_diagnostic_event_record(event)?;
+        }
+        let ledger = SqliteDiagnosticsLedger::open(
+            directory.path().join("app-data/serial-cpu-diagnostics.db"),
+        )?;
+        let raw_before = ledger.diagnostic_events_after(0, 10)?;
+        assert_eq!(raw_before.len(), 4);
+        let stale = facade.workflow_run_inspection_query(inspection())?;
+        assert!(stale.run.is_none());
+        assert!(stale.node_statuses.is_empty());
+        assert!(stale.io_artifacts.is_empty());
+        assert_eq!(stale.run_projection_state.last_applied_event_seq, 0);
+        for invalid in [0, 501] {
+            assert!(matches!(
+                facade.workflow_diagnostics_projection_refresh(refresh(invalid)),
+                Err(WorkflowServiceError::InvalidRequest(_))
+            ));
+        }
+        // One page cannot silently catch up the run projection past its bound.
+        let first = facade.workflow_diagnostics_projection_refresh(refresh(1))?;
+        assert!(first.failed.is_empty());
+        assert_eq!(first.advanced[0].projection_state.last_applied_event_seq, 1);
+        let updated = facade.workflow_diagnostics_projection_refresh(refresh(10))?;
+        assert!(updated.failed.is_empty());
+        assert_eq!(updated.advanced.len(), 3);
+        assert_eq!(updated.invalidations.len(), 3);
+        for advance in &updated.advanced {
+            let expected = match advance.projection_kind {
+                WorkflowDiagnosticsProjectionKind::NodeStatus => 3,
+                _ => 4,
+            };
+            assert_eq!(advance.projection_state.last_applied_event_seq, expected);
+        }
+        let visible = facade.workflow_run_inspection_query(inspection())?;
+        assert_eq!(
+            visible.run.as_ref().unwrap().status,
+            RunListProjectionStatus::Completed
+        );
+        assert_eq!(visible.node_statuses.len(), 1);
+        assert_eq!(
+            visible.node_statuses[0].status,
+            NodeExecutionProjectionStatus::Completed
+        );
+        assert_eq!(visible.io_artifacts.len(), 1);
+        assert_eq!(visible.io_artifacts[0].artifact_id, artifact.artifact_id);
+        assert_eq!(
+            facade
+                .workflow_read_artifact_body(ArtifactReadRequest {
+                    artifact_id: artifact.artifact_id,
+                    byte_range_start: None,
+                    byte_range_end_exclusive: None,
+                })?
+                .body,
+            body
+        );
+        let raw_after = ledger.diagnostic_events_after(0, 10)?;
+        assert_eq!(raw_before, raw_after);
+        assert!(facade.registry_snapshot().reservations.is_empty());
+        let diagnostics = facade.residency_diagnostics().unwrap();
+        assert_eq!(
+            (diagnostics.loads, diagnostics.retains, diagnostics.stops),
+            (0, 0, 0)
+        );
+        assert!(!diagnostics.has_idle_owner);
+        Ok::<_, Box<dyn std::error::Error>>(())
+    }
+    .await;
+    let shutdown = facade.shutdown().await;
+    result.unwrap();
+    shutdown.unwrap();
+    assert!(matches!(
+        facade.workflow_diagnostics_projection_refresh(refresh(10)),
+        Err(WorkflowServiceError::InvalidRequest(_))
+    ));
+}
+
+#[tokio::test]
 async fn metadata_sessions_never_load_reserve_or_mint_physical_load_proof() {
     use pantograph_workflow_service::{
         WorkflowExecutionSessionRetentionHint as Retention, WorkflowHost,
