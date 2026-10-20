@@ -406,8 +406,12 @@ async fn inventory_rejection_case(resume: bool) {
     let (directory, facade, session_id, edit) = default_execution_fixture().await;
     let load_entered = Arc::new(tokio::sync::Notify::new());
     let drain_entered = Arc::new(tokio::sync::Notify::new());
-    facade.set_residency_after_load_gate(load_entered.clone(), Arc::new(tokio::sync::Notify::new()));
-    facade.set_residency_after_drain_gate(drain_entered.clone(), Arc::new(tokio::sync::Notify::new()));
+    facade
+        .set_residency_after_load_gate(load_entered.clone(), Arc::new(tokio::sync::Notify::new()));
+    facade.set_residency_after_drain_gate(
+        drain_entered.clone(),
+        Arc::new(tokio::sync::Notify::new()),
+    );
     let before = unchanged_execution_facts(directory.path(), &facade, &session_id).await;
     let error = if resume {
         // An actual authored/attributed session and a valid run identifier; no
