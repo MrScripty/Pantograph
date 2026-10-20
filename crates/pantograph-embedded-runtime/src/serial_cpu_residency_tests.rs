@@ -630,15 +630,189 @@ pub(crate) async fn author(
     Ok(edit.session_id)
 }
 
+// Diagnostic I/O must never early-return past the existing shutdown owner.
+// Reserve space for first/terminal errors and shutdown phases even if polling
+// reaches its observation budget. A write/limit error vetoes success afterward.
+#[cfg(feature = "host-dependency-inventory")]
+struct FacadeNativeEvidence {
+    root: Option<PathBuf>,
+    progress: Option<std::fs::File>,
+    summary: serde_json::Value,
+    sequence: usize,
+    phase_records: usize,
+    bytes: usize,
+    io_error: Option<String>,
+}
+
+#[cfg(feature = "host-dependency-inventory")]
+impl FacadeNativeEvidence {
+    const CASE: &'static str =
+        "actual_facade_session_uses_private_load_owner_and_acknowledged_shutdown";
+
+    fn new() -> std::io::Result<Self> {
+        let root = std::env::var_os("PANTOGRAPH_M4_CANCELLATION_EVIDENCE_ROOT").map(PathBuf::from);
+        let progress = if let Some(root) = &root {
+            std::fs::create_dir_all(root)?;
+            let file = std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(root.join(format!("{}.progress.jsonl", Self::CASE)))?;
+            file.sync_all()?;
+            std::fs::File::open(root)?.sync_all()?;
+            Some(file)
+        } else {
+            None
+        };
+        let mut observer = Self {
+            root,
+            progress,
+            summary: json!({"case_id":Self::CASE,"host_dependency_inventory":true,
+                "raw_readiness":{"unavailable":"private facade Check/request/binding/provider snapshots are not exposed"}}),
+            sequence: 0,
+            phase_records: 0,
+            bytes: 0,
+            io_error: None,
+        };
+        observer.record("case_started", json!({}), true);
+        if let Some(error) = observer.io_error.take() {
+            return Err(std::io::Error::other(error));
+        }
+        Ok(observer)
+    }
+
+    fn record(&mut self, kind: &str, data: serde_json::Value, critical: bool) {
+        use std::io::Write;
+        if self.progress.is_none() {
+            return;
+        }
+        // Two 30-second loops, each sleeping 20ms, normally emit fewer than
+        // 6,100 await records. Critical errors/teardown have a separate reserve.
+        let event = json!({"sequence":self.sequence,"event":kind,
+            "await":self.summary["await"],"round":self.summary["round"],
+            "session_id":self.summary["session_id"],"data":data});
+        let write = (|| -> Result<(), Box<dyn std::error::Error>> {
+            let mut bytes = serde_json::to_vec(&event)?;
+            bytes.push(b'\n');
+            if !critical
+                && (self.phase_records >= 7000 || self.bytes + bytes.len() > 3 * 1024 * 1024)
+            {
+                self.io_error
+                    .get_or_insert_with(|| "facade diagnostic phase limit exceeded".into());
+                return Ok(());
+            }
+            if bytes.len() > 64 * 1024
+                || self.sequence >= 8192
+                || self.bytes + bytes.len() > 4 * 1024 * 1024
+            {
+                return Err("facade diagnostic output limit exceeded".into());
+            }
+            let file = self.progress.as_mut().unwrap();
+            file.write_all(&bytes)?;
+            file.sync_all()?;
+            self.bytes += bytes.len();
+            self.sequence += 1;
+            self.phase_records += usize::from(!critical);
+            Ok(())
+        })();
+        if let Err(error) = write {
+            if self.io_error.is_none() {
+                self.io_error = Some(error.to_string());
+            }
+            // Preserve the prefix; failed writes must not recur before cleanup.
+            self.progress = None;
+        }
+    }
+
+    fn phase(&mut self, phase: &str, critical: bool) {
+        self.summary["await"] = json!(phase);
+        self.record("await", json!({}), critical);
+    }
+
+    fn error_record(error: &(dyn std::error::Error + 'static)) -> serde_json::Value {
+        let mut causes = Vec::new();
+        let mut source = error.source();
+        while let Some(cause) = source {
+            if causes.len() == 16 {
+                break;
+            }
+            causes.push(cause.to_string());
+            source = cause.source();
+        }
+        json!({"error":error.to_string(),"debug":format!("{error:?}"),
+            "causes":causes,"causes_truncated":source.is_some()})
+    }
+
+    fn error(&mut self, error: &(dyn std::error::Error + 'static), pending: bool) {
+        let error = json!({"await":self.summary["await"],"round":self.summary["round"],
+            "readiness_pending":pending,"detail":Self::error_record(error)});
+        if self.summary["first_error"].is_null() {
+            self.summary["first_error"] = error.clone();
+            self.record("first_error", error.clone(), true);
+        }
+        if !pending && self.summary["first_terminal_error"].is_null() {
+            self.summary["first_terminal_error"] = error.clone();
+            self.record("first_terminal_error", error.clone(), true);
+        }
+        if self.summary["latest_error"] != error {
+            self.summary["latest_error"] = error.clone();
+            self.record("latest_error", error, true);
+        }
+    }
+
+    fn run_result(&mut self, result: &Result<WorkflowRunResponse, WorkflowServiceError>) {
+        if let Err(error) = result {
+            self.error(
+                error,
+                matches!(
+                    error,
+                    WorkflowServiceError::RuntimeDependencyReadinessPending { .. }
+                ),
+            );
+        }
+    }
+
+    fn finish(mut self) {
+        self.summary["oracle"] = json!({"ok":true});
+        self.record("oracle_completed", json!({"ok":true}), true);
+        self.summary["diagnostic_io_error"] = json!(self.io_error);
+        if let Some(root) = &self.root {
+            let write = (|| -> Result<(), Box<dyn std::error::Error>> {
+                let mut file = std::fs::OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .open(root.join(format!("{}.json", Self::CASE)))?;
+                serde_json::to_writer_pretty(&mut file, &self.summary)?;
+                file.sync_all()?;
+                Ok(())
+            })();
+            if let Err(error) = write {
+                self.io_error.get_or_insert_with(|| error.to_string());
+            }
+        }
+        assert!(
+            self.io_error.is_none(),
+            "facade diagnostic failure: {:?}",
+            self.io_error
+        );
+    }
+}
+
 #[cfg(feature = "host-dependency-inventory")]
 #[tokio::test]
 async fn actual_facade_session_uses_private_load_owner_and_acknowledged_shutdown() {
+    let mut evidence =
+        FacadeNativeEvidence::new().expect("create exclusive facade progress evidence");
+    evidence.phase("fixture_seed", true);
     let directory = tempfile::tempdir().unwrap();
     seed(directory.path());
-    let facade = EmbeddedSerialCpuResidency::new(config(directory.path()))
-        .await
-        .unwrap();
+    evidence.phase("facade_construction", true);
+    let constructed = EmbeddedSerialCpuResidency::new(config(directory.path())).await;
+    if let Err(error) = &constructed {
+        evidence.error(error, false);
+    }
+    let facade = constructed.unwrap();
     let result = async {
+        evidence.phase("author_workflow", true);
         let edit = author(&facade).await?;
         let registered = facade.register_attribution_client(ClientRegistrationRequest {
             display_name: Some("CPU fixture".into()),
@@ -654,6 +828,7 @@ async fn actual_facade_session_uses_private_load_owner_and_acknowledged_shutdown
             client_session_id: client.session.client_session_id.as_str().into(),
             bucket_selection: pantograph_runtime_attribution::BucketSelection::Default,
         };
+        evidence.phase("expected_keep_alive_rejection", true);
         assert!(matches!(
             facade
                 .create_attributed_workflow_execution_session(
@@ -668,6 +843,7 @@ async fn actual_facade_session_uses_private_load_owner_and_acknowledged_shutdown
             Err(WorkflowServiceError::InvalidRequest(_))
         ));
         assert!(facade.registry_snapshot().reservations.is_empty());
+        evidence.phase("create_attributed_session", true);
         let session = facade
             .create_attributed_workflow_execution_session(
                 WorkflowExecutionSessionAttributedCreateRequest {
@@ -678,9 +854,12 @@ async fn actual_facade_session_uses_private_load_owner_and_acknowledged_shutdown
                 },
             )
             .await?;
+        evidence.summary["session_id"] = json!(session.session_id);
         let mut runs = Vec::new();
         for round in 0..2 {
+            evidence.summary["round"] = json!(round);
             let execution = async {
+                evidence.phase("physical_run", false);
                 let mut result = facade
                     .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
                         session_id: session.session_id.clone(),
@@ -699,10 +878,12 @@ async fn actual_facade_session_uses_private_load_owner_and_acknowledged_shutdown
                         priority: Some(0),
                     })
                     .await;
+                evidence.run_result(&result);
                 while matches!(
                     result,
                     Err(WorkflowServiceError::RuntimeDependencyReadinessPending { .. })
                 ) {
+                    evidence.phase("readiness_poll_interval", false);
                     tokio::time::sleep(Duration::from_millis(20)).await;
                     if let Some(request) = facade
                         .workflow_execution_session_runtime_dependency_readiness_resume_candidates(
@@ -710,14 +891,30 @@ async fn actual_facade_session_uses_private_load_owner_and_acknowledged_shutdown
                         .into_iter()
                         .find(|request| request.session_id == session.session_id)
                     {
+                        let actual_request = json!(request);
+                        if evidence.summary["resume_request"] != actual_request {
+                            evidence.summary["resume_request"] = actual_request.clone();
+                            evidence.record("resume_request", actual_request, true);
+                        }
+                        evidence.phase("physical_readiness_resume", false);
                         result = facade
                             .resume_workflow_execution_session_runtime_dependency_readiness(request)
                             .await;
+                        evidence.run_result(&result);
                     }
                 }
                 result
             };
-            let response = tokio::time::timeout(Duration::from_secs(30), execution).await??;
+            let observed = tokio::time::timeout(Duration::from_secs(30), execution).await;
+            if let Err(error) = &observed {
+                evidence.error(error, false);
+            }
+            let response = observed??;
+            evidence.record(
+                "round_terminal",
+                json!({"ok":true,"workflow_run_id":response.workflow_run_id}),
+                true,
+            );
             let golden: serde_json::Value = serde_json::from_slice(&std::fs::read(
                 directory
                     .path()
@@ -752,11 +949,13 @@ async fn actual_facade_session_uses_private_load_owner_and_acknowledged_shutdown
                 "only genuine mode guard remains after task receipt ACK"
             );
         }
+        evidence.phase("close_execution_session", true);
         facade
             .close_workflow_execution_session(WorkflowExecutionSessionCloseRequest {
                 session_id: session.session_id,
             })
             .await?;
+        evidence.phase("close_graph_session", true);
         facade
             .workflow_graph_close_edit_session(WorkflowGraphEditSessionCloseRequest {
                 session_id: edit,
@@ -765,20 +964,35 @@ async fn actual_facade_session_uses_private_load_owner_and_acknowledged_shutdown
         Ok::<_, Box<dyn std::error::Error>>(())
     }
     .await;
+    if let Err(error) = &result {
+        evidence.error(error.as_ref(), false);
+    }
+    evidence.record("body_result", json!({"ok":result.is_ok()}), true);
+    evidence.phase("shutdown_operations_read_guard", true);
     let operations = facade.operations.read().await;
+    evidence.phase("controlled_first_shutdown_poll", true);
     let mut first = Box::pin(facade.shutdown());
     assert!(futures_util::poll!(first.as_mut()).is_pending());
     drop(first);
     // The retained shutdown supervisor is blocked before native stop by the
     // controlled operation lifetime, even after its original caller disappeared.
+    evidence.phase("shutdown_supervisor_yield", true);
     tokio::task::yield_now().await;
+    evidence.phase("shutdown_supervisor_lock", true);
     assert!(facade.shutdown_state.lock().await.task.is_some());
     assert_eq!(facade.residency_diagnostics().unwrap().stops, 0);
     drop(operations);
+    evidence.phase("owned_facade_shutdown", true);
     let shutdown = facade.shutdown().await;
+    if let Err(error) = &shutdown {
+        evidence.error(error, false);
+    }
+    evidence.record("shutdown_result", json!({"ok":shutdown.is_ok()}), true);
     result.unwrap();
     shutdown.unwrap();
+    evidence.phase("idempotent_facade_shutdown", true);
     facade.shutdown().await.unwrap();
+    evidence.phase("final_shutdown_supervisor_lock", true);
     assert!(facade.shutdown_state.lock().await.task.is_none());
     assert!(facade.registry_snapshot().reservations.is_empty());
     assert_eq!(facade.residency_diagnostics().unwrap().stops, 1);
@@ -790,4 +1004,5 @@ async fn actual_facade_session_uses_private_load_owner_and_acknowledged_shutdown
         .gateway
         .resident_cpu_serial_owner(&model)
         .is_none());
+    evidence.finish();
 }
