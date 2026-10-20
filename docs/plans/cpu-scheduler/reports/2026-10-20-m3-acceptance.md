@@ -1,8 +1,9 @@
 # M3 published-head acceptance review
 
-Status: **Pending final Quality summary**. C1–C4 evidence is satisfied; M3-C5 and
-the M4 production dependency remain pending. A successful substantive matrix is
-not substituted for a queued final required check. No merge is authorized.
+Status: **Accepted within the reviewed CPU service-opportunity scope**. C1–C5
+are satisfied at the exact published head. The actual final Quality summary
+succeeded, independently verified at02:23 UTC. The admitted M4 local production
+dependency is satisfied. No merge or further publication is authorized.
 
 ## Exact source and CI provenance
 
@@ -14,12 +15,11 @@ PR81 published head `b63aa3ebe5fab1531aef952a35ce74932bf76b30`, tree
 source tree, not a different integration tree. CPU Composition and Native Text
 Controls explicitly checked out the published head itself.
 
-The exact-head API query returns all four applicable workflows. All15 substantive
-jobs succeeded:12 Quality jobs, Headless Workflow Contract, Runtime Separation
-and CPU Composition. Their full logs and API checkpoint are retained in
+The exact-head API query returns all four applicable workflows. All16 jobs succeeded:13 Quality jobs including the actual final summary,
+Headless Workflow Contract, Runtime Separation and CPU Composition. Their full logs and API checkpoint are retained in
 [ci/logs.tar.gz](m3-service-v1/ci/logs.tar.gz), with
-[member hashes](m3-service-v1/ci/log-sha256.json). All15 logs contain published-head
-attribution and zero GitHub error markers. Independent source review checked
+[member hashes](m3-service-v1/ci/log-sha256.json). The15 substantive logs contain published-head attribution; all16 logs have
+zero GitHub error markers. The summary log records actual required gate results. Independent source review checked
 actual checkout, relevant command/test results and audit wrappers; format and
 warning-deny Clippy themselves succeeded, not merely their surrounding jobs.
 
@@ -28,11 +28,14 @@ warning-deny Clippy themselves succeeded, not merely their surrounding jobs.
 | [Headless Workflow Contract](https://github.com/MrScripty/Pantograph/actions/runs/39341838018) |39341838018 |success |
 | [Runtime Separation](https://github.com/MrScripty/Pantograph/actions/runs/39341838040) |39341838040 |success |
 | [CPU Composition](https://github.com/MrScripty/Pantograph/actions/runs/39341838152) |39341838152 |success |
-| [Quality Gates](https://github.com/MrScripty/Pantograph/actions/runs/39341838081) |39341838081 |all12 substantive jobs success; final summary queued |
+| [Quality Gates](https://github.com/MrScripty/Pantograph/actions/runs/39341838081) |39341838081 |all13 jobs success, including final summary |
 
-Last checked2026-10-20 at01:21 UTC: final summary job `118394536482` is
-queued with null conclusion in the retained
-checkpoint. Acceptance waits for its actual successful completion/log. These
+Final checked2026-10-20 at02:23 UTC: summary job `118394536482` completed
+successfully at02:00:50 UTC; its actual log reports all10 required gates and
+format/Clippy audits successful. The earlier01:21 queued checkpoint is retained
+as historical evidence alongside `final-status.json` in the archive. The unchanged
+`review-notes.json` is the historical conditional review, whose then-current
+`accepted: false`/queued disposition predates this final acceptance. These
 normal workflows do not add a GPU, UI, native-batching, semantic-model-quality or
 performance claim to M3's narrow CPU service-opportunity qualification.
 
@@ -56,10 +59,13 @@ limits remain disclosed. No producer success or performance result is invented.
 
 ## Gate disposition
 
-Independent final review found no remaining source or evidence blocker. M3-C5 is
-still pending only the observed final Quality summary result. M4's admitted
-contract and controlled registry fixtures may progress independently, but no M4
-production edit or native qualification is admitted by a queued status. Once the
-actual summary succeeds, retain its log/final metadata, record exact-head M3
-acceptance on the dependent branch, and enter the already admitted M4 production
-slice. Preserve the M3 branch/head; parent owns integration and branch cleanup.
+Independent final source/evidence review accepts M3-C1–C5 within the disclosed
+scope. The M3 branch/head/tree remain frozen. Parent authorized entry into the
+already admitted M4 production slice **locally in persistent storage** after this
+actual successful summary; no new model cohort ran for this reconciliation.
+
+Publication remains blocked: automatic approval review rejected uploading the
+12-file local checkpoint07138639 payload to MrScripty/Pantograph via Git Data as
+nonpublic source/test egress without exact-payload approval. The approval question
+is unanswered. Acceptance and green CI do not authorize retry, another route or
+subsequent payload publication. Parent owns integration and branch cleanup.

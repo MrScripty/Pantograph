@@ -350,24 +350,24 @@ invocation completed all ten results/receipts and shutdown, then exited1 due to 
 local-task-name oracle defect. Original failure retained; independently reviewed
 JSON-only reanalysis passes with source-assisted aggregate training evidence and
 no per-attempt sample timing attribution. See the [M3 report](reports/2026-10-19-m3-service-opportunities.md)
-and its exact-source archives. M3-C5 remains pending
-published-head required CI; no native retry or M4 implementation is authorized by
-this outcome.
+and its exact-source archives. M3-C5 is now accepted after the actual final published-head Quality summary
+succeeded; see the2026-10-20 acceptance report. No native retry occurred.
 
 M4 follows only after these gates: identify a dependency-ready, separately reviewed
 serial residency subset using actual load/unload/reload evidence, M2 service-cost
-limits, M3 delay obligations and owner-acknowledged full-charge retention. No M4
-action or native batching claim is admitted here.
+limits, M3 delay obligations and owner-acknowledged full-charge retention. The separately admitted M4 contract below controls subsequent local work.
+No native batching claim is admitted.
 
-### M4 Serial Residency Contract (2026-10-19; independently admitted, M3 gate pending)
+### M4 Serial Residency Contract (2026-10-19; independently admitted, M3 accepted2026-10-20)
 
 Operation `continue` under this canonical plan. Parent continuation explicitly
 admits contract/research/fixture work on dependent branch
 `feat/cpu-scheduler-m4-serial-residency`, worktree `/workspace/pantograph-m4`,
 from preserved M3 head `b63aa3ebe5fab1531aef952a35ce74932bf76b30` (PR81).
-M3 acceptance is still pending its exact published-head CI, monitored by parent.
-M4 production edits and native qualification wait for M3 acceptance AND independent
-admission of this contract. The older M3 admission did not authorize M4; this
+Exact published-head M3 acceptance is complete, including the actual successful
+Quality summary and independent final review. Parent authorized local M4
+production under this independently admitted contract. Publication remains blocked
+by the unanswered automatic-approval rejection; do not retry or change routes. The older M3 admission did not authorize M4; this
 parent continuation does, subject to these gates. No merge/deletion is authorized.
 
 #### Objective, next slice and dependency gates
@@ -379,12 +379,11 @@ M3 service order, task outcomes and full physical ownership/accounting. Measure
 load, forward/drain, stop and reload separately. Counts and resource/ownership
 traces decide acceptance; there is no speedup, semantic-quality or latency claim.
 
-Current phase: admitted contract and verified fixture checkpoint. Independent
-GPT-6.1 Sol High source/design reviewers admitted this bounded contract. Exactly
-one next slice: after observed exact-head M3 acceptance, implement the native
-residency capability and ownership tests. That dependency remains pending; no
-production edits are allowed while final Quality summary is queued.
-No native cohort or M4 implementation is claimed yet.
+Current phase: admitted local production implementation. Independent GPT-6.1 Sol
+High source/design reviewers admitted this bounded contract and accepted M3-C1–C5
+after actual final CI success. Exactly one next slice: implement the native
+residency capability and ownership tests, then integrate the private owner/port
+and granted-turn preparation. No M4 native cohort or acceptance is claimed yet.
 
 #### Binding decisions and authority
 

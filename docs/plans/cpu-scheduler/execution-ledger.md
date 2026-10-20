@@ -576,3 +576,20 @@ coordination; parent owns its later disposition after reachable handoff.
   fixture source/log hashes and unchanged original M3 bundle verified. Explicit
   staged traceability and whitespace checks pass. Final summary remained queued
   at01:22:35 UTC; no M3 acceptance or M4 production start is claimed.
+
+## 2026-10-20 — M3 acceptance and local M4 production gate
+
+- At02:23 UTC all4 exact-head workflows and all13 Quality jobs completed success,
+  including actual summary118394536482. Independent final source review accepts
+  M3-C1–C5 within the existing CPU/opportunity/source-assisted evidence limits.
+  Frozen b63aa3eb/tree defca3d3 and original failed oracle/native cohort are unchanged.
+- Added the16th actual summary log and full final API status to the CI archive;
+  retained the earlier queued checkpoints as history and regenerated hashes.
+- Parent explicitly authorized local M4 production on the existing separate
+  branch. Native capability, preparation contract/resolver and workflow lanes
+  now implement the independently admitted contract; no M4 cohort has run.
+- Publication is still blocked by automatic review's nonpublic source/test egress
+  rejection for local07138639 payload to MrScripty/Pantograph. Exact-payload approval
+  remains unanswered; no retry, alternative upload, merge or deletion is authorized.
+- Harmless pwd/status checks verified recovered execution access after the02:25
+  disconnect; existing checkpoint and in-progress native files were preserved.

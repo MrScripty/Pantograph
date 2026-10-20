@@ -1,7 +1,7 @@
 # M3: Bounded Authenticated CPU Service Opportunities
 
-Status: **Verifying**. Source and deterministic evidence independently reviewed;
-fixed native cohort completed once; published-head CI remains pending. M1/M2 remain accepted.
+Status: **Accepted**. Source and deterministic evidence independently reviewed;
+fixed native cohort completed once; published-head CI and independent final acceptance now pass. M1/M2 remain accepted.
 No default activation, speedup, GUI/GPU, native batching or model-quality claim.
 
 ## Owned change
@@ -52,7 +52,7 @@ following the final-Start correction. Workflow all-target and CPU-example scoped
 pass. Scheduler205 tests pass with one existing ignored cost probe; declared
 pre-push tests pass261+168 with one existing node-engine ignore. Workspace
 formatting, whitespace, critical/accessibility lint and explicit staged
-traceability pass. Three existing actual native lifecycle regressions pass. Normal PR CI remains pending. Existing
+traceability pass. Three existing actual native lifecycle regressions pass. Normal exact-head PR CI passes, including the actual final summary. Existing
 Candle-only inference optional-consumer warnings (CPU-17) remain outside-slice
 debt; no suppression or PR75-owned repair is claimed.
 
@@ -130,7 +130,7 @@ limits. Independent `m3_source_review` verified all41 raw archive members agains
 retained originals, all bundle/log hashes, the unchanged frozen production source
 and report scope. Independent `m3_design_review` approved corrected producer
 SHA256 `8fa52e568df966dd783d0d3f6930a17789765667b371e0e04e8276525e626820`.
-M3-C5 remains pending exact published-head required CI. Parent retains merge/integration authority.
+M3-C5 is accepted after exact published-head required CI and independent final review; see the2026-10-20 acceptance report. Parent retains merge/integration authority.
 
 ## M4 dependency boundary
 
