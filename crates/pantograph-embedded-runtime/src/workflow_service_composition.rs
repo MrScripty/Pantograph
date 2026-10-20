@@ -1919,7 +1919,11 @@ mod tests {
                 &payload
             ));
         }
-        let payload_evidence = serde_json::to_value(&payload).unwrap();
+        let payload_evidence = serde_json::json!({
+            "dependency_requirements_id":payload.dependency_requirements_id,
+            "identity_key":payload.identity_key,"requirements":payload.requirements,
+            "bindings":payload.bindings,"selected_binding_ids":payload.selected_binding_ids
+        });
         output
             .dependency_readiness
             .requirements_registry()
