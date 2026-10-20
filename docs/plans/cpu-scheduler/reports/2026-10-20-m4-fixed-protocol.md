@@ -52,13 +52,14 @@ Completed carries the exact lease. The producer must join their shared identity
 and match the Completed lease to genuine native/registry records. It must not
 invent a Started lease or weaken the Completed join.
 
-The two separately admitted cancellation cases have not yet executed. Their
-metadata terminal query has the same projection prerequisite. The prospective
+Before either separately admitted cancellation case executed, its
+metadata terminal query was found to have the same projection prerequisite. The prospective
 repair uses the existing typed diagnostics refresh through an admission-checked
 facade forwarder; this changes diagnostic readback only. Each refresh advances selected projections by at most one bounded page, without
 a new native operation or writable alias. The producer must verify it caught up.
-Source, binary, fixture and environment gates must be reviewed and frozen again
-before their first invocation. Original main source/binaries/evidence stay intact.
+Source, binary, fixture and environment gates were independently reviewed and
+frozen again before their first invocation, as recorded below. Original main
+source/binaries/evidence stay intact.
 
 Publication remains blocked by the unanswered automatic-review rejection of the
 exact12-file07138639 source/test upload to `MrScripty/Pantograph`. No retry,
@@ -72,8 +73,47 @@ failed during Pumas initialization because its default registry directory was
 read-only. Both logs are retained. The explicit disposable registry configuration
 passes and performs zero native loads/forwards/stops. A misspelled npm script
 failed; the actual critical lint gate passes. These are supporting-check outcomes,
-not retries of a qualification case. Final lint and freeze precede native execution.
+not retries of a qualification case. Those checks preceded the independently frozen native supplement.
 
 Final repair gates pass: warning-deny embedded library/tests Clippy (existing
 optional inference dead-code warning disclosed), workspace format, critical lint,
 accessibility and staged traceability. [Original repair-check logs](m4-metadata-repair-v1/original-validation-logs.tar.gz) preserve failed and successful commands.
+
+
+## Two-case cancellation supplement
+
+Both separately admitted cases ran once at clean source
+`96691fd764ddf6af838e66c3b064cd34f419b1c5`, tree
+`00103d81a0926035d5a2127239a86db8d7d959a6`, with frozen test binary SHA256
+`6d318a6465b568a8d7d013c24cc1c35c7114caac95deeabe3d4ae2625508ad09`.
+Independent preflight verified966 source hashes,14 fixture hashes and all manifests,
+the exact two-case list, fresh isolated registry/evidence paths and full additive
+budgets. Execution03:36:06.900–03:36:07.697UTC exited0:2passed,0failed,0ignored.
+No case was retried. [Original supplement archive](m4-cancellation-v1/original-evidence.tar.gz)
+retains every manifest, build/list log, execution status, case JSON and registry.
+The executable remains externally retained at `/workspace/m4-cancellation-v1/binaries`.
+
+| Case | Actual outcome and deciding evidence |
+| --- | --- |
+| Post-load, before Start | One real load/publication, zero forwards/stops. Task remained Ready without active attempt. The owned facade shutdown signal refused run and shutdown, fenced the private owner, and retained the same600MiB guard plus32MiB resident charges. Both actual errors are retained. This is a native preparation signal, not public active-task cancellation. |
+| Public Running, after drain | One load and one forward/drain. Public cancellation targeted the observed Running attempt; request preserved both leases and all charges. Completion won and the terminal run is Completed. Exact task lease3 removal returned the idle capability; guard1/resident stayed charged. One final stop/ACK cleared every lease, claim and resident owner. Projection cursors12/8 and metadata charge preservation are recorded. |
+
+These JSON records contain actual session/run/task/attempt/lease identifiers,
+registry instance and charges, counters, public results and projection responses.
+The genuine cap/receipt barriers are supported by the frozen source; raw native
+profile/generation/full phase receipts and ephemeral SQLite event streams were
+not captured by these cases. The first case's full fence is observed before
+owner destruction, not a post-process lifetime claim. No compute interruption,
+per-attempt timing/training or full native identity qualification is inferred.
+The second returned vector matches the existing golden within declared tolerance.
+
+The supplement establishes its two bounded cancellation custody observations.
+It does not replace the missing retained/comparison/pressure main steps. M4-C4
+remains Partial/Blocked and M4-C5 publication/exact-head CI remains blocked.
+
+
+[Independent raw supplement review](m4-cancellation-v1/independent-review.json)
+passes the bounded custody claims and re-verifies every source/input/manifest/
+binary hash without modifying originals. Review SHA256:
+`bf59970f50683b3952f2491042ecb61599321c344593255b4f75d27076046797`.
+It explicitly preserves the main failure and observability limits above.

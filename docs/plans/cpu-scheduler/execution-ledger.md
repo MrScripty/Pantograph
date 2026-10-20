@@ -644,3 +644,22 @@ coordination; parent owns its later disposition after reachable handoff.
   run and require a new reviewed source/binary/input/environment freeze. Original
   failed main evidence stays unchanged; no main retry/continuation is authorized.
 - Publication remains blocked by the same unanswered automatic-review rejection.
+
+
+## 2026-10-20 — Metadata repair and once-only cancellation supplement
+
+- Clean96691fd7/tree00103d81 checkpoints the independently reviewed bounded
+  diagnostics forward/readback and realistic Started/Completed join. Producer11
+  pure tests, one no-model regression, Clippy/format/critical/a11y/traceability pass;
+  failed support checks and corrected results are preserved byte-for-byte.
+- Independent preflight approved frozen binary6d318a64, exact source/fixtures/
+  budgets and fresh paths. Exactly2 native cases ran once at03:36UTC, exit0.
+  Pre-Start shutdown fenced one loaded owner with zero forwards and full charges;
+  post-drain public request lost to completion, exact task cleanup returned cap,
+  and final stopACK cleared charges. Raw JSON/manifests are archived separately.
+- Supplement barriers/native identity are partly source-assisted; no raw full
+  native profile/generation/phase receipt stream was retained. Main7139 exit1,
+  missing AABBA/comparison/pressure and C4 Partial remain unchanged. No reruns.
+- Parent owns prospective new main-protocol admission and integration. Publication
+  still awaits exact-payload approval after auto-review rejection; no alternate
+  route, merge or branch deletion occurred. M5/M6 remain unadmitted.
