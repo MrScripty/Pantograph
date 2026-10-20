@@ -23,6 +23,14 @@ mod cpu_warm_attempt;
 pub use cpu_warm_attempt::{
     CandleCpuDrainedAttempt, CandleCpuWarmAttemptIdentity, CandleCpuWarmAttemptRequest,
 };
+#[cfg(feature = "backend-candle")]
+#[path = "gateway_cpu_residency.rs"]
+mod cpu_residency;
+#[cfg(feature = "backend-candle")]
+pub use cpu_residency::{
+    CandleCpuColdResidencyRequest, CandleCpuIdleResidency, CandleCpuResidencyStopOutcome,
+    CandleCpuResidencyWarmAttemptRequest,
+};
 struct SelectedEmbeddingOwnedOutcome {
     result: InferenceExecutionResult,
     #[cfg(feature = "backend-candle")]

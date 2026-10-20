@@ -12,6 +12,7 @@ type BackendGuard = OwnedRwLockWriteGuard<Box<dyn InferenceBackend>>;
 
 #[path = "gateway_cpu_last_lease_eviction.rs"]
 mod last_lease_eviction;
+pub(super) use last_lease_eviction::stop_last_lease_owned;
 
 /// Caller-owned tags. Native request/lease fields are checked exactly; the
 /// native layer cannot independently certify run/node/attempt/candidate custody.
@@ -76,6 +77,9 @@ impl CandleCpuDrainedAttempt {
     }
     /// Consume actual drain proof; mismatch cannot use ordinary cleanup fallback.
     pub async fn release_retained(self) -> Result<RuntimeRetentionDisposition, GatewayError> {
+        if self.binding.residency.is_some() {
+            return Err(refusal());
+        }
         self.binding
             .gateway
             .release_retained_cpu_reservation_owned(
@@ -86,6 +90,46 @@ impl CandleCpuDrainedAttempt {
             )
             .await
     }
+
+    /// Release this exact task lease, then return the genuine updated native
+    /// idle capability. The host keeps it unavailable until scheduler ACK and
+    /// serial scope release; returning it does not grant another service turn.
+    pub async fn release_retained_with_residency(
+        self,
+    ) -> Result<(RuntimeRetentionDisposition, CandleCpuIdleResidency), GatewayError> {
+        let mut binding = self.binding;
+        let residency = binding.residency.take().ok_or_else(refusal)?;
+        if !residency.belongs_to(&binding.gateway)
+            || !Arc::ptr_eq(residency.registry(), &binding.registry)
+        {
+            return Err(refusal());
+        }
+        let backend = binding.gateway.backend.write().await;
+        binding.current(backend.as_ref())?;
+        cpu_residency::validate_current_owner(
+            &binding.gateway,
+            backend.as_ref(),
+            &binding.owner,
+            binding.runtime_instance_id.as_deref().ok_or_else(refusal)?,
+            &binding.model_target,
+        )
+        .await?;
+        let identity = RuntimeRetainedOwnerIdentity {
+            runtime_id: "candle",
+            source_id: &binding.gateway.resident_source_id,
+            runtime_instance_id: binding.runtime_instance_id.as_deref().ok_or_else(refusal)?,
+            model_target: &binding.model_target,
+        };
+        let disposition = binding
+            .custody
+            .take()
+            .ok_or_else(refusal)?
+            .release_retained(identity)
+            .map_err(|error| GatewayError::SwitchFailed(error.to_string()))?;
+        let residency = residency.after_task_ack(binding.owner)?;
+        residency.validate_live(backend.as_ref()).await?;
+        Ok((disposition, residency))
+    }
 }
 
 pub(super) struct AttemptBinding {
@@ -95,6 +139,7 @@ pub(super) struct AttemptBinding {
     owner: CandleCpuCleanupOwner,
     previous_owner: CandleCpuCleanupOwner,
     custody: Option<RuntimeReservationExecutionCustody>,
+    residency: Option<CandleCpuIdleResidency>,
     identity: [String; 7],
     input: blake3::Hash,
     model_target: String,
@@ -167,6 +212,7 @@ impl AttemptBinding {
             owner: input.expected_owner.clone(),
             previous_owner: input.expected_owner.clone(),
             custody: None,
+            residency: None,
             identity: tags.map(str::to_owned),
             input: blake3::hash(text.as_bytes()),
             model_target: input.target.local_load_path.clone(),
@@ -179,6 +225,15 @@ impl AttemptBinding {
         backend: &dyn InferenceBackend,
         target: &crate::PumasArtifactLoadTarget,
     ) -> Result<(), GatewayError> {
+        if let Some(residency) = &self.residency {
+            if !residency.belongs_to(&self.gateway)
+                || !Arc::ptr_eq(residency.registry(), &self.registry)
+                || !residency.matches_target(target)
+            {
+                return Err(refusal());
+            }
+            residency.validate_live(backend).await?;
+        }
         if canonical_backend_key(backend.name()) != "candle"
             || !backend.is_ready()
             || target.model_ref != *self.owner.model_ref()
@@ -295,7 +350,12 @@ impl crate::InferenceExecutionCancellationSignal for CallerSignal {
         }
     }
 }
-struct CancelOnDrop(Option<Arc<AtomicBool>>);
+pub(super) struct CancelOnDrop(Option<Arc<AtomicBool>>);
+impl CancelOnDrop {
+    pub(super) fn disarm(&mut self) {
+        self.0 = None;
+    }
+}
 impl Drop for CancelOnDrop {
     fn drop(&mut self) {
         if let Some(flag) = &self.0 {
@@ -304,7 +364,71 @@ impl Drop for CancelOnDrop {
     }
 }
 
+pub(super) fn caller_signal(
+    host: InferenceExecutionCancellationHandle,
+) -> (InferenceExecutionCancellationHandle, CancelOnDrop) {
+    let dropped = Arc::new(AtomicBool::new(false));
+    let cancel = CancelOnDrop(Some(dropped.clone()));
+    let signal =
+        InferenceExecutionCancellationHandle::with_signal(Arc::new(CallerSignal { dropped, host }));
+    (signal, cancel)
+}
+
 impl InferenceGateway {
+    /// Consume the native idle owner into this actual custodied warm attempt.
+    /// Its private owner supplies the expected stamp; the caller cannot refresh
+    /// the capability from advisory facts. Errors/lost receipts remain fenced.
+    pub async fn execute_resident_cpu_warm_attempt(
+        self: &Arc<Self>,
+        residency: CandleCpuIdleResidency,
+        input: CandleCpuResidencyWarmAttemptRequest<'_>,
+        host: InferenceExecutionCancellationHandle,
+    ) -> Result<(InferenceExecutionResult, CandleCpuDrainedAttempt), GatewayError> {
+        if !residency.belongs_to(self) || !residency.matches_target(&input.target) {
+            return Err(refusal());
+        }
+        let registry = residency.registry().clone();
+        let input = CandleCpuWarmAttemptRequest {
+            request: input.request,
+            target: input.target,
+            decision: input.decision,
+            identity: input.identity,
+            lease: input.lease,
+            expected_owner: residency.cleanup_owner(),
+        };
+        let mut binding = AttemptBinding::bind(self.clone(), registry.clone(), &input)?;
+        binding.custody = Some(
+            registry
+                .acquire_execution_custody(input.lease)
+                .map_err(|error| GatewayError::SwitchFailed(error.to_string()))?,
+        );
+        let request = input.request;
+        let target = input.target;
+        let decision = input.decision;
+        binding.residency = Some(residency);
+        self.embedding_replacement.drain().await?;
+        let backend: BackendGuard = self.backend.clone().write_owned().await;
+        reject_cancelled_execution_handle("native resident warm attempt", &host)?;
+        let (cancellation, mut cancel) = caller_signal(host);
+        let gateway = self.clone();
+        let task = tokio::spawn(async move {
+            gateway
+                .execute_selected_embedding_owned(
+                    request,
+                    target,
+                    decision,
+                    cancellation,
+                    Some(backend),
+                    Some(binding),
+                )
+                .await
+        });
+        let outcome = task.await.map_err(|error| {
+            GatewayError::SwitchFailed(format!("native resident warm supervision failed: {error}"))
+        })??;
+        cancel.disarm();
+        Ok((outcome.result, outcome.drained_attempt.ok_or_else(refusal)?))
+    }
     /// Success-only retained warm execution. A supervised task owns the actual
     /// backend writer until load/forward/drain terminate, including collector loss.
     /// Caller must exclusively own this lease's admission/session lifecycle

@@ -1502,6 +1502,39 @@ async fn claim_and_execute_runtime_branch_event(
     let mut serial_pair = None;
     let mut serial_owner = None;
     if let (Some(mode), Some(scope)) = (service.serial_ready_mode.as_ref(), serial_scope.as_ref()) {
+        if mode.residency_enabled() {
+            let prepared = async {
+                let admission = fair_admission.as_ref().ok_or_else(|| {
+                    WorkflowServiceError::InvalidRequest(
+                        "serial residency requires an authenticated Ready grant".into(),
+                    )
+                })?;
+                let owner = scope.prepare_residency(&admission.member).await?;
+                // Native preparation may load/stop, but cannot refresh graph,
+                // attribution, priority or input authority across its awaits.
+                service
+                    .session_store_guard()?
+                    .validate_serial_service_admission(
+                        &command.session_id,
+                        &command.workflow_run_id,
+                        admission,
+                    )?;
+                Ok::<_, WorkflowServiceError>(owner)
+            }
+            .await;
+            match prepared {
+                Ok(owner) => serial_owner = Some(owner),
+                Err(error) => {
+                    return WorkflowTaskExecutionWorkerRuntimeBranchExecutionResult::complete(
+                        WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
+                            command,
+                            error.to_string(),
+                            Vec::new(),
+                        ),
+                    );
+                }
+            }
+        }
         let pair = service.session_store_guard().ok().and_then(|store| {
             store.serial_ready_pair(&command.session_id, &command.workflow_run_id)
         });
@@ -1520,6 +1553,18 @@ async fn claim_and_execute_runtime_branch_event(
                     "oldest_age_ns": decision.oldest_age_ns, "decision_ns": decision_ns,
                 }));
                 if let Some(owner) = decision.owner {
+                    if serial_owner
+                        .as_ref()
+                        .is_some_and(|prepared| !super::serial_ready::same_owner(prepared, &owner))
+                    {
+                        return WorkflowTaskExecutionWorkerRuntimeBranchExecutionResult::complete(
+                            WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
+                                command,
+                                "serial prepared CPU owner changed before selection",
+                                Vec::new(),
+                            ),
+                        );
+                    }
                     selected_task_id = pair.members[decision.position].task.task_id.to_string();
                     serial_owner = Some(owner);
                     serial_pair = Some(pair);

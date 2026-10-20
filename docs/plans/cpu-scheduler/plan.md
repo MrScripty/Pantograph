@@ -556,6 +556,18 @@ and counts outside the3vs5 cohort; no fenced owner is recovered or rerun. Freeze
 all case counts and phase intervals prospectively before any native invocation.
 
 
+Producer interpretation independently admitted2026-10-20 before execution: the
+stop-between-tasks comparison uses five fresh private facade lifetimes, one call
+and acknowledged shutdown each, rather than adding a production idle-eviction API
+only for this measurement. Give every lifetime an isolated app-data/ledger/registry
+root and complete its stop ACK before constructing the next. The retained protocol
+uses one lifetime for all five calls. Both use identical declarations, actual input
+and calibration. Compare actual native load/stop counts, vectors and ownership;
+there is no equivalence claim for startup, session, fairness histories or latency.
+Repeated numeric generations across owners do not establish lineage; retain each
+actual native instance/profile/full identity. This is the admitted meaning of
+fresh isolated comparison owners, not a residency policy expansion.
+
 Configure explicit bounded RAM/VRAM admission and record the actual consumed
 resource claims and observed identities. A fixed pressure refusal must show no
 load/forward/claim mutation before admission; a fitting serial switch must show
@@ -623,8 +635,9 @@ physical work, and are not a native cohort budget or allocator measurement.
 Numeric native cohort capacity/pressure values freeze only in producer admission
 before execution, using those verified sources; no post-outcome tuning.
 
-Blockers: parent-confirmed M3-C5/acceptance; independent admission; feasible additive
-accounting and enforceable dedicated facade verified before production.
+Dependency gates: parent-confirmed exact-head M3-C5/acceptance and independent
+contract admission are satisfied. Feasible additive accounting and the dedicated
+facade are under implementation/review; M4 acceptance and publication remain gated.
 Re-plan triggers: writable gateway/ordinary execution escape, production path outside
 write set, inability to reserve full load/registration envelope, inability to preserve
 M3 final Start/turn ordering, unsupported native stop/load ownership or missing actual

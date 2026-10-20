@@ -593,3 +593,25 @@ coordination; parent owns its later disposition after reachable handoff.
   remains unanswered; no retry, alternative upload, merge or deletion is authorized.
 - Harmless pwd/status checks verified recovered execution access after the02:25
   disconnect; existing checkpoint and in-progress native files were preserved.
+
+## 2026-10-20 — Local M4 implementation/review checkpoint
+
+- Native linear residency implementation passes26 scoped actual CPU tests
+  (8new plus18 existing warm/last-lease), with separate load/publication/stop/ACK
+  intervals. Independent source review found no native/workflow lifecycle blocker.
+- Workflow7new tests pass; full suite1015library+65integration pass,0ignored.
+  Original missing-import test compile failure is preserved separately from its
+  corrected successful rerun. Actual M3 grant/Ready/owner proof remains authority.
+- Root port initial6tests passed. Independent port review found two P1 integration
+  defects: pre-load accounting substituted package size for actual per-kind intent
+  maxima, and generic lifecycle refusal rejected DispatchStarted. Fixes now use
+  actual RAM/VRAM MAX hints (unknown/shrunk refuses), acknowledge exact Start without
+  release, and permit only exact unstarted task lease cleanup without generic stop.
+  Added regression tests await affected recompilation; these are not claimed passing.
+- Independent design review admitted five separate acknowledged private facade
+  lifetimes for the fixed stop-between-tasks comparison, versus one retained owner.
+  Counts/outputs/ownership are comparable; startup/fairness/latency are not claimed
+  equivalent. This avoids adding a production eviction API for a measurement.
+- Private facade integration and fixed producer are in progress. No fixed M4 native
+  protocol has run; source/producer/input/environment freeze and independent review
+  are still required. Local-only publication restriction remains unchanged.

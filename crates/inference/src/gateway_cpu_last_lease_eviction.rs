@@ -13,11 +13,11 @@ impl CandleCpuDrainedAttempt {
     ) -> Result<RuntimeRetentionDisposition, GatewayError> {
         let mut binding = self.binding;
         let gateway = binding.gateway.clone();
-        if binding.custody.is_none() {
+        if binding.custody.is_none() || binding.residency.is_some() {
             return Err(refusal());
         }
         gateway.embedding_replacement.drain().await?;
-        let mut backend = gateway.backend.clone().write_owned().await;
+        let backend = gateway.backend.clone().write_owned().await;
         binding.current(backend.as_ref())?;
         let lifecycle = gateway.runtime_lifecycle.read().await;
         let config = gateway.current_runtime_config.read().await;
@@ -51,59 +51,81 @@ impl CandleCpuDrainedAttempt {
             .map_err(|e| GatewayError::SwitchFailed(e.to_string()))?;
         drop(config);
         drop(lifecycle);
-        let dropped = Arc::new(AtomicBool::new(false));
-        let mut cancel = CancelOnDrop(Some(dropped.clone()));
-        let signal = InferenceExecutionCancellationHandle::with_signal(Arc::new(CallerSignal {
-            dropped,
-            host,
-        }));
-        // No await between the synchronous handoff and transferring both exact
-        // owners into supervision. JoinHandle Drop does not abort this task.
-        let task = tokio::spawn(async move {
-            #[cfg(test)]
-            eviction_test_phase(&gateway, "eviction_before_stop").await?;
-            reject_cancelled_execution_handle("native CPU eviction before stop", &signal)?;
-            binding.current(backend.as_ref())?;
-            // Irreversible boundary: cancellation is advisory after this point.
-            backend.stop().await?;
-            if backend.is_ready() || backend.resident_cpu_calibration_instance().is_some() {
-                return Err(refusal());
-            }
-            #[cfg(test)]
-            eviction_test_phase(&gateway, "eviction_after_stop").await?;
-            *gateway.embedding_mode.write().await = false;
-            *gateway.reranking_mode.write().await = false;
-            *gateway.external_mode.write().await = false;
-            *gateway.current_runtime_config.write().await = None;
-            let mut lifecycle = gateway.runtime_lifecycle.write().await;
-            lifecycle.active = false;
-            lifecycle.lifecycle_decision_reason = Some("native_last_lease_evicted".into());
-            lifecycle.last_error = None;
-            if lifecycle.warmup_completed_at_ms.is_none() {
-                lifecycle.warmup_started_at_ms = None;
-                lifecycle.warmup_timing_attempt_id = None;
-                lifecycle.warmup_duration_ms = None;
-            }
-            // Allocate after actual stop while still holding the same writer.
-            // All prior sampled frames, even undelivered ones, are now older.
-            let sequence = gateway
-                .resident_observation_sequence
-                .fetch_update(Ordering::AcqRel, Ordering::Acquire, |s| s.checked_add(1))
-                .map_err(|_| refusal())?
-                + 1;
-            let result = ticket
-                .acknowledge_stopped(sequence)
-                .map_err(|e| GatewayError::SwitchFailed(e.to_string()));
-            drop(lifecycle);
-            drop(backend);
-            result
-        });
-        let result = task.await.map_err(|e| {
-            GatewayError::SwitchFailed(format!("native CPU eviction supervision failed: {e}"))
-        })??;
-        cancel.0 = None;
-        Ok(result)
+        Ok(
+            stop_last_lease_owned(gateway, backend, ticket, binding.owner, host)
+                .await?
+                .disposition,
+        )
     }
+}
+
+/// Same held writer and original registry stop ticket for task or idle guard.
+/// The physical interval excludes writer admission, hooks and registry ACK.
+pub(in crate::gateway) async fn stop_last_lease_owned(
+    gateway: Arc<InferenceGateway>,
+    mut backend: BackendGuard,
+    ticket: pantograph_runtime_registry::RuntimeLastLeaseEviction,
+    owner: CandleCpuCleanupOwner,
+    host: InferenceExecutionCancellationHandle,
+) -> Result<CandleCpuResidencyStopOutcome, GatewayError> {
+    let (signal, mut cancel) = caller_signal(host);
+    // No await between synchronous stop admission and supervisor ownership.
+    let task = tokio::spawn(async move {
+        #[cfg(test)]
+        eviction_test_phase(&gateway, "eviction_before_stop").await?;
+        reject_cancelled_execution_handle("native CPU eviction before stop", &signal)?;
+        let instance = backend
+            .resident_cpu_calibration_instance()
+            .ok_or_else(refusal)?;
+        if !gateway
+            .candle_cpu_calibration
+            .as_ref()
+            .is_some_and(|calibration| calibration.matches_cleanup_owner(&owner, instance))
+        {
+            return Err(refusal());
+        }
+        // Cancellation becomes advisory at this physical irreversible boundary.
+        let started = std::time::Instant::now();
+        backend.stop().await?;
+        let stop_duration = started.elapsed();
+        if backend.is_ready() || backend.resident_cpu_calibration_instance().is_some() {
+            return Err(refusal());
+        }
+        #[cfg(test)]
+        eviction_test_phase(&gateway, "eviction_after_stop").await?;
+        *gateway.embedding_mode.write().await = false;
+        *gateway.reranking_mode.write().await = false;
+        *gateway.external_mode.write().await = false;
+        *gateway.current_runtime_config.write().await = None;
+        let mut lifecycle = gateway.runtime_lifecycle.write().await;
+        lifecycle.active = false;
+        lifecycle.lifecycle_decision_reason = Some("native_last_lease_evicted".into());
+        lifecycle.last_error = None;
+        if lifecycle.warmup_completed_at_ms.is_none() {
+            lifecycle.warmup_started_at_ms = None;
+            lifecycle.warmup_timing_attempt_id = None;
+            lifecycle.warmup_duration_ms = None;
+        }
+        // The producer sequence follows physical stop under this same writer.
+        let sequence = cpu_residency::next_observation_sequence(&gateway)?;
+        let acknowledged = std::time::Instant::now();
+        let disposition = ticket
+            .acknowledge_stopped(sequence)
+            .map_err(|error| GatewayError::SwitchFailed(error.to_string()))?;
+        let acknowledgement_duration = acknowledged.elapsed();
+        drop(lifecycle);
+        drop(backend);
+        Ok(CandleCpuResidencyStopOutcome {
+            disposition,
+            stop_duration,
+            acknowledgement_duration,
+        })
+    });
+    let result = task.await.map_err(|error| {
+        GatewayError::SwitchFailed(format!("native CPU eviction supervision failed: {error}"))
+    })??;
+    cancel.disarm();
+    Ok(result)
 }
 
 #[cfg(test)]

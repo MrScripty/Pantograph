@@ -18,6 +18,7 @@ mod serial_runtime_host;
 pub use serial_runtime_host::{
     SerialRuntimeHostBatchExecutionPort, SerialRuntimeHostCleanupReceipt,
     SerialRuntimeHostCpuOwnerEvidence, SerialRuntimeHostDrainedExecution,
+    SerialRuntimeHostPreparationRequest,
 };
 
 pub use reservation_lifecycle::{
