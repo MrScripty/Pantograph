@@ -404,6 +404,10 @@ async fn unchanged_execution_facts(
 #[cfg(not(feature = "host-dependency-inventory"))]
 async fn inventory_rejection_case(resume: bool) {
     let (directory, facade, session_id, edit) = default_execution_fixture().await;
+    let load_entered = Arc::new(tokio::sync::Notify::new());
+    let drain_entered = Arc::new(tokio::sync::Notify::new());
+    facade.set_residency_after_load_gate(load_entered.clone(), Arc::new(tokio::sync::Notify::new()));
+    facade.set_residency_after_drain_gate(drain_entered.clone(), Arc::new(tokio::sync::Notify::new()));
     let before = unchanged_execution_facts(directory.path(), &facade, &session_id).await;
     let error = if resume {
         // An actual authored/attributed session and a valid run identifier; no
@@ -429,6 +433,9 @@ async fn inventory_rejection_case(resume: bool) {
     );
     let after = unchanged_execution_facts(directory.path(), &facade, &session_id).await;
     assert_eq!(before, after);
+    // The rejected request cannot reach either genuine native boundary.
+    assert!(futures_util::poll!(Box::pin(load_entered.notified())).is_pending());
+    assert!(futures_util::poll!(Box::pin(drain_entered.notified())).is_pending());
     facade
         .close_workflow_execution_session(WorkflowExecutionSessionCloseRequest { session_id })
         .await
