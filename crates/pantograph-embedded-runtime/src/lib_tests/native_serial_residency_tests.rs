@@ -3,7 +3,9 @@
 use super::*;
 use crate::serial_cpu_residency::tests::{author, config, seed};
 use crate::EmbeddedSerialCpuResidency;
-use pantograph_diagnostics_ledger::RunListProjectionStatus;
+use pantograph_diagnostics_ledger::{
+    DiagnosticsLedgerRepository, RunListProjectionStatus, SqliteDiagnosticsLedger,
+};
 use pantograph_runtime_registry::RuntimeRegistrySnapshot;
 use pantograph_scheduler::SchedulerTaskStateKind;
 use pantograph_workflow_service::workflow::{
@@ -20,12 +22,13 @@ use pantograph_workflow_service::{
 };
 use serde_json::{json, Value};
 use std::error::Error;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::Notify;
 
 type CaseResult<T> = Result<T, Box<dyn Error + Send + Sync>>;
 const WATCHDOG: Duration = Duration::from_secs(40);
+const CASE_OBSERVER: Duration = Duration::from_secs(120);
 
 fn require(condition: bool, message: &'static str) -> CaseResult<()> {
     if condition {
@@ -88,7 +91,8 @@ fn save_evidence(case: &str, evidence: &Value) -> CaseResult<()> {
     Ok(())
 }
 
-async fn session(facade: &EmbeddedSerialCpuResidency) -> CaseResult<String> {
+async fn session(facade: &EmbeddedSerialCpuResidency, evidence: &mut Value) -> CaseResult<String> {
+    label_await(evidence, "session:author_workflow");
     author(facade).await.map_err(|error| error.to_string())?;
     let registered = facade.register_attribution_client(ClientRegistrationRequest {
         display_name: Some("M4 native cancellation qualification".into()),
@@ -99,6 +103,7 @@ async fn session(facade: &EmbeddedSerialCpuResidency) -> CaseResult<String> {
         takeover: false,
         reason: None,
     })?;
+    label_await(evidence, "session:create_attributed_session");
     Ok(facade
         .create_attributed_workflow_execution_session(
             WorkflowExecutionSessionAttributedCreateRequest {
@@ -119,7 +124,9 @@ async fn session(facade: &EmbeddedSerialCpuResidency) -> CaseResult<String> {
 async fn run(
     facade: Arc<EmbeddedSerialCpuResidency>,
     session_id: String,
+    observation: Arc<Mutex<Value>>,
 ) -> CaseResult<WorkflowRunResponse> {
+    observation.lock().unwrap()["await"] = json!("physical_run");
     let mut result = facade
         .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
             session_id: session_id.clone(),
@@ -138,19 +145,24 @@ async fn run(
             priority: Some(0),
         })
         .await;
+    retain_first_run_error(&observation, &result);
     while matches!(
         result,
         Err(WorkflowServiceError::RuntimeDependencyReadinessPending { .. })
     ) {
+        observation.lock().unwrap()["await"] = json!("readiness_poll_interval");
         tokio::time::sleep(Duration::from_millis(20)).await;
         if let Some(request) = facade
             .workflow_execution_session_runtime_dependency_readiness_resume_candidates()?
             .into_iter()
             .find(|request| request.session_id == session_id)
         {
+            observation.lock().unwrap()["resume_request"] = json!(request);
+            observation.lock().unwrap()["await"] = json!("physical_readiness_resume");
             result = facade
                 .resume_workflow_execution_session_runtime_dependency_readiness(request)
                 .await;
+            retain_first_run_error(&observation, &result);
         }
     }
     Ok(result?)
@@ -159,7 +171,9 @@ async fn run(
 async fn task_states(
     facade: &EmbeddedSerialCpuResidency,
     session_id: &str,
+    evidence: &mut Value,
 ) -> CaseResult<WorkflowSchedulerTaskStateReadModelQueryResponse> {
+    label_await(evidence, "task_states:scheduler_snapshot");
     let snapshot = facade
         .workflow_get_scheduler_snapshot(WorkflowSchedulerSnapshotRequest {
             session_id: session_id.into(),
@@ -168,6 +182,7 @@ async fn task_states(
     let workflow_run_id = snapshot
         .workflow_run_id
         .ok_or("missing active workflow run")?;
+    label_await(evidence, "task_states:read_models");
     Ok(facade
         .workflow_get_scheduler_task_state_read_models(
             WorkflowSchedulerTaskStateReadModelQueryRequest {
@@ -181,11 +196,148 @@ async fn task_states(
 fn record_result<T: serde::Serialize>(result: &CaseResult<T>) -> Value {
     match result {
         Ok(value) => json!({"ok":true,"value":value}),
-        Err(error) => json!({"ok":false,"error":error.to_string()}),
+        Err(error) => error_record(error.as_ref()),
+    }
+}
+
+fn error_record(error: &(dyn Error + 'static)) -> Value {
+    let mut causes = Vec::new();
+    let mut source = error.source();
+    while let Some(cause) = source {
+        causes.push(cause.to_string());
+        source = cause.source();
+        if causes.len() == 16 {
+            break;
+        }
+    }
+    json!({"ok":false,"error":error.to_string(),"debug":format!("{error:?}"),"causes":causes,"cause_limit":16,"causes_truncated":source.is_some()})
+}
+
+fn retain_first_run_error(
+    observation: &Mutex<Value>,
+    result: &Result<WorkflowRunResponse, WorkflowServiceError>,
+) {
+    if let Err(error) = result {
+        let mut observation = observation.lock().unwrap();
+        let record = error_record(error);
+        if observation["first_error"].is_null() {
+            observation["first_error"] = record.clone();
+        }
+        // One first readiness error and the latest outcome are bounded even
+        // when the existing readiness polling loop observes pending repeatedly.
+        observation["latest_error"] = record;
+    }
+}
+
+fn label_await(evidence: &mut Value, label: &str) {
+    evidence["await"] = json!(label);
+    let history = evidence
+        .as_object_mut()
+        .unwrap()
+        .entry("await_history")
+        .or_insert_with(|| json!([]))
+        .as_array_mut()
+        .unwrap();
+    if history.len() < 64 {
+        history.push(json!(label));
     }
 }
 
 type Execution = tokio::task::JoinHandle<CaseResult<WorkflowRunResponse>>;
+
+// Borrow the retained handle: cancelling the observer never detaches the run.
+async fn await_boundary(
+    execution: &mut Option<Execution>,
+    entered: &Notify,
+    evidence: &mut Value,
+    label: &str,
+) -> CaseResult<()> {
+    label_await(evidence, label);
+    let terminal = tokio::time::timeout(WATCHDOG, async {
+        tokio::select! {
+            biased;
+            _ = entered.notified() => Ok(None),
+            result = execution.as_mut().ok_or("execution owner absent")? => Ok(Some(result)),
+        }
+    })
+    .await?;
+    let terminal: CaseResult<_> = terminal;
+    if let Some(terminal) = terminal? {
+        // The terminal outcome is observed exactly once, including join errors.
+        *execution = None;
+        match terminal {
+            Ok(result) => {
+                evidence["execution_before_boundary"] = record_result(&result);
+                result?;
+                return Err(format!("execution completed before {label}").into());
+            }
+            Err(error) => {
+                evidence["execution_before_boundary"] = error_record(&error);
+                return Err(error.into());
+            }
+        }
+    }
+    Ok(())
+}
+
+// Capture before shutdown closes the public observation surface. These reads
+// neither refresh projections nor enqueue readiness work or native execution.
+async fn capture_case_snapshots(
+    facade: &EmbeddedSerialCpuResidency,
+    directory: &Path,
+    evidence: &mut Value,
+    phase: &str,
+) {
+    let mut snapshot = json!({"registry":registry_facts(&facade.registry_snapshot()),"native":facade.residency_diagnostics(),
+        "raw_readiness":{"ok":false,"unavailable":"facade does not expose raw readiness Check/request/binding/provider snapshots; scheduler diagnostics and resume requests are observations only"}});
+    if let Some(session_id) = evidence["session_id"].as_str().map(str::to_owned) {
+        label_await(evidence, &format!("{phase}:scheduler_snapshot"));
+        snapshot["scheduler"] = match tokio::time::timeout(
+            WATCHDOG,
+            facade.workflow_get_scheduler_snapshot(WorkflowSchedulerSnapshotRequest {
+                session_id: session_id.clone(),
+            }),
+        )
+        .await
+        {
+            Ok(Ok(value)) => json!({"ok":true,"value":value}),
+            Ok(Err(error)) => error_record(&error),
+            Err(error) => error_record(&error),
+        };
+        label_await(evidence, &format!("{phase}:task_states"));
+        snapshot["tasks"] = match tokio::time::timeout(
+            WATCHDOG,
+            task_states(facade, &session_id, evidence),
+        )
+        .await
+        {
+            Ok(result) => record_result(&result),
+            Err(error) => error_record(&error),
+        };
+        snapshot["readiness_resume_candidates"] = match facade
+            .workflow_execution_session_runtime_dependency_readiness_resume_candidates()
+        {
+            Ok(value) => json!({"ok":true,"value":value}),
+            Err(error) => error_record(&error),
+        };
+    }
+    let path = directory.join("app-data/serial-cpu-diagnostics.db");
+    snapshot["raw_ledger"] = if path.is_file() {
+        match SqliteDiagnosticsLedger::open(path)
+            .and_then(|ledger| ledger.diagnostic_events_after(0, 129))
+        {
+            Ok(mut events) => {
+                let truncated = events.len() > 128;
+                events.truncate(128);
+                json!({"ok":true,"after_event_seq":0,"limit":128,"truncated":truncated,"events":events})
+            }
+            Err(error) => error_record(&error),
+        }
+    } else {
+        json!({"ok":false,"error":"diagnostics ledger was not created"})
+    };
+    evidence[phase] = snapshot;
+}
 
 async fn join_execution(
     execution: &mut Option<Execution>,
@@ -209,6 +361,7 @@ async fn finish_failed_case(
     evidence: &mut Value,
 ) {
     let Some(facade) = facade else { return };
+    label_await(evidence, "failure_teardown:facade_shutdown");
     let shutdown = match tokio::time::timeout(WATCHDOG, facade.shutdown()).await {
         Ok(result) => match result {
             Ok(()) => json!({"ok":true}),
@@ -218,16 +371,19 @@ async fn finish_failed_case(
             json!({"ok":false,"watchdog":error.to_string(),"supervisor":"retained_by_facade"})
         }
     };
-    let run = if let Some(handle) = execution.as_mut() {
-        match tokio::time::timeout(WATCHDOG, handle).await {
-            Ok(Ok(result)) => record_result(&result),
-            Ok(Err(error)) => json!({"ok":false,"join_error":error.to_string()}),
-            Err(error) => {
-                json!({"ok":false,"watchdog":error.to_string(),"execution":"not_acknowledged_terminal"})
-            }
+    label_await(evidence, "failure_teardown:execution_join");
+    let run = if execution.is_some() {
+        match join_execution(execution).await {
+            Ok(result) => record_result(&result),
+            Err(error) => error_record(error.as_ref()),
         }
     } else {
-        Value::Null
+        // An early terminal error was already retained by await_boundary.
+        evidence
+            .get("execution_before_boundary")
+            .or_else(|| evidence.get("run"))
+            .cloned()
+            .unwrap_or(Value::Null)
     };
     evidence["failure_teardown"] = json!({"shutdown":shutdown,"run":run,
         "registry":registry_facts(&facade.registry_snapshot()),"native":facade.residency_diagnostics()});
@@ -241,25 +397,40 @@ async fn actual_post_load_pre_start_shutdown_signal_fences_guard_without_running
     let directory = TempDir::new().expect("isolated native fixture directory");
     let mut owned_facade = None;
     let mut execution = None;
-    let result: CaseResult<()> = async {
+    let run_observation = Arc::new(Mutex::new(json!({})));
+    let result: CaseResult<()> = match tokio::time::timeout(CASE_OBSERVER, async {
         seed(directory.path());
+        label_await(&mut evidence, "facade_construction");
         let facade = Arc::new(EmbeddedSerialCpuResidency::new(config(directory.path())).await?);
         owned_facade = Some(facade.clone());
-        let session_id = session(&facade).await?;
+        label_await(&mut evidence, "attributed_session_creation");
+        let session_id = session(&facade, &mut evidence).await?;
         evidence["session_id"] = json!(session_id);
         let entered = Arc::new(Notify::new());
         let proceed = Arc::new(Notify::new());
         facade.set_residency_after_load_gate(entered.clone(), proceed.clone());
         let release = ReleaseGate(proceed.clone());
-        execution = Some(tokio::spawn(run(facade.clone(), session_id.clone())));
-        tokio::time::timeout(WATCHDOG, entered.notified()).await?;
+        execution = Some(tokio::spawn(run(
+            facade.clone(),
+            session_id.clone(),
+            run_observation.clone(),
+        )));
+        await_boundary(
+            &mut execution,
+            &entered,
+            &mut evidence,
+            "after_actual_load_before_Start",
+        )
+        .await?;
         let before = facade.registry_snapshot();
-        let states = task_states(&facade, &session_id).await?;
+        label_await(&mut evidence, "gate:task_states");
+        let states = task_states(&facade, &session_id, &mut evidence).await?;
         let diagnostic = facade
             .residency_diagnostics()
             .ok_or("missing diagnostics")?;
         evidence["at_gate"] =
             json!({"tasks":states,"registry":registry_facts(&before),"native":diagnostic});
+        capture_case_snapshots(&facade, directory.path(), &mut evidence, "gate_snapshot").await;
         let task = states
             .tasks
             .iter()
@@ -289,16 +460,18 @@ async fn actual_post_load_pre_start_shutdown_signal_fences_guard_without_running
         evidence["owned_shutdown_signal_requested"] = json!(true);
         proceed.notify_one();
         drop(release);
+        label_await(&mut evidence, "pre_Start:facade_shutdown");
         let shutdown_result: CaseResult<()> = tokio::time::timeout(WATCHDOG, shutdown)
             .await?
             .map_err(Into::into);
+        evidence["shutdown"] = record_result(&shutdown_result);
+        label_await(&mut evidence, "terminal:execution_join");
         let run_result = join_execution(&mut execution).await?;
+        evidence["run"] = record_result(&run_result);
         let after = facade.registry_snapshot();
         let diagnostic = facade
             .residency_diagnostics()
             .ok_or("missing final diagnostics")?;
-        evidence["shutdown"] = record_result(&shutdown_result);
-        evidence["run"] = record_result(&run_result);
         evidence["after_shutdown"] = json!({"registry":registry_facts(&after),"native":diagnostic});
         require(
             shutdown_result.is_err() && run_result.is_err(),
@@ -317,11 +490,31 @@ async fn actual_post_load_pre_start_shutdown_signal_fences_guard_without_running
             "post-load signal must retain an inaccessible full fence without forward or stop",
         )?;
         Ok(())
-    }
-    .await;
+    })
+    .await
+    {
+        Ok(result) => result,
+        Err(error) => Err(error.into()),
+    };
+    evidence["run_observation"] = run_observation.lock().unwrap().clone();
     if result.is_err() {
+        evidence["first_observer_error"] = record_result(&result);
+        evidence["failed_await"] = evidence["await"].clone();
+        if let Some(facade) = owned_facade.as_ref() {
+            capture_case_snapshots(
+                facade,
+                directory.path(),
+                &mut evidence,
+                "before_failure_teardown",
+            )
+            .await;
+        }
         finish_failed_case(owned_facade.as_ref(), &mut execution, &mut evidence).await;
     }
+    if let Some(facade) = owned_facade.as_ref() {
+        capture_case_snapshots(facade, directory.path(), &mut evidence, "final_snapshot").await;
+    }
+    evidence["run_observation"] = run_observation.lock().unwrap().clone();
     evidence["oracle"] = record_result(&result);
     save_evidence(CASE, &evidence)
         .expect("preserve native qualification evidence without replacement");
@@ -336,23 +529,28 @@ async fn actual_public_running_post_drain_cancellation_preserves_cap_and_exact_c
     let directory = TempDir::new().expect("isolated native fixture directory");
     let mut owned_facade = None;
     let mut execution = None;
-    let result: CaseResult<()> = async {
+    let run_observation = Arc::new(Mutex::new(json!({})));
+    let result: CaseResult<()> = match tokio::time::timeout(CASE_OBSERVER, async {
         seed(directory.path());
+        label_await(&mut evidence, "facade_construction");
         let facade = Arc::new(EmbeddedSerialCpuResidency::new(config(directory.path())).await?);
         owned_facade = Some(facade.clone());
-        let session_id = session(&facade).await?;
+        label_await(&mut evidence, "attributed_session_creation");
+        let session_id = session(&facade, &mut evidence).await?;
         evidence["session_id"] = json!(session_id);
         let entered = Arc::new(Notify::new());
         let proceed = Arc::new(Notify::new());
         facade.set_residency_after_drain_gate(entered.clone(), proceed.clone());
         let release = ReleaseGate(proceed.clone());
-        execution = Some(tokio::spawn(run(facade.clone(), session_id.clone())));
-        tokio::time::timeout(WATCHDOG, entered.notified()).await?;
+        execution = Some(tokio::spawn(run(facade.clone(), session_id.clone(), run_observation.clone())));
+        await_boundary(&mut execution, &entered, &mut evidence, "after_actual_forward_drain_while_Running").await?;
         let before = facade.registry_snapshot();
-        let states = task_states(&facade, &session_id).await?;
+        label_await(&mut evidence, "gate:task_states");
+        let states = task_states(&facade, &session_id, &mut evidence).await?;
         let task = states.tasks.iter().find(|task|task.node_id == "infer").ok_or("missing inference task")?;
         let diagnostic = facade.residency_diagnostics().ok_or("missing diagnostics")?;
         evidence["at_gate"] = json!({"tasks":states,"registry":registry_facts(&before),"native":diagnostic});
+        capture_case_snapshots(&facade, directory.path(), &mut evidence, "gate_snapshot").await;
         require(task.state == SchedulerTaskStateKind::Running && task.active_attempt_id.is_some(), "genuine drained result must be held during public Running")?;
         require(diagnostic.loads == 1 && diagnostic.forward_drains == 1 && diagnostic.stops == 0 && diagnostic.fenced && !diagnostic.has_idle_owner, "exactly one genuine load/forward/drain with cap in receipt required")?;
         require(before.reservations.len() == 2, "mode guard and exact task lease must remain charged at drain gate")?;
@@ -361,12 +559,14 @@ async fn actual_public_running_post_drain_cancellation_preserves_cap_and_exact_c
         let guard_lease = before.reservations.iter().find(|lease| lease.workflow_id == "cpu-serial-residency-owner").ok_or("mode guard lease absent")?;
         require(task_lease.reservation_id != guard_lease.reservation_id, "guard and task must be distinct actual leases")?;
         evidence["actual_task_identity"] = json!({"workflow_run_id":states.workflow_run_id,"task_id":task.task_id,"attempt_id":task.active_attempt_id,"task_lease_id":task_lease.reservation_id,"guard_lease_id":guard_lease.reservation_id});
+        label_await(&mut evidence, "public_active_task_cancellation");
         let cancellation = facade.workflow_cancel_active_execution_session_task(WorkflowExecutionSessionActiveTaskCancelRequest {
             session_id:session_id.clone(), workflow_run_id:states.workflow_run_id.clone(), task_id:task.task_id.clone(),
             reason:Some("native M4 qualification: actual post-drain request".into()),
         }).await?;
         let after_request = facade.registry_snapshot();
-        let requested_states = task_states(&facade, &session_id).await?;
+        label_await(&mut evidence, "after_cancellation:task_states");
+        let requested_states = task_states(&facade, &session_id, &mut evidence).await?;
         evidence["public_cancellation"] = json!(cancellation);
         evidence["after_request"] = json!({"tasks":requested_states,"registry":registry_facts(&after_request)});
         require(cancellation.ok && cancellation.status == WorkflowExecutionSessionActiveTaskCancelStatus::CancellationRequested && Some(cancellation.active_attempt_id.as_str()) == task.active_attempt_id.as_deref(), "public cancellation must target the actual Running attempt")?;
@@ -374,10 +574,11 @@ async fn actual_public_running_post_drain_cancellation_preserves_cap_and_exact_c
         require(same_charges(&before, &after_request), "public cancellation request must not release any task or resident charge")?;
         proceed.notify_one();
         drop(release);
+        label_await(&mut evidence, "terminal:execution_join");
         let run_result = join_execution(&mut execution).await?;
+        evidence["run"] = record_result(&run_result);
         let after = facade.registry_snapshot();
         let diagnostic = facade.residency_diagnostics().ok_or("missing final diagnostics")?;
-        evidence["run"] = record_result(&run_result);
         evidence["after_run"] = json!({"registry":registry_facts(&after),"native":diagnostic});
         // Inspection reads persisted projections. Advance only the two needed
         // for terminal observation, once, after the actual execution has joined.
@@ -435,6 +636,7 @@ async fn actual_public_running_post_drain_cancellation_preserves_cap_and_exact_c
         evidence["cleanup_disposition"] = json!(if exact_cleanup {"exact_task_release_ack_and_cap_returned"} else if honest_full_fence {"full_charges_fenced"} else {"invalid"});
         require(exact_cleanup || honest_full_fence, "receipt must produce exact task cleanup/cap return or preserve every charge behind a full fence")?;
         require(diagnostic.loads == 1 && diagnostic.forward_drains == 1 && diagnostic.stops == 0, "no extra native work is admitted by cancellation")?;
+        label_await(&mut evidence, "post_drain:facade_shutdown");
         let shutdown_result: CaseResult<()> = tokio::time::timeout(WATCHDOG,facade.shutdown()).await?.map_err(Into::into);
         let stopped = facade.registry_snapshot();
         let final_diagnostic = facade.residency_diagnostics().ok_or("missing shutdown diagnostics")?;
@@ -446,10 +648,29 @@ async fn actual_public_running_post_drain_cancellation_preserves_cap_and_exact_c
             require(shutdown_result.is_err() && same_charges(&after,&stopped) && final_diagnostic.fenced && final_diagnostic.stops == 0, "uncertain cleanup must remain fully charged and report fenced shutdown")?;
         }
         Ok(())
-    }.await;
+    }).await {
+        Ok(result) => result,
+        Err(error) => Err(error.into()),
+    };
+    evidence["run_observation"] = run_observation.lock().unwrap().clone();
     if result.is_err() {
+        evidence["first_observer_error"] = record_result(&result);
+        evidence["failed_await"] = evidence["await"].clone();
+        if let Some(facade) = owned_facade.as_ref() {
+            capture_case_snapshots(
+                facade,
+                directory.path(),
+                &mut evidence,
+                "before_failure_teardown",
+            )
+            .await;
+        }
         finish_failed_case(owned_facade.as_ref(), &mut execution, &mut evidence).await;
     }
+    if let Some(facade) = owned_facade.as_ref() {
+        capture_case_snapshots(facade, directory.path(), &mut evidence, "final_snapshot").await;
+    }
+    evidence["run_observation"] = run_observation.lock().unwrap().clone();
     evidence["oracle"] = record_result(&result);
     save_evidence(CASE, &evidence)
         .expect("preserve native qualification evidence without replacement");

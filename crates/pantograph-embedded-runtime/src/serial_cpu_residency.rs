@@ -104,6 +104,15 @@ fn closed_error() -> WorkflowServiceError {
     WorkflowServiceError::InvalidRequest("serial CPU residency admission is closed".into())
 }
 
+fn require_execution_inventory() -> Result<(), WorkflowServiceError> {
+    if !cfg!(feature = "host-dependency-inventory") {
+        return Err(WorkflowServiceError::InvalidRequest(
+            "serial CPU residency execution requires host-dependency-inventory".into(),
+        ));
+    }
+    Ok(())
+}
+
 /// The only public owner of this residency composition. Methods return values;
 /// no gateway, host, registry, service, extensions or inner-runtime alias escapes.
 /// All run/resume calls share one supervised execution owner through shutdown.
@@ -344,11 +353,14 @@ impl EmbeddedSerialCpuResidency {
             .create_attributed_workflow_execution_session(request)
             .await
     }
+    /// Physical execution requires host dependency inventory. Construction and
+    /// metadata/projection operations remain available without that feature.
     pub async fn run_workflow_execution_session(
         &self,
         request: WorkflowExecutionSessionRunRequest,
     ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
         let _admission = self.admit().await?;
+        require_execution_inventory()?;
         self.execution.run_workflow_execution_session(request).await
     }
     pub async fn resume_workflow_execution_session_runtime_dependency_readiness(
@@ -356,6 +368,7 @@ impl EmbeddedSerialCpuResidency {
         request: WorkflowExecutionSessionResumeRequest,
     ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
         let _admission = self.admit().await?;
+        require_execution_inventory()?;
         self.execution
             .resume_workflow_execution_session_runtime_dependency_readiness(request)
             .await

@@ -1810,10 +1810,10 @@ mod tests {
             .await;
     }
 
-    #[cfg(all(feature = "host-dependency-inventory", feature = "backend-candle"))]
+    #[cfg(feature = "backend-candle")]
     async fn hosted_candle_feature_snapshot(
         with_inventory: bool,
-        feature_id: &str,
+        native_profile: bool,
     ) -> pantograph_dependency_planning::DependencyEnvironmentResult {
         use pantograph_dependency_environment_service::{
             DependencyEnvironmentProvider, DependencyReadinessWorkItem,
@@ -1832,8 +1832,9 @@ mod tests {
                 .expect("pumas api"),
         );
         let gateway = Arc::new(inference::InferenceGateway::new());
+        let registry = Arc::new(RuntimeRegistry::new());
         let mut factory_input = EmbeddedHostedWorkflowServiceFactoryInput::new(
-            Arc::new(RuntimeRegistry::new()),
+            registry.clone(),
             gateway.clone(),
             gateway,
             Arc::new(PumasSelectorAccess::Owner(pumas_api)),
@@ -1862,46 +1863,63 @@ mod tests {
             "../../pantograph-dependency-planning/tests/fixtures/dependency_environment_resolve_request.json"
         ))
         .expect("request fixture");
-        let binding_id = format!("candle.{feature_id}");
+        let features = if native_profile {
+            vec!["request_lifecycle", "device_selection"]
+        } else {
+            vec!["external_connection"]
+        };
+        let ids: Vec<_> = features
+            .iter()
+            .map(|feature| {
+                if native_profile {
+                    format!("candle.native_cpu.{feature}.v1")
+                } else {
+                    format!("candle.{feature}")
+                }
+            })
+            .collect();
+        value["action"] = serde_json::json!("check");
+        value["environment_ref"] = serde_json::Value::Null;
         value["dependency_requirements_id"] = serde_json::json!("deps.hosted.candle.feature");
+        let platform =
+            pantograph_dependency_planning::DependencyPlanningPlatformContext::from_os_arch(
+                std::env::consts::OS,
+                std::env::consts::ARCH,
+            )
+            .unwrap();
         for key in ["identity_key", "planning_request"] {
             value[key]["model_ref"] = serde_json::json!({"model_id": "synthetic/embedding"});
             value[key]["task_id"] = serde_json::json!("embedding");
             value[key]["task_type"] = serde_json::Value::Null;
             value[key]["expected_artifact_kind"] = serde_json::Value::Null;
-            value[key]["scheduler_intent"] = serde_json::json!({
-                "requested_runtime_id": "candle", "requested_device_id": "cpu"
-            });
-            value[key]["selected_binding_ids"] = serde_json::json!([binding_id]);
+            value[key]["platform_context"] = serde_json::to_value(&platform).unwrap();
+            value[key]["scheduler_intent"] =
+                serde_json::json!({"requested_runtime_id":"candle","requested_device_id":"cpu"});
+            value[key]["selected_binding_ids"] = serde_json::json!(ids);
         }
         value["planning_request"]["dependency_override_patches"] = serde_json::json!([]);
         let raw: DependencyEnvironmentRequest = serde_json::from_value(value).expect("request");
         let request = ValidatedDependencyEnvironmentRequest::try_from(raw).expect("valid request");
         let payload = DependencyRequirementsPayload::new(
-            request
-                .as_request()
-                .dependency_requirements_id
-                .clone()
-                .expect("requirements id"),
+            request.as_request().dependency_requirements_id.clone().unwrap(),
             request.as_request().identity_key.clone(),
-            vec![serde_json::from_value(serde_json::json!({
-                "name": "candle_feature", "kind": "runtime_feature",
-                "runtime_feature": {"runtime_id": "candle", "feature_id": feature_id}
-            }))
-            .expect("runtime feature requirement")],
-            vec![serde_json::from_value(serde_json::json!({
-                "binding_id": binding_id, "requirement_name": "candle_feature",
-                "environment_kind": "runtime_feature",
-                "runtime_feature": {"runtime_id": "candle", "feature_id": feature_id}
-            }))
-            .expect("runtime feature binding")],
-            request
-                .as_request()
-                .identity_key
-                .selected_binding_ids
-                .clone(),
-        )
-        .expect("valid requirements metadata");
+            features.iter().map(|feature| serde_json::from_value(serde_json::json!({
+                "name":format!("candle_native_{feature}"),"kind":"runtime_feature",
+                "runtime_feature":{"runtime_id":"candle","feature_id":feature}
+            })).unwrap()).collect(),
+            features.iter().zip(&ids).map(|(feature,id)| serde_json::from_value(serde_json::json!({
+                "binding_id":id,"requirement_name":format!("candle_native_{feature}"),"environment_kind":"runtime_feature",
+                "runtime_feature":{"runtime_id":"candle","feature_id":feature}
+            })).unwrap()).collect(),
+            request.as_request().identity_key.selected_binding_ids.clone(),
+        ).unwrap();
+        if native_profile {
+            assert!(crate::inference_dependency_requirements::is_native_payload(
+                request.as_request(),
+                &payload
+            ));
+        }
+        let payload_evidence = serde_json::to_value(&payload).unwrap();
         output
             .dependency_readiness
             .requirements_registry()
@@ -1926,32 +1944,125 @@ mod tests {
         })
         .await
         .expect("actual producer published a snapshot");
-        let result = provider.resolve(&request);
+        let result = provider.check(&request);
+        assert_eq!(
+            result.selected_binding_ids,
+            request.as_request().identity_key.selected_binding_ids
+        );
+        assert!(registry.snapshot().reservations.is_empty());
+        assert!(registry.snapshot().runtimes.iter().all(|runtime| runtime
+            .runtime_instance_id
+            .is_none()
+            && runtime.models.is_empty()
+            && runtime.active_reservation_ids.is_empty()));
+        let scheduler = if native_profile {
+            // A model-free projection of the ACTUAL provider result, never a
+            // Ready substitute or execution authority. Match every context key.
+            use pantograph_dependency_planning::{
+                dependency_preflight_result_from_environment_result,
+                ValidatedDependencyEnvironmentResult,
+            };
+            let validated = ValidatedDependencyEnvironmentResult::try_from(result.clone()).unwrap();
+            let preflight = dependency_preflight_result_from_environment_result(&validated)
+                .unwrap()
+                .into_inner();
+            let mut proof: serde_json::Value = serde_json::from_str(include_str!(
+                "../../pantograph-scheduler/tests/fixtures/readiness_admission_decision_ready.json"
+            ))
+            .unwrap();
+            proof["task_intent"]["model_ref"] =
+                serde_json::to_value(&result.identity_key.model_ref).unwrap();
+            proof["task_intent"]["task_type"] = serde_json::json!("embedding");
+            proof["task_intent"]["constraints"] =
+                serde_json::json!({"requested_runtime_id":"candle","requested_device_id":"cpu"});
+            proof["task_intent"]["trait_settings"] = serde_json::json!([]);
+            proof["task_intent"]["estimate_hints"] = serde_json::json!([]);
+            proof["readiness_proof"]["preflight_result"] = serde_json::to_value(preflight).unwrap();
+            proof["readiness_proof"]["execution_context"]["dependency_requirements_id"] =
+                serde_json::to_value(&request.as_request().dependency_requirements_id).unwrap();
+            proof["readiness_proof"]["execution_context"]["selected_binding_ids"] =
+                serde_json::json!(ids);
+            let decoded: pantograph_scheduler::SchedulerReadinessAdmissionDecision =
+                serde_json::from_value(proof).unwrap();
+            let decision = pantograph_scheduler::plan_scheduler_readiness_admission(
+                pantograph_scheduler::ValidatedSchedulerReadinessAdmissionRequest::try_from(
+                    pantograph_scheduler::SchedulerReadinessAdmissionRequest {
+                        contract_version: 1,
+                        task_intent: decoded.task_intent,
+                        policy:
+                            pantograph_dependency_planning::DependencyReadinessPolicy::CheckOnly,
+                    },
+                )
+                .unwrap(),
+                decoded.readiness_proof,
+            )
+            .unwrap()
+            .into_inner();
+            if result.readiness_state == pantograph_dependency_planning::DependencyEnvironmentReadinessState::NotImplemented {
+                assert_eq!(decision.state,pantograph_scheduler::SchedulerReadinessAdmissionState::TerminalFailed);
+                assert_eq!(decision.action,pantograph_scheduler::SchedulerReadinessAdmissionAction::Fail);
+                assert!(decision.diagnostics.iter().any(|d| d.message == "Dependency readiness cannot be satisfied for this task."));
+                assert!(result.diagnostics.iter().any(|d| d.code == pantograph_dependency_planning::DependencyPlanningDiagnosticCode::NotImplemented && d.field_path.as_deref() == Some("dependency_environment.probe")));
+                assert_eq!(result.binding_statuses.len(),2);
+                assert!(result.binding_statuses.iter().all(|b| b.state == pantograph_dependency_planning::DependencyBindingStatusState::NotImplemented));
+            } else { assert_eq!(decision.state,pantograph_scheduler::SchedulerReadinessAdmissionState::Ready); }
+            Some(decision)
+        } else {
+            None
+        };
         output
             .dependency_readiness_snapshot_producer
             .shutdown()
             .await;
+        let case = if !cfg!(feature = "host-dependency-inventory") {
+            "default_native_inventory_is_not_implemented"
+        } else if !with_inventory {
+            "hosted_inventory_without_explicit_owner_context_stays_conservative"
+        } else if native_profile {
+            "hosted_inventory_observes_real_compiled_candle_lifecycle"
+        } else {
+            "hosted_inventory_preserves_unsupported_candle_feature"
+        };
+        crate::serial_cpu_residency::tests::save_model_free_evidence(
+            case,
+            serde_json::json!({
+                "request":request.as_request(),"payload":payload_evidence,"provenance":{
+                    "session":"hosted-session","run":"hosted-run","task":"hosted-task"},
+                "result":result,"scheduler_decision":scheduler,"registry":format!("{:?}",registry.snapshot()),
+                "no_model_load_or_forward_submitted":true,"producer_shutdown":"ok"
+            }),
+        );
         result
+    }
+
+    #[cfg(all(feature = "backend-candle", not(feature = "host-dependency-inventory")))]
+    #[tokio::test]
+    async fn default_native_inventory_is_not_implemented() {
+        let result = hosted_candle_feature_snapshot(false, true).await;
+        assert_eq!(
+            result.readiness_state,
+            pantograph_dependency_planning::DependencyEnvironmentReadinessState::NotImplemented
+        );
     }
 
     #[cfg(all(feature = "host-dependency-inventory", feature = "backend-candle"))]
     #[tokio::test]
     async fn hosted_inventory_observes_real_compiled_candle_lifecycle() {
-        let result = hosted_candle_feature_snapshot(true, "request_lifecycle").await;
+        let result = hosted_candle_feature_snapshot(true, true).await;
         assert_eq!(
             result.readiness_state,
             pantograph_dependency_planning::DependencyEnvironmentReadinessState::Ready
         );
         assert_eq!(
             result.selected_binding_ids[0].as_str(),
-            "candle.request_lifecycle"
+            "candle.native_cpu.request_lifecycle.v1"
         );
     }
 
     #[cfg(all(feature = "host-dependency-inventory", feature = "backend-candle"))]
     #[tokio::test]
     async fn hosted_inventory_preserves_unsupported_candle_feature() {
-        let result = hosted_candle_feature_snapshot(true, "external_connection").await;
+        let result = hosted_candle_feature_snapshot(true, false).await;
         assert_eq!(
             result.readiness_state,
             pantograph_dependency_planning::DependencyEnvironmentReadinessState::Unavailable
@@ -1978,7 +2089,7 @@ mod tests {
     #[cfg(all(feature = "host-dependency-inventory", feature = "backend-candle"))]
     #[tokio::test]
     async fn hosted_inventory_without_explicit_owner_context_stays_conservative() {
-        let result = hosted_candle_feature_snapshot(false, "request_lifecycle").await;
+        let result = hosted_candle_feature_snapshot(false, true).await;
         assert_eq!(
             result.readiness_state,
             pantograph_dependency_planning::DependencyEnvironmentReadinessState::NotImplemented

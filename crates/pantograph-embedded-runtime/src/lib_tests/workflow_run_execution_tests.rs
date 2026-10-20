@@ -3979,6 +3979,6 @@ mod cpu_audio_graph_tests;
 #[path = "native_serial_worker_tests.rs"]
 mod native_serial_worker_tests;
 
-#[cfg(feature = "backend-candle")]
+#[cfg(all(feature = "backend-candle", feature = "host-dependency-inventory"))]
 #[path = "native_serial_residency_tests.rs"]
 mod native_serial_residency_tests;

@@ -6,6 +6,26 @@ use serde_json::json;
 
 const MODEL: &str = "embedding/qualification/synthetic-bert-8";
 
+pub(crate) fn save_model_free_evidence(case: &str, observations: serde_json::Value) {
+    let evidence = json!({"case":case,
+        "host_dependency_inventory":cfg!(feature = "host-dependency-inventory"),
+        "observations":observations});
+    if let Some(root) = std::env::var_os("PANTOGRAPH_M4_C5_MODEL_FREE_EVIDENCE_ROOT") {
+        std::fs::create_dir_all(&root).unwrap();
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(PathBuf::from(root).join(format!("{case}.json")))
+            .unwrap();
+        serde_json::to_writer_pretty(&mut file, &evidence).unwrap();
+        file.sync_all().unwrap();
+    }
+    println!(
+        "model-free case {case}; host inventory={}",
+        cfg!(feature = "host-dependency-inventory")
+    );
+}
+
 pub(crate) fn config(root: &std::path::Path) -> EmbeddedSerialCpuResidencyConfig {
     EmbeddedSerialCpuResidencyConfig {
         runtime: EmbeddedRuntimeConfig::new(root.join("app-data"), root.to_path_buf()),
@@ -221,6 +241,10 @@ async fn projection_refresh_publishes_existing_raw_evidence_without_native_work(
         facade.workflow_diagnostics_projection_refresh(refresh(10)),
         Err(WorkflowServiceError::InvalidRequest(_))
     ));
+    save_model_free_evidence(
+        "projection_refresh_publishes_existing_raw_evidence_without_native_work",
+        json!({"native":facade.residency_diagnostics(),"registry":format!("{:?}",facade.registry_snapshot()),"shutdown":"ok"}),
+    );
 }
 
 #[tokio::test]
@@ -274,6 +298,204 @@ async fn metadata_sessions_never_load_reserve_or_mint_physical_load_proof() {
             metadata_json: None
         })
         .is_err());
+    save_model_free_evidence(
+        "metadata_sessions_never_load_reserve_or_mint_physical_load_proof",
+        json!({"native":facade.residency_diagnostics(),"registry":format!("{:?}",facade.registry_snapshot()),"shutdown":"ok"}),
+    );
+}
+
+#[cfg(not(feature = "host-dependency-inventory"))]
+async fn default_execution_fixture() -> (
+    tempfile::TempDir,
+    EmbeddedSerialCpuResidency,
+    String,
+    String,
+) {
+    let directory = tempfile::tempdir().unwrap();
+    seed(directory.path());
+    let facade = EmbeddedSerialCpuResidency::new(config(directory.path()))
+        .await
+        .unwrap();
+    let edit = author(&facade).await.unwrap();
+    let registered = facade
+        .register_attribution_client(ClientRegistrationRequest {
+            display_name: Some("model-free inventory prerequisite".into()),
+            metadata_json: None,
+        })
+        .unwrap();
+    let client = facade
+        .open_client_session(ClientSessionOpenRequest {
+            credential: registered.credential_proof_request(),
+            takeover: false,
+            reason: None,
+        })
+        .unwrap();
+    let session = facade
+        .create_attributed_workflow_execution_session(
+            WorkflowExecutionSessionAttributedCreateRequest {
+                workflow_id: "serial-residency-test".into(),
+                usage_profile: None,
+                keep_alive: false,
+                attribution: WorkflowExecutionSessionAttributionRequest {
+                    credential: registered.credential_proof_request(),
+                    client_session_id: client.session.client_session_id.as_str().into(),
+                    bucket_selection: pantograph_runtime_attribution::BucketSelection::Default,
+                },
+            },
+        )
+        .await
+        .unwrap();
+    (directory, facade, session.session_id, edit)
+}
+
+#[cfg(not(feature = "host-dependency-inventory"))]
+fn execution_request(session_id: &str) -> WorkflowExecutionSessionRunRequest {
+    WorkflowExecutionSessionRunRequest {
+        session_id: session_id.into(),
+        workflow_semantic_version: "1.0.0".into(),
+        inputs: vec![WorkflowPortBinding {
+            node_id: "prompt".into(),
+            port_id: "text".into(),
+            value: json!("hello world"),
+        }],
+        output_targets: Some(vec![WorkflowOutputTarget {
+            node_id: "vectors".into(),
+            port_id: "vector".into(),
+        }]),
+        override_selection: None,
+        timeout_ms: None,
+        priority: Some(0),
+    }
+}
+
+#[cfg(not(feature = "host-dependency-inventory"))]
+async fn unchanged_execution_facts(
+    directory: &std::path::Path,
+    facade: &EmbeddedSerialCpuResidency,
+    session_id: &str,
+) -> serde_json::Value {
+    use pantograph_diagnostics_ledger::DiagnosticsLedgerRepository;
+    let snapshot = facade
+        .workflow_get_scheduler_snapshot(WorkflowSchedulerSnapshotRequest {
+            session_id: session_id.into(),
+        })
+        .await
+        .unwrap();
+    let ledger =
+        SqliteDiagnosticsLedger::open(directory.join("app-data/serial-cpu-diagnostics.db"))
+            .unwrap();
+    let events = ledger.diagnostic_events_after(0, 129).unwrap();
+    assert!(events.len() <= 128);
+    let native = facade.residency_diagnostics().unwrap();
+    assert_eq!(
+        (
+            native.loads,
+            native.forward_drains,
+            native.stops,
+            native.retains
+        ),
+        (0, 0, 0, 0)
+    );
+    assert!(facade.registry_snapshot().reservations.is_empty());
+    json!({"session":snapshot.session,"workflow_run_id":snapshot.workflow_run_id,"queue":snapshot.items,
+        "ledger":events,"native":native,"registry":format!("{:?}",facade.registry_snapshot())})
+}
+
+#[cfg(not(feature = "host-dependency-inventory"))]
+async fn inventory_rejection_case(resume: bool) {
+    let (directory, facade, session_id, edit) = default_execution_fixture().await;
+    let before = unchanged_execution_facts(directory.path(), &facade, &session_id).await;
+    let error = if resume {
+        // An actual authored/attributed session and a valid run identifier; no
+        // otherwise-resumable paused run is invented or submitted by this test.
+        facade
+            .resume_workflow_execution_session_runtime_dependency_readiness(
+                WorkflowExecutionSessionResumeRequest {
+                    session_id: session_id.clone(),
+                    workflow_run_id: "run.model-free-inventory-prerequisite".into(),
+                },
+            )
+            .await
+            .unwrap_err()
+    } else {
+        facade
+            .run_workflow_execution_session(execution_request(&session_id))
+            .await
+            .unwrap_err()
+    };
+    assert!(
+        matches!(&error,WorkflowServiceError::InvalidRequest(message)
+        if message == "serial CPU residency execution requires host-dependency-inventory")
+    );
+    let after = unchanged_execution_facts(directory.path(), &facade, &session_id).await;
+    assert_eq!(before, after);
+    facade
+        .close_workflow_execution_session(WorkflowExecutionSessionCloseRequest { session_id })
+        .await
+        .unwrap();
+    facade
+        .workflow_graph_close_edit_session(WorkflowGraphEditSessionCloseRequest {
+            session_id: edit,
+        })
+        .await
+        .unwrap();
+    facade.shutdown().await.unwrap();
+    save_model_free_evidence(
+        if resume {
+            "default_resume_requires_inventory_before_enqueue"
+        } else {
+            "default_run_requires_inventory_before_enqueue"
+        },
+        json!({"before":before,"after":after,"error":error.to_string(),"shutdown":"ok",
+            "otherwise_resumable_paused_run_claimed":false}),
+    );
+}
+
+#[cfg(not(feature = "host-dependency-inventory"))]
+#[tokio::test]
+async fn default_run_requires_inventory_before_enqueue() {
+    inventory_rejection_case(false).await;
+}
+
+#[cfg(not(feature = "host-dependency-inventory"))]
+#[tokio::test]
+async fn default_resume_requires_inventory_before_enqueue() {
+    inventory_rejection_case(true).await;
+}
+
+#[cfg(not(feature = "host-dependency-inventory"))]
+#[tokio::test]
+async fn closed_admission_precedes_missing_inventory() {
+    let (_directory, facade, session_id, _edit) = default_execution_fixture().await;
+    // Hold the existing operation read guard so shutdown is pending after it
+    // closes admission; no native load/forward is started.
+    let operation = facade.operations.read().await;
+    let mut shutdown = Box::pin(facade.shutdown());
+    assert!(futures_util::poll!(shutdown.as_mut()).is_pending());
+    let run = facade
+        .run_workflow_execution_session(execution_request(&session_id))
+        .await
+        .unwrap_err();
+    let resume = facade
+        .resume_workflow_execution_session_runtime_dependency_readiness(
+            WorkflowExecutionSessionResumeRequest {
+                session_id,
+                workflow_run_id: "run.model-free-inventory-prerequisite".into(),
+            },
+        )
+        .await
+        .unwrap_err();
+    for error in [&run, &resume] {
+        assert!(
+            matches!(error,WorkflowServiceError::InvalidRequest(message) if message == "serial CPU residency admission is closed")
+        );
+    }
+    drop(operation);
+    shutdown.await.unwrap();
+    save_model_free_evidence(
+        "closed_admission_precedes_missing_inventory",
+        json!({"run":run.to_string(),"resume":resume.to_string(),"native":facade.residency_diagnostics(),"shutdown":"ok"}),
+    );
 }
 
 pub(crate) async fn author(
@@ -384,6 +606,7 @@ pub(crate) async fn author(
     Ok(edit.session_id)
 }
 
+#[cfg(feature = "host-dependency-inventory")]
 #[tokio::test]
 async fn actual_facade_session_uses_private_load_owner_and_acknowledged_shutdown() {
     let directory = tempfile::tempdir().unwrap();
