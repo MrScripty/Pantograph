@@ -726,3 +726,38 @@ coordination; parent owns its later disposition after reachable handoff.
   or environment change occurred. Synthetic fixtures establish no trained-model,
   production/default activation, GPU, native batching or performance qualification.
 - See [combined evidence and C5 handoff](reports/2026-10-20-m4-combined-c4.md).
+
+## 2026-10-20 — C5 explicit inventory repair and reviewed local regression handoff
+
+- Preserved e792fa61 unchanged. Five repair checkpoints through47077561 require
+  explicit host inventory before physical run/resume admission, retain conservative
+  unsupported/default behavior and native-boundary assertions, and split CI's
+  default library gate from exact inventory composition/native cases. Stable
+  comparison excludes only registry collection time; raw timestamps remain.
+- The first model-free attempt at71325cac remains failed:1pass/1fail/7unrun plus
+  a separately recorded Python launch-contract mismatch. The separately admitted
+  second attempt at47077561 passed9model-free cases once, with zero native calls.
+- Separate be7773ee test-only diagnostics retain public await phases and
+  first/latest errors before supervised shutdown, preserving all16 facade
+  assertions, original timeouts and cleanup ownership. Both exact-source binaries
+  compiled/listed and scoped Clippy passed without case execution in preparation.
+- Fresh explicit user approval then admitted exactly the original3 native cases
+  serially once atbe7773ee. Actual preflight/execute outer exits and all3child
+  exits are0; all3source oracles pass. Facade journal27records complete/noIOerror;
+  pre-Start retains honest full fence; post-drain completion wins with exact task
+  ACK/cap return and final stop/charge clear. Independent evidence/archive review
+  accepts only this bounded local result. Direct children reaped/no live groups;
+  descendant reaping is not claimed. No retry/cohort/download occurred.
+- This packaging checkpoint changes only docs/evidence afterbe7773ee; no tests,
+  native/model work or CI ran. The proposed PR83 fast-forward preserves all
+  commits. PR84 sourcea8a9f105's three-file repair is already represented by
+  e8d5d20d (stable patch ID1920567f9c950b7c36e51243d47c59b3b61bcd86);
+  do not merge it twice. Parent owns the replacement disposition and M3 dependency.
+- Read-only GitHub refresh of PR83/PR84/main returned Forbidden. Last observed
+  PR83head5b4fc6dd/baseM3b63aa3eb and PR84head9e068bbc are preconditions, not
+  current verified refs. No publication, metadata change, merge, rebase, closure
+  or deletion occurred. All prior source/evidence remains preserved.
+- OverallM4/C5 remain pending fresh refs, exact publication-source normal required
+  CI and coordinated integration. Historical hosted first cause/private raw
+  readiness remain unknown. See [C5 repair/publication handoff](reports/2026-10-20-m4-c5-local.md)
+  and its three exact retained evidence archives. No further execution is admitted.

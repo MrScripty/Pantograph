@@ -2,9 +2,9 @@
 
 **Plan status:** `Active` — M1/M2/M3 accepted; M4 C4 locally qualified with source-assisted cancellation limits, C5 blocked; M5/M6 unadmitted.
 
-**Current phase:** Independently reviewed main-v4 and separate cancellation evidence satisfy the original bounded local C4 contract. Overall M4 remains unaccepted: published-head embedded-runtime CI failures (CPU-28), exact composed/publication-head CI and coordinated integration remain C5 blockers.
+**Current phase:** Bounded local C4 remains qualified. The independently reviewed C5 inventory repair has nine model-free passes at 47077561 and three original native regression passes once at be7773ee, including durable facade diagnostics. Overall M4 remains unaccepted: fresh remote-state readback, exact publication-source hosted CI and coordinated PR83/PR84 integration remain C5 gates. Historical hosted failures and private raw readiness remain unresolved.
 
-**Next slice:** Hand the exact local composition/evidence delta to the parent for narrow publication permission and PR83/PR84 equivalent-patch coordination. Retain all failed/stopped attempts and investigate CPU-28 under a separately bounded plan before overall acceptance. No further model work, repair expansion, publication or merge is authorized by this handoff. M5/M6 remain unadmitted.
+**Next slice:** Prepare the minimal history-preserving PR83 fast-forward and documentation/evidence handoff for parent review. The PR84 three-file repair is already represented by e8d5d20d and must not be integrated twice. GitHub refresh returned Forbidden during packaging; current refs must be read before separately authorized publication. No further execution, repair expansion, publication, merge, rebase, closure or deletion is authorized here. M5/M6 remain unadmitted.
 
 **Acceptance status:** M1 merged as PR73 in main `07b23d47`; the original
 negative cohort and the separately accepted C3 supplement remain unchanged.
@@ -19,6 +19,9 @@ M3 is accepted at preserved exact head `b63aa3ebe5fab1531aef952a35ce74932bf76b30
 M4 local C4 combines main source9ce4ca8a with separate96691fd7 cancellation only
 within its disclosed source-assisted scope; C5 and overall M4 remain unaccepted.
 See the [combined C4 report](reports/2026-10-20-m4-combined-c4.md).
+The later [C5 repair and publication handoff](reports/2026-10-20-m4-c5-local.md)
+records the exact sources, three-case native result, preserved failures and hosted
+CI requirements without upgrading C5 or overall M4 acceptance.
 
 **Execution ledger:** [execution-ledger.md](execution-ledger.md)
 
@@ -766,13 +769,15 @@ Original failed v1/v2 and rejected-before-model v3 remain immutable failures.
 No model work was rerun during combination. This later disposition supersedes
 earlier current-status C4 Partial statements without rewriting their history.
 
-Overall M4 and C5 remain unaccepted. Published PR83 and PR84 Quality Gates both
-fail three embedded-runtime tests (facade TerminalFailed and two cancellation
-Elapsed results); cause is unestablished. Exact composed/publication-head CI is
-unavailable. Local isolated qualification does not resolve broad-suite reliability.
-Publication/integration requires separate narrow authorization and parent-owned
-PR84-equivalent-patch coordination; no additional production change is proposed.
-See [combined C4 evidence and C5 handoff](reports/2026-10-20-m4-combined-c4.md).
+The e792fa61 checkpoint retained PR83/PR84 hosted failures: facade TerminalFailed
+and two cancellation Elapsed results. Their original first awaited phase/cause
+remains unestablished. The later reviewed inventory repair, model-free checks
+and three local native passes are recorded in the
+[C5 repair handoff](reports/2026-10-20-m4-c5-local.md). They do not replace those
+historical failures or supply broad-suite/hosted reproducibility. Overall M4/C5
+remain unaccepted pending fresh refs, exact publication-source required CI and
+parent-owned integration/PR84 replacement coordination. No further execution or
+publication is authorized by this packaging checkpoint.
 
 ### M1 Evidence And Oracle Plan
 
