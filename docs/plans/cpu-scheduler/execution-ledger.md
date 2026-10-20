@@ -663,3 +663,29 @@ coordination; parent owns its later disposition after reachable handoff.
 - Parent owns prospective new main-protocol admission and integration. Publication
   still awaits exact-payload approval after auto-review rejection; no alternate
   route, merge or branch deletion occurred. M5/M6 remain unadmitted.
+
+
+## 2026-10-20 — Main-v2 once-only qualification: native positives, pressure lifecycle failure
+
+- Parent separately authorized one new frozen main cohort after causal-fix review
+  and deterministic populated-projection preflight; all original criteria retained.
+  Actual metadata replay plus synthetic AABBA source tests pass16/16, zero new
+  native work. Initial wrong NodeStatus fixture expectation and exact source bytes
+  remain preserved. Two independent reviewers admitted source/producer/stop gates.
+- Clean c25fd49d/tree4ac114a2, all967source/14fixture hashes, exact budgets/env
+  and release binaryff1f35ac (86511472bytes) passed independent preflight. Exactly
+  one v2 invocation at03:58:22–24UTC exited1; no cancellation/retry/continuation.
+- Actual retainedAABBA:3loads2retains5forwards5taskACKs2switch+1finalstop. Five
+  fresh comparison owners eachload/forward/stop1. All10goldens match; independent
+  strict saved-owner checks support3vs5/native identities/claims/cleanup. Original
+  v1 and cancellation supplement remain unchanged.
+- Pressure correctly refuses620781187RAM against83886080 beforeStart/native/
+  claims, and facade shutdown succeeds. But its4event ledger has noFailedterminal;
+  public execution-sessionclose is scheduler_busy. M4prepareErr returns worker
+  RuntimeBranchFailed before admitted-run finalization; caller directly mapsErr,
+  leavingactive_run. Overallv2/C4 remainFAILED/Partial; no criterion relaxed.
+- Nextfixrequires parent/T4coordination: exactpre-Start admitted-run terminalization
+  before responder settlement, retaining originalerror/nativefence/charges and no
+  fabricatedStart/release. Reserved T4 file unchanged. No further workflow attempt
+  is authorized. C5 publication/exact-headCI remains held; later consolidated
+  destination/payload approval must cover finalsource/tests/rawreports scope.

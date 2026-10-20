@@ -347,3 +347,10 @@ are populated. See the [prospective protocol](../../docs/plans/cpu-scheduler/rep
 All original retention/switching/pressure/3-versus-5 criteria and budgets remain
 binding. This admission does not restart or continue the original failed owner,
 and allows no winner retry or new cancellation execution. Publication stays held.
+
+The authorized v2 invocation subsequently ran once at `c25fd49d` and exited1.
+Retained/comparison native counts,10golden outputs and acknowledged cleanup
+passed. Pressure correctly refused before native work, but its failed preparation
+left the session active with no Failed terminal event; close reported
+`scheduler_busy`. Full pressure and M4-C4 remain blocked. No further invocation
+is authorized by the consumed v2 admission. Preserve both original failures.

@@ -2,9 +2,9 @@
 
 **Plan status:** `Active` — M1/M2/M3 accepted; M4 implemented locally, native qualification Partial; M5/M6 unadmitted.
 
-**Current phase:** One new M4 main protocol is prospectively authorized after causal-fix review and deterministic projection preflight; preserve the failed original protocol. Publication remains blocked.
+**Current phase:** Main-v2 ran once: retention/switch/reload/comparison evidence passes; pressure run/session finalization fails. M4-C4 remains Partial and publication remains blocked.
 
-**Next slice:** Review and freeze `m4-serial-residency-v2-readback`, then execute it once with unchanged retention/switching/pressure/3-versus-5 criteria. M5/M6 remain unadmitted.
+**Next slice:** Coordinate pre-Start preparation-error terminalization with the parent/T4 owner. Preserve both failed protocols and all criteria; no further native cohort is authorized. M5/M6 remain unadmitted.
 
 **Acceptance status:** M1 merged as PR73 in main `07b23d47`; the original
 negative cohort and the separately accepted C3 supplement remain unchanged.
@@ -741,7 +741,9 @@ Dependency gates: parent-confirmed exact-head M3-C5/acceptance and independent
 contract admission are satisfied. Feasible additive accounting, the dedicated
 facade and affected source tests passed local review at7139b2ad. The fixed main
 qualification failed on diagnostic readback after one task; acceptance and
-publication remain gated.
+publication remain gated. The separately authorized v2 now supports retained/
+comparison native3vs5, but pressure run/session finalization fails (CPU-27);
+no additional native request is authorized.
 Re-plan triggers: writable gateway/ordinary execution escape, production path outside
 write set, inability to reserve full load/registration envelope, inability to preserve
 M3 final Start/turn ordering, unsupported native stop/load ownership or missing actual

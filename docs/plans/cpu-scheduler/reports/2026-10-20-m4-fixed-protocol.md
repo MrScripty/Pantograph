@@ -1,5 +1,10 @@
 # M4 fixed protocol: partial evidence and preserved failure
 
+Later continuation: parent separately admitted one main-v2 protocol. It supports
+retained/comparison native counts but fails pressure run/session finalization;
+see the [main-v2 report](2026-10-20-m4-main-v2.md). This original failed protocol
+and its outcome remain unchanged.
+
 Status: **M4-C4 Partial/Blocked; M4 not accepted**. The prospectively fixed main
 protocol ran once at source `7139b2ad547e5b195482146f17b6e27e633c92ed`, tree
 `75852b54dd591d5e01a00f5345256cbff260711f`. Its frozen release binary SHA256 was
