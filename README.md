@@ -19,7 +19,7 @@ npm install
 python3 examples/scheduler-demo/serve.py
 ```
 
-Open `http://127.0.0.1:8765`. Run the supplied JSON, then try **Missing path** to see a real scheduler rejection.
+Open `http://127.0.0.1:8765`. Run the supplied JSON, then click **Test expected rejection** and **Run workflow** to see a real scheduler rejection.
 
 For the full workbench, run `npm run dev` in another terminal and follow **Open the live workbench**. On **Graph**, load **editor-demo**, edit Text Input, **Save**, then **Submit**. This uses real Rust execution and temporary demo state. [Demo guide](examples/scheduler-demo/README.md).
 
