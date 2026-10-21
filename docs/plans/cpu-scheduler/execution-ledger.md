@@ -883,3 +883,25 @@ coordination; parent owns its later disposition after reachable handoff.
   snapshot serialization/raw checks/clones/equality are additional uncounted work.
   [C2a check receipt](reports/2026-10-21-m5-c2a-checks.json) records hashes/commands.
   Normal dependent draft/hosted CI remain before this publication checkpoint.
+
+### 2026-10-21 — exact recovery, M3 integration and dependent M6a publication
+
+- Verified the exact Library packet, all48 sections,30 decoded chunks, bundle,
+  prerequisite, raw commits/trees/patches and every changed file hash/mode before
+  strict-object import. Fresh identity `MrScripty` and protected refs matched.
+- Normal fast-forward published diagnostic5f to PR86; M6a5270 published separately
+  as draft PR87. Exact siblings and all branches remain intact. No old credentials,
+  denied log route, sandbox change, rewrite, model work or unrelated edit was used.
+- Independent exact-source/native-evidence review and all22 check runs approved
+  M3b63. PR81 merged as71cfd845 with exact reviewed treedefca3d3; PR83 retargeted
+  to main at unchanged bd66. M4 browser/Quality gates still block integration.
+- Independent review reverified PR84→e8d5 replacement mapping, C4/C5 archives and
+  source transfer. Preserve PR84 history and do not apply its repair again.
+- PR87's sibling-head browser failure has only a fixed unstructured-failure
+  annotation. Normal dependency merge2403 has parents5270/5f and tree38f6f434;
+  combined731 frontend,10 diagnostic/CDP and4 configuration cases pass. This
+  repairs CI source consistency without asserting the browser cause. New CI is
+  pending. Fresh standalone M6a also passed12 constructor/store regressions.
+- [Recovery report](reports/2026-10-21-publication-recovery.md) owns exact identities,
+  failure/evidence limits and retained-resource disposition. M4, overall M5/C2,
+  broader M6 and real-workload performance/memory/hardware evidence remain open.
