@@ -1,5 +1,76 @@
 # CPU Scheduler Execution Ledger
 
+## 2026-10-20 — Publication closure and M5 C1 implementation admission
+
+- Replacement publication executor independently reconstructed all151 incremental
+  text-transfer chunks, checked whole decoded SHA256, complete prerequisite,
+  strict Git objects, exact candidate/tree and10-commit25-path delta. Authenticated
+  REST login was MrScripty. Normal guarded PR83 fast-forward completed to
+  `bd66da4e0ba20d17f30a70140a448b55d57fce1e`; accepted M3, PR84's original head,
+  every other branch/tag and original checkout were preserved. No merge.
+- All four hosted workflows reached terminal: [CPU Composition](https://github.com/MrScripty/Pantograph/actions/runs/39469325294),
+  [Runtime Separation](https://github.com/MrScripty/Pantograph/actions/runs/39469325295)
+  and [Headless Workflow](https://github.com/MrScripty/Pantograph/actions/runs/39469325324)
+  passed. [Quality Gates](https://github.com/MrScripty/Pantograph/actions/runs/39469325274)
+  failed at sandboxed image browser qualification; its other jobs, including
+  explicit inventory/native residency and native text controls, passed.
+  Hosted logs redirected to denied storage; that read was not retried.
+- A new user continuation requested Codex instances and authorized independent
+  implementation while preserving publication. One supported exact-source local
+  browser attempt installed locked npm dependencies offline with Node24.12.0,
+  then failed at Chromium151 sandbox startup in1.5s, before acceptance. The helper
+  is uid65534/nobody, mode4755. No ownership/mode/access setting was changed and
+  sandboxing was not disabled. Local failure does not establish hosted cause.
+  No alternate official Chrome exists in the inspected standard install paths.
+- Independent plan/contract review identified the M5 nested-work, validated-input
+  and unused-private-delivery gaps. Initial report checkpoint is529cd902. The
+  later explicit user continuation authorizes a production C1 implementation
+  instead of stopping at a design-only report. Independent pre-code review
+  accepted a new exported nonserialized pure API with complete all-member raw
+  preflights, checked64KiB aggregate admitted-string accounting, existing candidate
+  validation, duplicate precedence, exact compatibility and selected-only memory
+  aggregation. No grants, Ready proof, runtime owner, dispatch or defaults change.
+- Canonical path/operation: `docs/plans/cpu-scheduler/plan.md`, `continue`.
+  Branch `feat/cpu-scheduler-m5-bounded-grouping` depends on exact PR83bd66da4e
+  and retains initial review529cd902. M5 C1 write set is scheduler batching policy,
+  curated exports, public-facing deterministic tests and owned contract/plan docs.
+  Existing M3 member opportunities are not grouped or replaced. C2 execution,
+  actual CPU comparison, M6 and real-model qualification remain distinct gates.
+- The pinned standards188beda1 baseline is retained. Current Core/Router and
+  applicable library/Rust API/security, contract, diagnostic, verification/oracle,
+  documentation/commit and proportionality guidance were refreshed before code.
+  Initial offline package build lacked the workspace's pinned Pumas git source;
+  one ordinary bounded dependency preparation succeeded in29.9s with retry0,
+  two build jobs and no model download. Final source checks/review follow below.
+
+- C1 source is implemented with one shared exact compatibility classifier;
+  generic serialized validation preserves its prior check order and messages.
+  Public API tests passed all17 independently specified grouping cases. The whole
+  scheduler package passed222 tests, zero failures, one existing ignored cost
+  probe. Package formatting, all-target warning-deny Clippy and warning-deny
+  Rustdoc passed offline after dependency preparation. The initial Clippy failure
+  was confined to two test table type annotations; a named mutation type fixed
+  them without suppressions. Original failed output remains preserved.
+- Independent final source/contract review approved exact C1 library-kernel and
+  dependent draft scope, with no blocking findings. It verified complete raw
+  preflight, duplicate/validation precedence, fixed diagnostic privacy, exact
+  compatibility, selected-only arithmetic and independent boundary oracles.
+  Reviewed kernel SHA256 is
+  `8ffea8371221ea6dbe14baca0445213469d9c85eb31b0f7e39126e1456d46b21`.
+  [Check receipt](reports/2026-10-20-m5-c1-checks.json) records commands and source
+  hashes. No workflow/native code, fairness queue, manifest, lockfile or default
+  mode changed; actual grouped CPU work and M5 acceptance remain C2.
+
+This dependent implementation branch/worktree is retained-protected for parent
+review and draft CI. Parent owns integration and later disposition. No broad
+cleanup, rebase, branch deletion, default activation or merge is authorized.
+The task-created `/workspace/pantograph-m5-bounded-grouping` is retained under its
+feature ref for draft review; `/workspace/pantograph-m5-contract-review` retains
+529cd902 as the initial contract checkpoint, and the detached exact-source
+`/workspace/pantograph-image-qualification-bd66da4e` remains protected by the
+preserved bd66da4e verification ref for browser diagnosis. Parent owns these
+resources' integration/diagnosis and any later disposition; this task removes none.
+
 ## 2026-10-12 — M0 planning admission
 
 - User authorized remaining CPU-testable scheduler work after a standards-compliant

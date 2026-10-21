@@ -1,10 +1,10 @@
 # Plan: CPU Scheduler Completion And Fair Progress
 
-**Plan status:** `Active` — M1/M2/M3 accepted; M4 C4 locally qualified with source-assisted cancellation limits, C5 blocked; M5/M6 unadmitted.
+**Plan status:** `Active` — M1/M2/M3 accepted; M4 acceptance remains open; M5 C1 implemented and locally verified; M5 execution and M6 remain unadmitted.
 
-**Current phase:** Bounded local C4 remains qualified. The independently reviewed C5 inventory repair has nine model-free passes at 47077561 and three original native regression passes once at be7773ee, including durable facade diagnostics. Overall M4 remains unaccepted: fresh remote-state readback, exact publication-source hosted CI and coordinated PR83/PR84 integration remain C5 gates. Historical hosted failures and private raw readiness remain unresolved.
+**Current phase:** PR83 was fast-forwarded to `bd66da4e0ba20d17f30a70140a448b55d57fce1e` with exact tree/scope and remote preservation verified. Its CPU Composition, Runtime Separation and Headless workflows passed; Quality Gates failed at the image browser step while all Rust jobs and explicit inventory/native cases passed. Hosted browser root cause remains unavailable. Overall M4 and PR83/PR84 integration remain unaccepted. The current user continuation separately admits the independently reviewed, inert M5 C1 library kernel below; it changes no runtime custody, M3 opportunities or defaults.
 
-**Next slice:** Prepare the minimal history-preserving PR83 fast-forward and documentation/evidence handoff for parent review. The PR84 three-file repair is already represented by e8d5d20d and must not be integrated twice. GitHub refresh returned Forbidden during packaging; current refs must be read before separately authorized publication. No further execution, repair expansion, publication, merge, rebase, closure or deletion is authorized here. M5/M6 remain unadmitted.
+**Next slice:** Publish the independently reviewed and locally verified M5 C1 kernel as a dependent draft from `feat/cpu-scheduler-m5-bounded-grouping` onto PR83's exact `bd66da4e` branch, then observe its hosted checks. Local evidence is in the [C1 check receipt](reports/2026-10-20-m5-c1-checks.json). Preserve PR84's repair/history and accepted M3. Actual fair member execution remains C2; M6, real-model qualification, default activation and merge remain outside this slice.
 
 **Acceptance status:** M1 merged as PR73 in main `07b23d47`; the original
 negative cohort and the separately accepted C3 supplement remain unchanged.
@@ -214,8 +214,47 @@ and write sets receive an independent review before their first code change.
 | M2 / Accepted; merged PR76 | Bounded completion lookahead for a disclosed CPU cohort, initially advisory on actual work. Extend existing scheduler kernels, workflow capture and native evidence producer only. | M1; complete comparable evidence for every admitted alternative/transition, including unfinished obligations. Hand-computed independent oracles, work-budget refusal, missing/stale evidence, owner invalidation and actual CPU trace correspondence. No forecasts authorize execution. Promote only a separately qualified action subset; do not fill missing cold/transfer costs with zero. |
 | M3 / Accepted; PR81 unmerged | Explicit per-app/bucket service opportunities at an authoritative ready-work boundary, alongside priorities. Writes confined to scheduler/workflow queue/attribution integration and tests after its design review. | M1 and a bounded eligible population; use authenticated existing attribution, not arbitrary caller identities. Fixed modeled traces prove opportunity/order, then actual CPU sessions from two authenticated units prove progress under repeated foreground arrival and cancellation. No wall-clock guarantee for unbounded nonpreemptible jobs. Missing entitlement identity has an explicit owned disposition. |
 | M4 / C4 locally qualified with source-assisted cancellation; C5 blocked | CPU residency actions improve a specified repeated-model workflow without violating cleanup; serial preparation/eviction only. Writes scheduler policy, registry/host action integration and tests after review. | M2 evidence, M3 fairness obligations where actions delay other apps. Measure load/unload/reload separately; full charge remains until acknowledged stop; pinned/live allocations protected. Actual two-model CPU alternation, pressure, separately scoped cancellation and controlled failed-stop cases. No overlapping loads, speculative lease release or automatic recovery of unknown execution. Overall M4 remains unaccepted; see combined local C4 report and unresolved C5 CI failures. |
-| M5 / Planned | Fair bounded grouping on the existing supported sequential CPU batch envelope; optimize only demonstrated scheduler overhead/reuse. Writes existing batch policy/broker and tests after review. | M3/M4 where grouping changes retention or fairness. Group 1..8 compatible members without waiting indefinitely, preserve per-member outputs/attempts/cancellation, mixed/incompatible tasks refuse grouping. Compare actual CPU grouped versus singleton runs. Label sequential envelope honestly; native/continuous execution remains Deferred unless independently capable and exercised. |
+| M5 / C1 locally verified; draft CI pending | C1 supplies the bounded advisory library policy. Actual fair grouping on the existing sequential CPU envelope remains C2; optimize only demonstrated scheduler overhead/reuse. | C1 public API/package checks and independent review passed; normal draft CI remains. C2 depends on M3/M4 where retention or fairness changes: group 1..8 compatible members without indefinite waiting, preserve per-member outputs/attempts/cancellation and compare actual CPU grouped versus singleton runs. Native/continuous execution remains Deferred unless independently capable and exercised. |
 | M6 / Planned | Qualified modes become an explicit documented host/application choice with truthful diagnostics and bounded rollback. | Accepted upstream milestones; exact consumer contract and UI/IPC/persistence routing reviewed if added. Real consuming-path evidence, regression and performance report, normal CI. Default activation is a separate decision; no main merge/deployment authorized. |
+
+### M5 C1 bounded grouping kernel admission
+
+Operation `continue` under this exact plan. The 2026-10-20 user continuation
+explicitly authorizes actual M5 implementation, focused deterministic checks,
+independent review and a dependent draft PR; no merge. C1 is a usable pure library
+policy, not the current host batch executor or a new Ready/fairness owner. This
+bounded work can proceed independently of unresolved M4 runtime acceptance.
+
+The initial [contract review](reports/2026-10-20-m5-bounded-grouping-contract-proposal.md)
+exposed unbounded nested model/device metadata and an unusable private-production
+delivery boundary. Before code, independent review accepted an explicit exported,
+nonserialized API over borrowed raw candidates, with every member's nested count
+and raw-byte preflight completed before existing validation or equality. Input
+size is one through eight members, each nested collection is at most eight, and
+aggregate admitted raw strings are at most 64 KiB. This is an input-size bound;
+validation and repeated anchor comparisons make additional bounded passes.
+
+The [scheduler consumer contract](../../../crates/pantograph-scheduler/README.md)
+owns exact limits, refusal order and prefix semantics. Invalid/duplicate members
+refuse before incompatibility; a valid mixed window proposes only the anchor;
+compatible members aggregate selected memory with checked arithmetic. No generic
+serialized DTO/version is narrowed. The proposal grants no Ready proof, CPU
+capability, capacity, identity binding, future dispatch or M3 opportunity.
+
+Write set: scheduler `batching.rs`, its new bounded-grouping child module,
+`lib.rs` curated exports, external-facing focused tests, scheduler README and
+this plan's current-state/ledger/issues. No manifests, lockfiles, workflow,
+runtime/registry, UI, IPC, persisted schema or CI mechanism changes. Reuse the
+existing canonical standards baseline with Core/Router, Implementation,
+Verification/oracles, Development Proportionality, Documentation/Commit,
+Contracts, Code Design, Security/Diagnostics and Rust base/API/security/library
+profiles. No new dependency or scheduling daemon is required.
+
+Focused acceptance: public API oracles, existing scheduler package tests,
+affected Rust formatting, warning-deny Clippy and Rustdoc; independent exact-diff
+review; then normal draft CI. Actual C2 grouped-versus-singleton CPU evidence,
+per-member M3 re-entry and final Start/cleanup/cancellation remain separate gates.
+The existing already-Running broker is not a shortcut to that Ready boundary.
 
 M2–M5 may be reordered only when measured dependencies change; the integrator
 updates the one next slice and affected design review, rather than implementing
