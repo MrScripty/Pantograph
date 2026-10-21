@@ -7,7 +7,7 @@
   88aaf720, 22 successful check runs and four successful PR workflows; independent
   source approval remained applicable. CodeRabbit draft skip was not review.
 - Ready transition and guarded merge preserved both parents as dc926783, with
-  exactly the approved tree. Post-merge CI is separately monitored. All earlier
+  exactly the approved tree. All20 post-merge checks and all four workflows passed. All earlier
   branches and six prior clean worktrees remain retained-protected; PR84 is open
   draft with unchanged head9e068bbc and replacement lineage.
 - Independent discovery and pre-code review admitted the original completed
@@ -26,7 +26,13 @@
   ordinary Rustdoc, formatting/traceability and pre-push261/oneignored+168 passed.
   Strict Rustdoc retains the unchanged KV-cache HTML-tag failure; the narrow
   feature strict lint attempt retains the existing dead-code warning. Neither
-  warning was suppressed. Exact published head/tree/hosted CI belong to the draft
+  warning was suppressed. The initial published source head0b2ca052 is retained;
+  independent review admitted a ninth-path CI coverage follow-up because the
+  existing default inference command does not execute these feature-gated cases.
+  Exact discovery/execution of all12 and retained revision/result artifacts add
+  two steps while structurally preserving every existing job/step/control. The
+  extracted Bash step and YAML structural comparison passed locally.
+  Exact published head/tree/hosted CI belong to the draft
   PR, and complete incremental memory/overall M5/M6 remain unaccepted.
 
 ## 2026-10-20 — Publication closure and M5 C1 implementation admission

@@ -7,7 +7,8 @@ PR88 merged normally as `dc9267831ee846229d365fa17e5bf9250b01868e`, parents
 `8306e2f131c32e6db44a5a5108ab9abdb1f6304e`, with the exact independently approved
 tree `88aaf720384c5ff1537810a58dfd6fc055bc38b3`. Its 22 check runs and four PR
 workflows passed. CodeRabbit skipped draft source review and supplies no source
-approval. Post-merge CI has a separate receipt; do not infer its status here.
+approval. All20 post-merge check runs and all four workflows subsequently passed
+at exact main dc926783; the separate integration receipt owns their identities.
 
 ## Reviewed contract
 
@@ -81,9 +82,12 @@ qualify usefulness and performance later; this slice makes no such claim.
 The source write set is `crates/inference/src/backend/candle_embedding.rs`, new
 private `candle_embedding/result_payload.rs` and focused job tests. Documentation
 is this report, canonical plan/ledger/issues and the affected host-options guide.
+The ninth path is .github/workflows/quality-gates.yml for the reviewed explicit
+hosted test selection described below.
 Standards baseline `188beda1` remains adopted; Implementation, Verification,
 Contracts, Concurrency, Diagnostics, Performance, Library and Rust API/async
-routes apply. Dependency discovery changes no dependency identity or resolution.
+routes apply. The explicit CI addition also routes Tooling/Build and Rust Tooling.
+Dependency discovery changes no dependency identity or resolution.
 
 Model-free cases cover capacity arithmetic and spare storage, overlapping leases,
 overflow/poison, unpolled join completion, caller loss, last-reader retirement,
@@ -109,7 +113,7 @@ warning in kv_cache/types.rs:179. The optional warning-deny Rustdoc attempt fail
 on that exact baseline defect. The entire unchanged file matches base dc926783
 (SHA256 05872528ebec88abe6505337c9f81ca0d9bee2222a9c7c1309abfbd44a071864).
 No unrelated KV-cache edit or warning suppression was made. Formatting, staged
-traceability (eight paths, zero mapped impacts) and whitespace passed. Declared
+traceability (eight initial paths, zero mapped impacts) and whitespace passed. Declared
 pre-push tests passed 261 node-engine cases with one existing ignored case and
 168 workflow-nodes cases. Ordinary locked preparation fetched missing test/PyO3
 source crates; manifests, lockfiles and dependency identities are unchanged.
@@ -120,3 +124,21 @@ draft PR owns exact published head/tree and hosted CI; no hosted candidate pass
 is claimed by local evidence. The branch/worktree remains retained-protected
 for parent review; all prior branches, PR84 lineage and unrelated work remain
 protected. Overall M5/M6 and complete incremental-memory acceptance remain open.
+
+## Hosted coverage closure
+
+Initial draft head0b2ca052 adds the reviewed backend source, but the existing
+default inference CI command does not enable backend-candle. Its ordinary
+Candle tests are locally proven and compiled through other consumers; they
+were not selected for hosted execution. Independent pre-code review admitted
+one focused Rust job step plus retained discovery/results/revision artifacts.
+All twelve fully qualified cases must discover exactly once and pass, with
+a final12passed/0failed/0ignored summary. Existing workflow jobs, steps, browser
+assertions, deadlines, sandbox and other controls remain unchanged. This is
+continuing ordinary regression coverage, not a new performance cohort.
+
+The exact extracted Bash step replay passed all12 cases locally, including
+its discovery and per-case/result parsing. YAML parsing and structural comparison
+prove that removing the two added steps reproduces the original workflow.
+A normal fast-forward follow-up preserves the initial implementation commit and
+its own CI evidence; only the updated exact candidate may claim hosted coverage.
