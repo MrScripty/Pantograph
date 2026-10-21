@@ -1,5 +1,64 @@
 # Publication recovery and dependency integration
 
+## Integration continuation after the recovery checkpoint
+
+The sections below retain the initial recovery checkpoint, including its then-open
+gates. Subsequent source qualification and integration supersede those pending
+dispositions only within the following scope.
+
+A permitted fresh log read for PR87 job 118982037142 showed that Chrome 155 did not
+publish its debugging port within the unchanged ten-second launch deadline;
+no browser assertion ran. This is a new launch-boundary observation, not a
+reconstruction of any denied historical log or proof of the underlying cause.
+Independent review approved selective backport `4ce0d8ba6f12984a802daf5c2ad401d9bd8ba24a`
+from preserved `5f5bdf23` onto PR83's bd66. Their complete 26,497-byte patches are
+byte-identical at SHA256 067d02b0d5277c3e4881343307c5a09c354aefe0be80c9887a764f302a7a8bd6;
+the backport commit records its source. No M5 production code entered M4.
+All 43 assertion expressions, original deadline declarations, browser spawn/options
+and sandbox flags compare identically by TypeScript AST. The optional bounded
+version probe can perturb timing/cache state; later success is no root-cause fix
+proof. Fresh 731 frontend, 10 diagnostic/CDP and 261+168 pre-push cases passed, with
+one existing ignored case, plus range traceability and whitespace checks.
+
+PR83's exact 4ce successor / tree 5a65ba5e passed all 22 check runs and CodeRabbit.
+The Rust-focused log independently shows each of the three inventory and three
+original native cases discovered once and executed with 1 pass / 0 failures. The Quality
+summary and all four workflows succeeded. Independent source/evidence review
+admitted M4 acceptance only for the already qualified synthetic-fixture CPU
+residency scope and its original source-assisted cancellation limits. Merge
+`fa3a9b88651ff6cd9aaf90486b286ac8a22e1e63` preserves main 71cfd845 and 4ce as parents,
+with exact reviewed tree `5a65ba5e1013a915e9a6e70cb29beaf87c091cec`.
+All historical failures remain preserved and causally unproven.
+
+PR85's normal dependency merge `e50ac2a3c82971c05085fc2ac1c9b569593753ff`
+preserves original C1 f3 and M4 successor 4ce, tree 7c9e5901. C1 source/tests are
+unchanged; fresh scheduler execution has 222 passes / 1 existing ignored case.
+Independent C1 review verified all source/test receipt hashes and 17 public API
+cases, approving the pure library scope subject to current CI and integration.
+PR85 now targets main after M4 integration. PR86 exact 5f / tree 24d0b9af and PR87
+source checkpoint f365 / tree 3fc35113 each reached terminal success in all 16 check
+runs plus CodeRabbit. Independent C2a review verified 11 bound source/test hashes,
+cache invalidation and per-member lifecycle, and derived the 30 / 16 / 22 encoding/hit
+arithmetic. M6a review verified seven bound hashes and all 19 fresh cases, including
+three hosted consumer cases. No timing speedup is inferred.
+
+The live [PR85](https://github.com/MrScripty/Pantograph/pull/85),
+[PR86](https://github.com/MrScripty/Pantograph/pull/86) and
+[PR87](https://github.com/MrScripty/Pantograph/pull/87) own subsequent terminal CI,
+target and final merge identities. Recheck each new target's computed and actual
+merge tree against its tested candidate before merge. This documentation successor
+changes no production code and receives its own ordinary required checks.
+
+Only the three superseded intermediate 2403 executions 39526699700 / 39526699706 /
+39526699780 were cancelled; readback confirms terminal cancelled status. Their
+completed outcomes, the initial 5270 failure and all final source results remain.
+Additional task worktrees `/workspace/pantograph-m4-integration` and
+`/workspace/pantograph-m5-integration` are retained-protected with exact 4ce/e50
+branch reachability. Together with the two resources below, the parent Pantograph
+task owns them for dependency/PR84 coordination and future safe eligibility review.
+No branch retirement, security change, model acquisition or new local native
+cohort occurred. Actual CI native cases remain scoped to their enforced fixtures.
+
 The 2026-10-21 continuation authorizes recovery, publication, independent review
 and merge-commit integration of ready product PRs. It supersedes older reports'
 publication-only restrictions, while preserving history, default-policy limits,

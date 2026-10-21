@@ -905,3 +905,28 @@ coordination; parent owns its later disposition after reachable handoff.
 - [Recovery report](reports/2026-10-21-publication-recovery.md) owns exact identities,
   failure/evidence limits and retained-resource disposition. M4, overall M5/C2,
   broader M6 and real-workload performance/memory/hardware evidence remain open.
+
+### 2026-10-21 — bounded M4 acceptance and final source qualification
+
+- Permitted fresh PR87 evidence established a ten-second Chrome launch-boundary
+  failure, without diagnosing the historical cause. Independently reviewed 5f was
+  selectively backported as 4ce; exact patches and all 43 browser assertions,
+  deadlines, launch flags and sandbox settings remain unchanged. No M5 production
+  change entered M4. Fresh frontend/diagnostic/pre-push/traceability gates passed.
+- PR83 all 22 check runs plus CodeRabbit passed, including discovered/executed
+  three inventory and three original native cases. Independent final review
+  accepted only the bounded synthetic-fixture C4/C5 residency scope. Merge fa3a9b88
+  has exact reviewed tree 5a65ba5e and expected 71cfd845 / 4ce parents. Historical
+  failures and original cancellation/performance/memory limits remain preserved.
+- PR85 dependency merge e50 preserves f3 / 4ce and unchanged C1 source/tests; fresh
+  scheduler 222 passes / 1 ignored and independent source/test review pass. PR85
+  targets main; its live PR owns terminal required checks and merge identity.
+- PR86 exact 5f and PR87 source f365 each passed all 16 check runs plus CodeRabbit.
+  Independent C2a/M6a review verified source/test bindings and scope; all 19 fresh
+  M6a cases pass. This documentation successor changes no production code and
+  remains subject to ordinary CI. Linked PRs own final integration identities.
+- Only superseded 2403 CI executions were cancelled; readback confirms those
+  outcomes. All branches, PR84 lineage and task worktrees remain protected.
+  Overall M5/C2, broader M6, trained-model, performance, memory provenance and
+  hardware acceptance remain open. Next work requires reviewed producer contracts
+  rather than invented forecasts or an unadmitted new native cohort.
