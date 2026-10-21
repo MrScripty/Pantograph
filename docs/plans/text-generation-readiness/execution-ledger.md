@@ -1,5 +1,30 @@
 # Execution ledger
 
+- Source checkpoint `b3219d06` was published as draft
+  [PR92](https://github.com/MrScripty/Pantograph/pull/92). CI
+  [39658398681](https://github.com/MrScripty/Pantograph/actions/runs/39658398681)
+  passed generation, loader-failure and early-cancellation scenarios with
+  correct public outcomes and cleanup, then rejected the first cold probe at
+  publication: a new validation session cannot replace the authorization bound
+  to an immutable workflow version. This is retained failed evidence, not a
+  qualification pass. A semantic-version bump for the unchanged executable
+  fingerprint is also forbidden by ADR-013 and was not attempted.
+- Corrected the probe to use the public persisted-snapshot lookup and verify
+  exact retained authorization, graph/model/version identity and current
+  descriptor/constraints. Fresh validation and Resolve/Check remain observable;
+  runtime readiness uses a new producer and run context with the retained
+  authorization's provenance. Canonical requirements identity excludes
+  validation-session/run IDs, allowing fresh observations without changing the
+  immutable authorization. No production freshness guard or store was edited.
+  Independent source review admitted this corrected lifecycle. The canonical
+  runtime guide now distinguishes embedded PyO3 text from process adapters.
+- The first local workflow suite, focused text suite, example build and exact
+  probe build each exhausted their 600-second command budgets during cold
+  compilation or Cargo-lock wait. No local tests or probe scenario ran in those
+  attempts; no source error or access denial was observed. Their logs are kept.
+  Subsequent native commands run sequentially with populated caches and an
+  exclusive build budget. New-source qualification remains pending.
+
 - 2026-10-21 integration continuation: fetched main `9ec7e7f3`, inspected
   PR75/80/82 plus the excluded PR84 transplant and separate README PR79 before
   changing source. No AGENTS.md exists in the accessible workspace. Preserved

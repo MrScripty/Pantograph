@@ -109,16 +109,31 @@ match the original observation. Process IDs and random process markers are
 retained for both invocations.
 
 The fresh `EmbeddedRuntime` must start without an active run, refresh executable
-validation with a new validation identity, invoke new Resolve and Check actions,
-and publish a new executable snapshot before submitting generation. Its own
-readiness producer and normal readiness resume API establish availability; no
-previous in-memory readiness or validation is inserted. The generation must have
+validation with a new validation identity, and invoke new Resolve and Check
+actions. It then reads the existing immutable executable snapshot through the
+public lookup API and requires exact equality with the original publication,
+matching graph revision, owner-computed executable identity, inference coverage,
+and current node/model/task/descriptor/runtime/device facts. The scheduler
+recomputes requirements/binding identity from that graph and retained proof.
+The retained version authorizes
+the new run; the fresh draft validation is an additional current observation.
+Its own readiness producer and normal readiness resume API establish current
+availability; no prior in-memory readiness is inserted. The generation must have
 a new workflow-run identity, nonempty output, an empty scheduler queue, and the
 same bounded session/shutdown/resource cleanup checks. `process-boundary.json`,
 `bootstrap-before-reopen.json`, `reopen-observation.json`, the startup registry,
-validation/action files, response and final result retain these observations.
+validation/action files, `retained-validation.json`, `run-version.json`, response
+and final result retain these observations. The new run's public historic graph
+must reference the same version, executable fingerprint and semantic version.
 The qualification script runs the two invocations sequentially, establishing
 that the authoring process exited before the reopen process started.
+
+[ADR-013](adr/ADR-013-workflow-version-registry-and-run-snapshots.md) preserves
+one semantic version per executable fingerprint. Executable snapshot publication
+is immutable per workflow version; a new draft validation identity cannot replace
+the original authorization. The earlier [checkpoint CI run](https://github.com/MrScripty/Pantograph/actions/runs/39658398681)
+correctly rejected attempted republication. Reopen retains that authorization
+and reruns live readiness checks instead of changing the graph, version or guard.
 
 This proves clean-process reopening of the current saved graph/catalog and
 renewed public CPU execution. It does not exercise crash recovery, schema

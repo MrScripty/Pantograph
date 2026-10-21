@@ -320,7 +320,7 @@ async fn author_graph(
             "blake3":blake3::hash(&std::fs::read(&saved.path)?).to_hex().to_string(),
         }),
     )?;
-    validate_graph(runtime, root, stage, graph, sessions).await
+    validate_graph(runtime, root, stage, graph, sessions, None).await
 }
 
 // Reopening retains authored snapshots and graph bytes; only validation is refreshed.
@@ -370,7 +370,8 @@ async fn reopen_workflow(
     }
     save(evidence, "loaded-workflow.json", &loaded)?;
     save(evidence, "saved-graph.json", &saved)?;
-    let session = validate_graph(runtime, evidence, stage, loaded.graph, sessions).await?;
+    let session =
+        validate_graph(runtime, evidence, stage, loaded.graph, sessions, Some(root)).await?;
     let prior: Value =
         serde_json::from_slice(&std::fs::read(root.join("executable-validation.json"))?)?;
     let current: Value =
@@ -386,6 +387,8 @@ async fn reopen_workflow(
         &json!({
             "saved_graph_unchanged":true,"catalog_rebuilt_by_probe":false,
             "catalog_startup":"pumas_default_metadata_reconciliation",
+            "executable_authorization":"retained_immutable_snapshot",
+            "authorization_validation_session_id":serde_json::from_slice::<Value>(&std::fs::read(evidence.join("retained-validation.json"))?)?["validation_session_id"],
             "model_inputs_unchanged":true,"catalog_root":root,"model_path":model,
             "previous_validation_session_id":prior_id,"validation_session_id":current_id,
             "graph_session_id":session,
@@ -400,11 +403,12 @@ async fn validate_graph(
     stage: &mut &str,
     graph: WorkflowGraph,
     sessions: &mut Sessions,
+    retained_root: Option<&Path>,
 ) -> ProbeResult<String> {
     let service = runtime.workflow_service();
     let session = service
         .workflow_graph_create_edit_session(WorkflowGraphEditSessionCreateRequest {
-            graph,
+            graph: graph.clone(),
             workflow_id: Some(WORKFLOW_ID.into()),
         })
         .await?;
@@ -459,19 +463,66 @@ async fn validate_graph(
             );
         }
     }
-    *stage = "publish_validation";
-    let published = service
-        .publish_graph_session_executable_validation_snapshot(
-            WorkflowGraphSessionExecutableValidationSnapshotPublishRequest {
-                workflow_id: WORKFLOW_ID.into(),
-                workflow_semantic_version: "1.0.0".into(),
-                graph_session_id: session.session_id.clone(),
-                validation_session_id: Some(validation_id),
-                validation_snapshot_id: None,
+    if let Some(retained_root) = retained_root {
+        *stage = "retained_validation_lookup";
+        let original_bytes = std::fs::read(retained_root.join("published-validation.json"))?;
+        let original: pantograph_workflow_service::WorkflowExecutableValidationSnapshotRecord =
+            serde_json::from_slice(&original_bytes)?;
+        let retained = service.workflow_executable_validation_snapshot(
+            pantograph_workflow_service::WorkflowExecutableValidationSnapshotLookupRequest {
+                workflow_version_id: original.workflow_version_id.clone(),
+                workflow_execution_fingerprint: original.workflow_execution_fingerprint.clone(),
+                descriptor_contract_version: original.descriptor_contract_version,
             },
-        )
-        .await?;
-    save(root, "published-validation.json", published.as_record())?;
+        )?;
+        let version = service.resolve_workflow_graph_version(WORKFLOW_ID, "1.0.0", &graph)?;
+        if retained.as_record() != &original
+            || serde_json::to_vec_pretty(retained.as_record())? != original_bytes
+            || original.workflow_version_id != version.workflow_version_id
+            || original.workflow_execution_fingerprint != version.execution_fingerprint
+            || original.workflow_id.as_str() != WORKFLOW_ID
+            || original.workflow_semantic_version != "1.0.0"
+            || original.graph_revision.as_str() != graph.compute_fingerprint()
+        {
+            return Err(
+                "retained executable authorization does not match the saved graph/version".into(),
+            );
+        }
+        retained.scheduler_inference_task_projections(&graph)?;
+        for node in &original.nodes {
+            let current = validation
+                .node_projections
+                .iter()
+                .find(|projection| projection.node_id == node.node_id)
+                .ok_or("retained inference node missing from current validation")?;
+            if current.descriptor.descriptor_fingerprint != node.descriptor_fingerprint
+                || current.descriptor.model_ref != node.model_ref
+                || current.descriptor.task_kind != node.task_kind
+                || current.runtime_source_context != node.runtime_source_context
+                || current.runtime_constraint != node.constraints.requested_runtime_id
+                || current.device_constraint != node.constraints.requested_device_id
+            {
+                return Err(
+                    "current descriptor or constraints differ from retained authorization".into(),
+                );
+            }
+        }
+        save(root, "retained-validation.json", retained.as_record())?;
+    } else {
+        *stage = "publish_validation";
+        let published = service
+            .publish_graph_session_executable_validation_snapshot(
+                WorkflowGraphSessionExecutableValidationSnapshotPublishRequest {
+                    workflow_id: WORKFLOW_ID.into(),
+                    workflow_semantic_version: "1.0.0".into(),
+                    graph_session_id: session.session_id.clone(),
+                    validation_session_id: Some(validation_id),
+                    validation_snapshot_id: None,
+                },
+            )
+            .await?;
+        save(root, "published-validation.json", published.as_record())?;
+    }
     // Keep authoring context alive while its dependency work is being checked,
     // just as the open editor does. Close it after the execution session.
     Ok(session.session_id)
@@ -733,6 +784,26 @@ async fn execute(
                 if previous["workflow_run_id"] == response.workflow_run_id {
                     return Err("cold reopen reused the prior workflow run identity".into());
                 }
+                let retained: Value = serde_json::from_slice(&std::fs::read(
+                    evidence.join("retained-validation.json"),
+                )?)?;
+                let projection = runtime.workflow_service().workflow_run_graph_query(
+                    pantograph_workflow_service::WorkflowRunGraphQueryRequest {
+                        workflow_run_id: response.workflow_run_id.clone(),
+                    },
+                )?;
+                let run = projection
+                    .run_graph
+                    .as_ref()
+                    .ok_or("missing cold-reopen run version")?;
+                if retained["workflow_version_id"] != run.workflow_version_id
+                    || retained["workflow_execution_fingerprint"]
+                        != run.workflow_execution_fingerprint
+                    || retained["workflow_semantic_version"] != run.workflow_semantic_version
+                {
+                    return Err("cold reopen changed the retained executable version".into());
+                }
+                save(evidence, "run-version.json", &projection)?;
             }
             let text = response
                 .outputs

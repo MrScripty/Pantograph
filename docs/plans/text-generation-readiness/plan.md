@@ -30,6 +30,7 @@ Dependencies and Licensing. Apply existing ownership and bounded evidence.
 | T2 | Real Pumas graph action registers payload without a Ready snapshot; actual inventory Check observes the linked interpreter and preserves its environment identity | integration | representative | automated | satisfied |
 | T3 | A trained, licensed, bounded local model generates nonempty text through the public hosted CPU workflow; model identity, resource limits, output and cleanup recorded | system | required-real | automated | blocked |
 | T4 | Committed untrained weights exercise public hosted generation, loader failure, active cancellation and owned cleanup while preserving public failure/cancellation meaning | integration | representative | automated | blocked |
+| T5 | Fresh process reopens the same saved graph/model/catalog, reuses its immutable executable authorization, establishes live readiness and generates nonempty text with cleanup | integration | representative | automated | verifying |
 
 ## Current integration admission (2026-10-21)
 
@@ -60,12 +61,20 @@ Two bounded follow-ups are admitted within the existing owners:
 - The existing CPU text example, qualification script, CI job and runbook:
   reopen the saved graph and isolated catalog in a new process, establish fresh
   validation and actual dependency observations, execute bounded CPU text and
-  prove cleanup. No copied Ready snapshot or regenerated stand-in graph.
+  prove cleanup. Reuse the persisted immutable executable authorization through
+  the public lookup API; a new validation session cannot replace it. No copied
+  Ready snapshot or regenerated stand-in graph.
 
-Standards were reread at Coding-Standards `0fc92a24279f3a4574c80af0a2f31ea347a21597`: Core/Router, implementation, verification/oracles, planning/discovery, proportionality, commit, documentation/tooling, Rust/API/async/tooling, library, architecture, contracts, concurrency, resilience, code design, dependencies and licensing. No AGENTS.md exists in the accessible checkout.
+Standards were reread at Coding-Standards
+`0fc92a24279f3a4574c80af0a2f31ea347a21597`: Core/Router, implementation,
+verification/oracles, planning/discovery, proportionality, commit,
+documentation/tooling, Rust/API/async/tooling, library, architecture, contracts,
+concurrency, resilience, code design, dependencies and licensing.
+No AGENTS.md exists in the accessible checkout.
 
 Plan/index/status reconciliation and a compact source/results report are owned
-by this integration lead. Runtime/readiness and probe workers have disjoint
+by this integration lead. The runtime-operations guide records the linked PyO3
+environment and truthful failed-job cleanup/retry contract. Runtime/readiness and probe workers have disjoint
 write sets; this lead serially integrates them. No custom-node ABI, registry,
 NodeLab, tool-loop, scheduler-policy or unrelated orchestration edits are admitted.
 Existing runtime and workflow owners retain their authorities; no new public
@@ -74,7 +83,8 @@ contract, durable store or generic verifier is introduced.
 Acceptance for this continuation: affected runtime and workflow suites and
 Clippy; public generation, loader failure and early active cancellation with
 correct public outcomes and zero retained runtime resources; a new-process
-saved-graph reopen with fresh proofs and cleanup; and independent source/evidence
+saved-graph reopen with retained authorization, fresh live readiness and cleanup;
+and independent source/evidence
 review. Required native execution unavailable at build time remains explicitly
 blocked. Exact sources and limits are recorded before publication.
 
