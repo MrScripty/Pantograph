@@ -883,3 +883,68 @@ coordination; parent owns its later disposition after reachable handoff.
   snapshot serialization/raw checks/clones/equality are additional uncounted work.
   [C2a check receipt](reports/2026-10-21-m5-c2a-checks.json) records hashes/commands.
   Normal dependent draft/hosted CI remain before this publication checkpoint.
+
+### 2026-10-21 — exact recovery, M3 integration and dependent M6a publication
+
+- Verified the exact Library packet, all48 sections,30 decoded chunks, bundle,
+  prerequisite, raw commits/trees/patches and every changed file hash/mode before
+  strict-object import. Fresh identity `MrScripty` and protected refs matched.
+- Normal fast-forward published diagnostic5f to PR86; M6a5270 published separately
+  as draft PR87. Exact siblings and all branches remain intact. No old credentials,
+  denied log route, sandbox change, rewrite, model work or unrelated edit was used.
+- Independent exact-source/native-evidence review and all22 check runs approved
+  M3b63. PR81 merged as71cfd845 with exact reviewed treedefca3d3; PR83 retargeted
+  to main at unchanged bd66. M4 browser/Quality gates still block integration.
+- Independent review reverified PR84→e8d5 replacement mapping, C4/C5 archives and
+  source transfer. Preserve PR84 history and do not apply its repair again.
+- PR87's sibling-head browser failure has only a fixed unstructured-failure
+  annotation. Normal dependency merge2403 has parents5270/5f and tree38f6f434;
+  combined731 frontend,10 diagnostic/CDP and4 configuration cases pass. This
+  repairs CI source consistency without asserting the browser cause. New CI is
+  pending. Fresh standalone M6a also passed12 constructor/store regressions.
+- [Recovery report](reports/2026-10-21-publication-recovery.md) owns exact identities,
+  failure/evidence limits and retained-resource disposition. M4, overall M5/C2,
+  broader M6 and real-workload performance/memory/hardware evidence remain open.
+
+### 2026-10-21 — bounded M4 acceptance and final source qualification
+
+- Permitted fresh PR87 evidence established a ten-second Chrome launch-boundary
+  failure, without diagnosing the historical cause. Independently reviewed 5f was
+  selectively backported as 4ce; exact patches and all 43 browser assertions,
+  deadlines, launch flags and sandbox settings remain unchanged. No M5 production
+  change entered M4. Fresh frontend/diagnostic/pre-push/traceability gates passed.
+- PR83 all 22 check runs plus CodeRabbit passed, including discovered/executed
+  three inventory and three original native cases. Independent final review
+  accepted only the bounded synthetic-fixture C4/C5 residency scope. Merge fa3a9b88
+  has exact reviewed tree 5a65ba5e and expected 71cfd845 / 4ce parents. Historical
+  failures and original cancellation/performance/memory limits remain preserved.
+- PR85 dependency merge e50 preserves f3 / 4ce and unchanged C1 source/tests; fresh
+  scheduler 222 passes / 1 ignored and independent source/test review pass. PR85
+  targets main; its live PR owns terminal required checks and merge identity.
+- PR86 exact 5f and PR87 source f365 each passed all 16 check runs plus CodeRabbit.
+  Independent C2a/M6a review verified source/test bindings and scope; all 19 fresh
+  M6a cases pass. This documentation successor changes no production code and
+  remains subject to ordinary CI. Linked PRs own final integration identities.
+- Only superseded 2403 CI executions were cancelled; readback confirms those
+  outcomes. All branches, PR84 lineage and task worktrees remain protected.
+  Overall M5/C2, broader M6, trained-model, performance, memory provenance and
+  hardware acceptance remain open. Next work requires reviewed producer contracts
+  rather than invented forecasts or an unadmitted new native cohort.
+
+### 2026-10-21 — C1/C2a integration and fresh browser observation repair
+
+- PR85 merged as ae295707 with exact reviewed tree7c9e5901; PR86 retargeted to
+  main, rechecked with unchanged tree24d0b9af and merged as65704ed0. Each had all16
+  check runs plus CodeRabbit pass, independent source/evidence review and exact
+  target/tree recheck. PR87 now targets main; all original commits/branches remain.
+- Documentation successor e115 produced a new launch-deadline and cleanup-parent
+  observation failure in fresh job118996071539. Preserve that failure and the
+  earlier source successes. No denied historical endpoint was retried.
+- Independent design/source review admitted a bounded cleanup observation repair:
+  wait for the existing exit promise only through the remaining existing deadline.
+  An owned detached Node-child regression reproduces empty group before Node exit
+  observation. This establishes a reachable race, not the hosted root cause.
+- Fixed own-child process diagnostics distinguish future launch state without
+  raw stderr/commands/paths. All43 original assertions, launch flags, sandbox
+  settings and deadline declarations remain. No native/model workload or local
+  Chrome rerun is used. New source remains subject to focused review and CI.

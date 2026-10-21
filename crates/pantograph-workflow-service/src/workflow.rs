@@ -66,7 +66,9 @@ mod runtime_task_attempt_fact;
 mod serial_ready;
 mod serial_service_opportunities;
 mod service_config;
-pub use serial_ready::WorkflowSerialReadyConfig;
+pub use serial_ready::{
+    WorkflowSchedulerConfiguration, WorkflowSchedulerExecutionOwner, WorkflowSerialReadyConfig,
+};
 pub(crate) use serial_ready::{
     WorkflowSerialReadyMember, WorkflowSerialReadyPair, WorkflowSerialServiceAdmission,
 };

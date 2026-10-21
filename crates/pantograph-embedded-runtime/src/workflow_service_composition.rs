@@ -767,6 +767,13 @@ impl EmbeddedWorkflowServiceComposition {
             None => service,
         };
         service.set_loaded_runtime_capacity_limit(max_loaded_sessions)?;
+        let configuration = service.scheduler_configuration();
+        log::info!(target: "workflow::configuration",
+            "constructor execution_owner={:?} serial_completion_advisory={} serial_fair_opportunities={} serial_residency={} serial_key_reuse={} serial_minimum_samples={:?} serial_maximum_sample_age={:?} configuration_only=true",
+            configuration.execution_owner(), configuration.serial_completion_advisory(),
+            configuration.serial_fair_opportunities(), configuration.serial_residency(),
+            configuration.serial_key_reuse(), configuration.serial_minimum_samples(),
+            configuration.serial_maximum_sample_age());
         Ok(Arc::new(service))
     }
 }
@@ -1105,6 +1112,42 @@ mod tests {
         assert_eq!(Arc::strong_count(&execution), 1);
         assert_eq!(Arc::strong_count(&batch), 1);
         assert_eq!(Arc::strong_count(&cleanup), 1);
+    }
+
+    #[test]
+    fn hosted_composition_preserves_read_only_constructor_configuration() {
+        use pantograph_workflow_service::workflow::{
+            WorkflowSchedulerExecutionOwner, WorkflowSerialReadyConfig,
+        };
+        let config = WorkflowSerialReadyConfig::new(8, std::time::Duration::from_nanos(123))
+            .unwrap()
+            .with_completion_lookahead()
+            .with_fair_service_opportunities()
+            .with_serial_residency()
+            .unwrap()
+            .with_bounded_grouping()
+            .unwrap();
+        let serial =
+            WorkflowService::new_serial_ready_cpu(Arc::new(RejectingRuntimeHostPort), config);
+        let expected = serial.scheduler_configuration();
+        let shared = EmbeddedWorkflowServiceComposition::new()
+            .into_shared_configured_workflow_service(serial, Some(1))
+            .expect("successful serial composition");
+        assert_eq!(shared.scheduler_configuration(), expected);
+        assert_eq!(
+            shared.scheduler_configuration().execution_owner(),
+            WorkflowSchedulerExecutionOwner::SerialReadyCpu
+        );
+        let ordinary = EmbeddedWorkflowServiceComposition::new()
+            .into_shared_workflow_service(Some(1))
+            .expect("successful ordinary composition");
+        assert_eq!(
+            ordinary.scheduler_configuration(),
+            WorkflowService::new().scheduler_configuration()
+        );
+        assert!(EmbeddedWorkflowServiceComposition::new()
+            .into_shared_configured_workflow_service(WorkflowService::new(), Some(0))
+            .is_err());
     }
 
     #[test]
@@ -2229,10 +2272,12 @@ mod tests {
     #[test]
     fn default_scheduler_accepts_optional_completion_timing() {
         let service = WorkflowService::new();
+        let constructor_configuration = service.scheduler_configuration();
         assert!(!service.is_serial_ready_cpu());
         validate_hosted_scheduler_modes(&service, None).expect("default mode");
         validate_hosted_scheduler_modes(&service, Some(&completion_timing_opt_in()))
             .expect("existing completion-timing opt-in remains available");
+        assert_eq!(service.scheduler_configuration(), constructor_configuration);
         validate_hosted_scheduler_modes(&serial_workflow_service(), None)
             .expect("serial mode alone is supported");
     }

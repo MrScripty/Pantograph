@@ -8,7 +8,10 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+mod configuration;
 mod grouping;
+
+pub use configuration::{WorkflowSchedulerConfiguration, WorkflowSchedulerExecutionOwner};
 
 const MAX_LOOKAHEAD_DIAGNOSTIC_BYTES: usize = 8192;
 
