@@ -20,7 +20,7 @@
   host Python. Full snapshot tests now prove the same embedded environment is
   retained for both default and explicit checks.
 
-- T-05 (resolved in PR82; composed-source requalification pending): actual public CPU probe runtime cancellation and corrupt
+- T-05 (resolved and requalified at `3de39827`): actual public CPU probe runtime cancellation and corrupt
   model loading both release resources, but the public workflow call loses the
   cause and returns `InvalidRequest` / `TerminalFailed`. Canonical diagnostics
   retain runtime cancellation and `pytorch_worker_model_load_failed` header
@@ -29,11 +29,15 @@
   `workflow/runtime_branch_run_finalization.rs` and related batch finalization.
   PR82 repairs this projection in the owning helper and retains independent
   qualification. The 2026-10-21 integration composes that successor with current
-  main and requires fresh public negative-path evidence. No fairness change.
-- T-06 (in progress): a failed joined text producer remains in its slot and
+  main and has fresh public negative-path evidence. No fairness change.
+- T-06 (resolved): a failed joined text producer remained in its slot and
   permanently blocks subsequent lifecycle calls with the same error. Owner:
   inference PyTorch text lifecycle. The admitted follow-up preserves failed
   replacement residency and permits truthful cleanup/recovery after join.
-- T-07 (in progress): the original public text probe saves a graph but does not
-  qualify loading it in a fresh process. Owner: CPU text integration probe;
-  establish fresh validation/readiness and cleanup after reopening actual state.
+  Error/panic, stale-drain, controlled worker cleanup and selected replacement
+  regressions pass in the complete inference suite.
+- T-07 (resolved): the original public text probe saved a graph but did not
+  qualify loading it in a fresh process. The corrected probe loads actual saved
+  state, reuses immutable executable authorization through public lookup and
+  obtains fresh current validation/readiness with cleanup. Local and hosted
+  four-case qualification pass at `3de39827`; no crash-recovery claim.

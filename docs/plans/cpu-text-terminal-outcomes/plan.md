@@ -2,7 +2,7 @@
 
 **Plan status:** Blocked
 **Current phase:** bounded T4 qualified; trained T3 input blocked
-**Next slice:** current-main qualification under the text-readiness integration lead; trained run when verified inputs arrive
+**Next slice:** draft PR92 review/CI and trained T3 when verified inputs arrive
 **Acceptance status:** F1/F2/F3 and bounded T4 satisfied; trained T3 blocked
 **Execution ledger:** [execution-ledger.md](execution-ledger.md)
 **Issues:** [issues.md](issues.md)
@@ -17,6 +17,9 @@ It preserves this repair and its historical evidence through a normal merge with
 main `9ec7e7f3`, then qualifies the composed source. The old M3 coordination and
 parent-publication wording below describes the original bounded handoff; it does
 not block the newly authorized integration. T3 remains blocked.
+The [current integration report](../text-generation-readiness/reports/2026-10-21-current-main-integration.md)
+now records passing composed-source libraries and all four public CPU scenarios
+at `3de39827`, including preserved failure/cancellation and owned cleanup.
 
 Preserve actual runtime-host failure and cancellation meaning in the public
 workflow result. PR80 proved real untrained CPU generation and cleanup, but its

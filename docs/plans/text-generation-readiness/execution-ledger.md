@@ -1,5 +1,27 @@
 # Execution ledger
 
+- Qualified source `3de398277e3619fb282766c4ff794c60a2c0d4bd`: 874 inference,
+  643 embedded-runtime and 1,052 workflow-service library tests passed, with four
+  existing embedded qualifications ignored. First executable embedded run had
+  54 precondition/setup failures because its default Pumas registry path was
+  under read-only `/home/agent/.config/pumas`. No home write was retried; the
+  supported registry override and disposable XDG roots under owned task storage
+  produced the complete passing suites. Initial failures are retained.
+- Exact clean-source local script then passed generation, identified loader
+  failure, early active typed cancellation and fresh-process same-version
+  reopen, all with shutdown/resource checks and `t3_qualified: false`. Hosted
+  text run `39659962842` passed the same four cases. Quality Gates `39659962837`
+  passed, including strict all-target/all-feature Clippy on merge `a199dbd7`.
+  Its tree exactly matches source `3de39827` at `a45b03b46275d96174bafea394df4c35e2901137`.
+  Raw local JSON/log evidence, failed attempts and source bindings are retained
+  in the 105-file manifest linked from the integration report.
+- T1/T2/T4/T5 are satisfied within this bounded CPU/headless/untrained scope.
+  T3 remains required and blocked, so PR92 remains draft and the plan remains
+  Blocked. No merge to main/deployment or broader roadmap completion. Final
+  evidence-only commits preserve the qualified production/probe source hashes;
+  their own CI status is separate. Independent final evidence admission is
+  recorded in the source/results report before publication.
+
 - Source checkpoint `b3219d06` was published as draft
   [PR92](https://github.com/MrScripty/Pantograph/pull/92). CI
   [39658398681](https://github.com/MrScripty/Pantograph/actions/runs/39658398681)
@@ -30,7 +52,7 @@
   changing source. No AGENTS.md exists in the accessible workspace. Preserved
   original `work`/`integration/quality-gates-2026-10-04` branches and all remote
   proposals. Composed PR82's complete PR80 stack through normal merge
-  `15b11d48`; no force push, branch rewrite, deletion, text merge or deployment.
+  `15b11d48`; no force push, branch rewrite, deletion, merge to main or deployment.
   The new integration branch targets main and remains retained for review/T3.
 - Reconciled old T4-blocked next slices with PR82's qualified terminal repair.
   Canonical operation remains `continue` on this readiness plan; this lead owns

@@ -1,8 +1,8 @@
 # Plan: CPU text dependency readiness handoff
 
 **Plan status:** `Blocked`
-**Current phase:** current-main integration, failed-producer recovery and cold reopen qualification
-**Next slice:** qualify the composed source, obtain independent review and prepare a draft integration PR
+**Current phase:** bounded current-main integration qualified; trained T3 input blocked
+**Next slice:** obtain verified licensed trained assets/sanctioned access and qualify T3; retain draft PR92 for review
 **Acceptance status:** `blocked`
 **Execution ledger:** [execution-ledger.md](execution-ledger.md)
 **Issues:** [issues.md](issues.md)
@@ -29,8 +29,8 @@ Dependencies and Licensing. Apply existing ownership and bounded evidence.
 | T1 | Supported text Resolve supplies nonempty, identity-bound Python prerequisites without asserting Ready; unsupported inputs and declared model constraints are refused | contract | not-applicable | automated | satisfied |
 | T2 | Real Pumas graph action registers payload without a Ready snapshot; actual inventory Check observes the linked interpreter and preserves its environment identity | integration | representative | automated | satisfied |
 | T3 | A trained, licensed, bounded local model generates nonempty text through the public hosted CPU workflow; model identity, resource limits, output and cleanup recorded | system | required-real | automated | blocked |
-| T4 | Committed untrained weights exercise public hosted generation, loader failure, active cancellation and owned cleanup while preserving public failure/cancellation meaning | integration | representative | automated | blocked |
-| T5 | Fresh process reopens the same saved graph/model/catalog, reuses its immutable executable authorization, establishes live readiness and generates nonempty text with cleanup | integration | representative | automated | verifying |
+| T4 | Committed untrained weights exercise public hosted generation, loader failure, active cancellation and owned cleanup while preserving public failure/cancellation meaning | integration | representative | automated | satisfied |
+| T5 | Fresh process reopens the same saved graph/model/catalog, reuses its immutable executable authorization, establishes live readiness and generates nonempty text with cleanup | integration | representative | automated | satisfied |
 
 ## Current integration admission (2026-10-21)
 
@@ -47,8 +47,11 @@ PR79 and unrelated local branches remain separate.
 
 This section supersedes the old next slice and T-05 coordination blocker below.
 PR82's bounded T4 evidence is retained under the
-[terminal-outcomes plan](../cpu-text-terminal-outcomes/plan.md); current composed
-source still requires fresh qualification. T3 remains a required, blocked gate.
+[terminal-outcomes plan](../cpu-text-terminal-outcomes/plan.md). Current composed
+source `3de39827` now has fresh qualification: 2,569 passing native library tests,
+four public local/hosted CPU scenarios and strict Clippy on a verified identical
+CI merge tree. See the [integration report](reports/2026-10-21-current-main-integration.md).
+T3 remains a required, blocked gate.
 Neither historical tests nor untrained numerical output satisfy it.
 
 Two bounded follow-ups are admitted within the existing owners:
@@ -198,10 +201,11 @@ untrained fixtures can prove integration only and cannot satisfy T3. Resolve
 must not fabricate Ready; actual Check observations and shutdown are retained.
 Cancellation observation requires public Running, acknowledged intent, matching
 run/node/attempt runtime cancellation diagnostics, an empty queue and cleanup.
-The public API currently flattens cancellation and loader errors into generic
-`InvalidRequest` / `TerminalFailed`; observation success does not qualify that
-projection or T4. The shared finalization-owner correction is excluded pending
-parent coordination. A dropped future cannot supply cancellation evidence.
+PR80 originally flattened cancellation and loader errors into generic
+`InvalidRequest` / `TerminalFailed`; its observation-only evidence did not qualify
+T4. PR82's finalization-owner repair is now composed and freshly qualified under
+the current integration admission above. A dropped future still cannot supply
+cancellation evidence.
 
 Gates: independent plan admission, focused adapter regressions, actual hosted
 probe with bounded trained model, affected crate tests/Clippy, staged diff and
@@ -234,3 +238,5 @@ unavailable-on-observation-error invariants are implemented and verified.
 T1/T2 source and checks are complete. See the [verification report](reports/2026-10-13-dependency-handoff.md)
 and [source/result record](reports/source-and-results.json). T3 remains blocked;
 this plan is not Accepted. No trained text, GPU or desktop outcome is claimed.
+Current T4/T5 qualification and exact-source evidence are in the
+[2026-10-21 integration report](reports/2026-10-21-current-main-integration.md).
