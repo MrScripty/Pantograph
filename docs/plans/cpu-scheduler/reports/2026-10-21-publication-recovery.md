@@ -1,5 +1,51 @@
 # Publication recovery and dependency integration
 
+## Fresh launch and cleanup observation follow-up
+
+Documentation successor e115 subsequently failed its browser step in
+[fresh job118996071539](https://github.com/MrScripty/Pantograph/actions/runs/39530833035/job/118996071539).
+The fixed diagnostics identify start/chrome_launch at the original ten-second
+deadline and cleanup/process_group with a parent-exit assertion. No image/browser
+assertion ran. This failure remains preserved; source checkpoint f365's success
+does not establish e115 success or a historical launch fix.
+
+Independent source review identified a reachable observation gap: synchronous
+`ps` can see group termination before Node delivers the parent's exit callback.
+An empty group skips the loop's asynchronous wait although the existing graceful
+deadline has time remaining. An actual owned detached Node-child regression
+independently reproduces group-empty plus exitCode/signalCode-null, followed by
+successful observation after yielding. This demonstrates the mechanism, not that
+it caused the saved hosted failure. The repair waits on the already registered
+exit promise only through the remainder of the existing graceful/forced deadline.
+All 43 original assertion expressions, deadlines, browser flags and sandbox
+settings remain intact. Group checks and parent observation remain independent;
+neither parent exit nor a missing process record proves descendant cleanup.
+
+Launch causation remains separate. A fixed own-child diagnostic observes spawn,
+parent exit/status/signal, verified `/proc` PID/group/state, executable category,
+last port-read errno and bounded stderr-byte count. Raw process command text,
+paths, stderr, exception payloads and URLs are excluded. Disappeared/unreadable
+state is unavailable and grants no release authority. The stderr counter saturates
+at 1 MiB, while private assertion context is capped at4096 characters. No launch
+deadline, sandbox setting, model workload or assertion is relaxed. The new source
+requires its own focused checks, independent review and normal CI before merge.
+
+Fresh local verification on the repair passed all 9 process-observation cases,
+the existing 10 diagnostic/CDP cases and all 731 frontend cases on Node 24.12.0.
+ESLint, harness syntax and whitespace checks passed. An AST comparison against
+original diagnostic commit `5f5bdf23` verified all 43 assertion expressions, the
+browser spawn call/options and all five deadline declarations remain identical.
+These results do not exercise Chrome or establish a launch-cause correction.
+
+Meanwhile PR85 merged as `ae295707fc4f44f7999835ccfa1e753b8cde68d1`, tree
+`7c9e59011993e3d87d4c3cc37b37d5e58b0ec947`, after all16 check runs plus CodeRabbit.
+PR86 was retargeted/rechecked against that main, then merged as
+`65704ed0a88dcff58602ebc235eea17be35082b1`, tree
+`24d0b9af4c9c0f9ccbdba02897f0ebd441f91f5c`, also after all16 check runs plus CodeRabbit.
+Both preserve expected parents and exact reviewed candidate trees. PR87 now
+targets main; its fresh mandatory failure remains blocking until corrected
+candidate qualification. All original commits/branches and PR84 lineage remain.
+
 ## Integration continuation after the recovery checkpoint
 
 The sections below retain the initial recovery checkpoint, including its then-open

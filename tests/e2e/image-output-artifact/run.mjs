@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { browserVersion, createBrowserDiagnostics } from '../../../scripts/browser-qualification-diagnostics.mjs';
+import { MAX_BROWSER_STDERR_BYTES, observeBrowserProcess, waitForBrowserParentExit } from '../../../scripts/browser-process-observation.mjs';
 
 const diagnostics = createBrowserDiagnostics();
 async function main() {
@@ -20,6 +21,10 @@ const noSandbox = process.env.PANTOGRAPH_IMAGE_BROWSER_NO_SANDBOX === '1';
 const sandboxMode = noSandbox ? 'disabled-explicit-opt-in' : 'enabled';
 let server;
 let browser;
+let browserSpawned = false;
+let portReadError = null;
+let stderrBytes = 0;
+let stderrSaturated = false;
 let socket;
 let evaluate;
 let send;
@@ -27,6 +32,9 @@ let evidence;
 let executionFailed = false;
 const passed = [];
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const reportBrowserProcess = async (checkpoint) => console.log(JSON.stringify(await observeBrowserProcess(browser, {
+  checkpoint, spawned: browserSpawned, portError: portReadError, stderrBytes, stderrSaturated,
+})));
 try {
   diagnostics.at('build', 'setup');
   assert.equal(process.platform, 'linux', 'Image browser fixture requires Linux process-group ownership');
@@ -94,16 +102,27 @@ try {
   } });
   let browserError;
   let diagnostic = '';
+  browser.once('spawn', () => { browserSpawned = true; });
   browser.on('error', (error) => { browserError = error; });
-  browser.stderr.on('data', (chunk) => { diagnostic += chunk; });
+  browser.stderr.on('data', (chunk) => {
+    const observedBytes = stderrBytes + chunk.length;
+    stderrSaturated ||= observedBytes > MAX_BROWSER_STDERR_BYTES;
+    stderrBytes = Math.min(MAX_BROWSER_STDERR_BYTES, observedBytes);
+    // This private assertion context is never published; retain at most 4096 characters.
+    if (diagnostic.length < 4096) diagnostic += chunk.toString().slice(0, 4096 - diagnostic.length);
+  });
   let port;
   const launchDeadline = Date.now() + 10_000;
   while (!port && Date.now() < launchDeadline) {
     if (browserError) throw browserError;
     if (browser.exitCode !== null || browser.signalCode !== null) break;
-    try { port = (await readFile(path.join(profile, 'DevToolsActivePort'), 'utf8')).split('\n')[0]; }
-    catch { await delay(50); }
+    try {
+      port = (await readFile(path.join(profile, 'DevToolsActivePort'), 'utf8')).split('\n')[0];
+      portReadError = null;
+    }
+    catch (error) { portReadError = error.code; await delay(50); }
   }
+  if (!port) await reportBrowserProcess('launch_deadline');
   assert.ok(port, `Browser acceptance unavailable: Chromium did not start (sandbox mode: ${sandboxMode}). ` + diagnostic);
   diagnostics.at('start', 'cdp_connect');
   const pages = await (await fetch('http://127.0.0.1:' + port + '/json/list')).json();
@@ -399,16 +418,28 @@ try {
       await Promise.race([exited, delay(2_000)]);
       const gracefulDeadline = Date.now() + 2_000;
       while (groupHasLiveMembers() && Date.now() < gracefulDeadline) await delay(20);
+      // Synchronous ps can see termination before Node delivers the exit callback.
+      // Observe the same parent within the remainder of the existing deadline.
+      if (browser.exitCode === null && browser.signalCode === null) {
+        await waitForBrowserParentExit(exited, gracefulDeadline);
+      }
       if (groupHasLiveMembers()) {
         signalGroup('SIGKILL');
         await Promise.race([exited, delay(2_000)]);
         const forcedDeadline = Date.now() + 2_000;
         while (groupHasLiveMembers() && Date.now() < forcedDeadline) await delay(20);
+        if (browser.exitCode === null && browser.signalCode === null) {
+          await waitForBrowserParentExit(exited, forcedDeadline);
+        }
       }
       assert.equal(groupHasLiveMembers(), false, 'Browser process group did not stop; retaining temporary profile');
       assert.ok(browser.exitCode !== null || browser.signalCode !== null, 'Browser parent exit was not observed');
     }
-  } catch (error) { cleanupError = error; diagnostics.failure(error); }
+  } catch (error) {
+    cleanupError = error;
+    if (browser?.pid) await reportBrowserProcess('cleanup_observation');
+    diagnostics.failure(error);
+  }
   diagnostics.at('cleanup', 'server');
   server?.closeAllConnections();
   if (server) await new Promise((resolve) => server.close(resolve));

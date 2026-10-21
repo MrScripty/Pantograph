@@ -930,3 +930,21 @@ coordination; parent owns its later disposition after reachable handoff.
   Overall M5/C2, broader M6, trained-model, performance, memory provenance and
   hardware acceptance remain open. Next work requires reviewed producer contracts
   rather than invented forecasts or an unadmitted new native cohort.
+
+### 2026-10-21 — C1/C2a integration and fresh browser observation repair
+
+- PR85 merged as ae295707 with exact reviewed tree7c9e5901; PR86 retargeted to
+  main, rechecked with unchanged tree24d0b9af and merged as65704ed0. Each had all16
+  check runs plus CodeRabbit pass, independent source/evidence review and exact
+  target/tree recheck. PR87 now targets main; all original commits/branches remain.
+- Documentation successor e115 produced a new launch-deadline and cleanup-parent
+  observation failure in fresh job118996071539. Preserve that failure and the
+  earlier source successes. No denied historical endpoint was retried.
+- Independent design/source review admitted a bounded cleanup observation repair:
+  wait for the existing exit promise only through the remaining existing deadline.
+  An owned detached Node-child regression reproduces empty group before Node exit
+  observation. This establishes a reachable race, not the hosted root cause.
+- Fixed own-child process diagnostics distinguish future launch state without
+  raw stderr/commands/paths. All43 original assertions, launch flags, sandbox
+  settings and deadline declarations remain. No native/model workload or local
+  Chrome rerun is used. New source remains subject to focused review and CI.
