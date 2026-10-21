@@ -77,6 +77,41 @@ impl SerialRuntimeHostBatchExecutionPort for UnqueriedPort {
 }
 
 struct UnqueriedCandidates;
+
+#[test]
+fn fallible_grouping_observation_refuses_absent_mode_and_poisoned_cache() {
+    assert!(matches!(
+        WorkflowService::new().try_serial_grouping_work_for_test(),
+        Err(crate::workflow::WorkflowServiceError::InvalidRequest(_))
+    ));
+    let service = WorkflowService::new_serial_ready_cpu(
+        Arc::new(UnqueriedPort),
+        WorkflowSerialReadyConfig::default()
+            .with_fair_service_opportunities()
+            .with_bounded_grouping()
+            .unwrap(),
+    );
+    assert_eq!(
+        service.try_serial_grouping_work_for_test().unwrap(),
+        (0, 0, 0)
+    );
+    let poisoned = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let _guard = service
+            .serial_ready_mode
+            .as_ref()
+            .unwrap()
+            .grouping
+            .lock()
+            .unwrap();
+        panic!("controlled test-support cache poison");
+    }));
+    assert!(poisoned.is_err());
+    assert!(matches!(
+        service.try_serial_grouping_work_for_test(),
+        Err(crate::workflow::WorkflowServiceError::Internal(_))
+    ));
+}
+
 impl WorkflowRuntimeDispatchCandidateProvider for UnqueriedCandidates {
     fn runtime_dispatch_candidates(
         &self,

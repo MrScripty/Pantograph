@@ -1,6 +1,53 @@
 # CPU Scheduler Execution Ledger
 
 
+
+## 2026-10-21 — PR90 integration and fixed native comparison admission
+
+- User explicitly authorized guarded normal merge at c45d103f and the finite
+  native comparison producer, independent review, prospective freeze and one
+  retained execution. Fresh remote/actor/exact tree540618b7, successful22checks/
+  four PR workflows and empty review/thread arrays were verified. Independent
+  source reviewer extended approval to merge. Ready transition preserved all
+  checks; normal merge succeeded as ecfed47d, parentsdc64b895/c45d103f and identical
+  tree. Actual-main CI is pending independently; all earlier resources retained.
+- Producer write set: new serial_cpu_residency_key_reuse_qualification.rs under
+  existing test module plus its registration; test-support fallible scalar read
+  in serial_ready/grouping.rs and focused configuration_tests.rs; this canonical
+  plan/ledger/issues/checklist and the prospective protocol/result report. No
+  production policy/default/native allocator or dependency/manifest/lock change.
+- Two independent pre-code reviews admitted fixed two-arm/two-Ready/four-forward
+  BERT-8 comparison and strict source-derived counts (baseline6/0, enabled4/4).
+  Each public member keeps its own grant/Start/drain/registryACK. No native wrapper,
+  injected readiness/history or redefined scheduler ACK. Resource, termination,
+  golden/input, evidence availability and no-winner-retry conditions are fixed in
+  the [protocol](reports/2026-10-21-m5-native-key-reuse-protocol.md).
+- Root owns grouping helper/tests, module registration, canonical docs, freeze/
+  invocation and serial integration. review_m3_merge owns only the new producer
+  file. review_c2a_m6 independently reviews source/oracles/protocol/evidence and
+  never executes the held run. New branchtest/cpu-scheduler-native-key-reuse and
+  /workspace/pantograph-native-key-reuse are retained-protected for parent review,
+  target main ecfed47d; no cleanup is authorized.
+- The legacy test getter maps poisoned cache to0, so it cannot prove emptiness.
+  A new fallible companion retains old callers and rejects absent mode/poison.
+  Its controlled poison/healthy/absent regression passed, with no native work.
+  Full workflow library1048 and default embedded library614 passed; the latter
+  retains two existing ignored cost probes. Seven model-free oracle cases passed
+  with inventory enabled, compiling but never executing the held native body.
+  All-feature/all-target own-package warning-deny Clippy and warning-deny
+  own-package Rustdoc passed, as did formatting, staged traceability/local links
+  and declared pre-push261/one existing ignore+168. Independent source/protocol/
+  supervisor review approved freezing; exact manifest/binary review still gates
+  execution, alongside actual-main CI. No native comparison has executed.
+- Retained preparation failures: first default library run569passed/45setup
+  failures because the supported scratch Pumas metadata override was omitted;
+  the corrected process-local override run passed614. No HOME/security change.
+  Initial traceability lacked explicit staged/range selection; corrected staged
+  gate passed nine paths. First strict Clippy found a redundant Ok/try expression
+  in the new held helper; a semantic-preserving fix was independently re-reviewed
+  before the corrected strict gate passed. Initial author misprofile compile
+  stopped130 before any tests. No failure is erased or relabeled native evidence.
+
 ## 2026-10-21 — PR89 integration and finite M5/M6 consuming path
 
 - User authorized normal PR89 integration and required a complete remaining-plan

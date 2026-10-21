@@ -298,6 +298,31 @@ impl SerialReadyMode {
 pub(super) mod tests;
 
 impl super::WorkflowService {
+    /// Fallible test-support observation of mechanism work and retained entries.
+    /// Absent serial mode or poisoned cache is unavailable, never measured zero.
+    /// These fixed counters confer no execution or cleanup authority.
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn try_serial_grouping_work_for_test(
+        &self,
+    ) -> Result<(u64, u64, usize), super::WorkflowServiceError> {
+        use std::sync::atomic::Ordering;
+        let mode = self.serial_ready_mode.as_ref().ok_or_else(|| {
+            super::WorkflowServiceError::InvalidRequest(
+                "serial grouping observation requires serial mode".into(),
+            )
+        })?;
+        let cache = mode.grouping.lock().map_err(|_| {
+            super::WorkflowServiceError::Internal(
+                "serial grouping observation cache unavailable".into(),
+            )
+        })?;
+        Ok((
+            mode.key_encodings.load(Ordering::Relaxed),
+            mode.key_cache_hits.load(Ordering::Relaxed),
+            cache.entries.len(),
+        ))
+    }
+
     /// Test-only mechanism counts, including independent final-request hashing.
     /// These counters establish no end-to-end or real-model performance result.
     #[cfg(any(test, feature = "test-support"))]
