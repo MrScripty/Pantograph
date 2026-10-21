@@ -10,8 +10,13 @@ use serde_json::Value;
 use std::path::{Component, Path};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
-    Arc, Mutex,
+    Arc, Mutex, OnceLock,
 };
+
+mod result_payload;
+#[cfg(test)]
+mod result_payload_job_tests;
+use result_payload::{embedding_payload_capacity, ResultPayloadLease, ResultPayloadLedger};
 
 fn invalid(message: impl std::fmt::Display) -> BackendError {
     BackendError::Config(format!("Candle BERT embedding: {message}"))
@@ -515,17 +520,39 @@ impl EmbeddingModel {
     }
 }
 
-type Completion<T> = Shared<futures_util::future::BoxFuture<'static, Arc<Result<T, BackendError>>>>;
+// Field order retires the immutable original result before its accounting lease.
+// Shared/Arc aliases retain this same envelope; caller copies remain untracked.
+struct Completed<T> {
+    result: Result<T, BackendError>,
+    _payload_lease: Option<ResultPayloadLease>,
+}
+
+impl<T> std::ops::Deref for Completed<T> {
+    type Target = Result<T, BackendError>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.result
+    }
+}
+
+type Completion<T> = Shared<futures_util::future::BoxFuture<'static, Arc<Completed<T>>>>;
+type PayloadObserver<T> = (Arc<ResultPayloadLedger>, fn(&T) -> Option<u64>);
 #[derive(Clone)]
 struct Job<T> {
     stop: Arc<AtomicBool>,
     completion: Completion<T>,
 }
-pub(super) struct EmbeddingJobs<T = Vec<EmbeddingResult>>(Mutex<Option<Job<T>>>);
+pub(super) struct EmbeddingJobs<T = Vec<EmbeddingResult>> {
+    slot: Mutex<Option<Job<T>>>,
+    payloads: OnceLock<Arc<ResultPayloadLedger>>,
+}
 
 impl<T> Default for EmbeddingJobs<T> {
     fn default() -> Self {
-        Self(Mutex::new(None))
+        Self {
+            slot: Mutex::new(None),
+            payloads: OnceLock::new(),
+        }
     }
 }
 
@@ -552,30 +579,45 @@ impl EmbeddingJobs {
         texts: Vec<String>,
         cancellation: InferenceExecutionCancellationHandle,
     ) -> Result<Vec<EmbeddingResult>, BackendError> {
-        let completion = self.spawn(move |stop| {
-            let run = || {
-                #[cfg(test)]
-                if let Some(owner) = &model.calibration {
-                    owner.test_attempt_phase("forward");
-                }
-                if let (Some(owner), Some(profile)) =
-                    (&model.calibration, &model.calibration_profile)
-                {
-                    owner.check_worker_settings(profile);
-                }
-                let result = model.forward(texts, &cancellation, &stop);
-                if let (Some(owner), Some(profile)) =
-                    (&model.calibration, &model.calibration_profile)
-                {
-                    owner.check_worker_settings(profile);
-                }
-                result
-            };
-            match &model.calibration {
-                Some(owner) => owner.pool.install(run),
-                None => run(),
-            }
-        })?;
+        // The existing explicit calibration owner is the observation gate.
+        // Default execution and generic model loads initialize no payload ledger.
+        let observer = model.calibration.as_ref().map(|_| {
+            (
+                self.payloads
+                    .get_or_init(|| Arc::new(ResultPayloadLedger::new()))
+                    .clone(),
+                embedding_payload_capacity as fn(&Vec<EmbeddingResult>) -> Option<u64>,
+            )
+        });
+        let completion = self
+            .start_observed(
+                move |stop| {
+                    let run = || {
+                        #[cfg(test)]
+                        if let Some(owner) = &model.calibration {
+                            owner.test_attempt_phase("forward");
+                        }
+                        if let (Some(owner), Some(profile)) =
+                            (&model.calibration, &model.calibration_profile)
+                        {
+                            owner.check_worker_settings(profile);
+                        }
+                        let result = model.forward(texts, &cancellation, &stop);
+                        if let (Some(owner), Some(profile)) =
+                            (&model.calibration, &model.calibration_profile)
+                        {
+                            owner.check_worker_settings(profile);
+                        }
+                        result
+                    };
+                    match &model.calibration {
+                        Some(owner) => owner.pool.install(run),
+                        None => run(),
+                    }
+                },
+                observer,
+            )?
+            .completion;
         copy_result(completion.await.as_ref())
     }
 }
@@ -583,7 +625,7 @@ impl EmbeddingJobs {
 impl<T: Clone + Send + Sync + 'static> EmbeddingJobs<T> {
     // Retained custody counts as busy even after completion, until actual drain.
     pub(super) fn is_idle(&self) -> bool {
-        self.0.try_lock().is_ok_and(|slot| slot.is_none())
+        self.slot.try_lock().is_ok_and(|slot| slot.is_none())
     }
     pub(super) async fn load(
         &self,
@@ -596,6 +638,7 @@ impl<T: Clone + Send + Sync + 'static> EmbeddingJobs<T> {
         copy_result(job.completion.await.as_ref())
     }
 
+    #[cfg(test)]
     fn spawn(
         &self,
         run: impl FnOnce(Arc<AtomicBool>) -> Result<T, BackendError> + Send + 'static,
@@ -607,7 +650,15 @@ impl<T: Clone + Send + Sync + 'static> EmbeddingJobs<T> {
         &self,
         run: impl FnOnce(Arc<AtomicBool>) -> Result<T, BackendError> + Send + 'static,
     ) -> Result<Job<T>, BackendError> {
-        let mut slot = self.0.lock().unwrap();
+        self.start_observed(run, None)
+    }
+
+    fn start_observed(
+        &self,
+        run: impl FnOnce(Arc<AtomicBool>) -> Result<T, BackendError> + Send + 'static,
+        observer: Option<PayloadObserver<T>>,
+    ) -> Result<Job<T>, BackendError> {
+        let mut slot = self.slot.lock().unwrap();
         if slot
             .as_ref()
             .is_some_and(|job| job.completion.peek().is_none())
@@ -616,22 +667,46 @@ impl<T: Clone + Send + Sync + 'static> EmbeddingJobs<T> {
         }
         let stop = Arc::new(AtomicBool::new(false));
         let worker_stop = stop.clone();
-        let handle = tokio::task::spawn_blocking(move || run(worker_stop));
+        let handle = tokio::task::spawn_blocking(move || {
+            let result = run(worker_stop);
+            // Register inside the worker: a completed unpolled JoinHandle also
+            // owns its result. No job-slot guard crosses this worker boundary.
+            let payload_lease = observer.as_ref().and_then(|(ledger, capacity)| {
+                result
+                    .as_ref()
+                    .ok()
+                    .and_then(|value| ledger.retain(capacity(value)))
+            });
+            let completed = Completed {
+                result,
+                _payload_lease: payload_lease,
+            };
+            if let Some((ledger, _)) = observer {
+                ledger.log("worker_completed");
+            }
+            completed
+        });
         let completion = async move {
-            Arc::new(
-                handle
-                    .await
-                    .unwrap_or_else(|error| Err(inference(format!("worker join failed: {error}")))),
-            )
+            Arc::new(handle.await.unwrap_or_else(|error| Completed {
+                result: Err(inference(format!("worker join failed: {error}"))),
+                _payload_lease: None,
+            }))
         }
         .boxed()
         .shared();
         let job = Job { stop, completion };
-        *slot = Some(job.clone());
+        let retired = slot.replace(job.clone());
+        drop(slot);
+        // Retiring a completed slot may release a payload. Neither destruction
+        // nor diagnostic callbacks run under the job-slot guard.
+        drop(retired);
+        if let Some(ledger) = self.payloads.get() {
+            ledger.log("job_slot_updated");
+        }
         Ok(job)
     }
     pub(super) async fn drain(&self, cancel: bool) -> Result<(), BackendError> {
-        let job = self.0.lock().unwrap().clone();
+        let job = self.slot.lock().unwrap().clone();
         if let Some(job) = job {
             if cancel {
                 job.stop.store(true, Ordering::Release);
@@ -640,13 +715,18 @@ impl<T: Clone + Send + Sync + 'static> EmbeddingJobs<T> {
             // Execution owns the request outcome. Lifecycle cleanup observes the
             // join, then retires this completed job even when inference failed.
             // A concurrent request may already have installed a different job.
-            let mut slot = self.0.lock().unwrap();
+            let mut slot = self.slot.lock().unwrap();
             if slot
                 .as_ref()
                 .is_some_and(|current| Arc::ptr_eq(&current.stop, &job.stop))
             {
-                *slot = None;
+                let retired = slot.take();
+                drop(slot);
+                drop(retired);
             }
+        }
+        if let Some(ledger) = self.payloads.get() {
+            ledger.log("drain_join_observed");
         }
         Ok(())
     }
@@ -1156,7 +1236,7 @@ mod tests {
         // Synchronize on the actual stop signal, not timing of a mock inference result.
         loop {
             if jobs
-                .0
+                .slot
                 .lock()
                 .unwrap()
                 .as_ref()
@@ -1173,7 +1253,7 @@ mod tests {
         release_tx.send(()).unwrap();
         drain.await.unwrap().unwrap();
         assert!(exited.load(Ordering::Acquire));
-        assert!(jobs.0.lock().unwrap().is_none());
+        assert!(jobs.slot.lock().unwrap().is_none());
         jobs.spawn(|_| Ok(vec![]))
             .unwrap()
             .await
@@ -1265,7 +1345,7 @@ mod tests {
             .spawn(|_| Err(BackendError::Inference("controlled failure".into())))
             .unwrap();
         jobs.drain(false).await.unwrap();
-        assert!(jobs.0.lock().unwrap().is_none());
+        assert!(jobs.slot.lock().unwrap().is_none());
         assert!(matches!(
             copy_result(request_completion.await.as_ref()),
             Err(BackendError::Inference(_))

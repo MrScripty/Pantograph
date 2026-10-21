@@ -1,5 +1,34 @@
 # CPU Scheduler Execution Ledger
 
+## 2026-10-21 — PR88 integration and result-payload foundation
+
+- User explicitly authorized normal PR88 merge and the next reviewed backend
+  allocation/lifetime milestone. Rechecked exact head8306/base4561, approved tree
+  88aaf720, 22 successful check runs and four successful PR workflows; independent
+  source approval remained applicable. CodeRabbit draft skip was not review.
+- Ready transition and guarded merge preserved both parents as dc926783, with
+  exactly the approved tree. Post-merge CI is separately monitored. All earlier
+  branches and six prior clean worktrees remain retained-protected; PR84 is open
+  draft with unchanged head9e068bbc and replacement lineage.
+- Independent discovery and pre-code review admitted the original completed
+  embedding-result payload domain. Fixed job-owner counters and actual last-Arc
+  lifetime are supported in safe Rust; full Candle allocator/alias/scratch/worker
+  attribution is not. No external input blocks the software foundation.
+- Root owns candle_embedding.rs, focused job tests, canonical docs and integration;
+  the bounded worker owns only the new private result_payload.rs ledger/tests.
+  Source worktree `/workspace/pantograph-allocation`, branch
+  `feat/cpu-scheduler-allocation-lifetimes`, starts at dc926783 and is retained-
+  protected for parent review. No cleanup, security/default/admission/dependency
+  change or unrelated work is authorized by this slice.
+- See the [reviewed contract](reports/2026-10-21-result-payload-attribution.md).
+  Independent exact-source review approved the bounded component. Twelve new
+  cases and all582 inference cases passed; strict all-feature/all-target Clippy,
+  ordinary Rustdoc, formatting/traceability and pre-push261/oneignored+168 passed.
+  Strict Rustdoc retains the unchanged KV-cache HTML-tag failure; the narrow
+  feature strict lint attempt retains the existing dead-code warning. Neither
+  warning was suppressed. Exact published head/tree/hosted CI belong to the draft
+  PR, and complete incremental memory/overall M5/M6 remain unaccepted.
+
 ## 2026-10-20 — Publication closure and M5 C1 implementation admission
 
 - Replacement publication executor independently reconstructed all151 incremental
