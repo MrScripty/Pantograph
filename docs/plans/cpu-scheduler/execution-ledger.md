@@ -1,6 +1,153 @@
 # CPU Scheduler Execution Ledger
 
 
+
+## 2026-10-21 — Single v2 cohort passed narrow qualification
+
+- Exact staged six-path correction ffc8ddc4 passed independent commit/draft
+  review, committed/published normally as1f6af8a2/tree0368ee2e on PR91. Recovery
+  after capacity/environment interruption checked all preserved bytes, completed
+  build, process absence, provided actor and remote tips before any work retry.
+  No native launch was pending/uncertain; v2 root/marker were absent.
+- Independent exact-manifest/binary review admitted one v2 run: manifest331e55de,
+  producerc41b0a57, protocol780f42c2 and supervisorcdc2efb9. All15 hashes, exact
+  discovery, cgroups and affinity matched. No local compilation overlapped.
+- Root executed that held v2 test once at07:11:49Z; terminal exit0, reaped, no
+  timeout/error. Both fresh arms ran two native forwards. Baseline6enc/0hits and
+  enabled4enc/4hits both finished with zero healthy retained cache entries.
+  Public closes/shutdown acknowledged, final reservations empty/no idle owner.
+- Independent raw review confirmed the frozen criteria, actual artifact bytes/
+  golden/cross-arm equality, genuine Ready/captured pair, distinct per-member
+  custody/ACK joins, fresh loaded instances, one-thread owners4→6→8, all five
+  enabled final phase observations, and28 persisted rows within25965bytes.
+  Cold history remained unavailable; no trained ranking or timing win is claimed.
+- The [successor v2 result](reports/2026-10-21-m5-native-key-reuse-result-v2.md)
+  and39-file durable archive retain exact originals plus preparation/admission/
+  independent review. V1 source/protocol/archive/result/marker remain unchanged
+  and failed. No rerun or retrospective acceptance change occurred.
+- M5-CPU now has independent narrow v2 evidence. M6-CLOSE awaits final source/
+  report/archive review and exact-candidate CI/normal integration/post-merge
+  gates. Existing source/branches/worktrees and PR84 stay protected. No admission,
+  default, allocator, security, dependency/lockfile or CI change is selected.
+
+## 2026-10-21 — Separately authorized prospective v2 correction
+
+- Fresh user delegation explicitly authorizes a corrected oracle, independent
+  full source/protocol review and one bounded new baseline/enabled cohort. V1's
+  failed source, protocol, archive and marker remain unchanged; neither its
+  baseline nor verdict is reused. Parent's second disconnect report was followed
+  by successful pwd/Git/metadata recovery, clean source AEA, unchanged v1 archive
+  e6edef6c/result77a24b38 and provided actor MrScripty. Remote main ecfed47d and
+  PR91 source AEA match. No write or native launch was pending/uncertain.
+- Independent pre-code review admitted removing only candidate_id from across-
+  member uniqueness, adding exact runtime.candle per-native validation, and
+  retaining exact within-member candidate ACK tuples and ledger selected-runtime
+  joins. All task/attempt/execution-request/reservation and grant-ticket custody
+  distinctions remain. New positive/negative oracles must decide this contract
+  directly, including coordinated foreign candidates and intended failure cause.
+- Existing branch/worktree test/cpu-scheduler-native-key-reuse is retained and
+  remains the sole publication owner. Root owns canonical docs, new prospective
+  v2 document/supervisor, compilation, commits/publication, freeze and one run.
+  review_m3_merge owns only the existing held producer file; review_c2a_m6 owns
+  independent read-only review. No helper/default/admission/allocator/manifest/
+  lockfile/CI or unrelated change is selected. V1 evidence paths are excluded
+  from this write set. V2 outcome report/archive may be added after the run.
+- [V2](reports/2026-10-21-m5-native-key-reuse-protocol-v2.md) retains unchanged
+  baseline6/0 versus enabled4/4 mechanism targets, vector/genuine Ready/captured
+  pair/five phase/owner/Start/ACK/cleanup requirements and all execution/log bounds.
+  Exact cross-arm output equality is stated explicitly to match existing source.
+  Conservative VRAM claims are not zero reservation or physical GPU evidence.
+  No v2 physical execution has occurred; full source/protocol/supervisor review,
+  model-free checks, exact source/binary/fixtures freeze and manifest admission
+  still gate the single new run. Publication stays draft while unqualified.
+- Correction checks passed: ten inventory-enabled model-free oracle cases
+  (held v2 compiled, never executed), full default embedded library617 with two
+  existing ignored probes, strict all-feature/all-target own-package Clippy,
+  warning-deny own-package Rustdoc, formatting and declared pre-push261/one
+  existing ignore+168. Workflow-service source/helper is byte-unchanged from
+  reviewed AEA and its previous1048 passes; no unrelated suite is relabeled as
+  new v2 evidence. Source/protocol/supervisor review approved freezing after
+  prerequisites. The apparent missing cgroup/affinity check review finding was
+  withdrawn after confirming the existing pre-marker assertions in exact bytes;
+  no unnecessary supervisor behavior change was introduced.
+
+## 2026-10-21 — Single native cohort terminal failure and finite stop
+
+- PR90 actual main ecfed47d completed all20 checks/four workflows successfully,
+  preserving tree540618b7, twelve prior branch tips and eight prior clean
+  worktrees. Integration receipt SHA2569d7e20d34d5a1a55811134dd35058f3795f0f966a0fdf49b0c05b95b84a38daf.
+- Independent review approved the exact nine-path staged source for commit/draft,
+  then exact frozen manifest/binary for one run after that actual-main gate.
+  Source fb7ba0e3/tree203f7b4a and manifest1aecf82f were unchanged. Root alone ran
+  the reviewed supervisor once, with no concurrent local compilation.
+- Terminal result FAILED, exit101, reaped, no timeout: baseline completed two
+  forwards,6encodings/0hits/0retained and acknowledged closes/shutdown; frozen
+  candidate-ID distinctness oracle failed on runtime.candle. Enabled never ran.
+  Both source-author and independent source/raw review confirmed candidate_id
+  is stable runtime-alternative identity, not unique member custody. The
+  pre-run source/fixture review missed that distinction. Do not reinterpret
+  the old oracle, erase its failure or continue to an enabled-only run.
+- The [successor result report](reports/2026-10-21-m5-native-key-reuse-result.md)
+  records exact provenance, actual baseline facts, limits and durable archived
+  originals. Distinct actual custody identities, joins, owners4→6→8, numerical
+  outputs/readbacks and cleanup checked out independently. Conservative VRAM
+  reservation claims are present; no physical allocation/GPU claim follows.
+- Finite stop: INT-89/M5-SW/M6-SW complete within existing limits; M5-CPU failed
+  v1, M6-CLOSE unaccepted. Publish unchanged producer/oracle/protocol plus
+  independently reviewed failure disposition as draft. Do not merge a failed
+  qualification or select another allocator/diagnostic domain. Any evidenced
+  oracle correction/new physical cohort requires separate prospective replanning.
+  Missing representative workloads/hardware did not prevent this software work.
+- Original once-only evidence root, exclusive marker and all branches/worktrees
+  remain retained. Historical denied-log evidence and baseline strict inference
+  lint/Rustdoc limitations remain unretried and unsuppressed.
+
+## 2026-10-21 — PR90 integration and fixed native comparison admission
+
+- User explicitly authorized guarded normal merge at c45d103f and the finite
+  native comparison producer, independent review, prospective freeze and one
+  retained execution. Fresh remote/actor/exact tree540618b7, successful22checks/
+  four PR workflows and empty review/thread arrays were verified. Independent
+  source reviewer extended approval to merge. Ready transition preserved all
+  checks; normal merge succeeded as ecfed47d, parentsdc64b895/c45d103f and identical
+  tree. Actual-main CI is pending independently; all earlier resources retained.
+- Producer write set: new serial_cpu_residency_key_reuse_qualification.rs under
+  existing test module plus its registration; test-support fallible scalar read
+  in serial_ready/grouping.rs and focused configuration_tests.rs; this canonical
+  plan/ledger/issues/checklist and the prospective protocol/result report. No
+  production policy/default/native allocator or dependency/manifest/lock change.
+- Two independent pre-code reviews admitted fixed two-arm/two-Ready/four-forward
+  BERT-8 comparison and strict source-derived counts (baseline6/0, enabled4/4).
+  Each public member keeps its own grant/Start/drain/registryACK. No native wrapper,
+  injected readiness/history or redefined scheduler ACK. Resource, termination,
+  golden/input, evidence availability and no-winner-retry conditions are fixed in
+  the [protocol](reports/2026-10-21-m5-native-key-reuse-protocol.md).
+- Root owns grouping helper/tests, module registration, canonical docs, freeze/
+  invocation and serial integration. review_m3_merge owns only the new producer
+  file. review_c2a_m6 independently reviews source/oracles/protocol/evidence and
+  never executes the held run. New branchtest/cpu-scheduler-native-key-reuse and
+  /workspace/pantograph-native-key-reuse are retained-protected for parent review,
+  target main ecfed47d; no cleanup is authorized.
+- The legacy test getter maps poisoned cache to0, so it cannot prove emptiness.
+  A new fallible companion retains old callers and rejects absent mode/poison.
+  Its controlled poison/healthy/absent regression passed, with no native work.
+  Full workflow library1048 and default embedded library614 passed; the latter
+  retains two existing ignored cost probes. Seven model-free oracle cases passed
+  with inventory enabled, compiling but never executing the held native body.
+  All-feature/all-target own-package warning-deny Clippy and warning-deny
+  own-package Rustdoc passed, as did formatting, staged traceability/local links
+  and declared pre-push261/one existing ignore+168. Independent source/protocol/
+  supervisor review approved freezing; exact manifest/binary review still gates
+  execution, alongside actual-main CI. No native comparison has executed.
+- Retained preparation failures: first default library run569passed/45setup
+  failures because the supported scratch Pumas metadata override was omitted;
+  the corrected process-local override run passed614. No HOME/security change.
+  Initial traceability lacked explicit staged/range selection; corrected staged
+  gate passed nine paths. First strict Clippy found a redundant Ok/try expression
+  in the new held helper; a semantic-preserving fix was independently re-reviewed
+  before the corrected strict gate passed. Initial author misprofile compile
+  stopped130 before any tests. No failure is erased or relabeled native evidence.
+
 ## 2026-10-21 — PR89 integration and finite M5/M6 consuming path
 
 - User authorized normal PR89 integration and required a complete remaining-plan

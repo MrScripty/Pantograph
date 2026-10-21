@@ -4,6 +4,9 @@ use pantograph_workflow_service::graph::{
 };
 use serde_json::json;
 
+#[path = "serial_cpu_residency_key_reuse_qualification.rs"]
+mod key_reuse_qualification;
+
 const MODEL: &str = "embedding/qualification/synthetic-bert-8";
 
 pub(crate) fn save_model_free_evidence(case: &str, observations: serde_json::Value) {

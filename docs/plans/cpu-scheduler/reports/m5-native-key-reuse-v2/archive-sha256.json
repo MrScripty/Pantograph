@@ -1,0 +1,10 @@
+{
+  "archive": "retained-cohort.tar.gz",
+  "bytes": 131938,
+  "sha256": "d7cd6334bcec3b2a72c9f4eee026b0a507d62f7388db9739e611d4c179b98828",
+  "member_count": 39,
+  "scope": "original once-only v2 cohort, both raw arms/actual artifact bodies, journal, prospective protocol/supervisor/frozen manifest, pre-run source/review/check receipts and independent outcome review; no binary/databases/client credentials",
+  "source_head": "1f6af8a25440d6a4049a3e86c86785689b71cf70",
+  "result": "producer oracle passed; independent narrow raw evidence qualified; integration gates separate",
+  "v1_remains_failed_and_unchanged": true
+}

@@ -1,0 +1,9 @@
+{
+  "archive": "retained-failed-cohort.tar.gz",
+  "bytes": 131098,
+  "sha256": "e6edef6c58518ab809be8fc5b31d1c9e18abd700ddafdb5037c82aa70fbed340",
+  "member_count": 40,
+  "scope": "original once-only failed cohort plus pre-run source/binary/fixture manifest, supervisor, actual artifact bytes, review/integration/local-check receipts and preparation logs; no executable/databases/client credentials",
+  "original_frozen_source": "fb7ba0e37645aaa6627ef6ae1b729c931387a772",
+  "result": "FAILED; enabled arm absent; no rerun"
+}
