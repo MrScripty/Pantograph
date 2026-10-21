@@ -7,15 +7,15 @@ import { mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { build } from 'vite';
-import { svelte } from '@sveltejs/vite-plugin-svelte';
-import { evaluateBrowserFunction } from '../../../scripts/cdp-browser-function.mjs';
+import { browserVersion, createBrowserDiagnostics } from '../../../scripts/browser-qualification-diagnostics.mjs';
+
+const diagnostics = createBrowserDiagnostics();
+async function main() {
 
 const testDir = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(testDir, '../../..');
-assert.equal(process.platform, 'linux', 'Image browser fixture requires Linux process-group ownership');
-const sourceRevision = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf8' }).trim();
-const scratch = await mkdtemp(path.join(tmpdir(), 'pantograph-image-output-'));
+let sourceRevision;
+let scratch;
 const noSandbox = process.env.PANTOGRAPH_IMAGE_BROWSER_NO_SANDBOX === '1';
 const sandboxMode = noSandbox ? 'disabled-explicit-opt-in' : 'enabled';
 let server;
@@ -25,15 +25,23 @@ let evaluate;
 let send;
 let evidence;
 let executionFailed = false;
-let executionError;
 const passed = [];
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 try {
+  diagnostics.at('build', 'setup');
+  assert.equal(process.platform, 'linux', 'Image browser fixture requires Linux process-group ownership');
+  sourceRevision = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+  scratch = await mkdtemp(path.join(tmpdir(), 'pantograph-image-output-'));
+  diagnostics.at('build', 'dependencies');
+  const { build } = await import('vite');
+  const { svelte } = await import('@sveltejs/vite-plugin-svelte');
+  const { evaluateBrowserFunction } = await import('../../../scripts/cdp-browser-function.mjs');
   await symlink(path.join(repo, 'node_modules'), path.join(scratch, 'node_modules'));
   await writeFile(path.join(scratch, 'main.js'), `import ${JSON.stringify(path.join(testDir, 'fixture.ts'))};`);
   await writeFile(path.join(scratch, 'index.html'), '<!doctype html><html><head><meta charset="utf-8"><title>Image Output artifact fixture</title><style>body{font:16px sans-serif;background:#111;color:#eee}#app{width:360px;margin:24px}.base-node{padding:12px}img{max-width:100%}button,select{margin:4px}</style></head><body><main id="app"></main><script type="module" src="/main.js"></script></body></html>');
+  diagnostics.at('build', 'fixture_build');
   const buildResult = await build({
-    root: scratch, configFile: false, logLevel: 'warn',
+    root: scratch, configFile: false, logLevel: 'silent',
     plugins: [
       {
         name: 'controlled-image-output-host', enforce: 'pre',
@@ -48,6 +56,7 @@ try {
     ],
     build: { target: 'esnext', outDir: path.join(scratch, 'dist') },
   });
+  diagnostics.at('build', 'assets');
   // Only build-owned names reach the filesystem. Requests perform exact Map lookups.
   const assets = new Map();
   const buildOutputs = Array.isArray(buildResult) ? buildResult : [buildResult];
@@ -59,6 +68,7 @@ try {
   }
   assert.ok(assets.has('/index.html'), 'Build did not produce the fixture index');
   assets.set('/', assets.get('/index.html'));
+  diagnostics.at('start', 'server');
   server = createServer((request, response) => {
     try {
       const pathname = new URL(request.url, 'http://localhost').pathname;
@@ -70,6 +80,10 @@ try {
   });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   console.log('Chromium sandbox mode: ' + sandboxMode);
+  diagnostics.at('start', 'chrome_launch');
+  // Bounded version-only probe; absence never changes qualification assertions.
+  try { diagnostics.version(execFileSync(process.env.CHROMIUM_BINARY || 'chromium', ['--version'], { encoding: 'utf8', timeout: 2_000, killSignal: 'SIGKILL', maxBuffer: 1024, stdio: ['ignore', 'pipe', 'pipe'] })); }
+  catch { diagnostics.version(null); }
   const profile = path.join(scratch, 'profile');
   browser = spawn(process.env.CHROMIUM_BINARY || 'chromium', [
     ...(noSandbox ? ['--no-sandbox'] : []),
@@ -91,6 +105,7 @@ try {
     catch { await delay(50); }
   }
   assert.ok(port, `Browser acceptance unavailable: Chromium did not start (sandbox mode: ${sandboxMode}). ` + diagnostic);
+  diagnostics.at('start', 'cdp_connect');
   const pages = await (await fetch('http://127.0.0.1:' + port + '/json/list')).json();
   socket = new WebSocket(pages.find((page) => page.type === 'page').webSocketDebuggerUrl);
   await new Promise((resolve, reject) => {
@@ -114,6 +129,9 @@ try {
     pending.set(id, { resolve, reject, timer });
     socket.send(JSON.stringify({ id, method, params }));
   });
+  diagnostics.at('start', 'browser_version');
+  const version = await send('Browser.getVersion');
+  diagnostics.version(version.product);
   evaluate = (callback, args = []) => evaluateBrowserFunction(send, callback, args);
   const waitFor = async (callback, args = [], description = 'browser state') => {
     const deadline = Date.now() + 10_000;
@@ -168,6 +186,7 @@ try {
     await send('Input.dispatchMouseEvent', { type: 'mousePressed', button: 'left', clickCount: 1, ...coordinates });
     await send('Input.dispatchMouseEvent', { type: 'mouseReleased', button: 'left', clickCount: 1, ...coordinates });
   };
+  diagnostics.at('start', 'fixture_start');
   await send('Page.navigate', { url: 'http://127.0.0.1:' + server.address().port });
   await waitFor(() => window.imageArtifactFixture?.ready || document.body.dataset.fixtureError, [], 'fixture startup');
   assert.equal(await evaluate(() => document.body.dataset.fixtureError ?? null), null);
@@ -175,6 +194,7 @@ try {
   const downloadsDirectory = path.join(scratch, 'downloads');
   await send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: downloadsDirectory });
 
+  diagnostics.at('assertion', 'png_jpeg');
   console.log('checking PNG/JPEG decoding and actual downloaded files');
   for (const id of ['png', 'jpeg']) {
     // Descriptor format is authoritative, including when the scheduler hint differs.
@@ -205,6 +225,7 @@ try {
     passed.push(`${id}: decoded ${current.width}x${current.height}; ${downloaded.length} bytes downloaded as ${download.filename} (${downloadBlob.mediaType})`);
   }
 
+  diagnostics.at('assertion', 'keyboard_modal');
   console.log('checking keyboard expansion, Escape, and restored focus');
   // Tab reaches the native Expand button; CDP dispatches native keys rather than DOM click events.
   await evaluate(() => document.activeElement?.blur());
@@ -242,6 +263,7 @@ try {
   assert.deepEqual((await snapshot()).parentEvents, [], 'Expand pointer events escaped into the parent shell');
   passed.push('native keyboard Expand/Enter, modal decode/focus, 3 settled native Escape/pointer Expand reopen cycles, restored Expand focus; pointer Close');
 
+  diagnostics.at('assertion', 'reference_lifecycle');
   console.log('checking replacement and clearing lifecycle');
   const oldUrl = (await preview()).src;
   await set({ artifact_id: 'png' });
@@ -258,6 +280,7 @@ try {
   assert.ok((await evaluate(() => document.body.innerText)).includes('No image yet'));
   passed.push('changed/cleared reference removes preview, closes modal, and revokes owned URLs');
 
+  diagnostics.at('assertion', 'malformed_artifacts');
   console.log('checking malformed references and retained-artifact failures');
   for (const invalid of ['legacy-base64', {}, { artifact_id: '' }, { artifact_id: 7 }]) {
     const before = await snapshot();
@@ -299,6 +322,7 @@ try {
   }
   passed.push('malformed scheduler refs rejected before transport');
 
+  diagnostics.at('assertion', 'superseded_read');
   console.log('checking superseded read/descriptor success and failure');
   for (const [id, outcome] of [['defer-read-stale', 'resolve'], ['defer-read-failure', 'reject'], ['defer-descriptor-stale', 'resolve']]) {
     await set({ artifact_id: id });
@@ -315,6 +339,7 @@ try {
     assert.equal(await evaluate(() => Boolean(document.querySelector('[role="alert"]'))), false, 'superseded failure leaked into current UI');
     passed.push(`${id}: superseded ${outcome} cannot publish`);
   }
+  diagnostics.at('assertion', 'unmount');
   const beforeUnmount = await snapshot();
   const liveBeforeUnmount = beforeUnmount.created.filter((entry) => !beforeUnmount.revoked.includes(entry.url));
   await evaluate(async () => window.imageArtifactFixture.unmount());
@@ -334,18 +359,17 @@ try {
   const finalSnapshot = await snapshot();
   assert.ok(finalSnapshot.created.every(entry => finalSnapshot.revoked.includes(entry.url)), 'fixture left an owned URL live');
   passed.push('pending retained read completion after unmount cannot publish');
-  const version = await send('Browser.getVersion');
   evidence = { ok: true, sourceRevision, environment: {
-    browser: version.product, sandboxMode, headless: true, gpuDisabled: true,
+    browser: browserVersion(version.product), sandboxMode, headless: true, gpuDisabled: true,
     profile: 'fresh temporary profile/config/cache', host: 'loopback-only fixture',
     scope: 'CPU browser presentation; controlled transport/shell/store; actual Svelte component and browser raster decoder/downloads',
   }, passed };
 } catch (error) {
   executionFailed = true;
-  executionError = error;
-  console.error('Image browser qualification failed:', error);
+  diagnostics.failure(error);
 } finally {
   let cleanupError;
+  diagnostics.at('cleanup', 'process_group');
   try {
     if (evaluate && socket?.readyState === WebSocket.OPEN) {
       await evaluate(async () => window.imageArtifactFixture?.unmount()).catch(() => {});
@@ -384,19 +408,21 @@ try {
       assert.equal(groupHasLiveMembers(), false, 'Browser process group did not stop; retaining temporary profile');
       assert.ok(browser.exitCode !== null || browser.signalCode !== null, 'Browser parent exit was not observed');
     }
-  } catch (error) { cleanupError = error; }
+  } catch (error) { cleanupError = error; diagnostics.failure(error); }
+  diagnostics.at('cleanup', 'server');
   server?.closeAllConnections();
   if (server) await new Promise((resolve) => server.close(resolve));
-  if (!cleanupError) {
+  if (!cleanupError && scratch) {
+    diagnostics.at('cleanup', 'temporary_root');
     try { await rm(scratch, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); }
-    catch (error) { cleanupError = error; }
+    catch (error) { cleanupError = error; diagnostics.failure(error); }
   }
-  if (cleanupError) {
-    throw executionFailed
-      ? new AggregateError([executionError, cleanupError], 'Image browser assertions and cleanup failed', { cause: executionError })
-      : cleanupError;
-  }
+  if (cleanupError) executionFailed = true;
 }
-if (executionFailed) throw executionError;
+if (executionFailed) { process.exitCode = 1; return; }
 // Success is published only after the owned process/server/temporary root end.
 console.log(JSON.stringify({ ...evidence, cleanup: 'completed' }, null, 2));
+
+}
+// Catch setup/cleanup and guarded import failures without publishing exception payloads.
+await main().catch(error => { diagnostics.failure(error); process.exitCode = 1; });
