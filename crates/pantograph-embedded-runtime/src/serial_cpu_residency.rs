@@ -133,10 +133,40 @@ struct ShutdownState {
 }
 
 impl EmbeddedSerialCpuResidency {
+    /// Construct the dedicated fair serial CPU residency owner with workload-key
+    /// reuse disabled. Existing resource and lifecycle requirements apply.
     pub async fn new(
+        config: EmbeddedSerialCpuResidencyConfig,
+    ) -> Result<Self, EmbeddedRuntimeError> {
+        Self::build(config, false).await
+    }
+
+    /// Opt into bounded pure workload-key reuse on the ordinary per-member path.
+    ///
+    /// Each member retains its own fair opportunity, preparation, resource and
+    /// Start checks, native execution/drain and matched cleanup. This enables no
+    /// native batching, new admission policy or complete-memory guarantee.
+    /// Construction does not load a model or qualify execution/performance.
+    pub async fn new_with_bounded_key_reuse(
+        config: EmbeddedSerialCpuResidencyConfig,
+    ) -> Result<Self, EmbeddedRuntimeError> {
+        Self::build(config, true).await
+    }
+
+    async fn build(
         mut config: EmbeddedSerialCpuResidencyConfig,
+        bounded_key_reuse: bool,
     ) -> Result<Self, EmbeddedRuntimeError> {
         config.validate()?;
+        let mut serial = WorkflowSerialReadyConfig::default()
+            .with_fair_service_opportunities()
+            .with_serial_residency()
+            .map_err(initialization_error)?;
+        if bounded_key_reuse {
+            serial = serial
+                .with_bounded_grouping()
+                .map_err(initialization_error)?;
+        }
         config.runtime.max_loaded_sessions = Some(config.runtime.max_loaded_sessions.unwrap_or(8));
         let calibration = inference::CandleCpuCalibrationConfig::new(
             config.cpu_threads,
@@ -214,42 +244,36 @@ impl EmbeddedSerialCpuResidency {
             .map_err(initialization_error)?,
         );
         std::fs::create_dir_all(&config.runtime.app_data_dir).map_err(initialization_error)?;
-        let service = WorkflowService::new_serial_ready_cpu(
-            port.clone(),
-            WorkflowSerialReadyConfig::default()
-                .with_fair_service_opportunities()
-                .with_serial_residency()
-                .map_err(initialization_error)?,
-        )
-        .with_attribution_store(
-            pantograph_runtime_attribution::SqliteAttributionStore::open_in_memory()
-                .map_err(initialization_error)?,
-        )
-        .with_diagnostics_ledger(
-            SqliteDiagnosticsLedger::open(
-                config
-                    .runtime
-                    .app_data_dir
-                    .join("serial-cpu-diagnostics.db"),
+        let service = WorkflowService::new_serial_ready_cpu(port.clone(), serial)
+            .with_attribution_store(
+                pantograph_runtime_attribution::SqliteAttributionStore::open_in_memory()
+                    .map_err(initialization_error)?,
             )
-            .map_err(initialization_error)?,
-        )
-        .with_artifact_store(
-            ArtifactStore::open(
-                config.runtime.app_data_dir.join("serial-cpu-artifacts"),
-                ArtifactPolicy {
-                    policy_id: "serial-cpu-residency".into(),
-                    policy_version: 1,
-                    ttl_seconds: None,
-                    max_disk_bytes: Some(1024 * 1024),
-                    max_memory_bytes: Some(1024 * 1024),
-                    max_single_artifact_bytes: Some(65536),
-                    spill_threshold_bytes: None,
-                    delete_on_consume: false,
-                },
+            .with_diagnostics_ledger(
+                SqliteDiagnosticsLedger::open(
+                    config
+                        .runtime
+                        .app_data_dir
+                        .join("serial-cpu-diagnostics.db"),
+                )
+                .map_err(initialization_error)?,
             )
-            .map_err(initialization_error)?,
-        );
+            .with_artifact_store(
+                ArtifactStore::open(
+                    config.runtime.app_data_dir.join("serial-cpu-artifacts"),
+                    ArtifactPolicy {
+                        policy_id: "serial-cpu-residency".into(),
+                        policy_version: 1,
+                        ttl_seconds: None,
+                        max_disk_bytes: Some(1024 * 1024),
+                        max_memory_bytes: Some(1024 * 1024),
+                        max_single_artifact_bytes: Some(65536),
+                        spill_threshold_bytes: None,
+                        delete_on_consume: false,
+                    },
+                )
+                .map_err(initialization_error)?,
+            );
         let input = EmbeddedHostedStartupCompositionInput::new(EmbeddedHostedStartupConfig {
             runtime_registry: registry.clone(),
             runtime_registry_controller: gateway.clone(),
@@ -301,6 +325,13 @@ impl EmbeddedSerialCpuResidency {
             operations: Arc::new(tokio::sync::RwLock::new(())),
             shutdown_state: tokio::sync::Mutex::new(ShutdownState::default()),
         })
+    }
+
+    /// Read immutable constructor facts without querying native state or opening
+    /// execution admission. This value remains readable after shutdown and is
+    /// neither an execution capability nor proof of readiness or qualification.
+    pub fn scheduler_configuration(&self) -> WorkflowSchedulerConfiguration {
+        self.runtime.workflow_service.scheduler_configuration()
     }
 
     async fn admit(&self) -> Result<tokio::sync::RwLockReadGuard<'_, ()>, WorkflowServiceError> {

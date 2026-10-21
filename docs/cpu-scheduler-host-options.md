@@ -78,6 +78,36 @@ builders remain explicit and require fair service opportunities; observing their
 flags does not promote the unresolved M4/C2 acceptance gates. M6a adds no
 application selector, UI, IPC field, persisted preference or provider capability.
 
+## Protected embedded residency owner
+
+With `pantograph-embedded-runtime`'s `backend-candle` feature, the owning
+`EmbeddedSerialCpuResidency` facade provides two construction choices:
+
+- `new(config)` preserves fair serial residency with workload-key reuse disabled.
+- `new_with_bounded_key_reuse(config)` explicitly enables the existing bounded
+  pure workload-key cache on that same per-member execution path.
+
+Both take the existing `EmbeddedSerialCpuResidencyConfig` unchanged. Invalid
+resource/configuration declarations refuse before filesystem/native startup.
+The caller still supplies valid local model identities and operator-declared
+resource bounds; construction loads no model and downloads none. Physical run
+and resume retain their `host-dependency-inventory` feature requirement.
+
+`facade.scheduler_configuration()` returns the same immutable value snapshot
+described above, with fair opportunities/residency true, key reuse matching the
+constructor, and completion advice false. It exposes no service, gateway,
+registry, native owner or execution authority. It remains readable after
+shutdown because configuration is not live runtime state.
+
+This is immediate ordinary member execution with planning reuse, not a grouped
+native forward. Each member retains its own fair opportunity, preparation,
+reservation, final Start checks, drain and matched cleanup. Change this choice
+by acknowledged facade shutdown followed by construction at the next clean
+startup; there is no live setter. Admission, resource accounting and defaults
+are unchanged. Constructor/consumer tests do not qualify actual CPU benefits;
+the [finite completion checklist](plans/cpu-scheduler/reports/2026-10-21-m5-m6-completion-checklist.md)
+keeps that native comparison and representative performance evidence separate.
+
 ## Lifecycle and rollback
 
 The snapshot is stable across service clones and loaded-session capacity changes.

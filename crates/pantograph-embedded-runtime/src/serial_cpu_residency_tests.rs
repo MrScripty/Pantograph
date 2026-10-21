@@ -91,6 +91,55 @@ async fn invalid_facade_configuration_refuses_before_owner_or_filesystem_startup
 }
 
 #[tokio::test]
+async fn key_reuse_configuration_refuses_before_owner_or_filesystem_startup() {
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path().join("not-created");
+    let mut configuration = config(&root);
+    configuration.ram_capacity_bytes = 0;
+    assert!(matches!(
+        EmbeddedSerialCpuResidency::new_with_bounded_key_reuse(configuration).await,
+        Err(EmbeddedRuntimeError::Config { .. })
+    ));
+    assert!(!root.exists());
+}
+
+#[tokio::test]
+async fn owning_facade_explicit_key_reuse_preserves_default_and_shutdown_configuration() {
+    for enabled in [false, true] {
+        let directory = tempfile::tempdir().unwrap();
+        seed(directory.path());
+        let configuration = config(directory.path());
+        let facade = if enabled {
+            EmbeddedSerialCpuResidency::new_with_bounded_key_reuse(configuration).await
+        } else {
+            EmbeddedSerialCpuResidency::new(configuration).await
+        }
+        .unwrap();
+        let snapshot = facade.scheduler_configuration();
+        assert_eq!(
+            snapshot.execution_owner(),
+            WorkflowSchedulerExecutionOwner::SerialReadyCpu
+        );
+        assert!(snapshot.serial_fair_opportunities());
+        assert!(snapshot.serial_residency());
+        assert_eq!(snapshot.serial_key_reuse(), enabled);
+        assert!(!snapshot.serial_completion_advisory());
+        assert_eq!(snapshot.serial_minimum_samples(), Some(3));
+        assert_eq!(
+            snapshot.serial_maximum_sample_age(),
+            Some(Duration::from_secs(60))
+        );
+        assert!(facade.registry_snapshot().reservations.is_empty());
+        assert_eq!(facade.residency_diagnostics().unwrap().loads, 0);
+        assert_eq!(facade.scheduler_configuration(), snapshot);
+        facade.shutdown().await.unwrap();
+        facade.shutdown().await.unwrap();
+        assert_eq!(facade.scheduler_configuration(), snapshot);
+        assert!(facade.registry_snapshot().reservations.is_empty());
+    }
+}
+
+#[tokio::test]
 async fn projection_refresh_publishes_existing_raw_evidence_without_native_work() {
     use pantograph_diagnostics_ledger::{
         DiagnosticEventAppendRequest, DiagnosticsLedgerRepository, NodeExecutionProjectionStatus,

@@ -1,5 +1,52 @@
 # CPU Scheduler Execution Ledger
 
+
+## 2026-10-21 — PR89 integration and finite M5/M6 consuming path
+
+- User authorized normal PR89 integration and required a complete remaining-plan
+  checklist before more allocation abstractions. Fresh actor MrScripty, remote
+  main/source tips, exact head48717570/tree2d59d369, 22 successful check runs/four
+  PR workflows and empty GitHub review/thread arrays were verified. Independent
+  source reviewer extended approval to merge; CodeRabbit supplies no source credit.
+- Ready transition followed by guarded normal merge succeeded as dc64b895, parents
+  dc926783 and48717570, exact approved tree2d59d369. Source branches remain intact.
+  Actual-main post-merge CI is pending; do not infer its result from source CI.
+- Independent audit found full allocator hooks are not an M5 prerequisite for
+  cost-free ordinary-member key reuse. The integrator explicitly selects that
+  previously open C2 option as the supported CPU envelope, retaining the actual
+  native comparison and broader qualifications. The [finite checklist](reports/2026-10-21-m5-m6-completion-checklist.md)
+  sets five deciding rows and stops further diagnostic slices from substituting
+  for usable consuming behavior or actual CPU evidence.
+- Both independent pre-code reviewers admitted the additive owning constructor
+  and direct immutable query with unchanged config literals/defaults/owners/
+  feature gates/lifecycle. Source write set is serial_cpu_residency.rs and its
+  existing tests; documentation is the host guide and CPU plan/ledger/issues/
+  checklist. No allocator, dependency, manifest/lockfile, binding, IPC, CI or
+  admission change. Independent exact-source review approved the consumer change.
+- Local verification passed: default facade module8, full embedded library607
+  with2 existing ignored cost probes, inventory facade module6 including the
+  existing native lifecycle case; all-feature/all-target own-package warning-deny
+  Clippy, warning-deny own-package Rustdoc, formatting and33 local doc links.
+  Declared pre-push tests passed261/one existing ignored+168.
+- Initial no-default/Candle test compilation selected a profile whose existing
+  tests require llama Gateway::new, and found one corrected new-test Option access;
+  no tests ran. The first default execution passed2/refused6 on the restricted
+  default Pumas registry home path. Both failures are retained. The pinned Pumas
+  supported PUMAS_REGISTRY_DB_PATH override points process-local test metadata to
+  writable scratch; corrected default/inventory runs passed without HOME,
+  authentication or security changes. No duplicate tests were launched during
+  the brief exec transport interruption; recovery was verified with pwd.
+- Exact published head/tree and hosted CI belong to the draft PR. Constructor
+  facts and existing native regression execution do not close M5-CPU; that fixed
+  qualification producer/protocol and one retained comparison remain next after
+  this consumer's integration.
+- New isolated branch/worktree feat/cpu-scheduler-owned-key-reuse at
+  /workspace/pantograph-owned-key-reuse starts from verified main dc64b895.
+  Root agent owns integration; target main. Retain it protected for parent review;
+  no worktree or prior branch is eligible for cleanup under this task.
+- PR89 baseline strict Rustdoc/narrow-feature lint limitations and prior Forbidden
+  log evidence remain preserved, unsuppressed and unretried.
+
 ## 2026-10-21 — PR88 integration and result-payload foundation
 
 - User explicitly authorized normal PR88 merge and the next reviewed backend
