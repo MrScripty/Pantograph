@@ -2,6 +2,37 @@
 
 
 
+## 2026-10-21 — Single native cohort terminal failure and finite stop
+
+- PR90 actual main ecfed47d completed all20 checks/four workflows successfully,
+  preserving tree540618b7, twelve prior branch tips and eight prior clean
+  worktrees. Integration receipt SHA2569d7e20d34d5a1a55811134dd35058f3795f0f966a0fdf49b0c05b95b84a38daf.
+- Independent review approved the exact nine-path staged source for commit/draft,
+  then exact frozen manifest/binary for one run after that actual-main gate.
+  Source fb7ba0e3/tree203f7b4a and manifest1aecf82f were unchanged. Root alone ran
+  the reviewed supervisor once, with no concurrent local compilation.
+- Terminal result FAILED, exit101, reaped, no timeout: baseline completed two
+  forwards,6encodings/0hits/0retained and acknowledged closes/shutdown; frozen
+  candidate-ID distinctness oracle failed on runtime.candle. Enabled never ran.
+  Both source-author and independent source/raw review confirmed candidate_id
+  is stable runtime-alternative identity, not unique member custody. The
+  pre-run source/fixture review missed that distinction. Do not reinterpret
+  the old oracle, erase its failure or continue to an enabled-only run.
+- The [successor result report](reports/2026-10-21-m5-native-key-reuse-result.md)
+  records exact provenance, actual baseline facts, limits and durable archived
+  originals. Distinct actual custody identities, joins, owners4→6→8, numerical
+  outputs/readbacks and cleanup checked out independently. Conservative VRAM
+  reservation claims are present; no physical allocation/GPU claim follows.
+- Finite stop: INT-89/M5-SW/M6-SW complete within existing limits; M5-CPU failed
+  v1, M6-CLOSE unaccepted. Publish unchanged producer/oracle/protocol plus
+  independently reviewed failure disposition as draft. Do not merge a failed
+  qualification or select another allocator/diagnostic domain. Any evidenced
+  oracle correction/new physical cohort requires separate prospective replanning.
+  Missing representative workloads/hardware did not prevent this software work.
+- Original once-only evidence root, exclusive marker and all branches/worktrees
+  remain retained. Historical denied-log evidence and baseline strict inference
+  lint/Rustdoc limitations remain unretried and unsuppressed.
+
 ## 2026-10-21 — PR90 integration and fixed native comparison admission
 
 - User explicitly authorized guarded normal merge at c45d103f and the finite
