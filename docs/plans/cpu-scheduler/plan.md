@@ -2,9 +2,9 @@
 
 **Plan status:** `Active` — M1/M2/M3, bounded M4, M5 C1/C2a, M6a and the bounded warm-service/grouping diagnostic producer are accepted and merged. Overall M5, broader M6 and real-model qualification remain unaccepted.
 
-**Current phase:** PR88 merged normally as `dc9267831ee846229d365fa17e5bf9250b01868e`, exact independently reviewed tree `88aaf720384c5ff1537810a58dfd6fc055bc38b3`, preserving main4561 and head8306 as parents. All 22 PR check runs and four PR workflows passed. CodeRabbit skipped draft source review; independent source review owns approval. Local full-library evidence is 1,047 passes; hosted focused selection includes both new worker tests among 84 private-owner cases. Prior integration PR81 → PR83 → PR85 → PR86 → PR87 and all original branches/PR84 lineage remain protected. All20 post-merge check runs and all four workflows passed at dc926783; their identities are recorded separately.
+**Current phase:** PR89 merged normally as `dc64b895180260ceef8619bedd1ac6d8b756a3ec`, tree `2d59d369f11b89e119c54afce9f0a6df86ada4bd`, preserving main `dc926783` and source `48717570` as parents. Independent exact-source review approved merging; all 22 source check runs and four PR workflows passed. Post-merge CI is pending. CodeRabbit status supplies no independent source-review credit. PR88 and prior integrations remain accepted within their reported limits; all earlier branches, PR84 lineage and unrelated work remain protected.
 
-**Next slice:** The user authorized a proportionate allocation/lifetime foundation after PR88 integration. Independent pre-code review admitted [completed-result ownership attribution](reports/2026-10-21-result-payload-attribution.md) at the existing Candle embedding job boundary. Track immutable original completed-result payload capacity through actual Shared/Arc custody, gated solely by the existing calibration owner. This is post-materialization ownership evidence, with explicit untracked construction, tensor/alias, scratch/worker, residency and caller-copy allocations. Keep admission/default policy unchanged. Complete allocator attribution still requires separately reviewed backend/dependency hooks; reservation/RSS proxies remain inadmissible. Preserve all earlier branches and unrelated work. The reviewed CI follow-up explicitly discovers and executes all twelve new feature-gated cases, retaining exact revision/result evidence; existing checks and controls remain intact.
+**Next slice:** Verify and publish the implemented ordinary-member key-reuse consuming path through the protected residency facade, following the [finite M5/M6 checklist](reports/2026-10-21-m5-m6-completion-checklist.md). The additive constructor choice reuses the immutable configuration snapshot; preserve the existing constructor, admission and lifecycle. The integrator selects C2's safe ordinary-member planning-reuse option as this supported envelope. Actual CPU comparison and final consumer qualification remain required before accepting that envelope. Complete allocator instrumentation is separate future work for a complete-memory claim, not a prerequisite for cost-free key reuse. Do not add another partial instrumentation domain instead of closing the five finite checklist rows.
 
 **Acceptance status:** M1 merged as PR73 in main `07b23d47`; the original
 negative cohort and the separately accepted C3 supplement remain unchanged.
@@ -218,8 +218,12 @@ and write sets receive an independent review before their first code change.
 | M2 / Accepted; merged PR76 | Bounded completion lookahead for a disclosed CPU cohort, initially advisory on actual work. Extend existing scheduler kernels, workflow capture and native evidence producer only. | M1; complete comparable evidence for every admitted alternative/transition, including unfinished obligations. Hand-computed independent oracles, work-budget refusal, missing/stale evidence, owner invalidation and actual CPU trace correspondence. No forecasts authorize execution. Promote only a separately qualified action subset; do not fill missing cold/transfer costs with zero. |
 | M3 / Accepted; PR81 merged as71cfd845 | Explicit per-app/bucket service opportunities at an authoritative ready-work boundary, alongside priorities. Writes confined to scheduler/workflow queue/attribution integration and tests after its design review. | M1 and a bounded eligible population; use authenticated existing attribution, not arbitrary caller identities. Fixed modeled traces prove opportunity/order, then actual CPU sessions from two authenticated units prove progress under repeated foreground arrival and cancellation. No wall-clock guarantee for unbounded nonpreemptible jobs. Missing entitlement identity has an explicit owned disposition. |
 | M4 / Bounded C4/C5 accepted; merged as fa3a9b88 | CPU residency actions improve a specified repeated-model workflow without violating cleanup; serial preparation/eviction only. | Independently reviewed synthetic-fixture two-model, pressure and source-assisted cancellation evidence; six enforced inventory/native cases and all exact candidate CI passed. No overlapping loads, speculative release, automatic recovery, trained-model, speedup or allocator-memory qualification. Historical failures remain failures. |
-| M5 / C1 and C2a implemented; integration owned by PR85/PR86 | C1 supplies the bounded advisory library policy. C2a reuses pure workload keys on the actual sequential worker path; it does not combine native executions. | Source/tests/evidence independently reviewed. C1 scheduler has 222 fresh passes; C2a candidate CI passed. Required current integration checks remain owned by the PRs. Overall C2 execution/performance acceptance and actual CPU grouped-versus-singleton evidence remain separate; native/continuous execution remains Deferred. |
-| M6 / M6a source accepted; broader rollout planned | Read-only constructor configuration and a fixed hosted scalar diagnostic document existing explicit host choices. No mode activation, UI, IPC or persistence is added. | M6a source/tests/guide independently reviewed; 19 fresh constructor/consumer cases and all source-candidate CI pass. Documentation successor and final integration checks are recorded in PR87. Broader rollout requires reviewed consumer contracts and real consuming-path evidence. Default activation and deployment remain separate decisions. |
+| M5 / C1 and C2a merged; supported-envelope qualification pending | C1 supplies the bounded advisory library policy. C2a reuses pure workload keys on the actual sequential worker path; it does not combine native executions. | Source/tests/evidence independently reviewed. C1 scheduler has 222 fresh passes; C2a candidate CI passed. PR85/86 integration is complete. The finite checklist selects ordinary-member key reuse; its actual CPU comparison remains required. Native/continuous execution remains Deferred; no complete-memory or speedup acceptance is inferred. |
+| M6 / M6a merged; owning-consumer key-reuse choice next | Accepted M6a supplies read-only constructor configuration and a fixed hosted scalar diagnostic, with no mode activation. The next additive owning constructor explicitly selects existing key reuse; no UI, IPC or persistence is added. | M6a source/tests/guide independently reviewed; 19 fresh constructor/consumer cases and all source-candidate CI pass. PR87 integration is complete. The finite checklist requires the protected owning consumer and actual CPU evidence before scoped closure. Default activation and deployment remain separate decisions. |
+
+Dated admissions below preserve binding invariants and original evidence. Their
+then-pending integration/status narration is historical; the current milestone
+table and finite completion checklist own live acceptance and remaining work.
 
 ### M5 C1 bounded grouping kernel admission
 
@@ -953,10 +957,11 @@ push and use normal CI for completed source changes; no forced updates or securi
 suppression. Where CI triggers only on PR/main, report that limitation and use a
 review PR only when authorized, never an unauthorized main push to obtain CI.
 
-Current M1 design admission is approved by independent feasibility and standards
-reviewers; findings and disposition are in the execution ledger. Publication through the
-authorized GitHub connector is available; Git CLI GraphQL reads return HTTP 403 in this saved environment; the GitHub connector
-read of PR73 succeeds. Publication must verify the supported connector/write path.
+Historical M1 design admission and publication restrictions are retained in the
+execution ledger. Current connected actor and remote state were verified for
+PR89; permitted Git CLI metadata reads and the authorized GitHub connector merge
+completed. No historical log-storage denial is reopened by that capability.
+Current remaining gates and stop conditions are the finite completion checklist.
 No evidence is accepted merely because source compiles or a historical report is
 green. Full simulator differential acceptance remains unavailable without the
 verified archive and is not claimed for the independently qualified CPU subset.
@@ -969,7 +974,7 @@ or measured regression that invalidates the promised useful outcome. Fix routine
 implementation defects inside the admitted boundary without repeating design
 ceremonies. GPU/remote remain Deferred until the stated environment and authority.
 
-## Final Acceptance
+## Historical M1 acceptance checkpoint
 
 M0 is accepted. M1 implementation and CPU/ranking/measurement evidence are
 independently reviewed. The original release cohort remains negative for
