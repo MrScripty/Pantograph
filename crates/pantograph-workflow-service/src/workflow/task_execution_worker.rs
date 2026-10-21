@@ -1601,6 +1601,18 @@ async fn claim_and_execute_runtime_branch_event(
                 }
             }
         }
+        if let Some(admission) = fair_admission.as_ref() {
+            if mode.grouping_needs_refresh(&admission.member) {
+                let window = service.session_store_guard().ok().and_then(|store| {
+                    store.serial_ready_window(
+                        &command.session_id,
+                        &command.workflow_run_id,
+                        admission.member.task.task_id.as_str(),
+                    )
+                });
+                mode.refresh_grouping(window);
+            }
+        }
         let pair = service.session_store_guard().ok().and_then(|store| {
             store.serial_ready_pair(&command.session_id, &command.workflow_run_id)
         });

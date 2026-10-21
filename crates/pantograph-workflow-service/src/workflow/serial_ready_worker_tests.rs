@@ -1,5 +1,6 @@
 mod serial_ready_tests {
     use super::*;
+    use crate::workflow::serial_ready::SerialReadyPortAdapter;
     use crate::workflow::*;
     use pantograph_runtime_host_contracts::{
         RuntimeHostExecutionDiagnostic, RuntimeHostExecutionDiagnosticCode,
@@ -729,6 +730,469 @@ mod serial_ready_tests {
             drive_runtime_branch_continuations(&environment, &registry, continuations).await;
         }
     }
+    fn grouping_config() -> WorkflowSerialReadyConfig {
+        WorkflowSerialReadyConfig::default()
+            .with_fair_service_opportunities()
+            .with_bounded_grouping()
+            .unwrap()
+    }
+
+    fn grouping_cpu_run(
+        service: &WorkflowService,
+        run: &str,
+        texts: &[&str],
+        client: &str,
+    ) -> String {
+        let session = cpu_run_with_attribution_inputs(
+            service,
+            run,
+            texts,
+            Some(WorkflowExecutionSessionAttributionContext {
+                client_id: client.into(),
+                client_session_id: format!("session.{client}"),
+                bucket_id: "bucket.grouping".into(),
+            }),
+        );
+        // The older two-member fixture intentionally enqueues only two events.
+        // This fixed cohort supplies every additional member's real worker event.
+        for index in 2..texts.len() {
+            let event = WorkflowRuntimeBranchTaskEventRecord::ready(
+                WorkflowRuntimeBranchTaskEventRequest {
+                    event_id: WorkflowRuntimeBranchTaskEventId::parse(format!(
+                        "event.{run}.{index}"
+                    ))
+                    .unwrap(),
+                    session_id: session.clone(),
+                    workflow_id: WORKER_BATCH_WORKFLOW_ID.into(),
+                    workflow_run_id: run.into(),
+                    scheduler_task_id: format!("task.cpu.{index}"),
+                    scheduler_task_attempt_id: None,
+                    attempt_generation: 1,
+                    queued_input_keys: vec![],
+                    output_targets: Some(vec![WorkflowOutputTarget {
+                        node_id: WORKER_BATCH_NODE_ID.into(),
+                        port_id: "image".into(),
+                    }]),
+                    timeout_ms: Some(500),
+                    batching_key: None,
+                    runtime_source_context: runtime_source_context(),
+                    batch_eligibility: None,
+                    ready_at_ms: unix_timestamp_ms().saturating_sub(1),
+                },
+            )
+            .unwrap();
+            service
+                .runtime_branch_task_event_repository
+                .lock()
+                .unwrap()
+                .enqueue(event)
+                .unwrap();
+        }
+        session
+    }
+
+    async fn grouping_run_to_response(
+        service: Arc<WorkflowService>,
+        session: &str,
+        id: &str,
+    ) -> WorkflowTaskExecutionWorkerOutcome {
+        let environment =
+            WorkflowTaskExecutionWorkerRuntimeBranchEnvironment::new(service, test_host());
+        let command = runtime_branch_command_for_session_run(session, id);
+        let registry = WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistry::new();
+        let (responder, receiver) =
+            WorkflowTaskExecutionWorkerRuntimeBranchCompletionResponder::channel();
+        let registration = registry.register_workflow_run(&command, responder).unwrap();
+        drive_runtime_branch_continuations(
+            &environment,
+            &registry,
+            vec![WorkflowRuntimeBranchContinuation {
+                command,
+                registration,
+            }],
+        )
+        .await;
+        receiver.await.unwrap()
+    }
+
+    #[test]
+    fn bounded_grouping_requires_explicit_fair_service_opt_in() {
+        assert!(WorkflowSerialReadyConfig::default()
+            .with_bounded_grouping()
+            .is_err());
+        assert!(WorkflowSerialReadyConfig::default()
+            .with_completion_lookahead()
+            .with_bounded_grouping()
+            .is_err());
+        assert!(WorkflowSerialReadyConfig::default()
+            .with_fair_service_opportunities()
+            .with_bounded_grouping()
+            .is_ok());
+    }
+
+    #[tokio::test]
+    async fn bounded_grouping_controlled_cpu_cohorts_preserve_results_and_member_lifecycle() {
+        // n=2 is a focused regression. The prospective mechanism comparison is
+        // n=8, one baseline and one candidate, unique 1024-byte text per member.
+        // This synthetic port is not model inference; elapsed time is descriptive.
+        for count in [2_usize, 8] {
+            let texts = (0..count)
+                .map(|index| format!("{index:04}{}", "x".repeat(1020)))
+                .collect::<Vec<_>>();
+            let inputs = texts.iter().map(String::as_str).collect::<Vec<_>>();
+            let mut evidence = Vec::new();
+            let mut key_oracles = Vec::new();
+            for grouped in [false, true] {
+                let port = CpuPort::new();
+                port.verified_reuse.store(true, Ordering::Release);
+                let config = if grouped {
+                    grouping_config()
+                } else {
+                    WorkflowSerialReadyConfig::default().with_fair_service_opportunities()
+                };
+                let service = service(port.clone(), config);
+                let id = format!("run.grouping.cohort.{count}");
+                let session = grouping_cpu_run(&service, &id, &inputs, "client.cohort");
+                let start = std::time::Instant::now();
+                let outcome = tokio::time::timeout(
+                    Duration::from_secs(2),
+                    grouping_run_to_response(service.clone(), &session, &id),
+                )
+                .await
+                .unwrap();
+                let elapsed = start.elapsed();
+                assert_runtime_branch_completed_response(outcome, &id, &format!("image for {id}"));
+                let expected = (0..count)
+                    .map(|index| format!("task.cpu.{index}"))
+                    .collect::<Vec<_>>();
+                assert_eq!(port.tasks(), expected);
+                let requests = port.requests.lock().unwrap();
+                assert_eq!(requests.len(), count);
+                let mut assignments = std::collections::BTreeSet::new();
+                let mut executions = std::collections::BTreeSet::new();
+                for (index, request) in requests.iter().enumerate() {
+                    assert_eq!(request.members.len(), 1);
+                    let member = &request.members[0];
+                    assert!(assignments.insert(member.assignment_id.clone()));
+                    assert!(executions.insert(member.execution_request_id.clone()));
+                    assert_eq!(member.handoff.task_id.as_str(), expected[index]);
+                    assert_eq!(member.materialized_inputs.len(), 1);
+                    assert_eq!(
+                        member.materialized_inputs[0].value,
+                        pantograph_runtime_host_contracts::RuntimeHostExecutionInputValue::String(
+                            texts[index].clone()
+                        )
+                    );
+                }
+                drop(requests);
+                let cleanups = port.cleanups.lock().unwrap();
+                assert_eq!(cleanups.len(), count);
+                assert_eq!(
+                    cleanups
+                        .iter()
+                        .map(|event| event.task_id.to_string())
+                        .collect::<Vec<_>>(),
+                    expected
+                );
+                drop(cleanups);
+                assert_eq!(service.serial_service_pending_for_test().unwrap(), 0);
+                let samples = service.serial_ready_samples_for_test();
+                assert_eq!(samples.len(), count);
+                key_oracles.push(
+                    samples
+                        .into_iter()
+                        .map(|(task, key, _, _)| (task, key))
+                        .collect::<Vec<_>>(),
+                );
+                let (encodings, hits, retained) = service.serial_grouping_work_for_test();
+                assert_eq!(retained, 0, "completed inputs must not remain cached");
+                if grouped {
+                    // n fill encodings + n independent final native-bind encodings.
+                    assert_eq!(encodings, (2 * count) as u64);
+                    // Two pair lookups for n-1 pairs and one capture per member.
+                    assert_eq!(hits, (3 * count - 2) as u64);
+                } else {
+                    // Two hashes for n-1 pairs, n captures and n final bindings.
+                    assert_eq!(encodings, (4 * count - 2) as u64);
+                    assert_eq!(hits, 0);
+                }
+                evidence.push((grouped, encodings, hits, elapsed));
+            }
+            assert_eq!(key_oracles[0], key_oracles[1]);
+            if count == 8 {
+                eprintln!(
+                    "C2a controlled synthetic CPU cohort n={count}, bytes/member=1024, no warmup, one invocation per mode; (grouped,key_encodings,hits,elapsed)={evidence:?}; snapshot serialization/cloning/equality are additional work; no real-model or speedup claim"
+                );
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn bounded_grouping_unknown_window_uses_ordinary_singleton_fallback() {
+        let port = CpuPort::new();
+        let service = service(port.clone(), grouping_config());
+        // An informational proof diagnostic is ordinarily supported, but this
+        // deliberately narrow cache accepts only diagnostic-free snapshots.
+        let id = "run.grouping.window.fallback";
+        let session = grouping_cpu_run(&service, id, &["slow", "fast"], "client.fallback");
+        {
+            let mut store = service.session_store_guard().unwrap();
+            let mut proof = store
+                .active_run_runtime_dispatch_readiness_proof(&session, id, "task.cpu.0")
+                .unwrap()
+                .unwrap();
+            proof.preflight_result.diagnostics.push(
+                serde_json::from_value(serde_json::json!({
+                    "code": "not_implemented", "severity": "info",
+                    "message": "controlled cache-unsupported proof diagnostic"
+                }))
+                .unwrap(),
+            );
+            store
+                .record_active_run_runtime_dispatch_readiness_proof(
+                    &session,
+                    id,
+                    "task.cpu.0",
+                    proof,
+                )
+                .unwrap();
+            assert!(store
+                .serial_ready_window(&session, id, "task.cpu.0")
+                .is_none());
+        }
+        run(service.clone(), &session, id).await;
+        assert_eq!(port.tasks(), ["task.cpu.0", "task.cpu.1"]);
+        assert_eq!(port.cleanups.lock().unwrap().len(), 2);
+        let (encodings, hits, retained) = service.serial_grouping_work_for_test();
+        // The first window refuses. Once the first member completes, the second
+        // singleton may be freshly cached; both final-bind hashes still execute.
+        assert_eq!(encodings, 6);
+        assert_eq!(hits, 1);
+        assert_eq!(retained, 0);
+    }
+
+    #[test]
+    fn bounded_grouping_exact_snapshot_changes_cannot_hit_a_cached_key() {
+        let service = service(CpuPort::new(), grouping_config());
+        let id = "run.grouping.snapshot";
+        let session = attributed_cpu_run(&service, id, "client.snapshot");
+        let pair = service
+            .session_store_guard()
+            .unwrap()
+            .serial_ready_pair(&session, id)
+            .unwrap();
+        let mode = service.serial_ready_mode.as_ref().unwrap();
+        for mutation in 0..3 {
+            let window = service
+                .session_store_guard()
+                .unwrap()
+                .serial_ready_window(&session, id, "task.cpu.0")
+                .unwrap();
+            mode.refresh_grouping(Some(window));
+            let before = service.serial_grouping_work_for_test();
+            assert_eq!(mode.select(&pair).position, 0);
+            let after_hit = service.serial_grouping_work_for_test();
+            assert_eq!(after_hit.0, before.0);
+            assert_eq!(after_hit.1, before.1 + 2);
+            let mut changed = pair.clone();
+            match mutation {
+                0 => changed.members[0].record.state_version += 1,
+                1 => {
+                    changed.members[0].proof.readiness_proof_id =
+                        DependencyReadinessProofId::parse("proof.changed.identity").unwrap();
+                }
+                2 => {
+                    changed.members[0].inputs[0].value =
+                        pantograph_runtime_host_contracts::RuntimeHostExecutionInputValue::String(
+                            "changed actual text".into(),
+                        );
+                }
+                _ => unreachable!(),
+            }
+            assert_eq!(mode.select(&changed).position, 0);
+            let after_miss = service.serial_grouping_work_for_test();
+            assert_eq!(after_miss.0, after_hit.0 + 1);
+            assert_eq!(after_miss.1, after_hit.1 + 1);
+            assert!(mode.grouping_needs_refresh(&changed.members[0]));
+        }
+    }
+
+    #[tokio::test]
+    async fn bounded_grouping_cached_capture_keeps_independent_native_input_fence() {
+        let port = CpuPort::new();
+        let service = service(port.clone(), grouping_config());
+        let id = "run.grouping.final.input";
+        let session = attributed_cpu_run(&service, id, "client.final.input");
+        let window = service
+            .session_store_guard()
+            .unwrap()
+            .serial_ready_window(&session, id, "task.cpu.0")
+            .unwrap();
+        let admitted = window[0].clone();
+        run(service.clone(), &session, id).await;
+        let mut request = port.requests.lock().unwrap()[0].clone();
+        let mode = service.serial_ready_mode.as_ref().unwrap();
+        mode.refresh_grouping(Some(window));
+        let scope = mode.enter().await.unwrap();
+        let before = service.serial_grouping_work_for_test();
+        scope.capture(&admitted, None).unwrap();
+        let captured = service.serial_grouping_work_for_test();
+        assert_eq!(captured.0, before.0);
+        assert_eq!(captured.1, before.1 + 1);
+        request.members[0].materialized_inputs[0].value =
+            pantograph_runtime_host_contracts::RuntimeHostExecutionInputValue::String(
+                "different final request text".into(),
+            );
+        let cancellation =
+            RuntimeHostExecutionCancellationHandle::running(request.cancellation_context.clone());
+        let error = SerialReadyPortAdapter(mode.clone())
+            .execute_runtime_host_batch_request(request, cancellation)
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(error, RuntimeHostExecutionPortError::ExecutionFailed { message }
+            if message == "serial exact input changed before owner execution")
+        );
+        assert_eq!(service.serial_grouping_work_for_test().0, captured.0 + 1);
+        assert_eq!(port.requests.lock().unwrap().len(), 2);
+        assert_eq!(port.cleanups.lock().unwrap().len(), 2);
+        drop(scope);
+    }
+
+    #[tokio::test]
+    async fn bounded_grouping_reenters_fair_service_between_members_after_cleanup() {
+        let port = CpuPort::new();
+        port.block_cleanup.store(true, Ordering::Release);
+        let service = service(port.clone(), grouping_config());
+        let first = attributed_cpu_run(&service, "run.grouping.first", "client.first");
+        let rival = attributed_cpu_run(&service, "run.grouping.rival", "client.rival");
+        let first_handle = tokio::spawn({
+            let service = service.clone();
+            async move { run(service, &first, "run.grouping.first").await }
+        });
+        tokio::time::timeout(Duration::from_secs(2), port.cleanup_started.notified())
+            .await
+            .unwrap();
+        let rival_handle = tokio::spawn({
+            let service = service.clone();
+            async move { run(service, &rival, "run.grouping.rival").await }
+        });
+        wait_for_fair_waiters(&service, 1).await;
+        assert_eq!(port.requests.lock().unwrap().len(), 1);
+        assert!(port.cleanups.lock().unwrap().is_empty());
+        port.block_cleanup.store(false, Ordering::Release);
+        port.cleanup_release.notify_one();
+        for handle in [first_handle, rival_handle] {
+            tokio::time::timeout(Duration::from_secs(2), handle)
+                .await
+                .unwrap()
+                .unwrap();
+        }
+        let requests = port.requests.lock().unwrap();
+        assert_eq!(requests.len(), 4);
+        let starts = requests
+            .iter()
+            .map(|request| {
+                (
+                    request.members[0].handoff.workflow_run_id.to_string(),
+                    request.members[0].handoff.task_id.to_string(),
+                )
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            starts[0],
+            ("run.grouping.first".into(), "task.cpu.0".into())
+        );
+        assert_eq!(
+            starts[1],
+            ("run.grouping.rival".into(), "task.cpu.0".into())
+        );
+        assert_eq!(port.cleanups.lock().unwrap().len(), 4);
+        assert_eq!(service.serial_service_pending_for_test().unwrap(), 0);
+    }
+
+    #[tokio::test]
+    async fn bounded_grouping_cancellation_waits_for_actual_drain_and_cleanup_without_training() {
+        let port = CpuPort::new();
+        port.block.store(true, Ordering::Release);
+        port.block_cleanup.store(true, Ordering::Release);
+        let service = service(port.clone(), grouping_config());
+        let id = "run.grouping.cancel";
+        let session = attributed_cpu_run(&service, id, "client.cancel");
+        let handle = tokio::spawn({
+            let service = service.clone();
+            let session = session.clone();
+            async move { run(service, &session, id).await }
+        });
+        tokio::time::timeout(Duration::from_secs(2), port.started.notified())
+            .await
+            .unwrap();
+        let attempt = service
+            .session_store_guard()
+            .unwrap()
+            .active_run_scheduler_task_attempt_id(&session, id, "task.cpu.0")
+            .unwrap();
+        service
+            .scheduler_task_orchestrator
+            .request_started_runtime_task_cancellation(
+                &SchedulerTaskId::parse("task.cpu.0").unwrap(),
+                &attempt,
+                "controlled grouped member cancellation",
+            )
+            .unwrap();
+        assert_eq!(port.requests.lock().unwrap().len(), 1);
+        assert!(port.cleanups.lock().unwrap().is_empty());
+        port.block.store(false, Ordering::Release);
+        port.release.notify_one();
+        tokio::time::timeout(Duration::from_secs(2), port.cleanup_started.notified())
+            .await
+            .unwrap();
+        assert_eq!(port.requests.lock().unwrap().len(), 1);
+        assert!(service.serial_ready_samples_for_test().is_empty());
+        port.block_cleanup.store(false, Ordering::Release);
+        port.cleanup_release.notify_one();
+        tokio::time::timeout(Duration::from_secs(2), handle)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(service
+            .serial_ready_samples_for_test()
+            .iter()
+            .all(|(task, _, _, _)| task != "task.cpu.0"));
+        assert_eq!(
+            port.cleanups
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|event| event.task_id.as_str() == "task.cpu.0")
+                .count(),
+            1
+        );
+        assert_eq!(service.serial_service_pending_for_test().unwrap(), 0);
+    }
+
+    #[tokio::test]
+    async fn bounded_grouping_failed_cleanup_keeps_native_owner_fenced() {
+        let port = CpuPort::new();
+        port.fail_cleanup.store(true, Ordering::Release);
+        let service = service(port.clone(), grouping_config());
+        let first = attributed_cpu_run(&service, "run.grouping.failed.cleanup", "client.failure");
+        run(service.clone(), &first, "run.grouping.failed.cleanup").await;
+        assert_eq!(service.serial_grouping_work_for_test().2, 0);
+        let next = attributed_cpu_run(&service, "run.grouping.after.failure", "client.failure");
+        run(service.clone(), &next, "run.grouping.after.failure").await;
+        assert_eq!(port.tasks(), ["task.cpu.0"]);
+        assert!(port.cleanups.lock().unwrap().is_empty());
+        assert!(service.serial_ready_samples_for_test().is_empty());
+        assert!(service
+            .serial_ready_mode
+            .as_ref()
+            .unwrap()
+            .enter()
+            .await
+            .is_err());
+    }
+
     fn attributed_cpu_run(service: &WorkflowService, run: &str, client: &str) -> String {
         // Controlled store fixture only; actual credential verification is covered
         // by public attributed-session tests and the native M3 cohort.

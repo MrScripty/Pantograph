@@ -832,3 +832,54 @@ coordination; parent owns its later disposition after reachable handoff.
   CI and coordinated integration. Historical hosted first cause/private raw
   readiness remain unknown. See [C5 repair/publication handoff](reports/2026-10-20-m4-c5-local.md)
   and its three exact retained evidence archives. No further execution is admitted.
+
+
+## 2026-10-21: C1 publication and C2a runtime reuse continuation
+
+- C1 was normally pushed as new branch `feat/cpu-scheduler-m5-bounded-grouping`
+  and draft [PR85](https://github.com/MrScripty/Pantograph/pull/85), exact head
+  `f3f438a23b507a0f82a0c2f316a83f1148798643`, based on PR83 `bd66da4e`.
+  Authenticated REST login and PR creator are MrScripty. Exact remote tree/blobs,
+  original clean checkout and preservation of all pre-existing refs were checked.
+  All four workflows and 16 checks passed, including sandboxed Chrome. Its
+  success does not establish the cause of PR83's old failed browser run. No
+  denied log retry, model acquisition, security change or merge occurred.
+- The current user admits C2 continuation on a separate dependent branch.
+  Independent discovery rejected a producerless optional cost-facts port as
+  scaffolding. Existing loaded-runtime memory is static package-derived residency;
+  per-member incremental/peak memory and grouping latency are unavailable.
+  Serial history is actual dispatch-through-matched-cleanup timing, and graph
+  shape labels are declared metadata. These are not interchangeable estimates.
+- Independent pre-code review admitted C2a: bounded, opt-in memoization of existing
+  pure workload-key encoding/hashing using real store-owned Ready/input facts.
+  Refill first-at-most-eight only on absent/changed anchor; every hit requires
+  complete bounded snapshot equality. Proposal and all execution/resource/owner
+  authority are excluded from retained state. Members keep M3 opportunities,
+  preparation, Start, cancellation and cleanup; final request hashing is fresh.
+- The [C2a report](reports/2026-10-21-m5-c2a-key-reuse.md) fixes the write set,
+  complete raw bounds, lock ordering, full encoding-count oracle and one bounded
+  eight-member synthetic comparison before execution. Source and tests are
+  Implementing; review/checks and normal dependent draft CI remain required.
+- Independent read-only integration review finds main -> M3 -> PR83 -> PR85
+  ancestry. A later parent-authorized merge-commit sequence can preserve exact
+  heads: integrate PR81, verify ancestry, retarget/recheck PR83 onto main, integrate
+  only after M4 disposition, then retarget/recheck PR85 onto main. PR84's repair
+  is already represented and must not be integrated twice. No squash/rebase,
+  branch deletion, retarget or merge was performed. Empty GitHub approval arrays
+  and absent main protection are not domain acceptance or merge authorization.
+
+- C2a source/test review caught and corrected unused-cache retention after an
+  execution-success/cleanup-failure split. Both failed and poisoned scopes now
+  clear all derived keys; only acknowledged successful completion prunes one.
+  Independent review then approved the complete source and tests.
+- Focused scheduler gates passed: 232 tests, one existing ignored probe; Clippy,
+  Rustdoc and formatting. Workflow passed 1,037 unit tests before the held
+  comparison, plus own-package Clippy/Rustdoc/formatting. Initial missing test
+  import and overlong-result fixture failures were preserved and corrected.
+  No source or workload winner retry occurred in the held comparison.
+- The single fixed eight-member synthetic comparison passed first execution:
+  baseline30 versus candidate16 key encodings,22hits, exact results/order/identity/
+  cleanup/keys. Descriptive elapsed29.727789ms/29.418059ms is no speedup evidence;
+  snapshot serialization/raw checks/clones/equality are additional uncounted work.
+  [C2a check receipt](reports/2026-10-21-m5-c2a-checks.json) records hashes/commands.
+  Normal dependent draft/hosted CI remain before this publication checkpoint.
