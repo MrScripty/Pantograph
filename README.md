@@ -46,4 +46,3 @@ Use `npm run build:desktop` to package it. The browser demo and native desktop h
 ## License
 
 The repository includes Apache-2.0 license material while Cargo metadata declares `MIT OR Apache-2.0`. Resolve that mismatch before distribution; see [release guidance](docs/release.md).
-
