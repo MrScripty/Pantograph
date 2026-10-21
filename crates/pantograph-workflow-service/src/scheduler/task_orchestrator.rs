@@ -93,6 +93,7 @@ impl AsRef<pantograph_runtime_host_contracts::ReservationLifecycleApplication>
 #[derive(Clone)]
 #[must_use]
 pub(crate) struct WorkflowSchedulerTaskOrchestrator {
+    node_registry: Arc<crate::graph::NodeRegistry>,
     runtime_host_dispatcher: SchedulerRuntimeHostDispatcher,
     runtime_host_batch_dispatcher: SchedulerRuntimeHostBatchDispatcher,
     reservation_lifecycle_port: Arc<dyn ReservationLifecyclePort>,
@@ -103,6 +104,7 @@ pub(crate) struct WorkflowSchedulerTaskOrchestrator {
 #[derive(Debug, Clone)]
 #[must_use]
 pub(crate) struct StartedNonRuntimeTaskExecution {
+    custom_invocation: Option<Arc<crate::custom_nodes::PreparedCustomNodeInvocation>>,
     task: WorkflowSchedulerTask,
     materialized_results: Vec<WorkflowSchedulerTaskResult>,
     running_record: SchedulerTaskStateRecord,
@@ -215,6 +217,12 @@ impl SelectedRuntimeTaskDispatch {
 }
 
 impl StartedNonRuntimeTaskExecution {
+    pub(crate) fn custom_node_cancelled(&self) -> bool {
+        self.custom_invocation
+            .as_ref()
+            .is_some_and(|invocation| invocation.is_cancelled())
+    }
+
     pub(crate) fn task(&self) -> &WorkflowSchedulerTask {
         &self.task
     }
@@ -279,6 +287,7 @@ impl WorkflowSchedulerTaskOrchestrator {
                 .expect("default scheduler lifecycle owner id"),
         );
         Self {
+            node_registry: Arc::new(crate::graph::NodeRegistry::new()),
             runtime_host_dispatcher,
             runtime_host_batch_dispatcher: SchedulerRuntimeHostBatchDispatcher::new(Arc::new(
                 UnavailableRuntimeHostBatchExecutionPort,
@@ -293,6 +302,11 @@ impl WorkflowSchedulerTaskOrchestrator {
                 ),
             )),
         }
+    }
+
+    pub(crate) fn with_node_registry(mut self, registry: Arc<crate::graph::NodeRegistry>) -> Self {
+        self.node_registry = registry;
+        self
     }
 
     pub(crate) fn with_runtime_host_dispatcher(
@@ -1217,6 +1231,29 @@ impl WorkflowSchedulerTaskOrchestrator {
         let running_transition =
             running_transition_from_ready(ready_record, ready_execution_intent.clone())?;
         let attempt_id = WorkflowSchedulerTaskAttemptId::new();
+        let materialized_results = store
+            .active_run_scheduler_task_results(session_id, workflow_run_id)
+            .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)?;
+        let custom_invocation = if matches!(
+            task.non_runtime_task_template,
+            Some(WorkflowSchedulerNonRuntimeTaskTemplate::CustomNode { .. })
+        ) {
+            Some(Arc::new(
+                self.node_registry
+                    .custom_nodes
+                    .prepare(crate::custom_nodes::CustomNodeInvocation {
+                        workflow_id: task.workflow_id.as_str().into(),
+                        workflow_run_id: task.workflow_run_id.as_str().into(),
+                        task_id: task.task_id.as_str().into(),
+                        attempt_id: attempt_id.as_str().into(),
+                    })
+                    .map_err(|error| {
+                        WorkflowSchedulerTaskOrchestratorError::NonRuntimeTaskAdapter(error.into())
+                    })?,
+            ))
+        } else {
+            None
+        };
         self.track_task_lifecycle_handle(&task.task_id, &attempt_id)?;
         let (running_record, attempt_id, started_at_ms) = store
             .start_active_run_scheduler_task_attempt(
@@ -1231,10 +1268,8 @@ impl WorkflowSchedulerTaskOrchestrator {
                 self.release_task_lifecycle_handle_without_error(&task.task_id, &attempt_id);
             })?;
 
-        let materialized_results = store
-            .active_run_scheduler_task_results(session_id, workflow_run_id)
-            .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)?;
         Ok(StartedNonRuntimeTaskExecution {
+            custom_invocation,
             task: task.clone(),
             materialized_results,
             running_record,
@@ -1247,9 +1282,24 @@ impl WorkflowSchedulerTaskOrchestrator {
         &self,
         started: &StartedNonRuntimeTaskExecution,
     ) -> Result<WorkflowSchedulerTaskResult, WorkflowSchedulerTaskOrchestratorError> {
-        execute_non_runtime_scheduler_task(&started.task, &started.materialized_results)
+        let result = if let Some(WorkflowSchedulerNonRuntimeTaskTemplate::CustomNode { identity }) =
+            &started.task.non_runtime_task_template
+        {
+            crate::workflow::non_runtime_task_adapter::execute_custom_scheduler_task(
+                &started.task,
+                &started.materialized_results,
+                identity,
+                started.custom_invocation.as_deref().ok_or_else(|| {
+                    WorkflowSchedulerTaskOrchestratorError::NonRuntimeTaskAdapter(
+                        crate::custom_nodes::CustomNodeError::Unavailable.into(),
+                    )
+                })?,
+            )
             .await
-            .map_err(WorkflowSchedulerTaskOrchestratorError::NonRuntimeTaskAdapter)
+        } else {
+            execute_non_runtime_scheduler_task(&started.task, &started.materialized_results).await
+        };
+        result.map_err(WorkflowSchedulerTaskOrchestratorError::NonRuntimeTaskAdapter)
     }
 
     pub(crate) fn complete_started_non_runtime_task(
@@ -1260,6 +1310,13 @@ impl WorkflowSchedulerTaskOrchestrator {
         started: &StartedNonRuntimeTaskExecution,
         result: WorkflowSchedulerTaskResult,
     ) -> Result<SchedulerTaskStateRecord, WorkflowSchedulerTaskOrchestratorError> {
+        if started.custom_node_cancelled() {
+            return Err(
+                WorkflowSchedulerTaskOrchestratorError::NonRuntimeTaskAdapter(
+                    crate::custom_nodes::CustomNodeError::Cancelled.into(),
+                ),
+            );
+        }
         let completion_transition = completion_transition_from_running(&started.running_record)?;
         let record = store
             .complete_active_run_scheduler_task(
@@ -1287,15 +1344,29 @@ impl WorkflowSchedulerTaskOrchestrator {
             &started.running_record,
             non_runtime_adapter_failure_diagnostic(error),
         )?;
-        let record = store
-            .fail_active_run_scheduler_task_attempt(
+        let cancelled = matches!(
+            error,
+            WorkflowSchedulerNonRuntimeTaskAdapterError::CustomNode(
+                crate::custom_nodes::CustomNodeError::Cancelled
+            )
+        );
+        let record = if cancelled {
+            store.cancel_active_run_scheduler_task_attempt(
                 session_id,
                 workflow_run_id,
                 &started.attempt_id,
                 failure_transition,
             )
-            .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
-            .and_then(applied_terminal_task_state_record)?;
+        } else {
+            store.fail_active_run_scheduler_task_attempt(
+                session_id,
+                workflow_run_id,
+                &started.attempt_id,
+                failure_transition,
+            )
+        }
+        .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
+        .and_then(applied_terminal_task_state_record)?;
         self.release_task_lifecycle_handle(&started.task.task_id, &started.attempt_id)?;
         Ok(record)
     }
@@ -3642,6 +3713,29 @@ fn non_runtime_input_readiness(
     };
 
     match template {
+        WorkflowSchedulerNonRuntimeTaskTemplate::CustomNode { .. } => {
+            for binding in &task.input_bindings {
+                match materialized_bound_output(task, results, binding) {
+                    MaterializedBindingValue::Ready(WorkflowSchedulerTaskResultValue::String(
+                        _,
+                    )) => {}
+                    MaterializedBindingValue::Ready(_) => {
+                        return NonRuntimeInputReadiness::Invalid(scheduler_input_diagnostic(
+                            SchedulerTaskStateDiagnosticCode::InvalidTask,
+                            "custom-node input must be a bounded string",
+                        ))
+                    }
+                    MaterializedBindingValue::Blocked => return NonRuntimeInputReadiness::Blocked,
+                    MaterializedBindingValue::Unavailable(diagnostic) => {
+                        return NonRuntimeInputReadiness::InputUnavailable(diagnostic)
+                    }
+                    MaterializedBindingValue::Invalid(diagnostic) => {
+                        return NonRuntimeInputReadiness::Invalid(diagnostic)
+                    }
+                }
+            }
+            NonRuntimeInputReadiness::Ready
+        }
         WorkflowSchedulerNonRuntimeTaskTemplate::VectorOutput => {
             vector_output_input_readiness(task, results)
         }

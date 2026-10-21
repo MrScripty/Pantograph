@@ -44,10 +44,11 @@ pub(crate) fn validate_workflow_semantic_version(
     Ok(())
 }
 
-pub(super) fn validate_workflow_graph_submit_readiness(
+pub(super) fn validate_workflow_graph_submit_readiness_with_registry(
     graph: &WorkflowGraph,
+    registry: &NodeRegistry,
 ) -> Result<(), WorkflowServiceError> {
-    let diagnostics = validate_workflow_graph_contract_diagnostics(graph, &NodeRegistry::new());
+    let diagnostics = validate_workflow_graph_contract_diagnostics(graph, registry);
     let blocking_diagnostics = diagnostics
         .into_iter()
         .filter(|diagnostic| diagnostic.blocking_submission)

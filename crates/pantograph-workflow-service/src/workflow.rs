@@ -46,7 +46,7 @@ mod identity;
 mod io_contract;
 mod local_network_api;
 mod media_capability_contracts;
-mod non_runtime_task_adapter;
+pub(crate) mod non_runtime_task_adapter;
 mod preflight_api;
 #[allow(dead_code)]
 mod runtime_branch_batch_execution;
@@ -298,6 +298,7 @@ pub use crate::scheduler::{
 /// Service entrypoint for workflow API operations.
 #[derive(Clone)]
 pub struct WorkflowService {
+    node_registry: Arc<crate::graph::NodeRegistry>,
     serial_ready_mode: Option<Arc<serial_ready::SerialReadyMode>>,
     cohort_coverage_provider: Option<Arc<dyn WorkflowCohortCoverageProvider>>,
     session_store: Arc<Mutex<WorkflowExecutionSessionStore>>,

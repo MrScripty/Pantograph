@@ -16,6 +16,7 @@ mod fixtures;
 use fixtures::*;
 
 mod contracts;
+mod custom_nodes;
 mod diagnostics;
 mod local_network;
 mod runtime_preflight;

@@ -9,6 +9,7 @@
 extern crate workflow_nodes;
 
 pub mod capabilities;
+pub mod custom_nodes;
 pub mod graph;
 mod inference_dependency_planning;
 mod scheduler;

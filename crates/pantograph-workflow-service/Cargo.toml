@@ -46,5 +46,5 @@ pantograph-managed-dependencies = { path = "../pantograph-managed-dependencies" 
 [dev-dependencies]
 pumas-library.workspace = true
 rusqlite.workspace = true
-tokio.workspace = true
+tokio = { workspace = true, features = ["test-util"] }
 tempfile.workspace = true

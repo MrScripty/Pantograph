@@ -1,12 +1,12 @@
 use crate::graph::{
     inspect_workflow_graph, ConnectionCandidatesResponse, ConnectionCommitResponse,
     EdgeInsertionPreviewResponse, InferenceInterfaceApplyProposalRequest,
-    InsertNodeConnectionResponse, InsertNodeOnEdgeResponse, NodeRegistry, WorkflowFile,
-    WorkflowGraph, WorkflowGraphAddEdgeRequest, WorkflowGraphAddNodeRequest,
-    WorkflowGraphConnectRequest, WorkflowGraphCreateGroupRequest,
-    WorkflowGraphCurrentValidationRefreshRequest, WorkflowGraphCurrentValidationRefreshResponse,
-    WorkflowGraphCurrentValidationSummaryRequest, WorkflowGraphCurrentValidationSummaryResponse,
-    WorkflowGraphDeleteRequest, WorkflowGraphDeleteResponse, WorkflowGraphDeleteSelectionRequest,
+    InsertNodeConnectionResponse, InsertNodeOnEdgeResponse, WorkflowFile, WorkflowGraph,
+    WorkflowGraphAddEdgeRequest, WorkflowGraphAddNodeRequest, WorkflowGraphConnectRequest,
+    WorkflowGraphCreateGroupRequest, WorkflowGraphCurrentValidationRefreshRequest,
+    WorkflowGraphCurrentValidationRefreshResponse, WorkflowGraphCurrentValidationSummaryRequest,
+    WorkflowGraphCurrentValidationSummaryResponse, WorkflowGraphDeleteRequest,
+    WorkflowGraphDeleteResponse, WorkflowGraphDeleteSelectionRequest,
     WorkflowGraphEditSessionCloseRequest, WorkflowGraphEditSessionCloseResponse,
     WorkflowGraphEditSessionCreateRequest, WorkflowGraphEditSessionCreateResponse,
     WorkflowGraphEditSessionGraphRequest, WorkflowGraphEditSessionGraphResponse,
@@ -318,7 +318,7 @@ impl WorkflowService {
         let workflow = store.load_workflow(request.path)?;
         Ok(inspect_workflow_graph(
             workflow.graph,
-            &NodeRegistry::new(),
+            &self.node_registry,
             request.selected_node_id.as_deref(),
         ))
     }

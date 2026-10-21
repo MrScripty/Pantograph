@@ -551,9 +551,21 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                 .scheduler_task_orchestrator
                 .execute_started_non_runtime_task(&started)
                 .await;
+            // The active cancellation API uses this same store gate through its
+            // cancellation mutation. Completion and acknowledged cancellation
+            // therefore cannot both win for this attempt.
+            let mut store = self.service.session_store_guard()?;
+            let execution_result = if started.custom_node_cancelled() {
+                Err(
+                    crate::scheduler::WorkflowSchedulerTaskOrchestratorError::NonRuntimeTaskAdapter(
+                        crate::custom_nodes::CustomNodeError::Cancelled.into(),
+                    ),
+                )
+            } else {
+                execution_result
+            };
             match execution_result {
                 Ok(result) => {
-                    let mut store = self.service.session_store_guard()?;
                     self.service
                         .scheduler_task_orchestrator
                         .complete_started_non_runtime_task(
@@ -586,7 +598,7 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                         error,
                     ),
                 ) => {
-                    let mut store = self.service.session_store_guard()?;
+                    let cancelled = matches!(error, super::non_runtime_task_adapter::WorkflowSchedulerNonRuntimeTaskAdapterError::CustomNode(crate::custom_nodes::CustomNodeError::Cancelled));
                     let failed = self
                         .service
                         .scheduler_task_orchestrator
@@ -603,13 +615,23 @@ impl<'a> WorkflowSchedulerSessionRunner<'a> {
                                 task: started.task(),
                                 attempt_id: started.attempt_id().as_str(),
                                 started_at_ms: started.started_at_ms(),
-                                transition: SchedulerTaskAttemptLifecycleTransition::Failed,
+                                transition: if cancelled {
+                                    SchedulerTaskAttemptLifecycleTransition::Cancelled
+                                } else {
+                                    SchedulerTaskAttemptLifecycleTransition::Failed
+                                },
                                 reason: "scheduler non-runtime task execution failed",
                                 error_summary: Some(error.to_string()),
                                 selected_dispatch: None,
                                 terminal_mutation: None,
                             },
                         )?;
+                    }
+                    if cancelled {
+                        return Err(WorkflowServiceError::Cancelled(error.to_string()));
+                    }
+                    if matches!(error, super::non_runtime_task_adapter::WorkflowSchedulerNonRuntimeTaskAdapterError::CustomNode(crate::custom_nodes::CustomNodeError::TimedOut)) {
+                        return Err(WorkflowServiceError::RuntimeTimeout(error.to_string()));
                     }
                     return Err(WorkflowServiceError::InvalidRequest(format!(
                         "scheduler non-runtime task execution failed: {error}"

@@ -236,7 +236,7 @@ impl WorkflowService {
             .unwrap_or("workflow active task cancellation requested")
             .to_string();
 
-        let (scheduler_task_id, attempt_id) = {
+        let (scheduler_task_id, attempt_id, custom) = {
             let store = self.session_store_guard()?;
             let (task_graph, records) = store
                 .active_run_scheduler_task_state(session_id, workflow_run_id)?
@@ -256,7 +256,13 @@ impl WorkflowService {
                         task_id, workflow_run_id
                     ))
                 })?;
-            if task.execution_class != WorkflowSchedulerTaskExecutionClass::RuntimeInference {
+            let custom = matches!(
+                task.non_runtime_task_template,
+                Some(super::WorkflowSchedulerNonRuntimeTaskTemplate::CustomNode { .. })
+            );
+            if task.execution_class != WorkflowSchedulerTaskExecutionClass::RuntimeInference
+                && !custom
+            {
                 return Err(WorkflowServiceError::InvalidRequest(format!(
                     "scheduler task '{}' is not a runtime inference task",
                     task_id
@@ -280,9 +286,24 @@ impl WorkflowService {
             }
             let attempt_id =
                 store.active_run_scheduler_task_attempt_id(session_id, workflow_run_id, task_id)?;
-            (task.task_id.clone(), attempt_id)
+            if custom {
+                // Keep the scheduler state guard through cancellation, sharing
+                // the commit gate with non-runtime completion.
+                self.node_registry
+                    .custom_nodes
+                    .cancel(workflow_run_id, task.task_id.as_str(), attempt_id.as_str())
+                    .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
+            }
+            (task.task_id.clone(), attempt_id, custom)
         };
 
+        if custom {
+            return Ok(WorkflowExecutionSessionActiveTaskCancelResponse {
+                ok: true, status: WorkflowExecutionSessionActiveTaskCancelStatus::CancellationRequested,
+                task_id: scheduler_task_id.as_str().into(), active_attempt_id: attempt_id.as_str().into(),
+                message: "custom-node cancellation requested; terminal cancellation follows callback future disposal".into(),
+            });
+        }
         self.scheduler_task_orchestrator
             .request_started_runtime_task_cancellation(&scheduler_task_id, &attempt_id, reason)
             .map_err(|error| {

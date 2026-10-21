@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::graph::WorkflowRuntimeSourceContext;
 
-pub const WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION: u16 = 7;
+pub const WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION: u16 = 8;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
@@ -113,7 +113,12 @@ pub enum WorkflowSchedulerNonRuntimeTaskTemplate {
     VectorOutput,
     ImageOutput,
     Merge,
-    JsonFilter { path: String },
+    JsonFilter {
+        path: String,
+    },
+    CustomNode {
+        identity: crate::custom_nodes::CustomNodeIdentity,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
