@@ -74,6 +74,10 @@ mod pytorch_worker_image_contract;
 #[path = "pytorch_text_job.rs"]
 mod pytorch_text_job;
 
+#[path = "pytorch_text_dependencies.rs"]
+mod text_dependencies;
+pub use text_dependencies::{observe_text_package_presence, TEXT_GENERATION_PACKAGES};
+
 const ALLOWED_TRANSFORMERS_GENERATE_KWARGS: &[&str] = &[
     "top_k",
     "repetition_penalty",

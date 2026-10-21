@@ -15,18 +15,19 @@ impl PumasDispatchPackageFactsSource {
         &self,
         model_id: &str,
         platform_key: &str,
+        backend_key: &str,
     ) -> Result<bool, String> {
         let Some(PumasSelectorAccess::Owner(api)) = self.selector_access.as_deref() else {
             return Ok(false);
         };
         let model_id = model_id.strip_prefix("pumas://models/").unwrap_or(model_id);
         let facts = api
-            .resolve_model_dependency_requirements(model_id, platform_key, Some("candle"))
+            .resolve_model_dependency_requirements(model_id, platform_key, Some(backend_key))
             .await
             .map_err(|error| error.to_string())?;
         Ok(facts.model_id == model_id
             && facts.platform_key == platform_key
-            && facts.backend_key.as_deref() == Some("candle")
+            && facts.backend_key.as_deref() == Some(backend_key)
             && facts.dependency_contract_version == 1
             && facts.validation_state
                 == pumas_library::model_library::DependencyValidationState::Resolved

@@ -75,3 +75,7 @@ tempfile.workspace = true
 [[example]]
 name = "cpu_embedding_workflow_probe"
 required-features = ["backend-candle", "host-dependency-inventory"]
+
+[[example]]
+name = "cpu_text_generation_workflow_probe"
+required-features = ["backend-pytorch", "host-dependency-inventory"]

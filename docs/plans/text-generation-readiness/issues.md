@@ -1,0 +1,43 @@
+# Issues
+
+- T-01 (bounded support): distribution presence does not certify versions,
+  imports or model compatibility. Owner: dependency/readiness adapters. All
+  Pumas-declared model constraints are refused by this narrow profile. Revisit
+  when a model needing those declarations is selected; do not drop their pins.
+- T-02 (blocking T3): trained-model access is unavailable after proxy HTTP 403;
+  verified trained weights/config/tokenizer/license inputs are missing. Owner:
+  CPU text integration delegate; parent coordinates model access. SoundFile was
+  installed from official PyPI on 2026-10-19 and actual CPU imports pass. No
+  weights were downloaded. Historical no-install scope applied to the adapter
+  repair; the current delegation authorizes normal setup.
+  Resume only with sanctioned model access, verified license/revision/resource
+  bounds and satisfied actual worker prerequisites. No GPU/desktop substitution.
+- T-03 (resolved): foreign process Python could supply readiness observations
+  for linked PyO3 execution. The exact text profile now observes the linked
+  interpreter; malformed/foreign profiles cannot fall through to process probes.
+  Seven focused regressions and independent review cover the repair.
+- T-04 (resolved): a default Check initially projected embedded observations as
+  host Python. Full snapshot tests now prove the same embedded environment is
+  retained for both default and explicit checks.
+
+- T-05 (resolved and requalified at `3de39827`): actual public CPU probe runtime cancellation and corrupt
+  model loading both release resources, but the public workflow call loses the
+  cause and returns `InvalidRequest` / `TerminalFailed`. Canonical diagnostics
+  retain runtime cancellation and `pytorch_worker_model_load_failed` header
+  deserialization failure. Owner: workflow-service runtime finalization; parent
+  coordinates with scheduler M3 before a separate source change. Relevant owners:
+  `workflow/runtime_branch_run_finalization.rs` and related batch finalization.
+  PR82 repairs this projection in the owning helper and retains independent
+  qualification. The 2026-10-21 integration composes that successor with current
+  main and has fresh public negative-path evidence. No fairness change.
+- T-06 (resolved): a failed joined text producer remained in its slot and
+  permanently blocks subsequent lifecycle calls with the same error. Owner:
+  inference PyTorch text lifecycle. The admitted follow-up preserves failed
+  replacement residency and permits truthful cleanup/recovery after join.
+  Error/panic, stale-drain, controlled worker cleanup and selected replacement
+  regressions pass in the complete inference suite.
+- T-07 (resolved): the original public text probe saved a graph but did not
+  qualify loading it in a fresh process. The corrected probe loads actual saved
+  state, reuses immutable executable authorization through public lookup and
+  obtains fresh current validation/readiness with cleanup. Local and hosted
+  four-case qualification pass at `3de39827`; no crash-recovery claim.

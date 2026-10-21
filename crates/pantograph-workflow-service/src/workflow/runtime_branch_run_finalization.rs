@@ -25,7 +25,8 @@ use super::validation::{
 use super::{
     project_scheduler_task_results_to_outputs, WorkflowHost, WorkflowOutputTarget,
     WorkflowRunResponse, WorkflowSchedulerTask, WorkflowSchedulerTaskExecutionClass,
-    WorkflowSchedulerTaskGraph, WorkflowSchedulerTaskResult, WorkflowSchedulerTaskResultStatus,
+    WorkflowSchedulerTaskGraph, WorkflowSchedulerTaskResult,
+    WorkflowSchedulerTaskResultDiagnosticSeverity, WorkflowSchedulerTaskResultStatus,
     WorkflowService, WorkflowServiceError,
 };
 
@@ -102,11 +103,11 @@ pub(super) async fn completed_scheduler_run_response<H: WorkflowHost + ?Sized>(
 ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
     let (task_graph, records) =
         active_run_scheduler_task_state_required(service, session_id, workflow_run_id)?;
-    ensure_all_scheduler_tasks_completed(&records)?;
     let results = {
         let mut store = service.session_store_guard()?;
         store.active_run_scheduler_task_results(session_id, workflow_run_id)?
     };
+    ensure_all_scheduler_tasks_completed(&records, &results)?;
     let targets = scheduler_output_targets_for_run(host, workflow_id, output_targets).await?;
     let outputs = project_scheduler_task_results_to_outputs(&task_graph, &results, &targets)
         .map_err(|error| {
@@ -508,7 +509,42 @@ fn active_run_scheduler_task_state_required(
 
 fn ensure_all_scheduler_tasks_completed(
     records: &[SchedulerTaskStateRecord],
+    results: &[WorkflowSchedulerTaskResult],
 ) -> Result<(), WorkflowServiceError> {
+    // A blocked descendant may precede its failed producer. Preserve the causal
+    // terminal result before reporting generic incomplete graph state.
+    for record in records
+        .iter()
+        .filter(|record| record.state.kind() == SchedulerTaskStateKind::TerminalFailed)
+    {
+        let Some(result) = results.iter().find(|result| {
+            result.workflow_id == record.workflow_id.as_str()
+                && result.workflow_run_id == record.workflow_run_id.as_str()
+                && result.node_id == record.node_id.as_str()
+                && result.task_id == record.task_id.as_str()
+                && result.status == WorkflowSchedulerTaskResultStatus::Failed
+        }) else {
+            continue;
+        };
+        let Some(diagnostic) = result.diagnostics.iter().find(|diagnostic| {
+            diagnostic.severity == WorkflowSchedulerTaskResultDiagnosticSeverity::Error
+        }) else {
+            continue;
+        };
+        let message = format!(
+            "scheduler task '{}' failed ({}): {}",
+            record.task_id.as_str(),
+            diagnostic.code,
+            diagnostic.message
+        );
+        return Err(match diagnostic.code.as_str() {
+            "runtime_host.cancellation_requested" | "runtime_host.shutdown_requested" => {
+                WorkflowServiceError::Cancelled(message)
+            }
+            _ => WorkflowServiceError::Internal(message),
+        });
+    }
+
     if let Some(record) = records
         .iter()
         .find(|record| record.state.kind() != SchedulerTaskStateKind::Completed)
@@ -713,7 +749,7 @@ mod tests {
                 diagnostics: Vec::new(),
             },
         );
-        let error = ensure_all_scheduler_tasks_completed(&[record])
+        let error = ensure_all_scheduler_tasks_completed(&[record], &[])
             .expect_err("incomplete scheduler task state should be rejected");
 
         assert!(matches!(
@@ -722,6 +758,152 @@ mod tests {
                 if message.contains("scheduler task 'task.image' did not complete")
                     && message.contains("TerminalFailed")
         ));
+    }
+
+    #[test]
+    fn terminal_failure_preserves_first_error_before_blocked_descendants() {
+        let blocked = scheduler_task_state_record(
+            "task.output",
+            SchedulerTaskState::AwaitingInputs {
+                diagnostics: Vec::new(),
+            },
+        );
+        let failed = terminal_failure_record();
+        let mut result = failed_result(
+            "runtime_host.execution_failed",
+            "pytorch_worker_model_load_failed: header too large",
+        );
+        result.diagnostics.insert(
+            0,
+            super::super::WorkflowSchedulerTaskResultDiagnostic {
+                code: "runtime_host.cancellation_requested".to_string(),
+                severity: WorkflowSchedulerTaskResultDiagnosticSeverity::Info,
+                message: "informational context".to_string(),
+                port_id: None,
+            },
+        );
+        result.diagnostics.push(error_diagnostic(
+            "runtime_host.cancellation_requested",
+            "later error",
+        ));
+        let error =
+            ensure_all_scheduler_tasks_completed(&[blocked, failed], &[result]).unwrap_err();
+        assert!(matches!(error, WorkflowServiceError::Internal(message)
+            if message.contains("task.image")
+                && message.contains("runtime_host.execution_failed")
+                && message.contains("pytorch_worker_model_load_failed: header too large")
+                && !message.contains("later error")));
+    }
+
+    #[test]
+    fn terminal_failure_projects_only_exact_cancellation_and_shutdown_codes() {
+        for code in [
+            "runtime_host.cancellation_requested",
+            "runtime_host.shutdown_requested",
+        ] {
+            let error = ensure_all_scheduler_tasks_completed(
+                &[terminal_failure_record()],
+                &[failed_result(code, "owner stopped execution")],
+            )
+            .unwrap_err();
+            assert!(matches!(error, WorkflowServiceError::Cancelled(message)
+                if message.contains(code) && message.contains("owner stopped execution")));
+        }
+        let error = ensure_all_scheduler_tasks_completed(
+            &[terminal_failure_record()],
+            &[failed_result(
+                "runtime_host.execution_failed",
+                "cancellation requested",
+            )],
+        )
+        .unwrap_err();
+        assert!(matches!(error, WorkflowServiceError::Internal(message)
+            if message.contains("cancellation requested")));
+    }
+
+    #[test]
+    fn terminal_failure_requires_coherent_result_identity_status_and_error() {
+        let original = failed_result("runtime_host.cancellation_requested", "cancelled");
+        let mut variants = Vec::new();
+        for field in ["workflow", "run", "node", "task"] {
+            let mut result = original.clone();
+            match field {
+                "workflow" => result.workflow_id = "other.workflow".to_string(),
+                "run" => result.workflow_run_id = "other.run".to_string(),
+                "node" => result.node_id = "other.node".to_string(),
+                _ => result.task_id = "other.task".to_string(),
+            }
+            variants.push(result);
+        }
+        for status in [
+            WorkflowSchedulerTaskResultStatus::Completed,
+            WorkflowSchedulerTaskResultStatus::Unavailable,
+            WorkflowSchedulerTaskResultStatus::Invalid,
+        ] {
+            let mut result = original.clone();
+            result.status = status;
+            variants.push(result);
+        }
+        let mut info_only = original.clone();
+        info_only.diagnostics[0].severity = WorkflowSchedulerTaskResultDiagnosticSeverity::Info;
+        variants.push(info_only);
+        let mut no_diagnostics = original;
+        no_diagnostics.diagnostics.clear();
+        variants.push(no_diagnostics);
+        for result in variants {
+            assert!(matches!(
+                ensure_all_scheduler_tasks_completed(&[terminal_failure_record()], &[result]),
+                Err(WorkflowServiceError::InvalidRequest(_))
+            ));
+        }
+        let blocked = scheduler_task_state_record(
+            "task.image",
+            SchedulerTaskState::AwaitingInputs {
+                diagnostics: Vec::new(),
+            },
+        );
+        assert!(matches!(
+            ensure_all_scheduler_tasks_completed(
+                &[blocked],
+                &[failed_result(
+                    "runtime_host.cancellation_requested",
+                    "cancelled"
+                )]
+            ),
+            Err(WorkflowServiceError::InvalidRequest(_))
+        ));
+    }
+
+    #[test]
+    fn no_scheduler_tasks_remains_complete() {
+        assert!(ensure_all_scheduler_tasks_completed(&[], &[]).is_ok());
+    }
+
+    fn terminal_failure_record() -> SchedulerTaskStateRecord {
+        scheduler_task_state_record(
+            "task.image",
+            SchedulerTaskState::TerminalFailed {
+                diagnostics: Vec::new(),
+            },
+        )
+    }
+
+    fn error_diagnostic(
+        code: &str,
+        message: &str,
+    ) -> super::super::WorkflowSchedulerTaskResultDiagnostic {
+        super::super::WorkflowSchedulerTaskResultDiagnostic {
+            code: code.to_string(),
+            severity: WorkflowSchedulerTaskResultDiagnosticSeverity::Error,
+            message: message.to_string(),
+            port_id: None,
+        }
+    }
+
+    fn failed_result(code: &str, message: &str) -> WorkflowSchedulerTaskResult {
+        let mut result = workflow_task_result(WorkflowSchedulerTaskResultStatus::Failed);
+        result.diagnostics.push(error_diagnostic(code, message));
+        result
     }
 
     #[test]

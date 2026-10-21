@@ -105,6 +105,15 @@ impl TextJobs {
                 job.cancel.send_replace(true);
             }
             let result = job.completion.await;
+            // Join before retiring ownership. A stream may still retain this
+            // result, or may already have admitted a successor after completion.
+            let mut slot = self.0.lock().unwrap();
+            if slot
+                .as_ref()
+                .is_some_and(|current| current.cancel.same_channel(&job.cancel))
+            {
+                *slot = None;
+            }
             // Cancellation is expected for explicit stop and receiver loss. Other
             // producer failures remain visible to lifecycle callers as well.
             match result.as_ref() {
