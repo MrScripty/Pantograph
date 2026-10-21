@@ -121,19 +121,28 @@ jobs:
           CHROMIUM_BINARY: google-chrome
         shell: bash
         run: |
-          set -euo pipefail
+          set -Eeuo pipefail
+          trap 'echo "::error title=Image browser qualification::Qualification preflight or entrypoint failed; inspect fixed stage diagnostics when present."' ERR
           if [[ ! "$IMAGE_SOURCE_SHA" =~ ^[0-9a-fA-F]{40}$ ]] ||
              [[ "$(git rev-parse HEAD)" != "$IMAGE_SOURCE_SHA" ]]; then
-            echo "Image browser qualification requires the exact requested source SHA" >&2
+            echo "::error title=Image browser qualification::Preflight requires the exact requested source SHA." >&2
             exit 1
           fi
           if [[ -n "${PANTOGRAPH_IMAGE_BROWSER_NO_SANDBOX:-}" ]]; then
-            echo "Hosted image qualification requires Chrome sandboxing" >&2
+            echo "::error title=Image browser qualification::Preflight requires Chrome sandboxing." >&2
             exit 1
           fi
           command -v "$CHROMIUM_BINARY"
           "$CHROMIUM_BINARY" --version
-          node tests/e2e/image-output-artifact/run.mjs 2>&1 | tee "$RUNNER_TEMP/image-output-browser.log"
+          trap - ERR
+          if node tests/e2e/image-output-artifact/run.mjs 2>&1 | tee "$RUNNER_TEMP/image-output-browser.log"; then
+            :
+          else
+            if ! grep -q '"event":"image_browser_failure"' "$RUNNER_TEMP/image-output-browser.log"; then
+              echo "::error title=Image browser qualification::Qualification entrypoint or evidence stream failed before a structured failure was available."
+            fi
+            exit 1
+          fi
 
       - name: Upload image browser qualification evidence
         if: always()
@@ -145,7 +154,7 @@ jobs:
 
       - name: Check presentation and demo security boundaries
         run: |
-          node --test scripts/render-research-markdown.test.mjs scripts/presentation-recording.test.mjs scripts/cdp-browser-function.test.mjs
+          node --test scripts/render-research-markdown.test.mjs scripts/presentation-recording.test.mjs scripts/cdp-browser-function.test.mjs scripts/browser-qualification-diagnostics.test.mjs
           python3 -m unittest discover -s examples/scheduler-demo -p test_header_security.py
 
   dependency-audit:
