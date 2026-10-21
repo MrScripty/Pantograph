@@ -126,5 +126,31 @@ All observations are read-only diagnostics. They change no admission, fair turn,
 resource claim, Start check, cleanup requirement, policy default or execution
 mode. No complete incremental allocation measurement is supplied: known live
 buffer capacities, reservation estimates and sampled RSS cannot substitute for
-allocation/drop, alias, scratch and worker attribution. That backend foundation
-requires a separate reviewed design. See the [producer contract and evidence](plans/cpu-scheduler/reports/2026-10-21-provenance-producer.md).
+allocation/drop, alias, scratch and worker attribution. See the [producer contract and evidence](plans/cpu-scheduler/reports/2026-10-21-provenance-producer.md).
+
+With the existing explicit CPU calibration owner, the Candle embedding backend
+also emits `inference::candle_result_payload` diagnostics. A lazy job-owner scope
+reports registered/released original completed-result owners, live owned Vec
+payload capacity and its observed peak, in bytes. Shared completion readers
+retain one original payload; their aliases are not new allocations. The original
+result drops before its accounting lease. A completed unpolled join, or a reader
+surviving slot replacement/drain, still retains its original payload. Independent
+caller copies are outside this tracked domain. Ordinary no-owner execution and
+generic model loads initialize no such scope or ledger.
+
+These snapshots cover immutable completed output payloads after materialization,
+including spare outer/inner Vec capacity. They do not observe construction peaks,
+allocator overhead, input/tokenizer storage, Candle intermediates/shared aliases,
+scratch/Rayon workers, resident models or caller copies. The scope can span model
+replacements and supplies no per-workload cost. Overflow, invalid release or
+poisoned accounting reports unavailable without changing inference results.
+Logging occurs outside guards; Drop only updates counters. A late last-reader
+drop has no guaranteed immediate log record, and snapshots can arrive out of
+order. This is ownership attribution for the declared domain, not an allocator
+event stream, attempt-wide incremental memory or admission estimate. Full
+allocation/lifetime attribution remains separate software work. See the
+[result-payload contract](plans/cpu-scheduler/reports/2026-10-21-result-payload-attribution.md).
+
+Live capacity counts registered owners whose accounting has not retired. Its
+registration and post-payload-drop retirement windows can overlap concurrent
+snapshots, so the observed counter peak is not an instantaneous allocator peak.

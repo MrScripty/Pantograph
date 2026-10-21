@@ -386,6 +386,39 @@ jobs:
           path: ${{ runner.temp }}/m4-host-inventory/
           if-no-files-found: warn
 
+      - name: Run completed Candle result ownership tests
+        run: |
+          set -euo pipefail
+          evidence_root="$RUNNER_TEMP/candle-result-payload"
+          mkdir -p "$evidence_root"
+          git rev-parse HEAD 'HEAD^{tree}' > "$evidence_root/revision.txt"
+          tests=(
+            backend::candle_embedding::result_payload::tests::diagnostics_are_fixed_scalar_summaries_with_an_opaque_scope
+            backend::candle_embedding::result_payload::tests::leases_track_overlapping_original_owners_and_accept_zero_capacity
+            backend::candle_embedding::result_payload::tests::payload_capacity_counts_outer_spare_slots_and_initialized_inner_capacities
+            backend::candle_embedding::result_payload::tests::poison_remains_unavailable_without_recovering_or_panicking_on_release
+            backend::candle_embedding::result_payload::tests::unavailable_capacity_overflow_and_invalid_releases_are_absorbing
+            backend::candle_embedding::result_payload_job_tests::result_payload_actual_execute_uses_only_existing_calibration_gate
+            backend::candle_embedding::result_payload_job_tests::result_payload_cancellation_waits_for_real_worker_completion
+            backend::candle_embedding::result_payload_job_tests::result_payload_completed_slot_replacement_preserves_old_reader_storage
+            backend::candle_embedding::result_payload_job_tests::result_payload_errors_panics_and_unavailable_measurement_preserve_outcomes
+            backend::candle_embedding::result_payload_job_tests::result_payload_original_value_drops_before_accounting_lease
+            backend::candle_embedding::result_payload_job_tests::result_payload_shared_aliases_and_caller_copies_have_distinct_lifetimes
+            backend::candle_embedding::result_payload_job_tests::result_payload_unpolled_worker_completion_survives_caller_loss_until_drain
+          )
+          cargo test --locked -p inference --features backend-candle --lib backend::candle_embedding::result_payload -- --list > "$evidence_root/tests.list"
+          python3 -c 'import pathlib, sys; lines = pathlib.Path(sys.argv[1]).read_text().splitlines(); names = [line[:-6] for line in lines if line.endswith(": test")]; expected = sys.argv[2:]; counts = {name: names.count(name) for name in expected}; print(counts); sys.exit(0 if len(names) == len(expected) and all(count == 1 for count in counts.values()) else 1)' "$evidence_root/tests.list" "${tests[@]}"
+          cargo test --locked -p inference --features backend-candle --lib backend::candle_embedding::result_payload 2>&1 | tee "$evidence_root/results.log"
+          python3 -c 'import pathlib, re, sys; text = pathlib.Path(sys.argv[1]).read_text(); expected = sys.argv[2:]; passed = all(re.search(r"^test " + re.escape(name) + r" \.\.\. ok$", text, re.M) for name in expected); summary = re.search(r"^test result: ok\. 12 passed; 0 failed; 0 ignored;", text, re.M); sys.exit(0 if passed and summary else 1)' "$evidence_root/results.log" "${tests[@]}"
+
+      - name: Upload completed Candle result ownership evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: candle-result-payload-ownership
+          path: ${{ runner.temp }}/candle-result-payload/
+          if-no-files-found: warn
+
       - name: Run runtime registry contract tests
         run: cargo test -p pantograph-runtime-registry
       - name: Run task summary contract tests
