@@ -487,6 +487,13 @@ async fn main() -> ProbeResult<()> {
         );
         return Ok(());
     }
+    if args.len() == 2 && args[1] == "--reanalyze-fair-service" {
+        let root = PathBuf::from(&args[0]);
+        if !root.is_absolute() {
+            return Err("M3 reanalysis requires an absolute existing evidence directory".into());
+        }
+        return serial_ready_probe::reanalyze_m3(&root);
+    }
     if args.len() > 2
         || args.get(1).is_some_and(|mode| {
             mode != "--inspect-targets"
@@ -495,10 +502,11 @@ async fn main() -> ProbeResult<()> {
                 && mode != "--serial-ready"
                 && mode != "--serial-ready-c3-768b"
                 && mode != "--serial-lookahead"
+                && mode != "--fair-service"
         })
     {
         return Err(
-            "usage: cpu_embedding_workflow_probe <new absolute directory> [--inspect-targets|--serve-stdio|--serve-rich-stdio|--serial-ready|--serial-ready-c3-768b|--serial-lookahead]"
+            "usage: cpu_embedding_workflow_probe <new absolute directory> [--inspect-targets|--serve-stdio|--serve-rich-stdio|--serial-ready|--serial-ready-c3-768b|--serial-lookahead|--fair-service]"
                 .into(),
         );
     }
@@ -523,6 +531,9 @@ async fn main() -> ProbeResult<()> {
     }
     if args.get(1).is_some_and(|mode| mode == "--serial-lookahead") {
         return serial_ready_probe::qualify_m2(&root).await;
+    }
+    if args.get(1).is_some_and(|mode| mode == "--fair-service") {
+        return serial_ready_probe::qualify_m3(&root).await;
     }
     if args.get(1).is_some_and(|mode| mode == "--inspect-targets") {
         return target_observation::inspect(&root).await;

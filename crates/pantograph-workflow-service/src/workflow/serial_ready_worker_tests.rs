@@ -9,7 +9,7 @@ mod serial_ready_tests {
     use pantograph_scheduler::{
         SchedulerSerialBoundDispatch, SchedulerSerialDrainState, SchedulerSerialDrainedDispatch,
         SchedulerSerialOwnerSnapshot, SchedulerSerialRuntimeOwnerLease,
-        SchedulerSourceInputTaskIntent, SchedulerSourceInputTaskKind,
+        SchedulerSourceInputTaskIntent, SchedulerSourceInputTaskKind, SchedulerTaskStateKind,
     };
     use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
@@ -370,7 +370,15 @@ mod serial_ready_tests {
         cpu_run_with_inputs(service, run, &texts)
     }
     fn cpu_run_with_inputs(service: &WorkflowService, run: &str, texts: &[&str]) -> String {
-        let session = prepare_ready_runtime_branch_run(service, run);
+        cpu_run_with_attribution_inputs(service, run, texts, None)
+    }
+    fn cpu_run_with_attribution_inputs(
+        service: &WorkflowService,
+        run: &str,
+        texts: &[&str],
+        attribution: Option<WorkflowExecutionSessionAttributionContext>,
+    ) -> String {
+        let session = prepare_ready_runtime_branch_run_with_attribution(service, run, attribution);
         let mut graph = ready_runtime_task_graph(run);
         let mut records = vec![];
         let mut proofs = vec![];
@@ -667,6 +675,319 @@ mod serial_ready_tests {
         {
             drive_runtime_branch_continuations(&environment, &registry, continuations).await;
         }
+    }
+    fn attributed_cpu_run(service: &WorkflowService, run: &str, client: &str) -> String {
+        // Controlled store fixture only; actual credential verification is covered
+        // by public attributed-session tests and the native M3 cohort.
+        cpu_run_with_attribution_inputs(
+            service,
+            run,
+            &["slow", "fast"],
+            Some(WorkflowExecutionSessionAttributionContext {
+                client_id: client.into(),
+                client_session_id: format!("session.{client}"),
+                bucket_id: "bucket.default".into(),
+            }),
+        )
+    }
+
+    async fn wait_for_fair_waiters(service: &WorkflowService, expected: usize) {
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while service.serial_service_pending_for_test().unwrap() != expected {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+    }
+
+    #[derive(Default)]
+    struct FairStartRefreshBarrier {
+        entered: tokio::sync::Notify,
+        release: tokio::sync::Notify,
+    }
+    #[async_trait::async_trait]
+    impl WorkflowRuntimeDispatchSourceRefresher for FairStartRefreshBarrier {
+        async fn refresh_runtime_dispatch_sources(
+            &self,
+            _: &WorkflowSchedulerTask,
+            _: &SchedulerTaskStateRecord,
+            _: &DependencyReadinessProofEnvelope,
+        ) -> Result<(), WorkflowRuntimeDispatchSourceRefreshError> {
+            self.entered.notify_one();
+            self.release.notified().await;
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn fair_serial_final_start_fences_population_changed_during_async_preselection() {
+        let port = CpuPort::new();
+        let barrier = Arc::new(FairStartRefreshBarrier::default());
+        let service = Arc::new(
+            WorkflowService::new_serial_ready_cpu(
+                port.clone(),
+                WorkflowSerialReadyConfig::default().with_fair_service_opportunities(),
+            )
+            .with_runtime_dispatch_candidate_provider(Arc::new(SyntheticCpuCandidateProvider))
+            .with_runtime_dispatch_source_refresher(barrier.clone()),
+        );
+        let session = cpu_run_with_attribution_inputs(
+            &service,
+            "run.fair.final.fence",
+            &["slow"],
+            Some(WorkflowExecutionSessionAttributionContext {
+                client_id: "client.a".into(),
+                client_session_id: "session.a".into(),
+                bucket_id: "bucket.a".into(),
+            }),
+        );
+        assert!(service
+            .session_store_guard()
+            .unwrap()
+            .serial_ready_pair(&session, "run.fair.final.fence")
+            .is_none());
+        let handle = tokio::spawn({
+            let service = service.clone();
+            let session = session.clone();
+            async move { run(service, &session, "run.fair.final.fence").await }
+        });
+        tokio::time::timeout(Duration::from_secs(2), barrier.entered.notified())
+            .await
+            .unwrap();
+        {
+            let mut store = service.session_store_guard().unwrap();
+            let (mut graph, mut records) = store
+                .active_run_scheduler_task_state(&session, "run.fair.final.fence")
+                .unwrap()
+                .unwrap();
+            // Add unrelated completed sources: selected task, inputs and proof
+            // remain identical across the candidate-preparation await.
+            let source = graph
+                .tasks
+                .iter()
+                .find(|task| {
+                    task.execution_class == WorkflowSchedulerTaskExecutionClass::SourceInput
+                })
+                .unwrap()
+                .clone();
+            let record = records
+                .iter()
+                .find(|record| record.task_id == source.task_id)
+                .unwrap()
+                .clone();
+            for index in 0..127 {
+                let mut task = source.clone();
+                let mut record = record.clone();
+                task.task_id = SchedulerTaskId::parse(format!("task.extra.{index}")).unwrap();
+                record.task_id = task.task_id.clone();
+                let SchedulerTaskState::Completed {
+                    execution_intent: SchedulerTaskExecutionIntent::SourceInput { task_intent },
+                } = &mut record.state
+                else {
+                    panic!("completed source fixture")
+                };
+                task_intent.task_id = task.task_id.clone();
+                graph.tasks.push(task);
+                records.push(record);
+            }
+            store
+                .set_active_run_scheduler_task_state(
+                    &session,
+                    "run.fair.final.fence",
+                    graph,
+                    records,
+                )
+                .unwrap();
+        }
+        barrier.release.notify_one();
+        tokio::time::timeout(Duration::from_secs(2), handle)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(port.requests.lock().unwrap().is_empty());
+        assert!(port.cleanups.lock().unwrap().is_empty());
+        let store = service.session_store_guard().unwrap();
+        assert!(store
+            .active_run_scheduler_task_attempt_id(&session, "run.fair.final.fence", "task.cpu.0")
+            .is_err());
+        let (_, records) = store
+            .active_run_scheduler_task_state(&session, "run.fair.final.fence")
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            records
+                .iter()
+                .find(|record| record.task_id.as_str() == "task.cpu.0")
+                .unwrap()
+                .state
+                .kind(),
+            SchedulerTaskStateKind::Ready
+        );
+    }
+
+    #[tokio::test]
+    async fn fair_serial_missing_identity_refuses_without_claim_or_native_forward() {
+        let port = CpuPort::new();
+        let service = service(
+            port.clone(),
+            WorkflowSerialReadyConfig::default().with_fair_service_opportunities(),
+        );
+        let session = cpu_run(&service, "run.fair.anonymous");
+        run(service.clone(), &session, "run.fair.anonymous").await;
+        assert!(port.requests.lock().unwrap().is_empty());
+        assert!(port.cleanups.lock().unwrap().is_empty());
+        assert_eq!(service.serial_service_pending_for_test().unwrap(), 0);
+        assert!(matches!(service.session_store_guard().unwrap()
+            .serial_service_identity(&session, "run.fair.anonymous"),
+            Err(WorkflowServiceError::InvalidRequest(message)) if message == "fair serial service requires authenticated client/bucket session attribution"));
+        assert_eq!(
+            runtime_branch_event_state(
+                &service,
+                &WorkflowRuntimeBranchTaskEventId::parse("event.run.fair.anonymous.0").unwrap()
+            ),
+            WorkflowRuntimeBranchTaskEventState::Ready
+        );
+    }
+
+    #[tokio::test]
+    async fn fair_serial_stale_waiter_refuses_before_claim_and_keeps_other_owner_cleanup() {
+        let port = CpuPort::new();
+        port.block.store(true, Ordering::Release);
+        let service = service(
+            port.clone(),
+            WorkflowSerialReadyConfig::default().with_fair_service_opportunities(),
+        );
+        let first = attributed_cpu_run(&service, "run.fair.active", "client.a");
+        let second = attributed_cpu_run(&service, "run.fair.stale", "client.b");
+        let first_handle = tokio::spawn({
+            let service = service.clone();
+            async move { run(service, &first, "run.fair.active").await }
+        });
+        tokio::time::timeout(Duration::from_secs(2), port.started.notified())
+            .await
+            .unwrap();
+        let second_handle = tokio::spawn({
+            let service = service.clone();
+            let second = second.clone();
+            async move { run(service, &second, "run.fair.stale").await }
+        });
+        wait_for_fair_waiters(&service, 1).await;
+        assert_eq!(port.requests.lock().unwrap().len(), 1);
+        {
+            let mut store = service.session_store_guard().unwrap();
+            let mut results = store
+                .active_run_scheduler_task_results(&second, "run.fair.stale")
+                .unwrap();
+            results[0].outputs[0].value =
+                WorkflowSchedulerTaskResultValue::String("stale exact input".into());
+            store
+                .set_active_run_scheduler_task_results(&second, "run.fair.stale", results)
+                .unwrap();
+        }
+        port.block.store(false, Ordering::Release);
+        port.release.notify_one();
+        tokio::time::timeout(Duration::from_secs(2), first_handle)
+            .await
+            .unwrap()
+            .unwrap();
+        tokio::time::timeout(Duration::from_secs(2), second_handle)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(port.requests.lock().unwrap().len(), 2);
+        assert!(port
+            .requests
+            .lock()
+            .unwrap()
+            .iter()
+            .all(
+                |request| request.members[0].handoff.workflow_run_id.as_str() == "run.fair.active"
+            ));
+        assert_eq!(port.cleanups.lock().unwrap().len(), 2);
+        assert_eq!(
+            runtime_branch_event_state(
+                &service,
+                &WorkflowRuntimeBranchTaskEventId::parse("event.run.fair.stale.0").unwrap()
+            ),
+            WorkflowRuntimeBranchTaskEventState::Ready
+        );
+        assert_eq!(service.serial_service_pending_for_test().unwrap(), 0);
+    }
+
+    #[tokio::test]
+    async fn fair_serial_aborted_owner_poison_wakes_ready_waiter_without_forward() {
+        let port = CpuPort::new();
+        port.block.store(true, Ordering::Release);
+        let service = service(
+            port.clone(),
+            WorkflowSerialReadyConfig::default().with_fair_service_opportunities(),
+        );
+        let first = attributed_cpu_run(&service, "run.fair.abort", "client.a");
+        let second = attributed_cpu_run(&service, "run.fair.after.abort", "client.b");
+        let first_handle = tokio::spawn({
+            let service = service.clone();
+            async move { run(service, &first, "run.fair.abort").await }
+        });
+        tokio::time::timeout(Duration::from_secs(2), port.started.notified())
+            .await
+            .unwrap();
+        let second_handle = tokio::spawn({
+            let service = service.clone();
+            async move { run(service, &second, "run.fair.after.abort").await }
+        });
+        wait_for_fair_waiters(&service, 1).await;
+        first_handle.abort();
+        assert!(first_handle.await.unwrap_err().is_cancelled());
+        tokio::time::timeout(Duration::from_secs(2), second_handle)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(port.requests.lock().unwrap().len(), 1);
+        assert!(port.cleanups.lock().unwrap().is_empty());
+        assert_eq!(service.serial_service_pending_for_test().unwrap(), 0);
+    }
+
+    #[test]
+    fn fair_ready_eligibility_fences_order_state_run_and_population_bounds() {
+        let service = service(
+            CpuPort::new(),
+            WorkflowSerialReadyConfig::default().with_fair_service_opportunities(),
+        );
+        let session = attributed_cpu_run(&service, "run.fair.bounds", "client.a");
+        let mut store = service.session_store_guard().unwrap();
+        assert!(store
+            .serial_service_ready_member(&session, "run.fair.bounds", "task.cpu.0")
+            .is_some());
+        assert!(store
+            .serial_service_ready_member(&session, "run.fair.bounds", "task.cpu.1")
+            .is_none());
+        assert!(store
+            .serial_service_ready_member(&session, "run.other", "task.cpu.0")
+            .is_none());
+        let (mut graph, records) = store
+            .active_run_scheduler_task_state(&session, "run.fair.bounds")
+            .unwrap()
+            .unwrap();
+        graph.tasks.swap(0, 2);
+        store
+            .set_active_run_scheduler_task_state(
+                &session,
+                "run.fair.bounds",
+                graph.clone(),
+                records.clone(),
+            )
+            .unwrap();
+        assert!(store
+            .serial_service_ready_member(&session, "run.fair.bounds", "task.cpu.0")
+            .is_none());
+        graph.tasks.resize(129, graph.tasks[0].clone());
+        store
+            .set_active_run_scheduler_task_state(&session, "run.fair.bounds", graph, records)
+            .unwrap();
+        assert!(store
+            .serial_service_ready_member(&session, "run.fair.bounds", "task.cpu.1")
+            .is_none());
     }
     #[tokio::test]
     async fn serial_ready_worker_learns_only_real_drained_cleaned_dispatches_and_ranks_first_pair()

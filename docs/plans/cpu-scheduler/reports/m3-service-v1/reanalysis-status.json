@@ -1,0 +1,11 @@
+{
+  "command": [
+    "/workspace/pantograph-cache/target/debug/examples/cpu_embedding_workflow_probe",
+    "/workspace/m3-authenticated-service-v1/run",
+    "--reanalyze-fair-service"
+  ],
+  "exit_code": 0,
+  "binary_sha256": "b511969c4b78d4d91c706e96ace35bf7b3594a1228ec6281181790d5e6a4c53e",
+  "producer_sha256": "8fa52e568df966dd783d0d3f6930a17789765667b371e0e04e8276525e626820",
+  "native_reexecuted": false
+}

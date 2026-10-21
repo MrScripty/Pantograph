@@ -233,3 +233,39 @@ Merge now uses the existing generic workflow renderer, exposing its real ports
 and connections. Toolbar submission also materializes the scheduler's supported
 integer, boolean and selection sources; unsafe/fractional integer values are
 rejected before submission and structured selection values are captured by value.
+
+## Opt-in bounded CPU service opportunities
+
+`WorkflowSerialReadyConfig::with_fair_service_opportunities()` enables M3 on the
+constructor-owned serial CPU service. Existing ordinary construction and M1/M2
+configuration keep their prior behavior. This mode requires sessions created
+through the public authenticated attribution API. It shares a service unit by
+validated client/bucket, including multiple sessions belonging to that unit.
+Missing attribution or the 64-waiter/32-unit limit returns an explicit refusal
+before runtime admission. After two other-unit grants, a waiting unit receives
+a protected opportunity before ordinary priority; otherwise active-run priority
+and FIFO apply. Existing per-session starvation boosts remain intact. The
+promise counts opportunities, not milliseconds or interruption of native work.
+
+The isolated `cpu_embedding_workflow_probe <new absolute directory> --fair-service`
+mode executes a fixed cohort with five sessions across two authenticated units.
+Qualification controls arrival using transparent native barriers, then forwards
+real results and cleanup receipts unchanged. The cancellation request is after
+native drain while the workflow still reports Running; it does not demonstrate
+interrupted compute. The existing public cancellation API requires Running and
+cannot cancel a waiting Ready task. No default activation, GPU, browser, native
+batching, model-quality or speedup qualification follows from this mode.
+
+The [M3 contract](../../docs/plans/cpu-scheduler/plan.md#m3-bounded-service-contract-2026-10-19-independently-admitted)
+owns the fixed protocol and acceptance gates. Reproduce only in a fresh isolated
+project with the existing BERT fixture and CPU build features; retain failed
+outcomes, source/binary hashes, ledger events and teardown records.
+
+Saved M3 evidence can be checked with
+`cpu_embedding_workflow_probe <absolute existing run directory> --reanalyze-fair-service`.
+This synchronous mode reads saved JSON and committed golden bytes, creates a
+separate `reanalysis.json` in the run directory's parent with create-new semantics,
+and starts no host, runtime or model. It preserves the original failed oracle and
+exit status. Aggregate training checks use frozen-source assistance; local sample
+task names do not independently identify run/attempt timings. See the M3 report
+for the original checker defect and exact-source evidence.

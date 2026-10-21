@@ -384,3 +384,115 @@ coordination; parent owns its later disposition after reachable handoff.
   [Runtime Separation](https://github.com/MrScripty/Pantograph/actions/runs/38492288359).
   Remote main remained the recorded merge; no code/evidence change or new
   qualification claim. The approved follow-up records these final observations.
+
+
+## 2026-10-19 — bounded M3 admission
+
+- Fetched current main `4aec0d5c4927a6af2832d40e224be5c2136fc9ef`; original
+  clean `work` checkout at `ca9edde6` remains untouched. Created separate
+  `feat/cpu-scheduler-m3-bounded-service` worktree `/workspace/pantograph-m3`.
+  No applicable AGENTS.md exists; standards `188beda1` read from exact checkout.
+- Independent GPT-6.1 Sol / High reviewer `m3_design_review` admitted the M3
+  contract before production edits. It identified a concrete stale-key-ticket
+  starvation counterexample: three backlogged keys can cycle forever ahead of
+  a fourth. The contract refreshes service-order tickets per grant separately
+  from member FIFO, and includes an explicit regression trace.
+- Opt-in post-Ready entitlement opportunities use existing authenticated
+  client/bucket session attribution, 64 pending registrations / 32 units and
+  two other-unit bypasses. Active-run base priority applies at this boundary;
+  existing per-session priority/FIFO/starvation/warm policy stays intact.
+- Preparation is outside the serial permit in this opt-in only. Its CheckOnly
+  readiness/non-runtime progression grants no native execution authority. The
+  waiter bound does not bound all supervised preparations. Source review must
+  prove RAII removal, no lost wakeups, checked identities, final representative
+  fences and turn retention through serial scope release/poison.
+- M3-C1..C5 remain pending. No native cohort, speedup/default, M4 or PR75
+  adapter/model work is claimed. User authorizes focused PR publication; parent
+  coordinates integration and no merge/branch deletion is performed.
+
+
+## 2026-10-19 — M3 source and deterministic review
+
+- Implemented bounded entitlement policy and owned async waiters in separate
+  scheduler/workflow owners. The native serial permit is released before the
+  fairness turn wakes another waiter. No physical accounting or cleanup contract
+  changed. Missing attribution refuses before preparation/runtime claims.
+- Independent GPT-6.1 Sol / High `m3_source_review` found a final-Start gap after
+  awaited candidate preparation. Fixed it by carrying the original attribution,
+  priority and first Ready member through to the existing final store lock,
+  alongside the current M1 pair and selected-task fences. Its no-pair async
+  mutation regression proves refusal with no attempt/native forward/cleanup.
+- Reviewer approved the corrected source and deterministic evidence: workflow
+  library1008 passed,0 failed,0 ignored. This includes13 hand-oracle policy tests,
+  2 async registration tests and5 fair-worker tests. Existing priority/FIFO/boost,
+  M1 ranking, M2 advisory and native-owner controlled regressions remain green.
+- Native producer review exposed that cancellation before forwarding yields no
+  drain receipt. Prospectively choose a genuine post-drain public cancellation
+  request instead; do not claim compute interruption or fabricate Cancelled.
+  Five sessions across two authenticated units (4 foreground pairs+1 background
+  pair) ensure a competing foreground waiter at protected background selection.
+  Minimum8 samples fixes M1 to insufficient-sample FIFO for this cohort.
+- Independent `m3_design_review` admitted the final producer SHA256
+  `6d4e4d4a2cb512c44a661c56b032217c40f67e39a9701fb1f74cee0ce603fdc6`,
+  including direct attribution, charged-lease and cancellation/cleanup ordering
+  oracles. Release build/affected lint/source freeze precede any model execution.
+- The initial documentation checkpoint had no installed Git hooks in this saved
+  checkout. Its manual traceability call first failed due to missing node_modules;
+  linked the existing pinned dependency directory and reran the declared range
+  check successfully. No hook was disabled, credentials/settings changed, or
+  unrelated product work overwritten. Subsequent checks use explicit inputs.
+
+- Core checkpoint `dd9b800cc0dc2ee7169235e67fb1a5526b1f5f25` is pushed and
+  remote SHA verified; workflow all-target `--no-deps -D warnings` Clippy passes.
+  Declared pre-push tests pass261+168 (one existing node-engine ignore);
+  scheduler205 pass with one existing cost probe ignored. Formatting, critical/
+  accessibility lint and explicit staged traceability pass.
+- The saved environment disconnect callback at23:07 was checked against actual
+  shell/repository/process state. Access remained intact, local+remote checkpoint
+  matched, producer edits were preserved and the original release/lint processes
+  continued. No duplicate worker or test restart occurred because of the callback.
+- The affected CPU example warning-deny Clippy passes after one lint-only nested
+  if collapse. Independent reviewer verified reversing only that edit reproduces
+  the prior reviewed digest; final producer SHA256 is
+  `864d371a4d5c5abb90186b9deef2859a14e86c9ec99862b7d3e44a8170b18d1e`.
+  This remains pre-run admission. Existing inference optional-consumer warnings
+  CPU-17 are unchanged; no other-owner code or suppression was added.
+
+## 2026-10-19 — M3 fixed cohort and oracle disposition
+
+- Frozen clean source `e9d89eacf686b163539c08ebc6225a6c2750bc96`, tree
+  `f7ec94bd6f550975b58f30b96603bf0b80401ec7`; release binary SHA256
+  `74ad1349267b2251299e10c7c6b650575669893402b0fd00009db380766cb756`.
+  The prospectively reviewed five-session/two-unit cohort ran exactly once,
+  after independent numerical reference and source/binary freeze. All ten
+  grants/Starts/native outputs/matching cleanup receipts agree. Background was
+  protected at positions3 and7 despite waiting foreground priority100.
+- Actual post-drain cancellation retained the charged lease through matching
+  cleanup; completed output was allowed. Shutdown cleanup errors/reservations
+  empty and native owner absent; CPU-14 metadata remains disclosed. Three actual
+  native lifecycle regressions pass in the accepted default-feature offline
+  configuration. Unsupported Candle-only whole-library build failure retained.
+- Original process exit1 and failed oracle retained: the sample checker confused
+  local task names reused across runs with full identities. Both independent
+  reviewers admitted saved-data-only correction. Four pure checker regressions
+  cover repeated names, missing/extra counts, foreign/duplicate full identities
+  and actual cancellation state; no model/native retry occurred.
+- Corrected analysis matches nine aggregate samples to the serial uncancelled
+  return sequence after full-identity result/return join. Training exclusion is
+  source-assisted using frozen cancellation/appending checks and lifecycle tests;
+  raw samples expose no run/attempt IDs and cannot independently attribute timings.
+- Evidence/report in `reports/m3-service-v1` and the M3 report preserve all original
+  outcomes, hashes, supporting logs and correction provenance. M3-C1..C4 satisfied
+  within admitted scope; C5 exact published-head CI pending.
+- After independent M3 source review, identified a bounded M4 dependency: actual
+  receipt-backed last-lease stop exists; serial retained cleanup/cold-load wiring
+  and separate load/stop costs are missing. RetainIfNextSame else acknowledged
+  StopThenColdLoad requires its own contract and actual BERT8/BERT12 evidence.
+  No M4/default policy, overlapping load, recovery or native batching was added.
+
+- Independent final report/evidence review approved the bundle: all41 raw members
+  are byte-identical to retained originals, archive/log hashes match, production
+  source is unchanged since freeze and the corrected checker/source-assisted
+  limits are accurate. Design review approved corrected producer SHA256
+  `8fa52e568df966dd783d0d3f6930a17789765667b371e0e04e8276525e626820`.
+  Final staged traceability, formatting and whitespace checks pass.

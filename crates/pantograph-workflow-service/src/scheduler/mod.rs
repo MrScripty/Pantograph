@@ -4,6 +4,7 @@ mod policy;
 mod queue_worker;
 mod readiness_lifecycle;
 mod retry_lifecycle;
+pub(crate) mod service_opportunities;
 mod store;
 mod store_admission;
 mod task_lifecycle;

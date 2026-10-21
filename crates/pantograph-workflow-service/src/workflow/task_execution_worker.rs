@@ -1327,7 +1327,33 @@ async fn claim_and_execute_runtime_branch_event(
     runtime_branch_responder_registration: &mut WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistration,
 ) -> WorkflowTaskExecutionWorkerRuntimeBranchExecutionResult {
     let service = environment.service();
-    let serial_scope = if let Some(mode) = service.serial_ready_mode.as_ref() {
+    let fair_identity = match service
+        .serial_ready_mode
+        .as_ref()
+        .filter(|mode| mode.fair_service_enabled())
+        .map(|_| {
+            service
+                .session_store_guard()?
+                .serial_service_identity(&command.session_id, &command.workflow_run_id)
+        })
+        .transpose()
+    {
+        Ok(identity) => identity,
+        Err(error) => {
+            return WorkflowTaskExecutionWorkerRuntimeBranchExecutionResult::complete(
+                WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
+                    command,
+                    error.to_string(),
+                    Vec::new(),
+                ),
+            );
+        }
+    };
+    let mut serial_scope = if let Some(mode) = service
+        .serial_ready_mode
+        .as_ref()
+        .filter(|mode| !mode.fair_service_enabled())
+    {
         match mode.enter().await {
             Ok(scope) => Some(scope),
             Err(error) => {
@@ -1426,6 +1452,53 @@ async fn claim_and_execute_runtime_branch_event(
         );
     };
     let mut selected_task_id = task_id.to_owned();
+    let mut fair_admission = None;
+    if let (Some(mode), Some(identity)) = (service.serial_ready_mode.as_ref(), fair_identity) {
+        let admission = async {
+            let member = service
+                .session_store_guard()?
+                .serial_service_ready_member(&command.session_id, &command.workflow_run_id, task_id)
+                .ok_or_else(|| {
+                    WorkflowServiceError::InvalidRequest(
+                        "fair serial service requires a bounded authoritative Ready member".into(),
+                    )
+                })?;
+            let scope = mode.enter_fair(identity.0.clone(), identity.1).await?;
+            let admission = super::WorkflowSerialServiceAdmission { identity, member };
+            service
+                .session_store_guard()?
+                .validate_serial_service_admission(
+                    &command.session_id,
+                    &command.workflow_run_id,
+                    &admission,
+                )?;
+            if let Some(grant) = scope.service_grant() {
+                log::info!(target: "workflow::serial_ready", "{}", serde_json::json!({
+                    "phase": "service_opportunity", "workflow_run_id": command.workflow_run_id,
+                    "task_id": task_id, "ticket": grant.ticket, "protected": grant.protected,
+                    "bypasses": grant.bypasses,
+                    "competing_priority": grant.competing_priority,
+                }));
+            }
+            Ok::<_, WorkflowServiceError>((scope, admission))
+        }
+        .await;
+        match admission {
+            Ok((scope, admission)) => {
+                serial_scope = Some(scope);
+                fair_admission = Some(admission);
+            }
+            Err(error) => {
+                return WorkflowTaskExecutionWorkerRuntimeBranchExecutionResult::complete(
+                    WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
+                        command,
+                        error.to_string(),
+                        Vec::new(),
+                    ),
+                )
+            }
+        }
+    }
     let mut serial_pair = None;
     let mut serial_owner = None;
     if let (Some(mode), Some(scope)) = (service.serial_ready_mode.as_ref(), serial_scope.as_ref()) {
@@ -1549,6 +1622,7 @@ async fn claim_and_execute_runtime_branch_event(
             scheduler_transition_from_runtime_branch_start_reason(command.start_reason),
             serial_pair.as_ref(),
             serial_owner.as_ref(),
+            fair_admission.as_ref(),
         )
         .await
     {
@@ -3985,12 +4059,20 @@ mod tests {
         service: &WorkflowService,
         workflow_run_id: &str,
     ) -> String {
+        prepare_ready_runtime_branch_run_with_attribution(service, workflow_run_id, None)
+    }
+
+    fn prepare_ready_runtime_branch_run_with_attribution(
+        service: &WorkflowService,
+        workflow_run_id: &str,
+        attribution: Option<crate::WorkflowExecutionSessionAttributionContext>,
+    ) -> String {
         let mut store = service.session_store_guard().expect("session store");
         let session_id = store
             .create_session(
                 WORKER_BATCH_WORKFLOW_ID.to_string(),
                 None,
-                None,
+                attribution,
                 vec!["pytorch".to_string()],
                 vec!["stable-diffusion-xl".to_string()],
                 true,

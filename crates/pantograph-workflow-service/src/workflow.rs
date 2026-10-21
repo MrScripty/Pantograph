@@ -64,9 +64,12 @@ mod runtime_preflight;
 #[allow(dead_code)]
 mod runtime_task_attempt_fact;
 mod serial_ready;
+mod serial_service_opportunities;
 mod service_config;
 pub use serial_ready::WorkflowSerialReadyConfig;
-pub(crate) use serial_ready::{WorkflowSerialReadyMember, WorkflowSerialReadyPair};
+pub(crate) use serial_ready::{
+    WorkflowSerialReadyMember, WorkflowSerialReadyPair, WorkflowSerialServiceAdmission,
+};
 mod session_execution_api;
 mod session_io_artifacts;
 mod session_lifecycle_api;

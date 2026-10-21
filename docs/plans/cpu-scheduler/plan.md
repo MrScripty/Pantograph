@@ -1,10 +1,10 @@
 # Plan: CPU Scheduler Completion And Fair Progress
 
-**Plan status:** `Active` — M1/M2 accepted and merged; later milestone contracts remain unadmitted.
+**Plan status:** `Active` — M1/M2 accepted and merged; bounded M3 admitted; M4–M6 unadmitted.
 
-**Current phase:** M2 acceptance closure — bounded advisory CPU scope accepted.
+**Current phase:** M3 fixed native evidence completed and independently reviewed; exact published-head gates pending.
 
-**Next slice:** Review and admit a bounded M3 fairness contract before implementation.
+**Next slice:** Publish the focused M3 source/tests/report PR and verify its exact-head required CI. M4 remains unadmitted.
 
 **Acceptance status:** M1 merged as PR73 in main `07b23d47`; the original
 negative cohort and the separately accepted C3 supplement remain unchanged.
@@ -205,7 +205,7 @@ and write sets receive an independent review before their first code change.
 | M0 / Accepted on publication | Reviewed plan, source/hardware facts, ledger/issues; navigation pointers in `docs/plans/README.md`, broad plan and scheduler migration notes. No production code. | Two independent reviewers approved M1's shared interface decisions; links, exact scope and history reviewed. This plan commit is the publication checkpoint. |
 | M1 / Accepted; merged PR73 | Existing retained CPU first-two-Ready mode composes with ordinary hosted providers. Writes: embedded `workflow_service_composition.rs` and its focused tests; workflow `serial_ready.rs`, `task_execution_worker.rs`, relevant tests/exports; new focused native integration test and registration; bounded CPU example/guide only if needed for repeatable invocation; this plan's evidence. | M0; real resident CPU owner and retaining lease. Actual public sessions with two ready embeddings and retained outputs; measured sample-driven order; no injected candidate/readiness/timing/outputs; default and negative lifecycle regressions. Exact-head local gates, independent source/evidence review, normal CI. |
 | M2 / Accepted; merged PR76 | Bounded completion lookahead for a disclosed CPU cohort, initially advisory on actual work. Extend existing scheduler kernels, workflow capture and native evidence producer only. | M1; complete comparable evidence for every admitted alternative/transition, including unfinished obligations. Hand-computed independent oracles, work-budget refusal, missing/stale evidence, owner invalidation and actual CPU trace correspondence. No forecasts authorize execution. Promote only a separately qualified action subset; do not fill missing cold/transfer costs with zero. |
-| M3 / Planned | Explicit per-app/bucket service opportunities at an authoritative ready-work boundary, alongside priorities. Writes confined to scheduler/workflow queue/attribution integration and tests after its design review. | M1 and a bounded eligible population; use authenticated existing attribution, not arbitrary caller identities. Fixed modeled traces prove opportunity/order, then two actual CPU sessions prove progress under repeated foreground arrival and cancellation. No wall-clock guarantee for unbounded nonpreemptible jobs. Missing entitlement identity has an explicit owned disposition. |
+| M3 / Implemented; Verifying | Explicit per-app/bucket service opportunities at an authoritative ready-work boundary, alongside priorities. Writes confined to scheduler/workflow queue/attribution integration and tests after its design review. | M1 and a bounded eligible population; use authenticated existing attribution, not arbitrary caller identities. Fixed modeled traces prove opportunity/order, then actual CPU sessions from two authenticated units prove progress under repeated foreground arrival and cancellation. No wall-clock guarantee for unbounded nonpreemptible jobs. Missing entitlement identity has an explicit owned disposition. |
 | M4 / Planned | CPU residency actions improve a specified repeated-model workflow without violating cleanup; serial preparation/eviction only. Writes scheduler policy, registry/host action integration and tests after review. | M2 evidence, M3 fairness obligations where actions delay other apps. Measure load/unload/reload separately; full charge remains until acknowledged stop; pinned/live allocations protected. Actual two-model CPU alternation, pressure, cancellation and failed-stop cases. No overlapping loads, speculative lease release or automatic recovery of unknown execution. |
 | M5 / Planned | Fair bounded grouping on the existing supported sequential CPU batch envelope; optimize only demonstrated scheduler overhead/reuse. Writes existing batch policy/broker and tests after review. | M3/M4 where grouping changes retention or fairness. Group 1..8 compatible members without waiting indefinitely, preserve per-member outputs/attempts/cancellation, mixed/incompatible tasks refuse grouping. Compare actual CPU grouped versus singleton runs. Label sequential envelope honestly; native/continuous execution remains Deferred unless independently capable and exercised. |
 | M6 / Planned | Qualified modes become an explicit documented host/application choice with truthful diagnostics and bounded rollback. | Accepted upstream milestones; exact consumer contract and UI/IPC/persistence routing reviewed if added. Real consuming-path evidence, regression and performance report, normal CI. Default activation is a separate decision; no main merge/deployment authorized. |
@@ -214,6 +214,150 @@ M2–M5 may be reordered only when measured dependencies change; the integrator
 updates the one next slice and affected design review, rather than implementing
 unsettled shared contracts in parallel. A milestone unable to prove its named
 native action remains advisory/Blocked; contract tests never substitute for it.
+
+### M3 Bounded Service Contract (2026-10-19; independently admitted)
+
+Operation `continue` under this plan. The current user delegation authorizes M3
+implementation, focused PR publication and independent review; it does not
+authorize merging, default activation or M4 implementation. Base is main
+`4aec0d5c4927a6af2832d40e224be5c2136fc9ef`; original `work` and PR79 README work
+remain untouched. Branch `feat/cpu-scheduler-m3-bounded-service` in
+`/workspace/pantograph-m3` is retained for parent integration, with committed
+checkpoints and normal fast-forward feature pushes. No history rewrite.
+
+**Behavior:** an explicit `WorkflowSerialReadyConfig` builder enables protected
+opportunities on the existing singleton CPU serial mode. Ordinary construction,
+M1 sample ranking and M2 advisory authorization remain unchanged. A service
+opportunity admits one already Ready runtime task to the existing serial owner;
+it is neither a successful Start nor a predicted completion or lease.
+
+**Eligibility and identity:** complete ordinary preparation first, outside the
+serial owner permit in this opt-in only. Capture the authoritative first Ready
+runtime member using existing store proof/input/population bounds (128 tasks).
+Bind its active run and priority to the session's backend-validated attribution.
+The entitlement unit is `(client_id, bucket_id)`; session IDs cannot mint a new
+unit. Bucket selection has already been checked against the authenticated client
+by the attribution store. No caller-authored fairness identity is accepted.
+Missing attribution refuses this mode before preparation with `InvalidRequest`
+and before a new runtime
+event claim, reservation or native execution; bootstrap may use a separate
+ordinary service. Credential revocation is not newly polled: entitlement has
+the existing attributed-session lifetime. This is fairness among client/bucket
+units, not a weighted app share independent of bucket count.
+
+**Bounded policy:** at most 64 pending registrations and 32 pending entitlement
+units; overflow refuses explicitly without evicting eligible work. One selected
+registration holds the service turn through existing execution/drain/cleanup.
+Pending state is owned by this serial mode and disappears after its last waiter;
+there is no persisted debt or background arbiter. Each distinct pending unit
+counts other-unit grants, saturating at two. A unit with two bypasses is protected.
+Select the protected unit with the oldest service-order ticket before ordinary priority;
+within that unit select active-run priority then FIFO. Otherwise use active-run
+priority then FIFO across the pending population. Existing per-session priority,
+FIFO, warm window and starvation boosts still select runs before this boundary;
+the new arbiter does not invent an active-run starvation boost.
+FIFO is local registration order with checked monotonic identities. Same-unit
+arrivals do not erase debt while another member remains pending; new units start
+behind existing protected units. Reset the selected unit's bypass count and refresh its service-order ticket
+on every grant, independently of member FIFO, even if old backlog remains.
+Otherwise three old backlogged units could rotate forever ahead of a newer
+protected unit. Increment only other units. For a continuously pending unit with continuously pending eligible work,
+at most two ordinary other-unit grants plus the other 31 bounded protected units
+can precede its protected opportunity. This is a grant-count bound, not wall time
+or preemption. Priorities may yield to that explicit protection; starvation within
+one unit at arbitrarily different priorities is not a new guarantee.
+
+**Ownership and cancellation:** registrations use cancellation-safe RAII removal;
+dropping a pending future removes only scheduling state, with no runtime claim to
+release. Caller loss does not abort the supervised task. Existing public active
+task cancellation still requires Running; waiting Ready cancellation through
+that API remains unsupported and must be reported truthfully. Active cancellation
+retains the service turn and physical charges until actual drain/cleanup or
+existing poison fencing. Final task/proof/input/active-run checks remain mandatory
+after waiting and before Start; stale representatives refuse. An unchanged first representative may still
+use M1's current same-run pair to choose its second member, subject to the
+existing final pair fence; this does not transfer the turn to another unit. No async guard is a cleanup receipt. Poison/uncertain cleanup does
+not recover merely because the scheduling turn ends.
+
+**Composition:** the scheduler module owns bounded synchronous opportunity state
+and selection; the workflow serial mode owns async wakeup/registration lifetime.
+The worker supplies only authoritative eligibility and then enters the existing
+serial scope. Preparation, selection, execution custody and diagnostics remain
+separate concerns. Composition roots opt in with one builder and supply existing
+attribution; they do not provide queue/debt/clock data. Future policy tuning touches
+the policy owner/tests; identity changes touch the attribution boundary; cleanup
+changes remain native-owner work. A bounded private log projection may expose
+run/task IDs, grant ordinal, protected/priority reason and counts to qualification;
+no text, credential, caller identity history, durable schema, IPC or UI change.
+
+**Write set:** scheduler opportunity policy/tests and store Ready/active-run read;
+workflow serial configuration, owned waiter lifecycle, worker integration and
+focused tests; an isolated M3 CPU qualification module wired through the existing
+embedding probe and its guide; this plan/issues/ledger/report/evidence. No PR75
+adapter/model code, registry accounting change, new dependency, general scheduler,
+batch implementation, binding or default-policy change. Existing canonical
+standards baseline `188beda1` applies; Rust API/async and security input bounds
+are routed with the existing Core/topics/workflows. The existing contract document
+and source rustdoc own the opt-in consumer semantics; no duplicate policy database.
+
+| ID | Deciding observable / oracle | Evidence / gate |
+| --- | --- | --- |
+| M3-C1 | Fixed hand-written traces preserve active-run priority/FIFO and leave existing session boost policy intact; repeated foreground grants protect background within the stated count; same-unit sessions cannot reset debt; an A/B/C/D always-backlogged trace catches stale service-order rotation. | Deterministic policy tests, exact expected grant sequences and saturation/cap/overflow cases. |
+| M3-C2 | Only store-validated Ready active-run work with verified attribution joins; invalid/missing identity, stale proof/input, non-Ready or population overflow never starts. | Focused store/worker regressions, no-new-reservation/forward assertions. |
+| M3-C3 | Pending drop, active cancellation, owner mismatch and uncertain cleanup preserve registration, exclusive execution and physical ownership invariants. | Deterministic async registration tests plus existing native lifecycle regressions and focused worker composition tests. |
+| M3-C4 | Actual authenticated CPU sessions from two units make progress with repeated high-priority foreground arrivals and one actual cancellation request; exact grants, Starts, results and cleanup agree. | One prospectively fixed isolated cohort after producer review; retain every outcome and source/binary/input/environment hashes. No winner retries or latency/speedup threshold. Missing native behavior stays Partial/Blocked. |
+| M3-C5 | Source/tests/report independently reviewed and exact published head passes normal required CI. | Affected package tests/Clippy, formatting, declared hooks, traceability, review and remote SHA/tree evidence. |
+
+#### M3 Fixed Native Cohort (prospectively fixed; executed once)
+
+One isolated invocation, frozen reviewed release source/binary, existing untrained
+BERT-8 fixture and independent numerical reference. Two real authenticated
+client/bucket units use five sessions: four foreground sessions with two Ready
+embedding branches each (priority100), one background session with two branches
+(priority-100). All foreground sessions share the same backend-validated unit;
+new session IDs cannot create four entitlements. Minimum eight samples and a 60-second age keep M1 on explicit untrained FIFO
+(each workload has at most five cohort samples), so grant representatives can be
+compared directly with actual Starts without changing M1 policy. One separate ordinary bootstrap
+and live retaining session supply the existing native CPU owner prerequisites.
+
+A transparent qualification-only wrapper forwards every native method, response
+and linear receipt unchanged. Hold the first foreground call at its actual
+Running/pre-forward boundary; launch the other three foreground runs and background
+run and wait for exactly four actual registered Ready waiters before release.
+After two other-unit grants the background becomes protected while at least one
+high-priority foreground waiter remains. The private grant diagnostic records
+maximum other-unit waiting priority; raw evidence must prove actual protection
+against a higher-priority waiter, not merely progress without competition.
+There are exactly ten planned native calls, eight foreground plus two background.
+
+For the eighth foreground call only, hold its genuine completed native result
+and drain receipt before returning to the workflow; request public active-task
+cancellation while the task is still Running, record request/charge/receipt facts,
+then return the native result unchanged. This is a post-drain cancellation
+request and proves no interrupted compute. Completion may win; do not fabricate
+Cancelled or withhold cleanup. A pre-forward cancellation would instead reject
+before receipt production and could poison custody; that is not this cohort.
+
+Retain every raw result, failure, grant, ledger Start/completion, cancellation,
+retained output, owner/registry and shutdown record. No winner retry, cohort
+expansion, timing tuning, downloaded model, missing-phase zero or speedup threshold.
+Any missing native criterion remains Partial/Blocked; unit tests cannot replace it.
+After source review and fixed-protocol review, publish/checkpoint source before
+executing once. Explicit teardown still runs after producer errors.
+
+Outcome: M3-C1/C2/C3/C4 satisfied within the admitted limits. The one native
+invocation completed all ten results/receipts and shutdown, then exited1 due to a
+local-task-name oracle defect. Original failure retained; independently reviewed
+JSON-only reanalysis passes with source-assisted aggregate training evidence and
+no per-attempt sample timing attribution. See the [M3 report](reports/2026-10-19-m3-service-opportunities.md)
+and its exact-source archives. M3-C5 remains pending
+published-head required CI; no native retry or M4 implementation is authorized by
+this outcome.
+
+M4 follows only after these gates: identify a dependency-ready, separately reviewed
+serial residency subset using actual load/unload/reload evidence, M2 service-cost
+limits, M3 delay obligations and owner-acknowledged full-charge retention. No M4
+action or native batching claim is admitted here.
 
 ### M1 Evidence And Oracle Plan
 

@@ -13,6 +13,15 @@ use std::sync::Mutex;
 
 #[path = "m2_lookahead_probe.rs"]
 mod m2_lookahead_probe;
+#[path = "m3_fair_service_probe.rs"]
+mod m3_fair_service_probe;
+
+pub(super) async fn qualify_m3(root: &Path) -> ProbeResult<()> {
+    m3_fair_service_probe::qualify(root).await
+}
+pub(super) fn reanalyze_m3(root: &Path) -> ProbeResult<()> {
+    m3_fair_service_probe::reanalyze(root)
+}
 
 const RUNS: usize = 8; // Three training runs and five observations, never retry for a winner.
 const PAIR_WORKFLOW: &str = "cpu-serial-ready-pair";
@@ -69,16 +78,31 @@ async fn compose_with_serial_config(
     selector: Arc<PumasSelectorAccess>,
     serial_config: Option<WorkflowSerialReadyConfig>,
 ) -> ProbeResult<EmbeddedRuntime> {
-    let service = if let Some(config) = serial_config {
-        WorkflowService::new_serial_ready_cpu(
+    let serial_port = serial_config.map(|config| {
+        let port: Arc<dyn pantograph_runtime_host_contracts::SerialRuntimeHostBatchExecutionPort> =
             Arc::new(EmbeddedRetainedCpuSerialPort::new(
                 gateway.clone(),
                 registry.clone(),
                 selector.clone(),
-            )),
-            config,
-        )
-        .with_attribution_store(
+            ));
+        (config, port)
+    });
+    compose_with_serial_port(root, name, gateway, registry, selector, serial_port).await
+}
+
+async fn compose_with_serial_port(
+    root: &Path,
+    name: &str,
+    gateway: Arc<inference::InferenceGateway>,
+    registry: Arc<RuntimeRegistry>,
+    selector: Arc<PumasSelectorAccess>,
+    serial_port: Option<(
+        WorkflowSerialReadyConfig,
+        Arc<dyn pantograph_runtime_host_contracts::SerialRuntimeHostBatchExecutionPort>,
+    )>,
+) -> ProbeResult<EmbeddedRuntime> {
+    let service = if let Some((config, port)) = serial_port {
+        WorkflowService::new_serial_ready_cpu(port, config).with_attribution_store(
             pantograph_workflow_service::workflow::SqliteAttributionStore::open_in_memory()?,
         )
     } else {
