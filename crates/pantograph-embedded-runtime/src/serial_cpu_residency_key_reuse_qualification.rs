@@ -188,7 +188,6 @@ fn verify_arm(arm: &Value, enabled: bool, golden: &Value) -> Result<(), String> 
         "task_id",
         "attempt_id",
         "execution_request_id",
-        "candidate_id",
         "reservation_lease_id",
     ] {
         require(
@@ -200,6 +199,11 @@ fn verify_arm(arm: &Value, enabled: bool, golden: &Value) -> Result<(), String> 
     let mut task_ids = Vec::new();
     for (index, row) in drained.iter().enumerate() {
         let native = &row["record"];
+        // Candidate identifies the selected runtime alternative, not an attempt.
+        require(
+            native["candidate_id"] == "runtime.candle",
+            "native candidate does not identify the Candle runtime",
+        )?;
         let (previous, current) = (&native["previous_owner"], &native["current_owner"]);
         verify_owner(previous)?;
         verify_owner(current)?;
@@ -425,7 +429,7 @@ mod held {
     };
 
     type Outcome<T> = Result<T, Box<dyn Error>>;
-    const PROTOCOL: &str = "m5-native-two-ready-key-reuse-v1";
+    const PROTOCOL: &str = "m5-native-two-ready-key-reuse-v2";
     const TEXTS: [&str; 2] = ["hello world", "hello"];
     const RUN_BUDGET: Duration = Duration::from_secs(60);
     const SHUTDOWN_BUDGET: Duration = Duration::from_secs(30);
@@ -974,7 +978,7 @@ mod held {
 
     #[tokio::test]
     #[ignore = "one held native protocol; requires separate exact-source admission and evidence root"]
-    async fn fixed_two_ready_native_key_reuse_comparison() -> Outcome<()> {
+    async fn fixed_two_ready_native_key_reuse_comparison_v2() -> Outcome<()> {
         let root = PathBuf::from(
             std::env::var_os("PANTOGRAPH_M5_KEY_REUSE_EVIDENCE_ROOT")
                 .ok_or("mandatory evidence root missing")?,
@@ -1069,7 +1073,7 @@ mod oracle_tests {
             let lease = 10 + index;
             logs.push(json!({"sequence":index*10,"record":{"phase":"service_opportunity","workflow_run_id":run,"task_id":task,"ticket":index+1}}));
             let native = json!({"phase":"native_drained","workflow_id":WORKFLOW,"workflow_run_id":run,"node_id":node,"task_id":task,
-                "attempt_id":attempt,"execution_request_id":format!("request-{index}"),"candidate_id":format!("candidate-{index}"),"reservation_lease_id":lease,
+                "attempt_id":attempt,"execution_request_id":format!("request-{index}"),"candidate_id":"runtime.candle","reservation_lease_id":lease,
                 "previous_owner":{"loaded_instance":vec![7;16],"loaded_profile":vec![8;32],"effective_settings":vec![9;32],"generation":2+index*2,"cpu_threads":1},
                 "current_owner":{"loaded_instance":vec![7;16],"loaded_profile":vec![8;32],"effective_settings":vec![9;32],"generation":4+index*2,"cpu_threads":1}});
             logs.push(json!({"sequence":index*10+4,"record":native}));
@@ -1137,6 +1141,57 @@ mod oracle_tests {
         let mut changed = arm;
         changed["logs"][3]["record"]["ticket"] = json!(1);
         assert!(verify_arm(&changed, true, &golden).is_err());
+    }
+
+    #[test]
+    fn runtime_candidate_can_repeat_but_coordinated_foreign_candidates_are_refused() {
+        let (arm, golden) = positive(true);
+        for native_index in [1, 4] {
+            assert_eq!(
+                arm["logs"][native_index]["record"]["candidate_id"],
+                "runtime.candle"
+            );
+        }
+        assert_eq!(verify_arm(&arm, true, &golden), Ok(()));
+        let mut changed = arm;
+        for row in [1, 2] {
+            changed["logs"][row]["record"]["candidate_id"] = json!("runtime.foreign");
+        }
+        assert_eq!(
+            verify_arm(&changed, true, &golden),
+            Err("native candidate does not identify the Candle runtime".into())
+        );
+    }
+
+    #[test]
+    fn runtime_candidate_must_match_its_member_registry_ack() {
+        let (mut arm, golden) = positive(true);
+        arm["logs"][2]["record"]["candidate_id"] = json!("runtime.foreign");
+        assert_eq!(
+            verify_arm(&arm, true, &golden),
+            Err("registry ACK identity differs".into())
+        );
+    }
+
+    #[test]
+    fn repeating_an_attempt_custody_identity_still_refuses_before_member_joins() {
+        let (arm, golden) = positive(true);
+        for field in [
+            "task_id",
+            "attempt_id",
+            "execution_request_id",
+            "reservation_lease_id",
+        ] {
+            let mut changed = arm.clone();
+            let repeated = arm["logs"][1]["record"][field].clone();
+            for row in [4, 5] {
+                changed["logs"][row]["record"][field] = repeated.clone();
+            }
+            assert_eq!(
+                verify_arm(&changed, true, &golden),
+                Err("native identity reused".into())
+            );
+        }
     }
 
     #[test]

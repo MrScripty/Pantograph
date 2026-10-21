@@ -2,6 +2,47 @@
 
 
 
+## 2026-10-21 — Separately authorized prospective v2 correction
+
+- Fresh user delegation explicitly authorizes a corrected oracle, independent
+  full source/protocol review and one bounded new baseline/enabled cohort. V1's
+  failed source, protocol, archive and marker remain unchanged; neither its
+  baseline nor verdict is reused. Parent's second disconnect report was followed
+  by successful pwd/Git/metadata recovery, clean source AEA, unchanged v1 archive
+  e6edef6c/result77a24b38 and provided actor MrScripty. Remote main ecfed47d and
+  PR91 source AEA match. No write or native launch was pending/uncertain.
+- Independent pre-code review admitted removing only candidate_id from across-
+  member uniqueness, adding exact runtime.candle per-native validation, and
+  retaining exact within-member candidate ACK tuples and ledger selected-runtime
+  joins. All task/attempt/execution-request/reservation and grant-ticket custody
+  distinctions remain. New positive/negative oracles must decide this contract
+  directly, including coordinated foreign candidates and intended failure cause.
+- Existing branch/worktree test/cpu-scheduler-native-key-reuse is retained and
+  remains the sole publication owner. Root owns canonical docs, new prospective
+  v2 document/supervisor, compilation, commits/publication, freeze and one run.
+  review_m3_merge owns only the existing held producer file; review_c2a_m6 owns
+  independent read-only review. No helper/default/admission/allocator/manifest/
+  lockfile/CI or unrelated change is selected. V1 evidence paths are excluded
+  from this write set. V2 outcome report/archive may be added after the run.
+- [V2](reports/2026-10-21-m5-native-key-reuse-protocol-v2.md) retains unchanged
+  baseline6/0 versus enabled4/4 mechanism targets, vector/genuine Ready/captured
+  pair/five phase/owner/Start/ACK/cleanup requirements and all execution/log bounds.
+  Exact cross-arm output equality is stated explicitly to match existing source.
+  Conservative VRAM claims are not zero reservation or physical GPU evidence.
+  No v2 physical execution has occurred; full source/protocol/supervisor review,
+  model-free checks, exact source/binary/fixtures freeze and manifest admission
+  still gate the single new run. Publication stays draft while unqualified.
+- Correction checks passed: ten inventory-enabled model-free oracle cases
+  (held v2 compiled, never executed), full default embedded library617 with two
+  existing ignored probes, strict all-feature/all-target own-package Clippy,
+  warning-deny own-package Rustdoc, formatting and declared pre-push261/one
+  existing ignore+168. Workflow-service source/helper is byte-unchanged from
+  reviewed AEA and its previous1048 passes; no unrelated suite is relabeled as
+  new v2 evidence. Source/protocol/supervisor review approved freezing after
+  prerequisites. The apparent missing cgroup/affinity check review finding was
+  withdrawn after confirming the existing pre-marker assertions in exact bytes;
+  no unnecessary supervisor behavior change was introduced.
+
 ## 2026-10-21 — Single native cohort terminal failure and finite stop
 
 - PR90 actual main ecfed47d completed all20 checks/four workflows successfully,
