@@ -11,7 +11,7 @@ permissions:
   contents: read
 jobs:
   public-text-workflow:
-    name: Public CPU text runtime effects (untrained fixture)
+    name: Public CPU text effects and cold reopen (untrained fixture)
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -29,7 +29,7 @@ jobs:
           python -m venv "$RUNNER_TEMP/text-venv"
           "$RUNNER_TEMP/text-venv/bin/python" -m pip install torch --index-url https://download.pytorch.org/whl/cpu
           "$RUNNER_TEMP/text-venv/bin/python" -m pip install 'transformers>=4.52,<4.54' 'soundfile==0.13.1' accelerate safetensors tokenizers
-      - name: Observe generation, loader failure and early active cancellation
+      - name: Observe generation, loader failure, early active cancellation and cold reopen
         env:
           TEXT_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           CARGO_BUILD_JOBS: '2'

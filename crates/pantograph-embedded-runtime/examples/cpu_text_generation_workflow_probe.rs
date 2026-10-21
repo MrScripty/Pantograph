@@ -139,6 +139,7 @@ impl Sessions {
 }
 async fn create_runtime(
     root: &Path,
+    reopen: bool,
 ) -> ProbeResult<(
     EmbeddedRuntime,
     Arc<pumas_library::PumasApi>,
@@ -159,7 +160,9 @@ async fn create_runtime(
             .build()
             .await?,
     );
-    api.rebuild_model_index().await?;
+    if !reopen {
+        api.rebuild_model_index().await?;
+    }
     let registry = Arc::new(RuntimeRegistry::new());
     let gateway = Arc::new(inference::InferenceGateway::with_backend(
         Box::new(inference::backend::pytorch::PyTorchBackend::new()),
@@ -302,13 +305,103 @@ async fn author_graph(
         node.data["inference_interface_snapshot"] =
             serde_json::to_value(authored_snapshot_from_descriptor(&projection.descriptor)?)?;
     }
-    service.workflow_graph_save(
+    let saved = service.workflow_graph_save(
         &pantograph_workflow_service::FileSystemWorkflowGraphStore::new(root),
         pantograph_workflow_service::WorkflowGraphSaveRequest {
             name: WORKFLOW_ID.into(),
             graph: graph.clone(),
         },
     )?;
+    save(
+        root,
+        "saved-graph.json",
+        &json!({
+            "path":saved.path,
+            "blake3":blake3::hash(&std::fs::read(&saved.path)?).to_hex().to_string(),
+        }),
+    )?;
+    validate_graph(runtime, root, stage, graph, sessions).await
+}
+
+// Reopening retains authored snapshots and graph bytes; only validation is refreshed.
+async fn reopen_workflow(
+    runtime: &EmbeddedRuntime,
+    root: &Path,
+    evidence: &Path,
+    stage: &mut &str,
+    sessions: &mut Sessions,
+) -> ProbeResult<String> {
+    *stage = "graph_reopen";
+    let inputs: Value = serde_json::from_slice(&std::fs::read(root.join("model-inputs.json"))?)?;
+    let model = root.join("shared-resources/models").join(MODEL_ID);
+    for input in inputs["files"]
+        .as_array()
+        .ok_or("missing saved model inputs")?
+    {
+        let name = input["file"].as_str().ok_or("missing model input name")?;
+        if Path::new(name).file_name() != Some(std::ffi::OsStr::new(name)) {
+            return Err("saved model input must be a single filename".into());
+        }
+        let path = model.join(name);
+        let metadata = std::fs::symlink_metadata(&path)?;
+        if !metadata.is_file()
+            || input["bytes"].as_u64() != Some(metadata.len())
+            || metadata.len() > 600 * 1024 * 1024
+            || input["blake3"] != blake3::hash(&std::fs::read(&path)?).to_hex().to_string()
+        {
+            return Err("retained model input bytes changed before cold reopen".into());
+        }
+    }
+    save(evidence, "model-inputs.json", &inputs)?;
+    let saved: Value = serde_json::from_slice(&std::fs::read(root.join("saved-graph.json"))?)?;
+    let path = root
+        .join(".pantograph/workflows")
+        .join(format!("{WORKFLOW_ID}.json"));
+    let hash = blake3::hash(&std::fs::read(&path)?).to_hex().to_string();
+    if saved["path"].as_str() != path.to_str() || saved["blake3"] != hash {
+        return Err("saved graph identity or bytes changed before cold reopen".into());
+    }
+    let loaded =
+        runtime.workflow_graph_load(pantograph_workflow_service::WorkflowGraphLoadRequest {
+            path: path.to_string_lossy().into_owned(),
+        })?;
+    if loaded.metadata.id.as_deref() != Some(WORKFLOW_ID) {
+        return Err("reopened graph has unexpected workflow identity".into());
+    }
+    save(evidence, "loaded-workflow.json", &loaded)?;
+    save(evidence, "saved-graph.json", &saved)?;
+    let session = validate_graph(runtime, evidence, stage, loaded.graph, sessions).await?;
+    let prior: Value =
+        serde_json::from_slice(&std::fs::read(root.join("executable-validation.json"))?)?;
+    let current: Value =
+        serde_json::from_slice(&std::fs::read(evidence.join("executable-validation.json"))?)?;
+    let prior_id = &prior["summary"]["validation_session_id"];
+    let current_id = &current["summary"]["validation_session_id"];
+    if prior_id.is_null() || current_id.is_null() || prior_id == current_id {
+        return Err("cold reopen did not create a fresh validation identity".into());
+    }
+    save(
+        evidence,
+        "reopen-observation.json",
+        &json!({
+            "saved_graph_unchanged":true,"catalog_rebuilt_by_probe":false,
+            "catalog_startup":"pumas_default_metadata_reconciliation",
+            "model_inputs_unchanged":true,"catalog_root":root,"model_path":model,
+            "previous_validation_session_id":prior_id,"validation_session_id":current_id,
+            "graph_session_id":session,
+        }),
+    )?;
+    Ok(session)
+}
+
+async fn validate_graph(
+    runtime: &EmbeddedRuntime,
+    root: &Path,
+    stage: &mut &str,
+    graph: WorkflowGraph,
+    sessions: &mut Sessions,
+) -> ProbeResult<String> {
+    let service = runtime.workflow_service();
     let session = service
         .workflow_graph_create_edit_session(WorkflowGraphEditSessionCreateRequest {
             graph,
@@ -479,11 +572,23 @@ fn observe_negative(
 async fn execute(
     runtime: &EmbeddedRuntime,
     root: &Path,
+    evidence: &Path,
     stage: &mut &str,
     sessions: &mut Sessions,
     mode: &str,
 ) -> ProbeResult<Value> {
-    author_workflow(runtime, root, stage, sessions).await?;
+    if mode == "reopen" {
+        let bootstrap = runtime
+            .workflow_service()
+            .workflow_execution_session_bootstrap_recovery_report()?;
+        save(evidence, "bootstrap-before-reopen.json", &bootstrap)?;
+        if !bootstrap.active_runs.is_empty() {
+            return Err("fresh runtime unexpectedly retained an active run".into());
+        }
+        reopen_workflow(runtime, root, evidence, stage, sessions).await?;
+    } else {
+        author_workflow(runtime, root, stage, sessions).await?;
+    }
     if mode == "failure" {
         // Damage only this disposable copy after package/graph resolution.
         std::fs::write(
@@ -549,7 +654,7 @@ async fn execute(
             .into_iter()
             .find(|r| r.session_id == session.session_id)
         {
-            save(root, "readiness-resume-request.json", &request)?;
+            save(evidence, "readiness-resume-request.json", &request)?;
             resumes.push(request.workflow_run_id.clone());
             let resume =
                 runtime.resume_workflow_execution_session_runtime_dependency_readiness(request);
@@ -561,11 +666,11 @@ async fn execute(
                         let active = runtime.workflow_service().workflow_execution_session_bootstrap_recovery_report()?;
                         if let Some(run) = active.active_runs.iter().find(|run|run.session_id==session.session_id) {
                             if let Some(task) = run.runtime_tasks.iter().find(|task|task.state_kind==Some(pantograph_scheduler::SchedulerTaskStateKind::Running)) {
-                                save(root,"running-before-cancel.json",&active)?;
+                                save(evidence,"running-before-cancel.json",&active)?;
                                 let cancelled = runtime.workflow_service().workflow_cancel_active_execution_session_task(WorkflowExecutionSessionActiveTaskCancelRequest {
                                     session_id:session.session_id.clone(),workflow_run_id:run.workflow_run_id.clone(),task_id:task.task_id.clone(),reason:Some("bounded CPU text probe cancellation".into()),
                                 }).await?;
-                                save(root,"cancellation-request.json",&cancelled)?;
+                                save(evidence,"cancellation-request.json",&cancelled)?;
                                 cancellation_observed = cancelled.ok;
                                 cancellation_attempt = Some(cancelled.active_attempt_id);
                             }
@@ -577,14 +682,14 @@ async fn execute(
             tokio::time::sleep(Duration::from_millis(25)).await;
         }
     }
-    save(root, "readiness-resumed-runs.json", &resumes)?;
+    save(evidence, "readiness-resumed-runs.json", &resumes)?;
     let scheduler = runtime
         .workflow_service()
         .workflow_get_scheduler_snapshot(serde_json::from_value(
             json!({"session_id": session.session_id}),
         )?)
         .await?;
-    save(root, "scheduler-after-run.json", &scheduler)?;
+    save(evidence, "scheduler-after-run.json", &scheduler)?;
     match result {
         Err(error) if matches!(mode, "failure" | "cancel") => {
             if !scheduler.items.is_empty() {
@@ -617,8 +722,18 @@ async fn execute(
             )
         }
         Err(error) => Err(error.into()),
-        Ok(response) if mode == "generate" => {
-            save(root, "response.json", &response)?;
+        Ok(response) if matches!(mode, "generate" | "reopen") => {
+            save(evidence, "response.json", &response)?;
+            if !scheduler.items.is_empty() {
+                return Err("completed run still retained in session queue".into());
+            }
+            if mode == "reopen" {
+                let previous: Value =
+                    serde_json::from_slice(&std::fs::read(root.join("response.json"))?)?;
+                if previous["workflow_run_id"] == response.workflow_run_id {
+                    return Err("cold reopen reused the prior workflow run identity".into());
+                }
+            }
             let text = response
                 .outputs
                 .iter()
@@ -639,9 +754,15 @@ async fn execute(
 
 #[tokio::main]
 async fn main() -> ProbeResult<()> {
+    let process_marker = uuid::Uuid::new_v4().to_string();
     let args: Vec<_> = std::env::args().skip(1).collect();
-    if args.len() != 3 || !matches!(args[2].as_str(), "generate" | "failure" | "cancel") {
-        return Err("usage: cpu_text_generation_workflow_probe <new absolute evidence root> <absolute local model directory|--synthetic> <generate|failure|cancel>".into());
+    if args.len() != 3
+        || !matches!(
+            args[2].as_str(),
+            "generate" | "failure" | "cancel" | "reopen"
+        )
+    {
+        return Err("usage: cpu_text_generation_workflow_probe <absolute probe root (new except reopen)> <absolute local model directory|--synthetic> <generate|failure|cancel|reopen>".into());
     }
     let root = PathBuf::from(&args[0]);
     if !root.is_absolute()
@@ -650,7 +771,7 @@ async fn main() -> ProbeResult<()> {
             .as_deref()
             != Some(root.join("registry.db").as_path())
     {
-        return Err("set PUMAS_REGISTRY_DB_PATH=<new absolute evidence root>/registry.db; existing catalogs are never opened".into());
+        return Err("set PUMAS_REGISTRY_DB_PATH=<absolute probe root>/registry.db; only the disposable probe catalog may be opened".into());
     }
     let synthetic = args[1] == "--synthetic";
     let source = if synthetic {
@@ -659,23 +780,63 @@ async fn main() -> ProbeResult<()> {
     } else {
         PathBuf::from(&args[1])
     };
-    std::fs::create_dir(&root)?;
-    seed_model(&root, &source, synthetic)?;
+    let reopen = args[2] == "reopen";
+    let evidence = if reopen {
+        let previous: Value = serde_json::from_slice(&std::fs::read(root.join("result.json"))?)?;
+        if previous["probe_passed"] != true
+            || previous["cleanup_ok"] != true
+            || previous["scenario"] != "generate"
+            || previous["synthetic"] != synthetic
+            || previous["process_id"].as_u64().is_none()
+            || previous["process_id"] == std::process::id()
+            || previous["process_marker"].as_str().is_none()
+            || previous["process_marker"] == process_marker
+        {
+            return Err(
+                "cold reopen requires a successful cleaned-up generation from a different process"
+                    .into(),
+            );
+        }
+        let evidence = root.join("cold-reopen");
+        std::fs::create_dir(&evidence)?;
+        save(
+            &evidence,
+            "process-boundary.json",
+            &json!({
+                "previous_process_id":previous["process_id"],"process_id":std::process::id(),
+                "previous_process_marker":previous["process_marker"],"process_marker":process_marker,
+                "previous_generation_cleanup_ok":true,
+            }),
+        )?;
+        evidence
+    } else {
+        std::fs::create_dir(&root)?;
+        seed_model(&root, &source, synthetic)?;
+        root.clone()
+    };
     save(
-        &root,
+        &evidence,
         "linked-package-observation.json",
         &inference::backend::pytorch::observe_text_package_presence()?,
     )?;
-    let (runtime, _library, registry) = create_runtime(&root).await?;
+    let (runtime, _library, registry) = create_runtime(&root, reopen).await?;
+    save(&evidence, "registry-at-startup.json", &registry.snapshot())?;
     let mut sessions = Sessions::default();
     let mut stage = "initialization";
     let result = tokio::time::timeout(
         Duration::from_secs(120),
-        execute(&runtime, &root, &mut stage, &mut sessions, &args[2]),
+        execute(
+            &runtime,
+            &root,
+            &evidence,
+            &mut stage,
+            &mut sessions,
+            &args[2],
+        ),
     )
     .await;
     let outcome_save = save(
-        &root,
+        &evidence,
         "execution-outcome.json",
         &match &result {
             Ok(Ok(value)) => value.clone(),
@@ -685,11 +846,11 @@ async fn main() -> ProbeResult<()> {
     );
     // A watchdog expiry is a failure, never cancellation evidence. Always run owner cleanup.
     let close =
-        tokio::time::timeout(Duration::from_secs(30), sessions.close(&runtime, &root)).await;
+        tokio::time::timeout(Duration::from_secs(30), sessions.close(&runtime, &evidence)).await;
     let shutdown = tokio::time::timeout(Duration::from_secs(30), runtime.shutdown()).await;
     outcome_save?;
     let registry_after = registry.snapshot();
-    save(&root, "registry-after-shutdown.json", &registry_after)?;
+    save(&evidence, "registry-after-shutdown.json", &registry_after)?;
     let cleanup_ok = matches!(close, Ok(Ok(())))
         && matches!(shutdown, Ok(Ok(())))
         && registry_after.reservations.is_empty()
@@ -707,7 +868,7 @@ async fn main() -> ProbeResult<()> {
         });
     let events = SqliteDiagnosticsLedger::open(root.join("diagnostics.db"))?
         .diagnostic_events_after(0, 500)?;
-    save(&root, "diagnostics.json", &events)?;
+    save(&evidence, "diagnostics.json", &events)?;
     let output = match &result {
         Ok(Ok(value)) => value.clone(),
         Ok(Err(error)) => json!({"error":error.to_string()}),
@@ -715,10 +876,10 @@ async fn main() -> ProbeResult<()> {
     };
     let public_projection = output["public_result_projection_qualified"] == true;
     let passed = matches!(result, Ok(Ok(_))) && cleanup_ok && public_projection;
-    let report = json!({"probe_passed":passed,"runtime_effect_observed":matches!(result,Ok(Ok(_))),"public_result_projection_qualified":public_projection,"integration_passed":passed && public_projection,"stage":stage,"scenario":args[2],"synthetic":synthetic,"t3_qualified":false,
+    let report = json!({"probe_passed":passed,"runtime_effect_observed":matches!(result,Ok(Ok(_))),"public_result_projection_qualified":public_projection,"integration_passed":passed && public_projection,"stage":stage,"scenario":args[2],"synthetic":synthetic,"t3_qualified":false,"process_id":std::process::id(),"process_marker":process_marker,"cold_reopen_qualified":reopen && passed,
         "cleanup_ok":cleanup_ok,"shutdown_ok":matches!(shutdown,Ok(Ok(()))),"output":output,"diagnostics_may_be_truncated":events.len()==500,
         "limits":{"device":"cpu","max_new_tokens":MAX_NEW_TOKENS,"temperature":TEMPERATURE,"max_model_bytes":600*1024*1024,"timeout_ms":60000,"max_loaded_sessions":1}});
-    save(&root, "result.json", &report)?;
+    save(&evidence, "result.json", &report)?;
     println!("{}", serde_json::to_string_pretty(&report)?);
     if !passed {
         return Err("probe failed; evidence retained in supplied directory".into());

@@ -21,6 +21,7 @@ than an in-tree archive, preserves completed plans and superseded notes.
 ## Current Plans
 
 - [Domain architecture and multimodal workflows](plans/domain-architecture-and-multimodal/plan.md)
+- [CPU text integration and remaining acceptance](plans/text-generation-readiness/plan.md)
 - [Documentation consolidation](plans/documentation-consolidation/plan.md)
 
 Plans own current objective, order, scope, and acceptance. Their

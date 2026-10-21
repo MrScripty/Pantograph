@@ -53,7 +53,8 @@ timeout 600 /workspace/pantograph-cache/target/debug/examples/cpu_text_generatio
   "$probe_root" /absolute/path/to/verified-local-model generate
 ```
 
-Do not pre-create `probe_root`; the example refuses existing directories.
+Do not pre-create `probe_root` for an initial scenario; only the documented
+`reopen` mode accepts the successful generation's existing directory.
 The model must fit the standard local Transformers causal-LM loader without
 custom Python code or additional Pumas dependency declarations. Verify and retain
 upstream URL, immutable revision, authoritative license terms and acquisition
@@ -75,7 +76,8 @@ The separate `CPU Text Workflow Integration` CI workflow invokes
 `scripts/qualify-cpu-text-workflow.sh EXPECTED_SOURCE_SHA NEW_ABSOLUTE_EVIDENCE_ROOT`
 with a prepared Python environment. It requires a clean checkout, records the exact source SHA, source
 status and relevant source hashes, then builds and runs all three synthetic
-scenarios. This job provides integration coverage, never trained-model T3.
+scenarios and a fourth fresh-process cold reopen of the successful generation.
+This job provides integration coverage, never trained-model T3.
 
 For independent integration evidence, replace the model directory with
 `--synthetic`. Run each scenario in a separate new evidence root:
@@ -91,6 +93,38 @@ For independent integration evidence, replace the model directory with
   cancellation and terminal attempt diagnostics, an empty queue and cleanup.
   Acknowledgment alone cannot pass. This observes early active cancellation;
   it does not prove interruption after generation begins.
+
+After `generate` has exited successfully, invoke the same executable with the
+same probe root, XDG roots and registry path, changing only the final scenario
+argument to `reopen`. This is the sole mode that accepts an existing probe root;
+it requires a successful, cleaned-up generation report from a different process
+and creates a new `cold-reopen/` evidence directory. It refuses an existing
+`cold-reopen/` directory. It copies no model inputs, performs no explicit catalog
+rebuild, and loads the retained workflow through the public graph-load API.
+The pinned Pumas `ModelLibrary::new` performs its normal metadata-to-index
+reconciliation during startup. This procedure uses that supported lifecycle;
+it does not establish that the on-disk index remains untouched across reopening.
+The saved graph bytes, retained model input hashes and workflow identity must
+match the original observation. Process IDs and random process markers are
+retained for both invocations.
+
+The fresh `EmbeddedRuntime` must start without an active run, refresh executable
+validation with a new validation identity, invoke new Resolve and Check actions,
+and publish a new executable snapshot before submitting generation. Its own
+readiness producer and normal readiness resume API establish availability; no
+previous in-memory readiness or validation is inserted. The generation must have
+a new workflow-run identity, nonempty output, an empty scheduler queue, and the
+same bounded session/shutdown/resource cleanup checks. `process-boundary.json`,
+`bootstrap-before-reopen.json`, `reopen-observation.json`, the startup registry,
+validation/action files, response and final result retain these observations.
+The qualification script runs the two invocations sequentially, establishing
+that the authoring process exited before the reopen process started.
+
+This proves clean-process reopening of the current saved graph/catalog and
+renewed public CPU execution. It does not exercise crash recovery, schema
+migration, desktop reopening, or trained-model quality. `t3_qualified` remains
+false in both processes. Retained SQLite diagnostics include both runs; correlate
+events with each response's workflow-run identity.
 
 The probe requires public terminal semantics as well as canonical runtime
 observations and cleanup. A loader failure must return `InternalError` retaining

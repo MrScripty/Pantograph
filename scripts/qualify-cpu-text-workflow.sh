@@ -20,8 +20,16 @@ git rev-parse HEAD > "$evidence_root/source-sha.txt"
 git status --porcelain > "$evidence_root/source-status.txt"
 sha256sum crates/pantograph-embedded-runtime/examples/cpu_text_generation_workflow_probe.rs \
   crates/pantograph-embedded-runtime/Cargo.toml scripts/qualify-cpu-text-workflow.sh \
+  .github/workflows/cpu-text-integration.yml \
+  crates/inference/src/backend/pytorch_text_job.rs \
+  crates/inference/src/backend/pytorch.rs crates/inference/src/backend/pytorch_tests.rs \
+  crates/inference/src/backend/pytorch_text_dependencies.rs \
+  crates/pantograph-embedded-runtime/src/inference_text_dependency_requirements.rs \
+  crates/pantograph-embedded-runtime/src/inference_text_dependency_requirements_tests.rs \
+  crates/pantograph-workflow-service/src/workflow/runtime_branch_run_finalization.rs \
   > "$evidence_root/source-sha256.txt"
 export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 OMP_NUM_THREADS=2 MKL_NUM_THREADS=2
+export CARGO_BUILD_JOBS=2
 export PYTHONPATH="${PYTHONPATH:-}"
 # PYO3_PYTHON must name the same prepared environment used by execution.
 if [[ -n "${PYO3_PYTHON:-}" ]]; then
@@ -39,3 +47,10 @@ for scenario in generate failure cancel; do
     timeout 240 "$target_root/debug/examples/cpu_text_generation_workflow_probe" \
     "$probe_root" --synthetic "$scenario" 2>&1 | tee "$evidence_root/$scenario.log"
 done
+# The generate invocation has exited: reopen its retained graph/catalog in a
+# separate OS process. The probe refuses to overwrite prior phase evidence.
+probe_root="$evidence_root/generate"
+XDG_CONFIG_HOME="$probe_root/config" XDG_DATA_HOME="$probe_root/data" \
+  XDG_CACHE_HOME="$probe_root/cache" PUMAS_REGISTRY_DB_PATH="$probe_root/registry.db" \
+  timeout 240 "$target_root/debug/examples/cpu_text_generation_workflow_probe" \
+  "$probe_root" --synthetic reopen 2>&1 | tee "$evidence_root/reopen.log"

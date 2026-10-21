@@ -1,5 +1,42 @@
 # Execution ledger
 
+- 2026-10-21 integration continuation: fetched main `9ec7e7f3`, inspected
+  PR75/80/82 plus the excluded PR84 transplant and separate README PR79 before
+  changing source. No AGENTS.md exists in the accessible workspace. Preserved
+  original `work`/`integration/quality-gates-2026-10-04` branches and all remote
+  proposals. Composed PR82's complete PR80 stack through normal merge
+  `15b11d48`; no force push, branch rewrite, deletion, text merge or deployment.
+  The new integration branch targets main and remains retained for review/T3.
+- Reconciled old T4-blocked next slices with PR82's qualified terminal repair.
+  Canonical operation remains `continue` on this readiness plan; this lead owns
+  serial integration and plan updates. Explicit GPT-6.1 Sol / High runtime,
+  cold-reopen and independent-review workers have disjoint write sets.
+- Source audit found failed `TextJobs::drain` completion was retained forever,
+  poisoning subsequent cleanup/replacement. Retire only the same joined job,
+  preserving the stream's result and any newer job. Keep first unobserved
+  failure/no-effects lifecycle semantics; subsequent cleanup reaches the worker
+  and changes resource metadata only after acknowledgement. No gateway/schema
+  or scheduler-owner changes. Added producer error/panic, successor identity,
+  real worker cleanup retry and selected-text replacement assertions.
+- Added fresh-process cold reopen using actual saved graph/model bytes and the
+  same disposable catalog through normal Pumas startup. The pinned Pumas owner
+  reconciles metadata/index at construction; this does not claim untouched
+  SQLite index persistence. New validation/run identities, actual Resolve/Check,
+  nonempty output and full cleanup remain required. No fixture reseeding or
+  imported Ready/validation state in the reopening process.
+- Independent source review admitted readiness/terminal composition, recovery
+  and cold-reopen changes without material findings. Final exact-source checks
+  and evidence admission are still pending at this source checkpoint.
+  Supporting checks passed: affected Rust formatting, shell syntax, staged
+  composition traceability/whitespace and 28 traceability-tool regressions.
+- Restored missing SoundFile 0.13.1 from official PyPI in the disposable prepared
+  environment only (plus required cffi/pycparser). `uv pip check` passed, and all
+  seven worker prerequisites imported with CPU Torch. No product manifests or
+  lockfiles changed. No trained model obtained; the old official model-host
+  proxy CONNECT HTTP403 is neither retried nor bypassed. Verified trained
+  weights/config/tokenizer, upstream revision/license and sanctioned access
+  remain missing, so T3 and overall acceptance remain blocked.
+
 - 2026-10-13: preserved clean saved branches; fetched and selected `07b23d47` on
   `fix/text-generation-readiness-handoff`. No AGENTS.md found. Read standards at
   `188beda1`; traced missing payload to Candle-only facts adapter. Independent

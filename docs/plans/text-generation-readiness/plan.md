@@ -1,8 +1,8 @@
 # Plan: CPU text dependency readiness handoff
 
 **Plan status:** `Blocked`
-**Current phase:** M1 runtime-effects observation; public terminal-result and trained-model qualification blocked
-**Next slice:** coordinate a public failure/cancellation result-projection fix with the workflow finalization owner
+**Current phase:** current-main integration, failed-producer recovery and cold reopen qualification
+**Next slice:** qualify the composed source, obtain independent review and prepare a draft integration PR
 **Acceptance status:** `blocked`
 **Execution ledger:** [execution-ledger.md](execution-ledger.md)
 **Issues:** [issues.md](issues.md)
@@ -30,6 +30,59 @@ Dependencies and Licensing. Apply existing ownership and bounded evidence.
 | T2 | Real Pumas graph action registers payload without a Ready snapshot; actual inventory Check observes the linked interpreter and preserves its environment identity | integration | representative | automated | satisfied |
 | T3 | A trained, licensed, bounded local model generates nonempty text through the public hosted CPU workflow; model identity, resource limits, output and cleanup recorded | system | required-real | automated | blocked |
 | T4 | Committed untrained weights exercise public hosted generation, loader failure, active cancellation and owned cleanup while preserving public failure/cancellation meaning | integration | representative | automated | blocked |
+
+## Current integration admission (2026-10-21)
+
+Operation `continue`, integration owner: CPU text repository integration lead.
+The current delegation authorizes implementation, tests, independent review and
+reviewable PR preparation. It does not authorize a text merge or deployment.
+Main was fetched and confirmed at `9ec7e7f3f4a0db1a1123bdc5504f76f4b79322f6`.
+PR75 `2f1e38fd`, PR80 `040969de` and PR82 `3ab04849` were inspected first.
+PR80 already preserves PR75's repair as `7a78625b`; PR82 is its terminal-result
+successor. A normal merge of that complete stack into a new branch based on
+current main preserves their intended work and original histories. PR75/80/82
+remain untouched. PR84's older preparation-lifecycle transplant is excluded;
+PR79 and unrelated local branches remain separate.
+
+This section supersedes the old next slice and T-05 coordination blocker below.
+PR82's bounded T4 evidence is retained under the
+[terminal-outcomes plan](../cpu-text-terminal-outcomes/plan.md); current composed
+source still requires fresh qualification. T3 remains a required, blocked gate.
+Neither historical tests nor untrained numerical output satisfy it.
+
+Two bounded follow-ups are admitted within the existing owners:
+
+- `crates/inference/src/backend/pytorch_text_job.rs`, `pytorch.rs` and existing
+  sibling tests: retire a joined failed text producer without losing its stream
+  result or clearing a successor job. Preserve failed replacement residency;
+  a first unobserved producer failure retains the existing no-effects cleanup
+  error, then an explicit retry can obtain the real worker cleanup acknowledgement.
+- The existing CPU text example, qualification script, CI job and runbook:
+  reopen the saved graph and isolated catalog in a new process, establish fresh
+  validation and actual dependency observations, execute bounded CPU text and
+  prove cleanup. No copied Ready snapshot or regenerated stand-in graph.
+
+Standards were reread at Coding-Standards `0fc92a24279f3a4574c80af0a2f31ea347a21597`: Core/Router, implementation, verification/oracles, planning/discovery, proportionality, commit, documentation/tooling, Rust/API/async/tooling, library, architecture, contracts, concurrency, resilience, code design, dependencies and licensing. No AGENTS.md exists in the accessible checkout.
+
+Plan/index/status reconciliation and a compact source/results report are owned
+by this integration lead. Runtime/readiness and probe workers have disjoint
+write sets; this lead serially integrates them. No custom-node ABI, registry,
+NodeLab, tool-loop, scheduler-policy or unrelated orchestration edits are admitted.
+Existing runtime and workflow owners retain their authorities; no new public
+contract, durable store or generic verifier is introduced.
+
+Acceptance for this continuation: affected runtime and workflow suites and
+Clippy; public generation, loader failure and early active cancellation with
+correct public outcomes and zero retained runtime resources; a new-process
+saved-graph reopen with fresh proofs and cleanup; and independent source/evidence
+review. Required native execution unavailable at build time remains explicitly
+blocked. Exact sources and limits are recorded before publication.
+
+Trained T3 needs sanctioned official model-host access or an already accessible
+verified local trained asset set, including weights/config/tokenizer, upstream
+repository and immutable revision, authoritative license and applicable notices.
+The previous official-host proxy CONNECT HTTP403 is not retried or bypassed.
+No credential, permission or network-setting expansion is part of this work.
 
 Formatting, affected Rust tests and Clippy are supporting gates. Synthetic model
 output is only contract evidence and cannot close T3. No GPU, browser GUI,
