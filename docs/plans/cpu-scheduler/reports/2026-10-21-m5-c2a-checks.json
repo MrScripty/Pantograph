@@ -1,0 +1,225 @@
+{
+  "scope": "M5 C2a opt-in bounded immutable workload-key reuse; overall M5 execution acceptance remains open",
+  "dependency_base": "PR85 f3f438a23b507a0f82a0c2f316a83f1148798643",
+  "toolchain": "Rust1.92.0",
+  "profile": "Test/dev unoptimized, debug=0, jobs=2, incremental=0; final checks locked and offline",
+  "source_sha256": {
+    "crates/pantograph-scheduler/src/batching.rs": "2d1b02f124c1d5a05bec7038873aac111c244bf9a72cd25b586fc62b3901d5ee",
+    "crates/pantograph-scheduler/src/batching/bounded_compatibility.rs": "98d0653780a8f2f0352951b9ccf4d92322f054f4b52576937ebda94d6b962699",
+    "crates/pantograph-scheduler/src/batching/bounded_grouping.rs": "56476dcb23edfad42698a103a975caf77f69db815238ebc7b16eb08e03f3d5f3",
+    "crates/pantograph-scheduler/src/lib.rs": "c4db7be0a5f406dd9f9b90e4965d5ac9785ce6087606ca06887618848ec26053",
+    "crates/pantograph-scheduler/tests/bounded_compatibility.rs": "8dee2b5d06195dc4bae71a7a73db06c28c03742e7c1c51de41c078f32a09783a",
+    "crates/pantograph-workflow-service/src/scheduler/store_serial_ready.rs": "cce5c99a2b1cfff3ae268fc092f0fff23740374b6229a82a574a72ebb797284a",
+    "crates/pantograph-workflow-service/src/scheduler/store_serial_ready_tests.rs": "53e960dce9cbad9c0ea016c248209d91ec60586bf1f1d9156e8f0f45e5474cfa",
+    "crates/pantograph-workflow-service/src/workflow/serial_ready.rs": "07729895f7eca440f376bc747cab5490f60e7ccf7f6e440119208516a88f60c6",
+    "crates/pantograph-workflow-service/src/workflow/serial_ready/grouping.rs": "49e44cf549ff32968fb741935495cbc4597c2b31305f0e54396337de07a6a1e6",
+    "crates/pantograph-workflow-service/src/workflow/serial_ready_worker_tests.rs": "ac20222e5bacc7a9f1096273bec10d6a36931f69292fd9010c00305434364fa2",
+    "crates/pantograph-workflow-service/src/workflow/task_execution_worker.rs": "501578663c37dfaddb4f0161e7067fc5ec2e19391cd1981d41a9a7474941fcd7"
+  },
+  "checks": [
+    {
+      "check": "workflow-format",
+      "command": [
+        "timeout",
+        "--signal=TERM",
+        "--kill-after=10s",
+        "600s",
+        "/workspace/pantograph-tools/cargo/bin/cargo",
+        "fmt",
+        "--package",
+        "pantograph-workflow-service",
+        "--",
+        "--check"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 1.2710766960008186
+    },
+    {
+      "check": "workflow-unit-tests",
+      "command": [
+        "timeout",
+        "--signal=TERM",
+        "--kill-after=10s",
+        "600s",
+        "/workspace/pantograph-tools/cargo/bin/cargo",
+        "test",
+        "--locked",
+        "--offline",
+        "-p",
+        "pantograph-workflow-service",
+        "--lib",
+        "--",
+        "--skip",
+        "bounded_grouping_controlled_cpu_cohorts_preserve_results_and_member_lifecycle"
+      ],
+      "exit_code": 101,
+      "elapsed_seconds": 130.99879695900017
+    },
+    {
+      "check": "workflow-format",
+      "command": [
+        "timeout",
+        "--signal=TERM",
+        "--kill-after=10s",
+        "600s",
+        "/workspace/pantograph-tools/cargo/bin/cargo",
+        "fmt",
+        "--package",
+        "pantograph-workflow-service",
+        "--",
+        "--check"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 1.3044593689992325
+    },
+    {
+      "check": "workflow-unit-tests",
+      "command": [
+        "timeout",
+        "--signal=TERM",
+        "--kill-after=10s",
+        "600s",
+        "/workspace/pantograph-tools/cargo/bin/cargo",
+        "test",
+        "--locked",
+        "--offline",
+        "-p",
+        "pantograph-workflow-service",
+        "--lib",
+        "--",
+        "--skip",
+        "bounded_grouping_controlled_cpu_cohorts_preserve_results_and_member_lifecycle"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 38.72347854199688
+    },
+    {
+      "check": "workflow-clippy",
+      "command": [
+        "timeout",
+        "--signal=TERM",
+        "--kill-after=10s",
+        "600s",
+        "/workspace/pantograph-tools/cargo/bin/cargo",
+        "clippy",
+        "--locked",
+        "--offline",
+        "-p",
+        "pantograph-workflow-service",
+        "--all-targets",
+        "--no-deps",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 40.90059123500032
+    },
+    {
+      "check": "workflow-rustdoc",
+      "command": [
+        "timeout",
+        "--signal=TERM",
+        "--kill-after=10s",
+        "600s",
+        "/workspace/pantograph-tools/cargo/bin/cargo",
+        "doc",
+        "--locked",
+        "--offline",
+        "-p",
+        "pantograph-workflow-service",
+        "--no-deps"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 7.89040145099716
+    },
+    {
+      "check": "synthetic-comparison",
+      "command": [
+        "timeout",
+        "--signal=TERM",
+        "--kill-after=10s",
+        "60s",
+        "/workspace/pantograph-tools/cargo/bin/cargo",
+        "test",
+        "--locked",
+        "--offline",
+        "-p",
+        "pantograph-workflow-service",
+        "--lib",
+        "workflow::task_execution_worker::tests::serial_ready_tests::bounded_grouping_controlled_cpu_cohorts_preserve_results_and_member_lifecycle",
+        "--",
+        "--exact",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.5940099589970487
+    }
+  ],
+  "scheduler_tests": {
+    "passed": 232,
+    "failed": 0,
+    "existing_ignored_cost_probe": 1,
+    "new_compatibility_cases": 10
+  },
+  "workflow_unit_tests": {
+    "passed": 1037,
+    "failed": 0,
+    "withheld_comparison": 1,
+    "new_store_cases": 10,
+    "new_worker_cases_including_comparison": 8
+  },
+  "comparison": {
+    "passed": 1,
+    "first_execution": true,
+    "members": 8,
+    "bytes_per_member": 1024,
+    "model_inference": false,
+    "baseline": {
+      "key_encodings": 30,
+      "cache_hits": 0,
+      "elapsed_ms": 29.727789
+    },
+    "candidate": {
+      "key_encodings": 16,
+      "cache_hits": 22,
+      "elapsed_ms": 29.418059
+    },
+    "identical_oracles": [
+      "Outputs",
+      "Member order",
+      "Distinct attempt/execution identities",
+      "Matched cleanup",
+      "Workload keys"
+    ],
+    "not_counted": [
+      "Snapshot-bound serialization",
+      "Raw preflight",
+      "Cloning",
+      "Equality"
+    ],
+    "performance_claim": "No total-overhead or end-to-end speedup established; elapsed time is descriptive only"
+  },
+  "independent_review": "Approved production and completed tests after cleanup-retention correction; corrected legal fallback oracle also approved",
+  "preserved_failures": [
+    "Initial offline dependency was uncached",
+    "New test import missing at compilation; no tests ran",
+    "One fixture exceeded the existing 2,048-byte result limit; 1,036 other unit tests passed"
+  ],
+  "dependency_warning": "Existing inference::selected_text_execution unused package/target/device warning remains. Own scheduler/workflow Clippy gates passed without suppression or unrelated edits.",
+  "unavailable_facts": [
+    "Per-member incremental/peak execution memory",
+    "Grouping latency forecast",
+    "Measured tensor/tokenizer shape"
+  ],
+  "claims_not_established": [
+    "Overall M5 acceptance",
+    "Native/continuous batching",
+    "Physical capacity",
+    "Total CPU overhead improvement",
+    "Real-model qualification",
+    "M6"
+  ],
+  "browser_limitation": "PR85 hosted browser passed. Historical PR83 cause is unknown; denied redirected log read not retried; local helper ownership unchanged."
+}

@@ -8,6 +8,8 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+mod grouping;
+
 const MAX_LOOKAHEAD_DIAGNOSTIC_BYTES: usize = 8192;
 
 #[derive(Clone, PartialEq, Eq)]
@@ -44,6 +46,7 @@ pub struct WorkflowSerialReadyConfig {
     completion_lookahead: bool,
     fair_service_opportunities: bool,
     serial_residency: bool,
+    bounded_grouping: bool,
 }
 impl WorkflowSerialReadyConfig {
     pub fn new(
@@ -64,6 +67,7 @@ impl WorkflowSerialReadyConfig {
             completion_lookahead: false,
             fair_service_opportunities: false,
             serial_residency: false,
+            bounded_grouping: false,
         })
     }
     /// Enable bounded predecessor-conditioned completion advice. Actual dispatch
@@ -94,6 +98,19 @@ impl WorkflowSerialReadyConfig {
         self.serial_residency = true;
         Ok(self)
     }
+    /// Reuse pure workload-key planning for up to eight bounded Ready members.
+    /// Every member still obtains its own fair turn, preparation, Start and
+    /// cleanup. This does not enable native batching or supply memory/latency
+    /// forecasts. Unknown or changed inputs retain ordinary key calculation.
+    pub fn with_bounded_grouping(mut self) -> Result<Self, WorkflowServiceError> {
+        if !self.fair_service_opportunities {
+            return Err(WorkflowServiceError::InvalidRequest(
+                "bounded grouping requires fair service opportunities".into(),
+            ));
+        }
+        self.bounded_grouping = true;
+        Ok(self)
+    }
 }
 impl Default for WorkflowSerialReadyConfig {
     fn default() -> Self {
@@ -103,6 +120,7 @@ impl Default for WorkflowSerialReadyConfig {
             completion_lookahead: false,
             fair_service_opportunities: false,
             serial_residency: false,
+            bounded_grouping: false,
         }
     }
 }
@@ -115,6 +133,11 @@ pub(crate) struct SerialReadyMode {
     history: Mutex<SerialReadyHistory>,
     config: WorkflowSerialReadyConfig,
     service_opportunities: Arc<super::serial_service_opportunities::SerialServiceOpportunities>,
+    grouping: Mutex<grouping::WorkloadKeyGroup>,
+    #[cfg(any(test, feature = "test-support"))]
+    key_encodings: std::sync::atomic::AtomicU64,
+    #[cfg(any(test, feature = "test-support"))]
+    key_cache_hits: std::sync::atomic::AtomicU64,
 }
 #[derive(Default)]
 struct SerialReadyHistory {
@@ -266,6 +289,11 @@ impl SerialReadyMode {
             history: Mutex::new(SerialReadyHistory::default()),
             config,
             service_opportunities: Arc::default(),
+            grouping: Mutex::default(),
+            #[cfg(any(test, feature = "test-support"))]
+            key_encodings: std::sync::atomic::AtomicU64::new(0),
+            #[cfg(any(test, feature = "test-support"))]
+            key_cache_hits: std::sync::atomic::AtomicU64::new(0),
         })
     }
     pub(crate) async fn enter(self: &Arc<Self>) -> Result<SerialReadyScope, WorkflowServiceError> {
@@ -396,8 +424,8 @@ impl SerialReadyMode {
             return decision;
         }
         let (Some(first_key), Some(second_key)) = (
-            observation_key(&pair.members[0]),
-            observation_key(&pair.members[1]),
+            self.key_for(&pair.members[0]),
+            self.key_for(&pair.members[1]),
         ) else {
             decision.reason = SerialReadyReason::UnsupportedInputs;
             return decision;
@@ -471,8 +499,8 @@ impl SerialReadyMode {
             return advice;
         }
         let (Some(a), Some(b)) = (
-            observation_key(&pair.members[0]),
-            observation_key(&pair.members[1]),
+            self.key_for(&pair.members[0]),
+            self.key_for(&pair.members[1]),
         ) else {
             advice.reason = Reason::UnsupportedInputs;
             return advice;
@@ -706,7 +734,7 @@ impl SerialReadyScope {
         let mut context = self.context.lock().map_err(lock_error)?;
         context.task = Some(member.task.clone());
         context.member = Some(member.clone());
-        context.key = observation_key(member);
+        context.key = self.mode.key_for(member);
         context.owner = owner;
         Ok(())
     }
@@ -732,9 +760,22 @@ impl SerialReadyScope {
 }
 impl Drop for SerialReadyScope {
     fn drop(&mut self) {
-        let failed = self.context.lock().map_or(true, |c| {
-            c.native_preparation_pending || (c.claimed && !c.cleanup_acknowledged)
-        });
+        let failed = match self.context.lock() {
+            Ok(c) => {
+                let failed = c.native_preparation_pending || (c.claimed && !c.cleanup_acknowledged);
+                self.mode
+                    .finish_grouping_member(if c.successful && !failed {
+                        c.member.as_ref()
+                    } else {
+                        None
+                    });
+                failed
+            }
+            Err(_) => {
+                self.mode.finish_grouping_member(None);
+                true
+            }
+        };
         if failed {
             self.mode.semaphore.close();
         }
@@ -778,7 +819,7 @@ impl RuntimeHostBatchExecutionPort for SerialReadyPortAdapter {
                 }
             }
             if let (Some(key), Some(snapshot)) = (c.key, c.member.as_ref()) {
-                if observation_key_with_inputs(snapshot, &member.materialized_inputs) != Some(key) {
+                if self.0.compute_key(snapshot, &member.materialized_inputs) != Some(key) {
                     return Err(execution_error(
                         "serial exact input changed before owner execution",
                     ));
@@ -1044,12 +1085,14 @@ fn is_release_outcome(outcome: &ReservationLifecycleOutcome) -> bool {
             | ReservationLifecycleOutcome::RetryDeferred
     )
 }
+#[cfg(test)]
 fn observation_key(member: &super::WorkflowSerialReadyMember) -> Option<[u8; 32]> {
-    observation_key_with_inputs(member, &member.inputs)
+    observation_key_with_inputs(member, &member.inputs, || {})
 }
 fn observation_key_with_inputs(
     member: &super::WorkflowSerialReadyMember,
     inputs: &[RuntimeHostExecutionInput],
+    on_encode: impl FnOnce(),
 ) -> Option<[u8; 32]> {
     let intent = member.task.schedulable_intent.as_ref()?;
     let [input] = inputs else {
@@ -1062,6 +1105,7 @@ fn observation_key_with_inputs(
         return None;
     }
     let proof = &member.proof;
+    on_encode();
     let bytes = serde_json::to_vec(&(
         &intent.model_ref,
         &intent.task_type,

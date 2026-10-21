@@ -15,10 +15,10 @@ pub const SCHEDULER_BOUNDED_GROUPING_MAX_MEMBERS: usize = 8;
 pub const SCHEDULER_BOUNDED_GROUPING_MAX_RAW_STRING_BYTES: usize = 64 * 1024;
 
 const MAX_NESTED_ITEMS: usize = 8;
-const MAX_ID_BYTES: usize = 128;
+pub(super) const MAX_ID_BYTES: usize = 128;
 const MAX_MODEL_ID_BYTES: usize = 512;
 const MAX_TEXT_BYTES: usize = 1024;
-const MAX_SHAPE_BYTES: usize = 128;
+pub(super) const MAX_SHAPE_BYTES: usize = 128;
 
 /// First compatibility field that prevents grouping with the anchor.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -167,12 +167,12 @@ pub fn evaluate_scheduler_bounded_grouping(
 }
 
 #[derive(Default)]
-struct RawStringBudget {
+pub(super) struct RawStringBudget {
     admitted_bytes: usize,
 }
 
 impl RawStringBudget {
-    fn text(
+    pub(super) fn text(
         &mut self,
         candidate_index: usize,
         field: &'static str,
@@ -207,7 +207,7 @@ impl RawStringBudget {
     }
 }
 
-fn count(
+pub(super) fn count(
     index: usize,
     field: &'static str,
     length: usize,
@@ -221,7 +221,7 @@ fn count(
     Ok(())
 }
 
-fn preflight_model_ref(
+pub(super) fn preflight_model_ref(
     model: &PumasModelRef,
     index: usize,
     field: &'static str,

@@ -46,13 +46,14 @@ pub use serial_service_completion::{
 };
 
 pub use batching::{
-    evaluate_scheduler_bounded_grouping, SchedulerBatchCandidate, SchedulerBatchDiagnostic,
-    SchedulerBatchDiagnosticCode, SchedulerBatchDiagnosticSeverity, SchedulerBatchMemoryImpact,
-    SchedulerBatchPolicyDecision, SchedulerBatchPolicyState, SchedulerBoundedGroupingDisposition,
+    evaluate_scheduler_bounded_compatibility, evaluate_scheduler_bounded_grouping,
+    SchedulerBatchCandidate, SchedulerBatchDiagnostic, SchedulerBatchDiagnosticCode,
+    SchedulerBatchDiagnosticSeverity, SchedulerBatchMemoryImpact, SchedulerBatchPolicyDecision,
+    SchedulerBatchPolicyState, SchedulerBoundedGroupingDisposition,
     SchedulerBoundedGroupingIncompatibility, SchedulerBoundedGroupingProposal,
-    SchedulerBoundedGroupingRefusal, ValidatedSchedulerBatchPolicyDecision,
-    SCHEDULER_BATCHING_POLICY_CONTRACT_VERSION, SCHEDULER_BOUNDED_GROUPING_MAX_MEMBERS,
-    SCHEDULER_BOUNDED_GROUPING_MAX_RAW_STRING_BYTES,
+    SchedulerBoundedGroupingRefusal, SchedulerGroupingCompatibility,
+    ValidatedSchedulerBatchPolicyDecision, SCHEDULER_BATCHING_POLICY_CONTRACT_VERSION,
+    SCHEDULER_BOUNDED_GROUPING_MAX_MEMBERS, SCHEDULER_BOUNDED_GROUPING_MAX_RAW_STRING_BYTES,
 };
 pub use capability::{
     CapabilityAvailabilityState, SchedulerCapabilityDiagnostic, SchedulerCapabilityDiagnosticCode,

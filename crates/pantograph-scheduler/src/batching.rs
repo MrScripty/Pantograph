@@ -14,7 +14,12 @@ use crate::intent::{
 };
 use crate::resource_types::SchedulerModelResidencyState;
 
+mod bounded_compatibility;
 mod bounded_grouping;
+
+pub use bounded_compatibility::{
+    evaluate_scheduler_bounded_compatibility, SchedulerGroupingCompatibility,
+};
 
 pub use bounded_grouping::{
     evaluate_scheduler_bounded_grouping, SchedulerBoundedGroupingDisposition,
@@ -272,19 +277,22 @@ fn batch_candidate_incompatibility(
     first: &SchedulerBatchCandidate,
     candidate: &SchedulerBatchCandidate,
 ) -> Option<SchedulerBoundedGroupingIncompatibility> {
-    if candidate.task_family != first.task_family {
-        Some(SchedulerBoundedGroupingIncompatibility::TaskFamily)
-    } else if candidate.selected_model_ref != first.selected_model_ref {
-        Some(SchedulerBoundedGroupingIncompatibility::ModelReference)
-    } else if candidate.selected_runtime_id != first.selected_runtime_id {
-        Some(SchedulerBoundedGroupingIncompatibility::Runtime)
-    } else if candidate.selected_device_ids != first.selected_device_ids {
-        Some(SchedulerBoundedGroupingIncompatibility::DeviceSet)
-    } else if candidate.input_shape_signature != first.input_shape_signature {
-        Some(SchedulerBoundedGroupingIncompatibility::InputShape)
-    } else {
-        None
-    }
+    bounded_compatibility::compatibility_incompatibility(
+        SchedulerGroupingCompatibility {
+            task_family: &first.task_family,
+            model_ref: &first.selected_model_ref,
+            runtime_id: &first.selected_runtime_id,
+            device_ids: &first.selected_device_ids,
+            input_shape_signature: &first.input_shape_signature,
+        },
+        SchedulerGroupingCompatibility {
+            task_family: &candidate.task_family,
+            model_ref: &candidate.selected_model_ref,
+            runtime_id: &candidate.selected_runtime_id,
+            device_ids: &candidate.selected_device_ids,
+            input_shape_signature: &candidate.input_shape_signature,
+        },
+    )
 }
 
 fn validate_memory_total(

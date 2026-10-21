@@ -69,6 +69,22 @@ The [CPU plan](../../docs/plans/cpu-scheduler/plan.md#m5-c1-bounded-grouping-ker
 owns staged admission and acceptance. M6 application choice/diagnostics and actual
 real-model qualification remain separate work.
 
+## Compatibility-only planning
+
+The borrowed `SchedulerGroupingCompatibility` projection and
+`evaluate_scheduler_bounded_compatibility` expose the same bounded five-field
+comparison without requiring unavailable cost forecasts. They return only the
+unchanged compatible window length, or one for incompatibility, after all-member
+raw preflight and model/shape/device validation. They neither validate member
+correlation nor supply a memory sum. The original C1 API retains its full
+validation and checked sum unchanged.
+
+The explicit workflow C2a consumer reuses only exact immutable workload-key
+calculations while every member follows ordinary M3 admission and resource,
+owner, Start and cleanup fences. See the [C2a contract](../../docs/plans/cpu-scheduler/reports/2026-10-21-m5-c2a-key-reuse.md).
+This projection is not evidence of resolved backend authority, physical memory,
+measured tensor shape, native batching or a performance improvement.
+
 ## Focused verification
 
 Use the repository's pinned Rust toolchain:
