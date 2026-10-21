@@ -948,3 +948,24 @@ coordination; parent owns its later disposition after reachable handoff.
   raw stderr/commands/paths. All43 original assertions, launch flags, sandbox
   settings and deadline declarations remain. No native/model workload or local
   Chrome rerun is used. New source remains subject to focused review and CI.
+
+## 2026-10-21: provenance-aware producer continuation
+
+- User authorized the next implementation milestone after main4561e838 passed
+  all20 post-merge checks/four workflows. Separate branch
+  `feat/cpu-scheduler-provenance-observations` starts at that exact main/tree0d8d.
+- Canonical operation remains `continue`; independent pre-code review admitted
+  the [producer contract](reports/2026-10-21-provenance-producer.md), with captured
+  compatible prefix, full owner identity/currentness, opaque lifetime scope,
+  inclusive nonadditive spans and uncalibrated nested observer cost.
+- Root owns forecast projection, worker wiring and documents. The bounded worker
+  owns only grouping.rs and its new focused test file; one root integrator stages,
+  tests, publishes and observes CI. No overlapping source writes are admitted.
+- Scope is existing-ring warm-service maxima plus five fixed grouping phase
+  aggregates. No new key encoding/profile store, scheduling/resource authority,
+  default, native dependency or placeholder memory API. Complete allocation
+  attribution needs separately reviewed backend lifetime/scratch/worker hooks;
+  no external input is required to begin the admitted software producer.
+- All earlier branches, PR84 and original checkout remain retained-protected.
+  This new worktree `/workspace/pantograph-provenance` is retained-protected for
+  the draft PR/parent integration; retire only after explicit reviewed disposition.

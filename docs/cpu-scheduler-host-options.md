@@ -97,3 +97,34 @@ precision, ordinary construction, clone/capacity stability, and preservation thr
 hosted composition. Rejecting ports/providers ensure these reads perform no
 native execution or runtime queries. These are constructor/consumer contract
 tests, not model or performance qualification.
+
+## Bounded runtime observations
+
+With the existing explicit bounded-grouping option, host logs can report
+`workflow::serial_observations` warm-service forecasts for the captured compatible
+prefix (at most eight Ready members). Exact precomputed workload digests and the
+current private owner select the existing cleanup-qualified history; output
+contains only a diagnostic scope, digest, scalar generation, fixed reason,
+eligible count, oldest age and historical maximum in nanoseconds. No input text,
+model/task identifier or owner capability is disclosed. A historical maximum is
+not a future bound, queue delay, cold preparation estimate or group completion
+forecast. Insufficient, stale, changed-owner, invalid-clock and unavailable
+history states carry no estimate. Logging before cache publication does not prove
+that a poisoned cache retained the captured prefix.
+
+`workflow::serial_ready` grouping-observation records use the same opaque
+mode-lifetime scope for five fixed service-lifetime phase totals: probe, capture,
+fill, lookup and key calculation. Each reports checked call counts and inclusive
+monotonic elapsed nanoseconds, or a fixed unavailable state after overflow/invalid
+time. Nested spans overlap and cannot be summed. Each phase excludes its own
+recorder, while parent spans can include nested instrumentation; overhead is
+uncalibrated. These records do not measure total CPU work or establish speedup.
+Disabled grouping collects no such clocks, scopes or records. Existing host log
+configuration owns delivery/retention; no new history database is created.
+
+All observations are read-only diagnostics. They change no admission, fair turn,
+resource claim, Start check, cleanup requirement, policy default or execution
+mode. No complete incremental allocation measurement is supplied: known live
+buffer capacities, reservation estimates and sampled RSS cannot substitute for
+allocation/drop, alias, scratch and worker attribution. That backend foundation
+requires a separate reviewed design. See the [producer contract and evidence](plans/cpu-scheduler/reports/2026-10-21-provenance-producer.md).
