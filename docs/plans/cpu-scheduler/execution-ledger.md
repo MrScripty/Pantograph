@@ -2,6 +2,34 @@
 
 
 
+## 2026-10-21 — Single v2 cohort passed narrow qualification
+
+- Exact staged six-path correction ffc8ddc4 passed independent commit/draft
+  review, committed/published normally as1f6af8a2/tree0368ee2e on PR91. Recovery
+  after capacity/environment interruption checked all preserved bytes, completed
+  build, process absence, provided actor and remote tips before any work retry.
+  No native launch was pending/uncertain; v2 root/marker were absent.
+- Independent exact-manifest/binary review admitted one v2 run: manifest331e55de,
+  producerc41b0a57, protocol780f42c2 and supervisorcdc2efb9. All15 hashes, exact
+  discovery, cgroups and affinity matched. No local compilation overlapped.
+- Root executed that held v2 test once at07:11:49Z; terminal exit0, reaped, no
+  timeout/error. Both fresh arms ran two native forwards. Baseline6enc/0hits and
+  enabled4enc/4hits both finished with zero healthy retained cache entries.
+  Public closes/shutdown acknowledged, final reservations empty/no idle owner.
+- Independent raw review confirmed the frozen criteria, actual artifact bytes/
+  golden/cross-arm equality, genuine Ready/captured pair, distinct per-member
+  custody/ACK joins, fresh loaded instances, one-thread owners4→6→8, all five
+  enabled final phase observations, and28 persisted rows within25965bytes.
+  Cold history remained unavailable; no trained ranking or timing win is claimed.
+- The [successor v2 result](reports/2026-10-21-m5-native-key-reuse-result-v2.md)
+  and39-file durable archive retain exact originals plus preparation/admission/
+  independent review. V1 source/protocol/archive/result/marker remain unchanged
+  and failed. No rerun or retrospective acceptance change occurred.
+- M5-CPU now has independent narrow v2 evidence. M6-CLOSE awaits final source/
+  report/archive review and exact-candidate CI/normal integration/post-merge
+  gates. Existing source/branches/worktrees and PR84 stay protected. No admission,
+  default, allocator, security, dependency/lockfile or CI change is selected.
+
 ## 2026-10-21 — Separately authorized prospective v2 correction
 
 - Fresh user delegation explicitly authorizes a corrected oracle, independent
