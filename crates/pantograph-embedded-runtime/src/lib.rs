@@ -52,6 +52,8 @@ pub mod host_runtime;
 mod inference_dependency_requirements;
 mod inference_interface_facts_provider;
 mod inference_resource_estimator;
+#[cfg(feature = "backend-pytorch")]
+mod inference_text_dependency_requirements;
 pub mod managed_runtime_manager;
 mod media_base64;
 mod model_dependency_activity;

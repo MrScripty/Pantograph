@@ -1,0 +1,46 @@
+{
+  "base": "07b23d47b2cdfae5669bbda78515c9c728081031",
+  "tested_source_sha256": {
+    "crates/inference/src/backend/pytorch.rs": "2a936085684ae26626690fe172a0774494c48fe59fa123e47b6ee51bde5f836d",
+    "crates/inference/src/backend/pytorch_text_dependencies.rs": "3adb10b3096f96cf8aeb124f6c1279a751c1175455adccbc1b411bb2f3375c35",
+    "crates/pantograph-embedded-runtime/src/dependency_inventory.rs": "fb00117d8fe597d8416371382e4a2871172dd93278c0785567cbad0b61963bc4",
+    "crates/pantograph-embedded-runtime/src/dependency_inventory_python.rs": "57640e4a82e87436f8a77ae4261ef3be3f8758cadf76e9759be99695114ce5d0",
+    "crates/pantograph-embedded-runtime/src/inference_dependency_requirements.rs": "067a7e5c0752792db072758893e3c5b79f216183eceaa5cd91ac3ef4a13e7c63",
+    "crates/pantograph-embedded-runtime/src/inference_interface_facts_provider.rs": "82242592b780711a3772587ccab95ee37221814bebd3528ecec5dc3771ceb4ec",
+    "crates/pantograph-embedded-runtime/src/inference_text_dependency_requirements.rs": "74f12f2f5ef60c9f907910c8ef5a97b3a9c18eb76d9b7748e1fbdd9fcac70c91",
+    "crates/pantograph-embedded-runtime/src/inference_text_dependency_requirements_tests.rs": "ca664f65347663e3cb54ebf5dc5bb2c2a26c0fe51ef07308fbb645cff1881304",
+    "crates/pantograph-embedded-runtime/src/lib.rs": "3f31acaffeaff19f9b4a277c408f0082949f957c736189fd358429ebe241bea6",
+    "crates/pantograph-embedded-runtime/src/pumas_dispatch_package_facts.rs": "a865f2d6391dd15914452f58b489f155a1ec2af2de24490e9ca4f9ab130e05e4"
+  },
+  "qualification": {
+    "dependency_contract": "passed",
+    "pumas_graph_handoff": "passed",
+    "cpu_trained_text_generation": "blocked",
+    "gpu": "unqualified",
+    "native_desktop": "unqualified"
+  },
+  "results": {
+    "focused": {
+      "exit": 0,
+      "passed": 7
+    },
+    "inference_lib": {
+      "exit": 0,
+      "passed": 853
+    },
+    "embedded_lib": {
+      "exit": 0,
+      "passed": 619,
+      "ignored": 3
+    },
+    "clippy": {
+      "exit": 0
+    },
+    "rustfmt": {
+      "exit": 0
+    },
+    "diff_check": {
+      "exit": 0
+    }
+  }
+}
