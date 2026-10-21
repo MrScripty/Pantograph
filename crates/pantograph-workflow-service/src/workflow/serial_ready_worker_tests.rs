@@ -2547,6 +2547,50 @@ mod serial_ready_tests {
     }
 
     #[tokio::test]
+    async fn serial_ready_provenance_forecasts_and_grouping_phases_are_observational() {
+        let port = CpuPort::new();
+        let service = service(
+            port.clone(),
+            WorkflowSerialReadyConfig::default()
+                .with_fair_service_opportunities()
+                .with_bounded_grouping()
+                .unwrap(),
+        );
+        let session = cpu_run(&service, "run.provenance.oracle");
+        let pair = service
+            .session_store_guard()
+            .unwrap()
+            .serial_ready_pair(&session, "run.provenance.oracle")
+            .unwrap();
+        crate::workflow::serial_ready::tests::assert_provenance_oracles(
+            service.serial_ready_mode.as_ref().unwrap(),
+            &pair,
+        );
+        assert!(port.requests.lock().unwrap().is_empty());
+        assert!(port.cleanups.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn serial_ready_provenance_actual_worker_records_all_grouping_phases() {
+        let port = CpuPort::new();
+        let service = service(port.clone(), grouping_config());
+        let id = "run.provenance.worker";
+        let session = grouping_cpu_run(&service, id, &["slow", "fast"], "client.provenance");
+        let outcome = tokio::time::timeout(
+            Duration::from_secs(2),
+            grouping_run_to_response(service.clone(), &session, id),
+        )
+        .await
+        .unwrap();
+        assert_runtime_branch_completed_response(outcome, id, &format!("image for {id}"));
+        assert_eq!(port.requests.lock().unwrap().len(), 2);
+        assert_eq!(port.cleanups.lock().unwrap().len(), 2);
+        crate::workflow::serial_ready::tests::assert_worker_phase_coverage(
+            service.serial_ready_mode.as_ref().unwrap(),
+        );
+    }
+
+    #[tokio::test]
     async fn serial_ready_conditioned_history_follows_real_cleanup_transitions_and_reuse() {
         let port = CpuPort::new();
         port.verified_reuse.store(true, Ordering::Release);

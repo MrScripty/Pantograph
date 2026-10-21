@@ -10,6 +10,7 @@ use std::time::{Duration, Instant};
 
 mod configuration;
 mod grouping;
+mod observations;
 
 pub use configuration::{WorkflowSchedulerConfiguration, WorkflowSchedulerExecutionOwner};
 
@@ -103,8 +104,9 @@ impl WorkflowSerialReadyConfig {
     }
     /// Reuse pure workload-key planning for up to eight bounded Ready members.
     /// Every member still obtains its own fair turn, preparation, Start and
-    /// cleanup. This does not enable native batching or supply memory/latency
-    /// forecasts. Unknown or changed inputs retain ordinary key calculation.
+    /// cleanup. Diagnostics report historical warm-service maxima and inclusive
+    /// grouping spans; these supply no future bound or incremental memory cost.
+    /// Native batching remains disabled. Changed inputs retain ordinary keys.
     pub fn with_bounded_grouping(mut self) -> Result<Self, WorkflowServiceError> {
         if !self.fair_service_opportunities {
             return Err(WorkflowServiceError::InvalidRequest(
@@ -292,7 +294,7 @@ impl SerialReadyMode {
             history: Mutex::new(SerialReadyHistory::default()),
             config,
             service_opportunities: Arc::default(),
-            grouping: Mutex::default(),
+            grouping: Mutex::new(grouping::WorkloadKeyGroup::new(config.bounded_grouping)),
             #[cfg(any(test, feature = "test-support"))]
             key_encodings: std::sync::atomic::AtomicU64::new(0),
             #[cfg(any(test, feature = "test-support"))]
@@ -785,6 +787,7 @@ impl Drop for SerialReadyScope {
         if let Ok(mut active) = self.mode.active.lock() {
             active.take();
         }
+        self.mode.log_grouping_observations();
     }
 }
 
@@ -1259,6 +1262,22 @@ impl WorkflowService {
 #[cfg(test)]
 pub(super) mod tests {
     use super::*;
+
+    pub(in crate::workflow) fn assert_provenance_oracles(
+        mode: &SerialReadyMode,
+        pair: &WorkflowSerialReadyPair,
+    ) {
+        observations::tests::assert_warm_forecast_oracle(mode, pair);
+        grouping::tests::assert_grouping_observation_oracle(mode, pair);
+        let disabled =
+            SerialReadyMode::new(mode.port.clone(), WorkflowSerialReadyConfig::default());
+        let poisoned = SerialReadyMode::new(mode.port.clone(), mode.config);
+        grouping::tests::assert_grouping_disabled_and_poison_oracles(&disabled, &poisoned, pair);
+    }
+
+    pub(in crate::workflow) fn assert_worker_phase_coverage(mode: &SerialReadyMode) {
+        grouping::tests::assert_worker_phase_coverage(mode);
+    }
 
     #[test]
     fn completion_lookahead_requires_explicit_construction() {

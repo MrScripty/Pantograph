@@ -1603,6 +1603,7 @@ async fn claim_and_execute_runtime_branch_event(
         }
         if let Some(admission) = fair_admission.as_ref() {
             if mode.grouping_needs_refresh(&admission.member) {
+                let capture_started = std::time::Instant::now();
                 let window = service.session_store_guard().ok().and_then(|store| {
                     store.serial_ready_window(
                         &command.session_id,
@@ -1610,6 +1611,9 @@ async fn claim_and_execute_runtime_branch_event(
                         admission.member.task.task_id.as_str(),
                     )
                 });
+                mode.record_grouping_capture(
+                    std::time::Instant::now().checked_duration_since(capture_started),
+                );
                 mode.refresh_grouping(window);
             }
         }
