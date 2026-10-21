@@ -1,0 +1,92 @@
+{
+  "tested_native_source_head": "be7773eebe5b931372425516c29825d71b808503",
+  "tested_native_source_tree": "beffc99b779c86c7890e19b9247ccbf5011c7fe9",
+  "model_free_source_head": "47077561ed0ec31e4807b6b57e1a8fcdb5b76c10",
+  "native_inventory_binary_sha256": "51a54219e437e7654e970599df6e7b1c52849d4506e1b7b081d0c2fe87f5deb0",
+  "archives": {
+    "model-free-v2-evidence.tar.gz": {
+      "sha256": "16b27fc42bd64b29546391b21c44a91721265f4adc2e888e42b2b4c15ea07ada",
+      "bytes": 329899,
+      "original_local_path": "/workspace/m4-c5-repair-v2-local-evidence.tar.gz"
+    },
+    "native-protocol-v2-evidence.tar.gz": {
+      "sha256": "90fd99f8b75e650c974b1aa0312f1c308416c3a0e17e0eae3390160edca4671f",
+      "bytes": 298299,
+      "original_local_path": "/workspace/m4-c5-native-protocol-v2.tar.gz"
+    },
+    "native-three-case-evidence.tar.gz": {
+      "sha256": "aa5dbd2b132a6df344c740e7595aa284e6d56b7da1d931ec26cc28b2d508d2ea",
+      "bytes": 36269,
+      "original_local_path": "/workspace/m4-c5-native-run-v2-reviewed-local-evidence.tar.gz"
+    }
+  },
+  "native_case_result": {
+    "passed": 3,
+    "failed": 0,
+    "attempts": 1,
+    "preflight_outer_exit": 0,
+    "execute_outer_exit": 0,
+    "child_exits": [
+      0,
+      0,
+      0
+    ],
+    "independent_review_accepted": true,
+    "facade_journal_records": 27,
+    "diagnostic_io_error": null,
+    "postdrain_cleanup": "exact_task_release_ack_and_cap_returned",
+    "postdrain_terminal": "completed; cancellation requested but completion won",
+    "prestart_cleanup": "honest full fence; expected run and shutdown errors; not native release ACK"
+  },
+  "model_free_result": {
+    "passed": 9,
+    "failed": 0,
+    "native_cases": 0,
+    "source": "47077561; six default negatives/metadata plus three inventory composition cases"
+  },
+  "previous_candidate": {
+    "head": "e792fa61125d037d5d863e2aacab030fb6ca5c0c",
+    "tree": "46b848e3bac7a945f6d16c1305062d9bfa7b3789",
+    "disposition": "Preserved unchanged; ancestor of current successor, not replaced or rebased."
+  },
+  "PR84_replacement_lineage": {
+    "source_branch": "fix/workflow-preparation-terminal-lifecycle-2026-10-20",
+    "source_commit": "a8a9f1055910be2999f0b3ab4c138be39c15087d",
+    "source_evidence_head": "9e068bbc2a040f20de88dfc70d914339cd5a8910",
+    "replacement_commit": "e8d5d20dd78cb93cfb08b1ea2d7b214ae8b093d1",
+    "mode": "Previously reviewed selective three-file patch; already in candidate ancestry. No new cherry-pick/merge.",
+    "paths": [
+      "crates/pantograph-workflow-service/src/workflow/preparation_terminal_lifecycle_tests.rs",
+      "crates/pantograph-workflow-service/src/workflow/task_execution_worker.rs",
+      "crates/pantograph-workflow-service/src/workflow/workflow_run_finalization.rs"
+    ],
+    "stable_patch_id": "1920567f9c950b7c36e51243d47c59b3b61bcd86",
+    "normalized_diff_sha256": "4970d7ed22cbc91e149fc2208bb319a4755abc87b7f37e9aa5ab85ee9832afd6",
+    "normalization": "Only index lines and numeric hunk coordinates differ due to existing M4 context; all remaining diff bytes match.",
+    "PR84_branch_disposition": "Retained unchanged for parent coordination; no rewrite, merge, closure or deletion authorized. Do not duplicate the repair.",
+    "normalization_spec": {
+      "decode": "UTF-8, splitlines()",
+      "drop": "lines whose literal prefix is index followed by a space",
+      "hunk_regex": "^@@ -[0-9,]+ \\+[0-9,]+ @@",
+      "hunk_replacement": "@@",
+      "join": "LF between retained lines; no trailing LF",
+      "hash": "SHA256 of UTF-8 joined text"
+    }
+  },
+  "retained_original_failed_model_free_attempt": {
+    "source": "71325cac623cc7f9530e2710be43da2afa2460ec",
+    "result": "1 pass, 1 fail, 7 unrun; runtime-path contract mismatch separately retained; never relabeled",
+    "local_archive": "/workspace/m4-c5-repair-v1-local-evidence.tar.gz",
+    "sha256": "3f7f9aa1765b1d5e6b43c56e58a5055170aa9b58bee68d04a26df6a0339712d0",
+    "included_in_this_new_copy_set": false,
+    "preservation": "Original archive and all historical hashes remain unchanged; exact repair source recovery is retained inside model-free-v2 archive."
+  },
+  "scope_limits": [
+    "Private raw readiness unavailable through facade; public await phases only",
+    "Facade golden/counter evidence source-assisted assertions",
+    "No hung-shutdown or failed-filesystem diagnostic recovery exercised",
+    "No reconstruction of original hosted first error/root cause",
+    "Local passes do not supply exact publication-head hosted CI",
+    "No new execution in packaging; no broad C5/default-policy/GPU/native-batching/performance qualification"
+  ]
+}

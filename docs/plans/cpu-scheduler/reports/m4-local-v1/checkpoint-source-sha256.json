@@ -1,0 +1,12 @@
+{
+  "crates/inference/src/gateway.rs": "15563b0ab47768aa638d89d44fd76e55c075de46cf1dfdb1b9e61f7517fe12e8",
+  "crates/inference/src/gateway_cpu_last_lease_eviction.rs": "2f584727b332152c77388ec0484276bd286afb45ae813a516007f507092df9c6",
+  "crates/inference/src/gateway_cpu_warm_attempt.rs": "40e68a977917de5315a01e17f93a247cf4d189be1c821bf684913e7ef5c54526",
+  "crates/inference/src/gateway_cpu_residency.rs": "ca8edac4458499f7e2b229c6eca414c1320c6103105b796d117aca9396e22e3a",
+  "crates/inference/src/gateway_cpu_residency_tests.rs": "8a8c858e7d35708f6cc247aa350064b56f0ed1819e55bd8ede656af7ac4b3fea",
+  "crates/pantograph-workflow-service/src/workflow/serial_ready.rs": "28a5783973d639dfd3592ca4fbb48ea7bccc16bc8e4100ad9f73e545f508f935",
+  "crates/pantograph-workflow-service/src/workflow/task_execution_worker.rs": "59a3e7d4cd251f8a41963e69d774d272865ec11dcbcafa916f768c427009bb35",
+  "crates/pantograph-workflow-service/src/workflow/serial_ready_worker_tests.rs": "3e3eadf178240d876edbefe65597038dcd93c1b6a74683bd95bbba898759243e",
+  "crates/pantograph-runtime-host-contracts/src/serial_runtime_host.rs": "907916dfefb1f8fba134447eda654aaa10fd68446500bd30d03b99179a829ce6",
+  "crates/pantograph-runtime-host-contracts/src/lib.rs": "d43e6b1735341fa5bd8e95ed08557bbe87fc994de06936795a2f4d65243bdc4b"
+}

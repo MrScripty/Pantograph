@@ -496,3 +496,268 @@ coordination; parent owns its later disposition after reachable handoff.
   limits are accurate. Design review approved corrected producer SHA256
   `8fa52e568df966dd783d0d3f6930a17789765667b371e0e04e8276525e626820`.
   Final staged traceability, formatting and whitespace checks pass.
+
+## 2026-10-19 — M4 dependent contract and fixture preparation
+
+- Parent explicitly authorized the next bounded retain/acknowledged-stop/cold-load
+  slice on a separate dependent branch. Created `feat/cpu-scheduler-m4-serial-residency`
+  in `/workspace/pantograph-m4` from preserved PR81/M3 head
+  `b63aa3ebe5fab1531aef952a35ce74932bf76b30`. Parent monitors M3 CI;
+  production edits wait for M3 acceptance and independently admitted M4 contract.
+- Independent source/design research found consumed-task-receipt and cold-load
+  authority gaps. Chose one native idle capability over actual cold-load-started
+  guard custody, preserving existing registry last-lease stop/ACK invariants.
+  No stale next-task peek, fake warm drain or separate generic registry is needed.
+- Canonical draft records exact write set, actual post-grant/pre-candidate load-only
+  preparation, prepared-owner final Start fencing, private facade exclusion,
+  explicit ephemeral-session disposition and shutdown ordering. T4 helper/text
+  paths, M3 tested head, PR75 model/adapters and PR79 root README remain untouched.
+- Read-only fixture script verified all14 original manifest files and BERT8/12
+  golden shapes/finite normalization, recording exact hashes and prospective
+  A,A,B,B,A load/retain/stop oracle. No model forward, acquisition or regeneration.
+- The23:33:44 disconnect callback was checked against actual shell/worktree/process
+  state. Executor remained available, all heads/branch files intact, and no duplicate
+  workers, builds or model invocations were started.
+
+- Independent GPT-6.1 Sol High source/design reviewers admitted the revised M4
+  contract after load-started guard reuse, private-facade exclusion, ordered
+  shutdown and separate pre-Start native cancellation clarifications. Source
+  reviewer checked plan SHA256 `aeb814ad14428783bf1366f422562e61891b1e16653f8076270de961af4ba2a3`
+  before admission-status edits. Producer reviewer verified fixture script SHA256
+  `d35d1ee9a406640cc65186775e17ba098891788d0c8f774589b432fe7e880a97`.
+- Static accounting witness preserves existing per-kind conservative task hints
+  and proves a conditional fitting additive envelope; it is not a native capacity
+  freeze or memory measurement. Actual hints/future resident headroom must be
+  validated before physical work. Producer phase boundaries and separate case
+  owners/counts freeze before any native invocation. M3 acceptance still pending.
+
+- Final source reviewer approved the conditional accounting witness and checked
+  RAM32+48+1024=1104MiB and VRAM0+0+1024=1024MiB arithmetic against exact
+  existing estimator/consumer source. It is a logical admission witness, not
+  discovered hardware capacity or native memory qualification. All14 original
+  fixture hashes and helper/manifest hashes match; Python parses and staged
+  traceability/whitespace checks pass. No Rust production/test source changed.
+
+## 2026-10-20 — Exact-head M3 review and independent M4 fixtures
+
+- Retained all15 successful substantive CI job logs for PR81 head
+  `b63aa3ebe5fab1531aef952a35ce74932bf76b30`. Fetched PR merge
+  `a9292d48a49ac05ddec711397159077b3e68f9f0` has identical tree
+  `defca3d306f4824726fa6094b2bba04a3128e570`; source-pinned CPU jobs check out
+  the head directly. Actual format/Clippy command outcomes are success, despite
+  advisory wrappers. Independent final source/evidence review approved C1–C4;
+  all original native data/failure/reanalysis hashes remain intact.
+- Quality summary118394536482 is still queued/null. M3 acceptance and M4 production
+  remain pending; no status is promoted from queued to success. Detailed review
+  and complete CI logs are in the2026-10-20 acceptance report and M3 CI bundle.
+- Independent fixture work added one controlled registry composition regression:
+  original load-started guard custody survives two separate task cleanups, full
+  charges150running/140idle, mutation refusal, sole guard stopACK and stale frame
+  rejection. Sole guard retained-task validation correctly refuses LastLease;
+  native cap minting needs successor-free proof. This performs no native actions.
+  Scoped registry13 tests pass; tests warning-deny Clippy, rustfmt and whitespace
+  checks pass. Independent source reviewer approved SHA256
+  `7eba158fe0e825beda3fac8c2295b9f44a09c81c16e6f95d6c49a6ff330bf298`.
+- Facade feasibility refinement retains one execution-runtime owner across all
+  calls/shutdown and keeps ordinary auto-resume disabled; scalar diagnostics leak
+  no writable generation evidence. Native API research found existing supervised
+  load-only Candle primitive and exact private receipt transfer path. All remain
+  within the admitted write set; no M4 production code or model run occurred.
+
+- Independent design review admitted a narrow four-path preparation amendment:
+  host-contract Rust export, existing PUMAS package/load-target wrappers and target
+  tests. Model-reference methods preserve all legacy selected-model/runtime-family,
+  identity/OwnerFresh/error/privacy behavior. Actual intent+bounded text goes into
+  preparation without a fake Started/candidate/lease/public-cancellation context.
+  This closes the pre-candidate resolver feasibility gap before production edits.
+
+- Independent final packaging review approved the pending-evidence checkpoint:
+  all15CI log hashes/original bytes, compact and archived queued-summary metadata,
+  fixture source/log hashes and unchanged original M3 bundle verified. Explicit
+  staged traceability and whitespace checks pass. Final summary remained queued
+  at01:22:35 UTC; no M3 acceptance or M4 production start is claimed.
+
+## 2026-10-20 — M3 acceptance and local M4 production gate
+
+- At02:23 UTC all4 exact-head workflows and all13 Quality jobs completed success,
+  including actual summary118394536482. Independent final source review accepts
+  M3-C1–C5 within the existing CPU/opportunity/source-assisted evidence limits.
+  Frozen b63aa3eb/tree defca3d3 and original failed oracle/native cohort are unchanged.
+- Added the16th actual summary log and full final API status to the CI archive;
+  retained the earlier queued checkpoints as history and regenerated hashes.
+- Parent explicitly authorized local M4 production on the existing separate
+  branch. Native capability, preparation contract/resolver and workflow lanes
+  now implement the independently admitted contract; no M4 cohort has run.
+- Publication is still blocked by automatic review's nonpublic source/test egress
+  rejection for local07138639 payload to MrScripty/Pantograph. Exact-payload approval
+  remains unanswered; no retry, alternative upload, merge or deletion is authorized.
+- Harmless pwd/status checks verified recovered execution access after the02:25
+  disconnect; existing checkpoint and in-progress native files were preserved.
+
+## 2026-10-20 — Local M4 implementation/review checkpoint
+
+- Native linear residency implementation passes26 scoped actual CPU tests
+  (8new plus18 existing warm/last-lease), with separate load/publication/stop/ACK
+  intervals. Independent source review found no native/workflow lifecycle blocker.
+- Workflow7new tests pass; full suite1015library+65integration pass,0ignored.
+  Original missing-import test compile failure is preserved separately from its
+  corrected successful rerun. Actual M3 grant/Ready/owner proof remains authority.
+- Root port initial6tests passed. Independent port review found two P1 integration
+  defects: pre-load accounting substituted package size for actual per-kind intent
+  maxima, and generic lifecycle refusal rejected DispatchStarted. Fixes now use
+  actual RAM/VRAM MAX hints (unknown/shrunk refuses), acknowledge exact Start without
+  release, and permit only exact unstarted task lease cleanup without generic stop.
+  Added regression tests await affected recompilation; these are not claimed passing.
+- Independent design review admitted five separate acknowledged private facade
+  lifetimes for the fixed stop-between-tasks comparison, versus one retained owner.
+  Counts/outputs/ownership are comparable; startup/fairness/latency are not claimed
+  equivalent. This avoids adding a production eviction API for a measurement.
+- Private facade integration and fixed producer are in progress. No fixed M4 native
+  protocol has run; source/producer/input/environment freeze and independent review
+  are still required. Local-only publication restriction remains unchanged.
+
+## 2026-10-20 — Local source/producer gate complete, execution not started
+
+- Current contracts65, metadata/package14, port/facade11, native26 and workflow
+  1015+65 regressions pass. Producer8pure saved-JSON oracle tests pass after
+  independent findings corrected acquired claims, exact ACK, identities/order,
+  pressure terminal/refusal-stage and bounded shutdown evidence.
+- Independent source reviews accept private facade/supervised shutdown, common
+  real-signal preparation refusal, optional native timing and scalar logs, typed
+  input-bound refinement and the two prospective cancellation fixtures.
+- All local failures/success logs retained in m4-local-v1 pre-qualification archive.
+  No fixed protocol or either new qualification case has executed. Clean tracked
+  source/tree, binary/input/environment freeze is the next gate. Local-only hold
+  remains; no publication retry or alternative route is authorized.
+
+## 2026-10-20 — Fixed M4 main failed; native prefix preserved
+
+- Frozen7139b2ad/tree75852b54 release binaryc10590a7 ran the main protocol once
+  at03:22UTC and exited1 after first A: `M4 retained vector artifact missing`.
+  All71 original nonbinary files are archived with hashes in m4-main-failure-v1.
+- Independent read-only review confirms a valid golden-matching vector, one
+  load/forward/taskACK/finalstopACK and zero final charges. Empty projections
+  caused the readback failure; optional Started lease assumptions were also wrong.
+  No remaining main steps, comparison owners or pressure ran. C4 is Partial/Blocked.
+- Metadata-only explicit refresh and corrected Started/Completed joins are under
+  local repair/review. The two separately admitted cancellation cases have never
+  run and require a new reviewed source/binary/input/environment freeze. Original
+  failed main evidence stays unchanged; no main retry/continuation is authorized.
+- Publication remains blocked by the same unanswered automatic-review rejection.
+
+
+## 2026-10-20 — Metadata repair and once-only cancellation supplement
+
+- Clean96691fd7/tree00103d81 checkpoints the independently reviewed bounded
+  diagnostics forward/readback and realistic Started/Completed join. Producer11
+  pure tests, one no-model regression, Clippy/format/critical/a11y/traceability pass;
+  failed support checks and corrected results are preserved byte-for-byte.
+- Independent preflight approved frozen binary6d318a64, exact source/fixtures/
+  budgets and fresh paths. Exactly2 native cases ran once at03:36UTC, exit0.
+  Pre-Start shutdown fenced one loaded owner with zero forwards and full charges;
+  post-drain public request lost to completion, exact task cleanup returned cap,
+  and final stopACK cleared charges. Raw JSON/manifests are archived separately.
+- Supplement barriers/native identity are partly source-assisted; no raw full
+  native profile/generation/phase receipt stream was retained. Main7139 exit1,
+  missing AABBA/comparison/pressure and C4 Partial remain unchanged. No reruns.
+- Parent owns prospective new main-protocol admission and integration. Publication
+  still awaits exact-payload approval after auto-review rejection; no alternate
+  route, merge or branch deletion occurred. M5/M6 remain unadmitted.
+
+
+## 2026-10-20 — Main-v2 once-only qualification: native positives, pressure lifecycle failure
+
+- Parent separately authorized one new frozen main cohort after causal-fix review
+  and deterministic populated-projection preflight; all original criteria retained.
+  Actual metadata replay plus synthetic AABBA source tests pass16/16, zero new
+  native work. Initial wrong NodeStatus fixture expectation and exact source bytes
+  remain preserved. Two independent reviewers admitted source/producer/stop gates.
+- Clean c25fd49d/tree4ac114a2, all967source/14fixture hashes, exact budgets/env
+  and release binaryff1f35ac (86511472bytes) passed independent preflight. Exactly
+  one v2 invocation at03:58:22–24UTC exited1; no cancellation/retry/continuation.
+- Actual retainedAABBA:3loads2retains5forwards5taskACKs2switch+1finalstop. Five
+  fresh comparison owners eachload/forward/stop1. All10goldens match; independent
+  strict saved-owner checks support3vs5/native identities/claims/cleanup. Original
+  v1 and cancellation supplement remain unchanged.
+- Pressure correctly refuses620781187RAM against83886080 beforeStart/native/
+  claims, and facade shutdown succeeds. But its4event ledger has noFailedterminal;
+  public execution-sessionclose is scheduler_busy. M4prepareErr returns worker
+  RuntimeBranchFailed before admitted-run finalization; caller directly mapsErr,
+  leavingactive_run. Overallv2/C4 remainFAILED/Partial; no criterion relaxed.
+- Nextfixrequires parent/T4coordination: exactpre-Start admitted-run terminalization
+  before responder settlement, retaining originalerror/nativefence/charges and no
+  fabricatedStart/release. Reserved T4 file unchanged. No further workflow attempt
+  is authorized. C5 publication/exact-headCI remains held; later consolidated
+  destination/payload approval must cover finalsource/tests/rawreports scope.
+
+## 2026-10-20 — Composed main-v4 and combined local C4; C5 handoff held
+
+- Parent admitted reviewed PR84 preparation-refusal repair onto public M4base5b4:
+  e8d5d20d imports exact three-file patch;9ce4ca8a adds one model-free exact M4
+  before-event regression. Full workflow1020library+65integration, focused8+1,
+  pure producer12+4 and scoped/supported lint pass in retained logs; broad Candle
+  dependency lint exit101 remains explicit. Reserved T4/README/text paths unchanged.
+- Fresh v3 stopped BEFORE models because independent wrapper review rejected
+  post-spawn observer ownership. Failure marker/old runtime unchanged. Separately
+  reviewed cd085 runtime repair retained non-daemon owned supervision and actual
+  outer-exit/failure-artifact veto;11model-free fault methods pass. No silent fix
+  or reuse of stopped admission occurred.
+- Parent conditionally admitted one fresh v4 at unchanged9ce/tree05c47e8c and
+  release binary6335eedf. Independent source/binary/env/accounting/14fixture/
+  637history checks plus24-input final readback passed before formalverify0 and
+  exactly one native invocation. Actual wrappertool/child exit0, no errors/signals
+  or retained owner. RetainedAABBA3loads2retains5drains3stops;5freshcomparisons
+  eachload/drain/stop1. Ten goldens match maxabs5.960464477539063e-08. Pressure
+  refuses before effects and has exactly1Failedterminal, closes and emptyregistry.
+- Independent main review passes61rows/8nativeinstances/11runs/full native joins,
+  charges/phases/ACKs;360postfiles and637historical hashes unchanged. Combined
+  independent review accepts bounded LOCAL C4 using separate966 cancellation
+  evidence within original source-assisted limits. Native paths unchanged; no9ce
+  cancellation run or new metadata-terminal observation is invented. Original
+  v1/v2 failures and stoppedv3 remain preserved. No model reruns during review.
+- C5/overallM4 remain blocked. Read-only hosted evidence finds QualityGates failure
+  on both PR83/5b4 and PR84/9e: embedded600pass3fail2ignored, facadeTerminalFailed
+  and two cancellationElapsed results; awaited step/cause unknown (CPU-28).
+  Other three workflows pass only their actual published heads. Exact composed/
+  proposed-head CI is unavailable, and broad-suite reliability is unqualified.
+- Prepare only local focused fast-forward payload5b4..e8..9ce plus one evidence/
+  documentation commit; parent coordinates PR84 equivalent repair/dependency
+  order and any later publication authorization. No push/PRmetadata/merge/delete
+  or environment change occurred. Synthetic fixtures establish no trained-model,
+  production/default activation, GPU, native batching or performance qualification.
+- See [combined evidence and C5 handoff](reports/2026-10-20-m4-combined-c4.md).
+
+## 2026-10-20 — C5 explicit inventory repair and reviewed local regression handoff
+
+- Preserved e792fa61 unchanged. Five repair checkpoints through47077561 require
+  explicit host inventory before physical run/resume admission, retain conservative
+  unsupported/default behavior and native-boundary assertions, and split CI's
+  default library gate from exact inventory composition/native cases. Stable
+  comparison excludes only registry collection time; raw timestamps remain.
+- The first model-free attempt at71325cac remains failed:1pass/1fail/7unrun plus
+  a separately recorded Python launch-contract mismatch. The separately admitted
+  second attempt at47077561 passed9model-free cases once, with zero native calls.
+- Separate be7773ee test-only diagnostics retain public await phases and
+  first/latest errors before supervised shutdown, preserving all16 facade
+  assertions, original timeouts and cleanup ownership. Both exact-source binaries
+  compiled/listed and scoped Clippy passed without case execution in preparation.
+- Fresh explicit user approval then admitted exactly the original3 native cases
+  serially once atbe7773ee. Actual preflight/execute outer exits and all3child
+  exits are0; all3source oracles pass. Facade journal27records complete/noIOerror;
+  pre-Start retains honest full fence; post-drain completion wins with exact task
+  ACK/cap return and final stop/charge clear. Independent evidence/archive review
+  accepts only this bounded local result. Direct children reaped/no live groups;
+  descendant reaping is not claimed. No retry/cohort/download occurred.
+- This packaging checkpoint changes only docs/evidence afterbe7773ee; no tests,
+  native/model work or CI ran. The proposed PR83 fast-forward preserves all
+  commits. PR84 sourcea8a9f105's three-file repair is already represented by
+  e8d5d20d (stable patch ID1920567f9c950b7c36e51243d47c59b3b61bcd86);
+  do not merge it twice. Parent owns the replacement disposition and M3 dependency.
+- Read-only GitHub refresh of PR83/PR84/main returned Forbidden. Last observed
+  PR83head5b4fc6dd/baseM3b63aa3eb and PR84head9e068bbc are preconditions, not
+  current verified refs. No publication, metadata change, merge, rebase, closure
+  or deletion occurred. All prior source/evidence remains preserved.
+- OverallM4/C5 remain pending fresh refs, exact publication-source normal required
+  CI and coordinated integration. Historical hosted first cause/private raw
+  readiness remain unknown. See [C5 repair/publication handoff](reports/2026-10-20-m4-c5-local.md)
+  and its three exact retained evidence archives. No further execution is admitted.

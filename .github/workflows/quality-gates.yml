@@ -121,19 +121,28 @@ jobs:
           CHROMIUM_BINARY: google-chrome
         shell: bash
         run: |
-          set -euo pipefail
+          set -Eeuo pipefail
+          trap 'echo "::error title=Image browser qualification::Qualification preflight or entrypoint failed; inspect fixed stage diagnostics when present."' ERR
           if [[ ! "$IMAGE_SOURCE_SHA" =~ ^[0-9a-fA-F]{40}$ ]] ||
              [[ "$(git rev-parse HEAD)" != "$IMAGE_SOURCE_SHA" ]]; then
-            echo "Image browser qualification requires the exact requested source SHA" >&2
+            echo "::error title=Image browser qualification::Preflight requires the exact requested source SHA." >&2
             exit 1
           fi
           if [[ -n "${PANTOGRAPH_IMAGE_BROWSER_NO_SANDBOX:-}" ]]; then
-            echo "Hosted image qualification requires Chrome sandboxing" >&2
+            echo "::error title=Image browser qualification::Preflight requires Chrome sandboxing." >&2
             exit 1
           fi
           command -v "$CHROMIUM_BINARY"
           "$CHROMIUM_BINARY" --version
-          node tests/e2e/image-output-artifact/run.mjs 2>&1 | tee "$RUNNER_TEMP/image-output-browser.log"
+          trap - ERR
+          if node tests/e2e/image-output-artifact/run.mjs 2>&1 | tee "$RUNNER_TEMP/image-output-browser.log"; then
+            :
+          else
+            if ! grep -q '"event":"image_browser_failure"' "$RUNNER_TEMP/image-output-browser.log"; then
+              echo "::error title=Image browser qualification::Qualification entrypoint or evidence stream failed before a structured failure was available."
+            fi
+            exit 1
+          fi
 
       - name: Upload image browser qualification evidence
         if: always()
@@ -145,7 +154,7 @@ jobs:
 
       - name: Check presentation and demo security boundaries
         run: |
-          node --test scripts/render-research-markdown.test.mjs scripts/presentation-recording.test.mjs scripts/cdp-browser-function.test.mjs
+          node --test scripts/render-research-markdown.test.mjs scripts/presentation-recording.test.mjs scripts/cdp-browser-function.test.mjs scripts/browser-qualification-diagnostics.test.mjs
           python3 -m unittest discover -s examples/scheduler-demo -p test_header_security.py
 
   dependency-audit:
@@ -337,6 +346,46 @@ jobs:
 
       - name: Run embedded runtime unit tests
         run: cargo test -p pantograph-embedded-runtime --lib
+      - name: Run explicit host inventory composition and native residency cases
+        env:
+          PANTOGRAPH_M4_CANCELLATION_EVIDENCE_ROOT: ${{ runner.temp }}/m4-host-inventory/cancellation-evidence
+        run: |
+          set -euo pipefail
+          evidence_root="$RUNNER_TEMP/m4-host-inventory"
+          mkdir -p "$evidence_root/registries" "$PANTOGRAPH_M4_CANCELLATION_EVIDENCE_ROOT"
+          export PUMAS_REGISTRY_DB_PATH="$evidence_root/registries/discovery.db"
+          cargo test --locked -p pantograph-embedded-runtime --features host-dependency-inventory --lib -- --list > "$evidence_root/tests.list"
+          composition_tests=(
+            workflow_service_composition::tests::hosted_inventory_without_explicit_owner_context_stays_conservative
+            workflow_service_composition::tests::hosted_inventory_observes_real_compiled_candle_lifecycle
+            workflow_service_composition::tests::hosted_inventory_preserves_unsupported_candle_feature
+          )
+          native_tests=(
+            serial_cpu_residency::tests::actual_facade_session_uses_private_load_owner_and_acknowledged_shutdown
+            tests::workflow_run_execution_tests::native_serial_residency_tests::actual_post_load_pre_start_shutdown_signal_fences_guard_without_running_attempt
+            tests::workflow_run_execution_tests::native_serial_residency_tests::actual_public_running_post_drain_cancellation_preserves_cap_and_exact_cleanup
+          )
+          # Discover all three native cases before any case executes. Each exact
+          # filter must resolve once; feature gating cannot silently remove it.
+          python3 -c 'import pathlib, sys; lines = pathlib.Path(sys.argv[1]).read_text().splitlines(); counts = {name: lines.count(name + ": test") for name in sys.argv[2:]}; print(counts); sys.exit(0 if all(count == 1 for count in counts.values()) else 1)' "$evidence_root/tests.list" "${composition_tests[@]}" "${native_tests[@]}"
+          for test_name in "${composition_tests[@]}" "${native_tests[@]}"; do
+            case_id="${test_name##*::}"
+            export PUMAS_REGISTRY_DB_PATH="$evidence_root/registries/$case_id.db"
+            result_path="$evidence_root/$case_id.log"
+            # Serial, separate processes isolate the process-global registry;
+            # the fixed native fixtures and existing cancellation oracles own ACK.
+            cargo test --locked -p pantograph-embedded-runtime --features host-dependency-inventory --lib "$test_name" -- --exact --test-threads=1 --nocapture 2>&1 | tee "$result_path"
+            python3 -c 'import pathlib, re, sys; text = pathlib.Path(sys.argv[1]).read_text(); sys.exit(0 if re.search(r"^test result: ok\. 1 passed; 0 failed; 0 ignored;", text, re.M) else 1)' "$result_path"
+          done
+
+      - name: Upload explicit host inventory evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: m4-host-inventory-residency-cases
+          path: ${{ runner.temp }}/m4-host-inventory/
+          if-no-files-found: warn
+
       - name: Run runtime registry contract tests
         run: cargo test -p pantograph-runtime-registry
       - name: Run task summary contract tests

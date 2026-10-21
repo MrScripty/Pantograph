@@ -35,6 +35,8 @@ const WORKFLOW_ID: &str = "cpu-embedding-probe";
 
 #[path = "cpu_embedding_workflow_probe/browser_host.rs"]
 mod browser_host;
+#[path = "cpu_embedding_workflow_probe/m4_residency_probe.rs"]
+mod m4_residency_probe;
 #[path = "cpu_embedding_workflow_probe/retained_inspection.rs"]
 mod retained_inspection;
 #[path = "cpu_embedding_workflow_probe/rich_workflow.rs"]
@@ -503,10 +505,11 @@ async fn main() -> ProbeResult<()> {
                 && mode != "--serial-ready-c3-768b"
                 && mode != "--serial-lookahead"
                 && mode != "--fair-service"
+                && mode != "--serial-residency"
         })
     {
         return Err(
-            "usage: cpu_embedding_workflow_probe <new absolute directory> [--inspect-targets|--serve-stdio|--serve-rich-stdio|--serial-ready|--serial-ready-c3-768b|--serial-lookahead|--fair-service]"
+            "usage: cpu_embedding_workflow_probe <new absolute directory> [--inspect-targets|--serve-stdio|--serve-rich-stdio|--serial-ready|--serial-ready-c3-768b|--serial-lookahead|--fair-service|--serial-residency]"
                 .into(),
         );
     }
@@ -520,6 +523,9 @@ async fn main() -> ProbeResult<()> {
         return Err("set PUMAS_REGISTRY_DB_PATH to <new absolute probe directory>/registry.db; existing catalogs are never opened".into());
     }
     std::fs::create_dir(&root)?; // Refuse existing directories, including previous evidence.
+    if args.get(1).is_some_and(|mode| mode == "--serial-residency") {
+        return m4_residency_probe::qualify(&root).await;
+    }
     if args.get(1).is_some_and(|mode| mode == "--serial-ready") {
         return serial_ready_probe::qualify(&root).await;
     }

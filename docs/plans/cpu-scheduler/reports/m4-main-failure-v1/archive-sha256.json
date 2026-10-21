@@ -1,0 +1,8 @@
+{
+  "archive": "original-main-evidence.tar.gz",
+  "sha256": "d6780daaa309f1e00b31f03e695c3bc5bed1ad2633ff68fd224bb276581b85fc",
+  "bytes": 164980,
+  "frozen_source_head": "7139b2ad547e5b195482146f17b6e27e633c92ed",
+  "frozen_source_tree": "75852b54dd591d5e01a00f5345256cbff260711f",
+  "binary_files_excluded": "Retained externally; exact hashes in original binary-freeze.json. No source/data mutation."
+}

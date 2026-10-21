@@ -4,7 +4,7 @@ use crate::{
     ReservationLifecycleApplication, ReservationLifecycleEvent, ReservationLifecyclePort,
     ReservationLifecyclePortError, RuntimeHostBatchExecutionPort, RuntimeHostBatchExecutionRequest,
     RuntimeHostBatchExecutionResponse, RuntimeHostExecutionCancellationHandle,
-    RuntimeHostExecutionPortError,
+    RuntimeHostExecutionInput, RuntimeHostExecutionInputValue, RuntimeHostExecutionPortError,
 };
 use async_trait::async_trait;
 use pantograph_scheduler::{
@@ -16,10 +16,172 @@ use std::sync::{
     Arc,
 };
 
+const MAX_PREPARATION_METADATA_BYTES: usize = 32 * 1024;
+
+/// Actual Ready task data for load-only preparation before candidate admission.
+///
+/// The correlation ID identifies preparation, not a Started task attempt. This
+/// request carries no candidate, execution lease, handoff or public cancellation
+/// context. The port owns its native preparation/shutdown signal. Workflow
+/// readiness and prepared-owner evidence must still be fenced at final Start.
+/// Exactly one nonblank `text` input is supported: `String` up to 1024 bytes or
+/// `TranscriptText` up to 4096 bytes, matching the existing execution limits.
+#[derive(Debug)]
+pub struct SerialRuntimeHostPreparationRequest {
+    pub preparation_request_id: String,
+    pub task_intent: SchedulableTaskIntent,
+    pub materialized_inputs: Vec<RuntimeHostExecutionInput>,
+}
+
+impl SerialRuntimeHostPreparationRequest {
+    /// Validate borrowed metadata and actual input before copying or native work.
+    pub fn new(
+        preparation_request_id: &str,
+        task_intent: &SchedulableTaskIntent,
+        materialized_inputs: &[RuntimeHostExecutionInput],
+    ) -> Result<Self, RuntimeHostExecutionPortError> {
+        validate_preparation(preparation_request_id, task_intent, materialized_inputs)?;
+        Ok(Self {
+            preparation_request_id: preparation_request_id.to_owned(),
+            task_intent: task_intent.clone(),
+            materialized_inputs: materialized_inputs.to_vec(),
+        })
+    }
+
+    /// Recheck the public fields before preparation, including old-owner stop.
+    pub fn validate(&self) -> Result<(), RuntimeHostExecutionPortError> {
+        validate_preparation(
+            &self.preparation_request_id,
+            &self.task_intent,
+            &self.materialized_inputs,
+        )
+    }
+}
+
+fn preparation_error(message: &str) -> RuntimeHostExecutionPortError {
+    RuntimeHostExecutionPortError::ExecutionFailed {
+        message: message.to_owned(),
+    }
+}
+
+fn validate_preparation(
+    id: &str,
+    intent: &SchedulableTaskIntent,
+    inputs: &[RuntimeHostExecutionInput],
+) -> Result<(), RuntimeHostExecutionPortError> {
+    if id.is_empty()
+        || id.len() > 128
+        || !id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-' | b':'))
+    {
+        return Err(preparation_error("invalid serial CPU preparation identity"));
+    }
+    if intent.task_type.as_str() != "embedding"
+        || intent
+            .constraints
+            .requested_runtime_id
+            .as_ref()
+            .map(|id| id.as_str())
+            != Some("candle")
+        || intent
+            .constraints
+            .requested_device_id
+            .as_ref()
+            .map(|id| id.as_str())
+            != Some("cpu")
+        || !intent.trait_settings.is_empty()
+        || !intent.dependency_override_patches.is_empty()
+        || intent.estimate_hints.len() > 32
+    {
+        return Err(preparation_error("serial CPU preparation requires bounded embedding intent on candle/cpu without overrides"));
+    }
+    let model = &intent.model_ref;
+    if model.model_id.len() > 128
+        || model
+            .revision
+            .as_ref()
+            .is_some_and(|value| value.len() > 128)
+        || model
+            .selected_artifact_id
+            .as_ref()
+            .is_some_and(|value| value.len() > 128)
+        || model
+            .selected_artifact_path
+            .as_ref()
+            .is_some_and(|value| value.len() > 1024)
+        || model.migration_diagnostics.len() > 4
+    {
+        return Err(preparation_error(
+            "serial CPU preparation model metadata is not bounded",
+        ));
+    }
+    let [input] = inputs else {
+        return Err(preparation_error(
+            "serial CPU preparation requires one actual text input",
+        ));
+    };
+    let (text, max_bytes) = match &input.value {
+        RuntimeHostExecutionInputValue::String(text) => (text, 1024),
+        RuntimeHostExecutionInputValue::TranscriptText(text) => (text, 4096),
+        _ => {
+            return Err(preparation_error(
+                "serial CPU preparation requires an actual text input",
+            ))
+        }
+    };
+    if input.port_id != "text" || text.len() > max_bytes || text.trim().is_empty() {
+        return Err(preparation_error(
+            "serial CPU preparation requires nonblank text: String at most 1024 bytes or TranscriptText at most 4096 bytes",
+        ));
+    }
+    // Bound borrowed serialization before validating/cloning variable metadata.
+    // The writer counts bytes without allocating a serialized metadata buffer.
+    let mut budget = PreparationMetadataBudget(MAX_PREPARATION_METADATA_BYTES);
+    serde_json::to_writer(&mut budget, &(id, intent, inputs)).map_err(|_| {
+        preparation_error("serial CPU preparation metadata exceeds its bounded budget")
+    })?;
+    intent
+        .validate()
+        .map_err(|_| preparation_error("invalid serial CPU preparation intent"))?;
+    Ok(())
+}
+
+struct PreparationMetadataBudget(usize);
+impl std::io::Write for PreparationMetadataBudget {
+    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+        self.0 = self.0.checked_sub(bytes.len()).ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "preparation metadata bound",
+            )
+        })?;
+        Ok(bytes.len())
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
 #[async_trait]
 pub trait SerialRuntimeHostBatchExecutionPort:
     RuntimeHostBatchExecutionPort + ReservationLifecyclePort
 {
+    /// Prepare only this actual Ready CPU task under its granted service turn.
+    ///
+    /// Implementations validate the request before Pumas, stop or load work, own
+    /// their native cancellation/shutdown signal, and retain linear residency
+    /// authority privately. Returned owner evidence grants no execution or cleanup
+    /// authority. Existing retained-only ports explicitly refuse cold preparation.
+    async fn prepare_serial_cpu(
+        &self,
+        _request: SerialRuntimeHostPreparationRequest,
+    ) -> Result<SerialRuntimeHostCpuOwnerEvidence, RuntimeHostExecutionPortError> {
+        Err(preparation_error(
+            "serial CPU residency preparation is unsupported by this port",
+        ))
+    }
+
     /// Read-only nonblocking query on the exact admitted CPU model/config. None
     /// means baseline order, not permission to fabricate an owner/drain proof.
     fn resident_serial_cpu_owner(
@@ -107,4 +269,181 @@ pub struct SerialRuntimeHostDrainedExecution {
     pub drained: SchedulerSerialDrainedDispatch,
     pub owner: Option<SerialRuntimeHostCpuOwnerEvidence>,
     pub cleanup: Option<Box<dyn SerialRuntimeHostCleanupReceipt>>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn intent() -> SchedulableTaskIntent {
+        serde_json::from_value(json!({
+            "workflow_id":"wf.cpu","workflow_run_id":"run.cpu","node_id":"infer","task_id":"task.cpu",
+            "task_type":"embedding","model_ref":{"model_id":"embedding/test","selected_artifact_id":"main"},
+            "constraints":{"requested_runtime_id":"candle","requested_device_id":"cpu"}
+        })).unwrap()
+    }
+
+    fn inputs(text: &str) -> Vec<RuntimeHostExecutionInput> {
+        vec![RuntimeHostExecutionInput {
+            port_id: "text".into(),
+            value: RuntimeHostExecutionInputValue::String(text.into()),
+        }]
+    }
+
+    #[test]
+    fn preparation_copies_only_valid_actual_inputs_and_rechecks_public_mutation() {
+        let intent = intent();
+        let inputs = inputs("actual Ready text");
+        let mut request =
+            SerialRuntimeHostPreparationRequest::new("prepare.1", &intent, &inputs).unwrap();
+        assert_eq!(request.task_intent, intent);
+        assert_eq!(request.materialized_inputs, inputs);
+        request.materialized_inputs[0].port_id = "placeholder".into();
+        assert!(request.validate().is_err());
+    }
+
+    #[test]
+    fn preparation_enforces_actual_single_nonblank_text_input_shape() {
+        let intent = intent();
+        for text in [String::new(), " \t\n".into()] {
+            assert!(
+                SerialRuntimeHostPreparationRequest::new("prepare.1", &intent, &inputs(&text))
+                    .is_err()
+            );
+            let mut transcript = inputs(&text);
+            transcript[0].value = RuntimeHostExecutionInputValue::TranscriptText(text);
+            assert!(
+                SerialRuntimeHostPreparationRequest::new("prepare.1", &intent, &transcript)
+                    .is_err()
+            );
+        }
+        assert!(SerialRuntimeHostPreparationRequest::new("prepare.1", &intent, &[]).is_err());
+        let mut two = inputs("hello");
+        two.extend(inputs("world"));
+        assert!(SerialRuntimeHostPreparationRequest::new("prepare.1", &intent, &two).is_err());
+        let wrong_value = vec![RuntimeHostExecutionInput {
+            port_id: "text".into(),
+            value: RuntimeHostExecutionInputValue::Bool(true),
+        }];
+        assert!(
+            SerialRuntimeHostPreparationRequest::new("prepare.1", &intent, &wrong_value).is_err()
+        );
+    }
+
+    #[test]
+    fn preparation_string_limit_matches_embedding_semantics_in_bytes() {
+        let intent = intent();
+        for text in ["x".repeat(1024), "é".repeat(512)] {
+            assert!(
+                SerialRuntimeHostPreparationRequest::new("prepare.1", &intent, &inputs(&text))
+                    .is_ok()
+            );
+        }
+        for text in ["x".repeat(1025), format!("{}x", "é".repeat(512))] {
+            assert!(
+                SerialRuntimeHostPreparationRequest::new("prepare.1", &intent, &inputs(&text))
+                    .is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn preparation_transcript_limit_matches_native_warm_semantics_in_bytes() {
+        let intent = intent();
+        for (text, accepted) in [
+            ("x".repeat(4096), true),
+            ("é".repeat(2048), true),
+            ("x".repeat(4097), false),
+            (format!("{}x", "é".repeat(2048)), false),
+        ] {
+            let mut transcript = inputs("unused");
+            transcript[0].value = RuntimeHostExecutionInputValue::TranscriptText(text);
+            assert_eq!(
+                SerialRuntimeHostPreparationRequest::new("prepare.1", &intent, &transcript).is_ok(),
+                accepted
+            );
+        }
+    }
+
+    #[test]
+    fn preparation_rechecks_mutated_public_text_type_and_size() {
+        let mut request = SerialRuntimeHostPreparationRequest::new(
+            "prepare.1",
+            &intent(),
+            &inputs(&"x".repeat(1024)),
+        )
+        .unwrap();
+        request.materialized_inputs[0].value =
+            RuntimeHostExecutionInputValue::String("x".repeat(1025));
+        assert!(request.validate().is_err());
+        request.materialized_inputs[0].value =
+            RuntimeHostExecutionInputValue::TranscriptText("x".repeat(4096));
+        assert!(request.validate().is_ok());
+        request.materialized_inputs[0].value =
+            RuntimeHostExecutionInputValue::String("x".repeat(4096));
+        assert!(request.validate().is_err());
+        request.materialized_inputs[0].value =
+            RuntimeHostExecutionInputValue::TranscriptText("x".repeat(4097));
+        assert!(request.validate().is_err());
+    }
+
+    #[test]
+    fn preparation_refuses_foreign_runtime_missing_cpu_and_trait_overrides() {
+        for (field, value) in [
+            ("task_type", json!("text_generation")),
+            (
+                "constraints",
+                json!({"requested_runtime_id":"candle","requested_device_id":"cuda:0"}),
+            ),
+            ("constraints", json!({"requested_runtime_id":"candle"})),
+            ("constraints", json!({"requested_device_id":"cpu"})),
+            (
+                "constraints",
+                json!({"requested_runtime_id":"llamacpp","requested_device_id":"cpu"}),
+            ),
+            (
+                "trait_settings",
+                json!([{"trait_id":"temperature","value":{"kind":"u64","value":1}}]),
+            ),
+            ("contract_version", json!(99)),
+        ] {
+            let mut value_intent = serde_json::to_value(intent()).unwrap();
+            value_intent[field] = value;
+            let foreign: SchedulableTaskIntent = serde_json::from_value(value_intent).unwrap();
+            assert!(
+                SerialRuntimeHostPreparationRequest::new("prepare.1", &foreign, &inputs("hello"))
+                    .is_err(),
+                "accepted {field}"
+            );
+        }
+    }
+
+    #[test]
+    fn preparation_bounds_identity_and_serialized_metadata_before_copying() {
+        let intent = intent();
+        for id in [
+            String::new(),
+            "x".repeat(129),
+            " bad id ".into(),
+            "prepare/foreign".into(),
+        ] {
+            assert!(
+                SerialRuntimeHostPreparationRequest::new(&id, &intent, &inputs("hello")).is_err()
+            );
+        }
+        let mut huge = serde_json::to_value(&intent).unwrap();
+        huge["model_ref"]["migration_diagnostics"] =
+            json!([{"code":"legacy","message":"x".repeat(40000),"input":"old"}]);
+        let huge: SchedulableTaskIntent = serde_json::from_value(huge).unwrap();
+        assert!(
+            SerialRuntimeHostPreparationRequest::new("prepare.1", &huge, &inputs("hello")).is_err()
+        );
+        let mut huge_id = intent;
+        huge_id.model_ref.model_id = "x".repeat(129);
+        assert!(
+            SerialRuntimeHostPreparationRequest::new("prepare.1", &huge_id, &inputs("hello"))
+                .is_err()
+        );
+    }
 }

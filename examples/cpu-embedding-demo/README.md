@@ -269,3 +269,88 @@ and starts no host, runtime or model. It preserves the original failed oracle an
 exit status. Aggregate training checks use frozen-source assistance; local sample
 task names do not independently identify run/attempt timings. See the M3 report
 for the original checker defect and exact-source evidence.
+
+## Opt-in serial CPU residency producer
+
+The M4 producer is selected explicitly with `--serial-residency`. It uses the
+owning `EmbeddedSerialCpuResidency` facade, authenticated ephemeral sessions,
+and the committed untrained BERT-8/BERT-12 fixtures. Construction performs no
+native bootstrap. The constructor owns its gateway and runtime registry; no
+writable runtime or owner capability is exposed to the producer.
+
+The build command and invocation shape below require independent
+source/producer review, source/binary/environment freeze, and separate
+authorization of a future protocol:
+
+```sh
+ORT_SKIP_DOWNLOAD=1 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
+  cargo build --locked -p pantograph-embedded-runtime --no-default-features \
+  --features backend-candle,host-dependency-inventory --release \
+  --example cpu_embedding_workflow_probe
+# Execution requires separate prospective protocol admission:
+PUMAS_REGISTRY_DB_PATH=/tmp/pantograph-m4-new/registry.db \
+  "${CARGO_TARGET_DIR:-target}/release/examples/cpu_embedding_workflow_probe" \
+  /tmp/pantograph-m4-new --serial-residency
+```
+
+The retained protocol makes exactly five public embedding calls in `A,A,B,B,A`
+order through one fresh facade. Its count oracle requires three cold loads,
+two retains, two switch stops and one final acknowledged idle stop. Comparison
+uses five fresh facades, one call and acknowledged shutdown each, with the same
+model declarations, inputs and CPU calibration. Each previous facade is dropped
+before the next is constructed. This compares native counts, vectors and
+ownership; it establishes no startup, session, history or latency equivalence.
+The process-wide Pumas registry SQLite file is shared metadata only. Each facade
+has a distinct project, model-library and application-data root and owns a new
+native gateway and runtime registry.
+
+A separate fresh pressure owner attempts one A call with 80 MiB declared RAM
+capacity and must refuse before any load, runtime Start or reservation. The
+fitting protocols declare 1,104 MiB RAM capacity, 1,024 MiB VRAM admission
+capacity, 32 MiB resident RAM and a 48 MiB cold guard, with explicit CPU VRAM
+zero. Actual task RAM/VRAM maxima remain unchanged and must fit additively;
+these declarations are neither allocator measurements nor GPU qualification.
+
+The producer first verifies all fourteen committed fixture hashes using the
+read-only `m4_fixture_contract.py` helper. It saves every public result/error,
+successful-run readiness resumes, retained vector readback, ledger Start and
+Completed observations, native
+identity, resource claim, phase observation and teardown outcome. Load,
+publication, forward-and-drain, physical stop and registry ACK are distinct
+observations. The registry task ACK is not labelled a scheduler cleanup ACK.
+Pressure requires its exact headroom refusal and failed terminal ledger run.
+Outer request time and shutdown watchdog timeouts are labelled separately;
+an uncertain shutdown ends the cohort without constructing another owner.
+Failed-run resume history is not returned by the helper; public errors and
+matching preparation/terminal identities remain in raw native/ledger evidence.
+Readback explicitly refreshes the three diagnostic projections with a 500-event
+page bound, checks each cursor against its relevant visible raw events, and
+saves inspection before artifact assertions. Start identifies run/node/task/
+attempt; Completed supplies the matching selected lease, runtime and device.
+Existing directories,
+fixture overrides, missing evidence and log overflow refuse; failed cohorts
+are preserved and never restarted to obtain a desired result.
+
+A successful exit covers only `main-counts-v2+pressure`. Full M4-C4 requires
+independent review together with the separately preserved cancellation and
+controlled fault evidence. The two once-only cancellation cases at `96691fd7`
+are not invoked by this producer. No missing phase is
+assigned zero, and no general speedup, useful embedding quality, default
+activation or M4 acceptance follows from this invocation.
+
+The original frozen `7139b2ad` main attempt exited after its first A result
+because diagnostic projections had not been advanced. Its source, binaries and
+failed evidence remain preserved. Parent subsequently authorized exactly one new
+`m4-serial-residency-v2-readback` main cohort after independent causal-fix review
+and a deterministic saved-event/artifact replay proves all required projections
+are populated. See the [prospective protocol](../../docs/plans/cpu-scheduler/reports/2026-10-20-m4-main-v2.md).
+All original retention/switching/pressure/3-versus-5 criteria and budgets remain
+binding. This admission does not restart or continue the original failed owner,
+and allows no winner retry or new cancellation execution. Publication stays held.
+
+The authorized v2 invocation subsequently ran once at `c25fd49d` and exited1.
+Retained/comparison native counts,10golden outputs and acknowledged cleanup
+passed. Pressure correctly refused before native work, but its failed preparation
+left the session active with no Failed terminal event; close reported
+`scheduler_busy`. Full pressure and M4-C4 remain blocked. No further invocation
+is authorized by the consumed v2 admission. Preserve both original failures.

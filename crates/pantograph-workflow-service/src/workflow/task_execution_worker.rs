@@ -771,6 +771,28 @@ impl WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistry {
         }
     }
 
+    fn owns_unassigned_workflow_run(
+        &self,
+        registration: &WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistration,
+        command: &WorkflowTaskExecutionWorkerRuntimeBranchCommand,
+    ) -> bool {
+        registration.runtime_dispatch_assignment_id.is_none()
+            && registration.session_id == command.session_id
+            && registration.workflow_run_id == command.workflow_run_id
+            && registration.workflow_id == command.workflow_id
+            && self.responders.lock().is_ok_and(|responders| {
+                responders.get(&registration.key).is_some_and(|registered| {
+                    registered.session_id == command.session_id
+                        && registered.workflow_run_id == command.workflow_run_id
+                        && registered.workflow_id == command.workflow_id
+                        && registered.execution_task_id == tokio::task::try_id()
+                        && registered.runtime_dispatch_assignment_id.is_none()
+                        && registered.batch_claim.is_none()
+                        && registered.event_ownership.is_none()
+                })
+            })
+    }
+
     fn fail_registered_event(
         &self,
         service: &WorkflowService,
@@ -1197,6 +1219,48 @@ impl WorkflowTaskExecutionWorkerDiagnostic {
     }
 }
 
+fn settle_runtime_branch_terminal_response(
+    service: &WorkflowService,
+    registry: &WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistry,
+    registration: &WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistration,
+    command: &WorkflowTaskExecutionWorkerRuntimeBranchCommand,
+    outcome: &mut WorkflowTaskExecutionWorkerOutcome,
+) {
+    let (error, diagnostics) = match outcome {
+        WorkflowTaskExecutionWorkerOutcome::RuntimeBranchFailed(failed) => (
+            WorkflowServiceError::Internal(failed.error_message.clone()),
+            &mut failed.diagnostics,
+        ),
+        WorkflowTaskExecutionWorkerOutcome::RuntimeBranchCancelled(cancelled) => (
+            WorkflowServiceError::Cancelled(cancelled.message.clone()),
+            &mut cancelled.diagnostics,
+        ),
+        _ => return,
+    };
+    let settlement = registry.fail_registered_event(service, registration);
+    let settled = settlement.is_empty();
+    diagnostics.extend(settlement);
+    if settled && registry.owns_unassigned_workflow_run(registration, command) {
+        if let Err(error) =
+            super::workflow_run_finalization::finalize_unstarted_runtime_branch_failure(
+                service,
+                &command.session_id,
+                &command.workflow_run_id,
+                &command.workflow_id,
+                error,
+            )
+        {
+            let reason = error
+                .diagnostics()
+                .and_then(|link| link.diagnostics_unavailable.as_deref())
+                .unwrap_or_else(|| error.message());
+            diagnostics.push(settlement_diagnostic(format!(
+                "workflow preparation refusal finalization failed: {reason}"
+            )));
+        }
+    }
+}
+
 async fn drive_runtime_branch_continuations(
     environment: &WorkflowTaskExecutionWorkerRuntimeBranchEnvironment,
     registry: &WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistry,
@@ -1222,11 +1286,13 @@ async fn drive_runtime_branch_continuations(
             mut outcome,
         ) = outcome
         {
-            if let WorkflowTaskExecutionWorkerOutcome::RuntimeBranchFailed(failed) = &mut outcome {
-                failed.diagnostics.extend(
-                    registry.fail_registered_event(environment.service().as_ref(), &registration),
-                );
-            }
+            settle_runtime_branch_terminal_response(
+                environment.service().as_ref(),
+                registry,
+                &registration,
+                &command,
+                &mut outcome,
+            );
             if let Some(assignment_id) = registration.runtime_dispatch_assignment_id.clone() {
                 let completion =
                     WorkflowTaskExecutionWorkerRuntimeBranchResponderAssignmentCompletion {
@@ -1502,6 +1568,39 @@ async fn claim_and_execute_runtime_branch_event(
     let mut serial_pair = None;
     let mut serial_owner = None;
     if let (Some(mode), Some(scope)) = (service.serial_ready_mode.as_ref(), serial_scope.as_ref()) {
+        if mode.residency_enabled() {
+            let prepared = async {
+                let admission = fair_admission.as_ref().ok_or_else(|| {
+                    WorkflowServiceError::InvalidRequest(
+                        "serial residency requires an authenticated Ready grant".into(),
+                    )
+                })?;
+                let owner = scope.prepare_residency(&admission.member).await?;
+                // Native preparation may load/stop, but cannot refresh graph,
+                // attribution, priority or input authority across its awaits.
+                service
+                    .session_store_guard()?
+                    .validate_serial_service_admission(
+                        &command.session_id,
+                        &command.workflow_run_id,
+                        admission,
+                    )?;
+                Ok::<_, WorkflowServiceError>(owner)
+            }
+            .await;
+            match prepared {
+                Ok(owner) => serial_owner = Some(owner),
+                Err(error) => {
+                    return WorkflowTaskExecutionWorkerRuntimeBranchExecutionResult::complete(
+                        WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
+                            command,
+                            error.to_string(),
+                            Vec::new(),
+                        ),
+                    );
+                }
+            }
+        }
         let pair = service.session_store_guard().ok().and_then(|store| {
             store.serial_ready_pair(&command.session_id, &command.workflow_run_id)
         });
@@ -1520,6 +1619,18 @@ async fn claim_and_execute_runtime_branch_event(
                     "oldest_age_ns": decision.oldest_age_ns, "decision_ns": decision_ns,
                 }));
                 if let Some(owner) = decision.owner {
+                    if serial_owner
+                        .as_ref()
+                        .is_some_and(|prepared| !super::serial_ready::same_owner(prepared, &owner))
+                    {
+                        return WorkflowTaskExecutionWorkerRuntimeBranchExecutionResult::complete(
+                            WorkflowTaskExecutionWorkerOutcome::runtime_branch_failed(
+                                command,
+                                "serial prepared CPU owner changed before selection",
+                                Vec::new(),
+                            ),
+                        );
+                    }
                     selected_task_id = pair.members[decision.position].task.task_id.to_string();
                     serial_owner = Some(owner);
                     serial_pair = Some(pair);
@@ -2692,6 +2803,7 @@ fn scheduler_transition_from_runtime_branch_start_reason(
 #[cfg(test)]
 mod tests {
     include!("serial_ready_worker_tests.rs");
+    include!("preparation_terminal_lifecycle_tests.rs");
     use super::*;
     use crate::scheduler::{
         WorkflowSchedulerLifecycleComponentKind, WorkflowSchedulerLifecycleComponentRegistryHandle,
@@ -3241,7 +3353,17 @@ mod tests {
     async fn task_execution_worker_executes_runtime_branch_and_fails_invalid_dispatch_state_before_running(
     ) {
         let scheduler_lifecycle = scheduler_lifecycle();
-        let service = Arc::new(WorkflowService::new());
+        let native = Arc::new(RecordingWorkerBatchExecutionPort::default());
+        let lifecycle = Arc::new(RecordingReservationLifecyclePort::default());
+        let service = Arc::new(
+            WorkflowService::new()
+                .with_diagnostics_ledger(
+                    pantograph_diagnostics_ledger::SqliteDiagnosticsLedger::open_in_memory()
+                        .unwrap(),
+                )
+                .with_runtime_host_batch_execution_port(native.clone())
+                .with_reservation_lifecycle_port(lifecycle.clone()),
+        );
         let session_id = prepare_active_runtime_run(service.as_ref());
         let event_id =
             WorkflowRuntimeBranchTaskEventId::parse("runtime-branch-task-event.run-1.image-task")
@@ -3281,7 +3403,7 @@ mod tests {
         let (completion_responder, completion_rx) =
             WorkflowTaskExecutionWorkerRuntimeBranchCompletionResponder::channel();
         let command = WorkflowTaskExecutionWorkerRuntimeBranchCommand {
-            session_id,
+            session_id: session_id.clone(),
             workflow_run_id: "run-1".to_string(),
             workflow_id: "workflow-1".to_string(),
             output_targets: None,
@@ -3335,6 +3457,42 @@ mod tests {
         assert!(persisted.running_at_ms.is_none());
         assert!(persisted.deferred_at_ms.is_none());
         assert!(persisted.failed_at_ms.is_none());
+
+        let terminals = preparation_run_terminals(&service, "run-1");
+        assert_eq!(terminals.len(), 1);
+        assert_eq!(
+            terminals[0].status,
+            pantograph_diagnostics_ledger::RunTerminalStatus::Failed
+        );
+        assert!(terminals[0]
+            .error
+            .as_ref()
+            .unwrap()
+            .contains("cannot continue from Invalid"));
+        assert!(native.requests().is_empty());
+        assert!(lifecycle.events().is_empty());
+        {
+            use pantograph_diagnostics_ledger::DiagnosticsLedgerRepository;
+            let events = service
+                .diagnostics_ledger_guard()
+                .unwrap()
+                .diagnostic_events_after(0, 500)
+                .unwrap();
+            assert!(!events.iter().any(|event| event.event_kind == pantograph_diagnostics_ledger::DiagnosticEventKind::SchedulerTaskAttemptLifecycleChanged));
+            let store = service.session_store_guard().unwrap();
+            assert!(store.active_run_context(&session_id, "run-1").is_err());
+            assert!(store.list_queue(&session_id).unwrap().is_empty());
+        }
+        assert!(
+            service
+                .close_workflow_execution_session(
+                    &WorkerHost,
+                    super::super::WorkflowExecutionSessionCloseRequest { session_id }
+                )
+                .await
+                .unwrap()
+                .ok
+        );
 
         worker
             .shutdown()

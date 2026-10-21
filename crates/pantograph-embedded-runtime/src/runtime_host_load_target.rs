@@ -29,27 +29,21 @@ impl RuntimeHostPumasLoadTargetResolver {
     pub(crate) fn new(selector_access: Arc<workflow_nodes::setup::PumasSelectorAccess>) -> Self {
         Self { selector_access }
     }
-}
 
-#[async_trait]
-impl RuntimeHostLoadTargetResolver for RuntimeHostPumasLoadTargetResolver {
-    async fn resolve(
+    /// Resolve an owner-fresh target without inventing task admission authority.
+    pub(crate) async fn resolve_for_model(
         &self,
-        request: &ValidatedRuntimeHostExecutionRequest,
+        selected: &pantograph_dependency_planning::PumasModelRef,
+        task_kind: &str,
+        runtime_family: &str,
     ) -> Result<PumasArtifactLoadTarget, RuntimeHostPumasLoadTargetError> {
-        let pumas_request = build_runtime_host_artifact_load_target_request(request)?;
+        let pumas_request =
+            build_model_artifact_load_target_request(selected, task_kind, runtime_family);
         let response = self
             .selector_access
             .resolve_model_artifact_load_target(pumas_request)
             .await?;
         let mut target = ready_runtime_host_artifact_load_target(response)?;
-        let selected = &request
-            .as_ref()
-            .handoff
-            .dispatch_decision
-            .as_ref()
-            .ok_or(RuntimeHostPumasLoadTargetError::MissingDispatchDecision)?
-            .selected_model_ref;
         if selected
             .model_id
             .strip_prefix("pumas://models/")
@@ -81,28 +75,38 @@ impl RuntimeHostLoadTargetResolver for RuntimeHostPumasLoadTargetResolver {
     }
 }
 
-fn build_runtime_host_artifact_load_target_request(
-    request: &ValidatedRuntimeHostExecutionRequest,
-) -> Result<ResolveModelArtifactLoadTargetRequest, RuntimeHostPumasLoadTargetError> {
-    let handoff = &request.as_ref().handoff;
-    let dispatch_decision = handoff
-        .dispatch_decision
-        .as_ref()
-        .ok_or(RuntimeHostPumasLoadTargetError::MissingDispatchDecision)?;
-    Ok(ResolveModelArtifactLoadTargetRequest {
+#[async_trait]
+impl RuntimeHostLoadTargetResolver for RuntimeHostPumasLoadTargetResolver {
+    async fn resolve(
+        &self,
+        request: &ValidatedRuntimeHostExecutionRequest,
+    ) -> Result<PumasArtifactLoadTarget, RuntimeHostPumasLoadTargetError> {
+        let handoff = &request.as_ref().handoff;
+        let decision = handoff
+            .dispatch_decision
+            .as_ref()
+            .ok_or(RuntimeHostPumasLoadTargetError::MissingDispatchDecision)?;
+        self.resolve_for_model(
+            &decision.selected_model_ref,
+            handoff.task_intent.task_type.as_str(),
+            &runtime_family(decision),
+        )
+        .await
+    }
+}
+
+fn build_model_artifact_load_target_request(
+    selected: &pantograph_dependency_planning::PumasModelRef,
+    task_kind: &str,
+    runtime_family: &str,
+) -> ResolveModelArtifactLoadTargetRequest {
+    ResolveModelArtifactLoadTargetRequest {
         model_ref: pumas_library::models::PumasModelRef {
-            model_id: dispatch_decision.selected_model_ref.model_id.clone(),
-            revision: dispatch_decision.selected_model_ref.revision.clone(),
-            selected_artifact_id: dispatch_decision
-                .selected_model_ref
-                .selected_artifact_id
-                .clone(),
-            selected_artifact_path: dispatch_decision
-                .selected_model_ref
-                .selected_artifact_path
-                .clone(),
-            migration_diagnostics: dispatch_decision
-                .selected_model_ref
+            model_id: selected.model_id.clone(),
+            revision: selected.revision.clone(),
+            selected_artifact_id: selected.selected_artifact_id.clone(),
+            selected_artifact_path: selected.selected_artifact_path.clone(),
+            migration_diagnostics: selected
                 .migration_diagnostics
                 .iter()
                 .map(
@@ -116,18 +120,15 @@ fn build_runtime_host_artifact_load_target_request(
             ..Default::default()
         },
         expected_artifact_kind: None,
-        caller_observed_entry_path: dispatch_decision
-            .selected_model_ref
-            .selected_artifact_path
-            .clone(),
+        caller_observed_entry_path: selected.selected_artifact_path.clone(),
         caller_observed_package_facts_contract_version: None,
         resolution_mode: PumasArtifactLoadTargetResolutionMode::OwnerFresh,
         consumer: PumasArtifactConsumer {
             consumer_name: PANTOGRAPH_RUNTIME_HOST_CONSUMER.to_string(),
-            task_kind: Some(handoff.task_intent.task_type.to_string()),
-            runtime_family: Some(runtime_family(dispatch_decision)),
+            task_kind: Some(task_kind.to_owned()),
+            runtime_family: Some(runtime_family.to_owned()),
         },
-    })
+    }
 }
 
 fn runtime_family(decision: &pantograph_scheduler::SchedulerDispatchDecision) -> String {

@@ -1,0 +1,18 @@
+{
+  "accounting-freeze.json": "4977f2b4e7ecbe2cbed8a65c0f3f5b44edf66522ca7fd1c1ba88b63276e1a0b5",
+  "binary-freeze.json": "97eb725fd58f697890f4b35df0ed5b2e7a99b86814049f9cf0295d458bd7872a",
+  "environment-freeze.json": "fdd8c8bf9536098602f695315e2983848b5ffdacdf56db795db3c254c2c84e53",
+  "evidence/actual_post_load_pre_start_shutdown_signal_fences_guard_without_running_attempt.json": "2926ed0147def46c4c5e9204309fb3bd1072e43a1fb6a23a1f6cc844a6a00c46",
+  "evidence/actual_public_running_post_drain_cancellation_preserves_cap_and_exact_cleanup.json": "a8af023d6c463967291b1e0ca21ed05b0cdfb253ef88efba5f776bf6696b535a",
+  "execution-status.json": "f796f63d855aa95c0346cca4016c87e25500ed731b2cf7bb757e8dcf0c740ed8",
+  "fixture-freeze.json": "578e11d41c9784ef3a8f6711d7bc4c8cf4bda47bb9d7bfa61c4b2232b72f1817",
+  "process.log": "d1935e95e5c256ab6c60d772ec5615a2c77ac279b5a55efaadf30c55466eea0b",
+  "registry.db": "2a9b8833a9d4803a105f9e38613fa66a98e46fe7352bbf98f2fa5a37293f6b4c",
+  "registry.db-shm": "5e3a60399c889736648f4d74bf08c91810b0b8cbcaab9f514dd84b0cbe0003d0",
+  "registry.db-wal": "1822d54e2f3572d7dfc09a18f23ab7a5afcade1c02eb59af4711608d874d530f",
+  "source-freeze.json": "3184a3b3bc5dc14adfb5c2eb09c13f3177be6aacf9358d4187c9b7b194561fd5",
+  "test-build-messages.jsonl": "f2107152ed97e0a1975b5398154b9bc37f080684ef49119cdfd1167d89165175",
+  "test-build.log": "1775a306c3b82608ad96adf426881cfbd558effa48b88a2d1e12ee063e6b186a",
+  "test-list.txt": "7c79bd7f763437d35d351837c3884f4ae4d7363468a79340e1ef84a7858cf54d",
+  "toolchain-freeze.json": "479f2757e6c877237bfb0412433701373a6732eee0be5a8076868df7e7a62aed"
+}

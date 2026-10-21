@@ -43,6 +43,7 @@ pub struct WorkflowSerialReadyConfig {
     maximum_age: Duration,
     completion_lookahead: bool,
     fair_service_opportunities: bool,
+    serial_residency: bool,
 }
 impl WorkflowSerialReadyConfig {
     pub fn new(
@@ -62,6 +63,7 @@ impl WorkflowSerialReadyConfig {
             maximum_age,
             completion_lookahead: false,
             fair_service_opportunities: false,
+            serial_residency: false,
         })
     }
     /// Enable bounded predecessor-conditioned completion advice. Actual dispatch
@@ -80,6 +82,18 @@ impl WorkflowSerialReadyConfig {
         self.fair_service_opportunities = true;
         self
     }
+    /// Prepare the actual CPU resident owner after the authenticated fair grant
+    /// and before task reservation/Start. Requires a native port with explicit
+    /// load-only preparation and owned residency cleanup; ordinary ports refuse.
+    pub fn with_serial_residency(mut self) -> Result<Self, WorkflowServiceError> {
+        if !self.fair_service_opportunities {
+            return Err(WorkflowServiceError::InvalidRequest(
+                "serial residency requires fair service opportunities".into(),
+            ));
+        }
+        self.serial_residency = true;
+        Ok(self)
+    }
 }
 impl Default for WorkflowSerialReadyConfig {
     fn default() -> Self {
@@ -88,6 +102,7 @@ impl Default for WorkflowSerialReadyConfig {
             maximum_age: Duration::from_secs(60),
             completion_lookahead: false,
             fair_service_opportunities: false,
+            serial_residency: false,
         }
     }
 }
@@ -205,7 +220,7 @@ impl SerialLookaheadDecision {
         }
     }
 }
-fn same_owner(
+pub(super) fn same_owner(
     a: &SerialRuntimeHostCpuOwnerEvidence,
     b: &SerialRuntimeHostCpuOwnerEvidence,
 ) -> bool {
@@ -218,6 +233,7 @@ pub(crate) struct SerialReadyContext {
     cleanup: Option<Box<dyn SerialRuntimeHostCleanupReceipt>>,
     claimed: bool,
     cleanup_acknowledged: bool,
+    native_preparation_pending: bool,
     successful: bool,
     cancellation: Option<RuntimeHostExecutionCancellationHandle>,
     pub(crate) task: Option<WorkflowSchedulerTask>,
@@ -268,6 +284,7 @@ impl SerialReadyMode {
             cleanup: None,
             claimed: false,
             cleanup_acknowledged: false,
+            native_preparation_pending: false,
             successful: false,
             cancellation: None,
             task: None,
@@ -290,6 +307,9 @@ impl SerialReadyMode {
     }
     pub(crate) fn fair_service_enabled(&self) -> bool {
         self.config.fair_service_opportunities
+    }
+    pub(crate) fn residency_enabled(&self) -> bool {
+        self.config.serial_residency
     }
     pub(crate) async fn enter_fair(
         self: &Arc<Self>,
@@ -603,6 +623,62 @@ impl SerialReadyMode {
     }
 }
 impl SerialReadyScope {
+    /// The owned fair turn and serial permit outlive every preparation await.
+    /// A dropped/failed native operation cannot make uncertain work reusable.
+    pub(crate) async fn prepare_residency(
+        &self,
+        member: &WorkflowSerialReadyMember,
+    ) -> Result<SerialRuntimeHostCpuOwnerEvidence, WorkflowServiceError> {
+        let intent = member.task.schedulable_intent.as_ref().ok_or_else(|| {
+            WorkflowServiceError::InvalidRequest("serial preparation requires a task intent".into())
+        })?;
+        let request = SerialRuntimeHostPreparationRequest::new(
+            &format!("serial-preparation.{}", uuid::Uuid::new_v4()),
+            intent,
+            &member.inputs,
+        )
+        .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
+        self.context
+            .lock()
+            .map_err(lock_error)?
+            .native_preparation_pending = true;
+        let owner = self
+            .mode
+            .port
+            .prepare_serial_cpu(request)
+            .await
+            .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
+        if !self
+            .mode
+            .owner_for(&member.task)
+            .is_some_and(|actual| same_owner(&actual, &owner))
+        {
+            return Err(WorkflowServiceError::InvalidRequest(
+                "serial preparation did not establish the current CPU owner".into(),
+            ));
+        }
+        {
+            let mut history = self.mode.history.lock().map_err(lock_error)?;
+            if history
+                .samples
+                .iter()
+                .any(|sample| !same_owner(&sample.owner, &owner))
+                || history
+                    .predecessor
+                    .as_ref()
+                    .is_some_and(|previous| !same_owner(&previous.owner, &owner))
+            {
+                history.samples.clear();
+                history.predecessor = None;
+            }
+        }
+        self.context
+            .lock()
+            .map_err(lock_error)?
+            .native_preparation_pending = false;
+        Ok(owner)
+    }
+
     pub(crate) fn service_grant(
         &self,
     ) -> Option<crate::scheduler::service_opportunities::ServiceOpportunityGrant> {
@@ -656,10 +732,9 @@ impl SerialReadyScope {
 }
 impl Drop for SerialReadyScope {
     fn drop(&mut self) {
-        let failed = self
-            .context
-            .lock()
-            .map_or(true, |c| c.claimed && !c.cleanup_acknowledged);
+        let failed = self.context.lock().map_or(true, |c| {
+            c.native_preparation_pending || (c.claimed && !c.cleanup_acknowledged)
+        });
         if failed {
             self.mode.semaphore.close();
         }
@@ -1020,6 +1095,14 @@ fn cleanup_error(message: impl Into<String>) -> ReservationLifecyclePortError {
 type SerialReadyConditionedSample = (String, [u8; 32], Option<[u8; 32]>, u64, u64, u64);
 
 impl WorkflowService {
+    /// Whether the explicit constructor-owned mode prepares CPU residency under
+    /// an authenticated fair turn. Retained-only serial modes remain distinct.
+    pub fn is_serial_cpu_residency(&self) -> bool {
+        self.serial_ready_mode
+            .as_ref()
+            .is_some_and(|mode| mode.residency_enabled())
+    }
+
     /// Number of registered Ready waiters, excluding the active service turn.
     /// Read-only qualification observation; it grants no execution capability.
     #[cfg(any(test, feature = "test-support"))]
@@ -1142,6 +1225,23 @@ pub(super) mod tests {
             WorkflowSerialReadyConfig::default()
                 .with_completion_lookahead()
                 .completion_lookahead
+        );
+    }
+
+    #[test]
+    fn serial_residency_requires_explicit_fair_service() {
+        assert!(!WorkflowSerialReadyConfig::default().serial_residency);
+        assert!(matches!(
+            WorkflowSerialReadyConfig::default().with_serial_residency(),
+            Err(WorkflowServiceError::InvalidRequest(message))
+                if message == "serial residency requires fair service opportunities"
+        ));
+        assert!(
+            WorkflowSerialReadyConfig::default()
+                .with_fair_service_opportunities()
+                .with_serial_residency()
+                .unwrap()
+                .serial_residency
         );
     }
 

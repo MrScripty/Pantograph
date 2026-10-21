@@ -3,8 +3,9 @@ mod serial_ready_tests {
     use crate::workflow::*;
     use pantograph_runtime_host_contracts::{
         RuntimeHostExecutionDiagnostic, RuntimeHostExecutionDiagnosticCode,
-        RuntimeHostExecutionDiagnosticSeverity, SerialRuntimeHostBatchExecutionPort,
-        SerialRuntimeHostCpuOwnerEvidence,
+        RuntimeHostExecutionDiagnosticSeverity, RuntimeHostExecutionInput,
+        SerialRuntimeHostBatchExecutionPort, SerialRuntimeHostCpuOwnerEvidence,
+        SerialRuntimeHostPreparationRequest,
     };
     use pantograph_scheduler::{
         SchedulerSerialBoundDispatch, SchedulerSerialDrainState, SchedulerSerialDrainedDispatch,
@@ -17,6 +18,18 @@ mod serial_ready_tests {
         owner: Arc<tokio::sync::Mutex<SchedulerSerialOwnerSnapshot>>,
         generation: Mutex<Arc<AtomicU64>>,
         requests: Mutex<Vec<RuntimeHostBatchExecutionRequest>>,
+        preparations: Mutex<
+            Vec<(
+                String,
+                SchedulableTaskIntent,
+                Vec<RuntimeHostExecutionInput>,
+            )>,
+        >,
+        preparation_started: tokio::sync::Notify,
+        preparation_release: tokio::sync::Notify,
+        block_preparation: AtomicBool,
+        fail_preparation: AtomicBool,
+        change_preparation_owner: AtomicBool,
         cleanups: Arc<Mutex<Vec<ReservationLifecycleEvent>>>,
         verified_reuse: AtomicBool,
         evidence: AtomicBool,
@@ -43,6 +56,12 @@ mod serial_ready_tests {
                 })),
                 generation: Mutex::new(Arc::new(AtomicU64::new(2))),
                 requests: Mutex::new(vec![]),
+                preparations: Mutex::new(vec![]),
+                preparation_started: tokio::sync::Notify::new(),
+                preparation_release: tokio::sync::Notify::new(),
+                block_preparation: AtomicBool::new(false),
+                fail_preparation: AtomicBool::new(false),
+                change_preparation_owner: AtomicBool::new(false),
                 cleanups: Arc::new(Mutex::new(vec![])),
                 verified_reuse: AtomicBool::new(false),
                 evidence: AtomicBool::new(true),
@@ -103,6 +122,40 @@ mod serial_ready_tests {
     }
     #[async_trait::async_trait]
     impl SerialRuntimeHostBatchExecutionPort for CpuPort {
+        async fn prepare_serial_cpu(
+            &self,
+            request: SerialRuntimeHostPreparationRequest,
+        ) -> Result<SerialRuntimeHostCpuOwnerEvidence, RuntimeHostExecutionPortError> {
+            request.validate()?;
+            self.preparations.lock().unwrap().push((
+                request.preparation_request_id.clone(),
+                request.task_intent.clone(),
+                request.materialized_inputs.clone(),
+            ));
+            self.preparation_started.notify_one();
+            if self.block_preparation.load(Ordering::Acquire) {
+                self.preparation_release.notified().await;
+            }
+            if self.fail_preparation.swap(false, Ordering::AcqRel) {
+                return Err(RuntimeHostExecutionPortError::ExecutionFailed {
+                    message: "controlled native preparation failure".into(),
+                });
+            }
+            if self.change_preparation_owner.swap(false, Ordering::AcqRel) {
+                let mut owner = self.owner.lock().await;
+                owner.loaded_instance = [8; 16];
+                owner.generation += 2;
+                self.generation
+                    .lock()
+                    .unwrap()
+                    .store(owner.generation, Ordering::Release);
+            }
+            self.resident_serial_cpu_owner(&request.task_intent).ok_or(
+                RuntimeHostExecutionPortError::ExecutionFailed {
+                    message: "controlled prepared owner missing".into(),
+                },
+            )
+        }
         fn resident_serial_cpu_owner(
             &self,
             intent: &SchedulableTaskIntent,
@@ -705,6 +758,7 @@ mod serial_ready_tests {
     struct FairStartRefreshBarrier {
         entered: tokio::sync::Notify,
         release: tokio::sync::Notify,
+        bypass: AtomicBool,
     }
     #[async_trait::async_trait]
     impl WorkflowRuntimeDispatchSourceRefresher for FairStartRefreshBarrier {
@@ -714,10 +768,373 @@ mod serial_ready_tests {
             _: &SchedulerTaskStateRecord,
             _: &DependencyReadinessProofEnvelope,
         ) -> Result<(), WorkflowRuntimeDispatchSourceRefreshError> {
+            if self.bypass.load(Ordering::Acquire) {
+                return Ok(());
+            }
             self.entered.notify_one();
             self.release.notified().await;
             Ok(())
         }
+    }
+
+    fn residency_config() -> WorkflowSerialReadyConfig {
+        WorkflowSerialReadyConfig::default()
+            .with_fair_service_opportunities()
+            .with_serial_residency()
+            .unwrap()
+    }
+
+    fn attributed_single_cpu_run(service: &WorkflowService, run: &str) -> String {
+        cpu_run_with_attribution_inputs(
+            service,
+            run,
+            &["slow"],
+            Some(WorkflowExecutionSessionAttributionContext {
+                client_id: "client.residency".into(),
+                client_session_id: "session.residency".into(),
+                bucket_id: "bucket.residency".into(),
+            }),
+        )
+    }
+
+    #[tokio::test]
+    async fn serial_residency_prepares_actual_inputs_after_grant_before_claim() {
+        let port = CpuPort::new();
+        port.block_preparation.store(true, Ordering::Release);
+        let service = service(port.clone(), residency_config());
+        let id = "run.residency.prepare";
+        let session = attributed_cpu_run(&service, id, "client.residency");
+        let captured = service
+            .session_store_guard()
+            .unwrap()
+            .serial_service_ready_member(&session, id, "task.cpu.0")
+            .unwrap();
+        let handle = tokio::spawn({
+            let service = service.clone();
+            let session = session.clone();
+            async move { run(service, &session, id).await }
+        });
+        tokio::time::timeout(Duration::from_secs(2), port.preparation_started.notified())
+            .await
+            .unwrap();
+        {
+            let preparations = port.preparations.lock().unwrap();
+            assert_eq!(preparations.len(), 1);
+            assert!(preparations[0].0.starts_with("serial-preparation."));
+            assert_eq!(
+                Some(&preparations[0].1),
+                captured.task.schedulable_intent.as_ref()
+            );
+            assert_eq!(preparations[0].2, captured.inputs);
+        }
+        assert_eq!(service.serial_service_pending_for_test().unwrap(), 0);
+        assert!(port.requests.lock().unwrap().is_empty());
+        assert!(service
+            .session_store_guard()
+            .unwrap()
+            .active_run_scheduler_task_attempt_id(&session, id, "task.cpu.0")
+            .is_err());
+        assert_eq!(
+            runtime_branch_event_state(
+                &service,
+                &WorkflowRuntimeBranchTaskEventId::parse(format!("event.{id}.0")).unwrap()
+            ),
+            WorkflowRuntimeBranchTaskEventState::Ready
+        );
+        port.block_preparation.store(false, Ordering::Release);
+        port.preparation_release.notify_one();
+        tokio::time::timeout(Duration::from_secs(2), handle)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(port.preparations.lock().unwrap().len(), 2);
+        assert_eq!(port.tasks(), vec!["task.cpu.0", "task.cpu.1"]);
+        assert_eq!(port.cleanups.lock().unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn serial_residency_preparation_await_cannot_refresh_stale_inputs() {
+        let port = CpuPort::new();
+        port.block_preparation.store(true, Ordering::Release);
+        let service = service(port.clone(), residency_config());
+        let id = "run.residency.stale";
+        let session = attributed_single_cpu_run(&service, id);
+        let handle = tokio::spawn({
+            let service = service.clone();
+            let session = session.clone();
+            async move { run(service, &session, id).await }
+        });
+        tokio::time::timeout(Duration::from_secs(2), port.preparation_started.notified())
+            .await
+            .unwrap();
+        {
+            let mut store = service.session_store_guard().unwrap();
+            let mut results = store
+                .active_run_scheduler_task_results(&session, id)
+                .unwrap();
+            results[0].outputs[0].value =
+                WorkflowSchedulerTaskResultValue::String("changed during load".into());
+            store
+                .set_active_run_scheduler_task_results(&session, id, results)
+                .unwrap();
+        }
+        port.block_preparation.store(false, Ordering::Release);
+        port.preparation_release.notify_one();
+        tokio::time::timeout(Duration::from_secs(2), handle)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(port.preparations.lock().unwrap().len(), 1);
+        assert!(port.requests.lock().unwrap().is_empty());
+        assert!(port.cleanups.lock().unwrap().is_empty());
+        assert_eq!(
+            runtime_branch_event_state(
+                &service,
+                &WorkflowRuntimeBranchTaskEventId::parse(format!("event.{id}.0")).unwrap()
+            ),
+            WorkflowRuntimeBranchTaskEventState::Ready
+        );
+        assert!(service
+            .serial_ready_mode
+            .as_ref()
+            .unwrap()
+            .enter()
+            .await
+            .is_ok());
+    }
+
+    #[tokio::test]
+    async fn serial_residency_preparation_refusal_finishes_run_but_preserves_native_fence() {
+        use pantograph_diagnostics_ledger::{
+            DiagnosticEventKind, DiagnosticsLedgerRepository, RunTerminalStatus,
+            SqliteDiagnosticsLedger,
+        };
+        let port = CpuPort::new();
+        port.fail_preparation.store(true, Ordering::Release);
+        let service = Arc::new(
+            WorkflowService::new_serial_ready_cpu(port.clone(), residency_config())
+                .with_runtime_dispatch_candidate_provider(Arc::new(SyntheticCpuCandidateProvider))
+                .with_diagnostics_ledger(SqliteDiagnosticsLedger::open_in_memory().unwrap()),
+        );
+        let id = "run.residency.refused.terminal";
+        let session = attributed_single_cpu_run(&service, id);
+        let environment =
+            WorkflowTaskExecutionWorkerRuntimeBranchEnvironment::new(service.clone(), test_host());
+        let command = runtime_branch_command_for_session_run(&session, id);
+        let registry = WorkflowTaskExecutionWorkerRuntimeBranchResponderRegistry::new();
+        let (responder, receiver) =
+            WorkflowTaskExecutionWorkerRuntimeBranchCompletionResponder::channel();
+        let registration = registry.register_workflow_run(&command, responder).unwrap();
+        drive_runtime_branch_continuations(
+            &environment,
+            &registry,
+            vec![WorkflowRuntimeBranchContinuation {
+                command,
+                registration,
+            }],
+        )
+        .await;
+        let WorkflowTaskExecutionWorkerOutcome::RuntimeBranchFailed(failed) =
+            receiver.await.unwrap()
+        else {
+            panic!("expected serial preparation refusal")
+        };
+        assert!(failed
+            .error_message
+            .contains("controlled native preparation failure"));
+        assert!(failed.diagnostics.is_empty(), "{failed:?}");
+        assert_eq!(port.preparations.lock().unwrap().len(), 1);
+        assert!(port.requests.lock().unwrap().is_empty());
+        assert!(port.cleanups.lock().unwrap().is_empty());
+        assert_eq!(registry.active_responder_count(), 0);
+        // Preparation refuses before claiming the queued event or creating Start.
+        assert_eq!(
+            runtime_branch_event_state(
+                &service,
+                &WorkflowRuntimeBranchTaskEventId::parse(format!("event.{id}.0")).unwrap()
+            ),
+            WorkflowRuntimeBranchTaskEventState::Ready
+        );
+        let events = service
+            .diagnostics_ledger_guard()
+            .unwrap()
+            .diagnostic_events_after(0, 500)
+            .unwrap();
+        assert!(!events
+            .iter()
+            .any(|event| event.event_kind
+                == DiagnosticEventKind::SchedulerTaskAttemptLifecycleChanged));
+        let terminals = preparation_run_terminals(&service, id);
+        assert_eq!(terminals.len(), 1);
+        assert_eq!(terminals[0].status, RunTerminalStatus::Failed);
+        assert!(terminals[0]
+            .error
+            .as_ref()
+            .unwrap()
+            .contains("controlled native preparation failure"));
+        assert!(service
+            .session_store_guard()
+            .unwrap()
+            .active_run_context(&session, id)
+            .is_err());
+        assert!(service
+            .session_store_guard()
+            .unwrap()
+            .list_queue(&session)
+            .unwrap()
+            .is_empty());
+        assert!(
+            service
+                .close_workflow_execution_session(
+                    &WorkerHost,
+                    WorkflowExecutionSessionCloseRequest {
+                        session_id: session
+                    },
+                )
+                .await
+                .unwrap()
+                .ok
+        );
+        // Finishing a workflow supplies no native cleanup ACK or new admission.
+        assert!(service
+            .serial_ready_mode
+            .as_ref()
+            .unwrap()
+            .enter()
+            .await
+            .is_err());
+        assert_eq!(service.serial_service_pending_for_test().unwrap(), 0);
+    }
+
+    #[tokio::test]
+    async fn serial_residency_failed_preparation_fences_next_turn_without_forward() {
+        let port = CpuPort::new();
+        port.fail_preparation.store(true, Ordering::Release);
+        let service = service(port.clone(), residency_config());
+        let first = attributed_single_cpu_run(&service, "run.residency.failed");
+        let second = attributed_single_cpu_run(&service, "run.residency.after.failed");
+        run(service.clone(), &first, "run.residency.failed").await;
+        run(service.clone(), &second, "run.residency.after.failed").await;
+        assert_eq!(port.preparations.lock().unwrap().len(), 1);
+        assert!(port.requests.lock().unwrap().is_empty());
+        assert!(port.cleanups.lock().unwrap().is_empty());
+        assert_eq!(service.serial_service_pending_for_test().unwrap(), 0);
+    }
+
+    #[tokio::test]
+    async fn serial_residency_dropped_preparation_wakes_and_fences_waiter() {
+        let port = CpuPort::new();
+        port.block_preparation.store(true, Ordering::Release);
+        let service = service(port.clone(), residency_config());
+        let first = attributed_single_cpu_run(&service, "run.residency.dropped");
+        let second = attributed_single_cpu_run(&service, "run.residency.waiter");
+        let first = tokio::spawn({
+            let service = service.clone();
+            async move { run(service, &first, "run.residency.dropped").await }
+        });
+        tokio::time::timeout(Duration::from_secs(2), port.preparation_started.notified())
+            .await
+            .unwrap();
+        let second = tokio::spawn({
+            let service = service.clone();
+            async move { run(service, &second, "run.residency.waiter").await }
+        });
+        wait_for_fair_waiters(&service, 1).await;
+        first.abort();
+        assert!(first.await.unwrap_err().is_cancelled());
+        tokio::time::timeout(Duration::from_secs(2), second)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(port.preparations.lock().unwrap().len(), 1);
+        assert!(port.requests.lock().unwrap().is_empty());
+        assert_eq!(service.serial_service_pending_for_test().unwrap(), 0);
+    }
+
+    #[tokio::test]
+    async fn serial_residency_prepared_owner_fences_unranked_final_start() {
+        let port = CpuPort::new();
+        let barrier = Arc::new(FairStartRefreshBarrier::default());
+        let service = Arc::new(
+            WorkflowService::new_serial_ready_cpu(port.clone(), residency_config())
+                .with_runtime_dispatch_candidate_provider(Arc::new(SyntheticCpuCandidateProvider))
+                .with_runtime_dispatch_source_refresher(barrier.clone()),
+        );
+        let id = "run.residency.unranked";
+        let session = attributed_single_cpu_run(&service, id);
+        assert!(service
+            .session_store_guard()
+            .unwrap()
+            .serial_ready_pair(&session, id)
+            .is_none());
+        let handle = tokio::spawn({
+            let service = service.clone();
+            let session = session.clone();
+            async move { run(service, &session, id).await }
+        });
+        tokio::time::timeout(Duration::from_secs(2), barrier.entered.notified())
+            .await
+            .unwrap();
+        {
+            let mut owner = port.owner.lock().await;
+            owner.generation += 2;
+            port.generation
+                .lock()
+                .unwrap()
+                .store(owner.generation, Ordering::Release);
+        }
+        barrier.release.notify_one();
+        tokio::time::timeout(Duration::from_secs(2), handle)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(port.requests.lock().unwrap().is_empty());
+        assert!(service
+            .session_store_guard()
+            .unwrap()
+            .active_run_scheduler_task_attempt_id(&session, id, "task.cpu.0")
+            .is_err());
+    }
+
+    #[tokio::test]
+    async fn serial_residency_new_owner_clears_warm_history_before_start() {
+        let port = CpuPort::new();
+        let barrier = Arc::new(FairStartRefreshBarrier::default());
+        barrier.bypass.store(true, Ordering::Release);
+        let service = Arc::new(
+            WorkflowService::new_serial_ready_cpu(
+                port.clone(),
+                residency_config().with_completion_lookahead(),
+            )
+            .with_runtime_dispatch_candidate_provider(Arc::new(SyntheticCpuCandidateProvider))
+            .with_runtime_dispatch_source_refresher(barrier.clone()),
+        );
+        for index in 0..3 {
+            let id = format!("run.residency.training.{index}");
+            let session = attributed_cpu_run(&service, &id, "client.residency");
+            run(service.clone(), &session, &id).await;
+        }
+        assert_eq!(service.serial_ready_samples_for_test().len(), 6);
+        assert!(service.serial_ready_predecessor_for_test().is_some());
+        port.change_preparation_owner.store(true, Ordering::Release);
+        barrier.bypass.store(false, Ordering::Release);
+        let id = "run.residency.changed.owner";
+        let session = attributed_single_cpu_run(&service, id);
+        let handle = tokio::spawn({
+            let service = service.clone();
+            async move { run(service, &session, id).await }
+        });
+        tokio::time::timeout(Duration::from_secs(2), barrier.entered.notified())
+            .await
+            .unwrap();
+        assert!(service.serial_ready_samples_for_test().is_empty());
+        assert!(service.serial_ready_predecessor_for_test().is_none());
+        barrier.release.notify_one();
+        tokio::time::timeout(Duration::from_secs(2), handle)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(service.serial_ready_samples_for_test().len(), 1);
     }
 
     #[tokio::test]

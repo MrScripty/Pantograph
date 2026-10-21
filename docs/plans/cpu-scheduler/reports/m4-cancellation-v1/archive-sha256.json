@@ -1,0 +1,8 @@
+{
+  "sha256": "a2cd21bf823231fd652f61a6004839341149bb143b3cf1d1b87f3f6e0771d670",
+  "files": 16,
+  "source_head": "96691fd764ddf6af838e66c3b064cd34f419b1c5",
+  "tree": "00103d81a0926035d5a2127239a86db8d7d959a6",
+  "binary_sha256": "6d318a6465b568a8d7d013c24cc1c35c7114caac95deeabe3d4ae2625508ad09",
+  "binary_retained_externally": "/workspace/m4-cancellation-v1/binaries/frozen-embedded-runtime-tests"
+}

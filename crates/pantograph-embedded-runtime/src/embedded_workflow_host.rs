@@ -133,6 +133,16 @@ impl WorkflowHost for EmbeddedWorkflowHost {
         usage_profile: Option<&str>,
         retention_hint: WorkflowExecutionSessionRetentionHint,
     ) -> Result<bool, WorkflowServiceError> {
+        if self.workflow_service.is_serial_cpu_residency() {
+            return match retention_hint {
+                WorkflowExecutionSessionRetentionHint::Ephemeral => Ok(true),
+                WorkflowExecutionSessionRetentionHint::KeepAlive => {
+                    Err(WorkflowServiceError::InvalidRequest(
+                        "serial CPU residency supports metadata-only ephemeral sessions".into(),
+                    ))
+                }
+            };
+        }
         let Some(runtime_registry) = self.runtime_registry.as_ref() else {
             return Ok(true);
         };
@@ -174,6 +184,14 @@ impl WorkflowHost for EmbeddedWorkflowHost {
         usage_profile: Option<&str>,
         retention_hint: WorkflowExecutionSessionRetentionHint,
     ) -> Result<(), WorkflowServiceError> {
+        if self.workflow_service.is_serial_cpu_residency() {
+            return match retention_hint {
+                WorkflowExecutionSessionRetentionHint::Ephemeral => Ok(()),
+                WorkflowExecutionSessionRetentionHint::KeepAlive => Err(WorkflowServiceError::InvalidRequest(
+                    "serial CPU residency refuses session KeepAlive before reservation or native work".into(),
+                )),
+            };
+        }
         self.ensure_workflow_runtime_ready_for_session_load(workflow_id)
             .await?;
         self.ensure_workflow_inference_model_loaded(workflow_id)
@@ -190,6 +208,10 @@ impl WorkflowHost for EmbeddedWorkflowHost {
         Option<pantograph_workflow_service::WorkflowSessionRuntimeLoadProof>,
         WorkflowServiceError,
     > {
+        if self.workflow_service.is_serial_cpu_residency() {
+            // A session metadata admission is not a physical model load proof.
+            return Ok(None);
+        }
         self.workflow_session_runtime_load_proof(workflow_id).await
     }
 
@@ -199,7 +221,9 @@ impl WorkflowHost for EmbeddedWorkflowHost {
         _workflow_id: &str,
         reason: pantograph_workflow_service::WorkflowExecutionSessionUnloadReason,
     ) -> Result<(), WorkflowServiceError> {
-        self.release_loaded_session_runtime(session_id).await?;
+        if !self.workflow_service.is_serial_cpu_residency() {
+            self.release_loaded_session_runtime(session_id).await?;
+        }
         workflow_execution_session_execution::apply_session_execution_unload_transition(
             &self.session_executions,
             session_id,

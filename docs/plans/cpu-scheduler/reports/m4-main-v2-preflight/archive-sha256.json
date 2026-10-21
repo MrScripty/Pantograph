@@ -1,0 +1,7 @@
+{
+  "sha256": "978806dc57e5729a97c4eb88f7c796c7fcffe0c6f23cc625b989490a4f9b5042",
+  "files": 12,
+  "producer_sha256": "61be319ca58c0757d30c28b99c56f69b45d956cbc4703ad6a03735ee93394c4b",
+  "failed_preflight_source_sha256": "1fe6a2a054cc17df1ffb4684af70dcc35f7f21783f2f5114c6e84917b8b1b858",
+  "new_native_invocations": 0
+}

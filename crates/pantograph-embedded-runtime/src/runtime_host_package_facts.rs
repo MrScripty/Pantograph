@@ -22,15 +22,12 @@ impl RuntimeHostPumasPackageFactsResolver {
     pub(crate) fn new(selector_access: Arc<workflow_nodes::setup::PumasSelectorAccess>) -> Self {
         Self { selector_access }
     }
-}
 
-#[async_trait]
-impl RuntimeHostPackageFactsResolver for RuntimeHostPumasPackageFactsResolver {
-    async fn resolve(
+    /// Resolve full owner facts before a task has a candidate or Started handoff.
+    pub(crate) async fn resolve_for_model(
         &self,
-        request: &ValidatedRuntimeHostExecutionRequest,
+        selected_model_ref: &pantograph_dependency_planning::PumasModelRef,
     ) -> Result<ResolvedModelPackageFacts, RuntimeHostPumasPackageFactsError> {
-        let selected_model_ref = selected_pumas_model_ref(request)?;
         let raw_facts = self
             .selector_access
             .resolve_model_package_facts(selected_model_ref.model_id.as_str())
@@ -43,6 +40,17 @@ impl RuntimeHostPackageFactsResolver for RuntimeHostPumasPackageFactsResolver {
             selected_model_ref,
             package_facts,
         ))
+    }
+}
+
+#[async_trait]
+impl RuntimeHostPackageFactsResolver for RuntimeHostPumasPackageFactsResolver {
+    async fn resolve(
+        &self,
+        request: &ValidatedRuntimeHostExecutionRequest,
+    ) -> Result<ResolvedModelPackageFacts, RuntimeHostPumasPackageFactsError> {
+        self.resolve_for_model(selected_pumas_model_ref(request)?)
+            .await
     }
 }
 
