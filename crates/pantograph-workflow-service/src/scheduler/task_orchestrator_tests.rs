@@ -3349,3 +3349,73 @@ mod dependency_completion_gate_tests;
 
 #[path = "cohort_capture_tests.rs"]
 mod cohort_capture_tests;
+
+#[tokio::test]
+async fn custom_nodes_cancel_after_callback_return_prevents_commit_and_downstream_readiness() {
+    use crate::custom_nodes::tests::{admitted, Behavior, Executor};
+    use crate::custom_nodes::{CustomNodeCatalog, CustomNodeError};
+    let custom = admitted(Arc::new(Executor::new(Behavior::Uppercase)));
+    let identity = custom.identity().clone();
+    let catalog = Arc::new(CustomNodeCatalog::try_new(vec![custom]).unwrap());
+    let registry = Arc::new(crate::graph::NodeRegistry::with_custom_nodes(
+        catalog.clone(),
+    ));
+    let orchestrator = orchestrator_without_runtime_host_response().with_node_registry(registry);
+    let mut custom_task = text_output_task();
+    custom_task.node_type = "custom-uppercase".into();
+    custom_task.non_runtime_task_template =
+        Some(WorkflowSchedulerNonRuntimeTaskTemplate::CustomNode { identity });
+    custom_task.input_bindings[0].target_port_id = "input".into();
+    let graph = task_graph(vec![text_input_task("prompt", "Mixed case"), custom_task]);
+    let run = graph.workflow_run_id.as_str();
+    let mut store = WorkflowExecutionSessionStore::new(1, 1);
+    let session = begin_active_run_for_task_graph(&mut store, &graph);
+    orchestrator
+        .initialize_active_run_task_state(&mut store, &session, run, graph.clone())
+        .unwrap();
+    store
+        .record_active_run_scheduler_task_result(
+            &session,
+            run,
+            text_result("prompt", WorkflowSchedulerTaskResultStatus::Completed),
+        )
+        .unwrap();
+    orchestrator
+        .advance_awaiting_non_runtime_task_inputs(&mut store, &session, run, "text-output")
+        .unwrap()
+        .unwrap();
+    let started = orchestrator
+        .start_ready_non_runtime_task(&mut store, &session, run, "text-output")
+        .unwrap();
+    let output = orchestrator
+        .execute_started_non_runtime_task(&started)
+        .await
+        .unwrap();
+    // This is the exact formerly racy interval: callback complete, no commit.
+    catalog
+        .cancel(run, "text-output", started.attempt_id().as_str())
+        .unwrap();
+    let error = orchestrator
+        .complete_started_non_runtime_task(&mut store, &session, run, &started, output)
+        .unwrap_err();
+    let WorkflowSchedulerTaskOrchestratorError::NonRuntimeTaskAdapter(error) = error else {
+        panic!("expected custom cancellation")
+    };
+    assert!(matches!(error, crate::workflow::non_runtime_task_adapter::WorkflowSchedulerNonRuntimeTaskAdapterError::CustomNode(CustomNodeError::Cancelled)));
+    let cancelled = orchestrator
+        .fail_started_non_runtime_task(&mut store, &session, run, &started, &error)
+        .unwrap();
+    assert_eq!(
+        cancelled.state.kind(),
+        SchedulerTaskStateKind::TerminalFailed
+    );
+    let results = store
+        .active_run_scheduler_task_results(&session, run)
+        .unwrap();
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].task_id, "prompt");
+    assert_eq!(
+        orchestrator.active_task_lifecycle_handle_count().unwrap(),
+        0
+    );
+}

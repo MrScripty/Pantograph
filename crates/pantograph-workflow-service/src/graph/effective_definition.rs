@@ -66,6 +66,11 @@ pub fn effective_node_contract(
         graph_revision: None,
         configuration: Some(node.data.clone()),
     };
+    registry
+        .validate_custom_node_identity(node)
+        .map_err(|error| EffectiveDefinitionError::InvalidDynamicDefinition {
+            message: error.to_string(),
+        })?;
     let overlay = dynamic_contract_ports(node)?;
     let mut effective = EffectiveNodeContract::from_static_with_dynamic_ports(
         context,

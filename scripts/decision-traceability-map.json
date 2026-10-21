@@ -45,6 +45,13 @@
       "artifact": "scripts/README.md",
       "profile": "boundary-readme",
       "knowledge": "Declared impact coverage and operation of the traceability gate"
+    },
+    {
+      "id": "trusted-custom-node-adapter",
+      "triggers": ["docs/adr/ADR-018-trusted-custom-node-adapter.md"],
+      "artifact": "docs/custom-nodes.md",
+      "profile": "contract-readme",
+      "knowledge": "Host-authorized custom-node admission, exact identity and scheduler invocation lifecycle"
     }
   ]
 }

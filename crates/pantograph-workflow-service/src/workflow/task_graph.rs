@@ -2,7 +2,6 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use pantograph_dependency_planning::{DependencyTaskId, PumasModelRef};
 use pantograph_inference_interface_contracts::InferenceInterfaceFingerprint;
-use pantograph_node_contracts::NodeTypeContract;
 use pantograph_runtime_attribution::{WorkflowId, WorkflowRunId};
 use pantograph_scheduler::{
     SchedulableTaskIntent, SchedulerEstimateHint, SchedulerNodeId,
@@ -26,7 +25,7 @@ use crate::graph::dependency_environment_subject::{
     resolve_dependency_environment_action_subject, DependencyEnvironmentActionSubjectResolution,
     DEPENDENCY_ENVIRONMENT_NODE_TYPE,
 };
-use crate::graph::{workflow_executable_topology, WorkflowGraph, WorkflowRuntimeSourceContext};
+use crate::graph::{NodeRegistry, WorkflowGraph, WorkflowRuntimeSourceContext};
 
 const PORT_TEXT: &str = "text";
 const PORT_VALUE: &str = "value";
@@ -135,10 +134,25 @@ pub fn workflow_scheduler_task_graph_with_inference_projections(
     graph: &WorkflowGraph,
     inference_task_projections: &WorkflowSchedulerInferenceTaskProjections,
 ) -> Result<WorkflowSchedulerTaskGraph, WorkflowServiceError> {
+    workflow_scheduler_task_graph_with_registry(
+        workflow_id,
+        workflow_run_id,
+        graph,
+        inference_task_projections,
+        &NodeRegistry::new(),
+    )
+}
+
+pub(crate) fn workflow_scheduler_task_graph_with_registry(
+    workflow_id: &WorkflowId,
+    workflow_run_id: &WorkflowRunId,
+    graph: &WorkflowGraph,
+    inference_task_projections: &WorkflowSchedulerInferenceTaskProjections,
+    registry: &NodeRegistry,
+) -> Result<WorkflowSchedulerTaskGraph, WorkflowServiceError> {
     let workflow_id = scheduler_workflow_id(workflow_id)?;
     let workflow_run_id = scheduler_workflow_run_id(workflow_run_id)?;
-    let topology = workflow_executable_topology(graph)?;
-    let node_contracts = builtin_contracts_by_node_type()?;
+    let topology = registry.executable_topology(graph)?;
 
     let mut incoming_edges = BTreeMap::<&str, Vec<_>>::new();
     for edge in &topology.edges {
@@ -157,10 +171,15 @@ pub fn workflow_scheduler_task_graph_with_inference_projections(
         let task_id = scheduler_task_id(&node.node_id)?;
         let input_bindings = input_bindings(node.node_id.as_str(), &incoming_edges)?;
         let dependency_task_ids = dependency_task_ids(&input_bindings);
-        let execution_class = classify_workflow_scheduler_task(
-            &node.node_type,
-            node_contracts.get(node.node_type.as_str()),
-        );
+        let custom_node = registry.custom_nodes.get(&node.node_type);
+        let execution_class = if custom_node.is_some() {
+            WorkflowSchedulerTaskExecutionClass::NonRuntimeNodeEngine
+        } else {
+            classify_workflow_scheduler_task(
+                &node.node_type,
+                registry.get_contract(&node.node_type),
+            )
+        };
         let (
             schedulable_intent,
             schedulable_intent_template,
@@ -175,7 +194,29 @@ pub fn workflow_scheduler_task_graph_with_inference_projections(
             execution_class,
             inference_task_projections.get(&node_id),
         );
-        let (non_runtime_task_template, non_runtime_diagnostics) =
+        let (non_runtime_task_template, non_runtime_diagnostics) = if let Some(custom) = custom_node
+        {
+            let ports = &custom.contract().inputs;
+            if input_bindings.len() != ports.len()
+                || ports.iter().any(|port| {
+                    input_bindings
+                        .iter()
+                        .filter(|binding| binding.target_port_id == port.id.as_str())
+                        .count()
+                        != 1
+                })
+            {
+                return Err(WorkflowServiceError::InvalidRequest(
+                    "custom-node bindings must cover each admitted input exactly once".into(),
+                ));
+            }
+            (
+                Some(WorkflowSchedulerNonRuntimeTaskTemplate::CustomNode {
+                    identity: custom.identity().clone(),
+                }),
+                Vec::new(),
+            )
+        } else {
             non_runtime_task_template_for_node(
                 &node_id,
                 &node.node_type,
@@ -186,7 +227,8 @@ pub fn workflow_scheduler_task_graph_with_inference_projections(
                     .iter()
                     .find(|source| source.id == node.node_id)
                     .map(|source| &source.data),
-            );
+            )
+        };
         let (source_input_task_template, source_input_diagnostics) =
             source_input_task_template_for_node(&node_id, &node.node_type, execution_class);
         let mut diagnostics = diagnostics;
@@ -218,22 +260,6 @@ pub fn workflow_scheduler_task_graph_with_inference_projections(
         workflow_run_id,
         tasks,
     })
-}
-
-fn builtin_contracts_by_node_type(
-) -> Result<BTreeMap<String, NodeTypeContract>, WorkflowServiceError> {
-    workflow_nodes::builtin_node_contracts()
-        .map_err(|error| {
-            WorkflowServiceError::CapabilityViolation(format!(
-                "failed to load built-in node contracts: {error}"
-            ))
-        })
-        .map(|contracts| {
-            contracts
-                .into_iter()
-                .map(|contract| (contract.node_type.as_str().to_string(), contract))
-                .collect()
-        })
 }
 
 fn input_bindings(

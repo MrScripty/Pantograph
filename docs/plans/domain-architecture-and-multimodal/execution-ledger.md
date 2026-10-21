@@ -1,5 +1,37 @@
 # Execution Ledger
 
+## 2026-10-21 — Trusted custom-node scheduler adapter
+
+Continued the Active plan with the admitted minimal contract before production
+implementation, using Coding-Standards `0fc92a2` as explicitly recorded in the
+slice. Branch `feat/custom-node-managed-adapter` starts at main `9ec7e7f3`;
+`/workspace/pantograph-custom-node` and its branch are retained pending parent
+PR/integration disposition. Original branches, README PR79 and text runtime/
+readiness work remain separate. [ADR-018](../../adr/ADR-018-trusted-custom-node-adapter.md)
+and the [consumer contract](../../custom-nodes.md) own the immutable host-attested
+identity, trusted string-only admission and managed invocation boundary.
+
+Independent GPT-6.1 Sol High review accepted the final source after repairing
+cancellation versus commitment, registration preparation ordering and built-in-only
+inspection. Actual save/reopen with a fresh service/catalog, canonical scheduler
+source → transform → sink, attribution/diagnostics, identity refusal, bounded
+payloads, panic/error sanitation, cancellation and timeout/drop cleanup are covered.
+`cargo test --locked -p pantograph-workflow-service --no-fail-fast` passes 1,064
+library plus 65 integration tests, zero failures/ignored. Initial new fixtures
+failed for incorrect discovery roots/missing built-in I/O definitions and an
+assertion against the inner rather than public diagnostic wrapper; repairs retain
+exact structured refusal assertions and zero callback calls. No oracle was relaxed.
+
+`cargo check --locked -p pantograph-workflow-service`, package all-target Clippy,
+`cargo fmt --all -- --check`, scheduler-only execution guard, decision-traceability
+tests (28), staged traceability and whitespace checks pass. Clippy retains only
+the existing unrelated inference dead-field warning. Qualification is Linux CPU
+and host-registered Rust callbacks, not native/GPU/desktop or release acceptance.
+NodeLab authoring/publishing and scheduler-managed tool-loop dependencies remain
+CN-02/CN-03; no arbitrary loader, sandbox or retired static loop is added. Parent
+owns PR review, hosted CI and integration; no merge or deployment is authorized
+by this slice's implementation acceptance.
+
 ## 2026-10-07 — Preserve rerank/audio; selected CPU rerank successor
 
 The user retained the unpublished removal experiment and authorized a main-based

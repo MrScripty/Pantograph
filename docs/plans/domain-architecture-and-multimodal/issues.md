@@ -70,3 +70,11 @@ SDAR/masked/custom routes explicitly refuse. Parent candidate review/publication
 and real model/loader/GPU/full desktop qualification remain separate. The accepted
 seed/precision histories are preserved; this entry does not close DA-03/DA-07 or
 authorize the historical resident-accounting next-slice text.
+
+## Custom-node adapter dependencies (2026-10-21)
+
+| ID | Issue | Owner | Disposition / next evidence |
+| --- | --- | --- | --- |
+| CN-01 | Palette/callback registration does not establish canonical executable admission or implementation/environment identity. | Custom-node lead | Closed for the bounded trusted string adapter after independent GPT-6.1 Sol High review and 1,129 passing service tests. Exact admission, saved/reopened scheduler execution, cancellation/commit arbitration and inspection share the immutable catalog. Arbitrary executable loading remains outside this contract. |
+| CN-02 | NodeLab authoring, Local Agent and runtime publishing remain unavailable. | NodeLab follow-on | Deferred. Consume the [custom-node contract](../../custom-nodes.md): host-authorized registrations and exact graph pins, same registry for edit-session validation/connection previews, trust/version/unavailable outcomes. Untrusted package publishing additionally needs independently admitted artifact verification and isolation. A palette entry cannot enable execution. |
+| CN-03 | Scheduler-managed tool-loop exposure needs a safe node invocation contract and explicit tool authority. | Tool-loop follow-on | Deferred. Depend on CN-01 exact identity/admission and scheduler-owned run/attempt/cancellation/result commitment; separately admit typed tool capabilities, bounded iteration and side-effect/idempotency behavior. The string adapter grants no tool capability. Do not restore the retired static loop. |

@@ -4,8 +4,8 @@ use std::{
 };
 
 use crate::graph::{
-    workflow_executable_topology, workflow_graph_run_settings, workflow_graph_run_settings_json,
-    WorkflowExecutionSessionKind, WorkflowGraph, WorkflowGraphRunSettings,
+    workflow_graph_run_settings, workflow_graph_run_settings_json, WorkflowExecutionSessionKind,
+    WorkflowGraph, WorkflowGraphRunSettings,
 };
 use crate::scheduler::{
     unix_timestamp_ms, WorkflowSchedulerBootstrapRecoveryAction,
@@ -60,14 +60,13 @@ use super::task_execution_worker::{
 };
 use super::validation::{
     validate_bindings, validate_output_targets, validate_timeout_ms,
-    validate_workflow_graph_submit_readiness, validate_workflow_id,
+    validate_workflow_graph_submit_readiness_with_registry, validate_workflow_id,
     validate_workflow_semantic_version,
 };
 use super::workflow_run_finalization::{
     finalize_admitted_workflow_run, WorkflowRunFinalizationRequest,
 };
 use super::{
-    workflow_scheduler_task_graph, workflow_scheduler_task_graph_with_inference_projections,
     workflow_scheduler_task_run_summary, AttributionRepository, WorkflowCapabilityModel,
     WorkflowExecutableValidationSnapshotLookupRequest,
     WorkflowExecutionSessionAttributedCreateRequest, WorkflowExecutionSessionAttributionContext,
@@ -782,7 +781,7 @@ impl WorkflowService {
         run_snapshot: Option<&WorkflowRunSnapshotRecord>,
     ) -> Result<WorkflowSchedulerTaskGraph, WorkflowServiceError> {
         let graph = host.workflow_graph(workflow_id).await?;
-        validate_workflow_graph_submit_readiness(&graph)?;
+        validate_workflow_graph_submit_readiness_with_registry(&graph, &self.node_registry)?;
         let workflow_id = WorkflowId::try_from(workflow_id.to_string())?;
         let workflow_run_id = WorkflowRunId::try_from(workflow_run_id.to_string())?;
         if let Some(run_snapshot) = run_snapshot {
@@ -798,15 +797,22 @@ impl WorkflowService {
             let projections = snapshot
                 .scheduler_inference_task_projections(&graph)
                 .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
-            return workflow_scheduler_task_graph_with_inference_projections(
+            return super::task_graph::workflow_scheduler_task_graph_with_registry(
                 &workflow_id,
                 &workflow_run_id,
                 &graph,
                 &projections,
+                &self.node_registry,
             );
         }
 
-        let task_graph = workflow_scheduler_task_graph(&workflow_id, &workflow_run_id, &graph)?;
+        let task_graph = super::task_graph::workflow_scheduler_task_graph_with_registry(
+            &workflow_id,
+            &workflow_run_id,
+            &graph,
+            &super::WorkflowSchedulerInferenceTaskProjections::default(),
+            &self.node_registry,
+        )?;
         if task_graph.tasks.iter().any(|task| {
             task.execution_class == WorkflowSchedulerTaskExecutionClass::RuntimeInference
         }) {
@@ -854,7 +860,7 @@ impl WorkflowService {
         }
 
         let graph = host.workflow_graph(&session.workflow_id).await?;
-        validate_workflow_graph_submit_readiness(&graph)?;
+        validate_workflow_graph_submit_readiness_with_registry(&graph, &self.node_registry)?;
         let capabilities = host.workflow_capabilities(&session.workflow_id).await?;
         let version = self.resolve_workflow_graph_version(
             &session.workflow_id,
@@ -998,7 +1004,9 @@ impl WorkflowService {
         let Some(ledger) = self.diagnostics_ledger.as_ref() else {
             return Ok(());
         };
-        let node_versions = workflow_executable_topology(graph)?
+        let node_versions = self
+            .node_registry
+            .executable_topology(graph)?
             .nodes
             .into_iter()
             .map(|node| RunSnapshotNodeVersionPayload {

@@ -27,6 +27,11 @@ Plans own current objective, order, scope, and acceptance. Their
 `execution-ledger.md` files own history; `issues.md` owns open dispositions.
 See the [plans index](plans/README.md) for the artifact rules.
 
+## Custom-node integration
+
+[Trusted custom-node execution](custom-nodes.md) describes host admission,
+immutable identity, scheduler invocation and deferred authoring surfaces.
+
 ## Documentation Rules
 
 - `README.md` and `ARCHITECTURE.md` are the repository entry points.

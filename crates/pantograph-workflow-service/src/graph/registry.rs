@@ -85,6 +85,7 @@ pub fn validate_workflow_connection(
 pub struct NodeRegistry {
     definitions: HashMap<String, NodeDefinition>,
     contracts: HashMap<String, pantograph_node_contracts::NodeTypeContract>,
+    pub(crate) custom_nodes: std::sync::Arc<crate::custom_nodes::CustomNodeCatalog>,
 }
 
 impl NodeRegistry {
@@ -101,7 +102,66 @@ impl NodeRegistry {
         Self {
             definitions,
             contracts: contracts_by_type,
+            custom_nodes: std::sync::Arc::new(crate::custom_nodes::CustomNodeCatalog::default()),
         }
+    }
+
+    pub(crate) fn with_custom_nodes(
+        catalog: std::sync::Arc<crate::custom_nodes::CustomNodeCatalog>,
+    ) -> Self {
+        let mut registry = Self::new();
+        for node in catalog.nodes() {
+            let contract = node.contract().clone();
+            registry.definitions.insert(
+                contract.node_type.as_str().to_string(),
+                convert_contract(&contract),
+            );
+            registry
+                .contracts
+                .insert(contract.node_type.as_str().to_string(), contract);
+        }
+        registry.custom_nodes = catalog;
+        registry
+    }
+
+    pub(crate) fn executable_topology(
+        &self,
+        graph: &super::WorkflowGraph,
+    ) -> Result<super::WorkflowExecutableTopology, crate::workflow::WorkflowServiceError> {
+        for node in &graph.nodes {
+            self.validate_custom_node_identity(node).map_err(|error| {
+                crate::workflow::WorkflowServiceError::InvalidRequest(error.to_string())
+            })?;
+        }
+        let versions = self
+            .contracts
+            .values()
+            .map(pantograph_node_contracts::NodeBehaviorVersion::from_contract)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| {
+                crate::workflow::WorkflowServiceError::InvalidRequest(error.to_string())
+            })?;
+        super::workflow_executable_topology_with_node_versions(graph, versions)
+    }
+
+    pub(crate) fn validate_custom_node_identity(
+        &self,
+        node: &super::GraphNode,
+    ) -> Result<(), crate::custom_nodes::CustomNodeError> {
+        if let Some(custom) = self.custom_nodes.get(&node.node_type) {
+            let identity = node
+                .data
+                .get(crate::custom_nodes::CUSTOM_NODE_IDENTITY_FIELD)
+                .and_then(|value| {
+                    serde_json::from_value::<crate::custom_nodes::CustomNodeIdentity>(value.clone())
+                        .ok()
+                });
+            if identity.as_ref() != Some(custom.identity()) || node.data.get("definition").is_some()
+            {
+                return Err(crate::custom_nodes::CustomNodeError::IdentityMismatch);
+            }
+        }
+        Ok(())
     }
 
     pub fn get_definition(&self, node_type: &str) -> Option<&NodeDefinition> {

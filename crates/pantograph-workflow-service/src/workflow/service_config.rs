@@ -60,7 +60,26 @@ impl WorkflowService {
     }
 
     pub fn with_capacity_limits(max_sessions: usize, max_loaded_sessions: usize) -> Self {
+        Self::with_capacity_and_custom_nodes(
+            max_sessions,
+            max_loaded_sessions,
+            Arc::new(crate::custom_nodes::CustomNodeCatalog::default()),
+        )
+    }
+
+    /// Construct a fresh service with one immutable host-admitted catalog.
+    pub fn with_trusted_custom_nodes(catalog: Arc<crate::custom_nodes::CustomNodeCatalog>) -> Self {
+        Self::with_capacity_and_custom_nodes(DEFAULT_MAX_SESSIONS, DEFAULT_MAX_SESSIONS, catalog)
+    }
+
+    fn with_capacity_and_custom_nodes(
+        max_sessions: usize,
+        max_loaded_sessions: usize,
+        catalog: Arc<crate::custom_nodes::CustomNodeCatalog>,
+    ) -> Self {
+        let node_registry = Arc::new(crate::graph::NodeRegistry::with_custom_nodes(catalog));
         Self {
+            node_registry: node_registry.clone(),
             serial_ready_mode: None,
             cohort_coverage_provider: None,
             session_store: Arc::new(Mutex::new(WorkflowExecutionSessionStore::new(
@@ -84,7 +103,8 @@ impl WorkflowService {
             diagnostics_ledger: None,
             diagnostics_projection_refresh_sink: Arc::new(Mutex::new(None)),
             scheduler_diagnostics_provider: Arc::new(Mutex::new(None)),
-            scheduler_task_orchestrator: default_scheduler_task_orchestrator(),
+            scheduler_task_orchestrator: default_scheduler_task_orchestrator()
+                .with_node_registry(node_registry),
             dependency_readiness_provider: default_dependency_readiness_provider(),
             runtime_dispatch_source_refresher: default_runtime_dispatch_source_refresher(),
             runtime_dispatch_candidate_provider: default_runtime_dispatch_candidate_provider(),

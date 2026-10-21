@@ -230,6 +230,74 @@ rescue and shared coordination; differing task classes are not a controlled
 benchmark. These settings apply to delegated tasks, not the primary session's
 configuration.
 
+## Admitted custom-node adapter slice (2026-10-21)
+
+**Admission:** `continue` this Active plan, under the delegated instruction to
+implement unfinished custom-node paths. Independent GPT-6.1 Sol High design
+review admits the bounded contract below; production implementation starts after
+this record. Existing text/runtime/readiness work and README PR79 are excluded.
+
+**Operation and outcome:** host composition registers a trusted, nonblocking,
+cancellation-safe in-process Rust `NodeExecutor`; a saved, cold-reopened
+source → custom string transformation → sink graph runs through scheduler
+sessions. This does not install new executable code without rebuilding.
+
+**Binding contract:** Processing/Batch only, 1..8 required single string inputs
+and outputs, bounded UTF-8 payloads, no inferred capabilities, inference,
+configuration overlays, dynamic ports, or name/task-ID-based execution authority.
+The immutable admission binds node type/version, normalized contract digest,
+host-attested implementation digest and environment digest. Graphs pin that
+identity; canonical lookup, derivation and invocation use the same admitted
+registry. Built-in collisions and duplicate registration are rejected. Registry
+publication is immutable; replacement requires a new service/graph identity.
+The host attests captured configuration is immutable and callbacks neither block,
+spawn detached work nor produce external effects. This is a trust boundary, not
+a sandbox or verified binary/environment attestation. Managed invocation owns
+input/output validation, scheduler run/task/attempt correlation, panic/error
+classification, deadline and cancellation; dropped polling is the cancellation
+claim. No result is committed after cancellation. No retry is introduced.
+
+**Write set:** `crates/pantograph-workflow-service/src/{custom_nodes.rs,graph,
+workflow,scheduler}`, its public exports and directly related tests; existing
+plan/ledger/issues; `docs/custom-nodes.md`, ADR-018, documentation navigation
+and the directly required decision-traceability map/guide projection.
+No text runtime/readiness source or PR75/80/82 changes. Branch
+`feat/custom-node-managed-adapter`, base `9ec7e7f3`, target `main`, task owner custom
+node lead; parent owns integration after independent review. Preserve the branch
+and worktree pending PR disposition; no merge/deploy or branch deletion.
+
+**Composed-design review: applicable.** Admission/catalog owns trusted callback
+identity, shape and immutable lifetime; graph owns pinned authored facts;
+scheduler owns run/attempt state and result commitment; adapter owns one call.
+Their necessary interleaving is identity and materialized values at dispatch.
+Callers know a contract, host trust attestation, executor and identity pin; no
+callback names, registry locks, task-type inference or plugin loader internals.
+Changing a callback changes registration identity and graphs that choose it;
+changing scheduler policy leaves callback code/contract alone. Stable interfaces
+carry canonical contracts and identities; scheduler templates reference exact
+identity. Adapter failure cannot commit outputs. Deleting the admission/adapter
+would distribute validation, trust and lifecycle obligations across graph and
+scheduler callers. No second runtime, plugin ecosystem, static tool loop, process
+manager or generalized capability layer is added.
+
+**Evidence and next slice:** bounded slice accepted after independent GPT-6.1
+Sol High source review and 1,064 library + 65 integration tests passing, with
+zero failures/ignored tests. Admission → saved/reopened graph → canonical
+scheduler dispatch → result, immutable identity refusal, payload/type/collision
+rejection, callback errors/panic, cancellation/commit arbitration and timeout
+cleanup are covered. Evidence kinds: focused + integration + contract,
+representative Linux CPU, automated; see the execution ledger for exact checks.
+The broad plan remains Active; publication is a draft PR for parent integration.
+NodeLab remains unavailable; scheduler-managed tool-loop and NodeLab exposure
+require this exact registration/identity/managed invocation contract plus their
+own lifecycle and authoring admission. Replan for untrusted code, side effects,
+blocking work, external workers, or broader ports; those are not implicit grants.
+Standards used for this slice: fetched Coding-Standards `0fc92a2` (original local
+path unavailable), Core/Router and routed Planning, Implementation, Verification,
+Development Proportionality, Commit, Documentation, Architecture/Code Design,
+Contracts, Security, Concurrency/Resilience and Library/Rust API/Async guidance.
+The rest of this plan retains its historical standards baseline.
+
 ## Standards And Plan Authority
 
 Standards source:
