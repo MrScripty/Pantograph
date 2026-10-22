@@ -82,13 +82,47 @@ adds the `custom_node` non-runtime template; identity adapter version 1 owns thi
 bounded contract. Coordinated Rust producers/consumers are updated together;
 older implementations cannot execute that template.
 
-NodeLab authoring, Local Agent and runtime publishing remain unavailable.
-Graph edit-session authoring and connection APIs still use built-in discovery;
-they are not custom-node authoring surfaces. Before exposing custom nodes there,
-NodeLab must install host-authorized registrations and exact graph pins, use the
-same registry for edit validation/connection previews, and expose trust, version
-mismatch and unavailable implementation outcomes. Publishing arbitrary code
-needs its own artifact verification, isolation and lifecycle contract.
+## NodeLab graph authoring
+
+NodeLab authors workflows from implementations already admitted by its host. It
+reads `custom_node_authoring_catalog` (wire version 1), a narrow projection of
+canonical labels, required string port IDs and complete immutable identities.
+The projection's `trusted_in_process` profile carries the trust obligations above;
+it is not an installation or execution permission. Default desktop composition
+has an empty catalog and says so. Host maintainers register implementations in
+Rust before service construction; browser clients cannot register or load code.
+The legacy generic palette remains built-in-only.
+
+`create_custom_node_draft` requires the complete selected identity. The service
+resolves exact equality before creating a session, then builds one text source
+per required input, the pinned custom node, and one text sink per output. Custom
+nodes never receive `node.data.definition`. NodeLab owns a separate edit session,
+allows text source edits, displays backend contract diagnostics, and saves/reopens
+through existing graph persistence. It provides no execution button; saved graphs
+use scheduler sessions. Input text is authored configuration, not tool authority.
+
+The same admitted registry reaches edit-session canonicalization, diagnostics,
+connection candidates and commits, including provider-builder construction. New
+custom additions require exact pins. General custom data patches cannot change
+identity or definitions. Imported/reopened missing or stale pins remain unchanged
+and produce blocking diagnostics; explicit new authoring is the recovery path.
+Name-only insert-and-connect/insert-on-edge APIs cannot express a selected complete
+identity, so custom insertion there is explicitly unsupported and omitted from
+creation suggestions. Adding a pinned node and connecting existing endpoints is
+supported.
+
+Failed create/reopen preserves the current draft. Replacement and page teardown
+close owned sessions, including late creation completion. Transport failures during
+close retain exact session IDs in the app-scoped NodeLab service. Pending cleanup
+is visible on the next NodeLab mount, blocks new creation/reopening and has an
+explicit retry action. No automatic graph-session reap is assumed. A process or
+host restart ends these ephemeral sessions; saved files retain their exact pins.
+
+The desktop commands are `get_custom_node_authoring_catalog`,
+`create_custom_node_draft` and `get_node_lab_draft`; mutations/persistence reuse
+existing commands. Local Agent and runtime publishing remain unavailable or
+unsupported. Arbitrary packages still need independently admitted artifact
+verification, isolation and lifecycle contracts.
 
 A scheduler-managed tool loop must consume this exact admission and invocation
 identity, plus its own typed tool authority, bounded iterations, cancellation,

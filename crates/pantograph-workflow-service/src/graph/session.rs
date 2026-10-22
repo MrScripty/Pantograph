@@ -75,6 +75,7 @@ fn dirty_tasks_from_seed_nodes_unique(graph: &WorkflowGraph, node_ids: &[String]
 }
 
 pub struct GraphSessionStore {
+    node_registry: Arc<super::registry::NodeRegistry>,
     sessions: RwLock<HashMap<String, GraphSessionHandle>>,
     validation_state: Arc<CurrentInferenceValidationStateStore>,
     validation_lifecycle: Arc<WorkflowGraphValidationLifecycleOwner>,
@@ -136,6 +137,7 @@ impl GraphSessionStore {
         dependency_provider: SharedDependencyEnvironmentProvider,
     ) -> Self {
         Self {
+            node_registry: Arc::new(super::registry::NodeRegistry::new()),
             sessions: RwLock::new(HashMap::new()),
             validation_state: Arc::new(CurrentInferenceValidationStateStore::new()),
             validation_lifecycle: Arc::new(WorkflowGraphValidationLifecycleOwner::new()),
@@ -144,6 +146,14 @@ impl GraphSessionStore {
             dependency_environment_service: DependencyEnvironmentService::new(dependency_provider),
             stale_timeout: timeout,
         }
+    }
+
+    pub(crate) fn with_node_registry(
+        mut self,
+        registry: Arc<super::registry::NodeRegistry>,
+    ) -> Self {
+        self.node_registry = registry;
+        self
     }
 
     pub async fn set_validation_lifecycle_event_sink(
@@ -159,7 +169,11 @@ impl GraphSessionStore {
         workflow_id: Option<String>,
     ) -> WorkflowGraphEditSessionCreateResponse {
         let session_id = Uuid::new_v4().to_string();
-        let session = Arc::new(Mutex::new(GraphEditSession::new(graph, workflow_id)));
+        let session = Arc::new(Mutex::new(GraphEditSession::new(
+            graph,
+            workflow_id,
+            self.node_registry.clone(),
+        )));
         let graph_revision = {
             let state = session.lock().await;
             state.graph.compute_fingerprint()

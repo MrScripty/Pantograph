@@ -1,0 +1,54 @@
+{
+  "base": "285c48989a95caef1bcaac92eac9ff3b1be0a9ad",
+  "environment": {
+    "os": "Linux x86_64",
+    "rust": "1.92.0",
+    "node": "24.12.0",
+    "chromium": "Chromium 151.0.7922.173 built on Debian GNU/Linux 13 (trixie)",
+    "mode": "headless; disposable profile/store; GPU disabled; container verification no-sandbox only"
+  },
+  "claims": {
+    "browser_user_workflow": "passed: actual NodeLab -> loopback -> Rust service -> filesystem create/edit/save/reopen; keyboard/pointer and focus; missing implementation blocking; exact pin retained",
+    "service_tests": "1068 library +65 integration passed, zero failures/ignored",
+    "frontend_tests": "740 passed, zero failures/ignored; 10 focused decoding/controller/presenter tests included",
+    "native_tauri": "unavailable: cargo check --locked -p pantograph --bin pantograph --no-default-features fails at glib-sys: missing glib-2.0.pc; pkg-config also lacks GTK/WebKit; no native startup claim",
+    "not_claimed": [
+      "installed custom nodes in default desktop",
+      "arbitrary code loading",
+      "trained model T3",
+      "GPU",
+      "inference-backed/effectful tool loops",
+      "release qualification"
+    ]
+  },
+  "source_sha256": {
+    "crates/pantograph-workflow-service/examples/nodelab_host.rs": "1c9a33092e0bac9560247b8c1e158bc0405527cad7b0a280d79dc61334eed8c8",
+    "crates/pantograph-workflow-service/src/custom_nodes.rs": "1d413febbad16689c864e7945191c7bb83079530ece13fda73541178bd86f774",
+    "crates/pantograph-workflow-service/src/custom_nodes/authoring.rs": "ab2e37ca4a68b846e8f23897891eea064730a1376c8597eb5ce00e1bf5f909ed",
+    "crates/pantograph-workflow-service/src/graph/connection_insert.rs": "881afe99675e681a2bd1208f69e55f82afa881adec9ead9a6863089dd3a6f2af",
+    "crates/pantograph-workflow-service/src/graph/connection_intent.rs": "d5832d05d88dd0d2dc10cb367038a0a6d5973e1275fe19e888fb411c13057199",
+    "crates/pantograph-workflow-service/src/graph/session.rs": "e9248df745093b0ff078691a04036017fed894bdd073d922b0f628920a1efcac",
+    "crates/pantograph-workflow-service/src/graph/session_connection_api.rs": "f29f061031b4c70f829cfbd603108857ed7d093245ae3cdeb8d63797b9c5fefe",
+    "crates/pantograph-workflow-service/src/graph/session_contract.rs": "844733c80c5f5a372844637a104e901b9cd46433e1ef73662ff314f4b8e134b0",
+    "crates/pantograph-workflow-service/src/graph/session_node_api.rs": "61505593be43e6bc58e9c9c8f1b991cfd75949a55da8351278ca45a25015ecd3",
+    "crates/pantograph-workflow-service/src/graph/session_state.rs": "c19150bbf4b61dd506ad6bb618593c40f59a8fde43f554025eb940e8c75b1d17",
+    "crates/pantograph-workflow-service/src/workflow.rs": "47e42061802abc91ebe6b3babf8c578116d2e0fecf51d86fa53148cbed613886",
+    "crates/pantograph-workflow-service/src/workflow/custom_node_authoring_api.rs": "5bf54f01b2db4ec2ffc21b6af41291c695ff91a3b274deb80838c32020b9941d",
+    "crates/pantograph-workflow-service/src/workflow/service_config.rs": "257edc58a50b37e8dee265b971e91084b0f77b0ce4031f8d105b604f33cea513",
+    "crates/pantograph-workflow-service/src/workflow/tests/custom_nodes.rs": "aa080d798774771aa419db01d83cd26401684ab06333770a74e209c601e5952f",
+    "scripts/README.md": "03bed3d3d157a4d7e4a9f2a291f4a2ab37efa2e81f87c83e3d5710a38220119a",
+    "scripts/check-nodelab-browser.mjs": "30a619d382ddb242c19b50c51ec97fda8a6c20973fe51f94c7c0fcf5658d24d4",
+    "src-tauri/src/app_setup.rs": "b14c996956638c5a708156aaf8f110ce6f1fa3a175f6b03bb9ff0284bd392a50",
+    "src-tauri/src/workflow/commands.rs": "24834569833ec6509300b9c8c795b9eb8be233f0c6d9c37c5d67f82b63d24b6c",
+    "src/components/workbench/NodeLabPage.svelte": "b9206ed693d2a18f065c547752622cbb48a96a3599d1867d166e45f39fc7424f",
+    "src/components/workbench/nodeLabController.ts": "3b3806dcf0aedf191fd7ad91ce3ac746a08c6962b1c0b292f54d9ba6e9145716",
+    "src/components/workbench/nodeLabPresenters.test.ts": "5debffcdba6ddc86d4b4093dceb08dbf691b7659b73a483abd8d991616faa02e",
+    "src/components/workbench/nodeLabPresenters.ts": "4792bedc18bf6b55173a892e0f15bc7900b4c36fd84bfc508da3dac9c0bbb075",
+    "src/services/workflow/customNodeAuthoring.test.ts": "73d776ffb40ddcafcfb0e69f7434f98aa19bd037484a36ccdef7d9eff290d250",
+    "src/services/workflow/customNodeAuthoring.ts": "f4a11c2fa37816819db79176b2af584199c946a5e3c533482cc595362092dc08"
+  },
+  "evidence_sha256": {
+    "browser.log.gz": "39a0549788107cc92c66b172a0810f2f81b40de30458af58e660a67fa1b45287",
+    "native-unavailable.log.gz": "f72bc764c185d785964c3ac95e9a0d6f24a1d999aefbd349dc143eed28d261b3"
+  }
+}

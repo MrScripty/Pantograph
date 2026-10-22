@@ -362,3 +362,272 @@ async fn custom_nodes_callback_failures_are_terminal_without_publishing_outputs(
             .is_err());
     }
 }
+
+async fn authored_draft(service: &WorkflowService) -> crate::WorkflowGraphEditSessionGraphResponse {
+    let identity = service.custom_node_authoring_catalog().nodes[0]
+        .identity
+        .clone();
+    service
+        .create_custom_node_draft(crate::custom_nodes::authoring::CustomNodeDraftRequest {
+            identity,
+        })
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn custom_node_authoring_registry_survives_provider_builders_and_undo_redo() {
+    for mode in 0..3 {
+        let service = WorkflowService::with_trusted_custom_nodes(catalog(Arc::new(Executor::new(
+            Behavior::Uppercase,
+        ))));
+        let service = match mode {
+            1 => service.with_inference_interface_facts_provider(Arc::new(crate::graph::UnavailableInferenceInterfaceFactsProvider)),
+            2 => service.with_graph_session_fact_providers(Arc::new(crate::graph::UnavailableInferenceInterfaceFactsProvider), Arc::new(pantograph_dependency_environment_service::NotImplementedDependencyEnvironmentProvider)),
+            _ => service,
+        };
+        let draft = authored_draft(&service).await;
+        assert!(
+            draft
+                .graph_diagnostics
+                .iter()
+                .all(|d| !d.blocking_submission),
+            "{:?}",
+            draft.graph_diagnostics
+        );
+        let pin = draft.graph.nodes[0].data[CUSTOM_NODE_IDENTITY_FIELD].clone();
+        let updated = service
+            .workflow_graph_update_node_data(crate::WorkflowGraphUpdateNodeDataRequest {
+                session_id: draft.session_id.clone(),
+                node_id: "input-0".into(),
+                data: serde_json::json!({"text": "authored"}),
+            })
+            .await
+            .unwrap();
+        assert_eq!(
+            updated.graph.find_node("input-0").unwrap().data["text"],
+            "authored"
+        );
+        let request = crate::WorkflowGraphEditSessionGraphRequest {
+            session_id: draft.session_id,
+        };
+        let undo = service.workflow_graph_undo(request.clone()).await.unwrap();
+        let redo = service.workflow_graph_redo(request).await.unwrap();
+        for snapshot in [undo, redo] {
+            assert_eq!(
+                snapshot.graph.find_node("custom").unwrap().data[CUSTOM_NODE_IDENTITY_FIELD],
+                pin
+            );
+            assert!(snapshot
+                .graph_diagnostics
+                .iter()
+                .all(|d| !d.blocking_submission));
+        }
+    }
+}
+
+#[tokio::test]
+async fn custom_node_authoring_refuses_stale_selection_and_identity_patches_without_mutation() {
+    let service = WorkflowService::with_trusted_custom_nodes(catalog(Arc::new(Executor::new(
+        Behavior::Uppercase,
+    ))));
+    let entry = service.custom_node_authoring_catalog().nodes[0].clone();
+    let mut stale = entry.identity.clone();
+    stale.environment_digest = crate::custom_nodes::tests::digest("changed environment");
+    let error = service
+        .create_custom_node_draft(crate::custom_nodes::authoring::CustomNodeDraftRequest {
+            identity: stale.clone(),
+        })
+        .await
+        .unwrap_err();
+    assert!(error.to_string().contains("identity does not match"));
+    assert!(
+        serde_json::from_value::<crate::custom_nodes::authoring::CustomNodeDraftRequest>(
+            serde_json::json!({"identity": entry.identity, "definition": {}})
+        )
+        .is_err()
+    );
+    let draft = authored_draft(&service).await;
+    for patch in [
+        serde_json::json!({CUSTOM_NODE_IDENTITY_FIELD: stale}),
+        serde_json::json!({"definition": {}}),
+        serde_json::json!({CUSTOM_NODE_IDENTITY_FIELD: null}),
+    ] {
+        let error = service
+            .workflow_graph_update_node_data(crate::WorkflowGraphUpdateNodeDataRequest {
+                session_id: draft.session_id.clone(),
+                node_id: "custom".into(),
+                data: patch,
+            })
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("cannot be patched"));
+        let after = service
+            .workflow_graph_get_edit_session_graph(crate::WorkflowGraphEditSessionGraphRequest {
+                session_id: draft.session_id.clone(),
+            })
+            .await
+            .unwrap();
+        assert_eq!(after.graph_revision, draft.graph_revision);
+        assert_eq!(after.graph, draft.graph);
+    }
+    let mut unpinned = draft.graph.find_node("custom").unwrap().clone();
+    unpinned.id = "bad".into();
+    unpinned.data = serde_json::json!({});
+    assert!(service
+        .workflow_graph_add_node(crate::WorkflowGraphAddNodeRequest {
+            session_id: draft.session_id,
+            node: unpinned
+        })
+        .await
+        .unwrap_err()
+        .to_string()
+        .contains("identity does not match"));
+}
+
+#[tokio::test]
+async fn custom_node_authoring_candidates_and_commit_share_exact_registry() {
+    let service = WorkflowService::with_trusted_custom_nodes(catalog(Arc::new(Executor::new(
+        Behavior::Uppercase,
+    ))));
+    let draft = authored_draft(&service).await;
+    let removed = service
+        .workflow_graph_remove_edge(crate::WorkflowGraphRemoveEdgeRequest {
+            session_id: draft.session_id.clone(),
+            edge_id: "edge-input-0".into(),
+        })
+        .await
+        .unwrap();
+    let source = crate::ConnectionAnchor {
+        node_id: "input-0".into(),
+        port_id: "text".into(),
+    };
+    let candidates = service
+        .workflow_graph_get_connection_candidates(
+            crate::WorkflowGraphGetConnectionCandidatesRequest {
+                session_id: draft.session_id.clone(),
+                source_anchor: source.clone(),
+                graph_revision: Some(removed.graph_revision.clone()),
+            },
+        )
+        .await
+        .unwrap();
+    assert!(candidates
+        .compatible_nodes
+        .iter()
+        .any(|node| node.node_id == "custom"));
+    assert!(!candidates
+        .insertable_node_types
+        .iter()
+        .any(|node| node.node_type == "custom-uppercase"));
+    let rejected = service
+        .workflow_graph_preview_node_insert_on_edge(
+            crate::WorkflowGraphPreviewNodeInsertOnEdgeRequest {
+                session_id: draft.session_id.clone(),
+                edge_id: "edge-output-0".into(),
+                node_type: "custom-uppercase".into(),
+                graph_revision: removed.graph_revision.clone(),
+            },
+        )
+        .await
+        .unwrap();
+    assert!(!rejected.accepted);
+    assert!(rejected
+        .rejection
+        .unwrap()
+        .message
+        .contains("insertion by name is unsupported"));
+    let committed = service
+        .workflow_graph_connect(crate::WorkflowGraphConnectRequest {
+            session_id: draft.session_id.clone(),
+            source_anchor: source,
+            target_anchor: crate::ConnectionAnchor {
+                node_id: "custom".into(),
+                port_id: "input".into(),
+            },
+            graph_revision: removed.graph_revision,
+        })
+        .await
+        .unwrap();
+    assert!(committed.accepted);
+    let snapshot = service
+        .workflow_graph_get_edit_session_graph(crate::WorkflowGraphEditSessionGraphRequest {
+            session_id: draft.session_id,
+        })
+        .await
+        .unwrap();
+    assert!(snapshot
+        .graph_diagnostics
+        .iter()
+        .all(|d| !d.blocking_submission));
+}
+
+#[tokio::test]
+async fn custom_node_authoring_saved_reopen_preserves_pin_and_scheduler_execution() {
+    let root = tempfile::tempdir().unwrap();
+    let catalog = catalog(Arc::new(Executor::new(Behavior::Uppercase)));
+    let service = WorkflowService::with_trusted_custom_nodes(catalog.clone());
+    let draft = authored_draft(&service).await;
+    let store = FileSystemWorkflowGraphStore::new(root.path());
+    let saved = service
+        .workflow_graph_save(
+            &store,
+            crate::WorkflowGraphSaveRequest {
+                name: "custom-workflow".into(),
+                graph: draft.graph.clone(),
+            },
+        )
+        .unwrap();
+    let reopened = WorkflowService::with_trusted_custom_nodes(catalog);
+    let graph = reopened
+        .workflow_graph_load(
+            &store,
+            crate::WorkflowGraphLoadRequest {
+                path: saved.path.clone(),
+            },
+        )
+        .unwrap()
+        .graph;
+    assert_eq!(
+        graph.find_node("custom").unwrap().data[CUSTOM_NODE_IDENTITY_FIELD],
+        draft.graph.find_node("custom").unwrap().data[CUSTOM_NODE_IDENTITY_FIELD]
+    );
+    for (service, blocking) in [(&reopened, false), (&WorkflowService::new(), true)] {
+        let edit = service
+            .workflow_graph_create_edit_session(crate::WorkflowGraphEditSessionCreateRequest {
+                graph: graph.clone(),
+                workflow_id: Some(saved.path.clone()),
+            })
+            .await
+            .unwrap();
+        let snapshot = service
+            .workflow_graph_get_edit_session_graph(crate::WorkflowGraphEditSessionGraphRequest {
+                session_id: edit.session_id,
+            })
+            .await
+            .unwrap();
+        assert_eq!(
+            snapshot.graph.find_node("custom").unwrap().data,
+            graph.find_node("custom").unwrap().data
+        );
+        assert_eq!(
+            snapshot
+                .graph_diagnostics
+                .iter()
+                .any(|d| d.blocking_submission),
+            blocking
+        );
+    }
+    let host = SavedGraphHost {
+        root: root.path().into(),
+    };
+    let session_id = session(&reopened, &host).await;
+    let mut request = run_request(&session_id);
+    request.inputs[0].node_id = "input-0".into();
+    request.output_targets.as_mut().unwrap()[0].node_id = "output-0".into();
+    let result = reopened
+        .run_workflow_execution_session(&host, request)
+        .await
+        .unwrap();
+    assert_eq!(result.outputs[0].value, "MIXED CASE");
+}

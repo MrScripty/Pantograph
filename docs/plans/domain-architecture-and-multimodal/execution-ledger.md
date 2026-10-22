@@ -813,3 +813,36 @@ Accepted stop-string/PR60 and all seed/precision/repair/paused histories remain
 separate. Controlled package/readiness/dispatch/session facts and untrained CPU
 models do not qualify live Pumas, pretrained quality, GPU, desktop or native
 batching/throughput. Full plan acceptance and parent publication remain separate.
+
+## 2026-10-22 — NodeLab trusted-node authoring
+
+Continued the admitted CN-02 slice on main `285c4898` after CN-01/README merges.
+The [consumer contract](../../custom-nodes.md#nodelab-graph-authoring) owns the
+read-only versioned catalog, exact-selection server-built drafts, shared edit
+registry, pin-preserving mutations and saved/reopened behavior. Default desktop
+has no custom registrations; the separate real Rust qualification host supplies
+one compiled pure transform. No code loader, execution UI or tool grant is added.
+Independent GPT-6.1 Sol High review accepted after repairing failed replacement
+loss, explicit-null diagnostic decoding and close-failure ownership/recovery.
+
+[Qualification](evidence/nodelab-authoring/qualification.json) retains source
+bindings, actual Chromium→Rust→filesystem user-workflow evidence and the native
+failure. Service tests pass 1,068 library +65 integration, zero failures/ignored;
+740 frontend tests pass including ten focused parser/controller/presenter cases.
+Formatting, typecheck, production frontend build, lint, critical/a11y gates,
+scheduler-only guard and traceability tests pass. All-target package Clippy
+retains only the existing inference dead-field warning. Initial new fixtures used
+an unexported provider and a nonexistent response field; corrected against the
+actual owning APIs, preserving the assertions. The first browser Enter simulation
+omitted character text and did not activate the button; proper CDP key events
+then passed the same workflow assertions, with no pointer fallback for that gate.
+
+Native `cargo check --locked -p pantograph --bin pantograph --no-default-features`
+is unavailable at glib-sys because this environment lacks `glib-2.0.pc`; GTK and
+WebKit development packages are also absent. No native/desktop startup claim or
+persistent access change is made. PR92 `afe33029` remains open with its unique
+trained-text source/evidence and missing T3 gate unchanged. CN-03 PR94 integrates
+first by parent instruction; CN-02 must then reconcile current main, preserve its
+registry/loop validations, rerun combined affected tests and pass exact-head CI
+before merge. The local/remote feature branch and worktree are retained pending
+that disposition, with source and evidence preserved.

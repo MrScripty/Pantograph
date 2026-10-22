@@ -1,16 +1,11 @@
-export interface NodeLabStatusRow {
-  label: string;
-  value: string;
-}
-
+export interface NodeLabStatusRow { label: string; value: string }
 export function buildNodeLabStatusRows(): NodeLabStatusRow[] {
   return [
-    { label: 'Authoring API', value: 'Unavailable' },
+    { label: 'Graph authoring', value: 'Host-admitted nodes' },
     { label: 'Local Agent', value: 'Unavailable' },
-    { label: 'Runtime Publishing', value: 'Unavailable' },
+    { label: 'Runtime Publishing', value: 'Unsupported' },
   ];
 }
-
-export function nodeLabUnavailableMessage(): string {
-  return 'Node authoring is unavailable in this build';
+export function nodeLabTrustMessage(): string {
+  return 'These nodes are supplied by this host and run as trusted in-process code. NodeLab creates workflows; it cannot install or publish code.';
 }

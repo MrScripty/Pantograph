@@ -257,3 +257,20 @@ it preserves the existing expression-evidence policy rather than proving its
 runtime value. Native-button rules and reviewed-ignore rules are unchanged.
 Runtime accessibility and dynamically empty/hidden content still require UI
 validation.
+
+## NodeLab authoring browser qualification
+
+Build `cargo build --locked -p pantograph-workflow-service --example nodelab_host`,
+then run `NODELAB_HOST_BINARY=<absolute target/debug/examples/nodelab_host> node
+scripts/check-nodelab-browser.mjs`. The isolated stdio Rust host registers one
+compiled pure transform and owns a temporary workflow store; the verifier exposes
+only a temporary loopback transport. It exercises the actual NodeLab component,
+strict catalog decoding, keyboard focus/creation, pointer edits, filesystem
+save/reopen, pin retention, session replacement cleanup and missing-implementation
+blocking. A second real empty host proves the empty catalog and stale reopen;
+a deliberately failed transport proves the distinct unavailable state. Browser
+arguments select headless Chromium, disposable profile, GPU disabled and the
+verification-only no-sandbox mode required by this container. They do not alter
+normal startup. This is browser/host evidence, not native Tauri, package, model,
+GPU or scheduler tool-loop qualification. EOF and verifier teardown release the
+host/store/browser resources. See [custom-node authoring](../docs/custom-nodes.md#nodelab-graph-authoring).
