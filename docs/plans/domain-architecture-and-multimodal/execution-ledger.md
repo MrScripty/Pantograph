@@ -836,6 +836,8 @@ an unexported provider and a nonexistent response field; corrected against the
 actual owning APIs, preserving the assertions. The first browser Enter simulation
 omitted character text and did not activate the button; proper CDP key events
 then passed the same workflow assertions, with no pointer fallback for that gate.
+Full lint required keys on stateless diagnostic rows; repaired. Final browser
+evidence loads the actual application stylesheet and checks nonzero focus outline.
 
 Native `cargo check --locked -p pantograph --bin pantograph --no-default-features`
 is unavailable at glib-sys because this environment lacks `glib-2.0.pc`; GTK and

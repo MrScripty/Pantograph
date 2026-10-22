@@ -26,8 +26,8 @@ const sessions = [];
 try {
   await symlink(path.join(repo, 'node_modules'), path.join(fixture, 'node_modules'));
   await writeFile(path.join(fixture, 'index.html'), '<div id="app"></div><script type="module" src="/main.js"></script>');
-  await writeFile(path.join(fixture, 'main.js'), `import { mount } from 'svelte'; import Page from ${JSON.stringify(path.join(repo, 'src/components/workbench/NodeLabPage.svelte'))}; mount(Page, { target: document.getElementById('app') });`);
-  await build({ configFile: false, root: fixture, plugins: [svelte()], build: { outDir: 'dist', emptyOutDir: true } });
+  await writeFile(path.join(fixture, 'main.js'), `import ${JSON.stringify(path.join(repo, 'src/styles.css'))}; import { mount } from 'svelte'; import Page from ${JSON.stringify(path.join(repo, 'src/components/workbench/NodeLabPage.svelte'))}; mount(Page, { target: document.getElementById('app') });`);
+  await build({ configFile: false, root: fixture, css: { postcss: repo }, plugins: [svelte()], build: { outDir: 'dist', emptyOutDir: true } });
   function rustHost(empty) {
     const child = spawn(hostBinary, empty ? ['--empty-catalog'] : [], { stdio: ['pipe', 'pipe', 'inherit'] });
     hosts.push(child);
@@ -64,7 +64,7 @@ try {
         const relative = url.pathname === '/' ? 'index.html' : url.pathname.slice(1);
         const file = path.resolve(fixture, 'dist', relative);
         if (!file.startsWith(path.resolve(fixture, 'dist') + path.sep)) { response.writeHead(403).end(); return; }
-        response.setHeader('Content-Type', file.endsWith('.js') ? 'application/javascript' : 'text/html');
+        response.setHeader('Content-Type', file.endsWith('.js') ? 'application/javascript' : file.endsWith('.css') ? 'text/css' : 'text/html');
         response.end(await readFile(file));
       } catch (error) { response.writeHead(500, { 'Content-Type': 'application/json' }).end(JSON.stringify({ code: 'internal_error', message: String(error) })); }
     });
@@ -140,7 +140,7 @@ try {
     if (await evaluate(() => document.activeElement?.textContent === 'Create Host uppercase draft')) break;
   }
   assert.equal(await evaluate(() => document.activeElement?.textContent), 'Create Host uppercase draft');
-  assert.equal(await evaluate(() => getComputedStyle(document.activeElement).outlineStyle !== 'none'), true);
+  assert.equal(await evaluate(() => getComputedStyle(document.activeElement).outlineStyle !== 'none' && parseFloat(getComputedStyle(document.activeElement).outlineWidth) > 0), true);
   await call('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, text: '\r', unmodifiedText: '\r' });
   await call('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
   await waitText('Graph contract valid');

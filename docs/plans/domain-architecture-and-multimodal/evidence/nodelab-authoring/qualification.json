@@ -5,7 +5,8 @@
     "rust": "1.92.0",
     "node": "24.12.0",
     "chromium": "Chromium 151.0.7922.173 built on Debian GNU/Linux 13 (trixie)",
-    "mode": "headless; disposable profile/store; GPU disabled; container verification no-sandbox only"
+    "mode": "headless; disposable profile/store; GPU disabled; container verification no-sandbox only",
+    "application_styles": true
   },
   "claims": {
     "browser_user_workflow": "passed: actual NodeLab -> loopback -> Rust service -> filesystem create/edit/save/reopen; keyboard/pointer and focus; missing implementation blocking; exact pin retained",
@@ -37,7 +38,7 @@
     "crates/pantograph-workflow-service/src/workflow/service_config.rs": "257edc58a50b37e8dee265b971e91084b0f77b0ce4031f8d105b604f33cea513",
     "crates/pantograph-workflow-service/src/workflow/tests/custom_nodes.rs": "aa080d798774771aa419db01d83cd26401684ab06333770a74e209c601e5952f",
     "scripts/README.md": "03bed3d3d157a4d7e4a9f2a291f4a2ab37efa2e81f87c83e3d5710a38220119a",
-    "scripts/check-nodelab-browser.mjs": "30a619d382ddb242c19b50c51ec97fda8a6c20973fe51f94c7c0fcf5658d24d4",
+    "scripts/check-nodelab-browser.mjs": "91505dbfa49defa836a246fcff7317bc6dae795fd257da1ee8747146cebe3357",
     "src-tauri/src/app_setup.rs": "b14c996956638c5a708156aaf8f110ce6f1fa3a175f6b03bb9ff0284bd392a50",
     "src-tauri/src/workflow/commands.rs": "24834569833ec6509300b9c8c795b9eb8be233f0c6d9c37c5d67f82b63d24b6c",
     "src/components/workbench/NodeLabPage.svelte": "ab23063b86e78e3dc919602df48d027f0e736bee678b8e5609eedc41d0da25d2",
@@ -48,7 +49,7 @@
     "src/services/workflow/customNodeAuthoring.ts": "f4a11c2fa37816819db79176b2af584199c946a5e3c533482cc595362092dc08"
   },
   "evidence_sha256": {
-    "browser.log.gz": "6a1c002a0a7a2aa962249b01f31b98f5f33e5643f43472cb07b390d8d75c0f74",
+    "browser.log.gz": "6c2a15df9371220e78251fd39f27631010da2e63d41f45843e9c9dba0c3bc97e",
     "native-unavailable.log.gz": "f72bc764c185d785964c3ac95e9a0d6f24a1d999aefbd349dc143eed28d261b3"
   }
 }
