@@ -506,6 +506,7 @@ pub fn connection_candidates_with_surfaces(
     let mut insertable_node_types = registry
         .all_definitions()
         .into_iter()
+        .filter(|definition| registry.custom_nodes.get(&definition.node_type).is_none())
         .filter_map(|definition| {
             let mut matching_input_port_ids = definition
                 .inputs

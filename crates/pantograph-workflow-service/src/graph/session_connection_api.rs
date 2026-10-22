@@ -13,7 +13,6 @@ use super::super::inference_validation_state::{
     WorkflowGraphCurrentConnectionSurfacesStateRequest,
 };
 use super::super::memory_impact::graph_memory_impact_from_graph_change;
-use super::super::registry::NodeRegistry;
 use super::super::session_event::{dirty_tasks_from_seed_nodes, graph_modified_event};
 use super::super::session_graph::sync_embedding_emit_metadata_flags;
 use super::super::session_types::{
@@ -39,10 +38,10 @@ impl GraphSessionStore {
                 request.graph_revision.as_deref(),
             )
             .await?;
-        let registry = NodeRegistry::new();
+        let registry = self.node_registry.as_ref();
         connection_candidates_with_surfaces(
             &graph,
-            &registry,
+            registry,
             InferenceConnectionSurfaceView::new(&connection_surfaces.surfaces),
             request.source_anchor,
             request.graph_revision.as_deref(),
@@ -65,10 +64,10 @@ impl GraphSessionStore {
             let mut state = handle.lock().await;
             state.touch();
             let before_graph = state.graph.clone();
-            let registry = NodeRegistry::new();
+            let registry = self.node_registry.as_ref();
             if let Err(rejection) = commit_connection_with_surfaces(
                 &state.graph,
-                &registry,
+                registry,
                 InferenceConnectionSurfaceView::new(&connection_surfaces.surfaces),
                 &request.graph_revision,
                 &request.source_anchor,
@@ -191,10 +190,10 @@ impl GraphSessionStore {
             let mut state = handle.lock().await;
             state.touch();
             let before_graph = state.graph.clone();
-            let registry = NodeRegistry::new();
+            let registry = self.node_registry.as_ref();
             let (inserted_node, inserted_edge) = match insert_node_and_connect(
                 &state.graph,
-                &registry,
+                registry,
                 &request.graph_revision,
                 &request.source_anchor,
                 &request.node_type,
@@ -252,11 +251,11 @@ impl GraphSessionStore {
         let handle = self.get_session_handle(&request.session_id).await?;
         let mut state = handle.lock().await;
         state.touch();
-        let registry = NodeRegistry::new();
+        let registry = self.node_registry.as_ref();
 
         match preview_node_insert_on_edge(
             &state.graph,
-            &registry,
+            registry,
             &request.graph_revision,
             &request.edge_id,
             &request.node_type,
@@ -283,11 +282,11 @@ impl GraphSessionStore {
             let mut state = handle.lock().await;
             state.touch();
             let before_graph = state.graph.clone();
-            let registry = NodeRegistry::new();
+            let registry = self.node_registry.as_ref();
 
             let (inserted_node, incoming_edge, outgoing_edge, bridge) = match insert_node_on_edge(
                 &state.graph,
-                &registry,
+                registry,
                 &request.graph_revision,
                 &request.edge_id,
                 &request.node_type,

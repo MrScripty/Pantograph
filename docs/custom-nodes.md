@@ -82,13 +82,47 @@ retains the `custom_node` non-runtime template and adds `tool_loop`; identity ad
 bounded contract. Coordinated Rust producers/consumers are updated together;
 older implementations cannot execute that template.
 
-NodeLab authoring, Local Agent and runtime publishing remain unavailable.
-Graph edit-session authoring and connection APIs still use built-in discovery;
-they are not custom-node authoring surfaces. Before exposing custom nodes there,
-NodeLab must install host-authorized registrations and exact graph pins, use the
-same registry for edit validation/connection previews, and expose trust, version
-mismatch and unavailable implementation outcomes. Publishing arbitrary code
-needs its own artifact verification, isolation and lifecycle contract.
+## NodeLab graph authoring
+
+NodeLab authors workflows from implementations already admitted by its host. It
+reads `custom_node_authoring_catalog` (wire version 1), a narrow projection of
+canonical labels, required string port IDs and complete immutable identities.
+The projection's `trusted_in_process` profile carries the trust obligations above;
+it is not an installation or execution permission. Default desktop composition
+has an empty catalog and says so. Host maintainers register implementations in
+Rust before service construction; browser clients cannot register or load code.
+The legacy generic palette remains built-in-only.
+
+`create_custom_node_draft` requires the complete selected identity. The service
+resolves exact equality before creating a session, then builds one text source
+per required input, the pinned custom node, and one text sink per output. Custom
+nodes never receive `node.data.definition`. NodeLab owns a separate edit session,
+allows text source edits, displays backend contract diagnostics, and saves/reopens
+through existing graph persistence. It provides no execution button; saved graphs
+use scheduler sessions. Input text is authored configuration, not tool authority.
+
+The same admitted registry reaches edit-session canonicalization, diagnostics,
+connection candidates and commits, including provider-builder construction. New
+custom additions require exact pins. General custom data patches cannot change
+identity or definitions. Imported/reopened missing or stale pins remain unchanged
+and produce blocking diagnostics; explicit new authoring is the recovery path.
+Name-only insert-and-connect/insert-on-edge APIs cannot express a selected complete
+identity, so custom insertion there is explicitly unsupported and omitted from
+creation suggestions. Adding a pinned node and connecting existing endpoints is
+supported.
+
+Failed create/reopen preserves the current draft. Replacement and page teardown
+close owned sessions, including late creation completion. Transport failures during
+close retain exact session IDs in the app-scoped NodeLab service. Pending cleanup
+is visible on the next NodeLab mount, blocks new creation/reopening and has an
+explicit retry action. No automatic graph-session reap is assumed. A process or
+host restart ends these ephemeral sessions; saved files retain their exact pins.
+
+The desktop commands are `get_custom_node_authoring_catalog`,
+`create_custom_node_draft` and `get_node_lab_draft`; mutations/persistence reuse
+existing commands. Local Agent and runtime publishing remain unavailable or
+unsupported. Arbitrary packages still need independently admitted artifact
+verification, isolation and lifecycle contracts.
 
 The [scheduler-managed pure tool-loop adapter](tool-loops.md) consumes this
 exact admission and invocation identity plus separate host tool grants. It
@@ -97,6 +131,14 @@ string registration grants no tool capability. The retired static loop stays
 retired. Inference-backed controllers, side-effectful tools, external workers,
 Wasm, Python, package discovery, automatic updates, streaming and inference ports
 require follow-on admission; none are inferred from a palette entry.
+
+NodeLab's creation catalog projects individual CN-01 registrations, not loop
+templates or tool grants. Existing host-pinned loop graphs can be reopened using
+the same registry; their pins remain unchanged and unavailable/stale grants are
+blocking. A future loop-authoring surface must select a complete host-admitted
+`ToolLoopIdentity` and produce exactly one prompt binding under the
+[CN-03 contract](tool-loops.md); optional authoring ports and new grants remain
+unsupported. No scheduler or loop authority is owned by NodeLab.
 
 See [ADR-018](adr/ADR-018-trusted-custom-node-adapter.md) and the
 [admitted implementation slice](plans/domain-architecture-and-multimodal/plan.md#admitted-custom-node-adapter-slice-2026-10-21).

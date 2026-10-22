@@ -88,9 +88,26 @@ fn build_graph_session_response(
     build_graph_session_response_with_state(session_id, graph, workflow_event, None)
 }
 
+#[cfg(test)]
 pub(crate) fn build_graph_session_response_with_state(
     session_id: &str,
     graph: &super::types::WorkflowGraph,
+    workflow_event: Option<WorkflowEvent>,
+    projection: Option<&WorkflowGraphSessionStateProjection>,
+) -> WorkflowGraphEditSessionGraphResponse {
+    build_graph_session_response_with_registry(
+        session_id,
+        graph,
+        &NodeRegistry::new(),
+        workflow_event,
+        projection,
+    )
+}
+
+pub(crate) fn build_graph_session_response_with_registry(
+    session_id: &str,
+    graph: &super::types::WorkflowGraph,
+    registry: &NodeRegistry,
     workflow_event: Option<WorkflowEvent>,
     projection: Option<&WorkflowGraphSessionStateProjection>,
 ) -> WorkflowGraphEditSessionGraphResponse {
@@ -106,10 +123,7 @@ pub(crate) fn build_graph_session_response_with_state(
             workflow_event.as_ref(),
             projection,
         )),
-        graph_diagnostics: validate_workflow_graph_contract_diagnostics(
-            graph,
-            &NodeRegistry::new(),
-        ),
+        graph_diagnostics: validate_workflow_graph_contract_diagnostics(graph, registry),
     }
 }
 
