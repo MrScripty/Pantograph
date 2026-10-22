@@ -66,7 +66,7 @@
       <p class="mt-2 text-neutral-400">{view.draft.graph.nodes.length} nodes · {view.draft.graph.edges.length} connections. Saving preserves the selected implementation identity. Run saved workflows from Scheduler.</p>
       {#if view.draft.graph_diagnostics.length}
         <ul class="mt-3 text-amber-200" aria-label="Graph diagnostics">
-          {#each view.draft.graph_diagnostics as diagnostic}
+          {#each view.draft.graph_diagnostics as diagnostic, index (index)}
             <li>{diagnostic.blocking_submission ? 'Blocks execution: ' : ''}{diagnostic.message}</li>
           {/each}
         </ul>

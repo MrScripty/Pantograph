@@ -40,7 +40,7 @@
     "scripts/check-nodelab-browser.mjs": "30a619d382ddb242c19b50c51ec97fda8a6c20973fe51f94c7c0fcf5658d24d4",
     "src-tauri/src/app_setup.rs": "b14c996956638c5a708156aaf8f110ce6f1fa3a175f6b03bb9ff0284bd392a50",
     "src-tauri/src/workflow/commands.rs": "24834569833ec6509300b9c8c795b9eb8be233f0c6d9c37c5d67f82b63d24b6c",
-    "src/components/workbench/NodeLabPage.svelte": "b9206ed693d2a18f065c547752622cbb48a96a3599d1867d166e45f39fc7424f",
+    "src/components/workbench/NodeLabPage.svelte": "ab23063b86e78e3dc919602df48d027f0e736bee678b8e5609eedc41d0da25d2",
     "src/components/workbench/nodeLabController.ts": "3b3806dcf0aedf191fd7ad91ce3ac746a08c6962b1c0b292f54d9ba6e9145716",
     "src/components/workbench/nodeLabPresenters.test.ts": "5debffcdba6ddc86d4b4093dceb08dbf691b7659b73a483abd8d991616faa02e",
     "src/components/workbench/nodeLabPresenters.ts": "4792bedc18bf6b55173a892e0f15bc7900b4c36fd84bfc508da3dac9c0bbb075",
@@ -48,7 +48,7 @@
     "src/services/workflow/customNodeAuthoring.ts": "f4a11c2fa37816819db79176b2af584199c946a5e3c533482cc595362092dc08"
   },
   "evidence_sha256": {
-    "browser.log.gz": "39a0549788107cc92c66b172a0810f2f81b40de30458af58e660a67fa1b45287",
+    "browser.log.gz": "6a1c002a0a7a2aa962249b01f31b98f5f33e5643f43472cb07b390d8d75c0f74",
     "native-unavailable.log.gz": "f72bc764c185d785964c3ac95e9a0d6f24a1d999aefbd349dc143eed28d261b3"
   }
 }
