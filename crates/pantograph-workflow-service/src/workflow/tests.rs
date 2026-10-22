@@ -35,6 +35,7 @@ mod task_binding_resolution;
 mod task_graph;
 mod task_result_contracts;
 mod task_state_read_model;
+mod tool_loops;
 mod workflow_capabilities;
 mod workflow_graph_inspection;
 mod workflow_io;

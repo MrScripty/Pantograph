@@ -21,7 +21,11 @@ acceptance and the deferred audio design. Direct rerank/audio handlers remain;
 `63f7b4e` stays separate and unpublished. Native/model/display qualification and
 publication are outside this local task.
 
-**Next slice:** The user-selected single-prompt canonical `chat_completion`
+**Next slice (CN-03, 2026-10-22):** Verify and serially integrate the bounded
+scheduler-managed pure tool-loop implementation below. CN-02 owns the concurrent
+NodeLab/edit-session path; PR92 trained-text readiness remains unchanged.
+
+**Prior chat slice:** The user-selected single-prompt canonical `chat_completion`
 graph feature is implemented and locally qualified on isolated
 `feat/workflow-chat-completion`; see the [chat report](reports/2026-10-06-workflow-chat-completion.md). Source is
 fresh main `c75fa237` with explicit ordinary composition of stop successor
@@ -297,6 +301,70 @@ path unavailable), Core/Router and routed Planning, Implementation, Verification
 Development Proportionality, Commit, Documentation, Architecture/Code Design,
 Contracts, Security, Concurrency/Resilience and Library/Rust API/Async guidance.
 The rest of this plan retains its historical standards baseline.
+
+## Admitted CN-03 pure tool-loop slice (2026-10-22)
+
+**Authority and status:** The user authorized unfinished Pantograph paths and
+multiple implementations on 2026-10-21; the parent delegated scheduler-owned
+CN-03 execution on 2026-10-22. Continue this plan for that bounded slice.
+Status `Verifying`; objective acceptance `partial`. Source is isolated on
+`codex/cn03-scheduler-tool-loop` in `/workspace/pantograph-cn03`, fetched main
+`285c48989a95caef1bcaac92eac9ff3b1be0a9ad`. The parent owns serial integration
+with CN-02. Retain branch/worktree, protected by the named branch, until review,
+checks and integration disposition; no force pushes or branch deletion.
+
+**Goal and binding decision:** Execute a saved/reopened source → `tool-loop` →
+sink graph with a host-admitted pure controller and explicitly granted trusted
+string-transform tools. [ADR-019](../../adr/ADR-019-scheduler-managed-pure-tool-loops.md)
+and [the consumer contract](../../tool-loops.md) own authority, bounds, failure,
+cancellation, commitment and schema version 9. Inference-backed controllers,
+side effects, arbitrary loading, UI/edit sessions and static loop expansion are
+excluded. No licensed trained-model or hardware acceptance is claimed.
+
+**Write set:** workflow-service `custom_nodes.rs`, `tool_loops{.rs,/tests.rs}`,
+`lib.rs`; graph `registry.rs`; scheduler `mod.rs`, `task_orchestrator{.rs,_tests.rs}`,
+`tool_loop.rs`; workflow `task_graph{.rs,_contracts.rs}`,
+`non_runtime_task_adapter.rs`, `session_queue_api.rs`, `tests{.rs,/tool_loops.rs}`;
+quality-gates tool-loop test step/exact-head Rust checkout; traceability map/guide;
+docs tool-loop guide,
+custom-node cross-reference, ADR/index and this plan/ledger/issues. No frontend,
+CN-02 authoring or PR92 readiness surface is in this write set.
+
+**Composed-design admission:** applicable; inspected artifact probe:
+
+1. Host composition owns what code/grants exist and why they are trusted;
+   canonical registry owns graph identity; scheduler owns when execution starts,
+   serial nonruntime invocation, attempt lifetime and publication.
+2. Identity, budget and capability authority meet only at catalog admission and
+   task derivation. Cancellation and commitment deliberately share the existing
+   store gate. State is latest-observation only, with no durable partial replay.
+3. Hosts learn one registration value and strict turn protocol; graphs carry a
+   complete pin. Existing clients need no new executor, runtime or shutdown API.
+4. Adding a pure tool changes host registration only. Changing turn protocol
+   changes adapter/version and focused tests; adding model/effect capability
+   reopens admission and must change the runtime/effect owners first.
+5. Dependencies are exact CN-01 identities and the prepared invocation interface.
+   Existing scheduler start/commit order is intentionally retained; graph data
+   never supplies cancellation, attempt, callback or capability authority.
+6. Contract admission and bounded runner can fail and be tested independently;
+   final publication/cancellation is verified through the existing orchestrator
+   and saved/reopened session consumer.
+7. Removing `tool_loops` would spread grant/protocol rules into callers;
+   removing scheduler `tool_loop` would spread turn/deadline ownership there.
+   No additional registry service, worker, executor trait or static graph exists.
+   Schema 9 is necessary to distinguish the coordinated new typed template.
+8. Inherent exact authority, bounded state and cancellation ordering live at
+   these owners; CN-01 retains primitive safety, scheduler retains lifecycle.
+
+**Acceptance:** pure admission/authority, deterministic bounded progress,
+primitive correlation, cancellation/commit race, timeout/disposal and positive
+saved/reopened execution require focused tests plus the full service regression
+suite. Independent GPT-6.1 Sol High source review and exact-head CI are required
+before integration. Evidence and precise pending gates live in the ledger/PR.
+The current milestone is verification; the next integration slice is CN-03
+source review/checks then serial CN-02 dependency reconciliation. Re-plan if
+model turns, external effects, unsupported authoring ports or shared API changes
+are needed. An authoring palette cannot grant execution.
 
 ## Standards And Plan Authority
 

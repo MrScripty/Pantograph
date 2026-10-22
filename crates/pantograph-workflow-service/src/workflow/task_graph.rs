@@ -172,7 +172,15 @@ pub(crate) fn workflow_scheduler_task_graph_with_registry(
         let input_bindings = input_bindings(node.node_id.as_str(), &incoming_edges)?;
         let dependency_task_ids = dependency_task_ids(&input_bindings);
         let custom_node = registry.custom_nodes.get(&node.node_type);
-        let execution_class = if custom_node.is_some() {
+        let loop_identity = graph
+            .nodes
+            .iter()
+            .find(|source| source.id == node.node_id)
+            .map(|source| registry.tool_loop_for_node(source))
+            .transpose()
+            .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?
+            .flatten();
+        let execution_class = if custom_node.is_some() || loop_identity.is_some() {
             WorkflowSchedulerTaskExecutionClass::NonRuntimeNodeEngine
         } else {
             classify_workflow_scheduler_task(
@@ -194,8 +202,21 @@ pub(crate) fn workflow_scheduler_task_graph_with_registry(
             execution_class,
             inference_task_projections.get(&node_id),
         );
-        let (non_runtime_task_template, non_runtime_diagnostics) = if let Some(custom) = custom_node
+        let (non_runtime_task_template, non_runtime_diagnostics) = if let Some(identity) =
+            loop_identity
         {
+            if input_bindings.len() != 1 || input_bindings[0].target_port_id != "prompt" {
+                return Err(WorkflowServiceError::InvalidRequest(
+                    "pure tool-loop requires exactly one prompt binding; optional authoring ports are unsupported".into(),
+                ));
+            }
+            (
+                Some(WorkflowSchedulerNonRuntimeTaskTemplate::ToolLoop {
+                    identity: identity.clone(),
+                }),
+                Vec::new(),
+            )
+        } else if let Some(custom) = custom_node {
             let ports = &custom.contract().inputs;
             if input_bindings.len() != ports.len()
                 || ports.iter().any(|port| {

@@ -31,6 +31,8 @@ See the [plans index](plans/README.md) for the artifact rules.
 
 [Trusted custom-node execution](custom-nodes.md) describes host admission,
 immutable identity, scheduler invocation and deferred authoring surfaces.
+[Pure tool loops](tool-loops.md) adds explicit host tool grants and bounded
+scheduler-owned orchestration.
 
 ## Documentation Rules
 

@@ -131,6 +131,31 @@ pub(crate) async fn execute_custom_scheduler_task(
         }
     }
     let outputs = prepared.invoke(identity, inputs).await?;
+    managed_result(task, outputs)
+}
+
+pub(crate) async fn execute_tool_loop_scheduler_task(
+    task: &WorkflowSchedulerTask,
+    results: &[WorkflowSchedulerTaskResult],
+    identity: &crate::tool_loops::ToolLoopIdentity,
+    prepared: &crate::custom_nodes::PreparedCustomNodeInvocation,
+) -> Result<WorkflowSchedulerTaskResult, WorkflowSchedulerNonRuntimeTaskAdapterError> {
+    if task.execution_class != WorkflowSchedulerTaskExecutionClass::NonRuntimeNodeEngine
+        || task.node_type != "tool-loop"
+        || task.input_bindings.len() != 1
+        || task.input_bindings[0].target_port_id != "prompt"
+    {
+        return Err(crate::custom_nodes::CustomNodeError::IdentityMismatch.into());
+    }
+    let prompt = materialized_string_input(task, results, "prompt")?;
+    let outputs = crate::scheduler::tool_loop::execute(prepared, identity, prompt).await?;
+    managed_result(task, outputs)
+}
+
+fn managed_result(
+    task: &WorkflowSchedulerTask,
+    outputs: HashMap<String, Value>,
+) -> Result<WorkflowSchedulerTaskResult, WorkflowSchedulerNonRuntimeTaskAdapterError> {
     let result = WorkflowSchedulerTaskResult {
         schema_version: WORKFLOW_SCHEDULER_TASK_RESULT_SCHEMA_VERSION,
         workflow_id: task.workflow_id.as_str().into(),
@@ -161,7 +186,8 @@ fn node_engine_inputs(
 ) -> Result<HashMap<String, Value>, WorkflowSchedulerNonRuntimeTaskAdapterError> {
     let mut inputs = HashMap::new();
     match template {
-        WorkflowSchedulerNonRuntimeTaskTemplate::CustomNode { .. } => {
+        WorkflowSchedulerNonRuntimeTaskTemplate::CustomNode { .. }
+        | WorkflowSchedulerNonRuntimeTaskTemplate::ToolLoop { .. } => {
             return Err(crate::custom_nodes::CustomNodeError::Unavailable.into())
         }
         WorkflowSchedulerNonRuntimeTaskTemplate::VectorOutput => {
@@ -286,7 +312,8 @@ fn scheduler_outputs(
     outputs: &HashMap<String, Value>,
 ) -> Result<Vec<WorkflowSchedulerTaskResultOutput>, WorkflowSchedulerNonRuntimeTaskAdapterError> {
     match template {
-        WorkflowSchedulerNonRuntimeTaskTemplate::CustomNode { .. } => {
+        WorkflowSchedulerNonRuntimeTaskTemplate::CustomNode { .. }
+        | WorkflowSchedulerNonRuntimeTaskTemplate::ToolLoop { .. } => {
             Err(crate::custom_nodes::CustomNodeError::Unavailable.into())
         }
         WorkflowSchedulerNonRuntimeTaskTemplate::VectorOutput => {
@@ -440,6 +467,7 @@ fn materialized_output<'a>(
                     Some(
                         WorkflowSchedulerNonRuntimeTaskTemplate::VectorOutput
                             | WorkflowSchedulerNonRuntimeTaskTemplate::CustomNode { .. }
+                            | WorkflowSchedulerNonRuntimeTaskTemplate::ToolLoop { .. }
                     )
                 ) || (result.workflow_id == task.workflow_id.as_str()
                     && result.workflow_run_id == task.workflow_run_id.as_str()))
