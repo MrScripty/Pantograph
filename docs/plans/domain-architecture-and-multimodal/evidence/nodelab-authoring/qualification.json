@@ -1,5 +1,5 @@
 {
-  "base": "285c48989a95caef1bcaac92eac9ff3b1be0a9ad",
+  "base": "46aad5841ca8f2185e639da44f73474af045bc13",
   "environment": {
     "os": "Linux x86_64",
     "rust": "1.92.0",
@@ -9,8 +9,8 @@
     "application_styles": true
   },
   "claims": {
-    "browser_user_workflow": "passed: actual NodeLab -> loopback -> Rust service -> filesystem create/edit/save/reopen; keyboard/pointer and focus; missing implementation blocking; exact pin retained; latest repaired-source run in browser-refresh.log.gz; original browser.log.gz retained as baseline evidence",
-    "service_tests": "1068 library +65 integration passed, zero failures/ignored",
+    "browser_user_workflow": "passed on combined source: actual styled NodeLab -> loopback -> rebuilt Rust service -> filesystem create/edit/save/reopen; keyboard/pointer and focus; exact pin retained; missing implementation blocking; failed catalog refresh/recovery preserves draft/path. Latest receipt browser-combined.log.gz",
+    "service_tests": "1084 library +65 integration passed, zero failures/ignored; both custom-node and pure-loop suites included",
     "frontend_tests": "740 passed, zero failures/ignored; 10 focused decoding/controller/presenter tests included",
     "native_tauri": "unavailable: cargo check --locked -p pantograph --bin pantograph --no-default-features fails at glib-sys: missing glib-2.0.pc; pkg-config also lacks GTK/WebKit; no native startup claim",
     "not_claimed": [
@@ -21,11 +21,12 @@
       "inference-backed/effectful tool loops",
       "release qualification"
     ],
-    "catalog_refresh": "failed refresh after successful load removes stale choices while preserving draft and saved path; focused red on baseline 802544a0, green after repair; same mounted real-browser flow passed"
+    "catalog_refresh": "focused red on 802544a0, green after repair; same mounted combined-source browser flow removes stale choices and preserves draft and saved path",
+    "hosted_test_discovery": "local exact CI commands discovered and passed 15 tool_loop tests and 10 workflow::tests::custom_nodes:: tests; original loop gate unchanged"
   },
   "source_sha256": {
     "crates/pantograph-workflow-service/examples/nodelab_host.rs": "1c9a33092e0bac9560247b8c1e158bc0405527cad7b0a280d79dc61334eed8c8",
-    "crates/pantograph-workflow-service/src/custom_nodes.rs": "1d413febbad16689c864e7945191c7bb83079530ece13fda73541178bd86f774",
+    "crates/pantograph-workflow-service/src/custom_nodes.rs": "93b016626ce454091fe6092807442184556f90b6f4ae65125af9c12a1e9c52aa",
     "crates/pantograph-workflow-service/src/custom_nodes/authoring.rs": "ab2e37ca4a68b846e8f23897891eea064730a1376c8597eb5ce00e1bf5f909ed",
     "crates/pantograph-workflow-service/src/graph/connection_insert.rs": "881afe99675e681a2bd1208f69e55f82afa881adec9ead9a6863089dd3a6f2af",
     "crates/pantograph-workflow-service/src/graph/connection_intent.rs": "d5832d05d88dd0d2dc10cb367038a0a6d5973e1275fe19e888fb411c13057199",
@@ -37,8 +38,8 @@
     "crates/pantograph-workflow-service/src/workflow.rs": "47e42061802abc91ebe6b3babf8c578116d2e0fecf51d86fa53148cbed613886",
     "crates/pantograph-workflow-service/src/workflow/custom_node_authoring_api.rs": "5bf54f01b2db4ec2ffc21b6af41291c695ff91a3b274deb80838c32020b9941d",
     "crates/pantograph-workflow-service/src/workflow/service_config.rs": "257edc58a50b37e8dee265b971e91084b0f77b0ce4031f8d105b604f33cea513",
-    "crates/pantograph-workflow-service/src/workflow/tests/custom_nodes.rs": "aa080d798774771aa419db01d83cd26401684ab06333770a74e209c601e5952f",
-    "scripts/README.md": "03bed3d3d157a4d7e4a9f2a291f4a2ab37efa2e81f87c83e3d5710a38220119a",
+    "crates/pantograph-workflow-service/src/workflow/tests/custom_nodes.rs": "39ea2a0a726a4a93e6199f6cf72d22914db7d43e4edc8d750178acc5084c55ec",
+    "scripts/README.md": "a1b99bbc7b161a5842b49b4a97e08c8042121a2b034848c35c53e22e3dbd881c",
     "scripts/check-nodelab-browser.mjs": "82f884c2fb04394168c06ba09b0432345aad059e67bc54efdc281a759b68c88f",
     "src-tauri/src/app_setup.rs": "b14c996956638c5a708156aaf8f110ce6f1fa3a175f6b03bb9ff0284bd392a50",
     "src-tauri/src/workflow/commands.rs": "24834569833ec6509300b9c8c795b9eb8be233f0c6d9c37c5d67f82b63d24b6c",
@@ -47,12 +48,31 @@
     "src/components/workbench/nodeLabPresenters.test.ts": "5debffcdba6ddc86d4b4093dceb08dbf691b7659b73a483abd8d991616faa02e",
     "src/components/workbench/nodeLabPresenters.ts": "4792bedc18bf6b55173a892e0f15bc7900b4c36fd84bfc508da3dac9c0bbb075",
     "src/services/workflow/customNodeAuthoring.test.ts": "97aa21f8487984832d03efac4f81d694b214ed065087099aca4a9b87433083dd",
-    "src/services/workflow/customNodeAuthoring.ts": "f4a11c2fa37816819db79176b2af584199c946a5e3c533482cc595362092dc08"
+    "src/services/workflow/customNodeAuthoring.ts": "f4a11c2fa37816819db79176b2af584199c946a5e3c533482cc595362092dc08",
+    ".github/workflows/quality-gates.yml": "030e50d32426e0abaa17990e683e67a29b9cdb704a2a146908c78817e5369d2f",
+    "crates/pantograph-workflow-service/src/graph/registry.rs": "ad7cfd660e85e264a0c8f9e2ddd78fa3d4fd3074ee2275a13ee33c3f998434c7",
+    "crates/pantograph-workflow-service/src/tool_loops.rs": "3dee015aefb679de08564a02ed4175d902c9836c520c1b0de072cc5a036aaa09",
+    "crates/pantograph-workflow-service/src/scheduler/tool_loop.rs": "3af80db2ce8f4a621e2e1778e1c4dede603068fc12457c8a550d752d9a0bf362"
   },
   "evidence_sha256": {
     "browser.log.gz": "6c2a15df9371220e78251fd39f27631010da2e63d41f45843e9c9dba0c3bc97e",
     "native-unavailable.log.gz": "f72bc764c185d785964c3ac95e9a0d6f24a1d999aefbd349dc143eed28d261b3",
     "catalog-refresh-red.log.gz": "c849e1ead56e2b00b0f7fc3c7e04a4cf867a99fe176476aa9b0d9658613bf720",
-    "browser-refresh.log.gz": "2ddc4d6339e12a6c43cff584156c871b94352780d060b6ee4aa49495975884e2"
+    "browser-refresh.log.gz": "2ddc4d6339e12a6c43cff584156c871b94352780d060b6ee4aa49495975884e2",
+    "browser-combined.log.gz": "a8ef7d653ecfa27ad28d01cf055ee112c4c83b03ee1d3b251e25671b37e7d598",
+    "service-combined.log.gz": "6cd931f20b55b2fc5bfd846b74e7ac0dfbcd4d61e4d175da0228192ec7374029",
+    "ci-discovery.log.gz": "272c0cad07fac982061e125acd110df89918e2147a478a2f30b9051fed19223a"
+  },
+  "integrated_dependency": {
+    "pull_request": 94,
+    "head": "fcb2d7f618f32000ed1992569d7eabf3c77cf873",
+    "merge": "46aad5841ca8f2185e639da44f73474af045bc13",
+    "production_loop_core": "unchanged from merged main; NodeLab consumes the same immutable registry without authoring loop grants"
+  },
+  "historical_evidence": {
+    "browser.log.gz": "802544a0ed5f523d2ce7a54f7859b8ed0187e63f; initial styled flow",
+    "browser-refresh.log.gz": "ff4e4de05d884f05338e70745db2400df0134926; refresh repair",
+    "catalog-refresh-red.log.gz": "regression failed on 802544a0 before repair",
+    "native-unavailable.log.gz": "original missing-GLib failure; retained unchanged"
   }
 }

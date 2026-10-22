@@ -360,6 +360,20 @@ transfers exact session IDs to an app-scoped, user-retryable cleanup owner. Stan
 continues, adding routed Frontend, TypeScript/Async, Accessibility, IPC,
 Persistence, protocol/evolution and GUI verification detail to the CN-01 routes.
 
+**Serial reconciliation (2026-10-22):** CN-03 PR94 is integrated as `46aad584`.
+Continue CN-02 on that current-main base with the same production contract.
+Preserve both admitted slices and CN-03 source unchanged. Add one edit-session
+integration regression for a saved/reopened exact loop pin: its admitted catalog
+accepts it, changed/missing catalogs retain it with blocking diagnostics, and an
+invalid new pin is rejected without mutation. This tests the shared-registry
+handoff rather than adding loop authoring or execution. Rerun both service suites,
+frontend/static gates and the real-host browser flow; bind fresh combined-source
+evidence, obtain independent review, then pass fresh exact-head CI and current-main
+rechecks. PR94 post-merge CI must also pass before PR95 merges normally.
+Add explicit hosted discovery/execution of all ten custom-node service tests;
+keep CN-03's existing fifteen-test loop gate unchanged and name the new
+edit-session regression outside that substring filter.
+
 ## Admitted CN-03 pure tool-loop slice (2026-10-22)
 
 **Authority and status:** The user authorized unfinished Pantograph paths and

@@ -631,3 +631,93 @@ async fn custom_node_authoring_saved_reopen_preserves_pin_and_scheduler_executio
         .unwrap();
     assert_eq!(result.outputs[0].value, "MIXED CASE");
 }
+
+#[tokio::test]
+async fn custom_node_edit_sessions_preserve_integrated_loop_admission() {
+    use crate::tool_loops::tests::{catalog as loop_catalog, Executor as LoopExecutor, Mode};
+    use crate::tool_loops::TOOL_LOOP_IDENTITY_FIELD;
+
+    let controller = LoopExecutor::new(Mode::RoundTrip);
+    let tool = LoopExecutor::new(Mode::Uppercase);
+    let catalog = loop_catalog(controller.clone(), tool.clone(), 3);
+    let mut graph = custom_graph(catalog.get("loop-controller").unwrap().identity());
+    let node = graph.find_node_mut("custom").unwrap();
+    node.node_type = "tool-loop".into();
+    node.data = serde_json::json!({TOOL_LOOP_IDENTITY_FIELD: catalog.tool_loop_identity("pure-loop").unwrap()});
+    graph.edges[0].target_handle = "prompt".into();
+    graph.edges[1].source_handle = "response".into();
+    let root = tempfile::tempdir().unwrap();
+    let store = FileSystemWorkflowGraphStore::new(root.path());
+    let service = WorkflowService::with_trusted_custom_nodes(catalog.clone());
+    let saved = service
+        .workflow_graph_save(
+            &store,
+            crate::WorkflowGraphSaveRequest {
+                name: "integrated-loop".into(),
+                graph,
+            },
+        )
+        .unwrap();
+    let graph = service
+        .workflow_graph_load(
+            &store,
+            crate::WorkflowGraphLoadRequest {
+                path: saved.path.clone(),
+            },
+        )
+        .unwrap()
+        .graph;
+    let pin = graph.find_node("custom").unwrap().data[TOOL_LOOP_IDENTITY_FIELD].clone();
+    let changed = loop_catalog(controller.clone(), tool.clone(), 4);
+    for (service, blocking) in [
+        (service, false),
+        (WorkflowService::with_trusted_custom_nodes(changed), true),
+        (WorkflowService::new(), true),
+    ] {
+        let edit = service
+            .workflow_graph_create_edit_session(crate::WorkflowGraphEditSessionCreateRequest {
+                graph: graph.clone(),
+                workflow_id: Some(saved.path.clone()),
+            })
+            .await
+            .unwrap();
+        let request = crate::WorkflowGraphEditSessionGraphRequest {
+            session_id: edit.session_id.clone(),
+        };
+        let snapshot = service
+            .workflow_graph_get_edit_session_graph(request.clone())
+            .await
+            .unwrap();
+        assert_eq!(
+            snapshot.graph.find_node("custom").unwrap().data[TOOL_LOOP_IDENTITY_FIELD],
+            pin
+        );
+        assert_eq!(
+            snapshot
+                .graph_diagnostics
+                .iter()
+                .any(|d| d.blocking_submission),
+            blocking,
+            "{:?}",
+            snapshot.graph_diagnostics
+        );
+        let mut invalid = snapshot.graph.find_node("custom").unwrap().clone();
+        invalid.id = "invalid-new-loop".into();
+        invalid.data[TOOL_LOOP_IDENTITY_FIELD]["max_turns"] = serde_json::json!(5);
+        assert!(service
+            .workflow_graph_add_node(crate::WorkflowGraphAddNodeRequest {
+                session_id: edit.session_id,
+                node: invalid,
+            })
+            .await
+            .is_err());
+        let after = service
+            .workflow_graph_get_edit_session_graph(request)
+            .await
+            .unwrap();
+        assert_eq!(after.graph_revision, snapshot.graph_revision);
+        assert_eq!(after.graph, snapshot.graph);
+    }
+    assert!(controller.calls.lock().is_empty());
+    assert!(tool.calls.lock().is_empty());
+}

@@ -132,5 +132,13 @@ retired. Inference-backed controllers, side-effectful tools, external workers,
 Wasm, Python, package discovery, automatic updates, streaming and inference ports
 require follow-on admission; none are inferred from a palette entry.
 
+NodeLab's creation catalog projects individual CN-01 registrations, not loop
+templates or tool grants. Existing host-pinned loop graphs can be reopened using
+the same registry; their pins remain unchanged and unavailable/stale grants are
+blocking. A future loop-authoring surface must select a complete host-admitted
+`ToolLoopIdentity` and produce exactly one prompt binding under the
+[CN-03 contract](tool-loops.md); optional authoring ports and new grants remain
+unsupported. No scheduler or loop authority is owned by NodeLab.
+
 See [ADR-018](adr/ADR-018-trusted-custom-node-adapter.md) and the
 [admitted implementation slice](plans/domain-architecture-and-multimodal/plan.md#admitted-custom-node-adapter-slice-2026-10-21).
