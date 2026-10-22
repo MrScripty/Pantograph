@@ -77,8 +77,8 @@ it does not prove that external effects ceased or rolled back.
 The supported slice is a host-registered, saved/reopened source → custom string
 transformation → sink graph executed through scheduler sessions. The service's
 saved-graph inspection and run/version inspection use its admitted contracts.
-Default service construction remains built-in-only. Task graph schema version 8
-adds the `custom_node` non-runtime template; identity adapter version 1 owns this
+Default service construction remains built-in-only. Task graph schema version 9
+retains the `custom_node` non-runtime template and adds `tool_loop`; identity adapter version 1 owns this
 bounded contract. Coordinated Rust producers/consumers are updated together;
 older implementations cannot execute that template.
 
@@ -124,13 +124,13 @@ existing commands. Local Agent and runtime publishing remain unavailable or
 unsupported. Arbitrary packages still need independently admitted artifact
 verification, isolation and lifecycle contracts.
 
-A scheduler-managed tool loop must consume this exact admission and invocation
-identity, plus its own typed tool authority, bounded iterations, cancellation,
-result and side-effect/idempotency contracts. These string transforms grant no
-tool capability. The deliberately retired static loop stays retired. External
-workers, Wasm, Python, package discovery, automatic updates, side-effectful tools,
-streaming and inference ports require follow-on design admission; none are
-inferred from a palette entry.
+The [scheduler-managed pure tool-loop adapter](tool-loops.md) consumes this
+exact admission and invocation identity plus separate host tool grants. It
+supports a bounded pure controller and pure string-transform tools; an ordinary
+string registration grants no tool capability. The retired static loop stays
+retired. Inference-backed controllers, side-effectful tools, external workers,
+Wasm, Python, package discovery, automatic updates, streaming and inference ports
+require follow-on admission; none are inferred from a palette entry.
 
 See [ADR-018](adr/ADR-018-trusted-custom-node-adapter.md) and the
 [admitted implementation slice](plans/domain-architecture-and-multimodal/plan.md#admitted-custom-node-adapter-slice-2026-10-21).

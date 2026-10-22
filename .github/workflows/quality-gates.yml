@@ -229,6 +229,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Checkout Pumas-Library
         uses: actions/checkout@v4
@@ -426,6 +428,12 @@ jobs:
           cargo test -p pantograph-workflow-service --lib workflow::task_run_summary::tests:: -- --list > "$RUNNER_TEMP/task-summary-tests.list"
           python3 -c 'import pathlib, sys; names = [line for line in pathlib.Path(sys.argv[1]).read_text().splitlines() if line.startswith("workflow::task_run_summary::tests::") and line.endswith(": test")]; print("Task summary tests discovered:", len(names)); sys.exit(0 if names else 1)' "$RUNNER_TEMP/task-summary-tests.list"
           cargo test -p pantograph-workflow-service --lib workflow::task_run_summary::tests::
+      - name: Run exact-head scheduler-managed tool-loop regression suite
+        run: |
+          cargo test --locked -p pantograph-workflow-service --lib tool_loop -- --list > "$RUNNER_TEMP/tool-loop-tests.list"
+          python3 -c 'import pathlib, sys; names = [line for line in pathlib.Path(sys.argv[1]).read_text().splitlines() if "tool_loop" in line and line.endswith(": test")]; print("Tool-loop tests discovered:", len(names)); sys.exit(0 if len(names) == 15 else 1)' "$RUNNER_TEMP/tool-loop-tests.list"
+          cargo test --locked -p pantograph-workflow-service --lib tool_loop
+
       - name: Run complete session execution regression suite
         run: |
           cargo test -p pantograph-workflow-service --lib workflow::tests::session_execution:: -- --list > "$RUNNER_TEMP/session-execution-tests.list"

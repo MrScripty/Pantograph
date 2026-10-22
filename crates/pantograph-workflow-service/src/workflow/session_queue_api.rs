@@ -258,7 +258,10 @@ impl WorkflowService {
                 })?;
             let custom = matches!(
                 task.non_runtime_task_template,
-                Some(super::WorkflowSchedulerNonRuntimeTaskTemplate::CustomNode { .. })
+                Some(
+                    super::WorkflowSchedulerNonRuntimeTaskTemplate::CustomNode { .. }
+                        | super::WorkflowSchedulerNonRuntimeTaskTemplate::ToolLoop { .. }
+                )
             );
             if task.execution_class != WorkflowSchedulerTaskExecutionClass::RuntimeInference
                 && !custom

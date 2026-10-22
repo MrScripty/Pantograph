@@ -69,6 +69,14 @@ pub enum CustomNodeError {
     Panicked,
     #[error("custom-node attempt is already running")]
     AlreadyRunning,
+    #[error("invalid tool-loop admission: {0}")]
+    InvalidLoop(&'static str),
+    #[error("tool-loop controller returned an invalid bounded action or state")]
+    InvalidLoopAction,
+    #[error("tool-loop requested a tool outside its host grant")]
+    UnauthorizedTool,
+    #[error("tool-loop exhausted its admitted turn budget")]
+    TurnLimit,
 }
 
 /// Immutable trusted implementation. No deserializer or mutable executor access.
@@ -189,6 +197,7 @@ fn validate_ports(ports: &[PortContract]) -> Result<(), CustomNodeError> {
 #[derive(Default)]
 pub struct CustomNodeCatalog {
     entries: BTreeMap<String, TrustedCustomNode>,
+    pub(crate) tool_loops: BTreeMap<String, crate::tool_loops::ToolLoopIdentity>,
     active: Mutex<HashMap<InvocationKey, watch::Sender<bool>>>,
 }
 
@@ -212,8 +221,33 @@ impl CustomNodeCatalog {
         }
         Ok(Self {
             entries,
+            tool_loops: BTreeMap::new(),
             active: Mutex::new(HashMap::new()),
         })
+    }
+
+    /// Admit pure loops and all their primitives together before service creation.
+    /// No live catalog mutation or graph-supplied registration is supported.
+    pub fn try_new_with_tool_loops(
+        nodes: Vec<TrustedCustomNode>,
+        loops: Vec<crate::tool_loops::ToolLoopRegistration>,
+    ) -> Result<Self, CustomNodeError> {
+        let mut catalog = Self::try_new(nodes)?;
+        for registration in loops {
+            let identity = crate::tool_loops::ToolLoopIdentity::admit(registration, &catalog)?;
+            if catalog
+                .tool_loops
+                .insert(identity.id.clone(), identity)
+                .is_some()
+            {
+                return Err(CustomNodeError::InvalidLoop("duplicate loop id"));
+            }
+        }
+        Ok(catalog)
+    }
+
+    pub fn tool_loop_identity(&self, id: &str) -> Option<&crate::tool_loops::ToolLoopIdentity> {
+        self.tool_loops.get(id)
     }
 
     pub fn get(&self, node_type: &str) -> Option<&TrustedCustomNode> {
@@ -285,6 +319,23 @@ impl PreparedCustomNodeInvocation {
         identity: &CustomNodeIdentity,
         inputs: HashMap<String, Value>,
     ) -> Result<HashMap<String, Value>, CustomNodeError> {
+        self.invoke_primitive(identity, inputs, None).await
+    }
+
+    pub(crate) fn catalog(&self) -> &CustomNodeCatalog {
+        &self.catalog
+    }
+
+    pub(crate) fn invocation(&self) -> &CustomNodeInvocation {
+        &self.invocation
+    }
+
+    pub(crate) async fn invoke_primitive(
+        &self,
+        identity: &CustomNodeIdentity,
+        inputs: HashMap<String, Value>,
+        primitive: Option<crate::tool_loops::ToolLoopPrimitiveInvocation>,
+    ) -> Result<HashMap<String, Value>, CustomNodeError> {
         let invocation = &self.invocation;
         let mut cancelled = self.cancelled.clone();
         if *cancelled.borrow() {
@@ -301,6 +352,9 @@ impl PreparedCustomNodeInvocation {
         let context = Context::new();
         let mut extensions = ExecutorExtensions::new();
         extensions.set(CUSTOM_NODE_INVOCATION_EXTENSION, invocation.clone());
+        if let Some(primitive) = primitive {
+            extensions.set(crate::tool_loops::TOOL_LOOP_PRIMITIVE_EXTENSION, primitive);
+        }
         let callback = AssertUnwindSafe(async {
             node.executor
                 .execute(&invocation.task_id, inputs, &context, &extensions)

@@ -23,6 +23,7 @@ records own decisions that need independent history and consequences.
 | [016](ADR-016-workflow-error-diagnostics-spine.md) | Workflow error diagnostics spine |
 | [017](ADR-017-rust-workspace-policy.md) | Rust workspace metadata, lint, and dependency policy |
 | [018](ADR-018-trusted-custom-node-adapter.md) | Trusted custom-node admission, identity and scheduler invocation |
+| [019](ADR-019-scheduler-managed-pure-tool-loops.md) | Scheduler-managed pure tool-loop authority and bounded execution |
 
 ADR status is authoritative inside each record. Superseded implementation
 plans referenced by older ADRs are historical provenance, not current

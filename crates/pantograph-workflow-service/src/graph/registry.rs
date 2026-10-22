@@ -141,13 +141,30 @@ impl NodeRegistry {
             .map_err(|error| {
                 crate::workflow::WorkflowServiceError::InvalidRequest(error.to_string())
             })?;
-        super::workflow_executable_topology_with_node_versions(graph, versions)
+        let mut topology = super::workflow_executable_topology_with_node_versions(graph, versions)?;
+        // Loop behavior is selected per instance, not globally by node type.
+        for node in &mut topology.nodes {
+            if node.node_type == "tool-loop" {
+                let source = graph
+                    .nodes
+                    .iter()
+                    .find(|source| source.id == node.node_id)
+                    .expect("topology nodes originate in this graph");
+                if let Some(identity) = self.tool_loop_for_node(source).map_err(|error| {
+                    crate::workflow::WorkflowServiceError::InvalidRequest(error.to_string())
+                })? {
+                    node.behavior_digest = identity.behavior_digest(&node.behavior_digest);
+                }
+            }
+        }
+        Ok(topology)
     }
 
     pub(crate) fn validate_custom_node_identity(
         &self,
         node: &super::GraphNode,
     ) -> Result<(), crate::custom_nodes::CustomNodeError> {
+        self.tool_loop_for_node(node)?;
         if let Some(custom) = self.custom_nodes.get(&node.node_type) {
             let identity = node
                 .data
@@ -162,6 +179,42 @@ impl NodeRegistry {
             }
         }
         Ok(())
+    }
+
+    pub(crate) fn tool_loop_for_node(
+        &self,
+        node: &super::GraphNode,
+    ) -> Result<Option<&crate::tool_loops::ToolLoopIdentity>, crate::custom_nodes::CustomNodeError>
+    {
+        use crate::custom_nodes::CustomNodeError;
+        if node.node_type != "tool-loop" {
+            return Ok(None);
+        }
+        let pin = node
+            .data
+            .get(crate::tool_loops::TOOL_LOOP_IDENTITY_FIELD)
+            .and_then(|value| {
+                serde_json::from_value::<crate::tool_loops::ToolLoopIdentity>(value.clone()).ok()
+            })
+            .ok_or(CustomNodeError::IdentityMismatch)?;
+        let admitted = self
+            .custom_nodes
+            .tool_loop_identity(&pin.id)
+            .ok_or(CustomNodeError::Unavailable)?;
+        if &pin != admitted
+            || [
+                "definition",
+                "tools",
+                "max_turns",
+                "system_prompt",
+                "context",
+            ]
+            .iter()
+            .any(|field| node.data.get(*field).is_some())
+        {
+            return Err(CustomNodeError::IdentityMismatch);
+        }
+        Ok(Some(admitted))
     }
 
     pub fn get_definition(&self, node_type: &str) -> Option<&NodeDefinition> {
@@ -315,5 +368,42 @@ mod tests {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tool_loop_tests {
+    use super::*;
+
+    #[test]
+    fn tool_loop_behavior_identity_retains_the_canonical_descriptor_digest() {
+        use crate::tool_loops::tests::{catalog, Executor, Mode};
+        let catalog = catalog(
+            Executor::new(Mode::RoundTrip),
+            Executor::new(Mode::Uppercase),
+            3,
+        );
+        let graph = super::super::WorkflowGraph {
+            nodes: vec![super::super::GraphNode {
+                id: "loop".into(),
+                node_type: "tool-loop".into(),
+                position: super::super::Position { x: 0.0, y: 0.0 },
+                data: serde_json::json!({crate::tool_loops::TOOL_LOOP_IDENTITY_FIELD: catalog.tool_loop_identity("pure-loop").unwrap()}),
+            }],
+            edges: vec![],
+            derived_graph: None,
+        };
+        let mut registry = NodeRegistry::with_custom_nodes(catalog);
+        let before = registry.executable_topology(&graph).unwrap();
+        registry
+            .contracts
+            .get_mut("tool-loop")
+            .unwrap()
+            .contract_digest = Some("node-behavior-blake3:changed-canonical-contract".into());
+        let after = registry.executable_topology(&graph).unwrap();
+        assert_ne!(
+            before.nodes[0].behavior_digest,
+            after.nodes[0].behavior_digest
+        );
     }
 }

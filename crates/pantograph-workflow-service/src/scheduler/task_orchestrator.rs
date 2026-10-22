@@ -1236,7 +1236,10 @@ impl WorkflowSchedulerTaskOrchestrator {
             .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)?;
         let custom_invocation = if matches!(
             task.non_runtime_task_template,
-            Some(WorkflowSchedulerNonRuntimeTaskTemplate::CustomNode { .. })
+            Some(
+                WorkflowSchedulerNonRuntimeTaskTemplate::CustomNode { .. }
+                    | WorkflowSchedulerNonRuntimeTaskTemplate::ToolLoop { .. }
+            )
         ) {
             Some(Arc::new(
                 self.node_registry
@@ -1282,22 +1285,37 @@ impl WorkflowSchedulerTaskOrchestrator {
         &self,
         started: &StartedNonRuntimeTaskExecution,
     ) -> Result<WorkflowSchedulerTaskResult, WorkflowSchedulerTaskOrchestratorError> {
-        let result = if let Some(WorkflowSchedulerNonRuntimeTaskTemplate::CustomNode { identity }) =
-            &started.task.non_runtime_task_template
-        {
-            crate::workflow::non_runtime_task_adapter::execute_custom_scheduler_task(
-                &started.task,
-                &started.materialized_results,
-                identity,
-                started.custom_invocation.as_deref().ok_or_else(|| {
-                    WorkflowSchedulerTaskOrchestratorError::NonRuntimeTaskAdapter(
-                        crate::custom_nodes::CustomNodeError::Unavailable.into(),
-                    )
-                })?,
-            )
-            .await
-        } else {
-            execute_non_runtime_scheduler_task(&started.task, &started.materialized_results).await
+        let result = match &started.task.non_runtime_task_template {
+            Some(WorkflowSchedulerNonRuntimeTaskTemplate::CustomNode { identity }) => {
+                crate::workflow::non_runtime_task_adapter::execute_custom_scheduler_task(
+                    &started.task,
+                    &started.materialized_results,
+                    identity,
+                    started.custom_invocation.as_deref().ok_or_else(|| {
+                        WorkflowSchedulerTaskOrchestratorError::NonRuntimeTaskAdapter(
+                            crate::custom_nodes::CustomNodeError::Unavailable.into(),
+                        )
+                    })?,
+                )
+                .await
+            }
+            Some(WorkflowSchedulerNonRuntimeTaskTemplate::ToolLoop { identity }) => {
+                crate::workflow::non_runtime_task_adapter::execute_tool_loop_scheduler_task(
+                    &started.task,
+                    &started.materialized_results,
+                    identity,
+                    started.custom_invocation.as_deref().ok_or_else(|| {
+                        WorkflowSchedulerTaskOrchestratorError::NonRuntimeTaskAdapter(
+                            crate::custom_nodes::CustomNodeError::Unavailable.into(),
+                        )
+                    })?,
+                )
+                .await
+            }
+            _ => {
+                execute_non_runtime_scheduler_task(&started.task, &started.materialized_results)
+                    .await
+            }
         };
         result.map_err(WorkflowSchedulerTaskOrchestratorError::NonRuntimeTaskAdapter)
     }
@@ -3713,7 +3731,8 @@ fn non_runtime_input_readiness(
     };
 
     match template {
-        WorkflowSchedulerNonRuntimeTaskTemplate::CustomNode { .. } => {
+        WorkflowSchedulerNonRuntimeTaskTemplate::CustomNode { .. }
+        | WorkflowSchedulerNonRuntimeTaskTemplate::ToolLoop { .. } => {
             for binding in &task.input_bindings {
                 match materialized_bound_output(task, results, binding) {
                     MaterializedBindingValue::Ready(WorkflowSchedulerTaskResultValue::String(
