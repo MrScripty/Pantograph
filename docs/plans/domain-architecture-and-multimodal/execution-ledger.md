@@ -848,3 +848,21 @@ first by parent instruction; CN-02 must then reconcile current main, preserve it
 registry/loop validations, rerun combined affected tests and pass exact-head CI
 before merge. The local/remote feature branch and worktree are retained pending
 that disposition, with source and evidence preserved.
+
+While dependency integration was pending, a reachable catalog-refresh failure
+left earlier Create choices visible. The focused regression failed on `802544a0`
+and passes after clearing/publishing the catalog before transport; authored draft
+and saved path remain unchanged. The same mounted real-browser flow passes
+failed refresh and recovery. Its first probe inspected old-session closure before
+Reopen completed; bounded observation now waits for replacement completion and
+retains the original closure assertion. Original browser/native receipts remain;
+the qualification manifest binds the repaired source and additional receipts.
+No backend, scheduler or audit behavior changed. This repair remains local until
+the required PR94 integration/current-main qualification.
+
+Hosted PR95 source/build/native-IPC checks passed on `802544a0`; the required
+audit failed with an actual advisory-bulk HTTP 503. PR94 likewise remains blocked
+on audit service failures. No audit retries or gate changes were requested here.
+Local native provisioning inspection stopped when `apt-cache policy` was denied
+reading `/etc/apt/apt.conf.d/80-applied-apt-retries`; no package installation or
+privileged retry was attempted. This does not qualify native startup/interaction.

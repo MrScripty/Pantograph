@@ -23,6 +23,7 @@ let browser;
 let socket;
 const commands = [];
 const sessions = [];
+let failRealCatalog = false;
 try {
   await symlink(path.join(repo, 'node_modules'), path.join(fixture, 'node_modules'));
   await writeFile(path.join(fixture, 'index.html'), '<div id="app"></div><script type="module" src="/main.js"></script>');
@@ -56,7 +57,7 @@ try {
           const command = decodeURIComponent(url.pathname.split('/').at(-1));
           const args = JSON.parse(body);
           commands.push(command);
-          const result = mode === 'error' ? { ok: false, error: { code: 'runtime_not_ready', message: 'Qualification host unavailable' } } : await (mode === 'empty' ? emptyHost : realHost)(command, args);
+          const result = (mode === 'error' || (mode === 'real' && failRealCatalog && command === 'get_custom_node_authoring_catalog')) ? { ok: false, error: { code: 'runtime_not_ready', message: 'Qualification host unavailable' } } : await (mode === 'empty' ? emptyHost : realHost)(command, args);
           if (result.ok && command === 'create_custom_node_draft') sessions.push(result.value.session_id);
           response.writeHead(result.ok ? 200 : 400, { 'Content-Type': 'application/json' }).end(JSON.stringify(result.ok ? result.value : result.error));
           return;
@@ -151,18 +152,38 @@ try {
   const file = (await realHost('load_workflow', { path: savedPath })).value;
   assert.equal(file.graph.nodes.find(node => node.node_type === 'text-input').data.text, 'Saved Mixed case');
   const pin = file.graph.nodes.find(node => node.id === 'custom').data.custom_node_identity;
-  await enter('input', savedPath); await clickButton('Reopen saved workflow'); await waitText('Graph contract valid');
+  await enter('input', savedPath); await clickButton('Reopen saved workflow');
+  const reopenDeadline = Date.now() + 10000;
+  while ((await realHost('get_node_lab_draft', { executionId: sessions[0] })).ok && Date.now() < reopenDeadline) {
+    await new Promise(resolve => setTimeout(resolve, 30));
+  }
+  while (await evaluate(() => document.querySelector('[aria-label="NodeLab authoring"]')?.getAttribute('aria-busy') === 'true')) {
+    assert.ok(Date.now() < reopenDeadline, 'Reopen must finish before inspecting the replacement');
+    await new Promise(resolve => setTimeout(resolve, 30));
+  }
+  await waitText('Graph contract valid');
   assert.equal(await evaluate(() => document.querySelector('textarea')?.value), 'Saved Mixed case');
   const reloaded = (await realHost('load_workflow', { path: savedPath })).value;
   assert.deepEqual(reloaded.graph.nodes.find(node => node.id === 'custom').data.custom_node_identity, pin);
   assert.equal((await realHost('get_node_lab_draft', { executionId: sessions[0] })).error.code, 'session_not_found');
+  // A failed refresh cannot advertise stale implementations or discard the authored draft.
+  failRealCatalog = true;
+  await clickButton('Refresh catalog'); await waitText('Qualification host unavailable');
+  assert.equal(await evaluate(() => [...document.querySelectorAll('button')].some(button => button.textContent.startsWith('Create '))), false);
+  assert.equal(await evaluate(() => document.querySelector('textarea')?.value), 'Saved Mixed case');
+  assert.equal(await evaluate(() => document.querySelector('code')?.textContent), savedPath);
+  assert.equal((await text()).includes('This host has no admitted custom nodes'), false);
+  failRealCatalog = false;
+  await clickButton('Refresh catalog'); await waitText('Create Host uppercase draft');
+  assert.equal(await evaluate(() => document.querySelector('textarea')?.value), 'Saved Mixed case');
+  assert.equal(await evaluate(() => document.querySelector('code')?.textContent), savedPath);
   // Same saved graph opened on a host without its implementation stays visible and blocked.
   await emptyHost('save_workflow', { name: 'stale', graph: file.graph });
   await navigate(emptyOrigin); await waitText('This host has no admitted custom nodes');
   await enter('input', '.pantograph/workflows/stale.json'); await clickButton('Reopen saved workflow'); await waitText('Blocks execution:');
   assert.ok((await text()).includes('host-uppercase'));
   assert.ok(!commands.some(command => command.includes('run_execution') || command.includes('register') || command.includes('publish')));
-  console.log(JSON.stringify({ ok: true, claims: ['real empty catalog', 'transport failure distinct from empty', 'keyboard creation and visible focus', 'pointer edit/save/reopen through Rust filesystem', 'exact pin preserved', 'replaced session closed', 'missing implementation visible and blocking'], mode: 'headless Chromium, disposable profile, no sandbox, GPU disabled', nativeTauri: 'not qualified' }, null, 2));
+  console.log(JSON.stringify({ ok: true, claims: ['real empty catalog', 'transport failure distinct from empty', 'keyboard creation and visible focus', 'pointer edit/save/reopen through Rust filesystem', 'exact pin preserved', 'replaced session closed', 'missing implementation visible and blocking', 'failed catalog refresh hides stale choices and preserves draft'], mode: 'headless Chromium, disposable profile, no sandbox, GPU disabled', nativeTauri: 'not qualified' }, null, 2));
 } finally {
   socket?.close();
   if (browser && browser.exitCode === null) { browser.kill('SIGTERM'); await new Promise(resolve => { browser.once('exit', resolve); setTimeout(resolve, 2000).unref(); }); }

@@ -34,7 +34,11 @@ export class NodeLabController {
   }
   retryCleanup(): Promise<void> { return this.perform(() => this.service.retryCleanup()); }
   loadCatalog(): Promise<void> {
-    return this.perform(async () => { this.view.catalog = await this.service.catalog(); });
+    return this.perform(async () => {
+      this.view.catalog = null;
+      this.publish();
+      this.view.catalog = await this.service.catalog();
+    });
   }
   private async replace(create: () => Promise<NodeLabDraft>): Promise<void> {
     const next = await create();

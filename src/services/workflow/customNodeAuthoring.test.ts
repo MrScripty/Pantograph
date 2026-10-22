@@ -45,22 +45,29 @@ test('invalid newly created response closes its session instead of leaking it', 
 });
 
 test('controller distinguishes empty catalog from failure and closes superseded drafts', async () => {
-  let fail = false;
+  let mode: 'empty' | 'full' | 'failed' = 'empty';
   let counter = 0;
   const closed: string[] = [];
   const service = new NodeLabService(async (command, args) => {
     if (command === 'get_custom_node_authoring_catalog') {
-      if (fail) throw new Error('host unavailable');
-      return { contract_version: 1, nodes: [] };
+      if (mode === 'failed') throw new Error('host unavailable');
+      return mode === 'empty' ? { contract_version: 1, nodes: [] } : catalog();
     }
     if (command === 'remove_execution') { closed.push(String(args?.executionId)); return null; }
     return snapshot(`edit-${++counter}`);
   });
   const controller = new NodeLabController(service, () => {});
   await controller.loadCatalog(); assert.deepEqual(controller.view.catalog, []); assert.equal(controller.view.error, null);
-  fail = true; await controller.loadCatalog(); assert.equal(controller.view.error, 'host unavailable');
+  mode = 'full'; await controller.loadCatalog(); assert.equal(controller.view.catalog?.length, 1);
   const selected = parseCustomNodeCatalog(catalog())[0];
-  await controller.create(selected); await controller.create(selected);
+  await controller.create(selected);
+  controller.view.savedPath = 'saved-current.json';
+  const before = structuredClone(controller.view.draft);
+  mode = 'failed'; await controller.loadCatalog(); assert.equal(controller.view.error, 'host unavailable');
+  assert.equal(controller.view.catalog, null, 'failed refresh must not advertise stale creation choices');
+  assert.deepEqual(controller.view.draft, before, 'catalog failure must preserve the current draft');
+  assert.equal(controller.view.savedPath, 'saved-current.json');
+  await controller.create(selected);
   assert.deepEqual(closed, ['edit-1']);
   await controller.dispose(); assert.deepEqual(closed, ['edit-1', 'edit-2']);
 });
