@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::graph::WorkflowRuntimeSourceContext;
 
-pub const WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION: u16 = 8;
+pub const WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION: u16 = 9;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
@@ -118,6 +118,9 @@ pub enum WorkflowSchedulerNonRuntimeTaskTemplate {
     },
     CustomNode {
         identity: crate::custom_nodes::CustomNodeIdentity,
+    },
+    ToolLoop {
+        identity: crate::tool_loops::ToolLoopIdentity,
     },
 }
 

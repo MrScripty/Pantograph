@@ -14,6 +14,7 @@ pub mod graph;
 mod inference_dependency_planning;
 mod scheduler;
 pub mod technical_fit;
+pub mod tool_loops;
 pub mod trace;
 pub mod workflow;
 

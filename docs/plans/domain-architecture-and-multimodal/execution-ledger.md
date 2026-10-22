@@ -1,5 +1,64 @@
 # Execution Ledger
 
+## 2026-10-22 — CN-03 scheduler-managed pure tool loops
+
+User-authorized unfinished Pantograph implementation; parent delegated CN-03.
+Fetched actual main `285c48989a95caef1bcaac92eac9ff3b1be0a9ad` (includes PR93
+`2e517f58683792f5946a6ac883740219475eed06` and README PR79). Isolated branch
+`codex/cn03-scheduler-tool-loop`, worktree `/workspace/pantograph-cn03`; the
+saved environment's `work` branch remains untouched. No AGENTS.md was found.
+Coding-Standards inspected at `73bd032b8840656e104c3748c4b73cc197bffb17`:
+Core/Router; Implementation, Verification/oracles, Proportionality, Planning,
+Commit, Documentation; Contracts/evolution, Architecture, Concurrency,
+Security; Rust/API/async and Library/Persistence profiles. The parent request
+supplies implementation authority; no additional permission ceremony applies.
+
+Implemented the [ADR-019](../../adr/ADR-019-scheduler-managed-pure-tool-loops.md)
+pure-controller slice, not inference-backed agent execution. Immutable host
+registrations pin CN-01 primitives and explicit tool grants/budget. Canonical
+graph and scheduler template resolve the same catalog; behavior digest combines
+canonical descriptor and selected loop identity. Scheduler start/readiness,
+prepared invocation, cancellation/commit gate and terminal owner remain the
+existing ones. Whole-loop deadline, bounded serial progress and latest
+observation prevent unbounded state/work. Failed/cancelled attempts commit no
+partial loop outputs. No UI/edit-session surface, dynamic loader, model readiness
+or static loop was added.
+
+Verification on the implementation tree:
+
+- `cargo test --locked -p pantograph-workflow-service --lib --test contract
+  --test artifact_store`: 1,079 library, 31 contract and 13 artifact-store tests
+  passed, zero failures. The 15 named tool-loop tests cover complete
+  saved/reopened scheduler→sink execution, exact authority, primitive ownership,
+  maximum progress/call IDs, invalid state/output, callback failure/panic,
+  exhaustion, whole-loop/outer timeout, pre/in-flight cancellation and the
+  returned-callback/before-commit race. The positive graph fixture uses a
+  zero-inference validation record; it is not model-readiness evidence.
+- Independent GPT-6.1 Sol High read-only source review approved the bounded
+  slice after correcting canonical descriptor digest composition and the
+  source/sink IO-discovery fixture. No remaining source findings; exact committed
+  head confirmation is pending.
+- Package all-target Clippy passed (the existing inference dead-code warning
+  remains); scheduler-only guardrail and selected-file formatting passed.
+  Staged/range traceability and hosted exact-head CI are being finalized; their
+  final outcomes belong in the PR. Quality-gates Rust tests now explicitly check out PR head and discover
+  exactly 15 tool-loop tests before execution.
+
+Acceptance remains `Verifying`/`partial` until exact-head source/check evidence
+and serial CN-02 integration reconciliation. CN-02 task
+`01a15fcf-681a-751d-9b21-132ff2a3c02a` owns authoring; no changes to its
+UI/edit-session files. Shared dependency is the immutable CN-01 catalog; this
+slice adds `try_new_with_tool_loops`, `tool_loop_identity` and a schema-9 template.
+Parent must serially reconcile registry validation changes and rerun both suites
+on any combined head before merging. PR92 remains draft pending actual licensed
+trained-weight T3 qualification; no such evidence was produced.
+
+Not run: actual model/inference-backed loop, side-effectful tools, GPU/hardware,
+GUI/NodeLab, cold code replay, full workspace/native/binding/release acceptance.
+Retain the branch/worktree protected by its named ref for parent review and
+integration; retire only after an explicit terminal commit disposition. No merge,
+force push or branch deletion is authorized by these local passing checks.
+
 ## 2026-10-21 — Trusted custom-node scheduler adapter
 
 Continued the Active plan with the admitted minimal contract before production

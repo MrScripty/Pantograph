@@ -157,6 +157,7 @@ exact accepted decision documents to current documentation owners:
 - ADR-017: contributor workspace policy and verification procedure,
   owned by [development](../docs/development.md)
 - Trusted custom-node adapter: host admission, immutable identity and scheduler invocation, owned by [the consumer contract](../docs/custom-nodes.md)
+- Scheduler-managed pure tool loops: host grants, bounded progress and final result ownership, owned by [the tool-loop contract](../docs/tool-loops.md)
 - The map itself: the gate's declared coverage, owned by this guide
 
 Changing a mapped decision or its mapping requires updating that boundary's
