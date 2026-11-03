@@ -1,0 +1,240 @@
+{
+  "contract_version": 1,
+  "model_ref": {
+    "model_id": "synthetic/asr-fixture",
+    "revision": "synthetic-r1"
+  },
+  "task_kind": "audio_transcription",
+  "descriptor_fingerprint": "iface.test.cpu_audio.v1",
+  "inputs": [
+    {
+      "port_id": "audio",
+      "label": "Small WAV audio",
+      "direction": "input",
+      "requirement": "required",
+      "value_type": {
+        "category": "structured",
+        "kind": "json"
+      },
+      "options": {
+        "kind": "none"
+      },
+      "availability": {
+        "status": "available"
+      }
+    },
+    {
+      "port_id": "language",
+      "label": "Language",
+      "direction": "input",
+      "requirement": "optional",
+      "value_type": {
+        "category": "scalar",
+        "kind": "string"
+      },
+      "options": {
+        "kind": "none"
+      },
+      "availability": {
+        "status": "available"
+      }
+    },
+    {
+      "port_id": "prompt",
+      "label": "Prompt",
+      "direction": "input",
+      "requirement": "optional",
+      "value_type": {
+        "category": "scalar",
+        "kind": "string"
+      },
+      "options": {
+        "kind": "none"
+      },
+      "availability": {
+        "status": "available"
+      }
+    },
+    {
+      "port_id": "asr_task",
+      "label": "ASR task",
+      "direction": "input",
+      "requirement": "optional",
+      "value_type": {
+        "category": "scalar",
+        "kind": "string"
+      },
+      "options": {
+        "kind": "none"
+      },
+      "availability": {
+        "status": "available"
+      }
+    },
+    {
+      "port_id": "chunk_length_s",
+      "label": "Chunk length (seconds)",
+      "direction": "input",
+      "requirement": "optional",
+      "value_type": {
+        "category": "scalar",
+        "kind": "f64"
+      },
+      "options": {
+        "kind": "none"
+      },
+      "availability": {
+        "status": "available"
+      }
+    },
+    {
+      "port_id": "extra_options",
+      "label": "Backend options (empty only)",
+      "direction": "input",
+      "requirement": "optional",
+      "value_type": {
+        "category": "structured",
+        "kind": "json"
+      },
+      "options": {
+        "kind": "none"
+      },
+      "availability": {
+        "status": "available"
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "port_id": "response",
+      "label": "Response",
+      "direction": "output",
+      "requirement": "required",
+      "value_type": {
+        "category": "scalar",
+        "kind": "string"
+      },
+      "options": {
+        "kind": "none"
+      },
+      "availability": {
+        "status": "available"
+      }
+    },
+    {
+      "port_id": "stream",
+      "label": "Stream",
+      "direction": "output",
+      "requirement": "required",
+      "value_type": {
+        "category": "structured",
+        "kind": "json"
+      },
+      "options": {
+        "kind": "none"
+      },
+      "availability": {
+        "status": "available"
+      }
+    },
+    {
+      "port_id": "text",
+      "label": "Text",
+      "direction": "output",
+      "requirement": "required",
+      "value_type": {
+        "category": "scalar",
+        "kind": "string"
+      },
+      "options": {
+        "kind": "none"
+      },
+      "availability": {
+        "status": "available"
+      }
+    },
+    {
+      "port_id": "language",
+      "label": "Language",
+      "direction": "output",
+      "requirement": "optional",
+      "value_type": {
+        "category": "scalar",
+        "kind": "string"
+      },
+      "options": {
+        "kind": "none"
+      },
+      "availability": {
+        "status": "available"
+      }
+    },
+    {
+      "port_id": "duration_seconds",
+      "label": "Duration seconds",
+      "direction": "output",
+      "requirement": "optional",
+      "value_type": {
+        "category": "structured",
+        "kind": "json"
+      },
+      "options": {
+        "kind": "none"
+      },
+      "availability": {
+        "status": "available"
+      }
+    },
+    {
+      "port_id": "segments",
+      "label": "Segments",
+      "direction": "output",
+      "requirement": "required",
+      "value_type": {
+        "category": "structured",
+        "kind": "json"
+      },
+      "options": {
+        "kind": "none"
+      },
+      "availability": {
+        "status": "available"
+      }
+    },
+    {
+      "port_id": "metadata",
+      "label": "Metadata",
+      "direction": "output",
+      "requirement": "required",
+      "value_type": {
+        "category": "structured",
+        "kind": "json"
+      },
+      "options": {
+        "kind": "none"
+      },
+      "availability": {
+        "status": "available"
+      }
+    },
+    {
+      "port_id": "diagnostics",
+      "label": "Diagnostics",
+      "direction": "output",
+      "requirement": "required",
+      "value_type": {
+        "category": "structured",
+        "kind": "json"
+      },
+      "options": {
+        "kind": "none"
+      },
+      "availability": {
+        "status": "available"
+      }
+    }
+  ],
+  "availability": {
+    "status": "available"
+  }
+}

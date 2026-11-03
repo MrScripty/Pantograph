@@ -1,0 +1,18 @@
+{
+  "model_seed": 11,
+  "synthetic_untrained": true,
+  "torch": "2.14.1+cpu",
+  "transformers": "4.53.3",
+  "parameter_count": 5392,
+  "chat_template": "{% for message in messages %}{{ message['role'] }}:{{ message['content'] }};{% endfor %}{% if add_generation_prompt %}assistant:{% endif %}",
+  "sha256": {
+    "chat_template.jinja": "30282b14d6e685aebce0c1088451f8ff931a8eb391ccd00e65aa39c3cc2bd097",
+    "config.json": "9ee520b4364ca645b69041a37d48763552c7d03f8a0f4fa2c527939ae110d500",
+    "generation_config.json": "c5eb603db353a896c00d33628caa4be9b7a1ae7f26f05783dbbd1cbe9f2831ff",
+    "golden.json": "1c95cba2708d8da20ce535819216526be5a82322f61898ef858e0ee26592a04b",
+    "model.safetensors": "ee6aea28ed8f598402eb50deb7e1c3e3f593e5184d1b80c88930ce3d63635b07",
+    "special_tokens_map.json": "fdd1575e8bd811652f3708f5d70495fd581ca5b59111e6edaa903e43783ce944",
+    "tokenizer.json": "cc2d05c6f5b33b87d9c77ed0050733f2df59503d599685dc0fb4cd6cb04c591e",
+    "tokenizer_config.json": "b893f56c8053a1ad1abcdfe19ad924d2f1b83b9bb47ac26a5a2dc61694d8b49d"
+  }
+}

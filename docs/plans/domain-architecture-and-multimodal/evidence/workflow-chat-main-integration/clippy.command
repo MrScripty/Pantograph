@@ -1,0 +1,1 @@
+cargo clippy --locked --offline -p inference -p pantograph-embedded-runtime -p pantograph-inference-interface-contracts -p pantograph-runtime-host-contracts -p pantograph-workflow-service --features inference/backend-pytorch\,inference/backend-candle\,inference/std-process\,pantograph-embedded-runtime/backend-pytorch --all-targets -- -D warnings

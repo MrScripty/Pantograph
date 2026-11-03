@@ -13,14 +13,14 @@ use pantograph_runtime_host_contracts::{
     RuntimeHostBatchExecutionMemberRequest, RuntimeHostBatchExecutionMemberResponse,
     RuntimeHostBatchExecutionMemberState, RuntimeHostBatchExecutionPort,
     RuntimeHostBatchExecutionRequest, RuntimeHostBatchMemberFailurePolicy,
-    RuntimeHostBatchMemberReservationPolicy, RuntimeHostBatchMemberRetryDisposition,
-    RuntimeHostDispatchError, RuntimeHostExecutionCancellationContext,
-    RuntimeHostExecutionCancellationHandle, RuntimeHostExecutionDiagnosticSeverity,
-    RuntimeHostExecutionPortError, SchedulerRuntimeHostBatchDispatcher,
-    SchedulerRuntimeHostDispatcher, ValidatedReservationLifecycleApplication,
-    ValidatedReservationLifecycleEvent, ValidatedRuntimeHostBatchExecutionRequest,
-    ValidatedRuntimeHostBatchExecutionResponse, RESERVATION_LIFECYCLE_CONTRACT_VERSION,
-    RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
+    RuntimeHostBatchMemberReservationDisposition, RuntimeHostBatchMemberReservationPolicy,
+    RuntimeHostBatchMemberRetryDisposition, RuntimeHostDispatchError,
+    RuntimeHostExecutionCancellationContext, RuntimeHostExecutionCancellationHandle,
+    RuntimeHostExecutionDiagnosticSeverity, RuntimeHostExecutionPortError,
+    SchedulerRuntimeHostBatchDispatcher, SchedulerRuntimeHostDispatcher,
+    ValidatedReservationLifecycleApplication, ValidatedReservationLifecycleEvent,
+    ValidatedRuntimeHostBatchExecutionRequest, ValidatedRuntimeHostBatchExecutionResponse,
+    RESERVATION_LIFECYCLE_CONTRACT_VERSION, RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
 };
 use pantograph_scheduler::{
     plan_scheduler_readiness_admission, select_scheduler_dispatch, SchedulerContractError,
@@ -42,13 +42,14 @@ use pantograph_scheduler::{
 use thiserror::Error;
 
 use crate::workflow::{
-    execute_non_runtime_scheduler_task, materialize_external_workflow_inputs,
-    materialize_runtime_host_inputs, runtime_host_batch_member_response_to_task_result,
-    runtime_host_response_to_task_result, WorkflowExternalInputMaterializationError,
-    WorkflowPortBinding, WorkflowRuntimeHostTaskInputMappingError,
-    WorkflowRuntimeHostTaskResultMappingError, WorkflowSchedulerNonRuntimeTaskAdapterError,
-    WorkflowSchedulerNonRuntimeTaskTemplate, WorkflowSchedulerSourceInputTemplate,
-    WorkflowSchedulerTask, WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskGraph,
+    execute_non_runtime_scheduler_task, is_bounded_vector_json,
+    materialize_external_workflow_inputs, materialize_runtime_host_inputs,
+    runtime_host_batch_member_response_to_task_result, runtime_host_response_to_task_result,
+    WorkflowExternalInputMaterializationError, WorkflowPortBinding,
+    WorkflowRuntimeHostTaskInputMappingError, WorkflowRuntimeHostTaskResultMappingError,
+    WorkflowSchedulerNonRuntimeTaskAdapterError, WorkflowSchedulerNonRuntimeTaskTemplate,
+    WorkflowSchedulerSourceInputTemplate, WorkflowSchedulerTask,
+    WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskGraph,
     WorkflowSchedulerTaskInputBinding, WorkflowSchedulerTaskProjectionDiagnostic,
     WorkflowSchedulerTaskProjectionDiagnosticSeverity, WorkflowSchedulerTaskResult,
     WorkflowSchedulerTaskResultStatus, WorkflowSchedulerTaskResultValue, WorkflowServiceError,
@@ -67,6 +68,23 @@ use super::{
     WorkflowSchedulerTaskTerminalMutation,
 };
 
+/// Minted only after applying an owned cleanup release event and validating its exact
+/// echoed event/lease. Cannot be constructed from a DispatchStarted application.
+#[derive(Debug, Clone)]
+pub(crate) struct WorkflowReservationCleanupAcknowledgement {
+    application: ValidatedReservationLifecycleApplication,
+    pub(crate) workflow_run_id: String,
+    pub(crate) task_id: String,
+    pub(crate) cleanup_release: bool,
+}
+impl AsRef<pantograph_runtime_host_contracts::ReservationLifecycleApplication>
+    for WorkflowReservationCleanupAcknowledgement
+{
+    fn as_ref(&self) -> &pantograph_runtime_host_contracts::ReservationLifecycleApplication {
+        self.application.as_ref()
+    }
+}
+
 /// Workflow-service async shell for scheduler task orchestration.
 ///
 /// This type owns application-layer calls into lower-level scheduler and
@@ -75,6 +93,7 @@ use super::{
 #[derive(Clone)]
 #[must_use]
 pub(crate) struct WorkflowSchedulerTaskOrchestrator {
+    node_registry: Arc<crate::graph::NodeRegistry>,
     runtime_host_dispatcher: SchedulerRuntimeHostDispatcher,
     runtime_host_batch_dispatcher: SchedulerRuntimeHostBatchDispatcher,
     reservation_lifecycle_port: Arc<dyn ReservationLifecyclePort>,
@@ -85,6 +104,7 @@ pub(crate) struct WorkflowSchedulerTaskOrchestrator {
 #[derive(Debug, Clone)]
 #[must_use]
 pub(crate) struct StartedNonRuntimeTaskExecution {
+    custom_invocation: Option<Arc<crate::custom_nodes::PreparedCustomNodeInvocation>>,
     task: WorkflowSchedulerTask,
     materialized_results: Vec<WorkflowSchedulerTaskResult>,
     running_record: SchedulerTaskStateRecord,
@@ -197,6 +217,12 @@ impl SelectedRuntimeTaskDispatch {
 }
 
 impl StartedNonRuntimeTaskExecution {
+    pub(crate) fn custom_node_cancelled(&self) -> bool {
+        self.custom_invocation
+            .as_ref()
+            .is_some_and(|invocation| invocation.is_cancelled())
+    }
+
     pub(crate) fn task(&self) -> &WorkflowSchedulerTask {
         &self.task
     }
@@ -261,6 +287,7 @@ impl WorkflowSchedulerTaskOrchestrator {
                 .expect("default scheduler lifecycle owner id"),
         );
         Self {
+            node_registry: Arc::new(crate::graph::NodeRegistry::new()),
             runtime_host_dispatcher,
             runtime_host_batch_dispatcher: SchedulerRuntimeHostBatchDispatcher::new(Arc::new(
                 UnavailableRuntimeHostBatchExecutionPort,
@@ -275,6 +302,11 @@ impl WorkflowSchedulerTaskOrchestrator {
                 ),
             )),
         }
+    }
+
+    pub(crate) fn with_node_registry(mut self, registry: Arc<crate::graph::NodeRegistry>) -> Self {
+        self.node_registry = registry;
+        self
     }
 
     pub(crate) fn with_runtime_host_dispatcher(
@@ -619,6 +651,27 @@ impl WorkflowSchedulerTaskOrchestrator {
         task: &WorkflowSchedulerTask,
         selection_request: ValidatedSchedulerDispatchSelectionRequest,
     ) -> Result<SelectedRuntimeTaskDispatch, WorkflowSchedulerTaskOrchestratorError> {
+        self.select_runtime_task_dispatch_inner(task, selection_request, true)
+            .await
+    }
+
+    /// The prepared request's custody owns rollback; releasing its lease here
+    /// would also end a predecessor that a failed replacement must preserve.
+    pub(crate) async fn select_runtime_task_dispatch_with_custody(
+        &self,
+        task: &WorkflowSchedulerTask,
+        selection_request: ValidatedSchedulerDispatchSelectionRequest,
+    ) -> Result<SelectedRuntimeTaskDispatch, WorkflowSchedulerTaskOrchestratorError> {
+        self.select_runtime_task_dispatch_inner(task, selection_request, false)
+            .await
+    }
+
+    async fn select_runtime_task_dispatch_inner(
+        &self,
+        task: &WorkflowSchedulerTask,
+        selection_request: ValidatedSchedulerDispatchSelectionRequest,
+        cleanup_unselected: bool,
+    ) -> Result<SelectedRuntimeTaskDispatch, WorkflowSchedulerTaskOrchestratorError> {
         let selection_request = selection_request.into_inner();
         let selection = select_scheduler_dispatch(
             ValidatedSchedulerDispatchSelectionRequest::try_from(selection_request.clone())
@@ -627,22 +680,24 @@ impl WorkflowSchedulerTaskOrchestrator {
         .map_err(WorkflowSchedulerTaskOrchestratorError::SchedulerContract)?
         .into_inner();
         if selection.state != SchedulerDispatchSelectionState::Selected {
-            self.apply_unselected_candidate_lifecycle_events(task, &selection_request)
-                .await?;
+            if cleanup_unselected {
+                self.apply_unselected_candidate_lifecycle_events(task, &selection_request)
+                    .await?;
+            }
             return Err(
                 WorkflowSchedulerTaskOrchestratorError::RuntimeDispatchSelectionNoSelection(
-                    selection,
+                    Box::new(selection),
                 ),
             );
         }
         let handoff = dispatch_selected_handoff_from_selection(selection)?;
-        let dispatch_decision = handoff.dispatch_decision.as_ref().ok_or_else(|| {
+        let dispatch_decision = handoff.dispatch_decision.as_ref().ok_or(
             WorkflowSchedulerTaskOrchestratorError::SchedulerContract(
                 SchedulerContractError::MissingField {
                     field: "dispatch_decision",
                 },
-            )
-        })?;
+            ),
+        )?;
         let reservation_lease_id = dispatch_decision.reservation_lease_id.clone();
         let candidate_id = selected_candidate_id(&selection_request, dispatch_decision);
         Ok(SelectedRuntimeTaskDispatch {
@@ -778,11 +833,14 @@ impl WorkflowSchedulerTaskOrchestrator {
         task: &WorkflowSchedulerTask,
         mutation: &WorkflowSchedulerTaskTerminalMutation,
         result: &WorkflowSchedulerTaskResult,
-    ) -> Result<(), WorkflowSchedulerTaskOrchestratorError> {
+    ) -> Result<
+        Option<WorkflowReservationCleanupAcknowledgement>,
+        WorkflowSchedulerTaskOrchestratorError,
+    > {
         let Some(release_intent) = mutation.reservation_release_intent.as_ref() else {
-            return Ok(());
+            return Ok(None);
         };
-        let _ = self
+        let application = self
             .apply_reservation_cleanup_lifecycle_event(runtime_host_terminal_lifecycle_event(
                 task,
                 release_intent.reservation_lease_id.clone(),
@@ -790,7 +848,7 @@ impl WorkflowSchedulerTaskOrchestrator {
                 result,
             )?)
             .await?;
-        Ok(())
+        Ok(Some(application))
     }
 
     pub(crate) async fn apply_runtime_task_dispatch_error_reservation_lifecycle(
@@ -798,11 +856,14 @@ impl WorkflowSchedulerTaskOrchestrator {
         task: &WorkflowSchedulerTask,
         mutation: &WorkflowSchedulerTaskTerminalMutation,
         error: &WorkflowSchedulerTaskOrchestratorError,
-    ) -> Result<(), WorkflowSchedulerTaskOrchestratorError> {
+    ) -> Result<
+        Option<WorkflowReservationCleanupAcknowledgement>,
+        WorkflowSchedulerTaskOrchestratorError,
+    > {
         let Some(release_intent) = mutation.reservation_release_intent.as_ref() else {
-            return Ok(());
+            return Ok(None);
         };
-        let _ = self
+        let application = self
             .apply_reservation_cleanup_lifecycle_event(reservation_lifecycle_event(
                 task,
                 release_intent.reservation_lease_id.clone(),
@@ -815,7 +876,7 @@ impl WorkflowSchedulerTaskOrchestrator {
                 )],
             )?)
             .await?;
-        Ok(())
+        Ok(Some(application))
     }
 
     pub(crate) async fn apply_runtime_task_cancellation_reservation_lifecycle(
@@ -823,11 +884,14 @@ impl WorkflowSchedulerTaskOrchestrator {
         task: &WorkflowSchedulerTask,
         mutation: &WorkflowSchedulerTaskTerminalMutation,
         reason: &str,
-    ) -> Result<(), WorkflowSchedulerTaskOrchestratorError> {
+    ) -> Result<
+        Option<WorkflowReservationCleanupAcknowledgement>,
+        WorkflowSchedulerTaskOrchestratorError,
+    > {
         let Some(release_intent) = mutation.reservation_release_intent.as_ref() else {
-            return Ok(());
+            return Ok(None);
         };
-        let _ = self
+        let application = self
             .apply_reservation_cleanup_lifecycle_event(reservation_lifecycle_event(
                 task,
                 release_intent.reservation_lease_id.clone(),
@@ -840,7 +904,7 @@ impl WorkflowSchedulerTaskOrchestrator {
                 )],
             )?)
             .await?;
-        Ok(())
+        Ok(Some(application))
     }
 
     #[allow(dead_code)]
@@ -848,7 +912,7 @@ impl WorkflowSchedulerTaskOrchestrator {
         &self,
         member: &StartedRuntimeTaskBatchMember,
         response: &RuntimeHostBatchExecutionMemberResponse,
-    ) -> Result<ValidatedReservationLifecycleApplication, WorkflowSchedulerTaskOrchestratorError>
+    ) -> Result<WorkflowReservationCleanupAcknowledgement, WorkflowSchedulerTaskOrchestratorError>
     {
         validate_runtime_batch_member_response_correlation(member, response)?;
         self.apply_reservation_cleanup_lifecycle_event(runtime_host_batch_member_lifecycle_event(
@@ -905,15 +969,33 @@ impl WorkflowSchedulerTaskOrchestrator {
     async fn apply_reservation_cleanup_lifecycle_event(
         &self,
         event: ReservationLifecycleEvent,
-    ) -> Result<ValidatedReservationLifecycleApplication, WorkflowSchedulerTaskOrchestratorError>
+    ) -> Result<WorkflowReservationCleanupAcknowledgement, WorkflowSchedulerTaskOrchestratorError>
     {
+        let workflow_run_id = event.workflow_run_id.to_string();
+        let task_id = event.task_id.to_string();
+        let cleanup_release = matches!(
+            event.outcome,
+            ReservationLifecycleOutcome::RuntimeHostCompleted
+                | ReservationLifecycleOutcome::RuntimeHostFailed
+                | ReservationLifecycleOutcome::RuntimeHostDispatchRejected
+                | ReservationLifecycleOutcome::WorkflowCancelled
+                // Existing singleton batch Completed responses delegate reservation
+                // release with RetryDeferred. The cleanup owner applies that
+                // release/reconcile event; task input readiness remains separate.
+                | ReservationLifecycleOutcome::RetryDeferred
+        );
         self.mark_reservation_cleanup_lifecycle(WorkflowSchedulerLifecycleComponentState::Running)?;
         let result = self.apply_reservation_lifecycle_event(event).await;
         let reset_result = self.mark_reservation_cleanup_lifecycle(
             WorkflowSchedulerLifecycleComponentState::NotStarted,
         );
         match (result, reset_result) {
-            (Ok(application), Ok(())) => Ok(application),
+            (Ok(application), Ok(())) => Ok(WorkflowReservationCleanupAcknowledgement {
+                application,
+                workflow_run_id,
+                task_id,
+                cleanup_release,
+            }),
             (Err(error), Ok(())) => Err(error),
             (Ok(_application), Err(error)) => Err(error),
             (Err(error), Err(_reset_error)) => Err(error),
@@ -1149,6 +1231,32 @@ impl WorkflowSchedulerTaskOrchestrator {
         let running_transition =
             running_transition_from_ready(ready_record, ready_execution_intent.clone())?;
         let attempt_id = WorkflowSchedulerTaskAttemptId::new();
+        let materialized_results = store
+            .active_run_scheduler_task_results(session_id, workflow_run_id)
+            .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)?;
+        let custom_invocation = if matches!(
+            task.non_runtime_task_template,
+            Some(
+                WorkflowSchedulerNonRuntimeTaskTemplate::CustomNode { .. }
+                    | WorkflowSchedulerNonRuntimeTaskTemplate::ToolLoop { .. }
+            )
+        ) {
+            Some(Arc::new(
+                self.node_registry
+                    .custom_nodes
+                    .prepare(crate::custom_nodes::CustomNodeInvocation {
+                        workflow_id: task.workflow_id.as_str().into(),
+                        workflow_run_id: task.workflow_run_id.as_str().into(),
+                        task_id: task.task_id.as_str().into(),
+                        attempt_id: attempt_id.as_str().into(),
+                    })
+                    .map_err(|error| {
+                        WorkflowSchedulerTaskOrchestratorError::NonRuntimeTaskAdapter(error.into())
+                    })?,
+            ))
+        } else {
+            None
+        };
         self.track_task_lifecycle_handle(&task.task_id, &attempt_id)?;
         let (running_record, attempt_id, started_at_ms) = store
             .start_active_run_scheduler_task_attempt(
@@ -1163,10 +1271,8 @@ impl WorkflowSchedulerTaskOrchestrator {
                 self.release_task_lifecycle_handle_without_error(&task.task_id, &attempt_id);
             })?;
 
-        let materialized_results = store
-            .active_run_scheduler_task_results(session_id, workflow_run_id)
-            .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)?;
         Ok(StartedNonRuntimeTaskExecution {
+            custom_invocation,
             task: task.clone(),
             materialized_results,
             running_record,
@@ -1179,9 +1285,39 @@ impl WorkflowSchedulerTaskOrchestrator {
         &self,
         started: &StartedNonRuntimeTaskExecution,
     ) -> Result<WorkflowSchedulerTaskResult, WorkflowSchedulerTaskOrchestratorError> {
-        execute_non_runtime_scheduler_task(&started.task, &started.materialized_results)
-            .await
-            .map_err(WorkflowSchedulerTaskOrchestratorError::NonRuntimeTaskAdapter)
+        let result = match &started.task.non_runtime_task_template {
+            Some(WorkflowSchedulerNonRuntimeTaskTemplate::CustomNode { identity }) => {
+                crate::workflow::non_runtime_task_adapter::execute_custom_scheduler_task(
+                    &started.task,
+                    &started.materialized_results,
+                    identity,
+                    started.custom_invocation.as_deref().ok_or_else(|| {
+                        WorkflowSchedulerTaskOrchestratorError::NonRuntimeTaskAdapter(
+                            crate::custom_nodes::CustomNodeError::Unavailable.into(),
+                        )
+                    })?,
+                )
+                .await
+            }
+            Some(WorkflowSchedulerNonRuntimeTaskTemplate::ToolLoop { identity }) => {
+                crate::workflow::non_runtime_task_adapter::execute_tool_loop_scheduler_task(
+                    &started.task,
+                    &started.materialized_results,
+                    identity,
+                    started.custom_invocation.as_deref().ok_or_else(|| {
+                        WorkflowSchedulerTaskOrchestratorError::NonRuntimeTaskAdapter(
+                            crate::custom_nodes::CustomNodeError::Unavailable.into(),
+                        )
+                    })?,
+                )
+                .await
+            }
+            _ => {
+                execute_non_runtime_scheduler_task(&started.task, &started.materialized_results)
+                    .await
+            }
+        };
+        result.map_err(WorkflowSchedulerTaskOrchestratorError::NonRuntimeTaskAdapter)
     }
 
     pub(crate) fn complete_started_non_runtime_task(
@@ -1192,6 +1328,13 @@ impl WorkflowSchedulerTaskOrchestrator {
         started: &StartedNonRuntimeTaskExecution,
         result: WorkflowSchedulerTaskResult,
     ) -> Result<SchedulerTaskStateRecord, WorkflowSchedulerTaskOrchestratorError> {
+        if started.custom_node_cancelled() {
+            return Err(
+                WorkflowSchedulerTaskOrchestratorError::NonRuntimeTaskAdapter(
+                    crate::custom_nodes::CustomNodeError::Cancelled.into(),
+                ),
+            );
+        }
         let completion_transition = completion_transition_from_running(&started.running_record)?;
         let record = store
             .complete_active_run_scheduler_task(
@@ -1219,15 +1362,29 @@ impl WorkflowSchedulerTaskOrchestrator {
             &started.running_record,
             non_runtime_adapter_failure_diagnostic(error),
         )?;
-        let record = store
-            .fail_active_run_scheduler_task_attempt(
+        let cancelled = matches!(
+            error,
+            WorkflowSchedulerNonRuntimeTaskAdapterError::CustomNode(
+                crate::custom_nodes::CustomNodeError::Cancelled
+            )
+        );
+        let record = if cancelled {
+            store.cancel_active_run_scheduler_task_attempt(
                 session_id,
                 workflow_run_id,
                 &started.attempt_id,
                 failure_transition,
             )
-            .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
-            .and_then(applied_terminal_task_state_record)?;
+        } else {
+            store.fail_active_run_scheduler_task_attempt(
+                session_id,
+                workflow_run_id,
+                &started.attempt_id,
+                failure_transition,
+            )
+        }
+        .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)
+        .and_then(applied_terminal_task_state_record)?;
         self.release_task_lifecycle_handle(&started.task.task_id, &started.attempt_id)?;
         Ok(record)
     }
@@ -1787,6 +1944,9 @@ impl WorkflowSchedulerTaskOrchestrator {
         workflow_run_id: &str,
         task_id: &str,
     ) -> Result<Option<SchedulerTaskStateRecord>, WorkflowSchedulerTaskOrchestratorError> {
+        if store.completion_cleanup_pending(session_id, workflow_run_id, task_id) {
+            return Ok(None);
+        }
         let (task_graph, records) = store
             .active_run_scheduler_task_state(session_id, workflow_run_id)
             .map_err(WorkflowSchedulerTaskOrchestratorError::WorkflowService)?
@@ -2115,7 +2275,9 @@ fn dispatch_selected_handoff_from_selection(
 ) -> Result<SchedulerRuntimeHandoff, WorkflowSchedulerTaskOrchestratorError> {
     if selection.state != SchedulerDispatchSelectionState::Selected {
         return Err(
-            WorkflowSchedulerTaskOrchestratorError::RuntimeDispatchSelectionNoSelection(selection),
+            WorkflowSchedulerTaskOrchestratorError::RuntimeDispatchSelectionNoSelection(Box::new(
+                selection,
+            )),
         );
     }
     let Some(dispatch_decision) = selection.dispatch_decision else {
@@ -2432,6 +2594,11 @@ fn runtime_host_batch_member_lifecycle_event(
 fn runtime_host_batch_member_reservation_outcome(
     response: &RuntimeHostBatchExecutionMemberResponse,
 ) -> Result<ReservationLifecycleOutcome, WorkflowSchedulerTaskOrchestratorError> {
+    if response.reservation_disposition
+        == RuntimeHostBatchMemberReservationDisposition::DeferredToScheduler
+    {
+        return Ok(ReservationLifecycleOutcome::RetryDeferred);
+    }
     match response.state {
         RuntimeHostBatchExecutionMemberState::Completed => {
             Ok(ReservationLifecycleOutcome::RuntimeHostCompleted)
@@ -2713,7 +2880,7 @@ fn initial_task_state(
             }
             if let Some(task_intent) = task.schedulable_intent.clone() {
                 Ok(SchedulerTaskState::WaitingDependencyReadiness {
-                    execution_intent: SchedulerTaskExecutionIntent::Runtime { task_intent },
+                    execution_intent: SchedulerTaskExecutionIntent::runtime(task_intent),
                 })
             } else {
                 Ok(awaiting_inputs_state())
@@ -2807,7 +2974,7 @@ pub(crate) enum WorkflowSchedulerTaskOrchestratorError {
     #[error("runtime-host task input mapping failed")]
     RuntimeHostTaskInputMapping(WorkflowRuntimeHostTaskInputMappingError),
     #[error("scheduler dispatch selection did not select a runtime task")]
-    RuntimeDispatchSelectionNoSelection(SchedulerDispatchSelectionDecision),
+    RuntimeDispatchSelectionNoSelection(Box<SchedulerDispatchSelectionDecision>),
     #[error("reservation lifecycle contract validation failed: {0}")]
     ReservationLifecycleContract(ReservationLifecycleContractError),
     #[error("reservation lifecycle port failed: {0}")]
@@ -3492,6 +3659,8 @@ fn source_input_task_kind(
     let task_kind = match template {
         WorkflowSchedulerSourceInputTemplate::Text { .. } => "text-input",
         WorkflowSchedulerSourceInputTemplate::Boolean { .. } => "boolean-input",
+        WorkflowSchedulerSourceInputTemplate::Integer { .. } => "number-input",
+        WorkflowSchedulerSourceInputTemplate::Selection { .. } => "selection-input",
     };
     SchedulerSourceInputTaskKind::parse(task_kind)
         .map_err(WorkflowSchedulerTaskOrchestratorError::SchedulerContract)
@@ -3562,11 +3731,108 @@ fn non_runtime_input_readiness(
     };
 
     match template {
+        WorkflowSchedulerNonRuntimeTaskTemplate::CustomNode { .. }
+        | WorkflowSchedulerNonRuntimeTaskTemplate::ToolLoop { .. } => {
+            for binding in &task.input_bindings {
+                match materialized_bound_output(task, results, binding) {
+                    MaterializedBindingValue::Ready(WorkflowSchedulerTaskResultValue::String(
+                        _,
+                    )) => {}
+                    MaterializedBindingValue::Ready(_) => {
+                        return NonRuntimeInputReadiness::Invalid(scheduler_input_diagnostic(
+                            SchedulerTaskStateDiagnosticCode::InvalidTask,
+                            "custom-node input must be a bounded string",
+                        ))
+                    }
+                    MaterializedBindingValue::Blocked => return NonRuntimeInputReadiness::Blocked,
+                    MaterializedBindingValue::Unavailable(diagnostic) => {
+                        return NonRuntimeInputReadiness::InputUnavailable(diagnostic)
+                    }
+                    MaterializedBindingValue::Invalid(diagnostic) => {
+                        return NonRuntimeInputReadiness::Invalid(diagnostic)
+                    }
+                }
+            }
+            NonRuntimeInputReadiness::Ready
+        }
+        WorkflowSchedulerNonRuntimeTaskTemplate::VectorOutput => {
+            vector_output_input_readiness(task, results)
+        }
+        WorkflowSchedulerNonRuntimeTaskTemplate::ImageOutput => {
+            match materialized_binding_value(task, results, "image") {
+                MaterializedBindingValue::Ready(
+                    WorkflowSchedulerTaskResultValue::MediaArtifactRef(_),
+                ) => NonRuntimeInputReadiness::Ready,
+                MaterializedBindingValue::Ready(_) => {
+                    NonRuntimeInputReadiness::Invalid(scheduler_input_diagnostic(
+                        SchedulerTaskStateDiagnosticCode::InvalidTask,
+                        "image-output input is not a typed media artifact reference",
+                    ))
+                }
+                MaterializedBindingValue::Blocked => NonRuntimeInputReadiness::Blocked,
+                MaterializedBindingValue::Unavailable(diagnostic) => {
+                    NonRuntimeInputReadiness::InputUnavailable(diagnostic)
+                }
+                MaterializedBindingValue::Invalid(diagnostic) => {
+                    NonRuntimeInputReadiness::Invalid(diagnostic)
+                }
+            }
+        }
+        WorkflowSchedulerNonRuntimeTaskTemplate::JsonFilter { .. } => {
+            match materialized_binding_value(task, results, "json") {
+                MaterializedBindingValue::Ready(
+                    WorkflowSchedulerTaskResultValue::Json(_)
+                    | WorkflowSchedulerTaskResultValue::String(_)
+                    | WorkflowSchedulerTaskResultValue::TranscriptText(_)
+                    | WorkflowSchedulerTaskResultValue::Bool(_)
+                    | WorkflowSchedulerTaskResultValue::I64(_)
+                    | WorkflowSchedulerTaskResultValue::U64(_),
+                ) => NonRuntimeInputReadiness::Ready,
+                MaterializedBindingValue::Ready(_) => {
+                    NonRuntimeInputReadiness::Invalid(scheduler_input_diagnostic(
+                        SchedulerTaskStateDiagnosticCode::InvalidTask,
+                        "json-filter input is not a JSON-compatible value",
+                    ))
+                }
+                MaterializedBindingValue::Blocked => NonRuntimeInputReadiness::Blocked,
+                MaterializedBindingValue::Unavailable(diagnostic) => {
+                    NonRuntimeInputReadiness::InputUnavailable(diagnostic)
+                }
+                MaterializedBindingValue::Invalid(diagnostic) => {
+                    NonRuntimeInputReadiness::Invalid(diagnostic)
+                }
+            }
+        }
+        WorkflowSchedulerNonRuntimeTaskTemplate::Merge => {
+            for binding in &task.input_bindings {
+                match materialized_bound_output(task, results, binding) {
+                    MaterializedBindingValue::Ready(
+                        WorkflowSchedulerTaskResultValue::String(_)
+                        | WorkflowSchedulerTaskResultValue::TranscriptText(_),
+                    ) => {}
+                    MaterializedBindingValue::Ready(_) => {
+                        return NonRuntimeInputReadiness::Invalid(scheduler_input_diagnostic(
+                            SchedulerTaskStateDiagnosticCode::InvalidTask,
+                            "materialized merge input has the wrong value type",
+                        ))
+                    }
+                    MaterializedBindingValue::Blocked => return NonRuntimeInputReadiness::Blocked,
+                    MaterializedBindingValue::Unavailable(diagnostic) => {
+                        return NonRuntimeInputReadiness::InputUnavailable(diagnostic)
+                    }
+                    MaterializedBindingValue::Invalid(diagnostic) => {
+                        return NonRuntimeInputReadiness::Invalid(diagnostic)
+                    }
+                }
+            }
+            NonRuntimeInputReadiness::Ready
+        }
         WorkflowSchedulerNonRuntimeTaskTemplate::TextOutput => {
             match materialized_binding_value(task, results, "text") {
-                MaterializedBindingValue::Ready(WorkflowSchedulerTaskResultValue::String(_)) => {
-                    NonRuntimeInputReadiness::Ready
-                }
+                MaterializedBindingValue::Ready(
+                    WorkflowSchedulerTaskResultValue::String(_)
+                    | WorkflowSchedulerTaskResultValue::TranscriptText(_),
+                ) => NonRuntimeInputReadiness::Ready,
                 MaterializedBindingValue::Ready(_) => {
                     NonRuntimeInputReadiness::Invalid(scheduler_input_diagnostic(
                         SchedulerTaskStateDiagnosticCode::InvalidTask,
@@ -3585,6 +3851,50 @@ fn non_runtime_input_readiness(
     }
 }
 
+fn vector_output_input_readiness(
+    task: &WorkflowSchedulerTask,
+    results: &[WorkflowSchedulerTaskResult],
+) -> NonRuntimeInputReadiness {
+    if task.node_type != "vector-output"
+        || task.input_bindings.len() > 1
+        || task
+            .input_bindings
+            .iter()
+            .any(|binding| binding.target_port_id != "vector")
+    {
+        return NonRuntimeInputReadiness::Invalid(scheduler_input_diagnostic(
+            SchedulerTaskStateDiagnosticCode::InvalidTask,
+            "vector-output accepts at most one vector input binding",
+        ));
+    }
+    let Some(binding) = task.input_bindings.first() else {
+        // The registered input is optional: an unconnected sink emits null.
+        return NonRuntimeInputReadiness::Ready;
+    };
+    let Some(result) = results.iter().find(|result| {
+        result.workflow_id == task.workflow_id.as_str()
+            && result.workflow_run_id == task.workflow_run_id.as_str()
+            && result.task_id == binding.source_task_id.as_str()
+            && result.node_id == binding.source_node_id.as_str()
+    }) else {
+        return NonRuntimeInputReadiness::Blocked;
+    };
+    match materialized_bound_output(task, std::slice::from_ref(result), binding) {
+        MaterializedBindingValue::Ready(WorkflowSchedulerTaskResultValue::Json(value))
+            if is_bounded_vector_json(value) => NonRuntimeInputReadiness::Ready,
+        MaterializedBindingValue::Ready(_) => NonRuntimeInputReadiness::Invalid(scheduler_input_diagnostic(
+            SchedulerTaskStateDiagnosticCode::InvalidTask,
+            "vector-output input must be a finite numeric JSON array of 1..4096 elements, at most 64 KiB",
+        )),
+        MaterializedBindingValue::Blocked => NonRuntimeInputReadiness::InputUnavailable(scheduler_input_diagnostic(
+            SchedulerTaskStateDiagnosticCode::InputUnavailable,
+            format!("completed upstream task '{}' did not produce vector port '{}'", result.task_id, binding.source_port_id),
+        )),
+        MaterializedBindingValue::Unavailable(diagnostic) => NonRuntimeInputReadiness::InputUnavailable(diagnostic),
+        MaterializedBindingValue::Invalid(diagnostic) => NonRuntimeInputReadiness::Invalid(diagnostic),
+    }
+}
+
 fn runtime_execution_intent(
     task: &WorkflowSchedulerTask,
 ) -> Result<SchedulerTaskExecutionIntent, WorkflowSchedulerTaskOrchestratorError> {
@@ -3596,7 +3906,7 @@ fn runtime_execution_intent(
             )),
         ));
     };
-    Ok(SchedulerTaskExecutionIntent::Runtime { task_intent })
+    Ok(SchedulerTaskExecutionIntent::runtime(task_intent))
 }
 
 enum MaterializedBindingValue<'a> {

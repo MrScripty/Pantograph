@@ -1,0 +1,55 @@
+
+> Pantograph@0.0.0 lint:no-new
+> npm run lint:critical && npm run lint:a11y && npm run traceability
+
+
+> Pantograph@0.0.0 lint:critical
+> node scripts/check-critical-antipatterns.mjs
+
+critical anti-pattern gate passed
+
+> Pantograph@0.0.0 lint:a11y
+> node --test scripts/svelte-role-button-check.test.mjs && node scripts/check-svelte-a11y.mjs
+
+✔ arrow callbacks do not hide later keyboard and name attributes (11.49693ms)
+✔ quoted greater-than signs and legacy event directives retain complete attributes (1.167359ms)
+✔ missing keyboard activation remains a violation after an arrow callback (0.6418ms)
+✔ all required attributes are checked independently with exact location (3.416487ms)
+✔ comments and script strings are not rendered elements (1.457311ms)
+✔ nested control-flow elements are inspected and native controls remain exempt (1.012122ms)
+✔ malformed Svelte fails closed instead of silently skipping checks (1.003681ms)
+✔ visible descendant text supplies a name, but handler expressions do not (0.856696ms)
+✔ an unused snippet declaration is not rendered name evidence (0.824336ms)
+✔ render-only content requires independent name evidence: empty local snippet (3.216466ms)
+✔ render-only content requires independent name evidence: whitespace and comments (0.51674ms)
+✔ render-only content requires independent name evidence: nonempty local snippet (0.459372ms)
+✔ render-only content requires independent name evidence: nested unused snippet (0.479275ms)
+✔ render-only content requires independent name evidence: nested render call (0.450007ms)
+✔ render-only content requires independent name evidence: shadowed local snippet (1.094942ms)
+✔ render-only content requires independent name evidence: snippet parameter (0.554507ms)
+✔ render-only content requires independent name evidence: self recursion (0.356246ms)
+✔ render-only content requires independent name evidence: mutual recursion (0.403671ms)
+✔ render-only content requires independent name evidence: unknown snippet (0.226401ms)
+✔ render-only content requires independent name evidence: optional snippet (0.340675ms)
+✔ render-only content requires independent name evidence: member call (0.390599ms)
+✔ explicit aria-label="Select" supports render-only content (3.016912ms)
+✔ explicit aria-labelledby="label" supports render-only content (4.97301ms)
+✔ adjacent rendered evidence remains accepted: Select (2.135682ms)
+✔ adjacent rendered evidence remains accepted: <span>Select</span> (1.66513ms)
+✔ adjacent rendered evidence remains accepted: {label} (1.663943ms)
+✔ adjacent rendered evidence remains accepted: <span>{label}</span> (1.843398ms)
+ℹ tests 27
+ℹ suites 0
+ℹ pass 27
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 347.049056
+svelte accessibility gate passed
+
+> Pantograph@0.0.0 traceability
+> ./scripts/check-decision-traceability.sh
+
+Decision traceability input: staged fff03a153ff26b5a38c01be8a3cc65ddb28be07e -> a1a5e4c58866cd6019bbd260d06b83ba9a740db6; map scripts/decision-traceability-map.json
+Decision traceability failed: unavailable: broken local reference in docs/plans/domain-architecture-and-multimodal/reports/2026-10-06-workflow-chat-completion.md: ../evidence/workflow-chat-completion/README.md -> docs/plans/domain-architecture-and-multimodal/evidence/workflow-chat-completion/README.md

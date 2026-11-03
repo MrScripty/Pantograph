@@ -25,7 +25,12 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Install C# UniFFI generator
-        run: cargo install uniffi-bindgen-cs --version 0.9.0 --locked
+        # Official v0.9.0+v0.28.3 source; this version is not on crates.io.
+        run: >-
+          cargo install uniffi-bindgen-cs
+          --git https://github.com/NordSecurity/uniffi-bindgen-cs
+          --rev 2f4880f03ed08d960ad0ee14d11cf95444eee540
+          --locked
 
       - name: Run workflow service tests
         run: cargo test -p pantograph-workflow-service

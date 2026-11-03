@@ -1,0 +1,82 @@
+{
+  "implementation_source_commit": "7a7165d493858de016f96196fb50ca998ebddcb5",
+  "documentation_drafts_during_postcohort_gates": true,
+  "env": {
+    "ORT_SKIP_DOWNLOAD": "1",
+    "HF_HUB_OFFLINE": "1",
+    "TRANSFORMERS_OFFLINE": "1"
+  },
+  "gates": [
+    {
+      "id": "release_build",
+      "command": "cargo build --locked -p pantograph-embedded-runtime --no-default-features --features backend-candle,host-dependency-inventory --example cpu_embedding_workflow_probe --release",
+      "log": "m2-native-release-build.log",
+      "exit_code": 0,
+      "log_sha256": "09c330ce0f69b03546ddf8a668d72fd81a39e4a1fd220f84242e7556694ff78b"
+    },
+    {
+      "id": "offline_release_freeze",
+      "command": "cargo build --locked --offline -p pantograph-embedded-runtime --no-default-features --features backend-candle,host-dependency-inventory --example cpu_embedding_workflow_probe --release",
+      "log": "m2-native-release-freeze.log",
+      "exit_code": 0,
+      "log_sha256": "298a19efaa35cbc6c6162637002c3301586ea852c0b9d31ee2958c5e8c4383b3"
+    },
+    {
+      "id": "cpu_example_owner_clippy",
+      "command": "cargo clippy --locked --offline --no-deps -p pantograph-embedded-runtime --no-default-features --features backend-candle,host-dependency-inventory --example cpu_embedding_workflow_probe -- -D warnings",
+      "log": "m2-native-example-clippy-owner.log",
+      "exit_code": 0,
+      "log_sha256": "a3d36ba4d3b2d4aaef4170b41d0db19c3ab1975da1636bb8f536b91a80ea0507"
+    },
+    {
+      "id": "dependency_wide_cpu_clippy_failure",
+      "command": "cargo clippy --locked --offline -p pantograph-embedded-runtime --no-default-features --features backend-candle,host-dependency-inventory --example cpu_embedding_workflow_probe -- -D warnings",
+      "log": "m2-native-example-clippy.log",
+      "exit_code": 101,
+      "log_sha256": "be49ac41a787b6c216fc6abdcfefe4467b9ba02229ded23c888f8887f5447083"
+    },
+    {
+      "id": "scheduler_tests",
+      "command": "cargo test --locked --offline -p pantograph-scheduler",
+      "log": "m2-final-scheduler-tests.log",
+      "exit_code": 0,
+      "log_sha256": "ad76fe1050a2962fbfd7de375e48bf668e7b17edd6240937698c355329a510d5"
+    },
+    {
+      "id": "workflow_tests",
+      "command": "cargo test --locked --offline -p pantograph-workflow-service --lib",
+      "log": "m2-final-workflow-tests.log",
+      "exit_code": 0,
+      "log_sha256": "5c1800b90197acfb6be419b75249781ef3249427957faead1434e1a6b22f0702"
+    },
+    {
+      "id": "scheduler_clippy",
+      "command": "cargo clippy --locked --offline -p pantograph-scheduler --all-targets -- -D warnings",
+      "log": "m2-final-scheduler-clippy.log",
+      "exit_code": 0,
+      "log_sha256": "7e8397b3c3d5ef73830e57f61ffa6f2cfd565f338d3d371aefe79dbf3b020764"
+    },
+    {
+      "id": "workflow_owner_clippy",
+      "command": "cargo clippy --locked --offline --no-deps -p pantograph-workflow-service --all-targets -- -D warnings",
+      "log": "m2-final-workflow-clippy.log",
+      "exit_code": 0,
+      "log_sha256": "4ac743622c02463c16f5dc2e1b273c7b1ee075685743422e54a889b5d276dc7c"
+    },
+    {
+      "id": "native_lifecycle_regressions",
+      "command": "cargo test --locked --offline -p pantograph-embedded-runtime --features host-dependency-inventory --lib native_serial_worker_tests",
+      "log": "m2-native-lifecycle-regressions.log",
+      "exit_code": 0,
+      "log_sha256": "674feaf7229dada2eed6b119b5472ed7f85a76224200de5ab9556feb40b0ab6a"
+    },
+    {
+      "id": "declared_prepush_tests_core_source",
+      "command": "npm test",
+      "log": "m2-declared-prepush-tests.log",
+      "exit_code": 0,
+      "log_sha256": "82858d9bb06178613054e5eaeaeb816223c028750880240df964d85c115c04e4",
+      "scope": "Earlier core implementation; later producer adds no node-engine/workflow-nodes source/dependency changes."
+    }
+  ]
+}

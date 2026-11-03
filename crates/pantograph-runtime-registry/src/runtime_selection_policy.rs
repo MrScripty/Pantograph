@@ -178,7 +178,7 @@ pub(crate) fn select_runtime_technical_fit_automatically(
                 return RuntimeSelectionDecision::new(unselected_decision_with_device_diagnostics(
                     RuntimeTechnicalFitSelectionMode::Automatic,
                     Vec::new(),
-                    vec![diagnostic],
+                    vec![*diagnostic],
                 ));
             }
         };
@@ -292,7 +292,7 @@ fn automatic_selection_policy_trace(
     controlled_exploration_seed_basis: Option<&str>,
     history_threshold_state: RuntimeTechnicalFitHistoryThresholdState,
     history_ranking_enabled: bool,
-) -> Result<RuntimeTechnicalFitSelectionPolicyTrace, RuntimeTechnicalFitDeviceDiagnostic> {
+) -> Result<RuntimeTechnicalFitSelectionPolicyTrace, Box<RuntimeTechnicalFitDeviceDiagnostic>> {
     let candidate_set_summary = automatic_candidate_set_summary(request, eligible_candidates)?;
     Ok(RuntimeTechnicalFitSelectionPolicyTrace {
         policy_version: TECHNICAL_FIT_SELECTION_POLICY_VERSION,
@@ -327,12 +327,12 @@ fn automatic_selection_policy_trace(
 fn automatic_candidate_set_summary(
     request: &RuntimeTechnicalFitRequest,
     eligible_candidates: &[&RuntimeTechnicalFitCandidate],
-) -> Result<RuntimeTechnicalFitCandidateSetSummary, RuntimeTechnicalFitDeviceDiagnostic> {
+) -> Result<RuntimeTechnicalFitCandidateSetSummary, Box<RuntimeTechnicalFitDeviceDiagnostic>> {
     let total_candidate_count = checked_candidate_count(request.candidates.len())?;
     let eligible_candidate_count = checked_candidate_count(eligible_candidates.len())?;
     let rejected_candidate_count = total_candidate_count
         .checked_sub(eligible_candidate_count)
-        .ok_or_else(candidate_summary_count_diagnostic)?;
+        .ok_or_else(|| Box::new(candidate_summary_count_diagnostic()))?;
 
     Ok(RuntimeTechnicalFitCandidateSetSummary {
         total_candidate_count,
@@ -346,8 +346,8 @@ fn automatic_candidate_set_summary(
     .normalized())
 }
 
-fn checked_candidate_count(count: usize) -> Result<u32, RuntimeTechnicalFitDeviceDiagnostic> {
-    u32::try_from(count).map_err(|_| candidate_summary_count_diagnostic())
+fn checked_candidate_count(count: usize) -> Result<u32, Box<RuntimeTechnicalFitDeviceDiagnostic>> {
+    u32::try_from(count).map_err(|_| Box::new(candidate_summary_count_diagnostic()))
 }
 
 fn candidate_summary_count_diagnostic() -> RuntimeTechnicalFitDeviceDiagnostic {
@@ -822,7 +822,7 @@ fn resource_budget_diagnostic(
     };
     let reserved_bytes = match active_reserved_bytes(runtime_snapshot, resource_kind) {
         Ok(reserved_bytes) => reserved_bytes,
-        Err(diagnostic) => return Some(diagnostic_context_from_candidate(diagnostic, candidate)),
+        Err(diagnostic) => return Some(diagnostic_context_from_candidate(*diagnostic, candidate)),
     };
     let Some(available_bytes) = after_safety_margin_bytes.checked_sub(reserved_bytes) else {
         return Some(resource_budget_underflow_diagnostic(
@@ -871,7 +871,7 @@ fn resource_budget_diagnostic(
 fn active_reserved_bytes(
     runtime_snapshot: &RuntimeRegistryRuntimeSnapshot,
     resource_kind: RuntimeAdmissionResourceKind,
-) -> Result<u64, RuntimeTechnicalFitDeviceDiagnostic> {
+) -> Result<u64, Box<RuntimeTechnicalFitDeviceDiagnostic>> {
     let mut reserved_bytes = 0_u64;
     for active_claim in &runtime_snapshot.active_reservation_claims {
         for claim in active_claim
@@ -891,10 +891,10 @@ fn checked_add_claim_bytes(
     resource_kind: RuntimeAdmissionResourceKind,
     reserved_bytes: u64,
     claim: &RuntimeReservationResourceClaim,
-) -> Result<u64, RuntimeTechnicalFitDeviceDiagnostic> {
+) -> Result<u64, Box<RuntimeTechnicalFitDeviceDiagnostic>> {
     reserved_bytes
         .checked_add(claim.bytes)
-        .ok_or_else(|| RuntimeTechnicalFitDeviceDiagnostic {
+        .ok_or_else(|| Box::new(RuntimeTechnicalFitDeviceDiagnostic {
             code: RuntimeTechnicalFitDeviceDiagnosticCode::ResourceAccountingOverflow,
             severity: RuntimeTechnicalFitDeviceDiagnosticSeverity::Error,
             message: format!(
@@ -911,7 +911,7 @@ fn checked_add_claim_bytes(
             model_id: None,
             evidence_key: Some(resource_kind.resource_label().to_string()),
             requested_runtime_key: None,
-        })
+        }))
 }
 
 fn resource_budget_underflow_diagnostic(
@@ -1131,4 +1131,33 @@ fn candidate_has_available_peak_memory_estimate(candidate: &RuntimeTechnicalFitC
             )
             && estimate.value_bytes().is_some()
     })
+}
+
+#[cfg(test)]
+mod private_diagnostic_tests {
+    use super::checked_candidate_count;
+
+    #[test]
+    fn candidate_counts_preserve_exact_valid_boundaries() {
+        assert_eq!(checked_candidate_count(0).unwrap(), 0);
+        assert_eq!(
+            checked_candidate_count(u32::MAX as usize).unwrap(),
+            u32::MAX
+        );
+    }
+
+    #[test]
+    #[cfg(target_pointer_width = "64")]
+    fn candidate_count_overflow_preserves_exact_diagnostic_json() {
+        let diagnostic = checked_candidate_count(u32::MAX as usize + 1).unwrap_err();
+        let expected = serde_json::json!({
+            "code": "no_valid_candidate",
+            "severity": "error",
+            "message": "technical-fit candidate set is too large to summarize exactly"
+        });
+        assert_eq!(serde_json::to_value(diagnostic.as_ref()).unwrap(), expected);
+        let decoded: crate::technical_fit::RuntimeTechnicalFitDeviceDiagnostic =
+            serde_json::from_value(expected).unwrap();
+        assert_eq!(*diagnostic, decoded);
+    }
 }

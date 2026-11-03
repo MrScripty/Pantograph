@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="535" viewBox="0 0 1000 535">
+<rect width="1000" height="535" fill="white"/>
+<defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#526d7a"/></marker></defs>
+<text x="30" y="36.0" text-anchor="start" font-family="DejaVu Sans, sans-serif" font-size="25" font-weight="bold" fill="#152b38">A model package becomes a task only when four contracts agree</text>
+<text x="30" y="65.0" text-anchor="start" font-family="DejaVu Sans, sans-serif" font-size="17" font-weight="normal" fill="#52616a">Conceptual model</text>
+<rect x="30" y="100" width="430" height="120" rx="8" fill="#eaf1f5" stroke="#748994" stroke-width="1.5"/>
+<text x="245.0" y="130.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38">Artifact closure</text>
+<text x="245.0" y="159.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">Config · weights · tokenizer / processors</text>
+<text x="245.0" y="182.76" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">Components · exact revisions</text>
+<rect x="540" y="100" width="430" height="120" rx="8" fill="#eaf3ee" stroke="#748994" stroke-width="1.5"/>
+<text x="755.0" y="130.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38">Implemented computation</text>
+<text x="755.0" y="159.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">Architecture code or graph semantics</text>
+<text x="755.0" y="182.76" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">Operators · heads · state rules</text>
+<rect x="30" y="285" width="430" height="120" rx="8" fill="#f5f0e5" stroke="#748994" stroke-width="1.5"/>
+<text x="245.0" y="315.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38">Task recipe</text>
+<text x="245.0" y="344.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">Inputs · transforms · orchestration</text>
+<text x="245.0" y="367.76" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">Postprocessing · output meaning</text>
+<rect x="540" y="285" width="430" height="120" rx="8" fill="#eaf1f5" stroke="#748994" stroke-width="1.5"/>
+<text x="755.0" y="315.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38">Execution profile</text>
+<text x="755.0" y="344.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">Runtime build · device · numeric policy</text>
+<text x="755.0" y="367.76" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">Trust · resource and lifecycle policy</text>
+<rect x="305" y="445" width="390" height="63" rx="8" fill="#eaf3ee" stroke="#748994" stroke-width="1.5"/>
+<text x="500.0" y="475.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38">Validated task session</text>
+<polyline points="245,220 245,245 500,245 500,437" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+<polyline points="755,220 755,245 500,245" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+<polyline points="245,405 245,475 297,475" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+<polyline points="755,405 755,475 703,475" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+</svg>

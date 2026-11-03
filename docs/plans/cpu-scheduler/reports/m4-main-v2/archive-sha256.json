@@ -1,0 +1,12 @@
+{
+  "sha256": "463aa2f5893963b76730fb066a99bb979cf0ef739a93d93fa6845f1aad559a58",
+  "files": 340,
+  "bytes": 644349,
+  "source_head": "c25fd49d19dd9268b5d63a794835c568eb32ff9b",
+  "source_tree": "4ac114a25c45e90e5c64623f5053ed3ab6193024",
+  "binary_sha256": "ff1f35ac0044f987b25cf8d939df68a8e4e00440dce9b420da137f2524f6e539",
+  "original_exit": 1,
+  "native_invocations_within_v2": 1,
+  "retries": 0,
+  "exclusions": "Frozen executable retained externally; validation bytes retained separately in m4-main-v2-preflight archive. Includes copied committed synthetic fixtures and generated local test databases/artifact outputs."
+}

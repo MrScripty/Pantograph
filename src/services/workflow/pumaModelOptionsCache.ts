@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { invokeWorkflowCommand as invoke } from './workflowServiceErrors.ts';
 import type { PortOption, PortOptionsCommandArgs, PortOptionsResult } from './types';
 
 const PUMA_LIB_NODE_TYPE = 'puma-lib';

@@ -23,6 +23,11 @@ import { WorkflowGraphMutationService } from './WorkflowGraphMutationService.ts'
 import { USE_WORKFLOW_MOCKS } from './workflowServiceConfig.ts';
 import { invokeWorkflowCommand } from './workflowServiceErrors.ts';
 
+type InspectionCollections = 'node_statuses' | 'io_artifacts' | 'retention_summary';
+type WorkflowRunInspectionWireResponse =
+  Omit<WorkflowRunInspectionQueryResponse, InspectionCollections> &
+  Partial<Pick<WorkflowRunInspectionQueryResponse, InspectionCollections>>;
+
 export class WorkflowProjectionService extends WorkflowGraphMutationService {
   async querySchedulerTimeline(
     request: WorkflowSchedulerTimelineQueryRequest = {},
@@ -109,9 +114,16 @@ export class WorkflowProjectionService extends WorkflowGraphMutationService {
       };
     }
 
-    return invokeWorkflowCommand<WorkflowRunInspectionQueryResponse>('workflow_run_inspection_query', {
+    const response = await invokeWorkflowCommand<WorkflowRunInspectionWireResponse>('workflow_run_inspection_query', {
       request,
     });
+    // Rust omits empty Vec fields on the wire; presenters consume arrays.
+    return {
+      ...response,
+      node_statuses: response.node_statuses ?? [],
+      io_artifacts: response.io_artifacts ?? [],
+      retention_summary: response.retention_summary ?? [],
+    };
   }
 
   async querySchedulerEstimate(

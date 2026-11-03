@@ -1,0 +1,12 @@
+{
+  "command": [
+    "/workspace/pantograph-cache/target/release/examples/cpu_embedding_workflow_probe",
+    "/workspace/m3-authenticated-service-v1/run",
+    "--fair-service"
+  ],
+  "exit_code": 1,
+  "finished_utc": "2026-10-19T23:19:58.098910+00:00",
+  "binary_unchanged": true,
+  "source_unchanged": true,
+  "retry_performed": false
+}

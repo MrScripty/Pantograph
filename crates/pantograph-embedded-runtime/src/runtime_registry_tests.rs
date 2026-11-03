@@ -598,3 +598,146 @@ async fn release_reservation_and_reconcile_runtime_registry_reclaims_evicted_run
     assert_eq!(runtime.status, RuntimeRegistryStatus::Stopped);
     assert!(runtime.runtime_instance_id.is_none());
 }
+
+#[cfg(feature = "backend-candle")]
+#[tokio::test]
+async fn compiled_candle_registration_reports_cold_owner_capability_without_readiness() {
+    let registry = Arc::new(RuntimeRegistry::new());
+    let gateway = Arc::new(inference::InferenceGateway::new());
+    register_scheduler_loadable_candle(&registry, &gateway);
+    let outcome =
+        crate::runtime_dispatch_capability_facts::RuntimeDispatchCapabilityFactsSource::new(
+            registry.clone(),
+        )
+        .with_gateway(gateway)
+        .collect()
+        .await;
+    let crate::runtime_dispatch_capability_facts::RuntimeDispatchCapabilityFactsOutcome::Projected {
+        facts, ..
+    } = outcome else { panic!("compiled Candle owner must be discoverable") };
+    let candle = facts
+        .runtimes
+        .iter()
+        .find(|runtime| runtime.runtime_id == "candle")
+        .unwrap();
+    assert_eq!(candle.status, RuntimeRegistryStatus::Stopped);
+    assert!(candle.runtime_instance_id.is_none());
+    assert!(candle.loaded_model_ids.is_empty());
+    assert!(candle.active_reservation_ids.is_empty());
+    assert!(!candle.has_admission_budget);
+    assert!(registry.snapshot().reservations.is_empty());
+    assert_eq!(candle.runtime_family, "candle");
+    assert_eq!(candle.runtime_residency_key, "candle.cpu");
+    assert_eq!(candle.automatic_device_candidates.len(), 1);
+    assert_eq!(
+        candle.automatic_device_candidates[0]
+            .runtime_variant_id
+            .as_str(),
+        "candle.cpu"
+    );
+    assert_eq!(
+        candle.automatic_device_candidates[0].device_id.as_str(),
+        "cpu"
+    );
+    let before = registry.snapshot().runtimes;
+    register_scheduler_loadable_candle(&registry, &inference::InferenceGateway::new());
+    assert_eq!(registry.snapshot().runtimes, before);
+}
+
+#[cfg(feature = "backend-candle")]
+#[test]
+fn compiled_candle_registration_preserves_an_existing_failed_owner() {
+    let registry = RuntimeRegistry::new();
+    registry.register_runtime(
+        RuntimeRegistration::new("candle", "Existing Candle")
+            .with_backend_keys(vec!["candle".into()]),
+    );
+    registry
+        .transition_runtime(
+            "candle",
+            pantograph_runtime_registry::RuntimeTransition::Failed {
+                message: "actual load failed".into(),
+            },
+        )
+        .unwrap();
+    let before = registry.snapshot().runtimes;
+    register_scheduler_loadable_candle(&registry, &inference::InferenceGateway::new());
+    assert_eq!(registry.snapshot().runtimes, before);
+}
+
+#[cfg(not(feature = "backend-candle"))]
+#[test]
+fn candle_registration_does_not_fabricate_an_uncompiled_owner() {
+    let registry = RuntimeRegistry::new();
+    register_scheduler_loadable_candle(&registry, &inference::InferenceGateway::new());
+    assert!(registry.snapshot().runtimes.is_empty());
+    assert!(registry.snapshot().reservations.is_empty());
+}
+
+#[test]
+fn production_registration_supplies_stable_identity_and_reconciliation_preserves_it() {
+    let registry = RuntimeRegistry::new();
+    let mut mode = HostRuntimeModeSnapshot {
+        backend_name: Some("PyTorch".into()),
+        backend_key: Some("pytorch".into()),
+        active_runtime: Some(inference::RuntimeLifecycleSnapshot {
+            runtime_id: Some("pytorch".into()),
+            runtime_instance_id: Some("first-instance".into()),
+            active: true,
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    reconcile_runtime_registry_mode_info(&registry, &mode);
+    let first = registry.snapshot().runtimes.remove(0);
+    assert_eq!(first.runtime_family.as_deref(), Some("pytorch"));
+    assert_eq!(
+        first.runtime_residency_key.as_deref(),
+        Some("runtime.pytorch.shared")
+    );
+    mode.active_runtime.as_mut().unwrap().runtime_instance_id = Some("second-instance".into());
+    reconcile_runtime_registry_mode_info(&registry, &mode);
+    let second = registry.snapshot().runtimes.remove(0);
+    assert_eq!(second.runtime_family, first.runtime_family);
+    assert_eq!(second.runtime_residency_key, first.runtime_residency_key);
+    assert_eq!(
+        second.runtime_instance_id.as_deref(),
+        Some("second-instance")
+    );
+}
+
+#[test]
+fn production_registration_preserves_embedding_identity_and_leaves_unknown_unqualified() {
+    let registry = RuntimeRegistry::new();
+    registry.register_runtime(
+        RuntimeRegistration::new("pytorch", "PyTorch").with_dispatch_identity(
+            RuntimeDispatchIdentity::new("transformers", "host.slot.1").unwrap(),
+        ),
+    );
+    register_active_runtime(
+        &registry,
+        &HostRuntimeModeSnapshot {
+            backend_key: Some("pytorch".into()),
+            ..Default::default()
+        },
+    );
+    register_active_runtime(&registry, &HostRuntimeModeSnapshot::default());
+    let snapshot = registry.snapshot();
+    let pytorch = snapshot
+        .runtimes
+        .iter()
+        .find(|runtime| runtime.runtime_id == "pytorch")
+        .unwrap();
+    assert_eq!(pytorch.runtime_family.as_deref(), Some("transformers"));
+    assert_eq!(
+        pytorch.runtime_residency_key.as_deref(),
+        Some("host.slot.1")
+    );
+    let unknown = snapshot
+        .runtimes
+        .iter()
+        .find(|runtime| runtime.runtime_id == "unknown")
+        .unwrap();
+    assert!(unknown.runtime_family.is_none());
+    assert!(unknown.runtime_residency_key.is_none());
+}

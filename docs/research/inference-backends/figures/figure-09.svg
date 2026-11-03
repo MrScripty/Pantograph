@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="595" viewBox="0 0 1000 595">
+<rect width="1000" height="595" fill="white"/>
+<defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#526d7a"/></marker></defs>
+<text x="30" y="36.0" text-anchor="start" font-family="DejaVu Sans, sans-serif" font-size="25" font-weight="bold" fill="#152b38">A semantic payload is more than an array</text>
+<text x="30" y="65.0" text-anchor="start" font-family="DejaVu Sans, sans-serif" font-size="17" font-weight="normal" fill="#52616a">Preserve meaning across preprocessing, runtime and task output</text>
+<rect x="65" y="110" width="870" height="85" rx="8" fill="#eaf1f5" stroke="#748994" stroke-width="1.5"/>
+<text x="500.0" y="140.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38">Values and structure</text>
+<text x="500.0" y="169.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">dtype · shape · symbolic relations · ragged / sparse structure</text>
+<rect x="65" y="220" width="870" height="85" rx="8" fill="#eaf3ee" stroke="#748994" stroke-width="1.5"/>
+<text x="500.0" y="250.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38">Meaning</text>
+<text x="500.0" y="279.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">axes · labels · units · coordinate frame · time origin</text>
+<rect x="65" y="330" width="870" height="85" rx="8" fill="#f5f0e5" stroke="#748994" stroke-width="1.5"/>
+<text x="500.0" y="360.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38">Identity and transforms</text>
+<text x="500.0" y="389.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">candidate / graph IDs · recipe identity · forward / inverse transforms</text>
+<rect x="65" y="440" width="870" height="85" rx="8" fill="#eaf1f5" stroke="#748994" stroke-width="1.5"/>
+<text x="500.0" y="470.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38">Transport and ownership</text>
+<text x="500.0" y="499.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">inline · shared memory · file / device handle · lifetime · mutability</text>
+</svg>

@@ -282,3 +282,55 @@ impl DependencyEnvironmentProvider for ReadyWithoutEnvironmentProvider {
         self.resolve(request)
     }
 }
+
+#[test]
+fn snapshot_preserves_empty_authored_choices_with_owner_selected_defaults() {
+    let mut request = validated_request_with_requirements().as_request().clone();
+    request.planning_request.selected_binding_ids.clear();
+    request.identity_key.selected_binding_ids.clear();
+    let request = ValidatedDependencyEnvironmentRequest::try_from(request).unwrap();
+    let mut result = ready_result_for_request(&request);
+    result.selected_binding_ids = result
+        .bindings
+        .iter()
+        .map(|binding| binding.binding_id.clone())
+        .collect();
+    let snapshot = DependencyEnvironmentReadinessSnapshot::for_request(
+        &request,
+        result,
+        DependencyEnvironmentReadinessSnapshotStatus::Fresh,
+    )
+    .unwrap();
+    assert_eq!(snapshot.identity_key, request.as_request().identity_key);
+    assert_eq!(
+        snapshot.dependency_requirements_id,
+        request.as_request().dependency_requirements_id
+    );
+    assert!(snapshot.identity_key.selected_binding_ids.is_empty());
+    assert_eq!(snapshot.result.selected_binding_ids.len(), 1);
+}
+
+#[test]
+fn snapshot_refuses_changed_explicit_choices_and_uncovered_default_choices() {
+    let request = validated_request_with_requirements();
+    let mut result = ready_result_for_request(&request);
+    result.selected_binding_ids.clear();
+    assert!(DependencyEnvironmentReadinessSnapshot::for_request(
+        &request,
+        result,
+        DependencyEnvironmentReadinessSnapshotStatus::Fresh
+    )
+    .is_err());
+    let mut request = request.as_request().clone();
+    request.planning_request.selected_binding_ids.clear();
+    request.identity_key.selected_binding_ids.clear();
+    let request = ValidatedDependencyEnvironmentRequest::try_from(request).unwrap();
+    let mut result = ready_result_for_request(&request);
+    result.selected_binding_ids = vec!["foreign.binding".parse().unwrap()];
+    assert!(DependencyEnvironmentReadinessSnapshot::for_request(
+        &request,
+        result,
+        DependencyEnvironmentReadinessSnapshotStatus::Fresh
+    )
+    .is_err());
+}

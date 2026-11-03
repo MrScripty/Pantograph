@@ -654,8 +654,7 @@ impl WorkflowService {
                             resource_observation: None,
                         }),
                     },
-                )
-                .map_err(WorkflowServiceError::from)?;
+                )?;
                 repaired = increment_startup_repair_count(repaired)?;
             }
         }
@@ -1516,7 +1515,7 @@ fn mark_projection_refresh_failed(
         .map_err(WorkflowServiceError::from)
 }
 
-fn diagnostics_projection_refresh_request_for_event(
+pub(super) fn diagnostics_projection_refresh_request_for_event(
     request: &DiagnosticEventAppendRequest,
 ) -> Option<WorkflowDiagnosticsProjectionRefreshRequest> {
     let projections = diagnostics_projection_kinds_for_payload(&request.payload);

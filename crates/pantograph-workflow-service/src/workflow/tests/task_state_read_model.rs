@@ -85,7 +85,7 @@ fn state_with_intent(
 }
 
 fn runtime_execution_intent(task_intent: SchedulableTaskIntent) -> SchedulerTaskExecutionIntent {
-    SchedulerTaskExecutionIntent::Runtime { task_intent }
+    SchedulerTaskExecutionIntent::runtime(task_intent)
 }
 
 fn scheduler_task_graph(workflow_run_id: &str) -> WorkflowSchedulerTaskGraph {

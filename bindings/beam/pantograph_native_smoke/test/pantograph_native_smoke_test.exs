@@ -20,13 +20,16 @@ defmodule PantographNativeSmokeTest do
   test "workflow_validate returns edge-reference errors for unknown nodes" do
     graph_json =
       Pantograph.Native.workflow_new("beam-invalid", "BEAM Invalid")
-      |> Pantograph.Native.workflow_add_edge("missing-source", "out", "missing-target", "in")
+      |> Pantograph.Native.workflow_add_node("known-source", "text-input", 0.0, 0.0, "{}")
+      |> Pantograph.Native.workflow_add_node("known-target", "text-output", 100.0, 0.0, "{}")
+      |> Pantograph.Native.workflow_add_edge("missing-source", "text", "known-target", "text")
+      |> Pantograph.Native.workflow_add_edge("known-source", "text", "missing-target", "text")
 
     errors = Pantograph.Native.workflow_validate(graph_json)
 
     assert is_list(errors)
-    assert Enum.any?(errors, &String.contains?(&1, "unknown node 'missing-source'"))
-    assert Enum.any?(errors, &String.contains?(&1, "unknown node 'missing-target'"))
+    assert Enum.any?(errors, &String.contains?(&1, "unknown source node 'missing-source'"))
+    assert Enum.any?(errors, &String.contains?(&1, "unknown target node 'missing-target'"))
   end
 
   test "workflow_from_json returns parse errors as BEAM tuples" do
@@ -57,6 +60,7 @@ defmodule PantographNativeSmokeTest do
     queryable = Pantograph.Native.node_registry_queryable_ports(registry)
 
     assert String.contains?(queryable, ~s("node_type":"puma-lib"))
-    assert String.contains?(queryable, ~s("port_id":"model_path"))
+    assert String.contains?(queryable, ~s("port_id":"pumas_model_ref"))
+    refute String.contains?(queryable, ~s("port_id":"model_path"))
   end
 end

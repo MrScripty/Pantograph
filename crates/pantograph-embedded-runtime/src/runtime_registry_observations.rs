@@ -73,11 +73,19 @@ pub fn live_host_runtime_producer(
     runtime_id: &str,
 ) -> Option<HostRuntimeProducer> {
     let runtime_id = canonical_runtime_id(runtime_id);
+    // An unfinished effectful start owns a producer even before readiness.
+    // Reclaim must reach shutdown rather than only stopping its projection,
+    // including legacy runtimes without configured resource accounting.
+    let owns_producer = |snapshot: &inference::RuntimeLifecycleSnapshot| {
+        snapshot.active
+            || (snapshot.warmup_started_at_ms.is_some()
+                && snapshot.warmup_completed_at_ms.is_none())
+    };
 
     if mode_info
         .active_runtime
         .as_ref()
-        .map(|snapshot| snapshot.active)
+        .map(owns_producer)
         .unwrap_or(false)
         && active_runtime_id(mode_info).as_deref() == Some(runtime_id.as_str())
     {
@@ -87,7 +95,7 @@ pub fn live_host_runtime_producer(
     if mode_info
         .embedding_runtime
         .as_ref()
-        .map(|snapshot| snapshot.active)
+        .map(owns_producer)
         .unwrap_or(false)
         && embedding_runtime_id(mode_info).as_deref() == Some(runtime_id.as_str())
     {

@@ -1,0 +1,31 @@
+{
+  "kind": "static feasible additive-envelope witness, not native cohort capacity or measured memory",
+  "source": {
+    "task": "existing estimate_hints\u2192reservation_requirements_from_estimate_hints; per-kind maximum",
+    "static_estimator": "3*strong logical package bytes +512MiB, emitted for both RAM and VRAM; never silently zero VRAM taskclaims",
+    "resident_guard": "trusted explicit constructor configuration; known per-kind; no phase-based charge shrink"
+  },
+  "original_fixture_artifact_bytes": {
+    "bert-8": 8756,
+    "bert-12": 13286
+  },
+  "witness": {
+    "resident_ram": 33554432,
+    "guard_load_peak_ram": 50331648,
+    "task_ram_upper_bound": 1073741824,
+    "ram_capacity": 1157627904,
+    "resident_vram": 0,
+    "guard_load_peak_vram": 0,
+    "task_vram_upper_bound": 1073741824,
+    "vram_admission_capacity": 1073741824
+  },
+  "conditions": [
+    "confirm actual authoritative selected task RAM/VRAM hints do not exceed witness bounds before any physical action",
+    "check full additive resident+guard+task envelope, including future resident publication, before coldload",
+    "private registry+M3turn exclude other lease publications while this check/preparation completes",
+    "actual M4 capacity/pressure case numericvalues still require prospective producer admission"
+  ],
+  "physical_memory_measurement": false,
+  "gpu_execution": false,
+  "native_run": false
+}

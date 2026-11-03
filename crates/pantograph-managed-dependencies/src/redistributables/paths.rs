@@ -121,6 +121,28 @@ pub(crate) fn library_path(name: &str) -> String {
     }
 }
 
+pub(crate) fn sanitize_path_segment(segment: &str) -> String {
+    segment
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() || matches!(character, '.' | '-' | '_') {
+                character
+            } else {
+                '_'
+            }
+        })
+        .collect()
+}
+
+pub(crate) fn current_unix_timestamp_ms() -> u64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64
+}
+
 #[cfg(test)]
 mod tests {
     use super::{managed_redistributable_version_dir, ManagedRedistributableId};
@@ -145,26 +167,4 @@ mod tests {
             legacy_dir
         );
     }
-}
-
-pub(crate) fn sanitize_path_segment(segment: &str) -> String {
-    segment
-        .chars()
-        .map(|character| {
-            if character.is_ascii_alphanumeric() || matches!(character, '.' | '-' | '_') {
-                character
-            } else {
-                '_'
-            }
-        })
-        .collect()
-}
-
-pub(crate) fn current_unix_timestamp_ms() -> u64 {
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis() as u64
 }

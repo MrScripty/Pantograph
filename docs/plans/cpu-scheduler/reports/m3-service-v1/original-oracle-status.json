@@ -1,0 +1,4 @@
+{
+  "error": "cancelled attempt trained, cancellation unobserved, or successful sample count differs",
+  "passed": false
+}

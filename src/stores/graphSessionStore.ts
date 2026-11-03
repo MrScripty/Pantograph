@@ -5,6 +5,9 @@
  * (SYSTEM_GRAPHS, loadSystemGraph) which is Pantograph-specific.
  */
 import { sessionStores, backend, workflowStores } from './storeInstances';
+import { get } from 'svelte/store';
+import { getWorkflowBrowserHost } from '../services/workflow/workflowBrowserTransport';
+import { graphSessionStorageKey, selectBrowserStartupWorkflow } from './browserGraphStartup';
 
 // Re-export types
 export type { GraphType, GraphInfo, SessionKind } from '@pantograph/svelte-graph';
@@ -64,7 +67,7 @@ export function loadSystemGraph(graphId: string): boolean {
 
 // --- Override: loadLastGraph with system graph support ---
 
-const LAST_GRAPH_KEY = 'pantograph.lastGraph';
+const LAST_GRAPH_KEY = graphSessionStorageKey(getWorkflowBrowserHost());
 
 function getLastGraph(): { id: string; type: GraphType } | null {
   try {
@@ -81,6 +84,13 @@ function getLastGraph(): { id: string; type: GraphType } | null {
  */
 export async function loadLastGraph(): Promise<void> {
   const last = getLastGraph();
+  if (getWorkflowBrowserHost()) {
+    workflowStores.nodeDefinitions.set(await backend.getNodeDefinitions());
+    await sessionStores.refreshWorkflowList();
+    const selected = selectBrowserStartupWorkflow(get(availableWorkflows), last);
+    if (selected) await sessionStores.loadWorkflowByName(selected);
+    return;
+  }
   if (last?.type === 'system') {
     // Load definitions so they're available when user switches to a workflow
     const defs = await backend.getNodeDefinitions();

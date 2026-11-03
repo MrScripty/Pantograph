@@ -182,22 +182,31 @@ pub(super) fn upsert_projection_state(
     update.validate()?;
     let tx = ledger.conn.transaction()?;
     let record = if update.status == ProjectionStatus::Failed {
-        write_projection_failure_state(
+        write_projection_state(
             &tx,
-            update.projection_name.as_str(),
-            update.projection_version,
-            update.last_applied_event_seq,
-            update.rebuilt_at_ms,
-            update
-                .last_error
-                .as_deref()
-                .expect("failed projection state has an error"),
-            update
-                .last_error_at_ms
-                .expect("failed projection state has an error timestamp"),
-            update
-                .last_failed_event_seq
-                .expect("failed projection state has a failed event cursor"),
+            ProjectionStateWrite {
+                projection_name: update.projection_name.as_str(),
+                projection_version: update.projection_version,
+                last_applied_event_seq: update.last_applied_event_seq,
+                status: ProjectionStatus::Failed,
+                rebuilt_at_ms: update.rebuilt_at_ms,
+                last_error: Some(
+                    update
+                        .last_error
+                        .as_deref()
+                        .expect("failed projection state has an error"),
+                ),
+                last_error_at_ms: Some(
+                    update
+                        .last_error_at_ms
+                        .expect("failed projection state has an error timestamp"),
+                ),
+                last_failed_event_seq: Some(
+                    update
+                        .last_failed_event_seq
+                        .expect("failed projection state has a failed event cursor"),
+                ),
+            },
         )?
     } else {
         write_projection_state(
@@ -264,31 +273,6 @@ fn write_projection_success_state(
             last_error: None,
             last_error_at_ms: None,
             last_failed_event_seq: None,
-        },
-    )
-}
-
-fn write_projection_failure_state(
-    tx: &Transaction<'_>,
-    projection_name: &str,
-    projection_version: i64,
-    last_applied_event_seq: i64,
-    rebuilt_at_ms: Option<i64>,
-    last_error: &str,
-    last_error_at_ms: i64,
-    last_failed_event_seq: i64,
-) -> Result<ProjectionStateRecord, DiagnosticsLedgerError> {
-    write_projection_state(
-        tx,
-        ProjectionStateWrite {
-            projection_name,
-            projection_version,
-            last_applied_event_seq,
-            status: ProjectionStatus::Failed,
-            rebuilt_at_ms,
-            last_error: Some(last_error),
-            last_error_at_ms: Some(last_error_at_ms),
-            last_failed_event_seq: Some(last_failed_event_seq),
         },
     )
 }
@@ -1433,6 +1417,7 @@ fn node_status_events_after(
          WHERE event_seq > ?1
            AND event_kind IN (
                'node.execution_status',
+               'scheduler.task_attempt_lifecycle_changed',
                'diagnostic.error_occurred',
                'inference.execution_diagnostic_observed'
            )
@@ -1948,7 +1933,8 @@ fn inference_option_support_timeline_detail(
         ("requires backend support", counts.requires_backend_support),
     ]
     .into_iter()
-    .filter_map(|(label, count)| (count > 0).then(|| format!("{label} {count}")))
+    .filter(|(_, count)| *count > 0)
+    .map(|(label, count)| format!("{label} {count}"))
     .collect::<Vec<_>>();
 
     (!parts.is_empty()).then(|| format!("option support {}", parts.join(", ")))
@@ -2337,6 +2323,46 @@ fn apply_node_status_projection_event(
             None,
             payload.execution_cache_status,
         ),
+        // Non-runtime tasks execute through the scheduler's node-engine host,
+        // which emits attempt lifecycle events rather than runtime-owner status.
+        // Keep runtime attempts on their existing owner-status projection path.
+        DiagnosticEventPayload::SchedulerTaskAttemptLifecycleChanged(payload)
+            if payload.execution_class
+                == SchedulerTaskAttemptExecutionClass::NonRuntimeNodeEngine
+                && event.node_id.is_some() =>
+        {
+            let status = match payload.transition {
+                SchedulerTaskAttemptLifecycleTransition::Started
+                | SchedulerTaskAttemptLifecycleTransition::Redispatched => {
+                    NodeExecutionProjectionStatus::Running
+                }
+                SchedulerTaskAttemptLifecycleTransition::Completed => {
+                    NodeExecutionProjectionStatus::Completed
+                }
+                SchedulerTaskAttemptLifecycleTransition::Failed => {
+                    NodeExecutionProjectionStatus::Failed
+                }
+                SchedulerTaskAttemptLifecycleTransition::Cancelled => {
+                    NodeExecutionProjectionStatus::Cancelled
+                }
+            };
+            (
+                status,
+                payload.started_at_ms,
+                payload.ended_at_ms,
+                payload.duration_ms.map(|value| value as i64),
+                payload.error_summary.clone(),
+                None,
+                payload.canonical_error_event_id.clone(),
+                None,
+                None,
+                None,
+                Some(payload.scheduler_task_id.clone()),
+                payload.selected_backend_key.clone(),
+                None,
+                None,
+            )
+        }
         DiagnosticEventPayload::InferenceExecutionDiagnosticObserved(payload)
             if payload.runtime_settings.is_some() =>
         {
@@ -2402,6 +2428,15 @@ fn apply_node_status_projection_event(
         .as_ref()
         .ok_or(DiagnosticsLedgerError::MissingField { field: "node_id" })?;
 
+    let new_attempt = matches!(&payload,
+        DiagnosticEventPayload::SchedulerTaskAttemptLifecycleChanged(attempt)
+            if attempt.execution_class == SchedulerTaskAttemptExecutionClass::NonRuntimeNodeEngine
+                && matches!(attempt.transition,
+                    SchedulerTaskAttemptLifecycleTransition::Started
+                    | SchedulerTaskAttemptLifecycleTransition::Redispatched));
+    // A new attempt must not inherit a failed attempt's duration or error links.
+    // Events remain ordered by ledger sequence; the scheduler timeline retains
+    // each attempt identity and its full lifecycle separately.
     tx.execute(
         "INSERT INTO node_status_projection
             (workflow_run_id, workflow_id, workflow_version_id,
@@ -2426,17 +2461,17 @@ fn apply_node_status_projection_event(
             runtime_settings_json = COALESCE(excluded.runtime_settings_json, node_status_projection.runtime_settings_json),
             model_id = COALESCE(excluded.model_id, node_status_projection.model_id),
             model_version = COALESCE(excluded.model_version, node_status_projection.model_version),
-            execution_cache_status = COALESCE(excluded.execution_cache_status, node_status_projection.execution_cache_status),
+            execution_cache_status = CASE WHEN ?28 THEN excluded.execution_cache_status ELSE COALESCE(excluded.execution_cache_status, node_status_projection.execution_cache_status) END,
             status = excluded.status,
             started_at_ms = COALESCE(excluded.started_at_ms, node_status_projection.started_at_ms),
             completed_at_ms = excluded.completed_at_ms,
-            duration_ms = COALESCE(excluded.duration_ms, node_status_projection.duration_ms),
+            duration_ms = CASE WHEN ?28 THEN excluded.duration_ms ELSE COALESCE(excluded.duration_ms, node_status_projection.duration_ms) END,
             error = excluded.error,
-            error_event_id = COALESCE(excluded.error_event_id, node_status_projection.error_event_id),
-            canonical_error_event_id = COALESCE(excluded.canonical_error_event_id, node_status_projection.canonical_error_event_id),
-            error_severity = COALESCE(excluded.error_severity, node_status_projection.error_severity),
-            error_phase = COALESCE(excluded.error_phase, node_status_projection.error_phase),
-            error_code = COALESCE(excluded.error_code, node_status_projection.error_code),
+            error_event_id = CASE WHEN ?28 THEN excluded.error_event_id ELSE COALESCE(excluded.error_event_id, node_status_projection.error_event_id) END,
+            canonical_error_event_id = CASE WHEN ?28 THEN excluded.canonical_error_event_id ELSE COALESCE(excluded.canonical_error_event_id, node_status_projection.canonical_error_event_id) END,
+            error_severity = CASE WHEN ?28 THEN excluded.error_severity ELSE COALESCE(excluded.error_severity, node_status_projection.error_severity) END,
+            error_phase = CASE WHEN ?28 THEN excluded.error_phase ELSE COALESCE(excluded.error_phase, node_status_projection.error_phase) END,
+            error_code = CASE WHEN ?28 THEN excluded.error_code ELSE COALESCE(excluded.error_code, node_status_projection.error_code) END,
             last_event_seq = excluded.last_event_seq,
             last_updated_at_ms = excluded.last_updated_at_ms",
         params![
@@ -2470,6 +2505,7 @@ fn apply_node_status_projection_event(
             error_code.as_deref(),
             event.event_seq,
             event.occurred_at_ms,
+            new_attempt,
         ],
     )?;
     Ok(())
@@ -4328,4 +4364,47 @@ where
     E: std::error::Error + Send + Sync + 'static,
 {
     rusqlite::Error::FromSqlConversionFailure(0, Type::Text, Box::new(error))
+}
+
+#[cfg(test)]
+mod projection_style_tests {
+    use super::inference_option_support_timeline_detail;
+    use crate::event::InferenceOptionSupportCounts;
+
+    #[test]
+    fn option_support_detail_preserves_order_and_omits_zero_counts() {
+        let counts = InferenceOptionSupportCounts {
+            honored: 1,
+            mapped: 2,
+            defaulted: 3,
+            ignored: 4,
+            unsupported: 5,
+            rejected: 6,
+            conflict: 7,
+            model_unavailable: 8,
+            backend_unavailable: 9,
+            requires_model_support: 10,
+            requires_backend_support: 11,
+        };
+        assert_eq!(inference_option_support_timeline_detail(&counts).as_deref(), Some(
+            "option support honored 1, mapped 2, defaulted 3, ignored 4, unsupported 5, rejected 6, conflict 7, model unavailable 8, backend unavailable 9, requires model support 10, requires backend support 11"
+        ));
+        let sparse = InferenceOptionSupportCounts {
+            mapped: 2,
+            rejected: 6,
+            ..InferenceOptionSupportCounts::default()
+        };
+        assert_eq!(
+            inference_option_support_timeline_detail(&sparse).as_deref(),
+            Some("option support mapped 2, rejected 6")
+        );
+    }
+
+    #[test]
+    fn option_support_detail_is_absent_for_zero_counts() {
+        assert_eq!(
+            inference_option_support_timeline_detail(&InferenceOptionSupportCounts::default()),
+            None
+        );
+    }
 }

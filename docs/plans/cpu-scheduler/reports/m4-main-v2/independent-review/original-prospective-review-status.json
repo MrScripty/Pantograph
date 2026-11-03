@@ -1,0 +1,8 @@
+{
+  "script_sha256": "e8267d1b1f741820c1e159784e8356b66984af7ca72d2bc5802cae41a5361985",
+  "exit_code": 1,
+  "stdout": "{\"checks_passed\": false, \"report\": \"/workspace/m4-main-v2-review/original-prospective-report.json\", \"finding\": \"AssertionError: v2 process incomplete/failed/retried/wrong source\"}\n",
+  "stderr": "",
+  "native_invocations": 0,
+  "originals_modified": false
+}

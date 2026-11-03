@@ -1,16 +1,20 @@
 use pantograph_diagnostics_ledger::{
-    DiagnosticEventAppendRequest, DiagnosticEventPayload, DiagnosticEventPrivacyClass,
-    DiagnosticEventRetentionClass, DiagnosticEventSourceComponent, SchedulerModelCacheState,
-    SchedulerModelLifecycleChangedPayload, SchedulerModelLifecycleTransition,
+    sanitize_diagnostic_error_text, DiagnosticEventAppendRequest, DiagnosticEventPayload,
+    DiagnosticEventPrivacyClass, DiagnosticEventRetentionClass, DiagnosticEventSourceComponent,
+    SchedulerModelCacheState, SchedulerModelLifecycleChangedPayload,
+    SchedulerModelLifecycleTransition, MAX_DIAGNOSTIC_ERROR_TEXT_LEN,
 };
 use pantograph_runtime_attribution::{
-    BucketId, ClientId, ClientSessionId, WorkflowId, WorkflowRunId, WorkflowRunSnapshotRecord,
+    BucketId, ClientId, ClientSessionId, WorkflowId, WorkflowRunSnapshotRecord,
 };
 use pantograph_timing_contracts::{checked_timing_duration_ms, WorkflowTimingAttemptId};
 
 use crate::scheduler::WorkflowExecutionSessionPreflightCache;
 use crate::technical_fit::WorkflowTechnicalFitOverride;
 
+use super::diagnostic_errors::{
+    WorkflowDiagnosticErrorRecordRequest, WorkflowDiagnosticSessionRuntimeScope,
+};
 use super::{
     WorkflowExecutionSessionRetentionHint, WorkflowExecutionSessionRuntimeSelectionTarget,
     WorkflowExecutionSessionRuntimeUnloadCandidate, WorkflowExecutionSessionSummary,
@@ -49,8 +53,6 @@ fn workflow_timing_duration_ms(
 pub(super) struct WorkflowSessionRuntimeAdmissionDiagnosticContext<'a> {
     pub(super) session: &'a WorkflowExecutionSessionSummary,
     pub(super) snapshot: Option<&'a WorkflowRunSnapshotRecord>,
-    pub(super) workflow_run_id: &'a str,
-    pub(super) workflow_semantic_version: &'a str,
 }
 
 struct CapacityRebalanceModelLifecycleEventRequest<'a> {
@@ -162,7 +164,8 @@ impl WorkflowService {
                                 duration_ms: None,
                                 error: None,
                             },
-                        )?;
+                        )
+                        .map_err(lifecycle_diagnostic_failure)?;
                         self.record_capacity_rebalance_model_lifecycle_events_if_configured(
                             CapacityRebalanceModelLifecycleEventRequest {
                                 context,
@@ -173,7 +176,8 @@ impl WorkflowService {
                                 duration_ms: None,
                                 error: None,
                             },
-                        )?;
+                        )
+                        .map_err(lifecycle_diagnostic_failure)?;
                     }
                     let unload_started_at_ms = crate::scheduler::unix_timestamp_ms();
                     let unload_result = host
@@ -183,48 +187,54 @@ impl WorkflowService {
                             WorkflowExecutionSessionUnloadReason::CapacityRebalance,
                         )
                         .await;
+                    // Host residency is authoritative even if subsequent telemetry fails.
+                    if unload_result.is_ok() {
+                        self.session_store_guard()?
+                            .mark_runtime_loaded(&candidate.session_id, false)?;
+                    }
                     let unload_duration_ms = workflow_timing_duration_ms(
                         &unload_timing_attempt_id,
                         unload_started_at_ms,
                         crate::scheduler::unix_timestamp_ms(),
                     )?;
-                    if let Some(context) = diagnostics_context.as_ref() {
-                        match &unload_result {
-                            Ok(()) => {
-                                self.record_capacity_rebalance_model_lifecycle_events_if_configured(
-                                    CapacityRebalanceModelLifecycleEventRequest {
-                                        context,
-                                        candidate: &candidate,
-                                        transition:
-                                            SchedulerModelLifecycleTransition::UnloadCompleted,
-                                        timing_attempt_id: Some(unload_timing_attempt_id.as_str()),
-                                        reason: "capacity rebalance unloaded selected session",
-                                        duration_ms: Some(unload_duration_ms),
-                                        error: None,
-                                    },
-                                )?;
-                            }
-                            Err(error) => {
-                                let error_text = error.to_string();
-                                let _diagnostic_result = self
-                                    .record_capacity_rebalance_model_lifecycle_events_if_configured(
-                                    CapacityRebalanceModelLifecycleEventRequest {
-                                        context,
-                                        candidate: &candidate,
-                                        transition: SchedulerModelLifecycleTransition::UnloadFailed,
-                                        timing_attempt_id: Some(unload_timing_attempt_id.as_str()),
-                                        reason:
-                                            "capacity rebalance failed to unload selected session",
-                                        duration_ms: Some(unload_duration_ms),
-                                        error: Some(error_text.as_str()),
-                                    },
-                                );
-                            }
+                    let terminal_diagnostics = if let Some(context) = diagnostics_context.as_ref() {
+                        let error_text = unload_result.as_ref().err().map(|error| {
+                            sanitize_diagnostic_error_text(
+                                &error.to_string(),
+                                MAX_DIAGNOSTIC_ERROR_TEXT_LEN,
+                            )
+                        });
+                        self.record_capacity_rebalance_model_lifecycle_events_if_configured(
+                            CapacityRebalanceModelLifecycleEventRequest {
+                                context,
+                                candidate: &candidate,
+                                transition: if unload_result.is_ok() {
+                                    SchedulerModelLifecycleTransition::UnloadCompleted
+                                } else {
+                                    SchedulerModelLifecycleTransition::UnloadFailed
+                                },
+                                timing_attempt_id: Some(unload_timing_attempt_id.as_str()),
+                                reason: if unload_result.is_ok() {
+                                    "capacity rebalance unloaded selected session"
+                                } else {
+                                    "capacity rebalance failed to unload selected session"
+                                },
+                                duration_ms: Some(unload_duration_ms),
+                                error: error_text.as_deref(),
+                            },
+                        )
+                    } else {
+                        Ok(())
+                    };
+                    match unload_result {
+                        Ok(()) => terminal_diagnostics.map_err(lifecycle_diagnostic_failure)?,
+                        Err(error) => {
+                            return Err(match terminal_diagnostics {
+                                Ok(()) => error,
+                                Err(recording_error) => error
+                                    .with_diagnostics(lifecycle_diagnostic_link(&recording_error)),
+                            })
                         }
-                    }
-                    unload_result?;
-                    if let Ok(mut store) = self.session_store.lock() {
-                        let _ = store.mark_runtime_loaded(&candidate.session_id, false);
                     }
                 }
                 RuntimeDecision::LoadTarget {
@@ -260,7 +270,10 @@ impl WorkflowService {
             return Ok(());
         }
 
-        let workflow_run_id = WorkflowRunId::try_from(request.context.workflow_run_id.to_string())?;
+        let workflow_run_id = request
+            .context
+            .snapshot
+            .map(|snapshot| snapshot.workflow_run_id.clone());
         let workflow_id = workflow_id_for_runtime_admission_event(
             request.context.session,
             request.context.snapshot,
@@ -276,21 +289,16 @@ impl WorkflowService {
                     source_component: DiagnosticEventSourceComponent::Scheduler,
                     source_instance_id: Some("workflow-session-scheduler".to_string()),
                     occurred_at_ms: crate::scheduler::unix_timestamp_ms() as i64,
-                    workflow_run_id: Some(workflow_run_id.clone()),
+                    workflow_run_id: workflow_run_id.clone(),
                     workflow_id: Some(workflow_id.clone()),
                     workflow_version_id: request
                         .context
                         .snapshot
                         .map(|snapshot| snapshot.workflow_version_id.clone()),
-                    workflow_semantic_version: Some(
-                        request
-                            .context
-                            .snapshot
-                            .map(|snapshot| snapshot.workflow_semantic_version.clone())
-                            .unwrap_or_else(|| {
-                                request.context.workflow_semantic_version.to_string()
-                            }),
-                    ),
+                    workflow_semantic_version: request
+                        .context
+                        .snapshot
+                        .map(|snapshot| snapshot.workflow_semantic_version.clone()),
                     node_id: None,
                     node_type: None,
                     node_version: None,
@@ -320,6 +328,12 @@ impl WorkflowService {
                     payload_ref: None,
                     payload: DiagnosticEventPayload::SchedulerModelLifecycleChanged(
                         SchedulerModelLifecycleChangedPayload {
+                            workflow_execution_session_id: Some(
+                                request.context.session.session_id.clone(),
+                            ),
+                            unloaded_workflow_execution_session_id: Some(
+                                request.candidate.session_id.clone(),
+                            ),
                             transition: request.transition,
                             cache_state: Some(SchedulerModelCacheState::for_lifecycle_transition(
                                 request.transition,
@@ -334,8 +348,7 @@ impl WorkflowService {
                         },
                     ),
                 },
-            )
-            .map_err(WorkflowServiceError::from)?;
+            )?;
         }
         Ok(())
     }
@@ -407,8 +420,51 @@ impl WorkflowService {
                 super::format_runtime_not_ready_message(&cache.blocking_runtime_issues),
             ));
         }
-        self.ensure_session_runtime_loaded(host, session_id, None)
-            .await
+        let session = self.session_store_guard()?.session_summary(session_id)?;
+        let result = self
+            .ensure_session_runtime_loaded(
+                host,
+                session_id,
+                Some(WorkflowSessionRuntimeAdmissionDiagnosticContext {
+                    session: &session,
+                    snapshot: None,
+                }),
+            )
+            .await;
+        match result {
+            Ok(()) => Ok(()),
+            Err(error) => {
+                let outcome = self.record_workflow_diagnostic_error_if_configured(
+                    WorkflowDiagnosticErrorRecordRequest::session_runtime_admission_failed(
+                        WorkflowDiagnosticSessionRuntimeScope {
+                            session_id: session.session_id.clone(),
+                            workflow_id: WorkflowId::try_from(session.workflow_id.clone())?,
+                            workflow_run_id: None,
+                        },
+                        &error,
+                    ),
+                );
+                let prior_unavailable = error
+                    .diagnostics()
+                    .and_then(|link| link.diagnostics_unavailable.clone());
+                let mut diagnostics = match outcome {
+                    Ok(outcome) => outcome.into_error_link(None::<String>),
+                    Err(recording_error) => super::WorkflowErrorDiagnosticsLink {
+                        workflow_run_id: None,
+                        diagnostic_event_id: None,
+                        diagnostics_unavailable: Some(recording_error.message().to_string()),
+                    },
+                };
+                if let Some(prior) = prior_unavailable {
+                    diagnostics.diagnostics_unavailable =
+                        Some(match diagnostics.diagnostics_unavailable {
+                            Some(current) if current != prior => format!("{prior}; {current}"),
+                            _ => prior,
+                        });
+                }
+                Err(error.with_diagnostics(diagnostics))
+            }
+        }
     }
 
     pub(super) async fn refresh_session_runtime_affinity_basis<H: WorkflowHost>(
@@ -485,4 +541,20 @@ fn runtime_event_bucket_id(
             .transpose()
             .map_err(WorkflowServiceError::from),
     }
+}
+
+fn lifecycle_diagnostic_link(error: &WorkflowServiceError) -> super::WorkflowErrorDiagnosticsLink {
+    super::WorkflowErrorDiagnosticsLink {
+        workflow_run_id: None,
+        diagnostic_event_id: None,
+        diagnostics_unavailable: Some(format!(
+            "capacity lifecycle event unavailable: {}",
+            sanitize_diagnostic_error_text(error.message(), MAX_DIAGNOSTIC_ERROR_TEXT_LEN)
+        )),
+    }
+}
+
+fn lifecycle_diagnostic_failure(error: WorkflowServiceError) -> WorkflowServiceError {
+    let link = lifecycle_diagnostic_link(&error);
+    error.with_diagnostics(link)
 }

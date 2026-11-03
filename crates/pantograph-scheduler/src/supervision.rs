@@ -284,12 +284,13 @@ impl SchedulerLifecycleOwnerSnapshot {
 #[must_use]
 pub struct ValidatedSchedulerLifecycleOwnerSnapshot(SchedulerLifecycleOwnerSnapshot);
 
-impl ValidatedSchedulerLifecycleOwnerSnapshot {
-    #[must_use]
-    pub fn as_ref(&self) -> &SchedulerLifecycleOwnerSnapshot {
+impl AsRef<SchedulerLifecycleOwnerSnapshot> for ValidatedSchedulerLifecycleOwnerSnapshot {
+    fn as_ref(&self) -> &SchedulerLifecycleOwnerSnapshot {
         &self.0
     }
+}
 
+impl ValidatedSchedulerLifecycleOwnerSnapshot {
     #[must_use]
     pub fn into_inner(self) -> SchedulerLifecycleOwnerSnapshot {
         self.0

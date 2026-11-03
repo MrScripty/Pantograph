@@ -57,15 +57,8 @@ impl StreamArtifactizer {
         let relationship = artifact_relationship_from_chunk(chunk);
 
         let key = MediaStreamKey::new(execution_id, task_id, port);
-        let (artifact_id, stream_handle, byte_range_start) = self.open_or_get_stream(
-            &key,
-            task_id,
-            execution_id,
-            port,
-            media_body.kind,
-            &media_type,
-            &relationship,
-        )?;
+        let (artifact_id, stream_handle, byte_range_start) =
+            self.open_or_get_stream(&key, media_body.kind, &media_type, &relationship)?;
         let (byte_range_end_exclusive, next_sequence) =
             checked_stream_artifact_progress(byte_range_start, body.len(), sequence)?;
 
@@ -167,9 +160,6 @@ impl StreamArtifactizer {
     fn open_or_get_stream(
         &self,
         key: &MediaStreamKey,
-        task_id: &str,
-        execution_id: &str,
-        port: &str,
         payload_kind: ArtifactPayloadKind,
         media_type: &str,
         relationship: &ArtifactRelationship,
@@ -184,11 +174,11 @@ impl StreamArtifactizer {
                     media_type: media_type.to_string(),
                     format: Some(format_metadata(payload_kind, media_type)),
                     attribution: ArtifactAttribution {
-                        workflow_run_id: execution_id.to_string(),
+                        workflow_run_id: key.workflow_run_id.clone(),
                         workflow_id: None,
                         workflow_version_id: None,
-                        node_id: Some(task_id.to_string()),
-                        port_id: Some(port.to_string()),
+                        node_id: Some(key.node_id.clone()),
+                        port_id: Some(key.port.clone()),
                         model_id: None,
                         runtime_id: None,
                     },
@@ -413,6 +403,71 @@ mod tests {
     };
     use pantograph_workflow_service::WorkflowService;
     use std::sync::Arc;
+
+    #[test]
+    fn stream_key_preserves_attribution_reuse_and_scope_isolation() {
+        use pantograph_workflow_service::{
+            ArtifactDescriptorQueryRequest, ArtifactPolicy, ArtifactReadRequest, ArtifactStore,
+            WorkflowArtifactWriter,
+        };
+        let temp = tempfile::tempdir().expect("artifact directory");
+        let store = ArtifactStore::open(
+            temp.path().join("artifacts"),
+            ArtifactPolicy {
+                policy_id: "stream-key-test".to_string(),
+                policy_version: 1,
+                ttl_seconds: None,
+                max_disk_bytes: None,
+                max_memory_bytes: None,
+                max_single_artifact_bytes: None,
+                spill_threshold_bytes: None,
+                delete_on_consume: false,
+            },
+        )
+        .expect("artifact store");
+        let service = Arc::new(
+            WorkflowService::new().with_artifact_writer(WorkflowArtifactWriter::new(store)),
+        );
+        let artifactizer = StreamArtifactizer::new(service.clone());
+        let chunk = serde_json::json!({"audio_base64":"AA==", "media_type":"audio/wav"});
+        let first = artifactizer.artifactize_chunk("node-a", "run-a", "audio", chunk.clone());
+        let mut final_chunk = chunk.clone();
+        final_chunk["is_final"] = serde_json::json!(true);
+        let second = artifactizer.artifactize_chunk("node-a", "run-a", "audio", final_chunk);
+        assert_eq!(first["artifact_id"], second["artifact_id"]);
+        assert_eq!(first["byte_range_start"], 0);
+        assert_eq!(second["byte_range_start"], 1);
+        assert_eq!(second["available_byte_length"], 2);
+        let id = first["artifact_id"].as_str().expect("artifact id");
+        let descriptor = service
+            .artifact_descriptor(ArtifactDescriptorQueryRequest {
+                artifact_id: id.to_string(),
+            })
+            .expect("descriptor")
+            .artifact
+            .expect("stored artifact");
+        assert_eq!(descriptor.attribution.workflow_run_id, "run-a");
+        assert_eq!(descriptor.attribution.node_id.as_deref(), Some("node-a"));
+        assert_eq!(descriptor.attribution.port_id.as_deref(), Some("audio"));
+        let body = service
+            .read_artifact_body(ArtifactReadRequest {
+                artifact_id: id.to_string(),
+                byte_range_start: None,
+                byte_range_end_exclusive: None,
+            })
+            .expect("body");
+        assert_eq!(body.body, vec![0, 0]);
+        for (node, run, port) in [
+            ("node-b", "run-a", "audio"),
+            ("node-a", "run-b", "audio"),
+            ("node-a", "run-a", "other"),
+        ] {
+            let isolated = artifactizer.artifactize_chunk(node, run, port, chunk.clone());
+            assert_ne!(isolated["artifact_id"], first["artifact_id"]);
+            assert_eq!(isolated["byte_range_start"], 0);
+        }
+        assert_eq!(artifactizer.streams.lock().expect("streams").len(), 3);
+    }
 
     #[test]
     fn stream_artifact_progress_rejects_byte_range_overflow() {

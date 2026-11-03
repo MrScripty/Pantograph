@@ -11,6 +11,9 @@ publish = false
 [lints]
 workspace = true
 
+[features]
+test-support = []
+
 [dependencies]
 async-trait.workspace = true
 blake3.workspace = true
@@ -22,6 +25,7 @@ uuid.workspace = true
 chrono.workspace = true
 parking_lot.workspace = true
 futures-util.workspace = true
+log.workspace = true
 sysinfo = "0.32"
 
 # Shared framework/domain crates
@@ -40,6 +44,7 @@ pantograph-diagnostics-ledger = { path = "../pantograph-diagnostics-ledger" }
 pantograph-managed-dependencies = { path = "../pantograph-managed-dependencies" }
 
 [dev-dependencies]
+pumas-library.workspace = true
 rusqlite.workspace = true
-tokio.workspace = true
+tokio = { workspace = true, features = ["test-util"] }
 tempfile.workspace = true

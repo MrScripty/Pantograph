@@ -456,13 +456,12 @@ impl PumasSelectorAccess {
         &self,
         model_id: &str,
     ) -> pumas_library::Result<pumas_library::models::ResolvedModelPackageFacts> {
+        // The consumer URI denotes the same relative Pumas identity; the IPC
+        // operation accepts the relative identity, never an executable path.
+        let model_id = model_id.strip_prefix("pumas://models/").unwrap_or(model_id);
         match self {
             Self::Owner(api) => api.resolve_model_package_facts(model_id).await,
-            Self::LocalClient(_) => Err(pumas_library::PumasError::InvalidParams {
-                message:
-                    "local-client Pumas selector access does not provide full package facts yet"
-                        .to_string(),
-            }),
+            Self::LocalClient(client) => client.resolve_model_package_facts(model_id).await,
             Self::ReadOnly(_) => Err(pumas_library::PumasError::InvalidParams {
                 message: "read-only Pumas selector access does not provide full package facts"
                     .to_string(),
@@ -480,8 +479,14 @@ impl PumasSelectorAccess {
 
     pub async fn resolve_model_artifact_load_target(
         &self,
-        request: pumas_library::models::ResolveModelArtifactLoadTargetRequest,
+        mut request: pumas_library::models::ResolveModelArtifactLoadTargetRequest,
     ) -> pumas_library::Result<pumas_library::models::ResolveModelArtifactLoadTargetResponse> {
+        request.model_ref.model_id = request
+            .model_ref
+            .model_id
+            .strip_prefix("pumas://models/")
+            .unwrap_or(&request.model_ref.model_id)
+            .to_string();
         match self {
             Self::Owner(api) => api.resolve_model_artifact_load_target(request).await,
             Self::LocalClient(client) => client.resolve_model_artifact_load_target(request).await,
@@ -1271,11 +1276,12 @@ pub fn setup_extensions_with_rpc_endpoint(
 ///
 /// Tries in order:
 /// 1. Owner API from configured launcher roots derived from `library_path` and
-///    `PUMAS_LIBRARY_PATH`.
+///    `PUMAS_LIBRARY_PATH`, or the local client for that same root when another
+///    process already owns it.
 /// 2. Read-only selector access from configured model-library roots containing
 ///    `models.db`.
-/// 3. Local-client selector access from Pumas ready-instance discovery.
-/// 4. Owner API from `PumasApi::discover()`.
+/// 3. When no root is configured, local-client ready-instance discovery and
+///    then owner API discovery.
 #[cfg(feature = "model-library")]
 pub async fn setup_extensions_with_path(
     extensions: &mut ExecutorExtensions,
@@ -1300,6 +1306,7 @@ pub async fn setup_extensions_with_path(
 
     let mut api: Option<Arc<pumas_library::PumasApi>> = None;
     let mut selector_access: Option<Arc<PumasSelectorAccess>> = None;
+    let mut ready_instances = None;
     for path in &candidates {
         if !path.exists() {
             log::info!("Skipping non-existent library path: {:?}", path);
@@ -1321,6 +1328,12 @@ pub async fn setup_extensions_with_path(
             }
             Err(e) => {
                 log::warn!("PumasApi::builder({:?}) failed: {}", path, e);
+                let instances = ready_instances.get_or_insert_with(discover_ready_pumas_instances);
+                if let Some(client) = connect_local_client(instances, Some(path)).await {
+                    selector_access =
+                        Some(Arc::new(PumasSelectorAccess::LocalClient(Arc::new(client))));
+                    break;
+                }
             }
         }
     }
@@ -1351,36 +1364,18 @@ pub async fn setup_extensions_with_path(
         }
     }
 
-    if selector_access.is_none() {
-        match pumas_library::PumasLocalClient::discover_ready_instances() {
-            Ok(instances) => {
-                for instance in instances {
-                    match pumas_library::PumasLocalClient::connect(instance).await {
-                        Ok(client) => {
-                            log::info!("Pumas selector access connected as local client");
-                            selector_access =
-                                Some(Arc::new(PumasSelectorAccess::LocalClient(Arc::new(client))));
-                            break;
-                        }
-                        Err(error) => {
-                            log::warn!("PumasLocalClient connect failed: {}", error);
-                        }
-                    }
-                }
-            }
-            Err(error) => {
-                log::info!("PumasLocalClient discovery unavailable: {}", error);
-            }
+    if selector_access.is_none() && raw_candidates.is_empty() {
+        let instances = ready_instances.get_or_insert_with(discover_ready_pumas_instances);
+        if let Some(client) = connect_local_client(instances, None).await {
+            selector_access = Some(Arc::new(PumasSelectorAccess::LocalClient(Arc::new(client))));
         }
     }
 
-    if api.is_none() && selector_access.is_none() {
-        if raw_candidates.is_empty() {
-            log::info!(
-                "No pumas-library path configured. \
-                 Set PUMAS_LIBRARY_PATH or pass a path to setup_extensions_with_path()."
-            );
-        }
+    if api.is_none() && selector_access.is_none() && raw_candidates.is_empty() {
+        log::info!(
+            "No pumas-library path configured. \
+             Set PUMAS_LIBRARY_PATH or pass a path to setup_extensions_with_path()."
+        );
         match pumas_library::PumasApi::discover().await {
             Ok(found) => {
                 log::info!("PumasApi connected via discover()");
@@ -1401,6 +1396,43 @@ pub async fn setup_extensions_with_path(
     if let Some(selector_access) = selector_access {
         extensions.set(PUMAS_SELECTOR_ACCESS, selector_access);
     }
+}
+
+#[cfg(feature = "model-library")]
+fn discover_ready_pumas_instances() -> Vec<pumas_library::registry::InstanceEntry> {
+    pumas_library::PumasLocalClient::discover_ready_instances().unwrap_or_else(|error| {
+        log::info!("PumasLocalClient discovery unavailable: {}", error);
+        Vec::new()
+    })
+}
+
+#[cfg(feature = "model-library")]
+async fn connect_local_client(
+    instances: &[pumas_library::registry::InstanceEntry],
+    launcher_root: Option<&Path>,
+) -> Option<pumas_library::PumasLocalClient> {
+    let canonical_root = match launcher_root {
+        Some(root) => Some(std::fs::canonicalize(root).ok()?),
+        None => None,
+    };
+    for instance in instances {
+        if let Some(root) = &canonical_root {
+            if std::fs::canonicalize(&instance.library_path).ok().as_ref() != Some(root) {
+                continue;
+            }
+        }
+        match pumas_library::PumasLocalClient::connect(instance.clone()).await {
+            Ok(client) => {
+                log::info!(
+                    "Pumas selector access connected as local client at {:?}",
+                    client.instance().library_path
+                );
+                return Some(client);
+            }
+            Err(error) => log::warn!("PumasLocalClient connect failed: {}", error),
+        }
+    }
+    None
 }
 
 #[cfg(feature = "model-library")]
@@ -1491,11 +1523,56 @@ pub fn resolve_pumas_model_library_root(path: &Path) -> Option<PathBuf> {
 mod tests {
     use super::*;
     use node_engine::extension_keys;
+    use pumas_library::registry::InstanceEntry;
     use pumas_library::ModelIndex;
     use std::io::{Read, Write};
     use std::net::TcpListener;
     use std::thread;
     use tempfile::TempDir;
+
+    async fn create_owner(root: &Path) -> pumas_library::PumasApi {
+        pumas_library::PumasApi::builder(root)
+            .auto_create_dirs(true)
+            .with_hf_client(false)
+            .with_process_manager(false)
+            .build()
+            .await
+            .expect("isolated public Pumas owner should start")
+    }
+
+    fn owner_instance(owner: &pumas_library::PumasApi) -> InstanceEntry {
+        let root = std::fs::canonicalize(owner.launcher_root()).unwrap();
+        pumas_library::PumasLocalClient::discover_ready_instances()
+            .expect("public owner registry discovery")
+            .into_iter()
+            .find(|instance| {
+                std::fs::canonicalize(&instance.library_path).ok().as_ref() == Some(&root)
+            })
+            .expect("owner should publish an authenticated ready instance")
+    }
+
+    async fn import_fixture_model(owner: &pumas_library::PumasApi) -> String {
+        let source = owner.launcher_root().join("source.gguf");
+        let mut bytes = [0_u8; 24];
+        bytes[..4].copy_from_slice(b"GGUF");
+        bytes[4..8].copy_from_slice(&2_u32.to_le_bytes());
+        std::fs::write(&source, bytes).unwrap();
+        let imported = owner
+            .import_model(&pumas_library::model_library::ModelImportSpec {
+                path: source.display().to_string(),
+                family: "fixture".into(),
+                official_name: "Local Client Test".into(),
+                repo_id: None,
+                model_type: Some("llm".into()),
+                subtype: None,
+                tags: None,
+                security_acknowledged: Some(true),
+            })
+            .await
+            .expect("public fixture import");
+        assert!(imported.success, "import failed: {:?}", imported.error);
+        imported.model_id.expect("imported model identity")
+    }
 
     fn create_models_db(model_root: &Path) {
         std::fs::create_dir_all(model_root).unwrap();
@@ -1607,6 +1684,452 @@ mod tests {
                 .is_none(),
             "read-only selector setup must not claim owner API access"
         );
+    }
+
+    #[tokio::test]
+    async fn configured_setup_attaches_to_real_owner_before_read_only_fallback() {
+        let temp = create_launcher_root();
+        let owner = pumas_library::PumasApi::builder(temp.path())
+            .auto_create_dirs(true)
+            .with_hf_client(false)
+            .with_process_manager(false)
+            .build()
+            .await
+            .expect("isolated Pumas owner should start");
+        let build_dir = temp.path().join("rust/target/release");
+        std::fs::create_dir_all(&build_dir).unwrap();
+        let mut extensions = ExecutorExtensions::new();
+
+        setup_extensions_with_path(&mut extensions, Some(&build_dir)).await;
+
+        let access = extensions
+            .get::<Arc<PumasSelectorAccess>>(PUMAS_SELECTOR_ACCESS)
+            .expect("existing owner should provide selector access");
+        let PumasSelectorAccess::LocalClient(client) = access.as_ref() else {
+            panic!("expected local-client access, got {}", access.role_name());
+        };
+        assert_eq!(
+            std::fs::canonicalize(&client.instance().library_path).unwrap(),
+            std::fs::canonicalize(temp.path()).unwrap()
+        );
+        assert!(extensions
+            .get::<Arc<pumas_library::PumasApi>>(extension_keys::PUMAS_API)
+            .is_none());
+        let request = pumas_library::models::ModelLibrarySelectorSnapshotRequest {
+            limit: Some(1),
+            ..Default::default()
+        };
+        let owner_snapshot = owner
+            .model_library_selector_snapshot(request.clone())
+            .await
+            .expect("owner selector snapshot");
+        let client_snapshot = access
+            .model_library_selector_snapshot(request.clone())
+            .await
+            .expect("authenticated selector snapshot over real owner IPC");
+        assert_eq!(client_snapshot.cursor, owner_snapshot.cursor);
+        assert_eq!(client_snapshot.total_count, owner_snapshot.total_count);
+        assert!(client_snapshot.rows.is_empty());
+
+        let instance = client.instance().clone();
+        let mut invalid_instance = instance.clone();
+        invalid_instance.connection_token = Some("invalid-owner-token".to_string());
+        let invalid_client = pumas_library::PumasLocalClient::connect(invalid_instance)
+            .await
+            .expect("TCP connection does not authenticate owner methods");
+        let error = invalid_client
+            .model_library_selector_snapshot(request.clone())
+            .await
+            .expect_err("owner must reject an invalid local-client token");
+        assert!(
+            matches!(
+                &error,
+                pumas_library::PumasError::InvalidParams { message }
+                    if message == "Invalid local IPC parameters"
+            ),
+            "invalid token must return the public IPC authentication error: {error}"
+        );
+
+        drop(extensions);
+        owner
+            .model_library_selector_snapshot(request.clone())
+            .await
+            .expect("dropping attached access must not shut down the owner");
+        pumas_library::PumasLocalClient::connect(instance)
+            .await
+            .expect("owner must still accept clients")
+            .model_library_selector_snapshot(request)
+            .await
+            .expect("owner IPC must survive dropping attached extensions");
+    }
+
+    #[tokio::test]
+    async fn configured_local_client_full_facts_and_guarded_target_match_real_owner() {
+        use pumas_library::models::{
+            PumasArtifactConsumer, PumasArtifactLoadTargetResolutionMode,
+            ResolveModelArtifactLoadTargetRequest,
+        };
+        let root = create_launcher_root();
+        let owner = pumas_library::PumasApi::builder(root.path())
+            .auto_create_dirs(true)
+            .with_hf_client(false)
+            .with_process_manager(false)
+            .build()
+            .await
+            .expect("isolated real owner");
+        let source = root.path().join("source.gguf");
+        let mut bytes = [0_u8; 24];
+        bytes[..4].copy_from_slice(b"GGUF");
+        bytes[4..8].copy_from_slice(&2_u32.to_le_bytes());
+        std::fs::write(&source, bytes).unwrap();
+        let imported = owner
+            .import_model(&pumas_library::model_library::ModelImportSpec {
+                path: source.display().to_string(),
+                family: "fixture".into(),
+                official_name: "Consumer Full Facts".into(),
+                repo_id: None,
+                model_type: Some("llm".into()),
+                subtype: None,
+                tags: None,
+                security_acknowledged: Some(true),
+            })
+            .await
+            .unwrap();
+        assert!(imported.success, "import failed: {:?}", imported.error);
+        let model_id = imported.model_id.unwrap();
+        let expected = owner.resolve_model_package_facts(&model_id).await.unwrap();
+        assert_eq!(expected.package_facts_contract_version, 3);
+        assert!(expected.gguf.is_some());
+        assert!(expected.inspection_manifest.is_some());
+        assert!(expected.artifact.logical_size.is_some());
+        let mut extensions = ExecutorExtensions::new();
+        setup_extensions_with_path(&mut extensions, Some(root.path())).await;
+        let access = extensions
+            .get::<Arc<PumasSelectorAccess>>(PUMAS_SELECTOR_ACCESS)
+            .unwrap();
+        let PumasSelectorAccess::LocalClient(client) = access.as_ref() else {
+            panic!("real owner must be attached as a client")
+        };
+        assert!(extensions
+            .get::<Arc<pumas_library::PumasApi>>(extension_keys::PUMAS_API)
+            .is_none());
+        let consumer_id = format!("pumas://models/{model_id}");
+        let actual = access
+            .resolve_model_package_facts(&consumer_id)
+            .await
+            .unwrap();
+        assert_eq!(
+            serde_json::to_value(&actual).unwrap(),
+            serde_json::to_value(&expected).unwrap()
+        );
+        let mut request = ResolveModelArtifactLoadTargetRequest {
+            model_ref: expected.model_ref.clone(),
+            expected_artifact_kind: None,
+            caller_observed_entry_path: None,
+            caller_observed_package_facts_contract_version: Some(3),
+            resolution_mode: PumasArtifactLoadTargetResolutionMode::OwnerFresh,
+            consumer: PumasArtifactConsumer {
+                consumer_name: "pantograph-consumer-test".into(),
+                task_kind: Some("text_generation".into()),
+                runtime_family: Some("llamacpp".into()),
+            },
+        };
+        let owner_target = owner
+            .resolve_model_artifact_load_target(request.clone())
+            .await
+            .unwrap();
+        request.model_ref.model_id = consumer_id;
+        let client_target = access
+            .resolve_model_artifact_load_target(request)
+            .await
+            .unwrap();
+        assert_eq!(client_target.artifact_state, owner_target.artifact_state);
+        assert_eq!(
+            client_target.entry_path_state,
+            owner_target.entry_path_state
+        );
+        assert_eq!(client_target.target, owner_target.target);
+        assert_eq!(
+            client_target
+                .diagnostics
+                .iter()
+                .map(|diagnostic| diagnostic.code)
+                .collect::<Vec<_>>(),
+            owner_target
+                .diagnostics
+                .iter()
+                .map(|diagnostic| diagnostic.code)
+                .collect::<Vec<_>>()
+        );
+        // Public local import has no explicit selected artifact identity. Preserve
+        // the owner's admission failure instead of inventing one from a filename.
+        assert_eq!(expected.model_ref.selected_artifact_id, None);
+        assert!(!client_target.is_ready());
+        assert!(client_target.target.is_none());
+        assert!(!client_target.diagnostics.is_empty());
+        assert!(client_target
+            .diagnostics
+            .iter()
+            .all(|diagnostic| diagnostic.field_path.is_none()
+                && diagnostic.message == "Artifact load target is not available"));
+        let mut wrong = client.instance().clone();
+        wrong.connection_token = Some("wrong-owner-token".into());
+        let wrong = pumas_library::PumasLocalClient::connect(wrong)
+            .await
+            .unwrap();
+        assert!(matches!(
+            wrong.resolve_model_package_facts(&model_id).await,
+            Err(pumas_library::PumasError::InvalidParams { .. })
+        ));
+        drop(extensions);
+        owner.resolve_model_package_facts(&model_id).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn configured_local_client_skips_other_libraries_and_survives_client_drop() {
+        let expected_root = create_launcher_root();
+        let other_root = create_launcher_root();
+        let expected_owner = create_owner(expected_root.path()).await;
+        let other_owner = create_owner(other_root.path()).await;
+        let instances = [
+            owner_instance(&other_owner),
+            owner_instance(&expected_owner),
+        ];
+
+        let client = connect_local_client(&instances, Some(expected_root.path()))
+            .await
+            .expect("matching owner should connect");
+        assert_eq!(client.instance().library_path, expected_root.path());
+        let access = PumasSelectorAccess::LocalClient(Arc::new(client));
+        let snapshot = access
+            .model_library_selector_snapshot(Default::default())
+            .await
+            .expect("authenticated matching owner snapshot");
+        assert_eq!(
+            snapshot,
+            expected_owner
+                .model_library_selector_snapshot(Default::default())
+                .await
+                .unwrap()
+        );
+        drop(access);
+
+        connect_local_client(&instances, Some(expected_root.path()))
+            .await
+            .expect("attached client must not own server shutdown")
+            .model_library_selector_snapshot(Default::default())
+            .await
+            .expect("owner IPC should remain available");
+    }
+
+    #[tokio::test]
+    async fn configured_local_client_does_not_fall_back_to_another_owner() {
+        let expected_root = create_launcher_root();
+        let other_root = create_launcher_root();
+        let expected_owner = create_owner(expected_root.path()).await;
+        let other_owner = create_owner(other_root.path()).await;
+        let other = owner_instance(&other_owner);
+        let mut unavailable = owner_instance(&expected_owner);
+        unavailable.connection_token = None;
+        let instances = [unavailable, other];
+
+        assert!(connect_local_client(&instances, Some(expected_root.path()))
+            .await
+            .is_none());
+        assert!(
+            connect_local_client(&instances, Some(&expected_root.path().join("missing")))
+                .await
+                .is_none()
+        );
+        assert!(connect_local_client(&instances, None).await.is_some());
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn configured_local_client_matches_canonical_launcher_root() {
+        let root = create_launcher_root();
+        let alias_parent = TempDir::new().unwrap();
+        let alias = alias_parent.path().join("launcher-alias");
+        std::os::unix::fs::symlink(root.path(), &alias).unwrap();
+        let owner = create_owner(root.path()).await;
+        let instance = owner_instance(&owner);
+
+        let client = connect_local_client(&[instance], Some(&alias))
+            .await
+            .expect("canonical launcher identity should accept an alias");
+        assert_eq!(client.instance().library_path, root.path());
+    }
+
+    #[tokio::test]
+    async fn local_client_update_feed_recovers_events_from_selector_cursor() {
+        let root = create_launcher_root();
+        let owner = create_owner(root.path()).await;
+        let cursor = owner
+            .model_library_selector_snapshot(Default::default())
+            .await
+            .unwrap()
+            .cursor;
+        let model_id = import_fixture_model(&owner).await;
+        let expected = owner
+            .list_model_library_updates_since(Some(&cursor), 100)
+            .await
+            .unwrap();
+        assert!(expected
+            .events
+            .iter()
+            .any(|event| event.model_id == model_id));
+        let client = pumas_library::PumasLocalClient::connect(owner_instance(&owner))
+            .await
+            .unwrap();
+        let access = PumasSelectorAccess::LocalClient(Arc::new(client));
+
+        let feed = access
+            .list_model_library_updates_since(Some(&cursor), 100)
+            .await
+            .expect("local client update feed should recover durable updates");
+
+        assert!(!feed.stale_cursor);
+        assert!(!feed.snapshot_required);
+        assert!(feed.cursor.starts_with("model-library-updates:"));
+        assert!(feed.events.iter().any(|event| event.model_id == model_id));
+        for event in expected.events {
+            assert!(
+                feed.events.contains(&event),
+                "owner update must survive IPC recovery"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn local_client_selected_model_detail_uses_batch_detail_methods() {
+        let root = create_launcher_root();
+        let owner = create_owner(root.path()).await;
+        let model_id = import_fixture_model(&owner).await;
+        // Import publishes the model before the owner's background index work
+        // necessarily settles. Await a forced pass before testing cache reuse;
+        // only the documented in-flight conflict is eligible for retry.
+        let indexed_count = tokio::time::timeout(std::time::Duration::from_secs(10), async {
+            loop {
+                match owner.rebuild_model_index().await {
+                    Ok(count) => break count,
+                    Err(pumas_library::PumasError::ModelIndexRefreshInProgress) => {
+                        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+                    }
+                    Err(error) => panic!("fixture index reconciliation failed: {error}"),
+                }
+            }
+        })
+        .await
+        .expect("fixture index reconciliation must settle");
+        assert_eq!(
+            indexed_count, 1,
+            "the fixture must retain its imported model"
+        );
+        let expected_descriptor = owner
+            .resolve_model_execution_descriptors_batch(vec![model_id.clone()])
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|item| item.model_id == model_id)
+            .and_then(|item| item.descriptor)
+            .expect("owner should resolve an imported GGUF descriptor");
+        let expected_row = owner
+            .model_library_selector_snapshot(Default::default())
+            .await
+            .unwrap()
+            .rows
+            .into_iter()
+            .find(|row| row.model_id == model_id)
+            .expect("imported selector row before detail hydration");
+        let client = pumas_library::PumasLocalClient::connect(owner_instance(&owner))
+            .await
+            .unwrap();
+        let access = PumasSelectorAccess::LocalClient(Arc::new(client));
+
+        let detail = access
+            .selected_model_detail(&model_id)
+            .await
+            .expect("local client selected detail should load from batch APIs");
+
+        assert_eq!(
+            serde_json::to_value(detail.selector_row.expect("selector row")).unwrap(),
+            serde_json::to_value(expected_row).unwrap()
+        );
+        assert_eq!(
+            serde_json::to_value(detail.descriptor.expect("descriptor should hydrate")).unwrap(),
+            serde_json::to_value(expected_descriptor).unwrap()
+        );
+        // The selected-detail call hydrates a cold summary over IPC. A later
+        // owner lookup observes the populated cache, so freshness must change
+        // while the complete model identity and summary payload stay equal.
+        let cold_summary = detail
+            .package_summary_result
+            .expect("summary should hydrate");
+        let warm_summary = owner
+            .resolve_model_package_facts_summaries(vec![model_id.clone()])
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|item| item.model_id == model_id)
+            .and_then(|item| item.result)
+            .expect("owner should resolve the hydrated GGUF summary");
+        assert_eq!(
+            cold_summary.status,
+            pumas_library::models::ModelPackageFactsSummaryStatus::Regenerated
+        );
+        assert_eq!(
+            warm_summary.status,
+            pumas_library::models::ModelPackageFactsSummaryStatus::Fresh
+        );
+        assert_eq!(cold_summary.model_id, model_id);
+        assert_eq!(warm_summary.model_id, model_id);
+        assert_eq!(
+            serde_json::to_value(cold_summary.summary.expect("cold summary payload")).unwrap(),
+            serde_json::to_value(warm_summary.summary.as_ref().expect("warm summary payload"))
+                .unwrap()
+        );
+        // Observe the producer-owned cache without reconciling or mutating it.
+        // Equal summary payloads alone do not prove equal source fingerprints.
+        let model_root = owner.launcher_root().join("shared-resources/models");
+        let index = ModelIndex::open_read_only(model_root.join("models.db")).unwrap();
+        let selected_artifact_id = warm_summary
+            .summary
+            .as_ref()
+            .unwrap()
+            .model_ref
+            .selected_artifact_id
+            .as_deref();
+        let cache_before = index
+            .get_model_package_facts_cache(
+                &model_id,
+                selected_artifact_id,
+                pumas_library::index::ModelPackageFactsCacheScope::Summary,
+            )
+            .unwrap()
+            .expect("warm owner summary must have a durable cache row");
+        let metadata_path = model_root.join(&model_id).join("metadata.json");
+        let metadata_before = std::fs::read_to_string(&metadata_path).unwrap();
+        let warm_client_summary = access
+            .resolve_model_package_facts_summary(&model_id)
+            .await
+            .expect("client should observe the same warm summary");
+        let cache_after = index
+            .get_model_package_facts_cache(
+                &model_id,
+                selected_artifact_id,
+                pumas_library::index::ModelPackageFactsCacheScope::Summary,
+            )
+            .unwrap();
+        let metadata_after = std::fs::read_to_string(&metadata_path).unwrap();
+        assert_eq!(
+            serde_json::to_value(warm_client_summary).unwrap(),
+            serde_json::to_value(warm_summary).unwrap(),
+            "warm IPC must preserve freshness; cache before={cache_before:?}, \
+             cache after={cache_after:?}, metadata before={metadata_before}, \
+             metadata after={metadata_after}"
+        );
+        assert_eq!(cache_after.as_ref(), Some(&cache_before));
+        assert_eq!(metadata_after, metadata_before);
     }
 
     #[tokio::test]

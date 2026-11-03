@@ -1,0 +1,7 @@
+# Workflow behavior-preserving lint basics
+
+Prepare only the 30 mechanical findings evidenced by PR #36: 13 unnecessary fingerprint borrows, 10 identity WorkflowServiceError conversions, two equivalent empty defaults, two ordered filter/map rewrites, one absent-Option early return, one eager literal error construction, and one redundant method must_use annotation where the type retains it. Preserve every signature, error value, branch order, iterator order and default wire field. Other conversions, payload layouts, enum naming, type aliases and seven high-arity methods stay outside this slice.
+
+Four focused regressions cover empty connection surfaces, exact default runtime requirements JSON, absent versus invalid model references and first-seen dependency deduplication order. Explicit nonzero discovery runs those tests; inherited full service/Headless tests retain cancellation, session recovery and dispatch behavior. Finished-task filtering keeps the same state lock, one is_finished check per entry and identical removal sequence.
+
+Root approved the bounded preparation. Root source review accepted the entire fifteen-file frozen tree 61cb018d85a9c49b0da80bd9175fc1bd919fd764. Fresh PR #37 Clippy job 111216602528 confirms all 30 findings remain at the same locations/categories; the aggregate fell from 134 to 47 findings after the separate private error change. Hosted execution of this mechanical slice remains pending. No local Rust execution is claimed.

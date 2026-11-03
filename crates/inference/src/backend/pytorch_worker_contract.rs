@@ -75,6 +75,8 @@ pub(super) struct PyTorchWorkerCancellation {
 #[serde(rename_all = "snake_case")]
 pub(super) struct PyTorchTransformersLoadRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chunk_length_s: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model_ref: Option<PumasModelRef>,
     pub artifact_kind: ModelArtifactKind,
     pub entry_path: String,

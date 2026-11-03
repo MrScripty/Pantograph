@@ -1,0 +1,8 @@
+{
+  "frozen_pr_head": "6eceb28997fe4c8d0ef6400e598f093d2bffa252",
+  "verified_original_packet_members": 78,
+  "original_manifest_sha256": "1fb50e426f0107c29db70adb694a250b698e728d4836d8bc7f42d388e2e74976",
+  "main_reproduction_sha256": "844596ffd4f35d6eee2bd9a524d830f3a18884253575f5de8ab0ec3229c61dc3",
+  "expanded_failure_sha256": "18811f682e87b8db4109a09106e6569714b9ade485ddbfd77c71adfe5206962d",
+  "no_original_evidence_modified": true
+}

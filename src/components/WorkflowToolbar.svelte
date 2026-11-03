@@ -1,5 +1,6 @@
 <script lang="ts">
   import { AlertTriangle, Loader2, Send } from 'lucide-svelte';
+  import { workflowSubmitOutputOverlays, workflowSubmitStatusOverlays } from './workflowSubmitResult';
   import {
     isDirty,
     isExecuting,
@@ -37,6 +38,7 @@
   } from '../stores/workbenchStore';
   import { formatWorkflowCommandError } from './workbench/workflowErrorPresenters';
   import WorkflowPersistenceControls from './WorkflowPersistenceControls.svelte';
+  import { assertDesktopSeedInputs, desktopSeedInputError } from './nodes/workflow/primitiveInputMetadata';
   import {
     applyWorkflowToolbarEvent,
     isCurrentWorkflowSubmitFailure,
@@ -45,6 +47,7 @@
     nextWorkflowPatchSemanticVersion,
     shouldRefreshValidationFromLifecycleEvent,
     workflowSubmitSuccessWorkbenchPage,
+    workflowSubmitInputs,
     workflowSubmitDisabledReason,
     workflowValidationRefreshKey,
   } from './workflowToolbarEvents';
@@ -57,6 +60,8 @@
   const WORKFLOW_SEMANTIC_VERSION_STORAGE_KEY_PREFIX = 'pantograph.workflowSemanticVersion.';
   const MAX_WORKFLOW_VERSION_CONFLICT_RETRIES = 25;
 
+  let runProjectionError = $state<string | null>(null);
+  let validationSubscriptionError = $state<string | null>(null);
   let workflowError = $state<WorkflowServiceError | null>(null);
   let workflowErrorWorkflowId = $state<string | null>(null);
   let workflowSemanticVersion = $state(DEFAULT_WORKFLOW_SEMANTIC_VERSION);
@@ -84,7 +89,7 @@
       hasWorkflowId: Boolean($currentGraphId),
       semanticVersionInvalid: workflowSemanticVersionInvalid,
       submitGate: currentValidationSummary?.submit_gate ?? null,
-    }),
+    }) ?? desktopSeedInputError($workflowGraph),
   );
   let submitDisabled = $derived(submitDisabledReason !== null);
   let submitTitle = $derived(submitDisabledReason ?? 'Submit workflow to the scheduler');
@@ -214,7 +219,9 @@
 
     void subscribeGraphValidationLifecycleEvents({
       getActiveGraphSessionId: () => $currentSessionId,
+      onEventError: (error) => { validationSubscriptionError = formatWorkflowCommandError(error); },
       handleEvent: async (event) => {
+        validationSubscriptionError = null;
         const graphSessionId = $currentSessionId;
         const graphRevision = $workflowGraph.derived_graph?.graph_fingerprint ?? null;
         if (!graphSessionId || !graphRevision) {
@@ -248,6 +255,8 @@
       } else {
         unlisten = nextUnlisten;
       }
+    }).catch((error) => {
+      if (!cancelled) validationSubscriptionError = formatWorkflowCommandError(error);
     });
 
     return () => {
@@ -275,14 +284,17 @@
     clearNodeRuntimeData([...AUDIO_RUNTIME_DATA_KEYS]);
     resetExecutionStates();
     clearStreamContent();
+    runProjectionError = null;
     const submittedWorkflowId = $currentGraphId;
     const submittedGraphSessionId = $currentSessionId;
+    const submittedGraphRevision = $workflowGraph.derived_graph?.graph_fingerprint;
     const submittedValidationSummary = currentValidationSummary;
 
     try {
       if ($isReadOnly) {
         throw new Error('Read-only graphs cannot be submitted');
       }
+      assertDesktopSeedInputs($workflowGraph);
       if ($isDirty) {
         throw new Error('Save workflow changes before submitting');
       }
@@ -305,6 +317,7 @@
         throw new Error('Workflow version must use numeric major.minor.patch format');
       }
 
+      const submittedInputs = workflowSubmitInputs($workflowGraph);
       const executionSession = await workflowService.createWorkflowExecutionSession({
         workflow_id: submittedWorkflowId,
         usage_profile: null,
@@ -314,7 +327,7 @@
       try {
         const runRequestBase = {
           session_id: executionSession.session_id,
-          inputs: [],
+          inputs: submittedInputs,
           output_targets: null,
           override_selection: null,
           timeout_ms: null,
@@ -354,6 +367,25 @@
           throw lastConflictError ?? new Error('Workflow submit failed');
         }
 
+        const matchesSubmittedGraph = () => $currentGraphId === submittedWorkflowId
+          && $currentSessionId === submittedGraphSessionId && !$isDirty
+          && $workflowGraph.derived_graph?.graph_fingerprint === submittedGraphRevision;
+        if (matchesSubmittedGraph()) {
+          for (const overlay of workflowSubmitOutputOverlays($workflowGraph, response)) {
+            updateNodeRuntimeData(overlay.nodeId, overlay.data);
+          }
+        }
+        try {
+          const statuses = await workflowService.queryNodeStatus({ workflow_run_id: response.workflow_run_id });
+          if (matchesSubmittedGraph()) {
+            for (const overlay of workflowSubmitStatusOverlays($workflowGraph, response.workflow_run_id, statuses.nodes ?? [])) {
+              setNodeExecutionState(overlay.nodeId, overlay.state, overlay.message);
+            }
+          }
+        } catch (error) {
+          // Submission succeeded; a diagnostic read failure must not relabel it as failed.
+          runProjectionError = formatWorkflowCommandError(error);
+        }
         persistWorkflowSemanticVersion(submittedWorkflowId, submittedVersion);
         selectActiveWorkflowRun({
           workflow_run_id: response.workflow_run_id,
@@ -461,6 +493,16 @@
     </div>
   {/if}
 
+  {#if runProjectionError}
+    <div class="border border-red-900 bg-red-950/50 px-3 py-2 text-sm text-red-200" role="alert">
+      Run completed, but node status could not be refreshed: {runProjectionError}
+    </div>
+  {/if}
+  {#if validationSubscriptionError}
+    <div class="border border-red-900 bg-red-950/50 px-3 py-2 text-sm text-red-200" role="alert">
+      Validation updates failed: {validationSubscriptionError}
+    </div>
+  {/if}
   {#if workflowErrorMessage}
     <div class="flex items-center justify-between gap-3 border-b border-red-700 bg-red-900/70 px-4 py-2 text-xs text-red-200">
       <div class="min-w-0 truncate" title={workflowErrorMessage} data-testid="workflow-submit-error">

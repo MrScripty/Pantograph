@@ -259,6 +259,10 @@ def _generate_image_kwargs_from_payload(payload, context):
         if value is not None and not isinstance(value, str):
             raise ValueError(f"PyTorch worker {context}.{key} must be a string")
 
+    scheduler = payload.get("denoising_scheduler")
+    if scheduler is not None and scheduler not in ("ddim", "euler"):
+        raise ValueError(f"PyTorch worker {context}.denoising_scheduler must be ddim or euler")
+
     width = _validate_positive_int(payload, "width", context)
     height = _validate_positive_int(payload, "height", context)
     steps = _validate_positive_int(payload, "num_inference_steps", context)

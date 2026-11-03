@@ -1,0 +1,10 @@
+frozen_source=9e8cd64cc64fa7ccb8dfd6cd85d37bff2282dfb6; native_test_sha256=0b7c384f614dc8b56ec2ede88b9f0a27e8e3e45b3094f9e49bee0d178d3b987a
+python=3.12.3; torch=2.14.1+cpu; diffusers=0.39.0; device=cpu; pretrained_models=0
+foreign-thread DDIM step completed while frozen global observer was installed
+observed step calls: ['DDIMScheduler', 'DDIMScheduler', 'DDIMScheduler'] expected: ['DDIMScheduler', 'DDIMScheduler']
+Traceback (most recent call last):
+  File "/tmp/diagnose-diffusers-foreign-step.py", line 43, in <module>
+    exec(compile(script, 'frozen-native-scheduler-with-controlled-foreign-step.py', 'exec'), {'call_diffusion_pipeline': worker.call_diffusion_pipeline})
+  File "frozen-native-scheduler-with-controlled-foreign-step.py", line 39, in <module>
+AssertionError
+Confirmed: the frozen exact-two-calls assertion counts an unrelated thread. Production helper and source are unchanged.

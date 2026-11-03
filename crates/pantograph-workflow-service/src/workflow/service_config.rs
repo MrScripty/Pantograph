@@ -46,12 +46,42 @@ impl WorkflowService {
         Self::with_capacity_limits(DEFAULT_MAX_SESSIONS, DEFAULT_MAX_SESSIONS)
     }
 
+    /// Whether dedicated construction installed the serial CPU execution owner.
+    ///
+    /// Hosted composition uses this read-only fact to preserve its execution and
+    /// cleanup ports. It does not attest readiness, residency or host identity.
+    #[must_use]
+    pub fn is_serial_ready_cpu(&self) -> bool {
+        self.serial_ready_mode.is_some()
+    }
+
     pub fn with_max_sessions(max_sessions: usize) -> Self {
         Self::with_capacity_limits(max_sessions, max_sessions)
     }
 
     pub fn with_capacity_limits(max_sessions: usize, max_loaded_sessions: usize) -> Self {
+        Self::with_capacity_and_custom_nodes(
+            max_sessions,
+            max_loaded_sessions,
+            Arc::new(crate::custom_nodes::CustomNodeCatalog::default()),
+        )
+    }
+
+    /// Construct a fresh service with one immutable host-admitted catalog.
+    pub fn with_trusted_custom_nodes(catalog: Arc<crate::custom_nodes::CustomNodeCatalog>) -> Self {
+        Self::with_capacity_and_custom_nodes(DEFAULT_MAX_SESSIONS, DEFAULT_MAX_SESSIONS, catalog)
+    }
+
+    fn with_capacity_and_custom_nodes(
+        max_sessions: usize,
+        max_loaded_sessions: usize,
+        catalog: Arc<crate::custom_nodes::CustomNodeCatalog>,
+    ) -> Self {
+        let node_registry = Arc::new(crate::graph::NodeRegistry::with_custom_nodes(catalog));
         Self {
+            node_registry: node_registry.clone(),
+            serial_ready_mode: None,
+            cohort_coverage_provider: None,
             session_store: Arc::new(Mutex::new(WorkflowExecutionSessionStore::new(
                 max_sessions,
                 max_loaded_sessions,
@@ -73,7 +103,8 @@ impl WorkflowService {
             diagnostics_ledger: None,
             diagnostics_projection_refresh_sink: Arc::new(Mutex::new(None)),
             scheduler_diagnostics_provider: Arc::new(Mutex::new(None)),
-            scheduler_task_orchestrator: default_scheduler_task_orchestrator(),
+            scheduler_task_orchestrator: default_scheduler_task_orchestrator()
+                .with_node_registry(node_registry),
             dependency_readiness_provider: default_dependency_readiness_provider(),
             runtime_dispatch_source_refresher: default_runtime_dispatch_source_refresher(),
             runtime_dispatch_candidate_provider: default_runtime_dispatch_candidate_provider(),
@@ -98,6 +129,10 @@ impl WorkflowService {
         mut self,
         port: Arc<dyn RuntimeHostBatchExecutionPort>,
     ) -> Self {
+        assert!(
+            self.serial_ready_mode.is_none(),
+            "serial constructor owns its execution port"
+        );
         self.scheduler_task_orchestrator = self
             .scheduler_task_orchestrator
             .with_runtime_host_batch_dispatcher(SchedulerRuntimeHostBatchDispatcher::new(port));
@@ -109,6 +144,10 @@ impl WorkflowService {
         mut self,
         port: Arc<dyn ReservationLifecyclePort>,
     ) -> Self {
+        assert!(
+            self.serial_ready_mode.is_none(),
+            "serial constructor owns its cleanup port"
+        );
         self.scheduler_task_orchestrator = self
             .scheduler_task_orchestrator
             .with_reservation_lifecycle_port(port);
@@ -439,6 +478,26 @@ fn dependency_requirements_registry_error(
     ))
 }
 
+fn load_artifact_format_settings(
+    path: &Path,
+) -> Result<ArtifactFormatSettings, WorkflowServiceError> {
+    if !path.exists() {
+        return Ok(ArtifactFormatSettings::default());
+    }
+    let content = std::fs::read_to_string(path).map_err(|error| {
+        WorkflowServiceError::Internal(format!(
+            "failed to read artifact format settings {:?}: {error}",
+            path
+        ))
+    })?;
+    serde_json::from_str(&content).map_err(|error| {
+        WorkflowServiceError::InvalidRequest(format!(
+            "artifact format settings file {:?} is invalid: {error}",
+            path
+        ))
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::{Arc, Mutex};
@@ -593,24 +652,4 @@ mod tests {
             }],
         }
     }
-}
-
-fn load_artifact_format_settings(
-    path: &Path,
-) -> Result<ArtifactFormatSettings, WorkflowServiceError> {
-    if !path.exists() {
-        return Ok(ArtifactFormatSettings::default());
-    }
-    let content = std::fs::read_to_string(path).map_err(|error| {
-        WorkflowServiceError::Internal(format!(
-            "failed to read artifact format settings {:?}: {error}",
-            path
-        ))
-    })?;
-    serde_json::from_str(&content).map_err(|error| {
-        WorkflowServiceError::InvalidRequest(format!(
-            "artifact format settings file {:?} is invalid: {error}",
-            path
-        ))
-    })
 }

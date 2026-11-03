@@ -8,7 +8,7 @@
     createConnectionDragState, createHorseshoeDragSessionState,
     createHorseshoeInsertFeedbackState, isPortTypeCompatible, markConnectionDragFinalizing,
     normalizeWorkflowHorseshoeSelectedIndex,
-    registerWorkflowGraphWindowListeners, rejectHorseshoeInsertFeedback,
+    createWorkflowGraphMount, rejectHorseshoeInsertFeedback,
     requestWorkflowHorseshoeOpen, resolveWorkflowDragCursorUpdate,
     resolveWorkflowDeleteSelectionRequest,
     resolveWorkflowGraphInteractionState, resolveWorkflowGroupZoomTarget,
@@ -304,17 +304,20 @@
     }
   });
 
-  onMount(async () => {
-    const removeWindowListeners = registerWorkflowGraphWindowListeners(window, {
+  onMount(() => {
+    const scope = createWorkflowGraphMount(window, {
       onKeyDown: handleWindowKeyDown,
       onPaletteDragEnd: handleWorkflowPaletteDragEnd,
       onPaletteDragStart: handleWorkflowPaletteDragStart,
+    }, {
+      loadNodeDefinitions: () => workflowService.getNodeDefinitions(),
+      applyNodeDefinitions: (definitions) => nodeDefinitions.set(definitions),
+      onFailure: (error) => {
+        console.error('[WorkflowGraph] Failed to load node definitions:', error);
+      },
     });
 
-    const definitions = await workflowService.getNodeDefinitions();
-    nodeDefinitions.set(definitions);
-
-    return removeWindowListeners;
+    return scope.stop;
   });
 
   onDestroy(() => {

@@ -89,7 +89,7 @@ impl WorkflowGraphValidationTaskOwner {
                     let mut state = session_handle.lock().await;
                     state.touch();
                     state.canonicalize_graph();
-                    WorkflowGraphRevision::parse(&state.graph.compute_fingerprint())
+                    WorkflowGraphRevision::parse(state.graph.compute_fingerprint())
                         .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))
                 },
             )
@@ -183,12 +183,8 @@ impl WorkflowGraphValidationTaskOwner {
             let finished_keys = state
                 .active
                 .iter()
-                .filter_map(|(graph_session_id, record)| {
-                    record
-                        .handle
-                        .is_finished()
-                        .then(|| graph_session_id.clone())
-                })
+                .filter(|(_, record)| record.handle.is_finished())
+                .map(|(graph_session_id, _)| graph_session_id.clone())
                 .collect::<Vec<_>>();
             finished_keys
                 .into_iter()

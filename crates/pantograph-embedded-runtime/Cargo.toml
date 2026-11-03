@@ -25,7 +25,8 @@ backend-candle = [
     "dep:tokio-stream",
     "dep:tower-http",
 ]
-standalone = ["inference/std-process"]
+host-dependency-inventory = []
+standalone = ["inference/std-process", "host-dependency-inventory"]
 
 [dependencies]
 inference = { path = "../inference", default-features = false }
@@ -68,4 +69,9 @@ tokio-stream = { workspace = true, optional = true }
 tower-http = { workspace = true, optional = true }
 
 [dev-dependencies]
+pantograph-workflow-service = { path = "../pantograph-workflow-service", features = ["test-support"] }
 tempfile.workspace = true
+
+[[example]]
+name = "cpu_embedding_workflow_probe"
+required-features = ["backend-candle", "host-dependency-inventory"]

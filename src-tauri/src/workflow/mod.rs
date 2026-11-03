@@ -21,6 +21,7 @@
 //!                            └─────────────────────────────────┘
 //! ```
 
+mod command_state;
 pub mod commands;
 pub mod diagnostics;
 pub mod event_adapter;

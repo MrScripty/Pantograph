@@ -704,8 +704,8 @@ impl FfiPumasApi {
             .api
             .get_hf_download_progress(&download_id)
             .await
-            .map_err(|e| FfiError::Other {
-                message: e.to_string(),
+            .map_err(|error| FfiError::Other {
+                message: error.to_string(),
             })?;
         match progress {
             Some(p) => {

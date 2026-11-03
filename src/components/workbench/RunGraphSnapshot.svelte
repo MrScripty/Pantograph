@@ -153,6 +153,7 @@
               />
             {/each}
             {#each canvas.nodes as node (node.id)}
+              <!-- a11y-reviewed: role=button and tabindex=0 share the onSelectNode guard; Enter and Space invoke the same guarded selection as click. -->
               <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
               <g
                 transform={`translate(${node.x}, ${node.y})`}

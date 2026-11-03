@@ -7,7 +7,7 @@ direction. This page is only a compact navigation map.
 | Area | Crates |
 | --- | --- |
 | Workflow domain | `pantograph-workflow-service`, `pantograph-scheduler`, `node-engine`, `workflow-nodes` |
-| Runtime composition | `pantograph-embedded-runtime`, `pantograph-runtime-host-contracts`, `pantograph-runtime-registry`, `pantograph-runtime-identity` |
+| Runtime composition | `pantograph-app-config`, `pantograph-embedded-runtime`, `pantograph-runtime-host-contracts`, `pantograph-runtime-registry`, `pantograph-runtime-identity` |
 | Inference and interfaces | `inference`, `pantograph-inference-interface-contracts` |
 | Dependency and media services | `pantograph-dependency-planning`, `pantograph-dependency-environment-service`, `pantograph-managed-dependencies`, `pantograph-media-conversion` |
 | Durable records | `pantograph-runtime-attribution`, `pantograph-diagnostics-ledger` |

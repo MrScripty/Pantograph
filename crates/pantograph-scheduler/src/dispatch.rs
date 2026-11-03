@@ -201,12 +201,13 @@ impl SchedulerDispatchDecision {
 #[must_use]
 pub struct ValidatedSchedulerDispatchDecision(SchedulerDispatchDecision);
 
-impl ValidatedSchedulerDispatchDecision {
-    #[must_use]
-    pub fn as_ref(&self) -> &SchedulerDispatchDecision {
+impl AsRef<SchedulerDispatchDecision> for ValidatedSchedulerDispatchDecision {
+    fn as_ref(&self) -> &SchedulerDispatchDecision {
         &self.0
     }
+}
 
+impl ValidatedSchedulerDispatchDecision {
     #[must_use]
     pub fn into_inner(self) -> SchedulerDispatchDecision {
         self.0

@@ -95,7 +95,7 @@
   function shouldShowError(comp: GeneratedComponent): boolean {
     return (
       comp.status === 'error' ||
-      !comp.component ||
+      (!comp.component && comp.status !== 'loading') ||
       renderErrors.has(comp.id) ||
       !!comp.error ||
       !!comp.renderError
@@ -152,7 +152,21 @@
           </span>
         </div>
       {:else}
-        <!-- Render component safely -->
+        {#if comp.pendingUpdate}
+          <div class="absolute top-0 left-0 z-10 max-w-full p-2 text-sm bg-neutral-900 text-amber-200 pointer-events-auto" role="status">
+            {#if comp.pendingUpdate.status === 'loading'}
+              Checking update; showing the last accepted component.
+            {:else}
+              <p>Update failed: {comp.pendingUpdate.error} Showing the last accepted component.</p>
+              <button
+                type="button"
+                class="mt-1 underline focus-visible:outline focus-visible:outline-2"
+                onclick={() => handleRetry(comp.id)}
+              >Retry update for {comp.id}</button>
+            {/if}
+          </div>
+        {/if}
+        <!-- Keep this render branch mounted while a replacement is checked. -->
         <SafeComponent
           component={comp.component}
           props={comp.props ?? {}}

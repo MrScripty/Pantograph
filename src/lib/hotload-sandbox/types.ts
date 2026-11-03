@@ -91,6 +91,10 @@ export interface GeneratedComponent {
   error?: string;
   /** Runtime render error message */
   renderError?: string;
+  /** Candidate load state; an accepted component stays visible during replacement. */
+  pendingUpdate?:
+    | { status: 'loading' }
+    | { status: 'error'; error: string; failureCode: ImportFailureCode };
 }
 
 /**
@@ -138,18 +142,24 @@ export interface ComponentError {
 // ============================================================================
 
 /**
- * Result of attempting to import a component.
+ * Failure codes preserve validation availability, invalidity and supersession.
  */
-export interface ImportResult {
-  /** Whether the import succeeded */
-  success: boolean;
-  /** The component constructor if successful */
-  component: ComponentType<SvelteComponent> | null;
-  /** Error message if failed */
-  error: string | null;
+export type ImportFailureCode =
+  | 'validation-unavailable'
+  | 'validation-response-invalid'
+  | 'validation-invalid'
+  | 'import-failed'
+  | 'import-timeout'
+  | 'superseded';
+
+/** Result of attempting to import a component. */
+export type ImportResult = {
   /** Time taken to import in ms */
   duration: number;
-}
+} & (
+  | { success: true; component: ComponentType<SvelteComponent>; error: null }
+  | { success: false; component: null; error: string; failureCode: ImportFailureCode }
+);
 
 /**
  * Validation result for pre-render checks.

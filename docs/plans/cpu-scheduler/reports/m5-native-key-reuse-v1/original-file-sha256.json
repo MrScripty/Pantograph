@@ -1,0 +1,162 @@
+{
+  "baseline/app-data/serial-cpu-artifacts/bodies/workflow-io-78821a221fa227fcd3caeb3f2990a121123a395a3a8210c3bf15683e0cef0c76.bin": {
+    "bytes": 160,
+    "sha256": "d3692d4df22e61e4e2c965304a642d323d05f42dc7d4f87018126b9672050494"
+  },
+  "baseline/app-data/serial-cpu-artifacts/bodies/workflow-io-9f5e97f7733fcc67ce48b2867e34b3a9753f25e377a46b833b39805febda7470.bin": {
+    "bytes": 160,
+    "sha256": "4a688224ef6edeb30360652fa2b8953fa94120f6dfd649c22fe49494021effce"
+  },
+  "baseline/app-data/serial-cpu-artifacts/bodies/workflow-io-c42766c95f453c55a06caf5aae4eca649c5fa8ab436221d53e578a159355075c.bin": {
+    "bytes": 11,
+    "sha256": "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9"
+  },
+  "baseline/app-data/serial-cpu-artifacts/bodies/workflow-io-f96ad5684917e2ee1797911f0e979421274e6e392d6895b82a6012bd050cae96.bin": {
+    "bytes": 5,
+    "sha256": "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+  },
+  "baseline/app-data/serial-cpu-artifacts/manifest.json": {
+    "bytes": 5012,
+    "sha256": "546495ec2200f27eade8b21c78667db45b04aa70d5f299f18fadde4dcb04f5a5"
+  },
+  "baseline/arm.json": {
+    "bytes": 133686,
+    "sha256": "be7f39bc407b869955d282a40bcc22569e28d5952470ea35c225457dd4f2684f"
+  },
+  "comparison.json": {
+    "bytes": 150464,
+    "sha256": "27cb921f9f4cf86bbd5cb23c224ce2084029c40bc1b2b05276f7e7592a15a0df"
+  },
+  "discovery.stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "discovery.stdout": {
+    "bytes": 132,
+    "sha256": "18790687fc28f2237596cb20cd11f762831554ff8b2476b6c7f1838eab9d3a22"
+  },
+  "execution-result.json": {
+    "bytes": 598,
+    "sha256": "77a24b38ccf56afccba928988e52d8c4fa99d2968b5e620689a19159b6fc1a91"
+  },
+  "execution-started.json": {
+    "bytes": 145,
+    "sha256": "edc88952ee485a00fc4328c12c0c6ce8d873ae4ec5ec8375fb9594641565e6bf"
+  },
+  "frozen-manifest.json": {
+    "bytes": 5619,
+    "sha256": "1aecf82f87d586f9eb28f8f5a4afdb03d721f72358f646804cc3fe58073b8e63"
+  },
+  "native-rows.jsonl": {
+    "bytes": 11369,
+    "sha256": "3bfe2b7316a2d3754382e4a815755d560e2d94391827708278805789782d2f57"
+  },
+  "producer.stdout.log": {
+    "bytes": 400,
+    "sha256": "61139d5816979f711d6f99a11837422df7941fb5c3cd63949b188f01e6fad32c"
+  },
+  "progress.jsonl": {
+    "bytes": 920,
+    "sha256": "8870f3b249d6fc1ddef531cab2d29413ee465fb4a69dad0ef7e7004309b3bf9b"
+  },
+  "prospective-protocol.md": {
+    "bytes": 6170,
+    "sha256": "a6648d0785bac9979ea3fc1f951f4c9b31a59d277f55f02b375b3bb7ae9c6216"
+  },
+  "protocol.json": {
+    "bytes": 680,
+    "sha256": "8834b7a8a53f9cee75c86a86ce2c89b87840b499bad8108782520aa20831def2"
+  },
+  "supervisor.py": {
+    "bytes": 10347,
+    "sha256": "83f8598ee2d8f61e26711b64c18ae1e10fc1e596d1c1009b1b54e06d47b38d3c"
+  },
+  "support/logs/native-key-reuse-build.log": {
+    "bytes": 186,
+    "sha256": "88cc95363ec99ade2504f9d86568c940e4cb0d48262148688a92e08643ad2179"
+  },
+  "support/logs/native-key-reuse-clippy-corrected.log": {
+    "bytes": 2443,
+    "sha256": "edc5ec95569a91d97f4acf0094646ba0a0ed647379df80bbd81f04bbf4813f71"
+  },
+  "support/logs/native-key-reuse-clippy.log": {
+    "bytes": 3205,
+    "sha256": "29c272d39bbfecb0f7672ee16d1783ba84b7420186685ac666f48a19748f33db"
+  },
+  "support/logs/native-key-reuse-embedded-corrected.log": {
+    "bytes": 71308,
+    "sha256": "ddb92e856e6782166a4134c20d0c9d334c231615423d342e0b013d36f91ef330"
+  },
+  "support/logs/native-key-reuse-embedded-full.log": {
+    "bytes": 101986,
+    "sha256": "c003d5e17a2001ec7c521aab13432e4579e9108c6c64423ca4dc3ef7a727181c"
+  },
+  "support/logs/native-key-reuse-final-fmt.log": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "support/logs/native-key-reuse-final-oracles.log": {
+    "bytes": 1206,
+    "sha256": "c8de7126022de7aecc5de5f2c166c6f72cf541c4e3434129d32bfe04e0efb146"
+  },
+  "support/logs/native-key-reuse-final-traceability.log": {
+    "bytes": 277,
+    "sha256": "8a71ef6bd357cc379c4b862e9df626f27b09da4656530681881dfcac75a086f9"
+  },
+  "support/logs/native-key-reuse-lint-staged.log": {
+    "bytes": 3174,
+    "sha256": "271494bf62f1e1c00d66b7da89c582e9f708dcad5bfeaadf31c794df788f16e8"
+  },
+  "support/logs/native-key-reuse-lint.log": {
+    "bytes": 3027,
+    "sha256": "1a39139815f170b7404be1375d3222de635581eb209f4d5e98acc5cc03ca607a"
+  },
+  "support/logs/native-key-reuse-oracles-misprofile-stopped.log": {
+    "bytes": 13209,
+    "sha256": "c265b6793078b6abbf209344aeccfe7d95914dfab23efdc62f8cb35565270f7d"
+  },
+  "support/logs/native-key-reuse-oracles.log": {
+    "bytes": 3848,
+    "sha256": "b95836ac6c6a45b69a036de784a5f63a7b35feb3f4359b806b8f23e89bf6325b"
+  },
+  "support/logs/native-key-reuse-prepush.log": {
+    "bytes": 35127,
+    "sha256": "33ecebae24571313ea2c000264f2319f153a73641612ba22f1ee4a9f0576ea29"
+  },
+  "support/logs/native-key-reuse-rustdoc-strict.log": {
+    "bytes": 471,
+    "sha256": "52ff88ae5092ae9668ab12077f838689005baba275de6bee1cba6b026caa1afa"
+  },
+  "support/logs/native-key-reuse-rustdoc.log": {
+    "bytes": 2675,
+    "sha256": "359fa0e69da1187b4bd2b41000ecb7070db2dee718b9063e2196db5a4586de49"
+  },
+  "support/logs/native-key-reuse-workflow-full.log": {
+    "bytes": 121326,
+    "sha256": "91cfc383f9418121faaaab54fbffa1ffea5f24f2d554a31cd5fb1d7d4fc5377c"
+  },
+  "support/native-key-reuse-build-artifacts.jsonl": {
+    "bytes": 444411,
+    "sha256": "f66d09804b9713ba1a06573c69f799cc3c99c58cd5279062398f555527423e95"
+  },
+  "support/native-key-reuse-freeze-preflight-failure.json": {
+    "bytes": 459,
+    "sha256": "29e121a62395fb7c5e18d6ead8997da3759934a49b5edde73b33daf9539699a0"
+  },
+  "support/native-key-reuse-frozen-admission.json": {
+    "bytes": 904,
+    "sha256": "7d21d65f38d53080bee8a573afc84d9630aae5969dce24b4987fb595a8298e5a"
+  },
+  "support/native-key-reuse-local-validation.json": {
+    "bytes": 4869,
+    "sha256": "3adf218aacf4b9cdec2bfe0fcdfeeb21a66b5a5f05a8b9c79af9a656939d71b1"
+  },
+  "support/native-key-reuse-selected-artifact.json": {
+    "bytes": 245,
+    "sha256": "a5ff74c750a43ccfdf7e5243d08b72feb5b16d9153b35a2da993992ba3f8bae3"
+  },
+  "support/pr90-integration-final-receipt.json": {
+    "bytes": 14133,
+    "sha256": "9d7e20d34d5a1a55811134dd35058f3795f0f966a0fdf49b0c05b95b84a38daf"
+  }
+}

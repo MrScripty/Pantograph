@@ -1,0 +1,3837 @@
+diff --git a/crates/inference/src/backend/pytorch.rs b/crates/inference/src/backend/pytorch.rs
+index feb08700..eb873c57 100644
+--- a/crates/inference/src/backend/pytorch.rs
++++ b/crates/inference/src/backend/pytorch.rs
+@@ -1064,6 +1064,11 @@ impl PyTorchBackend {
+                         vec![InferenceModality::Text],
+                         vec![InferenceModality::Text],
+                     ),
++                    BackendTaskCapability::stable(
++                        InferenceTaskId::ChatCompletion,
++                        vec![InferenceModality::Text],
++                        vec![InferenceModality::Text],
++                    ),
+                     BackendTaskCapability::stable(
+                         InferenceTaskId::AudioTranscription,
+                         vec![InferenceModality::Audio],
+diff --git a/crates/inference/src/backend/pytorch_tests.rs b/crates/inference/src/backend/pytorch_tests.rs
+index 5981fbe0..e3ee23f2 100644
+--- a/crates/inference/src/backend/pytorch_tests.rs
++++ b/crates/inference/src/backend/pytorch_tests.rs
+@@ -240,6 +240,7 @@ fn test_capabilities() {
+     assert!(caps.streaming);
+     assert!(!caps.tool_calling);
+     assert!(caps.supports_task(InferenceTaskId::TextGeneration));
++    assert!(caps.supports_task(InferenceTaskId::ChatCompletion));
+     assert!(caps.supports_task(InferenceTaskId::AudioTranscription));
+     assert!(caps.supports_task(InferenceTaskId::ImageGeneration));
+     assert!(!caps.supports_task(InferenceTaskId::Embedding));
+diff --git a/crates/inference/src/selected_text_execution.rs b/crates/inference/src/selected_text_execution.rs
+index 412c5580..2b54180d 100644
+--- a/crates/inference/src/selected_text_execution.rs
++++ b/crates/inference/src/selected_text_execution.rs
+@@ -22,7 +22,6 @@ fn invalid(message: impl Into<String>) -> BackendError {
+ fn same_model(left: &PumasModelRef, right: &PumasModelRef) -> bool {
+     left.model_id.trim_start_matches("pumas://models/")
+         == right.model_id.trim_start_matches("pumas://models/")
+-        && left.revision == right.revision
+         && left.selected_artifact_id == right.selected_artifact_id
+         && left.selected_artifact_path == right.selected_artifact_path
+ }
+@@ -71,19 +70,53 @@ impl<'a> SelectedTextLoad<'a> {
+                 ));
+             }
+         }
+-        if request.task_id != InferenceTaskId::TextGeneration
+-            || decision.selected_task_id != Some(InferenceTaskId::TextGeneration)
++        if model
++            .revision
++            .as_ref()
++            .is_some_and(|revision| selected.revision.as_ref() != Some(revision))
++        {
++            return Err(invalid(
++                "selected revision must preserve the explicit requested revision",
++            ));
++        }
++        for requested in [model, selected] {
++            if let Some(revision) = &requested.revision {
++                if package.model_ref.revision.as_ref() != Some(revision)
++                    || target.model_ref.revision.as_ref() != Some(revision)
++                {
++                    return Err(invalid(
++                        "explicit requested revision is missing or mismatched",
++                    ));
++                }
++            }
++        }
++        if package
++            .model_ref
++            .revision
++            .as_ref()
++            .is_some_and(|revision| target.model_ref.revision.as_ref() != Some(revision))
++        {
++            return Err(invalid("target must preserve the known package revision"));
++        }
++        if !matches!(
++            request.task_id,
++            InferenceTaskId::TextGeneration | InferenceTaskId::ChatCompletion
++        ) || decision.selected_task_id != Some(request.task_id.clone())
+             || !matches!(
+                 request.input,
+                 InferenceExecutionInput::TextGeneration { .. }
+             )
+         {
+-            return Err(invalid("explicit text_generation task required"));
++            return Err(invalid(
++                "exact requested and selected canonical text task required",
++            ));
+         }
+         let task = crate::resolve_task_registry_entry_from_evidence(&package.task)
+             .map_err(|error| invalid(format!("invalid package task evidence: {error:?}")))?;
+-        if task.task_id != InferenceTaskId::TextGeneration {
+-            return Err(invalid("package task is not text_generation"));
++        if task.task_id != request.task_id {
++            return Err(invalid(
++                "package task must match the requested canonical text task",
++            ));
+         }
+         if !package.uses_current_contract()
+             || target.package_facts_contract_version != Some(package.package_facts_contract_version)
+@@ -232,3 +265,68 @@ pub(crate) fn fixture() -> (
+     };
+     (directory, request, target, decision)
+ }
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    #[tokio::test]
++    async fn canonical_text_tasks_require_exact_request_selection_and_package_agreement() {
++        for requested in [
++            InferenceTaskId::TextGeneration,
++            InferenceTaskId::ChatCompletion,
++        ] {
++            for selected in [
++                InferenceTaskId::TextGeneration,
++                InferenceTaskId::ChatCompletion,
++            ] {
++                for packaged in [
++                    InferenceTaskId::TextGeneration,
++                    InferenceTaskId::ChatCompletion,
++                ] {
++                    let (_directory, mut request, target, mut decision) = fixture();
++                    request.task_id = requested.clone();
++                    decision.selected_task_id = Some(selected.clone());
++                    let task = &mut request.resolved_model_package_facts.as_mut().unwrap().task;
++                    task.pipeline_tag = None;
++                    task.task_type_primary = Some(packaged.canonical_label().to_string());
++                    assert_eq!(
++                        SelectedTextLoad::validate(&request, &target, &decision)
++                            .await
++                            .is_ok(),
++                        requested == selected && selected == packaged,
++                        "request={requested:?}, selected={selected:?}, package={packaged:?}"
++                    );
++                }
++            }
++        }
++    }
++
++    #[tokio::test]
++    async fn canonical_text_revisions_preserve_explicit_constraints_and_allow_omitted_refinement() {
++        for (requested, selected, package, target_revision, valid) in [
++            (Some("a"), Some("a"), Some("a"), Some("a"), true),
++            (None, Some("a"), Some("a"), Some("a"), true),
++            (None, None, Some("a"), Some("a"), true),
++            (Some("b"), Some("a"), Some("a"), Some("a"), false),
++            (Some("a"), None, Some("a"), Some("a"), false),
++            (Some("a"), Some("a"), None, Some("a"), false),
++            (Some("a"), Some("a"), Some("a"), None, false),
++            (None, Some("a"), Some("a"), Some("b"), false),
++            (None, None, Some("a"), None, false),
++        ] {
++            let (_directory, mut request, mut target, mut decision) = fixture();
++            request.model_ref.as_mut().unwrap().revision = requested.map(str::to_owned);
++            decision.selected_model_ref.as_mut().unwrap().revision = selected.map(str::to_owned);
++            request
++                .resolved_model_package_facts
++                .as_mut()
++                .unwrap()
++                .model_ref
++                .revision = package.map(str::to_owned);
++            target.model_ref.revision = target_revision.map(str::to_owned);
++            assert_eq!(SelectedTextLoad::validate(&request, &target, &decision).await.is_ok(), valid,
++                "request={requested:?}, selected={selected:?}, package={package:?}, target={target_revision:?}");
++        }
++    }
++}
+diff --git a/crates/inference/tests/fixtures/tiny_chat_gpt2/README.md b/crates/inference/tests/fixtures/tiny_chat_gpt2/README.md
+new file mode 100644
+index 00000000..ad2be7c9
+--- /dev/null
++++ b/crates/inference/tests/fixtures/tiny_chat_gpt2/README.md
+@@ -0,0 +1,38 @@
++# Synthetic CPU chat fixture
++
++`model-11` and `model-37` contain locally initialized, **untrained** GPT-2 models
++with 5,392 parameters each. `generate.py` constructs official installed
++Transformers/Tokenizers classes directly; it downloads no weights, tokenizer,
++config, or executable model code. These artifacts test routing and deterministic
++execution, not language quality. They are test data generated for this repository.
++
++Each directory includes an explicit character-tokenizer chat template, safe model
++serialization, eight native `GPT2LMHeadModel.generate` oracles and a SHA-256
++manifest. The tokenizer uses standard GPT-2 `input_ids`/`attention_mask` inputs;
++segment-ID tokenizers are outside this fixture's coverage. Oracles cover two
++prompt/system contexts and seeds 0, 42, 43 and `u64::MAX`, with four generated
++tokens and fixed sampling controls. Reproduction is version-sensitive: the
++recorded environment uses Torch 2.14.1+cpu and Transformers 4.53.3.
++
++With those official dependencies, Tokenizers, Accelerate and SoundFile installed:
++
++```sh
++export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
++python crates/inference/tests/fixtures/tiny_chat_gpt2/generate.py
++python crates/inference/tests/fixtures/tiny_chat_gpt2/qualify.py
++```
++
++Regeneration intentionally rewrites fixtures and manifests; review the resulting
++diff. `qualify.py` loads the actual full worker and local model, observes real
++forward inputs, checks the explicit template and both streaming/nonstreaming
++results, and confirms that seeded requests leave ambient Torch RNG unchanged.
++It does not stub worker imports or replace model forwards.
++
++The ignored Rust test
++`saved_cpu_chat_graph_runs_native_owner_with_template_controls_and_scope_isolation`
++must be run explicitly with `--ignored --nocapture` in a qualified CPU Python
++environment. It saves/reopens public graphs and calls the actual selected loader,
++gateway and worker with controlled package/readiness/dispatch facts. It also
++checks separately scoped sequential envelope members and precancellation.
++Live Pumas discovery, pretrained quality, GPU, desktop execution, post-start
++native cancellation, other architectures and tokenizer fallbacks remain separate.
+diff --git a/crates/inference/tests/fixtures/tiny_chat_gpt2/generate.py b/crates/inference/tests/fixtures/tiny_chat_gpt2/generate.py
+new file mode 100644
+index 00000000..4e89fe31
+--- /dev/null
++++ b/crates/inference/tests/fixtures/tiny_chat_gpt2/generate.py
+@@ -0,0 +1,86 @@
++"""Generate tiny untrained local GPT-2 fixtures and native CPU text oracles.
++
++Uses installed official Transformers/Tokenizers classes; no from_pretrained,
++network access, external weights or executable model code are required.
++"""
++import hashlib
++import json
++from pathlib import Path
++import string
++
++import torch
++import transformers
++from tokenizers import Tokenizer, decoders, models, pre_tokenizers
++from transformers import GPT2Config, GPT2LMHeadModel, PreTrainedTokenizerFast
++
++
++ROOT = Path(__file__).parent
++TEMPLATE = (
++    "{% for message in messages %}{{ message['role'] }}:{{ message['content'] }};"
++    "{% endfor %}{% if add_generation_prompt %}assistant:{% endif %}"
++)
++
++
++def generate(model_seed):
++    directory = ROOT / f"model-{model_seed}"
++    directory.mkdir(exist_ok=True)
++    chars = list(string.ascii_lowercase + " :;\n")
++    vocabulary = {token: index for index, token in enumerate(
++        ["[PAD]", "[EOS]", "[BOS]", "[UNK]", *chars])}
++    raw = Tokenizer(models.WordLevel(vocabulary, unk_token="[UNK]"))
++    raw.pre_tokenizer = pre_tokenizers.Split("", behavior="isolated")
++    raw.decoder = decoders.Fuse()
++    tokenizer = PreTrainedTokenizerFast(
++        tokenizer_object=raw, pad_token="[PAD]", eos_token="[EOS]",
++        bos_token="[BOS]", unk_token="[UNK]", chat_template=TEMPLATE,
++        model_input_names=["input_ids", "attention_mask"],
++    )
++    with torch.random.fork_rng(devices=[]):
++        torch.manual_seed(model_seed)
++        model = GPT2LMHeadModel(GPT2Config(
++            vocab_size=len(vocabulary), n_positions=96, n_ctx=96, n_embd=16,
++            n_layer=1, n_head=2, resid_pdrop=0, embd_pdrop=0, attn_pdrop=0,
++            bos_token_id=2, eos_token_id=1, pad_token_id=0,
++        )).eval()
++    model.save_pretrained(directory, safe_serialization=True)
++    tokenizer.save_pretrained(directory)
++    cases = []
++    for prompt, system in [("hello world", "be brief"), ("alternate question", None)]:
++        messages = ([{"role": "system", "content": system}] if system else [])
++        messages.append({"role": "user", "content": prompt})
++        formatted = tokenizer.apply_chat_template(
++            messages, tokenize=False, add_generation_prompt=True)
++        inputs = tokenizer(formatted, return_tensors="pt")
++        for seed in [0, 42, 43, (1 << 64) - 1]:
++            # Independent installed native generate oracle, with ambient RNG
++            # isolated here. Production requests use their own generators.
++            with torch.random.fork_rng(devices=[]), torch.no_grad():
++                torch.manual_seed(seed)
++                output = model.generate(
++                    **inputs, max_new_tokens=4, min_new_tokens=4,
++                    do_sample=True, temperature=0.8, top_p=1.0, top_k=4,
++                    repetition_penalty=1.0,
++                )
++            generated = output[0, inputs.input_ids.shape[-1]:].tolist()
++            cases.append({"prompt": prompt, "system_prompt": system, "seed": seed,
++                          "formatted_prompt": formatted,
++                          "prompt_token_ids": inputs.input_ids[0].tolist(),
++                          "generated_token_ids": generated,
++                          "text": tokenizer.decode(generated, skip_special_tokens=True)})
++    (directory / "golden.json").write_text(json.dumps(cases, indent=2) + "\n")
++    manifest = {
++        "model_seed": model_seed, "synthetic_untrained": True,
++        "torch": torch.__version__, "transformers": transformers.__version__,
++        "parameter_count": sum(parameter.numel() for parameter in model.parameters()),
++        "chat_template": TEMPLATE,
++        "sha256": {file.name: hashlib.sha256(file.read_bytes()).hexdigest()
++                   for file in sorted(directory.iterdir()) if file.name != "manifest.json"},
++    }
++    (directory / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
++    print(directory.name, manifest["parameter_count"], "untrained parameters;", len(cases), "CPU oracles")
++
++
++if __name__ == "__main__":
++    torch.set_num_threads(1)
++    for model_seed in [11, 37]:
++        generate(model_seed)
+diff --git a/crates/inference/tests/fixtures/tiny_chat_gpt2/model-11/chat_template.jinja b/crates/inference/tests/fixtures/tiny_chat_gpt2/model-11/chat_template.jinja
+new file mode 100644
+index 00000000..f02a9ff3
+--- /dev/null
++++ b/crates/inference/tests/fixtures/tiny_chat_gpt2/model-11/chat_template.jinja
+@@ -0,0 +1 @@
++{% for message in messages %}{{ message['role'] }}:{{ message['content'] }};{% endfor %}{% if add_generation_prompt %}assistant:{% endif %}
+\ No newline at end of file
+diff --git a/crates/inference/tests/fixtures/tiny_chat_gpt2/model-11/config.json b/crates/inference/tests/fixtures/tiny_chat_gpt2/model-11/config.json
+new file mode 100644
+index 00000000..fa19455b
+--- /dev/null
++++ b/crates/inference/tests/fixtures/tiny_chat_gpt2/model-11/config.json
+@@ -0,0 +1,33 @@
++{
++  "activation_function": "gelu_new",
++  "architectures": [
++    "GPT2LMHeadModel"
++  ],
++  "attn_pdrop": 0,
++  "bos_token_id": 2,
++  "embd_pdrop": 0,
++  "eos_token_id": 1,
++  "initializer_range": 0.02,
++  "layer_norm_epsilon": 1e-05,
++  "model_type": "gpt2",
++  "n_ctx": 96,
++  "n_embd": 16,
++  "n_head": 2,
++  "n_inner": null,
++  "n_layer": 1,
++  "n_positions": 96,
++  "pad_token_id": 0,
++  "reorder_and_upcast_attn": false,
++  "resid_pdrop": 0,
++  "scale_attn_by_inverse_layer_idx": false,
++  "scale_attn_weights": true,
++  "summary_activation": null,
++  "summary_first_dropout": 0.1,
++  "summary_proj_to_labels": true,
++  "summary_type": "cls_index",
++  "summary_use_proj": true,
++  "torch_dtype": "float32",
++  "transformers_version": "4.53.3",
++  "use_cache": true,
++  "vocab_size": 34
++}
+diff --git a/crates/inference/tests/fixtures/tiny_chat_gpt2/model-11/generation_config.json b/crates/inference/tests/fixtures/tiny_chat_gpt2/model-11/generation_config.json
+new file mode 100644
+index 00000000..c1b50994
+--- /dev/null
++++ b/crates/inference/tests/fixtures/tiny_chat_gpt2/model-11/generation_config.json
+@@ -0,0 +1,7 @@
++{
++  "_from_model_config": true,
++  "bos_token_id": 2,
++  "eos_token_id": 1,
++  "pad_token_id": 0,
++  "transformers_version": "4.53.3"
++}
+diff --git a/crates/inference/tests/fixtures/tiny_chat_gpt2/model-11/golden.json b/crates/inference/tests/fixtures/tiny_chat_gpt2/model-11/golden.json
+new file mode 100644
+index 00000000..dffa3969
+--- /dev/null
++++ b/crates/inference/tests/fixtures/tiny_chat_gpt2/model-11/golden.json
+@@ -0,0 +1,430 @@
++[
++  {
++    "prompt": "hello world",
++    "system_prompt": "be brief",
++    "seed": 0,
++    "formatted_prompt": "system:be brief;user:hello world;assistant:",
++    "prompt_token_ids": [
++      22,
++      28,
++      22,
++      23,
++      8,
++      16,
++      31,
++      5,
++      8,
++      30,
++      5,
++      21,
++      12,
++      8,
++      9,
++      32,
++      24,
++      22,
++      8,
++      21,
++      31,
++      11,
++      8,
++      15,
++      15,
++      18,
++      30,
++      26,
++      18,
++      21,
++      15,
++      7,
++      32,
++      4,
++      22,
++      22,
++      12,
++      22,
++      23,
++      4,
++      17,
++      23,
++      31
++    ],
++    "generated_token_ids": [
++      24,
++      24,
++      28,
++      11
++    ],
++    "text": "uuyh"
++  },
++  {
++    "prompt": "hello world",
++    "system_prompt": "be brief",
++    "seed": 42,
++    "formatted_prompt": "system:be brief;user:hello world;assistant:",
++    "prompt_token_ids": [
++      22,
++      28,
++      22,
++      23,
++      8,
++      16,
++      31,
++      5,
++      8,
++      30,
++      5,
++      21,
++      12,
++      8,
++      9,
++      32,
++      24,
++      22,
++      8,
++      21,
++      31,
++      11,
++      8,
++      15,
++      15,
++      18,
++      30,
++      26,
++      18,
++      21,
++      15,
++      7,
++      32,
++      4,
++      22,
++      22,
++      12,
++      22,
++      23,
++      4,
++      17,
++      23,
++      31
++    ],
++    "generated_token_ids": [
++      24,
++      28,
++      7,
++      11
++    ],
++    "text": "uydh"
++  },
++  {
++    "prompt": "hello world",
++    "system_prompt": "be brief",
++    "seed": 43,
++    "formatted_prompt": "system:be brief;user:hello world;assistant:",
++    "prompt_token_ids": [
++      22,
++      28,
++      22,
++      23,
++      8,
++      16,
++      31,
++      5,
++      8,
++      30,
++      5,
++      21,
++      12,
++      8,
++      9,
++      32,
++      24,
++      22,
++      8,
++      21,
++      31,
++      11,
++      8,
++      15,
++      15,
++      18,
++      30,
++      26,
++      18,
++      21,
++      15,
++      7,
++      32,
++      4,
++      22,
++      22,
++      12,
++      22,
++      23,
++      4,
++      17,
++      23,
++      31
++    ],
++    "generated_token_ids": [
++      8,
++      19,
++      13,
++      13
++    ],
++    "text": "epjj"
++  },
++  {
++    "prompt": "hello world",
++    "system_prompt": "be brief",
++    "seed": 18446744073709551615,
++    "formatted_prompt": "system:be brief;user:hello world;assistant:",
++    "prompt_token_ids": [
++      22,
++      28,
++      22,
++      23,
++      8,
++      16,
++      31,
++      5,
++      8,
++      30,
++      5,
++      21,
++      12,
++      8,
++      9,
++      32,
++      24,
++      22,
++      8,
++      21,
++      31,
++      11,
++      8,
++      15,
++      15,
++      18,
++      30,
++      26,
++      18,
++      21,
++      15,
++      7,
++      32,
++      4,
++      22,
++      22,
++      12,
++      22,
++      23,
++      4,
++      17,
++      23,
++      31
++    ],
++    "generated_token_ids": [
++      24,
++      8,
++      2,
++      2
++    ],
++    "text": "ue"
++  },
++  {
++    "prompt": "alternate question",
++    "system_prompt": null,
++    "seed": 0,
++    "formatted_prompt": "user:alternate question;assistant:",
++    "prompt_token_ids": [
++      24,
++      22,
++      8,
++      21,
++      31,
++      4,
++      15,
++      23,
++      8,
++      21,
++      17,
++      4,
++      23,
++      8,
++      30,
++      20,
++      24,
++      8,
++      22,
++      23,
++      12,
++      18,
++      17,
++      32,
++      4,
++      22,
++      22,
++      12,
++      22,
++      23,
++      4,
++      17,
++      23,
++      31
++    ],
++    "generated_token_ids": [
++      24,
++      24,
++      25,
++      27
++    ],
++    "text": "uuvx"
++  },
++  {
++    "prompt": "alternate question",
++    "system_prompt": null,
++    "seed": 42,
++    "formatted_prompt": "user:alternate question;assistant:",
++    "prompt_token_ids": [
++      24,
++      22,
++      8,
++      21,
++      31,
++      4,
++      15,
++      23,
++      8,
++      21,
++      17,
++      4,
++      23,
++      8,
++      30,
++      20,
++      24,
++      8,
++      22,
++      23,
++      12,
++      18,
++      17,
++      32,
++      4,
++      22,
++      22,
++      12,
++      22,
++      23,
++      4,
++      17,
++      23,
++      31
++    ],
++    "generated_token_ids": [
++      24,
++      28,
++      24,
++      11
++    ],
++    "text": "uyuh"
++  },
++  {
++    "prompt": "alternate question",
++    "system_prompt": null,
++    "seed": 43,
++    "formatted_prompt": "user:alternate question;assistant:",
++    "prompt_token_ids": [
++      24,
++      22,
++      8,
++      21,
++      31,
++      4,
++      15,
++      23,
++      8,
++      21,
++      17,
++      4,
++      23,
++      8,
++      30,
++      20,
++      24,
++      8,
++      22,
++      23,
++      12,
++      18,
++      17,
++      32,
++      4,
++      22,
++      22,
++      12,
++      22,
++      23,
++      4,
++      17,
++      23,
++      31
++    ],
++    "generated_token_ids": [
++      8,
++      19,
++      13,
++      13
++    ],
++    "text": "epjj"
++  },
++  {
++    "prompt": "alternate question",
++    "system_prompt": null,
++    "seed": 18446744073709551615,
++    "formatted_prompt": "user:alternate question;assistant:",
++    "prompt_token_ids": [
++      24,
++      22,
++      8,
++      21,
++      31,
++      4,
++      15,
++      23,
++      8,
++      21,
++      17,
++      4,
++      23,
++      8,
++      30,
++      20,
++      24,
++      8,
++      22,
++      23,
++      12,
++      18,
++      17,
++      32,
++      4,
++      22,
++      22,
++      12,
++      22,
++      23,
++      4,
++      17,
++      23,
++      31
++    ],
++    "generated_token_ids": [
++      24,
++      24,
++      25,
++      29
++    ],
++    "text": "uuvz"
++  }
++]
+diff --git a/crates/inference/tests/fixtures/tiny_chat_gpt2/model-11/manifest.json b/crates/inference/tests/fixtures/tiny_chat_gpt2/model-11/manifest.json
+new file mode 100644
+index 00000000..18cd6ffc
+--- /dev/null
++++ b/crates/inference/tests/fixtures/tiny_chat_gpt2/model-11/manifest.json
+@@ -0,0 +1,18 @@
++{
++  "model_seed": 11,
++  "synthetic_untrained": true,
++  "torch": "2.14.1+cpu",
++  "transformers": "4.53.3",
++  "parameter_count": 5392,
++  "chat_template": "{% for message in messages %}{{ message['role'] }}:{{ message['content'] }};{% endfor %}{% if add_generation_prompt %}assistant:{% endif %}",
++  "sha256": {
++    "chat_template.jinja": "30282b14d6e685aebce0c1088451f8ff931a8eb391ccd00e65aa39c3cc2bd097",
++    "config.json": "9ee520b4364ca645b69041a37d48763552c7d03f8a0f4fa2c527939ae110d500",
++    "generation_config.json": "c5eb603db353a896c00d33628caa4be9b7a1ae7f26f05783dbbd1cbe9f2831ff",
++    "golden.json": "1c95cba2708d8da20ce535819216526be5a82322f61898ef858e0ee26592a04b",
++    "model.safetensors": "ee6aea28ed8f598402eb50deb7e1c3e3f593e5184d1b80c88930ce3d63635b07",
++    "special_tokens_map.json": "fdd1575e8bd811652f3708f5d70495fd581ca5b59111e6edaa903e43783ce944",
++    "tokenizer.json": "cc2d05c6f5b33b87d9c77ed0050733f2df59503d599685dc0fb4cd6cb04c591e",
++    "tokenizer_config.json": "b893f56c8053a1ad1abcdfe19ad924d2f1b83b9bb47ac26a5a2dc61694d8b49d"
++  }
++}
+diff --git a/crates/inference/tests/fixtures/tiny_chat_gpt2/model-11/model.safetensors b/crates/inference/tests/fixtures/tiny_chat_gpt2/model-11/model.safetensors
+new file mode 100644
+index 0000000000000000000000000000000000000000..3d70627f25fe844c7bdc50899984cf127624f17b
+GIT binary patch
+literal 23024
+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
+I+P4({56Ih5t^fc4
+
+literal 0
+HcmV?d00001
+
+diff --git a/crates/inference/tests/fixtures/tiny_chat_gpt2/model-11/special_tokens_map.json b/crates/inference/tests/fixtures/tiny_chat_gpt2/model-11/special_tokens_map.json
+new file mode 100644
+index 00000000..8c7036cd
+--- /dev/null
++++ b/crates/inference/tests/fixtures/tiny_chat_gpt2/model-11/special_tokens_map.json
+@@ -0,0 +1,6 @@
++{
++  "bos_token": "[BOS]",
++  "eos_token": "[EOS]",
++  "pad_token": "[PAD]",
++  "unk_token": "[UNK]"
++}
+diff --git a/crates/inference/tests/fixtures/tiny_chat_gpt2/model-11/tokenizer.json b/crates/inference/tests/fixtures/tiny_chat_gpt2/model-11/tokenizer.json
+new file mode 100644
+index 00000000..828fc453
+--- /dev/null
++++ b/crates/inference/tests/fixtures/tiny_chat_gpt2/model-11/tokenizer.json
+@@ -0,0 +1,96 @@
++{
++  "version": "1.0",
++  "truncation": null,
++  "padding": null,
++  "added_tokens": [
++    {
++      "id": 0,
++      "content": "[PAD]",
++      "single_word": false,
++      "lstrip": false,
++      "rstrip": false,
++      "normalized": false,
++      "special": true
++    },
++    {
++      "id": 1,
++      "content": "[EOS]",
++      "single_word": false,
++      "lstrip": false,
++      "rstrip": false,
++      "normalized": false,
++      "special": true
++    },
++    {
++      "id": 2,
++      "content": "[BOS]",
++      "single_word": false,
++      "lstrip": false,
++      "rstrip": false,
++      "normalized": false,
++      "special": true
++    },
++    {
++      "id": 3,
++      "content": "[UNK]",
++      "single_word": false,
++      "lstrip": false,
++      "rstrip": false,
++      "normalized": false,
++      "special": true
++    }
++  ],
++  "normalizer": null,
++  "pre_tokenizer": {
++    "type": "Split",
++    "pattern": {
++      "String": ""
++    },
++    "behavior": "Isolated",
++    "invert": false
++  },
++  "post_processor": null,
++  "decoder": {
++    "type": "Fuse"
++  },
++  "model": {
++    "type": "WordLevel",
++    "vocab": {
++      "[PAD]": 0,
++      "[EOS]": 1,
++      "[BOS]": 2,
++      "[UNK]": 3,
++      "a": 4,
++      "b": 5,
++      "c": 6,
++      "d": 7,
++      "e": 8,
++      "f": 9,
++      "g": 10,
++      "h": 11,
++      "i": 12,
++      "j": 13,
++      "k": 14,
++      "l": 15,
++      "m": 16,
++      "n": 17,
++      "o": 18,
++      "p": 19,
++      "q": 20,
++      "r": 21,
++      "s": 22,
++      "t": 23,
++      "u": 24,
++      "v": 25,
++      "w": 26,
++      "x": 27,
++      "y": 28,
++      "z": 29,
++      " ": 30,
++      ":": 31,
++      ";": 32,
++      "\n": 33
++    },
++    "unk_token": "[UNK]"
++  }
++}
+\ No newline at end of file
+diff --git a/crates/inference/tests/fixtures/tiny_chat_gpt2/model-11/tokenizer_config.json b/crates/inference/tests/fixtures/tiny_chat_gpt2/model-11/tokenizer_config.json
+new file mode 100644
+index 00000000..f169dc76
+--- /dev/null
++++ b/crates/inference/tests/fixtures/tiny_chat_gpt2/model-11/tokenizer_config.json
+@@ -0,0 +1,48 @@
++{
++  "added_tokens_decoder": {
++    "0": {
++      "content": "[PAD]",
++      "lstrip": false,
++      "normalized": false,
++      "rstrip": false,
++      "single_word": false,
++      "special": true
++    },
++    "1": {
++      "content": "[EOS]",
++      "lstrip": false,
++      "normalized": false,
++      "rstrip": false,
++      "single_word": false,
++      "special": true
++    },
++    "2": {
++      "content": "[BOS]",
++      "lstrip": false,
++      "normalized": false,
++      "rstrip": false,
++      "single_word": false,
++      "special": true
++    },
++    "3": {
++      "content": "[UNK]",
++      "lstrip": false,
++      "normalized": false,
++      "rstrip": false,
++      "single_word": false,
++      "special": true
++    }
++  },
++  "bos_token": "[BOS]",
++  "clean_up_tokenization_spaces": false,
++  "eos_token": "[EOS]",
++  "extra_special_tokens": {},
++  "model_input_names": [
++    "input_ids",
++    "attention_mask"
++  ],
++  "model_max_length": 1000000000000000019884624838656,
++  "pad_token": "[PAD]",
++  "tokenizer_class": "PreTrainedTokenizerFast",
++  "unk_token": "[UNK]"
++}
+diff --git a/crates/inference/tests/fixtures/tiny_chat_gpt2/model-37/chat_template.jinja b/crates/inference/tests/fixtures/tiny_chat_gpt2/model-37/chat_template.jinja
+new file mode 100644
+index 00000000..f02a9ff3
+--- /dev/null
++++ b/crates/inference/tests/fixtures/tiny_chat_gpt2/model-37/chat_template.jinja
+@@ -0,0 +1 @@
++{% for message in messages %}{{ message['role'] }}:{{ message['content'] }};{% endfor %}{% if add_generation_prompt %}assistant:{% endif %}
+\ No newline at end of file
+diff --git a/crates/inference/tests/fixtures/tiny_chat_gpt2/model-37/config.json b/crates/inference/tests/fixtures/tiny_chat_gpt2/model-37/config.json
+new file mode 100644
+index 00000000..fa19455b
+--- /dev/null
++++ b/crates/inference/tests/fixtures/tiny_chat_gpt2/model-37/config.json
+@@ -0,0 +1,33 @@
++{
++  "activation_function": "gelu_new",
++  "architectures": [
++    "GPT2LMHeadModel"
++  ],
++  "attn_pdrop": 0,
++  "bos_token_id": 2,
++  "embd_pdrop": 0,
++  "eos_token_id": 1,
++  "initializer_range": 0.02,
++  "layer_norm_epsilon": 1e-05,
++  "model_type": "gpt2",
++  "n_ctx": 96,
++  "n_embd": 16,
++  "n_head": 2,
++  "n_inner": null,
++  "n_layer": 1,
++  "n_positions": 96,
++  "pad_token_id": 0,
++  "reorder_and_upcast_attn": false,
++  "resid_pdrop": 0,
++  "scale_attn_by_inverse_layer_idx": false,
++  "scale_attn_weights": true,
++  "summary_activation": null,
++  "summary_first_dropout": 0.1,
++  "summary_proj_to_labels": true,
++  "summary_type": "cls_index",
++  "summary_use_proj": true,
++  "torch_dtype": "float32",
++  "transformers_version": "4.53.3",
++  "use_cache": true,
++  "vocab_size": 34
++}
+diff --git a/crates/inference/tests/fixtures/tiny_chat_gpt2/model-37/generation_config.json b/crates/inference/tests/fixtures/tiny_chat_gpt2/model-37/generation_config.json
+new file mode 100644
+index 00000000..c1b50994
+--- /dev/null
++++ b/crates/inference/tests/fixtures/tiny_chat_gpt2/model-37/generation_config.json
+@@ -0,0 +1,7 @@
++{
++  "_from_model_config": true,
++  "bos_token_id": 2,
++  "eos_token_id": 1,
++  "pad_token_id": 0,
++  "transformers_version": "4.53.3"
++}
+diff --git a/crates/inference/tests/fixtures/tiny_chat_gpt2/model-37/golden.json b/crates/inference/tests/fixtures/tiny_chat_gpt2/model-37/golden.json
+new file mode 100644
+index 00000000..7bfcceda
+--- /dev/null
++++ b/crates/inference/tests/fixtures/tiny_chat_gpt2/model-37/golden.json
+@@ -0,0 +1,430 @@
++[
++  {
++    "prompt": "hello world",
++    "system_prompt": "be brief",
++    "seed": 0,
++    "formatted_prompt": "system:be brief;user:hello world;assistant:",
++    "prompt_token_ids": [
++      22,
++      28,
++      22,
++      23,
++      8,
++      16,
++      31,
++      5,
++      8,
++      30,
++      5,
++      21,
++      12,
++      8,
++      9,
++      32,
++      24,
++      22,
++      8,
++      21,
++      31,
++      11,
++      8,
++      15,
++      15,
++      18,
++      30,
++      26,
++      18,
++      21,
++      15,
++      7,
++      32,
++      4,
++      22,
++      22,
++      12,
++      22,
++      23,
++      4,
++      17,
++      23,
++      31
++    ],
++    "generated_token_ids": [
++      6,
++      7,
++      6,
++      29
++    ],
++    "text": "cdcz"
++  },
++  {
++    "prompt": "hello world",
++    "system_prompt": "be brief",
++    "seed": 42,
++    "formatted_prompt": "system:be brief;user:hello world;assistant:",
++    "prompt_token_ids": [
++      22,
++      28,
++      22,
++      23,
++      8,
++      16,
++      31,
++      5,
++      8,
++      30,
++      5,
++      21,
++      12,
++      8,
++      9,
++      32,
++      24,
++      22,
++      8,
++      21,
++      31,
++      11,
++      8,
++      15,
++      15,
++      18,
++      30,
++      26,
++      18,
++      21,
++      15,
++      7,
++      32,
++      4,
++      22,
++      22,
++      12,
++      22,
++      23,
++      4,
++      17,
++      23,
++      31
++    ],
++    "generated_token_ids": [
++      29,
++      7,
++      7,
++      26
++    ],
++    "text": "zddw"
++  },
++  {
++    "prompt": "hello world",
++    "system_prompt": "be brief",
++    "seed": 43,
++    "formatted_prompt": "system:be brief;user:hello world;assistant:",
++    "prompt_token_ids": [
++      22,
++      28,
++      22,
++      23,
++      8,
++      16,
++      31,
++      5,
++      8,
++      30,
++      5,
++      21,
++      12,
++      8,
++      9,
++      32,
++      24,
++      22,
++      8,
++      21,
++      31,
++      11,
++      8,
++      15,
++      15,
++      18,
++      30,
++      26,
++      18,
++      21,
++      15,
++      7,
++      32,
++      4,
++      22,
++      22,
++      12,
++      22,
++      23,
++      4,
++      17,
++      23,
++      31
++    ],
++    "generated_token_ids": [
++      32,
++      21,
++      28,
++      26
++    ],
++    "text": ";ryw"
++  },
++  {
++    "prompt": "hello world",
++    "system_prompt": "be brief",
++    "seed": 18446744073709551615,
++    "formatted_prompt": "system:be brief;user:hello world;assistant:",
++    "prompt_token_ids": [
++      22,
++      28,
++      22,
++      23,
++      8,
++      16,
++      31,
++      5,
++      8,
++      30,
++      5,
++      21,
++      12,
++      8,
++      9,
++      32,
++      24,
++      22,
++      8,
++      21,
++      31,
++      11,
++      8,
++      15,
++      15,
++      18,
++      30,
++      26,
++      18,
++      21,
++      15,
++      7,
++      32,
++      4,
++      22,
++      22,
++      12,
++      22,
++      23,
++      4,
++      17,
++      23,
++      31
++    ],
++    "generated_token_ids": [
++      31,
++      7,
++      19,
++      11
++    ],
++    "text": ":dph"
++  },
++  {
++    "prompt": "alternate question",
++    "system_prompt": null,
++    "seed": 0,
++    "formatted_prompt": "user:alternate question;assistant:",
++    "prompt_token_ids": [
++      24,
++      22,
++      8,
++      21,
++      31,
++      4,
++      15,
++      23,
++      8,
++      21,
++      17,
++      4,
++      23,
++      8,
++      30,
++      20,
++      24,
++      8,
++      22,
++      23,
++      12,
++      18,
++      17,
++      32,
++      4,
++      22,
++      22,
++      12,
++      22,
++      23,
++      4,
++      17,
++      23,
++      31
++    ],
++    "generated_token_ids": [
++      33,
++      31,
++      8,
++      33
++    ],
++    "text": "\n:e\n"
++  },
++  {
++    "prompt": "alternate question",
++    "system_prompt": null,
++    "seed": 42,
++    "formatted_prompt": "user:alternate question;assistant:",
++    "prompt_token_ids": [
++      24,
++      22,
++      8,
++      21,
++      31,
++      4,
++      15,
++      23,
++      8,
++      21,
++      17,
++      4,
++      23,
++      8,
++      30,
++      20,
++      24,
++      8,
++      22,
++      23,
++      12,
++      18,
++      17,
++      32,
++      4,
++      22,
++      22,
++      12,
++      22,
++      23,
++      4,
++      17,
++      23,
++      31
++    ],
++    "generated_token_ids": [
++      16,
++      3,
++      12,
++      10
++    ],
++    "text": "mig"
++  },
++  {
++    "prompt": "alternate question",
++    "system_prompt": null,
++    "seed": 43,
++    "formatted_prompt": "user:alternate question;assistant:",
++    "prompt_token_ids": [
++      24,
++      22,
++      8,
++      21,
++      31,
++      4,
++      15,
++      23,
++      8,
++      21,
++      17,
++      4,
++      23,
++      8,
++      30,
++      20,
++      24,
++      8,
++      22,
++      23,
++      12,
++      18,
++      17,
++      32,
++      4,
++      22,
++      22,
++      12,
++      22,
++      23,
++      4,
++      17,
++      23,
++      31
++    ],
++    "generated_token_ids": [
++      33,
++      33,
++      3,
++      3
++    ],
++    "text": "\n\n"
++  },
++  {
++    "prompt": "alternate question",
++    "system_prompt": null,
++    "seed": 18446744073709551615,
++    "formatted_prompt": "user:alternate question;assistant:",
++    "prompt_token_ids": [
++      24,
++      22,
++      8,
++      21,
++      31,
++      4,
++      15,
++      23,
++      8,
++      21,
++      17,
++      4,
++      23,
++      8,
++      30,
++      20,
++      24,
++      8,
++      22,
++      23,
++      12,
++      18,
++      17,
++      32,
++      4,
++      22,
++      22,
++      12,
++      22,
++      23,
++      4,
++      17,
++      23,
++      31
++    ],
++    "generated_token_ids": [
++      33,
++      8,
++      31,
++      11
++    ],
++    "text": "\ne:h"
++  }
++]
+diff --git a/crates/inference/tests/fixtures/tiny_chat_gpt2/model-37/manifest.json b/crates/inference/tests/fixtures/tiny_chat_gpt2/model-37/manifest.json
+new file mode 100644
+index 00000000..579219e2
+--- /dev/null
++++ b/crates/inference/tests/fixtures/tiny_chat_gpt2/model-37/manifest.json
+@@ -0,0 +1,18 @@
++{
++  "model_seed": 37,
++  "synthetic_untrained": true,
++  "torch": "2.14.1+cpu",
++  "transformers": "4.53.3",
++  "parameter_count": 5392,
++  "chat_template": "{% for message in messages %}{{ message['role'] }}:{{ message['content'] }};{% endfor %}{% if add_generation_prompt %}assistant:{% endif %}",
++  "sha256": {
++    "chat_template.jinja": "30282b14d6e685aebce0c1088451f8ff931a8eb391ccd00e65aa39c3cc2bd097",
++    "config.json": "9ee520b4364ca645b69041a37d48763552c7d03f8a0f4fa2c527939ae110d500",
++    "generation_config.json": "c5eb603db353a896c00d33628caa4be9b7a1ae7f26f05783dbbd1cbe9f2831ff",
++    "golden.json": "91fc8a6a1e050eed47561141b84c203d7a0cd5c52e7410f5c5b2d6e8c54bbb53",
++    "model.safetensors": "5a35e22f84d035be57d8a911338a97ead26ae7fc5ac2f82459e93ec41b1bd48b",
++    "special_tokens_map.json": "fdd1575e8bd811652f3708f5d70495fd581ca5b59111e6edaa903e43783ce944",
++    "tokenizer.json": "cc2d05c6f5b33b87d9c77ed0050733f2df59503d599685dc0fb4cd6cb04c591e",
++    "tokenizer_config.json": "b893f56c8053a1ad1abcdfe19ad924d2f1b83b9bb47ac26a5a2dc61694d8b49d"
++  }
++}
+diff --git a/crates/inference/tests/fixtures/tiny_chat_gpt2/model-37/model.safetensors b/crates/inference/tests/fixtures/tiny_chat_gpt2/model-37/model.safetensors
+new file mode 100644
+index 0000000000000000000000000000000000000000..0b973bb23ad5781bcf707de1fc437177f5b66198
+GIT binary patch
+literal 23024
+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
+
+literal 0
+HcmV?d00001
+
+diff --git a/crates/inference/tests/fixtures/tiny_chat_gpt2/model-37/special_tokens_map.json b/crates/inference/tests/fixtures/tiny_chat_gpt2/model-37/special_tokens_map.json
+new file mode 100644
+index 00000000..8c7036cd
+--- /dev/null
++++ b/crates/inference/tests/fixtures/tiny_chat_gpt2/model-37/special_tokens_map.json
+@@ -0,0 +1,6 @@
++{
++  "bos_token": "[BOS]",
++  "eos_token": "[EOS]",
++  "pad_token": "[PAD]",
++  "unk_token": "[UNK]"
++}
+diff --git a/crates/inference/tests/fixtures/tiny_chat_gpt2/model-37/tokenizer.json b/crates/inference/tests/fixtures/tiny_chat_gpt2/model-37/tokenizer.json
+new file mode 100644
+index 00000000..828fc453
+--- /dev/null
++++ b/crates/inference/tests/fixtures/tiny_chat_gpt2/model-37/tokenizer.json
+@@ -0,0 +1,96 @@
++{
++  "version": "1.0",
++  "truncation": null,
++  "padding": null,
++  "added_tokens": [
++    {
++      "id": 0,
++      "content": "[PAD]",
++      "single_word": false,
++      "lstrip": false,
++      "rstrip": false,
++      "normalized": false,
++      "special": true
++    },
++    {
++      "id": 1,
++      "content": "[EOS]",
++      "single_word": false,
++      "lstrip": false,
++      "rstrip": false,
++      "normalized": false,
++      "special": true
++    },
++    {
++      "id": 2,
++      "content": "[BOS]",
++      "single_word": false,
++      "lstrip": false,
++      "rstrip": false,
++      "normalized": false,
++      "special": true
++    },
++    {
++      "id": 3,
++      "content": "[UNK]",
++      "single_word": false,
++      "lstrip": false,
++      "rstrip": false,
++      "normalized": false,
++      "special": true
++    }
++  ],
++  "normalizer": null,
++  "pre_tokenizer": {
++    "type": "Split",
++    "pattern": {
++      "String": ""
++    },
++    "behavior": "Isolated",
++    "invert": false
++  },
++  "post_processor": null,
++  "decoder": {
++    "type": "Fuse"
++  },
++  "model": {
++    "type": "WordLevel",
++    "vocab": {
++      "[PAD]": 0,
++      "[EOS]": 1,
++      "[BOS]": 2,
++      "[UNK]": 3,
++      "a": 4,
++      "b": 5,
++      "c": 6,
++      "d": 7,
++      "e": 8,
++      "f": 9,
++      "g": 10,
++      "h": 11,
++      "i": 12,
++      "j": 13,
++      "k": 14,
++      "l": 15,
++      "m": 16,
++      "n": 17,
++      "o": 18,
++      "p": 19,
++      "q": 20,
++      "r": 21,
++      "s": 22,
++      "t": 23,
++      "u": 24,
++      "v": 25,
++      "w": 26,
++      "x": 27,
++      "y": 28,
++      "z": 29,
++      " ": 30,
++      ":": 31,
++      ";": 32,
++      "\n": 33
++    },
++    "unk_token": "[UNK]"
++  }
++}
+\ No newline at end of file
+diff --git a/crates/inference/tests/fixtures/tiny_chat_gpt2/model-37/tokenizer_config.json b/crates/inference/tests/fixtures/tiny_chat_gpt2/model-37/tokenizer_config.json
+new file mode 100644
+index 00000000..f169dc76
+--- /dev/null
++++ b/crates/inference/tests/fixtures/tiny_chat_gpt2/model-37/tokenizer_config.json
+@@ -0,0 +1,48 @@
++{
++  "added_tokens_decoder": {
++    "0": {
++      "content": "[PAD]",
++      "lstrip": false,
++      "normalized": false,
++      "rstrip": false,
++      "single_word": false,
++      "special": true
++    },
++    "1": {
++      "content": "[EOS]",
++      "lstrip": false,
++      "normalized": false,
++      "rstrip": false,
++      "single_word": false,
++      "special": true
++    },
++    "2": {
++      "content": "[BOS]",
++      "lstrip": false,
++      "normalized": false,
++      "rstrip": false,
++      "single_word": false,
++      "special": true
++    },
++    "3": {
++      "content": "[UNK]",
++      "lstrip": false,
++      "normalized": false,
++      "rstrip": false,
++      "single_word": false,
++      "special": true
++    }
++  },
++  "bos_token": "[BOS]",
++  "clean_up_tokenization_spaces": false,
++  "eos_token": "[EOS]",
++  "extra_special_tokens": {},
++  "model_input_names": [
++    "input_ids",
++    "attention_mask"
++  ],
++  "model_max_length": 1000000000000000019884624838656,
++  "pad_token": "[PAD]",
++  "tokenizer_class": "PreTrainedTokenizerFast",
++  "unk_token": "[UNK]"
++}
+diff --git a/crates/inference/tests/fixtures/tiny_chat_gpt2/qualify.py b/crates/inference/tests/fixtures/tiny_chat_gpt2/qualify.py
+new file mode 100644
+index 00000000..301e6949
+--- /dev/null
++++ b/crates/inference/tests/fixtures/tiny_chat_gpt2/qualify.py
+@@ -0,0 +1,49 @@
++"""Explicit full-worker qualification of the local synthetic CPU fixtures."""
++import json
++from pathlib import Path
++import sys
++
++import torch
++
++ROOT = Path(__file__).parent
++sys.path.insert(0, str(ROOT.parents[2] / "torch"))
++import worker
++
++
++def qualify(model_seed):
++    directory = ROOT / f"model-{model_seed}"
++    worker.load_model(str(directory), device="cpu", trust_remote_code=False, local_files_only=True)
++    assert type(worker._model).__name__ == "GPT2LMHeadModel"
++    assert next(worker._model.parameters()).device.type == "cpu"
++    observed = []
++
++    def forward_inputs(_model, args, kwargs):
++        ids = args[0] if args else kwargs["input_ids"]
++        observed.append(ids[0].tolist())
++
++    hook = worker._model.register_forward_pre_hook(forward_inputs, with_kwargs=True)
++    try:
++        for case in json.loads((directory / "golden.json").read_text()):
++            assert worker._format_prompt(case["prompt"], case["system_prompt"]) == case["formatted_prompt"]
++            for streaming in [False, True]:
++                observed.clear()
++                before = torch.get_rng_state().clone()
++                result = (worker.generate_tokens if streaming else worker.generate)(
++                    case["prompt"], system_prompt=case["system_prompt"], max_tokens=4,
++                    temperature=0.8, top_p=1.0, top_k=4, min_new_tokens=4,
++                    repetition_penalty=1.0, seed=case["seed"], stop_strings=["NEVER_STOP"],
++                )
++                text = "".join(chunk["text"] for chunk in result) if streaming else result
++                assert text == case["text"], (model_seed, case, streaming, text)
++                assert observed and observed[0] == case["prompt_token_ids"]
++                assert torch.equal(before, torch.get_rng_state())
++        print(f"model-{model_seed}: 16 full-worker CPU requests match native oracles, actual prompt forwards and private RNG")
++    finally:
++        hook.remove()
++        worker.unload_model()
++
++
++if __name__ == "__main__":
++    torch.set_num_threads(1)
++    for model_seed in [11, 37]:
++        qualify(model_seed)
+diff --git a/crates/pantograph-embedded-runtime/src/inference_interface_facts_provider.rs b/crates/pantograph-embedded-runtime/src/inference_interface_facts_provider.rs
+index 3a2de888..a6e7a914 100644
+--- a/crates/pantograph-embedded-runtime/src/inference_interface_facts_provider.rs
++++ b/crates/pantograph-embedded-runtime/src/inference_interface_facts_provider.rs
+@@ -233,7 +233,7 @@ fn runtime_availability_state(status: RuntimeRegistryStatus) -> InferenceRuntime
+ 
+ fn input_ports(task_entry: &TaskRegistryEntry) -> Vec<InferencePortDescriptor> {
+     match task_entry.task_id {
+-        InferenceTaskId::TextGeneration => {
++        InferenceTaskId::TextGeneration | InferenceTaskId::ChatCompletion => {
+             vec![
+                 port(
+                     "prompt",
+@@ -314,7 +314,7 @@ fn input_ports(task_entry: &TaskRegistryEntry) -> Vec<InferencePortDescriptor> {
+             InferencePortRequirement::Required,
+             InferenceValueType::Scalar(InferenceScalarType::String),
+         )],
+-        InferenceTaskId::ChatCompletion | InferenceTaskId::MultimodalGeneration => vec![port(
++        InferenceTaskId::MultimodalGeneration => vec![port(
+             "prompt",
+             "Prompt",
+             InferencePortDirection::Input,
+@@ -661,7 +661,7 @@ mod tests {
+             control.validate().expect("numeric control port contract");
+         }
+         let chat = inference::resolve_task_registry_entry("chat_completion").expect("chat task");
+-        assert_eq!(input_ports(&chat).len(), 1);
++        assert_eq!(input_ports(&chat), input_ports(&task));
+     }
+ 
+     #[test]
+@@ -671,6 +671,8 @@ mod tests {
+             "../../pantograph-inference-interface-contracts/tests/fixtures/text_generation_system_prompt_inputs.json"
+         )).unwrap();
+         assert_eq!(input_ports(&task), expected);
++        let chat = inference::resolve_task_registry_entry("chat_completion").unwrap();
++        assert_eq!(input_ports(&chat), expected);
+     }
+ 
+     #[test]
+diff --git a/crates/pantograph-embedded-runtime/src/lib_tests/cpu_chat_graph_tests.rs b/crates/pantograph-embedded-runtime/src/lib_tests/cpu_chat_graph_tests.rs
+new file mode 100644
+index 00000000..c506218e
+--- /dev/null
++++ b/crates/pantograph-embedded-runtime/src/lib_tests/cpu_chat_graph_tests.rs
+@@ -0,0 +1,922 @@
++use super::*;
++use inference::ResolvedModelPackageFacts;
++use pantograph_inference_interface_contracts::InferenceInterfaceDescriptor;
++use pantograph_runtime_host_contracts::{
++    RuntimeHostExecutionCancellationHandle, RuntimeHostExecutionInputValue,
++    RuntimeHostExecutionPort, RuntimeHostExecutionRequest, RuntimeHostExecutionState,
++    ValidatedRuntimeHostExecutionRequest,
++};
++use pantograph_workflow_service::{
++    FileSystemWorkflowGraphStore, WorkflowGraphLoadRequest, WorkflowGraphSaveRequest,
++    WorkflowRunHandle,
++};
++
++// Expose every authored source port; no inference implementation lives in this host.
++struct ChatSessionHost(ImageRuntimeSessionHost);
++#[async_trait]
++impl WorkflowHost for ChatSessionHost {
++    async fn validate_workflow(&self, id: &str) -> Result<(), WorkflowServiceError> {
++        self.0.validate_workflow(id).await
++    }
++    async fn workflow_graph_fingerprint(&self, id: &str) -> Result<String, WorkflowServiceError> {
++        self.0.workflow_graph_fingerprint(id).await
++    }
++    async fn workflow_graph(&self, id: &str) -> Result<WorkflowGraph, WorkflowServiceError> {
++        self.0.workflow_graph(id).await
++    }
++    async fn workflow_capabilities(
++        &self,
++        id: &str,
++    ) -> Result<WorkflowHostCapabilities, WorkflowServiceError> {
++        let mut limits = self.0.workflow_capabilities(id).await?;
++        limits.max_input_bindings = 16;
++        Ok(limits)
++    }
++    async fn workflow_io(&self, _: &str) -> Result<WorkflowIoResponse, WorkflowServiceError> {
++        let io_node = |node: &GraphNode, port: &str, kind: &str| WorkflowIoNode {
++            node_id: node.id.clone(),
++            node_type: node.node_type.clone(),
++            name: None,
++            description: None,
++            ports: vec![WorkflowIoPort {
++                port_id: port.into(),
++                name: None,
++                description: None,
++                data_type: Some(kind.into()),
++                required: Some(true),
++                multiple: Some(false),
++            }],
++        };
++        Ok(WorkflowIoResponse {
++            inputs: self
++                .0
++                .graph
++                .nodes
++                .iter()
++                .filter_map(|node| match node.node_type.as_str() {
++                    "text-input" => Some(io_node(node, "text", "string")),
++                    "number-input" => Some(io_node(node, "value", "number")),
++                    "selection-input" => Some(io_node(node, "value", "any")),
++                    _ => None,
++                })
++                .collect(),
++            outputs: self
++                .0
++                .graph
++                .nodes
++                .iter()
++                .filter(|node| matches!(node.node_type.as_str(), "llm-inference" | "text-output"))
++                .map(|node| io_node(node, "text", "string"))
++                .collect(),
++        })
++    }
++    async fn run_workflow(
++        &self,
++        _: &str,
++        _: &[WorkflowPortBinding],
++        _: Option<&[WorkflowOutputTarget]>,
++        _: WorkflowRunOptions,
++        _: WorkflowRunHandle,
++    ) -> Result<Vec<WorkflowPortBinding>, WorkflowServiceError> {
++        panic!("public scheduler must use selected native owner, not alternate host execution")
++    }
++    async fn load_session_runtime(
++        &self,
++        _: &str,
++        _: &str,
++        _: Option<&str>,
++        _: WorkflowExecutionSessionRetentionHint,
++    ) -> Result<(), WorkflowServiceError> {
++        panic!("public scheduler must use selected native loader, not alternate host loading")
++    }
++}
++
++struct Target(pumas_library::models::PumasArtifactLoadTarget);
++#[async_trait]
++impl crate::runtime_host_load_target::RuntimeHostLoadTargetResolver for Target {
++    async fn resolve(
++        &self,
++        _: &ValidatedRuntimeHostExecutionRequest,
++    ) -> Result<
++        pumas_library::models::PumasArtifactLoadTarget,
++        crate::runtime_host_load_target::RuntimeHostPumasLoadTargetError,
++    > {
++        Ok(self.0.clone())
++    }
++}
++struct Package(ResolvedModelPackageFacts);
++#[async_trait]
++impl crate::runtime_host_package_facts::RuntimeHostPackageFactsResolver for Package {
++    async fn resolve(
++        &self,
++        _: &ValidatedRuntimeHostExecutionRequest,
++    ) -> Result<
++        ResolvedModelPackageFacts,
++        crate::runtime_host_package_facts::RuntimeHostPumasPackageFactsError,
++    > {
++        Ok(self.0.clone())
++    }
++}
++struct UnusedMediaSink;
++impl crate::runtime_host_media_artifact_sink::RuntimeHostMediaArtifactSink for UnusedMediaSink {
++    fn write_image_output(
++        &self,
++        _: crate::runtime_host_media_artifact_sink::RuntimeHostImageArtifactWriteRequest<'_>,
++    ) -> Result<
++        pantograph_runtime_host_contracts::RuntimeHostExecutionMediaArtifactRef,
++        crate::runtime_host_media_artifact_sink::RuntimeHostMediaArtifactSinkError,
++    > {
++        panic!("text output must not require a media artifact");
++    }
++}
++
++fn fixture(
++    model_seed: u32,
++    task: &str,
++) -> (
++    TempDir,
++    RuntimeHostExecutionRequest,
++    inference::ResolvedModelPackageFacts,
++    inference::PumasArtifactLoadTarget,
++) {
++    let directory = TempDir::new().unwrap();
++    let source = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(format!(
++        "../inference/tests/fixtures/tiny_chat_gpt2/model-{model_seed}"
++    ));
++    for entry in std::fs::read_dir(source).unwrap() {
++        let entry = entry.unwrap();
++        std::fs::copy(entry.path(), directory.path().join(entry.file_name())).unwrap();
++    }
++    let mut package: serde_json::Value = serde_json::from_str(include_str!("../../../inference/tests/fixtures/inference_package_facts/hf_transformers_text_generation_package_facts.json")).unwrap();
++    let reference = serde_json::json!({"model_id":format!("chat/synthetic/GPT2-{model_seed}"), "revision":format!("untrained-seed-{model_seed}"), "selected_artifact_id":"main"});
++    package["model_ref"] = reference.clone();
++    package["artifact"]["entry_path"] = reference["model_id"].clone();
++    package["transformers"] = serde_json::json!({"config_status":"present", "config_model_type":"gpt2", "architectures":["GPT2LMHeadModel"], "torch_dtype":"float32", "auto_map":[], "generation_config_status":"present"});
++    package["custom_code"] = serde_json::json!({"requires_custom_code":false,"custom_code_sources":[],"auto_map_sources":[],"class_references":[],"dependency_manifests":[]});
++    package["task"] = serde_json::json!({"task_type_primary":task,"input_modalities":["text"],"output_modalities":["text"]});
++    package["generation_defaults"] =
++        serde_json::json!({"status":"present", "source_path":"generation_config.json"});
++    let package: inference::ResolvedModelPackageFacts = serde_json::from_value(package).unwrap();
++    let mut request: serde_json::Value = serde_json::from_str(include_str!("../../../pantograph-runtime-host-contracts/tests/fixtures/runtime_host_execution_request_dispatch_selected.json")).unwrap();
++    request["materialized_inputs"] = serde_json::json!([
++        {"port_id":"prompt", "value":{"value_type":"string","value":"hello world"}},
++        {"port_id":"system_prompt", "value":{"value_type":"string","value":"be brief"}},
++        {"port_id":"max_new_tokens", "value":{"value_type":"u64","value":4}},
++        {"port_id":"min_new_tokens", "value":{"value_type":"u64","value":4}},
++        {"port_id":"temperature", "value":{"value_type":"f64","value":0.8}},
++        {"port_id":"top_p", "value":{"value_type":"f64","value":1.0}},
++        {"port_id":"top_k", "value":{"value_type":"u64","value":4}},
++        {"port_id":"repetition_penalty", "value":{"value_type":"f64","value":1.0}},
++        {"port_id":"seed", "value":{"value_type":"u64","value":42}},
++        {"port_id":"stop", "value":{"value_type":"string","value":"NEVER_STOP"}}
++    ]);
++    for pointer in [
++        "/handoff/task_intent",
++        "/handoff/dispatch_decision/task_intent",
++    ] {
++        let intent = request.pointer_mut(pointer).unwrap();
++        intent["task_type"] = serde_json::json!(task);
++        intent["model_ref"] = reference.clone();
++        intent["constraints"] =
++            serde_json::json!({"requested_runtime_id":"pytorch","requested_device_id":"cpu"});
++        intent["trait_settings"] = serde_json::json!([]);
++    }
++    for pointer in [
++        "/handoff/readiness_proof/preflight_result/identity_key",
++        "/handoff/dispatch_decision/readiness_proof/preflight_result/identity_key",
++    ] {
++        let key = request.pointer_mut(pointer).unwrap();
++        key["task_id"] = serde_json::json!(task);
++        key["model_ref"] = reference.clone();
++        key["scheduler_intent"] =
++            serde_json::json!({"requested_runtime_id":"pytorch","requested_device_id":"cpu"});
++    }
++    let decision = &mut request["handoff"]["dispatch_decision"];
++    decision["selected_model_ref"] = reference.clone();
++    decision["selected_runtime_id"] = serde_json::json!("pytorch");
++    decision["selected_runtime_variant_id"] = serde_json::json!("pytorch.cpu");
++    decision["selected_device_ids"] = serde_json::json!(["cpu"]);
++    for reservation in decision["reservations"].as_array_mut().unwrap() {
++        reservation["device_id"] = serde_json::json!("cpu");
++    }
++    let request: RuntimeHostExecutionRequest = serde_json::from_value(request).unwrap();
++    request.validate().unwrap();
++    let target = inference::PumasArtifactLoadTarget {
++        model_ref: serde_json::from_value(reference).unwrap(),
++        artifact_kind: inference::ModelArtifactKind::HfCompatibleDirectory,
++        local_load_path: directory.path().to_str().unwrap().into(),
++        load_path_kind: inference::PumasArtifactLoadPathKind::Directory,
++        library_root_id: Some("synthetic-chat-root".into()),
++        storage_kind: inference::ModelStorageKind::LibraryOwned,
++        validation_state: inference::ModelValidationState::Valid,
++        content_fingerprint: None,
++        package_facts_contract_version: Some(package.package_facts_contract_version),
++    };
++    (directory, request, package, target)
++}
++
++fn graph(model_ref: &PumasModelRef, task: &str) -> WorkflowGraph {
++    let mut descriptor: serde_json::Value=serde_json::from_str(include_str!("../../../pantograph-inference-interface-contracts/tests/fixtures/descriptor_embedding_ready.json")).unwrap();
++    descriptor["model_ref"] = serde_json::to_value(model_ref).unwrap();
++    descriptor["task_kind"] = serde_json::json!(task);
++    descriptor["descriptor_fingerprint"] = serde_json::json!("iface.test.cpu_chat.v1");
++    descriptor["inputs"]=serde_json::from_str(include_str!("../../../pantograph-inference-interface-contracts/tests/fixtures/text_generation_system_prompt_inputs.json")).unwrap();
++    descriptor["outputs"] = serde_json::json!([{"port_id":"text","label":"Text","direction":"output","requirement":"required","value_type":{"category":"scalar","kind":"string"},"options":{"kind":"none"},"availability":{"status":"available"}}]);
++    let descriptor: InferenceInterfaceDescriptor = serde_json::from_value(descriptor).unwrap();
++    descriptor.validate().unwrap();
++    let snapshot =
++        pantograph_workflow_service::graph::authored_snapshot_from_descriptor(&descriptor).unwrap();
++    let mut nodes = vec![
++        GraphNode {
++            id: "prompt".into(),
++            node_type: "text-input".into(),
++            position: Position { x: 0.0, y: 0.0 },
++            data: serde_json::json!({}),
++        },
++        GraphNode {
++            id: "system".into(),
++            node_type: "text-input".into(),
++            position: Position { x: 0.0, y: 100.0 },
++            data: serde_json::json!({}),
++        },
++        GraphNode {
++            id: "infer".into(),
++            node_type: "llm-inference".into(),
++            position: Position { x: 200.0, y: 0.0 },
++            data: serde_json::json!({"task_kind":task,"runtime":"pytorch","device":"cpu","pumas_model_ref":model_ref,"inference_interface_snapshot":snapshot}),
++        },
++        GraphNode {
++            id: "output".into(),
++            node_type: "text-output".into(),
++            position: Position { x: 400.0, y: 0.0 },
++            data: serde_json::json!({}),
++        },
++        GraphNode {
++            id: "stop".into(),
++            node_type: "text-input".into(),
++            position: Position { x: 0.0, y: 200.0 },
++            data: serde_json::json!({"text":"NEVER_STOP"}),
++        },
++    ];
++    let mut edges = vec![
++        GraphEdge {
++            id: "prompt-edge".into(),
++            source: "prompt".into(),
++            source_handle: "text".into(),
++            target: "infer".into(),
++            target_handle: "prompt".into(),
++        },
++        GraphEdge {
++            id: "system-edge".into(),
++            source: "system".into(),
++            source_handle: "text".into(),
++            target: "infer".into(),
++            target_handle: "system_prompt".into(),
++        },
++        GraphEdge {
++            id: "stop-edge".into(),
++            source: "stop".into(),
++            source_handle: "text".into(),
++            target: "infer".into(),
++            target_handle: "stop".into(),
++        },
++        GraphEdge {
++            id: "output-edge".into(),
++            source: "infer".into(),
++            source_handle: "text".into(),
++            target: "output".into(),
++            target_handle: "text".into(),
++        },
++    ];
++    for (port, value) in [
++        ("max_new_tokens", serde_json::json!(4)),
++        ("min_new_tokens", serde_json::json!(4)),
++        ("temperature", serde_json::json!(0.8)),
++        ("top_p", serde_json::json!(1.0)),
++        ("top_k", serde_json::json!(4)),
++        ("repetition_penalty", serde_json::json!(1.0)),
++        ("seed", serde_json::json!(42)),
++    ] {
++        nodes.push(GraphNode {
++            id: port.into(),
++            node_type: if value.is_f64() {
++                "selection-input"
++            } else {
++                "number-input"
++            }
++            .into(),
++            position: Position { x: 0.0, y: 300.0 },
++            data: serde_json::json!({"value":value}),
++        });
++        edges.push(GraphEdge {
++            id: format!("{port}-edge"),
++            source: port.into(),
++            source_handle: "value".into(),
++            target: "infer".into(),
++            target_handle: port.into(),
++        });
++    }
++    WorkflowGraph {
++        nodes,
++        edges,
++        derived_graph: None,
++    }
++}
++
++fn install_chat_readiness(
++    service: &WorkflowService,
++    provider: &DependencyEnvironmentReadinessSnapshotProvider,
++    graph: &WorkflowGraph,
++    version: &WorkflowVersionRecord,
++    model_ref: &PumasModelRef,
++    task: &str,
++) {
++    // Only package/readiness/dispatch facts are controlled. Inference below uses
++    // the production selected-model owner and committed untrained GPT-2 CPU model.
++    let mut snapshot =
++        image_runtime_validation_snapshot(version, graph, &model_ref.model_id, "fixture");
++    let node = &mut snapshot.nodes[0];
++    node.task_kind = InferenceTaskKind::parse(task).unwrap();
++    node.model_ref = model_ref.clone();
++    node.descriptor_fingerprint =
++        InferenceInterfaceFingerprint::parse("iface.test.cpu_chat.v1").unwrap();
++    node.constraints.requested_runtime_id = Some(RuntimeIntentId::parse("pytorch").unwrap());
++    node.constraints.requested_device_id = Some(DeviceIntentId::parse("cpu").unwrap());
++    node.runtime_source_context.operation_type = format!("{task}.prompt");
++    node.runtime_source_context.context_shape_key = "chat.single-prompt".into();
++    let mut planning = image_runtime_dependency_planning_request(
++        version,
++        model_ref,
++        vec![DependencyBindingId::parse("pytorch-chat").unwrap()],
++    );
++    planning.task_id = DependencyTaskId::parse(task).unwrap();
++    planning.task_type = Some(planning.task_id.clone());
++    planning.scheduler_intent.requested_runtime_id =
++        Some(RuntimeIntentId::parse("pytorch").unwrap());
++    planning.scheduler_intent.requested_device_id = Some(DeviceIntentId::parse("cpu").unwrap());
++    let proof = produce_dependency_requirements_proof(
++        &ValidatedDependencyPlanningRequest::try_from(planning.clone()).unwrap(),
++        None,
++    )
++    .unwrap();
++    node.dependency_requirements_id = proof.dependency_requirements_id.clone();
++    node.selected_binding_ids = proof.identity_key.selected_binding_ids.clone();
++    node.dependency_override_fingerprint = proof.dependency_override_fingerprint.clone();
++    let request = ValidatedDependencyEnvironmentRequest::try_from(DependencyEnvironmentRequest {
++        contract_version: 1,
++        action: DependencyEnvironmentAction::Resolve,
++        identity_key: proof.identity_key,
++        planning_request: planning,
++        dependency_requirements_id: Some(proof.dependency_requirements_id),
++        environment_ref: None,
++    })
++    .unwrap();
++    let mut result = ready_image_dependency_environment_result(&request);
++    result.requirements = serde_json::from_value(serde_json::json!([{
++        "name": "pytorch-chat", "kind": "runtime_feature",
++        "runtime_feature": {"runtime_id": "pytorch", "feature_id": task, "runtime_variant_id": "pytorch.cpu"}
++    }])).unwrap();
++    result.bindings = serde_json::from_value(serde_json::json!([{
++        "binding_id": "pytorch-chat", "requirement_name": "pytorch-chat", "environment_kind": "runtime_feature",
++        "runtime_feature": {"runtime_id": "pytorch", "feature_id": task, "runtime_variant_id": "pytorch.cpu"}
++    }])).unwrap();
++    provider
++        .insert_snapshot(
++            DependencyEnvironmentReadinessSnapshot::for_request(
++                &request,
++                result,
++                DependencyEnvironmentReadinessSnapshotStatus::Fresh,
++            )
++            .unwrap(),
++        )
++        .unwrap();
++    service
++        .store_workflow_executable_validation_snapshot(snapshot)
++        .unwrap();
++}
++
++#[test]
++fn chat_projection_preserves_canonical_task_controls_and_original_revision() {
++    let (_directory, request, package, target) = fixture(11, "chat_completion");
++    let validated = ValidatedRuntimeHostExecutionRequest::try_from(request).unwrap();
++    let projection = crate::runtime_host_text_execution::project_runtime_host_text_generation(
++        &validated,
++        package,
++        serde_json::from_value(serde_json::to_value(target).unwrap()).unwrap(),
++    )
++    .unwrap();
++    assert_eq!(
++        projection.request().task_id,
++        inference::InferenceTaskId::ChatCompletion
++    );
++    assert_eq!(
++        projection.backend_decision().selected_task_id,
++        Some(inference::InferenceTaskId::ChatCompletion)
++    );
++    let options = projection.request().generation_options.as_ref().unwrap();
++    assert_eq!(options.sampling.seed, Some(42));
++    assert_eq!(options.length.max_new_tokens, Some(4));
++    assert_eq!(options.stopping.stop_strings, ["NEVER_STOP"]);
++}
++
++fn requested_revision(request: &mut RuntimeHostExecutionRequest, revision: Option<&str>) {
++    request.handoff.task_intent.model_ref.revision = revision.map(str::to_owned);
++    request
++        .handoff
++        .readiness_proof
++        .preflight_result
++        .identity_key
++        .model_ref
++        .revision = revision.map(str::to_owned);
++    let decision = request.handoff.dispatch_decision.as_mut().unwrap();
++    decision.task_intent = request.handoff.task_intent.clone();
++    decision.readiness_proof = request.handoff.readiness_proof.clone();
++    request.validate().unwrap();
++}
++
++struct NeverResolve;
++#[async_trait]
++impl crate::runtime_host_load_target::RuntimeHostLoadTargetResolver for NeverResolve {
++    async fn resolve(
++        &self,
++        _: &ValidatedRuntimeHostExecutionRequest,
++    ) -> Result<
++        pumas_library::models::PumasArtifactLoadTarget,
++        crate::runtime_host_load_target::RuntimeHostPumasLoadTargetError,
++    > {
++        panic!("invalid chat must reject before target resolution")
++    }
++}
++#[async_trait]
++impl crate::runtime_host_package_facts::RuntimeHostPackageFactsResolver for NeverResolve {
++    async fn resolve(
++        &self,
++        _: &ValidatedRuntimeHostExecutionRequest,
++    ) -> Result<
++        inference::ResolvedModelPackageFacts,
++        crate::runtime_host_package_facts::RuntimeHostPumasPackageFactsError,
++    > {
++        panic!("invalid chat must reject before package resolution")
++    }
++}
++struct Cancelled(String);
++impl pantograph_runtime_host_contracts::RuntimeHostExecutionCancellationSignal for Cancelled {
++    fn snapshot(
++        &self,
++    ) -> pantograph_runtime_host_contracts::RuntimeHostExecutionCancellationSnapshot {
++        pantograph_runtime_host_contracts::RuntimeHostExecutionCancellationSnapshot{cancellation_context_id:self.0.clone(),state:pantograph_runtime_host_contracts::RuntimeHostExecutionCancellationState::CancellationRequested,reason:Some("chat fixture precancellation".into())}
++    }
++}
++
++#[tokio::test]
++async fn canonical_chat_rejects_invalid_shape_revision_and_precancellation_before_resolvers() {
++    for fault in [
++        "revision",
++        "missing_selected_revision",
++        "blank",
++        "messages",
++        "cancel",
++    ] {
++        let (_directory, mut request, _package, _target) = fixture(11, "chat_completion");
++        match fault {
++            "revision" => requested_revision(&mut request, Some("different-requested-revision")),
++            "missing_selected_revision" => {
++                request
++                    .handoff
++                    .dispatch_decision
++                    .as_mut()
++                    .unwrap()
++                    .selected_model_ref
++                    .revision = None
++            }
++            "blank" => {
++                request.materialized_inputs[0].value =
++                    pantograph_runtime_host_contracts::RuntimeHostExecutionInputValue::String(
++                        " ".into(),
++                    )
++            }
++            "messages" => request.materialized_inputs[0].port_id = "messages".into(),
++            _ => {}
++        }
++        request.validate().unwrap();
++        let gateway = Arc::new(inference::InferenceGateway::with_backend(
++            Box::new(inference::backend::pytorch::PyTorchBackend::new()),
++            "PyTorch",
++        ));
++        let port = EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
++            Arc::new(NeverResolve),
++            Arc::new(NeverResolve),
++            Arc::new(UnusedMediaSink),
++            gateway.clone(),
++        );
++        let cancellation = if fault == "cancel" {
++            RuntimeHostExecutionCancellationHandle::with_signal(Arc::new(Cancelled(
++                request.cancellation_context.cancellation_context_id.clone(),
++            )))
++        } else {
++            RuntimeHostExecutionCancellationHandle::running(request.cancellation_context.clone())
++        };
++        let response = port
++            .execute_runtime_host_request(request, cancellation)
++            .await
++            .unwrap();
++        response.validate().unwrap();
++        assert_eq!(response.state, RuntimeHostExecutionState::Rejected);
++        assert!(response.outputs.is_empty());
++        assert!(!gateway.is_ready().await);
++    }
++}
++
++#[tokio::test]
++async fn canonical_chat_package_task_mismatch_refuses_before_native_loading() {
++    let (_directory, request, mut package, target) = fixture(11, "chat_completion");
++    package.task.task_type_primary = Some("text_generation".into());
++    let gateway = Arc::new(inference::InferenceGateway::with_backend(
++        Box::new(inference::backend::pytorch::PyTorchBackend::new()),
++        "PyTorch",
++    ));
++    let port = EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
++        Arc::new(Target(
++            serde_json::from_value(serde_json::to_value(target).unwrap()).unwrap(),
++        )),
++        Arc::new(Package(package)),
++        Arc::new(UnusedMediaSink),
++        gateway.clone(),
++    );
++    let response = port
++        .execute_runtime_host_request(
++            request.clone(),
++            RuntimeHostExecutionCancellationHandle::running(request.cancellation_context),
++        )
++        .await
++        .unwrap();
++    response.validate().unwrap();
++    assert_eq!(response.state, RuntimeHostExecutionState::Failed);
++    assert!(response.outputs.is_empty());
++    assert!(!gateway.is_ready().await);
++}
++
++#[test]
++fn canonical_chat_projection_preserves_omitted_revision_refinement_and_single_prompt_shape() {
++    let (_directory, mut request, package, target) = fixture(11, "chat_completion");
++    requested_revision(&mut request, None);
++    let validated = ValidatedRuntimeHostExecutionRequest::try_from(request).unwrap();
++    let projection = crate::runtime_host_text_execution::project_runtime_host_text_generation(
++        &validated,
++        package,
++        serde_json::from_value(serde_json::to_value(target).unwrap()).unwrap(),
++    )
++    .unwrap();
++    assert_eq!(
++        projection.request().model_ref.as_ref().unwrap().revision,
++        None
++    );
++    assert_eq!(
++        projection
++            .backend_decision()
++            .selected_model_ref
++            .as_ref()
++            .unwrap()
++            .revision
++            .as_deref(),
++        Some("untrained-seed-11")
++    );
++    assert!(
++        matches!(&projection.request().input,inference::InferenceExecutionInput::TextGeneration{prompt:Some(prompt),system_prompt:Some(system),messages,stream:false} if prompt=="hello world" && system=="be brief" && messages.is_empty())
++    );
++}
++
++fn chat_batch_request(
++    request: RuntimeHostExecutionRequest,
++) -> pantograph_runtime_host_contracts::RuntimeHostBatchExecutionRequest {
++    use pantograph_runtime_host_contracts::{
++        RuntimeHostBatchExecutionMemberRequest, RuntimeHostBatchExecutionRequest,
++        RuntimeHostBatchMemberFailurePolicy, RuntimeHostBatchMemberReservationPolicy,
++    };
++    let members = ["hello world", "hello"]
++        .into_iter()
++        .enumerate()
++        .map(|(index, text)| {
++            let mut request = request.clone();
++            request.execution_request_id = format!("chat.execution.{index}");
++            request.handoff.workflow_id = format!("workflow.chat.{index}").parse().unwrap();
++            request.handoff.workflow_run_id = format!("run.chat.{index}").parse().unwrap();
++            request.handoff.node_id = format!("node.chat.{index}").parse().unwrap();
++            request.handoff.task_id = format!("task.chat.{index}").parse().unwrap();
++            request.handoff.task_intent.workflow_id = request.handoff.workflow_id.clone();
++            request.handoff.task_intent.workflow_run_id = request.handoff.workflow_run_id.clone();
++            request.handoff.task_intent.node_id = request.handoff.node_id.clone();
++            request.handoff.task_intent.task_id = request.handoff.task_id.clone();
++            let context = &mut request.handoff.readiness_proof.execution_context;
++            context.workflow_id = request.handoff.workflow_id.as_str().parse().unwrap();
++            context.workflow_run_id = request.handoff.workflow_run_id.as_str().parse().unwrap();
++            context.node_id = request.handoff.node_id.as_str().parse().unwrap();
++            context.scheduler_task_id = request.handoff.task_id.as_str().parse().unwrap();
++            let decision = request.handoff.dispatch_decision.as_mut().unwrap();
++            decision.workflow_id = request.handoff.workflow_id.clone();
++            decision.workflow_run_id = request.handoff.workflow_run_id.clone();
++            decision.node_id = request.handoff.node_id.clone();
++            decision.task_id = request.handoff.task_id.clone();
++            decision.task_intent = request.handoff.task_intent.clone();
++            decision.readiness_proof = request.handoff.readiness_proof.clone();
++            for reservation in &mut decision.reservations {
++                reservation.workflow_run_id = decision.workflow_run_id.clone();
++                reservation.task_id = decision.task_id.clone();
++            }
++            request.materialized_inputs[0].value =
++                RuntimeHostExecutionInputValue::String(text.into());
++            RuntimeHostBatchExecutionMemberRequest {
++                execution_request_id: request.execution_request_id,
++                assignment_id: format!("assignment.chat.{index}"),
++                handoff: request.handoff,
++                materialized_inputs: request.materialized_inputs,
++                timeout_ms: None,
++                failure_policy: RuntimeHostBatchMemberFailurePolicy::TerminalOnly,
++                reservation_policy: RuntimeHostBatchMemberReservationPolicy::ReleaseOnTerminal,
++            }
++        })
++        .collect();
++    let batch = RuntimeHostBatchExecutionRequest {
++        contract_version: pantograph_runtime_host_contracts::RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
++        batch_execution_request_id: "chat.batch.001".into(), anchor_execution_request_id: "chat.execution.0".into(),
++        cancellation_context: pantograph_runtime_host_contracts::RuntimeHostExecutionCancellationContext::workflow_service("chat.batch.001"),
++        members,
++    };
++    batch.validate().unwrap();
++    batch
++}
++
++#[tokio::test]
++async fn canonical_chat_envelope_revision_mismatches_reject_before_resolvers() {
++    use pantograph_runtime_host_contracts::{
++        RuntimeHostBatchExecutionPort, RuntimeHostBatchExecutionState,
++    };
++    let (_directory, mut request, _package, _target) = fixture(11, "chat_completion");
++    requested_revision(&mut request, Some("requested-other"));
++    let batch = chat_batch_request(request);
++    let gateway = Arc::new(inference::InferenceGateway::with_backend(
++        Box::new(inference::backend::pytorch::PyTorchBackend::new()),
++        "PyTorch",
++    ));
++    let port = EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
++        Arc::new(NeverResolve),
++        Arc::new(NeverResolve),
++        Arc::new(UnusedMediaSink),
++        gateway.clone(),
++    );
++    let cancellation =
++        RuntimeHostExecutionCancellationHandle::running(batch.cancellation_context.clone());
++    let response = port
++        .execute_runtime_host_batch_request(batch, cancellation)
++        .await
++        .unwrap();
++    response.validate().unwrap();
++    assert_eq!(response.state, RuntimeHostBatchExecutionState::Rejected);
++    assert!(response
++        .members
++        .iter()
++        .all(|member| member.outputs.is_empty()));
++    assert!(!gateway.is_ready().await);
++}
++
++#[tokio::test]
++#[ignore = "explicit native qualification requires real CPU Torch, Transformers, Accelerate and SoundFile"]
++async fn saved_cpu_chat_graph_runs_native_owner_with_template_controls_and_scope_isolation() {
++    let gateway = Arc::new(inference::InferenceGateway::with_backend(
++        Box::new(inference::backend::pytorch::PyTorchBackend::new()),
++        "PyTorch",
++    ));
++    let mut previous_runs = std::collections::BTreeSet::new();
++    for (sequence, (model_seed, task)) in [
++        (11, "chat_completion"),
++        (37, "chat_completion"),
++        (11, "text_generation"),
++        (11, "chat_completion"),
++    ]
++    .into_iter()
++    .enumerate()
++    {
++        let (directory, request, package, target) = fixture(model_seed, task);
++        let model_ref = request
++            .handoff
++            .dispatch_decision
++            .as_ref()
++            .unwrap()
++            .selected_model_ref
++            .clone();
++        let artifact_root = TempDir::new().unwrap();
++        let provider = DependencyEnvironmentReadinessSnapshotProvider::new();
++        let lifecycle = Arc::new(TestReservationLifecyclePort::default());
++        let port = Arc::new(EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
++            Arc::new(Target(
++                serde_json::from_value(serde_json::to_value(target).unwrap()).unwrap(),
++            )),
++            Arc::new(Package(package)),
++            Arc::new(UnusedMediaSink),
++            gateway.clone(),
++        ));
++        let service = Arc::new(
++            WorkflowService::with_ephemeral_attribution_store()
++                .unwrap()
++                .with_artifact_writer(test_artifact_writer(&artifact_root))
++                .with_diagnostics_ledger(
++                    pantograph_workflow_service::SqliteDiagnosticsLedger::open_in_memory().unwrap(),
++                )
++                .with_dependency_environment_provider(Arc::new(provider.clone()))
++                .with_dependency_readiness_work_queue(Arc::new(DependencyReadinessWorkQueue::new()))
++                .with_runtime_dispatch_source_refresher(Arc::new(
++                    TestRuntimeDispatchSourceRefresher::default(),
++                ))
++                .with_runtime_dispatch_candidate_provider(Arc::new(
++                    TestRuntimeDispatchCandidateProvider,
++                ))
++                .with_runtime_host_execution_port(port.clone())
++                .with_runtime_host_batch_execution_port(port.clone())
++                .with_reservation_lifecycle_port(lifecycle.clone()),
++        );
++        let store = FileSystemWorkflowGraphStore::new(directory.path());
++        let authored = graph(&model_ref, task);
++        let saved = service
++            .workflow_graph_save(
++                &store,
++                WorkflowGraphSaveRequest {
++                    name: "Synthetic CPU Chat".into(),
++                    graph: authored.clone(),
++                },
++            )
++            .unwrap();
++        let restored = service
++            .workflow_graph_load(&store, WorkflowGraphLoadRequest { path: saved.path })
++            .unwrap()
++            .graph;
++        assert_eq!(
++            restored.compute_fingerprint(),
++            authored.compute_fingerprint()
++        );
++        assert_eq!(restored.nodes[2].data["task_kind"], task);
++        let workflow_id = format!("wf-chat-synthetic-{sequence}");
++        let version = service
++            .resolve_workflow_graph_version(&workflow_id, "1.0.0", &restored)
++            .unwrap();
++        install_chat_readiness(&service, &provider, &restored, &version, &model_ref, task);
++        let control_bindings: Vec<_> = restored
++            .nodes
++            .iter()
++            .filter(|node| {
++                matches!(node.node_type.as_str(), "number-input" | "selection-input")
++                    && node.id != "seed"
++            })
++            .map(|node| WorkflowPortBinding {
++                node_id: node.id.clone(),
++                port_id: "value".into(),
++                value: node.data["value"].clone(),
++            })
++            .chain(std::iter::once(WorkflowPortBinding {
++                node_id: "stop".into(),
++                port_id: "text".into(),
++                value: serde_json::json!("NEVER_STOP"),
++            }))
++            .collect();
++        let host = Arc::new(ChatSessionHost(ImageRuntimeSessionHost::new(restored)));
++        let cases: Vec<serde_json::Value> =
++            serde_json::from_slice(&std::fs::read(directory.path().join("golden.json")).unwrap())
++                .unwrap();
++        // Distinct envelope members traverse the same native owner sequentially.
++        // Results and terminal attribution must remain attached to their own scopes.
++        use pantograph_runtime_host_contracts::{
++            RuntimeHostBatchExecutionMemberState, RuntimeHostBatchExecutionPort,
++            RuntimeHostBatchExecutionState, RuntimeHostExecutionOutputValue,
++        };
++        let mut batch = chat_batch_request(request.clone());
++        for (member, case_index) in batch.members.iter_mut().zip([1, 6]) {
++            let case = &cases[case_index];
++            for input in &mut member.materialized_inputs {
++                input.value = match input.port_id.as_str() {
++                    "prompt" => RuntimeHostExecutionInputValue::String(
++                        case["prompt"].as_str().unwrap().into(),
++                    ),
++                    "system_prompt" => RuntimeHostExecutionInputValue::String(
++                        case["system_prompt"].as_str().unwrap_or("").into(),
++                    ),
++                    "seed" => RuntimeHostExecutionInputValue::U64(case["seed"].as_u64().unwrap()),
++                    _ => input.value.clone(),
++                };
++            }
++        }
++        batch.validate().unwrap();
++        let completed = port
++            .execute_runtime_host_batch_request(
++                batch.clone(),
++                RuntimeHostExecutionCancellationHandle::running(batch.cancellation_context.clone()),
++            )
++            .await
++            .unwrap();
++        completed.validate().unwrap();
++        assert_eq!(completed.state, RuntimeHostBatchExecutionState::Completed);
++        for ((member, authored), case_index) in
++            completed.members.iter().zip(&batch.members).zip([1, 6])
++        {
++            assert_eq!(
++                member.state,
++                RuntimeHostBatchExecutionMemberState::Completed
++            );
++            assert_eq!(member.execution_request_id, authored.execution_request_id);
++            assert_eq!(member.assignment_id, authored.assignment_id);
++            assert_eq!(member.workflow_id, authored.handoff.workflow_id);
++            assert_eq!(member.workflow_run_id, authored.handoff.workflow_run_id);
++            assert_eq!(member.node_id, authored.handoff.node_id);
++            assert_eq!(member.task_id, authored.handoff.task_id);
++            assert_eq!(member.outputs.len(), 1);
++            assert_eq!(
++                member.outputs[0].value,
++                RuntimeHostExecutionOutputValue::String(
++                    cases[case_index]["text"].as_str().unwrap().into()
++                )
++            );
++        }
++        let cancelled = port
++            .execute_runtime_host_batch_request(
++                batch.clone(),
++                RuntimeHostExecutionCancellationHandle::with_signal(Arc::new(Cancelled(
++                    batch.cancellation_context.cancellation_context_id.clone(),
++                ))),
++            )
++            .await
++            .unwrap();
++        cancelled.validate().unwrap();
++        assert_eq!(cancelled.state, RuntimeHostBatchExecutionState::Cancelled);
++        assert!(cancelled.members.iter().all(|member| member.state
++            == RuntimeHostBatchExecutionMemberState::Cancelled
++            && member.outputs.is_empty()));
++        let cancelled = port
++            .execute_runtime_host_request(
++                request.clone(),
++                RuntimeHostExecutionCancellationHandle::with_signal(Arc::new(Cancelled(
++                    request.cancellation_context.cancellation_context_id.clone(),
++                ))),
++            )
++            .await
++            .unwrap();
++        cancelled.validate().unwrap();
++        assert_eq!(cancelled.state, RuntimeHostExecutionState::Rejected);
++        assert!(cancelled.outputs.is_empty());
++        // Healthy public graph replays below follow cancelled single/envelope requests.
++        // Interleave seeds and replay 42 after another request; never reuse a run's output.
++        for case_index in [1, 0, 2, 1, 3, 5, 7] {
++            let case = &cases[case_index];
++            let created = service
++                .create_workflow_execution_session(
++                    host.as_ref(),
++                    WorkflowExecutionSessionCreateRequest {
++                        workflow_id: workflow_id.clone(),
++                        usage_profile: None,
++                        keep_alive: false,
++                    },
++                )
++                .await
++                .unwrap();
++            let mut inputs = control_bindings.clone();
++            inputs.extend([
++                WorkflowPortBinding {
++                    node_id: "prompt".into(),
++                    port_id: "text".into(),
++                    value: case["prompt"].clone(),
++                },
++                WorkflowPortBinding {
++                    node_id: "system".into(),
++                    port_id: "text".into(),
++                    value: case["system_prompt"]
++                        .as_str()
++                        .map(serde_json::Value::from)
++                        .unwrap_or_else(|| serde_json::json!("")),
++                },
++                WorkflowPortBinding {
++                    node_id: "seed".into(),
++                    port_id: "value".into(),
++                    value: case["seed"].clone(),
++                },
++            ]);
++            let response=pantograph_workflow_service::workflow::WorkflowSessionExecutionRuntime::from_shared_service(service.clone(),host.clone())
++                .run_workflow_execution_session(WorkflowExecutionSessionRunRequest{session_id:created.session_id,workflow_semantic_version:"1.0.0".into(),
++                    inputs,
++                    output_targets:Some(vec![WorkflowOutputTarget{node_id:"output".into(),port_id:"text".into()},WorkflowOutputTarget{node_id:"infer".into(),port_id:"text".into()}]),
++                    override_selection:None,timeout_ms:None,priority:None}).await.expect("actual synthetic chat through saved public scheduler graph");
++            assert!(previous_runs.insert(response.workflow_run_id.clone()));
++            assert_eq!(response.outputs.len(), 2);
++            for output in &response.outputs {
++                assert_eq!(
++                    output.value, case["text"],
++                    "model={model_seed}, case={case_index}, output={output:?}"
++                );
++            }
++            assert!(lifecycle
++                .events()
++                .iter()
++                .any(|event| event.workflow_run_id.as_str() == response.workflow_run_id));
++        }
++        println!("model={model_seed}, task={task}: 7 saved public graph replays + 2 separately attributed native envelope members, with pre-cancelled single/envelope isolation");
++        assert_eq!(host.0.runtime_load_attempts.load(Ordering::SeqCst), 0);
++        assert_eq!(host.0.run_attempts.load(Ordering::SeqCst), 0);
++    }
++    gateway.stop().await.unwrap();
++}
+diff --git a/crates/pantograph-embedded-runtime/src/lib_tests/workflow_run_execution_tests.rs b/crates/pantograph-embedded-runtime/src/lib_tests/workflow_run_execution_tests.rs
+index d0e52017..a9040c5b 100644
+--- a/crates/pantograph-embedded-runtime/src/lib_tests/workflow_run_execution_tests.rs
++++ b/crates/pantograph-embedded-runtime/src/lib_tests/workflow_run_execution_tests.rs
+@@ -1020,7 +1020,10 @@ impl WorkflowRuntimeDispatchCandidateProvider for TestRuntimeDispatchCandidatePr
+             selected_runtime_variant_id: Some(
+                 if intent.task_type.as_str() == "embedding" {
+                     "candle.cpu"
+-                } else if intent.task_type.as_str() == "text_generation" {
++                } else if matches!(
++                    intent.task_type.as_str(),
++                    "text_generation" | "chat_completion"
++                ) {
+                     "pytorch.cpu"
+                 } else {
+                     "pytorch.diffusers"
+@@ -1204,7 +1207,10 @@ impl WorkflowHost for ImageRuntimeSessionHost {
+                             .collect(),
+                         };
+                     }
+-                    let text = node.data["task_kind"] == "text_generation";
++                    let text = matches!(
++                        node.data["task_kind"].as_str(),
++                        Some("text_generation" | "chat_completion")
++                    );
+                     WorkflowIoNode {
+                         node_id: node.id.clone(),
+                         node_type: node.node_type.clone(),
+@@ -3832,3 +3838,7 @@ impl InferenceBackend for SelectedWorkflowTextBackend {
+ #[cfg(feature = "backend-candle")]
+ #[path = "cpu_embedding_graph_tests.rs"]
+ mod cpu_embedding_graph_tests;
++
++#[cfg(feature = "backend-pytorch")]
++#[path = "cpu_chat_graph_tests.rs"]
++mod cpu_chat_graph_tests;
+diff --git a/crates/pantograph-embedded-runtime/src/runtime_host_execution_port.rs b/crates/pantograph-embedded-runtime/src/runtime_host_execution_port.rs
+index 8bdf7e84..6cda190b 100644
+--- a/crates/pantograph-embedded-runtime/src/runtime_host_execution_port.rs
++++ b/crates/pantograph-embedded-runtime/src/runtime_host_execution_port.rs
+@@ -43,7 +43,7 @@ use crate::runtime_host_package_facts::{
+ use crate::runtime_host_text_execution::{
+     project_runtime_host_text_generation, text_from_inference_result,
+     validate_runtime_host_text_generation_request, RuntimeHostTextGenerationProjectionError,
+-    TEXT_GENERATION_TASK,
++    CHAT_COMPLETION_TASK, TEXT_GENERATION_TASK,
+ };
+ 
+ const MISSING_LOAD_TARGET_RESOLVER_HINT: &str =
+@@ -160,14 +160,15 @@ impl RuntimeHostExecutionPort for EmbeddedRuntimeHostExecutionPort {
+             return Ok(response);
+         }
+ 
+-        if validated_request
+-            .as_ref()
+-            .handoff
+-            .task_intent
+-            .task_type
+-            .as_str()
+-            == TEXT_GENERATION_TASK
+-        {
++        if matches!(
++            validated_request
++                .as_ref()
++                .handoff
++                .task_intent
++                .task_type
++                .as_str(),
++            TEXT_GENERATION_TASK | CHAT_COMPLETION_TASK
++        ) {
+             return self
+                 .execute_runtime_host_text_request(&validated_request, cancellation)
+                 .await;
+@@ -750,7 +751,7 @@ impl RuntimeHostBatchExecutionPort for EmbeddedRuntimeHostExecutionPort {
+         if member_requests.iter().all(|member| {
+             matches!(
+                 member.as_ref().handoff.task_intent.task_type.as_str(),
+-                TEXT_GENERATION_TASK | EMBEDDING_TASK
++                TEXT_GENERATION_TASK | CHAT_COMPLETION_TASK | EMBEDDING_TASK
+             )
+         }) {
+             return self
+@@ -983,7 +984,7 @@ fn shared_batch_runtime_context_error(
+     };
+     if !matches!(
+         first_decision.task_intent.task_type.as_str(),
+-        "image_generation" | TEXT_GENERATION_TASK | EMBEDDING_TASK
++        "image_generation" | TEXT_GENERATION_TASK | CHAT_COMPLETION_TASK | EMBEDDING_TASK
+     ) {
+         return Some(format!(
+             "embedded runtime-host batch task type '{}' is unsupported",
+diff --git a/crates/pantograph-embedded-runtime/src/runtime_host_text_execution.rs b/crates/pantograph-embedded-runtime/src/runtime_host_text_execution.rs
+index 34f573d8..e8eb54dd 100644
+--- a/crates/pantograph-embedded-runtime/src/runtime_host_text_execution.rs
++++ b/crates/pantograph-embedded-runtime/src/runtime_host_text_execution.rs
+@@ -13,6 +13,19 @@ use pantograph_scheduler::SchedulerDispatchDecision;
+ use thiserror::Error;
+ 
+ pub(crate) const TEXT_GENERATION_TASK: &str = "text_generation";
++pub(crate) const CHAT_COMPLETION_TASK: &str = "chat_completion";
++
++fn canonical_text_task(
++    task: &str,
++) -> Result<InferenceTaskId, RuntimeHostTextGenerationProjectionError> {
++    match task {
++        TEXT_GENERATION_TASK => Ok(InferenceTaskId::TextGeneration),
++        CHAT_COMPLETION_TASK => Ok(InferenceTaskId::ChatCompletion),
++        _ => Err(RuntimeHostTextGenerationProjectionError::UnsupportedTask {
++            task_type: task.to_string(),
++        }),
++    }
++}
+ pub(crate) const PROMPT_PORT: &str = "prompt";
+ pub(crate) const MAX_NEW_TOKENS_PORT: &str = "max_new_tokens";
+ pub(crate) const SYSTEM_PROMPT_PORT: &str = "system_prompt";
+@@ -53,16 +66,24 @@ impl RuntimeHostTextGenerationProjection {
+ pub(crate) fn validate_runtime_host_text_generation_request(
+     request: &RuntimeHostExecutionRequest,
+ ) -> Result<(), RuntimeHostTextGenerationProjectionError> {
+-    if request.handoff.task_intent.task_type.as_str() != TEXT_GENERATION_TASK {
+-        return Err(RuntimeHostTextGenerationProjectionError::UnsupportedTask {
+-            task_type: request.handoff.task_intent.task_type.as_str().to_string(),
+-        });
+-    }
++    canonical_text_task(request.handoff.task_intent.task_type.as_str())?;
+     let dispatch_decision = request
+         .handoff
+         .dispatch_decision
+         .as_ref()
+         .ok_or(RuntimeHostTextGenerationProjectionError::MissingDispatchDecision)?;
++    if request
++        .handoff
++        .task_intent
++        .model_ref
++        .revision
++        .as_ref()
++        .is_some_and(|revision| {
++            dispatch_decision.selected_model_ref.revision.as_ref() != Some(revision)
++        })
++    {
++        return Err(RuntimeHostTextGenerationProjectionError::RequestedRevisionMismatch);
++    }
+     validate_supported_inputs(request)?;
+     validate_min_new_tokens_budget(request)?;
+     optional_top_k(request)?;
+@@ -101,10 +122,12 @@ pub(crate) fn project_runtime_host_text_generation(
+     let backend_decision = text_backend_decision(dispatch_decision)?;
+     let artifact_load_target =
+         crate::runtime_host_image_execution::project_pumas_artifact_load_target(load_target);
++    let mut requested_model_ref = project_model_ref(&dispatch_decision.selected_model_ref);
++    requested_model_ref.revision = request.handoff.task_intent.model_ref.revision.clone();
+     let inference_request = InferenceExecutionRequest {
+         request_id: Some(request.execution_request_id.clone()),
+-        task_id: InferenceTaskId::TextGeneration,
+-        model_ref: Some(project_model_ref(&dispatch_decision.selected_model_ref)),
++        task_id: canonical_text_task(request.handoff.task_intent.task_type.as_str())?,
++        model_ref: Some(requested_model_ref),
+         model_name: Some(dispatch_decision.selected_model_ref.model_id.clone()),
+         resolved_model_package_facts: Some(package_facts),
+         input: InferenceExecutionInput::TextGeneration {
+@@ -185,7 +208,9 @@ fn text_backend_decision(
+         selected_device_class,
+         selected_device_id: Some(selected_device_id),
+         device_decision,
+-        selected_task_id: Some(InferenceTaskId::TextGeneration),
++        selected_task_id: Some(canonical_text_task(
++            decision.task_intent.task_type.as_str(),
++        )?),
+         selected_model_ref: Some(project_model_ref(&decision.selected_model_ref)),
+         diagnostics: Vec::new(),
+         dependency_readiness: Vec::new(),
+@@ -592,7 +617,11 @@ fn optional_system_prompt(
+ 
+ #[derive(Debug, Error, PartialEq, Eq)]
+ pub(crate) enum RuntimeHostTextGenerationProjectionError {
+-    #[error("runtime-host text execution supports text_generation only, got {task_type}")]
++    #[error("runtime-host text selected revision must preserve the explicit requested revision")]
++    RequestedRevisionMismatch,
++    #[error(
++        "runtime-host text execution supports text_generation or chat_completion, got {task_type}"
++    )]
+     UnsupportedTask { task_type: String },
+     #[error("runtime-host text execution requires a scheduler dispatch decision")]
+     MissingDispatchDecision,
+diff --git a/docs/plans/domain-architecture-and-multimodal/evidence/workflow-chat-completion/README.md b/docs/plans/domain-architecture-and-multimodal/evidence/workflow-chat-completion/README.md
+new file mode 100644
+index 00000000..88b8b4ee
+--- /dev/null
++++ b/docs/plans/domain-architecture-and-multimodal/evidence/workflow-chat-completion/README.md
+@@ -0,0 +1,23 @@
++# Local chat qualification evidence
++
++The separate evidence commit binds the tested implementation head/tree and its
++exact delta from composition `fff03a153ff26b5a38c01be8a3cc65ddb28be07e` in
++`source-binding.json` and `source.patch`. `manifest.sha256.json` checks every
++packet member. The final candidate may add only these evidence files after that
++tested implementation commit.
++
++Deciding logs cover the full affected Rust suite, explicit actual CPU saved-graph
++qualification, full Python worker qualification and regression suite, strict
++Clippy, formatting, frontend tests/typecheck/build, root gates and scheduler-only
++execution. `features.txt` records the complete all-target effective Cargo feature
++graph. `commands.sh` records the no-download/offline reproduction route.
++
++Initial failed fixture/harness/Clippy and unspecified-input traceability runs are
++retained as diagnostics; they are not deciding passes. Controlled package,
++readiness, dispatch and graph-discovery facts are distinct from actual native
++local loading, full worker imports and synthetic GPT-2 CPU forwards. This packet
++does not establish live Pumas, pretrained/GPU/desktop, post-start native
++cancellation or general production-model qualification.
++
++See the [feature report](../../reports/2026-10-06-workflow-chat-completion.md) and
++the [fixture instructions](../../../../../crates/inference/tests/fixtures/tiny_chat_gpt2/README.md).
+diff --git a/docs/plans/domain-architecture-and-multimodal/execution-ledger.md b/docs/plans/domain-architecture-and-multimodal/execution-ledger.md
+index 9275b756..93d47a43 100644
+--- a/docs/plans/domain-architecture-and-multimodal/execution-ledger.md
++++ b/docs/plans/domain-architecture-and-multimodal/execution-ledger.md
+@@ -1,5 +1,16 @@
+ # Execution Ledger
+ 
++## 2026-10-06 — Canonical single-prompt chat successor
++
++Fresh main `c75fa237` is explicitly composed with separate stop `e570302d` and
++embedding-revision `7be490d7` candidates on `feat/workflow-chat-completion`.
++The [chat report](reports/2026-10-06-workflow-chat-completion.md) records exact
++composition, canonical task/revision constraints, actual local synthetic CPU
++worker and saved public graph qualification, and precancellation/scope limits.
++Independent review, parent publication, live Pumas, pretrained/GPU/desktop and
++post-start native cancellation remain separate. Prior candidates stay preserved;
++no resident/ranking work or PR mutation is included.
++
+ ## 2026-09-08 — Plan prepared
+ 
+ - User priorities: coherent maintainable domain architecture, complete current-standards review/remediation, and functional text/image model workflows; execution by GPT-6 Astra medium.
+diff --git a/docs/plans/domain-architecture-and-multimodal/plan.md b/docs/plans/domain-architecture-and-multimodal/plan.md
+index faa712d7..fb3b5b07 100644
+--- a/docs/plans/domain-architecture-and-multimodal/plan.md
++++ b/docs/plans/domain-architecture-and-multimodal/plan.md
+@@ -5,13 +5,15 @@
+ **Current phase:** M3 owner/client consumer source is implemented. Native CPU sampling and the supported inference/embedded host route are qualified separately; the desktop-authored dependent text-to-image graph and full review remain open.
+ 
+ **Next slice:** The user-selected single-prompt canonical `chat_completion`
+-graph feature is active on isolated `feat/workflow-chat-completion`. Source is
++graph feature is implemented and locally qualified on isolated
++`feat/workflow-chat-completion`; see the [chat report](reports/2026-10-06-workflow-chat-completion.md). Source is
+ fresh main `c75fa237` with explicit ordinary composition of stop successor
+ `e570302d` and embedding revision successor `7be490d7`; those frozen candidates
+ remain separate and their review/publication belongs to the parent. Acceptance
+ requires exact canonical task/requested revision constraints and an offline
+-synthetic causal LM through saved/reopened public scheduler graphs, cancellation,
+-isolation and retained text-generation controls. No pretrained/GPU/desktop or
++synthetic causal LM through saved/reopened public scheduler graphs, precancellation,
++isolation and retained text-generation controls. Independent review and parent
++publication remain separate. No pretrained/GPU/desktop or
+ resident-accounting qualification is implied.
+ 
+ **Prior stop slice:** The user-authorized bounded M2 text stop-string successor is
+diff --git a/docs/plans/domain-architecture-and-multimodal/reports/2026-10-06-workflow-chat-completion.md b/docs/plans/domain-architecture-and-multimodal/reports/2026-10-06-workflow-chat-completion.md
+new file mode 100644
+index 00000000..e5ceac5e
+--- /dev/null
++++ b/docs/plans/domain-architecture-and-multimodal/reports/2026-10-06-workflow-chat-completion.md
+@@ -0,0 +1,94 @@
++# Canonical single-prompt chat graphs
++
++The registry and causal-LM profile already recognized `chat_completion`, but its
++descriptor exposed only a prompt and the selected host route admitted only
++`text_generation`. Saved single-prompt chat graphs now expose the existing text
++controls and execute through the same selected native text owner while retaining
++their exact canonical task identity.
++
++## Source and acceptance
++
++Normal Git fetch confirmed main
++`c75fa2379a730833709ea8976075bf17a117040f`, tree
++`6c8c4bb1cbed0527b58c1048ebf49fa0e243d56b`, before edits/builds. Isolated branch
++`feat/workflow-chat-completion` composes the two separately preserved candidates
++with ordinary merge commits:
++
++- `fcc24a70756920b70fd3957c737b07f60ff1d9d1` has parents main and stop repair
++  `e570302d688517f26125ca37bd406603e9b7cf7f`.
++- `fff03a153ff26b5a38c01be8a3cc65ddb28be07e` has parents `fcc24a70` and embedding
++  revision repair `7be490d7e403a95e2efff7e5a8f21a68d40a42fd`; its pre-feature tree
++  is `d5e041fc306e8c9c168c05f3d8f8e64e32358582`.
++
++Acceptance requires canonical task agreement, explicit requested-revision
++preservation, a local synthetic causal LM and explicit chat template through
++saved/reopened public scheduler graphs, deterministic scope isolation,
++precancellation and retained text-generation controls. The composed stop and
++embedding repairs retain their own independent review status. No main/PR change
++or resident/ranking work belongs to this candidate.
++
++## Behavior
++
++Chat descriptors share prompt, optional system prompt, length, sampling,
++repetition, seed and scalar stop controls with text generation. Optional defaults
++and validation remain shared. This is one prompt plus an optional system string;
++messages ports, persistent conversation history and tools are not added.
++
++Single requests and compatible sequential envelopes admit the canonical chat
++task. Request, selected decision and package evidence must agree exactly between
++`chat_completion` and `text_generation`; no task relabeling is allowed. Backend
++capability facts now include the existing causal-LM chat route. The existing
++worker owns tokenizer template formatting and model execution.
++
++The shared text projector rejects an explicit requested revision that differs
++from, or is absent on, the selected model before resolving packages/targets. The
++typed request retains its original revision, including omission; the selected
++owner may refine an omitted revision and requires explicit selected/package/target
++revisions to agree. Tests cover the task matrix, revision matrix, unsupported
++shape, blank prompt and package-task refusal before loading.
++
++## Qualification and limits
++
++Two committed, locally initialized GPT-2 fixtures each have 5,392 untrained
++parameters. Independent installed native `model.generate` oracles cover two
++prompt/system contexts and seeds 0, 42, 43 and `u64::MAX`. No external weights or
++privileges were acquired. The full worker qualifier makes 32 actual CPU requests,
++checks streaming/nonstreaming text, explicit template, real first-forward token
++IDs and unchanged ambient RNG. Worker imports and model forwards are real.
++
++The explicitly run ignored Rust qualification saves/reopens four graphs and
++makes 28 public scheduler graph runs plus eight separately attributed native
++envelope members. It changes model 11 → 37 → 11 and task chat → text → chat,
++interleaves/replays seeds and prompt contexts, checks exact inference/sink text,
++unique graph run identities and scoped reservation events, and follows cancelled
++single/envelope requests with healthy runs. Alternate host loading/execution
++panics if called. These are **precancellation** checks; interruption after a native
++forward begins is not qualified here. Envelope execution remains sequential,
++without backend-native batching or throughput claims.
++
++The deciding ordinary Rust run passes 2,486 tests and one doctest; five native
++tests and two doctests are ignored by that default run. The new native graph test
++is explicitly run and passes separately. All 78 existing Python worker tests and
++670 frontend tests pass. Typecheck, frontend build, formatting and affected strict
++Clippy are recorded with their final statuses in the evidence packet.
++
++Before building, the complete effective all-target Cargo feature graph for the
++five affected packages was inspected: current Pumas `26a84e32`, ORT `load-dynamic`
++and `disable-linking`, no `download-binaries`. Every Cargo command uses
++`ORT_SKIP_DOWNLOAD=1` and offline resolution. No denied binary download was
++retried. SoundFile 0.14.0 and its ordinary Python dependencies were installed to
++satisfy the existing full-worker import; Torch/Transformers were unchanged.
++
++Package/target/readiness/dispatch facts and host graph discovery are controlled.
++The selected local loader, gateway, full worker and GPT-2 CPU forwards are actual.
++This does not qualify live Pumas discovery/owner facts, pretrained quality, GPU,
++desktop authoring/execution, arbitrary architectures, segment-ID tokenizers,
++template fallback or full production loading. Desktop numeric precision remains
++bounded by the existing safe-integer contract; full-u64 coverage here is Rust/API.
++
++Initial compile and harness/fixture failures are retained alongside deciding
++logs: missing test imports, single cancellation-state expectation, unbound
++external controls and nonstandard tokenizer segment inputs were corrected in the
++test fixtures/harness. No worker production hardening was introduced for those
++fixture issues. Repository evidence and source binding are under
++[`evidence/workflow-chat-completion`](../evidence/workflow-chat-completion/README.md).

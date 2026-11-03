@@ -8,6 +8,7 @@ use rusqlite::{params, Connection, Row};
 mod event_sqlite;
 mod run_resource_observation_sqlite;
 mod run_summary_sqlite;
+mod runtime_host_observation_sqlite;
 mod runtime_selection_history_sqlite;
 mod timing_sqlite;
 
@@ -96,6 +97,20 @@ fn configure_file_backed_connection(conn: &Connection) -> Result<(), Diagnostics
 }
 
 impl DiagnosticsLedgerRepository for SqliteDiagnosticsLedger {
+    fn record_runtime_host_observation(
+        &mut self,
+        observation: crate::RuntimeHostRequestObservation,
+    ) -> Result<(), DiagnosticsLedgerError> {
+        runtime_host_observation_sqlite::record(self, observation)
+    }
+
+    fn runtime_host_observation_summary(
+        &self,
+        query: crate::RuntimeHostObservationQuery,
+    ) -> Result<crate::RuntimeHostObservationSummary, DiagnosticsLedgerError> {
+        runtime_host_observation_sqlite::summary(self, query)
+    }
+
     fn record_usage_event(
         &mut self,
         event: ModelLicenseUsageEvent,

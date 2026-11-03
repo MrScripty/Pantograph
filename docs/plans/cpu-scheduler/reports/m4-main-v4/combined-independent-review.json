@@ -1,0 +1,180 @@
+{
+  "combined_local_C4_supported": true,
+  "judgment": "Frozen local main observations plus narrowly transferred source-assisted cancellation custody satisfy the original bounded local C4 evidence contract; broad CI failures remain unresolved and C5/overall M4 unaccepted.",
+  "main_source": "9ce4ca8aca004cf51782c59e91dd9fd7af5beed5",
+  "cancellation_source": "96691fd764ddf6af838e66c3b064cd34f419b1c5",
+  "cancellation_tests_reexecuted": false,
+  "cancellation_full_private_native_identity_serialized": false,
+  "cancellation_raw_sqlite_retained": false,
+  "source_bridge_unchanged_blobs": 433,
+  "source_bridge_critical_sha256": {
+    "crates/pantograph-embedded-runtime/src/serial_cpu_residency.rs": "1005f4a71411e491366bd0fb3d5faedaab63fc5f8c68b948821cb1b35ada8c98",
+    "crates/pantograph-embedded-runtime/src/serial_cpu_port.rs": "259f70d31e230b1d03b845131c3551db77c1d0a1a1be4eab5892fee208b2bec7",
+    "crates/pantograph-embedded-runtime/src/lib_tests/native_serial_residency_tests.rs": "d316da5580154f46aebe345cd3abbfca28563cd4fea67dc9855cda3f3d30426c",
+    "crates/pantograph-workflow-service/src/workflow/serial_ready.rs": "28a5783973d639dfd3592ca4fbb48ea7bccc16bc8e4100ad9f73e545f508f935"
+  },
+  "changed_code_paths": [
+    "crates/pantograph-embedded-runtime/examples/cpu_embedding_workflow_probe/m4_residency_probe.rs",
+    "crates/pantograph-embedded-runtime/examples/cpu_embedding_workflow_probe/m4_residency_probe_aabba_tests.rs",
+    "crates/pantograph-workflow-service/src/workflow/preparation_terminal_lifecycle_tests.rs",
+    "crates/pantograph-workflow-service/src/workflow/serial_ready_worker_tests.rs",
+    "crates/pantograph-workflow-service/src/workflow/task_execution_worker.rs",
+    "crates/pantograph-workflow-service/src/workflow/workflow_run_finalization.rs"
+  ],
+  "main_post_execution_files_verified": 360,
+  "historical_files_verified": 637,
+  "cancellation_original_files_verified": 16,
+  "cancellation_frozen_Git_source_files_verified": 966,
+  "prior_failed_v1_files_verified": 54,
+  "CI_failures": {
+    "pr83": {
+      "focused_job_log_sha256": "971fbdd7902b032403f4570a2027eb0beaea1a0a670e59de806e4f98d1f89c0d",
+      "command": "cargo test -p pantograph-embedded-runtime --lib",
+      "passed": 600,
+      "failed": 3,
+      "ignored": 2,
+      "exit_code": 101,
+      "cause": "unresolved",
+      "run_id": 39368594419,
+      "focused_job_id": 118451011171,
+      "head": "5b4fc6dda17342e6b27f90ebb852ffd2b7ea47eb"
+    },
+    "pr84": {
+      "focused_job_log_sha256": "3ed8b6b31ff9f038992ce5e2e680a49a79451baf0d588137efa580977ed84f02",
+      "command": "cargo test -p pantograph-embedded-runtime --lib",
+      "passed": 600,
+      "failed": 3,
+      "ignored": 2,
+      "exit_code": 101,
+      "cause": "unresolved",
+      "run_id": 39371059809,
+      "focused_job_id": 118458798990,
+      "head": "9e068bbc2a040f20de88dfc70d914339cd5a8910"
+    }
+  },
+  "C5_status": "BLOCKED: unresolved published-head Rust focused failures and absent exact composed published-head CI",
+  "overall_M4_accepted": false,
+  "native_or_model_invocations_by_reviewer": 0,
+  "original_sqlite_opened": false,
+  "preserved_files_modified": false,
+  "evidence_sha256": {
+    "/workspace/m4-main-v4-review/independent-native-review.json": "21c39599e4a858838a378c3fb5489b53e92cca189fb4a44f0911b06e4c638ce0",
+    "/workspace/m4-main-v4-review/independent-native-review.md": "c0955ef299125d56ab57ea96e1427b594f7044104754c6f5a26599ff871d7123",
+    "/workspace/m4-cancellation-review-v1/review.json": "bf59970f50683b3952f2491042ecb61599321c344593255b4f75d27076046797",
+    "/workspace/m4-cancellation-v1/source-freeze.json": "3184a3b3bc5dc14adfb5c2eb09c13f3177be6aacf9358d4187c9b7b194561fd5",
+    "/workspace/m4-cancellation-v1/binary-freeze.json": "97eb725fd58f697890f4b35df0ed5b2e7a99b86814049f9cf0295d458bd7872a",
+    "/workspace/m4-cancellation-v1/execution-status.json": "f796f63d855aa95c0346cca4016c87e25500ed731b2cf7bb757e8dcf0c740ed8",
+    "/workspace/m4-main-v4/post-execution-file-sha256.json": "012789483953415b9918489dc192c9e1560e766ccfc98a6632aac76106a86a02",
+    "/workspace/m4-main-v4/pre-run-manifest-sha256.json": "28b9d391f6593d1e942fd64ea193c389a383fad17b68f7949ff4167e805d90d8",
+    "/workspace/m4-pr84-composition/independent-review.md": "a693e42bf6e58e78ca4d7ef326e8393a39e977c06314c0c8b76749b16872c724",
+    "/workspace/m4-pr84-composition/composition.json": "e2d6c294945044ab1cb4e8c653cc4cac343453dd784fe4bb80bb9e95733fd3ad",
+    "/workspace/m4-main-v3/preflight-failure.json": "bbff01e572b0edd6d151fc66b5359fd7b6707ba4fb716eb21ed53970e8482e1f",
+    "/workspace/m4-wrapper-repair-v1/independent-review.md": "3315d1047d195c8215e4de8a689a6974a60de16d236bf57ee08506a66fdfb15c",
+    "/workspace/pantograph-m4-composed/docs/plans/cpu-scheduler/plan.md": "6eb5a3affd384c64e4c634f94fe5f507776010b25cc79eeec7450ed3664e6bb1",
+    "/workspace/m4-c4-c5-handoff-v1/remote-pr-readback.json": "14465d3e6959ea187093db3d0f72ff96e267454d0ae91ff626c3f91606bf5a1b",
+    "/workspace/m4-c4-c5-handoff-v1/remote-ci-readback.json": "1dc28da399da474421376acd30ad8797b0a59a7d6faac72985bafda15e1c38b5"
+  },
+  "criteria": [
+    {
+      "criterion": "fixture/source/binary/input/env freeze",
+      "status": "satisfied",
+      "evidence": "main24 pre-run inputs,968 source files,14 original fixtures; cancellation8 pre-run files/966 frozen Git sources; both actual binaries verified"
+    },
+    {
+      "criterion": "fixed retained AABBA and comparison",
+      "status": "satisfied",
+      "evidence": "main retained3loads/2retains/3stops; five fresh acknowledged singleton comparisons5loads/5stops; exact input/thread/budget"
+    },
+    {
+      "criterion": "ten independent-golden outputs",
+      "status": "satisfied",
+      "evidence": "stored/public/retained vectors; maxabs5.960464477539063e-08; original tolerances"
+    },
+    {
+      "criterion": "full main native/task identities",
+      "status": "satisfied_main_scope",
+      "evidence": "8 distinct private native instances;10 exact drain/task-ACK joins; retained +2 lineage; no cross-owner scalar-ID inference"
+    },
+    {
+      "criterion": "reload and old-owner history",
+      "status": "satisfied_with_source_assistance",
+      "evidence": "main reload uses fresh actual native instance; unchanged serial_ready.rs clears samples/predecessor for changed owner; no serialized history dump claimed"
+    },
+    {
+      "criterion": "phase and collector requirements",
+      "status": "satisfied",
+      "evidence": "actual load/publication,forward-drain,physical stop,ACK scalars;61rows/nooverflow/original bounds; no absent-phase zero"
+    },
+    {
+      "criterion": "additive custody and ACK ordering",
+      "status": "satisfied",
+      "evidence": "main full guard/resident/task snapshots; exact task-only ACK; old-stop ACK before incoming load; final empty registry"
+    },
+    {
+      "criterion": "pressure refusal and finalization",
+      "status": "satisfied",
+      "evidence": "fresh80MiB refusal,required620781187;zeroStart/load/forward/claims;matchingFailed terminal;session closes/teardown"
+    },
+    {
+      "criterion": "post-load pre-Start cancellation",
+      "status": "satisfied_source_assisted",
+      "evidence": "966 actual1load/0forward/0stop;private owned shutdownsignal;Ready/noattempt;full600+32MiB fence;unchanged native path transfers custody only"
+    },
+    {
+      "criterion": "public Running post-drain cancellation",
+      "status": "satisfied_source_assisted",
+      "evidence": "966 actual1load/1drain;actualattempt publicrequest;allchargesheld;Completed wins;exacttaskACK;final1stop/emptyregistry"
+    },
+    {
+      "criterion": "controlled fault classification",
+      "status": "satisfied_scope_only",
+      "evidence": "prior controlled drop/pin/retainer/stale/failedstop/ACK evidence remains supporting/fault-injection; no actualCandle failure inference"
+    },
+    {
+      "criterion": "preserved failures and no hidden continuation",
+      "status": "satisfied",
+      "evidence": "v1/v2 remainexit1;v3NOT_ADMITTED0native;repair/v4 separately admitted;637history+54v1+360v4 bytes unchanged"
+    },
+    {
+      "criterion": "bounds on acceptance",
+      "status": "satisfied",
+      "evidence": "local fixed synthetic observation/source-assisted custody only; no exact9ce cancellation run/rawprivateidentities/rawSQLite/training/speedup/generalproduction claim"
+    },
+    {
+      "criterion": "C5 exact published-head required CI",
+      "status": "blocked",
+      "evidence": "both published precursor heads fail embedded-runtime tests;causeunknown;no exactcomposed9ce published-headCI"
+    }
+  ],
+  "signed_off_by": "/root/m4_v4_admission_review",
+  "local_c4_limits": [
+    "Cancellation observations remain at96691fd7; transfer establishes unchanged native custody mechanisms only.",
+    "Cancellation private profile/settings/generation and full receipts were not serialized; ephemeral case SQLite was not retained.",
+    "The new pre-Start metadata terminal outcome for the cancellation case is source-inferred, not observed at9ce.",
+    "Relevant broad CI failures remain unresolved; no reproducibility or general suite-reliability claim follows.",
+    "Old main-only signoff remains limited; this later combined judgment does not rewrite historical verdicts."
+  ],
+  "independent_report_sha256": "a005fd138f225809fd101e6b102a8a5ae33b8add61a331fb6050453d1183c1ea",
+  "local_C4_material_blockers": [],
+  "C5_material_blockers": [
+    "PR83 and PR84 embedded-runtime focused tests fail at their published heads; cause unresolved.",
+    "No required exact composed/pending published-head CI success; local scoped lint/tests are not a substitute."
+  ],
+  "source_bridge_unchanged_roots": [
+    "crates/inference",
+    "crates/pantograph-runtime-registry",
+    "crates/pantograph-runtime-host-contracts",
+    "crates/pantograph-embedded-runtime/src",
+    "crates/pantograph-workflow-service/src/workflow/serial_ready.rs",
+    "crates/pantograph-workflow-service/src/workflow/runtime_branch_run_finalization.rs",
+    "Cargo.toml",
+    "Cargo.lock"
+  ],
+  "canonicalization": {
+    "change": "terminal blank line removed; report text and verdict unchanged",
+    "report_path": "/workspace/m4-c4-combined-review/finalcanonical.md",
+    "initial_report_sha256": "94c5f485422528a40ff08049ba7fc90052a048fbb9b883f776efb16d6c42fbbf",
+    "initial_result_sha256": "a3517b05fe297c3d7e952f85cb5a6b547cb70ec8be29ce615d2ac55c6a7b4f05",
+    "initial_signed_pair_preserved": "/workspace/m4-c4-combined-review/initial-signed"
+  }
+}

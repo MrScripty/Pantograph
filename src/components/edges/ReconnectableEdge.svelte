@@ -137,7 +137,8 @@
   </defs>
 </svg>
 
-<!-- Main edge path with gradient stroke and glow filter -->
+<!-- Zero-area aligned paths cannot use an objectBoundingBox SVG filter.
+     Keep their gradient stroke visible; apply glow only to non-aligned paths. -->
 {#if edgeInsertPreviewActive}
   <path
     d={path}
@@ -171,7 +172,7 @@
   stroke-width={edgeInsertPreviewActive || inferenceInterfaceDriftAffected ? (selected ? 3 : 2.5) : (selected ? 1.5 : 1)}
   fill="none"
   stroke-linecap="round"
-  filter="url(#{gradientId}-glow)"
+  filter={sourceX === targetX || sourceY === targetY ? undefined : `url(#${gradientId}-glow)`}
 >
   {#if typeof inferenceInterfaceDriftTitle === 'string'}
     <title>{inferenceInterfaceDriftTitle}</title>

@@ -248,12 +248,13 @@ pub(crate) fn validate_ready_proof_for_intent(
 #[must_use]
 pub struct ValidatedSchedulerReadinessAdmissionRequest(SchedulerReadinessAdmissionRequest);
 
-impl ValidatedSchedulerReadinessAdmissionRequest {
-    #[must_use]
-    pub fn as_ref(&self) -> &SchedulerReadinessAdmissionRequest {
+impl AsRef<SchedulerReadinessAdmissionRequest> for ValidatedSchedulerReadinessAdmissionRequest {
+    fn as_ref(&self) -> &SchedulerReadinessAdmissionRequest {
         &self.0
     }
+}
 
+impl ValidatedSchedulerReadinessAdmissionRequest {
     #[must_use]
     pub fn into_inner(self) -> SchedulerReadinessAdmissionRequest {
         self.0
@@ -274,12 +275,13 @@ impl TryFrom<SchedulerReadinessAdmissionRequest> for ValidatedSchedulerReadiness
 #[must_use]
 pub struct ValidatedSchedulerReadinessAdmissionDecision(SchedulerReadinessAdmissionDecision);
 
-impl ValidatedSchedulerReadinessAdmissionDecision {
-    #[must_use]
-    pub fn as_ref(&self) -> &SchedulerReadinessAdmissionDecision {
+impl AsRef<SchedulerReadinessAdmissionDecision> for ValidatedSchedulerReadinessAdmissionDecision {
+    fn as_ref(&self) -> &SchedulerReadinessAdmissionDecision {
         &self.0
     }
+}
 
+impl ValidatedSchedulerReadinessAdmissionDecision {
     #[must_use]
     pub fn into_inner(self) -> SchedulerReadinessAdmissionDecision {
         self.0

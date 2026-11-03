@@ -1,41 +1,116 @@
-//! Validation for scheduler-selected embedding execution.
-//!
-//! The runtime host owns the scheduler handoff and Pumas target. This module
-//! keeps the executable-target and identity checks together so the gateway can
-//! start the selected Pantograph embedding backend without importing Pumas
-//! provider behavior or inferring a model path from metadata.
-
+//! Validated scheduler selection and the separately approved executable target.
 use std::path::Path;
 
 use crate::backend::BackendError;
 use crate::{
-    BackendExecutionDecision, InferenceDeviceClass, InferenceDevicePolicy, InferenceExecutionInput,
-    InferenceExecutionRequest, InferenceTaskId, ModelArtifactKind, ModelStorageKind,
-    ModelValidationState, PumasArtifactLoadPathKind, PumasArtifactLoadTarget, PumasModelRef,
+    BackendExecutionDecision, InferenceDeviceClass, InferenceDeviceId, InferenceDevicePolicy,
+    InferenceExecutionInput, InferenceExecutionRequest, InferenceTaskId, ModelArtifactKind,
+    ModelStorageKind, ModelValidationState, PumasArtifactEntryPath, PumasArtifactLoadPathKind,
+    PumasArtifactLoadTarget, PumasModelRef, ResolvedModelPackageFacts,
 };
 
 pub(crate) struct SelectedEmbeddingLoad<'a> {
+    pub(crate) package: &'a ResolvedModelPackageFacts,
     pub(crate) target: &'a PumasArtifactLoadTarget,
-    pub(crate) device: &'a crate::InferenceDeviceId,
+    pub(crate) device: &'a InferenceDeviceId,
+}
+
+#[cfg(all(test, feature = "backend-candle"))]
+pub(crate) fn fixture(
+    width: usize,
+) -> (
+    tempfile::TempDir,
+    InferenceExecutionRequest,
+    PumasArtifactLoadTarget,
+    BackendExecutionDecision,
+) {
+    fn copy(source: &Path, target: &Path) {
+        std::fs::create_dir_all(target).unwrap();
+        for entry in std::fs::read_dir(source).unwrap() {
+            let entry = entry.unwrap();
+            if entry.file_type().unwrap().is_dir() {
+                copy(&entry.path(), &target.join(entry.file_name()));
+            } else {
+                std::fs::copy(entry.path(), target.join(entry.file_name())).unwrap();
+            }
+        }
+    }
+    let directory = tempfile::tempdir().unwrap();
+    let source = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join(format!("tests/fixtures/candle_bert/bert-{width}"));
+    copy(&source, directory.path());
+    // Git does not retain the standard Normalize module's empty directory.
+    std::fs::create_dir_all(directory.path().join("2_Normalize")).unwrap();
+    let mut package: ResolvedModelPackageFacts = serde_json::from_str(include_str!(
+        "../tests/fixtures/inference_package_facts/hf_candle_embedding_package_facts.json"
+    ))
+    .unwrap();
+    package.model_ref.model_id = format!("embedding/test/synthetic-bert-{width}");
+    package.model_ref.revision = Some(format!("untrained-seed-{}", 171 + width));
+    let target = PumasArtifactLoadTarget {
+        model_ref: package.model_ref.clone(),
+        artifact_kind: package.artifact.artifact_kind.clone(),
+        local_load_path: directory.path().to_str().unwrap().into(),
+        load_path_kind: PumasArtifactLoadPathKind::Directory,
+        library_root_id: Some("synthetic-test-root".into()),
+        storage_kind: package.artifact.storage_kind.clone(),
+        validation_state: ModelValidationState::Valid,
+        verification_source_fingerprint: None,
+        verification_observed_from_cache_at: None,
+        content_fingerprint: None,
+        package_facts_contract_version: Some(package.package_facts_contract_version),
+    };
+    let device = InferenceDeviceId::parse("cpu").unwrap();
+    let runtime = crate::RuntimeVariantId::parse("candle.cpu").unwrap();
+    let decision = BackendExecutionDecision {
+        selected_backend_id: crate::BackendId::parse("candle").unwrap(),
+        selected_runtime_variant_id: runtime.clone(),
+        selected_device_class: InferenceDeviceClass::Cpu,
+        selected_device_id: Some(device.clone()),
+        device_decision: crate::DeviceResolutionDecision {
+            policy: InferenceDevicePolicy::Auto,
+            runtime_variant_id: runtime,
+            selected_device_class: InferenceDeviceClass::Cpu,
+            selected_device_id: Some(device),
+            diagnostics: vec![],
+        },
+        selected_task_id: Some(InferenceTaskId::Embedding),
+        selected_model_ref: Some(package.model_ref.clone()),
+        diagnostics: vec![],
+        dependency_readiness: vec![],
+        selection_policy_trace: None,
+    };
+    let request = InferenceExecutionRequest {
+        request_id: Some("selected-embedding-test".into()),
+        task_id: InferenceTaskId::Embedding,
+        model_ref: Some(package.model_ref.clone()),
+        model_name: None,
+        resolved_model_package_facts: Some(package),
+        input: InferenceExecutionInput::Embedding {
+            texts: vec![
+                "hello world".into(),
+                "hello".into(),
+                "different world".into(),
+            ],
+        },
+        generation_options: None,
+        extra_options: serde_json::json!({}),
+    };
+    (directory, request, target, decision)
 }
 
 fn invalid(message: impl Into<String>) -> BackendError {
     BackendError::Config(format!("selected embedding: {}", message.into()))
 }
 
-fn same_model(left: &PumasModelRef, right: &PumasModelRef) -> bool {
+fn same_model_identity(left: &PumasModelRef, right: &PumasModelRef) -> bool {
     left.model_id.trim_start_matches("pumas://models/")
         == right.model_id.trim_start_matches("pumas://models/")
-        && revisions_compatible(left.revision.as_deref(), right.revision.as_deref())
         && left.selected_artifact_id == right.selected_artifact_id
         && artifact_paths_compatible(
             left.selected_artifact_path.as_deref(),
             right.selected_artifact_path.as_deref(),
         )
-}
-
-fn revisions_compatible(left: Option<&str>, right: Option<&str>) -> bool {
-    left.is_none() || right.is_none() || left == right
 }
 
 fn revisions_agree(references: &[&PumasModelRef]) -> bool {
@@ -64,27 +139,10 @@ fn artifact_paths_agree(references: &[&PumasModelRef]) -> bool {
     true
 }
 
+// Intent-first Pumas results may omit the legacy selected artifact path; a
+// supplied path must still agree with every other supplied path.
 fn artifact_paths_compatible(left: Option<&str>, right: Option<&str>) -> bool {
     left.is_none() || right.is_none() || left == right
-}
-
-fn producer_and_target_paths_agree(
-    package: &crate::ResolvedModelPackageFacts,
-    target: &PumasArtifactLoadTarget,
-) -> bool {
-    let package_path = package.artifact.entry_path.trim();
-    let target_path = target.local_load_path.trim();
-    !is_absolute_local_path(package_path)
-        || !is_absolute_local_path(target_path)
-        || package_path == target_path
-}
-
-fn is_absolute_local_path(path: &str) -> bool {
-    Path::new(path).is_absolute()
-        || (path.len() >= 3
-            && path.as_bytes()[0].is_ascii_alphabetic()
-            && path.as_bytes()[1] == b':'
-            && matches!(path.as_bytes()[2], b'/' | b'\\'))
 }
 
 impl<'a> SelectedEmbeddingLoad<'a> {
@@ -129,7 +187,7 @@ impl<'a> SelectedEmbeddingLoad<'a> {
             reference
                 .validate()
                 .map_err(|error| invalid(error.to_string()))?;
-            if !same_model(reference, &target.model_ref) {
+            if !same_model_identity(reference, &target.model_ref) {
                 return Err(invalid(
                     "request/package/target/scheduler model or artifact mismatch",
                 ));
@@ -141,6 +199,41 @@ impl<'a> SelectedEmbeddingLoad<'a> {
             || target.model_ref.selected_artifact_id.is_none()
         {
             return Err(invalid("producer-selected artifact identity is required"));
+        }
+        if request.model_name.as_deref().is_some_and(|name| {
+            !name.is_empty()
+                && name.strip_prefix("pumas://models/").unwrap_or(name)
+                    != target
+                        .model_ref
+                        .model_id
+                        .strip_prefix("pumas://models/")
+                        .unwrap_or(&target.model_ref.model_id)
+        }) {
+            return Err(invalid(
+                "request model name conflicts with selected model identity",
+            ));
+        }
+        // Request and scheduler revisions constrain both producer observations.
+        // An omitted request revision permits additional target evidence, but
+        // never supplies a missing explicitly requested package/target revision.
+        for requested in [model, selected] {
+            if let Some(revision) = &requested.revision {
+                if package.model_ref.revision.as_ref() != Some(revision)
+                    || target.model_ref.revision.as_ref() != Some(revision)
+                {
+                    return Err(invalid(
+                        "explicit requested revision is missing or mismatched",
+                    ));
+                }
+            }
+        }
+        if package
+            .model_ref
+            .revision
+            .as_ref()
+            .is_some_and(|revision| target.model_ref.revision.as_ref() != Some(revision))
+        {
+            return Err(invalid("target must preserve the known package revision"));
         }
         if request.task_id != InferenceTaskId::Embedding
             || decision.selected_task_id != Some(InferenceTaskId::Embedding)
@@ -160,69 +253,53 @@ impl<'a> SelectedEmbeddingLoad<'a> {
                 "current package and target contract versions are required",
             ));
         }
-        if !producer_and_target_paths_agree(package, target) {
-            return Err(invalid(
-                "Pumas package facts and artifact load target must refer to the same executable artifact path",
-            ));
-        }
+        let _entry_path = PumasArtifactEntryPath::parse(&package.artifact.entry_path)
+            .map_err(|error| invalid(error.to_string()))?;
         if package.artifact.validation_state != ModelValidationState::Valid
             || target.validation_state != ModelValidationState::Valid
             || !package.artifact.validation_errors.is_empty()
             || target.artifact_kind != package.artifact.artifact_kind
-            || target.artifact_kind != ModelArtifactKind::Gguf
+            || !matches!(
+                target.artifact_kind,
+                ModelArtifactKind::HfCompatibleDirectory
+            )
             || target.storage_kind == ModelStorageKind::Unknown
             || target.storage_kind != package.artifact.storage_kind
         {
             return Err(invalid(
-                "a valid matching local GGUF embedding artifact is required",
+                "a valid matching local Transformers artifact is required",
             ));
         }
-        if target.load_path_kind != PumasArtifactLoadPathKind::File
+        if target.load_path_kind != PumasArtifactLoadPathKind::Directory
             || !Path::new(&target.local_load_path).is_absolute()
             || !tokio::fs::metadata(&target.local_load_path)
                 .await
                 .map_err(|error| invalid(format!("cannot inspect executable target: {error}")))?
-                .is_file()
+                .is_dir()
         {
             return Err(invalid(
-                "Pumas executable embedding target must be an existing absolute file",
+                "Pumas executable target must be an existing absolute directory",
             ));
         }
         if package.custom_code.requires_custom_code {
-            return Err(invalid("custom embedding code is denied"));
-        }
-        if decision.device_decision.runtime_variant_id != decision.selected_runtime_variant_id
-            || decision.device_decision.selected_device_class != decision.selected_device_class
-            || decision.device_decision.selected_device_id != decision.selected_device_id
-        {
-            return Err(invalid(
-                "scheduler device decision does not match selected runtime/device",
-            ));
+            return Err(invalid("custom Transformers code is denied"));
         }
         let device = decision
             .selected_device_id
             .as_ref()
             .ok_or_else(|| invalid("concrete scheduler device is required"))?;
-        let expected_runtime = match decision.selected_device_class {
-            InferenceDeviceClass::Cpu if device.as_str() == "cpu" => "llama_cpp.cpu",
-            InferenceDeviceClass::Cuda
-                if device
-                    .as_str()
-                    .strip_prefix("cuda:")
-                    .is_some_and(|index| index.parse::<u32>().is_ok()) =>
-            {
-                "llama_cpp.cuda"
-            }
-            InferenceDeviceClass::Metal if device.as_str() == "mps" => "llama_cpp.metal",
-            _ => return Err(invalid("unsupported or ambiguous selected device")),
+        let runtime = match decision.selected_device_class {
+            InferenceDeviceClass::Cpu if device.as_str() == "cpu" => "candle.cpu",
+            _ => return Err(invalid("only a concrete CPU device is supported")),
         };
         let nested = &decision.device_decision;
-        if decision.selected_backend_id.as_str() != "llama_cpp"
-            || decision.selected_runtime_variant_id.as_str() != expected_runtime
+        if decision.selected_backend_id.as_str() != "candle"
+            || decision.selected_runtime_variant_id.as_str() != runtime
+            || nested.runtime_variant_id != decision.selected_runtime_variant_id
+            || nested.selected_device_class != decision.selected_device_class
+            || nested.selected_device_id != decision.selected_device_id
         {
-            return Err(invalid(
-                "scheduler embedding selection must use a matching llama_cpp runtime",
-            ));
+            return Err(invalid("scheduler runtime/device decisions disagree"));
         }
         if let InferenceDevicePolicy::Explicit {
             device_class,
@@ -237,43 +314,80 @@ impl<'a> SelectedEmbeddingLoad<'a> {
                 ));
             }
         }
-        Ok(Self { target, device })
+        Ok(Self {
+            package,
+            target,
+            device,
+        })
     }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::revisions_compatible;
-
-    #[test]
-    fn allows_missing_package_revision_when_target_observes_one() {
-        assert!(revisions_compatible(None, Some("main")));
-        assert!(!revisions_compatible(Some("main"), Some("other")));
-    }
+mod identity_tests {
+    use super::*;
 
     #[test]
     fn artifact_paths_are_compatible_when_intent_omits_the_legacy_field() {
-        assert!(super::artifact_paths_compatible(Some("image/model"), None));
-        assert!(!super::artifact_paths_compatible(
-            Some("image/a"),
-            Some("image/b")
+        assert!(artifact_paths_compatible(Some("embedding/model"), None));
+        assert!(!artifact_paths_compatible(
+            Some("embedding/a"),
+            Some("embedding/b")
         ));
     }
 
     #[test]
     fn supplied_artifact_paths_must_agree_without_a_target_path() {
-        let request = super::PumasModelRef {
+        let request = PumasModelRef {
             model_id: "embedding/model".to_string(),
             revision: None,
             selected_artifact_id: None,
             selected_artifact_path: Some("embedding/a".to_string()),
             migration_diagnostics: Vec::new(),
         };
-        let package = super::PumasModelRef {
+        let package = PumasModelRef {
             selected_artifact_path: Some("embedding/b".to_string()),
             ..request.clone()
         };
 
-        assert!(!super::artifact_paths_agree(&[&request, &package]));
+        assert!(!artifact_paths_agree(&[&request, &package]));
+    }
+}
+
+#[cfg(all(test, feature = "backend-candle"))]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn optional_request_revisions_preserve_required_producer_evidence() {
+        for (requested, scheduled, package_revision, target_revision, valid) in [
+            (None, None, None, None, true),
+            (None, None, None, Some("a"), true),
+            (None, None, Some("a"), Some("a"), true),
+            (Some("a"), Some("a"), Some("a"), Some("a"), true),
+            (None, Some("a"), Some("a"), Some("a"), true),
+            (Some("a"), None, Some("a"), Some("a"), true),
+            (Some("a"), Some("a"), None, Some("a"), false),
+            (Some("a"), Some("a"), Some("a"), None, false),
+            (Some("a"), Some("a"), Some("b"), Some("a"), false),
+            (Some("a"), Some("a"), Some("a"), Some("b"), false),
+            (Some("a"), Some("b"), Some("a"), Some("a"), false),
+            (None, Some("a"), None, Some("a"), false),
+            (None, None, Some("a"), None, false),
+            (None, None, Some("a"), Some("b"), false),
+        ] {
+            let (_directory, mut request, mut target, mut decision) = fixture(8);
+            request.model_ref.as_mut().unwrap().revision = requested.map(str::to_owned);
+            decision.selected_model_ref.as_mut().unwrap().revision = scheduled.map(str::to_owned);
+            request
+                .resolved_model_package_facts
+                .as_mut()
+                .unwrap()
+                .model_ref
+                .revision = package_revision.map(str::to_owned);
+            target.model_ref.revision = target_revision.map(str::to_owned);
+            let result = SelectedEmbeddingLoad::validate(&request, &target, &decision).await;
+            assert_eq!(result.is_ok(), valid,
+                "request={requested:?}, scheduler={scheduled:?}, package={package_revision:?}, target={target_revision:?}");
+        }
     }
 }

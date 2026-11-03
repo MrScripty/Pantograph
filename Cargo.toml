@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+    "crates/pantograph-app-config",
     "crates/inference",
     "crates/node-engine",
     "crates/pantograph-diagnostics-ledger",
@@ -26,6 +27,7 @@ members = [
     "src-tauri",
 ]
 default-members = [
+    "crates/pantograph-app-config",
     "crates/inference",
     "crates/node-engine",
     "crates/pantograph-diagnostics-ledger",
@@ -108,4 +110,4 @@ parking_lot = "0.12"
 rusqlite = { version = "0.32.1", features = ["bundled"] }
 
 # Model management
-pumas-library = { git = "https://github.com/MrScripty/Pumas-Library.git", rev = "29242fce4ec9043becaeb061587f364ecc4e7177" }
+pumas-library = { git = "https://github.com/MrScripty/Pumas-Library.git", rev = "aa1d79ae2d53f0acb088bc85223ecc2ff46af12b" }

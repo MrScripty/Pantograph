@@ -1,0 +1,7 @@
+# Runtime-host standard borrowed accessors
+
+Fresh PR #32 Clippy job 111207010086 reports seven should_implement_trait errors in runtime-host-contracts. Move exactly those borrowed accessors into AsRef implementations, preserving the seven exported wrapper/raw pairs, validation, constructors, into_inner and raw reference lifetimes. Retain wrapper must_use; the redundant inherent accessor annotation disappears with the method migration.
+
+The source inventory covers runtime-host-contracts, embedded-runtime and workflow-service callers. No existing qualified accessor/function-pointer or no_implicit_prelude callers were found. Seven compile tests cover method syntax, qualified syntax, a typed function pointer and fully qualified trait syntax. Existing contract behavior tests remain, and hosted CI adds the complete crate suite plus the targeted trait lint. PR #19 already established with a Rust 1.92 probe that adding the trait while retaining the inherent method does not satisfy this lint.
+
+The public compatibility note records the explicit trait import needed for no_implicit_prelude consumers. This publish=false crate has no version bump. Formatting and staged whitespace are checked locally; root source review accepted frozen tree a8fc84c89cf8c97198ac2e2e4fb0ee437782a228 after inspecting all seven files; fresh hosted execution remains pending. No local workspace Rust qualification is claimed.

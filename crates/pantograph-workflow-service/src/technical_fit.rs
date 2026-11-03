@@ -1360,14 +1360,6 @@ mod tests {
         }
     }
 
-    fn ready_candle_runtime() -> WorkflowRuntimeCapability {
-        let mut runtime = unavailable_candle_runtime();
-        runtime.configured = true;
-        runtime.readiness_state = Some(WorkflowRuntimeReadinessState::Ready);
-        runtime.unavailable_reason = None;
-        runtime
-    }
-
     fn ready_llama_runtime() -> WorkflowRuntimeCapability {
         WorkflowRuntimeCapability {
             runtime_id: "llama_cpp".to_string(),
@@ -1648,9 +1640,9 @@ mod tests {
 
         let assessment = workflow_runtime_preflight_from_decision(
             &decision,
-            &[],
+            &["candle".to_string()],
             &["llm/gen-verse/trado-8b-instruct".to_string()],
-            &[ready_candle_runtime()],
+            &[],
         );
 
         assert_eq!(assessment.runtime_warnings.len(), 1);

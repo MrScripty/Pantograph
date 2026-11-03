@@ -1,8 +1,11 @@
+use crate::runtime_dispatch_completion_timing::EmbeddedCompletionTimingOptIn;
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use node_engine::ExecutorExtensions;
-use pantograph_runtime_host_contracts::{ReservationLifecyclePort, RuntimeHostExecutionPort};
+use pantograph_runtime_host_contracts::{
+    ReservationLifecyclePort, RuntimeHostBatchExecutionPort, RuntimeHostExecutionPort,
+};
 use pantograph_runtime_registry::SharedRuntimeRegistry;
 use pantograph_workflow_service::workflow::{
     WorkflowRuntimeDispatchCandidateProvider, WorkflowRuntimeDispatchSourceRefresher,
@@ -25,6 +28,7 @@ use crate::runtime_dispatch_source_snapshot::{
 use crate::runtime_host_execution_port::EmbeddedRuntimeHostExecutionPort;
 use crate::runtime_host_load_target::RuntimeHostPumasLoadTargetResolver;
 use crate::runtime_host_media_artifact_sink::WorkflowServiceRuntimeHostMediaArtifactSink;
+use crate::runtime_host_observation::ObservedRuntimeHostExecutionPort;
 use crate::runtime_host_package_facts::RuntimeHostPumasPackageFactsResolver;
 use crate::workflow_scheduler_diagnostics::EmbeddedWorkflowSchedulerDiagnosticsProvider;
 use crate::SharedExtensions;
@@ -33,6 +37,33 @@ use crate::{
     EmbeddedDependencyReadinessSnapshotProducer, EmbeddedDependencyReadinessSnapshotProducerConfig,
     EmbeddedDependencyReadinessSnapshotProducerHandle, EmbeddedRuntimeError, SharedWorkflowService,
 };
+
+fn observe_runtime_host_port(
+    port: Arc<dyn RuntimeHostExecutionPort>,
+    service: &WorkflowService,
+) -> Arc<dyn RuntimeHostExecutionPort> {
+    match service.runtime_host_observation_recorder() {
+        Some(recorder) => Arc::new(ObservedRuntimeHostExecutionPort::new(port, recorder)),
+        None => {
+            log::warn!(
+                "runtime-host observations unavailable: workflow service has no diagnostics ledger"
+            );
+            port
+        }
+    }
+}
+
+fn validate_hosted_scheduler_modes(
+    service: &WorkflowService,
+    completion_timing: Option<&EmbeddedCompletionTimingOptIn>,
+) -> Result<(), WorkflowServiceError> {
+    if service.is_serial_ready_cpu() && completion_timing.is_some() {
+        return Err(WorkflowServiceError::InvalidRequest(
+            "serial Ready CPU mode cannot be combined with completion timing".into(),
+        ));
+    }
+    Ok(())
+}
 
 /// Builds embedded-runtime workflow services before sharing them across hosts.
 ///
@@ -58,6 +89,8 @@ pub(crate) struct EmbeddedHostedWorkflowServiceFactoryInput<C> {
     pub(crate) gateway: Arc<inference::InferenceGateway>,
     pub(crate) pumas_selector_access: Arc<PumasSelectorAccess>,
     pub(crate) max_dispatch_source_snapshot_age_ms: u64,
+    pub(crate) completion_timing: Option<EmbeddedCompletionTimingOptIn>,
+    pub(crate) dependency_inventory_app_data_dir: Option<PathBuf>,
 }
 
 impl<C> EmbeddedHostedWorkflowServiceFactoryInput<C> {
@@ -77,6 +110,8 @@ impl<C> EmbeddedHostedWorkflowServiceFactoryInput<C> {
             gateway,
             pumas_selector_access,
             max_dispatch_source_snapshot_age_ms,
+            completion_timing: None,
+            dependency_inventory_app_data_dir: None,
         }
     }
 
@@ -121,6 +156,8 @@ pub(crate) struct EmbeddedHostedWorkflowServiceCompositionOutput {
     pub(crate) workflow_service: SharedWorkflowService,
     pub(crate) dependency_readiness_snapshot_producer:
         EmbeddedDependencyReadinessSnapshotProducerHandle,
+    #[cfg(test)]
+    dependency_readiness: WorkflowDependencyReadinessComponents,
 }
 
 impl EmbeddedHostedWorkflowServiceCompositionOutput {
@@ -141,6 +178,22 @@ pub enum EmbeddedHostedStartupPumasSelectorSource {
     RpcEndpoint(String),
 }
 
+/// Owned inputs for hosted startup composition, without changing startup defaults.
+///
+/// Rust callers construct these named fields and pass the config to
+/// `EmbeddedHostedStartupCompositionInput::new`.
+pub struct EmbeddedHostedStartupConfig<C> {
+    pub runtime_registry: SharedRuntimeRegistry,
+    pub runtime_registry_controller: Arc<C>,
+    pub gateway: Arc<inference::InferenceGateway>,
+    pub pumas_selector_source: Option<EmbeddedHostedStartupPumasSelectorSource>,
+    pub project_root: PathBuf,
+    pub kv_cache_dir: PathBuf,
+    pub dependency_readiness_runtime_handle: tokio::runtime::Handle,
+    pub max_loaded_sessions: Option<usize>,
+    pub max_dispatch_source_snapshot_age_ms: u64,
+}
+
 pub struct EmbeddedHostedStartupCompositionInput<C> {
     workflow_service: WorkflowService,
     max_loaded_sessions: Option<usize>,
@@ -153,21 +206,24 @@ pub struct EmbeddedHostedStartupCompositionInput<C> {
     dependency_readiness_runtime_handle: tokio::runtime::Handle,
     dependency_readiness_producer_config: EmbeddedDependencyReadinessSnapshotProducerConfig,
     max_dispatch_source_snapshot_age_ms: u64,
+    completion_timing: Option<EmbeddedCompletionTimingOptIn>,
+    dependency_inventory_app_data_dir: Option<PathBuf>,
 }
 
 impl<C> EmbeddedHostedStartupCompositionInput<C> {
     #[must_use]
-    pub fn new(
-        runtime_registry: SharedRuntimeRegistry,
-        runtime_registry_controller: Arc<C>,
-        gateway: Arc<inference::InferenceGateway>,
-        pumas_selector_source: Option<EmbeddedHostedStartupPumasSelectorSource>,
-        project_root: PathBuf,
-        kv_cache_dir: PathBuf,
-        dependency_readiness_runtime_handle: tokio::runtime::Handle,
-        max_loaded_sessions: Option<usize>,
-        max_dispatch_source_snapshot_age_ms: u64,
-    ) -> Self {
+    pub fn new(config: EmbeddedHostedStartupConfig<C>) -> Self {
+        let EmbeddedHostedStartupConfig {
+            runtime_registry,
+            runtime_registry_controller,
+            gateway,
+            pumas_selector_source,
+            project_root,
+            kv_cache_dir,
+            dependency_readiness_runtime_handle,
+            max_loaded_sessions,
+            max_dispatch_source_snapshot_age_ms,
+        } = config;
         Self {
             workflow_service: WorkflowService::new(),
             max_loaded_sessions,
@@ -181,12 +237,31 @@ impl<C> EmbeddedHostedStartupCompositionInput<C> {
             dependency_readiness_producer_config:
                 EmbeddedDependencyReadinessSnapshotProducerConfig::default(),
             max_dispatch_source_snapshot_age_ms,
+            completion_timing: None,
+            dependency_inventory_app_data_dir: None,
         }
     }
 
     #[must_use]
     pub fn with_workflow_service(mut self, workflow_service: WorkflowService) -> Self {
         self.workflow_service = workflow_service;
+        self
+    }
+
+    /// Supply the hosted owner's real managed-runtime directory. This enables
+    /// read-only gateway/runtime/device inventory; it performs no installation.
+    #[must_use]
+    #[cfg(feature = "host-dependency-inventory")]
+    pub fn with_dependency_inventory_app_data_dir(mut self, app_data_dir: PathBuf) -> Self {
+        self.dependency_inventory_app_data_dir = Some(app_data_dir);
+        self
+    }
+
+    /// Enable completion ranking using a trusted bounded native owner producer.
+    /// Session JSON cannot enable this or submit timing values. Default is absent.
+    #[must_use]
+    pub fn with_completion_timing(mut self, opt_in: EmbeddedCompletionTimingOptIn) -> Self {
+        self.completion_timing = Some(opt_in);
         self
     }
 
@@ -205,6 +280,8 @@ pub struct EmbeddedHostedStartupCompositionOutput {
     pub shared_extensions: SharedExtensions,
     pub dependency_activity: Arc<DependencyActivityHub>,
     pub dependency_readiness_snapshot_producer: EmbeddedDependencyReadinessSnapshotProducerHandle,
+    #[cfg(test)]
+    dependency_readiness: WorkflowDependencyReadinessComponents,
 }
 
 #[derive(Clone)]
@@ -212,6 +289,7 @@ pub(crate) struct EmbeddedWorkflowServiceDispatchDependencies {
     runtime_dispatch_candidate_provider: Arc<dyn WorkflowRuntimeDispatchCandidateProvider>,
     runtime_dispatch_source_refresher: Arc<dyn WorkflowRuntimeDispatchSourceRefresher>,
     runtime_host_execution_port: Arc<dyn RuntimeHostExecutionPort>,
+    runtime_host_batch_execution_port: Option<Arc<dyn RuntimeHostBatchExecutionPort>>,
     reservation_lifecycle_port: Arc<dyn ReservationLifecyclePort>,
 }
 
@@ -227,17 +305,20 @@ impl EmbeddedWorkflowServiceDispatchDependencies {
             runtime_dispatch_candidate_provider,
             runtime_dispatch_source_refresher,
             runtime_host_execution_port,
+            runtime_host_batch_execution_port: None,
             reservation_lifecycle_port,
         }
     }
 
     #[must_use]
+    #[allow(clippy::too_many_arguments)] // Explicit native composition dependencies.
     pub(crate) fn resource_backed(
         pumas_source: PumasDispatchPackageFactsSource,
         runtime_capability_source: RuntimeDispatchCapabilityFactsSource,
         load_target_source: RuntimeDispatchLoadTargetFactsSource,
         resource_facts_source: RuntimeDispatchResourceFactsSource,
         max_snapshot_age_ms: u64,
+        completion_timing: Option<EmbeddedCompletionTimingOptIn>,
         runtime_host_execution_port: Arc<dyn RuntimeHostExecutionPort>,
         reservation_lifecycle_port: Arc<dyn ReservationLifecyclePort>,
     ) -> Self {
@@ -250,7 +331,8 @@ impl EmbeddedWorkflowServiceDispatchDependencies {
         let provider = EmbeddedRuntimeDispatchCandidateProvider::with_source_snapshot_store(
             snapshot_store.clone(),
         )
-        .with_resource_facts_source(resource_facts_source);
+        .with_resource_facts_source(resource_facts_source)
+        .with_completion_timing(completion_timing);
         let refresher = EmbeddedRuntimeDispatchSourceFactRefresher::new(snapshot_store);
         Self::new(
             Arc::new(provider),
@@ -261,10 +343,29 @@ impl EmbeddedWorkflowServiceDispatchDependencies {
     }
 
     #[must_use]
+    fn with_runtime_host_batch_execution_port(
+        mut self,
+        port: Arc<dyn RuntimeHostBatchExecutionPort>,
+    ) -> Self {
+        self.runtime_host_batch_execution_port = Some(port);
+        self
+    }
+
+    #[must_use]
     fn configure_workflow_service(self, service: WorkflowService) -> WorkflowService {
-        service
+        let service = service
             .with_runtime_dispatch_source_refresher(self.runtime_dispatch_source_refresher)
-            .with_runtime_dispatch_candidate_provider(self.runtime_dispatch_candidate_provider)
+            .with_runtime_dispatch_candidate_provider(self.runtime_dispatch_candidate_provider);
+        if service.is_serial_ready_cpu() {
+            // Dedicated construction already owns execution, drain and cleanup.
+            // Missing timing evidence changes order, never the execution port.
+            return service;
+        }
+        let service = match self.runtime_host_batch_execution_port {
+            Some(port) => service.with_runtime_host_batch_execution_port(port),
+            None => service,
+        };
+        service
             .with_runtime_host_execution_port(self.runtime_host_execution_port)
             .with_reservation_lifecycle_port(self.reservation_lifecycle_port)
     }
@@ -314,43 +415,61 @@ impl EmbeddedWorkflowServiceComposition {
     where
         C: HostRuntimeRegistryController + Send + Sync + 'static,
     {
-        match input.pumas_selector_access.as_ref() {
-            PumasSelectorAccess::Owner(_) | PumasSelectorAccess::Rpc(_) => {}
-            PumasSelectorAccess::LocalClient(_) | PumasSelectorAccess::ReadOnly(_) => {
+        validate_hosted_scheduler_modes(&input.workflow_service, input.completion_timing.as_ref())?;
+        let pumas_access = match input.pumas_selector_access.as_ref() {
+            PumasSelectorAccess::Owner(_)
+            | PumasSelectorAccess::LocalClient(_)
+            | PumasSelectorAccess::Rpc(_) => input.pumas_selector_access.clone(),
+            PumasSelectorAccess::ReadOnly(_) => {
                 return Err(WorkflowServiceError::InvalidRequest(format!(
-                    "hosted resource-backed workflow-service construction requires owner or RPC Pumas selector access, got {} access",
+                    "hosted resource-backed workflow-service construction requires Pumas owner or authenticated local-client selector access or RPC library access, got {} access",
                     input.pumas_selector_access.role_name()
                 )));
             }
-        }
+        };
+        input
+            .runtime_registry
+            .bind_host_ram_capacity_source(Arc::new(
+                inference::resource_monitor::host_ram::NativeHostRamCapacitySource,
+            ));
+        crate::runtime_registry::register_scheduler_loadable_candle(
+            &input.runtime_registry,
+            &input.gateway,
+        );
         let artifact_writer = input.workflow_service.artifact_writer()?;
-        let runtime_host_execution_port =
-            Arc::new(EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
+        let runtime_host_execution_port = Arc::new(
+            EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
                 Arc::new(RuntimeHostPumasLoadTargetResolver::new(
-                    input.pumas_selector_access.clone(),
+                    pumas_access.clone(),
                 )),
-                Arc::new(RuntimeHostPumasPackageFactsResolver::new(
-                    input.pumas_selector_access.clone(),
-                )),
+                Arc::new(RuntimeHostPumasPackageFactsResolver::new(pumas_access)),
                 Arc::new(WorkflowServiceRuntimeHostMediaArtifactSink::new(
-                    artifact_writer,
+                    artifact_writer.clone(),
                 )),
                 input.gateway.clone(),
-            ));
+            )
+            .with_owned_audio_store(crate::OwnedAudioInputStore::new(artifact_writer)),
+        );
         let reservation_lifecycle_port = Arc::new(EmbeddedReservationLifecyclePort::new(
             input.runtime_registry.clone(),
             input.runtime_registry_controller,
         ));
+        let runtime_host_batch_execution_port = runtime_host_execution_port.clone();
+        let runtime_host_execution_port =
+            observe_runtime_host_port(runtime_host_execution_port, &input.workflow_service);
         let pumas_selector_access = input.pumas_selector_access;
         let dispatch_dependencies = EmbeddedWorkflowServiceDispatchDependencies::resource_backed(
             PumasDispatchPackageFactsSource::new(Some(pumas_selector_access.clone())),
-            RuntimeDispatchCapabilityFactsSource::new(input.runtime_registry.clone()),
+            RuntimeDispatchCapabilityFactsSource::new(input.runtime_registry.clone())
+                .with_gateway(input.gateway.clone()),
             RuntimeDispatchLoadTargetFactsSource::new(Some(pumas_selector_access.clone())),
             RuntimeDispatchResourceFactsSource::new(input.runtime_registry.clone()),
             input.max_dispatch_source_snapshot_age_ms,
+            input.completion_timing,
             runtime_host_execution_port,
             reservation_lifecycle_port,
-        );
+        )
+        .with_runtime_host_batch_execution_port(runtime_host_batch_execution_port);
         let scheduler_diagnostics_provider =
             Arc::new(EmbeddedWorkflowSchedulerDiagnosticsProvider::new(
                 input.gateway.clone(),
@@ -359,7 +478,8 @@ impl EmbeddedWorkflowServiceComposition {
         let inference_interface_facts_provider =
             Arc::new(EmbeddedInferenceInterfaceFactsProvider::new(
                 PumasDispatchPackageFactsSource::new(Some(pumas_selector_access)),
-                RuntimeDispatchCapabilityFactsSource::new(input.runtime_registry),
+                RuntimeDispatchCapabilityFactsSource::new(input.runtime_registry)
+                    .with_gateway(input.gateway.clone()),
             ));
         Self::new()
             .with_runtime_dispatch_dependencies(dispatch_dependencies)
@@ -377,20 +497,38 @@ impl EmbeddedWorkflowServiceComposition {
     where
         C: HostRuntimeRegistryController + Send + Sync + 'static,
     {
-        match input.factory_input.pumas_selector_access.as_ref() {
-            PumasSelectorAccess::Owner(_) | PumasSelectorAccess::Rpc(_) => {}
-            PumasSelectorAccess::LocalClient(_) | PumasSelectorAccess::ReadOnly(_) => {
+        validate_hosted_scheduler_modes(
+            &input.factory_input.workflow_service,
+            input.factory_input.completion_timing.as_ref(),
+        )
+        .map_err(|error| EmbeddedRuntimeError::Initialization {
+            message: error.to_string(),
+        })?;
+        let pumas_access = match input.factory_input.pumas_selector_access.as_ref() {
+            PumasSelectorAccess::Owner(_)
+            | PumasSelectorAccess::LocalClient(_)
+            | PumasSelectorAccess::Rpc(_) => input.factory_input.pumas_selector_access.clone(),
+            PumasSelectorAccess::ReadOnly(_) => {
                 return Err(EmbeddedRuntimeError::Initialization {
                     message: format!(
-                        "hosted resource-backed workflow-service composition requires owner or RPC Pumas selector access, got {} access",
+                        "hosted resource-backed workflow-service composition requires Pumas owner or authenticated local-client selector access or RPC library access, got {} access",
                         input.factory_input.pumas_selector_access.role_name()
                     ),
                 });
             }
-        }
+        };
         let dependency_readiness_runtime_handle = input.dependency_readiness_runtime_handle;
         let dependency_readiness_producer_config = input.dependency_readiness_producer_config;
         let factory_input = input.factory_input;
+        crate::runtime_registry::register_scheduler_loadable_candle(
+            &factory_input.runtime_registry,
+            &factory_input.gateway,
+        );
+        factory_input
+            .runtime_registry
+            .bind_host_ram_capacity_source(Arc::new(
+                inference::resource_monitor::host_ram::NativeHostRamCapacitySource,
+            ));
         let artifact_writer =
             factory_input
                 .workflow_service
@@ -398,42 +536,61 @@ impl EmbeddedWorkflowServiceComposition {
                 .map_err(|error| EmbeddedRuntimeError::Initialization {
                     message: error.to_string(),
                 })?;
-        let runtime_host_execution_port =
-            Arc::new(EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
+        let runtime_host_execution_port = Arc::new(
+            EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
                 Arc::new(RuntimeHostPumasLoadTargetResolver::new(
-                    factory_input.pumas_selector_access.clone(),
+                    pumas_access.clone(),
                 )),
-                Arc::new(RuntimeHostPumasPackageFactsResolver::new(
-                    factory_input.pumas_selector_access.clone(),
-                )),
+                Arc::new(RuntimeHostPumasPackageFactsResolver::new(pumas_access)),
                 Arc::new(WorkflowServiceRuntimeHostMediaArtifactSink::new(
-                    artifact_writer,
+                    artifact_writer.clone(),
                 )),
                 factory_input.gateway.clone(),
-            ));
+            )
+            .with_owned_audio_store(crate::OwnedAudioInputStore::new(artifact_writer)),
+        );
         let reservation_lifecycle_port = Arc::new(EmbeddedReservationLifecyclePort::new(
             factory_input.runtime_registry.clone(),
             factory_input.runtime_registry_controller,
         ));
+        let runtime_host_batch_execution_port = runtime_host_execution_port.clone();
+        let runtime_host_execution_port =
+            observe_runtime_host_port(runtime_host_execution_port, &factory_input.workflow_service);
         let pumas_selector_access = factory_input.pumas_selector_access;
         let dispatch_dependencies = EmbeddedWorkflowServiceDispatchDependencies::resource_backed(
             PumasDispatchPackageFactsSource::new(Some(pumas_selector_access.clone())),
-            RuntimeDispatchCapabilityFactsSource::new(factory_input.runtime_registry.clone()),
+            RuntimeDispatchCapabilityFactsSource::new(factory_input.runtime_registry.clone())
+                .with_gateway(factory_input.gateway.clone()),
             RuntimeDispatchLoadTargetFactsSource::new(Some(pumas_selector_access.clone())),
             RuntimeDispatchResourceFactsSource::new(factory_input.runtime_registry.clone()),
             factory_input.max_dispatch_source_snapshot_age_ms,
+            factory_input.completion_timing,
             runtime_host_execution_port,
             reservation_lifecycle_port,
-        );
+        )
+        .with_runtime_host_batch_execution_port(runtime_host_batch_execution_port);
         let scheduler_diagnostics_provider =
             Arc::new(EmbeddedWorkflowSchedulerDiagnosticsProvider::new(
-                factory_input.gateway,
+                factory_input.gateway.clone(),
                 factory_input.runtime_registry.clone(),
             ));
+        #[cfg(feature = "host-dependency-inventory")]
+        let dependency_inventory = factory_input
+            .dependency_inventory_app_data_dir
+            .as_ref()
+            .map(|dir| {
+                Arc::new(
+                    crate::dependency_inventory::DependencyInventoryService::from_app_data_dir(
+                        dir.clone(),
+                        factory_input.gateway.clone(),
+                    ),
+                )
+            });
         let inference_interface_facts_provider =
             Arc::new(EmbeddedInferenceInterfaceFactsProvider::new(
                 PumasDispatchPackageFactsSource::new(Some(pumas_selector_access)),
-                RuntimeDispatchCapabilityFactsSource::new(factory_input.runtime_registry),
+                RuntimeDispatchCapabilityFactsSource::new(factory_input.runtime_registry)
+                    .with_gateway(factory_input.gateway),
             ));
         let composition = Self::new()
             .with_runtime_dispatch_dependencies(dispatch_dependencies)
@@ -448,17 +605,24 @@ impl EmbeddedWorkflowServiceComposition {
             .map_err(|error| EmbeddedRuntimeError::Initialization {
                 message: error.to_string(),
             })?;
+        let producer = EmbeddedDependencyReadinessSnapshotProducer::new(
+            dependency_readiness.snapshot_provider(),
+            dependency_readiness.work_queue(),
+            dependency_readiness.requirements_registry(),
+        )
+        .with_config(dependency_readiness_producer_config);
+        #[cfg(feature = "host-dependency-inventory")]
+        let producer = match dependency_inventory {
+            Some(inventory) => producer.with_dependency_inventory(inventory),
+            None => producer,
+        };
         let dependency_readiness_snapshot_producer =
-            EmbeddedDependencyReadinessSnapshotProducer::new(
-                dependency_readiness.snapshot_provider(),
-                dependency_readiness.work_queue(),
-                dependency_readiness.requirements_registry(),
-            )
-            .with_config(dependency_readiness_producer_config)
-            .spawn(dependency_readiness_runtime_handle)?;
+            producer.spawn(dependency_readiness_runtime_handle)?;
         Ok(EmbeddedHostedWorkflowServiceCompositionOutput {
             workflow_service,
             dependency_readiness_snapshot_producer,
+            #[cfg(test)]
+            dependency_readiness,
         })
     }
 
@@ -468,6 +632,10 @@ impl EmbeddedWorkflowServiceComposition {
     where
         C: HostRuntimeRegistryController + Send + Sync + 'static,
     {
+        validate_hosted_scheduler_modes(&input.workflow_service, input.completion_timing.as_ref())
+            .map_err(|error| EmbeddedRuntimeError::Initialization {
+                message: error.to_string(),
+            })?;
         let shared_extensions: SharedExtensions =
             Arc::new(tokio::sync::RwLock::new(ExecutorExtensions::new()));
         let pumas_selector_access = Self::initialize_hosted_startup_extensions(
@@ -486,7 +654,7 @@ impl EmbeddedWorkflowServiceComposition {
             guard.set(node_engine::extension_keys::KV_CACHE_STORE, kv_store);
         }
 
-        let factory_input = EmbeddedHostedWorkflowServiceFactoryInput::new(
+        let mut factory_input = EmbeddedHostedWorkflowServiceFactoryInput::new(
             input.runtime_registry,
             input.runtime_registry_controller,
             input.gateway,
@@ -495,6 +663,8 @@ impl EmbeddedWorkflowServiceComposition {
             input.max_dispatch_source_snapshot_age_ms,
         )
         .with_workflow_service(input.workflow_service);
+        factory_input.completion_timing = input.completion_timing;
+        factory_input.dependency_inventory_app_data_dir = input.dependency_inventory_app_data_dir;
         let composition_input = EmbeddedHostedWorkflowServiceCompositionInput::new(
             factory_input,
             input.dependency_readiness_runtime_handle,
@@ -503,6 +673,8 @@ impl EmbeddedWorkflowServiceComposition {
         let output = Self::resource_backed_hosted_bundle(composition_input)?;
 
         Ok(EmbeddedHostedStartupCompositionOutput {
+            #[cfg(test)]
+            dependency_readiness: output.dependency_readiness,
             workflow_service: output.workflow_service,
             shared_extensions,
             dependency_activity,
@@ -558,11 +730,13 @@ impl EmbeddedWorkflowServiceComposition {
         selector_access: &PumasSelectorAccess,
     ) -> Result<(), EmbeddedRuntimeError> {
         match selector_access {
-            PumasSelectorAccess::Owner(_) | PumasSelectorAccess::Rpc(_) => Ok(()),
-            PumasSelectorAccess::LocalClient(_) | PumasSelectorAccess::ReadOnly(_) => {
+            PumasSelectorAccess::Owner(_)
+            | PumasSelectorAccess::LocalClient(_)
+            | PumasSelectorAccess::Rpc(_) => Ok(()),
+            PumasSelectorAccess::ReadOnly(_) => {
                 Err(EmbeddedRuntimeError::Initialization {
                     message: format!(
-                        "hosted startup composition requires owner or RPC Pumas selector access, got {} access",
+                        "hosted startup composition requires Pumas owner or authenticated local-client selector access or RPC library access, got {} access",
                         selector_access.role_name()
                     ),
                 })
@@ -601,6 +775,13 @@ impl EmbeddedWorkflowServiceComposition {
             None => service,
         };
         service.set_loaded_runtime_capacity_limit(max_loaded_sessions)?;
+        let configuration = service.scheduler_configuration();
+        log::info!(target: "workflow::configuration",
+            "constructor execution_owner={:?} serial_completion_advisory={} serial_fair_opportunities={} serial_residency={} serial_key_reuse={} serial_minimum_samples={:?} serial_maximum_sample_age={:?} configuration_only=true",
+            configuration.execution_owner(), configuration.serial_completion_advisory(),
+            configuration.serial_fair_opportunities(), configuration.serial_residency(),
+            configuration.serial_key_reuse(), configuration.serial_minimum_samples(),
+            configuration.serial_maximum_sample_age());
         Ok(Arc::new(service))
     }
 }
@@ -616,14 +797,19 @@ mod tests {
     };
     use pantograph_runtime_host_contracts::{
         ReservationLifecycleApplication, ReservationLifecycleEvent, ReservationLifecyclePortError,
+        RuntimeHostBatchExecutionRequest, RuntimeHostBatchExecutionResponse,
         RuntimeHostExecutionCancellationHandle, RuntimeHostExecutionPortError,
         RuntimeHostExecutionRequest, RuntimeHostExecutionResponse,
+        SerialRuntimeHostBatchExecutionPort, SerialRuntimeHostCpuOwnerEvidence,
     };
     use pantograph_runtime_registry::{
         RuntimeDispatchIdentity, RuntimeRegistration, RuntimeRegistry, RuntimeTransition,
         SharedRuntimeRegistry,
     };
-    use pantograph_scheduler::{SchedulerEstimateHintKind, SchedulerTaskStateRecord};
+    use pantograph_scheduler::{
+        SchedulableTaskIntent, SchedulerEstimateHintKind, SchedulerSerialBoundDispatch,
+        SchedulerSerialDrainedDispatch, SchedulerSerialOwnerSnapshot, SchedulerTaskStateRecord,
+    };
     use pantograph_workflow_service::graph::{GraphEdge, GraphNode, Position, WorkflowGraph};
     use pantograph_workflow_service::workflow::{
         WorkflowGraphSessionExecutableValidationSnapshotPublishRequest,
@@ -634,6 +820,105 @@ mod tests {
         ArtifactPolicy, ArtifactStore, WorkflowGraphCurrentValidationRefreshRequest,
         WorkflowGraphEditSessionCreateRequest,
     };
+
+    // Only declares controlled owner facts. These composition tests must never
+    // start a runtime or infer; real compiled-owner coverage remains below.
+    struct CompositionCapabilityBackend {
+        supports_images: bool,
+    }
+
+    #[async_trait]
+    impl inference::InferenceBackend for CompositionCapabilityBackend {
+        fn name(&self) -> &'static str {
+            "Composition capability fixture"
+        }
+        fn description(&self) -> &'static str {
+            "Controlled descriptor-only owner"
+        }
+        fn capabilities(&self) -> inference::BackendCapabilities {
+            if !self.supports_images {
+                return Default::default();
+            }
+            inference::BackendCapabilities {
+                image_generation: true,
+                device_selection: true,
+                facts: inference::BackendCapabilityFacts {
+                    tasks: vec![inference::BackendTaskCapability::stable(
+                        inference::InferenceTaskId::ImageGeneration,
+                        vec![inference::InferenceModality::Text],
+                        vec![inference::InferenceModality::Image],
+                    )],
+                    model_sources: inference::BackendModelSourceCapabilityFacts {
+                        artifact_kinds: vec![inference::ModelArtifactKind::DiffusersBundle],
+                        backend_hints: vec![inference::BackendHintLabel::Diffusers],
+                        ..Default::default()
+                    },
+                    runtime_variants: vec![inference::RuntimeVariantCapability {
+                        runtime_variant_id: "pytorch.cpu".parse().unwrap(),
+                        device_class: inference::InferenceDeviceClass::Cpu,
+                        available: true,
+                        diagnostics: Vec::new(),
+                    }],
+                    ..Default::default()
+                },
+                ..Default::default()
+            }
+        }
+        async fn start(
+            &mut self,
+            _: &inference::BackendConfig,
+            _: Arc<dyn inference::ProcessSpawner>,
+        ) -> Result<inference::backend::BackendStartOutcome, inference::BackendError> {
+            panic!("descriptor validation must not start a runtime")
+        }
+        async fn stop(&mut self) -> Result<(), inference::BackendError> {
+            Ok(())
+        }
+        fn is_ready(&self) -> bool {
+            false
+        }
+        async fn health_check(&self) -> bool {
+            false
+        }
+        fn base_url(&self) -> Option<String> {
+            None
+        }
+        async fn chat_completion_stream(
+            &self,
+            _: String,
+        ) -> Result<
+            std::pin::Pin<
+                Box<
+                    dyn futures_util::Stream<
+                            Item = Result<inference::ChatChunk, inference::BackendError>,
+                        > + Send,
+                >,
+            >,
+            inference::BackendError,
+        > {
+            panic!("descriptor validation must not infer")
+        }
+        async fn embeddings(
+            &self,
+            _: Vec<String>,
+            _: &str,
+        ) -> Result<Vec<inference::EmbeddingResult>, inference::BackendError> {
+            panic!("descriptor validation must not infer")
+        }
+        async fn rerank(
+            &self,
+            _: inference::RerankRequest,
+        ) -> Result<inference::RerankResponse, inference::BackendError> {
+            panic!("descriptor validation must not infer")
+        }
+    }
+
+    fn composition_capability_gateway(supports_images: bool) -> Arc<inference::InferenceGateway> {
+        Arc::new(inference::InferenceGateway::with_backend(
+            Box::new(CompositionCapabilityBackend { supports_images }),
+            "PyTorch",
+        ))
+    }
 
     #[derive(Debug)]
     struct RejectingRuntimeHostPort;
@@ -663,6 +948,88 @@ mod tests {
             Err(RuntimeHostExecutionPortError::ExecutionFailed {
                 message: "test runtime host port is not executable".to_string(),
             })
+        }
+    }
+
+    #[async_trait]
+    impl RuntimeHostBatchExecutionPort for RejectingRuntimeHostPort {
+        async fn execute_runtime_host_batch_request(
+            &self,
+            _request: RuntimeHostBatchExecutionRequest,
+            _cancellation: RuntimeHostExecutionCancellationHandle,
+        ) -> Result<RuntimeHostBatchExecutionResponse, RuntimeHostExecutionPortError> {
+            panic!("composition tests must not execute a batch")
+        }
+    }
+
+    #[async_trait]
+    impl ReservationLifecyclePort for RejectingRuntimeHostPort {
+        async fn apply_reservation_lifecycle(
+            &self,
+            _event: ReservationLifecycleEvent,
+        ) -> Result<ReservationLifecycleApplication, ReservationLifecyclePortError> {
+            panic!("composition tests must not release a reservation")
+        }
+    }
+
+    #[async_trait]
+    impl SerialRuntimeHostBatchExecutionPort for RejectingRuntimeHostPort {
+        fn resident_serial_cpu_owner(
+            &self,
+            _intent: &SchedulableTaskIntent,
+        ) -> Option<SerialRuntimeHostCpuOwnerEvidence> {
+            panic!("composition tests must not query a loaded owner")
+        }
+
+        async fn execute_serial_singleton(
+            &self,
+            _request: RuntimeHostBatchExecutionRequest,
+            _cancellation: RuntimeHostExecutionCancellationHandle,
+            _ownership: SchedulerSerialBoundDispatch,
+        ) -> Result<
+            (
+                RuntimeHostBatchExecutionResponse,
+                SchedulerSerialDrainedDispatch,
+                Option<SerialRuntimeHostCpuOwnerEvidence>,
+            ),
+            RuntimeHostExecutionPortError,
+        > {
+            panic!("composition tests must not execute a serial attempt")
+        }
+
+        async fn apply_serial_cleanup(
+            &self,
+            _event: ReservationLifecycleEvent,
+            _expected_owner: Option<SchedulerSerialOwnerSnapshot>,
+        ) -> Result<ReservationLifecycleApplication, ReservationLifecyclePortError> {
+            panic!("composition tests must not apply serial cleanup")
+        }
+    }
+
+    fn serial_workflow_service() -> WorkflowService {
+        WorkflowService::new_serial_ready_cpu(
+            Arc::new(RejectingRuntimeHostPort),
+            pantograph_workflow_service::workflow::WorkflowSerialReadyConfig::default(),
+        )
+    }
+
+    struct UnqueriedCompletionTimingSource;
+
+    impl crate::EmbeddedCompletionTimingSource for UnqueriedCompletionTimingSource {
+        fn timing_for(
+            &self,
+            _query: &crate::EmbeddedCompletionTimingQuery,
+        ) -> Option<crate::EmbeddedCompletionTimingRecord> {
+            panic!("composition must not query completion timing")
+        }
+    }
+
+    fn completion_timing_opt_in() -> EmbeddedCompletionTimingOptIn {
+        EmbeddedCompletionTimingOptIn {
+            source: Arc::new(UnqueriedCompletionTimingSource),
+            owner_epoch: "composition.test-owner".into(),
+            max_sample_age_ms: 1_000,
+            allow_configured_estimates: false,
         }
     }
 
@@ -729,19 +1096,132 @@ mod tests {
 
     #[test]
     fn builds_with_paired_runtime_dispatch_dependencies() {
+        let execution = Arc::new(RejectingRuntimeHostPort);
+        let batch = Arc::new(RejectingRuntimeHostPort);
+        let cleanup = Arc::new(RejectingReservationLifecyclePort);
         let dependencies = EmbeddedWorkflowServiceDispatchDependencies::new(
             Arc::new(EmbeddedRuntimeDispatchCandidateProvider::new()),
             Arc::new(AcceptingDispatchSourceRefresher),
-            Arc::new(RejectingRuntimeHostPort),
-            Arc::new(RejectingReservationLifecyclePort),
-        );
+            execution.clone(),
+            cleanup.clone(),
+        )
+        .with_runtime_host_batch_execution_port(batch.clone());
 
         let shared = EmbeddedWorkflowServiceComposition::new()
             .with_runtime_dispatch_dependencies(dependencies)
             .into_shared_workflow_service(Some(1))
             .expect("paired dependencies should build workflow service");
 
+        assert!(!shared.is_serial_ready_cpu());
+        assert!(Arc::strong_count(&execution) > 1);
+        assert!(Arc::strong_count(&batch) > 1);
+        assert!(Arc::strong_count(&cleanup) > 1);
         drop(shared);
+        assert_eq!(Arc::strong_count(&execution), 1);
+        assert_eq!(Arc::strong_count(&batch), 1);
+        assert_eq!(Arc::strong_count(&cleanup), 1);
+    }
+
+    #[test]
+    fn hosted_composition_preserves_read_only_constructor_configuration() {
+        use pantograph_workflow_service::workflow::{
+            WorkflowSchedulerExecutionOwner, WorkflowSerialReadyConfig,
+        };
+        let config = WorkflowSerialReadyConfig::new(8, std::time::Duration::from_nanos(123))
+            .unwrap()
+            .with_completion_lookahead()
+            .with_fair_service_opportunities()
+            .with_serial_residency()
+            .unwrap()
+            .with_bounded_grouping()
+            .unwrap();
+        let serial =
+            WorkflowService::new_serial_ready_cpu(Arc::new(RejectingRuntimeHostPort), config);
+        let expected = serial.scheduler_configuration();
+        let shared = EmbeddedWorkflowServiceComposition::new()
+            .into_shared_configured_workflow_service(serial, Some(1))
+            .expect("successful serial composition");
+        assert_eq!(shared.scheduler_configuration(), expected);
+        assert_eq!(
+            shared.scheduler_configuration().execution_owner(),
+            WorkflowSchedulerExecutionOwner::SerialReadyCpu
+        );
+        let ordinary = EmbeddedWorkflowServiceComposition::new()
+            .into_shared_workflow_service(Some(1))
+            .expect("successful ordinary composition");
+        assert_eq!(
+            ordinary.scheduler_configuration(),
+            WorkflowService::new().scheduler_configuration()
+        );
+        assert!(EmbeddedWorkflowServiceComposition::new()
+            .into_shared_configured_workflow_service(WorkflowService::new(), Some(0))
+            .is_err());
+    }
+
+    #[test]
+    fn serial_composition_preserves_owned_ports_and_installs_dispatch_and_readiness() {
+        let serial_owner = Arc::new(RejectingRuntimeHostPort);
+        let original_execution = Arc::new(RejectingRuntimeHostPort);
+        let service = WorkflowService::new_serial_ready_cpu(
+            serial_owner.clone(),
+            pantograph_workflow_service::workflow::WorkflowSerialReadyConfig::default(),
+        )
+        .with_runtime_host_execution_port(original_execution.clone());
+        let candidate_provider = Arc::new(EmbeddedRuntimeDispatchCandidateProvider::new());
+        let refresher = Arc::new(AcceptingDispatchSourceRefresher);
+        let ordinary_execution = Arc::new(RejectingRuntimeHostPort);
+        let ordinary_batch = Arc::new(RejectingRuntimeHostPort);
+        let ordinary_cleanup = Arc::new(RejectingReservationLifecyclePort);
+        let dependencies = EmbeddedWorkflowServiceDispatchDependencies::new(
+            candidate_provider.clone(),
+            refresher.clone(),
+            ordinary_execution.clone(),
+            ordinary_cleanup.clone(),
+        )
+        .with_runtime_host_batch_execution_port(ordinary_batch.clone());
+        let composition = EmbeddedWorkflowServiceComposition::new()
+            .with_runtime_dispatch_dependencies(dependencies);
+        let snapshots = composition.dependency_readiness().snapshot_provider();
+        let queue = composition.dependency_readiness().work_queue();
+        let requirements = composition.dependency_readiness().requirements_registry();
+
+        let shared = composition
+            .into_shared_configured_workflow_service(service, Some(1))
+            .expect("serial composition preserves constructor-owned ports");
+
+        assert!(shared.is_serial_ready_cpu());
+        assert!(Arc::strong_count(&serial_owner) > 1);
+        assert!(Arc::strong_count(&original_execution) > 1);
+        assert_eq!(Arc::strong_count(&ordinary_execution), 1);
+        assert_eq!(Arc::strong_count(&ordinary_batch), 1);
+        assert_eq!(Arc::strong_count(&ordinary_cleanup), 1);
+        assert!(Arc::strong_count(&candidate_provider) > 1);
+        assert!(Arc::strong_count(&refresher) > 1);
+        assert!(Arc::strong_count(&snapshots) > 1);
+        assert!(Arc::strong_count(&queue) > 1);
+        assert!(Arc::strong_count(&requirements) > 1);
+        drop(shared);
+        assert_eq!(Arc::strong_count(&serial_owner), 1);
+        assert_eq!(Arc::strong_count(&original_execution), 1);
+        assert_eq!(Arc::strong_count(&candidate_provider), 1);
+        assert_eq!(Arc::strong_count(&refresher), 1);
+        assert_eq!(Arc::strong_count(&snapshots), 1);
+        assert_eq!(Arc::strong_count(&queue), 1);
+        assert_eq!(Arc::strong_count(&requirements), 1);
+    }
+
+    #[test]
+    #[should_panic(expected = "serial constructor owns its execution port")]
+    fn serial_batch_port_replacement_still_refuses() {
+        let _ = serial_workflow_service()
+            .with_runtime_host_batch_execution_port(Arc::new(RejectingRuntimeHostPort));
+    }
+
+    #[test]
+    #[should_panic(expected = "serial constructor owns its cleanup port")]
+    fn serial_cleanup_port_replacement_still_refuses() {
+        let _ = serial_workflow_service()
+            .with_reservation_lifecycle_port(Arc::new(RejectingReservationLifecyclePort));
     }
 
     #[test]
@@ -753,6 +1233,7 @@ mod tests {
             RuntimeDispatchLoadTargetFactsSource::new(None),
             RuntimeDispatchResourceFactsSource::new(registry),
             1_000,
+            None,
             Arc::new(RejectingRuntimeHostPort),
             Arc::new(RejectingReservationLifecyclePort),
         );
@@ -769,7 +1250,7 @@ mod tests {
     async fn builds_resource_backed_hosted_workflow_service_before_sharing() {
         let temp_dir = tempfile::tempdir().expect("tempdir");
         let pumas_api = Arc::new(
-            pumas_library::PumasApi::builder(temp_dir.path())
+            crate::pumas_test_support::builder(temp_dir.path())
                 .with_hf_client(false)
                 .with_process_manager(false)
                 .build()
@@ -779,7 +1260,7 @@ mod tests {
         let registry: SharedRuntimeRegistry = Arc::new(RuntimeRegistry::new());
         let gateway = Arc::new(inference::InferenceGateway::new());
         let input = EmbeddedHostedWorkflowServiceFactoryInput::new(
-            registry,
+            registry.clone(),
             gateway.clone(),
             gateway,
             Arc::new(PumasSelectorAccess::Owner(pumas_api)),
@@ -791,11 +1272,161 @@ mod tests {
         let shared = EmbeddedWorkflowServiceComposition::resource_backed_hosted(input)
             .expect("hosted resource-backed workflow service should build");
 
+        #[cfg(feature = "backend-candle")]
+        {
+            let snapshot = registry.snapshot();
+            let candle = snapshot
+                .runtimes
+                .iter()
+                .find(|runtime| runtime.runtime_id == "candle")
+                .expect("hosted composition enrolls the available compiled owner");
+            assert_eq!(
+                candle.status,
+                pantograph_runtime_registry::RuntimeRegistryStatus::Stopped
+            );
+            assert!(candle.runtime_instance_id.is_none());
+            assert!(candle.models.is_empty());
+        }
         drop(shared);
     }
 
+    #[cfg(all(feature = "backend-candle", feature = "host-dependency-inventory"))]
+    mod native_cpu_qualification {
+        include!("native_cpu_workflow_qualification_tests.rs");
+    }
+
+    #[cfg(feature = "backend-candle")]
     #[tokio::test]
-    async fn resource_backed_hosted_service_refreshes_validation_from_production_facts() {
+    async fn cold_candle_descriptor_uses_real_pumas_and_compiled_owner_without_loading() {
+        let temp_dir = create_test_env();
+        let model_id = "embedding/qualification/synthetic-bert-8";
+        let model_dir = temp_dir
+            .path()
+            .join("shared-resources/models")
+            .join(model_id);
+        std::fs::create_dir_all(&model_dir).unwrap();
+        let source = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../inference/tests/fixtures/candle_bert/bert-8");
+        fn copy_fixture(source: &std::path::Path, destination: &std::path::Path) {
+            std::fs::create_dir_all(destination).unwrap();
+            for entry in std::fs::read_dir(source).unwrap() {
+                let entry = entry.unwrap();
+                let target = destination.join(entry.file_name());
+                if entry.file_type().unwrap().is_dir() {
+                    copy_fixture(&entry.path(), &target);
+                } else {
+                    std::fs::copy(entry.path(), target).unwrap();
+                }
+            }
+        }
+        copy_fixture(&source, &model_dir);
+        std::fs::write(
+            model_dir.join("metadata.json"),
+            serde_json::to_vec(&serde_json::json!({
+                "schema_version":2, "model_id":model_id, "family":"qualification",
+                "model_type":"embedding", "official_name":"Synthetic-BERT-8",
+                "cleaned_name":"synthetic-bert-8", "source_path":model_dir,
+                "entry_path":model_dir, "storage_kind":"library_owned",
+                "selected_artifact_id":"main", "selected_artifact_files":["model.safetensors"],
+                "import_state":"ready", "validation_state":"valid",
+                "pipeline_tag":"feature-extraction", "task_type_primary":"embedding",
+                "input_modalities":["text"], "output_modalities":["embedding"],
+                "recommended_backend":"candle", "runtime_engine_hints":["candle"]
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        let api = Arc::new(
+            crate::pumas_test_support::builder(temp_dir.path())
+                .with_hf_client(false)
+                .with_process_manager(false)
+                .build()
+                .await
+                .unwrap(),
+        );
+        api.rebuild_model_index().await.unwrap();
+        let registry = Arc::new(RuntimeRegistry::new());
+        let gateway = Arc::new(inference::InferenceGateway::new());
+        let input = EmbeddedHostedWorkflowServiceFactoryInput::new(
+            registry.clone(),
+            gateway.clone(),
+            gateway,
+            Arc::new(PumasSelectorAccess::Owner(api)),
+            Some(1),
+            1_000,
+        )
+        .with_workflow_service(workflow_service_with_artifact_store(&temp_dir));
+        let service = EmbeddedWorkflowServiceComposition::resource_backed_hosted(input).unwrap();
+        let graph: WorkflowGraph = serde_json::from_value(serde_json::json!({
+            "nodes":[{"id":"infer", "node_type":"llm-inference",
+                "position":{"x":0,"y":0}, "data":{
+                    "task_kind":"embedding", "runtime":"candle", "device":"cpu",
+                    "pumas_model_ref":{"model_id":model_id,"selected_artifact_id":"main"},
+                    "runtime_source_context":{"operation_type":"embedding.text",
+                        "context_shape_key":"embedding.one-text", "cancellation_mode":"run_scoped"}
+                }}], "edges":[]
+        }))
+        .unwrap();
+        let session = service
+            .workflow_graph_create_edit_session(WorkflowGraphEditSessionCreateRequest {
+                graph,
+                workflow_id: None,
+            })
+            .await
+            .unwrap();
+        let validation = service
+            .workflow_graph_refresh_current_validation_summary(
+                WorkflowGraphCurrentValidationRefreshRequest {
+                    graph_session_id: session.session_id,
+                    graph_revision: session.graph_revision.parse().unwrap(),
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(validation.node_projections.len(), 1);
+        let descriptor = &validation.node_projections[0].descriptor;
+        assert_eq!(
+            descriptor.availability.status,
+            pantograph_inference_interface_contracts::InferenceAvailabilityStatus::Available
+        );
+        assert_eq!(descriptor.task_kind.as_str(), "embedding");
+        assert!(descriptor.diagnostics.is_empty());
+        let snapshot = registry.snapshot();
+        let candle = snapshot
+            .runtimes
+            .iter()
+            .find(|runtime| runtime.runtime_id == "candle")
+            .unwrap();
+        assert_eq!(
+            candle.status,
+            pantograph_runtime_registry::RuntimeRegistryStatus::Stopped
+        );
+        assert!(candle.runtime_instance_id.is_none());
+        assert!(candle.models.is_empty());
+        assert!(snapshot.reservations.is_empty());
+    }
+
+    #[tokio::test]
+    async fn resource_backed_hosted_service_refreshes_validation_from_controlled_owner_facts() {
+        assert_resource_backed_validation(composition_capability_gateway(true), true).await;
+    }
+
+    #[tokio::test]
+    async fn resource_backed_hosted_service_rejects_registered_runtime_without_owner_capabilities()
+    {
+        assert_resource_backed_validation(composition_capability_gateway(false), false).await;
+    }
+
+    #[cfg(feature = "backend-pytorch")]
+    #[tokio::test]
+    async fn resource_backed_hosted_service_refreshes_validation_from_compiled_pytorch_facts() {
+        assert_resource_backed_validation(Arc::new(inference::InferenceGateway::new()), true).await;
+    }
+
+    async fn assert_resource_backed_validation(
+        gateway: Arc<inference::InferenceGateway>,
+        available: bool,
+    ) {
         let temp_dir = create_test_env();
         let model_id = "diffusion/imported/test-bundle";
         let model_dir = temp_dir
@@ -805,7 +1436,7 @@ mod tests {
         write_test_diffusers_bundle(&model_dir);
         write_imported_diffusion_metadata(&model_dir, model_id, &model_dir);
         let pumas_api = Arc::new(
-            pumas_library::PumasApi::builder(temp_dir.path())
+            crate::pumas_test_support::builder(temp_dir.path())
                 .with_hf_client(false)
                 .with_process_manager(false)
                 .build()
@@ -830,7 +1461,6 @@ mod tests {
                 },
             )
             .expect("ready runtime transition");
-        let gateway = Arc::new(inference::InferenceGateway::new());
         let input = EmbeddedHostedWorkflowServiceFactoryInput::new(
             registry,
             gateway.clone(),
@@ -864,6 +1494,28 @@ mod tests {
             .await
             .expect("refresh validation summary");
 
+        if !available {
+            assert!(
+                validation
+                    .summary
+                    .diagnostics
+                    .iter()
+                    .any(|diagnostic| diagnostic.code == pantograph_inference_interface_contracts::InferenceDiagnosticCode::InvalidRuntimeConstraint),
+                "expected unavailable-owner diagnostics: {:?}",
+                validation.summary.diagnostics
+            );
+            assert_ne!(
+                validation.summary.summary.as_ref().unwrap().status,
+                DraftGraphValidationStatus::Executable
+            );
+            return;
+        }
+        assert!(
+            validation.summary.diagnostics.is_empty(),
+            "validation diagnostics: {:?}",
+            validation.summary.diagnostics
+        );
+        assert_eq!(validation.node_projections.len(), 1);
         let summary = validation
             .summary
             .summary
@@ -890,7 +1542,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn resource_backed_hosted_service_publishes_executable_snapshot_from_production_facts() {
+    async fn resource_backed_hosted_service_publishes_executable_snapshot_from_controlled_owner_facts(
+    ) {
         let temp_dir = create_test_env();
         let model_id = "diffusion/imported/test-bundle";
         let model_dir = temp_dir
@@ -900,7 +1553,7 @@ mod tests {
         write_test_diffusers_bundle(&model_dir);
         write_imported_diffusion_metadata(&model_dir, model_id, &model_dir);
         let pumas_api = Arc::new(
-            pumas_library::PumasApi::builder(temp_dir.path())
+            crate::pumas_test_support::builder(temp_dir.path())
                 .with_hf_client(false)
                 .with_process_manager(false)
                 .build()
@@ -925,7 +1578,7 @@ mod tests {
                 },
             )
             .expect("ready runtime transition");
-        let gateway = Arc::new(inference::InferenceGateway::new());
+        let gateway = composition_capability_gateway(true);
         let input = EmbeddedHostedWorkflowServiceFactoryInput::new(
             registry,
             gateway.clone(),
@@ -960,6 +1613,21 @@ mod tests {
             )
             .await
             .expect("refresh validation summary");
+        assert!(
+            validation.summary.diagnostics.is_empty(),
+            "validation diagnostics: {:?}",
+            validation.summary.diagnostics
+        );
+        assert_eq!(validation.node_projections.len(), 1);
+        assert_eq!(
+            validation
+                .summary
+                .summary
+                .as_ref()
+                .expect("current validation summary")
+                .status,
+            DraftGraphValidationStatus::Executable
+        );
         let validation_session_id = validation
             .summary
             .validation_session_id
@@ -1026,7 +1694,7 @@ mod tests {
         }));
 
         let projections = snapshot
-            .scheduler_inference_task_projections()
+            .scheduler_inference_task_projections(&connected_dependency_inference_graph(model_id))
             .expect("scheduler projections");
         let scheduler_node_id = "infer".parse().expect("scheduler node id");
         let projection = projections
@@ -1060,7 +1728,7 @@ mod tests {
     async fn hosted_resource_backed_factory_requires_artifact_writer_before_sharing() {
         let temp_dir = tempfile::tempdir().expect("tempdir");
         let pumas_api = Arc::new(
-            pumas_library::PumasApi::builder(temp_dir.path())
+            crate::pumas_test_support::builder(temp_dir.path())
                 .with_hf_client(false)
                 .with_process_manager(false)
                 .build()
@@ -1093,7 +1761,7 @@ mod tests {
     #[tokio::test]
     async fn hosted_resource_backed_factory_rejects_non_owner_pumas_access() {
         let temp_dir = tempfile::tempdir().expect("tempdir");
-        let pumas_api = pumas_library::PumasApi::builder(temp_dir.path())
+        let pumas_api = crate::pumas_test_support::builder(temp_dir.path())
             .with_hf_client(false)
             .with_process_manager(false)
             .build()
@@ -1126,14 +1794,14 @@ mod tests {
         assert!(matches!(error, WorkflowServiceError::InvalidRequest(_)));
         assert!(error
             .to_string()
-            .contains("requires owner or RPC Pumas selector access"));
+            .contains("requires Pumas owner or authenticated local-client selector access"));
     }
 
     #[tokio::test]
     async fn resource_backed_hosted_bundle_returns_service_and_lifecycle_handle() {
         let temp_dir = tempfile::tempdir().expect("tempdir");
         let pumas_api = Arc::new(
-            pumas_library::PumasApi::builder(temp_dir.path())
+            crate::pumas_test_support::builder(temp_dir.path())
                 .with_hf_client(false)
                 .with_process_manager(false)
                 .build()
@@ -1143,7 +1811,7 @@ mod tests {
         let registry: SharedRuntimeRegistry = Arc::new(RuntimeRegistry::new());
         let gateway = Arc::new(inference::InferenceGateway::new());
         let factory_input = EmbeddedHostedWorkflowServiceFactoryInput::new(
-            registry,
+            registry.clone(),
             gateway.clone(),
             gateway,
             Arc::new(PumasSelectorAccess::Owner(pumas_api)),
@@ -1159,18 +1827,335 @@ mod tests {
         let output = EmbeddedWorkflowServiceComposition::resource_backed_hosted_bundle(input)
             .expect("hosted resource-backed bundle should build");
 
+        #[cfg(feature = "backend-candle")]
+        {
+            let snapshot = registry.snapshot();
+            let candle = snapshot
+                .runtimes
+                .iter()
+                .find(|runtime| runtime.runtime_id == "candle")
+                .expect("hosted bundle enrolls the available compiled owner");
+            assert_eq!(
+                candle.status,
+                pantograph_runtime_registry::RuntimeRegistryStatus::Stopped
+            );
+            assert_eq!(candle.runtime_family.as_deref(), Some("candle"));
+            assert_eq!(candle.runtime_residency_key.as_deref(), Some("candle.cpu"));
+            assert!(candle.runtime_instance_id.is_none());
+            assert!(candle.models.is_empty());
+            assert!(candle.active_reservation_ids.is_empty());
+            assert!(snapshot.reservations.is_empty());
+        }
+
         assert!(Arc::strong_count(output.workflow_service()) >= 1);
+        assert_eq!(
+            output
+                .dependency_readiness
+                .snapshot_provider()
+                .snapshot_count(),
+            0
+        );
         output
             .dependency_readiness_snapshot_producer
             .shutdown()
             .await;
     }
 
+    #[cfg(feature = "backend-candle")]
+    async fn hosted_candle_feature_snapshot(
+        with_inventory: bool,
+        native_profile: bool,
+    ) -> pantograph_dependency_planning::DependencyEnvironmentResult {
+        use pantograph_dependency_environment_service::{
+            DependencyEnvironmentProvider, DependencyReadinessWorkItem,
+            DependencyReadinessWorkItemProvenance, DependencyRequirementsPayload,
+        };
+        use pantograph_dependency_planning::{
+            DependencyEnvironmentRequest, ValidatedDependencyEnvironmentRequest,
+        };
+        let temp_dir = tempfile::tempdir().expect("tempdir");
+        let pumas_api = Arc::new(
+            crate::pumas_test_support::builder(temp_dir.path())
+                .with_hf_client(false)
+                .with_process_manager(false)
+                .build()
+                .await
+                .expect("pumas api"),
+        );
+        let gateway = Arc::new(inference::InferenceGateway::new());
+        let registry = Arc::new(RuntimeRegistry::new());
+        let mut factory_input = EmbeddedHostedWorkflowServiceFactoryInput::new(
+            registry.clone(),
+            gateway.clone(),
+            gateway,
+            Arc::new(PumasSelectorAccess::Owner(pumas_api)),
+            Some(1),
+            1_000,
+        )
+        .with_workflow_service(workflow_service_with_artifact_store(&temp_dir));
+        assert!(factory_input.dependency_inventory_app_data_dir.is_none());
+        if with_inventory {
+            factory_input.dependency_inventory_app_data_dir =
+                Some(temp_dir.path().join("actual-host-app-data"));
+        }
+        let input = EmbeddedHostedWorkflowServiceCompositionInput::new(
+            factory_input,
+            tokio::runtime::Handle::current(),
+        )
+        .with_dependency_readiness_producer_config(
+            EmbeddedDependencyReadinessSnapshotProducerConfig {
+                poll_interval: std::time::Duration::from_millis(5),
+            },
+        );
+        let output = EmbeddedWorkflowServiceComposition::resource_backed_hosted_bundle(input)
+            .expect("actual hosted bundle");
+
+        let mut value: serde_json::Value = serde_json::from_str(include_str!(
+            "../../pantograph-dependency-planning/tests/fixtures/dependency_environment_resolve_request.json"
+        ))
+        .expect("request fixture");
+        let features = if native_profile {
+            vec!["request_lifecycle", "device_selection"]
+        } else {
+            vec!["external_connection"]
+        };
+        let ids: Vec<_> = features
+            .iter()
+            .map(|feature| {
+                if native_profile {
+                    format!("candle.native_cpu.{feature}.v1")
+                } else {
+                    format!("candle.{feature}")
+                }
+            })
+            .collect();
+        value["action"] = serde_json::json!("check");
+        value["environment_ref"] = serde_json::Value::Null;
+        value["dependency_requirements_id"] = serde_json::json!("deps.hosted.candle.feature");
+        let platform =
+            pantograph_dependency_planning::DependencyPlanningPlatformContext::from_os_arch(
+                std::env::consts::OS,
+                std::env::consts::ARCH,
+            )
+            .unwrap();
+        for key in ["identity_key", "planning_request"] {
+            value[key]["model_ref"] = serde_json::json!({"model_id": "synthetic/embedding"});
+            value[key]["task_id"] = serde_json::json!("embedding");
+            value[key]["task_type"] = serde_json::Value::Null;
+            value[key]["expected_artifact_kind"] = serde_json::Value::Null;
+            value[key]["platform_context"] = serde_json::to_value(&platform).unwrap();
+            value[key]["scheduler_intent"] =
+                serde_json::json!({"requested_runtime_id":"candle","requested_device_id":"cpu"});
+            value[key]["selected_binding_ids"] = serde_json::json!(ids);
+        }
+        value["planning_request"]["dependency_override_patches"] = serde_json::json!([]);
+        let raw: DependencyEnvironmentRequest = serde_json::from_value(value).expect("request");
+        let request = ValidatedDependencyEnvironmentRequest::try_from(raw).expect("valid request");
+        let payload = DependencyRequirementsPayload::new(
+            request.as_request().dependency_requirements_id.clone().unwrap(),
+            request.as_request().identity_key.clone(),
+            features.iter().map(|feature| serde_json::from_value(serde_json::json!({
+                "name":format!("candle_native_{feature}"),"kind":"runtime_feature",
+                "runtime_feature":{"runtime_id":"candle","feature_id":feature}
+            })).unwrap()).collect(),
+            features.iter().zip(&ids).map(|(feature,id)| serde_json::from_value(serde_json::json!({
+                "binding_id":id,"requirement_name":format!("candle_native_{feature}"),"environment_kind":"runtime_feature",
+                "runtime_feature":{"runtime_id":"candle","feature_id":feature}
+            })).unwrap()).collect(),
+            request.as_request().identity_key.selected_binding_ids.clone(),
+        ).unwrap();
+        if native_profile {
+            assert!(crate::inference_dependency_requirements::is_native_payload(
+                request.as_request(),
+                &payload
+            ));
+        }
+        let payload_evidence = serde_json::json!({
+            "dependency_requirements_id":payload.dependency_requirements_id,
+            "identity_key":payload.identity_key,"requirements":payload.requirements,
+            "bindings":payload.bindings,"selected_binding_ids":payload.selected_binding_ids
+        });
+        output
+            .dependency_readiness
+            .requirements_registry()
+            .insert_payload(payload);
+        let provenance = DependencyReadinessWorkItemProvenance::new(
+            "hosted-session".parse().expect("session"),
+            "hosted-run".parse().expect("run"),
+            "hosted-task".parse().expect("task"),
+        );
+        output
+            .dependency_readiness
+            .work_queue()
+            .enqueue(DependencyReadinessWorkItem::new(
+                provenance,
+                request.clone(),
+            ));
+        let provider = output.dependency_readiness.snapshot_provider();
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            while provider.snapshot_count() == 0 {
+                tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .expect("actual producer published a snapshot");
+        let result = provider.check(&request);
+        assert_eq!(
+            result.selected_binding_ids,
+            request.as_request().identity_key.selected_binding_ids
+        );
+        assert!(registry.snapshot().reservations.is_empty());
+        assert!(registry.snapshot().runtimes.iter().all(|runtime| runtime
+            .runtime_instance_id
+            .is_none()
+            && runtime.models.is_empty()
+            && runtime.active_reservation_ids.is_empty()));
+        let scheduler = if native_profile {
+            // A model-free projection of the ACTUAL provider result, never a
+            // Ready substitute or execution authority. Match every context key.
+            use pantograph_dependency_planning::{
+                dependency_preflight_result_from_environment_result,
+                ValidatedDependencyEnvironmentResult,
+            };
+            let validated = ValidatedDependencyEnvironmentResult::try_from(result.clone()).unwrap();
+            let preflight = dependency_preflight_result_from_environment_result(&validated)
+                .unwrap()
+                .into_inner();
+            let mut proof: serde_json::Value = serde_json::from_str(include_str!(
+                "../../pantograph-scheduler/tests/fixtures/readiness_admission_decision_ready.json"
+            ))
+            .unwrap();
+            proof["task_intent"]["model_ref"] =
+                serde_json::to_value(&result.identity_key.model_ref).unwrap();
+            proof["task_intent"]["task_type"] = serde_json::json!("embedding");
+            proof["task_intent"]["constraints"] =
+                serde_json::json!({"requested_runtime_id":"candle","requested_device_id":"cpu"});
+            proof["task_intent"]["trait_settings"] = serde_json::json!([]);
+            proof["task_intent"]["estimate_hints"] = serde_json::json!([]);
+            proof["readiness_proof"]["preflight_result"] = serde_json::to_value(preflight).unwrap();
+            proof["readiness_proof"]["execution_context"]["dependency_requirements_id"] =
+                serde_json::to_value(&request.as_request().dependency_requirements_id).unwrap();
+            proof["readiness_proof"]["execution_context"]["selected_binding_ids"] =
+                serde_json::json!(ids);
+            let decoded: pantograph_scheduler::SchedulerReadinessAdmissionDecision =
+                serde_json::from_value(proof).unwrap();
+            let decision = pantograph_scheduler::plan_scheduler_readiness_admission(
+                pantograph_scheduler::ValidatedSchedulerReadinessAdmissionRequest::try_from(
+                    pantograph_scheduler::SchedulerReadinessAdmissionRequest {
+                        contract_version: 1,
+                        task_intent: decoded.task_intent,
+                        policy:
+                            pantograph_dependency_planning::DependencyReadinessPolicy::CheckOnly,
+                    },
+                )
+                .unwrap(),
+                decoded.readiness_proof,
+            )
+            .unwrap()
+            .into_inner();
+            if result.readiness_state == pantograph_dependency_planning::DependencyEnvironmentReadinessState::NotImplemented {
+                assert_eq!(decision.state,pantograph_scheduler::SchedulerReadinessAdmissionState::TerminalFailed);
+                assert_eq!(decision.action,pantograph_scheduler::SchedulerReadinessAdmissionAction::Fail);
+                assert!(decision.diagnostics.iter().any(|d| d.message == "Dependency readiness cannot be satisfied for this task."));
+                assert!(result.diagnostics.iter().any(|d| d.code == pantograph_dependency_planning::DependencyPlanningDiagnosticCode::NotImplemented && d.field_path.as_deref() == Some("dependency_environment.probe")));
+                assert_eq!(result.binding_statuses.len(),2);
+                assert!(result.binding_statuses.iter().all(|b| b.state == pantograph_dependency_planning::DependencyBindingStatusState::NotImplemented));
+            } else { assert_eq!(decision.state,pantograph_scheduler::SchedulerReadinessAdmissionState::Ready); }
+            Some(decision)
+        } else {
+            None
+        };
+        output
+            .dependency_readiness_snapshot_producer
+            .shutdown()
+            .await;
+        let case = if !cfg!(feature = "host-dependency-inventory") {
+            "default_native_inventory_is_not_implemented"
+        } else if !with_inventory {
+            "hosted_inventory_without_explicit_owner_context_stays_conservative"
+        } else if native_profile {
+            "hosted_inventory_observes_real_compiled_candle_lifecycle"
+        } else {
+            "hosted_inventory_preserves_unsupported_candle_feature"
+        };
+        crate::serial_cpu_residency::tests::save_model_free_evidence(
+            case,
+            serde_json::json!({
+                "request":request.as_request(),"payload":payload_evidence,"provenance":{
+                    "session":"hosted-session","run":"hosted-run","task":"hosted-task"},
+                "result":result,"scheduler_decision":scheduler,"registry":format!("{:?}",registry.snapshot()),
+                "no_model_load_or_forward_submitted":true,"producer_shutdown":"ok"
+            }),
+        );
+        result
+    }
+
+    #[cfg(all(feature = "backend-candle", not(feature = "host-dependency-inventory")))]
+    #[tokio::test]
+    async fn default_native_inventory_is_not_implemented() {
+        let result = hosted_candle_feature_snapshot(false, true).await;
+        assert_eq!(
+            result.readiness_state,
+            pantograph_dependency_planning::DependencyEnvironmentReadinessState::NotImplemented
+        );
+    }
+
+    #[cfg(all(feature = "host-dependency-inventory", feature = "backend-candle"))]
+    #[tokio::test]
+    async fn hosted_inventory_observes_real_compiled_candle_lifecycle() {
+        let result = hosted_candle_feature_snapshot(true, true).await;
+        assert_eq!(
+            result.readiness_state,
+            pantograph_dependency_planning::DependencyEnvironmentReadinessState::Ready
+        );
+        assert_eq!(
+            result.selected_binding_ids[0].as_str(),
+            "candle.native_cpu.request_lifecycle.v1"
+        );
+    }
+
+    #[cfg(all(feature = "host-dependency-inventory", feature = "backend-candle"))]
+    #[tokio::test]
+    async fn hosted_inventory_preserves_unsupported_candle_feature() {
+        let result = hosted_candle_feature_snapshot(true, false).await;
+        assert_eq!(
+            result.readiness_state,
+            pantograph_dependency_planning::DependencyEnvironmentReadinessState::Unavailable
+        );
+        assert_eq!(
+            result.selected_binding_ids[0].as_str(),
+            "candle.external_connection"
+        );
+        assert_eq!(result.binding_statuses.len(), 1);
+        assert_eq!(
+            result.binding_statuses[0].binding_id.as_str(),
+            "candle.external_connection"
+        );
+        assert_eq!(
+            result.binding_statuses[0].state,
+            pantograph_dependency_planning::DependencyBindingStatusState::Unavailable
+        );
+        assert!(result.diagnostics.iter().any(|diagnostic| {
+            diagnostic.code == pantograph_dependency_planning::DependencyPlanningDiagnosticCode::RuntimeUnavailable
+                && diagnostic.field_path.as_deref() == Some("dependency_environment.runtime_feature.source")
+        }));
+    }
+
+    #[cfg(all(feature = "host-dependency-inventory", feature = "backend-candle"))]
+    #[tokio::test]
+    async fn hosted_inventory_without_explicit_owner_context_stays_conservative() {
+        let result = hosted_candle_feature_snapshot(false, true).await;
+        assert_eq!(
+            result.readiness_state,
+            pantograph_dependency_planning::DependencyEnvironmentReadinessState::NotImplemented
+        );
+    }
+
     #[tokio::test]
     async fn resource_backed_hosted_bundle_rejects_invalid_producer_config_before_sharing() {
         let temp_dir = tempfile::tempdir().expect("tempdir");
         let pumas_api = Arc::new(
-            pumas_library::PumasApi::builder(temp_dir.path())
+            crate::pumas_test_support::builder(temp_dir.path())
                 .with_hf_client(false)
                 .with_process_manager(false)
                 .build()
@@ -1210,10 +2195,162 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn hosted_factories_reject_serial_completion_timing_before_registry_mutation() {
+        let temp_dir = tempfile::tempdir().expect("tempdir");
+        let pumas_api = Arc::new(
+            crate::pumas_test_support::builder(temp_dir.path())
+                .with_hf_client(false)
+                .with_process_manager(false)
+                .build()
+                .await
+                .expect("pumas api"),
+        );
+        for bundle in [false, true] {
+            let registry: SharedRuntimeRegistry = Arc::new(RuntimeRegistry::new());
+            let gateway = Arc::new(inference::InferenceGateway::new());
+            let mut input = EmbeddedHostedWorkflowServiceFactoryInput::new(
+                registry.clone(),
+                gateway.clone(),
+                gateway,
+                Arc::new(PumasSelectorAccess::Owner(pumas_api.clone())),
+                Some(1),
+                1_000,
+            )
+            .with_workflow_service(serial_workflow_service());
+            input.completion_timing = Some(completion_timing_opt_in());
+            // No artifact writer is configured: the scheduler-mode conflict must
+            // win before normal setup observes artifacts or enrolls runtimes.
+            let message = if bundle {
+                let input = EmbeddedHostedWorkflowServiceCompositionInput::new(
+                    input,
+                    tokio::runtime::Handle::current(),
+                );
+                match EmbeddedWorkflowServiceComposition::resource_backed_hosted_bundle(input) {
+                    Ok(_) => panic!("conflicting modes must reject bundle composition"),
+                    Err(error) => error.to_string(),
+                }
+            } else {
+                match EmbeddedWorkflowServiceComposition::resource_backed_hosted(input) {
+                    Ok(_) => panic!("conflicting modes must reject factory composition"),
+                    Err(error) => error.to_string(),
+                }
+            };
+            assert!(
+                message.contains("serial Ready CPU mode cannot be combined with completion timing")
+            );
+            let snapshot = registry.snapshot();
+            assert!(snapshot.runtimes.is_empty());
+            assert!(snapshot.reservations.is_empty());
+        }
+    }
+
+    #[tokio::test]
+    async fn hosted_startup_rejects_serial_completion_timing_before_selector_setup() {
+        let temp_dir = tempfile::tempdir().expect("tempdir");
+        let registry: SharedRuntimeRegistry = Arc::new(RuntimeRegistry::new());
+        let gateway = Arc::new(inference::InferenceGateway::new());
+        let kv_cache_dir = temp_dir.path().join("kv-cache");
+        let input = EmbeddedHostedStartupCompositionInput::new(EmbeddedHostedStartupConfig {
+            runtime_registry: registry.clone(),
+            runtime_registry_controller: gateway.clone(),
+            gateway,
+            // Setup itself would fail. Mode validation must happen before it.
+            pumas_selector_source: None,
+            project_root: temp_dir.path().to_path_buf(),
+            kv_cache_dir: kv_cache_dir.clone(),
+            dependency_readiness_runtime_handle: tokio::runtime::Handle::current(),
+            max_loaded_sessions: Some(1),
+            max_dispatch_source_snapshot_age_ms: 1_000,
+        })
+        .with_workflow_service(serial_workflow_service())
+        .with_completion_timing(completion_timing_opt_in());
+
+        let error =
+            match EmbeddedWorkflowServiceComposition::resource_backed_hosted_startup(input).await {
+                Ok(_) => panic!("conflicting modes must reject startup composition"),
+                Err(error) => error,
+            };
+        assert!(error
+            .to_string()
+            .contains("serial Ready CPU mode cannot be combined with completion timing"));
+        assert!(registry.snapshot().runtimes.is_empty());
+        assert!(!kv_cache_dir.exists());
+    }
+
+    #[test]
+    fn default_scheduler_accepts_optional_completion_timing() {
+        let service = WorkflowService::new();
+        let constructor_configuration = service.scheduler_configuration();
+        assert!(!service.is_serial_ready_cpu());
+        validate_hosted_scheduler_modes(&service, None).expect("default mode");
+        validate_hosted_scheduler_modes(&service, Some(&completion_timing_opt_in()))
+            .expect("existing completion-timing opt-in remains available");
+        assert_eq!(service.scheduler_configuration(), constructor_configuration);
+        validate_hosted_scheduler_modes(&serial_workflow_service(), None)
+            .expect("serial mode alone is supported");
+    }
+
+    #[tokio::test]
+    async fn hosted_startup_named_config_preserves_owned_values_and_defaults() {
+        let registry: SharedRuntimeRegistry = Arc::new(RuntimeRegistry::new());
+        let gateway = Arc::new(inference::InferenceGateway::new());
+        let input = EmbeddedHostedStartupCompositionInput::new(EmbeddedHostedStartupConfig {
+            runtime_registry: registry.clone(),
+            runtime_registry_controller: gateway.clone(),
+            gateway: gateway.clone(),
+            pumas_selector_source: Some(EmbeddedHostedStartupPumasSelectorSource::SetupPath(Some(
+                PathBuf::from("pumas-root"),
+            ))),
+            project_root: PathBuf::from("project-root"),
+            kv_cache_dir: PathBuf::from("kv-root"),
+            dependency_readiness_runtime_handle: tokio::runtime::Handle::current(),
+            max_loaded_sessions: Some(7),
+            max_dispatch_source_snapshot_age_ms: 2_345,
+        });
+        assert!(Arc::ptr_eq(&input.runtime_registry, &registry));
+        assert!(Arc::ptr_eq(&input.runtime_registry_controller, &gateway));
+        assert!(Arc::ptr_eq(&input.gateway, &gateway));
+        assert!(
+            matches!(&input.pumas_selector_source, Some(EmbeddedHostedStartupPumasSelectorSource::SetupPath(Some(path))) if path == std::path::Path::new("pumas-root"))
+        );
+        assert_eq!(input.project_root, PathBuf::from("project-root"));
+        assert_eq!(input.kv_cache_dir, PathBuf::from("kv-root"));
+        assert_eq!(input.max_loaded_sessions, Some(7));
+        assert_eq!(input.max_dispatch_source_snapshot_age_ms, 2_345);
+        assert!(!input.workflow_service.is_serial_ready_cpu());
+        assert!(input.completion_timing.is_none());
+        assert!(input.dependency_inventory_app_data_dir.is_none());
+        assert_eq!(
+            input.dependency_readiness_producer_config,
+            EmbeddedDependencyReadinessSnapshotProducerConfig::default()
+        );
+        assert_eq!(
+            input
+                .dependency_readiness_runtime_handle
+                .spawn(async { 42 })
+                .await
+                .expect("original runtime handle"),
+            42
+        );
+        let config = EmbeddedDependencyReadinessSnapshotProducerConfig {
+            poll_interval: std::time::Duration::from_secs(17),
+        };
+        let input = input.with_dependency_readiness_producer_config(config.clone());
+        assert_eq!(input.dependency_readiness_producer_config, config);
+        #[cfg(feature = "host-dependency-inventory")]
+        {
+            let owner_path = PathBuf::from("actual-owner-dir");
+            let input = input.with_dependency_inventory_app_data_dir(owner_path.clone());
+            assert_eq!(input.dependency_inventory_app_data_dir, Some(owner_path));
+            assert!(Arc::ptr_eq(&input.gateway, &gateway));
+        }
+    }
+
+    #[tokio::test]
     async fn hosted_startup_composition_returns_service_extensions_and_lifecycle_handle() {
         let temp_dir = tempfile::tempdir().expect("tempdir");
         let pumas_api = Arc::new(
-            pumas_library::PumasApi::builder(temp_dir.path())
+            crate::pumas_test_support::builder(temp_dir.path())
                 .with_hf_client(false)
                 .with_process_manager(false)
                 .build()
@@ -1222,19 +2359,19 @@ mod tests {
         );
         let registry: SharedRuntimeRegistry = Arc::new(RuntimeRegistry::new());
         let gateway = Arc::new(inference::InferenceGateway::new());
-        let input = EmbeddedHostedStartupCompositionInput::new(
-            registry,
-            gateway.clone(),
+        let input = EmbeddedHostedStartupCompositionInput::new(EmbeddedHostedStartupConfig {
+            runtime_registry: registry,
+            runtime_registry_controller: gateway.clone(),
             gateway,
-            Some(EmbeddedHostedStartupPumasSelectorSource::Provided(
+            pumas_selector_source: Some(EmbeddedHostedStartupPumasSelectorSource::Provided(
                 Arc::new(PumasSelectorAccess::Owner(pumas_api.clone())),
             )),
-            temp_dir.path().to_path_buf(),
-            temp_dir.path().join("kv-cache"),
-            tokio::runtime::Handle::current(),
-            Some(1),
-            1_000,
-        )
+            project_root: temp_dir.path().to_path_buf(),
+            kv_cache_dir: temp_dir.path().join("kv-cache"),
+            dependency_readiness_runtime_handle: tokio::runtime::Handle::current(),
+            max_loaded_sessions: Some(1),
+            max_dispatch_source_snapshot_age_ms: 1_000,
+        })
         .with_workflow_service(workflow_service_with_artifact_store(&temp_dir));
 
         let output = EmbeddedWorkflowServiceComposition::resource_backed_hosted_startup(input)
@@ -1297,17 +2434,17 @@ mod tests {
         let temp_dir = tempfile::tempdir().expect("tempdir");
         let registry: SharedRuntimeRegistry = Arc::new(RuntimeRegistry::new());
         let gateway = Arc::new(inference::InferenceGateway::new());
-        let input = EmbeddedHostedStartupCompositionInput::new(
-            registry,
-            gateway.clone(),
+        let input = EmbeddedHostedStartupCompositionInput::new(EmbeddedHostedStartupConfig {
+            runtime_registry: registry,
+            runtime_registry_controller: gateway.clone(),
             gateway,
-            None,
-            temp_dir.path().to_path_buf(),
-            temp_dir.path().join("kv-cache"),
-            tokio::runtime::Handle::current(),
-            Some(1),
-            1_000,
-        );
+            pumas_selector_source: None,
+            project_root: temp_dir.path().to_path_buf(),
+            kv_cache_dir: temp_dir.path().join("kv-cache"),
+            dependency_readiness_runtime_handle: tokio::runtime::Handle::current(),
+            max_loaded_sessions: Some(1),
+            max_dispatch_source_snapshot_age_ms: 1_000,
+        });
 
         let error =
             match EmbeddedWorkflowServiceComposition::resource_backed_hosted_startup(input).await {
@@ -1324,7 +2461,7 @@ mod tests {
     #[tokio::test]
     async fn hosted_startup_composition_rejects_non_owner_pumas_selector_access() {
         let temp_dir = tempfile::tempdir().expect("tempdir");
-        let pumas_api = pumas_library::PumasApi::builder(temp_dir.path())
+        let pumas_api = crate::pumas_test_support::builder(temp_dir.path())
             .with_hf_client(false)
             .with_process_manager(false)
             .build()
@@ -1340,19 +2477,19 @@ mod tests {
         .expect("read-only pumas");
         let registry: SharedRuntimeRegistry = Arc::new(RuntimeRegistry::new());
         let gateway = Arc::new(inference::InferenceGateway::new());
-        let input = EmbeddedHostedStartupCompositionInput::new(
-            registry,
-            gateway.clone(),
+        let input = EmbeddedHostedStartupCompositionInput::new(EmbeddedHostedStartupConfig {
+            runtime_registry: registry,
+            runtime_registry_controller: gateway.clone(),
             gateway,
-            Some(EmbeddedHostedStartupPumasSelectorSource::Provided(
+            pumas_selector_source: Some(EmbeddedHostedStartupPumasSelectorSource::Provided(
                 Arc::new(PumasSelectorAccess::ReadOnly(Arc::new(read_only))),
             )),
-            temp_dir.path().to_path_buf(),
-            temp_dir.path().join("kv-cache"),
-            tokio::runtime::Handle::current(),
-            Some(1),
-            1_000,
-        );
+            project_root: temp_dir.path().to_path_buf(),
+            kv_cache_dir: temp_dir.path().join("kv-cache"),
+            dependency_readiness_runtime_handle: tokio::runtime::Handle::current(),
+            max_loaded_sessions: Some(1),
+            max_dispatch_source_snapshot_age_ms: 1_000,
+        });
 
         let error =
             match EmbeddedWorkflowServiceComposition::resource_backed_hosted_startup(input).await {
@@ -1363,14 +2500,14 @@ mod tests {
         assert!(matches!(error, EmbeddedRuntimeError::Initialization { .. }));
         assert!(error
             .to_string()
-            .contains("requires owner or RPC Pumas selector access"));
+            .contains("requires Pumas owner or authenticated local-client selector access"));
     }
 
     #[tokio::test]
     async fn hosted_startup_composition_rejects_service_error_before_starting_sidecar() {
         let temp_dir = tempfile::tempdir().expect("tempdir");
         let pumas_api = Arc::new(
-            pumas_library::PumasApi::builder(temp_dir.path())
+            crate::pumas_test_support::builder(temp_dir.path())
                 .with_hf_client(false)
                 .with_process_manager(false)
                 .build()
@@ -1379,19 +2516,19 @@ mod tests {
         );
         let registry: SharedRuntimeRegistry = Arc::new(RuntimeRegistry::new());
         let gateway = Arc::new(inference::InferenceGateway::new());
-        let input = EmbeddedHostedStartupCompositionInput::new(
-            registry,
-            gateway.clone(),
+        let input = EmbeddedHostedStartupCompositionInput::new(EmbeddedHostedStartupConfig {
+            runtime_registry: registry,
+            runtime_registry_controller: gateway.clone(),
             gateway,
-            Some(EmbeddedHostedStartupPumasSelectorSource::Provided(
+            pumas_selector_source: Some(EmbeddedHostedStartupPumasSelectorSource::Provided(
                 Arc::new(PumasSelectorAccess::Owner(pumas_api)),
             )),
-            temp_dir.path().to_path_buf(),
-            temp_dir.path().join("kv-cache"),
-            tokio::runtime::Handle::current(),
-            Some(0),
-            1_000,
-        )
+            project_root: temp_dir.path().to_path_buf(),
+            kv_cache_dir: temp_dir.path().join("kv-cache"),
+            dependency_readiness_runtime_handle: tokio::runtime::Handle::current(),
+            max_loaded_sessions: Some(0),
+            max_dispatch_source_snapshot_age_ms: 1_000,
+        })
         .with_workflow_service(workflow_service_with_store(
             &temp_dir,
             WorkflowService::with_capacity_limits(2, 2),

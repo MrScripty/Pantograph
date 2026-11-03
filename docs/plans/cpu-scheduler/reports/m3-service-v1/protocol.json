@@ -1,0 +1,23 @@
+{
+  "authenticated_units": 2,
+  "background_priority": -100,
+  "background_sessions": 1,
+  "barriers_per_call": [
+    "pre_native",
+    "post_native_drain"
+  ],
+  "branches_per_session": 2,
+  "cancellation": "eighth foreground after actual native drain before unchanged receipt return",
+  "cohort_restarts": 0,
+  "cohort_watchdog_seconds": 120,
+  "first_native_admission": "pause Running pre-forward, launch remaining sessions, require4 actual Ready waiters",
+  "foreground_priority": 100,
+  "foreground_sessions": 4,
+  "gate_watchdog_seconds": 60,
+  "maximum_age_seconds": 60,
+  "minimum_samples": 8,
+  "native_calls": 10,
+  "performance_claim": false,
+  "protocol": "m3-authenticated-service-v1",
+  "threads": 1
+}

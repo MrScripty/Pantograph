@@ -1,0 +1,50 @@
+{
+  "cleanup_errors": [],
+  "completed_singletons_and_pair": 14,
+  "failure_stage": "two_ready_pair",
+  "native_owner_absent": true,
+  "registry": {
+    "generated_at_ms": 1791933918483,
+    "reservations": [],
+    "runtimes": [
+      {
+        "active_reservation_ids": [],
+        "backend_keys": [
+          "candle"
+        ],
+        "display_name": "Candle",
+        "last_error": null,
+        "last_transition_at_ms": 1791933918483,
+        "model_resource_residency": {
+          "model_id": "/workspace/pantograph-m2-cpu-2026-10-13-cohort-v1/shared-resources/models/embedding/qualification/synthetic-bert-8",
+          "requirements": {
+            "claims": [
+              {
+                "bytes": 33554432,
+                "kind": "ram_bytes"
+              },
+              {
+                "bytes": 0,
+                "kind": "vram_bytes"
+              }
+            ]
+          },
+          "runtime_instance_id": "candle-1"
+        },
+        "models": [
+          {
+            "loaded_at_ms": 1791933917724,
+            "model_id": "/workspace/pantograph-m2-cpu-2026-10-13-cohort-v1/shared-resources/models/embedding/qualification/synthetic-bert-8",
+            "pinned": false,
+            "usage_profile": null
+          }
+        ],
+        "runtime_family": "candle",
+        "runtime_id": "candle",
+        "runtime_instance_id": "candle-1",
+        "runtime_residency_key": "runtime.candle.shared",
+        "status": "stopping"
+      }
+    ]
+  }
+}

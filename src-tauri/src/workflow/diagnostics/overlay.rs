@@ -434,7 +434,7 @@ fn is_inline_media_string_key(key: &str, value: &str) -> bool {
 fn is_probably_base64_body(value: &str) -> bool {
     let value = value.trim();
     value.len() >= 128
-        && value.len() % 4 == 0
+        && value.len().is_multiple_of(4)
         && value
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'+' | b'/' | b'='))

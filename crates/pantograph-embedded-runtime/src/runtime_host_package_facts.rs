@@ -5,10 +5,9 @@ use inference::{PumasArtifactEntryPath, ResolvedModelPackageFacts};
 use pantograph_runtime_host_contracts::ValidatedRuntimeHostExecutionRequest;
 use pumas_library::PumasError;
 use thiserror::Error;
-use workflow_nodes::setup::PumasSelectorAccess;
 
 pub(crate) struct RuntimeHostPumasPackageFactsResolver {
-    selector_access: Arc<PumasSelectorAccess>,
+    selector_access: Arc<workflow_nodes::setup::PumasSelectorAccess>,
 }
 
 #[async_trait]
@@ -20,8 +19,26 @@ pub(crate) trait RuntimeHostPackageFactsResolver: Send + Sync {
 }
 
 impl RuntimeHostPumasPackageFactsResolver {
-    pub(crate) fn new(selector_access: Arc<PumasSelectorAccess>) -> Self {
+    pub(crate) fn new(selector_access: Arc<workflow_nodes::setup::PumasSelectorAccess>) -> Self {
         Self { selector_access }
+    }
+
+    /// Resolve full owner facts before a task has a candidate or Started handoff.
+    pub(crate) async fn resolve_for_model(
+        &self,
+        selected_model_ref: &pantograph_dependency_planning::PumasModelRef,
+    ) -> Result<ResolvedModelPackageFacts, RuntimeHostPumasPackageFactsError> {
+        let raw_facts = self
+            .selector_access
+            .resolve_model_package_facts(selected_model_ref.model_id.as_str())
+            .await?;
+        let package_facts = decode_pumas_package_facts(raw_facts)?;
+        validate_runtime_host_producer_package_identity(selected_model_ref, &package_facts)?;
+        let package_facts = validate_runtime_host_package_facts(selected_model_ref, package_facts)?;
+        Ok(normalize_runtime_host_package_fact_identity(
+            selected_model_ref,
+            package_facts,
+        ))
     }
 }
 
@@ -31,18 +48,8 @@ impl RuntimeHostPackageFactsResolver for RuntimeHostPumasPackageFactsResolver {
         &self,
         request: &ValidatedRuntimeHostExecutionRequest,
     ) -> Result<ResolvedModelPackageFacts, RuntimeHostPumasPackageFactsError> {
-        let selected_model_ref = selected_pumas_model_ref(request)?;
-        let raw_facts = self
-            .selector_access
-            .resolve_model_package_facts(
-                pumas_library_model_id(selected_model_ref.model_id.as_str()).as_str(),
-            )
-            .await?;
-        let package_facts = decode_pumas_package_facts(raw_facts)?;
-        validate_runtime_host_producer_package_identity(selected_model_ref, &package_facts)?;
-        let package_facts =
-            normalize_runtime_host_package_fact_identity(selected_model_ref, package_facts)?;
-        validate_runtime_host_package_facts(selected_model_ref, package_facts)
+        self.resolve_for_model(selected_pumas_model_ref(request)?)
+            .await
     }
 }
 
@@ -99,6 +106,26 @@ fn validate_runtime_host_package_facts(
             },
         );
     }
+    let canonical_id = |id: &str| id.strip_prefix("pumas://models/").unwrap_or(id).to_string();
+    if canonical_id(&selected_model_ref.model_id) != canonical_id(&package_facts.model_ref.model_id)
+        || selected_model_ref
+            .revision
+            .as_ref()
+            .is_some_and(|revision| package_facts.model_ref.revision.as_ref() != Some(revision))
+        || selected_model_ref
+            .selected_artifact_path
+            .as_ref()
+            .is_some_and(|path| {
+                package_facts.model_ref.selected_artifact_path.as_ref() != Some(path)
+            })
+    {
+        return Err(
+            RuntimeHostPumasPackageFactsError::PackageFactsDecodeFailed {
+                message: "full package facts disagree with selected model/revision/artifact path"
+                    .into(),
+            },
+        );
+    }
     if selected_model_ref.selected_artifact_id.is_some()
         && package_facts.model_ref.selected_artifact_id != selected_model_ref.selected_artifact_id
     {
@@ -121,19 +148,38 @@ fn validate_runtime_host_package_facts(
 fn normalize_runtime_host_package_fact_identity(
     selected_model_ref: &pantograph_dependency_planning::PumasModelRef,
     mut package_facts: ResolvedModelPackageFacts,
-) -> Result<ResolvedModelPackageFacts, RuntimeHostPumasPackageFactsError> {
-    package_facts.model_ref.model_id = selected_model_ref.model_id.clone();
-    if selected_model_ref.revision.is_some() {
-        package_facts.model_ref.revision = selected_model_ref.revision.clone();
+) -> ResolvedModelPackageFacts {
+    // Keep the producer's concrete root-relative entry when available. The
+    // existing logical privacy projection remains for owner-local absolute paths.
+    if !is_path_free_artifact_entry(&package_facts.artifact.entry_path) {
+        package_facts.artifact.entry_path =
+            runtime_host_package_fact_entry_path(selected_model_ref);
     }
-    package_facts.model_ref.selected_artifact_path = package_facts
-        .model_ref
+    package_facts.model_ref.selected_artifact_path = selected_model_ref
         .selected_artifact_path
-        .take()
         .as_deref()
         .filter(|path| is_path_free_artifact_entry(path))
         .map(str::to_string);
-    Ok(package_facts)
+    package_facts
+}
+
+fn runtime_host_package_fact_entry_path(
+    selected_model_ref: &pantograph_dependency_planning::PumasModelRef,
+) -> String {
+    selected_model_ref
+        .selected_artifact_path
+        .as_deref()
+        .filter(|path| is_path_free_artifact_entry(path))
+        .map(str::to_string)
+        .unwrap_or_else(|| path_free_model_entry_path(&selected_model_ref.model_id))
+}
+
+fn path_free_model_entry_path(model_id: &str) -> String {
+    model_id
+        .strip_prefix("pumas://models/")
+        .unwrap_or(model_id)
+        .trim_matches('/')
+        .to_string()
 }
 
 pub(crate) fn pumas_library_model_id(model_id: &str) -> String {
@@ -156,16 +202,36 @@ fn is_windows_drive_path(path: &str) -> bool {
 fn decode_pumas_package_facts(
     facts: pumas_library::models::ResolvedModelPackageFacts,
 ) -> Result<ResolvedModelPackageFacts, RuntimeHostPumasPackageFactsError> {
-    let value = serde_json::to_value(facts).map_err(|error| {
+    let mut value = serde_json::to_value(facts).map_err(|error| {
         RuntimeHostPumasPackageFactsError::PackageFactsDecodeFailed {
             message: error.to_string(),
         }
     })?;
+    strip_pumas_model_ref_contract_versions(&mut value);
     serde_json::from_value(value).map_err(|error| {
         RuntimeHostPumasPackageFactsError::PackageFactsDecodeFailed {
             message: error.to_string(),
         }
     })
+}
+
+fn strip_pumas_model_ref_contract_versions(value: &mut serde_json::Value) {
+    match value {
+        serde_json::Value::Object(map) => {
+            if map.contains_key("model_id") {
+                map.remove("model_ref_contract_version");
+            }
+            for child in map.values_mut() {
+                strip_pumas_model_ref_contract_versions(child);
+            }
+        }
+        serde_json::Value::Array(items) => {
+            for item in items {
+                strip_pumas_model_ref_contract_versions(item);
+            }
+        }
+        _ => {}
+    }
 }
 
 #[derive(Debug, Error)]
@@ -235,12 +301,12 @@ mod tests {
     }
 
     #[test]
-    fn decoded_package_facts_accept_supported_pumas_model_ref_contract_version() {
+    fn decoded_package_facts_strip_pumas_model_ref_contract_versions() {
         let mut value: serde_json::Value = serde_json::from_str(include_str!(
             "../../inference/tests/fixtures/inference_package_facts/diffusers_sd_text_to_image_package_facts.json"
         ))
         .expect("fixture should parse");
-        value["model_ref"]["model_ref_contract_version"] = serde_json::json!(1);
+        value["model_ref"]["model_ref_contract_version"] = serde_json::json!(2);
         let raw_facts: pumas_library::models::ResolvedModelPackageFacts =
             serde_json::from_value(value).expect("fixture should decode into Pumas facts");
 
@@ -282,26 +348,6 @@ mod tests {
     }
 
     #[test]
-    fn decoded_package_facts_reject_unsupported_pumas_model_ref_contract_version() {
-        let mut value: serde_json::Value = serde_json::from_str(include_str!(
-            "../../inference/tests/fixtures/inference_package_facts/diffusers_sd_text_to_image_package_facts.json"
-        ))
-        .expect("fixture should parse");
-        value["model_ref"]["model_ref_contract_version"] = serde_json::json!(999);
-        let raw_facts: pumas_library::models::ResolvedModelPackageFacts =
-            serde_json::from_value(value).expect("fixture should decode into Pumas facts");
-
-        let error = decode_pumas_package_facts(raw_facts)
-            .expect_err("unsupported Pumas model-ref version must fail closed");
-
-        assert!(matches!(
-            error,
-            RuntimeHostPumasPackageFactsError::PackageFactsDecodeFailed { message }
-                if message.contains("unsupported Pumas model-ref contract version 999")
-        ));
-    }
-
-    #[test]
     fn selected_artifact_mismatch_fails_closed() {
         let request = validated_runtime_host_request();
         let selected_model_ref = selected_pumas_model_ref(&request).expect("selected model ref");
@@ -320,6 +366,110 @@ mod tests {
             } if selected_artifact_id.as_deref() == Some("diffusers-bundle")
                 && package_artifact_id.as_deref() == Some("other-artifact")
         ));
+    }
+
+    #[test]
+    fn missing_logical_size_facts_fail_closed() {
+        let request = validated_runtime_host_request();
+        let selected_model_ref = selected_pumas_model_ref(&request).expect("selected model ref");
+        let mut package_facts = image_package_facts_for_request(selected_model_ref);
+        package_facts.artifact.logical_size = None;
+
+        let error = validate_runtime_host_package_facts(selected_model_ref, package_facts)
+            .expect_err("missing logical size facts must fail closed");
+
+        assert!(matches!(
+            error,
+            RuntimeHostPumasPackageFactsError::MissingLogicalSizeFacts { model_id }
+                if model_id == "pumas://models/juggernaut-xl-v10"
+        ));
+    }
+
+    #[test]
+    fn full_package_model_and_revision_mismatches_fail_closed() {
+        let request = validated_runtime_host_request();
+        let selected = selected_pumas_model_ref(&request).unwrap();
+        for different_model in [true, false] {
+            let mut facts = image_package_facts_for_request(selected);
+            if different_model {
+                facts.model_ref.model_id = "other/model".into();
+            } else {
+                facts.model_ref.revision = Some("different-revision".into());
+            }
+            assert!(validate_runtime_host_package_facts(selected, facts).is_err());
+        }
+        let mut selected = selected.clone();
+        selected.revision = Some("requested-revision".into());
+        let mut facts = image_package_facts_for_request(&selected);
+        facts.model_ref.revision = None;
+        assert!(
+            validate_runtime_host_package_facts(&selected, facts).is_err(),
+            "a requested revision cannot be inferred from missing producer evidence"
+        );
+    }
+
+    #[test]
+    fn relative_producer_entry_and_embedding_evidence_survive_host_adaptation() {
+        let mut raw: serde_json::Value = serde_json::from_str(include_str!(
+            "../../inference/tests/fixtures/inference_package_facts/hf_candle_embedding_package_facts.json"
+        )).unwrap();
+        raw["model_ref"]["model_ref_contract_version"] = serde_json::json!(1);
+        let producer = serde_json::from_value(raw).unwrap();
+        let facts = decode_pumas_package_facts(producer).unwrap();
+        let selected = facts.model_ref.clone();
+        let expected_entry = facts.artifact.entry_path.clone();
+        let expected_components = facts.components.clone();
+        let expected_transformers = facts.transformers.clone();
+        let expected_task = facts.task.clone();
+        let facts = normalize_runtime_host_package_fact_identity(&selected, facts);
+        assert_eq!(facts.artifact.entry_path, expected_entry);
+        assert_eq!(facts.components, expected_components);
+        assert_eq!(facts.transformers, expected_transformers);
+        assert_eq!(facts.task, expected_task);
+        assert_eq!(facts.model_ref.model_id, selected.model_id);
+        assert_eq!(
+            facts.model_ref.selected_artifact_id,
+            selected.selected_artifact_id
+        );
+    }
+
+    #[test]
+    fn runtime_host_package_fact_identity_removes_owner_local_entry_paths() {
+        let request = validated_runtime_host_request();
+        let selected_model_ref = selected_pumas_model_ref(&request).expect("selected model ref");
+        let mut package_facts = image_package_facts_for_request(selected_model_ref);
+        package_facts.artifact.entry_path = "/host-only/pumas/juggernaut-xl-v10".to_string();
+        package_facts.model_ref.selected_artifact_path =
+            Some("/host-only/pumas/juggernaut-xl-v10".to_string());
+
+        let normalized =
+            normalize_runtime_host_package_fact_identity(selected_model_ref, package_facts);
+
+        assert_eq!(normalized.artifact.entry_path, "juggernaut-xl-v10");
+        assert_eq!(normalized.model_ref.selected_artifact_path, None);
+    }
+
+    #[test]
+    fn runtime_host_package_fact_identity_preserves_path_free_selected_artifact_path() {
+        let request = validated_runtime_host_request();
+        let selected_model_ref = selected_pumas_model_ref(&request).expect("selected model ref");
+        let mut selected_model_ref = selected_model_ref.clone();
+        selected_model_ref.selected_artifact_path =
+            Some("image/stable-diffusion/tiny-sd/diffusers".to_string());
+        let mut package_facts = image_package_facts_for_request(&selected_model_ref);
+        package_facts.artifact.entry_path = "/host-only/pumas/tiny-sd".to_string();
+
+        let normalized =
+            normalize_runtime_host_package_fact_identity(&selected_model_ref, package_facts);
+
+        assert_eq!(
+            normalized.artifact.entry_path,
+            "image/stable-diffusion/tiny-sd/diffusers"
+        );
+        assert_eq!(
+            normalized.model_ref.selected_artifact_path.as_deref(),
+            Some("image/stable-diffusion/tiny-sd/diffusers")
+        );
     }
 
     #[test]
@@ -360,66 +510,6 @@ mod tests {
     }
 
     #[test]
-    fn missing_logical_size_facts_fail_closed() {
-        let request = validated_runtime_host_request();
-        let selected_model_ref = selected_pumas_model_ref(&request).expect("selected model ref");
-        let mut package_facts = image_package_facts_for_request(selected_model_ref);
-        package_facts.artifact.logical_size = None;
-
-        let error = validate_runtime_host_package_facts(selected_model_ref, package_facts)
-            .expect_err("missing logical size facts must fail closed");
-
-        assert!(matches!(
-            error,
-            RuntimeHostPumasPackageFactsError::MissingLogicalSizeFacts { model_id }
-                if model_id == "pumas://models/juggernaut-xl-v10"
-        ));
-    }
-
-    #[test]
-    fn runtime_host_package_fact_identity_preserves_producer_entry_path() {
-        let request = validated_runtime_host_request();
-        let selected_model_ref = selected_pumas_model_ref(&request).expect("selected model ref");
-        let mut package_facts = image_package_facts_for_request(selected_model_ref);
-        package_facts.artifact.entry_path = "/host-only/pumas/juggernaut-xl-v10".to_string();
-        package_facts.model_ref.selected_artifact_path =
-            Some("/host-only/pumas/juggernaut-xl-v10".to_string());
-
-        let normalized =
-            normalize_runtime_host_package_fact_identity(selected_model_ref, package_facts)
-                .expect("producer executable paths are retained at the runtime boundary");
-
-        assert_eq!(
-            normalized.artifact.entry_path,
-            "/host-only/pumas/juggernaut-xl-v10"
-        );
-        assert_eq!(normalized.model_ref.selected_artifact_path, None);
-    }
-
-    #[test]
-    fn runtime_host_package_fact_identity_preserves_path_free_selected_artifact_path() {
-        let request = validated_runtime_host_request();
-        let selected_model_ref = selected_pumas_model_ref(&request).expect("selected model ref");
-        let mut selected_model_ref = selected_model_ref.clone();
-        selected_model_ref.selected_artifact_path =
-            Some("image/stable-diffusion/tiny-sd/diffusers".to_string());
-        let mut package_facts = image_package_facts_for_request(&selected_model_ref);
-        package_facts.model_ref.selected_artifact_path =
-            Some("image/stable-diffusion/tiny-sd/diffusers".to_string());
-        package_facts.artifact.entry_path = "/host-only/pumas/tiny-sd".to_string();
-
-        let normalized =
-            normalize_runtime_host_package_fact_identity(&selected_model_ref, package_facts)
-                .expect("path-free producer entry paths should remain valid");
-
-        assert_eq!(normalized.artifact.entry_path, "/host-only/pumas/tiny-sd");
-        assert_eq!(
-            normalized.model_ref.selected_artifact_path.as_deref(),
-            Some("image/stable-diffusion/tiny-sd/diffusers")
-        );
-    }
-
-    #[test]
     fn runtime_host_package_fact_identity_preserves_producer_revision_when_scheduler_omits_it() {
         let request = validated_runtime_host_request();
         let selected_model_ref = selected_pumas_model_ref(&request).expect("selected model ref");
@@ -429,8 +519,7 @@ mod tests {
         package_facts.model_ref.revision = Some("producer-revision".to_string());
 
         let normalized =
-            normalize_runtime_host_package_fact_identity(&selected_model_ref, package_facts)
-                .expect("package facts should normalize");
+            normalize_runtime_host_package_fact_identity(&selected_model_ref, package_facts);
 
         assert_eq!(
             normalized.model_ref.revision.as_deref(),

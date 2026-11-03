@@ -33,3 +33,39 @@ become an implicit dependency of a package-local command.
 Implementation lives under `packages/svelte-graph/src/`. Repository-level
 development and verification guidance is in
 [`docs/development.md`](../../docs/development.md).
+
+## Navigation Animation Lifetime
+
+Each view-store instance owns one navigation animation timer. New animated
+navigation supersedes the prior animation; reset and immediate breadcrumb
+navigation cancel it. Superseded/cancelled callers settle their existing
+`Promise<void>` without clearing a newer target or animation state. Navigation
+state still changes immediately, and the current animation clears its transient
+target only when its configured duration finishes. No-op navigation preserves
+the current animation. Store instances keep independent timer ownership.
+
+Automatic view persistence also has one shared subscription/debounce scope per
+store. Each `enablePersistence()` call returns an independent, idempotent release
+handle. Persistence remains active until the last handle is released; final
+release unsubscribes and cancels the pending write. Re-enabling starts a fresh
+scope. The existing storage shape and 500 ms debounce are unchanged.
+
+
+View persistence reads the existing unversioned record's `viewLevel`, nullable
+string `orchestrationId`/`dataGraphId`, and string-array `groupStack`. It validates
+all present owned fields before applying any of them. Missing legacy fields leave
+current state intact; explicit null identities clear that identity. Empty strings,
+partial records and ignored extension fields remain compatible. No new length or
+group-count limit or schema migration is introduced.
+
+`enablePersistence()` initializes valid stored state before installing the first
+shared writeback scope. After an explicit restore or earlier scope, enabling
+validates storage without replacing current edits. Each write rechecks existing
+storage and validates its outgoing snapshot. Restoration suppresses synchronous
+subscriber write attempts; an already pending debounce observes the complete
+restored snapshot. Invalid JSON/records or unavailable storage stop writeback
+for that instance and retain
+the stored bytes. Later reads may update memory from externally corrected data,
+but they do not restart writes. There are no recovery writes. A fresh instance
+must validate storage again. `ViewStoreOptions.storage` can supply a per-instance
+`getItem`/`setItem` boundary; it otherwise uses browser `localStorage`.

@@ -112,13 +112,13 @@ pub fn resolve_managed_binary_command(
     app_data_dir: &Path,
     id: ManagedBinaryId,
     args: &[&str],
-) -> Result<ResolvedCommand, ManagedBinaryFacadeError> {
+) -> Result<ResolvedCommand, Box<ManagedBinaryFacadeError>> {
     let snapshot = managed_runtime_snapshot(app_data_dir, id)
         .map_err(ManagedBinaryFacadeError::RuntimeStatus)?;
 
     if !snapshot.available || snapshot.readiness_state != ManagedRuntimeReadinessState::Ready {
         let install_root = selected_install_root(&snapshot);
-        return Err(ManagedBinaryFacadeError::RuntimeNotReady {
+        return Err(Box::new(ManagedBinaryFacadeError::RuntimeNotReady {
             key: ManagedBinaryKey::runtime(snapshot.id),
             display_name: snapshot.display_name,
             readiness_state: snapshot.readiness_state,
@@ -126,7 +126,7 @@ pub fn resolve_managed_binary_command(
             install_root,
             missing_files: snapshot.missing_files,
             unavailable_reason: snapshot.unavailable_reason,
-        });
+        }));
     }
 
     let key = managed_runtime_dependency_key(id).ok_or_else(|| {
@@ -140,13 +140,13 @@ pub fn resolve_managed_binary_command(
         .map(resolved_command_from_dependency_command)
         .map_err(|source| {
             let install_root = selected_install_root(&snapshot);
-            ManagedBinaryFacadeError::RuntimeCommandResolution {
+            Box::new(ManagedBinaryFacadeError::RuntimeCommandResolution {
                 key: ManagedBinaryKey::runtime(snapshot.id),
                 display_name: snapshot.display_name,
                 selected_version: snapshot.selection.selected_version,
                 install_root,
                 source,
-            }
+            })
         })
 }
 
@@ -196,14 +196,14 @@ mod tests {
     fn resolve_command_reports_facade_not_ready_context() {
         let temp = tempfile::tempdir().expect("temp dir");
 
-        let error = resolve_managed_binary_command(
+        let error: Box<ManagedBinaryFacadeError> = resolve_managed_binary_command(
             temp.path(),
             ManagedBinaryId::LlamaCpp,
             &["--port", "0"],
         )
         .expect_err("missing llama.cpp should fail before command resolution");
 
-        match error {
+        match *error {
             ManagedBinaryFacadeError::RuntimeNotReady {
                 key,
                 readiness_state,
@@ -216,5 +216,65 @@ mod tests {
             }
             other => panic!("unexpected error: {other}"),
         }
+    }
+
+    #[test]
+    fn boxed_facade_errors_preserve_variants_and_exact_display() {
+        let not_ready = Box::new(ManagedBinaryFacadeError::RuntimeNotReady {
+            key: ManagedBinaryKey::runtime(ManagedBinaryId::LlamaCpp),
+            display_name: "llama.cpp".to_string(),
+            readiness_state: ManagedRuntimeReadinessState::Missing,
+            selected_version: Some("v1".to_string()),
+            install_root: Some("/runtime".to_string()),
+            missing_files: vec!["server".to_string(), "library".to_string()],
+            unavailable_reason: Some("not installed".to_string()),
+        });
+        assert_eq!(not_ready.to_string(), "llama.cpp is not ready for launch (Missing, selected version v1, install root /runtime, missing server, library: not installed)");
+        assert!(matches!(
+            *not_ready,
+            ManagedBinaryFacadeError::RuntimeNotReady { .. }
+        ));
+        let command = Box::new(ManagedBinaryFacadeError::RuntimeCommandResolution {
+            key: ManagedBinaryKey::runtime(ManagedBinaryId::LlamaCpp),
+            display_name: "llama.cpp".to_string(),
+            selected_version: Some("v1".to_string()),
+            install_root: Some("/runtime".to_string()),
+            source: "denied".to_string(),
+        });
+        assert_eq!(command.to_string(), "failed to resolve llama.cpp launch command for selected version v1 at /runtime: denied");
+        assert!(matches!(
+            *command,
+            ManagedBinaryFacadeError::RuntimeCommandResolution { .. }
+        ));
+        let status = Box::new(ManagedBinaryFacadeError::RuntimeStatus(
+            "unreadable".to_string(),
+        ));
+        assert_eq!(
+            status.to_string(),
+            "failed to read managed runtime status: unreadable"
+        );
+    }
+
+    #[test]
+    fn successful_command_projection_preserves_launch_fields_and_argument_boundaries() {
+        let command = resolved_command_from_dependency_command(ResolvedManagedDependencyCommand {
+            key: ManagedDependencyKey::RuntimeSidecar(RuntimeSidecarDependencyId::LlamaCpp),
+            executable_path: "/runtime/server".to_string(),
+            working_directory: "/runtime".to_string(),
+            args: vec!["--model".to_string(), "models/a b.gguf".to_string()],
+            env_overrides: vec![("RUNTIME_MODE".to_string(), "test".to_string())],
+            pid_file: Some("/runtime/server.pid".to_string()),
+        });
+        assert_eq!(command.executable_path, PathBuf::from("/runtime/server"));
+        assert_eq!(command.working_directory, PathBuf::from("/runtime"));
+        assert_eq!(
+            command.args,
+            vec![OsString::from("--model"), OsString::from("models/a b.gguf")]
+        );
+        assert_eq!(
+            command.env_overrides,
+            vec![(OsString::from("RUNTIME_MODE"), OsString::from("test"))]
+        );
+        assert_eq!(command.pid_file, Some(PathBuf::from("/runtime/server.pid")));
     }
 }

@@ -1,38 +1,5 @@
 use super::*;
 
-async fn ensure_capacity_test_runtime_loaded<H: WorkflowHost>(
-    service: &WorkflowService,
-    host: &H,
-    session_id: &str,
-    workflow_run_id: &str,
-) -> Result<(), WorkflowServiceError> {
-    let workflow_id = {
-        let store = service.session_store_guard()?;
-        store.session_summary(session_id)?.workflow_id
-    };
-    service
-        .refresh_session_runtime_affinity_basis(host, session_id, &workflow_id)
-        .await?;
-    let session = {
-        let store = service.session_store_guard()?;
-        store.session_summary(session_id)?
-    };
-    service
-        .ensure_session_runtime_loaded(
-            host,
-            session_id,
-            Some(
-                crate::workflow::session_runtime::WorkflowSessionRuntimeAdmissionDiagnosticContext {
-                    session: &session,
-                    snapshot: None,
-                    workflow_run_id,
-                    workflow_semantic_version: "0.1.0",
-                },
-            ),
-        )
-        .await
-}
-
 #[tokio::test]
 async fn workflow_execution_session_capacity_rebalance_uses_host_selected_candidate() {
     let unloads = Arc::new(Mutex::new(Vec::new()));
@@ -84,7 +51,18 @@ async fn workflow_execution_session_capacity_rebalance_uses_host_selected_candid
             },
         )
         .await
-        .expect("enable target keep-alive session");
+        .expect("admit target keep-alive runtime");
+
+    service
+        .workflow_set_execution_session_keep_alive(
+            &selecting_host,
+            WorkflowExecutionSessionKeepAliveRequest {
+                session_id: third_session_id.clone(),
+                keep_alive: false,
+            },
+        )
+        .await
+        .expect("disable target keep-alive and unload runtime");
 
     let unloads = unloads.lock().expect("unloads lock poisoned");
     assert_eq!(
@@ -94,7 +72,7 @@ async fn workflow_execution_session_capacity_rebalance_uses_host_selected_candid
             WorkflowExecutionSessionUnloadReason::CapacityRebalance,
         ))
     );
-    assert!(!unloads
+    assert!(unloads
         .iter()
         .any(|(session_id, _)| session_id == &third_session_id));
     assert!(!unloads
@@ -103,7 +81,7 @@ async fn workflow_execution_session_capacity_rebalance_uses_host_selected_candid
 }
 
 #[tokio::test]
-async fn workflow_execution_session_capacity_rebalance_preserves_unload_error_when_diagnostics_are_unavailable(
+async fn workflow_execution_session_capacity_rebalance_preserves_unload_error_when_diagnostics_unavailable(
 ) {
     let service = WorkflowService::with_capacity_limits(3, 2)
         .with_diagnostics_ledger(SqliteDiagnosticsLedger::open_in_memory().expect("ledger"));
@@ -148,19 +126,44 @@ async fn workflow_execution_session_capacity_rebalance_preserves_unload_error_wh
         .await
         .expect("create target session");
 
-    let error = ensure_capacity_test_runtime_loaded(
-        &service,
-        &host,
-        &target.session_id,
-        "capacity-diagnostics-run",
-    )
-    .await
-    .expect_err("capacity rebalance should preserve runtime unload failure");
+    let error = service
+        .workflow_set_execution_session_keep_alive(
+            &host,
+            WorkflowExecutionSessionKeepAliveRequest {
+                session_id: target.session_id.clone(),
+                keep_alive: true,
+            },
+        )
+        .await
+        .expect_err("capacity rebalance should preserve runtime unload failure");
 
+    let state = service
+        .session_store_guard()
+        .expect("session store")
+        .session_summary(&target.session_id)
+        .expect("target still exists");
+    assert!(!state.keep_alive);
+    assert_eq!(state.state, WorkflowExecutionSessionState::IdleUnloaded);
+    assert_eq!(
+        service
+            .session_store_guard()
+            .expect("store")
+            .loaded_session_count(),
+        2
+    );
     assert_eq!(error.code(), WorkflowErrorCode::RuntimeNotReady);
     assert!(error.message().contains("runtime unload failed"));
     assert!(!error.message().contains("diagnostics ledger lock poisoned"));
-    assert!(error.diagnostics().is_none());
+    let diagnostics = error
+        .diagnostics()
+        .expect("diagnostics unavailable link should be attached");
+    assert!(diagnostics.workflow_run_id.is_none());
+    assert!(diagnostics.diagnostic_event_id.is_none());
+    assert!(diagnostics
+        .diagnostics_unavailable
+        .as_deref()
+        .unwrap_or_default()
+        .contains("diagnostics ledger lock poisoned"));
 }
 
 #[tokio::test]
@@ -212,13 +215,27 @@ async fn workflow_execution_session_capacity_rebalance_preserves_affine_idle_run
             },
         )
         .await
-        .expect("enable target keep-alive session");
+        .expect("admit target keep-alive runtime");
+
+    service
+        .workflow_set_execution_session_keep_alive(
+            &host,
+            WorkflowExecutionSessionKeepAliveRequest {
+                session_id: target.session_id.clone(),
+                keep_alive: false,
+            },
+        )
+        .await
+        .expect("disable target keep-alive and unload runtime");
 
     let unloads = unloads.lock().expect("unloads lock poisoned");
     assert_eq!(
         unloads.first().map(String::as_str),
         Some(non_affine.session_id.as_str())
     );
+    assert!(unloads
+        .iter()
+        .any(|session_id| session_id == &target.session_id));
     assert!(!unloads
         .iter()
         .any(|session_id| session_id == &affine.session_id));
@@ -277,20 +294,36 @@ async fn workflow_execution_session_capacity_rebalance_preserves_shared_model_id
         .await
         .expect("create target session");
 
-    ensure_capacity_test_runtime_loaded(
-        &service,
-        &host,
-        &target.session_id,
-        "capacity-shared-model-run",
-    )
-    .await
-    .expect("admit target runtime");
+    service
+        .workflow_set_execution_session_keep_alive(
+            &host,
+            WorkflowExecutionSessionKeepAliveRequest {
+                session_id: target.session_id.clone(),
+                keep_alive: true,
+            },
+        )
+        .await
+        .expect("admit target keep-alive runtime");
+
+    service
+        .workflow_set_execution_session_keep_alive(
+            &host,
+            WorkflowExecutionSessionKeepAliveRequest {
+                session_id: target.session_id.clone(),
+                keep_alive: false,
+            },
+        )
+        .await
+        .expect("disable target keep-alive and unload runtime");
 
     let unloads = unloads.lock().expect("unloads lock poisoned");
     assert_eq!(
         unloads.first().map(String::as_str),
         Some(other_model.session_id.as_str())
     );
+    assert!(unloads
+        .iter()
+        .any(|session_id| session_id == &target.session_id));
     assert!(!unloads
         .iter()
         .any(|session_id| session_id == &shared_model.session_id));
@@ -336,6 +369,17 @@ async fn workflow_execution_session_capacity_rebalance_preserves_shared_model_id
         .as_str()
         .expect("capacity unload timing attempt id");
     assert!(timing_attempt_id.starts_with("timing_attempt_"));
+    for event in &capacity_rebalance_events {
+        assert!(event.workflow_run_id.is_none());
+        let payload: serde_json::Value =
+            serde_json::from_str(&event.payload_json).expect("payload");
+        assert_eq!(payload["workflow_execution_session_id"], target.session_id);
+        assert_eq!(
+            payload["unloaded_workflow_execution_session_id"],
+            other_model.session_id
+        );
+    }
+    assert!(unload_completed_payload["duration_ms"].as_u64().is_some());
     assert!(capacity_rebalance_events[0]
         .payload_json
         .contains("\"cache_state\":\"unload_requested\""));
@@ -430,14 +474,141 @@ async fn workflow_execution_session_capacity_rebalance_preserves_shared_backend_
             },
         )
         .await
-        .expect("enable target keep-alive session");
+        .expect("admit target keep-alive runtime");
+
+    service
+        .workflow_set_execution_session_keep_alive(
+            &host,
+            WorkflowExecutionSessionKeepAliveRequest {
+                session_id: target.session_id.clone(),
+                keep_alive: false,
+            },
+        )
+        .await
+        .expect("disable target keep-alive and unload runtime");
 
     let unloads = unloads.lock().expect("unloads lock poisoned");
     assert_eq!(
         unloads.first().map(String::as_str),
         Some(other_backend.session_id.as_str())
     );
+    assert!(unloads
+        .iter()
+        .any(|session_id| session_id == &target.session_id));
     assert!(!unloads
         .iter()
         .any(|session_id| session_id == &shared_backend.session_id));
+}
+
+#[tokio::test]
+async fn keep_alive_capacity_failure_records_session_error_and_rolls_back() {
+    let service = WorkflowService::with_capacity_limits(3, 2)
+        .with_diagnostics_ledger(SqliteDiagnosticsLedger::open_in_memory().expect("ledger"));
+    let host = SelectingRuntimeHost::new(String::new(), Arc::new(Mutex::new(Vec::new())));
+    for workflow_id in ["loaded-a", "loaded-b"] {
+        service
+            .create_workflow_execution_session(
+                &host,
+                WorkflowExecutionSessionCreateRequest {
+                    workflow_id: workflow_id.to_string(),
+                    usage_profile: None,
+                    keep_alive: true,
+                },
+            )
+            .await
+            .expect("loaded session");
+    }
+    let target = service
+        .create_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionCreateRequest {
+                workflow_id: "target".to_string(),
+                usage_profile: None,
+                keep_alive: false,
+            },
+        )
+        .await
+        .expect("target session");
+    let error = service
+        .workflow_set_execution_session_keep_alive(
+            &host,
+            WorkflowExecutionSessionKeepAliveRequest {
+                session_id: target.session_id.clone(),
+                keep_alive: true,
+            },
+        )
+        .await
+        .expect_err("host declined every unload candidate");
+    assert_eq!(error.code(), WorkflowErrorCode::SchedulerBusy);
+    let link = error.diagnostics().expect("diagnostic link");
+    assert!(link.workflow_run_id.is_none());
+    assert!(link.diagnostic_event_id.is_some());
+    assert!(link.diagnostics_unavailable.is_none());
+    let state = service
+        .session_store_guard()
+        .expect("store")
+        .session_summary(&target.session_id)
+        .expect("target retained");
+    assert!(!state.keep_alive);
+    assert_eq!(state.state, WorkflowExecutionSessionState::IdleUnloaded);
+    let events = {
+        let ledger = service.diagnostics_ledger_guard().expect("ledger");
+        pantograph_diagnostics_ledger::DiagnosticsLedgerRepository::diagnostic_events_after(
+            &*ledger, 0, 20,
+        )
+        .expect("events")
+    };
+    let event = events
+        .iter()
+        .find(|event| Some(&event.event_id) == link.diagnostic_event_id.as_ref())
+        .expect("recorded error");
+    assert!(event.workflow_run_id.is_none());
+    let payload: serde_json::Value = serde_json::from_str(&event.payload_json).expect("payload");
+    assert_eq!(payload["phase"], "session_runtime_admission");
+    assert_eq!(payload["workflow_execution_session_id"], target.session_id);
+    assert_eq!(payload["scope"], "session_runtime");
+}
+
+#[tokio::test]
+async fn failed_keep_alive_creation_removes_only_the_new_session() {
+    let service = WorkflowService::with_capacity_limits(2, 1)
+        .with_diagnostics_ledger(SqliteDiagnosticsLedger::open_in_memory().expect("ledger"));
+    let host = SelectingRuntimeHost::new(String::new(), Arc::new(Mutex::new(Vec::new())));
+    let existing = service
+        .create_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionCreateRequest {
+                workflow_id: "existing".to_string(),
+                usage_profile: None,
+                keep_alive: true,
+            },
+        )
+        .await
+        .expect("existing loaded session");
+    let error = service
+        .create_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionCreateRequest {
+                workflow_id: "rejected".to_string(),
+                usage_profile: None,
+                keep_alive: true,
+            },
+        )
+        .await
+        .expect_err("capacity admission rejected");
+    assert_eq!(error.code(), WorkflowErrorCode::SchedulerBusy);
+    assert!(error
+        .diagnostics()
+        .expect("error link")
+        .workflow_run_id
+        .is_none());
+    let store = service.session_store_guard().expect("store");
+    assert_eq!(store.active.len(), 1);
+    assert_eq!(store.loaded_session_count(), 1);
+    assert!(
+        store
+            .session_summary(&existing.session_id)
+            .expect("existing retained")
+            .keep_alive
+    );
 }

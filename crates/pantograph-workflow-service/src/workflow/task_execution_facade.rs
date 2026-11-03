@@ -6,8 +6,9 @@ use super::task_execution_worker::{
     WorkflowTaskExecutionWorkerOutcome, WorkflowTaskExecutionWorkerRuntimeBranchCommand,
 };
 use super::{
-    WorkflowExecutionSessionBootstrapRecoveryResult, WorkflowExecutionSessionRunRequest,
-    WorkflowHost, WorkflowRunResponse, WorkflowService, WorkflowServiceError,
+    WorkflowExecutionSessionBootstrapRecoveryResult, WorkflowExecutionSessionResumeRequest,
+    WorkflowExecutionSessionRunRequest, WorkflowHost, WorkflowRunResponse, WorkflowService,
+    WorkflowServiceError,
 };
 
 /// Composition-root entrypoint for production workflow session execution.
@@ -63,6 +64,24 @@ impl WorkflowSessionExecutionRuntime {
             .run_workflow_execution_session_with_runtime_owner(
                 self.host.as_ref(),
                 request,
+                Some(self.task_execution_runtime_owner()),
+            )
+            .await
+    }
+
+    /// Resume the same readiness-deferred run through its supervised worker.
+    /// This does not recreate submission inputs or authorize dependency readiness.
+    /// It adds no deadline enforcement to the supervised worker; serial CPU mode
+    /// rejects stored workflow timeouts before enqueueing.
+    pub async fn resume_workflow_execution_session_runtime_dependency_readiness(
+        &self,
+        request: WorkflowExecutionSessionResumeRequest,
+    ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
+        self.service
+            .resume_workflow_execution_session_runtime_dependency_readiness_with_attempt_transition(
+                self.host.as_ref(),
+                request,
+                pantograph_diagnostics_ledger::SchedulerTaskAttemptLifecycleTransition::Started,
                 Some(self.task_execution_runtime_owner()),
             )
             .await
@@ -180,6 +199,24 @@ mod tests {
             panic!("expected invalid request error");
         };
         assert!(message.contains("session_id must be non-empty"));
+    }
+
+    #[tokio::test]
+    async fn supervised_readiness_resume_delegates_identity_validation() {
+        let runtime =
+            WorkflowSessionExecutionRuntime::new(WorkflowService::new(), Arc::new(DelegatingHost));
+        let error = runtime
+            .resume_workflow_execution_session_runtime_dependency_readiness(
+                WorkflowExecutionSessionResumeRequest {
+                    session_id: " ".into(),
+                    workflow_run_id: "existing-run".into(),
+                },
+            )
+            .await
+            .expect_err("blank identity must be refused before worker admission");
+        assert!(
+            matches!(error, WorkflowServiceError::InvalidRequest(message) if message == "session_id must be non-empty")
+        );
     }
 
     #[tokio::test]

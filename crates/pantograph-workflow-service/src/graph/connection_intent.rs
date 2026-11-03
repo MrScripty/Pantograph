@@ -3,7 +3,7 @@ use std::collections::{HashSet, VecDeque};
 use pantograph_inference_interface_contracts::{
     InferenceArtifactType, InferenceConnectionSurface, InferenceConnectionSurfaceStatus,
     InferenceConstraintType, InferencePortDescriptor, InferencePortRequirement,
-    InferenceReferenceType, InferenceScalarType, InferenceValueType,
+    InferenceReferenceType, InferenceScalarType, InferenceStructuredType, InferenceValueType,
 };
 
 use super::effective_definition::{effective_node_definition, EffectiveDefinitionError};
@@ -35,7 +35,7 @@ struct ResolvedInputAnchor<'a> {
     port: PortDefinition,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct InferenceConnectionSurfaceView<'a> {
     surfaces: &'a [InferenceConnectionSurface],
 }
@@ -50,12 +50,6 @@ impl<'a> InferenceConnectionSurfaceView<'a> {
             surface.status == InferenceConnectionSurfaceStatus::Current
                 && surface.node_id.as_str() == node_id
         })
-    }
-}
-
-impl Default for InferenceConnectionSurfaceView<'_> {
-    fn default() -> Self {
-        Self { surfaces: &[] }
     }
 }
 
@@ -173,6 +167,12 @@ fn inference_value_type_to_port_data_type(
         InferenceValueType::Scalar(
             InferenceScalarType::I64 | InferenceScalarType::U64 | InferenceScalarType::F64,
         ) => super::types::PortDataType::Number,
+        InferenceValueType::Structured(InferenceStructuredType::Embedding) => {
+            super::types::PortDataType::Embedding
+        }
+        InferenceValueType::Structured(InferenceStructuredType::Json) => {
+            super::types::PortDataType::Json
+        }
         InferenceValueType::Artifact(InferenceArtifactType::Image) => {
             super::types::PortDataType::Image
         }
@@ -768,6 +768,73 @@ mod tests {
     }
 
     #[test]
+    fn current_embedding_connection_surface_accepts_vector_output_and_rejects_tensor_alias() {
+        let registry = NodeRegistry::new();
+        let descriptor: pantograph_inference_interface_contracts::InferenceInterfaceDescriptor = serde_json::from_str(include_str!("../../../pantograph-inference-interface-contracts/tests/fixtures/descriptor_embedding_ready.json")).unwrap();
+        let mut surface = current_connection_surface();
+        surface.descriptor_fingerprint = Some(descriptor.descriptor_fingerprint);
+        surface.inputs = descriptor.inputs;
+        surface.outputs = descriptor.outputs;
+        let mut graph = descriptor_backed_inference_graph();
+        graph.nodes[2].id = "vector-output".into();
+        graph.nodes[2].node_type = "vector-output".into();
+        let revision = graph.compute_fingerprint();
+        let source = ConnectionAnchor {
+            node_id: "inference-node-1".into(),
+            port_id: "embedding".into(),
+        };
+        let target = ConnectionAnchor {
+            node_id: "vector-output".into(),
+            port_id: "vector".into(),
+        };
+        let surfaces = InferenceConnectionSurfaceView::new(std::slice::from_ref(&surface));
+        commit_connection_with_surfaces(&graph, &registry, surfaces, &revision, &source, &target)
+            .unwrap();
+        commit_connection_with_surfaces(
+            &graph,
+            &registry,
+            surfaces,
+            &revision,
+            &ConnectionAnchor {
+                node_id: "source".into(),
+                port_id: "text".into(),
+            },
+            &ConnectionAnchor {
+                node_id: "inference-node-1".into(),
+                port_id: "text".into(),
+            },
+        )
+        .unwrap();
+        let candidates =
+            connection_candidates_with_surfaces(&graph, &registry, surfaces, source.clone(), None)
+                .unwrap();
+        assert!(candidates
+            .compatible_nodes
+            .iter()
+            .any(|node| node.node_id == "vector-output"
+                && node.anchors.iter().any(|anchor| anchor.port_id == "vector")));
+        assert_eq!(
+            inference_value_type_to_port_data_type(&surface.outputs[1].value_type).unwrap(),
+            super::super::types::PortDataType::Json
+        );
+        assert_eq!(
+            inference_value_type_to_port_data_type(&surface.outputs[2].value_type).unwrap(),
+            super::super::types::PortDataType::Json
+        );
+        surface.outputs[0].value_type = InferenceValueType::Artifact(InferenceArtifactType::Tensor);
+        let error = commit_connection_with_surfaces(
+            &graph,
+            &registry,
+            InferenceConnectionSurfaceView::new(std::slice::from_ref(&surface)),
+            &revision,
+            &source,
+            &target,
+        )
+        .unwrap_err();
+        assert_eq!(error.reason, ConnectionRejectionReason::IncompatibleTypes);
+    }
+
+    #[test]
     fn commit_connection_rejects_incompatible_types_with_contract_diagnostic() {
         let registry = NodeRegistry::new();
         let graph = WorkflowGraph {
@@ -982,5 +1049,17 @@ mod tests {
             }],
             derived_graph: None,
         }
+    }
+}
+
+#[cfg(test)]
+mod lint_style_regressions {
+    use super::InferenceConnectionSurfaceView;
+
+    #[test]
+    fn lint_style_default_connection_surface_has_no_current_node() {
+        assert!(InferenceConnectionSurfaceView::default()
+            .current_surface_for("node-a")
+            .is_none());
     }
 }

@@ -245,12 +245,13 @@ fn default_schedulable_task_intent_contract_version() -> u16 {
 #[must_use]
 pub struct ValidatedSchedulableTaskIntent(SchedulableTaskIntent);
 
-impl ValidatedSchedulableTaskIntent {
-    #[must_use]
-    pub fn as_ref(&self) -> &SchedulableTaskIntent {
+impl AsRef<SchedulableTaskIntent> for ValidatedSchedulableTaskIntent {
+    fn as_ref(&self) -> &SchedulableTaskIntent {
         &self.0
     }
+}
 
+impl ValidatedSchedulableTaskIntent {
     #[must_use]
     pub fn into_inner(self) -> SchedulableTaskIntent {
         self.0

@@ -38,6 +38,11 @@ The same runner is used by the required `Rustler BEAM smoke` job in
 - The local `Pantograph.Native` shim defines generated NIF stubs for the full
   default Rustler export surface so `:erlang.load_nif/2` can load the compiled
   library before individual smoke tests call the narrower contract under test.
+  This includes the package-facts snapshot (arity 3), individual summary (arity 2),
+  and update-cursor query (arity 3) exports. Their stubs permit native loading;
+  this smoke harness does not claim model-library query behavior coverage.
+  The seven `frontend-http` exports are feature-gated and outside this default
+  build's export surface.
 - This harness now also pins a backend-owned validation error path by
   asserting that unknown edge endpoints round-trip back to BEAM as validation
   strings through `workflow_validate/1`.

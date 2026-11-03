@@ -66,6 +66,7 @@ import type {
 import { WorkflowProjectionService } from './WorkflowProjectionService.ts';
 import { USE_WORKFLOW_MOCKS } from './workflowServiceConfig.ts';
 import { invokeWorkflowCommand } from './workflowServiceErrors.ts';
+import { getWorkflowBrowserHost } from './workflowBrowserTransport.ts';
 
 export class WorkflowCommandService extends WorkflowProjectionService {
   protected emitWorkflowEvent(_event: WorkflowEvent): void {}
@@ -96,6 +97,12 @@ export class WorkflowCommandService extends WorkflowProjectionService {
         outputs: [],
         timing_ms: 0,
       };
+    }
+
+    // The browser host returns the actual completed run and serves live
+    // projections over HTTP. Native channels remain a desktop-only transport.
+    if (getWorkflowBrowserHost()) {
+      return invokeWorkflowCommand<WorkflowRunResponse>('workflow_run_execution_session', { request });
     }
 
     const channel = new Channel<WorkflowEvent>();

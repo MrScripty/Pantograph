@@ -48,7 +48,7 @@ impl GraphSessionStore {
         state.touch();
         state.canonicalize_graph();
         let current_graph_revision =
-            WorkflowGraphRevision::parse(&state.graph.compute_fingerprint())
+            WorkflowGraphRevision::parse(state.graph.compute_fingerprint())
                 .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
         drop(state);
 
@@ -73,7 +73,7 @@ impl GraphSessionStore {
         state.touch();
         state.canonicalize_graph();
         let current_graph_revision =
-            WorkflowGraphRevision::parse(&state.graph.compute_fingerprint())
+            WorkflowGraphRevision::parse(state.graph.compute_fingerprint())
                 .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
         drop(state);
 
@@ -98,7 +98,7 @@ impl GraphSessionStore {
         state.touch();
         state.canonicalize_graph();
         let graph = state.graph.clone();
-        let current_graph_revision = WorkflowGraphRevision::parse(&graph.compute_fingerprint())
+        let current_graph_revision = WorkflowGraphRevision::parse(graph.compute_fingerprint())
             .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
         drop(state);
 
@@ -178,7 +178,7 @@ impl GraphSessionStore {
         let mut state = handle.lock().await;
         state.touch();
         state.canonicalize_graph();
-        let graph_revision = WorkflowGraphRevision::parse(&state.graph.compute_fingerprint())
+        let graph_revision = WorkflowGraphRevision::parse(state.graph.compute_fingerprint())
             .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
         drop(state);
 
@@ -223,7 +223,7 @@ impl GraphSessionStore {
             state.touch();
             state.canonicalize_graph();
             let current_graph_revision =
-                WorkflowGraphRevision::parse(&state.graph.compute_fingerprint())
+                WorkflowGraphRevision::parse(state.graph.compute_fingerprint())
                     .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
             if current_graph_revision != request.graph_revision {
                 return Err(WorkflowServiceError::InvalidRequest(
@@ -307,7 +307,7 @@ impl GraphSessionStore {
         state.touch();
         state.canonicalize_graph();
         let graph = state.graph.clone();
-        let current_graph_revision = WorkflowGraphRevision::parse(&graph.compute_fingerprint())
+        let current_graph_revision = WorkflowGraphRevision::parse(graph.compute_fingerprint())
             .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
         drop(state);
 
@@ -373,7 +373,7 @@ impl GraphSessionStore {
         state.touch();
         state.canonicalize_graph();
         let current_graph_revision =
-            WorkflowGraphRevision::parse(&state.graph.compute_fingerprint())
+            WorkflowGraphRevision::parse(state.graph.compute_fingerprint())
                 .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
         if current_graph_revision != validation_session.graph_revision {
             return Err(WorkflowServiceError::InvalidRequest(
@@ -401,7 +401,7 @@ impl GraphSessionStore {
         state.touch();
         state.canonicalize_graph();
         let graph = state.graph.clone();
-        let graph_revision = WorkflowGraphRevision::parse(&graph.compute_fingerprint())
+        let graph_revision = WorkflowGraphRevision::parse(graph.compute_fingerprint())
             .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
         drop(state);
 
@@ -444,7 +444,7 @@ impl GraphSessionStore {
         let mut state = handle.lock().await;
         state.touch();
         state.canonicalize_graph();
-        WorkflowGraphRevision::parse(&state.graph.compute_fingerprint())
+        WorkflowGraphRevision::parse(state.graph.compute_fingerprint())
             .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))
     }
 
@@ -461,7 +461,7 @@ impl GraphSessionStore {
         state.touch();
         state.canonicalize_graph();
         let graph = state.graph.clone();
-        let graph_revision = WorkflowGraphRevision::parse(&graph.compute_fingerprint())
+        let graph_revision = WorkflowGraphRevision::parse(graph.compute_fingerprint())
             .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
         drop(state);
 

@@ -85,6 +85,7 @@ run interfaces are not a supported compatibility path.
 | --- | --- | --- |
 | Svelte frontend and `@pantograph/svelte-graph` | Interaction and presentation state, typed user intent, active-run selection | Graph validity, scheduler decisions, runtime readiness, or reconstructed backend state |
 | Tauri desktop adapter | Process composition, command/event transport, windows, desktop lifecycle | Workflow, scheduler, model, device, retention, or artifact policy |
+| `pantograph-app-config` | Persisted application settings, fallible configuration loading, and explicit startup registry composition | Hardware discovery, runtime readiness, live resource admission, or GUI transport |
 | `pantograph-workflow-service` | Workflow use cases, graph sessions, task-graph derivation, run orchestration, artifacts, diagnostics, and user-facing projections | Runtime-specific execution or host transport policy |
 | `pantograph-node-contracts` | Canonical node types, ports, effective contracts, compatibility, and rejection diagnostics | Concrete runtime execution |
 | `node-engine` and `workflow-nodes` | Graph semantics, built-in descriptors, and materialized non-runtime node execution | Runtime selection, dependency resolution, Pumas load-target lookup, or model-runtime launch |

@@ -1,0 +1,132 @@
+{
+  "native_source_commit": "e9d89eacf686b163539c08ebc6225a6c2750bc96",
+  "production_unchanged_after_native_freeze": true,
+  "corrected_producer_sha256": "8fa52e568df966dd783d0d3f6930a17789765667b371e0e04e8276525e626820",
+  "gates": [
+    {
+      "id": "workflow_tests",
+      "command": "cargo test --locked -p pantograph-workflow-service --lib",
+      "log": "m3-workflow-tests-final.log",
+      "exit_code": 0,
+      "log_sha256": "a79dd4b8c080d07b331adc0f0132d2fccb89d9e873be7918d5f4924ec80e2cf4"
+    },
+    {
+      "id": "workflow_clippy",
+      "command": "cargo clippy --locked --no-deps -p pantograph-workflow-service --all-targets -- -D warnings",
+      "log": "m3-workflow-clippy.log",
+      "exit_code": 0,
+      "log_sha256": "4881235d54b137ccfad8c1b23d4562f0ff61d19fbf24d9c1aeeaa8ce367cf58a"
+    },
+    {
+      "id": "scheduler_tests",
+      "command": "cargo test --locked -p pantograph-scheduler",
+      "log": "m3-scheduler-tests.log",
+      "exit_code": 0,
+      "log_sha256": "30d12d8d3f6127c97e703f079e12ed581cc55cada034647481301ca4c495f9f6"
+    },
+    {
+      "id": "prepush_tests",
+      "command": "npm test",
+      "log": "m3-prepush-tests.log",
+      "exit_code": 0,
+      "log_sha256": "a18f0e66276d2d7615553d5f2d5a276b3a2ece82a1df25c6d20d69e2fa6bbdba"
+    },
+    {
+      "id": "critical_lint",
+      "command": "npm run lint:critical",
+      "log": "m3-critical-lint.log",
+      "exit_code": 0,
+      "log_sha256": "26b0f2007e6addcae0ca40a9209f82b2a6fa2027ea1613c3f71c3a506c372511"
+    },
+    {
+      "id": "a11y_lint",
+      "command": "npm run lint:a11y",
+      "log": "m3-a11y-lint.log",
+      "exit_code": 0,
+      "log_sha256": "32be97c9b7f60c0c4cb2512ce96f8465d6faeb4f8092a100dddb574438bfa5df"
+    },
+    {
+      "id": "core_staged_traceability",
+      "command": "TRACEABILITY_STAGED_ONLY=1 ./scripts/check-decision-traceability.sh",
+      "log": "m3-core-staged-traceability.log",
+      "exit_code": 0,
+      "log_sha256": "eb179d1933aa773b2e74f1b440b867ae0937ff6feb66b7aefbc6ca21305737f9"
+    },
+    {
+      "id": "producer_staged_traceability",
+      "command": "TRACEABILITY_STAGED_ONLY=1 ./scripts/check-decision-traceability.sh",
+      "log": "m3-producer-staged-traceability.log",
+      "exit_code": 0,
+      "log_sha256": "26562bcde55ec8d4208f1759855722f729a603f9053ca0a09703787d73899005"
+    },
+    {
+      "id": "original_producer_clippy",
+      "command": "cargo clippy --locked --no-deps -p pantograph-embedded-runtime --no-default-features --features backend-candle,host-dependency-inventory --example cpu_embedding_workflow_probe -- -D warnings",
+      "log": "m3-cpu-example-clippy-final.log",
+      "exit_code": 0,
+      "log_sha256": "beeaa2d98b9e912b73940aebd79f83ca2c6d8d9db6ee5e40fd2680ad6eba9633"
+    },
+    {
+      "id": "original_release_build",
+      "command": "cargo build --release --locked -p pantograph-embedded-runtime --example cpu_embedding_workflow_probe --no-default-features --features backend-candle,host-dependency-inventory",
+      "log": "m3-cpu-release-build.log",
+      "exit_code": 0,
+      "log_sha256": "1aa18a36b08aa7c0f452242668f717b7078f02ad176bfc74025223a4b6a3b552"
+    },
+    {
+      "id": "original_release_freeze",
+      "command": "cargo build --release --locked --offline -p pantograph-embedded-runtime --example cpu_embedding_workflow_probe --no-default-features --features backend-candle,host-dependency-inventory",
+      "log": "m3-cpu-release-freeze.log",
+      "exit_code": 0,
+      "log_sha256": "8101a5184d119e23836503e6520ea930085f0277ecd8a256feb8d62a740ef660"
+    },
+    {
+      "id": "unsupported_candle_only_lib_test_build",
+      "command": "cargo test --locked --offline -p pantograph-embedded-runtime --no-default-features --features backend-candle,host-dependency-inventory --lib native_serial_worker_tests --no-run",
+      "log": "m3-native-lifecycle-build.log",
+      "exit_code": 101,
+      "log_sha256": "f76a27e9e1f4b5a6a0940429b4540181bc4492bc8b8e23ed3230c92b7ca23be1"
+    },
+    {
+      "id": "supported_native_test_build",
+      "command": "cargo test --locked --offline -p pantograph-embedded-runtime --features host-dependency-inventory --lib native_serial_worker_tests --no-run",
+      "log": "m3-native-lifecycle-build-supported.log",
+      "exit_code": 0,
+      "log_sha256": "a0d0b94e1abbab7171cab59eccd8ee4370d5e7e015d409005362890a366b2154"
+    },
+    {
+      "id": "native_lifecycle_tests",
+      "command": "cargo test --locked --offline -p pantograph-embedded-runtime --features host-dependency-inventory --lib native_serial_worker_tests",
+      "log": "m3-native-lifecycle-tests.log",
+      "exit_code": 0,
+      "log_sha256": "a120ff75cb799e56e471feed9234038958819a15d088eb51b96738b539329de4"
+    },
+    {
+      "id": "corrected_oracle_regressions",
+      "command": "cargo test --locked -p pantograph-embedded-runtime --no-default-features --features backend-candle,host-dependency-inventory --example cpu_embedding_workflow_probe sample_oracle_tests",
+      "log": "m3-oracle-regressions-final.log",
+      "exit_code": 0,
+      "log_sha256": "91942747da4e85631caf198498276b5aaaeb3d964c52d60da0c94925bc7123f1"
+    },
+    {
+      "id": "corrected_oracle_clippy",
+      "command": "cargo clippy --locked --no-deps -p pantograph-embedded-runtime --no-default-features --features backend-candle,host-dependency-inventory --example cpu_embedding_workflow_probe -- -D warnings",
+      "log": "m3-corrected-example-clippy-final.log",
+      "exit_code": 0,
+      "log_sha256": "43ac6bb04f2354d1405d9fd98379ebd7d314bae4d3257b666018240bc4161441"
+    },
+    {
+      "id": "reanalysis_build",
+      "command": "cargo build --locked -p pantograph-embedded-runtime --no-default-features --features backend-candle,host-dependency-inventory --example cpu_embedding_workflow_probe",
+      "log": "m3-reanalysis-build-final.log",
+      "exit_code": 0,
+      "log_sha256": "4826f263781f500584ea06b9eb78a285f9717a38da075d4a7d70f7225d371f34"
+    }
+  ],
+  "required_pr_ci": "pending",
+  "limitations": [
+    "source-assisted aggregate training exclusion; no run/attempt identity in timing samples",
+    "CPU17 existing optional-consumer dependency warnings remain",
+    "CPU14 conservative shutdown registry metadata remains"
+  ]
+}

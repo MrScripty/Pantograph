@@ -1,0 +1,32 @@
+{
+  "error": null,
+  "kind": "read_only_reanalysis_of_original_cohort",
+  "native_reexecuted": false,
+  "original_oracle_status": {
+    "error": "cancelled attempt trained, cancellation unobserved, or successful sample count differs",
+    "passed": false
+  },
+  "passed": true,
+  "result": {
+    "all_vectors_match_reference": true,
+    "authenticated_units": 2,
+    "background_grant_positions": [
+      3,
+      7
+    ],
+    "background_priority": -100,
+    "cancellation_phase": "after_actual_native_drain_before_receipt_return",
+    "cancelled_attempt_excluded_from_training_source_assisted": true,
+    "competing_foreground_priority": 100,
+    "in_flight_compute_cancellation_claim": false,
+    "matched_cleanup_receipts": 10,
+    "native_outputs": 10,
+    "protected_background_bypasses": 2,
+    "public_sessions": 5,
+    "public_vectors": 10,
+    "sample_run_attempt_identity_available": false,
+    "successful_uncancelled_samples": 9
+  },
+  "sample_timing_attempt_attribution_claim": false,
+  "training_evidence": "aggregate ring correspondence plus frozen serial append/cancellation source and native regressions"
+}

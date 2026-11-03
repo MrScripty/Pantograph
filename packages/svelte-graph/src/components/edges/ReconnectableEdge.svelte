@@ -126,7 +126,8 @@
   </defs>
 </svg>
 
-<!-- Main edge path with gradient stroke and glow filter -->
+<!-- Zero-area aligned paths cannot use an objectBoundingBox SVG filter.
+     Keep their gradient stroke visible; apply glow only to non-aligned paths. -->
 <path
   {id}
   class="react-flow__edge-path"
@@ -135,7 +136,7 @@
   stroke-width={selected ? 1.5 : 1}
   fill="none"
   stroke-linecap="round"
-  filter="url(#{gradientId}-glow)"
+  filter={sourceX === targetX || sourceY === targetY ? undefined : `url(#${gradientId}-glow)`}
 />
 
 <!-- Invisible wider path for interaction -->

@@ -9,6 +9,7 @@
   import { undoStore } from './stores/undoStore';
   import { loadLastGraph } from './stores/graphSessionStore';
   import { linkModeActive, cancelLinkMode } from './stores/linkStore';
+  import { getWorkflowBrowserHost } from './services/workflow/workflowBrowserTransport';
 
   // Set up the @pantograph/svelte-graph context so package components
   // (GenericNode, ReconnectableEdge, etc.) can access stores via useGraphContext().
@@ -46,12 +47,14 @@
   onMount(() => {
     Logger.log('APP_MOUNTED', { version: '1.0.0-alpha' });
 
-    // Load previously generated components from disk
-    loadWorkspace().then((count) => {
-      if (count > 0) {
-        Logger.log('WORKSPACE_RESTORED', { count });
-      }
-    });
+    // Component workspace persistence belongs to the native desktop host.
+    if (!getWorkflowBrowserHost()) {
+      loadWorkspace().then((count) => {
+        if (count > 0) {
+          Logger.log('WORKSPACE_RESTORED', { count });
+        }
+      });
+    }
 
     // Load the last opened workflow/graph
     loadLastGraph().then(() => {

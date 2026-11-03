@@ -76,8 +76,16 @@ block_diffusion._generate_dllm_masked_streaming = lambda *args, **kwargs: iter((
 sys.modules["block_diffusion"] = block_diffusion
 
 autoregressive = types.ModuleType("autoregressive")
+autoregressive.RepetitionPenaltyNumericsError = ValueError
+autoregressive.MinimumNewTokensError = ValueError
+autoregressive.SeedSamplingError = ValueError
+autoregressive.StopStringError = ValueError
+autoregressive._resolve_stop_strings = lambda model, authored: authored or []
+autoregressive._seeded_sampling = lambda seed: None if seed is None else types.SimpleNamespace(seed=seed)
+autoregressive._resolve_min_new_tokens = lambda model, authored, maximum: authored or 0
 for attr in [
     "_generate_autoregressive",
+    "_generate_native_checked",
     "_continue_sdar_cached",
     "_generate_sdar_cached",
 ]:
@@ -232,6 +240,7 @@ fn test_capabilities() {
     assert!(caps.streaming);
     assert!(!caps.tool_calling);
     assert!(caps.supports_task(InferenceTaskId::TextGeneration));
+    assert!(caps.supports_task(InferenceTaskId::ChatCompletion));
     assert!(caps.supports_task(InferenceTaskId::AudioTranscription));
     assert!(caps.supports_task(InferenceTaskId::ImageGeneration));
     assert!(!caps.supports_task(InferenceTaskId::Embedding));
@@ -645,6 +654,7 @@ fn test_pytorch_worker_load_envelope_tolerates_additive_fields() {
 
 #[test]
 fn test_python_worker_contract_projects_task_profile_loader() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
         let envelope = serde_json::json!({
@@ -689,6 +699,7 @@ fn test_python_worker_contract_projects_task_profile_loader() {
 
 #[test]
 fn test_python_worker_contract_tolerates_additive_load_fields() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
         let envelope = serde_json::json!({
@@ -748,6 +759,7 @@ fn test_python_worker_contract_tolerates_additive_load_fields() {
 
 #[test]
 fn test_python_worker_contract_rejects_unsupported_task_profile_loader() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
         let envelope = serde_json::json!({
@@ -789,6 +801,7 @@ fn test_python_worker_contract_rejects_unsupported_task_profile_loader() {
 
 #[test]
 fn test_python_worker_contract_rejects_missing_load_entry_path() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
         let envelope = serde_json::json!({
@@ -826,6 +839,7 @@ fn test_python_worker_contract_rejects_missing_load_entry_path() {
 
 #[test]
 fn test_python_worker_load_value_error_after_projection_maps_to_model_load_failed() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_module_with_stubbed_dependencies(py);
         let patch = CString::new(
@@ -882,6 +896,7 @@ module.load_model = fail_load_model
 
 #[test]
 fn test_python_worker_load_unexpected_loader_exception_maps_to_model_load_failed() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_module_with_stubbed_dependencies(py);
         let patch = CString::new(
@@ -938,6 +953,7 @@ module.load_model = fail_load_model
 
 #[test]
 fn test_python_worker_load_invalid_loader_stays_invalid_request() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_module_with_stubbed_dependencies(py);
         let envelope = serde_json::json!({
@@ -1069,6 +1085,7 @@ fn test_pytorch_worker_generate_text_dllm_envelope_decodes_backend_local_control
 
 #[test]
 fn test_python_worker_contract_projects_dllm_generation_controls() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
         let fixture = include_str!(
@@ -1103,6 +1120,7 @@ fn test_python_worker_contract_projects_dllm_generation_controls() {
 
 #[test]
 fn test_python_worker_contract_tolerates_additive_generate_fields() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
         let envelope = serde_json::json!({
@@ -1572,6 +1590,7 @@ fn test_pytorch_worker_truncate_kv_cache_envelope_rejects_empty_path() {
 
 #[test]
 fn test_python_worker_contract_projects_unload_envelope() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
         let fixture =
@@ -1588,6 +1607,7 @@ fn test_python_worker_contract_projects_unload_envelope() {
 
 #[test]
 fn test_python_worker_contract_projects_init_envelope() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
         let fixture =
@@ -1604,6 +1624,7 @@ fn test_python_worker_contract_projects_init_envelope() {
 
 #[test]
 fn test_python_worker_contract_projects_shutdown_envelope() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
         let fixture = include_str!(
@@ -1621,6 +1642,7 @@ fn test_python_worker_contract_projects_shutdown_envelope() {
 
 #[test]
 fn test_python_worker_shutdown_from_envelope_returns_structured_success() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_module_with_stubbed_dependencies(py);
         let fixture = include_str!(
@@ -1645,6 +1667,7 @@ fn test_python_worker_shutdown_from_envelope_returns_structured_success() {
 
 #[test]
 fn test_python_worker_response_helpers_emit_success_contract() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
         let locals = PyDict::new(py);
@@ -1690,6 +1713,7 @@ response_json = worker_contract.worker_success_response_json(
 
 #[test]
 fn test_python_worker_response_helpers_emit_error_contract() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
 
@@ -1727,6 +1751,7 @@ fn test_python_worker_response_helpers_emit_error_contract() {
 
 #[test]
 fn test_python_worker_contract_rejects_invalid_init_envelope() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
         let wrong_operation = serde_json::json!({
@@ -1769,6 +1794,7 @@ fn test_python_worker_contract_rejects_invalid_init_envelope() {
 
 #[test]
 fn test_python_worker_contract_rejects_invalid_shutdown_envelope() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
         let wrong_operation = serde_json::json!({
@@ -1811,6 +1837,7 @@ fn test_python_worker_contract_rejects_invalid_shutdown_envelope() {
 
 #[test]
 fn test_python_worker_contract_projects_get_loaded_info_envelope() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
         let fixture = include_str!(
@@ -1828,6 +1855,7 @@ fn test_python_worker_contract_projects_get_loaded_info_envelope() {
 
 #[test]
 fn test_python_worker_contract_rejects_invalid_get_loaded_info_envelope() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
         let wrong_operation = serde_json::json!({
@@ -1870,6 +1898,7 @@ fn test_python_worker_contract_rejects_invalid_get_loaded_info_envelope() {
 
 #[test]
 fn test_python_worker_contract_projects_clear_kv_cache_envelope() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
         let fixture = include_str!(
@@ -1887,6 +1916,7 @@ fn test_python_worker_contract_projects_clear_kv_cache_envelope() {
 
 #[test]
 fn test_python_worker_contract_rejects_invalid_clear_kv_cache_envelope() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
         let wrong_operation = serde_json::json!({
@@ -1929,6 +1959,7 @@ fn test_python_worker_contract_rejects_invalid_clear_kv_cache_envelope() {
 
 #[test]
 fn test_python_worker_contract_projects_save_kv_cache_envelope() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
         let fixture =
@@ -1951,6 +1982,7 @@ fn test_python_worker_contract_projects_save_kv_cache_envelope() {
 
 #[test]
 fn test_python_worker_contract_rejects_invalid_save_kv_cache_envelope() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
         let wrong_operation = serde_json::json!({
@@ -1993,6 +2025,7 @@ fn test_python_worker_contract_rejects_invalid_save_kv_cache_envelope() {
 
 #[test]
 fn test_python_worker_contract_projects_restore_kv_cache_envelope() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
         let fixture = include_str!(
@@ -2016,6 +2049,7 @@ fn test_python_worker_contract_projects_restore_kv_cache_envelope() {
 
 #[test]
 fn test_python_worker_contract_rejects_invalid_restore_kv_cache_envelope() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
         let wrong_operation = serde_json::json!({
@@ -2058,6 +2092,7 @@ fn test_python_worker_contract_rejects_invalid_restore_kv_cache_envelope() {
 
 #[test]
 fn test_python_worker_contract_projects_truncate_kv_cache_envelope() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
         let fixture = include_str!(
@@ -2089,6 +2124,7 @@ fn test_python_worker_contract_projects_truncate_kv_cache_envelope() {
 
 #[test]
 fn test_python_worker_contract_rejects_invalid_truncate_kv_cache_envelope() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
         let wrong_operation = serde_json::json!({
@@ -2131,6 +2167,7 @@ fn test_python_worker_contract_rejects_invalid_truncate_kv_cache_envelope() {
 
 #[test]
 fn test_python_worker_contract_rejects_invalid_unload_envelope() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
         let wrong_operation = serde_json::json!({
@@ -2254,6 +2291,7 @@ fn test_pytorch_worker_audio_transcription_envelope_tolerates_additive_fields() 
 
 #[test]
 fn test_python_worker_contract_projects_audio_transcription_fields() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
         let fixture = include_str!(
@@ -2309,6 +2347,7 @@ fn test_python_worker_contract_projects_audio_transcription_fields() {
 
 #[test]
 fn test_python_worker_contract_tolerates_additive_audio_transcription_fields() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
         let envelope = serde_json::json!({
@@ -2344,6 +2383,7 @@ fn test_python_worker_contract_tolerates_additive_audio_transcription_fields() {
 
 #[test]
 fn test_python_worker_contract_rejects_audio_transcription_legacy_device() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
         let mut value: serde_json::Value = serde_json::from_str(include_str!(
@@ -2366,6 +2406,7 @@ fn test_python_worker_contract_rejects_audio_transcription_legacy_device() {
 
 #[test]
 fn test_python_worker_contract_rejects_audio_transcription_auto_device_field() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
         let mut value: serde_json::Value = serde_json::from_str(include_str!(
@@ -2629,16 +2670,194 @@ fn test_pytorch_worker_generate_text_transport_no_model_normalizes_to_not_runnin
 }
 
 #[test]
+fn test_pytorch_temperature_keeps_zero_and_finite_f32_range_in_worker_envelopes() {
+    for temperature in [0.0, 0.001, 0.7, f64::from(f32::MAX)] {
+        for operation in [
+            PyTorchWorkerOperation::GenerateText,
+            PyTorchWorkerOperation::GenerateTextStream,
+        ] {
+            let envelope = PyTorchBackend::generate_text_envelope(
+                "req-temperature",
+                operation,
+                PyTorchTextGenerationRequest {
+                    prompt: "Explain adapters.".into(),
+                    system_prompt: None,
+                    max_tokens: 3,
+                    min_new_tokens: None,
+                    temperature,
+                    top_p: 1.0,
+                    top_k: Some(0),
+                    repetition_penalty: None,
+                    seed: None,
+                    stop_strings: Vec::new(),
+                    masked_prompt_json: None,
+                },
+            );
+            match operation {
+                PyTorchWorkerOperation::GenerateText => {
+                    PyTorchBackend::validate_generate_text_envelope(&envelope).unwrap()
+                }
+                PyTorchWorkerOperation::GenerateTextStream => {
+                    PyTorchBackend::validate_generate_text_stream_envelope(&envelope).unwrap()
+                }
+                _ => unreachable!(),
+            }
+            assert_eq!(envelope.payload.temperature, temperature);
+            let value = serde_json::to_value(&envelope).unwrap();
+            assert_eq!(value["payload"]["temperature"].as_f64(), Some(temperature));
+            let options = GenerationOptions {
+                sampling: SamplingGenerationOptions {
+                    temperature: Some(temperature as f32),
+                    ..Default::default()
+                },
+                ..Default::default()
+            };
+            let mapping = PyTorchBackend::transformers_generation_option_mapping(&options);
+            assert!(mapping
+                .diagnostics
+                .iter()
+                .any(
+                    |diagnostic| diagnostic.option_path == "sampling.temperature"
+                        && diagnostic.state == OptionSupportState::Honored
+                ));
+        }
+    }
+}
+
+#[test]
+fn test_pytorch_top_p_preserves_unit_interval_in_generate_and_stream_envelopes() {
+    for top_p in [0.0, 0.7, 1.0] {
+        for temperature in [0.0, 0.7] {
+            for operation in [
+                PyTorchWorkerOperation::GenerateText,
+                PyTorchWorkerOperation::GenerateTextStream,
+            ] {
+                let envelope = PyTorchBackend::generate_text_envelope(
+                    "req-top-p",
+                    operation,
+                    PyTorchTextGenerationRequest {
+                        prompt: "Explain adapters.".into(),
+                        system_prompt: None,
+                        max_tokens: 2,
+                        min_new_tokens: None,
+                        temperature,
+                        top_p,
+                        top_k: Some(0),
+                        repetition_penalty: None,
+                        seed: None,
+                        stop_strings: Vec::new(),
+                        masked_prompt_json: None,
+                    },
+                );
+                match operation {
+                    PyTorchWorkerOperation::GenerateText => {
+                        PyTorchBackend::validate_generate_text_envelope(&envelope).unwrap()
+                    }
+                    PyTorchWorkerOperation::GenerateTextStream => {
+                        PyTorchBackend::validate_generate_text_stream_envelope(&envelope).unwrap()
+                    }
+                    _ => unreachable!(),
+                }
+                assert_eq!(envelope.payload.top_p, top_p);
+                assert_eq!(
+                    serde_json::to_value(&envelope).unwrap()["payload"]["top_p"].as_f64(),
+                    Some(top_p)
+                );
+                let options = GenerationOptions {
+                    sampling: SamplingGenerationOptions {
+                        top_p: Some(top_p as f32),
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                };
+                let mapping = PyTorchBackend::transformers_generation_option_mapping(&options);
+                assert!(mapping
+                    .diagnostics
+                    .iter()
+                    .any(|diagnostic| diagnostic.option_path == "sampling.top_p"
+                        && diagnostic.state == OptionSupportState::Honored));
+            }
+        }
+    }
+}
+#[test]
+fn test_pytorch_repetition_penalty_preserves_positive_values_in_generate_and_stream_envelopes() {
+    for repetition_penalty in [0.5_f32, 1.0, 1.2] {
+        for temperature in [0.0, 0.7] {
+            for operation in [
+                PyTorchWorkerOperation::GenerateText,
+                PyTorchWorkerOperation::GenerateTextStream,
+            ] {
+                let envelope = PyTorchBackend::generate_text_envelope(
+                    "req-top-p",
+                    operation,
+                    PyTorchTextGenerationRequest {
+                        prompt: "Explain adapters.".into(),
+                        system_prompt: None,
+                        max_tokens: 2,
+                        min_new_tokens: None,
+                        temperature,
+                        top_p: 0.7,
+                        top_k: Some(0),
+                        repetition_penalty: Some(repetition_penalty),
+                        seed: None,
+                        stop_strings: Vec::new(),
+                        masked_prompt_json: None,
+                    },
+                );
+                match operation {
+                    PyTorchWorkerOperation::GenerateText => {
+                        PyTorchBackend::validate_generate_text_envelope(&envelope).unwrap()
+                    }
+                    PyTorchWorkerOperation::GenerateTextStream => {
+                        PyTorchBackend::validate_generate_text_stream_envelope(&envelope).unwrap()
+                    }
+                    _ => unreachable!(),
+                }
+                assert_eq!(
+                    envelope.payload.transformers_kwargs["repetition_penalty"],
+                    serde_json::json!(repetition_penalty)
+                );
+                assert_eq!(
+                    serde_json::to_value(&envelope).unwrap()["payload"]["transformers_kwargs"]
+                        ["repetition_penalty"],
+                    serde_json::json!(repetition_penalty)
+                );
+                let options = GenerationOptions {
+                    sampling: SamplingGenerationOptions {
+                        repetition_penalty: Some(repetition_penalty),
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                };
+                let mapping = PyTorchBackend::transformers_generation_option_mapping(&options);
+                assert!(mapping
+                    .diagnostics
+                    .iter()
+                    .any(
+                        |diagnostic| diagnostic.option_path == "sampling.repetition_penalty"
+                            && diagnostic.state == OptionSupportState::Honored
+                    ));
+            }
+        }
+    }
+}
+
+#[test]
 fn test_pytorch_generate_text_request_threads_top_k_as_transformers_kwarg() {
-    let request = PyTorchBackend::generate_text_request(
-        "Explain adapters.".to_string(),
-        Some("Be precise.".to_string()),
-        48,
-        0.3,
-        0.9,
-        Some(20),
-        None,
-    );
+    let request = PyTorchBackend::generate_text_request(PyTorchTextGenerationRequest {
+        prompt: "Explain adapters.".to_string(),
+        system_prompt: Some("Be precise.".to_string()),
+        max_tokens: 48,
+        min_new_tokens: None,
+        temperature: 0.3,
+        top_p: 0.9,
+        top_k: Some(20),
+        repetition_penalty: None,
+        seed: None,
+        stop_strings: Vec::new(),
+        masked_prompt_json: None,
+    });
 
     assert_eq!(request.transformers_kwargs["top_k"], serde_json::json!(20));
     assert_eq!(request.prompt, "Explain adapters.");
@@ -2650,24 +2869,36 @@ fn test_pytorch_generate_text_envelopes_thread_top_k_for_generate_and_stream() {
     let generate_envelope = PyTorchBackend::generate_text_envelope(
         "req-generate-top-k",
         PyTorchWorkerOperation::GenerateText,
-        "Explain adapters.".to_string(),
-        Some("Be precise.".to_string()),
-        48,
-        0.3,
-        0.9,
-        Some(33),
-        None,
+        PyTorchTextGenerationRequest {
+            prompt: "Explain adapters.".to_string(),
+            system_prompt: Some("Be precise.".to_string()),
+            max_tokens: 48,
+            min_new_tokens: None,
+            temperature: 0.3,
+            top_p: 0.9,
+            top_k: Some(33),
+            repetition_penalty: None,
+            seed: None,
+            stop_strings: Vec::new(),
+            masked_prompt_json: None,
+        },
     );
     let stream_envelope = PyTorchBackend::generate_text_envelope(
         "req-stream-top-k",
         PyTorchWorkerOperation::GenerateTextStream,
-        "Explain adapters.".to_string(),
-        Some("Be precise.".to_string()),
-        48,
-        0.3,
-        0.9,
-        Some(33),
-        None,
+        PyTorchTextGenerationRequest {
+            prompt: "Explain adapters.".to_string(),
+            system_prompt: Some("Be precise.".to_string()),
+            max_tokens: 48,
+            min_new_tokens: None,
+            temperature: 0.3,
+            top_p: 0.9,
+            top_k: Some(33),
+            repetition_penalty: None,
+            seed: None,
+            stop_strings: Vec::new(),
+            masked_prompt_json: None,
+        },
     );
 
     PyTorchBackend::validate_generate_text_envelope(&generate_envelope)
@@ -2685,17 +2916,69 @@ fn test_pytorch_generate_text_envelopes_thread_top_k_for_generate_and_stream() {
 }
 
 #[test]
+fn test_pytorch_generate_text_top_k_keeps_zero_and_u32_max_in_worker_envelopes() {
+    for top_k in [0, u32::MAX] {
+        for operation in [
+            PyTorchWorkerOperation::GenerateText,
+            PyTorchWorkerOperation::GenerateTextStream,
+        ] {
+            let envelope = PyTorchBackend::generate_text_envelope(
+                "req-top-k-boundary",
+                operation,
+                PyTorchTextGenerationRequest {
+                    prompt: "Explain adapters.".into(),
+                    system_prompt: Some("Be precise.".into()),
+                    max_tokens: 48,
+                    min_new_tokens: None,
+                    temperature: 0.3,
+                    top_p: 0.9,
+                    top_k: Some(top_k),
+                    repetition_penalty: None,
+                    seed: None,
+                    stop_strings: Vec::new(),
+                    masked_prompt_json: None,
+                },
+            );
+            match operation {
+                PyTorchWorkerOperation::GenerateText => {
+                    PyTorchBackend::validate_generate_text_envelope(&envelope).unwrap()
+                }
+                PyTorchWorkerOperation::GenerateTextStream => {
+                    PyTorchBackend::validate_generate_text_stream_envelope(&envelope).unwrap()
+                }
+                _ => unreachable!(),
+            }
+            assert_eq!(
+                envelope.payload.transformers_kwargs["top_k"],
+                serde_json::json!(top_k)
+            );
+            assert_eq!(envelope.payload.max_tokens, 48);
+            assert_eq!(
+                envelope.payload.system_prompt.as_deref(),
+                Some("Be precise.")
+            );
+        }
+    }
+}
+
+#[test]
 fn test_pytorch_generate_text_envelope_rejects_unscoped_transformers_kwargs() {
     let mut generate_envelope = PyTorchBackend::generate_text_envelope(
         "req-generate-raw-kwarg",
         PyTorchWorkerOperation::GenerateText,
-        "Explain adapters.".to_string(),
-        None,
-        48,
-        0.3,
-        0.9,
-        None,
-        None,
+        PyTorchTextGenerationRequest {
+            prompt: "Explain adapters.".to_string(),
+            system_prompt: None,
+            max_tokens: 48,
+            min_new_tokens: None,
+            temperature: 0.3,
+            top_p: 0.9,
+            top_k: None,
+            repetition_penalty: None,
+            seed: None,
+            stop_strings: Vec::new(),
+            masked_prompt_json: None,
+        },
     );
     generate_envelope
         .payload
@@ -2716,13 +2999,19 @@ fn test_pytorch_generate_text_stream_envelope_rejects_policy_transformers_kwargs
     let mut stream_envelope = PyTorchBackend::generate_text_envelope(
         "req-stream-policy-kwarg",
         PyTorchWorkerOperation::GenerateTextStream,
-        "Explain adapters.".to_string(),
-        None,
-        48,
-        0.3,
-        0.9,
-        None,
-        None,
+        PyTorchTextGenerationRequest {
+            prompt: "Explain adapters.".to_string(),
+            system_prompt: None,
+            max_tokens: 48,
+            min_new_tokens: None,
+            temperature: 0.3,
+            top_p: 0.9,
+            top_k: None,
+            repetition_penalty: None,
+            seed: None,
+            stop_strings: Vec::new(),
+            masked_prompt_json: None,
+        },
     );
     stream_envelope
         .payload
@@ -2740,6 +3029,7 @@ fn test_pytorch_generate_text_stream_envelope_rejects_policy_transformers_kwargs
 
 #[test]
 fn test_python_worker_contract_rejects_additive_backend_kwargs() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
         let envelope = serde_json::json!({
@@ -2767,15 +3057,19 @@ fn test_python_worker_contract_rejects_additive_backend_kwargs() {
 
 #[test]
 fn test_pytorch_generate_text_request_omits_absent_top_k_kwarg() {
-    let request = PyTorchBackend::generate_text_request(
-        "Explain adapters.".to_string(),
-        None,
-        48,
-        0.3,
-        0.9,
-        None,
-        None,
-    );
+    let request = PyTorchBackend::generate_text_request(PyTorchTextGenerationRequest {
+        prompt: "Explain adapters.".to_string(),
+        system_prompt: None,
+        max_tokens: 48,
+        min_new_tokens: None,
+        temperature: 0.3,
+        top_p: 0.9,
+        top_k: None,
+        repetition_penalty: None,
+        seed: None,
+        stop_strings: Vec::new(),
+        masked_prompt_json: None,
+    });
 
     assert!(request.transformers_kwargs.is_empty());
 }
@@ -2990,6 +3284,7 @@ fn test_pytorch_worker_trust_policy_defaults_closed() {
     );
 
     let request = PyTorchTransformersLoadRequest {
+        chunk_length_s: None,
         model_ref: Some(PumasModelRef {
             model_id: "pumas://models/no-custom-code".to_string(),
             revision: None,
@@ -3617,6 +3912,7 @@ fn test_pytorch_worker_stream_token_extraction_error_normalizes_to_backend_error
 
 #[test]
 fn test_pytorch_worker_stream_token_accepts_string_chunk() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let token = pyo3::types::PyString::new(py, "hello");
         let chunk =
@@ -3630,6 +3926,7 @@ fn test_pytorch_worker_stream_token_accepts_string_chunk() {
 
 #[test]
 fn test_pytorch_worker_stream_token_accepts_replace_dict_chunk() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let token = pyo3::types::PyDict::new(py);
         token.set_item("mode", "replace").expect("set mode");
@@ -3657,6 +3954,7 @@ fn test_pytorch_worker_stream_token_accepts_replace_dict_chunk() {
 
 #[test]
 fn test_pytorch_worker_stream_token_accepts_usage_only_dict_chunk() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let token = pyo3::types::PyDict::new(py);
         let usage = pyo3::types::PyDict::new(py);
@@ -3682,6 +3980,7 @@ fn test_pytorch_worker_stream_token_accepts_usage_only_dict_chunk() {
 
 #[test]
 fn test_pytorch_worker_stream_token_bounds_usage_counts() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let token = pyo3::types::PyDict::new(py);
         let usage = pyo3::types::PyDict::new(py);
@@ -3707,6 +4006,7 @@ fn test_pytorch_worker_stream_token_bounds_usage_counts() {
 
 #[test]
 fn test_pytorch_worker_stream_token_rejects_dict_without_text_or_usage() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
     Python::with_gil(|py| {
         let token = pyo3::types::PyDict::new(py);
         token.set_item("mode", "replace").expect("set mode");
@@ -5584,8 +5884,7 @@ fn test_pytorch_generation_options_map_to_transformers_kwargs_and_diagnostics() 
             && diagnostic.state == OptionSupportState::Honored
     }));
     assert!(mapping.diagnostics.iter().any(|diagnostic| {
-        diagnostic.option_path == "sampling.seed"
-            && diagnostic.state == OptionSupportState::Unsupported
+        diagnostic.option_path == "sampling.seed" && diagnostic.state == OptionSupportState::Mapped
     }));
     assert!(mapping.diagnostics.iter().any(|diagnostic| {
         diagnostic.option_path == "stopping.eos_token_ids"
@@ -5897,6 +6196,7 @@ impl TextIteratorBarrier {
 
 #[tokio::test]
 async fn production_text_iterator_drains_before_successful_load_and_unload() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.lock().await;
     use futures_util::{FutureExt, StreamExt};
     for action in ["load", "unload", "stop", "failed_restart", "failed_load"] {
         let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();
@@ -5905,7 +6205,14 @@ async fn production_text_iterator_drains_before_successful_load_and_unload() {
             load_worker_module_with_stubbed_dependencies(py);
             py.run(c"import sys, types
 sys.modules['torch'].no_grad = lambda: (lambda f: f)\nsys.modules['torch.nn'] = types.SimpleNamespace(functional=types.SimpleNamespace())
-sys.modules['transformers.cache_utils'] = types.SimpleNamespace(DynamicCache=type('DynamicCache', (), {}))", None, None).unwrap();
+# Import-only placeholders: lifecycle tests replace worker execution below.
+sys.modules['transformers'] = types.ModuleType('transformers')
+sys.modules['transformers'].GenerationConfig = type('GenerationConfig', (), {})
+sys.modules['transformers'].GenerationMixin = type('GenerationMixin', (), {})
+sys.modules['transformers.generation.configuration_utils'] = types.SimpleNamespace(GenerationMode=types.SimpleNamespace(SAMPLE='sample', GREEDY_SEARCH='greedy_search'))
+sys.modules['transformers.generation.stopping_criteria'] = types.SimpleNamespace(StoppingCriteria=object, StoppingCriteriaList=list)
+sys.modules['transformers.cache_utils'] = types.SimpleNamespace(DynamicCache=type('DynamicCache', (), {}))
+sys.modules['transformers.generation.logits_process'] = types.SimpleNamespace(RepetitionPenaltyLogitsProcessor=object, MinNewTokensLengthLogitsProcessor=object)", None, None).unwrap();
             let worker = super::pytorch_worker::worker_module(py).unwrap();
             let names = [
                 "generate_text_stream_setup_from_envelope",
@@ -5935,6 +6242,7 @@ sys.modules['transformers.cache_utils'] = types.SimpleNamespace(DynamicCache=typ
 _rt03_effects = []
 _rt03_fail_text = False
 _rt03_fail_load = False
+_rt03_fail_stop = False
 def _rt03_success(envelope, result):
     request = json.loads(envelope)
     return json.dumps({'status': 'ok', 'request_id': request['request_id'], 'result': result})
@@ -5956,6 +6264,8 @@ def unload_model_from_envelope(envelope):
     return _rt03_success(envelope, {'unloaded': True})
 def shutdown_worker_from_envelope(envelope):
     _rt03_effects.append('stop')
+    if _rt03_fail_stop:
+        raise RuntimeError('controlled unacknowledged shutdown')
     return _rt03_success(envelope, {'shutdown': True})
 "#).unwrap();
             py.run(&source, Some(&worker.dict()), None).unwrap();
@@ -6182,6 +6492,59 @@ async fn assert_effectful_load_failure_clears_residency(backend: PyTorchBackend)
             .unwrap();
         assert_eq!(effects, vec!["load", "load"]);
     });
+    assert_eq!(
+        gateway
+            .resident_lifecycle_snapshot()
+            .await
+            .unwrap()
+            .allocation_state,
+        crate::resident_lifecycle::ResidentAllocationState::Unknown
+    );
+    Python::with_gil(|py| {
+        super::pytorch_worker::worker_module(py)
+            .unwrap()
+            .setattr("_rt03_fail_stop", true)
+            .unwrap();
+    });
+    assert!(gateway.stop().await.is_err());
+    assert_eq!(
+        gateway
+            .resident_lifecycle_snapshot()
+            .await
+            .unwrap()
+            .allocation_state,
+        crate::resident_lifecycle::ResidentAllocationState::Unknown
+    );
+    Python::with_gil(|py| {
+        super::pytorch_worker::worker_module(py)
+            .unwrap()
+            .setattr("_rt03_fail_stop", false)
+            .unwrap();
+    });
+    gateway.stop().await.unwrap();
+    assert_eq!(
+        gateway
+            .resident_lifecycle_snapshot()
+            .await
+            .unwrap()
+            .allocation_state,
+        crate::resident_lifecycle::ResidentAllocationState::Released
+    );
+    Python::with_gil(|py| {
+        let effects = super::pytorch_worker::worker_module(py)
+            .unwrap()
+            .getattr("_rt03_effects")
+            .unwrap()
+            .extract::<Vec<String>>()
+            .unwrap();
+        assert_eq!(
+            effects
+                .iter()
+                .filter(|effect| effect.as_str() == "stop")
+                .count(),
+            2
+        );
+    });
 }
 
 struct SelectedTextCancellation {
@@ -6205,6 +6568,7 @@ impl crate::InferenceExecutionCancellationSignal for SelectedTextCancellation {
 
 #[tokio::test]
 async fn selected_text_production_loader_and_worker_retain_selection_until_termination() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.lock().await;
     use futures_util::FutureExt;
     for mode in ["success", "error", "cancel"] {
         let (_directory, request, target, mut decision) = crate::selected_text_execution::fixture();
@@ -6226,7 +6590,14 @@ async fn selected_text_production_loader_and_worker_retain_selection_until_termi
             py.run(c"import sys, types
 sys.modules['torch'].no_grad = lambda: (lambda f: f)
 sys.modules['torch.nn'] = types.SimpleNamespace(functional=types.SimpleNamespace())
-sys.modules['transformers.cache_utils'] = types.SimpleNamespace(DynamicCache=type('DynamicCache', (), {}))", None, None).unwrap();
+# Import-only placeholders: lifecycle tests replace worker execution below.
+sys.modules['transformers'] = types.ModuleType('transformers')
+sys.modules['transformers'].GenerationConfig = type('GenerationConfig', (), {})
+sys.modules['transformers'].GenerationMixin = type('GenerationMixin', (), {})
+sys.modules['transformers.generation.configuration_utils'] = types.SimpleNamespace(GenerationMode=types.SimpleNamespace(SAMPLE='sample', GREEDY_SEARCH='greedy_search'))
+sys.modules['transformers.generation.stopping_criteria'] = types.SimpleNamespace(StoppingCriteria=object, StoppingCriteriaList=list)
+sys.modules['transformers.cache_utils'] = types.SimpleNamespace(DynamicCache=type('DynamicCache', (), {}))
+sys.modules['transformers.generation.logits_process'] = types.SimpleNamespace(RepetitionPenaltyLogitsProcessor=object, MinNewTokensLengthLogitsProcessor=object)", None, None).unwrap();
             let worker = super::pytorch_worker::worker_module(py).unwrap();
             let saved = [
                 "generate_text_stream_setup_from_envelope",
@@ -6397,4 +6768,1526 @@ fn selected_text_adapter_preserves_text_parts_and_rejects_nontext_parts() {
         {"type": "text", "text": "partial"}, {"type": "image_url", "image_url": {"url": "file:///image"}}
     ]}]});
     assert!(extract_prompt_from_messages(&request).is_err());
+}
+
+fn named_text_request(prompt: &str) -> crate::PyTorchTextGenerationRequest {
+    crate::PyTorchTextGenerationRequest {
+        prompt: prompt.to_string(),
+        system_prompt: Some("Be concise.".to_string()),
+        max_tokens: 64,
+        min_new_tokens: None,
+        temperature: 0.2,
+        top_p: 0.95,
+        top_k: Some(40),
+        repetition_penalty: None,
+        seed: None,
+        stop_strings: Vec::new(),
+        masked_prompt_json: Some("{\"prompt\":\"masked\"}".to_string()),
+    }
+}
+
+#[test]
+fn pytorch_named_text_request_preserves_exact_worker_envelopes() {
+    for (operation, label) in [
+        (PyTorchWorkerOperation::GenerateText, "generate_text"),
+        (
+            PyTorchWorkerOperation::GenerateTextStream,
+            "generate_text_stream",
+        ),
+    ] {
+        let envelope = PyTorchBackend::generate_text_envelope(
+            "request-named",
+            operation,
+            named_text_request("Explain adapters."),
+        );
+        PyTorchBackend::validate_generate_text_envelope_operation(&envelope, operation)
+            .expect("same worker validation");
+        assert_eq!(
+            serde_json::to_value(&envelope).expect("worker envelope"),
+            serde_json::json!({
+                "contract_version": 1,
+                "request_id": "request-named",
+                "operation": label,
+                "cancellation": { "drop_stream_cancels": false },
+                "payload": {
+                    "prompt": "Explain adapters.",
+                    "system_prompt": "Be concise.",
+                    "max_tokens": 64,
+                    "temperature": 0.2,
+                    "top_p": 0.95,
+                    "masked_prompt_json": "{\"prompt\":\"masked\"}",
+                    "transformers_kwargs": { "top_k": 40 },
+                },
+            })
+        );
+    }
+}
+
+#[tokio::test]
+async fn pytorch_named_text_request_preserves_legacy_validation_paths() {
+    use futures_util::StreamExt;
+    use std::time::Duration;
+
+    let backend = PyTorchBackend::new();
+    let mut request = named_text_request("  ");
+    request.top_k = None;
+    request.masked_prompt_json = None;
+    let legacy = backend
+        .generate(
+            "  ".to_string(),
+            Some("Be concise.".to_string()),
+            64,
+            0.2,
+            0.95,
+            None,
+        )
+        .await
+        .expect_err("blank legacy prompt");
+    let named = backend
+        .generate_with_top_k(request.clone())
+        .await
+        .expect_err("blank named prompt");
+    assert_eq!(legacy.to_string(), named.to_string());
+    assert!(
+        matches!(named, BackendError::Config(ref message) if message == "PyTorch worker generate_text envelope requires a prompt")
+    );
+
+    let mut legacy_stream = backend.generate_stream(
+        "  ".to_string(),
+        Some("Be concise.".to_string()),
+        64,
+        0.2,
+        0.95,
+        None,
+    );
+    let mut named_stream = backend.generate_stream_with_top_k(request);
+    let legacy_error = tokio::time::timeout(Duration::from_secs(2), legacy_stream.next())
+        .await
+        .expect("bounded legacy validation")
+        .expect("legacy error item")
+        .expect_err("legacy validation failure");
+    let named_error = tokio::time::timeout(Duration::from_secs(2), named_stream.next())
+        .await
+        .expect("bounded named validation")
+        .expect("named error item")
+        .expect_err("named validation failure");
+    assert_eq!(legacy_error.to_string(), named_error.to_string());
+    assert!(
+        matches!(named_error, BackendError::Config(ref message) if message == "PyTorch worker generate_text envelope requires a prompt")
+    );
+    assert!(
+        tokio::time::timeout(Duration::from_secs(2), legacy_stream.next())
+            .await
+            .expect("legacy stream closes")
+            .is_none()
+    );
+    assert!(
+        tokio::time::timeout(Duration::from_secs(2), named_stream.next())
+            .await
+            .expect("named stream closes")
+            .is_none()
+    );
+}
+
+#[test]
+fn test_pytorch_repetition_penalty_rejects_invalid_worker_values() {
+    for operation in [
+        PyTorchWorkerOperation::GenerateText,
+        PyTorchWorkerOperation::GenerateTextStream,
+    ] {
+        for value in [
+            serde_json::json!(0),
+            serde_json::json!(-1),
+            serde_json::json!(true),
+            serde_json::json!("1.2"),
+            serde_json::Value::Null,
+        ] {
+            let mut request = named_text_request("hello");
+            request.repetition_penalty = Some(1.2);
+            let mut envelope =
+                PyTorchBackend::generate_text_envelope("req-repeat-invalid", operation, request);
+            envelope
+                .payload
+                .transformers_kwargs
+                .insert("repetition_penalty".into(), value);
+            assert!(PyTorchBackend::validate_generate_text_envelope_operation(
+                &envelope, operation
+            )
+            .unwrap_err()
+            .to_string()
+            .contains("repetition_penalty must be positive and finite"));
+        }
+    }
+}
+
+#[test]
+fn test_pytorch_min_new_tokens_preserves_omission_zero_and_checked_budget_in_both_operations() {
+    for operation in [
+        PyTorchWorkerOperation::GenerateText,
+        PyTorchWorkerOperation::GenerateTextStream,
+    ] {
+        for (minimum, maximum) in [
+            (None, 512),
+            (Some(0), 512),
+            (Some(3), 3),
+            (Some(u32::MAX), i64::from(u32::MAX)),
+        ] {
+            let mut request = named_text_request("prompt");
+            request.min_new_tokens = minimum;
+            request.max_tokens = maximum;
+            request.repetition_penalty = Some(1.2);
+            let envelope =
+                PyTorchBackend::generate_text_envelope("min-envelope", operation, request);
+            PyTorchBackend::validate_generate_text_envelope_operation(&envelope, operation)
+                .unwrap();
+            assert_eq!(
+                envelope.payload.transformers_kwargs.get("min_new_tokens"),
+                minimum.map(serde_json::Value::from).as_ref()
+            );
+            let encoded = serde_json::to_value(&envelope).unwrap();
+            assert_eq!(
+                encoded["payload"]["transformers_kwargs"].get("min_new_tokens"),
+                minimum.map(serde_json::Value::from).as_ref()
+            );
+            assert_eq!(encoded["payload"]["max_tokens"], serde_json::json!(maximum));
+        }
+        for value in [
+            serde_json::json!(-1),
+            serde_json::json!(u64::from(u32::MAX) + 1),
+            serde_json::json!(3.0),
+            serde_json::json!(true),
+            serde_json::json!("3"),
+            serde_json::Value::Null,
+            serde_json::json!(513),
+        ] {
+            let mut request = named_text_request("prompt");
+            request.max_tokens = 512;
+            let mut envelope =
+                PyTorchBackend::generate_text_envelope("bad-min-envelope", operation, request);
+            envelope
+                .payload
+                .transformers_kwargs
+                .insert("min_new_tokens".into(), value);
+            assert!(PyTorchBackend::validate_generate_text_envelope_operation(
+                &envelope, operation
+            )
+            .unwrap_err()
+            .to_string()
+            .contains("min_new_tokens"));
+        }
+        for maximum in [0, -1, i64::from(u32::MAX) + 1, i64::MAX] {
+            let mut request = named_text_request("prompt");
+            request.min_new_tokens = Some(0);
+            request.max_tokens = maximum;
+            let envelope =
+                PyTorchBackend::generate_text_envelope("bad-max-envelope", operation, request);
+            assert!(PyTorchBackend::validate_generate_text_envelope_operation(
+                &envelope, operation
+            )
+            .unwrap_err()
+            .to_string()
+            .contains("max_tokens must be a positive u32"));
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_pytorch_chat_min_new_tokens_malformed_or_over_budget_refuses_before_python_job() {
+    let mut backend = PyTorchBackend::new();
+    backend.ready = true;
+    for (minimum, maximum) in [
+        (serde_json::json!(-1), None),
+        (serde_json::json!(u64::from(u32::MAX) + 1), None),
+        (serde_json::json!(3.0), None),
+        (serde_json::json!(true), None),
+        (serde_json::json!("3"), None),
+        (serde_json::Value::Null, None),
+        (serde_json::json!(513), None),
+        (serde_json::json!(9), Some(serde_json::json!(8))),
+        (serde_json::json!(3), Some(serde_json::json!("bad"))),
+        (serde_json::json!(3), Some(serde_json::json!(4.5))),
+        (serde_json::json!(0), Some(serde_json::json!(0))),
+        (serde_json::json!(0), Some(serde_json::Value::Null)),
+        (serde_json::json!(0), Some(serde_json::json!(true))),
+        (serde_json::json!(0), Some(serde_json::json!("3"))),
+        (serde_json::json!(0), Some(serde_json::json!(3.0))),
+        (
+            serde_json::json!(0),
+            Some(serde_json::json!(u64::from(u32::MAX) + 1)),
+        ),
+    ] {
+        let mut request = serde_json::json!({ "model": "local", "stream": true, "messages": [{ "role": "user", "content": [{ "type": "text", "text": "prompt" }] }], "min_new_tokens": minimum });
+        if let Some(maximum) = maximum {
+            request["max_tokens"] = maximum;
+        }
+        let error = match backend.chat_completion_stream(request.to_string()).await {
+            Err(error) => error,
+            Ok(_) => panic!("invalid minimum must refuse before a Python stream is returned"),
+        };
+        assert!(error.to_string().contains("min_new_tokens"), "{error}");
+    }
+}
+
+#[test]
+fn test_pytorch_seed_preserves_omission_and_u64_boundaries_in_both_worker_operations() {
+    for seed in [None, Some(0), Some(u64::MAX)] {
+        for operation in [
+            PyTorchWorkerOperation::GenerateText,
+            PyTorchWorkerOperation::GenerateTextStream,
+        ] {
+            let envelope = PyTorchBackend::generate_text_envelope(
+                "req-seed",
+                operation,
+                PyTorchTextGenerationRequest {
+                    prompt: "Explain seeds.".into(),
+                    system_prompt: None,
+                    max_tokens: 3,
+                    min_new_tokens: None,
+                    temperature: 0.7,
+                    top_p: 1.0,
+                    top_k: None,
+                    repetition_penalty: None,
+                    seed,
+                    stop_strings: Vec::new(),
+                    masked_prompt_json: None,
+                },
+            );
+            PyTorchBackend::validate_generate_text_envelope_operation(&envelope, operation)
+                .unwrap();
+            assert_eq!(
+                envelope.payload.transformers_kwargs.get("seed"),
+                seed.map(serde_json::Value::from).as_ref()
+            );
+            let encoded = serde_json::to_value(&envelope).unwrap();
+            assert_eq!(
+                encoded["payload"]
+                    .get("transformers_kwargs")
+                    .and_then(|kwargs| kwargs.get("seed")),
+                seed.map(serde_json::Value::from).as_ref()
+            );
+            let options = GenerationOptions {
+                sampling: SamplingGenerationOptions {
+                    seed,
+                    ..Default::default()
+                },
+                ..Default::default()
+            };
+            let mapping = PyTorchBackend::transformers_generation_option_mapping(&options);
+            assert_eq!(
+                mapping.kwargs.get("seed"),
+                seed.map(serde_json::Value::from).as_ref()
+            );
+            assert_eq!(
+                mapping
+                    .diagnostics
+                    .iter()
+                    .any(|diagnostic| diagnostic.option_path == "sampling.seed"
+                        && diagnostic.state == OptionSupportState::Mapped),
+                seed.is_some()
+            );
+        }
+    }
+}
+
+#[test]
+fn test_pytorch_worker_envelope_refuses_invalid_authored_seed() {
+    for invalid in [
+        serde_json::json!(-1),
+        serde_json::json!(1.5),
+        serde_json::json!(true),
+        serde_json::Value::Null,
+        serde_json::json!("42"),
+    ] {
+        for operation in [
+            PyTorchWorkerOperation::GenerateText,
+            PyTorchWorkerOperation::GenerateTextStream,
+        ] {
+            let mut request = named_text_request("Explain seeds.");
+            request.masked_prompt_json = None;
+            let mut envelope =
+                PyTorchBackend::generate_text_envelope("req-invalid-seed", operation, request);
+            envelope
+                .payload
+                .transformers_kwargs
+                .insert("seed".into(), invalid.clone());
+            let error =
+                PyTorchBackend::validate_generate_text_envelope_operation(&envelope, operation)
+                    .unwrap_err();
+            assert!(
+                error.to_string().contains("seed must be an integer"),
+                "{error}"
+            );
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_pytorch_chat_refuses_invalid_authored_seed_before_worker_dispatch() {
+    let mut backend = PyTorchBackend::new();
+    backend.ready = true;
+    for invalid in [
+        serde_json::json!(-1),
+        serde_json::json!(1.5),
+        serde_json::json!(true),
+        serde_json::Value::Null,
+        serde_json::json!("42"),
+    ] {
+        let request = serde_json::json!({
+            "messages": [{"role": "user", "content": "Hi"}],
+            "seed": invalid
+        });
+        let error = match backend.chat_completion_stream(request.to_string()).await {
+            Err(error) => error,
+            Ok(_) => panic!("invalid seed must fail before dispatch"),
+        };
+        assert!(
+            error.to_string().contains("seed must be an integer"),
+            "{error}"
+        );
+    }
+}
+
+#[test]
+fn test_pytorch_stop_strings_forward_exactly_and_omit_empty_options_for_both_operations() {
+    for stop_strings in [
+        Vec::new(),
+        vec!["終わり🛑".to_owned()],
+        vec!["  END\n".to_owned(), " ".to_owned()],
+    ] {
+        for operation in [
+            PyTorchWorkerOperation::GenerateText,
+            PyTorchWorkerOperation::GenerateTextStream,
+        ] {
+            let mut request = named_text_request("Explain stops.");
+            request.masked_prompt_json = None;
+            request.stop_strings = stop_strings.clone();
+            let envelope = PyTorchBackend::generate_text_envelope("req-stop", operation, request);
+            PyTorchBackend::validate_generate_text_envelope_operation(&envelope, operation)
+                .unwrap();
+            let expected = (!stop_strings.is_empty()).then(|| serde_json::json!(stop_strings));
+            assert_eq!(
+                envelope.payload.transformers_kwargs.get("stop_strings"),
+                expected.as_ref()
+            );
+            let encoded = serde_json::to_value(&envelope).unwrap();
+            assert_eq!(
+                encoded["payload"]["transformers_kwargs"].get("stop_strings"),
+                expected.as_ref()
+            );
+            let options = GenerationOptions {
+                stopping: StoppingGenerationOptions {
+                    stop_strings: stop_strings.clone(),
+                    ..Default::default()
+                },
+                ..Default::default()
+            };
+            let mapping = PyTorchBackend::transformers_generation_option_mapping(&options);
+            assert_eq!(mapping.kwargs.get("stop_strings"), expected.as_ref());
+            assert_eq!(
+                mapping
+                    .diagnostics
+                    .iter()
+                    .any(
+                        |diagnostic| diagnostic.option_path == "stopping.stop_strings"
+                            && diagnostic.state == OptionSupportState::Mapped
+                    ),
+                !stop_strings.is_empty()
+            );
+        }
+    }
+}
+
+#[test]
+fn test_pytorch_stop_strings_envelope_refuses_invalid_list_before_worker_dispatch() {
+    for invalid in [
+        serde_json::json!("END"),
+        serde_json::json!([]),
+        serde_json::json!([""]),
+        serde_json::json!([1]),
+        serde_json::json!(true),
+        serde_json::Value::Null,
+    ] {
+        for operation in [
+            PyTorchWorkerOperation::GenerateText,
+            PyTorchWorkerOperation::GenerateTextStream,
+        ] {
+            let mut request = named_text_request("Explain stops.");
+            request.masked_prompt_json = None;
+            let mut envelope =
+                PyTorchBackend::generate_text_envelope("req-invalid-stop", operation, request);
+            envelope
+                .payload
+                .transformers_kwargs
+                .insert("stop_strings".into(), invalid.clone());
+            let error =
+                PyTorchBackend::validate_generate_text_envelope_operation(&envelope, operation)
+                    .unwrap_err();
+            assert!(
+                error
+                    .to_string()
+                    .contains("stop_strings must be a nonempty list of nonempty strings"),
+                "{error}"
+            );
+        }
+    }
+}
+
+// Production Rust load/forward paths and blocking jobs; Python results are
+// controlled. This is custody/cache evidence, not a real ASR model result.
+fn prepare_selected_audio_worker<'py>(
+    py: Python<'py>,
+    isolated: &Arc<super::pytorch_worker::IsolatedAudioWorker>,
+) -> Bound<'py, pyo3::types::PyModule> {
+    load_worker_module_with_stubbed_dependencies(py);
+    py.run(c"import sys, types
+sys.modules['torch'].no_grad = lambda: (lambda f: f)
+sys.modules['torch.nn'] = types.SimpleNamespace(functional=types.SimpleNamespace())
+sys.modules['transformers'] = types.ModuleType('transformers')
+sys.modules['transformers'].GenerationConfig = type('GenerationConfig', (), {})
+sys.modules['transformers'].GenerationMixin = type('GenerationMixin', (), {})
+sys.modules['transformers.generation.configuration_utils'] = types.SimpleNamespace(GenerationMode=types.SimpleNamespace(SAMPLE='sample', GREEDY_SEARCH='greedy_search'))
+sys.modules['transformers.generation.stopping_criteria'] = types.SimpleNamespace(StoppingCriteria=object, StoppingCriteriaList=list)
+sys.modules['transformers.cache_utils'] = types.SimpleNamespace(DynamicCache=type('DynamicCache', (), {}))
+sys.modules['transformers.generation.logits_process'] = types.SimpleNamespace(RepetitionPenaltyLogitsProcessor=object, MinNewTokensLengthLogitsProcessor=object)",None,None).unwrap();
+    super::pytorch_worker::worker_module(py).unwrap();
+    isolated.module(py).unwrap()
+}
+
+#[tokio::test]
+async fn selected_audio_actual_python_loader_projects_chunk_and_closed_policy_to_pipeline() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.lock().await;
+    let (_directory, request, target, decision) = crate::selected_audio_execution::fixture();
+    let envelope = PyTorchBackend::selected_audio_load_envelope(&request, &target, &decision)
+        .await
+        .unwrap();
+    Python::with_gil(|py| {
+        let module = load_worker_module_with_stubbed_dependencies(py);
+        let contract = load_worker_contract_module(py);
+        module
+            .setattr(
+                "load_transformers_model_kwargs_from_envelope",
+                contract
+                    .getattr("load_transformers_model_kwargs_from_envelope")
+                    .unwrap(),
+            )
+            .unwrap();
+        py.run(c"
+import types
+fixture_calls=[]
+class FixtureAuto:
+    @classmethod
+    def from_pretrained(cls,path,**kwargs):
+        fixture_calls.append((path,kwargs))
+        return types.SimpleNamespace(tokenizer='fixture-tokenizer',feature_extractor='fixture-features')
+def fixture_pipeline(**kwargs):
+    fixture_calls.append(kwargs)
+    return object()
+transformers=types.ModuleType('transformers')
+transformers.AutoModelForSpeechSeq2Seq=FixtureAuto
+transformers.AutoProcessor=FixtureAuto
+transformers.pipeline=fixture_pipeline
+sys.modules['transformers']=transformers
+",Some(&module.dict()),None).unwrap();
+        let response: String = module
+            .call_method1(
+                "load_transformers_model_from_envelope",
+                (serde_json::to_string(&envelope).unwrap(),),
+            )
+            .unwrap()
+            .extract()
+            .unwrap();
+        let result: serde_json::Value = serde_json::from_str(&response).unwrap();
+        assert_eq!(result["status"], "ok", "{result}");
+        let globals = module.dict();
+        globals
+            .set_item("fixture_expected_path", &target.local_load_path)
+            .unwrap();
+        py.run(
+            c"
+assert fixture_calls[0][0] == fixture_expected_path
+assert fixture_calls[1][0] == fixture_expected_path
+for _,kw in fixture_calls[:2]:
+    assert kw['trust_remote_code'] is False
+    assert kw['local_files_only'] is True
+    assert kw['revision'] == 'synthetic-r1'
+assert fixture_calls[2]['task'] == 'automatic-speech-recognition'
+assert fixture_calls[2]['device'] == -1
+assert fixture_calls[2]['chunk_length_s'] == 0.5
+",
+            Some(&globals),
+            None,
+        )
+        .unwrap();
+        for bad in [
+            serde_json::json!(0),
+            serde_json::json!(-1),
+            serde_json::json!(true),
+            serde_json::json!("0.5"),
+        ] {
+            let mut encoded = serde_json::to_value(&envelope).unwrap();
+            encoded["payload"]["chunk_length_s"] = bad;
+            assert!(contract
+                .call_method1(
+                    "load_transformers_model_kwargs_from_envelope",
+                    (encoded.to_string(),)
+                )
+                .is_err());
+        }
+    });
+}
+
+fn patch_selected_audio_worker(py: Python<'_>, worker: &Bound<'_, pyo3::types::PyModule>) {
+    py.run(c"
+_audio_effects=[]
+_audio_mode='success'
+_audio_phase='forward'
+_audio_fail_stop=False
+_audio_load={}
+_audio_forward={}
+def _audio_success(envelope,result):
+    req=json.loads(envelope)
+    return json.dumps({'status':'ok','request_id':req['request_id'],'result':result})
+def load_transformers_model_from_envelope(envelope):
+    global _audio_load
+    _audio_load=json.loads(envelope)
+    _audio_effects.append('load')
+    if _audio_phase=='load':
+        _audio_barrier.wait()
+        _audio_effects.append('load-completed')
+        if _audio_mode=='error':
+            raise RuntimeError('controlled ASR load failure')
+    return _audio_success(envelope,{'model_path':_audio_load['payload']['entry_path'],'model_type':'audio_transcription','device':_audio_load['payload']['device']})
+def transcribe_audio_from_envelope(envelope):
+    global _audio_forward
+    _audio_forward=json.loads(envelope)
+    _audio_effects.append('forward')
+    if _audio_phase=='forward':
+        _audio_barrier.wait()
+        _audio_effects.append('forward-completed')
+        if _audio_mode=='error':
+            raise RuntimeError('controlled ASR forward failure')
+    return _audio_success(envelope,{'text':'controlled fixture transcript','language':'en','duration_seconds':0.00025,'chunks':None})
+def shutdown_worker_from_envelope(envelope):
+    _audio_effects.append('shutdown')
+    if _audio_fail_stop:
+        raise RuntimeError('controlled unacknowledged ASR shutdown')
+    return _audio_success(envelope,{'shutdown':True})
+",Some(&worker.dict()),None).unwrap();
+}
+
+#[tokio::test]
+async fn selected_audio_production_load_forward_jobs_hold_custody_through_cancel_abort_and_error() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.lock().await;
+    for phase in ["load", "forward"] {
+        for mode in ["success", "error", "cancel", "abort"] {
+            let (_directory, request, target, decision) =
+                crate::selected_audio_execution::fixture();
+            let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();
+            let (release_tx, release_rx) = std::sync::mpsc::channel();
+            let backend = PyTorchBackend::new();
+            let worker_handle = backend.selected_audio_worker.clone();
+            let saved = Python::with_gil(|py| {
+                let worker = prepare_selected_audio_worker(py, &worker_handle);
+                let saved = [
+                    "load_transformers_model_from_envelope",
+                    "transcribe_audio_from_envelope",
+                    "shutdown_worker_from_envelope",
+                ]
+                .into_iter()
+                .map(|name| (name, worker.getattr(name).unwrap().unbind()))
+                .collect::<Vec<_>>();
+                patch_selected_audio_worker(py, &worker);
+                worker.setattr("_audio_phase", phase).unwrap();
+                worker.setattr("_audio_mode", mode).unwrap();
+                worker
+                    .setattr(
+                        "_audio_barrier",
+                        Py::new(
+                            py,
+                            TextIteratorBarrier {
+                                entered: std::sync::Mutex::new(Some(entered_tx)),
+                                release: std::sync::Mutex::new(release_rx),
+                            },
+                        )
+                        .unwrap(),
+                    )
+                    .unwrap();
+                saved
+            });
+            let gateway = Arc::new(crate::InferenceGateway::with_backend(
+                Box::new(backend),
+                "PyTorch",
+            ));
+            let cancellation = Arc::new(SelectedTextCancellation {
+                cancelled: Default::default(),
+                observed: std::sync::Mutex::new(None),
+            });
+            let caller = {
+                let gateway = gateway.clone();
+                let cancellation = cancellation.clone();
+                let request = request.clone();
+                let target = target.clone();
+                tokio::spawn(async move {
+                    gateway
+                        .execute_selected_audio_with_cancellation(
+                            request,
+                            target,
+                            decision,
+                            crate::InferenceExecutionCancellationHandle::with_signal(cancellation),
+                        )
+                        .await
+                })
+            };
+            tokio::time::timeout(std::time::Duration::from_secs(2), entered_rx)
+                .await
+                .unwrap()
+                .unwrap();
+            if mode == "abort" {
+                caller.abort();
+            } else if mode == "cancel" {
+                cancellation
+                    .cancelled
+                    .store(true, std::sync::atomic::Ordering::SeqCst);
+            }
+            assert!(
+                tokio::time::timeout(std::time::Duration::from_millis(30), gateway.is_ready())
+                    .await
+                    .is_err(),
+                "{phase}:{mode}"
+            );
+            Python::with_gil(|py| {
+                let worker = worker_handle.module(py).unwrap();
+                let load: serde_json::Value = serde_json::from_str(
+                    &worker
+                        .getattr("json")
+                        .unwrap()
+                        .call_method1("dumps", (worker.getattr("_audio_load").unwrap(),))
+                        .unwrap()
+                        .extract::<String>()
+                        .unwrap(),
+                )
+                .unwrap();
+                assert_eq!(load["request_id"], request.request_id.clone().unwrap());
+                assert_eq!(load["payload"]["entry_path"], target.local_load_path);
+                assert_eq!(load["payload"]["device"], "cpu");
+                assert_eq!(load["payload"]["chunk_length_s"], 0.5);
+                assert_eq!(
+                    load["payload"]["model_ref"]["model_id"],
+                    "synthetic/asr-fixture"
+                );
+                assert_eq!(load["payload"]["trust_policy"]["local_files_only"], true);
+                assert_eq!(load["payload"]["trust_policy"]["allow_remote_code"], false);
+                if phase == "forward" {
+                    let f: serde_json::Value = serde_json::from_str(
+                        &worker
+                            .getattr("json")
+                            .unwrap()
+                            .call_method1("dumps", (worker.getattr("_audio_forward").unwrap(),))
+                            .unwrap()
+                            .extract::<String>()
+                            .unwrap(),
+                    )
+                    .unwrap();
+                    assert_eq!(f["request_id"], request.request_id.clone().unwrap());
+                    assert_eq!(f["payload"]["model_path"], target.local_load_path);
+                    assert_eq!(f["payload"]["device"], "cpu");
+                    assert_eq!(f["payload"]["extra_options"], serde_json::Value::Null);
+                }
+            });
+            release_tx.send(()).unwrap();
+            let result = caller.await;
+            if mode == "abort" {
+                assert!(result.unwrap_err().is_cancelled());
+            } else if mode == "success" {
+                assert!(matches!(
+                    result.unwrap().unwrap(),
+                    crate::InferenceExecutionResult::AudioTranscription { .. }
+                ));
+            } else {
+                let error = result.unwrap().unwrap_err().to_string();
+                assert!(
+                    error.contains(if mode == "error" {
+                        "controlled ASR"
+                    } else {
+                        "cancelled"
+                    }),
+                    "{error}"
+                );
+            }
+            tokio::time::timeout(std::time::Duration::from_secs(2), gateway.is_ready())
+                .await
+                .unwrap();
+            Python::with_gil(|py| {
+                let worker = worker_handle.module(py).unwrap();
+                let effects = worker
+                    .getattr("_audio_effects")
+                    .unwrap()
+                    .extract::<Vec<String>>()
+                    .unwrap();
+                assert!(
+                    effects.contains(&format!("{phase}-completed")),
+                    "{effects:?}"
+                );
+                assert_eq!(
+                    effects[0], "shutdown",
+                    "fresh owner must fence unknown global residency"
+                );
+                for (name, value) in saved {
+                    worker.setattr(name, value).unwrap();
+                }
+                worker.delattr("_audio_barrier").unwrap();
+            });
+        }
+    }
+}
+
+#[tokio::test]
+async fn selected_audio_production_cache_fences_revision_content_chunk_and_generic_mutation() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.lock().await;
+    let (_directory, mut request, mut target, mut decision) =
+        crate::selected_audio_execution::fixture();
+    let mut backend = PyTorchBackend::new();
+    let worker_handle = backend.selected_audio_worker.clone();
+    let saved = Python::with_gil(|py| {
+        let worker = prepare_selected_audio_worker(py, &worker_handle);
+        let saved = [
+            "load_transformers_model_from_envelope",
+            "transcribe_audio_from_envelope",
+            "shutdown_worker_from_envelope",
+        ]
+        .into_iter()
+        .map(|name| (name, worker.getattr(name).unwrap().unbind()))
+        .collect::<Vec<_>>();
+        patch_selected_audio_worker(py, &worker);
+        worker.setattr("_audio_phase", "none").unwrap();
+        saved
+    });
+    let running = crate::InferenceExecutionCancellationHandle::running;
+    assert_eq!(
+        backend
+            .load_selected_audio(&request, &target, &decision, None, running())
+            .await
+            .unwrap()
+            .runtime_reused,
+        Some(false)
+    );
+    assert_eq!(
+        backend
+            .load_selected_audio(&request, &target, &decision, None, running())
+            .await
+            .unwrap()
+            .runtime_reused,
+        Some(true)
+    );
+    let crate::InferenceExecutionInput::AudioTranscription { request: audio } = &mut request.input
+    else {
+        unreachable!()
+    };
+    audio.chunk_length_s = Some(0.25);
+    assert_eq!(
+        backend
+            .load_selected_audio(&request, &target, &decision, None, running())
+            .await
+            .unwrap()
+            .runtime_reused,
+        Some(false)
+    );
+    target.content_fingerprint = Some("synthetic-content-r2".into());
+    assert_eq!(
+        backend
+            .load_selected_audio(&request, &target, &decision, None, running())
+            .await
+            .unwrap()
+            .runtime_reused,
+        Some(false)
+    );
+    target.model_ref.revision = Some("synthetic-r2".into());
+    request.model_ref = Some(target.model_ref.clone());
+    request
+        .resolved_model_package_facts
+        .as_mut()
+        .unwrap()
+        .model_ref = target.model_ref.clone();
+    decision.selected_model_ref = Some(target.model_ref.clone());
+    assert_eq!(
+        backend
+            .load_selected_audio(&request, &target, &decision, None, running())
+            .await
+            .unwrap()
+            .runtime_reused,
+        Some(false)
+    );
+    // A direct-audio attempt cannot certify selected reuse, even on failure.
+    let crate::InferenceExecutionInput::AudioTranscription { request: audio } = &request.input
+    else {
+        unreachable!()
+    };
+    let mut direct = audio.clone();
+    direct.extra_options = serde_json::Value::Null;
+    assert!(backend.transcribe_audio(direct).await.is_err());
+    assert_eq!(
+        backend
+            .load_selected_audio(&request, &target, &decision, None, running())
+            .await
+            .unwrap()
+            .runtime_reused,
+        Some(false)
+    );
+    Python::with_gil(|py| {
+        worker_handle
+            .module(py)
+            .unwrap()
+            .setattr("_audio_fail_stop", true)
+            .unwrap();
+    });
+    target.content_fingerprint = Some("synthetic-content-r3".into());
+    assert!(backend
+        .load_selected_audio(&request, &target, &decision, None, running())
+        .await
+        .unwrap_err()
+        .to_string()
+        .contains("unacknowledged ASR shutdown"));
+    Python::with_gil(|py| {
+        let worker = worker_handle.module(py).unwrap();
+        let effects = worker
+            .getattr("_audio_effects")
+            .unwrap()
+            .extract::<Vec<String>>()
+            .unwrap();
+        assert_eq!(effects.iter().filter(|effect| *effect == "load").count(), 5);
+        assert_eq!(effects.last().unwrap(), "shutdown");
+        for (name, value) in saved {
+            worker.setattr(name, value).unwrap();
+        }
+    });
+}
+
+#[tokio::test]
+async fn selected_audio_two_live_owners_isolate_cache_custody_stop_and_module_retirement() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.lock().await;
+    for phase in ["load", "forward"] {
+        let (_directory, request, target, decision) = crate::selected_audio_execution::fixture();
+        let backend_a = PyTorchBackend::new();
+        let worker_a = backend_a.selected_audio_worker.clone();
+        let mut backend_b = PyTorchBackend::new();
+        let worker_b = backend_b.selected_audio_worker.clone();
+        let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let (name_a, name_b, generic_shutdown) = Python::with_gil(|py| {
+            let a = prepare_selected_audio_worker(py, &worker_a);
+            let b = prepare_selected_audio_worker(py, &worker_b);
+            assert!(!a.is(&b));
+            patch_selected_audio_worker(py, &a);
+            patch_selected_audio_worker(py, &b);
+            a.setattr("_audio_phase", phase).unwrap();
+            b.setattr("_audio_phase", "none").unwrap();
+            a.setattr(
+                "_audio_barrier",
+                Py::new(
+                    py,
+                    TextIteratorBarrier {
+                        entered: std::sync::Mutex::new(Some(entered_tx)),
+                        release: std::sync::Mutex::new(release_rx),
+                    },
+                )
+                .unwrap(),
+            )
+            .unwrap();
+            let generic = super::pytorch_worker::worker_module(py).unwrap();
+            let saved = generic
+                .getattr("shutdown_worker_from_envelope")
+                .unwrap()
+                .unbind();
+            py.run(c"def shutdown_worker_from_envelope(envelope):\n    raise RuntimeError('selected-only stop touched generic worker')",Some(&generic.dict()),None).unwrap();
+            (
+                a.name().unwrap().to_string(),
+                b.name().unwrap().to_string(),
+                saved,
+            )
+        });
+        let gateway = Arc::new(crate::InferenceGateway::with_backend(
+            Box::new(backend_a),
+            "PyTorch",
+        ));
+        let caller = {
+            let gateway = gateway.clone();
+            let r = request.clone();
+            let t = target.clone();
+            let d = decision.clone();
+            tokio::spawn(async move {
+                gateway
+                    .execute_selected_audio_with_cancellation(
+                        r,
+                        t,
+                        d,
+                        crate::InferenceExecutionCancellationHandle::running(),
+                    )
+                    .await
+            })
+        };
+        tokio::time::timeout(std::time::Duration::from_secs(2), entered_rx)
+            .await
+            .unwrap()
+            .unwrap();
+        let mut second_request = request.clone();
+        let mut second_target = target.clone();
+        let mut second_decision = decision.clone();
+        second_target.model_ref.revision = Some("synthetic-r2".into());
+        second_target.content_fingerprint = Some("synthetic-content-r2".into());
+        second_request.model_ref = Some(second_target.model_ref.clone());
+        second_request
+            .resolved_model_package_facts
+            .as_mut()
+            .unwrap()
+            .model_ref = second_target.model_ref.clone();
+        second_decision.selected_model_ref = Some(second_target.model_ref.clone());
+        let crate::InferenceExecutionInput::AudioTranscription { request: audio } =
+            &mut second_request.input
+        else {
+            unreachable!()
+        };
+        audio.chunk_length_s = Some(0.25);
+        let running = crate::InferenceExecutionCancellationHandle::running;
+        assert_eq!(
+            backend_b
+                .load_selected_audio(
+                    &second_request,
+                    &second_target,
+                    &second_decision,
+                    None,
+                    running()
+                )
+                .await
+                .unwrap()
+                .runtime_reused,
+            Some(false)
+        );
+        let crate::InferenceExecutionInput::AudioTranscription { request: audio } =
+            &second_request.input
+        else {
+            unreachable!()
+        };
+        backend_b
+            .selected_audio(
+                audio.clone(),
+                "audio-second-owner",
+                &second_target,
+                &second_decision,
+                running(),
+            )
+            .await
+            .unwrap();
+        backend_b.stop().await.unwrap();
+        assert!(
+            tokio::time::timeout(std::time::Duration::from_millis(30), gateway.is_ready())
+                .await
+                .is_err()
+        );
+        Python::with_gil(|py| {
+            let a = worker_a.module(py).unwrap();
+            let effects = a
+                .getattr("_audio_effects")
+                .unwrap()
+                .extract::<Vec<String>>()
+                .unwrap();
+            assert_eq!(
+                effects
+                    .iter()
+                    .filter(|effect| *effect == "shutdown")
+                    .count(),
+                1,
+                "other owner's stop touched first module"
+            );
+        });
+        release_tx.send(()).unwrap();
+        caller.await.unwrap().unwrap();
+        Python::with_gil(|py| {
+            worker_a
+                .module(py)
+                .unwrap()
+                .setattr("_audio_phase", "none")
+                .unwrap()
+        });
+        gateway
+            .execute_selected_audio_with_cancellation(
+                request.clone(),
+                target.clone(),
+                decision.clone(),
+                running(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            gateway.runtime_lifecycle_snapshot().await.runtime_reused,
+            Some(true)
+        );
+        Python::with_gil(|py| {
+            let a = worker_a.module(py).unwrap();
+            let load = a.getattr("_audio_load").unwrap();
+            assert_eq!(
+                load.get_item("payload")
+                    .unwrap()
+                    .get_item("chunk_length_s")
+                    .unwrap()
+                    .extract::<f64>()
+                    .unwrap(),
+                0.5
+            );
+            assert_eq!(
+                load.get_item("payload")
+                    .unwrap()
+                    .get_item("model_ref")
+                    .unwrap()
+                    .get_item("revision")
+                    .unwrap()
+                    .extract::<String>()
+                    .unwrap(),
+                "synthetic-r1"
+            );
+            // Avoid reusing the one-shot barrier during the warm request below.
+        });
+        gateway.stop().await.unwrap();
+        drop(gateway);
+        drop(backend_b);
+        drop(worker_a);
+        drop(worker_b);
+        Python::with_gil(|py| {
+            let modules = py.import("sys").unwrap().getattr("modules").unwrap();
+            assert!(!modules.contains(name_a).unwrap());
+            assert!(!modules.contains(name_b).unwrap());
+            super::pytorch_worker::worker_module(py)
+                .unwrap()
+                .setattr("shutdown_worker_from_envelope", generic_shutdown)
+                .unwrap();
+        });
+    }
+}
+
+#[tokio::test]
+async fn owned_audio_production_pybytes_jobs_retain_snapshot_through_caller_loss() {
+    let _python_fixture = super::PYTHON_TEST_LOCK.lock().await;
+    for phase in ["load", "forward"] {
+        for mode in ["success", "cancel", "abort"] {
+            let (_directory, mut request, target, decision) =
+                crate::selected_audio_execution::fixture();
+            let audio = match &request.input {
+                crate::InferenceExecutionInput::AudioTranscription { request } => request.clone(),
+                _ => unreachable!(),
+            };
+            use base64::Engine as _;
+            let bytes: std::sync::Arc<[u8]> = base64::engine::general_purpose::STANDARD
+                .decode(audio.audio.as_ref().unwrap().data_base64.trim())
+                .unwrap()
+                .into();
+            let weak = std::sync::Arc::downgrade(&bytes);
+            let hash = format!("blake3:{}", blake3::hash(&bytes).to_hex());
+            let source_id = crate::owned_audio_id("wf-owned", "original-source", &hash);
+            let snapshot = crate::OwnedAudioWav::verified(
+                source_id.clone(),
+                "wf-owned".into(),
+                "original-source".into(),
+                hash,
+                bytes,
+                crate::acquire_owned_audio_admission().await.unwrap(),
+            )
+            .unwrap();
+            let mut owned_request = audio;
+            owned_request.audio = None;
+            owned_request.audio_ref = Some(source_id.clone());
+            request.input = crate::InferenceExecutionInput::OwnedAudioTranscription {
+                request: owned_request,
+                snapshot,
+            };
+            assert!(serde_json::to_value(&request).unwrap()["input"]["snapshot"]
+                .get("bytes")
+                .is_none());
+            assert!(serde_json::from_value::<crate::InferenceExecutionRequest>(
+                serde_json::to_value(&request).unwrap()
+            )
+            .is_err());
+            let request_id = request.request_id.clone().unwrap();
+            let backend = PyTorchBackend::new();
+            let worker_handle = backend.selected_audio_worker.clone();
+            let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();
+            let (release_tx, release_rx) = std::sync::mpsc::channel();
+            Python::with_gil(|py| {
+                let worker = prepare_selected_audio_worker(py, &worker_handle);
+                patch_selected_audio_worker(py, &worker);
+                py.run(
+                    c"
+_owned_metadata={}
+_owned_bytes_length=0
+def transcribe_owned_wav_from_envelope(envelope, wav_bytes, metadata):
+    global _owned_metadata, _owned_bytes_length
+    assert type(wav_bytes) is bytes
+    _owned_metadata=json.loads(metadata)
+    _owned_bytes_length=len(wav_bytes)
+    return transcribe_audio_from_envelope(envelope)
+",
+                    Some(&worker.dict()),
+                    None,
+                )
+                .unwrap();
+                worker.setattr("_audio_phase", phase).unwrap();
+                worker
+                    .setattr(
+                        "_audio_barrier",
+                        Py::new(
+                            py,
+                            TextIteratorBarrier {
+                                entered: std::sync::Mutex::new(Some(entered_tx)),
+                                release: std::sync::Mutex::new(release_rx),
+                            },
+                        )
+                        .unwrap(),
+                    )
+                    .unwrap();
+            });
+            let gateway = std::sync::Arc::new(crate::InferenceGateway::with_backend(
+                Box::new(backend),
+                "PyTorch",
+            ));
+            let cancel = std::sync::Arc::new(SelectedTextCancellation {
+                cancelled: Default::default(),
+                observed: std::sync::Mutex::new(None),
+            });
+            let caller = {
+                let gateway = gateway.clone();
+                let cancel = cancel.clone();
+                tokio::spawn(async move {
+                    gateway
+                        .execute_selected_audio_with_cancellation(
+                            request,
+                            target,
+                            decision,
+                            crate::InferenceExecutionCancellationHandle::with_signal(cancel),
+                        )
+                        .await
+                })
+            };
+            tokio::time::timeout(std::time::Duration::from_secs(3), entered_rx)
+                .await
+                .unwrap()
+                .unwrap();
+            if mode == "abort" {
+                caller.abort();
+            } else if mode == "cancel" {
+                cancel
+                    .cancelled
+                    .store(true, std::sync::atomic::Ordering::SeqCst);
+            }
+            assert!(
+                weak.upgrade().is_some(),
+                "snapshot custody during actual worker job"
+            );
+            assert!(
+                tokio::time::timeout(std::time::Duration::from_millis(30), gateway.is_ready())
+                    .await
+                    .is_err()
+            );
+            if phase == "forward" {
+                Python::with_gil(|py| {
+                    let worker = worker_handle.module(py).unwrap();
+                    let meta: serde_json::Value = serde_json::from_str(
+                        &worker
+                            .getattr("json")
+                            .unwrap()
+                            .call_method1("dumps", (worker.getattr("_owned_metadata").unwrap(),))
+                            .unwrap()
+                            .extract::<String>()
+                            .unwrap(),
+                    )
+                    .unwrap();
+                    assert!(
+                        meta["artifact_id"] == source_id
+                            && meta["workflow_id"] == "wf-owned"
+                            && meta["source_run_id"] == "original-source"
+                    );
+                    assert!(
+                        worker
+                            .getattr("_owned_bytes_length")
+                            .unwrap()
+                            .extract::<usize>()
+                            .unwrap()
+                            == 52
+                    );
+                    let forward: serde_json::Value = serde_json::from_str(
+                        &worker
+                            .getattr("json")
+                            .unwrap()
+                            .call_method1("dumps", (worker.getattr("_audio_forward").unwrap(),))
+                            .unwrap()
+                            .extract::<String>()
+                            .unwrap(),
+                    )
+                    .unwrap();
+                    assert!(
+                        forward["request_id"] == request_id
+                            && forward["payload"]["device"] == "cpu"
+                    );
+                    assert!(forward["payload"]["audio_base64"] == "__owned_wav_side_argument_v1__");
+                });
+            }
+            release_tx.send(()).unwrap();
+            let result = caller.await;
+            if mode == "success" {
+                assert!(result.unwrap().is_ok());
+            } else if mode == "abort" {
+                assert!(result.unwrap_err().is_cancelled());
+            } else {
+                assert!(result.unwrap().is_err());
+            }
+            tokio::time::timeout(std::time::Duration::from_secs(3), gateway.is_ready())
+                .await
+                .unwrap();
+            assert!(
+                weak.upgrade().is_none(),
+                "snapshot released after actual completion"
+            );
+            Python::with_gil(|py| {
+                worker_handle
+                    .module(py)
+                    .unwrap()
+                    .delattr("_audio_barrier")
+                    .unwrap()
+            });
+        }
+    }
+}
+
+// Exercise public selected -> direct -> stop with controlled worker effects.
+// The generic module must remain separate from the private selected owner.
+async fn selected_to_direct_audio_cleanup(caller_abort: bool) {
+    let _python_fixture = super::PYTHON_TEST_LOCK.lock().await;
+    let (_directory, request, target, decision) = crate::selected_audio_execution::fixture();
+    let backend = PyTorchBackend::new();
+    let private = backend.selected_audio_worker.clone();
+    let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let (generic, saved_private, saved_generic) = Python::with_gil(|py| {
+        let worker = prepare_selected_audio_worker(py, &private);
+        let save = |module: &Bound<'_, pyo3::types::PyModule>, names: &[&'static str]| {
+            names
+                .iter()
+                .map(|name| (*name, module.getattr(*name).unwrap().unbind()))
+                .collect::<Vec<_>>()
+        };
+        let saved_private = save(
+            &worker,
+            &[
+                "load_transformers_model_from_envelope",
+                "transcribe_audio_from_envelope",
+                "shutdown_worker_from_envelope",
+            ],
+        );
+        patch_selected_audio_worker(py, &worker);
+        worker.setattr("_audio_phase", "none").unwrap();
+        let generic = super::pytorch_worker::worker_module(py).unwrap();
+        let saved_generic = save(
+            &generic,
+            &[
+                "transcribe_audio_from_envelope",
+                "shutdown_worker_from_envelope",
+                "_asr_pipeline",
+            ],
+        );
+        py.run(c"
+_direct_effects=[]
+_direct_abort=False
+_direct_fail_stop=False
+_asr_pipeline=None
+def transcribe_audio_from_envelope(envelope):
+    global _asr_pipeline
+    request=json.loads(envelope)
+    assert request['payload']['model_path'] == _direct_expected_path
+    assert request['payload']['audio_base64'] == _direct_expected_wav
+    _asr_pipeline=object()
+    _direct_effects.append('load')
+    if _direct_abort:
+        _direct_barrier.wait()
+    _direct_effects.append('completed')
+    return json.dumps({'status':'ok','request_id':request['request_id'],'result':{'text':'direct fixture transcript','language':'en','duration_seconds':0.00025,'chunks':None}})
+def shutdown_worker_from_envelope(envelope):
+    global _asr_pipeline
+    _direct_effects.append('shutdown')
+    if _direct_fail_stop:
+        raise RuntimeError('controlled generic shutdown failure')
+    _asr_pipeline=None
+    request=json.loads(envelope)
+    return json.dumps({'status':'ok','request_id':request['request_id'],'result':{'shutdown':True}})
+", Some(&generic.dict()), None).unwrap();
+        generic.setattr("_direct_abort", caller_abort).unwrap();
+        generic
+            .setattr("_direct_expected_path", &target.local_load_path)
+            .unwrap();
+        generic
+            .setattr(
+                "_direct_expected_wav",
+                include_str!("../../tests/fixtures/selected_audio/tiny_pcm16.base64").trim(),
+            )
+            .unwrap();
+        generic
+            .setattr(
+                "_direct_barrier",
+                Py::new(
+                    py,
+                    TextIteratorBarrier {
+                        entered: std::sync::Mutex::new(Some(entered_tx)),
+                        release: std::sync::Mutex::new(release_rx),
+                    },
+                )
+                .unwrap(),
+            )
+            .unwrap();
+        (generic.unbind(), saved_private, saved_generic)
+    });
+    let gateway = Arc::new(crate::InferenceGateway::with_backend(
+        Box::new(backend),
+        "PyTorch",
+    ));
+    let selected = gateway
+        .execute_selected_audio_with_cancellation(
+            request.clone(),
+            target.clone(),
+            decision,
+            crate::InferenceExecutionCancellationHandle::running(),
+        )
+        .await
+        .unwrap();
+    assert!(matches!(
+        selected,
+        crate::InferenceExecutionResult::AudioTranscription { .. }
+    ));
+    Python::with_gil(|py| {
+        assert!(
+            generic
+                .bind(py)
+                .getattr("_direct_effects")
+                .unwrap()
+                .extract::<Vec<String>>()
+                .unwrap()
+                .is_empty(),
+            "private selected work must not mutate the generic worker"
+        );
+    });
+    let crate::InferenceExecutionInput::AudioTranscription {
+        request: mut direct,
+    } = request.input
+    else {
+        unreachable!()
+    };
+    direct.model = target.local_load_path;
+    direct.extra_options = serde_json::Value::Null;
+    let caller = {
+        let gateway = gateway.clone();
+        tokio::spawn(async move { gateway.transcribe_audio(direct).await })
+    };
+    if caller_abort {
+        tokio::time::timeout(std::time::Duration::from_secs(2), entered_rx)
+            .await
+            .unwrap()
+            .unwrap();
+        caller.abort();
+        assert!(caller.await.unwrap_err().is_cancelled());
+        let mut stop = {
+            let gateway = gateway.clone();
+            tokio::spawn(async move { gateway.stop().await })
+        };
+        let early = tokio::time::timeout(std::time::Duration::from_millis(30), &mut stop).await;
+        release_tx.send(()).unwrap();
+        assert!(
+            early.is_err(),
+            "stop must retain actual direct job completion after caller abort"
+        );
+        tokio::time::timeout(std::time::Duration::from_secs(2), stop)
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+    } else {
+        assert_eq!(
+            caller.await.unwrap().unwrap().text,
+            "direct fixture transcript"
+        );
+        // An unacknowledged generic shutdown must retain ownership for retry.
+        Python::with_gil(|py| {
+            generic.bind(py).setattr("_direct_fail_stop", true).unwrap();
+        });
+        assert!(
+            gateway.stop().await.is_err(),
+            "generic shutdown failure must reach the gateway"
+        );
+        assert_ne!(
+            gateway
+                .resident_lifecycle_snapshot()
+                .await
+                .unwrap()
+                .allocation_state,
+            crate::resident_lifecycle::ResidentAllocationState::Released,
+            "failed shutdown must not publish confirmed release"
+        );
+        Python::with_gil(|py| {
+            assert!(!generic.bind(py).getattr("_asr_pipeline").unwrap().is_none());
+            generic
+                .bind(py)
+                .setattr("_direct_fail_stop", false)
+                .unwrap();
+        });
+        gateway.stop().await.unwrap();
+    }
+    assert!(!gateway.is_ready().await);
+    assert_eq!(
+        gateway
+            .resident_lifecycle_snapshot()
+            .await
+            .unwrap()
+            .allocation_state,
+        crate::resident_lifecycle::ResidentAllocationState::Released
+    );
+    Python::with_gil(|py| {
+        let worker = generic.bind(py);
+        assert!(
+            worker.getattr("_asr_pipeline").unwrap().is_none(),
+            "acknowledged stop must release direct generic ASR"
+        );
+        let effects = worker
+            .getattr("_direct_effects")
+            .unwrap()
+            .extract::<Vec<String>>()
+            .unwrap();
+        assert_eq!(
+            effects,
+            if caller_abort {
+                vec!["load", "completed", "shutdown"]
+            } else {
+                vec!["load", "completed", "shutdown", "shutdown"]
+            }
+        );
+        let isolated = private.module(py).unwrap();
+        assert_eq!(
+            isolated
+                .getattr("_audio_effects")
+                .unwrap()
+                .extract::<Vec<String>>()
+                .unwrap(),
+            vec!["shutdown", "load", "forward", "shutdown"]
+        );
+        for (name, value) in saved_private {
+            isolated.setattr(name, value).unwrap();
+        }
+        for (name, value) in saved_generic {
+            worker.setattr(name, value).unwrap();
+        }
+        worker.delattr("_direct_barrier").unwrap();
+    });
+}
+
+#[tokio::test]
+async fn selected_audio_public_direct_success_then_stop_releases_generic_asr_and_retries_failure() {
+    selected_to_direct_audio_cleanup(false).await;
+}
+
+#[tokio::test]
+async fn selected_audio_public_direct_caller_abort_then_stop_waits_and_releases_generic_asr() {
+    selected_to_direct_audio_cleanup(true).await;
 }

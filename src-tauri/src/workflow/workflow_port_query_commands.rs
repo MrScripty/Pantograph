@@ -1,14 +1,13 @@
+use super::command_state::PortOptionsCommandState;
 use tauri::State;
 
-use super::commands::{SharedExtensions, SharedNodeRegistry, SharedWorkflowService};
+use super::commands::{SharedNodeRegistry, SharedWorkflowService};
 
 const PUMA_LIB_NODE_TYPE: &str = "puma-lib";
 const PUMAS_MODEL_REF_PORT_ID: &str = "pumas_model_ref";
 
 pub async fn query_port_options(
-    registry: State<'_, SharedNodeRegistry>,
-    extensions: State<'_, SharedExtensions>,
-    workflow_service: State<'_, SharedWorkflowService>,
+    state: PortOptionsCommandState<'_>,
     node_type: String,
     port_id: String,
     search: Option<String>,
@@ -16,6 +15,11 @@ pub async fn query_port_options(
     offset: Option<usize>,
     context: Option<node_engine::PortOptionsQueryContext>,
 ) -> Result<node_engine::PortOptionsResult, String> {
+    let PortOptionsCommandState {
+        registry,
+        extensions,
+        workflow_service,
+    } = state;
     let ext = extensions.read().await;
     let query = node_engine::PortOptionsQuery {
         search: search.clone(),

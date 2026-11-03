@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { invokeWorkflowCommand as invoke } from './workflowServiceErrors.ts';
 import type {
   ConnectionAnchor,
   ConnectionCandidatesResponse,

@@ -49,16 +49,67 @@ pub trait WorkflowRuntimeDispatchCandidateProvider: Send + Sync {
         ready_record: &SchedulerTaskStateRecord,
         readiness_proof: &DependencyReadinessProofEnvelope,
     ) -> Result<WorkflowRuntimeDispatchCandidateSet, WorkflowRuntimeDispatchCandidateProviderError>;
+
+    /// Native opt-in only; existing providers keep their original collection path.
+    fn requires_materialized_inputs(&self) -> bool {
+        false
+    }
+
+    fn requires_dependency_lookahead(&self) -> bool {
+        false
+    }
+
+    fn runtime_dispatch_candidates_with_successor(
+        &self,
+        task: &WorkflowSchedulerTask,
+        ready: &SchedulerTaskStateRecord,
+        proof: &DependencyReadinessProofEnvelope,
+        inputs: Option<&[pantograph_runtime_host_contracts::RuntimeHostExecutionInput]>,
+        _successor: Option<&super::WorkflowCompletionSuccessorSnapshot>,
+    ) -> Result<WorkflowRuntimeDispatchCandidateSet, WorkflowRuntimeDispatchCandidateProviderError>
+    {
+        self.runtime_dispatch_candidates_with_inputs(task, ready, proof, inputs)
+    }
+
+    fn runtime_dispatch_candidates_with_inputs(
+        &self,
+        task: &WorkflowSchedulerTask,
+        ready_record: &SchedulerTaskStateRecord,
+        readiness_proof: &DependencyReadinessProofEnvelope,
+        _inputs: Option<&[pantograph_runtime_host_contracts::RuntimeHostExecutionInput]>,
+    ) -> Result<WorkflowRuntimeDispatchCandidateSet, WorkflowRuntimeDispatchCandidateProviderError>
+    {
+        self.runtime_dispatch_candidates(task, ready_record, readiness_proof)
+    }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+/// Runtime-owned rollback custody travels with prepared facts until binding.
+///
+/// Implementations own cleanup for every provisional lease in the accompanying
+/// candidate set. Dropping an untransferred token must roll back those claims;
+/// workflow-service skips ordinary unselected-lease release while custody owns
+/// rollback. Transfer occurs only after the selected task's in-memory cleanup
+/// intent is bound. This boundary does not promise process-abort recovery.
+pub trait WorkflowRuntimeDispatchReservationCustody: std::fmt::Debug + Send + Sync {
+    fn transfer(self: Box<Self>) -> Result<(), WorkflowRuntimeDispatchCandidateProviderError>;
+}
+
+#[derive(Debug, Default)]
 pub struct WorkflowRuntimeDispatchCandidateSet {
     pub candidates: Vec<SchedulerDispatchCandidate>,
     pub diagnostics: Vec<SchedulerDispatchSelectionDiagnostic>,
     pub candidate_evidence_context: WorkflowRuntimeDispatchCandidateEvidenceContext,
+    reservation_custody: Option<Box<dyn WorkflowRuntimeDispatchReservationCustody>>,
 }
 
 impl WorkflowRuntimeDispatchCandidateSet {
+    pub fn with_reservation_custody(
+        mut self,
+        custody: Box<dyn WorkflowRuntimeDispatchReservationCustody>,
+    ) -> Self {
+        self.reservation_custody = Some(custody);
+        self
+    }
     pub fn from_candidate_fact_bundle(
         bundle: ValidatedWorkflowRuntimeDispatchCandidateFactBundle,
     ) -> Self {
@@ -69,6 +120,7 @@ impl WorkflowRuntimeDispatchCandidateSet {
             diagnostics: bundle.diagnostics,
             candidate_evidence_context:
                 WorkflowRuntimeDispatchCandidateEvidenceContext::from_validated_facts(facts),
+            reservation_custody: None,
         }
     }
 
@@ -77,6 +129,7 @@ impl WorkflowRuntimeDispatchCandidateSet {
             candidates: Vec::new(),
             diagnostics,
             candidate_evidence_context: WorkflowRuntimeDispatchCandidateEvidenceContext::default(),
+            reservation_custody: None,
         }
     }
 }
@@ -246,13 +299,15 @@ pub(crate) fn runtime_dispatch_selection_request(
     Ok(WorkflowRuntimeDispatchSelectionRequest {
         selection_request,
         candidate_evidence_context: candidate_set.candidate_evidence_context,
+        reservation_custody: candidate_set.reservation_custody,
     })
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug)]
 pub(crate) struct WorkflowRuntimeDispatchSelectionRequest {
     pub(crate) selection_request: ValidatedSchedulerDispatchSelectionRequest,
     pub(crate) candidate_evidence_context: WorkflowRuntimeDispatchCandidateEvidenceContext,
+    reservation_custody: Option<Box<dyn WorkflowRuntimeDispatchReservationCustody>>,
 }
 
 pub(crate) struct WorkflowRuntimeDispatchSelectionBoundary<'a> {
@@ -283,11 +338,49 @@ impl<'a> WorkflowRuntimeDispatchSelectionBoundary<'a> {
         }
     }
 
+    #[cfg(test)]
     pub(crate) async fn prepare_ready_runtime_task_dispatch(
         &self,
         task: &WorkflowSchedulerTask,
         ready_record: &SchedulerTaskStateRecord,
         readiness_proof: DependencyReadinessProofEnvelope,
+    ) -> Result<WorkflowRuntimeDispatchSelectionRequest, WorkflowRuntimeDispatchPreselectionError>
+    {
+        self.prepare_ready_runtime_task_dispatch_with_inputs(
+            task,
+            ready_record,
+            readiness_proof,
+            None,
+        )
+        .await
+    }
+
+    #[cfg(test)]
+    pub(crate) async fn prepare_ready_runtime_task_dispatch_with_inputs(
+        &self,
+        task: &WorkflowSchedulerTask,
+        ready_record: &SchedulerTaskStateRecord,
+        readiness_proof: DependencyReadinessProofEnvelope,
+        inputs: Option<&[pantograph_runtime_host_contracts::RuntimeHostExecutionInput]>,
+    ) -> Result<WorkflowRuntimeDispatchSelectionRequest, WorkflowRuntimeDispatchPreselectionError>
+    {
+        self.prepare_ready_runtime_task_dispatch_with_successor(
+            task,
+            ready_record,
+            readiness_proof,
+            inputs,
+            None,
+        )
+        .await
+    }
+
+    pub(crate) async fn prepare_ready_runtime_task_dispatch_with_successor(
+        &self,
+        task: &WorkflowSchedulerTask,
+        ready_record: &SchedulerTaskStateRecord,
+        readiness_proof: DependencyReadinessProofEnvelope,
+        inputs: Option<&[pantograph_runtime_host_contracts::RuntimeHostExecutionInput]>,
+        successor: Option<&super::WorkflowCompletionSuccessorSnapshot>,
     ) -> Result<WorkflowRuntimeDispatchSelectionRequest, WorkflowRuntimeDispatchPreselectionError>
     {
         self.source_refresher
@@ -296,7 +389,13 @@ impl<'a> WorkflowRuntimeDispatchSelectionBoundary<'a> {
             .map_err(WorkflowRuntimeDispatchPreselectionError::SourceRefresh)?;
         let candidate_set = self
             .candidate_provider
-            .runtime_dispatch_candidates(task, ready_record, &readiness_proof)
+            .runtime_dispatch_candidates_with_successor(
+                task,
+                ready_record,
+                &readiness_proof,
+                inputs,
+                successor,
+            )
             .map_err(WorkflowRuntimeDispatchPreselectionError::CandidateCollection)?;
         runtime_dispatch_selection_request(task, readiness_proof, candidate_set)
             .map_err(WorkflowRuntimeDispatchPreselectionError::SelectionRequest)
@@ -309,11 +408,21 @@ impl<'a> WorkflowRuntimeDispatchSelectionBoundary<'a> {
     ) -> Result<WorkflowRuntimeDispatchPreselection, WorkflowRuntimeDispatchPreselectionError> {
         let selection_request = prepared_selection.selection_request;
         let candidate_evidence_context = prepared_selection.candidate_evidence_context;
-        let selected_dispatch = self
-            .scheduler_task_orchestrator
-            .select_runtime_task_dispatch(started_runtime_task.task(), selection_request)
-            .await
-            .map_err(WorkflowRuntimeDispatchPreselectionError::SchedulerSelection)?;
+        let reservation_custody = prepared_selection.reservation_custody;
+        let selection = if reservation_custody.is_some() {
+            self.scheduler_task_orchestrator
+                .select_runtime_task_dispatch_with_custody(
+                    started_runtime_task.task(),
+                    selection_request,
+                )
+                .await
+        } else {
+            self.scheduler_task_orchestrator
+                .select_runtime_task_dispatch(started_runtime_task.task(), selection_request)
+                .await
+        };
+        let selected_dispatch =
+            selection.map_err(WorkflowRuntimeDispatchPreselectionError::SchedulerSelection)?;
         let selected_candidate_fact = selected_runtime_dispatch_candidate_fact(
             selected_dispatch.candidate_id(),
             &candidate_evidence_context,
@@ -322,15 +431,30 @@ impl<'a> WorkflowRuntimeDispatchSelectionBoundary<'a> {
         Ok(WorkflowRuntimeDispatchPreselection {
             selected_dispatch,
             selected_candidate_fact,
+            reservation_custody,
         })
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 #[must_use]
 pub(crate) struct WorkflowRuntimeDispatchPreselection {
     pub(crate) selected_dispatch: SelectedRuntimeTaskDispatch,
     pub(crate) selected_candidate_fact: WorkflowRuntimeDispatchCandidateFact,
+    reservation_custody: Option<Box<dyn WorkflowRuntimeDispatchReservationCustody>>,
+}
+
+impl WorkflowRuntimeDispatchPreselection {
+    pub(crate) fn transfer_reservation_custody(&mut self) -> Result<(), WorkflowServiceError> {
+        if let Some(custody) = self.reservation_custody.take() {
+            custody.transfer().map_err(|error| {
+                WorkflowServiceError::Internal(format!(
+                    "runtime reservation custody transfer failed: {error}"
+                ))
+            })?;
+        }
+        Ok(())
+    }
 }
 
 pub(crate) fn selected_runtime_dispatch_candidate_fact(
@@ -703,6 +827,381 @@ mod tests {
     };
 
     use super::*;
+
+    #[derive(Debug)]
+    struct RecordingCustody {
+        rollbacks: Arc<std::sync::atomic::AtomicUsize>,
+        transfers: Arc<std::sync::atomic::AtomicUsize>,
+        transferred: bool,
+    }
+
+    impl Drop for RecordingCustody {
+        fn drop(&mut self) {
+            if !self.transferred {
+                self.rollbacks
+                    .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            }
+        }
+    }
+
+    impl WorkflowRuntimeDispatchReservationCustody for RecordingCustody {
+        fn transfer(
+            mut self: Box<Self>,
+        ) -> Result<(), WorkflowRuntimeDispatchCandidateProviderError> {
+            self.transferred = true;
+            self.transfers
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Ok(())
+        }
+    }
+
+    struct CustodyProvider {
+        rollbacks: Arc<std::sync::atomic::AtomicUsize>,
+        transfers: Arc<std::sync::atomic::AtomicUsize>,
+    }
+
+    impl WorkflowRuntimeDispatchCandidateProvider for CustodyProvider {
+        fn runtime_dispatch_candidates(
+            &self,
+            _task: &WorkflowSchedulerTask,
+            _ready_record: &SchedulerTaskStateRecord,
+            _proof: &DependencyReadinessProofEnvelope,
+        ) -> Result<
+            WorkflowRuntimeDispatchCandidateSet,
+            WorkflowRuntimeDispatchCandidateProviderError,
+        > {
+            let bundle = ValidatedWorkflowRuntimeDispatchCandidateFactBundle::try_from(
+                candidate_fact_bundle(vec![candidate_fact()]),
+            )
+            .unwrap();
+            Ok(
+                WorkflowRuntimeDispatchCandidateSet::from_candidate_fact_bundle(bundle)
+                    .with_reservation_custody(Box::new(RecordingCustody {
+                        rollbacks: self.rollbacks.clone(),
+                        transfers: self.transfers.clone(),
+                        transferred: false,
+                    })),
+            )
+        }
+    }
+
+    #[tokio::test]
+    async fn cancelling_prepared_dispatch_before_start_drops_unbound_custody() {
+        let rollbacks = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let transfers = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let boundary = preselection_boundary(
+            RecordingRuntimeDispatchSourceRefresher,
+            CustodyProvider {
+                rollbacks: rollbacks.clone(),
+                transfers: transfers.clone(),
+            },
+        );
+        let task = runtime_task_fixture();
+        let prepared = boundary
+            .prepare_ready_runtime_task_dispatch(
+                &task,
+                &ready_record_fixture(&task),
+                runtime_dispatch_readiness_proof_fixture(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(rollbacks.load(std::sync::atomic::Ordering::SeqCst), 0);
+        drop(prepared);
+        assert_eq!(rollbacks.load(std::sync::atomic::Ordering::SeqCst), 1);
+        assert_eq!(transfers.load(std::sync::atomic::Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn invalid_prepared_selection_releases_custody_acquired_by_provider() {
+        let rollbacks = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let transfers = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let boundary = preselection_boundary(
+            RecordingRuntimeDispatchSourceRefresher,
+            CustodyProvider {
+                rollbacks: rollbacks.clone(),
+                transfers,
+            },
+        );
+        let mut task = runtime_task_fixture();
+        task.schedulable_intent = None;
+        assert!(boundary
+            .prepare_ready_runtime_task_dispatch(
+                &task,
+                &ready_record_fixture(&task),
+                runtime_dispatch_readiness_proof_fixture()
+            )
+            .await
+            .is_err());
+        assert_eq!(rollbacks.load(std::sync::atomic::Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn start_failure_cancelled_binding_and_successful_binding_have_one_custody_owner() {
+        for scenario in [
+            "start_failure",
+            "cancel_before_bind",
+            "selection_rejected",
+            "bound",
+            "snapshot_version_changed",
+            "snapshot_inputs_changed",
+            "snapshot_proof_changed",
+        ] {
+            let rollbacks = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+            let transfers = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+            let boundary = preselection_boundary(
+                RecordingRuntimeDispatchSourceRefresher,
+                CustodyProvider {
+                    rollbacks: rollbacks.clone(),
+                    transfers: transfers.clone(),
+                },
+            );
+            let mut task = runtime_task_fixture();
+            if scenario == "snapshot_inputs_changed" {
+                task.input_bindings
+                    .push(super::super::WorkflowSchedulerTaskInputBinding {
+                        source_node_id: "node.source".parse().unwrap(),
+                        source_task_id: "task.source".parse().unwrap(),
+                        source_port_id: "text".into(),
+                        target_port_id: "prompt".into(),
+                    });
+            }
+            let run_id = task.workflow_run_id.as_str();
+            let mut store = crate::scheduler::WorkflowExecutionSessionStore::new(1, 1);
+            let session = store
+                .create_session(
+                    task.workflow_id.to_string(),
+                    None,
+                    None,
+                    Vec::new(),
+                    Vec::new(),
+                    true,
+                )
+                .unwrap();
+            let request = super::super::WorkflowExecutionSessionRunRequest {
+                session_id: session.clone(),
+                workflow_semantic_version: "1.0.0".into(),
+                inputs: Vec::new(),
+                output_targets: None,
+                override_selection: None,
+                timeout_ms: None,
+                priority: None,
+            };
+            let queued = store
+                .enqueue_run_with_id(&session, &request, run_id.to_owned())
+                .unwrap();
+            store.begin_queued_run(&session, &queued).unwrap().unwrap();
+            let graph = super::super::WorkflowSchedulerTaskGraph {
+                schema_version: super::super::WORKFLOW_SCHEDULER_TASK_GRAPH_SCHEMA_VERSION,
+                workflow_id: task.workflow_id.clone(),
+                workflow_run_id: task.workflow_run_id.clone(),
+                tasks: vec![task.clone()],
+            };
+            let source_result = |text: &str| super::super::WorkflowSchedulerTaskResult {
+                schema_version: super::super::WORKFLOW_SCHEDULER_TASK_RESULT_SCHEMA_VERSION,
+                workflow_id: task.workflow_id.to_string(),
+                workflow_run_id: run_id.into(),
+                node_id: "node.source".into(),
+                task_id: "task.source".into(),
+                status: super::super::WorkflowSchedulerTaskResultStatus::Completed,
+                outputs: vec![super::super::WorkflowSchedulerTaskResultOutput {
+                    port_id: "text".into(),
+                    value: super::super::WorkflowSchedulerTaskResultValue::String(text.into()),
+                }],
+                diagnostics: vec![],
+                terminal_metadata: None,
+            };
+            if scenario == "snapshot_inputs_changed" {
+                store
+                    .record_active_run_scheduler_task_result(
+                        &session,
+                        run_id,
+                        source_result("original"),
+                    )
+                    .unwrap();
+            }
+            let orchestrator = boundary.scheduler_task_orchestrator;
+            orchestrator
+                .initialize_active_run_task_state(&mut store, &session, run_id, graph)
+                .unwrap();
+            orchestrator
+                .apply_runtime_dependency_readiness_admission(
+                    &mut store,
+                    &session,
+                    run_id,
+                    task.task_id.as_str(),
+                    pantograph_dependency_planning::DependencyReadinessPolicy::CheckOnly,
+                    Some(runtime_dispatch_readiness_proof_fixture()),
+                )
+                .unwrap();
+            let (original_graph, original_records) = store
+                .active_run_scheduler_task_state(&session, run_id)
+                .unwrap()
+                .unwrap();
+            let ready = original_records
+                .iter()
+                .find(|r| r.task_id == task.task_id)
+                .unwrap();
+            let original_inputs = store.active_run_completion_inputs(&session, run_id, &task);
+            let proof = runtime_dispatch_readiness_proof_fixture();
+            store
+                .validate_ready_dispatch_snapshot(
+                    &session,
+                    run_id,
+                    &task,
+                    ready,
+                    &proof,
+                    original_inputs.as_deref(),
+                    true,
+                )
+                .unwrap();
+            let mut prepared = boundary
+                .prepare_ready_runtime_task_dispatch(&task, ready, proof.clone())
+                .await
+                .unwrap();
+            if scenario.starts_with("snapshot_") {
+                match scenario {
+                    "snapshot_version_changed" => {
+                        let mut changed = original_records.clone();
+                        changed[0].state_version += 1;
+                        store
+                            .set_active_run_scheduler_task_state(
+                                &session,
+                                run_id,
+                                original_graph,
+                                changed,
+                            )
+                            .unwrap();
+                    }
+                    "snapshot_inputs_changed" => store
+                        .record_active_run_scheduler_task_result(
+                            &session,
+                            run_id,
+                            source_result("replacement"),
+                        )
+                        .unwrap(),
+                    "snapshot_proof_changed" => {
+                        let mut changed = proof.clone();
+                        changed.execution_context.correlation_id =
+                            "changed-correlation".parse().unwrap();
+                        store
+                            .record_active_run_runtime_dispatch_readiness_proof(
+                                &session,
+                                run_id,
+                                task.task_id.as_str(),
+                                changed,
+                            )
+                            .unwrap();
+                    }
+                    _ => unreachable!(),
+                }
+                // This is the authoritative fence used by both real runner paths;
+                // it runs before attempt creation while holding the start lock.
+                assert!(store
+                    .validate_ready_dispatch_snapshot(
+                        &session,
+                        run_id,
+                        &task,
+                        ready,
+                        &proof,
+                        original_inputs.as_deref(),
+                        true
+                    )
+                    .is_err());
+                assert!(store
+                    .active_run_scheduler_task_attempt_read_facts(&session, run_id)
+                    .unwrap()
+                    .is_empty());
+                drop(prepared);
+                assert_eq!(rollbacks.load(std::sync::atomic::Ordering::SeqCst), 1);
+                assert_eq!(transfers.load(std::sync::atomic::Ordering::SeqCst), 0);
+                continue;
+            }
+            if scenario == "selection_rejected" {
+                let mut raw = prepared.selection_request.into_inner();
+                raw.candidates[0].selected_runtime_id = "unrequested-runtime".parse().unwrap();
+                prepared.selection_request = raw.try_into().unwrap();
+            }
+            let started = orchestrator
+                .start_ready_runtime_task(&mut store, &session, run_id, task.task_id.as_str())
+                .unwrap();
+            if scenario == "start_failure" {
+                assert!(orchestrator
+                    .start_ready_runtime_task(&mut store, &session, run_id, task.task_id.as_str())
+                    .is_err());
+                drop(prepared);
+                assert_eq!(rollbacks.load(std::sync::atomic::Ordering::SeqCst), 1);
+                continue;
+            }
+            if scenario == "selection_rejected" {
+                let error = boundary
+                    .select_prepared_started_runtime_task_dispatch(&started, prepared)
+                    .await
+                    .unwrap_err();
+                assert!(matches!(
+                    error,
+                    WorkflowRuntimeDispatchPreselectionError::SchedulerSelection(
+                        WorkflowSchedulerTaskOrchestratorError::RuntimeDispatchSelectionNoSelection(
+                            _
+                        )
+                    )
+                ));
+                assert_eq!(rollbacks.load(std::sync::atomic::Ordering::SeqCst), 1);
+                assert_eq!(transfers.load(std::sync::atomic::Ordering::SeqCst), 0);
+                continue;
+            }
+            let mut preselection = boundary
+                .select_prepared_started_runtime_task_dispatch(&started, prepared)
+                .await
+                .unwrap();
+            if scenario == "cancel_before_bind" {
+                let mutation = orchestrator
+                    .cancel_started_runtime_task_terminal_mutation(
+                        &mut store,
+                        &session,
+                        run_id,
+                        &started,
+                        "controlled cancellation",
+                    )
+                    .unwrap();
+                assert!(mutation.reservation_release_intent.is_none());
+                assert!(orchestrator
+                    .bind_started_runtime_task_reservation(
+                        &mut store,
+                        &session,
+                        run_id,
+                        &started,
+                        &preselection.selected_dispatch
+                    )
+                    .is_err());
+                drop(preselection);
+                assert_eq!(rollbacks.load(std::sync::atomic::Ordering::SeqCst), 1);
+            } else {
+                orchestrator
+                    .bind_started_runtime_task_reservation(
+                        &mut store,
+                        &session,
+                        run_id,
+                        &started,
+                        &preselection.selected_dispatch,
+                    )
+                    .unwrap();
+                preselection.transfer_reservation_custody().unwrap();
+                drop(preselection);
+                let mutation = orchestrator
+                    .cancel_started_runtime_task_terminal_mutation(
+                        &mut store,
+                        &session,
+                        run_id,
+                        &started,
+                        "controlled cancellation",
+                    )
+                    .unwrap();
+                assert!(mutation.reservation_release_intent.is_some());
+                assert_eq!(rollbacks.load(std::sync::atomic::Ordering::SeqCst), 0);
+                assert_eq!(transfers.load(std::sync::atomic::Ordering::SeqCst), 1);
+            }
+        }
+    }
 
     #[tokio::test]
     async fn preselection_boundary_prepares_request_with_retained_candidate_evidence() {
@@ -1231,7 +1730,12 @@ mod tests {
             WorkflowRuntimeDispatchCandidateSet,
             WorkflowRuntimeDispatchCandidateProviderError,
         > {
-            Ok(self.candidate_set.clone())
+            Ok(WorkflowRuntimeDispatchCandidateSet {
+                candidates: self.candidate_set.candidates.clone(),
+                diagnostics: self.candidate_set.diagnostics.clone(),
+                candidate_evidence_context: self.candidate_set.candidate_evidence_context.clone(),
+                reservation_custody: None,
+            })
         }
     }
 

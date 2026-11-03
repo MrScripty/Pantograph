@@ -1,0 +1,17 @@
+{
+  "kind": "controlled registry fixture evidence; not native M4 qualification",
+  "source_sha256": "7eba158fe0e825beda3fac8c2295b9f44a09c81c16e6f95d6c49a6ff330bf298",
+  "test_command": "cargo test --locked -p pantograph-runtime-registry --lib retained_cleanup::tests",
+  "passed": 13,
+  "failed": 0,
+  "ignored": 0,
+  "clippy_command": "cargo clippy --locked --no-deps -p pantograph-runtime-registry --tests -- -D warnings",
+  "clippy_exit_code": 0,
+  "log_sha256": {
+    "m4-registry-fixture-tests.log": "ac9ffa67bad9d4bfc929db0d07acc51d7d8352f0f42aba85baea8c14b27adc37",
+    "m4-registry-fixture-clippy.log": "a329c6a405e3bd32cdf75846e8b8517d0d651cba636cb32a5e2f11dcbf90f44c"
+  },
+  "native_invocations": 0,
+  "production_changes": false,
+  "independent_review": "m3_source_review approved exact source/hash/log and hand oracle; fixture does not open pending M3 gate"
+}

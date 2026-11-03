@@ -1,0 +1,9 @@
+{
+  "nodes": [
+    {"id": "source", "node_type": "text-input", "position": {"x": 0, "y": 0}, "data": {"text": "Edit this text, save, and submit to the real scheduler."}},
+    {"id": "out", "node_type": "text-output", "position": {"x": 400, "y": 0}, "data": {}}
+  ],
+  "edges": [
+    {"id": "source-out", "source": "source", "source_handle": "text", "target": "out", "target_handle": "text"}
+  ]
+}
