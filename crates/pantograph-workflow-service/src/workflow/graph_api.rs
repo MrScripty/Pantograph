@@ -1,12 +1,12 @@
 use crate::graph::{
     inspect_workflow_graph, ConnectionCandidatesResponse, ConnectionCommitResponse,
     EdgeInsertionPreviewResponse, InferenceInterfaceApplyProposalRequest,
-    InsertNodeConnectionResponse, InsertNodeOnEdgeResponse, NodeRegistry, WorkflowFile,
-    WorkflowGraph, WorkflowGraphAddEdgeRequest, WorkflowGraphAddNodeRequest,
-    WorkflowGraphConnectRequest, WorkflowGraphCreateGroupRequest,
-    WorkflowGraphCurrentValidationRefreshRequest, WorkflowGraphCurrentValidationRefreshResponse,
-    WorkflowGraphCurrentValidationSummaryRequest, WorkflowGraphCurrentValidationSummaryResponse,
-    WorkflowGraphDeleteRequest, WorkflowGraphDeleteResponse, WorkflowGraphDeleteSelectionRequest,
+    InsertNodeConnectionResponse, InsertNodeOnEdgeResponse, WorkflowFile, WorkflowGraph,
+    WorkflowGraphAddEdgeRequest, WorkflowGraphAddNodeRequest, WorkflowGraphConnectRequest,
+    WorkflowGraphCreateGroupRequest, WorkflowGraphCurrentValidationRefreshRequest,
+    WorkflowGraphCurrentValidationRefreshResponse, WorkflowGraphCurrentValidationSummaryRequest,
+    WorkflowGraphCurrentValidationSummaryResponse, WorkflowGraphDeleteRequest,
+    WorkflowGraphDeleteResponse, WorkflowGraphDeleteSelectionRequest,
     WorkflowGraphEditSessionCloseRequest, WorkflowGraphEditSessionCloseResponse,
     WorkflowGraphEditSessionCreateRequest, WorkflowGraphEditSessionCreateResponse,
     WorkflowGraphEditSessionGraphRequest, WorkflowGraphEditSessionGraphResponse,
@@ -72,9 +72,19 @@ impl WorkflowService {
         &self,
         request: DependencyEnvironmentActionIntent,
     ) -> Result<DependencyEnvironmentActionIntentResult, WorkflowServiceError> {
-        self.graph_session_store
-            .resolve_dependency_environment_action_intent(request)
-            .await
+        let (action, _) = self
+            .graph_session_store
+            .resolve_dependency_environment_action_with_result(request, |result| {
+                if matches!(result.as_result().readiness_state,
+                    pantograph_dependency_planning::DependencyEnvironmentReadinessState::Resolved
+                    | pantograph_dependency_planning::DependencyEnvironmentReadinessState::Ready)
+                {
+                    self.store_dependency_requirements_payload_from_result(result)?;
+                }
+                Ok(())
+            })
+            .await?;
+        Ok(action)
     }
 
     pub async fn workflow_graph_current_validation_summary(
@@ -308,7 +318,7 @@ impl WorkflowService {
         let workflow = store.load_workflow(request.path)?;
         Ok(inspect_workflow_graph(
             workflow.graph,
-            &NodeRegistry::new(),
+            &self.node_registry,
             request.selected_node_id.as_deref(),
         ))
     }

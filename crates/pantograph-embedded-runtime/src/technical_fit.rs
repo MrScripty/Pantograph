@@ -1237,7 +1237,28 @@ async fn resolve_required_model_package_facts_from_selector_access(
 fn decode_inference_package_facts<T: serde::Serialize>(
     facts: &T,
 ) -> Result<inference::ResolvedModelPackageFacts, serde_json::Error> {
-    serde_json::from_value(serde_json::to_value(facts)?)
+    let mut value = serde_json::to_value(facts)?;
+    strip_pumas_model_ref_contract_versions(&mut value);
+    serde_json::from_value(value)
+}
+
+fn strip_pumas_model_ref_contract_versions(value: &mut serde_json::Value) {
+    match value {
+        serde_json::Value::Object(map) => {
+            if map.contains_key("model_id") {
+                map.remove("model_ref_contract_version");
+            }
+            for child in map.values_mut() {
+                strip_pumas_model_ref_contract_versions(child);
+            }
+        }
+        serde_json::Value::Array(items) => {
+            for item in items {
+                strip_pumas_model_ref_contract_versions(item);
+            }
+        }
+        _ => {}
+    }
 }
 
 fn project_override(
@@ -1791,7 +1812,7 @@ mod tests {
                         kv_cache: inference::BackendFeatureSupport::Supported,
                     },
                     runtime_variants: vec![inference::RuntimeVariantCapability {
-                        runtime_variant_id: inference::RuntimeVariantId::parse(&format!(
+                        runtime_variant_id: inference::RuntimeVariantId::parse(format!(
                             "{}.cuda",
                             backend_key
                         ))
@@ -2838,7 +2859,7 @@ mod tests {
         let temp_dir = tempfile::tempdir().expect("temp dir");
         let model_id = "llm/test/live-technical-fit-facts";
         let api = Arc::new(
-            pumas_library::PumasApi::builder(temp_dir.path())
+            crate::pumas_test_support::builder(temp_dir.path())
                 .with_hf_client(false)
                 .with_process_manager(false)
                 .build()
@@ -2914,7 +2935,7 @@ mod tests {
         let temp_dir = tempfile::tempdir().expect("temp dir");
         std::fs::create_dir_all(temp_dir.path().join("shared-resources/models"))
             .expect("models dir");
-        let api = pumas_library::PumasApi::builder(temp_dir.path())
+        let api = crate::pumas_test_support::builder(temp_dir.path())
             .with_hf_client(false)
             .with_process_manager(false)
             .build()

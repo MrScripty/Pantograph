@@ -37,14 +37,18 @@ pub(crate) enum RuntimeHostMediaArtifactSinkError {
         image_index: usize,
         message: String,
     },
-    #[error("runtime-host image output artifact write failed for {task_id}.{port_id}[{image_index}]: {source}")]
-    ArtifactWriteFailed {
-        task_id: String,
-        port_id: String,
-        image_index: usize,
-        #[source]
-        source: WorkflowServiceError,
-    },
+    #[error(transparent)]
+    ArtifactWriteFailed(Box<RuntimeHostArtifactWriteFailure>),
+}
+
+#[derive(Debug, Error)]
+#[error("runtime-host image output artifact write failed for {task_id}.{port_id}[{image_index}]: {source}")]
+pub(crate) struct RuntimeHostArtifactWriteFailure {
+    task_id: String,
+    port_id: String,
+    image_index: usize,
+    #[source]
+    source: WorkflowServiceError,
 }
 
 #[derive(Clone)]
@@ -101,14 +105,16 @@ impl RuntimeHostMediaArtifactSink for WorkflowServiceRuntimeHostMediaArtifactSin
                 revision_index: Some(request.image_index as u64),
                 body,
             })
-            .map_err(
-                |source| RuntimeHostMediaArtifactSinkError::ArtifactWriteFailed {
-                    task_id: request.task_id.to_string(),
-                    port_id: request.port_id.to_string(),
-                    image_index: request.image_index,
-                    source,
-                },
-            )?;
+            .map_err(|source| {
+                RuntimeHostMediaArtifactSinkError::ArtifactWriteFailed(Box::new(
+                    RuntimeHostArtifactWriteFailure {
+                        task_id: request.task_id.to_string(),
+                        port_id: request.port_id.to_string(),
+                        image_index: request.image_index,
+                        source,
+                    },
+                ))
+            })?;
 
         Ok(RuntimeHostExecutionMediaArtifactRef {
             artifact_id: descriptor.artifact_id,
@@ -316,11 +322,56 @@ mod tests {
             })
             .expect_err("missing artifact store must fail closed");
 
-        let RuntimeHostMediaArtifactSinkError::ArtifactWriteFailed { source, .. } = error else {
+        let concrete_source = std::error::Error::source(&error)
+            .expect("artifact write failure retains its source")
+            .downcast_ref::<WorkflowServiceError>()
+            .expect("source remains the concrete workflow error");
+        assert_eq!(concrete_source.code(), WorkflowErrorCode::InternalError);
+        let RuntimeHostMediaArtifactSinkError::ArtifactWriteFailed(failure) = error else {
             panic!("expected artifact write failure");
         };
+        assert_eq!(failure.source.code(), WorkflowErrorCode::InternalError);
+        assert!(failure
+            .source
+            .to_string()
+            .contains("artifact store io error"));
+    }
+
+    #[test]
+    fn boxed_write_failure_preserves_exact_display_and_concrete_source_chain() {
+        let error = RuntimeHostMediaArtifactSinkError::ArtifactWriteFailed(Box::new(
+            RuntimeHostArtifactWriteFailure {
+                task_id: "task.image".to_string(),
+                port_id: "image".to_string(),
+                image_index: 2,
+                source: WorkflowServiceError::Internal("fixture failure".to_string()),
+            },
+        ));
+        assert_eq!(error.to_string(), "runtime-host image output artifact write failed for task.image.image[2]: internal_error: fixture failure");
+        let source = std::error::Error::source(&error).unwrap();
+        assert!(source
+            .downcast_ref::<RuntimeHostArtifactWriteFailure>()
+            .is_none());
+        assert!(source.downcast_ref::<Box<WorkflowServiceError>>().is_none());
+        let source = source
+            .downcast_ref::<WorkflowServiceError>()
+            .expect("unboxed workflow source identity");
         assert_eq!(source.code(), WorkflowErrorCode::InternalError);
-        assert!(source.to_string().contains("artifact store io error"));
+        assert_eq!(source.to_string(), "internal_error: fixture failure");
+        assert!(std::error::Error::source(source).is_none());
+        assert!(std::mem::size_of::<RuntimeHostMediaArtifactSinkError>() <= 128);
+    }
+
+    #[test]
+    fn invalid_image_failure_retains_message_and_absent_source() {
+        let error = RuntimeHostMediaArtifactSinkError::InvalidImagePayload {
+            task_id: "task.image".to_string(),
+            port_id: "image".to_string(),
+            image_index: 2,
+            message: "invalid fixture bytes".to_string(),
+        };
+        assert_eq!(error.to_string(), "runtime-host image output base64 decode failed for task.image.image[2]: invalid fixture bytes");
+        assert!(std::error::Error::source(&error).is_none());
     }
 
     fn artifact_writer(temp: &TempDir) -> WorkflowArtifactWriter {

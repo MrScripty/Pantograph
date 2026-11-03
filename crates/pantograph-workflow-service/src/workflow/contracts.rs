@@ -95,7 +95,7 @@ pub struct WorkflowCapabilityModel {
 }
 
 /// Host capability payload consumed by the service.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[serde(rename_all = "snake_case")]
 pub struct WorkflowRuntimeRequirements {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -103,17 +103,6 @@ pub struct WorkflowRuntimeRequirements {
     pub required_models: Vec<String>,
     pub required_backends: Vec<String>,
     pub required_extensions: Vec<String>,
-}
-
-impl Default for WorkflowRuntimeRequirements {
-    fn default() -> Self {
-        Self {
-            resource_estimates: Vec::new(),
-            required_models: Vec::new(),
-            required_backends: Vec::new(),
-            required_extensions: Vec::new(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -1430,5 +1419,22 @@ impl WorkflowRunHandle {
 impl Default for WorkflowRunHandle {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod lint_style_regressions {
+    use super::WorkflowRuntimeRequirements;
+
+    #[test]
+    fn lint_style_runtime_requirements_default_preserves_empty_wire_fields() {
+        let value = WorkflowRuntimeRequirements::default();
+        assert!(value.resource_estimates.is_empty());
+        assert_eq!(
+            serde_json::to_value(value).unwrap(),
+            serde_json::json!({
+                "required_models": [], "required_backends": [], "required_extensions": []
+            })
+        );
     }
 }

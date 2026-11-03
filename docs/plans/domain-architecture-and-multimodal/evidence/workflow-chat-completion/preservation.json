@@ -1,0 +1,39 @@
+{
+  "/workspace/Pantograph": {
+    "head": "ca9edde6850cd58ade0b7e534bb4f58e704c2c64",
+    "tree": "c5a72e68a784ff09756ad7ce5000660be58d2868",
+    "status": ""
+  },
+  "/workspace/Pantograph-text-stop-string": {
+    "head": "1911983715155fc3927d0ebdfd0b94b851a58536",
+    "tree": "ffc25587ce0cf84f6565e08e36f050355aaa2b9c",
+    "status": ""
+  },
+  "/workspace/Pantograph-embedding-graphs": {
+    "head": "2961b1480c103ec242c6359a45ceee6bb5d999f1",
+    "tree": "fff2f10bb15d396c698e88ce01de283f6ad4b3b6",
+    "status": ""
+  },
+  "/workspace/Pantograph-stop-held-rewrite": {
+    "head": "e570302d688517f26125ca37bd406603e9b7cf7f",
+    "tree": "f996396641fbd15c8ae51a1329daf67683870c4f",
+    "status": ""
+  },
+  "/workspace/Pantograph-embedding-revision": {
+    "head": "7be490d7e403a95e2efff7e5a8f21a68d40a42fd",
+    "tree": "a2caa645c27e584dda0df1d5ede0724f4e641a00",
+    "status": ""
+  },
+  "/workspace/Pantograph-embedding-evidence": {
+    "head": "0f97b3dd86265aaabb0b6be2fb489c3f584ed8aa",
+    "tree": "b4510d92b5cc50f3673586a75424bc010db2f7d1",
+    "status": ""
+  },
+  "/workspace/Pantograph-text-seed": {
+    "head": "1b9fd0bdaf201c92a54165ffab08cc6c6863a640",
+    "tree": "c9124b2f1b9cba9f0db8b9d736f35a95212abb99",
+    "status": " M crates/inference/src/backend/pytorch.rs\n M crates/inference/src/backend/pytorch_tests.rs\n M crates/inference/src/backend/pytorch_worker_image_python_tests.rs\n M crates/inference/src/gateway.rs\n M crates/inference/src/gateway_tests.rs\n M crates/inference/src/types.rs\n M crates/inference/torch/autoregressive.py\n M crates/inference/torch/tests/test_autoregressive.py\n M crates/inference/torch/worker.py\n M crates/inference/torch/worker_contract.py\n M crates/pantograph-embedded-runtime/src/inference_interface_facts_provider.rs\n M crates/pantograph-embedded-runtime/src/lib_tests/workflow_run_execution_tests.rs\n M crates/pantograph-embedded-runtime/src/runtime_host_text_execution.rs\n M crates/pantograph-inference-interface-contracts/tests/contract.rs\n M crates/pantograph-inference-interface-contracts/tests/fixtures/text_generation_system_prompt_inputs.json\n?? crates/inference/torch/tests/test_text_seed.py\n",
+    "tracked_delta_sha256": "429ec063d7f45f7416f95811c4cb5dc13b4efe2c1d7586c98cea78052e1bc71c",
+    "untracked_seed_test_sha256": "a9ba5be6ddfd8b4fb9072ec5afd84994d175ac0e4362d9c98c69ac5398f1e629"
+  }
+}

@@ -44,10 +44,11 @@ pub(crate) fn validate_workflow_semantic_version(
     Ok(())
 }
 
-pub(super) fn validate_workflow_graph_submit_readiness(
+pub(super) fn validate_workflow_graph_submit_readiness_with_registry(
     graph: &WorkflowGraph,
+    registry: &NodeRegistry,
 ) -> Result<(), WorkflowServiceError> {
-    let diagnostics = validate_workflow_graph_contract_diagnostics(graph, &NodeRegistry::new());
+    let diagnostics = validate_workflow_graph_contract_diagnostics(graph, registry);
     let blocking_diagnostics = diagnostics
         .into_iter()
         .filter(|diagnostic| diagnostic.blocking_submission)
@@ -152,23 +153,6 @@ pub(super) fn validate_bindings(
         }
     }
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn stale_graph_remaining_count_rejects_formatter_underflow() {
-        let error = remaining_stale_graph_diagnostic_count(1, 2)
-            .expect_err("shown diagnostics cannot exceed total diagnostics");
-
-        assert!(matches!(
-            error,
-            WorkflowServiceError::Internal(message)
-                if message.contains("formatter showed 2 reasons for 1 diagnostics")
-        ));
-    }
 }
 
 pub(super) fn validate_host_output_bindings(
@@ -339,4 +323,21 @@ pub(super) fn validate_payload_size(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stale_graph_remaining_count_rejects_formatter_underflow() {
+        let error = remaining_stale_graph_diagnostic_count(1, 2)
+            .expect_err("shown diagnostics cannot exceed total diagnostics");
+
+        assert!(matches!(
+            error,
+            WorkflowServiceError::Internal(message)
+                if message.contains("formatter showed 2 reasons for 1 diagnostics")
+        ));
+    }
 }

@@ -24,9 +24,7 @@ use pantograph_runtime_host_contracts::{
 };
 
 use crate::runtime_host_embedding_execution::{
-    embedding_vector_from_inference_result, project_runtime_host_embedding_generation,
-    validate_runtime_host_embedding_generation_request,
-    RuntimeHostEmbeddingGenerationProjectionError, EMBEDDING_TASK,
+    validate_runtime_host_embedding_request, EMBEDDING_TASK,
 };
 use crate::runtime_host_image_execution::{
     project_runtime_host_image_generation, RuntimeHostImageGenerationProjectionError,
@@ -45,7 +43,7 @@ use crate::runtime_host_package_facts::{
 use crate::runtime_host_text_execution::{
     project_runtime_host_text_generation, text_from_inference_result,
     validate_runtime_host_text_generation_request, RuntimeHostTextGenerationProjectionError,
-    TEXT_GENERATION_TASK,
+    CHAT_COMPLETION_TASK, TEXT_GENERATION_TASK,
 };
 
 const MISSING_LOAD_TARGET_RESOLVER_HINT: &str =
@@ -68,10 +66,6 @@ const GATEWAY_EXECUTION_FAILED_HINT: &str =
     "embedded_runtime_host_execution_port.gateway_execution_failed";
 const TEXT_GATEWAY_EXECUTION_FAILED_HINT: &str =
     "embedded_runtime_host_execution_port.text_gateway_execution_failed";
-const EMBEDDING_PROJECTION_FAILED_HINT: &str =
-    "embedded_runtime_host_execution_port.embedding_projection_failed";
-const EMBEDDING_GATEWAY_EXECUTION_FAILED_HINT: &str =
-    "embedded_runtime_host_execution_port.embedding_gateway_execution_failed";
 const BATCH_COMPATIBILITY_FAILED_HINT: &str =
     "embedded_runtime_host_execution_port.batch_compatibility_failed";
 const BATCH_PLANNING_FAILED_HINT: &str =
@@ -93,6 +87,7 @@ pub(crate) struct EmbeddedRuntimeHostExecutionPort {
     media_artifact_sink: Option<Arc<dyn RuntimeHostMediaArtifactSink>>,
     package_facts_resolver: Option<Arc<dyn RuntimeHostPackageFactsResolver>>,
     gateway: Option<Arc<inference::InferenceGateway>>,
+    owned_audio_store: Option<crate::OwnedAudioInputStore>,
 }
 
 impl EmbeddedRuntimeHostExecutionPort {
@@ -103,6 +98,7 @@ impl EmbeddedRuntimeHostExecutionPort {
             media_artifact_sink: None,
             package_facts_resolver: None,
             gateway: None,
+            owned_audio_store: None,
         }
     }
 
@@ -115,6 +111,7 @@ impl EmbeddedRuntimeHostExecutionPort {
             media_artifact_sink: None,
             package_facts_resolver: None,
             gateway: None,
+            owned_audio_store: None,
         }
     }
 
@@ -130,9 +127,14 @@ impl EmbeddedRuntimeHostExecutionPort {
             media_artifact_sink: Some(media_artifact_sink),
             package_facts_resolver: Some(package_facts_resolver),
             gateway: Some(gateway),
+            owned_audio_store: None,
         }
     }
 
+    pub(crate) fn with_owned_audio_store(mut self, store: crate::OwnedAudioInputStore) -> Self {
+        self.owned_audio_store = Some(store);
+        self
+    }
     #[cfg(test)]
     fn with_load_target_resolver_only_for_test(
         load_target_resolver: Arc<dyn RuntimeHostLoadTargetResolver>,
@@ -142,6 +144,7 @@ impl EmbeddedRuntimeHostExecutionPort {
             media_artifact_sink: None,
             package_facts_resolver: None,
             gateway: None,
+            owned_audio_store: None,
         }
     }
 }
@@ -166,14 +169,15 @@ impl RuntimeHostExecutionPort for EmbeddedRuntimeHostExecutionPort {
             return Ok(response);
         }
 
-        if validated_request
-            .as_ref()
-            .handoff
-            .task_intent
-            .task_type
-            .as_str()
-            == TEXT_GENERATION_TASK
-        {
+        if matches!(
+            validated_request
+                .as_ref()
+                .handoff
+                .task_intent
+                .task_type
+                .as_str(),
+            TEXT_GENERATION_TASK | CHAT_COMPLETION_TASK
+        ) {
             return self
                 .execute_runtime_host_text_request(&validated_request, cancellation)
                 .await;
@@ -185,10 +189,36 @@ impl RuntimeHostExecutionPort for EmbeddedRuntimeHostExecutionPort {
             .task_intent
             .task_type
             .as_str()
-            == EMBEDDING_TASK
+            == crate::runtime_host_embedding_execution::EMBEDDING_TASK
         {
             return self
                 .execute_runtime_host_embedding_request(&validated_request, cancellation)
+                .await;
+        }
+
+        if validated_request
+            .as_ref()
+            .handoff
+            .task_intent
+            .task_type
+            .as_str()
+            == crate::runtime_host_rerank_execution::RERANK_TASK
+        {
+            return self
+                .execute_runtime_host_rerank_request(&validated_request, cancellation)
+                .await;
+        }
+
+        if validated_request
+            .as_ref()
+            .handoff
+            .task_intent
+            .task_type
+            .as_str()
+            == crate::runtime_host_audio_execution::AUDIO_TASK
+        {
+            return self
+                .execute_runtime_host_audio_request(&validated_request, cancellation)
                 .await;
         }
 
@@ -367,175 +397,6 @@ impl RuntimeHostExecutionPort for EmbeddedRuntimeHostExecutionPort {
 }
 
 impl EmbeddedRuntimeHostExecutionPort {
-    async fn execute_runtime_host_embedding_request(
-        &self,
-        request: &ValidatedRuntimeHostExecutionRequest,
-        cancellation: RuntimeHostExecutionCancellationHandle,
-    ) -> Result<RuntimeHostExecutionResponse, RuntimeHostExecutionPortError> {
-        let request_ref = request.as_ref();
-        if let Err(error) = validate_runtime_host_embedding_generation_request(request_ref) {
-            return Ok(rejected_response(
-                request_ref,
-                RuntimeHostExecutionDiagnosticCode::ExecutionFailed,
-                &embedding_projection_error_message(error),
-                EMBEDDING_PROJECTION_FAILED_HINT,
-            ));
-        }
-        let Some(load_target_resolver) = self.load_target_resolver.as_ref() else {
-            return Ok(rejected_response(
-                request_ref,
-                RuntimeHostExecutionDiagnosticCode::PumasLoadTargetRequired,
-                "embedded runtime-host embedding execution requires a Pumas load-target resolver",
-                MISSING_LOAD_TARGET_RESOLVER_HINT,
-            ));
-        };
-        let Some(package_facts_resolver) = self.package_facts_resolver.as_ref() else {
-            return Ok(rejected_response(
-                request_ref,
-                RuntimeHostExecutionDiagnosticCode::RuntimeUnavailable,
-                "embedded runtime-host embedding execution requires a Pumas package-facts resolver",
-                MISSING_PACKAGE_FACTS_RESOLVER_HINT,
-            ));
-        };
-        let Some(gateway) = self.gateway.as_ref() else {
-            return Ok(rejected_response(
-                request_ref,
-                RuntimeHostExecutionDiagnosticCode::RuntimeUnavailable,
-                "embedded runtime-host embedding execution requires an inference gateway",
-                MISSING_INFERENCE_GATEWAY_HINT,
-            ));
-        };
-
-        if let Some(response) = cancellation_rejection_response(request_ref, &cancellation)? {
-            return Ok(response);
-        }
-        let load_target_resolution = load_target_resolver.resolve(request);
-        tokio::pin!(load_target_resolution);
-        let mut load_target_cancellation_poll =
-            tokio::time::interval(std::time::Duration::from_millis(25));
-        let load_target_result = loop {
-            tokio::select! {
-                result = &mut load_target_resolution => break result,
-                _ = load_target_cancellation_poll.tick() => {
-                    if let Some(response) = cancellation_rejection_response(request_ref, &cancellation)? {
-                        return Ok(response);
-                    }
-                }
-            }
-        };
-        let load_target = match load_target_result {
-            Ok(load_target) => load_target,
-            Err(error) => {
-                if let Some(response) = cancellation_rejection_response(request_ref, &cancellation)?
-                {
-                    return Ok(response);
-                }
-                return Ok(rejected_response(
-                    request_ref,
-                    RuntimeHostExecutionDiagnosticCode::PumasLoadTargetUnavailable,
-                    &load_target_error_message(error),
-                    LOAD_TARGET_UNAVAILABLE_HINT,
-                ));
-            }
-        };
-        if let Some(response) = cancellation_rejection_response(request_ref, &cancellation)? {
-            return Ok(response);
-        }
-        if let Some(response) = cancellation_rejection_response(request_ref, &cancellation)? {
-            return Ok(response);
-        }
-        let package_facts_resolution = package_facts_resolver.resolve(request);
-        tokio::pin!(package_facts_resolution);
-        let mut package_facts_cancellation_poll =
-            tokio::time::interval(std::time::Duration::from_millis(25));
-        let package_facts_result = loop {
-            tokio::select! {
-                result = &mut package_facts_resolution => break result,
-                _ = package_facts_cancellation_poll.tick() => {
-                    if let Some(response) = cancellation_rejection_response(request_ref, &cancellation)? {
-                        return Ok(response);
-                    }
-                }
-            }
-        };
-        let package_facts = match package_facts_result {
-            Ok(package_facts) => package_facts,
-            Err(error) => {
-                if let Some(response) = cancellation_rejection_response(request_ref, &cancellation)?
-                {
-                    return Ok(response);
-                }
-                return Ok(rejected_response(
-                    request_ref,
-                    RuntimeHostExecutionDiagnosticCode::PumasLoadTargetUnavailable,
-                    &package_facts_error_message(error),
-                    PACKAGE_FACTS_UNAVAILABLE_HINT,
-                ));
-            }
-        };
-        if let Some(response) = cancellation_rejection_response(request_ref, &cancellation)? {
-            return Ok(response);
-        }
-        let projection =
-            match project_runtime_host_embedding_generation(request, package_facts, load_target) {
-                Ok(projection) => projection,
-                Err(error) => {
-                    return Ok(rejected_response(
-                        request_ref,
-                        RuntimeHostExecutionDiagnosticCode::ExecutionFailed,
-                        &embedding_projection_error_message(error),
-                        EMBEDDING_PROJECTION_FAILED_HINT,
-                    ));
-                }
-            };
-        let inference_cancellation =
-            inference_cancellation_handle_from_runtime_host(cancellation.clone());
-        let result = match gateway
-            .execute_selected_embedding_with_cancellation(
-                projection.request().clone(),
-                projection.artifact_load_target().clone(),
-                projection.backend_decision().clone(),
-                inference_cancellation,
-            )
-            .await
-        {
-            Ok(result) => result,
-            Err(error) => {
-                if let Some(response) = cancellation_rejection_response(request_ref, &cancellation)?
-                {
-                    return Ok(response);
-                }
-                return Ok(failed_response(
-                    request_ref,
-                    &embedding_gateway_error_message(error),
-                    EMBEDDING_GATEWAY_EXECUTION_FAILED_HINT,
-                ));
-            }
-        };
-        if let Some(response) = cancellation_rejection_response(request_ref, &cancellation)? {
-            return Ok(response);
-        }
-        let vector = match embedding_vector_from_inference_result(result) {
-            Ok(vector) => vector,
-            Err(error) => {
-                let mut message = embedding_projection_error_message(error);
-                if let Err(cleanup_error) = gateway.stop().await {
-                    message =
-                        format!("{message}; embedding runtime cleanup failed: {cleanup_error}");
-                }
-                return Ok(failed_response(
-                    request_ref,
-                    &message,
-                    EMBEDDING_PROJECTION_FAILED_HINT,
-                ));
-            }
-        };
-        if let Some(response) = cancellation_rejection_response(request_ref, &cancellation)? {
-            return Ok(response);
-        }
-        completed_embedding_response(request_ref, vector)
-    }
-
     async fn execute_runtime_host_text_request(
         &self,
         request: &ValidatedRuntimeHostExecutionRequest,
@@ -702,91 +563,534 @@ impl EmbeddedRuntimeHostExecutionPort {
             }
         };
 
-        Ok(completed_text_response(request_ref, text))
+        Ok(completed_node_response(
+            request_ref,
+            vec![RuntimeHostExecutionOutput {
+                port_id: "text".into(),
+                value: RuntimeHostExecutionOutputValue::String(text),
+            }],
+            "embedded runtime-host text execution completed",
+        ))
+    }
+
+    async fn execute_runtime_host_embedding_request(
+        &self,
+        request: &ValidatedRuntimeHostExecutionRequest,
+        cancellation: RuntimeHostExecutionCancellationHandle,
+    ) -> Result<RuntimeHostExecutionResponse, RuntimeHostExecutionPortError> {
+        let request_ref = request.as_ref();
+        if let Err(error) =
+            crate::runtime_host_embedding_execution::validate_runtime_host_embedding_request(
+                request_ref,
+            )
+        {
+            return Ok(rejected_response(
+                request_ref,
+                RuntimeHostExecutionDiagnosticCode::ExecutionFailed,
+                &format!("embedded runtime-host embedding projection failed: {error}"),
+                "embedded_runtime_host_execution_port.embedding_projection_failed",
+            ));
+        }
+
+        let Some(load_target_resolver) = self.load_target_resolver.as_ref() else {
+            return Ok(rejected_response(
+                request_ref,
+                RuntimeHostExecutionDiagnosticCode::PumasLoadTargetRequired,
+                "embedded runtime-host embedding execution requires a Pumas load-target resolver",
+                MISSING_LOAD_TARGET_RESOLVER_HINT,
+            ));
+        };
+        let Some(package_facts_resolver) = self.package_facts_resolver.as_ref() else {
+            return Ok(rejected_response(
+                request_ref,
+                RuntimeHostExecutionDiagnosticCode::RuntimeUnavailable,
+                "embedded runtime-host embedding execution requires a Pumas package-facts resolver",
+                MISSING_PACKAGE_FACTS_RESOLVER_HINT,
+            ));
+        };
+        let Some(gateway) = self.gateway.as_ref() else {
+            return Ok(rejected_response(
+                request_ref,
+                RuntimeHostExecutionDiagnosticCode::RuntimeUnavailable,
+                "embedded runtime-host embedding execution requires an inference gateway",
+                MISSING_INFERENCE_GATEWAY_HINT,
+            ));
+        };
+
+        let load_target = match load_target_resolver.resolve(request).await {
+            Ok(load_target) => load_target,
+            Err(error) => {
+                return Ok(rejected_response(
+                    request_ref,
+                    RuntimeHostExecutionDiagnosticCode::PumasLoadTargetUnavailable,
+                    &load_target_error_message(error),
+                    LOAD_TARGET_UNAVAILABLE_HINT,
+                ));
+            }
+        };
+        if let Some(response) = cancellation_rejection_response(request_ref, &cancellation)? {
+            return Ok(response);
+        }
+
+        let package_facts = match package_facts_resolver.resolve(request).await {
+            Ok(package_facts) => package_facts,
+            Err(error) => {
+                return Ok(rejected_response(
+                    request_ref,
+                    RuntimeHostExecutionDiagnosticCode::PumasLoadTargetUnavailable,
+                    &package_facts_error_message(error),
+                    PACKAGE_FACTS_UNAVAILABLE_HINT,
+                ));
+            }
+        };
+        if let Some(response) = cancellation_rejection_response(request_ref, &cancellation)? {
+            return Ok(response);
+        }
+
+        let projection =
+            match crate::runtime_host_embedding_execution::project_runtime_host_embedding(
+                request,
+                package_facts,
+                crate::runtime_host_image_execution::project_pumas_artifact_load_target(
+                    load_target,
+                ),
+            ) {
+                Ok(projection) => projection,
+                Err(error) => {
+                    return Ok(rejected_response(
+                        request_ref,
+                        RuntimeHostExecutionDiagnosticCode::ExecutionFailed,
+                        &format!("embedded runtime-host embedding projection failed: {error}"),
+                        "embedded_runtime_host_execution_port.embedding_projection_failed",
+                    ));
+                }
+            };
+        if let Some(response) = cancellation_rejection_response(request_ref, &cancellation)? {
+            return Ok(response);
+        }
+
+        let inference_cancellation =
+            inference_cancellation_handle_from_runtime_host(cancellation.clone());
+        let result = match gateway
+            .execute_selected_embedding_with_cancellation(
+                projection.request,
+                projection.target,
+                projection.decision,
+                inference_cancellation,
+            )
+            .await
+        {
+            Ok(result) => result,
+            Err(error) => {
+                if matches!(
+                    error,
+                    inference::GatewayError::Backend(inference::BackendError::Cancelled(_))
+                ) {
+                    if let Some(response) =
+                        cancellation_rejection_response(request_ref, &cancellation)?
+                    {
+                        return Ok(response);
+                    }
+                }
+                return Ok(failed_response(
+                    request_ref,
+                    &format!("embedded runtime-host embedding gateway execution failed: {error}"),
+                    "embedded_runtime_host_execution_port.embedding_gateway_execution_failed",
+                ));
+            }
+        };
+
+        let outputs =
+            match crate::runtime_host_embedding_execution::embedding_outputs(request_ref, result) {
+                Ok(outputs) => outputs,
+                Err(error) => {
+                    return Ok(failed_response(
+                        request_ref,
+                        &format!("embedded runtime-host embedding projection failed: {error}"),
+                        "embedded_runtime_host_execution_port.embedding_projection_failed",
+                    ));
+                }
+            };
+
+        let response = completed_node_response(
+            request_ref,
+            outputs,
+            "embedded runtime-host embedding execution completed",
+        );
+        if let Err(error) = response.validate() {
+            return Ok(failed_response(
+                request_ref,
+                &format!("embedding output contract failed: {error}"),
+                "embedded_runtime_host_execution_port.embedding_projection_failed",
+            ));
+        }
+        Ok(response)
+    }
+    async fn execute_runtime_host_rerank_request(
+        &self,
+        request: &ValidatedRuntimeHostExecutionRequest,
+        cancellation: RuntimeHostExecutionCancellationHandle,
+    ) -> Result<RuntimeHostExecutionResponse, RuntimeHostExecutionPortError> {
+        let request_ref = request.as_ref();
+        if let Err(error) =
+            crate::runtime_host_rerank_execution::validate_runtime_host_rerank_request(request_ref)
+        {
+            return Ok(rejected_response(
+                request_ref,
+                RuntimeHostExecutionDiagnosticCode::ExecutionFailed,
+                &format!("embedded runtime-host rerank projection failed: {error}"),
+                "embedded_runtime_host_execution_port.rerank_projection_failed",
+            ));
+        }
+
+        let Some(load_target_resolver) = self.load_target_resolver.as_ref() else {
+            return Ok(rejected_response(
+                request_ref,
+                RuntimeHostExecutionDiagnosticCode::PumasLoadTargetRequired,
+                "embedded runtime-host rerank execution requires a Pumas load-target resolver",
+                MISSING_LOAD_TARGET_RESOLVER_HINT,
+            ));
+        };
+        let Some(package_facts_resolver) = self.package_facts_resolver.as_ref() else {
+            return Ok(rejected_response(
+                request_ref,
+                RuntimeHostExecutionDiagnosticCode::RuntimeUnavailable,
+                "embedded runtime-host rerank execution requires a Pumas package-facts resolver",
+                MISSING_PACKAGE_FACTS_RESOLVER_HINT,
+            ));
+        };
+        let Some(gateway) = self.gateway.as_ref() else {
+            return Ok(rejected_response(
+                request_ref,
+                RuntimeHostExecutionDiagnosticCode::RuntimeUnavailable,
+                "embedded runtime-host rerank execution requires an inference gateway",
+                MISSING_INFERENCE_GATEWAY_HINT,
+            ));
+        };
+
+        let load_target = match load_target_resolver.resolve(request).await {
+            Ok(load_target) => load_target,
+            Err(error) => {
+                return Ok(rejected_response(
+                    request_ref,
+                    RuntimeHostExecutionDiagnosticCode::PumasLoadTargetUnavailable,
+                    &load_target_error_message(error),
+                    LOAD_TARGET_UNAVAILABLE_HINT,
+                ));
+            }
+        };
+        if let Some(response) = cancellation_rejection_response(request_ref, &cancellation)? {
+            return Ok(response);
+        }
+
+        let package_facts = match package_facts_resolver.resolve(request).await {
+            Ok(package_facts) => package_facts,
+            Err(error) => {
+                return Ok(rejected_response(
+                    request_ref,
+                    RuntimeHostExecutionDiagnosticCode::PumasLoadTargetUnavailable,
+                    &package_facts_error_message(error),
+                    PACKAGE_FACTS_UNAVAILABLE_HINT,
+                ));
+            }
+        };
+        if let Some(response) = cancellation_rejection_response(request_ref, &cancellation)? {
+            return Ok(response);
+        }
+
+        let projection = match crate::runtime_host_rerank_execution::project_runtime_host_rerank(
+            request,
+            package_facts,
+            crate::runtime_host_image_execution::project_pumas_artifact_load_target(load_target),
+        ) {
+            Ok(projection) => projection,
+            Err(error) => {
+                return Ok(rejected_response(
+                    request_ref,
+                    RuntimeHostExecutionDiagnosticCode::ExecutionFailed,
+                    &format!("embedded runtime-host rerank projection failed: {error}"),
+                    "embedded_runtime_host_execution_port.rerank_projection_failed",
+                ));
+            }
+        };
+        if let Some(response) = cancellation_rejection_response(request_ref, &cancellation)? {
+            return Ok(response);
+        }
+
+        let inference_cancellation =
+            inference_cancellation_handle_from_runtime_host(cancellation.clone());
+        let result = match gateway
+            .execute_selected_rerank_with_cancellation(
+                projection.request,
+                projection.target,
+                projection.decision,
+                inference_cancellation,
+            )
+            .await
+        {
+            Ok(result) => result,
+            Err(error) => {
+                if matches!(
+                    error,
+                    inference::GatewayError::Backend(inference::BackendError::Cancelled(_))
+                ) {
+                    if let Some(response) =
+                        cancellation_rejection_response(request_ref, &cancellation)?
+                    {
+                        return Ok(response);
+                    }
+                }
+                return Ok(failed_response(
+                    request_ref,
+                    &format!("embedded runtime-host rerank gateway execution failed: {error}"),
+                    "embedded_runtime_host_execution_port.rerank_gateway_execution_failed",
+                ));
+            }
+        };
+
+        let outputs = match crate::runtime_host_rerank_execution::rerank_outputs(result) {
+            Ok(outputs) => outputs,
+            Err(error) => {
+                return Ok(failed_response(
+                    request_ref,
+                    &format!("embedded runtime-host rerank projection failed: {error}"),
+                    "embedded_runtime_host_execution_port.rerank_projection_failed",
+                ));
+            }
+        };
+
+        if let Some(response) = cancellation_rejection_response(request_ref, &cancellation)? {
+            return Ok(response);
+        }
+        let response = completed_node_response(
+            request_ref,
+            outputs,
+            "embedded runtime-host rerank execution completed",
+        );
+        if let Err(error) = response.validate() {
+            return Ok(failed_response(
+                request_ref,
+                &format!("rerank output contract failed: {error}"),
+                "embedded_runtime_host_execution_port.rerank_projection_failed",
+            ));
+        }
+        Ok(response)
     }
 }
 
 impl EmbeddedRuntimeHostExecutionPort {
-    async fn execute_runtime_host_text_batch_request(
+    async fn execute_runtime_host_audio_request(
         &self,
-        request: &RuntimeHostBatchExecutionRequest,
-        member_requests: Vec<ValidatedRuntimeHostExecutionRequest>,
+        request: &ValidatedRuntimeHostExecutionRequest,
         cancellation: RuntimeHostExecutionCancellationHandle,
-    ) -> Result<RuntimeHostBatchExecutionResponse, RuntimeHostExecutionPortError> {
-        let validation_errors = member_requests
-            .iter()
-            .map(|member| {
-                validate_runtime_host_text_generation_request(member.as_ref())
-                    .err()
-                    .map(|error| error.to_string())
-            })
-            .collect::<Vec<_>>();
-        let mut members = Vec::with_capacity(member_requests.len());
-
-        for (member_request, validation_error) in member_requests.into_iter().zip(validation_errors)
+    ) -> Result<RuntimeHostExecutionResponse, RuntimeHostExecutionPortError> {
+        let request_ref = request.as_ref();
+        if let Err(error) =
+            crate::runtime_host_audio_execution::validate_runtime_host_audio_request(request_ref)
         {
-            let member = request
-                .members
-                .iter()
-                .find(|candidate| {
-                    candidate.execution_request_id == member_request.as_ref().execution_request_id
-                })
-                .expect("validated batch member must match its source request");
-            if let Some(error) = validation_error {
-                members.push(batch_member_response(
-                    member,
-                    RuntimeHostBatchExecutionMemberState::Rejected,
-                    Vec::new(),
-                    vec![runtime_host_diagnostic(
-                        RuntimeHostExecutionDiagnosticCode::ExecutionFailed,
-                        &format!("embedded runtime-host text projection failed: {error}"),
-                        TEXT_PROJECTION_FAILED_HINT,
-                    )],
-                ));
-                continue;
-            }
-
-            if let Some(response) =
-                batch_member_cancellation_response(member, request, &cancellation)?
-            {
-                members.push(response);
-                continue;
-            }
-
-            let response = self
-                .execute_runtime_host_text_request(&member_request, cancellation.clone())
-                .await?;
-            members.push(batch_member_response_from_single(member, response));
-        }
-
-        let state = runtime_host_batch_state_from_members(&members);
-        let mut diagnostics = members
-            .iter()
-            .filter_map(|member| member.diagnostics.first().cloned())
-            .collect::<Vec<_>>();
-        if diagnostics.is_empty()
-            && matches!(
-                state,
-                RuntimeHostBatchExecutionState::Rejected | RuntimeHostBatchExecutionState::Failed
-            )
-        {
-            diagnostics.push(runtime_host_diagnostic(
+            return Ok(rejected_response(
+                request_ref,
                 RuntimeHostExecutionDiagnosticCode::ExecutionFailed,
-                "embedded runtime-host text batch execution ended without a completed member",
-                TEXT_GATEWAY_EXECUTION_FAILED_HINT,
+                &format!("embedded runtime-host audio projection failed: {error}"),
+                "embedded_runtime_host_execution_port.audio_projection_failed",
             ));
         }
 
-        Ok(RuntimeHostBatchExecutionResponse {
-            contract_version: RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
-            batch_execution_request_id: request.batch_execution_request_id.clone(),
-            state,
-            members,
-            diagnostics,
-        })
-    }
+        let Some(load_target_resolver) = self.load_target_resolver.as_ref() else {
+            return Ok(rejected_response(
+                request_ref,
+                RuntimeHostExecutionDiagnosticCode::PumasLoadTargetRequired,
+                "embedded runtime-host audio execution requires a Pumas load-target resolver",
+                MISSING_LOAD_TARGET_RESOLVER_HINT,
+            ));
+        };
+        let Some(package_facts_resolver) = self.package_facts_resolver.as_ref() else {
+            return Ok(rejected_response(
+                request_ref,
+                RuntimeHostExecutionDiagnosticCode::RuntimeUnavailable,
+                "embedded runtime-host audio execution requires a Pumas package-facts resolver",
+                MISSING_PACKAGE_FACTS_RESOLVER_HINT,
+            ));
+        };
+        let Some(gateway) = self.gateway.as_ref() else {
+            return Ok(rejected_response(
+                request_ref,
+                RuntimeHostExecutionDiagnosticCode::RuntimeUnavailable,
+                "embedded runtime-host audio execution requires an inference gateway",
+                MISSING_INFERENCE_GATEWAY_HINT,
+            ));
+        };
 
-    async fn execute_runtime_host_embedding_batch_request(
+        let load_target = match load_target_resolver.resolve(request).await {
+            Ok(load_target) => load_target,
+            Err(error) => {
+                return Ok(rejected_response(
+                    request_ref,
+                    RuntimeHostExecutionDiagnosticCode::PumasLoadTargetUnavailable,
+                    &load_target_error_message(error),
+                    LOAD_TARGET_UNAVAILABLE_HINT,
+                ));
+            }
+        };
+        if let Some(response) = cancellation_rejection_response(request_ref, &cancellation)? {
+            return Ok(response);
+        }
+
+        let package_facts = match package_facts_resolver.resolve(request).await {
+            Ok(package_facts) => package_facts,
+            Err(error) => {
+                return Ok(rejected_response(
+                    request_ref,
+                    RuntimeHostExecutionDiagnosticCode::PumasLoadTargetUnavailable,
+                    &package_facts_error_message(error),
+                    PACKAGE_FACTS_UNAVAILABLE_HINT,
+                ));
+            }
+        };
+        if let Some(response) = cancellation_rejection_response(request_ref, &cancellation)? {
+            return Ok(response);
+        }
+
+        let mut projection = match crate::runtime_host_audio_execution::project_runtime_host_audio(
+            request,
+            package_facts,
+            crate::runtime_host_image_execution::project_pumas_artifact_load_target(load_target),
+        ) {
+            Ok(projection) => projection,
+            Err(error) => {
+                return Ok(rejected_response(
+                    request_ref,
+                    RuntimeHostExecutionDiagnosticCode::ExecutionFailed,
+                    &format!("embedded runtime-host audio projection failed: {error}"),
+                    "embedded_runtime_host_execution_port.audio_projection_failed",
+                ));
+            }
+        };
+        if let Some(response) = cancellation_rejection_response(request_ref, &cancellation)? {
+            return Ok(response);
+        }
+
+        let source_id = match &projection.request.input {
+            inference::InferenceExecutionInput::AudioTranscription { request: audio } => {
+                audio.audio_ref.clone()
+            }
+            _ => None,
+        };
+        let owned = source_id.is_some();
+        if let Some(artifact_id) = source_id {
+            let Some(store) = &self.owned_audio_store else {
+                return Ok(rejected_response(
+                    request_ref,
+                    RuntimeHostExecutionDiagnosticCode::ExecutionFailed,
+                    "owned audio store unavailable",
+                    "audio.owned_store_unavailable",
+                ));
+            };
+            let snapshot = match store
+                .resolve_for_execution(
+                    artifact_id,
+                    request_ref.handoff.workflow_id.as_str().to_owned(),
+                    Some(cancellation.clone()),
+                )
+                .await
+            {
+                Ok(snapshot) => snapshot,
+                Err(error) => {
+                    if let Some(response) =
+                        cancellation_rejection_response(request_ref, &cancellation)?
+                    {
+                        return Ok(response);
+                    }
+                    return Ok(rejected_response(
+                        request_ref,
+                        RuntimeHostExecutionDiagnosticCode::ExecutionFailed,
+                        &error,
+                        "audio.owned_reference_invalid",
+                    ));
+                }
+            };
+            let inference::InferenceExecutionInput::AudioTranscription { request: audio } =
+                projection.request.input
+            else {
+                unreachable!("audio projection")
+            };
+            projection.request.input =
+                inference::InferenceExecutionInput::OwnedAudioTranscription {
+                    request: audio,
+                    snapshot,
+                };
+        }
+        if let Some(response) = cancellation_rejection_response(request_ref, &cancellation)? {
+            return Ok(response);
+        }
+        let inference_cancellation =
+            inference_cancellation_handle_from_runtime_host(cancellation.clone());
+        let result = match gateway
+            .execute_selected_audio_with_cancellation(
+                projection.request,
+                projection.target,
+                projection.decision,
+                inference_cancellation,
+            )
+            .await
+        {
+            Ok(result) => result,
+            Err(error) => {
+                if matches!(
+                    error,
+                    inference::GatewayError::Backend(inference::BackendError::Cancelled(_))
+                ) {
+                    if let Some(response) =
+                        cancellation_rejection_response(request_ref, &cancellation)?
+                    {
+                        return Ok(response);
+                    }
+                }
+                return Ok(failed_response(
+                    request_ref,
+                    &format!("embedded runtime-host audio gateway execution failed: {error}"),
+                    "embedded_runtime_host_execution_port.audio_gateway_execution_failed",
+                ));
+            }
+        };
+
+        let projected_outputs = if owned {
+            crate::runtime_host_audio_execution::owned_audio_outputs(result)
+        } else {
+            crate::runtime_host_audio_execution::audio_outputs(result)
+        };
+        let outputs = match projected_outputs {
+            Ok(outputs) => outputs,
+            Err(error) => {
+                return Ok(failed_response(
+                    request_ref,
+                    &format!("embedded runtime-host audio projection failed: {error}"),
+                    "embedded_runtime_host_execution_port.audio_projection_failed",
+                ));
+            }
+        };
+
+        if let Some(response) = cancellation_rejection_response(request_ref, &cancellation)? {
+            return Ok(response);
+        }
+        let response = completed_node_response(
+            request_ref,
+            outputs,
+            "embedded runtime-host audio execution completed",
+        );
+        if let Err(error) = response.validate() {
+            return Ok(failed_response(
+                request_ref,
+                &format!("audio output contract failed: {error}"),
+                "embedded_runtime_host_execution_port.audio_projection_failed",
+            ));
+        }
+        Ok(response)
+    }
+}
+
+impl EmbeddedRuntimeHostExecutionPort {
+    async fn execute_runtime_host_sequential_batch_request(
         &self,
         request: &RuntimeHostBatchExecutionRequest,
         member_requests: Vec<ValidatedRuntimeHostExecutionRequest>,
@@ -795,9 +1099,29 @@ impl EmbeddedRuntimeHostExecutionPort {
         let validation_errors = member_requests
             .iter()
             .map(|member| {
-                validate_runtime_host_embedding_generation_request(member.as_ref())
+                if member.as_ref().handoff.task_intent.task_type.as_str() == EMBEDDING_TASK {
+                    validate_runtime_host_embedding_request(member.as_ref())
+                        .err()
+                        .map(|error| error.to_string())
+                } else if member.as_ref().handoff.task_intent.task_type.as_str()
+                    == crate::runtime_host_rerank_execution::RERANK_TASK
+                {
+                    crate::runtime_host_rerank_execution::validate_runtime_host_rerank_request(
+                        member.as_ref(),
+                    )
                     .err()
-                    .map(|error| error.to_string())
+                } else if member.as_ref().handoff.task_intent.task_type.as_str()
+                    == crate::runtime_host_audio_execution::AUDIO_TASK
+                {
+                    crate::runtime_host_audio_execution::validate_runtime_host_audio_request(
+                        member.as_ref(),
+                    )
+                    .err()
+                } else {
+                    validate_runtime_host_text_generation_request(member.as_ref())
+                        .err()
+                        .map(|error| error.to_string())
+                }
             })
             .collect::<Vec<_>>();
         let mut members = Vec::with_capacity(member_requests.len());
@@ -818,22 +1142,88 @@ impl EmbeddedRuntimeHostExecutionPort {
                     Vec::new(),
                     vec![runtime_host_diagnostic(
                         RuntimeHostExecutionDiagnosticCode::ExecutionFailed,
-                        &format!("embedded runtime-host embedding projection failed: {error}"),
-                        EMBEDDING_PROJECTION_FAILED_HINT,
+                        &format!(
+                            "embedded runtime-host sequential member projection failed: {error}"
+                        ),
+                        if member_request
+                            .as_ref()
+                            .handoff
+                            .task_intent
+                            .task_type
+                            .as_str()
+                            == EMBEDDING_TASK
+                        {
+                            "embedded_runtime_host_execution_port.embedding_projection_failed"
+                        } else if member_request
+                            .as_ref()
+                            .handoff
+                            .task_intent
+                            .task_type
+                            .as_str()
+                            == crate::runtime_host_rerank_execution::RERANK_TASK
+                        {
+                            "embedded_runtime_host_execution_port.rerank_projection_failed"
+                        } else if member_request
+                            .as_ref()
+                            .handoff
+                            .task_intent
+                            .task_type
+                            .as_str()
+                            == crate::runtime_host_audio_execution::AUDIO_TASK
+                        {
+                            "embedded_runtime_host_execution_port.audio_projection_failed"
+                        } else {
+                            TEXT_PROJECTION_FAILED_HINT
+                        },
                     )],
                 ));
                 continue;
             }
+
             if let Some(response) =
-                batch_member_cancellation_response(member, request, &cancellation)?
+                sequential_batch_member_cancellation_response(member, request, &cancellation)?
             {
                 members.push(response);
                 continue;
             }
-            let response = self
-                .execute_runtime_host_embedding_request(&member_request, cancellation.clone())
-                .await?;
-            members.push(batch_member_response_from_single(member, response));
+
+            // These envelope members reuse the selected single-request owner sequentially.
+            // This does not advertise backend-native embedding, rerank or text batching.
+            let response = if member_request
+                .as_ref()
+                .handoff
+                .task_intent
+                .task_type
+                .as_str()
+                == EMBEDDING_TASK
+            {
+                self.execute_runtime_host_embedding_request(&member_request, cancellation.clone())
+                    .await?
+            } else if member_request
+                .as_ref()
+                .handoff
+                .task_intent
+                .task_type
+                .as_str()
+                == crate::runtime_host_rerank_execution::RERANK_TASK
+            {
+                self.execute_runtime_host_rerank_request(&member_request, cancellation.clone())
+                    .await?
+            } else if member_request
+                .as_ref()
+                .handoff
+                .task_intent
+                .task_type
+                .as_str()
+                == crate::runtime_host_audio_execution::AUDIO_TASK
+            {
+                self.execute_runtime_host_audio_request(&member_request, cancellation.clone())
+                    .await?
+            } else {
+                self.execute_runtime_host_text_request(&member_request, cancellation.clone())
+                    .await?
+            };
+            members.push(sequential_batch_member_response(member, response));
         }
 
         let state = runtime_host_batch_state_from_members(&members);
@@ -849,8 +1239,8 @@ impl EmbeddedRuntimeHostExecutionPort {
         {
             diagnostics.push(runtime_host_diagnostic(
                 RuntimeHostExecutionDiagnosticCode::ExecutionFailed,
-                "embedded runtime-host embedding batch execution ended without a completed member",
-                EMBEDDING_GATEWAY_EXECUTION_FAILED_HINT,
+                "embedded runtime-host sequential batch execution ended without a completed member",
+                BATCH_GATEWAY_EXECUTION_FAILED_HINT,
             ));
         }
 
@@ -891,18 +1281,17 @@ impl RuntimeHostBatchExecutionPort for EmbeddedRuntimeHostExecutionPort {
             ));
         }
         if member_requests.iter().all(|member| {
-            member.as_ref().handoff.task_intent.task_type.as_str() == TEXT_GENERATION_TASK
+            matches!(
+                member.as_ref().handoff.task_intent.task_type.as_str(),
+                TEXT_GENERATION_TASK
+                    | CHAT_COMPLETION_TASK
+                    | EMBEDDING_TASK
+                    | crate::runtime_host_rerank_execution::RERANK_TASK
+                    | crate::runtime_host_audio_execution::AUDIO_TASK
+            )
         }) {
             return self
-                .execute_runtime_host_text_batch_request(request, member_requests, cancellation)
-                .await;
-        }
-        if member_requests
-            .iter()
-            .all(|member| member.as_ref().handoff.task_intent.task_type.as_str() == EMBEDDING_TASK)
-        {
-            return self
-                .execute_runtime_host_embedding_batch_request(
+                .execute_runtime_host_sequential_batch_request(
                     request,
                     member_requests,
                     cancellation,
@@ -1033,7 +1422,7 @@ impl RuntimeHostBatchExecutionPort for EmbeddedRuntimeHostExecutionPort {
             };
             let plan = match inference::plan_image_generation_execution(projection.planning_input())
             {
-                ImageGenerationPlanningOutcome::Planned { plan } => plan,
+                ImageGenerationPlanningOutcome::Planned { plan } => *plan,
                 ImageGenerationPlanningOutcome::Rejected { diagnostics } => {
                     return Ok(rejected_batch_member_response(
                         request,
@@ -1170,7 +1559,12 @@ fn shared_batch_runtime_context_error(
     };
     if !matches!(
         first_decision.task_intent.task_type.as_str(),
-        "image_generation" | TEXT_GENERATION_TASK | EMBEDDING_TASK
+        "image_generation"
+            | TEXT_GENERATION_TASK
+            | CHAT_COMPLETION_TASK
+            | EMBEDDING_TASK
+            | crate::runtime_host_rerank_execution::RERANK_TASK
+            | crate::runtime_host_audio_execution::AUDIO_TASK
     ) {
         return Some(format!(
             "embedded runtime-host batch task type '{}' is unsupported",
@@ -1311,7 +1705,7 @@ fn append_remaining_batch_cancellation_members(
             continue;
         }
         if let Some(member) =
-            batch_member_cancellation_response(member_request, request, cancellation)?
+            sequential_batch_member_cancellation_response(member_request, request, cancellation)?
         {
             diagnostics.extend(member.diagnostics.clone());
             members.push(member);
@@ -1662,7 +2056,7 @@ fn batch_member_response(
     }
 }
 
-fn batch_member_response_from_single(
+fn sequential_batch_member_response(
     member: &RuntimeHostBatchExecutionMemberRequest,
     response: RuntimeHostExecutionResponse,
 ) -> RuntimeHostBatchExecutionMemberResponse {
@@ -1711,14 +2105,14 @@ fn batch_member_response_from_single(
     if diagnostics.is_empty() {
         diagnostics.push(runtime_host_diagnostic(
             RuntimeHostExecutionDiagnosticCode::ExecutionFailed,
-            "embedded runtime-host batch member returned no terminal diagnostic",
-            TEXT_GATEWAY_EXECUTION_FAILED_HINT,
+            "embedded runtime-host sequential batch member returned no terminal diagnostic",
+            BATCH_GATEWAY_EXECUTION_FAILED_HINT,
         ));
     }
     batch_member_response(member, state, outputs, diagnostics)
 }
 
-fn batch_member_cancellation_response(
+fn sequential_batch_member_cancellation_response(
     member: &RuntimeHostBatchExecutionMemberRequest,
     request: &RuntimeHostBatchExecutionRequest,
     cancellation: &RuntimeHostExecutionCancellationHandle,
@@ -1746,21 +2140,24 @@ fn batch_member_cancellation_response(
         RuntimeHostExecutionCancellationState::CancellationRequested => (
             RuntimeHostBatchExecutionMemberState::Cancelled,
             RuntimeHostExecutionDiagnosticCode::CancellationRequested,
-            format!("embedded runtime-host batch member cancelled before completion: {reason}"),
+            format!(
+                "embedded runtime-host sequential batch member cancelled before completion: {reason}"
+            ),
             CANCELLATION_REQUESTED_HINT,
         ),
         RuntimeHostExecutionCancellationState::ShutdownRequested => (
             RuntimeHostBatchExecutionMemberState::Cancelled,
             RuntimeHostExecutionDiagnosticCode::ShutdownRequested,
             format!(
-                "embedded runtime-host batch member stopped for workflow-service shutdown: {reason}"
+                "embedded runtime-host sequential batch member stopped for workflow-service shutdown: {reason}"
             ),
             SHUTDOWN_REQUESTED_HINT,
         ),
         _ => (
             RuntimeHostBatchExecutionMemberState::Failed,
             RuntimeHostExecutionDiagnosticCode::ExecutionFailed,
-            "embedded runtime-host batch member observed an unknown cancellation state".to_string(),
+            "embedded runtime-host sequential batch member observed an unknown cancellation state"
+                .to_string(),
             UNKNOWN_CANCELLATION_STATE_HINT,
         ),
     };
@@ -2010,9 +2407,10 @@ fn failed_response(
     }
 }
 
-fn completed_text_response(
+fn completed_node_response(
     request: &RuntimeHostExecutionRequest,
-    text: String,
+    outputs: Vec<RuntimeHostExecutionOutput>,
+    completion_message: &str,
 ) -> RuntimeHostExecutionResponse {
     RuntimeHostExecutionResponse {
         contract_version: RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
@@ -2022,54 +2420,15 @@ fn completed_text_response(
         node_id: request.handoff.node_id.clone(),
         task_id: request.handoff.task_id.clone(),
         state: RuntimeHostExecutionState::Completed,
-        outputs: vec![RuntimeHostExecutionOutput {
-            port_id: "text".to_string(),
-            value: RuntimeHostExecutionOutputValue::String(text),
-        }],
+        outputs,
         diagnostics: vec![RuntimeHostExecutionDiagnostic {
             severity: RuntimeHostExecutionDiagnosticSeverity::Info,
             code: RuntimeHostExecutionDiagnosticCode::ExecutionCompleted,
-            message: "embedded runtime-host text execution completed".to_string(),
+            message: completion_message.to_string(),
             hint: None,
         }],
         terminal_metadata: None,
     }
-}
-
-fn completed_embedding_response(
-    request: &RuntimeHostExecutionRequest,
-    vector: Vec<f32>,
-) -> Result<RuntimeHostExecutionResponse, RuntimeHostExecutionPortError> {
-    let vector = vector
-        .into_iter()
-        .map(|value| {
-            serde_json::Number::from_f64(f64::from(value)).ok_or_else(|| {
-                RuntimeHostExecutionPortError::ExecutionFailed {
-                    message: "embedding result contained a non-finite value".to_string(),
-                }
-            })
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-    Ok(RuntimeHostExecutionResponse {
-        contract_version: RUNTIME_HOST_EXECUTION_CONTRACT_VERSION,
-        execution_request_id: request.execution_request_id.clone(),
-        workflow_id: request.handoff.workflow_id.clone(),
-        workflow_run_id: request.handoff.workflow_run_id.clone(),
-        node_id: request.handoff.node_id.clone(),
-        task_id: request.handoff.task_id.clone(),
-        state: RuntimeHostExecutionState::Completed,
-        outputs: vec![RuntimeHostExecutionOutput {
-            port_id: "embedding".to_string(),
-            value: RuntimeHostExecutionOutputValue::EmbeddingVector(vector),
-        }],
-        diagnostics: vec![RuntimeHostExecutionDiagnostic {
-            severity: RuntimeHostExecutionDiagnosticSeverity::Info,
-            code: RuntimeHostExecutionDiagnosticCode::ExecutionCompleted,
-            message: "embedded runtime-host embedding execution completed".to_string(),
-            hint: None,
-        }],
-        terminal_metadata: None,
-    })
 }
 
 fn completed_image_response(
@@ -2135,12 +2494,6 @@ fn text_projection_error_message(error: RuntimeHostTextGenerationProjectionError
     format!("embedded runtime-host text projection failed: {error}")
 }
 
-fn embedding_projection_error_message(
-    error: RuntimeHostEmbeddingGenerationProjectionError,
-) -> String {
-    format!("embedded runtime-host embedding projection failed: {error}")
-}
-
 fn text_gateway_error_message(error: inference::GatewayError) -> String {
     format!("embedded runtime-host text gateway execution failed: {error}")
 }
@@ -2163,10 +2516,6 @@ fn image_gateway_error_message(error: inference::GatewayError) -> String {
         }
         other => format!("embedded runtime-host image gateway execution failed: {other}"),
     }
-}
-
-fn embedding_gateway_error_message(error: inference::GatewayError) -> String {
-    format!("embedded runtime-host embedding gateway execution failed: {error}")
 }
 
 fn batch_gateway_error_message(error: inference::GatewayError) -> String {
@@ -2257,29 +2606,6 @@ mod tests {
     use crate::runtime_host_package_facts::RuntimeHostPumasPackageFactsResolver;
     use workflow_nodes::pumas_rpc::PumasRpcClient;
     use workflow_nodes::setup::PumasSelectorAccess;
-
-    #[test]
-    fn completed_embedding_response_preserves_finite_numeric_vector() {
-        let request = runtime_host_request_fixture();
-        let response = completed_embedding_response(&request, vec![0.25, -1.5, 3.0])
-            .expect("finite embedding vector should project");
-
-        assert_eq!(
-            response.state,
-            RuntimeHostExecutionState::Completed,
-            "{response:#?}"
-        );
-        assert_eq!(response.outputs.len(), 1);
-        assert_eq!(response.outputs[0].port_id, "embedding");
-        assert!(matches!(
-            response.outputs[0].value,
-            RuntimeHostExecutionOutputValue::EmbeddingVector(ref vector)
-                if vector.len() == 3
-        ));
-        response
-            .validate()
-            .expect("embedding response should satisfy the shared contract");
-    }
 
     #[derive(Debug)]
     struct FixtureCancellationSignal {
@@ -3034,69 +3360,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[cfg(feature = "standalone")]
-    #[ignore = "requires a pinned library-only Pumas RPC server and local Qwen embedding assets"]
-    async fn real_rpc_selected_qwen_embedding_executes_through_runtime_host_port() {
-        use inference::process::StdProcessSpawner;
-
-        let endpoint = std::env::var("PANTOGRAPH_ACCEPTANCE_PUMAS_RPC_ENDPOINT")
-            .expect("set PANTOGRAPH_ACCEPTANCE_PUMAS_RPC_ENDPOINT");
-        let binaries_dir = std::env::var_os("PANTOGRAPH_ACCEPTANCE_LLAMA_BINARIES_DIR")
-            .map(std::path::PathBuf::from)
-            .expect("set PANTOGRAPH_ACCEPTANCE_LLAMA_BINARIES_DIR");
-        let data_dir = std::env::var_os("PANTOGRAPH_ACCEPTANCE_LLAMA_DATA_DIR")
-            .map(std::path::PathBuf::from)
-            .expect("set PANTOGRAPH_ACCEPTANCE_LLAMA_DATA_DIR");
-        let model_id = "pumas://models/embedding/qwen3/qwen--qwen3-embedding-8b-gguf__q4_k_m";
-        let artifact_id = "qwen--qwen3-embedding-8b-gguf__q4_k_m";
-        let mut request = embedding_request_fixture();
-        set_request_model_ref(&mut request, model_id, artifact_id);
-
-        let selector_access = Arc::new(PumasSelectorAccess::Rpc(Arc::new(
-            PumasRpcClient::new(&endpoint).expect("Pumas RPC endpoint should parse"),
-        )));
-        let gateway = Arc::new(inference::InferenceGateway::new());
-        gateway
-            .set_spawner(Arc::new(StdProcessSpawner::new(binaries_dir, data_dir)))
-            .await;
-        let port = EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
-            Arc::new(RuntimeHostPumasLoadTargetResolver::new(
-                selector_access.clone(),
-            )),
-            Arc::new(RuntimeHostPumasPackageFactsResolver::new(selector_access)),
-            Arc::new(UnusedMediaArtifactSink),
-            gateway,
-        );
-        let cancellation = runtime_host_cancellation(&request);
-
-        let response = port
-            .execute_runtime_host_request(request, cancellation)
-            .await
-            .expect("runtime-host execution should return a typed response");
-
-        assert_eq!(
-            response.state,
-            RuntimeHostExecutionState::Completed,
-            "{response:#?}"
-        );
-        let RuntimeHostExecutionOutputValue::EmbeddingVector(vector) = &response.outputs[0].value
-        else {
-            panic!("runtime-host embedding output should be a vector: {response:#?}");
-        };
-        assert_eq!(vector.len(), 4096, "Qwen3-Embedding-8B output dimension");
-        assert!(vector.iter().all(serde_json::Number::is_f64));
-        assert!(vector
-            .iter()
-            .any(|value| value.as_f64().unwrap_or(0.0) != 0.0));
-        println!(
-            "runtime_host_model_id={model_id:?} selected_artifact_id={artifact_id:?} state={:?} embedding_dimensions={} first={:?}",
-            response.state,
-            vector.len(),
-            vector.first()
-        );
-    }
-
-    #[tokio::test]
     async fn port_rejects_after_load_target_when_package_facts_resolver_is_missing() {
         let request = runtime_host_request_fixture();
         let cancellation = runtime_host_cancellation(&request);
@@ -3105,6 +3368,7 @@ mod tests {
             media_artifact_sink: Some(Arc::new(UnusedMediaArtifactSink)),
             package_facts_resolver: None,
             gateway: None,
+            owned_audio_store: None,
         };
 
         let response = port
@@ -3281,88 +3545,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn port_executes_embedding_through_selected_pantograph_gateway() {
-        let target_directory = tempfile::TempDir::new().expect("embedding target directory");
-        let target_path = target_directory.path().join("embedding.gguf");
-        std::fs::write(&target_path, b"test gguf target").expect("embedding target fixture");
-
-        let request = embedding_request_fixture();
-        let validated_request = ValidatedRuntimeHostExecutionRequest::try_from(request.clone())
-            .expect("embedding request fixture should validate");
-        let dispatch = validated_request
-            .as_ref()
-            .handoff
-            .dispatch_decision
-            .as_ref()
-            .expect("embedding fixture dispatch");
-        let mut package_facts: inference::ResolvedModelPackageFacts = serde_json::from_str(
-            include_str!(
-                "../../inference/tests/fixtures/inference_package_facts/gguf_embedding_package_facts.json"
-            ),
-        )
-        .expect("embedding package facts fixture should decode");
-        package_facts.model_ref = inference::PumasModelRef {
-            model_id: dispatch.selected_model_ref.model_id.clone(),
-            revision: dispatch.selected_model_ref.revision.clone(),
-            selected_artifact_id: dispatch.selected_model_ref.selected_artifact_id.clone(),
-            selected_artifact_path: None,
-            migration_diagnostics: Vec::new(),
-        };
-        let target = PumasArtifactLoadTarget {
-            model_ref: inference::PumasModelRef {
-                model_id: dispatch.selected_model_ref.model_id.clone(),
-                revision: dispatch.selected_model_ref.revision.clone(),
-                selected_artifact_id: dispatch.selected_model_ref.selected_artifact_id.clone(),
-                selected_artifact_path: None,
-                migration_diagnostics: Vec::new(),
-            },
-            artifact_kind: inference::ModelArtifactKind::Gguf,
-            local_load_path: target_path.to_string_lossy().into_owned(),
-            load_path_kind: PumasArtifactLoadPathKind::File,
-            library_root_id: Some("embedding-test-root".to_string()),
-            storage_kind: inference::ModelStorageKind::LibraryOwned,
-            validation_state: inference::ModelValidationState::Valid,
-            verification_source_fingerprint: None,
-            verification_observed_from_cache_at: None,
-            content_fingerprint: Some("sha256:embedding-test".to_string()),
-            package_facts_contract_version: Some(
-                pumas_library::models::PACKAGE_FACTS_CONTRACT_VERSION,
-            ),
-        };
-        let gateway = Arc::new(inference::InferenceGateway::with_backend(
-            Box::new(MockEmbeddingBackend),
-            "llama.cpp",
-        ));
-        gateway.set_spawner(Arc::new(NoopProcessSpawner)).await;
-        let port = EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
-            Arc::new(EmbeddingLoadTargetResolver { target }),
-            Arc::new(EmbeddingPackageFactsResolver { package_facts }),
-            Arc::new(UnusedMediaArtifactSink),
-            gateway,
-        );
-
-        let response = port
-            .execute_runtime_host_request(request.clone(), runtime_host_cancellation(&request))
-            .await
-            .expect("embedding execution should complete");
-
-        assert_eq!(
-            response.state,
-            RuntimeHostExecutionState::Completed,
-            "{response:#?}"
-        );
-        assert_eq!(response.outputs[0].port_id, "embedding");
-        assert!(matches!(
-            response.outputs[0].value,
-            RuntimeHostExecutionOutputValue::EmbeddingVector(ref vector)
-                if vector.len() == 2
-        ));
-        response
-            .validate()
-            .expect("embedding response should satisfy the shared contract");
-    }
-
-    #[tokio::test]
     async fn port_completes_image_execution_with_pumas_resolvers_and_sink_backed_media_ref() {
         const MODEL_ID: &str = "diffusion/stable-diffusion/tiny-sd-runtime-host";
         const SELECTED_ARTIFACT_ID: &str = "diffusers-bundle";
@@ -3373,7 +3555,7 @@ mod tests {
         let pumas_root = temp.path().join("pumas");
         std::fs::create_dir_all(&pumas_root).expect("pumas launcher root");
         let pumas_api = Arc::new(
-            pumas_library::PumasApi::builder(pumas_root)
+            crate::pumas_test_support::builder(pumas_root)
                 .with_hf_client(false)
                 .with_process_manager(false)
                 .build()
@@ -3394,13 +3576,12 @@ mod tests {
             .expect("fixture has dispatch decision")
             .runtime_trait_settings
             .clear();
+        let pumas_access = Arc::new(workflow_nodes::setup::PumasSelectorAccess::Owner(pumas_api));
         let port = EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
-            Arc::new(RuntimeHostPumasLoadTargetResolver::new(Arc::new(
-                workflow_nodes::setup::PumasSelectorAccess::Owner(pumas_api.clone()),
-            ))),
-            Arc::new(RuntimeHostPumasPackageFactsResolver::new(Arc::new(
-                workflow_nodes::setup::PumasSelectorAccess::Owner(pumas_api),
-            ))),
+            Arc::new(RuntimeHostPumasLoadTargetResolver::new(
+                pumas_access.clone(),
+            )),
+            Arc::new(RuntimeHostPumasPackageFactsResolver::new(pumas_access)),
             Arc::new(WorkflowServiceRuntimeHostMediaArtifactSink::new(
                 artifact_writer,
             )),
@@ -3616,6 +3797,243 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn graph_image_guidance_reaches_gateway_batch_without_defaults_or_precision_loss() {
+        use pantograph_runtime_host_contracts::{
+            RuntimeHostExecutionInput, RuntimeHostExecutionInputValue,
+        };
+        for guidance in [None, Some(-1.0), Some(0.0), Some(1.0), Some(7.5)] {
+            let mut request = runtime_host_batch_request_fixture();
+            for member in &mut request.members {
+                if let Some(value) = guidance {
+                    member.materialized_inputs.push(RuntimeHostExecutionInput {
+                        port_id: "guidance_scale".into(),
+                        value: RuntimeHostExecutionInputValue::F64(
+                            serde_json::Number::from_f64(value).unwrap(),
+                        ),
+                    });
+                }
+            }
+            let cancellation = runtime_host_batch_cancellation(&request);
+            let backend = RecordingBatchImageBackend::default();
+            let recorded = backend.recorded_batches.clone();
+            let port = EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
+                Arc::new(ReadyLoadTargetResolver),
+                Arc::new(FixturePackageFactsResolver),
+                Arc::new(RecordingMediaArtifactSink::default()),
+                Arc::new(inference::InferenceGateway::with_backend(
+                    Box::new(backend),
+                    "PyTorch",
+                )),
+            );
+            let response = port
+                .execute_runtime_host_batch_request(request, cancellation)
+                .await
+                .unwrap();
+            assert_eq!(
+                response.state,
+                RuntimeHostBatchExecutionState::Completed,
+                "{response:?}"
+            );
+            let recorded = recorded.lock().unwrap();
+            assert_eq!(recorded.len(), 1);
+            for member in &recorded[0].members {
+                assert_eq!(member.request.guidance_scale, guidance.map(|v| v as f32));
+                assert_eq!(member.plan.guidance_scale, guidance.map(|v| v as f32));
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn invalid_graph_image_guidance_is_rejected_before_gateway_dispatch() {
+        use pantograph_runtime_host_contracts::{
+            RuntimeHostExecutionInput, RuntimeHostExecutionInputValue,
+        };
+        for value in [
+            RuntimeHostExecutionInputValue::String("7.5".into()),
+            RuntimeHostExecutionInputValue::U64(u64::MAX),
+            RuntimeHostExecutionInputValue::F64(serde_json::Number::from_f64(f64::MAX).unwrap()),
+            RuntimeHostExecutionInputValue::F64(serde_json::Number::from_f64(1e-300).unwrap()),
+            RuntimeHostExecutionInputValue::F64(
+                serde_json::Number::from_f64(1.0000000000000002).unwrap(),
+            ),
+        ] {
+            let mut request = runtime_host_batch_request_fixture();
+            for member in &mut request.members {
+                member.materialized_inputs.extend([
+                    RuntimeHostExecutionInput {
+                        port_id: "num_images_per_prompt".into(),
+                        value: RuntimeHostExecutionInputValue::U64(3),
+                    },
+                    RuntimeHostExecutionInput {
+                        port_id: "denoising_scheduler".into(),
+                        value: RuntimeHostExecutionInputValue::String("euler".into()),
+                    },
+                ]);
+            }
+            request.members[0]
+                .materialized_inputs
+                .push(RuntimeHostExecutionInput {
+                    port_id: "guidance_scale".into(),
+                    value,
+                });
+            let cancellation = runtime_host_batch_cancellation(&request);
+            let backend = RecordingBatchImageBackend::default();
+            let recorded = backend.recorded_batches.clone();
+            let media_sink = Arc::new(RecordingMediaArtifactSink::default());
+            let port = EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
+                Arc::new(ReadyLoadTargetResolver),
+                Arc::new(FixturePackageFactsResolver),
+                media_sink.clone(),
+                Arc::new(inference::InferenceGateway::with_backend(
+                    Box::new(backend),
+                    "PyTorch",
+                )),
+            );
+            let response = port
+                .execute_runtime_host_batch_request(request, cancellation)
+                .await
+                .unwrap();
+            assert_eq!(
+                response.state,
+                RuntimeHostBatchExecutionState::Rejected,
+                "{response:?}"
+            );
+            assert!(response
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.message.contains("guidance_scale")));
+            assert!(recorded.lock().unwrap().is_empty());
+            assert!(media_sink.writes.lock().unwrap().is_empty());
+        }
+    }
+
+    #[tokio::test]
+    async fn invalid_graph_image_count_is_rejected_before_gateway_dispatch() {
+        use pantograph_runtime_host_contracts::{
+            RuntimeHostExecutionInput, RuntimeHostExecutionInputValue,
+        };
+        for value in [
+            RuntimeHostExecutionInputValue::U64(0),
+            RuntimeHostExecutionInputValue::U64(65),
+            RuntimeHostExecutionInputValue::U64(u64::MAX),
+            RuntimeHostExecutionInputValue::String("3".into()),
+            RuntimeHostExecutionInputValue::F64(serde_json::Number::from_f64(3.0).unwrap()),
+        ] {
+            let mut request = runtime_host_batch_request_fixture();
+            for member in &mut request.members {
+                member.materialized_inputs.extend([
+                    RuntimeHostExecutionInput {
+                        port_id: "guidance_scale".into(),
+                        value: RuntimeHostExecutionInputValue::F64(
+                            serde_json::Number::from_f64(7.5).unwrap(),
+                        ),
+                    },
+                    RuntimeHostExecutionInput {
+                        port_id: "denoising_scheduler".into(),
+                        value: RuntimeHostExecutionInputValue::String("euler".into()),
+                    },
+                ]);
+            }
+            request.members[0]
+                .materialized_inputs
+                .push(RuntimeHostExecutionInput {
+                    port_id: "num_images_per_prompt".into(),
+                    value,
+                });
+            let cancellation = runtime_host_batch_cancellation(&request);
+            let backend = RecordingBatchImageBackend::default();
+            let recorded = backend.recorded_batches.clone();
+            let media_sink = Arc::new(RecordingMediaArtifactSink::default());
+            let port = EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
+                Arc::new(ReadyLoadTargetResolver),
+                Arc::new(FixturePackageFactsResolver),
+                media_sink.clone(),
+                Arc::new(inference::InferenceGateway::with_backend(
+                    Box::new(backend),
+                    "PyTorch",
+                )),
+            );
+            let response = port
+                .execute_runtime_host_batch_request(request, cancellation)
+                .await
+                .unwrap();
+            assert_eq!(
+                response.state,
+                RuntimeHostBatchExecutionState::Rejected,
+                "{response:?}"
+            );
+            assert!(response
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.message.contains("num_images_per_prompt")));
+            assert!(recorded.lock().unwrap().is_empty());
+            assert!(media_sink.writes.lock().unwrap().is_empty());
+        }
+    }
+
+    #[tokio::test]
+    async fn invalid_graph_image_scheduler_is_rejected_before_gateway_dispatch() {
+        use pantograph_runtime_host_contracts::{
+            RuntimeHostExecutionInput, RuntimeHostExecutionInputValue,
+        };
+        for value in [
+            RuntimeHostExecutionInputValue::String("flow_match_euler".into()),
+            RuntimeHostExecutionInputValue::String("EulerDiscreteScheduler".into()),
+            RuntimeHostExecutionInputValue::U64(3),
+        ] {
+            let mut request = runtime_host_batch_request_fixture();
+            for member in &mut request.members {
+                member.materialized_inputs.extend([
+                    RuntimeHostExecutionInput {
+                        port_id: "guidance_scale".into(),
+                        value: RuntimeHostExecutionInputValue::F64(
+                            serde_json::Number::from_f64(7.5).unwrap(),
+                        ),
+                    },
+                    RuntimeHostExecutionInput {
+                        port_id: "num_images_per_prompt".into(),
+                        value: RuntimeHostExecutionInputValue::U64(3),
+                    },
+                ]);
+            }
+            request.members[0]
+                .materialized_inputs
+                .push(RuntimeHostExecutionInput {
+                    port_id: "denoising_scheduler".into(),
+                    value,
+                });
+            let cancellation = runtime_host_batch_cancellation(&request);
+            let backend = RecordingBatchImageBackend::default();
+            let recorded = backend.recorded_batches.clone();
+            let media_sink = Arc::new(RecordingMediaArtifactSink::default());
+            let port = EmbeddedRuntimeHostExecutionPort::with_runtime_dependencies(
+                Arc::new(ReadyLoadTargetResolver),
+                Arc::new(FixturePackageFactsResolver),
+                media_sink.clone(),
+                Arc::new(inference::InferenceGateway::with_backend(
+                    Box::new(backend),
+                    "PyTorch",
+                )),
+            );
+            let response = port
+                .execute_runtime_host_batch_request(request, cancellation)
+                .await
+                .unwrap();
+            assert_eq!(
+                response.state,
+                RuntimeHostBatchExecutionState::Rejected,
+                "{response:?}"
+            );
+            assert!(response
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.message.contains("denoising_scheduler")));
+            assert!(recorded.lock().unwrap().is_empty());
+            assert!(media_sink.writes.lock().unwrap().is_empty());
+        }
+    }
+
+    #[tokio::test]
     async fn batch_port_rejects_incompatible_members_before_gateway_dispatch() {
         let mut request = runtime_host_batch_request_fixture();
         let incompatible_variant = "diffusers-pytorch.other"
@@ -3717,63 +4135,6 @@ mod tests {
             }
             dispatch.readiness_proof = readiness_proof;
             dispatch.runtime_trait_settings = dispatch.task_intent.trait_settings.clone();
-        }
-        request
-    }
-
-    fn embedding_request_fixture() -> RuntimeHostExecutionRequest {
-        let mut request = runtime_host_request_fixture();
-        request.materialized_inputs = vec![RuntimeHostExecutionInput {
-            port_id: "text".to_string(),
-            value: RuntimeHostExecutionInputValue::String("generated prompt".to_string()),
-        }];
-        request.handoff.task_intent.task_type = "embedding".parse().expect("task type");
-        request.handoff.task_intent.constraints.requested_runtime_id =
-            Some("llama.cpp.embedding".parse().expect("runtime id"));
-        request.handoff.task_intent.constraints.requested_device_id =
-            Some("cpu".parse().expect("device id"));
-        let identity_key = &mut request
-            .handoff
-            .readiness_proof
-            .preflight_result
-            .identity_key;
-        identity_key.task_id = "embedding".parse().expect("task id");
-        identity_key.scheduler_intent.requested_runtime_id =
-            Some("llama.cpp.embedding".parse().expect("runtime id"));
-        identity_key.scheduler_intent.requested_device_id = Some("cpu".parse().expect("device id"));
-        let task_intent = request.handoff.task_intent.clone();
-        let readiness_proof = request.handoff.readiness_proof.clone();
-        let decision = request
-            .handoff
-            .dispatch_decision
-            .as_mut()
-            .expect("dispatch decision");
-        decision.task_intent = task_intent;
-        decision.selected_runtime_id = "llama.cpp.embedding".parse().expect("runtime id");
-        decision.selected_runtime_variant_id = Some("llama_cpp.cpu".parse().expect("variant id"));
-        decision.selected_device_ids = vec!["cpu".parse().expect("device id")];
-        for reservation in &mut decision.reservations {
-            reservation.device_id = "cpu".parse().expect("device id");
-        }
-        decision.readiness_proof = readiness_proof;
-        request.handoff.task_intent.model_ref.model_id =
-            "pumas://models/embedding/qwen3/tiny-embedding-gguf".to_string();
-        request.handoff.task_intent.model_ref.selected_artifact_id = Some("q8_0".to_string());
-        let model_ref = request.handoff.task_intent.model_ref.clone();
-        request
-            .handoff
-            .readiness_proof
-            .preflight_result
-            .identity_key
-            .model_ref = model_ref.clone();
-        if let Some(decision) = request.handoff.dispatch_decision.as_mut() {
-            decision.task_intent.model_ref = model_ref.clone();
-            decision.selected_model_ref = model_ref;
-            decision
-                .readiness_proof
-                .preflight_result
-                .identity_key
-                .model_ref = decision.selected_model_ref.clone();
         }
         request
     }
@@ -3970,6 +4331,7 @@ mod tests {
         selected_artifact_id: &str,
     ) {
         request.handoff.task_intent.model_ref.model_id = model_id.to_string();
+        request.handoff.task_intent.model_ref.revision = None;
         request.handoff.task_intent.model_ref.selected_artifact_id =
             Some(selected_artifact_id.to_string());
         request.handoff.task_intent.model_ref.selected_artifact_path = None;
@@ -3981,6 +4343,7 @@ mod tests {
             .model_ref = request.handoff.task_intent.model_ref.clone();
         if let Some(dispatch_decision) = request.handoff.dispatch_decision.as_mut() {
             dispatch_decision.task_intent.model_ref.model_id = model_id.to_string();
+            dispatch_decision.task_intent.model_ref.revision = None;
             dispatch_decision.task_intent.model_ref.selected_artifact_id =
                 Some(selected_artifact_id.to_string());
             dispatch_decision
@@ -3988,6 +4351,7 @@ mod tests {
                 .model_ref
                 .selected_artifact_path = None;
             dispatch_decision.selected_model_ref.model_id = model_id.to_string();
+            dispatch_decision.selected_model_ref.revision = None;
             dispatch_decision.selected_model_ref.selected_artifact_id =
                 Some(selected_artifact_id.to_string());
             dispatch_decision.selected_model_ref.selected_artifact_path = None;

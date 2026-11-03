@@ -9,9 +9,12 @@
 extern crate workflow_nodes;
 
 pub mod capabilities;
+pub mod custom_nodes;
 pub mod graph;
+mod inference_dependency_planning;
 mod scheduler;
 pub mod technical_fit;
+pub mod tool_loops;
 pub mod trace;
 pub mod workflow;
 
@@ -199,10 +202,11 @@ pub use workflow::{
     WorkflowRuntimeCapability, WorkflowRuntimeDiagnosticPhaseHint, WorkflowRuntimeInstallState,
     WorkflowRuntimeIssue, WorkflowRuntimeReadinessState, WorkflowRuntimeRequirements,
     WorkflowRuntimeSourceKind, WorkflowRuntimeVariantCapability, WorkflowSchedulerAdmissionOutcome,
-    WorkflowSchedulerDecisionReason, WorkflowSchedulerDiagnosticsProvider,
-    WorkflowSchedulerErrorDetails, WorkflowSchedulerErrorReason,
-    WorkflowSchedulerEstimateQueryRequest, WorkflowSchedulerEstimateQueryResponse,
-    WorkflowSchedulerEstimateRecord, WorkflowSchedulerNonRuntimeTaskTemplate,
+    WorkflowSchedulerConfiguration, WorkflowSchedulerDecisionReason,
+    WorkflowSchedulerDiagnosticsProvider, WorkflowSchedulerErrorDetails,
+    WorkflowSchedulerErrorReason, WorkflowSchedulerEstimateQueryRequest,
+    WorkflowSchedulerEstimateQueryResponse, WorkflowSchedulerEstimateRecord,
+    WorkflowSchedulerExecutionOwner, WorkflowSchedulerNonRuntimeTaskTemplate,
     WorkflowSchedulerRuntimeDiagnosticsRequest, WorkflowSchedulerSnapshotRequest,
     WorkflowSchedulerSnapshotResponse, WorkflowSchedulerSourceInputTemplate, WorkflowSchedulerTask,
     WorkflowSchedulerTaskExecutionClass, WorkflowSchedulerTaskGraph,

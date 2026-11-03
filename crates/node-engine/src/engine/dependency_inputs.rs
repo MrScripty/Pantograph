@@ -421,7 +421,7 @@ mod tests {
             inputs.get("text"),
             Some(&serde_json::json!("generated text"))
         );
-        assert!(inputs.get("stream").is_none());
+        assert!(!inputs.contains_key("stream"));
     }
 
     #[test]

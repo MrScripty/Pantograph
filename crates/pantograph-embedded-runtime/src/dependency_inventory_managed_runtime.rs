@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::Arc;
 
-#[cfg(feature = "standalone")]
+#[cfg(feature = "host-dependency-inventory")]
 use std::path::PathBuf;
 
 use async_trait::async_trait;
@@ -29,12 +29,12 @@ pub(crate) trait ManagedRuntimeSnapshotSource: Send + Sync {
     async fn list_snapshots(&self) -> Result<Vec<ManagedRuntimeSnapshot>, String>;
 }
 
-#[cfg(feature = "standalone")]
+#[cfg(feature = "host-dependency-inventory")]
 pub(crate) struct BlockingManagedRuntimeSnapshotSource {
     app_data_dir: PathBuf,
 }
 
-#[cfg(feature = "standalone")]
+#[cfg(feature = "host-dependency-inventory")]
 impl BlockingManagedRuntimeSnapshotSource {
     #[must_use]
     pub(crate) fn new(app_data_dir: PathBuf) -> Self {
@@ -42,7 +42,7 @@ impl BlockingManagedRuntimeSnapshotSource {
     }
 }
 
-#[cfg(feature = "standalone")]
+#[cfg(feature = "host-dependency-inventory")]
 #[async_trait]
 impl ManagedRuntimeSnapshotSource for BlockingManagedRuntimeSnapshotSource {
     async fn list_snapshots(&self) -> Result<Vec<ManagedRuntimeSnapshot>, String> {

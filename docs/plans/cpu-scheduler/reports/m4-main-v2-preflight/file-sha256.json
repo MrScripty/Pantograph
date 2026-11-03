@@ -1,0 +1,14 @@
+{
+  "clippy-example.log": "e53298402b1912d7b36faa5448664538e7add5e5dd6db0f5f744c641d93d0609",
+  "corrected-pre-test-source.json": "32fc9c3b9c65ef7d5536a916b24179388b26410c9ecdc82f8828d14af7b89c6a",
+  "critical.log": "d687c1c384d6d83a4205a971484fb3e4bc10531817897478b8dbfd6803ac512d",
+  "deterministic-preflight-result.json": "3506dba6913843a194fa0be14d6de12120ce0d0aee71295a2dc657ff1f36d46f",
+  "failed-preflight-source.rs": "1fe6a2a054cc17df1ffb4684af70dcc35f7f21783f2f5114c6e84917b8b1b858",
+  "format-corrected.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "format.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "independent-source-admission.json": "e6dc07f747443dd4a871bd9c3e7864d28245078e30aae07e216af3938a047394",
+  "pre-test-source.json": "fac5957eacc8944be766ad2cc756fb155e1464e1f9099640bb55a94c1e12ba69",
+  "producer-preflight-tests-corrected.log": "7775a1afecda6be228f1bc74a25a78b6b297b73d685d553b029d555a698a6305",
+  "producer-preflight-tests.log": "4fa6b1906dde388ee15f653787f6db93994ada1f10085f8fd9e172a7b4169a6f",
+  "staged-gates.log": "cc765ad880830bf8ae06826e93c9dfd7d4a08431f63caccaf50a096271fab612"
+}

@@ -90,6 +90,7 @@ pub(crate) enum RuntimeDispatchLoadTargetFactsDiagnosticCode {
     LoadTargetUnavailable,
     ReadyResponseMissingTarget,
     EmptyLoadTargetPath,
+    SelectedIdentityMismatch,
     PathFactsStripped,
 }
 
@@ -131,7 +132,7 @@ async fn resolve_runtime_dispatch_load_target_facts(
         return unavailable(vec![diagnostic(
             RuntimeDispatchLoadTargetFactsDiagnosticCode::MissingSelectorAccess,
             None,
-            "Pumas owner API access is required to resolve runtime dispatch load-target facts",
+            "Pumas owner or authenticated local-client access is required to resolve runtime dispatch load-target facts",
         )]);
     };
     if matches!(selector_access, PumasSelectorAccess::ReadOnly(_)) {
@@ -204,6 +205,14 @@ async fn resolve_runtime_dispatch_load_target_facts(
     let mut facts = Vec::new();
     let mut diagnostics = Vec::new();
     for runtime_family in runtime_families {
+        // Each runtime family consumes the same producer-issued intent target;
+        // the selected identity guard still applies per projected fact.
+        if let Err(diagnostic) =
+            validate_selected_load_target_identity(model_ref, &target, &runtime_family)
+        {
+            diagnostics.push(diagnostic);
+            continue;
+        }
         match project_load_target(target.clone(), &runtime_family) {
             Ok((fact, mut fact_diagnostics)) => {
                 facts.push(fact);
@@ -278,6 +287,7 @@ fn pumas_model_ref(model_ref: &PumasModelRef) -> pumas_library::models::PumasMod
 fn project_ready_load_target(
     response: ResolveModelArtifactLoadTargetResponse,
     runtime_family: &str,
+    selected: &PumasModelRef,
 ) -> Result<
     (
         RuntimeDispatchLoadTargetFact,
@@ -306,7 +316,40 @@ fn project_ready_load_target(
         )
     })?;
     let target = workflow_nodes::setup::pumas_load_target_to_inference(target);
+    validate_selected_load_target_identity(selected, &target, runtime_family)?;
     project_load_target(target, runtime_family)
+}
+
+fn validate_selected_load_target_identity(
+    selected: &PumasModelRef,
+    target: &PumasArtifactLoadTarget,
+    runtime_family: &str,
+) -> Result<(), RuntimeDispatchLoadTargetFactsDiagnostic> {
+    if selected
+        .model_id
+        .strip_prefix("pumas://models/")
+        .unwrap_or(&selected.model_id)
+        != target
+            .model_ref
+            .model_id
+            .strip_prefix("pumas://models/")
+            .unwrap_or(&target.model_ref.model_id)
+        || selected
+            .revision
+            .as_ref()
+            .is_some_and(|revision| target.model_ref.revision.as_ref() != Some(revision))
+        || selected
+            .selected_artifact_id
+            .as_ref()
+            .is_some_and(|id| target.model_ref.selected_artifact_id.as_ref() != Some(id))
+    {
+        return Err(diagnostic(
+            RuntimeDispatchLoadTargetFactsDiagnosticCode::SelectedIdentityMismatch,
+            Some(runtime_family.into()),
+            "Pumas load-target identity disagrees with selected model/revision/artifact",
+        ));
+    }
+    Ok(())
 }
 
 fn project_load_target(
@@ -515,8 +558,8 @@ mod tests {
             diagnostics: Vec::new(),
         };
 
-        let (fact, diagnostics) =
-            project_ready_load_target(response, "diffusers").expect("ready load target");
+        let (fact, diagnostics) = project_ready_load_target(response, "diffusers", &model_ref())
+            .expect("ready load target");
 
         assert!(diagnostics.iter().any(|diagnostic| {
             diagnostic.code == RuntimeDispatchLoadTargetFactsDiagnosticCode::PathFactsStripped
@@ -537,7 +580,7 @@ mod tests {
             diagnostics: Vec::new(),
         };
 
-        let diagnostic = project_ready_load_target(response, "diffusers")
+        let diagnostic = project_ready_load_target(response, "diffusers", &model_ref())
             .expect_err("unavailable load target must fail");
 
         assert_eq!(
@@ -545,6 +588,30 @@ mod tests {
             RuntimeDispatchLoadTargetFactsDiagnosticCode::LoadTargetUnavailable
         );
         assert_eq!(diagnostic.runtime_family.as_deref(), Some("diffusers"));
+    }
+
+    #[test]
+    fn ready_target_with_wrong_selected_identity_fails_closed() {
+        for mutation in 0..3 {
+            let mut target = load_target();
+            match mutation {
+                0 => target.model_ref.model_id = "other/model".into(),
+                1 => target.model_ref.revision = None,
+                2 => target.model_ref.selected_artifact_id = Some("other-artifact".into()),
+                _ => unreachable!(),
+            }
+            let response = ResolveModelArtifactLoadTargetResponse {
+                artifact_state: ModelArtifactState::Ready,
+                entry_path_state: ModelEntryPathState::Ready,
+                target: Some(target),
+                diagnostics: vec![],
+            };
+            let error = project_ready_load_target(response, "diffusers", &model_ref()).unwrap_err();
+            assert_eq!(
+                error.code,
+                RuntimeDispatchLoadTargetFactsDiagnosticCode::SelectedIdentityMismatch
+            );
+        }
     }
 
     fn model_ref() -> PumasModelRef {

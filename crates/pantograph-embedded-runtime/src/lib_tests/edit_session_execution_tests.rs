@@ -7,7 +7,7 @@ async fn execute_edit_session_graph_reconciles_registry_after_restore() {
     let (model_id, embedding_model_path) = write_imported_embedding_model(temp.path());
 
     let pumas_api = Arc::new(
-        pumas_library::PumasApi::builder(temp.path())
+        crate::pumas_test_support::builder(temp.path())
             .build()
             .await
             .expect("build pumas api"),
@@ -123,7 +123,7 @@ async fn execute_edit_session_graph_restore_keeps_scheduler_runtime_registry_dia
     let (model_id, embedding_model_path) = write_imported_embedding_model(temp.path());
 
     let pumas_api = Arc::new(
-        pumas_library::PumasApi::builder(temp.path())
+        crate::pumas_test_support::builder(temp.path())
             .build()
             .await
             .expect("build pumas api"),
@@ -278,7 +278,7 @@ async fn execute_edit_session_graph_reconciles_registry_after_embedding_prepare(
     let (model_id, embedding_model_path) = write_imported_embedding_model(temp.path());
 
     let pumas_api = Arc::new(
-        pumas_library::PumasApi::builder(temp.path())
+        crate::pumas_test_support::builder(temp.path())
             .build()
             .await
             .expect("build pumas api"),
@@ -404,7 +404,7 @@ async fn execute_edit_session_graph_reconciles_registry_after_failed_restore() {
     let (model_id, embedding_model_path) = write_imported_embedding_model(temp.path());
 
     let pumas_api = Arc::new(
-        pumas_library::PumasApi::builder(temp.path())
+        crate::pumas_test_support::builder(temp.path())
             .build()
             .await
             .expect("build pumas api"),

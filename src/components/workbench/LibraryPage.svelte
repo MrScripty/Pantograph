@@ -1,5 +1,11 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { getWorkflowBrowserHost } from '../../services/workflow/workflowBrowserTransport';
+  import {
+    browserLibraryActionAllowed,
+    loadWorkflowBrowserCapabilities,
+    type WorkflowBrowserCapabilities,
+  } from '../../services/workflow/workflowBrowserCapabilities';
   import type {
     LibraryUsageProjectionRecord,
     ProjectionStateRecord,
@@ -48,6 +54,18 @@
   import { Chip, DimensionLine, GroupHeader, KeyValue, Panel, SegmentedControl, TwoStepButton } from './ui';
 
   type LibraryAction = 'search' | 'download' | 'delete';
+
+  // A plain browser on the loopback workflow host may only search or write when the host says so.
+  const browserHost = getWorkflowBrowserHost();
+  let hostCapabilities = $state<WorkflowBrowserCapabilities | null>(null);
+  const canSearch = $derived(browserLibraryActionAllowed(Boolean(browserHost), hostCapabilities, 'search'));
+  const canWrite = $derived(browserLibraryActionAllowed(Boolean(browserHost), hostCapabilities, 'write'));
+  const hostSearchBlockReason = $derived(
+    canSearch ? null : hostCapabilities ? 'This browser host does not enable Hugging Face search' : 'Checking browser host capabilities',
+  );
+  const hostWriteBlockReason = $derived(
+    canWrite ? null : hostCapabilities ? 'This browser host does not enable library downloads or deletion' : 'Checking browser host capabilities',
+  );
 
   // Projection state. Only the services below write it; the page never patches it locally.
   let assets = $state<LibraryUsageProjectionRecord[]>([]);
@@ -102,7 +120,13 @@
   let hfRows = $derived(projectHfSearchResults(hfResults));
   let freshness = $derived(formatLibraryProjectionFreshness(projectionState));
   let deleteBlockReason = $derived(
-    selectedRow ? libraryDeleteBlockReason(selectedRow, activeRunId, actionBusy !== null) : null,
+    selectedRow ? (hostWriteBlockReason ?? libraryDeleteBlockReason(selectedRow, activeRunId, actionBusy !== null)) : null,
+  );
+  let searchBlockReason = $derived(
+    hostSearchBlockReason ?? (actionBusy !== null ? 'Wait for the current library action to finish' : null),
+  );
+  let downloadBlockReason = $derived(
+    hostWriteBlockReason ?? (actionBusy !== null ? 'Wait for the current library action to finish' : null),
   );
 
   async function refreshLibraryUsage(): Promise<void> {
@@ -153,7 +177,7 @@
   }
 
   async function searchHfModels(): Promise<void> {
-    if (actionBusy !== null) return;
+    if (!canSearch || actionBusy !== null) return;
     const request = buildHfSearchRequest({ query: hfQuery, kind: hfKind, limit: hfLimit });
     const token = beginAction('search');
     try {
@@ -172,7 +196,7 @@
   }
 
   async function startHfDownload(repoId: string): Promise<void> {
-    if (actionBusy !== null) return;
+    if (!canWrite || actionBusy !== null) return;
     const request = buildHfDownloadRequest(repoId, {
       officialName: downloadOfficialName,
       family: downloadFamily,
@@ -197,7 +221,7 @@
   }
 
   async function deleteModel(row: LibraryModelRow): Promise<void> {
-    if (libraryDeleteBlockReason(row, activeRunId, actionBusy !== null)) return;
+    if (!canWrite || libraryDeleteBlockReason(row, activeRunId, actionBusy !== null)) return;
     const token = beginAction('delete');
     try {
       const response = await workflowService.deletePumasModelWithAudit(row.modelId);
@@ -231,6 +255,13 @@
   onMount(() => {
     let disposed = false;
     let projectionUnsubscribe: (() => void) | null = null;
+    void loadWorkflowBrowserCapabilities()
+      .then((capabilities) => {
+        if (!disposed) hostCapabilities = capabilities;
+      })
+      .catch((hostError: unknown) => {
+        if (!disposed) actionError = formatWorkflowCommandError(hostError);
+      });
     void refreshLibraryPage();
     void subscribeDiagnosticsProjectionInvalidations({
       projections: ['library_usage'],
@@ -294,6 +325,14 @@
             Find on Hugging Face
           </button>
         </div>
+        {#if browserHost}
+          <p class="pg-muted pg-small lib-host" data-testid="library-host-notice">
+            {hostCapabilities?.description ?? 'Checking browser host capabilities…'}
+            {#if hostCapabilities && (!canSearch || !canWrite)}
+              Search, download and deletion require a host that enables these actions.
+            {/if}
+          </p>
+        {/if}
         {#if hfMode}
           <form
             id="lib-hf-form"
@@ -314,8 +353,8 @@
             <button
               class="pg-btn pg-btn-sm lib-search-btn"
               type="submit"
-              aria-disabled={actionBusy !== null ? 'true' : undefined}
-              title={actionBusy !== null ? 'Wait for the current library action to finish' : undefined}
+              aria-disabled={searchBlockReason !== null ? 'true' : undefined}
+              title={searchBlockReason ?? undefined}
             >
               {actionBusy === 'search' ? 'Searching' : 'Search'}
             </button>
@@ -378,8 +417,8 @@
                   class="pg-btn pg-btn-sm"
                   type="button"
                   aria-label={`${downloadingRepoId === result.repoId ? 'Requesting' : 'Download'} ${result.repoId}`}
-                  aria-disabled={actionBusy !== null ? 'true' : undefined}
-                  title={actionBusy !== null ? 'Wait for the current library action to finish' : undefined}
+                  aria-disabled={downloadBlockReason !== null ? 'true' : undefined}
+                  title={downloadBlockReason ?? undefined}
                   onclick={() => void startHfDownload(result.repoId)}
                 >
                   {downloadingRepoId === result.repoId ? 'Requesting' : 'Download'}
@@ -636,6 +675,10 @@
     padding: 10px 12px;
     font-size: 12.5px;
     color: var(--pg-text-muted);
+  }
+
+  .lib-host {
+    margin: 0;
   }
 
   .lib-note p {

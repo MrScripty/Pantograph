@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="640" viewBox="0 0 1000 640">
+<rect width="1000" height="640" fill="white"/>
+<defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#526d7a"/></marker></defs>
+<text x="30" y="36.0" text-anchor="start" font-family="DejaVu Sans, sans-serif" font-size="25" font-weight="bold" fill="#152b38">Proposed Pantograph ownership boundaries</text>
+<text x="30" y="65.0" text-anchor="start" font-family="DejaVu Sans, sans-serif" font-size="17" font-weight="normal" fill="#52616a">The scheduler ranks eligible plans; it does not interpret weights</text>
+<rect x="20" y="115" width="180" height="155" rx="8" fill="#eaf1f5" stroke="#748994" stroke-width="1.5"/>
+<text x="110.0" y="145.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="19" font-weight="bold" fill="#152b38">Pumas</text>
+<text x="110.0" y="174.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="16" font-weight="normal" fill="#152b38">Selected artifacts</text>
+<text x="110.0" y="195.12" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="16" font-weight="normal" fill="#152b38">Approved targets</text>
+<text x="110.0" y="216.24" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="16" font-weight="normal" fill="#152b38">Freshness authority</text>
+<path d="M200,190 L213,190" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+<rect x="218" y="115" width="180" height="155" rx="8" fill="#eaf3ee" stroke="#748994" stroke-width="1.5"/>
+<text x="308.0" y="145.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="19" font-weight="bold" fill="#152b38">Provider</text>
+<text x="308.0" y="174.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="16" font-weight="normal" fill="#152b38">Capability evidence</text>
+<text x="308.0" y="195.12" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="16" font-weight="normal" fill="#152b38">Validated load plan</text>
+<text x="308.0" y="216.24" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="16" font-weight="normal" fill="#152b38">Runtime facts</text>
+<path d="M398,190 L411,190" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+<rect x="416" y="115" width="180" height="155" rx="8" fill="#f5f0e5" stroke="#748994" stroke-width="1.5"/>
+<text x="506.0" y="145.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="19" font-weight="bold" fill="#152b38">Scheduler</text>
+<text x="506.0" y="174.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="16" font-weight="normal" fill="#152b38">Eligibility + policy</text>
+<text x="506.0" y="195.12" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="16" font-weight="normal" fill="#152b38">Resource admission</text>
+<text x="506.0" y="216.24" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="16" font-weight="normal" fill="#152b38">Session lease</text>
+<path d="M596,190 L609,190" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+<rect x="614" y="115" width="180" height="155" rx="8" fill="#eaf3ee" stroke="#748994" stroke-width="1.5"/>
+<text x="704.0" y="145.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="19" font-weight="bold" fill="#152b38">Task session</text>
+<text x="704.0" y="174.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="16" font-weight="normal" fill="#152b38">Processors + model</text>
+<text x="704.0" y="195.12" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="16" font-weight="normal" fill="#152b38">Typed result events</text>
+<text x="704.0" y="216.24" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="16" font-weight="normal" fill="#152b38">Cancel and drain</text>
+<path d="M794,190 L807,190" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+<rect x="812" y="115" width="180" height="155" rx="8" fill="#eaf1f5" stroke="#748994" stroke-width="1.5"/>
+<text x="902.0" y="145.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="19" font-weight="bold" fill="#152b38">Workflow node</text>
+<text x="902.0" y="174.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="16" font-weight="normal" fill="#152b38">Task request</text>
+<text x="902.0" y="195.12" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="16" font-weight="normal" fill="#152b38">Result commitment</text>
+<text x="902.0" y="216.24" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="16" font-weight="normal" fill="#152b38">Application effects</text>
+<rect x="150" y="355" width="700" height="90" rx="8" fill="#eaf1f5" stroke="#748994" stroke-width="1.5"/>
+<text x="500.0" y="385.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38">Resident components</text>
+<text x="500.0" y="414.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">Weights and compiled graphs have explicit ownership and sharing rules</text>
+<polyline points="705,270 705,345" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+<polyline points="507,270 507,345" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+<rect x="150" y="500" width="700" height="88" rx="8" fill="#f5f0e5" stroke="#748994" stroke-width="1.5"/>
+<text x="500.0" y="530.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38">Per execution state</text>
+<text x="500.0" y="559.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">Input, cache, random state, output sequence and terminal / drain evidence</text>
+<path d="M500,445 L500,492" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+</svg>

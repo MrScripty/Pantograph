@@ -18,4 +18,6 @@ pub use gateway::{InferenceGateway, SharedGateway};
 pub use health_monitor::SharedHealthMonitor;
 pub use rag_sync::sync_rag_embedding_url_from_gateway;
 pub use recovery::SharedRecoveryManager;
-pub use runtime_registry::{RuntimeRegistry, SharedRuntimeRegistry};
+#[cfg(test)]
+pub use runtime_registry::RuntimeRegistry;
+pub use runtime_registry::SharedRuntimeRegistry;

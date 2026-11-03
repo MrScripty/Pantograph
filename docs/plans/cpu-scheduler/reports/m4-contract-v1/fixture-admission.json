@@ -1,0 +1,117 @@
+{
+  "kind": "M4 fixture admission; no native/reference execution",
+  "m3_preserved_head": "b63aa3ebe5fab1531aef952a35ce74932bf76b30",
+  "m3_acceptance": "pending parent confirmation",
+  "native_invocations": 0,
+  "reference_manifest_sha256": "ae1644b099d946e03e75a1b75c65593bd2fcee0aa03df31aa79fb5fb94e2bd39",
+  "fixture_file_sha256": {
+    "bert-12/1_Pooling/config.json": "a5b4d40281572d135d1e06bcc508e8674d9d88d3930a82530e6240bea52546d6",
+    "bert-12/config.json": "35fec67a62863765389a48211bd3476ab1d61d120a641f54312fd02da09ee735",
+    "bert-12/golden.json": "7f03f502af56275befd7661504c12b6647939b9b6298a839e9ff1cdfcd945e64",
+    "bert-12/model.safetensors": "abf45455a60ca2a6e120effc62ecf7606ce7fefd00d95b9b3d26ed12734010bd",
+    "bert-12/modules.json": "21ddb3037a55ebf4549eb5c1dc44c3f28f10b56ec7f1335c92fd90e5b30d88ac",
+    "bert-12/sentence_bert_config.json": "1a8ca78fce4e36626d2b3eef2336842e8b2a502c963cd01ef271d44da0a741df",
+    "bert-12/tokenizer.json": "36baeedee0eb6001cd65282d64683b33a17e9a9491f80720ab5d9d85eb55e719",
+    "bert-8/1_Pooling/config.json": "f3471ef375e135a24ebbc10fb48ae1d4a0c8271f75ad9f2c566f391b6bde3892",
+    "bert-8/config.json": "379d188d421d6eb8a5429fc8241b7006495d316bf51955425679975f580a2308",
+    "bert-8/golden.json": "903e306675f766e9835375931b96efebb94097b80275220e3c80a76af04daa9c",
+    "bert-8/model.safetensors": "549cf713305780cd5af92cf397e6be34ada0e3650f967bb9772fa08ba9cedd44",
+    "bert-8/modules.json": "21ddb3037a55ebf4549eb5c1dc44c3f28f10b56ec7f1335c92fd90e5b30d88ac",
+    "bert-8/sentence_bert_config.json": "1a8ca78fce4e36626d2b3eef2336842e8b2a502c963cd01ef271d44da0a741df",
+    "bert-8/tokenizer.json": "36baeedee0eb6001cd65282d64683b33a17e9a9491f80720ab5d9d85eb55e719"
+  },
+  "reference_packages": {
+    "torch": "2.14.1+cpu",
+    "transformers": "4.53.3",
+    "tokenizers": "0.21.4",
+    "safetensors": "0.8.0"
+  },
+  "models": {
+    "bert-8": {
+      "hidden_size": 8,
+      "text": "hello world",
+      "text_sha256": "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9",
+      "golden_vector": [
+        0.13531813025474548,
+        -0.5401950478553772,
+        0.3139018416404724,
+        0.4897967278957367,
+        -0.14633087813854218,
+        0.25764963030815125,
+        0.003314525820314884,
+        -0.5134549736976624
+      ],
+      "golden_vector_position": 0,
+      "atol": 1e-05,
+      "rtol": 0.0001
+    },
+    "bert-12": {
+      "hidden_size": 12,
+      "text": "hello world",
+      "text_sha256": "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9",
+      "golden_vector": [
+        -0.3562951982021332,
+        -0.11680154502391815,
+        -0.16995444893836975,
+        -0.0968020111322403,
+        -0.19187982380390167,
+        0.44980692863464355,
+        0.4375486671924591,
+        -0.1260959506034851,
+        0.01802268624305725,
+        0.08783121407032013,
+        0.4592382609844208,
+        -0.39461877942085266
+      ],
+      "golden_vector_position": 0,
+      "atol": 1e-05,
+      "rtol": 0.0001
+    }
+  },
+  "fixed_work": [
+    "bert-8",
+    "bert-8",
+    "bert-12",
+    "bert-12",
+    "bert-8"
+  ],
+  "retained_protocol_expected": {
+    "cold_loads": [
+      "bert-8",
+      "bert-12",
+      "bert-8"
+    ],
+    "same_owner_retains": [
+      "bert-8",
+      "bert-12"
+    ],
+    "switch_stops": [
+      "bert-8",
+      "bert-12"
+    ],
+    "final_idle_stop": "bert-8",
+    "outputs": 5
+  },
+  "stop_between_tasks_expected": {
+    "cold_loads": [
+      "bert-8",
+      "bert-8",
+      "bert-12",
+      "bert-12",
+      "bert-8"
+    ],
+    "total_stops": 5,
+    "outputs": 5
+  },
+  "native_capacity_and_pressure": "must freeze authoritative consumed claims before producer admission; no invented small estimates",
+  "phase_fields_required": [
+    "load",
+    "forward_and_drain",
+    "stop",
+    "reload"
+  ],
+  "oracle_identity": "full run/task/attempt/request/lease plus native instance and generation, never local task name alone",
+  "performance_claim": false,
+  "semantic_model_quality_claim": false,
+  "model_acquisition_or_regeneration": false
+}

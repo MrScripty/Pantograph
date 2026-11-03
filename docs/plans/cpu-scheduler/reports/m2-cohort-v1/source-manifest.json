@@ -1,0 +1,43 @@
+{
+  "started_utc": "2026-10-13T23:25:17.410002+00:00",
+  "source_commit": "7a7165d493858de016f96196fb50ca998ebddcb5",
+  "source_tree": "27d881b0da7042f0341eed0739f347348025ce11",
+  "source_clean": true,
+  "binary": "/workspace/pantograph-cache/target/release/examples/cpu_embedding_workflow_probe",
+  "binary_sha256": "dd6c01eb30bb11c8b71c3d528532a10d109155dbe840ccfefdad292292d25fc2",
+  "source_and_fixture_sha256": {
+    "crates/pantograph-scheduler/src/serial_service_completion.rs": "814ebe36d187f498d1b0735788135ecdc1c7886ce91bfc89f794aeb8ea79f85b",
+    "crates/pantograph-workflow-service/src/workflow/serial_ready.rs": "f35be2e7e9f7f986906d6670c47e4d74a97968df13c97e24c6caf65fc0ff7df6",
+    "crates/pantograph-embedded-runtime/examples/cpu_embedding_workflow_probe.rs": "897e429b76d75a8334c610baadec916a7ff93fc594882f843d860cd4f120d0f2",
+    "crates/pantograph-embedded-runtime/examples/cpu_embedding_workflow_probe/serial_ready_probe.rs": "1cbc0ff14caa8bdd40e1ac8ac01d3c588f9a6115d4f2060e8204b4498c1b5555",
+    "crates/pantograph-embedded-runtime/examples/cpu_embedding_workflow_probe/m2_lookahead_probe.rs": "8de86040f813382ae65faaea5a8b5fd93cdedbca5be5e537f821ae5d5eee8498",
+    "Cargo.lock": "42c43401def2b14f41eead4f533f3b48f463a80602271d87602cec705d0ac002",
+    "crates/inference/tests/fixtures/candle_bert/bert-8/1_Pooling/config.json": "f3471ef375e135a24ebbc10fb48ae1d4a0c8271f75ad9f2c566f391b6bde3892",
+    "crates/inference/tests/fixtures/candle_bert/bert-8/config.json": "379d188d421d6eb8a5429fc8241b7006495d316bf51955425679975f580a2308",
+    "crates/inference/tests/fixtures/candle_bert/bert-8/golden.json": "903e306675f766e9835375931b96efebb94097b80275220e3c80a76af04daa9c",
+    "crates/inference/tests/fixtures/candle_bert/bert-8/model.safetensors": "549cf713305780cd5af92cf397e6be34ada0e3650f967bb9772fa08ba9cedd44",
+    "crates/inference/tests/fixtures/candle_bert/bert-8/modules.json": "21ddb3037a55ebf4549eb5c1dc44c3f28f10b56ec7f1335c92fd90e5b30d88ac",
+    "crates/inference/tests/fixtures/candle_bert/bert-8/sentence_bert_config.json": "1a8ca78fce4e36626d2b3eef2336842e8b2a502c963cd01ef271d44da0a741df",
+    "crates/inference/tests/fixtures/candle_bert/bert-8/tokenizer.json": "36baeedee0eb6001cd65282d64683b33a17e9a9491f80720ab5d9d85eb55e719"
+  },
+  "command": [
+    "/workspace/pantograph-cache/target/release/examples/cpu_embedding_workflow_probe",
+    "/workspace/pantograph-m2-cpu-2026-10-13-cohort-v1",
+    "--serial-lookahead"
+  ],
+  "registry_db": "/workspace/pantograph-m2-cpu-2026-10-13-cohort-v1/registry.db",
+  "cpu_max": "400000 100000",
+  "memory_max": "17179869184",
+  "cpu_model": "AMD EPYC 9V74 80-Core Processor",
+  "gpu_paths_present": {
+    "/dev/nvidia0": false,
+    "/dev/nvidiactl": false,
+    "/dev/dri": false,
+    "/dev/kfd": false,
+    "/proc/driver/nvidia": false,
+    "/sys/class/drm": false
+  },
+  "model_acquisition_allowed": false,
+  "cohort_attempt": 1,
+  "automatic_restart_allowed": false
+}

@@ -7,6 +7,9 @@
 
 mod batching;
 mod capability;
+mod cohort_completion;
+mod completion_ranking;
+mod dependency_completion;
 mod dispatch;
 mod dispatch_selection;
 mod dispatch_selection_policy;
@@ -20,19 +23,73 @@ mod queue;
 mod readiness;
 mod resource;
 mod resource_types;
+mod serial_admission;
+mod serial_dispatch;
+mod serial_service_completion;
 mod supervision;
+mod two_completion;
+
+pub use serial_admission::{
+    SchedulerSerialAdmission, SchedulerSerialAdmissionRefusal, SchedulerSerialDispatch,
+    SchedulerSerialPreparation,
+};
+pub use serial_dispatch::{
+    SchedulerSerialAttemptIdentity, SchedulerSerialBoundDispatch, SchedulerSerialCleanupEvent,
+    SchedulerSerialCleanupPending, SchedulerSerialCleanupState, SchedulerSerialDispatchRefusal,
+    SchedulerSerialDrainState, SchedulerSerialDrainedDispatch, SchedulerSerialExecutingDispatch,
+    SchedulerSerialOwnerSnapshot, SchedulerSerialRuntimeOwnerLease,
+    SchedulerSerialVerifiedWarmDrain,
+};
+pub use serial_service_completion::{
+    evaluate_serial_service_completion, SchedulerSerialServiceBudget,
+    SchedulerSerialServiceCompletion, SchedulerSerialServiceRefusal,
+};
 
 pub use batching::{
+    evaluate_scheduler_bounded_compatibility, evaluate_scheduler_bounded_grouping,
     SchedulerBatchCandidate, SchedulerBatchDiagnostic, SchedulerBatchDiagnosticCode,
     SchedulerBatchDiagnosticSeverity, SchedulerBatchMemoryImpact, SchedulerBatchPolicyDecision,
-    SchedulerBatchPolicyState, ValidatedSchedulerBatchPolicyDecision,
-    SCHEDULER_BATCHING_POLICY_CONTRACT_VERSION,
+    SchedulerBatchPolicyState, SchedulerBoundedGroupingDisposition,
+    SchedulerBoundedGroupingIncompatibility, SchedulerBoundedGroupingProposal,
+    SchedulerBoundedGroupingRefusal, SchedulerGroupingCompatibility,
+    ValidatedSchedulerBatchPolicyDecision, SCHEDULER_BATCHING_POLICY_CONTRACT_VERSION,
+    SCHEDULER_BOUNDED_GROUPING_MAX_MEMBERS, SCHEDULER_BOUNDED_GROUPING_MAX_RAW_STRING_BYTES,
 };
 pub use capability::{
     CapabilityAvailabilityState, SchedulerCapabilityDiagnostic, SchedulerCapabilityDiagnosticCode,
     SchedulerCapabilityHintSnapshot, SchedulerCapabilitySeverity, SchedulerDeviceCapabilityHint,
     SchedulerRuntimeCapabilityHint, SchedulerTraitOptionHint, SchedulerTraitOptionValue,
     ValidatedSchedulerCapabilityHintSnapshot, SCHEDULER_CAPABILITY_HINT_CONTRACT_VERSION,
+};
+pub use cohort_completion::{
+    evaluate_scheduler_cohort_completion, SchedulerCohortAction, SchedulerCohortBudget,
+    SchedulerCohortCompletion, SchedulerCohortCosts, SchedulerCohortEvidence,
+    SchedulerCohortIncomplete, SchedulerCohortPlacement, SchedulerCohortResult,
+    SchedulerCohortSample, SchedulerCohortScore, SchedulerCohortTask, SchedulerCohortTaskRequest,
+    SchedulerCohortTransition, SchedulerCohortWork, SchedulerFrozenCohort,
+    SCHEDULER_COHORT_MAX_BRANCHES, SCHEDULER_COHORT_MAX_EVENTS, SCHEDULER_COHORT_MAX_EVIDENCE,
+    SCHEDULER_COHORT_MAX_PLACEMENTS, SCHEDULER_COHORT_MAX_TASKS, SCHEDULER_COHORT_MAX_WORK,
+};
+
+pub use completion_ranking::{
+    completion_diagnostics_bounded, select_scheduler_candidate_with_completion,
+    SchedulerCompletionContext, SchedulerCompletionEvidence, SchedulerCompletionEvidenceSource,
+    SchedulerCompletionRankingDiagnostic, SchedulerCompletionRankingPolicy,
+    SchedulerCompletionRankingResult, SchedulerCompletionRefusalReason, SchedulerCompletionSample,
+    SCHEDULER_COMPLETION_MAX_CANDIDATES,
+};
+
+pub use two_completion::{
+    select_scheduler_candidate_with_two_completions, SchedulerTwoCompletionBudget,
+    SchedulerTwoCompletionContinuation, SchedulerTwoCompletionDiagnostic,
+    SchedulerTwoCompletionFallback, SchedulerTwoCompletionPrefix, SchedulerTwoCompletionResult,
+    SchedulerTwoCompletionScore, SCHEDULER_TWO_COMPLETION_MAX_EVENTS,
+    SCHEDULER_TWO_COMPLETION_MAX_OFFERS, SCHEDULER_TWO_COMPLETION_MAX_PLANS,
+};
+
+pub use dependency_completion::{
+    select_scheduler_candidate_with_dependency_completion, SchedulerCompletionSuccessorRequest,
+    SchedulerDependencyCompletionEvidence, ValidatedSchedulerCompletionSuccessor,
 };
 pub use dispatch::{
     SchedulerBatchingGroupId, SchedulerDispatchDecision, SchedulerDispatchDiagnostic,
@@ -47,7 +104,10 @@ pub use dispatch_selection::{
     SchedulerDispatchSelectionState, ValidatedSchedulerDispatchSelectionDecision,
     ValidatedSchedulerDispatchSelectionRequest, SCHEDULER_DISPATCH_SELECTION_CONTRACT_VERSION,
 };
-pub use dispatch_selection_policy::select_scheduler_dispatch;
+pub use dispatch_selection_policy::{
+    select_scheduler_candidate_for_reservation, select_scheduler_dispatch,
+    SchedulerDispatchReservationSelection,
+};
 pub use error::SchedulerContractError;
 pub use handoff::{
     SchedulerRuntimeHandoff, SchedulerRuntimeHandoffState, ValidatedSchedulerRuntimeHandoff,

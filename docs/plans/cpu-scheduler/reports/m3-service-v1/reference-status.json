@@ -1,0 +1,9 @@
+{
+  "command": [
+    "/workspace/Pantograph/.venv/bin/python",
+    "/workspace/pantograph-m3/crates/pantograph-embedded-runtime/examples/cpu_embedding_workflow_probe/c3_reference.py",
+    "/workspace/m3-authenticated-service-v1/reference.json"
+  ],
+  "exit_code": 0,
+  "finished_utc": "2026-10-19T23:19:57.142712+00:00"
+}

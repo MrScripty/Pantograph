@@ -258,7 +258,9 @@ pub(crate) fn get_download_progress(
     let progress = resource
         .runtime
         .block_on(async { resource.api.get_hf_download_progress(&download_id).await })
-        .map_err(|e| rustler::Error::Term(Box::new(format!("progress error: {}", e))))?;
+        .map_err(|error| {
+            rustler::Error::Term(Box::new(format!("get_download_progress error: {error}")))
+        })?;
 
     match progress {
         Some(p) => {

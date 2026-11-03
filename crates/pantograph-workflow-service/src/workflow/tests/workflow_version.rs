@@ -182,8 +182,15 @@ fn workflow_run_graph_query_returns_none_for_unknown_run() {
 #[test]
 fn workflow_executable_validation_snapshot_round_trips_through_attribution() {
     let service = WorkflowService::with_ephemeral_attribution_store().expect("service");
+    let mut graph = graph();
+    graph.nodes.push(GraphNode {
+        id: "infer_node".to_string(),
+        node_type: "llm-inference".to_string(),
+        position: Position { x: 0.0, y: 0.0 },
+        data: serde_json::json!({}),
+    });
     let version = service
-        .resolve_workflow_graph_version("workflow-versioned", "1.0.0", &graph())
+        .resolve_workflow_graph_version("workflow-versioned", "1.0.0", &graph)
         .expect("version");
     let snapshot = executable_validation_snapshot(&version);
 
@@ -202,7 +209,7 @@ fn workflow_executable_validation_snapshot_round_trips_through_attribution() {
 
     assert_eq!(stored.as_record(), &snapshot);
     assert_eq!(loaded.as_record(), &snapshot);
-    assert!(loaded.scheduler_inference_task_projections().is_ok());
+    assert!(loaded.scheduler_inference_task_projections(&graph).is_ok());
 }
 
 #[test]
@@ -416,7 +423,7 @@ fn executable_validation_publication(
     graph: &WorkflowGraph,
 ) -> WorkflowGraphInferenceValidationPublication {
     let graph_revision =
-        WorkflowGraphRevision::parse(&graph.compute_fingerprint()).expect("valid graph revision");
+        WorkflowGraphRevision::parse(graph.compute_fingerprint()).expect("valid graph revision");
     let validation_session_id = DraftGraphValidationSessionId::parse("validation_session_publish")
         .expect("valid validation session id");
     let summary = DraftGraphValidationSummary {

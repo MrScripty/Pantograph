@@ -5,11 +5,12 @@ use pantograph_inference_interface_contracts::{
     DraftGraphValidationStatus, DraftGraphValidationSummary, InferenceAvailabilityStatus,
     InferenceConnectionSurface, InferenceConnectionSurfaceStatus, InferenceDiagnosticCode,
     InferenceDiagnosticSeverity, InferenceInterfaceContractError, InferenceInterfaceDescriptor,
-    InferenceInterfaceDiagnostic, InferenceInterfaceDriftReport, InferencePortOptions,
-    InferenceValueType, ValidatedAuthoredInferenceInterfaceSnapshot,
-    ValidatedDependencyEnvironmentActionIntent, ValidatedDependencyEnvironmentActionIntentResult,
-    ValidatedDraftGraphValidationSummary, ValidatedInferenceConnectionSurface,
-    ValidatedInferenceInterfaceDescriptor,
+    InferenceInterfaceDiagnostic, InferenceInterfaceDriftReport, InferenceOptionScalar,
+    InferencePortDescriptor, InferencePortDirection, InferencePortOptions,
+    InferencePortRequirement, InferenceScalarType, InferenceValueType,
+    ValidatedAuthoredInferenceInterfaceSnapshot, ValidatedDependencyEnvironmentActionIntent,
+    ValidatedDependencyEnvironmentActionIntentResult, ValidatedDraftGraphValidationSummary,
+    ValidatedInferenceConnectionSurface, ValidatedInferenceInterfaceDescriptor,
 };
 
 const DESCRIPTOR: &str = include_str!("fixtures/descriptor_image_generation_ready.json");
@@ -20,6 +21,326 @@ const CONNECTION_SURFACE_CURRENT: &str =
     include_str!("fixtures/connection_surface_image_generation_current.json");
 const CONNECTION_SURFACE_DRIFT_BLOCKED: &str =
     include_str!("fixtures/connection_surface_image_generation_drift_blocked.json");
+const IMAGE_BASIC_INPUTS: &str = include_str!("fixtures/image_generation_basic_inputs.json");
+
+#[test]
+fn text_system_prompt_is_optional_string_without_changing_token_limit_or_defaults() {
+    let ports: Vec<InferencePortDescriptor> = serde_json::from_str(include_str!(
+        "fixtures/text_generation_system_prompt_inputs.json"
+    ))
+    .unwrap();
+    assert_eq!(
+        ports
+            .iter()
+            .map(|port| port.port_id.as_str())
+            .collect::<Vec<_>>(),
+        [
+            "prompt",
+            "max_new_tokens",
+            "system_prompt",
+            "top_k",
+            "temperature",
+            "top_p",
+            "repetition_penalty",
+            "min_new_tokens",
+            "seed",
+            "stop"
+        ]
+    );
+    assert_eq!(ports[0].requirement, InferencePortRequirement::Required);
+    assert_eq!(
+        ports[1].value_type,
+        InferenceValueType::Scalar(InferenceScalarType::U64)
+    );
+    assert!(matches!(
+        ports[1].options,
+        InferencePortOptions::NumericRange { .. }
+    ));
+    let system = &ports[2];
+    assert_eq!(system.direction, InferencePortDirection::Input);
+    assert_eq!(system.requirement, InferencePortRequirement::Optional);
+    assert_eq!(
+        system.value_type,
+        InferenceValueType::Scalar(InferenceScalarType::String)
+    );
+    assert_eq!(system.options, InferencePortOptions::None);
+    for port in &ports {
+        port.validate().unwrap();
+        assert!(port.default.is_none());
+    }
+    let encoded = serde_json::to_string(&ports).unwrap();
+    assert_eq!(
+        serde_json::from_str::<Vec<InferencePortDescriptor>>(&encoded).unwrap(),
+        ports
+    );
+}
+
+#[test]
+fn text_top_k_is_optional_zero_inclusive_u32_without_a_default() {
+    let ports: Vec<InferencePortDescriptor> = serde_json::from_str(include_str!(
+        "fixtures/text_generation_system_prompt_inputs.json"
+    ))
+    .unwrap();
+    let top_k = ports
+        .iter()
+        .find(|port| port.port_id.as_str() == "top_k")
+        .unwrap();
+    assert_eq!(top_k.direction, InferencePortDirection::Input);
+    assert_eq!(top_k.requirement, InferencePortRequirement::Optional);
+    assert_eq!(
+        top_k.value_type,
+        InferenceValueType::Scalar(InferenceScalarType::U64)
+    );
+    assert_eq!(
+        top_k.options,
+        InferencePortOptions::NumericRange {
+            range: pantograph_inference_interface_contracts::InferenceNumericRange {
+                min: 0.0,
+                max: f64::from(u32::MAX),
+                step: Some(1.0),
+                default: None,
+            },
+        }
+    );
+    assert!(top_k.default.is_none());
+    top_k.validate().unwrap();
+}
+
+#[test]
+fn text_temperature_is_optional_zero_inclusive_without_a_default_or_step() {
+    let ports: Vec<InferencePortDescriptor> = serde_json::from_str(include_str!(
+        "fixtures/text_generation_system_prompt_inputs.json"
+    ))
+    .unwrap();
+    let temperature = ports
+        .iter()
+        .find(|port| port.port_id.as_str() == "temperature")
+        .unwrap();
+    assert_eq!(temperature.requirement, InferencePortRequirement::Optional);
+    assert_eq!(
+        temperature.value_type,
+        InferenceValueType::Scalar(InferenceScalarType::F64)
+    );
+    assert_eq!(
+        temperature.options,
+        InferencePortOptions::NumericRange {
+            range: pantograph_inference_interface_contracts::InferenceNumericRange {
+                min: 0.0,
+                max: f64::from(f32::MAX),
+                step: None,
+                default: None,
+            },
+        }
+    );
+    assert!(temperature.default.is_none());
+    temperature.validate().unwrap();
+}
+
+#[test]
+fn text_top_p_is_optional_zero_inclusive_unit_interval_without_a_default() {
+    let ports: Vec<InferencePortDescriptor> = serde_json::from_str(include_str!(
+        "fixtures/text_generation_system_prompt_inputs.json"
+    ))
+    .unwrap();
+    let top_p = ports
+        .iter()
+        .find(|port| port.port_id.as_str() == "top_p")
+        .unwrap();
+    assert_eq!(top_p.direction, InferencePortDirection::Input);
+    assert_eq!(top_p.requirement, InferencePortRequirement::Optional);
+    assert_eq!(
+        top_p.value_type,
+        InferenceValueType::Scalar(InferenceScalarType::F64)
+    );
+    assert_eq!(
+        top_p.options,
+        InferencePortOptions::NumericRange {
+            range: pantograph_inference_interface_contracts::InferenceNumericRange {
+                min: 0.0,
+                max: 1.0,
+                step: None,
+                default: None,
+            },
+        }
+    );
+    assert!(top_p.default.is_none());
+    top_p.validate().unwrap();
+}
+#[test]
+fn text_repetition_penalty_is_optional_positive_finite_without_a_default() {
+    let ports: Vec<InferencePortDescriptor> = serde_json::from_str(include_str!(
+        "fixtures/text_generation_system_prompt_inputs.json"
+    ))
+    .unwrap();
+    let repetition_penalty = ports
+        .iter()
+        .find(|port| port.port_id.as_str() == "repetition_penalty")
+        .unwrap();
+    assert_eq!(repetition_penalty.direction, InferencePortDirection::Input);
+    assert_eq!(
+        repetition_penalty.requirement,
+        InferencePortRequirement::Optional
+    );
+    assert_eq!(
+        repetition_penalty.value_type,
+        InferenceValueType::Scalar(InferenceScalarType::F64)
+    );
+    assert_eq!(
+        repetition_penalty.options,
+        InferencePortOptions::NumericRange {
+            range: pantograph_inference_interface_contracts::InferenceNumericRange {
+                min: f64::from(f32::from_bits(1)),
+                max: f64::from(f32::MAX),
+                step: None,
+                default: None,
+            },
+        }
+    );
+    assert!(repetition_penalty.default.is_none());
+    repetition_penalty.validate().unwrap();
+}
+
+#[test]
+fn text_min_new_tokens_is_optional_zero_inclusive_u32_without_a_default() {
+    let ports: Vec<InferencePortDescriptor> = serde_json::from_str(include_str!(
+        "fixtures/text_generation_system_prompt_inputs.json"
+    ))
+    .unwrap();
+    let minimum = ports
+        .iter()
+        .find(|port| port.port_id.as_str() == "min_new_tokens")
+        .unwrap();
+    assert_eq!(minimum.direction, InferencePortDirection::Input);
+    assert_eq!(minimum.requirement, InferencePortRequirement::Optional);
+    assert_eq!(
+        minimum.value_type,
+        InferenceValueType::Scalar(InferenceScalarType::U64)
+    );
+    assert_eq!(
+        minimum.options,
+        InferencePortOptions::NumericRange {
+            range: pantograph_inference_interface_contracts::InferenceNumericRange {
+                min: 0.0,
+                max: f64::from(u32::MAX),
+                step: Some(1.0),
+                default: None,
+            },
+        }
+    );
+    assert!(minimum.default.is_none());
+    minimum.validate().unwrap();
+}
+
+#[test]
+fn basic_image_inputs_keep_optional_controls_and_backend_defaults_on_the_wire() {
+    let ports: Vec<InferencePortDescriptor> =
+        serde_json::from_str(IMAGE_BASIC_INPUTS).expect("basic image input contract");
+    assert_eq!(
+        ports
+            .iter()
+            .map(|port| port.port_id.as_str())
+            .collect::<Vec<_>>(),
+        [
+            "prompt",
+            "negative_prompt",
+            "width",
+            "height",
+            "num_inference_steps",
+            "seed",
+            "guidance_scale",
+            "num_images_per_prompt",
+            "denoising_scheduler"
+        ]
+    );
+    assert_eq!(ports[0].requirement, InferencePortRequirement::Required);
+    for port in &ports {
+        port.validate().expect("valid input port");
+        assert_eq!(port.direction, InferencePortDirection::Input);
+        assert!(port.default.is_none());
+    }
+    for port in &ports[1..] {
+        assert_eq!(port.requirement, InferencePortRequirement::Optional);
+    }
+    let encoded = serde_json::to_string(&ports).expect("encode basic image inputs");
+    let round_trip: Vec<InferencePortDescriptor> = serde_json::from_str(&encoded).unwrap();
+    assert_eq!(round_trip, ports);
+}
+
+#[test]
+fn basic_image_numeric_controls_preserve_u32_bounds_without_rounding_u64_seed() {
+    let ports: Vec<InferencePortDescriptor> = serde_json::from_str(IMAGE_BASIC_INPUTS).unwrap();
+    assert_eq!(
+        ports[1].value_type,
+        InferenceValueType::Scalar(InferenceScalarType::String)
+    );
+    for port in &ports[2..5] {
+        assert_eq!(
+            port.value_type,
+            InferenceValueType::Scalar(InferenceScalarType::U64)
+        );
+        let InferencePortOptions::NumericRange { range } = &port.options else {
+            panic!("positive u32 input must have a numeric range");
+        };
+        assert_eq!(range.min, 1.0);
+        assert_eq!(range.max, f64::from(u32::MAX));
+        assert_eq!(range.step, Some(1.0));
+        assert!(range.default.is_none());
+    }
+    assert_eq!(
+        ports[5].value_type,
+        InferenceValueType::Scalar(InferenceScalarType::U64)
+    );
+    assert_eq!(ports[5].options, InferencePortOptions::None);
+    assert_eq!(
+        ports[6].value_type,
+        InferenceValueType::Scalar(InferenceScalarType::F64)
+    );
+    let InferencePortOptions::NumericRange { range } = &ports[6].options else {
+        panic!("guidance scale must declare its finite f32 representation bounds");
+    };
+    assert_eq!(range.min, f64::from(f32::MIN));
+    assert_eq!(range.max, f64::from(f32::MAX));
+    assert_eq!(range.step, None);
+    assert_eq!(range.default, None);
+    assert_eq!(
+        ports[7].value_type,
+        InferenceValueType::Scalar(InferenceScalarType::U64)
+    );
+    let InferencePortOptions::NumericRange { range } = &ports[7].options else {
+        panic!("image count has bounds")
+    };
+    assert_eq!(
+        (range.min, range.max, range.step, range.default),
+        (1.0, 64.0, Some(1.0), None)
+    );
+}
+
+#[test]
+fn image_scheduler_options_are_closed_primitive_ids_without_an_invented_default() {
+    let ports: Vec<InferencePortDescriptor> = serde_json::from_str(IMAGE_BASIC_INPUTS).unwrap();
+    let port = &ports[8];
+    assert_eq!(
+        port.value_type,
+        InferenceValueType::Scalar(InferenceScalarType::String)
+    );
+    let InferencePortOptions::Enum { values } = &port.options else {
+        panic!("scheduler has choices")
+    };
+    assert_eq!(
+        values
+            .iter()
+            .map(|value| value.option_id.as_str())
+            .collect::<Vec<_>>(),
+        ["ddim", "euler"]
+    );
+    for value in values {
+        assert_eq!(
+            value.value,
+            InferenceOptionScalar::String(value.option_id.as_str().into())
+        );
+    }
+    assert!(port.default.is_none());
+}
 
 #[test]
 fn descriptor_fixture_decodes_validates_and_round_trips() {
@@ -476,4 +797,150 @@ fn connection_surface_non_current_requires_diagnostics_and_is_not_executable() {
             reason: "non-current surfaces must not be executable"
         }
     );
+}
+
+#[test]
+fn text_seed_is_optional_u64_without_a_floating_point_range_or_default() {
+    let ports: Vec<InferencePortDescriptor> = serde_json::from_str(include_str!(
+        "fixtures/text_generation_system_prompt_inputs.json"
+    ))
+    .unwrap();
+    let seed = ports
+        .iter()
+        .find(|port| port.port_id.as_str() == "seed")
+        .unwrap();
+    assert_eq!(
+        seed.value_type,
+        InferenceValueType::Scalar(InferenceScalarType::U64)
+    );
+    assert_eq!(seed.requirement, InferencePortRequirement::Optional);
+    assert_eq!(seed.options, InferencePortOptions::None);
+    assert!(seed.default.is_none());
+    seed.validate().unwrap();
+    let wire = serde_json::to_value(seed).unwrap();
+    assert!(wire.get("default").is_none());
+    assert_eq!(
+        serde_json::from_value::<InferencePortDescriptor>(wire).unwrap(),
+        *seed
+    );
+}
+
+#[test]
+fn embedding_descriptor_and_saved_snapshot_preserve_structured_types_and_requirements() {
+    use pantograph_inference_interface_contracts::InferenceStructuredType;
+    let descriptor: InferenceInterfaceDescriptor =
+        serde_json::from_str(include_str!("fixtures/descriptor_embedding_ready.json")).unwrap();
+    descriptor.validate().unwrap();
+    assert_eq!(descriptor.inputs.len(), 1);
+    assert_eq!(descriptor.inputs[0].port_id.as_str(), "text");
+    assert_eq!(
+        descriptor.inputs[0].value_type,
+        InferenceValueType::Scalar(InferenceScalarType::String)
+    );
+    assert_eq!(
+        descriptor.inputs[0].requirement,
+        InferencePortRequirement::Required
+    );
+    assert!(descriptor.inputs[0].default.is_none());
+    assert_eq!(
+        descriptor
+            .outputs
+            .iter()
+            .map(|port| port.port_id.as_str())
+            .collect::<Vec<_>>(),
+        ["embedding", "metadata", "usage"]
+    );
+    assert_eq!(
+        descriptor.outputs[0].value_type,
+        InferenceValueType::Structured(InferenceStructuredType::Embedding)
+    );
+    for index in [1, 2] {
+        assert_eq!(
+            descriptor.outputs[index].value_type,
+            InferenceValueType::Structured(InferenceStructuredType::Json)
+        );
+    }
+    assert_eq!(
+        descriptor.outputs[0].requirement,
+        InferencePortRequirement::Required
+    );
+    assert_eq!(
+        descriptor.outputs[1].requirement,
+        InferencePortRequirement::Required
+    );
+    assert_eq!(
+        descriptor.outputs[2].requirement,
+        InferencePortRequirement::Optional
+    );
+    assert!(descriptor.outputs.iter().all(|port| port.default.is_none()));
+    let wire = serde_json::to_value(&descriptor).unwrap();
+    assert_eq!(
+        wire["outputs"][0]["value_type"],
+        serde_json::json!({"category": "structured", "kind": "embedding"})
+    );
+    let decoded: InferenceInterfaceDescriptor =
+        serde_json::from_str(&serde_json::to_string(&descriptor).unwrap()).unwrap();
+    assert_eq!(decoded, descriptor);
+    let snapshot: AuthoredInferenceInterfaceSnapshot =
+        serde_json::from_str(include_str!("fixtures/authored_snapshot_embedding.json")).unwrap();
+    snapshot.validate().unwrap();
+    let restored: AuthoredInferenceInterfaceSnapshot =
+        serde_json::from_str(&serde_json::to_string(&snapshot).unwrap()).unwrap();
+    assert_eq!(restored, snapshot);
+    assert_eq!(
+        snapshot.descriptor_fingerprint,
+        descriptor.descriptor_fingerprint
+    );
+    assert_eq!(
+        snapshot.outputs[0].value_type,
+        descriptor.outputs[0].value_type
+    );
+    assert_eq!(
+        snapshot.outputs[2].requirement,
+        InferencePortRequirement::Optional
+    );
+}
+
+#[test]
+fn structured_value_types_are_additive_to_existing_wire_categories() {
+    for (category, kind) in [
+        ("scalar", "string"),
+        ("artifact", "tensor"),
+        ("reference", "media_artifact"),
+        ("constraint", "device"),
+        ("structured", "embedding"),
+        ("structured", "json"),
+    ] {
+        let wire = serde_json::json!({"category": category, "kind": kind});
+        let value: InferenceValueType = serde_json::from_value(wire.clone()).unwrap();
+        assert_eq!(serde_json::to_value(value).unwrap(), wire);
+    }
+    assert!(serde_json::from_value::<InferenceValueType>(
+        serde_json::json!({"category": "structured", "kind": "tensor"})
+    )
+    .is_err());
+}
+
+#[test]
+fn text_stop_is_optional_scalar_string_without_a_default_or_new_wire_type() {
+    let ports: Vec<InferencePortDescriptor> = serde_json::from_str(include_str!(
+        "fixtures/text_generation_system_prompt_inputs.json"
+    ))
+    .unwrap();
+    let stop = ports
+        .iter()
+        .find(|port| port.port_id.as_str() == "stop")
+        .unwrap();
+    assert_eq!(stop.label, "Stop string");
+    assert_eq!(
+        stop.value_type,
+        InferenceValueType::Scalar(InferenceScalarType::String)
+    );
+    assert_eq!(stop.requirement, InferencePortRequirement::Optional);
+    assert_eq!(stop.options, InferencePortOptions::None);
+    assert!(stop.default.is_none());
+    stop.validate().unwrap();
+    let decoded: InferencePortDescriptor =
+        serde_json::from_str(&serde_json::to_string(stop).unwrap()).unwrap();
+    assert_eq!(&decoded, stop);
 }

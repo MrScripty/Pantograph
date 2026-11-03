@@ -80,7 +80,37 @@ Adopt the following ownership and lifecycle boundary for the planned
   and technical-fit admission proceed.
 - Reservations must be released on successful completion, cancellation, and
   failure paths.
+- Preparation owns rollback custody until the workflow task records its
+  in-memory reservation cleanup intent. Failed or abandoned preparation rolls
+  back its provisional claim; a failed replacement restores its predecessor.
+  Explicit owner release ends the lease and must not be undone by later rollback.
+- The registry rechecks observed runtime status/instance, current capacity and
+  owner conflicts when publishing a reservation. Final candidate validation
+  precedes mutation. Custody transfer after binding leaves normal task lifecycle
+  cleanup authoritative; this contract does not promise process-abort recovery.
 - Eviction decisions must exclude active, reserved, or pinned runtimes/models.
+- Explicit model-resident RAM/VRAM envelopes belong to this same registry and
+  admission lock, separately from task leases. Task release, health failure and
+  stop requests do not confirm model deallocation. Observed stop/inactive-producer
+  reclaim clears resident accounting. Model or producer-instance changes require
+  fresh identity evidence and declarations; a smaller/partial estimate cannot
+  free a held envelope for the same resident identity. Shared backing admission
+  treats missing per-kind resident declarations as unavailable, not zero.
+  Explicit zero-byte claims represent known zero. The PyTorch and owned llama.cpp
+  gateway producers publish exact model/instance observations with a stable owner token and
+  sample-time sequence; only newer frames from that owner may replace its
+  allocation. Unsequenced stops/inactivity cannot free an owned envelope.
+  Failed effectful loads retain uncertainty until acknowledged owner cleanup;
+  estimates are immutable startup configuration and are not measurements.
+  Terminal host cleanup publishes residency or uncertainty before releasing task
+  custody, then retries publication after release even when another lease retains
+  the runtime. Failed uncertain allocations remain reclaimable through the
+  matching lifecycle owner even when that producer is no longer ready. Neither
+  a stop request nor an inactive snapshot substitutes for ordered release evidence.
+  Owned llama.cpp shutdown consumes the same generation's process termination
+  event before dropping custody or starting a successor. External servers and
+  dedicated embedding-server owners are outside this publication bridge; backend
+  switches preserve retired-owner release observations alongside the current owner.
 
 8. `crates/pantograph-embedded-runtime` remains a runtime producer and executor.
 - It continues to expose Pantograph-specific runtime capabilities and execute

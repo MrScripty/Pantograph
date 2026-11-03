@@ -81,7 +81,7 @@ impl InferenceBackend for MockKvBackend {
         Ok(BackendStartOutcome::default())
     }
 
-    async fn stop(&mut self) -> Result<(), BackendError> {
+    async fn stop(&mut self) -> std::result::Result<(), BackendError> {
         Ok(())
     }
 

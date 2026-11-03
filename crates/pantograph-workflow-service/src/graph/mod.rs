@@ -1,7 +1,7 @@
 mod canonicalization;
 mod connection_intent;
 mod contract_validation;
-mod dependency_environment_subject;
+pub(crate) mod dependency_environment_subject;
 mod diagnostics;
 mod effective_definition;
 #[cfg(test)]
@@ -83,6 +83,7 @@ pub use inference_interface_publication::{
     InferenceInterfaceNodeProjectionRecord, InferenceInterfacePublicationError,
     WorkflowGraphInferenceValidationPublication,
 };
+pub(crate) use inference_interface_request::inference_nodes_in_graph;
 pub use inference_interface_request::{
     inference_interface_resolution_inputs_from_graph, InferenceInterfaceGraphResolutionDiagnostic,
     InferenceInterfaceGraphResolutionDiagnosticCode, InferenceInterfaceGraphResolutionInput,

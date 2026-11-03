@@ -1,0 +1,56 @@
+{
+  "checks": {
+    "clippy": 0,
+    "scheduler-only": 0,
+    "expanded-rust": 0,
+    "native-graph": 0,
+    "format": 0,
+    "source-gates": 0,
+    "affected-rust": 0
+  },
+  "rust_results": {
+    "native-graph": {
+      "passed_including_doctests": 1,
+      "failed": 0,
+      "ignored_including_doctests": 0,
+      "exit": 0
+    },
+    "affected-rust": {
+      "passed_including_doctests": 2487,
+      "failed": 0,
+      "ignored_including_doctests": 7,
+      "exit": 0
+    },
+    "expanded-rust": {
+      "passed_including_doctests": 3171,
+      "failed": 0,
+      "ignored_including_doctests": 23,
+      "exit": 0
+    }
+  },
+  "actual_public_graph_runs": 28,
+  "chat_completion_graph_runs": 21,
+  "text_generation_control_graph_runs": 7,
+  "sequential_native_envelope_members": 8,
+  "chat_envelope_members": 6,
+  "text_control_envelope_members": 2,
+  "affected_tests": 2486,
+  "affected_doctests": 1,
+  "expanded_tests": 3170,
+  "expanded_doctests": 1,
+  "security_alert": 31,
+  "local_repair_verified": true,
+  "hosted_codeql": "Awaited for exact published head after normal push. Result recorded separately in PR description/publication evidence without moving the source head.",
+  "scope": "Untrained tiny GPT-2 CPU fixtures; actual selected loader, gateway, worker and CPU forwards with controlled package/target/readiness/dispatch/graph discovery. Precancellation, sequential envelopes.",
+  "unqualified": [
+    "production-model quality",
+    "GPU",
+    "usage accuracy",
+    "post-start cancellation",
+    "native desktop",
+    "live Pumas discovery",
+    "general model/tokenizer/template-fallback behavior"
+  ],
+  "manual_review_thread_resolution": false,
+  "alert_suppression": false
+}

@@ -85,7 +85,12 @@ impl DependencyRequirementsPayload {
         self.identity_key
             .validate()
             .map_err(DependencyRequirementsRegistryError::InvalidContract)?;
-        if self.identity_key.selected_binding_ids != self.selected_binding_ids {
+        // An empty identity selection lets the resolved payload choose its
+        // bindings (native CPU bootstrap); an explicit identity selection must
+        // match the payload exactly.
+        if !self.identity_key.selected_binding_ids.is_empty()
+            && self.identity_key.selected_binding_ids != self.selected_binding_ids
+        {
             return Err(DependencyRequirementsRegistryError::InvalidPayload {
                 field: "dependency_requirements_payload.identity_key.selected_binding_ids",
                 reason: "identity and payload selected binding ids must agree",

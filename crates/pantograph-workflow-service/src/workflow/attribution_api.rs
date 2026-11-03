@@ -12,10 +12,10 @@ use pantograph_runtime_attribution::{
 };
 
 use crate::graph::{
-    validate_workflow_graph_contract_diagnostics, workflow_executable_topology,
-    workflow_execution_fingerprint_for_topology, workflow_presentation_fingerprint_for_metadata,
-    workflow_presentation_metadata, workflow_presentation_metadata_json, GraphEdge, GraphNode,
-    NodeRegistry, WorkflowExecutableTopology, WorkflowGraph, WorkflowGraphRunSettings,
+    validate_workflow_graph_contract_diagnostics, workflow_execution_fingerprint_for_topology,
+    workflow_presentation_fingerprint_for_metadata, workflow_presentation_metadata,
+    workflow_presentation_metadata_json, GraphEdge, GraphNode, NodeRegistry,
+    WorkflowExecutableTopology, WorkflowGraph, WorkflowGraphRunSettings,
     WorkflowPresentationMetadata,
 };
 
@@ -87,7 +87,7 @@ impl WorkflowService {
         graph: &WorkflowGraph,
     ) -> Result<WorkflowVersionRecord, WorkflowServiceError> {
         validate_workflow_id(workflow_id)?;
-        let topology = workflow_executable_topology(graph)?;
+        let topology = self.node_registry.executable_topology(graph)?;
         let execution_fingerprint = workflow_execution_fingerprint_for_topology(&topology)?;
         let executable_topology_json = serde_json::to_string(&topology).map_err(|error| {
             WorkflowServiceError::CapabilityViolation(format!(
@@ -216,7 +216,7 @@ impl WorkflowService {
             ));
         }
         validate_workflow_id(&request.workflow_id)?;
-        let graph_revision = WorkflowGraphRevision::parse(&request.graph.compute_fingerprint())
+        let graph_revision = WorkflowGraphRevision::parse(request.graph.compute_fingerprint())
             .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
         if graph_revision
             != request
@@ -258,7 +258,7 @@ impl WorkflowService {
                 request.validation_session_id.clone(),
             )
             .await?;
-        let graph_revision = WorkflowGraphRevision::parse(&graph.compute_fingerprint())
+        let graph_revision = WorkflowGraphRevision::parse(graph.compute_fingerprint())
             .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
         if graph_revision != source.graph_revision {
             return Err(WorkflowServiceError::InvalidRequest(
@@ -277,6 +277,7 @@ impl WorkflowService {
             &workflow_version,
             snapshot_id,
             &source,
+            &graph,
         )
         .map_err(workflow_executable_validation_snapshot_service_error)?;
         self.reject_changed_dependency_proof_freshness(&snapshot)?;
@@ -327,15 +328,24 @@ impl WorkflowService {
         else {
             return Ok(WorkflowRunGraphQueryResponse { run_graph: None });
         };
-        let run_graph = workflow_run_graph_projection_from_version(projection)?;
+        let run_graph =
+            workflow_run_graph_projection_with_registry(projection, &self.node_registry)?;
         Ok(WorkflowRunGraphQueryResponse {
             run_graph: Some(run_graph),
         })
     }
 }
 
+#[cfg(test)]
 fn workflow_run_graph_projection_from_version(
     projection: WorkflowRunVersionProjection,
+) -> Result<WorkflowRunGraphProjection, WorkflowServiceError> {
+    workflow_run_graph_projection_with_registry(projection, &NodeRegistry::new())
+}
+
+fn workflow_run_graph_projection_with_registry(
+    projection: WorkflowRunVersionProjection,
+    registry: &NodeRegistry,
 ) -> Result<WorkflowRunGraphProjection, WorkflowServiceError> {
     let executable_topology: WorkflowExecutableTopology = decode_run_graph_json(
         "workflow executable topology",
@@ -354,8 +364,7 @@ fn workflow_run_graph_projection_from_version(
         &presentation_metadata,
         &graph_settings,
     )?;
-    let graph_diagnostics =
-        validate_workflow_graph_contract_diagnostics(&graph, &NodeRegistry::new());
+    let graph_diagnostics = validate_workflow_graph_contract_diagnostics(&graph, registry);
 
     Ok(WorkflowRunGraphProjection {
         workflow_run_id: projection.snapshot.workflow_run_id.as_str().to_string(),

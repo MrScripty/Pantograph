@@ -4,8 +4,8 @@ use std::{
 };
 
 use crate::graph::{
-    workflow_executable_topology, workflow_graph_run_settings, workflow_graph_run_settings_json,
-    WorkflowExecutionSessionKind, WorkflowGraph, WorkflowGraphRunSettings,
+    workflow_graph_run_settings, workflow_graph_run_settings_json, WorkflowExecutionSessionKind,
+    WorkflowGraph, WorkflowGraphRunSettings,
 };
 use crate::scheduler::{
     unix_timestamp_ms, WorkflowSchedulerBootstrapRecoveryAction,
@@ -48,8 +48,10 @@ use super::runtime_dispatch_assignment::{
     WorkflowRuntimeDispatchAssignmentId, WorkflowRuntimeDispatchAssignmentRecord,
 };
 use super::session_io_artifacts::workflow_io_artifact_metadata;
-use super::session_scheduler_runner::WorkflowSchedulerSessionRunner;
-use super::task_execution_owner::WorkflowTaskExecutionOwner;
+use super::session_scheduler_runner::{
+    WorkflowSchedulerRunContext, WorkflowSchedulerSessionRunner,
+};
+use super::task_execution_owner::{WorkflowNonRuntimeExecutionInput, WorkflowTaskExecutionOwner};
 use super::task_execution_runtime::WorkflowTaskExecutionRuntimeOwner;
 use super::task_execution_worker::{
     WorkflowTaskExecutionWorkerOutcome, WorkflowTaskExecutionWorkerRuntimeBranchCommand,
@@ -58,14 +60,13 @@ use super::task_execution_worker::{
 };
 use super::validation::{
     validate_bindings, validate_output_targets, validate_timeout_ms,
-    validate_workflow_graph_submit_readiness, validate_workflow_id,
+    validate_workflow_graph_submit_readiness_with_registry, validate_workflow_id,
     validate_workflow_semantic_version,
 };
 use super::workflow_run_finalization::{
     finalize_admitted_workflow_run, WorkflowRunFinalizationRequest,
 };
 use super::{
-    workflow_scheduler_task_graph, workflow_scheduler_task_graph_with_inference_projections,
     workflow_scheduler_task_run_summary, AttributionRepository, WorkflowCapabilityModel,
     WorkflowExecutableValidationSnapshotLookupRequest,
     WorkflowExecutionSessionAttributedCreateRequest, WorkflowExecutionSessionAttributionContext,
@@ -233,6 +234,11 @@ impl WorkflowService {
         }
         validate_workflow_semantic_version(&request.workflow_semantic_version)?;
         validate_timeout_ms(request.timeout_ms)?;
+        if self.is_serial_ready_cpu() && request.timeout_ms.is_some() {
+            return Err(WorkflowServiceError::InvalidRequest(
+                "serial Ready CPU mode does not support workflow timeout_ms; use None".into(),
+            ));
+        }
         validate_bindings(&request.inputs, "inputs")?;
         if let Some(targets) = request.output_targets.as_ref() {
             validate_output_targets(targets)?;
@@ -415,12 +421,14 @@ impl WorkflowService {
             return WorkflowTaskExecutionOwner::run_non_runtime_to_completion(
                 self,
                 host,
-                &session,
-                run_snapshot.as_ref(),
-                &session_id,
-                &workflow_run_id,
-                &queued_run,
-                &scheduler_task_run_summary,
+                WorkflowNonRuntimeExecutionInput {
+                    session: &session,
+                    run_snapshot: run_snapshot.as_ref(),
+                    session_id: &session_id,
+                    workflow_run_id: &workflow_run_id,
+                    queued_run: &queued_run,
+                    summary: &scheduler_task_run_summary,
+                },
             )
             .await;
         }
@@ -479,7 +487,7 @@ impl WorkflowService {
         .await
     }
 
-    async fn resume_workflow_execution_session_runtime_dependency_readiness_with_attempt_transition<
+    pub(super) async fn resume_workflow_execution_session_runtime_dependency_readiness_with_attempt_transition<
         H: WorkflowHost + ?Sized,
     >(
         &self,
@@ -528,6 +536,12 @@ impl WorkflowService {
             )));
         }
 
+        if self.is_serial_ready_cpu() && active_run.timeout_ms.is_some() {
+            return Err(WorkflowServiceError::InvalidRequest(
+                "serial Ready CPU mode does not support workflow timeout_ms; use None".into(),
+            ));
+        }
+
         if let Some(task_execution_runtime_owner) = task_execution_runtime_owner {
             self.ensure_runtime_branch_task_events_for_recovery(
                 &session_id,
@@ -565,12 +579,14 @@ impl WorkflowService {
             Ok(Some(timeout_ms)) => {
                 let run_future = runner.resume_runtime_dependency_readiness(
                     host,
-                    &session_id,
-                    &workflow_run_id,
-                    &active_run.workflow_id,
-                    active_run.output_targets.as_deref(),
-                    &scheduler_task_run_summary,
-                    started_at,
+                    WorkflowSchedulerRunContext {
+                        session_id: &session_id,
+                        workflow_run_id: &workflow_run_id,
+                        workflow_id: &active_run.workflow_id,
+                        output_targets: active_run.output_targets.as_deref(),
+                        summary: &scheduler_task_run_summary,
+                        started_at,
+                    },
                     attempt_start_transition,
                 );
                 match tokio::time::timeout(Duration::from_millis(timeout_ms), run_future).await {
@@ -585,12 +601,14 @@ impl WorkflowService {
                 runner
                     .resume_runtime_dependency_readiness(
                         host,
-                        &session_id,
-                        &workflow_run_id,
-                        &active_run.workflow_id,
-                        active_run.output_targets.as_deref(),
-                        &scheduler_task_run_summary,
-                        started_at,
+                        WorkflowSchedulerRunContext {
+                            session_id: &session_id,
+                            workflow_run_id: &workflow_run_id,
+                            workflow_id: &active_run.workflow_id,
+                            output_targets: active_run.output_targets.as_deref(),
+                            summary: &scheduler_task_run_summary,
+                            started_at,
+                        },
                         attempt_start_transition,
                     )
                     .await
@@ -763,7 +781,7 @@ impl WorkflowService {
         run_snapshot: Option<&WorkflowRunSnapshotRecord>,
     ) -> Result<WorkflowSchedulerTaskGraph, WorkflowServiceError> {
         let graph = host.workflow_graph(workflow_id).await?;
-        validate_workflow_graph_submit_readiness(&graph)?;
+        validate_workflow_graph_submit_readiness_with_registry(&graph, &self.node_registry)?;
         let workflow_id = WorkflowId::try_from(workflow_id.to_string())?;
         let workflow_run_id = WorkflowRunId::try_from(workflow_run_id.to_string())?;
         if let Some(run_snapshot) = run_snapshot {
@@ -777,17 +795,24 @@ impl WorkflowService {
                 },
             )?;
             let projections = snapshot
-                .scheduler_inference_task_projections()
+                .scheduler_inference_task_projections(&graph)
                 .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
-            return workflow_scheduler_task_graph_with_inference_projections(
+            return super::task_graph::workflow_scheduler_task_graph_with_registry(
                 &workflow_id,
                 &workflow_run_id,
                 &graph,
                 &projections,
+                &self.node_registry,
             );
         }
 
-        let task_graph = workflow_scheduler_task_graph(&workflow_id, &workflow_run_id, &graph)?;
+        let task_graph = super::task_graph::workflow_scheduler_task_graph_with_registry(
+            &workflow_id,
+            &workflow_run_id,
+            &graph,
+            &super::WorkflowSchedulerInferenceTaskProjections::default(),
+            &self.node_registry,
+        )?;
         if task_graph.tasks.iter().any(|task| {
             task.execution_class == WorkflowSchedulerTaskExecutionClass::RuntimeInference
         }) {
@@ -835,7 +860,7 @@ impl WorkflowService {
         }
 
         let graph = host.workflow_graph(&session.workflow_id).await?;
-        validate_workflow_graph_submit_readiness(&graph)?;
+        validate_workflow_graph_submit_readiness_with_registry(&graph, &self.node_registry)?;
         let capabilities = host.workflow_capabilities(&session.workflow_id).await?;
         let version = self.resolve_workflow_graph_version(
             &session.workflow_id,
@@ -979,7 +1004,9 @@ impl WorkflowService {
         let Some(ledger) = self.diagnostics_ledger.as_ref() else {
             return Ok(());
         };
-        let node_versions = workflow_executable_topology(graph)?
+        let node_versions = self
+            .node_registry
+            .executable_topology(graph)?
             .nodes
             .into_iter()
             .map(|node| RunSnapshotNodeVersionPayload {
@@ -1032,7 +1059,6 @@ impl WorkflowService {
             },
         )
         .map(|_| ())
-        .map_err(WorkflowServiceError::from)
     }
 
     fn record_library_model_access_events_if_configured(
@@ -1085,8 +1111,7 @@ impl WorkflowService {
                         },
                     ),
                 },
-            )
-            .map_err(WorkflowServiceError::from)?;
+            )?;
         }
         Ok(())
     }
@@ -1157,7 +1182,6 @@ impl WorkflowService {
             },
         )
         .map(|_| ())
-        .map_err(WorkflowServiceError::from)
     }
 
     fn record_scheduler_queue_placement_event_if_configured(
@@ -1217,7 +1241,6 @@ impl WorkflowService {
             },
         )
         .map(|_| ())
-        .map_err(WorkflowServiceError::from)
     }
 
     pub(super) fn record_run_started_event_if_configured(
@@ -1277,7 +1300,6 @@ impl WorkflowService {
             },
         )
         .map(|_| ())
-        .map_err(WorkflowServiceError::from)
     }
 
     fn runtime_dispatch_output_attribution(
@@ -1384,7 +1406,7 @@ impl WorkflowService {
                     privacy_class: metadata.privacy_class,
                     retention_class: metadata.retention_class,
                     payload_ref: metadata.payload_ref.clone(),
-                    payload: DiagnosticEventPayload::IoArtifactObserved(
+                    payload: DiagnosticEventPayload::IoArtifactObserved(Box::new(
                         IoArtifactObservedPayload {
                             artifact_fact_id: Some(metadata.artifact_fact_id),
                             payload_artifact_id: Some(metadata.payload_artifact_id),
@@ -1423,10 +1445,9 @@ impl WorkflowService {
                             stream_handle: metadata.stream_handle,
                             format: metadata.format,
                         },
-                    ),
+                    )),
                 },
-            )
-            .map_err(WorkflowServiceError::from)?;
+            )?;
         }
         Ok(())
     }
@@ -1515,7 +1536,6 @@ impl WorkflowService {
             },
         )
         .map(|_| ())
-        .map_err(WorkflowServiceError::from)
     }
 }
 
@@ -2677,8 +2697,8 @@ mod tests {
                 node_id: task.node_id.clone(),
                 task_id: task.task_id.clone(),
                 state: SchedulerTaskState::Completed {
-                    execution_intent: SchedulerTaskExecutionIntent::Runtime {
-                        task_intent: pantograph_scheduler::SchedulableTaskIntent {
+                    execution_intent: SchedulerTaskExecutionIntent::runtime(
+                        pantograph_scheduler::SchedulableTaskIntent {
                             contract_version:
                                 pantograph_scheduler::SCHEDULABLE_TASK_INTENT_CONTRACT_VERSION,
                             workflow_id: task.workflow_id.clone(),
@@ -2702,7 +2722,7 @@ mod tests {
                             dependency_override_patches: Vec::new(),
                             estimate_hints: Vec::new(),
                         },
-                    },
+                    ),
                 },
                 state_version: 1,
                 last_transition_id: "transition.completed".parse().expect("transition id"),
@@ -3137,7 +3157,7 @@ mod tests {
             retention_class: DiagnosticEventRetentionClass::AuditMetadata,
             payload_ref: None,
             payload: DiagnosticEventPayload::InferenceExecutionDiagnosticObserved(
-                pantograph_diagnostics_ledger::InferenceExecutionDiagnosticObservedPayload {
+                Box::new(pantograph_diagnostics_ledger::InferenceExecutionDiagnosticObservedPayload {
                     request_id: "req-a".to_string(),
                     task_id: "image_generation".to_string(),
                     lifecycle_phase: Some("backend_execution".to_string()),
@@ -3172,7 +3192,7 @@ mod tests {
                     option_support_counts:
                         pantograph_diagnostics_ledger::InferenceOptionSupportCounts::default(),
                     option_diagnostics: Vec::new(),
-                },
+                }),
             ),
         }
     }

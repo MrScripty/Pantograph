@@ -461,12 +461,18 @@
   }
 
   async function downloadArtifactBody(artifact: IoArtifactProjectionRecord): Promise<void> {
+    if (!pageLive) return;
+    // Fence every await: a body that arrives after the page is gone never creates a URL or state.
+    const lifecycleGeneration = pageLifecycleGeneration;
+    const isCurrent = () => pageLive && pageLifecycleGeneration === lifecycleGeneration;
     const payloadArtifactId = ioArtifactPayloadTargetId(artifact);
     setArtifactLoading(artifact.artifact_id, true);
     setArtifactAccessError(artifact.artifact_id, null);
     try {
       await verifyArtifactReadable(artifact);
+      if (!isCurrent()) return;
       const read = await workflowService.readArtifactBody({ artifact_id: payloadArtifactId });
+      if (!isCurrent()) return;
       assertCompleteIoArtifactImageRead(artifact, read.response);
       const preview = createArtifactBodyPreview(read);
       await startBrowserDownload(
@@ -479,9 +485,9 @@
         }),
       );
     } catch (error) {
-      setArtifactAccessError(artifact.artifact_id, formatWorkflowCommandError(error));
+      if (isCurrent()) setArtifactAccessError(artifact.artifact_id, formatWorkflowCommandError(error));
     } finally {
-      setArtifactLoading(artifact.artifact_id, false);
+      if (isCurrent()) setArtifactLoading(artifact.artifact_id, false);
     }
   }
 

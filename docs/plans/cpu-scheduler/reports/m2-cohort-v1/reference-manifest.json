@@ -1,0 +1,29 @@
+{
+  "kind": "generated untrained numerical reference; not pretrained semantic qualification",
+  "reference_packages": {
+    "torch": "2.14.1+cpu",
+    "transformers": "4.53.3",
+    "tokenizers": "0.21.4",
+    "safetensors": "0.8.0"
+  },
+  "torch_git_version": "5c4886908584029761b579af026dcfb627c84070",
+  "candle_pin": "88ed7911de9e88196b1f55b199145d22647f415e",
+  "actual_reference_bert_forward_executed": true,
+  "model_downloads": false,
+  "file_hashes": {
+    "bert-12/1_Pooling/config.json": "a5b4d40281572d135d1e06bcc508e8674d9d88d3930a82530e6240bea52546d6",
+    "bert-12/config.json": "35fec67a62863765389a48211bd3476ab1d61d120a641f54312fd02da09ee735",
+    "bert-12/golden.json": "7f03f502af56275befd7661504c12b6647939b9b6298a839e9ff1cdfcd945e64",
+    "bert-12/model.safetensors": "abf45455a60ca2a6e120effc62ecf7606ce7fefd00d95b9b3d26ed12734010bd",
+    "bert-12/modules.json": "21ddb3037a55ebf4549eb5c1dc44c3f28f10b56ec7f1335c92fd90e5b30d88ac",
+    "bert-12/sentence_bert_config.json": "1a8ca78fce4e36626d2b3eef2336842e8b2a502c963cd01ef271d44da0a741df",
+    "bert-12/tokenizer.json": "36baeedee0eb6001cd65282d64683b33a17e9a9491f80720ab5d9d85eb55e719",
+    "bert-8/1_Pooling/config.json": "f3471ef375e135a24ebbc10fb48ae1d4a0c8271f75ad9f2c566f391b6bde3892",
+    "bert-8/config.json": "379d188d421d6eb8a5429fc8241b7006495d316bf51955425679975f580a2308",
+    "bert-8/golden.json": "903e306675f766e9835375931b96efebb94097b80275220e3c80a76af04daa9c",
+    "bert-8/model.safetensors": "549cf713305780cd5af92cf397e6be34ada0e3650f967bb9772fa08ba9cedd44",
+    "bert-8/modules.json": "21ddb3037a55ebf4549eb5c1dc44c3f28f10b56ec7f1335c92fd90e5b30d88ac",
+    "bert-8/sentence_bert_config.json": "1a8ca78fce4e36626d2b3eef2336842e8b2a502c963cd01ef271d44da0a741df",
+    "bert-8/tokenizer.json": "36baeedee0eb6001cd65282d64683b33a17e9a9491f80720ab5d9d85eb55e719"
+  }
+}

@@ -6,6 +6,8 @@
 use std::{path::PathBuf, sync::Arc};
 
 use tauri::{command, AppHandle, Manager, State};
+
+pub use super::command_state::{PortOptionsCommandState, WorkflowRunCommandState};
 use tokio::sync::RwLock;
 
 use crate::agent::rag::SharedRagManager;
@@ -199,26 +201,11 @@ pub async fn workflow_create_execution_session(
 pub async fn workflow_run_execution_session(
     request: pantograph_workflow_service::WorkflowExecutionSessionRunRequest,
     app: AppHandle,
-    gateway: State<'_, SharedGateway>,
-    runtime_registry: State<'_, SharedRuntimeRegistry>,
-    extensions: State<'_, SharedExtensions>,
-    rag_manager: State<'_, SharedRagManager>,
-    workflow_service: State<'_, SharedWorkflowService>,
-    diagnostics_store: State<'_, SharedWorkflowDiagnosticsStore>,
+    state: WorkflowRunCommandState<'_>,
     channel: tauri::ipc::Channel<super::events::WorkflowEvent>,
 ) -> Result<pantograph_workflow_service::WorkflowRunResponse, String> {
-    super::headless_workflow_commands::workflow_run_execution_session(
-        request,
-        app,
-        gateway,
-        runtime_registry,
-        extensions,
-        rag_manager,
-        workflow_service,
-        diagnostics_store,
-        channel,
-    )
-    .await
+    super::headless_workflow_commands::workflow_run_execution_session(request, app, state, channel)
+        .await
 }
 
 #[command]
@@ -769,9 +756,7 @@ pub async fn workflow_set_execution_session_keep_alive(
 
 #[command]
 pub async fn query_port_options(
-    registry: State<'_, SharedNodeRegistry>,
-    extensions: State<'_, SharedExtensions>,
-    workflow_service: State<'_, SharedWorkflowService>,
+    state: PortOptionsCommandState<'_>,
     node_type: String,
     port_id: String,
     search: Option<String>,
@@ -780,15 +765,7 @@ pub async fn query_port_options(
     context: Option<node_engine::PortOptionsQueryContext>,
 ) -> Result<node_engine::PortOptionsResult, String> {
     super::workflow_port_query_commands::query_port_options(
-        registry,
-        extensions,
-        workflow_service,
-        node_type,
-        port_id,
-        search,
-        limit,
-        offset,
-        context,
+        state, node_type, port_id, search, limit, offset, context,
     )
     .await
 }

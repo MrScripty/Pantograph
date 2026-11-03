@@ -1,0 +1,49 @@
+{
+  "cleanup_errors": [],
+  "native_owner_absent": true,
+  "registry": {
+    "generated_at_ms": 1792451998075,
+    "reservations": [],
+    "runtimes": [
+      {
+        "active_reservation_ids": [],
+        "backend_keys": [
+          "candle"
+        ],
+        "display_name": "Candle",
+        "last_error": null,
+        "last_transition_at_ms": 1792451998075,
+        "model_resource_residency": {
+          "model_id": "/workspace/m3-authenticated-service-v1/run/shared-resources/models/embedding/qualification/synthetic-bert-8",
+          "requirements": {
+            "claims": [
+              {
+                "bytes": 33554432,
+                "kind": "ram_bytes"
+              },
+              {
+                "bytes": 0,
+                "kind": "vram_bytes"
+              }
+            ]
+          },
+          "runtime_instance_id": "candle-1"
+        },
+        "models": [
+          {
+            "loaded_at_ms": 1792451997575,
+            "model_id": "/workspace/m3-authenticated-service-v1/run/shared-resources/models/embedding/qualification/synthetic-bert-8",
+            "pinned": false,
+            "usage_profile": null
+          }
+        ],
+        "runtime_family": "candle",
+        "runtime_id": "candle",
+        "runtime_instance_id": "candle-1",
+        "runtime_residency_key": "runtime.candle.shared",
+        "status": "stopping"
+      }
+    ]
+  },
+  "stage": "fixed_five_session_cohort"
+}

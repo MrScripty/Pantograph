@@ -28,6 +28,12 @@ pub mod defaults {
     pub const DEVICE: &str = "auto";
 }
 
+/// Defaults owned by the PyTorch text chat/worker boundary.
+pub mod pytorch {
+    /// Existing token budget used when the chat request omits max_tokens.
+    pub const DEFAULT_MAX_NEW_TOKENS: u32 = 512;
+}
+
 /// Device type identifiers and prefixes
 pub mod device_types {
     /// CPU-only mode identifier

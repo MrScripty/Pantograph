@@ -15,6 +15,8 @@ import {
 } from '@pantograph/svelte-graph';
 import { loadOrchestration } from './orchestrationStore';
 import { workflowService } from '../services/workflow/WorkflowService';
+import { getWorkflowBrowserHost } from '../services/workflow/workflowBrowserTransport';
+import { graphSessionStorageKey } from './browserGraphStartup';
 
 // --- Singleton backend ---
 
@@ -34,7 +36,7 @@ export const workflowStores = createWorkflowStores(backend, {
 
 export const sessionStores = createSessionStores(backend, workflowStores, viewStores, {
   defaultGraphId: 'coding-agent',
-  storageKey: 'pantograph.lastGraph',
+  storageKey: graphSessionStorageKey(getWorkflowBrowserHost()),
   onWorkflowLoaded: async (metadata) => {
     if (metadata.orchestrationId) {
       try {

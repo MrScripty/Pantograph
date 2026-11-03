@@ -4,10 +4,12 @@ mod policy;
 mod queue_worker;
 mod readiness_lifecycle;
 mod retry_lifecycle;
+pub(crate) mod service_opportunities;
 mod store;
 mod store_admission;
 mod task_lifecycle;
 pub(crate) mod task_orchestrator;
+pub(crate) mod tool_loop;
 
 pub(crate) use contracts::scheduler_snapshot_workflow_run_id;
 pub use contracts::{

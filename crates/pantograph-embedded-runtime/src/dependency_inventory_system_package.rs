@@ -16,7 +16,8 @@ use pantograph_dependency_planning::{
 };
 
 use crate::dependency_inventory::{
-    DependencyInventoryObservation, DependencyInventoryProvider, DependencyInventoryRequest,
+    DependencyInventoryDiagnosticInput, DependencyInventoryObservation,
+    DependencyInventoryProvider, DependencyInventoryRequest,
 };
 use crate::dependency_inventory_system_package_source::{
     SystemPackageProviderSource, SystemPackageProviderSourceError,
@@ -135,9 +136,12 @@ fn observe_system_package_binding(
             binding.binding_id.clone(),
             DependencyInventoryObservationState::Missing,
             DependencyEnvironmentValidationState::Valid,
-            DependencyPlanningDiagnosticCode::ArtifactMissing,
-            "System-package source facts are missing for the requested package.",
-            "dependency_environment.system_package.source",
+            DependencyInventoryDiagnosticInput {
+                code: DependencyPlanningDiagnosticCode::ArtifactMissing,
+                message: "System-package source facts are missing for the requested package."
+                    .into(),
+                field_path: "dependency_environment.system_package.source",
+            },
             ready_alternatives(&snapshot.rows),
         );
     }
@@ -240,9 +244,11 @@ fn observation_from_source_row(
             binding_id,
             DependencyInventoryObservationState::Unavailable,
             DependencyEnvironmentValidationState::Stale,
-            DependencyPlanningDiagnosticCode::ArtifactStale,
-            "System-package source facts are stale.",
-            "dependency_environment.system_package.source",
+            DependencyInventoryDiagnosticInput {
+                code: DependencyPlanningDiagnosticCode::ArtifactStale,
+                message: "System-package source facts are stale.".into(),
+                field_path: "dependency_environment.system_package.source",
+            },
             source_row.alternatives.clone(),
         ),
         (DependencyProviderSourceState::Ready, _) => row(
@@ -257,9 +263,11 @@ fn observation_from_source_row(
             binding_id,
             DependencyInventoryObservationState::Missing,
             DependencyEnvironmentValidationState::Valid,
-            DependencyPlanningDiagnosticCode::ArtifactMissing,
-            "System-package source facts are missing.",
-            "dependency_environment.system_package.source",
+            DependencyInventoryDiagnosticInput {
+                code: DependencyPlanningDiagnosticCode::ArtifactMissing,
+                message: "System-package source facts are missing.".into(),
+                field_path: "dependency_environment.system_package.source",
+            },
             source_row.alternatives.clone(),
         ),
         (DependencyProviderSourceState::Failed, _) => observation_with_diagnostic(
@@ -267,9 +275,11 @@ fn observation_from_source_row(
             binding_id,
             DependencyInventoryObservationState::Failed,
             DependencyEnvironmentValidationState::Valid,
-            DependencyPlanningDiagnosticCode::RuntimeUnavailable,
-            "System-package source reported a failure.",
-            "dependency_environment.system_package.source",
+            DependencyInventoryDiagnosticInput {
+                code: DependencyPlanningDiagnosticCode::RuntimeUnavailable,
+                message: "System-package source reported a failure.".into(),
+                field_path: "dependency_environment.system_package.source",
+            },
             source_row.alternatives.clone(),
         ),
         (DependencyProviderSourceState::Unsupported, _)
@@ -282,9 +292,11 @@ fn observation_from_source_row(
             binding_id,
             DependencyInventoryObservationState::Unavailable,
             DependencyEnvironmentValidationState::Valid,
-            DependencyPlanningDiagnosticCode::RuntimeUnavailable,
-            "System-package source is not ready for the requested package.",
-            "dependency_environment.system_package.source",
+            DependencyInventoryDiagnosticInput {
+                code: DependencyPlanningDiagnosticCode::RuntimeUnavailable,
+                message: "System-package source is not ready for the requested package.".into(),
+                field_path: "dependency_environment.system_package.source",
+            },
             source_row.alternatives.clone(),
         ),
     }
@@ -380,9 +392,11 @@ fn invalid_row(
         binding_id,
         DependencyInventoryObservationState::Invalid,
         DependencyEnvironmentValidationState::Invalid,
-        DependencyPlanningDiagnosticCode::InvalidRequest,
-        message,
-        field_path,
+        DependencyInventoryDiagnosticInput {
+            code: DependencyPlanningDiagnosticCode::InvalidRequest,
+            message: message.into(),
+            field_path,
+        },
         Vec::new(),
     )
 }
@@ -392,12 +406,15 @@ fn observation_with_diagnostic(
     binding_id: DependencyBindingId,
     state: DependencyInventoryObservationState,
     validation_state: DependencyEnvironmentValidationState,
-    code: DependencyPlanningDiagnosticCode,
-    message: impl Into<String>,
-    field_path: &'static str,
+    diagnostic_input: DependencyInventoryDiagnosticInput,
     alternatives: Vec<pantograph_dependency_planning::DependencyProviderSourceAlternative>,
 ) -> DependencyInventoryObservationRow {
-    let diagnostic = diagnostic(item, code, message.into(), field_path);
+    let DependencyInventoryDiagnosticInput {
+        code,
+        message,
+        field_path,
+    } = diagnostic_input;
+    let diagnostic = diagnostic(item, code, message, field_path);
     row(
         binding_id,
         state,

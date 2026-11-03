@@ -1,0 +1,23 @@
+{
+  "model_ref": {
+    "model_id": "image/stable-diffusion/tiny-sd",
+    "revision": "fixture-revision",
+    "selected_artifact_id": "diffusers-bundle",
+    "selected_artifact_path": "image/stable-diffusion/tiny-sd",
+    "migration_diagnostics": [
+      {
+        "code": "legacy_reference_migrated",
+        "message": "Fixture preserves the producer migration diagnostic",
+        "input": "tiny-sd"
+      }
+    ]
+  },
+  "artifact_kind": "diffusers_bundle",
+  "local_load_path": "/pumas/models/image/stable-diffusion/tiny-sd",
+  "load_path_kind": "directory",
+  "library_root_id": "library-root",
+  "storage_kind": "library_owned",
+  "validation_state": "valid",
+  "content_fingerprint": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "package_facts_contract_version": 3
+}

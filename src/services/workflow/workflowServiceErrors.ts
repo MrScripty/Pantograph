@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { getWorkflowBrowserHost, invokeBrowserWorkflowCommand } from './workflowBrowserTransport.ts';
 
 export const WORKFLOW_BACKEND_ERROR_CODES = [
   'invalid_request',
@@ -147,7 +148,10 @@ export async function invokeWorkflowCommand<T>(
   args?: Record<string, unknown>,
 ): Promise<T> {
   try {
-    return await invoke<T>(command, args);
+    const host = getWorkflowBrowserHost();
+    return host
+      ? await invokeBrowserWorkflowCommand<T>(host, command, args)
+      : await invoke<T>(command, args);
   } catch (error) {
     throw normalizeWorkflowServiceError(error);
   }

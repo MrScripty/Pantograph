@@ -16,6 +16,7 @@ than an in-tree archive, preserves completed plans and superseded notes.
 | Which architecture decisions are accepted? | [ADR index](adr/README.md) |
 | What standards gaps are currently known? | [Current standards audit](audits/2026-09-03-current-standards/README.md) |
 | What work is currently authorized? | [Domain architecture and multimodal workflows](plans/domain-architecture-and-multimodal/plan.md) |
+| Which research informs development, and what does it prove? | [Research sources](research/README.md) |
 
 ## Current Plans
 
@@ -25,6 +26,13 @@ than an in-tree archive, preserves completed plans and superseded notes.
 Plans own current objective, order, scope, and acceptance. Their
 `execution-ledger.md` files own history; `issues.md` owns open dispositions.
 See the [plans index](plans/README.md) for the artifact rules.
+
+## Custom-node integration
+
+[Trusted custom-node execution](custom-nodes.md) describes host admission,
+immutable identity, scheduler invocation and deferred authoring surfaces.
+[Pure tool loops](tool-loops.md) adds explicit host tool grants and bounded
+scheduler-owned orchestration.
 
 ## Documentation Rules
 

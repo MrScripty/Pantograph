@@ -304,6 +304,73 @@ fn node_io_artifact_format_metadata(media_type: &str) -> ArtifactFormatMetadata 
     }
 }
 
+fn io_artifact_payload_kind(kind: ArtifactPayloadKind) -> IoArtifactPayloadKind {
+    match kind {
+        ArtifactPayloadKind::Text => IoArtifactPayloadKind::Text,
+        ArtifactPayloadKind::Image => IoArtifactPayloadKind::Image,
+        ArtifactPayloadKind::Audio => IoArtifactPayloadKind::Audio,
+        ArtifactPayloadKind::Video => IoArtifactPayloadKind::Video,
+        ArtifactPayloadKind::ThreeD => IoArtifactPayloadKind::ThreeD,
+        ArtifactPayloadKind::LargeTable => IoArtifactPayloadKind::LargeTable,
+        ArtifactPayloadKind::GenericBinary => IoArtifactPayloadKind::GenericBinary,
+        ArtifactPayloadKind::Structured => IoArtifactPayloadKind::Structured,
+    }
+}
+
+fn io_artifact_lifecycle_state(state: ArtifactLifecycleState) -> IoArtifactLifecycleState {
+    match state {
+        ArtifactLifecycleState::Declared => IoArtifactLifecycleState::Declared,
+        ArtifactLifecycleState::Writing => IoArtifactLifecycleState::Writing,
+        ArtifactLifecycleState::Streaming => IoArtifactLifecycleState::Streaming,
+        ArtifactLifecycleState::Finalizing => IoArtifactLifecycleState::Finalizing,
+        ArtifactLifecycleState::Retained => IoArtifactLifecycleState::Retained,
+        ArtifactLifecycleState::Failed => IoArtifactLifecycleState::Failed,
+        ArtifactLifecycleState::Expired => IoArtifactLifecycleState::Expired,
+        ArtifactLifecycleState::Deleted => IoArtifactLifecycleState::Deleted,
+    }
+}
+
+fn io_artifact_access_mode(mode: ArtifactAccessMode) -> IoArtifactAccessMode {
+    match mode {
+        ArtifactAccessMode::Read => IoArtifactAccessMode::Read,
+        ArtifactAccessMode::Download => IoArtifactAccessMode::Download,
+        ArtifactAccessMode::Stream => IoArtifactAccessMode::Stream,
+    }
+}
+
+fn io_artifact_format_metadata(format: ArtifactFormatMetadata) -> IoArtifactFormatMetadata {
+    IoArtifactFormatMetadata {
+        format_id: format.format_id,
+        media_type: format.media_type,
+        codec_id: format.codec_id,
+        quality_percent: format.quality_percent,
+        bitrate_kbps: format.bitrate_kbps,
+        crf: format.crf,
+        bit_depth: format.bit_depth,
+        color_profile_id: format.color_profile_id,
+        converter_id: format.converter_id,
+        converter_version: format.converter_version,
+        library_version: format.library_version,
+        conversion_id: format.conversion_id,
+        conversion_status: format.conversion_status.map(|status| match status {
+            ArtifactConversionStatus::Converted => IoArtifactConversionStatus::Converted,
+            ArtifactConversionStatus::PassedThrough => IoArtifactConversionStatus::PassedThrough,
+            ArtifactConversionStatus::Failed => IoArtifactConversionStatus::Failed,
+        }),
+        conversion_command_id: format.conversion_command_id,
+        conversion_dependencies: format
+            .conversion_dependencies
+            .into_iter()
+            .map(|dependency| IoArtifactConversionDependency {
+                dependency_id: dependency.dependency_id,
+                active_version: dependency.active_version,
+                lease_id: dependency.lease_id,
+                lease_holder: dependency.lease_holder,
+            })
+            .collect(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
@@ -392,72 +459,5 @@ mod tests {
                 .body,
             b"hello"
         );
-    }
-}
-
-fn io_artifact_payload_kind(kind: ArtifactPayloadKind) -> IoArtifactPayloadKind {
-    match kind {
-        ArtifactPayloadKind::Text => IoArtifactPayloadKind::Text,
-        ArtifactPayloadKind::Image => IoArtifactPayloadKind::Image,
-        ArtifactPayloadKind::Audio => IoArtifactPayloadKind::Audio,
-        ArtifactPayloadKind::Video => IoArtifactPayloadKind::Video,
-        ArtifactPayloadKind::ThreeD => IoArtifactPayloadKind::ThreeD,
-        ArtifactPayloadKind::LargeTable => IoArtifactPayloadKind::LargeTable,
-        ArtifactPayloadKind::GenericBinary => IoArtifactPayloadKind::GenericBinary,
-        ArtifactPayloadKind::Structured => IoArtifactPayloadKind::Structured,
-    }
-}
-
-fn io_artifact_lifecycle_state(state: ArtifactLifecycleState) -> IoArtifactLifecycleState {
-    match state {
-        ArtifactLifecycleState::Declared => IoArtifactLifecycleState::Declared,
-        ArtifactLifecycleState::Writing => IoArtifactLifecycleState::Writing,
-        ArtifactLifecycleState::Streaming => IoArtifactLifecycleState::Streaming,
-        ArtifactLifecycleState::Finalizing => IoArtifactLifecycleState::Finalizing,
-        ArtifactLifecycleState::Retained => IoArtifactLifecycleState::Retained,
-        ArtifactLifecycleState::Failed => IoArtifactLifecycleState::Failed,
-        ArtifactLifecycleState::Expired => IoArtifactLifecycleState::Expired,
-        ArtifactLifecycleState::Deleted => IoArtifactLifecycleState::Deleted,
-    }
-}
-
-fn io_artifact_access_mode(mode: ArtifactAccessMode) -> IoArtifactAccessMode {
-    match mode {
-        ArtifactAccessMode::Read => IoArtifactAccessMode::Read,
-        ArtifactAccessMode::Download => IoArtifactAccessMode::Download,
-        ArtifactAccessMode::Stream => IoArtifactAccessMode::Stream,
-    }
-}
-
-fn io_artifact_format_metadata(format: ArtifactFormatMetadata) -> IoArtifactFormatMetadata {
-    IoArtifactFormatMetadata {
-        format_id: format.format_id,
-        media_type: format.media_type,
-        codec_id: format.codec_id,
-        quality_percent: format.quality_percent,
-        bitrate_kbps: format.bitrate_kbps,
-        crf: format.crf,
-        bit_depth: format.bit_depth,
-        color_profile_id: format.color_profile_id,
-        converter_id: format.converter_id,
-        converter_version: format.converter_version,
-        library_version: format.library_version,
-        conversion_id: format.conversion_id,
-        conversion_status: format.conversion_status.map(|status| match status {
-            ArtifactConversionStatus::Converted => IoArtifactConversionStatus::Converted,
-            ArtifactConversionStatus::PassedThrough => IoArtifactConversionStatus::PassedThrough,
-            ArtifactConversionStatus::Failed => IoArtifactConversionStatus::Failed,
-        }),
-        conversion_command_id: format.conversion_command_id,
-        conversion_dependencies: format
-            .conversion_dependencies
-            .into_iter()
-            .map(|dependency| IoArtifactConversionDependency {
-                dependency_id: dependency.dependency_id,
-                active_version: dependency.active_version,
-                lease_id: dependency.lease_id,
-                lease_holder: dependency.lease_holder,
-            })
-            .collect(),
     }
 }

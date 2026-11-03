@@ -1,0 +1,14 @@
+{
+  "models": {},
+  "connection_mode": { "type": "None" },
+  "runtime_resource_domains": [
+    {
+      "domain_id": "host.ram",
+      "total_bytes": 100,
+      "bindings": [
+        { "runtime_id": "Torch", "resource_kind": "ram_bytes" },
+        { "runtime_id": "Candle", "resource_kind": "ram_bytes" }
+      ]
+    }
+  ]
+}

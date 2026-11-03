@@ -3,14 +3,37 @@ use std::sync::Arc;
 use pantograph_dependency_planning::PumasModelRef;
 use workflow_nodes::setup::PumasSelectorAccess;
 
-use crate::runtime_host_package_facts::pumas_library_model_id;
-
 #[derive(Clone)]
 pub(crate) struct PumasDispatchPackageFactsSource {
     selector_access: Option<Arc<PumasSelectorAccess>>,
 }
 
 impl PumasDispatchPackageFactsSource {
+    /// Owner-fresh dependency declarations; unsupported selector roles refuse
+    /// this narrow native profile rather than assuming an empty declaration.
+    pub(crate) async fn has_no_declared_dependencies(
+        &self,
+        model_id: &str,
+        platform_key: &str,
+    ) -> Result<bool, String> {
+        let Some(PumasSelectorAccess::Owner(api)) = self.selector_access.as_deref() else {
+            return Ok(false);
+        };
+        let model_id = model_id.strip_prefix("pumas://models/").unwrap_or(model_id);
+        let facts = api
+            .resolve_model_dependency_requirements(model_id, platform_key, Some("candle"))
+            .await
+            .map_err(|error| error.to_string())?;
+        Ok(facts.model_id == model_id
+            && facts.platform_key == platform_key
+            && facts.backend_key.as_deref() == Some("candle")
+            && facts.dependency_contract_version == 1
+            && facts.validation_state
+                == pumas_library::model_library::DependencyValidationState::Resolved
+            && facts.validation_errors.is_empty()
+            && facts.bindings.is_empty())
+    }
+
     pub(crate) fn new(selector_access: Option<Arc<PumasSelectorAccess>>) -> Self {
         Self { selector_access }
     }
@@ -88,7 +111,7 @@ pub(crate) enum PumasDispatchPackageFactsDiagnosticCode {
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum PumasDispatchPackageFactsBridgeOutcome {
     Projected {
-        facts: PumasDispatchPackageFactsProjection,
+        facts: Box<PumasDispatchPackageFactsProjection>,
         diagnostics: Vec<PumasDispatchPackageFactsDiagnostic>,
     },
     Unavailable {
@@ -123,21 +146,15 @@ pub(crate) async fn resolve_pumas_dispatch_package_facts(
         );
     };
 
-    if matches!(
-        selector_access,
-        PumasSelectorAccess::LocalClient(_) | PumasSelectorAccess::ReadOnly(_)
-    ) {
+    if matches!(selector_access, PumasSelectorAccess::ReadOnly(_)) {
         return unavailable(
             PumasDispatchPackageFactsDiagnosticCode::UnsupportedSelectorAccessRole,
-            format!(
-                "Pumas {} selector access does not provide full package facts for runtime dispatch",
-                selector_access.role_name()
-            ),
+            "read-only Pumas access cannot provide owner-fresh full package facts".into(),
         );
     }
 
     let raw_facts = match selector_access
-        .resolve_model_package_facts(pumas_library_model_id(model_ref.model_id.as_str()).as_str())
+        .resolve_model_package_facts(model_ref.model_id.as_str())
         .await
     {
         Ok(facts) => facts,
@@ -181,6 +198,26 @@ fn validate_and_project_dispatch_package_facts(
         ));
         return PumasDispatchPackageFactsBridgeOutcome::Unavailable { diagnostics };
     }
+    if model_ref
+        .model_id
+        .strip_prefix("pumas://models/")
+        .unwrap_or(&model_ref.model_id)
+        != facts
+            .model_ref
+            .model_id
+            .strip_prefix("pumas://models/")
+            .unwrap_or(&facts.model_ref.model_id)
+        || model_ref
+            .revision
+            .as_ref()
+            .is_some_and(|revision| facts.model_ref.revision.as_ref() != Some(revision))
+    {
+        diagnostics.push(diagnostic(
+            PumasDispatchPackageFactsDiagnosticCode::SelectedArtifactMismatch,
+            "Pumas full package facts do not match selected model/revision".into(),
+        ));
+        return PumasDispatchPackageFactsBridgeOutcome::Unavailable { diagnostics };
+    }
     if model_ref.selected_artifact_id.is_some()
         && facts.model_ref.selected_artifact_id != model_ref.selected_artifact_id
     {
@@ -214,7 +251,7 @@ fn validate_and_project_dispatch_package_facts(
     }
 
     PumasDispatchPackageFactsBridgeOutcome::Projected {
-        facts: project_dispatch_package_facts(facts),
+        facts: Box::new(project_dispatch_package_facts(facts)),
         diagnostics,
     }
 }
@@ -298,7 +335,13 @@ fn project_diffusers_facts(
 fn decode_pumas_package_facts(
     facts: pumas_library::models::ResolvedModelPackageFacts,
 ) -> Result<inference::ResolvedModelPackageFacts, serde_json::Error> {
-    let value = serde_json::to_value(facts)?;
+    let mut value = serde_json::to_value(facts)?;
+    if let Some(model_ref) = value
+        .get_mut("model_ref")
+        .and_then(serde_json::Value::as_object_mut)
+    {
+        model_ref.remove("model_ref_contract_version");
+    }
     serde_json::from_value(value)
 }
 
@@ -333,7 +376,7 @@ mod tests {
         write_test_diffusers_bundle(&model_dir);
         write_imported_diffusion_metadata(&model_dir, model_id, &model_dir);
         let api = Arc::new(
-            pumas_library::PumasApi::builder(temp_dir.path())
+            crate::pumas_test_support::builder(temp_dir.path())
                 .with_hf_client(false)
                 .with_process_manager(false)
                 .build()
@@ -401,7 +444,7 @@ mod tests {
         write_test_diffusers_bundle(&model_dir);
         write_imported_diffusion_metadata(&model_dir, model_id, &model_dir);
         let api = Arc::new(
-            pumas_library::PumasApi::builder(temp_dir.path())
+            crate::pumas_test_support::builder(temp_dir.path())
                 .with_hf_client(false)
                 .with_process_manager(false)
                 .build()
@@ -491,7 +534,7 @@ mod tests {
     #[tokio::test]
     async fn read_only_selector_access_does_not_promote_summaries() {
         let temp_dir = create_test_env();
-        let api = pumas_library::PumasApi::builder(temp_dir.path())
+        let api = crate::pumas_test_support::builder(temp_dir.path())
             .with_hf_client(false)
             .with_process_manager(false)
             .build()

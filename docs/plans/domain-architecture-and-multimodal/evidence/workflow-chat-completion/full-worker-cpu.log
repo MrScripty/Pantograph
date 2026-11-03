@@ -1,0 +1,4 @@
+Traceback (most recent call last):
+  File "/workspace/Pantograph-chat-completion/crates/inference/tests/fixtures/tiny_chat_gpt2/qualify.py", line 10, in <module>
+    import worker
+ModuleNotFoundError: No module named 'worker'

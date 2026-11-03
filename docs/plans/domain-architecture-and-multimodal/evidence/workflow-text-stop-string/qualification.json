@@ -1,0 +1,114 @@
+{
+  "branch": "feat/workflow-text-stop-string",
+  "base": {
+    "head": "fae339bdb1eb681a01ea983f1abe0f2f48916349",
+    "tree": "6c8c4bb1cbed0527b58c1048ebf49fa0e243d56b"
+  },
+  "included_main": {
+    "head": "d61b86fc27a7ecd725bd994b29a7cdcfcef9a6a3",
+    "tree": "e714ccb9508797268964a3c42190280d57b7b043"
+  },
+  "changed_crate_file_sha256": {
+    "crates/inference/src/backend/pytorch.rs": "75dd902aa170948f165358604f0c6ad50f2a8d1f22b94b3ce93004bf95cbdf80",
+    "crates/inference/src/backend/pytorch_tests.rs": "4c31c61aee4a4387262233c1fe16b2d82306030d17ae1faa606293516026e339",
+    "crates/inference/src/backend/pytorch_worker_image_python_tests.rs": "4b0d4b5568c3fd4456296ef34086a4d38662341ee104687a954e34d3597373f1",
+    "crates/inference/src/gateway.rs": "a8f3fbcbe4479d507316f4512c7f7850d51e7083b15ce7cec4ed90e067bb1d86",
+    "crates/inference/src/gateway_tests.rs": "8404b8675a7a2caff2b159848edc0d25d7342151c84f617d2b9e08c7bda2922d",
+    "crates/inference/src/types.rs": "103917a47c3959b0b452715f30f86c461c8788224284a11e2da90f15e5e69471",
+    "crates/inference/torch/autoregressive.py": "3d2c148f7afb23c27d25dd1f9721b44900f92bed82d1112140f7c42972da7104",
+    "crates/inference/torch/tests/test_autoregressive.py": "3e2aa16df25e071c51da12d7216cacc1af15eb954e7a1b781db4d3677bbda75e",
+    "crates/inference/torch/tests/test_text_stop_strings.py": "c45f514b9b1356bb548f97e39dbefd96c2f2b592434932417b098f6de9d6674c",
+    "crates/inference/torch/worker.py": "7a58b3bde2ce86c4966ce0ae5318e2109167bd88f3156b8aca5c70b9a91b74b1",
+    "crates/inference/torch/worker_contract.py": "3657895e714fd1c305a5d784529e4266acddecd55d432c0d5d231c7fb93199b2",
+    "crates/pantograph-embedded-runtime/src/inference_interface_facts_provider.rs": "66eeb55bbd0704b0043b2ae948e23424e8570971a2c7808d4d47bb2aa5d72954",
+    "crates/pantograph-embedded-runtime/src/lib_tests/workflow_run_execution_tests.rs": "03ecba8e8d645ba7f69aeda060038c0d8e421510034de51e21b23fbe47fd4be4",
+    "crates/pantograph-embedded-runtime/src/runtime_host_text_execution.rs": "8c66ac037ca00224ac842158c199b128589be48830912c225e9ea421557f2433",
+    "crates/pantograph-inference-interface-contracts/tests/contract.rs": "c1686d16f524223cbab5017f7ac16f917830dd6cbbb43db74678ca64027e31f1",
+    "crates/pantograph-inference-interface-contracts/tests/fixtures/text_generation_system_prompt_inputs.json": "34dc9ab60b52b1923164ffbff223c10e9a67bc7167634a347af9cf56b6cafb94"
+  },
+  "unchanged_cargo_sha256": {
+    "Cargo.toml": "c89d5d390b21f020c3c40586d06a7293f5703c324fed325724e69a4dc7b0987c",
+    "Cargo.lock": "79c6930a69db2dab90592058c092b4b86845dc988682c7f45ce19c9283733fe0"
+  },
+  "versions": {
+    "python": "3.12.3",
+    "torch": "2.14.1+cpu",
+    "transformers": "4.53.3",
+    "rustc": "rustc 1.92.0 (ded5c06cf 2025-12-08)",
+    "cargo": "cargo 1.92.0 (344c4567c 2025-10-21)",
+    "node": "v24.12.0",
+    "npm": "11.6.2",
+    "git": "git version 2.52.0"
+  },
+  "cargo_packages": [
+    "inference",
+    "pantograph-embedded-runtime",
+    "pantograph-inference-interface-contracts",
+    "pantograph-runtime-host-contracts",
+    "pantograph-workflow-service"
+  ],
+  "cargo_features": "inference/backend-pytorch,inference/backend-candle,inference/std-process,pantograph-embedded-runtime/backend-pytorch",
+  "build_environment": {
+    "ORT_SKIP_DOWNLOAD": "1",
+    "HF_HUB_OFFLINE": "1",
+    "TRANSFORMERS_OFFLINE": "1",
+    "Cargo": "--locked --offline",
+    "XDG_CONFIG_HOME": "isolated writable test directory",
+    "LD_LIBRARY_PATH": "existing Python LIBDIR"
+  },
+  "effective_feature_graph": {
+    "inspected_before_build": true,
+    "ort": "load-dynamic",
+    "ort-sys": "disable-linking",
+    "download-binaries": false,
+    "Pumas": "26a84e323cae566a46a8f76bef48fa1010aed48b"
+  },
+  "results": {
+    "python_methods": 73,
+    "new_stop_methods": 14,
+    "frontend": 669,
+    "typescript": "pass",
+    "vite_build": "pass",
+    "strict_five_package_all_target_clippy": "pass",
+    "rust_format": "pass",
+    "python_compile": "pass",
+    "eslint": "pass",
+    "critical_antipatterns": "pass",
+    "accessibility": "pass",
+    "scheduler_boundary": "pass",
+    "onnx_metadata_no_build_download": "pass",
+    "rust_nondoctest": 2457,
+    "inference_doctests": 1,
+    "existing_ignored": 6,
+    "inference_library": 800,
+    "inference_integration": 74,
+    "embedded_runtime": 528,
+    "interface_contract": 27,
+    "runtime_host_contract": 52,
+    "workflow_service": 976,
+    "staged_traceability": "pass"
+  },
+  "review": {
+    "scope": "independent Astra medium source-only design and complete integration review",
+    "legacy_default_finding": "closed after [] refresh/edited None regressions",
+    "remaining_substantive_findings": 0,
+    "usage_metrics": "unavailable"
+  },
+  "limits": [
+    "controlled fixed CPU forwards; no pretrained downloads",
+    "worker entry functions selected through AST; no full worker dependency import",
+    "public graph/host tests use controlled backend output",
+    "canonical single-sequence native and manual AR only",
+    "SDAR/live-KV/masked block diffusion/custom native routes refuse stops",
+    "no production loader, GPU, ONNX or full Tauri/desktop qualification",
+    "parent candidate review/publication and hosted CI remain separate"
+  ],
+  "preserved_refs": {
+    "refs/remotes/origin/main": "d61b86fc27a7ecd725bd994b29a7cdcfcef9a6a3",
+    "refs/heads/fix/pr58-omitted-generation-controls": "d0c9788c5d5ba11ebdfe548f360f1c270e41acab",
+    "refs/heads/fix/text-seed-desktop-precision": "fae339bdb1eb681a01ea983f1abe0f2f48916349",
+    "refs/heads/feat/workflow-text-seed-on-pr58-repair": "6cf549dd04933bd49a15b4527732d6a5db6e3c71",
+    "refs/heads/feat/workflow-text-seed": "1b9fd0bdaf201c92a54165ffab08cc6c6863a640"
+  },
+  "preserved_paused_seed_patch_sha256": "429ec063d7f45f7416f95811c4cb5dc13b4efe2c1d7586c98cea78052e1bc71c"
+}

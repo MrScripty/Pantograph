@@ -356,3 +356,79 @@ fn authored_snapshot_json() -> serde_json::Value {
         ]
     })
 }
+
+#[test]
+fn saved_embedding_snapshot_projects_vector_output_compatible_embedding_and_json_ports() {
+    use pantograph_node_contracts::PortValueType;
+    let registry = NodeRegistry::new();
+    let snapshot: serde_json::Value = serde_json::from_str(include_str!("../../../pantograph-inference-interface-contracts/tests/fixtures/authored_snapshot_embedding.json")).unwrap();
+    let node = GraphNode {
+        id: "embed".into(),
+        node_type: "llm-inference".into(),
+        position: Position::default(),
+        data: json!({"inference_interface_snapshot": snapshot}),
+    };
+    let node: GraphNode = serde_json::from_str(&serde_json::to_string(&node).unwrap()).unwrap();
+    let definition = effective_node_definition(&node, &registry).unwrap();
+    assert_eq!(
+        definition
+            .inputs
+            .iter()
+            .find(|port| port.id == "text")
+            .unwrap()
+            .data_type,
+        PortDataType::String
+    );
+    let embedding = definition
+        .outputs
+        .iter()
+        .find(|port| port.id == "embedding")
+        .unwrap();
+    assert_eq!(embedding.data_type, PortDataType::Embedding);
+    assert!(embedding.required);
+    for id in ["metadata", "usage"] {
+        assert_eq!(
+            definition
+                .outputs
+                .iter()
+                .find(|port| port.id == id)
+                .unwrap()
+                .data_type,
+            PortDataType::Json
+        );
+    }
+    assert!(
+        definition
+            .outputs
+            .iter()
+            .find(|port| port.id == "metadata")
+            .unwrap()
+            .required
+    );
+    assert!(
+        !definition
+            .outputs
+            .iter()
+            .find(|port| port.id == "usage")
+            .unwrap()
+            .required
+    );
+    let effective = effective_node_contract(&node, &registry).unwrap();
+    let output_type = effective
+        .outputs
+        .iter()
+        .find(|port| port.base.id.as_str() == "embedding")
+        .unwrap()
+        .base
+        .value_type;
+    assert_eq!(output_type, PortValueType::Embedding);
+    let vector_output = registry.get_contract("vector-output").unwrap();
+    let target_type = vector_output
+        .inputs
+        .iter()
+        .find(|port| port.id.as_str() == "vector")
+        .unwrap()
+        .value_type;
+    assert!(output_type.is_compatible_with(target_type));
+    assert!(!PortValueType::Tensor.is_compatible_with(target_type));
+}

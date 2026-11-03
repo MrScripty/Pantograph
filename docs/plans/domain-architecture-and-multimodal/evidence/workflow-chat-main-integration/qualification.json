@@ -1,0 +1,70 @@
+{
+  "checks": {
+    "clippy": 0,
+    "main-seed-baseline": 101,
+    "source-whitespace": 0,
+    "affected-rust-tests-qualified": 0,
+    "tooling-tests": 0,
+    "scheduler-workflow-tests": 101,
+    "scheduler-only": 0,
+    "typecheck": 0,
+    "frontend-tests": 0,
+    "format": 0,
+    "source-gates": 0,
+    "expanded-rust-tests-qualified": 101,
+    "python-tests": 0,
+    "rust-tests": 101,
+    "lint": 0,
+    "historical-evidence-whitespace": 2,
+    "native-chat-graph": 0,
+    "python-dependencies": 0,
+    "worker-cpu": 0,
+    "npm-dependencies": 0,
+    "frontend-build": 0
+  },
+  "rust_results": {
+    "affected-rust-tests-qualified": {
+      "passed_including_doctests": 2487,
+      "failed": 0,
+      "ignored_including_doctests": 7,
+      "cargo_exit": 0
+    },
+    "expanded-rust-tests-qualified": {
+      "passed_including_doctests": 3170,
+      "failed": 1,
+      "ignored_including_doctests": 23,
+      "cargo_exit": 101
+    },
+    "native-chat-graph": {
+      "passed_including_doctests": 1,
+      "failed": 0,
+      "ignored_including_doctests": 0,
+      "cargo_exit": 0
+    },
+    "main-seed-baseline": {
+      "passed_including_doctests": 0,
+      "failed": 1,
+      "ignored_including_doctests": 0,
+      "cargo_exit": 101
+    }
+  },
+  "frontend_tests": 670,
+  "python_worker_tests": 78,
+  "tooling_tests": 55,
+  "actual_worker_cpu_requests": 32,
+  "actual_public_cpu_chat_graph_runs": 28,
+  "actual_sequential_native_envelope_members": 8,
+  "qualified_affected_rust_tests": 2486,
+  "qualified_affected_doctests": 1,
+  "scope": "Single prompt plus optional system string; untrained 5392-parameter GPT-2 CPU fixtures, explicit chat template, controlled package/target/readiness/dispatch/graph discovery and actual selected loader/gateway/full worker/CPU forwards. Precancellation only; envelopes sequential.",
+  "excluded_claims": [
+    "production or pretrained quality",
+    "GPU",
+    "usage accuracy",
+    "post-start cancellation",
+    "native desktop validation",
+    "live Pumas discovery",
+    "arbitrary architectures/tokenizers or template fallback"
+  ],
+  "remaining_gate": "Expanded node-engine seed mock fixture fails on both combined tree and exact current main; separate native desktop gate and parent-owned independent/external review remain open."
+}

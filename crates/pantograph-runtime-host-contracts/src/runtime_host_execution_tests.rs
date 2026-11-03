@@ -46,6 +46,105 @@ fn runtime_host_execution_request_fixture_decodes_and_validates() {
 }
 
 #[test]
+fn finite_number_inputs_round_trip_without_changing_existing_integer_variants() {
+    use super::{RuntimeHostExecutionInput, RuntimeHostExecutionInputValue};
+    let mut request: RuntimeHostExecutionRequest = serde_json::from_str(include_str!(
+        "../tests/fixtures/runtime_host_execution_request_dispatch_selected.json"
+    ))
+    .unwrap();
+    for value in [0.0, 0.7, -0.5, f64::MAX, f64::MIN_POSITIVE] {
+        request.materialized_inputs.push(RuntimeHostExecutionInput {
+            port_id: "temperature".into(),
+            value: RuntimeHostExecutionInputValue::F64(
+                serde_json::Number::from_f64(value).unwrap(),
+            ),
+        });
+    }
+    request.materialized_inputs.push(RuntimeHostExecutionInput {
+        port_id: "integer".into(),
+        value: RuntimeHostExecutionInputValue::U64(u64::MAX),
+    });
+    request.validate().unwrap();
+    let encoded = serde_json::to_string(&request).unwrap();
+    let decoded: RuntimeHostExecutionRequest = serde_json::from_str(&encoded).unwrap();
+    assert_eq!(decoded, request);
+    assert_eq!(
+        decoded.materialized_inputs.last().unwrap().value,
+        RuntimeHostExecutionInputValue::U64(u64::MAX)
+    );
+    assert_eq!(
+        serde_json::to_value(RuntimeHostExecutionInputValue::I64(-1)).unwrap(),
+        json!({"value_type":"i64","value":-1})
+    );
+}
+
+#[test]
+fn numeric_input_f32_projection_checks_actual_precision_and_range_boundary() {
+    use super::RuntimeHostExecutionInputValue;
+    let number =
+        |value| RuntimeHostExecutionInputValue::F64(serde_json::Number::from_f64(value).unwrap());
+    for (value, expected) in [
+        (number(0.0), 0.0),
+        (number(0.7), 0.7),
+        (number(0.001), 0.001),
+        (number(-0.5), -0.5),
+        (number(f64::from(f32::MAX)), f32::MAX),
+        (number(f64::from(f32::MIN_POSITIVE)), f32::MIN_POSITIVE),
+        (number(f64::from(f32::from_bits(1))), f32::from_bits(1)),
+        (RuntimeHostExecutionInputValue::I64(0), 0.0),
+        (RuntimeHostExecutionInputValue::U64(2), 2.0),
+    ] {
+        assert_eq!(value.try_as_f32().unwrap(), expected);
+        let wire = serde_json::to_string(&value).unwrap();
+        assert_eq!(
+            serde_json::from_str::<RuntimeHostExecutionInputValue>(&wire)
+                .unwrap()
+                .try_as_f32()
+                .unwrap(),
+            expected
+        );
+    }
+    for value in [
+        number(f64::MAX),
+        number(-f64::MAX),
+        number(1e-100),
+        number(0.7000000000000001),
+        RuntimeHostExecutionInputValue::U64(16_777_217),
+        RuntimeHostExecutionInputValue::U64((1_u64 << 53) + 1),
+        RuntimeHostExecutionInputValue::U64(u64::MAX),
+        RuntimeHostExecutionInputValue::Bool(true),
+        RuntimeHostExecutionInputValue::String("0.7".into()),
+    ] {
+        assert!(value.try_as_f32().is_err(), "{value:?}");
+    }
+}
+
+#[test]
+fn finite_number_input_rejects_nonfinite_and_wrong_wire_types() {
+    use super::RuntimeHostExecutionInputValue;
+    for value in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+        assert!(serde_json::Number::from_f64(value).is_none());
+    }
+    for raw in [
+        "NaN",
+        "Infinity",
+        "-Infinity",
+        "1e400",
+        "null",
+        "true",
+        "\"0.7\"",
+        "[]",
+        "{}",
+    ] {
+        let json = format!(r#"{{"value_type":"f64","value":{raw}}}"#);
+        assert!(
+            serde_json::from_str::<RuntimeHostExecutionInputValue>(&json).is_err(),
+            "{raw}"
+        );
+    }
+}
+
+#[test]
 fn runtime_host_execution_request_requires_cancellation_context() {
     let mut value: serde_json::Value = serde_json::from_str(include_str!(
         "../tests/fixtures/runtime_host_execution_request_dispatch_selected.json"
@@ -198,6 +297,28 @@ fn runtime_host_completed_response_accepts_typed_path_free_outputs() {
     );
     assert_eq!(validated.as_ref().outputs.len(), 2);
     assert!(validated.as_ref().terminal_metadata.is_some());
+}
+
+#[test]
+fn structured_vector_round_trips_and_obeys_its_own_byte_limit() {
+    use super::{RuntimeHostExecutionOutput, RuntimeHostExecutionOutputValue};
+    let mut response = completed_runtime_host_response_fixture();
+    response.outputs = vec![RuntimeHostExecutionOutput {
+        port_id: "embedding".to_string(),
+        value: RuntimeHostExecutionOutputValue::Json(json!([0.25, -0.5, 0.75])),
+    }];
+    let encoded = serde_json::to_vec(&response).unwrap();
+    let decoded: RuntimeHostExecutionResponse = serde_json::from_slice(&encoded).unwrap();
+    assert_eq!(decoded, response);
+    decoded.validate().unwrap();
+    response.outputs[0].value = RuntimeHostExecutionOutputValue::Json(json!("x".repeat(65535)));
+    assert_eq!(
+        response.validate().unwrap_err(),
+        RuntimeHostExecutionContractError::FieldTooLong {
+            field: "output.json",
+            max_len: 65536,
+        }
+    );
 }
 
 #[test]
@@ -558,4 +679,44 @@ fn runtime_host_batch_diagnostic(
         message: message.to_string(),
         hint: None,
     }
+}
+
+#[test]
+fn structured_inputs_round_trip_and_enforce_serialized_size_without_numeric_coercion() {
+    use super::{
+        RuntimeHostExecutionInput, RuntimeHostExecutionInputValue,
+        RUNTIME_HOST_STRUCTURED_INPUT_MAX_BYTES,
+    };
+    let mut request: RuntimeHostExecutionRequest = serde_json::from_str(include_str!(
+        "../tests/fixtures/runtime_host_execution_request_dispatch_selected.json"
+    ))
+    .unwrap();
+    let input = RuntimeHostExecutionInputValue::Json(json!(["a",{"text":"b"}]));
+    assert!(input.try_as_f32().is_err());
+    request.materialized_inputs.push(RuntimeHostExecutionInput {
+        port_id: "documents".into(),
+        value: input,
+    });
+    request.validate().unwrap();
+    assert_eq!(
+        serde_json::from_str::<RuntimeHostExecutionRequest>(
+            &serde_json::to_string(&request).unwrap()
+        )
+        .unwrap(),
+        request
+    );
+    request.materialized_inputs.last_mut().unwrap().value = RuntimeHostExecutionInputValue::Json(
+        json!("x".repeat(RUNTIME_HOST_STRUCTURED_INPUT_MAX_BYTES - 2)),
+    );
+    request.validate().unwrap();
+    request.materialized_inputs.last_mut().unwrap().value = RuntimeHostExecutionInputValue::Json(
+        json!("x".repeat(RUNTIME_HOST_STRUCTURED_INPUT_MAX_BYTES - 1)),
+    );
+    assert!(matches!(
+        request.validate(),
+        Err(RuntimeHostExecutionContractError::FieldTooLong {
+            field: "input.json",
+            ..
+        })
+    ));
 }

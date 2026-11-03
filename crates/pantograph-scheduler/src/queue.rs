@@ -274,7 +274,7 @@ impl SchedulerNonRuntimeTaskIntent {
 #[non_exhaustive]
 pub enum SchedulerTaskExecutionIntent {
     Runtime {
-        task_intent: SchedulableTaskIntent,
+        task_intent: Box<SchedulableTaskIntent>,
     },
     SourceInput {
         task_intent: SchedulerSourceInputTaskIntent,
@@ -285,6 +285,14 @@ pub enum SchedulerTaskExecutionIntent {
 }
 
 impl SchedulerTaskExecutionIntent {
+    /// Wraps a runtime intent without changing its validation or wire representation.
+    #[must_use]
+    pub fn runtime(task_intent: SchedulableTaskIntent) -> Self {
+        Self::Runtime {
+            task_intent: Box::new(task_intent),
+        }
+    }
+
     #[must_use]
     pub fn runtime_task_intent(&self) -> Option<&SchedulableTaskIntent> {
         match self {
@@ -576,12 +584,13 @@ pub fn apply_scheduler_task_state_transition(
 #[must_use]
 pub struct ValidatedSchedulerTaskStateRecord(SchedulerTaskStateRecord);
 
-impl ValidatedSchedulerTaskStateRecord {
-    #[must_use]
-    pub fn as_ref(&self) -> &SchedulerTaskStateRecord {
+impl AsRef<SchedulerTaskStateRecord> for ValidatedSchedulerTaskStateRecord {
+    fn as_ref(&self) -> &SchedulerTaskStateRecord {
         &self.0
     }
+}
 
+impl ValidatedSchedulerTaskStateRecord {
     #[must_use]
     pub fn into_inner(self) -> SchedulerTaskStateRecord {
         self.0
@@ -601,12 +610,13 @@ impl TryFrom<SchedulerTaskStateRecord> for ValidatedSchedulerTaskStateRecord {
 #[must_use]
 pub struct ValidatedSchedulerTaskStateTransition(SchedulerTaskStateTransition);
 
-impl ValidatedSchedulerTaskStateTransition {
-    #[must_use]
-    pub fn as_ref(&self) -> &SchedulerTaskStateTransition {
+impl AsRef<SchedulerTaskStateTransition> for ValidatedSchedulerTaskStateTransition {
+    fn as_ref(&self) -> &SchedulerTaskStateTransition {
         &self.0
     }
+}
 
+impl ValidatedSchedulerTaskStateTransition {
     #[must_use]
     pub fn into_inner(self) -> SchedulerTaskStateTransition {
         self.0

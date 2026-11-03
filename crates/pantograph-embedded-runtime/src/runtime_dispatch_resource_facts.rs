@@ -1,6 +1,7 @@
 use pantograph_dependency_planning::{DeviceIntentId, RuntimeIntentId};
 use pantograph_runtime_registry::{
-    RuntimeAdmissionResourceKind, RuntimeRegistryError, RuntimeReservationRequest,
+    RuntimeAdmissionResourceKind, RuntimeRegistryError, RuntimeReservationAdmissionObservation,
+    RuntimeReservationCustody, RuntimeReservationPublicationError, RuntimeReservationRequest,
     RuntimeReservationRequirements, RuntimeRetentionHint, SharedRuntimeRegistry,
 };
 use pantograph_scheduler::{
@@ -15,10 +16,73 @@ pub(crate) struct RuntimeDispatchResourceFactsSource {
 }
 
 impl RuntimeDispatchResourceFactsSource {
+    pub(crate) fn reserve_provisional<T>(
+        &self,
+        request: RuntimeDispatchResourceFactsRequest,
+        expected: &RuntimeReservationAdmissionObservation,
+        validate: impl FnOnce(
+            RuntimeDispatchResourceFacts,
+        ) -> Result<
+            T,
+            pantograph_workflow_service::workflow::WorkflowRuntimeDispatchCandidateProviderError,
+        >,
+    ) -> Result<
+        RuntimeDispatchPublicationOutcome<T>,
+        pantograph_workflow_service::workflow::WorkflowRuntimeDispatchCandidateProviderError,
+    > {
+        let diagnostics = validate_request(&request);
+        if !diagnostics.is_empty() {
+            return Ok(RuntimeDispatchPublicationOutcome::Unavailable { diagnostics });
+        }
+        match self.registry.acquire_reservation_provisional(
+            runtime_reservation_request(&request),
+            expected,
+            |lease| {
+                validate(RuntimeDispatchResourceFacts {
+                    #[cfg(test)]
+                    lease_id: lease.reservation_id,
+                    reservations: scheduler_reservations(&request, lease.reservation_id),
+                    fit_assessment: fit_assessment(
+                        &request,
+                        SchedulerResourceFitState::Fits,
+                        Vec::new(),
+                    ),
+                })
+            },
+        ) {
+            Ok((value, custody)) => {
+                Ok(RuntimeDispatchPublicationOutcome::Reserved { value, custody })
+            }
+            Err(RuntimeReservationPublicationError::Validation(error)) => Err(error),
+            Err(RuntimeReservationPublicationError::Registry(error)) => {
+                Ok(RuntimeDispatchPublicationOutcome::Unavailable {
+                    diagnostics: vec![diagnostic_from_registry_error(&request, error)],
+                })
+            }
+        }
+    }
+
     pub(crate) fn new(registry: SharedRuntimeRegistry) -> Self {
         Self { registry }
     }
 
+    /// Observe an alternative without allocating or updating a lease.
+    pub(crate) fn evaluate(
+        &self,
+        request: &RuntimeDispatchResourceFactsRequest,
+    ) -> Result<RuntimeReservationAdmissionObservation, Vec<RuntimeDispatchResourceFactsDiagnostic>>
+    {
+        let diagnostics = validate_request(request);
+        if !diagnostics.is_empty() {
+            return Err(diagnostics);
+        }
+        self.registry
+            .evaluate_reservation(runtime_reservation_request(request))
+            .map(|evaluation| evaluation.observation().clone())
+            .map_err(|error| vec![diagnostic_from_registry_error(request, error)])
+    }
+
+    #[cfg(test)]
     pub(crate) fn reserve(
         &self,
         request: RuntimeDispatchResourceFactsRequest,
@@ -40,7 +104,8 @@ impl RuntimeDispatchResourceFactsSource {
 
         match self
             .registry
-            .acquire_reservation(runtime_reservation_request(&request))
+            .evaluate_reservation(runtime_reservation_request(&request))
+            .and_then(|evaluation| evaluation.commit())
         {
             Ok(lease) => RuntimeDispatchResourceFactsOutcome::Reserved {
                 facts: RuntimeDispatchResourceFacts {
@@ -67,15 +132,16 @@ impl RuntimeDispatchResourceFactsSource {
             }
         }
     }
+}
 
-    pub(crate) fn release_if_present(
-        &self,
-        reservation_id: u64,
-    ) -> Result<(), RuntimeRegistryError> {
-        self.registry
-            .release_reservation_if_present(reservation_id)
-            .map(|_| ())
-    }
+pub(crate) enum RuntimeDispatchPublicationOutcome<T> {
+    Reserved {
+        value: T,
+        custody: RuntimeReservationCustody,
+    },
+    Unavailable {
+        diagnostics: Vec<RuntimeDispatchResourceFactsDiagnostic>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -94,6 +160,7 @@ pub(crate) struct RuntimeDispatchResourceFactsRequest {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct RuntimeDispatchResourceFacts {
+    #[cfg(test)]
     pub lease_id: u64,
     pub reservations: Vec<SchedulerResourceReservation>,
     pub fit_assessment: SchedulerResourceFitAssessment,
@@ -114,6 +181,7 @@ pub(crate) enum RuntimeDispatchResourceFactsDiagnosticCode {
     RuntimeRegistryRejected,
 }
 
+#[cfg(test)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum RuntimeDispatchResourceFactsOutcome {
     Reserved {
@@ -126,6 +194,7 @@ pub(crate) enum RuntimeDispatchResourceFactsOutcome {
     },
 }
 
+#[cfg(test)]
 impl RuntimeDispatchResourceFactsOutcome {
     pub(crate) fn diagnostics(&self) -> &[RuntimeDispatchResourceFactsDiagnostic] {
         match self {
@@ -339,13 +408,13 @@ mod tests {
     }
 
     #[test]
-    fn source_reuses_reservation_owner_for_same_runtime() {
+    fn source_preserves_owner_with_fresh_reservation_incarnation_for_same_runtime() {
         let registry = Arc::new(pantograph_runtime_registry::RuntimeRegistry::new());
         registry.register_runtime(
             pantograph_runtime_registry::RuntimeRegistration::new("pytorch", "PyTorch")
                 .with_backend_keys(vec!["pytorch".to_string()]),
         );
-        let source = RuntimeDispatchResourceFactsSource::new(registry);
+        let source = RuntimeDispatchResourceFactsSource::new(registry.clone());
         let request = resource_request(vec![RuntimeReservationResourceClaim::ram_bytes(mib())]);
 
         let first = source.reserve(request.clone());
@@ -357,7 +426,13 @@ mod tests {
         let RuntimeDispatchResourceFactsOutcome::Reserved { facts: second, .. } = second else {
             panic!("second reservation should succeed");
         };
-        assert_eq!(first.lease_id, second.lease_id);
+        assert_ne!(first.lease_id, second.lease_id);
+        assert!(registry.reservation_lease(first.lease_id).is_none());
+        assert_eq!(registry.snapshot().reservations.len(), 1);
+        assert_eq!(
+            registry.snapshot().reservations[0].reservation_id,
+            second.lease_id
+        );
     }
 
     #[test]

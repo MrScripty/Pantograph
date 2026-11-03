@@ -1,5 +1,6 @@
 import type { Edge } from '@xyflow/svelte';
 import { applyWorkflowExecutionEvent } from '../../packages/svelte-graph/src/stores/workflowExecutionEvents.ts';
+import { WorkflowServiceError } from '../services/workflow/workflowServiceErrors.ts';
 
 import {
   buildAudioRuntimeDataFromCompletedOutputs,
@@ -9,6 +10,7 @@ import type {
   WorkflowEvent,
   WorkflowGraphValidationLifecycleEvent,
   WorkflowGraphValidationSubmitGate,
+  WorkflowGraph,
   WorkflowPortBinding,
   WorkflowRunResponse,
 } from '../services/workflow/types.ts';
@@ -67,6 +69,56 @@ export interface WorkflowValidationLifecycleRefreshInput extends WorkflowValidat
 }
 
 type WorkflowSubmitSuccessWorkbenchPage = 'scheduler' | 'io_inspector';
+
+export class UnsupportedWorkflowInputError extends WorkflowServiceError {
+  constructor(nodeId: string) {
+    super('capability_violation', `Image input '${nodeId}' is unsupported by scheduler submission.`, {
+      details: { status: 'unsupported', node_type: 'image-input', node_id: nodeId },
+    });
+    this.name = 'UnsupportedWorkflowInputError';
+  }
+}
+
+/** Capture authored text sources at the request boundary, before async submission. */
+export function workflowSubmitTextInputs(graph: WorkflowGraph): WorkflowPortBinding[] {
+  return graph.nodes.flatMap((node) => {
+    if (node.node_type !== 'text-input'
+      || typeof node.data?.text !== 'string'
+      || graph.edges.some((edge) => edge.target === node.id)) {
+      return [];
+    }
+    return [{ node_id: node.id, port_id: 'text', value: node.data.text }];
+  });
+}
+
+/** Materialize only the scheduler's supported authored source types. */
+export function workflowSubmitInputs(graph: WorkflowGraph): WorkflowPortBinding[] {
+  const imageInput = graph.nodes.find(node => node.node_type === 'image-input');
+  if (imageInput) {
+    throw new UnsupportedWorkflowInputError(imageInput.id);
+  }
+  const inputs = workflowSubmitTextInputs(graph);
+  for (const node of graph.nodes) {
+    if (graph.edges.some(edge => edge.target === node.id)) continue;
+    const value = node.data?.value;
+    if (value === undefined || value === null) continue;
+    if (node.node_type === 'number-input') {
+      // Number sources are integer-only in the scheduler. Never coerce authored
+      // text or serialize a rounded integer across the JavaScript boundary.
+      if (typeof value !== 'number' || !Number.isSafeInteger(value)) {
+        throw new Error(`Number input '${node.id}' requires a safe integer for scheduler submission.`);
+      }
+    } else if (node.node_type === 'boolean-input') {
+      if (typeof value !== 'boolean') {
+        throw new Error(`Boolean input '${node.id}' requires a boolean for scheduler submission.`);
+      }
+    } else if (node.node_type !== 'selection-input') {
+      continue;
+    }
+    inputs.push({ node_id: node.id, port_id: 'value', value: structuredClone(value) });
+  }
+  return inputs;
+}
 
 export function isNumericWorkflowSemanticVersion(version: string): boolean {
   const parts = version.split('.');

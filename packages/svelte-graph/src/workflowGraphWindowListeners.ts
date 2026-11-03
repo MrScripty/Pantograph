@@ -44,3 +44,37 @@ export function registerWorkflowGraphWindowListeners(
     target.removeEventListener('blur', onPaletteDragEnd);
   };
 }
+
+export interface WorkflowGraphMountOptions<Definitions> {
+  loadNodeDefinitions(): Promise<Definitions>;
+  applyNodeDefinitions(definitions: Definitions): void;
+  onFailure(error: unknown): void;
+}
+
+/** Register synchronously; the same mount owns the deferred definitions read. */
+export function createWorkflowGraphMount<Definitions>(
+  target: WorkflowGraphWindowListenerTarget,
+  handlers: WorkflowGraphWindowListenerHandlers,
+  options: WorkflowGraphMountOptions<Definitions>,
+): { stop(): void; ready: Promise<void> } {
+  let active = true;
+  const removeListeners = registerWorkflowGraphWindowListeners(target, handlers);
+  const ready = Promise.resolve().then(async () => {
+    if (!active) return;
+    try {
+      const definitions = await options.loadNodeDefinitions();
+      if (active) options.applyNodeDefinitions(definitions);
+    } catch (error) {
+      if (active) options.onFailure(error);
+    }
+  });
+
+  return {
+    ready,
+    stop() {
+      if (!active) return;
+      active = false;
+      removeListeners();
+    },
+  };
+}

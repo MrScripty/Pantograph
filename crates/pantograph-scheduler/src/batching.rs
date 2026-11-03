@@ -14,6 +14,20 @@ use crate::intent::{
 };
 use crate::resource_types::SchedulerModelResidencyState;
 
+mod bounded_compatibility;
+mod bounded_grouping;
+
+pub use bounded_compatibility::{
+    evaluate_scheduler_bounded_compatibility, SchedulerGroupingCompatibility,
+};
+
+pub use bounded_grouping::{
+    evaluate_scheduler_bounded_grouping, SchedulerBoundedGroupingDisposition,
+    SchedulerBoundedGroupingIncompatibility, SchedulerBoundedGroupingProposal,
+    SchedulerBoundedGroupingRefusal, SCHEDULER_BOUNDED_GROUPING_MAX_MEMBERS,
+    SCHEDULER_BOUNDED_GROUPING_MAX_RAW_STRING_BYTES,
+};
+
 const MAX_TEXT_LEN: usize = 1024;
 const MAX_INPUT_SHAPE_SIGNATURE_LEN: usize = 128;
 const MAX_TIME_MS: u64 = i64::MAX as u64;
@@ -180,12 +194,13 @@ impl SchedulerBatchPolicyDecision {
 #[must_use]
 pub struct ValidatedSchedulerBatchPolicyDecision(SchedulerBatchPolicyDecision);
 
-impl ValidatedSchedulerBatchPolicyDecision {
-    #[must_use]
-    pub fn as_ref(&self) -> &SchedulerBatchPolicyDecision {
+impl AsRef<SchedulerBatchPolicyDecision> for ValidatedSchedulerBatchPolicyDecision {
+    fn as_ref(&self) -> &SchedulerBatchPolicyDecision {
         &self.0
     }
+}
 
+impl ValidatedSchedulerBatchPolicyDecision {
     #[must_use]
     pub fn into_inner(self) -> SchedulerBatchPolicyDecision {
         self.0
@@ -232,32 +247,52 @@ fn validate_compatible_candidates(
         return Ok(());
     };
     for candidate in &candidates[1..] {
-        if candidate.task_family != first.task_family {
-            return incompatible("task_family", "batch candidates must share task family");
-        }
-        if candidate.selected_model_ref != first.selected_model_ref {
-            return incompatible(
-                "selected_model_ref",
-                "batch candidates must share model ref",
-            );
-        }
-        if candidate.selected_runtime_id != first.selected_runtime_id {
-            return incompatible("selected_runtime_id", "batch candidates must share runtime");
-        }
-        if candidate.selected_device_ids != first.selected_device_ids {
-            return incompatible(
-                "selected_device_ids",
-                "batch candidates must share device set",
-            );
-        }
-        if candidate.input_shape_signature != first.input_shape_signature {
-            return incompatible(
-                "input_shape_signature",
-                "batch candidates must share input shape",
-            );
+        if let Some(reason) = batch_candidate_incompatibility(first, candidate) {
+            return match reason {
+                SchedulerBoundedGroupingIncompatibility::TaskFamily => {
+                    incompatible("task_family", "batch candidates must share task family")
+                }
+                SchedulerBoundedGroupingIncompatibility::ModelReference => incompatible(
+                    "selected_model_ref",
+                    "batch candidates must share model ref",
+                ),
+                SchedulerBoundedGroupingIncompatibility::Runtime => {
+                    incompatible("selected_runtime_id", "batch candidates must share runtime")
+                }
+                SchedulerBoundedGroupingIncompatibility::DeviceSet => incompatible(
+                    "selected_device_ids",
+                    "batch candidates must share device set",
+                ),
+                SchedulerBoundedGroupingIncompatibility::InputShape => incompatible(
+                    "input_shape_signature",
+                    "batch candidates must share input shape",
+                ),
+            };
         }
     }
     Ok(())
+}
+
+fn batch_candidate_incompatibility(
+    first: &SchedulerBatchCandidate,
+    candidate: &SchedulerBatchCandidate,
+) -> Option<SchedulerBoundedGroupingIncompatibility> {
+    bounded_compatibility::compatibility_incompatibility(
+        SchedulerGroupingCompatibility {
+            task_family: &first.task_family,
+            model_ref: &first.selected_model_ref,
+            runtime_id: &first.selected_runtime_id,
+            device_ids: &first.selected_device_ids,
+            input_shape_signature: &first.input_shape_signature,
+        },
+        SchedulerGroupingCompatibility {
+            task_family: &candidate.task_family,
+            model_ref: &candidate.selected_model_ref,
+            runtime_id: &candidate.selected_runtime_id,
+            device_ids: &candidate.selected_device_ids,
+            input_shape_signature: &candidate.input_shape_signature,
+        },
+    )
 }
 
 fn validate_memory_total(

@@ -89,12 +89,13 @@ pub enum WorkflowSessionRuntimeLoadProofDiagnosticPhase {
 #[must_use]
 pub struct ValidatedWorkflowSessionRuntimeLoadProof(WorkflowSessionRuntimeLoadProof);
 
-impl ValidatedWorkflowSessionRuntimeLoadProof {
-    #[must_use]
-    pub fn as_ref(&self) -> &WorkflowSessionRuntimeLoadProof {
+impl AsRef<WorkflowSessionRuntimeLoadProof> for ValidatedWorkflowSessionRuntimeLoadProof {
+    fn as_ref(&self) -> &WorkflowSessionRuntimeLoadProof {
         &self.0
     }
+}
 
+impl ValidatedWorkflowSessionRuntimeLoadProof {
     #[must_use]
     pub fn into_inner(self) -> WorkflowSessionRuntimeLoadProof {
         self.0

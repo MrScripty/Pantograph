@@ -54,7 +54,7 @@ pub(crate) fn workflow_scheduler_task_run_summary(
             .iter()
             .find(|record| record.task_id.as_str() == task_id)
         else {
-            return Err(WorkflowSchedulerTaskRunSummaryError::MissingTaskState {
+            return Err(WorkflowSchedulerTaskRunSummaryError::Missing {
                 task_id: task_id.to_string(),
             });
         };
@@ -62,7 +62,7 @@ pub(crate) fn workflow_scheduler_task_run_summary(
             || record.workflow_run_id.as_str() != task.workflow_run_id.as_str()
             || record.node_id.as_str() != task.node_id.as_str()
         {
-            return Err(WorkflowSchedulerTaskRunSummaryError::MismatchedTaskState {
+            return Err(WorkflowSchedulerTaskRunSummaryError::Mismatched {
                 task_id: task_id.to_string(),
             });
         }
@@ -95,7 +95,7 @@ pub(crate) fn workflow_scheduler_task_run_summary(
     }
 
     if let Some(extra_task_id) = record_task_ids.into_iter().next() {
-        return Err(WorkflowSchedulerTaskRunSummaryError::UnexpectedTaskState {
+        return Err(WorkflowSchedulerTaskRunSummaryError::Unexpected {
             task_id: extra_task_id.to_string(),
         });
     }
@@ -107,11 +107,11 @@ pub(crate) fn workflow_scheduler_task_run_summary(
 #[non_exhaustive]
 pub(crate) enum WorkflowSchedulerTaskRunSummaryError {
     #[error("scheduler task '{task_id}' has no active task-state record")]
-    MissingTaskState { task_id: String },
+    Missing { task_id: String },
     #[error("active task-state record for scheduler task '{task_id}' has mismatched correlation")]
-    MismatchedTaskState { task_id: String },
+    Mismatched { task_id: String },
     #[error("active task-state record exists for unknown scheduler task '{task_id}'")]
-    UnexpectedTaskState { task_id: String },
+    Unexpected { task_id: String },
 }
 
 #[cfg(test)]
@@ -269,10 +269,36 @@ mod tests {
         )]);
 
         let error = workflow_scheduler_task_run_summary(&graph, &[]).expect_err("missing record");
+        assert_eq!(
+            error.to_string(),
+            "scheduler task 'prompt' has no active task-state record"
+        );
 
         assert_eq!(
             error,
-            WorkflowSchedulerTaskRunSummaryError::MissingTaskState {
+            WorkflowSchedulerTaskRunSummaryError::Missing {
+                task_id: "prompt".to_string()
+            }
+        );
+    }
+
+    #[test]
+    fn rejects_mismatched_task_state_with_unchanged_display() {
+        let graph = task_graph(&[(
+            "prompt",
+            WorkflowSchedulerTaskExecutionClass::NonRuntimeNodeEngine,
+        )]);
+        let mut mismatched = record("prompt", awaiting_inputs());
+        mismatched.workflow_run_id = SchedulerWorkflowRunId::parse("other-run").unwrap();
+        let error = workflow_scheduler_task_run_summary(&graph, &[mismatched])
+            .expect_err("mismatched correlation");
+        assert_eq!(
+            error.to_string(),
+            "active task-state record for scheduler task 'prompt' has mismatched correlation"
+        );
+        assert_eq!(
+            error,
+            WorkflowSchedulerTaskRunSummaryError::Mismatched {
                 task_id: "prompt".to_string()
             }
         );
@@ -293,10 +319,14 @@ mod tests {
             ],
         )
         .expect_err("unexpected record");
+        assert_eq!(
+            error.to_string(),
+            "active task-state record exists for unknown scheduler task 'extra'"
+        );
 
         assert_eq!(
             error,
-            WorkflowSchedulerTaskRunSummaryError::UnexpectedTaskState {
+            WorkflowSchedulerTaskRunSummaryError::Unexpected {
                 task_id: "extra".to_string()
             }
         );

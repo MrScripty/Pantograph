@@ -1,0 +1,79 @@
+{
+  "integration_base": {
+    "head": "d0c9788c5d5ba11ebdfe548f360f1c270e41acab",
+    "tree": "e714ccb9508797268964a3c42190280d57b7b043"
+  },
+  "repair_source": {
+    "head": "796d84cd94b7b45e54e14d36d8d1da7a069294b4",
+    "tree": "8d704866a03a0c122b0b0bb27ff1af6dbf5917ac"
+  },
+  "branch": "feat/workflow-text-seed-on-pr58-repair",
+  "versions": {
+    "python": "Python 3.12.3",
+    "rustc": "rustc 1.92.0 (ded5c06cf 2025-12-08)",
+    "cargo": "cargo 1.92.0 (344c4567c 2025-10-21)",
+    "node": "v24.12.0",
+    "npm": "11.6.2",
+    "git": "git version 2.52.0",
+    "torch": "2.14.1+cpu",
+    "transformers": "4.53.3"
+  },
+  "changed_crate_file_sha256": {
+    "crates/inference/src/backend/pytorch.rs": "a2b2bcd2121fc0aa6034018704987d3f973b3347a8a98a5c902fd56192f86c03",
+    "crates/inference/src/backend/pytorch_tests.rs": "691829319dccf09e6396046c0c36f2135b6d092608eae2bf89a992726970df70",
+    "crates/inference/src/backend/pytorch_worker_image_python_tests.rs": "cc08a25a4b1f17ff35f52b3dd8988eea2c7fe52e40c416242ebb1e99703135ad",
+    "crates/inference/src/gateway.rs": "611c8a73a446a55ac0fa31c65d73278c53888471d76b67936084af446f5c4c38",
+    "crates/inference/src/gateway_tests.rs": "1e103a8d1978573acdf24a202e6e68611226abf67e193d46967bf5ac4ad709cf",
+    "crates/inference/src/types.rs": "6eedc4adbe7c1bc0e07b806e19d3250e7fde6a42ca29a5418fd0c6f638874473",
+    "crates/inference/torch/autoregressive.py": "1973f8accf08ea6e6ef32ebbc15022f1c9782f707eb96c45ee8173b08e36bd2d",
+    "crates/inference/torch/tests/test_autoregressive.py": "bc8fa7711cd4e539ba26790269a610273821e957f0ff63627118414a7e18fc2b",
+    "crates/inference/torch/tests/test_text_seed.py": "2af3ce3688990cc1f6bb42872610ab0fd0ed5fcc37a48aab7674729017844ebc",
+    "crates/inference/torch/worker.py": "3e2c676047d46e69a63baae64e6aa9d5278431c718efa5349bd6a7f4c6239c75",
+    "crates/inference/torch/worker_contract.py": "7003db0e0d519b8390290f228e68bbc7783b869f6e7e0f0d29f9a7e3c9de6d43",
+    "crates/pantograph-embedded-runtime/src/inference_interface_facts_provider.rs": "fe2fdabe586d501ac0ef42b2962fd4906b65db6fc70745538e2e82dade4c4b3d",
+    "crates/pantograph-embedded-runtime/src/lib_tests/workflow_run_execution_tests.rs": "a5f7543756acd3e858f01a263ea94532c9abba331a06a0c15ccac54128f3f915",
+    "crates/pantograph-embedded-runtime/src/runtime_host_text_execution.rs": "e79a6e2eafcb4d53718abadaa81fcbddfefd1f6654ca7dfb67626ea0a4fe7736",
+    "crates/pantograph-inference-interface-contracts/tests/contract.rs": "a2333311abdd25698f9b8c796ccd42018eb3d170259216545e9a08c1cc081f88",
+    "crates/pantograph-inference-interface-contracts/tests/fixtures/text_generation_system_prompt_inputs.json": "c9ba042017b46eaa9aa04e6103fc36af5be798271442710b6171cca1ee2d6df9"
+  },
+  "cargo_feature_selection": "inference/backend-pytorch,inference/backend-candle,inference/std-process,pantograph-embedded-runtime/backend-pytorch",
+  "cargo_packages": [
+    "inference",
+    "pantograph-embedded-runtime",
+    "pantograph-inference-interface-contracts",
+    "pantograph-runtime-host-contracts",
+    "pantograph-workflow-service"
+  ],
+  "build_environment": {
+    "ORT_SKIP_DOWNLOAD": "1",
+    "HF_HUB_OFFLINE": "1",
+    "TRANSFORMERS_OFFLINE": "1",
+    "Cargo": "--locked --offline",
+    "XDG_CONFIG_HOME": "isolated test fixture directory"
+  },
+  "release_dependencies": [
+    "PR58 main merge",
+    "parent publication and hosted CI"
+  ],
+  "limits": [
+    "CPU token draws only",
+    "SDAR forwards/cache controlled",
+    "no production loader/GPU/pretrained qualification",
+    "no full-u64 desktop number entry qualification"
+  ],
+  "results": {
+    "rust_nondoctest_passes": 2447,
+    "inference_doctests_passed": 1,
+    "existing_ignored_native_and_doctest_cases": 6,
+    "inference_library_passes": 795,
+    "inference_integration_passes": 74,
+    "embedded_runtime_passes": 524,
+    "inference_interface_contract_passes": 26,
+    "runtime_host_contract_passes": 52,
+    "workflow_service_passes": 976,
+    "python_methods_passed": 59,
+    "frontend_passes": 662,
+    "typescript": "pass",
+    "strict_all_target_clippy": "pass"
+  }
+}

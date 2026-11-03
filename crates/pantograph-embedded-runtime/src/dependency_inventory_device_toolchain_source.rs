@@ -1,4 +1,4 @@
-#[cfg(feature = "standalone")]
+#[cfg(feature = "host-dependency-inventory")]
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -13,12 +13,12 @@ pub(crate) trait DeviceToolchainProviderSource: Send + Sync {
     async fn snapshot(&self) -> Result<DeviceToolchainProviderSourceSnapshot, String>;
 }
 
-#[cfg(feature = "standalone")]
+#[cfg(feature = "host-dependency-inventory")]
 pub(crate) struct GatewayDeviceToolchainProviderSource {
     gateway: Arc<inference::InferenceGateway>,
 }
 
-#[cfg(feature = "standalone")]
+#[cfg(feature = "host-dependency-inventory")]
 impl GatewayDeviceToolchainProviderSource {
     #[must_use]
     pub(crate) fn new(gateway: Arc<inference::InferenceGateway>) -> Self {
@@ -26,7 +26,7 @@ impl GatewayDeviceToolchainProviderSource {
     }
 }
 
-#[cfg(feature = "standalone")]
+#[cfg(feature = "host-dependency-inventory")]
 #[async_trait]
 impl DeviceToolchainProviderSource for GatewayDeviceToolchainProviderSource {
     async fn snapshot(&self) -> Result<DeviceToolchainProviderSourceSnapshot, String> {

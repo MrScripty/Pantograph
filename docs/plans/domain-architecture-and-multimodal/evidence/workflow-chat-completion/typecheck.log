@@ -1,0 +1,4 @@
+
+> Pantograph@0.0.0 typecheck
+> tsc --project tsconfig.json --noEmit --pretty false
+

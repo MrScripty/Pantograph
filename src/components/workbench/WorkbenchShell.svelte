@@ -1,5 +1,6 @@
 <script lang="ts">
   import { MessageSquare } from 'lucide-svelte';
+  import { getWorkflowBrowserHost } from '../../services/workflow/workflowBrowserTransport';
   import { panelWidth, sidePanelOpen, toggleSidePanel } from '../../stores/panelStore';
   import {
     selectedWorkbenchPage,
@@ -21,6 +22,8 @@
   import { refreshRunContextRunList, runContextRunList } from './shell/runContextStore';
 
   const settingsPage = workbenchPagesInGroup('settings')[0];
+  // Set only when a plain browser talks to the loopback workflow host instead of Tauri.
+  const browserHost = getWorkflowBrowserHost();
 
   let availability = $derived($runContextRunList.availability);
   let engineLine = $derived(engineLineParts(availability));
@@ -49,6 +52,10 @@
       {/each}
     </nav>
     <div class="spacer"></div>
+
+    {#if browserHost}
+      <span class="pg-chip browser-host" title={browserHost}>Loopback browser host</span>
+    {/if}
 
     <RunContextPicker />
 
@@ -240,6 +247,11 @@
 
   .retry {
     height: 22px;
+  }
+
+  .browser-host {
+    margin-right: 8px;
+    flex: none;
   }
 
   .assistant {

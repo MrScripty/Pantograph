@@ -1,0 +1,70 @@
+name: CPU Composition Contract
+
+on:
+  pull_request:
+    paths:
+      - 'examples/pumas-chrema-cpu-demo/**'
+      - 'crates/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'rust-toolchain.toml'
+      - '.github/workflows/cpu-composition-contract.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cpu-composition:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact Pantograph candidate
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Checkout pinned public Chrema
+        uses: actions/checkout@v4
+        with:
+          repository: MrScripty/Chrema
+          ref: 508c8b8cb724b49c655dab8bc4c8336190e516c7
+          path: .cpu-composition-chrema
+          persist-credentials: false
+      - name: Install selected Node toolchain
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+      - name: Select repository Rust toolchain
+        run: rustup show active-toolchain
+      - name: Prepare exact CPU dependency artifacts
+        run: |
+          node examples/pumas-chrema-cpu-demo/prepare.mjs \
+            --chrema "$GITHUB_WORKSPACE/.cpu-composition-chrema" \
+            --out "$RUNNER_TEMP/cpu-composition-prepared"
+      - name: Run real CPU integration contracts
+        env:
+          DEMO_PREPARED: ${{ runner.temp }}/cpu-composition-prepared
+          CHREMA_CHECKOUT: ${{ github.workspace }}/.cpu-composition-chrema
+        run: node --test examples/pumas-chrema-cpu-demo/composition.test.mjs
+      - name: Retain one complete workflow and inspect it in a fresh process
+        run: |
+          node examples/pumas-chrema-cpu-demo/run.mjs \
+            --prepared "$RUNNER_TEMP/cpu-composition-prepared" \
+            --out "$RUNNER_TEMP/cpu-composition-evidence"
+          node examples/pumas-chrema-cpu-demo/inspect.mjs \
+            --prepared "$RUNNER_TEMP/cpu-composition-prepared" \
+            --out "$RUNNER_TEMP/cpu-composition-evidence"
+      - name: Upload CPU evidence and preparation logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cpu-composition-${{ github.event.pull_request.head.sha || github.sha }}
+          include-hidden-files: true
+          path: |
+            ${{ runner.temp }}/cpu-composition-evidence
+            ${{ runner.temp }}/cpu-composition-prepared/*.stdout
+            ${{ runner.temp }}/cpu-composition-prepared/*.stderr
+            ${{ runner.temp }}/cpu-composition-prepared/*failure.json
+            ${{ runner.temp }}/cpu-composition-prepared/prepared.json

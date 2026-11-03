@@ -3,6 +3,7 @@
     externalUrl: string;
     apiKey: string;
     isConnecting: boolean;
+    canConnect: boolean;
     isConnected: boolean;
     onConnect: () => Promise<void>;
     onDisconnect: () => Promise<void>;
@@ -12,6 +13,7 @@
     externalUrl = $bindable(),
     apiKey = $bindable(),
     isConnecting,
+    canConnect,
     isConnected,
     onConnect,
     onDisconnect,
@@ -27,7 +29,7 @@
       bind:value={externalUrl}
       placeholder="http://localhost:1234 or https://api.openai.com/v1"
       class="pg-field pg-mono"
-      disabled={isConnecting || isConnected}
+      disabled={!canConnect || isConnecting || isConnected}
     />
   </label>
   <label class="pg-fl">
@@ -37,7 +39,7 @@
       bind:value={apiKey}
       placeholder="API Key (optional)"
       class="pg-field pg-mono"
-      disabled={isConnecting || isConnected}
+      disabled={!canConnect || isConnecting || isConnected}
     />
   </label>
   <div class="flex gap-2">
@@ -49,7 +51,7 @@
       <button
         type="button"
         onclick={onConnect}
-        disabled={isConnecting || !externalUrl.trim()}
+        disabled={!canConnect || isConnecting || !externalUrl.trim()}
         class="pg-btn pg-btn-primary"
       >
         {isConnecting ? 'Connecting...' : 'Connect'}

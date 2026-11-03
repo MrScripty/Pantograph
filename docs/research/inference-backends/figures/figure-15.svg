@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="690" viewBox="0 0 1000 690">
+<rect width="1000" height="690" fill="white"/>
+<defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#526d7a"/></marker></defs>
+<text x="30" y="36.0" text-anchor="start" font-family="DejaVu Sans, sans-serif" font-size="25" font-weight="bold" fill="#152b38">Multimodal GGUF execution is a paired recipe</text>
+<text x="30" y="65.0" text-anchor="start" font-family="DejaVu Sans, sans-serif" font-size="17" font-weight="normal" fill="#52616a">The media component can contain an encoder and family specific processing</text>
+<rect x="35" y="105" width="425" height="105" rx="8" fill="#eaf1f5" stroke="#748994" stroke-width="1.5"/>
+<text x="247.5" y="135.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38">Language model GGUF</text>
+<text x="247.5" y="164.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">Matching tokenizer, prompt format</text>
+<text x="247.5" y="187.76" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">and language model implementation</text>
+<rect x="540" y="105" width="425" height="105" rx="8" fill="#eaf3ee" stroke="#748994" stroke-width="1.5"/>
+<text x="752.5" y="135.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38">Media or projector GGUF</text>
+<text x="752.5" y="164.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">Matching encoder / projection path</text>
+<text x="752.5" y="187.76" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">and processor assumptions</text>
+<rect x="35" y="255" width="425" height="84" rx="8" fill="#eaf1f5" stroke="#748994" stroke-width="1.5"/>
+<text x="247.5" y="285.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38">Text input</text>
+<text x="247.5" y="314.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">Tokenization and task formatting</text>
+<rect x="540" y="255" width="425" height="84" rx="8" fill="#eaf3ee" stroke="#748994" stroke-width="1.5"/>
+<text x="752.5" y="285.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38">Image or audio input</text>
+<text x="752.5" y="314.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">RGB / PCM, rate, crops, patches, masks</text>
+<path d="M247,210 L247,248" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+<path d="M752,210 L752,248" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+<rect x="105" y="400" width="790" height="103" rx="8" fill="#f5f0e5" stroke="#748994" stroke-width="1.5"/>
+<text x="500.0" y="430.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38">Ordered text and media chunks</text>
+<text x="500.0" y="459.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">Text tokens | media embeddings | text tokens</text>
+<text x="500.0" y="482.76" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">Embedding-token count and position count may differ</text>
+<polyline points="247,339 247,368 350,368 350,392" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+<polyline points="752,339 752,368 650,368 650,392" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+<rect x="200" y="560" width="600" height="80" rx="8" fill="#eaf1f5" stroke="#748994" stroke-width="1.5"/>
+<text x="500.0" y="590.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#152b38">Language execution and task decoding</text>
+<text x="500.0" y="619.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="normal" fill="#152b38">Family-specific positions and attention policy</text>
+<path d="M500,503 L500,552" fill="none" stroke="#526d7a" stroke-width="2.2" marker-end="url(#arrow)"/>
+<text x="500" y="678.0" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="17" font-weight="normal" fill="#152b38">Cached chunk metadata alone does not retain the original media payload</text>
+</svg>

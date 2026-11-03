@@ -1,0 +1,7 @@
+# Private validation request and worker completion payloads
+
+Fresh PR #37 Clippy retains an 896-byte private RequestReady branch and six large-error reports caused by a 144-byte private RuntimeBranchCompleted outcome. Box only RequestReady.environment_request and the completed worker outcome. The constructor inventory is one validated-request helper and three completed-outcome constructors. The graph session still borrows the validated request for the dependency service; worker response extraction and all Result signatures remain unchanged. Public contracts and the public Ready inference projection are excluded.
+
+The real ready-proof regression now checks the retained request task, canonical identity, validation and full JSON round trip. Existing blocked/missing/stale proof tests remain. The worker success test retains complete response/scope/diagnostic equality and adds exact response JSON; existing cancellation, unavailable and shutdown behaviors remain. Two private layout bounds provide source-layout evidence, not measured performance claims. CI explicitly discovers and runs both complete owner test modules with nonzero guards.
+
+Root approved this bounded design. Whitespace and focused test syntax formatting are checked locally; root source review accepted all four files at frozen tree c2a6e2439f8df3a7e4d00461cf36175fbbe19ff4; hosted execution remains pending. No local Rust execution is claimed.

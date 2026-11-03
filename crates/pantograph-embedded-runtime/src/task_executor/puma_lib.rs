@@ -151,7 +151,7 @@ impl TauriTaskExecutor {
             if let Some(selector_access) =
                 extensions.get::<Arc<PumasSelectorAccess>>(PUMAS_SELECTOR_ACCESS)
             {
-                match Self::resolve_puma_lib_selected_detail(&selector_access, requested_model_id)
+                match Self::resolve_puma_lib_selected_detail(selector_access, requested_model_id)
                     .await
                 {
                     Ok(Some(detail)) => {

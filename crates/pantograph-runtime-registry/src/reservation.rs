@@ -31,6 +31,8 @@ pub struct RuntimeReservationRequest {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct RuntimeReservationLease {
+    /// Unique admitted incarnation. Same-owner replacement returns a new ID;
+    /// consumers must use that returned ID rather than retain the predecessor.
     pub reservation_id: u64,
     pub runtime_id: String,
     pub workflow_id: String,
