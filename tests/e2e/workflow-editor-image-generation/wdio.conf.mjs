@@ -1,3 +1,4 @@
+/* global process, console */
 import { spawn, spawnSync } from 'node:child_process';
 import { chmodSync, existsSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
