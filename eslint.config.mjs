@@ -26,6 +26,23 @@ export default [
   ...tseslint.configs.recommended,
   ...svelte.configs['flat/recommended'],
   {
+    // Evidence tooling kept with the plan that owns it: CommonJS drivers that
+    // run under Node and page fixtures injected into a browser.
+    files: ['docs/plans/**/reports/tools/**/*.{js,cjs,mjs}'],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+        ...globals.browser,
+      },
+    },
+    rules: {
+      '@typescript-eslint/no-require-imports': 'off',
+      'no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrors: 'none' }],
+      '@typescript-eslint/no-unused-vars': 'off',
+      'no-empty': ['error', { allowEmptyCatch: true }],
+    },
+  },
+  {
     files: ['scripts/**/*.mjs', '*.config.{js,mjs,cjs}', 'vite.config.ts', 'eslint.config.mjs'],
     languageOptions: {
       globals: {

@@ -120,7 +120,7 @@
       graph_settings: {
         schema_version: 1,
         nodes: graph.nodes.map((n) => {
-          const { label, definition, ...settings } = n.data;
+          const { label: _label, definition: _definition, ...settings } = n.data;
           return { node_id: n.id, node_type: n.node_type, data: settings };
         }),
       },
