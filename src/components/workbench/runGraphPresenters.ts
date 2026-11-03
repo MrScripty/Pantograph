@@ -7,48 +7,11 @@ import type {
 } from '../../services/workflow/types';
 import type {
   DiagnosticErrorSeverity,
-  IoArtifactProjectionRecord,
   NodeExecutionProjectionStatus,
   NodeStatusProjectionRecord,
 } from '../../services/diagnostics/types';
-
-export interface RunGraphCounts {
-  nodeCount: number;
-  edgeCount: number;
-}
-
-export interface RunGraphNodeRow {
-  nodeId: string;
-  nodeType: string;
-  contractVersion: string;
-  behaviorDigest: string;
-  positionLabel: string;
-  settingsState: string;
-  artifactSummaryLabel: string;
-  artifactDetailLabel: string;
-  hasOutputArtifacts: boolean;
-  statusLabel: string;
-  statusClass: string;
-  cacheStatusLabel: string | null;
-  errorEventId: string | null;
-  errorSeverity: DiagnosticErrorSeverity | null;
-  errorPhase: string | null;
-  errorCode: string | null;
-  errorBadgeLabel: string | null;
-  staleDiagnosticCount: number;
-  staleSeverity: WorkflowGraphDiagnostic['severity'] | null;
-  staleBadgeLabel: string | null;
-  staleDiagnosticMessages: string[];
-}
-
-export interface RunGraphEdgeRow {
-  edgeId: string;
-  source: string;
-  target: string;
-  staleDiagnosticCount: number;
-  staleSeverity: WorkflowGraphDiagnostic['severity'] | null;
-  staleDiagnosticMessages: string[];
-}
+import { glyphStateForStatus, type GlyphState } from './ui/statusGlyph.ts';
+import type { KeyValueRow } from './ui/types';
 
 export interface RunGraphCanvasNode {
   id: string;
@@ -116,17 +79,6 @@ const NODE_HEIGHT = 104;
 const CANVAS_PADDING = 96;
 const EMPTY_CANVAS_VIEWBOX = '0 0 640 360';
 
-export function resolveRunGraphCounts(graph: WorkflowGraph | null | undefined): RunGraphCounts {
-  return {
-    nodeCount: graph?.nodes.length ?? 0,
-    edgeCount: graph?.edges.length ?? 0,
-  };
-}
-
-export function formatRunGraphCountLabel(counts: RunGraphCounts): string {
-  return `${counts.nodeCount} nodes / ${counts.edgeCount} edges`;
-}
-
 export function formatRunGraphTimestamp(value: number): string {
   return new Date(value).toLocaleString();
 }
@@ -141,77 +93,6 @@ export function resolveRunGraphPresentationLabel(runGraph: WorkflowRunGraphProje
     return 'Presentation revision';
   }
   return 'Generated layout fallback';
-}
-
-export function buildRunGraphNodeRows(
-  runGraph: WorkflowRunGraphProjection,
-  artifactSummaries: RunGraphNodeArtifactSummaryByNodeId = {},
-  nodeStatuses: RunGraphNodeStatusByNodeId = {},
-): RunGraphNodeRow[] {
-  const diagnostics = indexRunGraphDiagnostics(runGraph.graph_diagnostics ?? []);
-  const topologyByNodeId = new Map(
-    runGraph.executable_topology.nodes.map((node) => [node.node_id, node]),
-  );
-  const settingsByNodeId = new Map(
-    runGraph.graph_settings.nodes.map((node) => [node.node_id, node]),
-  );
-
-  return runGraph.graph.nodes.map((node) => {
-    const topology = topologyByNodeId.get(node.id);
-    const settings = settingsByNodeId.get(node.id);
-    const artifactSummary = artifactSummaries[node.id];
-    const nodeStatus = nodeStatuses[node.id];
-    const nodeDiagnostics = diagnostics.byNodeId.get(node.id) ?? [];
-    return {
-      nodeId: node.id,
-      nodeType: topology?.node_type ?? node.node_type,
-      contractVersion: topology?.contract_version || 'Unknown',
-      behaviorDigest: topology?.behavior_digest || 'Unknown',
-      positionLabel: formatNodePosition(node),
-      settingsState: settings ? 'Run settings captured' : 'Run settings unavailable',
-      artifactSummaryLabel: formatRunGraphArtifactSummary(artifactSummary),
-      artifactDetailLabel: formatRunGraphArtifactDetail(artifactSummary),
-      hasOutputArtifacts: (artifactSummary?.outputCount ?? 0) > 0,
-      statusLabel: formatRunGraphNodeStatusLabel(nodeStatus?.status),
-      statusClass: runGraphNodeStatusClass(nodeStatus?.status),
-      cacheStatusLabel: formatRunGraphNodeCacheStatusLabel(nodeStatus?.execution_cache_status),
-      errorEventId: nodeStatus?.canonical_error_event_id ?? nodeStatus?.error_event_id ?? null,
-      errorSeverity: nodeStatus?.error_severity ?? null,
-      errorPhase: nodeStatus?.error_phase ?? null,
-      errorCode: nodeStatus?.error_code ?? null,
-      errorBadgeLabel: formatRunGraphNodeErrorBadge(nodeStatus),
-      staleDiagnosticCount: nodeDiagnostics.length,
-      staleSeverity: strongestGraphDiagnosticSeverity(nodeDiagnostics),
-      staleBadgeLabel: formatRunGraphStaleBadge(nodeDiagnostics),
-      staleDiagnosticMessages: nodeDiagnostics.map((diagnostic) => diagnostic.message),
-    };
-  });
-}
-
-export function buildRunGraphEdgeRows(runGraph: WorkflowRunGraphProjection): RunGraphEdgeRow[] {
-  const diagnostics = indexRunGraphDiagnostics(runGraph.graph_diagnostics ?? []);
-  if (runGraph.graph.edges.length > 0) {
-    return runGraph.graph.edges.map((edge) => {
-      const edgeDiagnostics = diagnostics.byEdgeId.get(edge.id) ?? [];
-      return {
-        edgeId: edge.id,
-        source: formatGraphEdgeEndpoint(edge.source, edge.source_handle),
-        target: formatGraphEdgeEndpoint(edge.target, edge.target_handle),
-        staleDiagnosticCount: edgeDiagnostics.length,
-        staleSeverity: strongestGraphDiagnosticSeverity(edgeDiagnostics),
-        staleDiagnosticMessages: edgeDiagnostics.map((diagnostic) => diagnostic.message),
-      };
-    });
-  }
-
-  return runGraph.executable_topology.edges.map((edge, index) => ({
-    edgeId: `topology-edge-${index + 1}`,
-    source: formatGraphEdgeEndpoint(edge.source_node_id, edge.source_port_id),
-    target: formatGraphEdgeEndpoint(edge.target_node_id, edge.target_port_id),
-    staleDiagnosticCount: 0,
-    staleSeverity: null,
-    staleDiagnosticMessages: [],
-  }));
 }
 
 export function buildRunGraphCanvasModel(
@@ -293,38 +174,6 @@ export function formatRunGraphNodeErrorBadge(
   return `${severity}: ${code}`;
 }
 
-export function runGraphNodeErrorClass(
-  severity: DiagnosticErrorSeverity | null | undefined,
-): string {
-  switch (severity) {
-    case 'fatal':
-      return 'fatal';
-    case 'error':
-      return 'error';
-    case 'warning':
-      return 'warning';
-    case null:
-    case undefined:
-      return 'none';
-  }
-}
-
-export function runGraphStaleDiagnosticClass(
-  severity: WorkflowGraphDiagnostic['severity'] | null | undefined,
-): string {
-  switch (severity) {
-    case 'error':
-      return 'error';
-    case 'warning':
-      return 'warning';
-    case 'info':
-      return 'info';
-    case null:
-    case undefined:
-      return 'none';
-  }
-}
-
 function formatRunGraphErrorSeverity(severity: DiagnosticErrorSeverity): string {
   switch (severity) {
     case 'fatal':
@@ -370,27 +219,6 @@ export function formatRunGraphNodeStatusLabel(
   }
 }
 
-export function runGraphNodeStatusClass(
-  status: NodeExecutionProjectionStatus | null | undefined,
-): string {
-  switch (status) {
-    case 'running':
-      return 'running';
-    case 'waiting':
-      return 'waiting';
-    case 'completed':
-      return 'completed';
-    case 'failed':
-      return 'failed';
-    case 'cancelled':
-      return 'cancelled';
-    case 'queued':
-      return 'queued';
-    default:
-      return 'unknown';
-  }
-}
-
 export function formatRunGraphNodeCacheStatusLabel(
   status: NodeStatusProjectionRecord['execution_cache_status'] | null | undefined,
 ): string | null {
@@ -404,86 +232,6 @@ export function formatRunGraphNodeCacheStatusLabel(
     default:
       return null;
   }
-}
-
-export function buildRunGraphNodeArtifactSummaries(
-  artifacts: Pick<
-    IoArtifactProjectionRecord,
-    'node_id' | 'artifact_role' | 'event_seq' | 'payload_ref' | 'media_type'
-  >[],
-): RunGraphNodeArtifactSummaryByNodeId {
-  const summaries: RunGraphNodeArtifactSummaryByNodeId = {};
-  const mediaTypesByNodeId = new Map<string, Set<string>>();
-
-  for (const artifact of artifacts) {
-    if (!artifact.node_id) {
-      continue;
-    }
-
-    const summary = summaries[artifact.node_id] ?? {
-      nodeId: artifact.node_id,
-      inputCount: 0,
-      outputCount: 0,
-      artifactCount: 0,
-      payloadRefCount: 0,
-      latestEventSeq: artifact.event_seq,
-      mediaTypes: [],
-    };
-
-    summary.artifactCount += 1;
-    summary.latestEventSeq = Math.max(summary.latestEventSeq, artifact.event_seq);
-    if (artifact.artifact_role === 'node_input') {
-      summary.inputCount += 1;
-    }
-    if (artifact.artifact_role === 'node_output') {
-      summary.outputCount += 1;
-    }
-    if (artifact.payload_ref?.trim()) {
-      summary.payloadRefCount += 1;
-    }
-    if (artifact.media_type?.trim()) {
-      const mediaTypes = mediaTypesByNodeId.get(artifact.node_id) ?? new Set<string>();
-      mediaTypes.add(artifact.media_type);
-      mediaTypesByNodeId.set(artifact.node_id, mediaTypes);
-    }
-
-    summaries[artifact.node_id] = summary;
-  }
-
-  for (const [nodeId, mediaTypes] of mediaTypesByNodeId.entries()) {
-    summaries[nodeId].mediaTypes = [...mediaTypes].sort();
-  }
-
-  return summaries;
-}
-
-export function formatRunGraphArtifactSummary(
-  summary: RunGraphNodeArtifactSummary | null | undefined,
-): string {
-  if (!summary || summary.artifactCount === 0) {
-    return 'No retained I/O';
-  }
-  return `${formatCount(summary.outputCount, 'output')} / ${formatCount(summary.inputCount, 'input')}`;
-}
-
-export function formatRunGraphArtifactDetail(
-  summary: RunGraphNodeArtifactSummary | null | undefined,
-): string {
-  if (!summary || summary.artifactCount === 0) {
-    return 'No retained artifact metadata for this node';
-  }
-
-  const payloadLabel =
-    summary.payloadRefCount === 1
-      ? '1 payload reference'
-      : `${summary.payloadRefCount} payload references`;
-  const mediaLabel =
-    summary.mediaTypes.length === 0 ? 'media unknown' : summary.mediaTypes.join(', ');
-  return `${formatCount(summary.artifactCount, 'artifact')}, ${payloadLabel}, ${mediaLabel}`;
-}
-
-function formatGraphEdgeEndpoint(nodeId: string, portId: string): string {
-  return `${nodeId}:${portId}`;
 }
 
 function indexRunGraphDiagnostics(diagnostics: WorkflowGraphDiagnostic[]): RunGraphDiagnosticIndex {
@@ -518,6 +266,41 @@ function appendDiagnostic(
   }
 }
 
+// Used only by buildRunGraphCanvasModel; no longer exported (M9d).
+function runGraphNodeStatusClass(
+  status: NodeExecutionProjectionStatus | null | undefined,
+): string {
+  switch (status) {
+    case 'running':
+      return 'running';
+    case 'waiting':
+      return 'waiting';
+    case 'completed':
+      return 'completed';
+    case 'failed':
+      return 'failed';
+    case 'cancelled':
+      return 'cancelled';
+    case 'queued':
+      return 'queued';
+    default:
+      return 'unknown';
+  }
+}
+
+function formatRunGraphArtifactSummary(
+  summary: RunGraphNodeArtifactSummary | null | undefined,
+): string {
+  if (!summary || summary.artifactCount === 0) {
+    return 'No retained I/O';
+  }
+  return `${formatCount(summary.outputCount, 'output')} / ${formatCount(summary.inputCount, 'input')}`;
+}
+
+function formatCount(count: number, noun: string): string {
+  return count === 1 ? `1 ${noun}` : `${count} ${noun}s`;
+}
+
 function strongestGraphDiagnosticSeverity(
   diagnostics: WorkflowGraphDiagnostic[],
 ): WorkflowGraphDiagnostic['severity'] | null {
@@ -538,14 +321,6 @@ function formatRunGraphStaleBadge(diagnostics: WorkflowGraphDiagnostic[]): strin
     return null;
   }
   return diagnostics.length === 1 ? '1 stale graph fact' : `${diagnostics.length} stale graph facts`;
-}
-
-function formatCount(count: number, noun: string): string {
-  return count === 1 ? `1 ${noun}` : `${count} ${noun}s`;
-}
-
-function formatNodePosition(node: GraphNode): string {
-  return `${Math.round(node.position.x)}, ${Math.round(node.position.y)}`;
 }
 
 function buildRunGraphCanvasEdge(
@@ -570,4 +345,553 @@ function buildRunGraphCanvasEdge(
     staleSeverity: strongestGraphDiagnosticSeverity(diagnostics),
     staleDiagnosticMessages: diagnostics.map((diagnostic) => diagnostic.message),
   };
+}
+
+// --- Graph page run mode (read-only run graph surface, ADR-014) ---
+
+/** How a wire is drawn in the run snapshot. */
+export type RunGraphWireKind = 'idle' | 'live' | 'failed' | 'stale';
+
+export interface RunGraphSnapshotPort {
+  id: string;
+  label: string;
+  dataType: string | null;
+}
+
+export interface RunGraphSnapshotNode {
+  id: string;
+  label: string;
+  nodeType: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  glyph: GlyphState;
+  stateLabel: string;
+  inputs: RunGraphSnapshotPort[];
+  outputs: RunGraphSnapshotPort[];
+  /** Ports of the node definition that no captured edge uses. */
+  hiddenPortCount: number;
+  /** One short line under the ports: the error badge or the stale-fact badge. */
+  note: string | null;
+  noteDanger: boolean;
+  errorEventId: string | null;
+}
+
+export interface RunGraphSnapshotWire {
+  id: string;
+  d: string;
+  kind: RunGraphWireKind;
+  sourceNodeId: string;
+  targetNodeId: string;
+}
+
+export interface RunGraphSnapshotLayout {
+  width: number;
+  height: number;
+  nodes: RunGraphSnapshotNode[];
+  wires: RunGraphSnapshotWire[];
+}
+
+export interface RunGraphNodeGlyph {
+  glyph: GlyphState;
+  label: string;
+}
+
+export interface RunGraphNodePortFact {
+  direction: 'in' | 'out';
+  id: string;
+  label: string;
+  dataType: string | null;
+}
+
+export interface RunGraphNodeFacts {
+  nodeId: string;
+  label: string;
+  nodeType: string;
+  glyph: GlyphState;
+  stateLabel: string;
+  /** Captured run settings as read-only rows; empty when none were captured. */
+  settings: KeyValueRow[];
+  settingsNote: string | null;
+  ports: RunGraphNodePortFact[];
+  contractRows: KeyValueRow[];
+  /** One sentence for the "In this run" section. */
+  runSentence: string;
+  runRows: KeyValueRow[];
+  errorEventId: string | null;
+  staleMessages: string[];
+}
+
+/** Card geometry, in canvas pixels. Port rows anchor the wires. */
+export const RUN_GRAPH_CARD_WIDTH = 184;
+export const RUN_GRAPH_CARD_HEADER = 32;
+export const RUN_GRAPH_CARD_ROW = 22;
+const RUN_GRAPH_CARD_PADDING = 6;
+const RUN_GRAPH_LAYOUT_MARGIN = 48;
+const RUN_GRAPH_SETTING_MAX_LENGTH = 120;
+
+/**
+ * Glyph and words for a node in a run. Without a status record the node was
+ * not reached, unless the node-status projection itself was unavailable, in
+ * which case nothing is claimed.
+ */
+export function runGraphNodeGlyph(
+  status: NodeStatusProjectionRecord | null | undefined,
+  statusesAvailable: boolean,
+): RunGraphNodeGlyph {
+  if (!status) {
+    return statusesAvailable
+      ? { glyph: 'queued', label: 'Not reached' }
+      : { glyph: 'idle', label: 'No status' };
+  }
+  return {
+    glyph: glyphStateForStatus(status.status),
+    label: formatRunGraphNodeStatusLabel(status.status),
+  };
+}
+
+/** Wire treatment from the status of the node it leaves. */
+export function runGraphWireKind(
+  sourceStatus: NodeExecutionProjectionStatus | null | undefined,
+  staleDiagnosticCount: number,
+): RunGraphWireKind {
+  if (sourceStatus === 'running') {
+    return 'live';
+  }
+  if (sourceStatus === 'failed') {
+    return 'failed';
+  }
+  return staleDiagnosticCount > 0 ? 'stale' : 'idle';
+}
+
+/**
+ * Lay out the captured run graph as cards and wires. Positions come from the
+ * snapshot and are shifted so the top-left card sits at the margin; nothing
+ * here reads or writes the editable graph.
+ */
+export function buildRunGraphSnapshotLayout(
+  graph: WorkflowGraph,
+  nodeStatuses: RunGraphNodeStatusByNodeId = {},
+  graphDiagnostics: WorkflowGraphDiagnostic[] = [],
+  statusesAvailable = true,
+): RunGraphSnapshotLayout {
+  if (graph.nodes.length === 0) {
+    return { width: 0, height: 0, nodes: [], wires: [] };
+  }
+
+  const diagnostics = indexRunGraphDiagnostics(graphDiagnostics);
+  const minX = Math.min(...graph.nodes.map((node) => node.position.x));
+  const minY = Math.min(...graph.nodes.map((node) => node.position.y));
+  const offsetX = RUN_GRAPH_LAYOUT_MARGIN - minX;
+  const offsetY = RUN_GRAPH_LAYOUT_MARGIN - minY;
+
+  const nodes = graph.nodes.map((node) => {
+    const status = nodeStatuses[node.id];
+    const { glyph, label: stateLabel } = runGraphNodeGlyph(status, statusesAvailable);
+    const ports = resolveSnapshotPorts(node, graph.edges);
+    const nodeDiagnostics = diagnostics.byNodeId.get(node.id) ?? [];
+    const errorBadge = formatRunGraphNodeErrorBadge(status);
+    const staleBadge = formatRunGraphStaleBadge(nodeDiagnostics);
+    const note = errorBadge ?? staleBadge;
+    const rowCount =
+      ports.inputs.length + ports.outputs.length + (ports.hiddenPortCount > 0 ? 1 : 0) + (note ? 1 : 0);
+    return {
+      id: node.id,
+      label: resolveNodeLabel(node),
+      nodeType: node.node_type,
+      x: Math.round(node.position.x + offsetX),
+      y: Math.round(node.position.y + offsetY),
+      width: RUN_GRAPH_CARD_WIDTH,
+      height: RUN_GRAPH_CARD_HEADER + RUN_GRAPH_CARD_PADDING * 2 + rowCount * RUN_GRAPH_CARD_ROW,
+      glyph,
+      stateLabel,
+      inputs: ports.inputs,
+      outputs: ports.outputs,
+      hiddenPortCount: ports.hiddenPortCount,
+      note,
+      noteDanger: errorBadge !== null,
+      errorEventId: status?.canonical_error_event_id ?? status?.error_event_id ?? null,
+    };
+  });
+
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const wires = graph.edges.flatMap((edge) => {
+    const source = nodeById.get(edge.source);
+    const target = nodeById.get(edge.target);
+    if (!source || !target) {
+      return [];
+    }
+    const sourceX = source.x + source.width;
+    const sourceY = outputAnchorY(source, edge.source_handle);
+    const targetX = target.x;
+    const targetY = inputAnchorY(target, edge.target_handle);
+    const bend = Math.max(40, Math.abs(targetX - sourceX) / 2);
+    return [
+      {
+        id: edge.id,
+        d: `M ${sourceX} ${sourceY} C ${sourceX + bend} ${sourceY}, ${targetX - bend} ${targetY}, ${targetX} ${targetY}`,
+        kind: runGraphWireKind(
+          nodeStatuses[edge.source]?.status,
+          diagnostics.byEdgeId.get(edge.id)?.length ?? 0,
+        ),
+        sourceNodeId: edge.source,
+        targetNodeId: edge.target,
+      },
+    ];
+  });
+
+  return {
+    width: Math.max(...nodes.map((node) => node.x + node.width)) + RUN_GRAPH_LAYOUT_MARGIN,
+    height: Math.max(...nodes.map((node) => node.y + node.height)) + RUN_GRAPH_LAYOUT_MARGIN,
+    nodes,
+    wires,
+  };
+}
+
+/**
+ * The node the properties panel shows when nothing valid is selected: the
+ * running node, else the failed node, else the first node.
+ */
+export function resolveRunGraphSelectedNodeId(
+  currentNodeId: string | null,
+  graph: WorkflowGraph,
+  nodeStatuses: RunGraphNodeStatusByNodeId = {},
+): string | null {
+  const nodeIds = graph.nodes.map((node) => node.id);
+  if (currentNodeId && nodeIds.includes(currentNodeId)) {
+    return currentNodeId;
+  }
+  return (
+    nodeIds.find((nodeId) => nodeStatuses[nodeId]?.status === 'running') ??
+    nodeIds.find((nodeId) => nodeStatuses[nodeId]?.status === 'failed') ??
+    nodeIds[0] ??
+    null
+  );
+}
+
+/** Facts for the run-mode properties panel, all from the run snapshot and node status projection. */
+export function buildRunGraphNodeFacts(
+  runGraph: WorkflowRunGraphProjection,
+  nodeId: string,
+  nodeStatuses: RunGraphNodeStatusByNodeId = {},
+  statusesAvailable = true,
+): RunGraphNodeFacts | null {
+  const node = runGraph.graph.nodes.find((candidate) => candidate.id === nodeId);
+  if (!node) {
+    return null;
+  }
+
+  const status = nodeStatuses[nodeId];
+  const { glyph, label: stateLabel } = runGraphNodeGlyph(status, statusesAvailable);
+  const topology = runGraph.executable_topology.nodes.find((candidate) => candidate.node_id === nodeId);
+  const settingsRecord = runGraph.graph_settings.nodes.find((candidate) => candidate.node_id === nodeId);
+  const settings = settingsRecord ? runGraphSettingRows(settingsRecord.data) : [];
+  const ports = resolveSnapshotPorts(node, runGraph.graph.edges, true);
+  const staleMessages = (runGraph.graph_diagnostics ?? [])
+    .filter((diagnostic) => diagnostic.scope === 'node' && diagnostic.node_id === nodeId)
+    .map((diagnostic) => diagnostic.message);
+
+  return {
+    nodeId,
+    label: resolveNodeLabel(node),
+    nodeType: topology?.node_type ?? node.node_type,
+    glyph,
+    stateLabel,
+    settings,
+    settingsNote: !settingsRecord
+      ? 'This run did not capture settings for this node.'
+      : settings.length === 0
+        ? 'No plain settings were captured for this node.'
+        : null,
+    ports: [
+      ...ports.inputs.map((port) => ({ direction: 'in' as const, ...port })),
+      ...ports.outputs.map((port) => ({ direction: 'out' as const, ...port })),
+    ],
+    contractRows: [
+      { key: 'Contract', value: topology?.contract_version || 'Unknown' },
+      { key: 'Behavior', value: topology?.behavior_digest || 'Unknown', mono: true },
+    ],
+    runSentence: formatRunGraphNodeRunSentence(status, statusesAvailable),
+    runRows: buildRunGraphNodeRunRows(status),
+    errorEventId: status?.canonical_error_event_id ?? status?.error_event_id ?? null,
+    staleMessages,
+  };
+}
+
+export function formatRunGraphNodeRunSentence(
+  status: NodeStatusProjectionRecord | null | undefined,
+  statusesAvailable = true,
+): string {
+  if (!status) {
+    return statusesAvailable
+      ? 'Not reached in this run.'
+      : 'Node status is unavailable for this run.';
+  }
+  switch (status.status) {
+    case 'queued':
+      return 'Queued, not started yet.';
+    case 'waiting':
+      return 'Waiting to start.';
+    case 'running':
+      return status.started_at_ms ? `Running since ${formatClockTime(status.started_at_ms)}.` : 'Running.';
+    case 'completed':
+      return status.duration_ms !== null && status.duration_ms !== undefined
+        ? `Completed in ${formatRunGraphDuration(status.duration_ms)}.`
+        : 'Completed.';
+    case 'failed': {
+      const reason = status.error?.trim() || formatRunGraphNodeErrorBadge(status);
+      return reason ? `Failed: ${trimSentenceEnd(reason)}.` : 'Failed.';
+    }
+    case 'cancelled':
+      return 'Cancelled.';
+  }
+}
+
+export function formatRunGraphDuration(durationMs: number): string {
+  if (durationMs < 1000) {
+    return `${Math.max(0, Math.round(durationMs))} ms`;
+  }
+  const seconds = durationMs / 1000;
+  if (seconds < 60) {
+    return `${seconds.toFixed(1)} s`;
+  }
+  const minutes = Math.floor(seconds / 60);
+  const rest = Math.round(seconds - minutes * 60);
+  return `${minutes}m ${String(rest).padStart(2, '0')}s`;
+}
+
+/** Plain scalar settings as rows; structured values are left to I/O Inspector. */
+export function runGraphSettingRows(data: unknown): KeyValueRow[] {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    return [];
+  }
+  const seenKeys = new Set<string>();
+  return Object.entries(data as Record<string, unknown>).flatMap(([key, value]) => {
+    if (key === 'label' || key === 'definition') {
+      return [];
+    }
+    // Rows are keyed by their visible key; keep the first of any that read the same.
+    const visibleKey = humanizeSettingKey(key);
+    if (seenKeys.has(visibleKey)) {
+      return [];
+    }
+    seenKeys.add(visibleKey);
+    if (typeof value === 'string') {
+      if (value.trim().length === 0) {
+        return [];
+      }
+      const text =
+        value.length > RUN_GRAPH_SETTING_MAX_LENGTH
+          ? `${value.slice(0, RUN_GRAPH_SETTING_MAX_LENGTH - 1)}…`
+          : value;
+      return [{ key: visibleKey, value: text }];
+    }
+    if (typeof value === 'number' || typeof value === 'boolean') {
+      return [{ key: visibleKey, value: String(value), mono: typeof value === 'number' }];
+    }
+    return [];
+  });
+}
+
+/**
+ * Current-invocation authority for run graph loads: a load started for one run
+ * must not apply after a newer load (another run, or a refresh) began, or
+ * after the owner stopped.
+ */
+export interface RunGraphRequestGate {
+  begin(): number;
+  isCurrent(token: number): boolean;
+  /** Supersede every started request, for example on unmount or leaving run mode. */
+  invalidate(): void;
+}
+
+export function createRunGraphRequestGate(): RunGraphRequestGate {
+  let generation = 0;
+  return {
+    begin() {
+      generation += 1;
+      return generation;
+    },
+    isCurrent(token) {
+      return token === generation;
+    },
+    invalidate() {
+      generation += 1;
+    },
+  };
+}
+
+function buildRunGraphNodeRunRows(status: NodeStatusProjectionRecord | null | undefined): KeyValueRow[] {
+  if (!status) {
+    return [];
+  }
+  const rows: KeyValueRow[] = [];
+  const cache = formatRunGraphNodeCacheStatusLabel(status.execution_cache_status);
+  if (cache) {
+    rows.push({ key: 'Cache', value: cache });
+  }
+  if (status.runtime_id) {
+    rows.push({
+      key: 'Runtime',
+      value: status.runtime_version ? `${status.runtime_id} ${status.runtime_version}` : status.runtime_id,
+    });
+  }
+  if (status.selected_backend_key) {
+    rows.push({ key: 'Backend', value: status.selected_backend_key });
+  }
+  if (status.model_id) {
+    rows.push({ key: 'Model', value: status.model_id, mono: true });
+  }
+  // A running node's sentence already says when it started.
+  if (status.started_at_ms && status.status !== 'running') {
+    rows.push({ key: 'Started', value: formatClockTime(status.started_at_ms), mono: true });
+  }
+  const errorBadge = formatRunGraphNodeErrorBadge(status);
+  if (errorBadge) {
+    rows.push({
+      key: 'Error',
+      value: status.error_phase ? `${errorBadge} in ${status.error_phase}` : errorBadge,
+    });
+  }
+  return rows;
+}
+
+function resolveNodeLabel(node: GraphNode): string {
+  const data = node.data ?? {};
+  const label = typeof data.label === 'string' ? data.label.trim() : '';
+  if (label) {
+    return label;
+  }
+  const definition = readDefinition(node);
+  return definition?.label?.trim() || node.id;
+}
+
+interface SnapshotDefinition {
+  label?: string;
+  inputs: RunGraphSnapshotPort[];
+  outputs: RunGraphSnapshotPort[];
+}
+
+function readDefinition(node: GraphNode): SnapshotDefinition | null {
+  const definition = (node.data ?? {}).definition;
+  if (!definition || typeof definition !== 'object') {
+    return null;
+  }
+  const record = definition as Record<string, unknown>;
+  return {
+    label: typeof record.label === 'string' ? record.label : undefined,
+    inputs: readPorts(record.inputs),
+    outputs: readPorts(record.outputs),
+  };
+}
+
+function readPorts(value: unknown): RunGraphSnapshotPort[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.flatMap((port) => {
+    if (!port || typeof port !== 'object') {
+      return [];
+    }
+    const record = port as Record<string, unknown>;
+    if (typeof record.id !== 'string') {
+      return [];
+    }
+    return [
+      {
+        id: record.id,
+        label: typeof record.label === 'string' && record.label.trim() ? record.label : record.id,
+        dataType: typeof record.data_type === 'string' ? record.data_type : null,
+      },
+    ];
+  });
+}
+
+/**
+ * Ports to draw on a card: the connected ones in definition order, plus any
+ * port an edge names that the definition lacks. With `allPorts`, every
+ * definition port is returned (properties panel).
+ */
+function resolveSnapshotPorts(
+  node: GraphNode,
+  edges: GraphEdge[],
+  allPorts = false,
+): { inputs: RunGraphSnapshotPort[]; outputs: RunGraphSnapshotPort[]; hiddenPortCount: number } {
+  const definition = readDefinition(node);
+  const connectedInputs = uniqueHandles(edges.filter((edge) => edge.target === node.id).map((edge) => edge.target_handle));
+  const connectedOutputs = uniqueHandles(edges.filter((edge) => edge.source === node.id).map((edge) => edge.source_handle));
+  const pick = (declared: RunGraphSnapshotPort[], connected: string[]) => {
+    const declaredIds = new Set(declared.map((port) => port.id));
+    const shown = allPorts ? declared : declared.filter((port) => connected.includes(port.id));
+    const undeclared = connected
+      .filter((id) => !declaredIds.has(id))
+      .map((id) => ({ id, label: id, dataType: null }));
+    return { shown: [...shown, ...undeclared], hidden: declared.length - (allPorts ? declared.length : shown.length) };
+  };
+  const inputs = pick(definition?.inputs ?? [], connectedInputs);
+  const outputs = pick(definition?.outputs ?? [], connectedOutputs);
+  return {
+    inputs: inputs.shown,
+    outputs: outputs.shown,
+    hiddenPortCount: inputs.hidden + outputs.hidden,
+  };
+}
+
+function uniqueHandles(handles: string[]): string[] {
+  return [...new Set(handles)];
+}
+
+function rowCenterY(node: RunGraphSnapshotNode, rowIndex: number): number {
+  return node.y + RUN_GRAPH_CARD_HEADER + RUN_GRAPH_CARD_PADDING + rowIndex * RUN_GRAPH_CARD_ROW + RUN_GRAPH_CARD_ROW / 2;
+}
+
+function inputAnchorY(node: RunGraphSnapshotNode, portId: string): number {
+  const index = node.inputs.findIndex((port) => port.id === portId);
+  return index < 0 ? node.y + RUN_GRAPH_CARD_HEADER / 2 : rowCenterY(node, index);
+}
+
+function outputAnchorY(node: RunGraphSnapshotNode, portId: string): number {
+  const index = node.outputs.findIndex((port) => port.id === portId);
+  return index < 0 ? node.y + RUN_GRAPH_CARD_HEADER / 2 : rowCenterY(node, node.inputs.length + index);
+}
+
+function humanizeSettingKey(key: string): string {
+  const words = key.replaceAll('_', ' ').replaceAll('-', ' ').trim();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+function trimSentenceEnd(text: string): string {
+  return text.trim().replace(/[.\s]+$/, '');
+}
+
+function formatClockTime(ms: number): string {
+  const date = new Date(ms);
+  return [date.getHours(), date.getMinutes(), date.getSeconds()]
+    .map((part) => String(part).padStart(2, '0'))
+    .join(':');
+}
+
+export const RUN_GRAPH_MIN_SCALE = 0.35;
+export const RUN_GRAPH_MAX_SCALE = 1.5;
+const RUN_GRAPH_FIT_INSET = 24;
+
+/** Scale that fits the whole snapshot in the viewport, never enlarging it. */
+export function fitRunGraphScale(
+  viewport: { width: number; height: number },
+  layout: Pick<RunGraphSnapshotLayout, 'width' | 'height'>,
+): number {
+  if (viewport.width <= 0 || viewport.height <= 0 || layout.width <= 0 || layout.height <= 0) {
+    return 1;
+  }
+  const fit = Math.min(
+    1,
+    (viewport.width - RUN_GRAPH_FIT_INSET) / layout.width,
+    (viewport.height - RUN_GRAPH_FIT_INSET) / layout.height,
+  );
+  return clampRunGraphScale(fit);
+}
+
+export function clampRunGraphScale(scale: number): number {
+  return Math.min(RUN_GRAPH_MAX_SCALE, Math.max(RUN_GRAPH_MIN_SCALE, Math.round(scale * 100) / 100));
 }

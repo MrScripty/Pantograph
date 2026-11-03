@@ -8,23 +8,19 @@ interface WorkflowMiniMapNodeLike {
   } | null;
 }
 
+/*
+ * The minimap draws node colours as inline `fill`, so CSS cannot restyle them;
+ * they are token references here (docs/design/mockups/boards/shell.css
+ * `.minimap i`). Categories are not colour-coded; groups read lighter so they
+ * stay distinguishable from ordinary nodes.
+ */
+export const WORKFLOW_MINIMAP_NODE_COLOR = 'var(--pg-border-idle)';
+export const WORKFLOW_MINIMAP_GROUP_COLOR = 'var(--pg-text-muted)';
+
 export function getWorkflowMiniMapNodeColor(node: WorkflowMiniMapNodeLike): string {
   if (node.type === 'node-group' || node.data?.isGroup) {
-    return '#7c3aed';
+    return WORKFLOW_MINIMAP_GROUP_COLOR;
   }
 
-  switch (node.data?.definition?.category) {
-    case 'input':
-      return '#2563eb';
-    case 'processing':
-      return '#16a34a';
-    case 'tool':
-      return '#d97706';
-    case 'output':
-      return '#0891b2';
-    case 'control':
-      return '#9333ea';
-    default:
-      return '#525252';
-  }
+  return WORKFLOW_MINIMAP_NODE_COLOR;
 }

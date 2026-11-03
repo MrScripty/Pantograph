@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
   import BaseNode from '../BaseNode.svelte';
+  import NodeHeaderTitle from './NodeHeaderTitle.svelte';
   import type {
     NodeDefinition,
     WorkflowAudioArtifactFormatSettings,
@@ -208,15 +209,6 @@
   let codecSelectId = $derived(`audio-output-${id}-codec`);
   let bitrateInputId = $derived(`audio-output-${id}-bitrate`);
   let isUsingDefaultFormat = $derived(!formatOverride);
-
-  let statusColor = $derived(
-    {
-      idle: 'bg-neutral-500',
-      running: 'bg-pink-500 animate-pulse',
-      success: 'bg-pink-500',
-      error: 'bg-red-500',
-    }[executionState]
-  );
 
   function formatTime(totalSeconds: number): string {
     if (!Number.isFinite(totalSeconds) || totalSeconds <= 0) {
@@ -745,18 +737,10 @@
   });
 </script>
 
-<div class="audio-output-wrapper" style="--node-color: #f472b6">
+<div class="audio-output-wrapper">
   <BaseNode {id} {data} {selected}>
     {#snippet header()}
-      <div class="flex items-center gap-2">
-        <div class="w-5 h-5 rounded bg-pink-500 flex items-center justify-center flex-shrink-0">
-          <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-          </svg>
-        </div>
-        <span class="text-sm font-medium text-neutral-200">{data.label || 'Audio Output'}</span>
-        <span class="w-2 h-2 rounded-full {statusColor} ml-auto"></span>
-      </div>
+      <NodeHeaderTitle label={data.label || 'Audio Output'} />
     {/snippet}
 
     {#if hasAnyAudio}
@@ -777,7 +761,7 @@
           <div class="flex items-center gap-2">
             <button
               type="button"
-              class="nodrag nopan nowheel text-[10px] px-2 py-1 rounded bg-neutral-700 hover:bg-neutral-600 text-neutral-200 border border-neutral-600 cursor-pointer"
+              class="nodrag nopan nowheel text-[10px] px-2 py-1 rounded bg-pg-panel-raised hover:bg-pg-panel-selected text-pg-text border border-pg-border cursor-pointer"
               onclick={togglePlayback}
               onmousedown={stopControlEvent}
               onmouseup={stopControlEvent}
@@ -787,7 +771,7 @@
             </button>
             <button
               type="button"
-              class="nodrag nopan nowheel text-[10px] px-2 py-1 rounded bg-neutral-700 hover:bg-neutral-600 text-neutral-200 border border-neutral-600 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              class="nodrag nopan nowheel text-[10px] px-2 py-1 rounded bg-pg-panel-raised hover:bg-pg-panel-selected text-pg-text border border-pg-border cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               onclick={handleReplay}
               onmousedown={stopControlEvent}
               onmouseup={stopControlEvent}
@@ -796,11 +780,11 @@
             >
               Replay
             </button>
-            <span class="text-[10px] text-neutral-400 tabular-nums">
+            <span class="text-[10px] text-pg-text-muted tabular-nums">
               {formatTime(currentTime)} / {formatTime(displayedDuration)}
             </span>
             {#if !finalAudioSrc}
-              <span class="text-[10px] text-pink-300">Streaming</span>
+              <span class="text-[10px] text-pg-accent">Streaming</span>
             {/if}
           </div>
           <input
@@ -809,7 +793,7 @@
             max={displayedDuration > 0 ? displayedDuration : 1}
             step="0.01"
             value={currentTime}
-            class="nodrag nopan nowheel w-full h-1.5 accent-pink-500 cursor-pointer"
+            class="nodrag nopan nowheel w-full h-1.5 accent-pg-text-soft cursor-pointer"
             disabled={!canSeek}
             oninput={handleSeek}
             onmousedown={stopControlEvent}
@@ -819,14 +803,14 @@
             onclickcapture={stopControlEvent}
           />
           <div class="flex items-center gap-2">
-            <span class="text-[10px] text-neutral-400">Vol</span>
+            <span class="text-[10px] text-pg-text-muted">Vol</span>
             <input
               type="range"
               min="0"
               max="1"
               step="0.01"
               value={volume}
-              class="nodrag nopan nowheel w-full h-1.5 accent-pink-500 cursor-pointer"
+              class="nodrag nopan nowheel w-full h-1.5 accent-pg-text-soft cursor-pointer"
               oninput={handleVolumeChange}
               onmousedown={stopControlEvent}
               onmouseup={stopControlEvent}
@@ -835,7 +819,7 @@
               onclickcapture={stopControlEvent}
             />
           </div>
-          <label class="nodrag nopan nowheel flex items-center gap-2 text-[10px] text-neutral-400">
+          <label class="nodrag nopan nowheel flex items-center gap-2 text-[10px] text-pg-text-muted">
             <input
               type="checkbox"
               checked={loopEnabled}
@@ -853,7 +837,7 @@
           <div class="flex justify-end">
             <button
               type="button"
-              class="nodrag nopan nowheel text-[10px] text-neutral-400 hover:text-neutral-200 bg-transparent border-0 cursor-pointer px-1"
+              class="nodrag nopan nowheel text-[10px] text-pg-text-muted hover:text-pg-text bg-transparent border-0 cursor-pointer px-1"
               onclick={downloadAudio}
               onmousedown={stopControlEvent}
               onmouseup={stopControlEvent}
@@ -865,25 +849,25 @@
         {/if}
       </div>
     {:else}
-      <div class="text-xs text-neutral-500 italic">
+      <div class="text-xs text-pg-text-muted italic">
         No audio yet
       </div>
     {/if}
 
-    <div class="mt-2 space-y-2 border-t border-neutral-700/70 pt-2">
+    <div class="mt-2 space-y-2 border-t border-pg-border pt-2">
       <div class="flex items-center justify-between gap-2">
-        <label class="text-[10px] text-neutral-400" for={formatSelectId}>Format</label>
+        <label class="text-[10px] text-pg-text-muted" for={formatSelectId}>Format</label>
         {#if isUsingDefaultFormat && defaultFormat}
-          <span class="text-[10px] text-neutral-500">
+          <span class="text-[10px] text-pg-text-muted">
             Default {defaultFormat.container_id}/{defaultFormat.codec_id}
           </span>
         {:else if formatOverride}
-          <span class="text-[10px] text-pink-300">Override</span>
+          <span class="text-[10px] text-pg-text-soft">Override</span>
         {/if}
       </div>
       <select
         id={formatSelectId}
-        class="nodrag nopan nowheel w-full rounded border border-neutral-600 bg-neutral-900 px-2 py-1 text-xs text-neutral-200 focus:border-pink-500 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+        class="nodrag nopan nowheel w-full rounded border border-pg-border bg-pg-panel-sunken px-2 py-1 text-xs text-pg-text disabled:cursor-not-allowed disabled:opacity-60"
         value={formatOverride?.container_id ?? DEFAULT_SELECTION_VALUE}
         disabled={!defaultFormat && !formatOverride}
         onchange={handleFormatChange}
@@ -906,10 +890,10 @@
       {#if formatOverride}
         <div class="grid grid-cols-2 gap-2">
           <div class="flex flex-col gap-1">
-            <label class="text-[10px] text-neutral-400" for={codecSelectId}>Codec</label>
+            <label class="text-[10px] text-pg-text-muted" for={codecSelectId}>Codec</label>
             <select
               id={codecSelectId}
-              class="nodrag nopan nowheel w-full rounded border border-neutral-600 bg-neutral-900 px-2 py-1 text-xs text-neutral-200 focus:border-pink-500 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+              class="nodrag nopan nowheel w-full rounded border border-pg-border bg-pg-panel-sunken px-2 py-1 text-xs text-pg-text disabled:cursor-not-allowed disabled:opacity-60"
               value={formatOverride.codec_id}
               disabled={codecOptions.length === 0}
               onchange={handleCodecChange}
@@ -925,10 +909,10 @@
             </select>
           </div>
           <div class="flex flex-col gap-1">
-            <label class="text-[10px] text-neutral-400" for={bitrateInputId}>Bitrate</label>
+            <label class="text-[10px] text-pg-text-muted" for={bitrateInputId}>Bitrate</label>
             <input
               id={bitrateInputId}
-              class="nodrag nopan nowheel w-full rounded border border-neutral-600 bg-neutral-900 px-2 py-1 text-xs text-neutral-200 focus:border-pink-500 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+              class="nodrag nopan nowheel w-full rounded border border-pg-border bg-pg-panel-sunken px-2 py-1 text-xs text-pg-text disabled:cursor-not-allowed disabled:opacity-60"
               type="number"
               min={selectedFormat?.bitrate_min_kbps ?? undefined}
               max={selectedFormat?.bitrate_max_kbps ?? undefined}
@@ -943,7 +927,7 @@
               onpointerup={stopControlEvent}
               onclickcapture={stopControlEvent}
             />
-            <span id={`${bitrateInputId}-range`} class="text-[10px] text-neutral-500">
+            <span id={`${bitrateInputId}-range`} class="text-[10px] text-pg-text-muted">
               {bitrateRangeLabel}
             </span>
           </div>
@@ -951,19 +935,9 @@
       {/if}
 
       {#if formatLoadError}
-        <div class="text-[10px] text-red-300">{formatLoadError}</div>
+        <div class="text-[10px] text-pg-danger">{formatLoadError}</div>
       {/if}
     </div>
   </BaseNode>
 </div>
 
-<style>
-  .audio-output-wrapper :global(.base-node) {
-    border-color: color-mix(in srgb, var(--node-color) 50%, transparent);
-  }
-
-  .audio-output-wrapper :global(.node-header) {
-    background-color: color-mix(in srgb, var(--node-color) 20%, transparent);
-    border-color: color-mix(in srgb, var(--node-color) 30%, transparent);
-  }
-</style>

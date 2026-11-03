@@ -11,8 +11,9 @@
   <button
     type="button"
     class="px-2 py-0.5 rounded transition-colors {mode === 'auto'
-      ? 'bg-cyan-600/30 text-cyan-300'
-      : 'text-neutral-500 hover:text-neutral-300'}"
+      ? 'bg-pg-panel-selected text-pg-text'
+      : 'text-pg-text-muted hover:text-pg-text'}"
+    aria-pressed={mode === 'auto'}
     onclick={() => onSetMode('auto')}
   >
     Auto
@@ -20,8 +21,9 @@
   <button
     type="button"
     class="px-2 py-0.5 rounded transition-colors {mode === 'manual'
-      ? 'bg-cyan-600/30 text-cyan-300'
-      : 'text-neutral-500 hover:text-neutral-300'}"
+      ? 'bg-pg-panel-selected text-pg-text'
+      : 'text-pg-text-muted hover:text-pg-text'}"
+    aria-pressed={mode === 'manual'}
     onclick={() => onSetMode('manual')}
   >
     Manual

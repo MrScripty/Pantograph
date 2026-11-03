@@ -197,6 +197,7 @@
   <SvelteFlow
     bind:nodes
     bind:edges
+    proOptions={{ hideAttribution: true }}
     nodeTypes={workflowNodeTypes}
     edgeTypes={workflowEdgeTypes}
     fitViewOptions={WORKFLOW_GRAPH_FIT_VIEW_OPTIONS}

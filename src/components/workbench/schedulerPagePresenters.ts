@@ -4,72 +4,35 @@ import type {
   ProjectionStateRecord,
   RunListProjectionRecord,
   WorkflowSchedulerEstimateRecord,
-  WorkflowRunListQueryRequest,
   SchedulerTimelineProjectionRecord,
 } from '../../services/diagnostics/types';
-import type { SchedulerRunFilters, SchedulerSortKey } from '../../stores/schedulerRunListStore';
+import {
+  DEFAULT_SCHEDULER_RUN_FILTERS,
+  SCHEDULER_SECONDARY_FILTER_KEYS,
+  SCHEDULER_SORT_OPTIONS,
+  SCHEDULER_STATUS_FILTERS,
+  SCHEDULER_STATUS_SEGMENTS,
+  type SchedulerRunFilters,
+  type SchedulerSecondaryFilterKey,
+  type SchedulerSortKey,
+  type SchedulerStatusSegment,
+} from '../../stores/schedulerRunListStore.ts';
 import { formatProjectionFreshnessState } from './projectionFreshness.ts';
+import {
+  formatClockTime,
+  formatRunDuration,
+  groupRunsForContextPicker,
+  startOfLocalDayMs,
+  type RunContextGroupId,
+  type RunContextRow,
+} from './shell/runContextPicker.ts';
+import type { SegmentOption } from './ui/types.ts';
 
 export function formatSchedulerTimestamp(value: number | null | undefined): string {
   if (!value) {
     return 'Unscheduled';
   }
   return new Date(value).toLocaleString();
-}
-
-export function formatSchedulerDuration(
-  value: number | null | undefined,
-  status: RunListProjectionRecord['status'],
-): string {
-  if (value === null || value === undefined) {
-    if (status === 'running') {
-      return 'Running';
-    }
-    if (
-      status === 'future' ||
-      status === 'scheduled' ||
-      status === 'queued' ||
-      status === 'accepted' ||
-      status === 'delayed'
-    ) {
-      return 'Pending';
-    }
-    return 'Unavailable';
-  }
-  if (value < 1_000) {
-    return `${Math.round(value)} ms`;
-  }
-  return `${(value / 1_000).toFixed(1)} s`;
-}
-
-export function formatSchedulerQueuePosition(value: number | null | undefined): string {
-  if (value === null || value === undefined) {
-    return 'Unassigned';
-  }
-  return String(value);
-}
-
-export function formatSchedulerPriority(value: number | null | undefined): string {
-  if (value === null || value === undefined) {
-    return 'Default';
-  }
-  return String(value);
-}
-
-export function formatSchedulerEstimateLabel(run: RunListProjectionRecord): string {
-  const parts = [
-    run.estimated_queue_wait_ms === null || run.estimated_queue_wait_ms === undefined
-      ? null
-      : `wait ${formatSchedulerDuration(run.estimated_queue_wait_ms, run.status)}`,
-    run.estimated_duration_ms === null || run.estimated_duration_ms === undefined
-      ? null
-      : `run ${formatSchedulerDuration(run.estimated_duration_ms, run.status)}`,
-  ].filter((part): part is string => part !== null);
-  if (parts.length === 0) {
-    return run.estimate_confidence ? `${run.estimate_confidence} confidence` : 'Unavailable';
-  }
-  const confidence = run.estimate_confidence ? ` (${run.estimate_confidence})` : '';
-  return `${parts.join(' / ')}${confidence}`;
 }
 
 export function formatSchedulerModelCacheState(
@@ -100,48 +63,9 @@ export function formatSchedulerModelCacheState(
   }
 }
 
-export interface SchedulerEstimateFactRow {
-  label: string;
-  value: string;
-  mono?: boolean;
-}
-
 export interface SchedulerRetentionSummaryRow {
   label: string;
   count: number;
-}
-
-export function buildSchedulerEstimateRows(
-  estimate: WorkflowSchedulerEstimateRecord | null | undefined,
-): SchedulerEstimateFactRow[] {
-  if (!estimate) {
-    return [
-    { label: 'Confidence', value: 'Unavailable' },
-    { label: 'Queue Wait', value: 'Unavailable' },
-    { label: 'Run Duration', value: 'Unavailable' },
-    { label: 'Model Cache', value: 'Unavailable' },
-    { label: 'Policy', value: 'Unassigned', mono: true },
-    { label: 'Updated', value: 'Unavailable' },
-    ];
-  }
-  return [
-    { label: 'Confidence', value: estimate.estimate_confidence ?? 'Unavailable' },
-    { label: 'Queue Wait', value: formatSchedulerEstimateDuration(estimate.estimated_queue_wait_ms) },
-    { label: 'Run Duration', value: formatSchedulerEstimateDuration(estimate.estimated_duration_ms) },
-    { label: 'Model Cache', value: formatSchedulerModelCacheState(estimate.model_cache_state) },
-    { label: 'Policy', value: formatSchedulerPolicyLabel(estimate.scheduler_policy_id), mono: true },
-    { label: 'Updated', value: formatSchedulerTimestamp(estimate.last_updated_at_ms) },
-  ];
-}
-
-export function formatSchedulerEstimateDuration(value: number | null | undefined): string {
-  if (value === null || value === undefined) {
-    return 'Unavailable';
-  }
-  if (value < 1_000) {
-    return `${Math.round(value)} ms`;
-  }
-  return `${(value / 1_000).toFixed(1)} s`;
 }
 
 export function buildSchedulerRetentionSummaryRows(
@@ -174,10 +98,6 @@ export function formatSchedulerRetentionStateLabel(retentionState: IoArtifactRet
   }
 }
 
-export function formatSchedulerReasonLabel(value: string | null | undefined): string {
-  return value && value.trim().length > 0 ? value : 'Unavailable';
-}
-
 export function formatSchedulerStatusLabel(status: RunListProjectionRecord['status']): string {
   switch (status) {
     case 'accepted':
@@ -208,26 +128,6 @@ export function schedulerRunSupportsDependencyReadinessResume(
     run?.workflow_execution_session_id
       && run.workflow_execution_session_resume_state === 'dependency_readiness_pending',
   );
-}
-
-export function schedulerStatusClass(status: RunListProjectionRecord['status']): string {
-  switch (status) {
-    case 'completed':
-      return 'border-emerald-700 bg-emerald-950/60 text-emerald-200';
-    case 'running':
-      return 'border-cyan-700 bg-cyan-950/60 text-cyan-200';
-    case 'queued':
-    case 'accepted':
-    case 'future':
-    case 'scheduled':
-      return 'border-amber-700 bg-amber-950/60 text-amber-200';
-    case 'delayed':
-      return 'border-orange-700 bg-orange-950/60 text-orange-200';
-    case 'failed':
-      return 'border-red-700 bg-red-950/60 text-red-200';
-    case 'cancelled':
-      return 'border-neutral-700 bg-neutral-900 text-neutral-300';
-  }
 }
 
 export function formatSchedulerProjectionFreshness(state: ProjectionStateRecord | null): string {
@@ -542,55 +442,6 @@ export function filterAndSortSchedulerRuns(
   return [...filtered].sort((left, right) => compareSchedulerRuns(left, right, filters.sort));
 }
 
-export function buildSchedulerRunListQuery(
-  filters: SchedulerRunFilters,
-  limit: number,
-): WorkflowRunListQueryRequest {
-  const request: WorkflowRunListQueryRequest = { limit };
-  if (filters.status !== 'all') {
-    request.status = filters.status;
-  }
-  if (isAssignedFilterValue(filters.schedulerPolicy)) {
-    request.scheduler_policy_id = filters.schedulerPolicy;
-  }
-  if (isAssignedFilterValue(filters.retentionPolicy)) {
-    request.retention_policy_id = filters.retentionPolicy;
-  }
-  if (isAssignedFilterValue(filters.client)) {
-    request.client_id = filters.client;
-  }
-  if (isAssignedFilterValue(filters.clientSession)) {
-    request.client_session_id = filters.clientSession;
-  }
-  if (isAssignedFilterValue(filters.bucket)) {
-    request.bucket_id = filters.bucket;
-  }
-  if (isAssignedFilterValue(filters.selectedRuntime)) {
-    request.selected_runtime_id = filters.selectedRuntime;
-  }
-  if (isAssignedFilterValue(filters.selectedRuntimeVariant)) {
-    request.selected_runtime_variant_id = filters.selectedRuntimeVariant;
-  }
-  if (isAssignedFilterValue(filters.selectedBackend)) {
-    request.selected_backend_key = filters.selectedBackend;
-  }
-  if (isAssignedFilterValue(filters.selectedDeviceClass)) {
-    request.selected_device_class = filters.selectedDeviceClass;
-  }
-  if (isAssignedFilterValue(filters.selectedDevice)) {
-    request.selected_device_id = filters.selectedDevice;
-  }
-  if (isAssignedFilterValue(filters.selectedNetworkNode)) {
-    request.selected_network_node_id = filters.selectedNetworkNode;
-  }
-  const acceptedRange = schedulerAcceptedDateRange(filters.acceptedDate);
-  if (acceptedRange) {
-    request.accepted_at_from_ms = acceptedRange.fromMs;
-    request.accepted_at_to_ms = acceptedRange.toMs;
-  }
-  return request;
-}
-
 function uniqueSortedOptions(values: string[]): string[] {
   return [...new Set(values)].sort(compareFilterOptions);
 }
@@ -603,24 +454,6 @@ function compareFilterOptions(left: string, right: string): number {
     return 1;
   }
   return compareStrings(left, right);
-}
-
-function isAssignedFilterValue(value: string): boolean {
-  return value !== 'all' && value !== 'Unassigned';
-}
-
-function schedulerAcceptedDateRange(value: string): { fromMs: number; toMs: number } | null {
-  if (!isAssignedFilterValue(value)) {
-    return null;
-  }
-  const fromMs = Date.parse(`${value}T00:00:00.000Z`);
-  if (!Number.isFinite(fromMs)) {
-    return null;
-  }
-  return {
-    fromMs,
-    toMs: fromMs + 86_400_000 - 1,
-  };
 }
 
 function schedulerRunMatchesSearch(run: RunListProjectionRecord, search: string): boolean {
@@ -666,4 +499,453 @@ function compareSchedulerRuns(
 
 function compareStrings(left: string, right: string): number {
   return left.localeCompare(right);
+}
+
+// ---------------------------------------------------------------------------
+// Redesigned Scheduler layout (docs/design/workbench-redesign-spec.md,
+// "Scheduler"). Input is the shell's run-list projection; grouping and row
+// decoration come from the run-context picker helpers so the list and the
+// header picker always agree (issues WR-004, WR-005).
+// ---------------------------------------------------------------------------
+
+const SCHEDULER_STATUS_SEGMENT_LABELS: Record<SchedulerStatusSegment, string> = {
+  all: 'All',
+  active: 'Active',
+  queued: 'Queued',
+  done: 'Done',
+  failed: 'Failed',
+};
+
+/**
+ * Status segment of a run. There is no memory-wait status in the run-list
+ * projection (WR-004), so Active holds running runs only and delayed runs
+ * count as Queued, matching the picker's Queued group.
+ */
+export function schedulerStatusSegmentForRun(
+  run: Pick<RunListProjectionRecord, 'status'>,
+): Exclude<SchedulerStatusSegment, 'all'> {
+  switch (run.status) {
+    case 'running':
+      return 'active';
+    case 'accepted':
+    case 'future':
+    case 'scheduled':
+    case 'queued':
+    case 'delayed':
+      return 'queued';
+    case 'completed':
+    case 'cancelled':
+      return 'done';
+    case 'failed':
+      return 'failed';
+  }
+}
+
+export function filterSchedulerRunsBySegment(
+  runs: readonly RunListProjectionRecord[],
+  segment: SchedulerStatusSegment,
+): RunListProjectionRecord[] {
+  return segment === 'all' ? [...runs] : runs.filter((run) => schedulerStatusSegmentForRun(run) === segment);
+}
+
+/** Segment buttons with counts over `pool` (the runs left after every other filter). */
+export function buildSchedulerStatusSegments(
+  pool: readonly RunListProjectionRecord[],
+): SegmentOption<SchedulerStatusSegment>[] {
+  const counts: Record<SchedulerStatusSegment, number> = { all: pool.length, active: 0, queued: 0, done: 0, failed: 0 };
+  for (const run of pool) counts[schedulerStatusSegmentForRun(run)] += 1;
+  return SCHEDULER_STATUS_SEGMENTS.map((segment) => ({
+    value: segment,
+    label: SCHEDULER_STATUS_SEGMENT_LABELS[segment],
+    count: counts[segment],
+  }));
+}
+
+export interface SchedulerRunRow extends RunContextRow {
+  /** Right-hand time: HH:MM today, otherwise a short date. */
+  time: string;
+  timeTitle: string;
+  /** Second sub-line: start time for running runs, placement otherwise. */
+  detail: string | null;
+}
+
+export interface SchedulerRunGroup {
+  id: RunContextGroupId;
+  title: string;
+  rows: SchedulerRunRow[];
+}
+
+const SHORT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+export function formatSchedulerRowTime(ms: number, startOfTodayMs: number): string {
+  if (ms >= startOfTodayMs) return formatClockTime(ms);
+  const date = new Date(ms);
+  return `${SHORT_MONTHS[date.getMonth()]} ${date.getDate()}`;
+}
+
+/** Local wall-clock time as HH:MM:SS, for timeline rows. */
+export function formatSchedulerClockTime(ms: number): string {
+  const date = new Date(ms);
+  return [date.getHours(), date.getMinutes(), date.getSeconds()]
+    .map((part) => String(part).padStart(2, '0'))
+    .join(':');
+}
+
+/** "llama.cpp on cuda:0", "llama.cpp, device not assigned yet", or null when nothing is placed. */
+export function schedulerRunPlacementSummary(
+  run: Pick<RunListProjectionRecord, 'selected_runtime_id' | 'selected_device_id'>,
+): string | null {
+  const runtime = run.selected_runtime_id?.trim();
+  const device = run.selected_device_id?.trim();
+  if (runtime && device) return `${runtime} on ${device}`;
+  if (runtime) return `${runtime}, device not assigned yet`;
+  if (device) return `on ${device}`;
+  return null;
+}
+
+export function schedulerRunDetailLine(run: RunListProjectionRecord): string | null {
+  if (run.status === 'running') {
+    // The picker's context for running runs is already the placement.
+    return typeof run.started_at_ms === 'number' ? `Started ${formatClockTime(run.started_at_ms)}` : null;
+  }
+  return schedulerRunPlacementSummary(run);
+}
+
+/**
+ * Group already filtered and sorted runs the way the header picker does
+ * (Running, Queued, Finished today, Finished earlier). Inside each group the
+ * order of `sortedRuns` (the Sort filter) is kept.
+ */
+export function groupSchedulerRuns(
+  sortedRuns: readonly RunListProjectionRecord[],
+  options: { selectedRunId: string | null; nowMs: number },
+): SchedulerRunGroup[] {
+  const order = new Map(sortedRuns.map((run, index) => [run.workflow_run_id, index]));
+  const position = (row: RunContextRow) => order.get(row.runId) ?? Number.MAX_SAFE_INTEGER;
+  const startOfToday = startOfLocalDayMs(options.nowMs);
+  return groupRunsForContextPicker(sortedRuns, {
+    query: '',
+    selectedRunId: options.selectedRunId,
+    nowMs: options.nowMs,
+  }).map((group) => ({
+    id: group.id,
+    title: group.title,
+    rows: [...group.rows]
+      .sort((left, right) => position(left) - position(right))
+      .map((row) => ({
+        ...row,
+        time: formatSchedulerRowTime(row.record.last_updated_at_ms, startOfToday),
+        timeTitle: `Updated ${formatSchedulerTimestamp(row.record.last_updated_at_ms)}`,
+        detail: schedulerRunDetailLine(row.record),
+      })),
+  }));
+}
+
+function formatWorkMinutes(ms: number): string {
+  if (ms < 60_000) return 'under a minute';
+  return `about ${Math.round(ms / 60_000)} min`;
+}
+
+function plural(count: number, one: string, many: string): string {
+  return `${count} ${count === 1 ? one : many}`;
+}
+
+/**
+ * The dimension line: "N runs waiting, about M min of queued work on D
+ * devices". Minutes come from the scheduler estimate facts carried on each
+ * run-list record (`estimated_duration_ms`); without any estimate the line is
+ * the count alone.
+ */
+export function buildSchedulerQueueSummary(
+  runs: readonly RunListProjectionRecord[],
+  list: { loaded: boolean; loading: boolean; unreachable: boolean },
+): string {
+  if (!list.loaded) {
+    if (list.unreachable) return 'Run list unavailable, the engine did not answer';
+    return list.loading ? 'Loading runs' : 'Run list unavailable';
+  }
+  const waiting = runs.filter((run) => schedulerStatusSegmentForRun(run) === 'queued');
+  if (waiting.length === 0) {
+    const running = runs.filter((run) => run.status === 'running').length;
+    return running > 0 ? `No runs waiting, ${running} running` : 'No runs waiting';
+  }
+  const count = plural(waiting.length, 'run waiting', 'runs waiting');
+  const estimated = waiting.filter(
+    (run) => typeof run.estimated_duration_ms === 'number' && run.estimated_duration_ms >= 0,
+  );
+  if (estimated.length === 0) return count;
+  const totalMs = estimated.reduce((sum, run) => sum + (run.estimated_duration_ms ?? 0), 0);
+  const coverage = estimated.length < waiting.length ? ` (estimated for ${estimated.length} of them)` : '';
+  const devices = new Set(
+    runs
+      .filter((run) => run.status === 'running' || schedulerStatusSegmentForRun(run) === 'queued')
+      .map((run) => run.selected_device_id?.trim())
+      .filter((device): device is string => Boolean(device)),
+  );
+  const onDevices = devices.size > 0 ? ` on ${plural(devices.size, 'device', 'devices')}` : '';
+  return `${count}, ${formatWorkMinutes(totalMs)} of queued work${onDevices}${coverage}`;
+}
+
+// --- Filters disclosure -----------------------------------------------------
+
+export interface SchedulerFilterOption {
+  value: string;
+  label: string;
+}
+
+export interface SchedulerFilterField {
+  key: SchedulerSecondaryFilterKey;
+  /** DOM id of the select, stable across renders. */
+  id: string;
+  label: string;
+  value: string;
+  options: SchedulerFilterOption[];
+}
+
+const SCHEDULER_FILTER_LABELS: Record<SchedulerSecondaryFilterKey, string> = {
+  status: 'Status',
+  sort: 'Sort',
+  schedulerPolicy: 'Policy',
+  retentionPolicy: 'Retention',
+  client: 'Client',
+  clientSession: 'Session',
+  bucket: 'Bucket',
+  selectedRuntime: 'Runtime',
+  selectedRuntimeVariant: 'Runtime variant',
+  selectedBackend: 'Backend',
+  selectedDeviceClass: 'Device class',
+  selectedDevice: 'Device',
+  selectedNetworkNode: 'Network node',
+  acceptedDate: 'Accepted',
+};
+
+type SchedulerOptionFilterKey = Exclude<SchedulerSecondaryFilterKey, 'status' | 'sort'>;
+
+const SCHEDULER_FILTER_OPTION_SOURCES: Record<SchedulerOptionFilterKey, (runs: RunListProjectionRecord[]) => string[]> = {
+  schedulerPolicy: schedulerPolicyFilterOptions,
+  retentionPolicy: schedulerRetentionFilterOptions,
+  client: schedulerClientFilterOptions,
+  clientSession: schedulerClientSessionFilterOptions,
+  bucket: schedulerBucketFilterOptions,
+  selectedRuntime: schedulerSelectedRuntimeFilterOptions,
+  selectedRuntimeVariant: schedulerSelectedRuntimeVariantFilterOptions,
+  selectedBackend: schedulerSelectedBackendFilterOptions,
+  selectedDeviceClass: schedulerSelectedDeviceClassFilterOptions,
+  selectedDevice: schedulerSelectedDeviceFilterOptions,
+  selectedNetworkNode: schedulerSelectedNetworkNodeFilterOptions,
+  acceptedDate: schedulerAcceptedDateFilterOptions,
+};
+
+function schedulerFilterValueLabel(key: SchedulerSecondaryFilterKey, value: string): string {
+  if (value === 'all') return 'All';
+  if (key === 'status') return formatSchedulerStatusLabel(value as RunListProjectionRecord['status']);
+  if (key === 'sort') return SCHEDULER_SORT_OPTIONS.find((option) => option.value === value)?.label ?? value;
+  return value;
+}
+
+/**
+ * The fourteen selects of the Filters disclosure, in display order. Options
+ * come from the loaded runs; an applied value that no loaded run carries any
+ * more stays listed so the select still shows it.
+ */
+export function buildSchedulerFilterFields(
+  runs: RunListProjectionRecord[],
+  filters: SchedulerRunFilters,
+): SchedulerFilterField[] {
+  return SCHEDULER_SECONDARY_FILTER_KEYS.map((key) => {
+    const value = filters[key];
+    let values: string[];
+    if (key === 'status') values = [...SCHEDULER_STATUS_FILTERS];
+    else if (key === 'sort') values = SCHEDULER_SORT_OPTIONS.map((option) => option.value);
+    else {
+      values = ['all', ...SCHEDULER_FILTER_OPTION_SOURCES[key](runs)];
+      if (!values.includes(value)) values.push(value);
+    }
+    return {
+      key,
+      id: `scheduler-filter-${key}`,
+      label: SCHEDULER_FILTER_LABELS[key],
+      value,
+      options: values.map((option) => ({ value: option, label: schedulerFilterValueLabel(key, option) })),
+    };
+  });
+}
+
+export interface SchedulerAppliedFilterChip {
+  key: SchedulerSecondaryFilterKey;
+  label: string;
+}
+
+/** One chip per disclosure filter that differs from its default. */
+export function schedulerAppliedFilterChips(filters: SchedulerRunFilters): SchedulerAppliedFilterChip[] {
+  return SCHEDULER_SECONDARY_FILTER_KEYS.filter((key) => filters[key] !== DEFAULT_SCHEDULER_RUN_FILTERS[key]).map(
+    (key) => ({ key, label: `${SCHEDULER_FILTER_LABELS[key]}: ${schedulerFilterValueLabel(key, filters[key])}` }),
+  );
+}
+
+// --- Detail panel -------------------------------------------------------------
+
+/** First line of the Progress cell, from run-list facts only. */
+export function schedulerRunProgressText(run: RunListProjectionRecord): string {
+  const reason = run.scheduler_reason?.trim();
+  const duration = formatRunDuration(run.duration_ms);
+  switch (run.status) {
+    case 'running':
+      return typeof run.started_at_ms === 'number'
+        ? `Running since ${formatSchedulerClockTime(run.started_at_ms)}`
+        : 'Running';
+    case 'accepted':
+    case 'future':
+    case 'scheduled':
+    case 'queued': {
+      const head = typeof run.scheduler_queue_position === 'number'
+        ? `Queue position ${run.scheduler_queue_position}`
+        : formatSchedulerStatusLabel(run.status);
+      return reason ? `${head}, ${reason}` : head;
+    }
+    case 'delayed':
+      return reason ? `Delayed: ${reason}` : 'Delayed by the scheduler';
+    case 'completed':
+      return duration ? `Finished in ${duration}` : 'Finished';
+    case 'failed': {
+      const error = run.latest_error_message?.trim() || run.latest_error_code?.trim();
+      return error ? `Failed: ${error}` : 'Failed';
+    }
+    case 'cancelled':
+      return duration ? `Cancelled after ${duration}` : 'Cancelled';
+  }
+}
+
+/** Second line of the Progress cell, from the selected run's scheduler estimate query. */
+export function schedulerEstimateSentence(
+  estimate: WorkflowSchedulerEstimateRecord | null,
+  state: { loading: boolean; error: string | null },
+): string {
+  if (state.error) return `Estimate unavailable: ${state.error}`;
+  if (!estimate) return state.loading ? 'Loading the scheduler estimate' : 'No scheduler estimate for this run';
+  const wait = formatRunDuration(estimate.estimated_queue_wait_ms);
+  const run = formatRunDuration(estimate.estimated_duration_ms);
+  const parts = [wait ? `about ${wait} queue wait` : null, run ? `about ${run} to run` : null].filter(
+    (part): part is string => part !== null,
+  );
+  let sentence = parts.length > 0 ? parts.join(', ') : 'no duration estimate';
+  if (estimate.estimate_confidence) sentence += `, ${estimate.estimate_confidence} confidence`;
+  sentence = `${sentence.charAt(0).toUpperCase()}${sentence.slice(1)}.`;
+  if (estimate.model_cache_state && estimate.model_cache_state !== 'unknown') {
+    sentence += ` ${formatSchedulerModelCacheState(estimate.model_cache_state)}.`;
+  }
+  return sentence;
+}
+
+export function schedulerRunPlacementText(run: RunListProjectionRecord): string {
+  const runtime = formatSchedulerRuntimePlacementLabel(run);
+  const device = formatSchedulerDevicePlacementLabel(run);
+  if (runtime === 'Unassigned' && device === 'Unassigned') return 'Not assigned to a device yet';
+  if (device === 'Unassigned') return `${runtime}, device not assigned yet`;
+  if (runtime === 'Unassigned') return `On ${device}`;
+  return `${runtime} on ${device}`;
+}
+
+export function schedulerRunPolicyText(run: RunListProjectionRecord): string {
+  const parts = [
+    run.scheduler_policy_id ? `Policy ${run.scheduler_policy_id}` : null,
+    run.bucket_id ? `bucket ${run.bucket_id}` : null,
+    run.selected_backend_key ? `backend ${run.selected_backend_key}` : null,
+    run.selected_network_node_id ? `network node ${run.selected_network_node_id}` : null,
+  ].filter((part): part is string => part !== null);
+  if (parts.length === 0) return 'No policy, bucket or backend recorded';
+  const text = parts.join(', ');
+  return `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
+}
+
+export function schedulerRetentionText(
+  summary: IoArtifactRetentionSummaryRecord[],
+  state: { loading: boolean; error: string | null },
+): string {
+  if (state.error) return `Artifact summary unavailable: ${state.error}`;
+  const rows = buildSchedulerRetentionSummaryRows(summary);
+  if (rows.length === 0) return state.loading ? 'Loading the artifact summary' : 'No retained artifacts projected';
+  return rows.map((row) => `${row.label}: ${row.count}`).join(', ');
+}
+
+export function schedulerRetentionPolicyText(run: Pick<RunListProjectionRecord, 'retention_policy_id'>): string {
+  return run.retention_policy_id ? `Retention policy ${run.retention_policy_id}` : 'No retention policy recorded';
+}
+
+/** Chips after the status chip: placement, priority, queue position. */
+export function schedulerRunDetailChips(run: RunListProjectionRecord): string[] {
+  const chips: string[] = [];
+  const placement = schedulerRunPlacementSummary(run);
+  if (placement) chips.push(placement);
+  if (typeof run.scheduler_priority === 'number' && run.scheduler_priority !== 0) {
+    chips.push(`priority ${run.scheduler_priority}`);
+  }
+  if (typeof run.scheduler_queue_position === 'number') chips.push(`#${run.scheduler_queue_position} in queue`);
+  return chips;
+}
+
+export function schedulerTimelineAttemptText(
+  event: Parameters<typeof buildSchedulerTimelineAttemptRows>[0],
+): string | null {
+  const rows = buildSchedulerTimelineAttemptRows(event);
+  return rows.length > 0 ? rows.map((row) => `${row.label} ${row.value}`).join(' · ') : null;
+}
+
+function lowerFirst(text: string): string {
+  return `${text.charAt(0).toLowerCase()}${text.slice(1)}`;
+}
+
+/** One muted line naming how fresh each detail projection is (ADR-014 guardrail). */
+export function schedulerDetailFreshnessText(states: {
+  timeline: ProjectionStateRecord | null;
+  estimate: ProjectionStateRecord | null;
+  retention: ProjectionStateRecord | null;
+}): string {
+  return [
+    `Timeline ${lowerFirst(formatProjectionFreshnessState(states.timeline))}`,
+    `estimate ${lowerFirst(formatProjectionFreshnessState(states.estimate))}`,
+    `artifacts ${lowerFirst(formatProjectionFreshnessState(states.retention))}`,
+  ].join('; ');
+}
+
+// --- Footer -----------------------------------------------------------------
+
+export type SchedulerFooterState =
+  | { kind: 'none' }
+  | { kind: 'missing' }
+  | { kind: 'finished'; workflowId: string }
+  | { kind: 'live'; run: RunListProjectionRecord };
+
+/**
+ * What the run panel footer offers. `missing` is an active run that is not in
+ * the loaded run list (selected elsewhere, or older than the list window).
+ */
+export function schedulerFooterState(
+  activeRunId: string | null,
+  run: RunListProjectionRecord | null,
+): SchedulerFooterState {
+  if (!activeRunId) return { kind: 'none' };
+  if (!run) return { kind: 'missing' };
+  const segment = schedulerStatusSegmentForRun(run);
+  if (segment === 'done' || segment === 'failed') return { kind: 'finished', workflowId: run.workflow_id };
+  return { kind: 'live', run };
+}
+
+/** Why the session queue actions (Cancel, Front, Priority) are unavailable, or null when they apply. */
+export function schedulerQueueControlsUnavailableReason(run: RunListProjectionRecord | null): string | null {
+  if (schedulerRunSupportsQueueControls(run)) return null;
+  if (!run || (run.status !== 'queued' && run.status !== 'delayed')) {
+    return 'The scheduler accepts cancel, front and priority changes only while a run is queued or delayed.';
+  }
+  return 'This run has no workflow execution session. The GUI admin actions under More actions act on it by run id.';
+}
+
+export function schedulerAdminControlsUnavailableReason(run: RunListProjectionRecord | null): string | null {
+  if (schedulerRunSupportsAdminQueueControls(run)) return null;
+  return 'GUI admin actions apply only while a run is queued or delayed.';
+}
+
+export function schedulerResumeUnavailableReason(run: RunListProjectionRecord | null): string | null {
+  if (schedulerRunSupportsDependencyReadinessResume(run)) return null;
+  return 'Resume applies only to a session run waiting on runtime dependency readiness.';
 }

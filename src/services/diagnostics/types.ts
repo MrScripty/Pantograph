@@ -645,9 +645,27 @@ export interface PumasHfModelSearchAuditRequest {
   hydrateLimit?: number | null;
 }
 
+/**
+ * Projection of Pumas `HuggingFaceModel` (pumas-core `models/model.rs`), which
+ * the host passes through unchanged. The struct serialises with
+ * `rename_all = "camelCase"`, so field names here are the camelCase forms.
+ * Values are runtime-decoded by the Library presenter before use.
+ */
 export interface PumasHfModelSearchResult {
-  id?: string | null;
-  [key: string]: unknown;
+  repoId?: string | null;
+  name?: string | null;
+  developer?: string | null;
+  kind?: string | null;
+  formats?: string[] | null;
+  quants?: string[] | null;
+  downloadOptions?: unknown[] | null;
+  url?: string | null;
+  releaseDate?: string | null;
+  modelCard?: Record<string, unknown> | null;
+  license?: string | null;
+  downloads?: number | null;
+  totalSizeBytes?: number | null;
+  quantSizes?: Record<string, number> | null;
 }
 
 export interface PumasHfModelSearchAuditResponse {

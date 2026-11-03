@@ -17,6 +17,8 @@
   import HealthStatusPanel from './server-status/HealthStatusPanel.svelte';
   import RuntimeSnapshotGrid from './server-status/RuntimeSnapshotGrid.svelte';
   import { expandedSection, toggleSection } from '../stores/accordionStore';
+  import { StatusGlyph } from './workbench/ui';
+  import { serverConnectionGlyph } from './server-status/serverStatusPresenters';
 
   let { showManagedRuntimePanel = true }: { showManagedRuntimePanel?: boolean } = $props();
 
@@ -129,14 +131,12 @@
     await HealthMonitorService.checkNow();
   }
 
-  let statusColor = $derived(
-    llmState.status.ready
-      ? healthState.lastResult?.healthy === false
-        ? 'bg-red-500'
-        : 'bg-green-500'
-      : llmState.status.mode !== 'none'
-        ? 'bg-yellow-500 animate-pulse'
-        : 'bg-neutral-500'
+  let statusGlyph = $derived(
+    serverConnectionGlyph(
+      llmState.status.ready,
+      healthState.lastResult?.healthy,
+      llmState.status.mode,
+    )
   );
 
   let statusText = $derived(
@@ -165,31 +165,30 @@
   });
 </script>
 
-<div class="space-y-3">
-  <button
-    type="button"
-    class="w-full flex items-center justify-between text-xs uppercase tracking-wider text-neutral-500 hover:text-neutral-400 transition-colors"
-    onclick={() => toggleSection('server')}
-  >
-    <div class="flex items-center gap-2">
-      <span class={`h-2 w-2 rounded-full ${statusColor}`}></span>
-      <span>LLM Server</span>
-      {#if llmState.status.ready}
-        <span class="normal-case text-green-400">({modeText})</span>
-      {/if}
-    </div>
-    <svg
-      class={`h-3 w-3 transform transition-transform ${$expandedSection === 'server' ? 'rotate-180' : ''}`}
-      fill="none"
-      stroke="currentColor"
-      viewBox="0 0 24 24"
-    >
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-    </svg>
-  </button>
+<section class="pg-card" aria-labelledby="settings-server-title">
+  <div class="flex items-center gap-2">
+    <h3 class="m-0 min-w-0 flex-1">
+      <button
+        type="button"
+        id="settings-server-title"
+        class="flex w-full items-center gap-2 text-left text-[13px] font-bold text-pg-text-bright"
+        aria-expanded={$expandedSection === 'server'}
+        onclick={() => toggleSection('server')}
+      >
+        LLM server
+        <span class="pg-muted text-[11px] font-normal" aria-hidden="true">
+          {$expandedSection === 'server' ? '▴' : '▾'}
+        </span>
+      </button>
+    </h3>
+    <span class="flex items-center gap-1.5 pg-small text-pg-text-soft">
+      <StatusGlyph state={statusGlyph} small />
+      {statusText}
+    </span>
+  </div>
 
   {#if $expandedSection === 'server'}
-    <div class="space-y-3 rounded-lg bg-neutral-800/30 p-3">
+    <div class="mt-3 flex flex-col gap-3 border-t border-pg-border-soft pt-3">
       <ConnectionModeTabs bind:connectionType />
 
       {#if connectionType === 'external'}
@@ -203,7 +202,7 @@
           onDisconnect={disconnectExternal}
         />
       {:else}
-        <div class="space-y-3">
+        <div class="flex flex-col gap-3">
           <BackendSelector />
           {#if showManagedRuntimePanel}
             <ManagedRuntimePanel />
@@ -212,12 +211,12 @@
       {/if}
 
       {#if llmState.status.ready}
-        <div class="flex items-center justify-between border-t border-neutral-700 pt-2 text-xs">
-          <span class="text-neutral-500">Status: {statusText}</span>
+        <p class="m-0 flex flex-wrap items-baseline justify-between gap-2 pg-small">
+          <span class="pg-muted">Mode {modeText}</span>
           {#if llmState.status.url}
-            <span class="font-mono text-[10px] text-neutral-600">{llmState.status.url}</span>
+            <span class="pg-mono pg-muted break-all">{llmState.status.url}</span>
           {/if}
-        </div>
+        </p>
 
         <RuntimeSnapshotGrid
           activeRuntime={llmState.status.active_runtime}
@@ -236,21 +235,21 @@
       {/if}
 
       {#if llmState.error || configState.error || healthState.error}
-        <div class="rounded border border-red-800/50 bg-red-900/20 p-2 text-xs text-red-400">
+        <p class="m-0 pg-muted pg-small" role="alert">
           {llmState.error || configState.error || healthState.error}
-        </div>
+        </p>
       {/if}
     </div>
   {:else}
-    <div class="flex items-center gap-2 text-xs text-neutral-500">
+    <p class="m-0 mt-1 pg-muted pg-small truncate">
       {#if llmState.status.ready}
-        <span class="text-green-400">{modeText}</span>
+        {modeText}
         {#if llmState.status.url}
-          <span class="truncate font-mono text-[10px] text-neutral-600">{llmState.status.url}</span>
+          <span class="pg-mono">{llmState.status.url}</span>
         {/if}
       {:else}
-        <span>Not connected</span>
+        Not connected
       {/if}
-    </div>
+    </p>
   {/if}
-</div>
+</section>

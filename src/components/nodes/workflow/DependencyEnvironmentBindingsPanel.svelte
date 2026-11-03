@@ -92,25 +92,25 @@
 </script>
 
 {#if mode === 'manual'}
-  <div class="rounded border border-neutral-700 px-2 py-1 space-y-2">
+  <div class="rounded border border-pg-border px-2 py-1 space-y-2">
     <div class="flex items-center gap-2">
-      <span class="text-[10px] text-neutral-400">Structured Override Controls</span>
-      <span class="ml-auto text-[10px] text-neutral-500">
+      <span class="text-[10px] text-pg-text-muted">Structured Override Controls</span>
+      <span class="ml-auto text-[10px] text-pg-text-muted">
         {effectiveManualOverrides.length} effective patch(es)
       </span>
     </div>
-    <div class="text-[10px] text-neutral-500">
+    <div class="text-[10px] text-pg-text-muted">
       Configure per binding and per requirement below. Overrides are applied immediately.
     </div>
     {#if upstreamManualOverrides.length > 0}
-      <div class="text-[10px] text-amber-300">
+      <div class="text-[10px] text-pg-text-soft">
         {upstreamManualOverrides.length} patch(es) are provided by connected input. Local form edits override conflicts.
       </div>
     {/if}
     <div class="flex items-center gap-2">
       <button
         type="button"
-        class="text-[10px] px-2 py-0.5 rounded bg-neutral-800 text-neutral-300 hover:bg-neutral-700 disabled:opacity-50"
+        class="text-[10px] px-2 py-0.5 rounded border border-pg-border bg-pg-panel-raised text-pg-text-soft hover:bg-pg-panel-selected disabled:opacity-50"
         onclick={onClearAllOverrides}
         disabled={isBusy || manualOverrides.length === 0}
       >
@@ -118,7 +118,7 @@
       </button>
       <button
         type="button"
-        class="text-[10px] px-2 py-0.5 rounded bg-neutral-800 text-neutral-300 hover:bg-neutral-700 disabled:opacity-50"
+        class="text-[10px] px-2 py-0.5 rounded border border-pg-border bg-pg-panel-raised text-pg-text-soft hover:bg-pg-panel-selected disabled:opacity-50"
         onclick={onToggleAllBindings}
         disabled={isBusy}
       >
@@ -129,9 +129,9 @@
 {/if}
 
 {#if requirements.bindings.length > 0}
-  <div class="rounded border border-neutral-700 px-2 py-1 text-[10px] space-y-1">
+  <div class="rounded border border-pg-border px-2 py-1 text-[10px] space-y-1">
     {#each bindings as binding (binding.binding_id)}
-      <div class="rounded border border-neutral-800 px-2 py-1">
+      <div class="rounded border border-pg-border-soft px-2 py-1">
         <div class="flex items-center gap-2">
           <input
             type="checkbox"
@@ -139,29 +139,29 @@
             disabled={isBusy}
             onchange={() => onToggleBinding(binding.binding_id)}
           />
-          <span class="text-neutral-200 truncate" title={binding.binding_id}>{binding.binding_id}</span>
+          <span class="text-pg-text truncate" title={binding.binding_id}>{binding.binding_id}</span>
           {#if mode === 'manual' && bindingPatchCount(binding.binding_id) > 0}
-            <span class="ml-auto text-[9px] text-cyan-300">
+            <span class="ml-auto text-[9px] text-pg-text-soft">
               {bindingPatchCount(binding.binding_id)} override patch(es)
             </span>
           {/if}
         </div>
-        <div class="text-[9px] text-neutral-500 truncate" title={binding.profile_id + ' v' + binding.profile_version}>
+        <div class="text-[9px] text-pg-text-muted truncate" title={binding.profile_id + ' v' + binding.profile_version}>
           {binding.profile_id} v{binding.profile_version}
         </div>
-        <div class="text-[9px] text-neutral-400">validation: {dependencyTokenLabel(binding.validation_state)}</div>
+        <div class="text-[9px] text-pg-text-muted">validation: {dependencyTokenLabel(binding.validation_state)}</div>
         {#if binding.requirements.length > 0}
           <div class="space-y-1 mt-1">
             {#if mode === 'manual'}
-              <div class="rounded border border-cyan-900/40 bg-cyan-950/10 px-2 py-1 space-y-1">
-                <div class="text-[10px] text-cyan-300">Binding Override</div>
-                <label class="text-[9px] text-neutral-400" for={bindingPythonExecutableId(binding.binding_id)}>
+              <div class="rounded border border-pg-border bg-pg-panel-sunken px-2 py-1 space-y-1">
+                <div class="text-[10px] text-pg-text">Binding Override</div>
+                <label class="text-[9px] text-pg-text-muted" for={bindingPythonExecutableId(binding.binding_id)}>
                   Python executable
                 </label>
                 <input
                   id={bindingPythonExecutableId(binding.binding_id)}
                   type="text"
-                  class="w-full bg-neutral-900 border border-neutral-700 rounded px-2 py-1 text-[10px] text-neutral-200 font-mono focus:outline-none focus:border-cyan-500"
+                  class="w-full bg-pg-panel-sunken border border-pg-border rounded px-2 py-1 text-[10px] text-pg-text font-mono"
                   value={getStringOverrideField(binding.binding_id, 'binding', undefined, 'python_executable')}
                   placeholder="/path/to/python or python3"
                   onchange={(event) => onBindingPythonExecutableChange(binding.binding_id, event)}
@@ -169,7 +169,7 @@
                 <div class="flex items-center gap-2">
                   <button
                     type="button"
-                    class="text-[9px] px-2 py-0.5 rounded bg-neutral-800 text-neutral-300 hover:bg-neutral-700 disabled:opacity-50"
+                    class="text-[9px] px-2 py-0.5 rounded border border-pg-border bg-pg-panel-raised text-pg-text-soft hover:bg-pg-panel-selected disabled:opacity-50"
                     onclick={() => onClearBindingPythonExecutable(binding.binding_id)}
                     disabled={isBusy || !hasBindingLocalOverride(binding.binding_id)}
                   >
@@ -177,7 +177,7 @@
                   </button>
                   <button
                     type="button"
-                    class="text-[9px] px-2 py-0.5 rounded bg-neutral-800 text-neutral-300 hover:bg-neutral-700 disabled:opacity-50"
+                    class="text-[9px] px-2 py-0.5 rounded border border-pg-border bg-pg-panel-raised text-pg-text-soft hover:bg-pg-panel-selected disabled:opacity-50"
                     onclick={() => onClearBindingOverrides(binding.binding_id)}
                     disabled={isBusy || bindingLocalPatchCount(binding.binding_id) === 0}
                   >
@@ -188,52 +188,52 @@
             {/if}
 
             {#each binding.requirements as requirement (`${binding.binding_id}:${requirement.name}`)}
-              <div class="rounded border border-neutral-800 px-2 py-1 space-y-1">
-                <div class="text-[9px] text-neutral-200">
+              <div class="rounded border border-pg-border-soft px-2 py-1 space-y-1">
+                <div class="text-[9px] text-pg-text">
                   {requirement.name}{requirement.exact_pin}
                 </div>
                 {#if mode === 'manual'}
                   <div class="space-y-1">
-                    <label class="text-[9px] text-neutral-400" for={requirementFieldId(binding.binding_id, requirement.name, 'index-url')}>
+                    <label class="text-[9px] text-pg-text-muted" for={requirementFieldId(binding.binding_id, requirement.name, 'index-url')}>
                       Index URL
                     </label>
                     <input
                       id={requirementFieldId(binding.binding_id, requirement.name, 'index-url')}
                       type="text"
-                      class="w-full bg-neutral-900 border border-neutral-700 rounded px-2 py-1 text-[10px] text-neutral-200 font-mono focus:outline-none focus:border-cyan-500"
+                      class="w-full bg-pg-panel-sunken border border-pg-border rounded px-2 py-1 text-[10px] text-pg-text font-mono"
                       value={getStringOverrideField(binding.binding_id, 'requirement', requirement.name, 'index_url')}
                       placeholder="https://..."
                       onchange={(event) => onRequirementFieldChange(binding.binding_id, requirement.name, 'index_url', event)}
                     />
-                    <label class="text-[9px] text-neutral-400" for={requirementFieldId(binding.binding_id, requirement.name, 'extra-index-urls')}>
+                    <label class="text-[9px] text-pg-text-muted" for={requirementFieldId(binding.binding_id, requirement.name, 'extra-index-urls')}>
                       Extra index URLs (comma-separated)
                     </label>
                     <input
                       id={requirementFieldId(binding.binding_id, requirement.name, 'extra-index-urls')}
                       type="text"
-                      class="w-full bg-neutral-900 border border-neutral-700 rounded px-2 py-1 text-[10px] text-neutral-200 font-mono focus:outline-none focus:border-cyan-500"
+                      class="w-full bg-pg-panel-sunken border border-pg-border rounded px-2 py-1 text-[10px] text-pg-text font-mono"
                       value={getExtraIndexUrls(binding.binding_id, requirement.name)}
                       placeholder="https://a, https://b"
                       onchange={(event) => onRequirementExtraUrlsChange(binding.binding_id, requirement.name, event)}
                     />
-                    <label class="text-[9px] text-neutral-400" for={requirementFieldId(binding.binding_id, requirement.name, 'wheel-source-path')}>
+                    <label class="text-[9px] text-pg-text-muted" for={requirementFieldId(binding.binding_id, requirement.name, 'wheel-source-path')}>
                       Wheel source path
                     </label>
                     <input
                       id={requirementFieldId(binding.binding_id, requirement.name, 'wheel-source-path')}
                       type="text"
-                      class="w-full bg-neutral-900 border border-neutral-700 rounded px-2 py-1 text-[10px] text-neutral-200 font-mono focus:outline-none focus:border-cyan-500"
+                      class="w-full bg-pg-panel-sunken border border-pg-border rounded px-2 py-1 text-[10px] text-pg-text font-mono"
                       value={getStringOverrideField(binding.binding_id, 'requirement', requirement.name, 'wheel_source_path')}
                       placeholder="/path/to/wheels"
                       onchange={(event) => onRequirementFieldChange(binding.binding_id, requirement.name, 'wheel_source_path', event)}
                     />
-                    <label class="text-[9px] text-neutral-400" for={requirementFieldId(binding.binding_id, requirement.name, 'package-source-override')}>
+                    <label class="text-[9px] text-pg-text-muted" for={requirementFieldId(binding.binding_id, requirement.name, 'package-source-override')}>
                       Package source override
                     </label>
                     <input
                       id={requirementFieldId(binding.binding_id, requirement.name, 'package-source-override')}
                       type="text"
-                      class="w-full bg-neutral-900 border border-neutral-700 rounded px-2 py-1 text-[10px] text-neutral-200 font-mono focus:outline-none focus:border-cyan-500"
+                      class="w-full bg-pg-panel-sunken border border-pg-border rounded px-2 py-1 text-[10px] text-pg-text font-mono"
                       value={getStringOverrideField(binding.binding_id, 'requirement', requirement.name, 'package_source_override')}
                       placeholder="custom source descriptor"
                       onchange={(event) =>
@@ -242,14 +242,14 @@
                     <div class="flex items-center gap-2">
                       <button
                         type="button"
-                        class="text-[9px] px-2 py-0.5 rounded bg-neutral-800 text-neutral-300 hover:bg-neutral-700 disabled:opacity-50"
+                        class="text-[9px] px-2 py-0.5 rounded border border-pg-border bg-pg-panel-raised text-pg-text-soft hover:bg-pg-panel-selected disabled:opacity-50"
                         onclick={() => onClearRequirementOverrides(binding.binding_id, requirement.name)}
                         disabled={isBusy || !hasRequirementLocalOverrides(binding.binding_id, requirement.name)}
                       >
                         Clear Local Requirement Overrides
                       </button>
                       {#if requirementPatchCount(binding.binding_id, requirement.name) > 0}
-                        <span class="text-[9px] text-cyan-300">
+                        <span class="text-[9px] text-pg-text-soft">
                           {requirementPatchCount(binding.binding_id, requirement.name)} patch(es)
                         </span>
                       {/if}

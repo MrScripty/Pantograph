@@ -10,6 +10,7 @@
   import ManagedRuntimeHeader from './ManagedRuntimeHeader.svelte';
   import ManagedRuntimeJobPanel from './ManagedRuntimeJobPanel.svelte';
   import ManagedRuntimeSummaryGrid from './ManagedRuntimeSummaryGrid.svelte';
+  import { sentenceCaseState } from './managedRuntimePresenters';
 
   type Props = {
     runtime: ManagedRuntimeManagerRuntimeView;
@@ -147,10 +148,7 @@
   }
 
   function formatHistoryEvent(event: string): string {
-    return event
-      .split('_')
-      .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
-      .join(' ');
+    return sentenceCaseState(event);
   }
 
   function formatHistoryTime(atMs: number): string {
@@ -255,7 +253,7 @@
   });
 </script>
 
-<section class="rounded-lg border border-neutral-700 bg-neutral-900/60 p-3">
+<section class="pg-card" aria-label={runtime.display_name}>
   <ManagedRuntimeHeader
     {runtime}
     installedVersionCount={installedVersions.length}
@@ -283,7 +281,7 @@
     onCancelRuntime={cancelRuntime}
   />
 
-  <div class="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+  <div class="mt-4 flex flex-col gap-4">
     <ManagedRuntimeCatalogPanel
       {runtime}
       {selectableVersions}

@@ -4,6 +4,7 @@
   import { LLMService } from '../services/LLMService';
   import { RagService } from '../services/RagService';
   import { expandedSection, toggleSection } from '../stores/accordionStore';
+  import { StatusGlyph } from './workbench/ui';
   import { createScopedDeviceRefresh, type DeviceRefreshScope } from './deviceConfigRefreshScope';
   import { createDeviceConfigLifecycle, type DeviceConfigLifecycle } from './deviceConfigLifecycle';
   import {
@@ -258,83 +259,73 @@
   });
 </script>
 
-<div class="space-y-3">
-  <!-- Header with toggle -->
-  <button type="button"
-    class="w-full flex items-center justify-between text-xs uppercase tracking-wider text-neutral-500 hover:text-neutral-400 transition-colors"
-    onclick={() => toggleSection('device')}
-  >
-    <div class="flex items-center gap-2">
-      <span>Device Configuration</span>
-      {#if isLoadingDevices}
-        <span class="w-1.5 h-1.5 rounded-full bg-yellow-500 animate-pulse"></span>
-      {:else if deviceLoadError}
-        <span class="w-1.5 h-1.5 rounded-full bg-red-500"></span>
-      {:else}
-        <span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>
-      {/if}
-    </div>
-    <svg
-      class="w-3 h-3 transform transition-transform {$expandedSection === 'device' ? 'rotate-180' : ''}"
-      fill="none"
-      stroke="currentColor"
-      viewBox="0 0 24 24"
-    >
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-    </svg>
-  </button>
+<section class="pg-card" aria-labelledby="settings-device-title">
+  <div class="flex items-center gap-2">
+    <h3 class="m-0 min-w-0 flex-1">
+      <button
+        type="button"
+        id="settings-device-title"
+        class="flex w-full items-center gap-2 text-left text-[13px] font-bold text-pg-text-bright"
+        aria-expanded={$expandedSection === 'device'}
+        onclick={() => toggleSection('device')}
+      >
+        Device configuration
+        <span class="pg-muted text-[11px] font-normal" aria-hidden="true">
+          {$expandedSection === 'device' ? '▴' : '▾'}
+        </span>
+      </button>
+    </h3>
+    <span class="flex items-center gap-1.5 pg-small text-pg-text-soft">
+      <StatusGlyph state={isLoadingDevices ? 'running' : deviceLoadError ? 'failed' : 'succeeded'} small />
+      {isLoadingDevices
+        ? 'Detecting devices'
+        : deviceLoadError
+          ? 'Detection failed'
+          : `${deviceOptions.length} device${deviceOptions.length === 1 ? '' : 's'}`}
+    </span>
+  </div>
 
   {#if $expandedSection === 'device'}
-    <div class="space-y-4 p-3 bg-neutral-800/30 rounded-lg">
-      <!-- Device Selection -->
-      <div class="space-y-2">
-        <div class="flex items-center justify-between">
-          <div class="text-[10px] text-neutral-600 uppercase tracking-wider">
-            Inference Device
-          </div>
-          <button type="button"
+    <div class="mt-3 flex flex-col gap-4 border-t border-pg-border-soft pt-3">
+      <div class="flex flex-col gap-3">
+        <div class="flex items-center justify-between gap-2">
+          <h4 class="m-0 text-[12.5px] font-bold text-pg-text-soft">Inference device</h4>
+          <button
+            type="button"
             onclick={() => loadDevices()}
             disabled={isLoadingDevices}
-            class="text-[10px] text-neutral-500 hover:text-neutral-400 disabled:opacity-50"
+            class="pg-btn pg-btn-sm"
+            aria-label={isLoadingDevices ? 'Loading devices' : 'Refresh devices'}
           >
             {isLoadingDevices ? 'Loading...' : 'Refresh'}
           </button>
         </div>
 
         {#if deviceLoadError}
-          <div class="text-[10px] text-red-400 mb-2">
-            Failed to detect devices: {deviceLoadError}
-          </div>
+          <p class="m-0 pg-muted pg-small" role="alert">Failed to detect devices: {deviceLoadError}</p>
         {/if}
 
-        <!-- Device Selection -->
-        <div class="space-y-1">
-          <label for="compute-device-select" class="text-xs text-neutral-400">Compute Device</label>
+        <div class="flex flex-col gap-1">
+          <label for="compute-device-select" class="pg-fl">Compute device</label>
           <select
             id="compute-device-select"
             bind:value={selectedDevice}
             disabled={isLoadingDevices || deviceOptions.length === 0}
-            class="w-full bg-neutral-900 border border-neutral-700 rounded px-2 py-1.5 text-xs text-neutral-200 focus:outline-none focus:border-neutral-500 disabled:opacity-50"
-            style="color-scheme: dark;"
+            class="pg-field w-full"
           >
             {#each deviceOptions as device (device.id)}
-              <option value={device.id} class="bg-neutral-900 text-neutral-200">{formatDeviceDisplayName(device)}</option>
+              <option value={device.id}>{formatDeviceDisplayName(device)}</option>
             {/each}
           </select>
-          {#if deviceOptions.length === 0}
-            <div class="text-[10px] text-neutral-600">
-              No backend-confirmed devices available.
-            </div>
-          {:else}
-            <div class="text-[10px] text-neutral-600">
-              Select a backend-confirmed device for inference.
-            </div>
-          {/if}
+          <p class="m-0 pg-muted pg-small">
+            {deviceOptions.length === 0
+              ? 'No backend-confirmed devices available.'
+              : 'Select a backend-confirmed device for inference.'}
+          </p>
         </div>
 
-        <!-- GPU Layers -->
-        <div class="space-y-1">
-          <label for="gpu-layers-range" class="text-xs text-neutral-400">GPU Layers</label>
+        <div class="flex flex-col gap-1">
+          <label for="gpu-layers-range" class="pg-fl">GPU layers</label>
           <div class="flex items-center gap-3">
             <input
               id="gpu-layers-range"
@@ -342,97 +333,76 @@
               bind:value={gpuLayers}
               min="-1"
               max="100"
-              class="flex-1 h-1.5 bg-neutral-700 rounded-lg appearance-none cursor-pointer"
+              class="min-w-0 flex-1 cursor-pointer accent-pg-text"
             />
-            <span class="text-xs text-neutral-300 w-24 text-right">{getGpuLayersLabel(gpuLayers)}</span>
+            <span class="pg-small w-28 text-right">{getGpuLayersLabel(gpuLayers)}</span>
           </div>
-          <div class="text-[10px] text-neutral-600">
-            -1 = all layers on GPU, 0 = CPU only
-          </div>
+          <p class="m-0 pg-muted pg-small">-1 = all layers on GPU, 0 = CPU only</p>
         </div>
 
-        <!-- VRAM Usage -->
-        <div class="space-y-1">
-          <span class="text-xs text-neutral-400">VRAM Usage</span>
+        <div class="flex flex-col gap-1">
+          <span class="pg-fl">VRAM usage</span>
           {#if vramUsage}
-            <div class={`space-y-1 rounded border p-2 ${oomFlash ? 'border-red-500/70 bg-red-900/20 animate-pulse' : 'border-neutral-700/60 bg-neutral-900/40'}`}>
-              <div class="flex items-center justify-between text-[10px] text-neutral-500">
-                <span>{getSelectedDeviceName()}</span>
-                <span class="text-neutral-300">
+            <div
+              class="flex flex-col gap-1.5 rounded border bg-pg-panel-sunken px-3 py-2 pg-small {oomFlash
+                ? 'border-pg-danger'
+                : 'border-pg-border'}"
+            >
+              <div class="flex items-baseline justify-between gap-2">
+                <span class="pg-muted">{getSelectedDeviceName()}</span>
+                <span class="pg-mono">
                   {formatVramValue(vramUsage.used)} / {formatVramValue(vramUsage.total)} used
                 </span>
               </div>
-              <div class="h-1.5 bg-neutral-700 rounded-full overflow-hidden">
-                <div
-                  class={vramUsage.percent >= 90 ? 'bg-red-500' : vramUsage.percent >= 75 ? 'bg-amber-500' : 'bg-blue-500'}
-                  style="width: {vramUsage.percent}%"
-                ></div>
+              <div class="pg-meter" aria-hidden="true">
+                <i class:pg-meter-accent={vramUsage.percent >= 75} style="width: {vramUsage.percent}%"></i>
               </div>
-              <div class="flex justify-between text-[10px] text-neutral-600">
+              <div class="flex justify-between pg-muted">
                 <span>{formatVramValue(vramUsage.free)} free</span>
-                <span>{vramUsage.percent}%</span>
+                <span class="pg-mono">{vramUsage.percent}%</span>
               </div>
+              {#if oomFlash}
+                <p class="m-0 flex items-center gap-1.5">
+                  <StatusGlyph state="failed" small />
+                  Out of memory reported
+                </p>
+              {/if}
             </div>
           {:else}
-            <div class="text-[10px] text-neutral-600">
-              Select a GPU device to see VRAM usage.
-            </div>
+            <p class="m-0 pg-muted pg-small">Select a GPU device to see VRAM usage.</p>
           {/if}
         </div>
 
-        <!-- Embedding Memory Mode -->
-        <div class="space-y-1">
-          <label for="embedding-memory-mode-select" class="text-xs text-neutral-400">Embedding Memory Mode</label>
+        <div class="flex flex-col gap-1">
+          <label for="embedding-memory-mode-select" class="pg-fl">Embedding memory mode</label>
           <select
             id="embedding-memory-mode-select"
             bind:value={embeddingMemoryMode}
-            class="w-full bg-neutral-900 border border-neutral-700 rounded px-2 py-1.5 text-xs text-neutral-200 focus:outline-none focus:border-neutral-500"
-            style="color-scheme: dark;"
+            class="pg-field w-full"
           >
-            <option value="cpu_parallel" class="bg-neutral-900 text-neutral-200">
-              CPU + GPU (Recommended)
-            </option>
-            <option
-              value="gpu_parallel"
-              class="bg-neutral-900 text-neutral-200"
-              disabled={!canFitBothModels}
-            >
+            <option value="cpu_parallel">CPU + GPU (Recommended)</option>
+            <option value="gpu_parallel" disabled={!canFitBothModels}>
               Both on GPU {canFitBothModels ? '' : '(Insufficient VRAM)'}
             </option>
-            <option value="sequential" class="bg-neutral-900 text-neutral-200">
-              Sequential (Low Memory)
-            </option>
+            <option value="sequential">Sequential (Low Memory)</option>
           </select>
-          <div class="text-[10px] text-neutral-600">
-            {getEmbeddingModeDescription(embeddingMemoryMode)}
-          </div>
+          <p class="m-0 pg-muted pg-small">{getEmbeddingModeDescription(embeddingMemoryMode)}</p>
         </div>
       </div>
 
-      <!-- Save Button -->
       {#if hasChanges}
-        <button type="button"
-          onclick={saveConfig}
-          disabled={isSaving}
-          class="w-full py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-neutral-700 disabled:text-neutral-500 rounded text-xs transition-colors"
-        >
-          {isSaving ? 'Saving...' : 'Save Device Configuration'}
-        </button>
+        <div>
+          <button type="button" onclick={saveConfig} disabled={isSaving} class="pg-btn pg-btn-primary">
+            {isSaving ? 'Saving...' : 'Save device configuration'}
+          </button>
+        </div>
       {/if}
 
-      <!-- Help text -->
-      <div class="text-[10px] text-neutral-600 leading-relaxed">
-        Server will restart automatically when you save changes.
-      </div>
+      <p class="m-0 pg-muted pg-small">Server will restart automatically when you save changes.</p>
     </div>
   {:else}
-    <!-- Collapsed summary -->
-    <div class="text-xs text-neutral-500">
-      <span class="text-neutral-400">{getSelectedDeviceName()}</span>
-      <span class="mx-1">|</span>
-      <span class="text-neutral-400">{getGpuLayersLabel(gpuLayers)}</span>
-      <span class="mx-1">|</span>
-      <span class="text-neutral-400">{getEmbeddingModeLabel(embeddingMemoryMode)}</span>
-    </div>
+    <p class="m-0 mt-1 pg-muted pg-small truncate">
+      {getSelectedDeviceName()}, {getGpuLayersLabel(gpuLayers)}, {getEmbeddingModeLabel(embeddingMemoryMode)}
+    </p>
   {/if}
-</div>
+</section>

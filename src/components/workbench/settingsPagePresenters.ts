@@ -3,11 +3,14 @@ import type {
   WorkflowRetentionCleanupResult,
 } from '../../services/diagnostics/types';
 import type {
+  WorkflowArtifactFormatCapabilities,
   WorkflowManagedMediaDependencyStatus,
   WorkflowManagedMediaDependencyVersionStatus,
   WorkflowArtifactPolicy,
   WorkflowMediaFormatOption,
 } from '../../services/workflow/types';
+import type { GlyphState } from './ui/statusGlyph';
+import type { KeyValueRow } from './ui/types';
 
 export interface SettingsOptionItem {
   value: string;
@@ -16,18 +19,16 @@ export interface SettingsOptionItem {
   unavailable?: boolean;
 }
 
-export interface SettingsPolicyRow {
-  label: string;
-  value: string;
-  mono?: boolean;
-}
+/** Settings rows render through the shared KeyValue part. */
+export type SettingsPolicyRow = KeyValueRow;
 
 export interface ManagedMediaDependencyStatusPresentation {
   installLabel: string;
   readinessLabel: string;
   categoryLabel: string;
   packageLabel: string;
-  statusClass: string;
+  /** Decorative glyph beside `readinessLabel`; the label carries the status. */
+  statusGlyph: GlyphState;
 }
 
 export interface NullableIntegerParseResult {
@@ -79,11 +80,11 @@ export function formatManagedMediaDependencyStatus(
   dependency: WorkflowManagedMediaDependencyStatus,
 ): ManagedMediaDependencyStatusPresentation {
   return {
-    installLabel: titleCaseSnakeLabel(dependency.install_state),
-    readinessLabel: titleCaseSnakeLabel(dependency.readiness),
-    categoryLabel: titleCaseSnakeLabel(dependency.category),
-    packageLabel: titleCaseSnakeLabel(dependency.catalog.package_kind),
-    statusClass: managedMediaDependencyStatusClass(dependency),
+    installLabel: sentenceCaseSnakeLabel(dependency.install_state),
+    readinessLabel: sentenceCaseSnakeLabel(dependency.readiness),
+    categoryLabel: sentenceCaseSnakeLabel(dependency.category),
+    packageLabel: sentenceCaseSnakeLabel(dependency.catalog.package_kind),
+    statusGlyph: managedMediaDependencyGlyph(dependency),
   };
 }
 
@@ -91,15 +92,15 @@ export function buildManagedMediaDependencyRows(
   dependency: WorkflowManagedMediaDependencyStatus,
 ): SettingsPolicyRow[] {
   return [
-    { label: 'Source', value: `${dependency.catalog.source.owner}/${dependency.catalog.source.project}` },
-    { label: 'Catalog Version', value: dependency.catalog.version, mono: true },
-    { label: 'Platform', value: dependency.catalog.platform_key, mono: true },
-    { label: 'Package', value: titleCaseSnakeLabel(dependency.catalog.package_kind) },
-    { label: 'Archive', value: dependency.catalog.archive_kind ? titleCaseSnakeLabel(dependency.catalog.archive_kind) : 'None' },
-    { label: 'Selected', value: dependency.selection.selected_version ?? 'None', mono: true },
-    { label: 'Active', value: dependency.selection.active_version ?? 'None', mono: true },
-    { label: 'Default', value: dependency.selection.default_version ?? 'None', mono: true },
-    { label: 'Installed Versions', value: String(dependency.versions.length), mono: true },
+    { key: 'Source', value: `${dependency.catalog.source.owner}/${dependency.catalog.source.project}` },
+    { key: 'Catalog version', value: dependency.catalog.version, mono: true },
+    { key: 'Platform', value: dependency.catalog.platform_key, mono: true },
+    { key: 'Package', value: sentenceCaseSnakeLabel(dependency.catalog.package_kind) },
+    { key: 'Archive', value: dependency.catalog.archive_kind ? sentenceCaseSnakeLabel(dependency.catalog.archive_kind) : 'None' },
+    { key: 'Selected', value: dependency.selection.selected_version ?? 'None', mono: true },
+    { key: 'Active', value: dependency.selection.active_version ?? 'None', mono: true },
+    { key: 'Default', value: dependency.selection.default_version ?? 'None', mono: true },
+    { key: 'Installed versions', value: String(dependency.versions.length), mono: true },
   ];
 }
 
@@ -121,46 +122,74 @@ export function managedMediaVersionStatusLabel(
     labels.push('selected');
   }
   if (version.readiness !== 'ready') {
-    labels.push(titleCaseSnakeLabel(version.readiness).toLowerCase());
+    labels.push(sentenceCaseSnakeLabel(version.readiness).toLowerCase());
   }
   return labels.join(' | ');
 }
 
-export function managedMediaDependencyStatusClass(
+export function managedMediaDependencyGlyph(
   dependency: WorkflowManagedMediaDependencyStatus,
-): string {
+): GlyphState {
   if (dependency.readiness === 'ready' && dependency.install_state === 'installed') {
-    return 'border-emerald-800 bg-emerald-950/40 text-emerald-200';
+    return 'succeeded';
   }
   if (dependency.install_state === 'unsupported' || dependency.readiness === 'unsupported') {
-    return 'border-neutral-700 bg-neutral-900 text-neutral-400';
+    return 'idle';
   }
-  return 'border-amber-800 bg-amber-950/40 text-amber-200';
+  return 'warn';
+}
+
+export function formatCapabilityCount(options: WorkflowMediaFormatOption[] | undefined): string {
+  const count = options?.length ?? 0;
+  return `${count} ${count === 1 ? 'format' : 'formats'}`;
+}
+
+/** One line for the format defaults heading, for example "Image 2 formats, audio 1 format, ...". */
+export function formatCapabilitySummary(
+  capabilities: WorkflowArtifactFormatCapabilities | null,
+): string {
+  return [
+    `Image ${formatCapabilityCount(capabilities?.image_formats)}`,
+    `audio ${formatCapabilityCount(capabilities?.audio_formats)}`,
+    `video ${formatCapabilityCount(capabilities?.video_formats)}`,
+    `3D ${formatCapabilityCount(capabilities?.three_d_formats)}`,
+  ].join(', ');
+}
+
+export function buildCapabilityRows(
+  capabilities: WorkflowArtifactFormatCapabilities | null,
+): SettingsPolicyRow[] {
+  return [
+    { key: 'Image', value: formatCapabilityCount(capabilities?.image_formats), mono: true },
+    { key: 'Audio', value: formatCapabilityCount(capabilities?.audio_formats), mono: true },
+    { key: 'Video', value: formatCapabilityCount(capabilities?.video_formats), mono: true },
+    { key: '3D', value: formatCapabilityCount(capabilities?.three_d_formats), mono: true },
+  ];
 }
 
 export function buildArtifactPolicyRows(policy: WorkflowArtifactPolicy | null): SettingsPolicyRow[] {
   if (!policy) {
     return [
-      { label: 'Policy', value: 'Unavailable' },
-      { label: 'Version', value: 'Unavailable' },
-      { label: 'TTL', value: 'Unavailable' },
-      { label: 'Disk Budget', value: 'Unavailable' },
-      { label: 'Memory Budget', value: 'Unavailable' },
-      { label: 'Single Artifact Limit', value: 'Unavailable' },
-      { label: 'Spill Threshold', value: 'Unavailable' },
-      { label: 'Delete On Consume', value: 'Unavailable' },
+      { key: 'Policy', value: 'Unavailable' },
+      { key: 'Version', value: 'Unavailable' },
+      { key: 'TTL', value: 'Unavailable' },
+      { key: 'Disk budget', value: 'Unavailable' },
+      { key: 'Memory budget', value: 'Unavailable' },
+      { key: 'Single artifact limit', value: 'Unavailable' },
+      { key: 'Spill threshold', value: 'Unavailable' },
+      { key: 'Delete on consume', value: 'Unavailable' },
     ];
   }
 
   return [
-    { label: 'Policy', value: policy.policy_id, mono: true },
-    { label: 'Version', value: String(policy.policy_version), mono: true },
-    { label: 'TTL', value: formatSettingsSeconds(policy.ttl_seconds) },
-    { label: 'Disk Budget', value: formatSettingsBytes(policy.max_disk_bytes) },
-    { label: 'Memory Budget', value: formatSettingsBytes(policy.max_memory_bytes) },
-    { label: 'Single Artifact Limit', value: formatSettingsBytes(policy.max_single_artifact_bytes) },
-    { label: 'Spill Threshold', value: formatSettingsBytes(policy.spill_threshold_bytes) },
-    { label: 'Delete On Consume', value: formatBooleanPolicy(policy.delete_on_consume) },
+    { key: 'Policy', value: policy.policy_id, mono: true },
+    { key: 'Version', value: String(policy.policy_version), mono: true },
+    { key: 'TTL', value: formatSettingsSeconds(policy.ttl_seconds) },
+    { key: 'Disk budget', value: formatSettingsBytes(policy.max_disk_bytes) },
+    { key: 'Memory budget', value: formatSettingsBytes(policy.max_memory_bytes) },
+    { key: 'Single artifact limit', value: formatSettingsBytes(policy.max_single_artifact_bytes) },
+    { key: 'Spill threshold', value: formatSettingsBytes(policy.spill_threshold_bytes) },
+    { key: 'Delete on consume', value: formatBooleanPolicy(policy.delete_on_consume) },
   ];
 }
 
@@ -169,18 +198,18 @@ export function buildDiagnosticsRetentionPolicyRows(
 ): SettingsPolicyRow[] {
   if (!policy) {
     return [
-      { label: 'Policy', value: 'Unavailable' },
-      { label: 'Version', value: 'Unavailable' },
-      { label: 'Class', value: 'Unavailable' },
-      { label: 'Days', value: 'Unavailable' },
+      { key: 'Policy', value: 'Unavailable' },
+      { key: 'Version', value: 'Unavailable' },
+      { key: 'Class', value: 'Unavailable' },
+      { key: 'Days', value: 'Unavailable' },
     ];
   }
 
   return [
-    { label: 'Policy', value: policy.policy_id, mono: true },
-    { label: 'Version', value: String(policy.policy_version), mono: true },
-    { label: 'Class', value: policy.retention_class, mono: true },
-    { label: 'Days', value: String(policy.retention_days) },
+    { key: 'Policy', value: policy.policy_id, mono: true },
+    { key: 'Version', value: String(policy.policy_version), mono: true },
+    { key: 'Class', value: policy.retention_class, mono: true },
+    { key: 'Days', value: String(policy.retention_days) },
   ];
 }
 
@@ -194,24 +223,24 @@ export function buildDiagnosticsRetentionSettingRows(
   const settings = policy.settings;
   return [
     {
-      label: 'Final Outputs',
+      key: 'Final outputs',
       value: formatRetentionPolicyMode(settings.final_outputs),
     },
     {
-      label: 'Workflow Inputs',
+      key: 'Workflow inputs',
       value: formatRetentionPolicyMode(settings.workflow_inputs),
     },
     {
-      label: 'Intermediate Node I/O',
+      key: 'Intermediate node I/O',
       value: formatRetentionPolicyMode(settings.intermediate_node_io),
     },
     {
-      label: 'Failed Run Data',
+      key: 'Failed run data',
       value: formatRetentionPolicyMode(settings.failed_run_data),
     },
     {
-      label: 'Cleanup Trigger',
-      value: titleCaseSnakeLabel(settings.cleanup_trigger),
+      key: 'Cleanup trigger',
+      value: sentenceCaseSnakeLabel(settings.cleanup_trigger),
     },
   ];
 }
@@ -224,12 +253,12 @@ export function buildDiagnosticsRetentionCleanupRows(
   }
 
   return [
-    { label: 'Policy', value: cleanup.policy_id, mono: true },
-    { label: 'Version', value: String(cleanup.policy_version), mono: true },
-    { label: 'Class', value: cleanup.retention_class, mono: true },
-    { label: 'Cutoff', value: formatSettingsTimestamp(cleanup.cutoff_occurred_before_ms) },
-    { label: 'Expired', value: String(cleanup.expired_artifact_count) },
-    { label: 'Last Event Seq', value: String(cleanup.last_event_seq ?? 'Unavailable'), mono: true },
+    { key: 'Policy', value: cleanup.policy_id, mono: true },
+    { key: 'Version', value: String(cleanup.policy_version), mono: true },
+    { key: 'Class', value: cleanup.retention_class, mono: true },
+    { key: 'Cutoff', value: formatSettingsTimestamp(cleanup.cutoff_occurred_before_ms) },
+    { key: 'Expired', value: String(cleanup.expired_artifact_count) },
+    { key: 'Last event seq', value: String(cleanup.last_event_seq ?? 'Unavailable'), mono: true },
   ];
 }
 
@@ -327,18 +356,19 @@ export function parseNullableIntegerField(
   return { value, error: null };
 }
 
-function titleCaseSnakeLabel(value: string): string {
-  return value
-    .split('_')
-    .filter((part) => part.length > 0)
-    .map((part) => `${part[0].toUpperCase()}${part.slice(1)}`)
-    .join(' ');
+function sentenceCaseSnakeLabel(value: string): string {
+  const words = value.split('_').filter((part) => part.length > 0);
+  if (words.length === 0) {
+    return '';
+  }
+  const [first, ...rest] = words;
+  return [`${first[0].toUpperCase()}${first.slice(1)}`, ...rest].join(' ');
 }
 
 function formatRetentionPolicyMode(
   policy: DiagnosticsRetentionPolicy['settings']['final_outputs'],
 ): string {
-  return `${policy.retention_days} days, ${titleCaseSnakeLabel(policy.payload_mode)}`;
+  return `${policy.retention_days} days, ${sentenceCaseSnakeLabel(policy.payload_mode)}`;
 }
 
 function formatSettingsTimestamp(value: number): string {

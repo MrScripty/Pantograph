@@ -1,13 +1,14 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import BaseNode from '../BaseNode.svelte';
+  import NodeHeaderTitle from './NodeHeaderTitle.svelte';
   import type {
     NodeDefinition,
     WorkflowMediaFormatOption,
     WorkflowThreeDArtifactFormatSettings,
   } from '../../../services/workflow/types';
   import { workflowService } from '../../../services/workflow/WorkflowService';
-  import { nodeExecutionStates, updateNodeData } from '../../../stores/workflowStore';
+  import { updateNodeData } from '../../../stores/workflowStore';
 
   interface ThreeDArtifactFormatOverride {
     format_id: string;
@@ -52,21 +53,8 @@
   let formatOptions = $state<WorkflowMediaFormatOption[]>([]);
   let formatLoadError = $state<string | null>(null);
 
-  let executionInfo = $derived($nodeExecutionStates.get(id));
-  let executionState = $derived(executionInfo?.state || 'idle');
   let hasData = $derived(
     data.point_cloud?.positions && data.point_cloud.positions.length > 0
-  );
-
-  const nodeColor = '#14b8a6';
-
-  let statusColor = $derived(
-    {
-      idle: 'bg-neutral-500',
-      running: 'bg-teal-500 animate-pulse',
-      success: 'bg-teal-500',
-      error: 'bg-red-500',
-    }[executionState]
   );
 
   let pointCount = $derived(
@@ -176,7 +164,8 @@
         const width = Math.max(canvasRef.clientWidth, 1);
 
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x1a1a1a);
+        // --pg-panel-sunken; three.js cannot read CSS variables.
+        scene.background = new THREE.Color(0x23272d);
 
         const camera = new THREE.PerspectiveCamera(60, width / height, 0.1, 1000);
         camera.position.set(0, 0, 5);
@@ -270,18 +259,10 @@
   });
 </script>
 
-<div class="pc-output-wrapper" style="--node-color: {nodeColor}">
+<div class="pc-output-wrapper">
   <BaseNode {id} {data} {selected}>
     {#snippet header()}
-      <div class="flex items-center gap-2">
-        <div class="w-5 h-5 rounded flex items-center justify-center flex-shrink-0" style="background-color: {nodeColor}">
-          <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2 1v-2.5M6 18l-2-1v-2.5M18 18l2-1v-2.5" />
-          </svg>
-        </div>
-        <span class="text-sm font-medium text-neutral-200">{data.label || 'Point Cloud'}</span>
-        <span class="w-2 h-2 rounded-full {statusColor} ml-auto"></span>
-      </div>
+      <NodeHeaderTitle label={data.label || 'Point Cloud'} />
     {/snippet}
 
       {#if hasData}
@@ -289,37 +270,37 @@
           <canvas
             bind:this={canvasRef}
             class="w-full rounded overflow-hidden nodrag nowheel nopan"
-            style="height: 160px; background: #1a1a1a;"
+            style="height: 160px; background: var(--pg-panel-sunken);"
             onpointerdown={(event) => event.stopPropagation()}
             onwheel={(event) => event.stopPropagation()}
           ></canvas>
-          <div class="text-[10px] text-neutral-500 text-right">
+          <div class="text-[10px] text-pg-text-muted text-right">
             {pointCount.toLocaleString()} points
           </div>
           {#if renderError}
-            <div class="text-[10px] text-red-400 text-right">
+            <div class="text-[10px] text-pg-danger text-right">
               3D preview unavailable
             </div>
           {/if}
         </div>
       {:else}
-        <div class="text-xs text-neutral-500 italic">
+        <div class="text-xs text-pg-text-muted italic">
           No point cloud yet
         </div>
       {/if}
 
-      <div class="mt-2 space-y-2 border-t border-neutral-700/70 pt-2">
+      <div class="mt-2 space-y-2 border-t border-pg-border pt-2">
         <div class="flex items-center justify-between gap-2">
-          <label class="text-[10px] text-neutral-400" for={formatSelectId}>Format</label>
+          <label class="text-[10px] text-pg-text-muted" for={formatSelectId}>Format</label>
           {#if isUsingDefaultFormat && defaultFormat}
-            <span class="text-[10px] text-neutral-500">Default {defaultFormat.format_id}</span>
+            <span class="text-[10px] text-pg-text-muted">Default {defaultFormat.format_id}</span>
           {:else if formatOverride}
-            <span class="text-[10px] text-teal-300">Override</span>
+            <span class="text-[10px] text-pg-text-soft">Override</span>
           {/if}
         </div>
         <select
           id={formatSelectId}
-          class="nodrag nopan nowheel w-full rounded border border-neutral-600 bg-neutral-900 px-2 py-1 text-xs text-neutral-200 focus:border-teal-500 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+          class="nodrag nopan nowheel w-full rounded border border-pg-border bg-pg-panel-sunken px-2 py-1 text-xs text-pg-text disabled:cursor-not-allowed disabled:opacity-60"
           value={formatOverride?.format_id ?? DEFAULT_SELECTION_VALUE}
           disabled={!defaultFormat && !formatOverride}
           onchange={handleFormatChange}
@@ -340,19 +321,9 @@
         </select>
 
         {#if formatLoadError}
-          <div class="text-[10px] text-red-300">{formatLoadError}</div>
+          <div class="text-[10px] text-pg-danger">{formatLoadError}</div>
         {/if}
       </div>
   </BaseNode>
 </div>
 
-<style>
-  .pc-output-wrapper :global(.base-node) {
-    border-color: color-mix(in srgb, var(--node-color) 50%, transparent);
-  }
-
-  .pc-output-wrapper :global(.node-header) {
-    background-color: color-mix(in srgb, var(--node-color) 20%, transparent);
-    border-color: color-mix(in srgb, var(--node-color) 30%, transparent);
-  }
-</style>

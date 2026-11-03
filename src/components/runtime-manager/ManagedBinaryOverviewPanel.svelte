@@ -1,21 +1,22 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { RefreshCw } from 'lucide-svelte';
   import {
     managedRuntimeService,
     type ManagedDependencyCategory,
     type ManagedDependencyKey,
     type ManagedDependencyStatus,
   } from '../../services/managedRuntime';
+  import { StatusGlyph } from '../workbench/ui';
+  import { managedDependencyGlyph, sentenceCaseState } from './managedRuntimePresenters';
 
   let dependencies: ManagedDependencyStatus[] = $state([]);
   let loading = $state(false);
   let error = $state<string | null>(null);
 
   const CATEGORY_LABELS: Record<ManagedDependencyCategory, string> = {
-    runtime_sidecar: 'Runtime Sidecars',
-    media_tool: 'Media Tools',
-    native_artifact: 'Native Artifacts',
+    runtime_sidecar: 'Runtime sidecars',
+    media_tool: 'Media tools',
+    native_artifact: 'Native artifacts',
   };
 
   onMount(() => {
@@ -63,52 +64,52 @@
   }
 </script>
 
-<section class="mt-4 border-t border-neutral-900 pt-4">
-  <div class="mb-3 flex items-center justify-between gap-3">
-    <div>
-      <h3 class="text-xs font-semibold uppercase tracking-wide text-neutral-400">
-        Managed Dependency State
-      </h3>
-    </div>
-    <button
-      type="button"
-      class="inline-flex items-center gap-2 rounded border border-neutral-700 px-2.5 py-1 text-xs text-neutral-300 transition-colors hover:border-neutral-500 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
-      onclick={() => loadBinaries()}
-      disabled={loading}
-    >
-      <RefreshCw size={13} aria-hidden="true" class={loading ? 'animate-spin' : ''} />
-      Refresh
+<section class="flex flex-col gap-3 border-t border-pg-border-soft pt-4" aria-labelledby="managed-dependency-state-title">
+  <div class="flex items-center justify-between gap-3">
+    <h3 id="managed-dependency-state-title" class="m-0 text-[13px] font-bold text-pg-text-bright">
+      Managed dependency state
+    </h3>
+    <button type="button" class="pg-btn" onclick={() => loadBinaries()} disabled={loading}>
+      {loading ? 'Refreshing dependency state' : 'Refresh dependency state'}
     </button>
   </div>
 
   {#if error}
-    <div class="rounded border border-red-900 bg-red-950/40 px-3 py-2 text-sm text-red-200" role="alert">
-      {error}
-    </div>
+    <p class="m-0 pg-muted pg-small" role="alert">{error}</p>
   {:else}
-    <div class="overflow-hidden rounded border border-neutral-800">
+    <div class="overflow-hidden rounded border border-pg-border">
       {#each Object.keys(CATEGORY_LABELS) as categoryKey (categoryKey)}
         {@const category = categoryKey as ManagedDependencyCategory}
         {@const categoryDependencies = dependenciesForCategory(category)}
-        <div class="border-b border-neutral-900 last:border-b-0">
-          <div class="bg-neutral-950 px-3 py-2 text-xs font-medium text-neutral-300">
+        <div class="border-t border-pg-border-soft first:border-t-0">
+          <h4 class="m-0 bg-pg-panel-head px-3 py-2 text-[12.5px] font-bold text-pg-text-soft">
             {CATEGORY_LABELS[category]}
-          </div>
+          </h4>
           {#if categoryDependencies.length === 0}
-            <div class="px-3 py-2 text-sm text-neutral-500">No backend entries reported.</div>
+            <p class="m-0 border-t border-pg-border-soft px-3 py-2 pg-muted pg-small">No backend entries reported.</p>
           {:else}
-            <div class="divide-y divide-neutral-900">
+            <ul class="m-0 list-none p-0">
               {#each categoryDependencies as dependency (dependencyStableKey(dependency.key))}
-                <div class="grid gap-2 px-3 py-2 text-sm text-neutral-300 md:grid-cols-[minmax(9rem,1fr)_7rem_minmax(8rem,1fr)_minmax(10rem,2fr)] md:items-center">
-                  <div class="font-medium text-neutral-100">{dependency.display_name}</div>
-                  <div class="capitalize text-neutral-400">{statusLabel(dependency)}</div>
-                  <div class="text-neutral-400">{versionLabel(dependency)}</div>
-                  <div class="truncate text-neutral-500" title={dependency.unavailable_reason ?? dependency.missing_files.join(', ')}>
+                {@const version = versionLabel(dependency)}
+                <li class="grid gap-2 border-t border-pg-border-soft px-3 py-2 text-[13px] md:grid-cols-[minmax(9rem,1fr)_8rem_minmax(8rem,1fr)_minmax(10rem,2fr)] md:items-center">
+                  <span class="text-pg-text-bright">{dependency.display_name}</span>
+                  <span class="flex items-center gap-1.5">
+                    <StatusGlyph
+                      state={managedDependencyGlyph(dependency.readiness_state, dependency.install_state)}
+                      small
+                    />
+                    <span>{sentenceCaseState(statusLabel(dependency))}</span>
+                  </span>
+                  <span class="pg-muted" class:pg-mono={version !== 'Unselected'}>{version}</span>
+                  <span
+                    class="truncate pg-muted"
+                    title={dependency.unavailable_reason ?? dependency.missing_files.join(', ')}
+                  >
                     {dependency.unavailable_reason ?? dependency.missing_files.join(', ') ?? ''}
-                  </div>
-                </div>
+                  </span>
+                </li>
               {/each}
-            </div>
+            </ul>
           {/if}
         </div>
       {/each}

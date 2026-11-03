@@ -11,6 +11,33 @@ import type {
 import {
   DEFAULT_DIAGNOSTICS_COMPARISON_FILTERS,
   DEFAULT_DIAGNOSTICS_EXECUTION_FILTERS,
+  buildDiagnosticsClientLabel,
+  buildDiagnosticsComparisonFilterChips,
+  buildDiagnosticsComparisonShortcuts,
+  buildDiagnosticsComparisonSummary,
+  buildDiagnosticsDimensionLine,
+  buildDiagnosticsErrorCard,
+  buildDiagnosticsExecutionFilterChips,
+  buildDiagnosticsFactSections,
+  buildDiagnosticsLevelOptions,
+  buildDiagnosticsLogLines,
+  buildDiagnosticsNodeErrorsOutsideTimeline,
+  buildDiagnosticsNodeStatusBars,
+  buildDiagnosticsPlacementLabel,
+  buildDiagnosticsProjectionRows,
+  buildDiagnosticsRetentionRows,
+  createDiagnosticsRefreshGate,
+  diagnosticsSentenceCase,
+  diagnosticsFactLayoutLabels,
+  diagnosticsFocusKey,
+  diagnosticsRecentFromDate,
+  explainDiagnosticsError,
+  filterDiagnosticsLogLines,
+  formatDiagnosticsClock,
+  formatDiagnosticsElapsed,
+  formatDiagnosticsLogTime,
+  groupDiagnosticsExecutionFacetRows,
+  resolveDiagnosticsFocus,
   buildDiagnosticsExecutionFacetRows,
   buildDiagnosticsExecutionFilterOptions,
   buildDiagnosticsFacetSummary,
@@ -18,10 +45,6 @@ import {
   buildDiagnosticsRetentionSummaryRows,
   buildDiagnosticsComparisonFilterOptions,
   buildDiagnosticsRunErrorSummary,
-  diagnosticsErrorSeverityClass,
-  diagnosticsStatusClass,
-  diagnosticsTimelineRowClass,
-  filterDiagnosticsTimelineEvents,
   filterDiagnosticsExecutionNodes,
   filterDiagnosticsComparisonRuns,
   formatDiagnosticErrorPhase,
@@ -180,14 +203,7 @@ test('formatDiagnosticsProjectionFreshness keeps projection cursor visible', () 
   );
 });
 
-test('diagnosticsStatusClass maps operational statuses to stable classes', () => {
-  assert.match(diagnosticsStatusClass('completed'), /emerald/);
-  assert.match(diagnosticsStatusClass('running'), /cyan/);
-  assert.match(diagnosticsStatusClass('future'), /amber/);
-  assert.match(diagnosticsStatusClass('scheduled'), /amber/);
-  assert.match(diagnosticsStatusClass('queued'), /amber/);
-  assert.match(diagnosticsStatusClass('failed'), /red/);
-  assert.match(diagnosticsStatusClass('cancelled'), /neutral/);
+test('formatDiagnosticsStatusLabel names every run status', () => {
   assert.equal(formatDiagnosticsStatusLabel('future'), 'Future');
   assert.equal(formatDiagnosticsStatusLabel('scheduled'), 'Scheduled');
   assert.equal(formatDiagnosticsStatusLabel('cancelled'), 'Cancelled');
@@ -209,45 +225,9 @@ test('diagnostic error presenters expose severity and run summary fields', () =>
   assert.equal(summary?.fatal, true);
   assert.equal(summary?.phase, 'runtime_model_load');
   assert.equal(summary?.code, 'runtime_model_load_failed');
-  assert.match(diagnosticsErrorSeverityClass('fatal'), /red/);
-  assert.match(diagnosticsErrorSeverityClass('error'), /orange/);
-  assert.match(diagnosticsErrorSeverityClass('warning'), /amber/);
   assert.equal(formatDiagnosticErrorSeverity('fatal'), 'Fatal');
   assert.equal(formatDiagnosticErrorSeverity(null), 'Unknown');
-  assert.equal(formatDiagnosticErrorPhase('runtime_model_load'), 'Runtime Model Load');
-});
-
-test('diagnostics timeline row class marks error events without payload parsing', () => {
-  const errorEvent: SchedulerTimelineProjectionRecord = {
-    event_seq: 1,
-    event_id: 'event-1',
-    event_kind: 'diagnostic_error_occurred',
-    source_component: 'workflow_service',
-    occurred_at_ms: 1,
-    recorded_at_ms: 1,
-    workflow_run_id: 'run-1',
-    workflow_id: 'workflow-a',
-    summary: 'runtime load failed',
-    detail: null,
-    error_severity: 'fatal',
-    error_phase: 'runtime_model_load',
-    related_event_ids: [],
-    payload_json: '{}',
-  };
-  const metadataEvent: SchedulerTimelineProjectionRecord = {
-    ...errorEvent,
-    event_id: 'event-2',
-    event_kind: 'scheduler_queue_placement',
-    error_severity: null,
-    error_phase: null,
-  };
-
-  assert.match(
-    diagnosticsTimelineRowClass(errorEvent),
-    /red/,
-  );
-  assert.deepEqual(filterDiagnosticsTimelineEvents([metadataEvent, errorEvent], 'errors'), [errorEvent]);
-  assert.deepEqual(filterDiagnosticsTimelineEvents([metadataEvent, errorEvent], 'all'), [metadataEvent, errorEvent]);
+  assert.equal(formatDiagnosticErrorPhase('runtime_model_load'), 'Runtime model load');
 });
 
 test('buildDiagnosticsFactRows uses projection fields without ledger parsing', () => {
@@ -616,12 +596,411 @@ test('diagnostics comparison filters support accepted date ranges', () => {
 });
 
 test('timeline label helpers format typed projection enums and payload presence', () => {
-  assert.equal(formatDiagnosticEventKind('scheduler_queue_placement'), 'Scheduler Queue Placement');
+  assert.equal(formatDiagnosticEventKind('scheduler_queue_placement'), 'scheduler queue placement');
   assert.equal(
     formatDiagnosticEventKind('inference_execution_diagnostic_observed'),
-    'Inference Execution Diagnostic Observed',
+    'inference execution diagnostic observed',
   );
-  assert.equal(formatDiagnosticSourceComponent('node_execution'), 'Node Execution');
+  assert.equal(formatDiagnosticSourceComponent('node_execution'), 'node execution');
   assert.equal(hasTimelinePayload({ payload_json: '{}' }), false);
   assert.equal(hasTimelinePayload({ payload_json: '{"decision":"delay"}' }), true);
+});
+
+// --- Redesigned page presenters ----------------------------------------------
+
+function createTimelineEvent(overrides: Partial<SchedulerTimelineProjectionRecord>): SchedulerTimelineProjectionRecord {
+  return {
+    event_seq: 1,
+    event_id: 'event-1',
+    event_kind: 'scheduler_queue_placement',
+    source_component: 'scheduler',
+    occurred_at_ms: new Date(2026, 10, 3, 19, 35, 2, 114).getTime(),
+    recorded_at_ms: 1,
+    workflow_run_id: 'run-1',
+    workflow_id: 'workflow-a',
+    summary: 'placed on cuda:1',
+    detail: null,
+    error_severity: null,
+    error_phase: null,
+    related_event_ids: [],
+    payload_json: '{}',
+    ...overrides,
+  };
+}
+
+function createFailedRun(overrides: Partial<RunDetailProjectionRecord> = {}): RunDetailProjectionRecord {
+  return {
+    ...createRunDetail(),
+    status: 'failed',
+    started_at_ms: new Date(2026, 10, 3, 19, 35, 20).getTime(),
+    completed_at_ms: new Date(2026, 10, 3, 19, 35, 42).getTime(),
+    duration_ms: 22_000,
+    latest_error_event_id: 'error-event-1',
+    latest_error_severity: 'fatal',
+    latest_error_phase: 'runtime_model_load',
+    latest_error_code: 'runtime_model_load_failed',
+    latest_error_message: 'CUDA out of memory on cuda:1',
+    fatal_error_event_id: 'error-event-1',
+    error_count: 1,
+    warning_count: 0,
+    ...overrides,
+  };
+}
+
+const NOW = new Date(2026, 10, 3, 20, 0, 0).getTime();
+
+test('time presenters format clock, elapsed and log times', () => {
+  assert.equal(formatDiagnosticsClock(new Date(2026, 10, 3, 19, 35, 20).getTime(), NOW), '19:35:20');
+  assert.equal(formatDiagnosticsClock(new Date(2026, 10, 1, 8, 5, 0).getTime(), NOW), '2026-11-01 08:05:00');
+  assert.equal(formatDiagnosticsClock(null, NOW), 'Not recorded');
+  assert.equal(formatDiagnosticsElapsed(640), '640 ms');
+  assert.equal(formatDiagnosticsElapsed(2_500), '2.5 s');
+  assert.equal(formatDiagnosticsElapsed(22_000), '22 s');
+  assert.equal(formatDiagnosticsElapsed(109_000), '1m 49s');
+  assert.equal(formatDiagnosticsElapsed(2 * 3_600_000 + 5 * 60_000), '2h 05m');
+  assert.equal(formatDiagnosticsLogTime(new Date(2026, 10, 3, 19, 35, 2, 114).getTime()), '19:35:02.114');
+});
+
+test('buildDiagnosticsDimensionLine summarises status, time and errors', () => {
+  const failedNode = createNodeStatus({ node_id: 'load_model', status: 'failed' });
+  assert.equal(
+    buildDiagnosticsDimensionLine(createFailedRun(), [createNodeStatus({}), failedNode], NOW),
+    'run-1, failed 19:35:42 after 22 s, 1 error in load_model',
+  );
+  assert.equal(
+    buildDiagnosticsDimensionLine({ ...createRunDetail(), started_at_ms: new Date(2026, 10, 3, 19, 50, 0).getTime() }, [], NOW),
+    'run-1, running since 19:50:00',
+  );
+  assert.equal(
+    buildDiagnosticsDimensionLine({ ...createRunDetail(), status: 'queued', scheduler_queue_position: 2 }, [], NOW),
+    'run-1, queued at position 2',
+  );
+  assert.equal(
+    buildDiagnosticsDimensionLine(
+      { ...createRunDetail(), status: 'delayed', scheduler_reason: 'needs 8 GB on cuda:0', warning_count: 2 },
+      [],
+      NOW,
+    ),
+    'run-1, delayed: needs 8 GB on cuda:0, 2 warnings',
+  );
+});
+
+test('placement and client labels say what is assigned', () => {
+  const run = createRunDetail();
+  assert.equal(buildDiagnosticsPlacementLabel(run), 'runtime-a on device-a');
+  assert.equal(buildDiagnosticsPlacementLabel({ ...run, selected_device_id: null }), 'runtime-a, device not assigned yet');
+  assert.equal(
+    buildDiagnosticsPlacementLabel({ ...run, selected_device_id: null, selected_runtime_id: null }),
+    'Not placed yet',
+  );
+  assert.equal(buildDiagnosticsClientLabel(run), 'from client-a, session session-a');
+  assert.equal(buildDiagnosticsClientLabel({ ...run, client_id: null, client_session_id: null }), null);
+});
+
+test('buildDiagnosticsFactSections places every run-detail fact exactly once', () => {
+  const run = createFailedRun({ terminal_error: 'worker exited with code 1' });
+  const factLabels = buildDiagnosticsFactRows(run).map((row) => row.label);
+  assert.deepEqual([...diagnosticsFactLayoutLabels()].sort(), [...factLabels].sort());
+
+  const sections = buildDiagnosticsFactSections(run, NOW);
+  const placed = [...sections.timing, ...sections.placement, ...sections.retention, ...sections.more];
+  const factValues = buildDiagnosticsFactRows(run).map((row) => row.value);
+  for (const value of factValues) {
+    assert.ok(placed.some((row) => row.value === value), `fact value ${value} is placed`);
+  }
+  // Timing leads with the lifecycle times; the five lifecycle rows plus three fact rows.
+  assert.deepEqual(
+    sections.timing.map((row) => row.key),
+    ['Accepted', 'Queued', 'Started', 'Finished', 'Duration', 'Estimated wait', 'Estimated duration', 'Estimate confidence'],
+  );
+  assert.equal(sections.timing.find((row) => row.key === 'Duration')?.value, '22 s');
+  assert.deepEqual(
+    sections.placement.map((row) => row.key),
+    ['Runtime', 'Backend', 'Device', 'Model', 'Model cache', 'Policy', 'Bucket', 'Queue position', 'Priority', 'Reason'],
+  );
+  assert.equal(sections.placement.find((row) => row.key === 'Runtime')?.value, 'runtime-a');
+  const running = { ...createRunDetail(), started_at_ms: NOW - 252_000 };
+  assert.equal(buildDiagnosticsFactSections(running, NOW).timing.find((row) => row.key === 'Duration')?.value, 'Running for 4m 12s');
+  assert.deepEqual(sections.retention, [{ key: 'Policy', value: 'retention-a', mono: true }]);
+  assert.equal(sections.more.find((row) => row.key === 'Latest error event')?.value, 'error-event-1');
+  assert.equal(sections.more.find((row) => row.key === 'Terminal error')?.value, 'worker exited with code 1');
+  assert.equal(sections.more.some((row) => row.key === 'Fatal error event'), false);
+  for (const section of Object.values(sections)) {
+    const keys = section.map((row: { key: string }) => row.key);
+    assert.equal(new Set(keys).size, keys.length, 'keys are unique within a section');
+  }
+});
+
+test('retention and projection rows keep every count and cursor', () => {
+  assert.deepEqual(
+    buildDiagnosticsRetentionRows([
+      { retention_state: 'metadata_only', artifact_count: 1 },
+      { retention_state: 'retained', artifact_count: 3 },
+    ]),
+    [
+      { key: 'Payload retained', value: '3 artifacts' },
+      { key: 'Metadata retained only', value: '1 artifact' },
+    ],
+  );
+  const state = {
+    projection_name: 'run_detail',
+    projection_version: 1,
+    last_applied_event_seq: 42,
+    status: 'current' as const,
+    rebuilt_at_ms: null,
+    updated_at_ms: 5,
+  };
+  assert.deepEqual(
+    buildDiagnosticsProjectionRows({ runDetail: state, timeline: null, runList: state, nodeStatus: state, io: state }).map(
+      (row) => `${row.key}: ${row.value}`,
+    ),
+    [
+      'Run detail: Current at seq 42',
+      'Scheduler timeline: Projection unavailable',
+      'Run list: Current at seq 42',
+      'Node status: Current at seq 42',
+      'I/O retention: Current at seq 42',
+    ],
+  );
+});
+
+test('node status bars and breakdown group the node projection', () => {
+  const nodes = [
+    createNodeStatus({ node_id: 'a', status: 'completed' }),
+    createNodeStatus({ node_id: 'b', status: 'failed', runtime_id: 'runtime-b' }),
+    createNodeStatus({ node_id: 'c', status: 'queued' }),
+    createNodeStatus({ node_id: 'd', status: 'queued' }),
+  ];
+  assert.deepEqual(buildDiagnosticsNodeStatusBars(nodes), [
+    { status: 'queued', label: 'Queued', count: 2, percent: 50 },
+    { status: 'completed', label: 'Completed', count: 1, percent: 25 },
+    { status: 'failed', label: 'Failed', count: 1, percent: 25 },
+  ]);
+  assert.deepEqual(buildDiagnosticsNodeStatusBars([]), []);
+
+  const groups = groupDiagnosticsExecutionFacetRows(buildDiagnosticsExecutionFacetRows(nodes));
+  assert.equal(groups.some((group) => group.label === 'Node status'), false);
+  assert.equal(diagnosticsSentenceCase('Selected Runtime Variant'), 'Selected runtime variant');
+  assert.deepEqual(
+    groups.find((group) => group.label === 'Runtime')?.rows.map((row) => `${row.value}:${row.count}`),
+    ['runtime-a:3', 'runtime-b:1'],
+  );
+});
+
+test('filter chips name each applied execution and comparison filter', () => {
+  assert.deepEqual(buildDiagnosticsExecutionFilterChips(DEFAULT_DIAGNOSTICS_EXECUTION_FILTERS), []);
+  assert.deepEqual(
+    buildDiagnosticsExecutionFilterChips({ ...DEFAULT_DIAGNOSTICS_EXECUTION_FILTERS, runtime: 'runtime-a', status: 'failed' }),
+    [
+      { field: 'status', label: 'Node status failed' },
+      { field: 'runtime', label: 'Runtime runtime-a' },
+    ],
+  );
+  assert.deepEqual(
+    buildDiagnosticsComparisonFilterChips({
+      ...DEFAULT_DIAGNOSTICS_COMPARISON_FILTERS,
+      status: 'failed',
+      selectedDevice: 'cuda:1',
+      acceptedFromDate: '2026-11-01',
+    }),
+    [
+      { field: 'status', label: 'Status Failed' },
+      { field: 'selectedDevice', label: 'Device cuda:1' },
+      { field: 'acceptedFromDate', label: 'Accepted from 2026-11-01' },
+    ],
+  );
+});
+
+test('comparison shortcuts toggle version, device and recent presets', () => {
+  const run = createRunDetail();
+  const shortcuts = buildDiagnosticsComparisonShortcuts(run, DEFAULT_DIAGNOSTICS_COMPARISON_FILTERS, NOW);
+  assert.deepEqual(
+    shortcuts.map((shortcut) => [shortcut.label, shortcut.pressed]),
+    [
+      ['Only v1.2.3', false],
+      ['Only device-a', false],
+      ['Last 7 days', false],
+    ],
+  );
+  const versionOn = shortcuts[0].toggled;
+  assert.equal(versionOn.workflowVersion, '1.2.3');
+  const again = buildDiagnosticsComparisonShortcuts(run, versionOn, NOW);
+  assert.equal(again[0].pressed, true);
+  assert.equal(again[0].toggled.workflowVersion, 'all');
+
+  const recentOn = shortcuts[2].toggled;
+  assert.equal(recentOn.acceptedFromDate, diagnosticsRecentFromDate(NOW));
+  assert.equal(buildDiagnosticsComparisonShortcuts(run, recentOn, NOW)[2].pressed, true);
+  assert.equal(
+    buildDiagnosticsComparisonShortcuts({ ...run, selected_device_id: null }, DEFAULT_DIAGNOSTICS_COMPARISON_FILTERS, NOW).some(
+      (shortcut) => shortcut.id === 'device',
+    ),
+    false,
+  );
+});
+
+test('buildDiagnosticsComparisonSummary compares failures and durations with peers', () => {
+  const run = createFailedRun();
+  const peers = [
+    createRunListPeer({ workflow_run_id: 'p1', status: 'failed', latest_error_code: 'runtime_model_load_failed' }),
+    createRunListPeer({ workflow_run_id: 'p2', status: 'completed', duration_ms: 100_000 }),
+    createRunListPeer({ workflow_run_id: 'p3', status: 'completed', duration_ms: 118_000 }),
+    createRunListPeer({ workflow_run_id: 'p4', status: 'completed', duration_ms: 109_000 }),
+  ];
+  const failed = buildDiagnosticsComparisonSummary(run, [run, ...peers]);
+  assert.equal(failed.failed, '2 of 5');
+  assert.equal(failed.median, '1m 49s');
+  assert.equal(failed.note, '1 of the other 4 compared runs also failed, 1 with runtime_model_load_failed.');
+
+  const completed = { ...createRunDetail(), status: 'completed' as const, duration_ms: 90_000 };
+  assert.equal(
+    buildDiagnosticsComparisonSummary(completed, [completed, ...peers]).note,
+    'This run took 1m 30s; the median completed run took 1m 49s.',
+  );
+  const alone = buildDiagnosticsComparisonSummary(createRunDetail(), [createRunDetail()]);
+  assert.equal(alone.median, 'None yet');
+  assert.equal(alone.note, 'No other runs of workflow-a in the run list match these filters.');
+});
+
+test('buildDiagnosticsLogLines turns timeline events and node errors into log lines', () => {
+  const events = [
+    createTimelineEvent({ event_seq: 3, event_id: 'event-3', event_kind: 'diagnostic_error_occurred', source_component: 'node_execution', summary: 'failed', error_severity: null, error_phase: 'runtime_model_load' }),
+    createTimelineEvent({ event_seq: 1, event_id: 'event-1', payload_json: '{"decision":"place"}' }),
+    createTimelineEvent({ event_seq: 2, event_id: 'event-2', event_kind: 'run_started', source_component: 'runtime', summary: 'memory pressure', error_severity: 'warning' }),
+  ];
+  const nodes = [
+    createNodeStatus({ node_id: 'load_model', status: 'failed', canonical_error_event_id: 'event-3', error_code: 'runtime_model_load_failed', error_severity: 'fatal' }),
+  ];
+  const lines = buildDiagnosticsLogLines(events, nodes);
+  assert.deepEqual(lines.map((line) => line.seq), [1, 2, 3]);
+  assert.equal(lines[0].kind, 'scheduler queue placement');
+  assert.equal(lines[0].source, 'scheduler, seq 1, payload captured');
+  assert.equal(lines[0].time, '19:35:02.114');
+  assert.equal(lines[0].domId, 'diagnostics-event-1');
+  assert.equal(lines[1].level, 'warn');
+  assert.equal(lines[2].kind, 'load_model');
+  assert.equal(lines[2].level, 'error');
+  assert.equal(lines[2].nodeId, 'load_model');
+  assert.equal(lines[2].message, 'failed, phase runtime model load, runtime_model_load_failed');
+
+  assert.deepEqual(
+    buildDiagnosticsLevelOptions(lines).map((option) => `${option.label} ${option.count}`),
+    ['All 3', 'Warnings 1', 'Errors 1'],
+  );
+  const only = (level: 'all' | 'warn' | 'error', source: 'all' | 'scheduler' | 'runtime' | 'nodes', query = '') =>
+    filterDiagnosticsLogLines(lines, { level, source, query }).map((line) => line.eventId);
+  assert.deepEqual(only('error', 'all'), ['event-3']);
+  assert.deepEqual(only('warn', 'all'), ['event-2']);
+  assert.deepEqual(only('all', 'nodes'), ['event-3']);
+  assert.deepEqual(only('all', 'runtime'), ['event-2']);
+  assert.deepEqual(only('all', 'all', 'MEMORY'), ['event-2']);
+  assert.deepEqual(only('all', 'all', 'event-1'), ['event-1']);
+});
+
+test('node errors stay reachable when the timeline lacks their event', () => {
+  const nodes = [
+    createNodeStatus({ node_id: 'in-timeline', status: 'failed', error_event_id: 'event-1', error: 'boom' }),
+    createNodeStatus({ node_id: 'missing', status: 'failed', error_event_id: 'event-9', error: 'boom' }),
+    createNodeStatus({ node_id: 'unlinked', status: 'failed', error_severity: 'error' }),
+    createNodeStatus({ node_id: 'fine', status: 'completed' }),
+  ];
+  assert.deepEqual(
+    buildDiagnosticsNodeErrorsOutsideTimeline(nodes, [createTimelineEvent({ event_id: 'event-1' })]).map((node) => node.node_id),
+    ['missing', 'unlinked'],
+  );
+});
+
+test('resolveDiagnosticsFocus selects the focused line and the level that shows it', () => {
+  const events = [
+    createTimelineEvent({ event_seq: 1, event_id: 'event-1' }),
+    createTimelineEvent({ event_seq: 2, event_id: 'event-2', error_severity: 'fatal' }),
+  ];
+  const nodes = [createNodeStatus({ node_id: 'load_model', status: 'failed', error_event_id: 'event-2' })];
+  const lines = buildDiagnosticsLogLines(events, nodes);
+  const focus = { workflow_run_id: 'run-1', diagnostic_event_id: 'event-2', node_id: null, requested_at_ms: 7 };
+
+  assert.deepEqual(resolveDiagnosticsFocus(focus, 'run-1', lines, nodes), {
+    eventId: 'event-2',
+    nodeId: 'load_model',
+    lineDomId: 'diagnostics-event-2',
+    level: 'error',
+  });
+  assert.equal(resolveDiagnosticsFocus(focus, 'run-2', lines, nodes), null);
+  assert.equal(resolveDiagnosticsFocus(null, 'run-1', lines, nodes), null);
+  assert.deepEqual(
+    resolveDiagnosticsFocus({ ...focus, diagnostic_event_id: null, node_id: 'load_model' }, 'run-1', lines, nodes)?.lineDomId,
+    'diagnostics-event-2',
+  );
+  assert.equal(resolveDiagnosticsFocus({ ...focus, diagnostic_event_id: 'event-1' }, 'run-1', lines, nodes)?.level, 'all');
+  assert.deepEqual(resolveDiagnosticsFocus({ ...focus, diagnostic_event_id: 'event-9' }, 'run-1', lines, nodes), {
+    eventId: 'event-9',
+    nodeId: null,
+    lineDomId: null,
+    level: 'all',
+  });
+  assert.equal(diagnosticsFocusKey(focus), 'run-1:7');
+  assert.notEqual(diagnosticsFocusKey({ ...focus, requested_at_ms: 8 }), diagnosticsFocusKey(focus));
+});
+
+test('explainDiagnosticsError explains known codes and restates unknown ones', () => {
+  const known = explainDiagnosticsError({
+    code: 'runtime_model_load_failed',
+    message: 'CUDA out of memory on cuda:1',
+    phase: 'runtime_model_load',
+    nodeId: 'load_model',
+  });
+  assert.equal(known.title, 'Model failed to load in load_model');
+  assert.equal(known.explanation, 'The runtime could not load the model for this run: CUDA out of memory on cuda:1.');
+  assert.match(known.suggestion, /^Try: /);
+
+  const unknown = explainDiagnosticsError({ code: 'something_new', message: 'disk quota exceeded.', phase: 'artifact' });
+  assert.equal(unknown.title, 'Artifact failed');
+  assert.equal(unknown.explanation, 'The run reported: disk quota exceeded.');
+  assert.match(unknown.suggestion, /^Try: show the error in the log/);
+
+  const bare = explainDiagnosticsError({ code: null, message: '  ', phase: 'unassigned' });
+  assert.equal(bare.title, 'The run reported an error');
+  assert.equal(bare.explanation, 'No error message was projected for this run.');
+});
+
+test('buildDiagnosticsErrorCard covers fatal errors, warnings and terminal-only errors', () => {
+  const nodes = [createNodeStatus({ node_id: 'load_model', status: 'failed', canonical_error_event_id: 'error-event-1' })];
+  const card = buildDiagnosticsErrorCard(createFailedRun(), nodes);
+  assert.equal(card?.kind, 'error');
+  assert.equal(card?.title, 'Model failed to load in load_model');
+  assert.equal(card?.codeLine, 'runtime_model_load_failed, phase runtime model load, fatal');
+  assert.equal(card?.eventId, 'error-event-1');
+  assert.equal(card?.nodeId, 'load_model');
+
+  const warning = buildDiagnosticsErrorCard(
+    {
+      ...createRunDetail(),
+      latest_error_event_id: 'warn-1',
+      latest_error_severity: 'warning',
+      latest_error_code: 'projection_failed',
+      latest_error_message: 'projection lagging',
+    },
+    [],
+  );
+  assert.equal(warning?.kind, 'warning');
+
+  const terminalOnly = buildDiagnosticsErrorCard({ ...createRunDetail(), status: 'failed', terminal_error: 'worker exited' }, []);
+  assert.equal(terminalOnly?.kind, 'error');
+  assert.equal(terminalOnly?.eventId, null);
+  assert.equal(terminalOnly?.explanation, 'The run reported: worker exited.');
+  assert.equal(buildDiagnosticsErrorCard(createRunDetail(), []), null);
+});
+
+test('createDiagnosticsRefreshGate applies only the newest refresh and nothing after close', () => {
+  const gate = createDiagnosticsRefreshGate();
+  const first = gate.begin();
+  const second = gate.begin();
+  assert.equal(gate.isCurrent(first), false);
+  assert.equal(gate.isCurrent(second), true);
+  gate.close();
+  assert.equal(gate.isCurrent(second), false);
+  assert.equal(gate.isCurrent(gate.begin()), false);
+
+  const other = createDiagnosticsRefreshGate();
+  assert.equal(other.isCurrent(other.begin()), true, 'gates are scoped to their owner');
 });
