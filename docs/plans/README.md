@@ -3,6 +3,7 @@
 | Plan | Status and purpose |
 | --- | --- |
 | [Domain architecture and multimodal workflows](domain-architecture-and-multimodal/plan.md) | Active; library-only Pumas RPC from an isolated pinned artifact, Pantograph-owned T/I/E inference, real desktop acceptance and current Coding-Standards MCP remediation. Revision 2 includes the current agent and baseline-selection policy. |
+| [Workbench redesign](workbench-redesign/plan.md) | Active; replace the workbench GUI with the approved calm redesign (top tabs, shared run-context picker, eight redesigned tabs including a new Sessions tab) over existing projections. Independent write set from the RPC plan. |
 | [Current-standards remediation](current-standards-remediation/plan.md) | Superseded; pending claims remain mapped into the active plan. |
 | [Image-generation workflow](current-image-generation-graphs/plan.md) | Superseded; real image output is retained and extended to text and embeddings in the active plan. |
 | [Documentation consolidation](documentation-consolidation/plan.md) | Accepted historical cleanup and migration evidence. |
