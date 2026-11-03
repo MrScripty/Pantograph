@@ -413,3 +413,59 @@ Issue IDs assigned at merge: WR-M9-2 was already WR-056 (dropped duplicate WR-05
 - The owner rejected the cherry-pick port ("we need proper merges"; cherry-picks leave stray branches). PRs #96/#97 closed, their branches and worktree removed. New path: merge `origin/main` into the RPC branch (in progress), fast-forward it onto `codex/pantograph-rpc-workflow-2026-09-26`, open PR #98 from that branch; merge it into `feat/workbench-redesign` (twelve frontend conflicts, resolutions known from the port), re-run gates, PR #99 stacked on #98. Both PRs are open as drafts.
 - Found while checking `b4854d8d6`: PR #95 (node authoring) overlaps M6; recorded as WR-066 and a re-plan trigger; M6b follows the merge.
 
+## 2026-11-03, merge of the updated RPC branch
+
+- Merge commit `9fbdda35a` (parents `002b27a6d` feat/workbench-redesign and
+  `cc6b6c476` codex/pantograph-rpc-workflow-2026-09-26, which is the RPC
+  branch merged with origin/main at `46aad5841`). Rule: the redesign keeps
+  structure and presentation; every incoming behavioural change is
+  re-applied on it. Follow-ups: `41dad656a` (eslint block for
+  `docs/plans/**/reports/tools`), `2bebcc013` (removes the unimported
+  `artifactDownloadLifecycle.ts` and its test).
+- Thirteen conflicts. `docs/plans/README.md` keeps every row from both
+  sides plus the Workbench redesign row. Re-applied on the redesign:
+  `WorkflowToolbar.svelte` (typed submit inputs, desktop seed checks,
+  post-submit overlays, run-projection and validation-subscription
+  alerts), `ImageOutputNode.svelte` (artifact-reference decode and object
+  URL lifecycle), `NumberInputNode.svelte` (seed validation),
+  `TextOutputNode.svelte` (empty-output branch, bounded width),
+  `ExternalConnectionPanel.svelte` (`canConnect` gating),
+  `LibraryPage.svelte` (browser-host capability gating),
+  `IoInspectorPage.svelte` (page-lifecycle fence on download; the
+  complete-image guard was already present), `WorkbenchShell.svelte`
+  ("Loopback browser host" chip), `ioInspectorPresenters.test.ts` (video
+  caption-notice test). Kept ours, the incoming change having no target in
+  the redesign: `ReconnectableEdge.svelte` (no glow filter),
+  `PumaLibNode.svelte` (already derived), `RunGraphSnapshot.svelte` (real
+  buttons, no a11y ignore). Not adopted: main's `artifactDownloadLifecycle`
+  queue (the redesign's anchor owns downloads) and the video caption notice
+  in the page (the redesign shows video as a binary preview).
+- Auto-merged files checked: `package.json` and `package-lock.json`,
+  `DeviceConfig.svelte`, `ServerStatus.svelte`,
+  `DependencyEnvironmentNode.svelte`, `ioInspectorPresenters.ts`; no
+  incoming file uses a presenter export the redesign removed.
+- Gates: `npm install` run because the traceability script needs
+  `commonmark` (lockfile left as committed). `npm run typecheck` pass;
+  `npm run test:frontend` 873/873; `lint:a11y` pass (27/27 role-button
+  tests); `lint:critical` pass; eslint `--max-warnings 0` on the 111 lintable
+  files changed since `002b27a6d`: 105 pass, 6 fail with 145 errors that
+  come unchanged from `cc6b6c476` (`docs/presentation/app.js`,
+  `examples/cpu-embedding-demo/capture.mjs`,
+  `examples/scheduler-demo/capture{,-editor}.mjs`,
+  `tests/e2e/image-output-artifact/{run.mjs,transport.ts}`); decision
+  traceability (range origin/main..HEAD) pass, 301 paths, 0 mapped
+  impacts; `npx vite build` pass.
+- Combined walkthrough over the build (port 8804) matches the closure run:
+  Scheduler "Pick a run" with 7 rows, the failed run sets the chip to
+  image-gen-sdxl v0.9.1, Diagnostics, I/O Inspector, Network, Graph, Node
+  Editor, Library, Sessions and Settings render with it, Ctrl+C/Ctrl+V move
+  ingest-docs-rag v1.4.0 into the chip, scrollHeight 900.
+- WebKitGTK harness: the unmodified run fails at its 20 s readiness wait
+  ("fixture did not become ready"). A scratch copy with only that wait
+  raised to 90 s passed every check (fixture ready after 26.2 s). Each
+  launch re-optimizes all dependencies because the two Svelte plugin
+  instances in `vite.config.ts` write different `_svelte_metadata.json`
+  contents. That predates the merge; the merge's larger dependency and
+  HTML-entry set is the likely reason it now exceeds 20 s (not measured
+  against the pre-merge tree). Recorded as a harness budget finding, not
+  fixed here.
