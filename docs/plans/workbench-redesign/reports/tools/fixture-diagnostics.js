@@ -1,4 +1,3 @@
-/* global window */
 // Diagnostics (M2) stand-in host. Inject after fixture.js: it reuses the base
 // fixture's runs and answers the projection queries DiagnosticsPage calls
 // (run detail, scheduler timeline, node status, I/O retention, run list scoped
