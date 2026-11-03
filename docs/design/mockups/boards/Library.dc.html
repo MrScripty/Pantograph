@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Library tab</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&amp;family=Atkinson+Hyperlegible:wght@400;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<link rel="stylesheet" href="./shell.css">
+<style>
+.item .sz{font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#A3A9B4;padding-top:2px;text-align:right;white-space:nowrap}
+.item .sz .where{display:block;font-size:11px}
+.res{display:grid;grid-template-columns:1fr auto auto;gap:4px 14px;align-items:center;padding:8px 12px;border-top:1px solid #3B4048;font-size:13px}
+.res .mono{font-size:12px}
+.res:hover{background:#3A3F47}
+.cache{display:inline-flex;gap:4px;align-items:center}
+.cache i{width:9px;height:9px;border-radius:2px;border:1px solid #6B717B;display:inline-block}
+.cache i.hot{background:var(--accent);border-color:var(--accent)}
+.cache i.disk{background:#6B717B}
+</style>
+</helmet>
+<div class="root" style="--accent: {{accent}}">
+  <header class="hdr">
+    <div class="brand">Pantograph</div>
+    <nav aria-label="Workspaces" style="display:flex;align-items:center">
+      <a class="tab" href="#sessions">Sessions</a>
+      <span class="vdiv" aria-hidden="true"></span>
+      <a class="tab" href="#scheduler">Scheduler</a>
+      <a class="tab" href="#diagnostics">Diagnostics</a>
+      <a class="tab" href="#io">I/O Inspector</a>
+      <a class="tab" href="#network">Network</a>
+      <span class="vdiv" aria-hidden="true"></span>
+      <a class="tab" href="#graph">Graph</a>
+      <a class="tab" href="#nodes">Node Editor</a>
+      <a class="tab" href="#library" aria-current="page">Library</a>
+    </nav>
+    <div style="flex:1"></div>
+    <!--ctx-start-->
+    <div class="ctxwrap" onMouseEnter="{{ctxHoverOn}}" onMouseLeave="{{ctxHoverOff}}">
+      <sc-if value="{{ctxHas}}" hint-placeholder-val="{{ true }}">
+        <div class="ctx" aria-label="Run context">
+          <button class="ctxbtn" type="button" aria-haspopup="listbox" aria-expanded="{{pickerOpen}}" onClick="{{togglePicker}}" title="{{ctxRun.id}}, click to change run">
+            <span class="g {{ctxRun.glyph}}" aria-hidden="true" style="margin-top:0"></span>
+            <span class="ctxname">{{ctxRun.wf}} <span class="muted">v{{ctxRun.ver}}</span></span>
+            <span class="muted" aria-hidden="true" style="font-size:10px">▾</span>
+          </button>
+          <button class="x" type="button" aria-label="Clear run context" onClick="{{clearSel}}">×</button>
+        </div>
+      </sc-if>
+      <sc-if value="{{ctxNone}}" hint-placeholder-val="{{ false }}">
+        <button class="ctx ctxbtn ctxempty" type="button" aria-haspopup="listbox" aria-expanded="{{pickerOpen}}" onClick="{{togglePicker}}">Pick a run <span aria-hidden="true" style="font-size:10px">▾</span></button>
+      </sc-if>
+      <sc-if value="{{pickerOpen}}" hint-placeholder-val="{{ false }}">
+        <div class="pop" role="dialog" aria-label="Pick a run">
+          <div style="padding:10px 10px 6px">
+            <label for="ctx-q" style="position:absolute;left:-9999px">Search runs or paste a run id</label>
+            <input id="ctx-q" class="field" data-key="ctx-q" data-autofocus="1" type="search" placeholder="Search runs, or paste a run id" value="{{pickerQuery}}" onInput="{{setQuery}}" style="width:100%">
+          </div>
+          <div class="poplist">
+            <sc-for list="{{pickerGroups}}" as="pg" hint-placeholder-count="2">
+              <div class="pophead">{{pg.title}} <span class="n">{{pg.n}}</span></div>
+              <sc-for list="{{pg.runs}}" as="r" hint-placeholder-count="2">
+                <button class="poprow" type="button" aria-current="{{r.selected}}" onClick="{{r.pick}}" onMouseEnter="{{r.hoverOn}}" onMouseLeave="{{r.hoverOff}}">
+                  <span class="g {{r.glyph}}" aria-hidden="true"></span>
+                  <span style="min-width:0"><b>{{r.wf}}</b> <span class="ver">v{{r.ver}}</span><span class="sub">{{r.statusLabel}}{{r.contextSuffix}}</span></span>
+                  <span class="time">{{r.id}}</span>
+                </button>
+              </sc-for>
+            </sc-for>
+            <sc-if value="{{pickerEmpty}}" hint-placeholder-val="{{ false }}"><div class="muted small" style="padding:10px 12px">{{pickerEmptyText}}</div></sc-if>
+          </div>
+          <div class="popfoot">Hover a run in Scheduler and press Ctrl+C to copy its id. Hover this chip and press Ctrl+V to view a copied run.</div>
+        </div>
+      </sc-if>
+    </div>
+    <sc-if value="{{copied}}" hint-placeholder-val="{{ false }}"><div class="toast" role="status">Copied {{copiedId}}</div></sc-if>
+    <!--ctx-end-->
+    <div class="engine muted"><span class="eng" aria-hidden="true"></span>Local engine</div>
+    <a class="tab" href="#settings">Settings</a>
+    <button class="tgl" type="button" aria-pressed="false" style="margin-left:6px"><svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true" style="stroke:currentColor;fill:none;stroke-width:1.8"><path d="M4 5h16v11H9l-5 4z"/></svg>Assistant</button>
+  </header>
+
+  <main class="main">
+    <div class="dimrow"><div class="dim" role="presentation"><span class="dim-label">{{dimLine}}</span></div></div>
+
+    <div style="flex:1;min-height:0;display:flex;gap:14px;align-items:stretch">
+
+      <section class="panel col" aria-label="Models" style="flex:0 0 400px">
+        <div class="ptop">
+          <div style="display:flex;gap:8px">
+            <label for="lib-search" style="position:absolute;left:-9999px">Search models</label>
+            <input id="lib-search" class="field" type="search" placeholder="{{searchPh}}" style="flex:1;min-width:0" value="{{query}}" onChange="{{setQuery}}">
+            <button class="btn" type="button" aria-pressed="{{hf}}" onClick="{{toggleHf}}">{{hfLabel}}</button>
+          </div>
+          <sc-if value="{{local}}" hint-placeholder-val="{{ true }}">
+            <div class="seg" role="group" aria-label="Kind">
+              <sc-for list="{{kinds}}" as="k" hint-placeholder-count="4">
+                <button type="button" aria-pressed="{{k.active}}" onClick="{{k.pick}}">{{k.label}} <span class="n">{{k.n}}</span></button>
+              </sc-for>
+            </div>
+          </sc-if>
+          <sc-if value="{{hf}}" hint-placeholder-val="{{ false }}">
+            <div class="muted small">Searching Hugging Face. Results download into the Pumas library on this machine.</div>
+          </sc-if>
+        </div>
+
+        <div class="scroll">
+          <sc-if value="{{local}}" hint-placeholder-val="{{ true }}">
+            <sc-for list="{{groups}}" as="grp" hint-placeholder-count="3">
+              <div class="ghead" style="cursor:default">{{grp.title}} <span class="n">{{grp.n}}</span></div>
+              <sc-for list="{{grp.items}}" as="m" hint-placeholder-count="3">
+                <button class="item" type="button" aria-current="{{m.selected}}" onClick="{{m.pick}}">
+                  <span class="cache" aria-label="{{m.cacheLabel}}" title="{{m.cacheLabel}}" style="margin-top:4px"><i class="{{m.c0}}"></i><i class="{{m.c1}}"></i></span>
+                  <span style="min-width:0">
+                    <span class="name">{{m.name}}</span><span class="ver">{{m.family}}</span>
+                    <span class="sub">{{m.sub}}</span>
+                  </span>
+                  <span class="sz">{{m.size}}<span class="where">{{m.last}}</span></span>
+                </button>
+              </sc-for>
+            </sc-for>
+          </sc-if>
+          <sc-if value="{{hf}}" hint-placeholder-val="{{ false }}">
+            <sc-for list="{{results}}" as="r" hint-placeholder-count="5">
+              <div class="res">
+                <span style="min-width:0"><span class="mono" style="color:#fff">{{r.id}}</span><span class="muted small" style="display:block">{{r.sub}}</span></span>
+                <span class="num muted">{{r.size}}</span>
+                <button class="btn sm" type="button" onClick="{{r.get}}">{{r.btn}}</button>
+              </div>
+            </sc-for>
+            <div class="muted small" style="padding:10px 12px">8 of 240 results. Narrow the search to see more specific models.</div>
+          </sc-if>
+        </div>
+        <div class="pfoot">
+          <span class="muted small">Cache <span class="cache" style="vertical-align:middle"><i class="hot"></i></span> on device <span class="cache" style="vertical-align:middle;margin-left:6px"><i class="disk"></i></span> on disk</span>
+          <span class="muted small" style="margin-left:auto">{{diskLine}}</span>
+        </div>
+      </section>
+
+      <section class="panel col" aria-label="Model detail" style="flex:1">
+        <div class="scroll">
+          <div style="padding:16px 18px 12px;display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap">
+            <div style="flex:1 1 260px;min-width:0">
+              <div class="title">{{sel.name}} <span class="muted">{{sel.family}}</span></div>
+              <div class="mono muted" style="margin-top:2px">{{sel.id}}</div>
+              <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap">
+                <sc-for list="{{sel.chips}}" as="c" hint-placeholder-count="3"><span class="chip">{{c}}</span></sc-for>
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn" type="button">Use in a new graph</button>
+              <button class="btn" type="button">Open folder</button>
+              <button class="btn {{delClass}}" type="button" onClick="{{del}}" aria-disabled="{{sel.inUse}}" title="{{delTitle}}">{{delLabel}}</button>
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(240px,100%),1fr));border-top:1px solid #4A5059">
+            <div class="sec" style="border-top:0">
+              <h3>Where it lives</h3>
+              <div class="kv">
+                <span class="k">On disk</span><span>{{sel.size}}, {{sel.path}}</span>
+                <span class="k">On device</span><span>{{sel.onDevice}}</span>
+                <span class="k">Format</span><span>{{sel.format}}</span>
+              </div>
+            </div>
+            <div class="sec" style="border-top:0;border-left:1px solid #4A5059">
+              <h3>How it is used</h3>
+              <div class="kv">
+                <span class="k">Runs</span><span>{{sel.runs}}</span>
+                <span class="k">Last used</span><span>{{sel.lastLong}}</span>
+                <span class="k">Read from network</span><span>{{sel.net}}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="sec">
+            <h3>Workflows that use it</h3>
+            <table class="tbl"><thead><tr><th style="position:static">Workflow</th><th style="position:static">Node</th><th style="position:static;text-align:right">Runs</th><th style="position:static">Last run</th></tr></thead><tbody>
+              <sc-for list="{{sel.uses}}" as="u" hint-placeholder-count="2">
+                <tr><td><b>{{u.wf}}</b> <span class="muted mono" style="font-size:11px">v{{u.ver}}</span></td><td class="mono" style="font-size:12px">{{u.node}}</td><td class="num">{{u.n}}</td><td class="muted">{{u.last}}</td></tr>
+              </sc-for>
+            </tbody></table>
+          </div>
+          <div class="sec">
+            <h3>Source</h3>
+            <div class="kv">
+              <span class="k">Repository</span><span class="mono" style="font-size:12px">{{sel.repo}}</span>
+              <span class="k">Downloaded</span><span>{{sel.downloaded}}</span>
+              <span class="k">Licence</span><span>{{sel.licence}}</span>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#D9B06A","options":["#D9B06A","#9FB7D9","#A7C4A0"]},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  /*ctx-start*/
+  catalog() {
+    return [
+      { id: 'run_01JB2K7Q3M', wf: 'ingest-docs-rag', ver: '1.4.0', status: 'running', runtime: 'llama.cpp', device: 'cuda:0', deviceName: 'RTX 4090', vram: 17.2, queue: 0, prio: 0, est: 'About 2 min left', node: 'embed_chunks', pct: '61%', reason: '', started: '20:01:40', dur: '4m 12s', updated: '20:05:51', client: 'gui', session: 's-4f2a' },
+      { id: 'run_01JB2K9F0A', wf: 'image-gen-sdxl', ver: '0.9.2', status: 'running', runtime: 'diffusers', device: 'cuda:1', deviceName: 'RTX 3090', vram: 9.8, queue: 0, prio: 0, est: 'About 40 s left', node: 'sample', pct: 'step 18 of 30', reason: '', started: '20:04:02', dur: '1m 49s', updated: '20:05:50', client: 'gui', session: 's-4f2a' },
+      { id: 'run_01JB2KB4ZT', wf: 'transcribe-meeting', ver: '2.1.0', status: 'waiting', runtime: 'whisper', device: 'cuda:0', deviceName: 'RTX 4090', vram: 8, queue: 1, prio: 5, est: 'Starts after ingest-docs-rag', node: '', pct: '', reason: 'needs 8 GB on cuda:0, 6.8 GB free', started: '—', dur: '—', updated: '20:05:12', client: 'cli', session: 's-9c01' },
+      { id: 'run_01JB2KC1PX', wf: 'summarize-daily', ver: '1.0.3', status: 'queued', runtime: 'llama.cpp', device: 'cuda:1', deviceName: 'RTX 3090', vram: 6, queue: 2, prio: 0, est: 'About 6 min', node: '', pct: '', reason: 'next on cuda:1, model cached', started: '—', dur: '—', updated: '20:04:40', client: 'gui', session: 's-4f2a' },
+      { id: 'run_01JB2KD8RN', wf: 'embed-corpus', ver: '1.4.0', status: 'queued', runtime: 'llama.cpp', device: '', deviceName: '', vram: 7, queue: 3, prio: 0, est: 'About 9 min', node: '', pct: '', reason: 'cold load, 12 s', started: '—', dur: '—', updated: '20:04:41', client: 'gui', session: 's-4f2a' },
+      { id: 'run_01JB2KE2QW', wf: 'image-gen-sdxl', ver: '0.9.2', status: 'queued', runtime: 'diffusers', device: '', deviceName: '', vram: 9.8, queue: 4, prio: 0, est: 'About 2 min', node: '', pct: '', reason: 'model cached', started: '—', dur: '—', updated: '20:04:55', client: 'gui', session: 's-4f2a' },
+      { id: 'run_01JB2JZ0MT', wf: 'summarize-daily', ver: '1.0.3', status: 'succeeded', runtime: 'llama.cpp', device: 'cuda:0', deviceName: 'RTX 4090', vram: 6, queue: 0, prio: 0, est: 'Finished in 38 s', node: '', pct: '', reason: '', started: '19:52:10', dur: '38 s', updated: '19:52:48', client: 'gui', session: 's-4f2a' },
+      { id: 'run_01JB2JV7KD', wf: 'embed-corpus', ver: '1.3.9', status: 'succeeded', runtime: 'llama.cpp', device: 'cuda:0', deviceName: 'RTX 4090', vram: 7, queue: 0, prio: 0, est: 'Finished in 11m 03s', node: '', pct: '', reason: '', started: '19:38:01', dur: '11m 03s', updated: '19:49:04', client: 'gui', session: 's-4f2a' },
+      { id: 'run_01JB2JT3HB', wf: 'image-gen-sdxl', ver: '0.9.1', status: 'failed', runtime: 'diffusers', device: 'cuda:1', deviceName: 'RTX 3090', vram: 14.2, queue: 0, prio: 0, est: 'Stopped after 22 s', node: 'load_model', pct: '', reason: 'out of memory, needed 14.2 GB', started: '19:35:20', dur: '22 s', updated: '19:35:42', client: 'gui', session: 's-4f2a' },
+      { id: 'run_01JB2JQ9XA', wf: 'transcribe-meeting', ver: '2.0.0', status: 'cancelled', runtime: 'whisper', device: 'cuda:0', deviceName: 'RTX 4090', vram: 8, queue: 0, prio: 0, est: 'Stopped after 1m 10s', node: 'transcribe', pct: '', reason: 'cancelled from the GUI', started: '19:30:05', dur: '1m 10s', updated: '19:31:15', client: 'gui', session: 's-4f2a' }
+    ];
+  }
+  wfMap() {
+    return {
+      'ingest-docs-rag': { model: 'pumas://models/bge-m3', nodes: [['read_docs', 'read-file', 'text'], ['chunking', 'expand-settings', 'settings'], ['split', 'processing', 'chunks'], ['embed_chunks', 'embedding', 'embedding'], ['index', 'vector-output', ''], ['manifest', 'write-file', '']] },
+      'image-gen-sdxl': { model: 'pumas://models/sdxl-base-1.0', nodes: [['prompt', 'text-input', 'text'], ['load_model', 'puma-lib', 'model_path'], ['sample', 'pytorch-inference', 'latents'], ['decode', 'image-output', 'image'], ['unload', 'unload-model', '']] },
+      'transcribe-meeting': { model: 'pumas://models/whisper-large-v3', nodes: [['audio', 'audio-input', 'audio'], ['transcribe', 'onnx-inference', 'transcript'], ['notes', 'text-output', 'text']] },
+      'summarize-daily': { model: 'pumas://models/qwen3-8b-instruct', nodes: [['fetch', 'read-file', 'text'], ['summarize', 'llm-inference', 'response'], ['write', 'write-file', '']] },
+      'embed-corpus': { model: 'pumas://models/bge-m3', nodes: [['read', 'read-file', 'text'], ['embed', 'embedding', 'embedding'], ['index', 'vector-output', '']] }
+    };
+  }
+  nodeStates(run) {
+    const wf = this.wfMap()[run.wf] || { nodes: [['start', 'processing', 'out'], ['end', 'text-output', '']] };
+    const idx = wf.nodes.findIndex((n) => n[0] === run.node);
+    return wf.nodes.map(([id, type, port], i) => {
+      let state = 'queued';
+      if (run.status === 'succeeded') state = 'succeeded';
+      else if (run.status === 'running') state = i < idx ? 'succeeded' : i === idx ? 'running' : 'queued';
+      else if (run.status === 'failed') state = i < idx ? 'succeeded' : i === idx ? 'failed' : 'skipped';
+      else if (run.status === 'cancelled') state = i < idx ? 'succeeded' : i === idx ? 'cancelled' : 'skipped';
+      const glyph = state === 'skipped' ? 'g-cancelled' : 'g-' + state;
+      return { id, type, port, state, glyph, label: state === 'skipped' ? 'skipped' : state };
+    });
+  }
+  decorateRun(r) {
+    const labels = { running: 'Running', waiting: 'Waiting', queued: 'Queued', succeeded: 'Succeeded', failed: 'Failed', cancelled: 'Cancelled' };
+    const isLive = r.status === 'running' || r.status === 'waiting' || r.status === 'queued';
+    let context = '';
+    if (r.status === 'running') context = ', ' + r.node + (r.pct ? ' ' + r.pct : '');
+    else if (r.status === 'waiting') context = ', ' + r.reason;
+    else if (r.status === 'queued') context = ', #' + r.queue + ' in queue';
+    else if (r.reason) context = ', ' + r.reason;
+    else context = ', ' + r.dur;
+    const placement = r.device ? r.runtime + ' on ' + r.device : r.runtime + ', device not assigned yet';
+    const placementLong = r.device ? r.runtime + ' on ' + r.device + ' (' + r.deviceName + ')' : 'Not assigned to a device yet';
+    let progress = r.est;
+    if (r.status === 'running') progress = r.node + ', ' + r.pct;
+    else if (r.status === 'waiting') progress = 'Waiting: ' + r.reason;
+    else if (r.status === 'queued') progress = 'Queue position ' + r.queue + ', ' + r.reason;
+    else if (r.status === 'failed') progress = 'Failed in ' + r.node + ': ' + r.reason;
+    const chips = [];
+    if (r.device) chips.push({ text: r.runtime + ' on ' + r.device });
+    if (r.prio) chips.push({ text: 'priority ' + r.prio });
+    if (r.queue) chips.push({ text: '#' + r.queue + ' in queue' });
+    return { ...r, glyph: 'g-' + r.status, stClass: r.status === 'failed' ? 'st-failed' : '', statusLabel: labels[r.status], contextSuffix: context, placement, placementLong, progress, chips, isLive,
+      model: (this.wfMap()[r.wf] || {}).model || 'none', hoverOn: () => { this._hoverRun = r.id; }, hoverOff: () => { if (this._hoverRun === r.id) this._hoverRun = null; } };
+  }
+  ctxBind() {
+    if (this._ctxBound || typeof document === 'undefined') return;
+    this._ctxBound = true;
+    const isField = (t) => t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT');
+    document.addEventListener('keydown', (e) => {
+      const k = (e.key || '').toLowerCase(); const mod = e.ctrlKey || e.metaKey;
+      if (e.key === 'Escape' && this.state && this.state.pickerOpen) { this.setState({ pickerOpen: false }); return; }
+      if (!mod || isField(e.target)) return;
+      if (k === 'c' && this._hoverRun) this.copyRun(this._hoverRun);
+      if (k === 'v' && this._hoverCtx) { e.preventDefault(); this.pasteRun(); }
+    });
+    document.addEventListener('mousedown', (e) => {
+      if (this.state && this.state.pickerOpen && !(e.target.closest && e.target.closest('.ctxwrap'))) this.setState({ pickerOpen: false });
+    });
+    window.addEventListener('storage', (e) => { if (e.key === 'pg.run') this.setState({ run: e.newValue || null }); });
+  }
+  copyRun(id) {
+    try { localStorage.setItem('pg.clip', id); } catch (_) {}
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(id).catch(() => {});
+    this.setState({ copied: id });
+    clearTimeout(this._copyT); this._copyT = setTimeout(() => this.setState({ copied: null }), 1600);
+  }
+  pasteRun() {
+    const apply = (text) => { const id = (text || '').trim(); if (this.catalog().some((r) => r.id === id)) this.pickRun(id); else this.setState({ pickerOpen: true, pickerQuery: id }); };
+    let fallback = ''; try { fallback = localStorage.getItem('pg.clip') || ''; } catch (_) {}
+    if (navigator.clipboard && navigator.clipboard.readText) navigator.clipboard.readText().then(apply, () => apply(fallback)); else apply(fallback);
+  }
+  pickRun(id) {
+    try { localStorage.setItem('pg.run', id || ''); } catch (_) {}
+    this.setState({ run: id || null, pickerOpen: false, pickerQuery: '', confirmCancel: false });
+  }
+  ctxRunId(fallback) {
+    const st = this.state || {};
+    if ('run' in st) return st.run;
+    try { const v = localStorage.getItem('pg.run'); if (v !== null) return v || null; } catch (_) {}
+    return fallback;
+  }
+  ctxVals(fallbackId) {
+    this.ctxBind();
+    const st = this.state || {};
+    const runId = this.ctxRunId(fallbackId);
+    const all = this.catalog();
+    const selRaw = all.find((r) => r.id === runId);
+    const sel = this.decorateRun(selRaw || all[0]);
+    const qRaw = st.pickerQuery || ''; const q = qRaw.toLowerCase();
+    const match = (r) => !q || r.wf.includes(q) || r.id.toLowerCase().includes(q) || ('v' + r.ver).includes(q);
+    const groups = [['Running', ['running']], ['Waiting for memory', ['waiting']], ['Queued', ['queued']], ['Finished today', ['succeeded', 'failed', 'cancelled']]]
+      .map(([title, keys]) => { const runs = all.filter((r) => keys.includes(r.status) && match(r)).map((r) => ({ ...this.decorateRun(r), selected: r.id === runId, pick: () => this.pickRun(r.id) })); return { title, n: runs.length, runs }; })
+      .filter((g) => g.n);
+    const total = groups.reduce((n, g) => n + g.n, 0);
+    return {
+      runId, hasSel: !!selRaw, noSel: !selRaw, sel, ctxHas: !!selRaw, ctxNone: !selRaw, ctxRun: sel,
+      pickerOpen: !!st.pickerOpen, pickerQuery: qRaw, pickerGroups: groups,
+      pickerEmpty: total === 0, pickerEmptyText: q.startsWith('run_') ? 'No run with id ' + qRaw + ' in today\'s history.' : 'No runs match.',
+      togglePicker: () => this.setState({ pickerOpen: !st.pickerOpen }),
+      openPicker: () => this.setState({ pickerOpen: true }),
+      setQuery: (e) => { const v = e.target.value; if (all.some((r) => r.id === v.trim())) this.pickRun(v.trim()); else this.setState({ pickerQuery: v }); },
+      clearSel: () => this.pickRun(null),
+      ctxHoverOn: () => { this._hoverCtx = true; }, ctxHoverOff: () => { this._hoverCtx = false; },
+      copied: !!st.copied, copiedId: st.copied || ''
+    };
+  }
+  /*ctx-end*/
+  models() {
+    return [
+      { id: 'pumas://models/bge-m3', name: 'bge-m3', family: 'embedding', kind: 'text', size: '2.2 GB', path: '/models/bge-m3', format: 'gguf, q8_0', devices: ['cuda:0'], onDevice: 'cuda:0, loaded 20:01:38 for ingest-docs-rag', runs: '41 runs this week', last: 'in use', lastLong: 'Now, by ingest-docs-rag run_01JB2K7Q3M', net: '0 B, read from local disk', inUse: true, chips: ['In use on cuda:0', 'llama.cpp', '41 runs this week'], sub: 'llama.cpp, in use by ingest-docs-rag', uses: [{ wf: 'ingest-docs-rag', ver: '1.4.0', node: 'embed_chunks', n: 31, last: '20:01' }, { wf: 'embed-corpus', ver: '1.4.0', node: 'embed', n: 10, last: '19:49' }], repo: 'BAAI/bge-m3', downloaded: '2026-09-14', licence: 'MIT' },
+      { id: 'pumas://models/sdxl-base-1.0', name: 'sdxl-base-1.0', family: 'diffusion', kind: 'image', size: '6.9 GB', path: '/models/sdxl-base-1.0', format: 'safetensors, fp16', devices: ['cuda:1'], onDevice: 'cuda:1, loaded 20:04:03 for image-gen-sdxl', runs: '18 runs this week, 3 failed', last: 'in use', lastLong: 'Now, by image-gen-sdxl run_01JB2K9F0A', net: '0 B', inUse: true, chips: ['In use on cuda:1', 'diffusers', '3 failures this week'], sub: 'diffusers, in use by image-gen-sdxl', uses: [{ wf: 'image-gen-sdxl', ver: '0.9.2', node: 'load_model', n: 15, last: '20:04' }, { wf: 'image-gen-sdxl', ver: '0.9.1', node: 'load_model', n: 3, last: '19:35' }], repo: 'stabilityai/stable-diffusion-xl-base-1.0', downloaded: '2026-08-02', licence: 'OpenRAIL++' },
+      { id: 'pumas://models/qwen3-8b-instruct', name: 'qwen3-8b-instruct', family: 'text', kind: 'text', size: '5.1 GB', path: '/models/qwen3-8b-instruct', format: 'gguf, q5_k_m', devices: [], onDevice: 'Not loaded. Cold load takes about 12 s on cuda:1', runs: '26 runs this week', last: '19:52', lastLong: '19:52, by summarize-daily', net: '0 B', inUse: false, chips: ['On disk', 'llama.cpp', 'Next: summarize-daily'], sub: 'llama.cpp, next up for summarize-daily', uses: [{ wf: 'summarize-daily', ver: '1.0.3', node: 'summarize', n: 26, last: '19:52' }], repo: 'Qwen/Qwen3-8B-Instruct-GGUF', downloaded: '2026-10-11', licence: 'Apache-2.0' },
+      { id: 'pumas://models/whisper-large-v3', name: 'whisper-large-v3', family: 'speech', kind: 'audio', size: '3.1 GB', path: '/models/whisper-large-v3', format: 'ct2, int8', devices: [], onDevice: 'Not loaded', runs: '9 runs this week', last: '19:31', lastLong: '19:31, by transcribe-meeting (cancelled)', net: '0 B', inUse: false, chips: ['On disk', 'whisper'], sub: 'whisper, waiting run needs it', uses: [{ wf: 'transcribe-meeting', ver: '2.1.0', node: 'transcribe', n: 9, last: '19:31' }], repo: 'Systran/faster-whisper-large-v3', downloaded: '2026-07-20', licence: 'MIT' },
+      { id: 'pumas://models/kitten-tts', name: 'kitten-tts', family: 'speech', kind: 'audio', size: '96 MB', path: '/models/kitten-tts', format: 'onnx', devices: [], onDevice: 'Not loaded', runs: '2 runs this week', last: 'Oct 29', lastLong: 'Oct 29, by KittenTTS', net: '0 B', inUse: false, chips: ['On disk', 'onnx'], sub: 'onnx, used by KittenTTS', uses: [{ wf: 'KittenTTS', ver: '0.1.0', node: 'tts', n: 2, last: 'Oct 29' }], repo: 'KittenML/kitten-tts-nano', downloaded: '2026-10-29', licence: 'Apache-2.0' },
+      { id: 'pumas://models/juggernaut-x-v10', name: 'juggernaut-x-v10', family: 'diffusion', kind: 'image', size: '7.1 GB', path: '/models/juggernaut-x-v10', format: 'safetensors, fp16', devices: [], onDevice: 'Not loaded', runs: 'No runs in 30 days', last: 'Sep 30', lastLong: 'Sep 30, by Juggernaut X v10 SDXL', net: '0 B', inUse: false, chips: ['On disk', 'diffusers', 'Unused 33 days'], sub: 'diffusers, unused for 33 days', uses: [{ wf: 'Juggernaut X v10 SDXL', ver: '0.2.0', node: 'load_model', n: 4, last: 'Sep 30' }], repo: 'RunDiffusion/Juggernaut-X-v10', downloaded: '2026-09-01', licence: 'CreativeML' },
+      { id: 'pumas://models/stable-audio-open', name: 'stable-audio-open', family: 'audio', kind: 'audio', size: '4.8 GB', path: '/models/stable-audio-open', format: 'safetensors', devices: [], onDevice: 'Not loaded', runs: 'No runs in 30 days', last: 'Sep 12', lastLong: 'Sep 12, by Stable Audio', net: '0 B', inUse: false, chips: ['On disk', 'diffusers', 'Unused 51 days'], sub: 'diffusers, unused for 51 days', uses: [{ wf: 'Stable Audio', ver: '0.1.2', node: 'generate', n: 6, last: 'Sep 12' }], repo: 'stabilityai/stable-audio-open-1.0', downloaded: '2026-08-30', licence: 'Stability community' }
+    ];
+  }
+  renderVals() {
+    const st = this.state || {};
+    const ctx = this.ctxVals(null);
+    const kind = st.kind || 'all';
+    const selId = st.sel || 'pumas://models/bge-m3';
+    const hf = !!st.hf;
+    const query = st.q || '';
+    const deleted = st.deleted || [];
+    const all = this.models().filter(m => !deleted.includes(m.id)).filter(m => !query || m.name.includes(query.toLowerCase()));
+    const kinds = [['all', 'All'], ['text', 'Text'], ['image', 'Image'], ['audio', 'Audio']].map(([key, label]) => ({ key, label, n: all.filter(m => key === 'all' || m.kind === key).length, active: key === kind, pick: () => this.setState({ kind: key }) }));
+    const pool = all.filter(m => kind === 'all' || m.kind === kind).map(m => ({ ...m, selected: m.id === selId, pick: () => this.setState({ sel: m.id, confirm: false }), c0: m.devices.includes('cuda:0') ? 'hot' : 'disk', c1: m.devices.includes('cuda:1') ? 'hot' : 'disk', cacheLabel: m.devices.length ? 'Loaded on ' + m.devices.join(', ') : 'On disk only' }));
+    const groups = [
+      { title: 'Loaded on a device', items: pool.filter(m => m.devices.length) },
+      { title: 'On disk, used this month', items: pool.filter(m => !m.devices.length && !m.runs.startsWith('No')) },
+      { title: 'On disk, unused 30 days', items: pool.filter(m => !m.devices.length && m.runs.startsWith('No')) }
+    ].map(g => ({ ...g, n: g.items.length })).filter(g => g.n);
+    const sel = all.find(m => m.id === selId) || all[0] || this.models()[0];
+    const confirm = !!st.confirm;
+    const got = st.got || [];
+    const results = [
+      { id: 'Qwen/Qwen3-14B-Instruct-GGUF', sub: 'text generation, 1.2k downloads this week', size: '9.0 GB' },
+      { id: 'BAAI/bge-reranker-v2-m3', sub: 'reranker, 8.4k downloads this week', size: '1.1 GB' },
+      { id: 'nomic-ai/nomic-embed-text-v2', sub: 'embedding, 3.1k downloads this week', size: '540 MB' },
+      { id: 'stabilityai/sd-turbo', sub: 'text to image, 2.0k downloads this week', size: '2.6 GB' },
+      { id: 'openai/whisper-large-v3-turbo', sub: 'speech recognition, 11k downloads this week', size: '1.6 GB' }
+    ].map(r => ({ ...r, btn: got.includes(r.id) ? 'Queued' : 'Download', get: () => this.setState({ got: [...got, r.id] }) }));
+    return {
+      ...ctx,
+      accent: this.props.accent ?? '#D9B06A',
+      dimLine: all.length + ' models, 29.3 GB on disk, 2 loaded on devices, 2 unused for 30 days (11.9 GB)',
+      diskLine: '212 GB free on /',
+      kinds, groups, sel, hf, local: !hf,
+      hfLabel: hf ? 'Back to library' : 'Find on Hugging Face',
+      searchPh: hf ? 'Search Hugging Face' : 'Search models',
+      toggleHf: () => this.setState({ hf: !hf, q: '' }),
+      query, setQuery: (e) => this.setState({ q: e.target.value }),
+      results,
+      delClass: confirm ? 'confirm' : 'danger',
+      delLabel: confirm ? 'Confirm delete' : 'Delete from disk',
+      delTitle: sel.inUse ? 'Cannot delete while a run is using it' : 'Removes ' + sel.size + ' from disk',
+      del: () => {
+        if (sel.inUse) return;
+        if (!confirm) { this.setState({ confirm: true }); setTimeout(() => this.setState({ confirm: false }), 4000); return; }
+        this.setState({ deleted: [...deleted, sel.id], confirm: false, sel: null });
+      }
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,38 @@
+    <div class="ctxwrap" onMouseEnter="{{ctxHoverOn}}" onMouseLeave="{{ctxHoverOff}}">
+      <sc-if value="{{ctxHas}}" hint-placeholder-val="{{ true }}">
+        <div class="ctx" aria-label="Run context">
+          <button class="ctxbtn" type="button" aria-haspopup="listbox" aria-expanded="{{pickerOpen}}" onClick="{{togglePicker}}" title="{{ctxRun.id}}, click to change run">
+            <span class="g {{ctxRun.glyph}}" aria-hidden="true" style="margin-top:0"></span>
+            <span class="ctxname">{{ctxRun.wf}} <span class="muted">v{{ctxRun.ver}}</span></span>
+            <span class="muted" aria-hidden="true" style="font-size:10px">▾</span>
+          </button>
+          <button class="x" type="button" aria-label="Clear run context" onClick="{{clearSel}}">×</button>
+        </div>
+      </sc-if>
+      <sc-if value="{{ctxNone}}" hint-placeholder-val="{{ false }}">
+        <button class="ctx ctxbtn ctxempty" type="button" aria-haspopup="listbox" aria-expanded="{{pickerOpen}}" onClick="{{togglePicker}}">Pick a run <span aria-hidden="true" style="font-size:10px">▾</span></button>
+      </sc-if>
+      <sc-if value="{{pickerOpen}}" hint-placeholder-val="{{ false }}">
+        <div class="pop" role="dialog" aria-label="Pick a run">
+          <div style="padding:10px 10px 6px">
+            <label for="ctx-q" style="position:absolute;left:-9999px">Search runs or paste a run id</label>
+            <input id="ctx-q" class="field" data-key="ctx-q" data-autofocus="1" type="search" placeholder="Search runs, or paste a run id" value="{{pickerQuery}}" onInput="{{setQuery}}" style="width:100%">
+          </div>
+          <div class="poplist">
+            <sc-for list="{{pickerGroups}}" as="pg" hint-placeholder-count="2">
+              <div class="pophead">{{pg.title}} <span class="n">{{pg.n}}</span></div>
+              <sc-for list="{{pg.runs}}" as="r" hint-placeholder-count="2">
+                <button class="poprow" type="button" aria-current="{{r.selected}}" onClick="{{r.pick}}" onMouseEnter="{{r.hoverOn}}" onMouseLeave="{{r.hoverOff}}">
+                  <span class="g {{r.glyph}}" aria-hidden="true"></span>
+                  <span style="min-width:0"><b>{{r.wf}}</b> <span class="ver">v{{r.ver}}</span><span class="sub">{{r.statusLabel}}{{r.contextSuffix}}</span></span>
+                  <span class="time">{{r.id}}</span>
+                </button>
+              </sc-for>
+            </sc-for>
+            <sc-if value="{{pickerEmpty}}" hint-placeholder-val="{{ false }}"><div class="muted small" style="padding:10px 12px">{{pickerEmptyText}}</div></sc-if>
+          </div>
+          <div class="popfoot">Hover a run in Scheduler and press Ctrl+C to copy its id. Hover this chip and press Ctrl+V to view a copied run.</div>
+        </div>
+      </sc-if>
+    </div>
+    <sc-if value="{{copied}}" hint-placeholder-val="{{ false }}"><div class="toast" role="status">Copied {{copiedId}}</div></sc-if>
