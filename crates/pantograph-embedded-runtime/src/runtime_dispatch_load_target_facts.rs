@@ -486,7 +486,7 @@ fn bounded_error_message(error: impl std::fmt::Display) -> String {
     let message = error.to_string();
     let mut bounded = message.chars().take(MAX_ERROR_BYTES).collect::<String>();
     if message.chars().count() > MAX_ERROR_BYTES {
-        bounded.push_str("…");
+        bounded.push('…');
     }
     bounded
 }

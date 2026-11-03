@@ -425,7 +425,7 @@ async fn wait_for_snapshot(
     tokio::time::timeout(Duration::from_secs(1), async {
         loop {
             let result = snapshot_provider.resolve(request);
-            let diagnostic_matches = expected_diagnostic_code.as_ref().map_or(true, |expected| {
+            let diagnostic_matches = expected_diagnostic_code.as_ref().is_none_or(|expected| {
                 result
                     .diagnostics
                     .iter()

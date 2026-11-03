@@ -33,6 +33,13 @@ pub(super) struct WorkflowIoArtifactMetadata {
     pub(super) format: Option<IoArtifactFormatMetadata>,
 }
 
+/// Runtime attribution recorded with a retained I/O artifact.
+#[derive(Clone, Copy, Debug, Default)]
+pub(super) struct WorkflowIoArtifactAttribution<'a> {
+    pub(super) model_id: Option<&'a str>,
+    pub(super) runtime_id: Option<&'a str>,
+}
+
 pub(super) fn workflow_io_artifact_metadata(
     service: &WorkflowService,
     workflow_run_id: &str,
@@ -40,9 +47,12 @@ pub(super) fn workflow_io_artifact_metadata(
     workflow_version_id: &str,
     role_label: &str,
     binding: &WorkflowPortBinding,
-    model_id: Option<&str>,
-    runtime_id: Option<&str>,
+    attribution: WorkflowIoArtifactAttribution<'_>,
 ) -> Result<WorkflowIoArtifactMetadata, WorkflowServiceError> {
+    let WorkflowIoArtifactAttribution {
+        model_id,
+        runtime_id,
+    } = attribution;
     let artifact_fact_id = workflow_io_artifact_fact_id(
         workflow_run_id,
         role_label,
@@ -365,7 +375,7 @@ mod tests {
     use pantograph_diagnostics_ledger::IoArtifactRetentionState;
     use tempfile::TempDir;
 
-    use super::workflow_io_artifact_metadata;
+    use super::{workflow_io_artifact_metadata, WorkflowIoArtifactAttribution};
     use crate::workflow::{
         ArtifactPolicy, ArtifactReadRequest, ArtifactStore, WorkflowPortBinding, WorkflowService,
     };
@@ -406,8 +416,10 @@ mod tests {
             "version-1",
             "node_output",
             &binding,
-            Some("model-qwen-embedding"),
-            Some("runtime-llama-cpp"),
+            WorkflowIoArtifactAttribution {
+                model_id: Some("model-qwen-embedding"),
+                runtime_id: Some("runtime-llama-cpp"),
+            },
         )
         .expect("retain generated output");
         let expected_body = serde_json::to_vec(&embedding).expect("encode embedding");

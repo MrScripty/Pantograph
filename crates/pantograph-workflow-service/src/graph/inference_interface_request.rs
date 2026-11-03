@@ -240,9 +240,7 @@ fn authored_trait_settings(
     Some(settings)
 }
 
-fn generation_option_values<'a>(
-    options: &'a serde_json::Map<String, Value>,
-) -> Vec<(&'a str, &'a Value)> {
+fn generation_option_values(options: &serde_json::Map<String, Value>) -> Vec<(&str, &Value)> {
     let mut values = Vec::new();
     for key in ["max_new_tokens", "temperature", "top_p", "top_k", "seed"] {
         if let Some(value) = options.get(key) {
