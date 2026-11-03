@@ -4,8 +4,6 @@
     getBezierPath,
     type EdgeProps,
   } from '@xyflow/svelte';
-  import { nodes } from '../../stores/workflowStore';
-  import type { NodeDefinition } from '../../services/workflow/types';
   import { insetReconnectAnchorPosition } from '../reconnectInteraction';
   import {
     INFERENCE_INTERFACE_DRIFT_EDGE_ACTIVE_KEY,
@@ -16,9 +14,7 @@
     id,
     data,
     source,
-    target,
     sourceHandleId,
-    targetHandleId,
     sourceX,
     sourceY,
     targetX,
@@ -28,44 +24,6 @@
     interactionWidth = 20,
     selected,
   }: EdgeProps = $props();
-
-  // Port type colors - brighter/more saturated versions for edges
-  const typeColors: Record<string, string> = {
-    string: '#4ade80',
-    prompt: '#60a5fa',
-    number: '#fbbf24',
-    boolean: '#f87171',
-    image: '#a78bfa',
-    audio: '#f9a8d4',
-    audio_stream: '#38bdf8',
-    stream: '#22d3ee',
-    json: '#fb923c',
-    kv_cache: '#a3e635',
-    component: '#f472b6',
-    document: '#2dd4bf',
-    tools: '#fbbf24',
-    embedding: '#818cf8',
-    vector_db: '#c084fc',
-    any: '#9ca3af',
-  };
-
-  // Get source port color
-  const sourceColor = $derived.by(() => {
-    const sourceNode = $nodes.find(n => n.id === source);
-    if (!sourceNode?.data?.definition) return '#60a5fa';
-    const def = sourceNode.data.definition as NodeDefinition;
-    const port = def.outputs.find(p => p.id === sourceHandleId);
-    return port ? (typeColors[port.data_type] || '#60a5fa') : '#60a5fa';
-  });
-
-  // Get target port color
-  const targetColor = $derived.by(() => {
-    const targetNode = $nodes.find(n => n.id === target);
-    if (!targetNode?.data?.definition) return '#60a5fa';
-    const def = targetNode.data.definition as NodeDefinition;
-    const port = def.inputs.find(p => p.id === targetHandleId);
-    return port ? (typeColors[port.data_type] || '#60a5fa') : '#60a5fa';
-  });
 
   const [path] = $derived(
     getBezierPath({
@@ -78,8 +36,6 @@
     })
   );
 
-  // Unique gradient ID for this edge
-  const gradientId = $derived(`edge-gradient-${id}`);
   const sourceAnchorPosition = $derived(
     insetReconnectAnchorPosition(
       {
@@ -117,31 +73,12 @@
   );
 </script>
 
-<!-- Custom SVG with gradient - colored only at the ends, white in the middle -->
-<svg style="position: absolute; width: 0; height: 0; overflow: visible;">
-  <defs>
-    <linearGradient id={gradientId} gradientUnits="userSpaceOnUse" x1={sourceX} y1={sourceY} x2={targetX} y2={targetY}>
-      <stop offset="0%" stop-color={sourceColor} />
-      <stop offset="12%" stop-color="#ffffff" />
-      <stop offset="88%" stop-color="#ffffff" />
-      <stop offset="100%" stop-color={targetColor} />
-    </linearGradient>
-    <filter id="{gradientId}-glow" x="-100%" y="-100%" width="300%" height="300%">
-      <feGaussianBlur in="SourceGraphic" stdDeviation="2" result="blur" />
-      <feMerge>
-        <feMergeNode in="blur" />
-        <feMergeNode in="blur" />
-        <feMergeNode in="SourceGraphic" />
-      </feMerge>
-    </filter>
-  </defs>
-</svg>
-
-<!-- Main edge path with gradient stroke and glow filter -->
+<!-- Neutral wire (docs/design/mockups/boards/shell.css .wire). The accent is
+     kept for live interaction (the insert preview); drift is dashed danger. -->
 {#if edgeInsertPreviewActive}
   <path
+    class="edge-insert-preview"
     d={path}
-    stroke="rgba(125, 211, 252, 0.45)"
     stroke-width={selected ? 9 : 7}
     fill="none"
     stroke-linecap="round"
@@ -150,8 +87,8 @@
 
 {#if inferenceInterfaceDriftAffected}
   <path
+    class="edge-drift"
     d={path}
-    stroke="rgba(248, 113, 113, 0.7)"
     stroke-width={selected ? 8 : 6}
     fill="none"
     stroke-linecap="round"
@@ -166,12 +103,10 @@
 <path
   {id}
   class="react-flow__edge-path"
+  class:edge-selected={selected}
   d={path}
-  stroke="url(#{gradientId})"
-  stroke-width={edgeInsertPreviewActive || inferenceInterfaceDriftAffected ? (selected ? 3 : 2.5) : (selected ? 1.5 : 1)}
   fill="none"
   stroke-linecap="round"
-  filter="url(#{gradientId}-glow)"
 >
   {#if typeof inferenceInterfaceDriftTitle === 'string'}
     <title>{inferenceInterfaceDriftTitle}</title>
@@ -189,3 +124,25 @@
 
 <EdgeReconnectAnchor type="source" position={sourceAnchorPosition} size={12} />
 <EdgeReconnectAnchor type="target" position={targetAnchorPosition} size={12} />
+
+<style>
+  .react-flow__edge-path {
+    stroke: var(--pg-border-strong);
+    stroke-width: 1.5px;
+  }
+
+  .react-flow__edge-path.edge-selected {
+    stroke: var(--pg-text);
+    stroke-width: 2px;
+  }
+
+  .edge-insert-preview {
+    stroke: var(--pg-accent);
+    stroke-opacity: 0.45;
+  }
+
+  .edge-drift {
+    stroke: var(--pg-danger);
+    stroke-opacity: 0.7;
+  }
+</style>

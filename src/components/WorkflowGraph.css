@@ -1,76 +1,115 @@
-.svelte-flow {
-  background-color: transparent !important;
-  background-image: none !important;
-}
-
-.svelte-flow__background {
-  display: none !important;
-}
-
-.svelte-flow__renderer {
-  background-color: transparent !important;
-}
-
-.svelte-flow__edge-path {
-  stroke: #60a5fa;
-  stroke-width: 2px;
-  filter: drop-shadow(0 0 3px rgba(96, 165, 250, 0.6));
-}
-
-.svelte-flow__edge.selected .svelte-flow__edge-path {
-  stroke: #93c5fd;
-  stroke-width: 3px;
-  filter: drop-shadow(0 0 6px rgba(147, 197, 253, 0.8));
-}
-
-.svelte-flow__controls {
-  background-color: #262626;
-  border: 1px solid #404040;
-  border-radius: 8px;
-}
-
-.svelte-flow__controls-button {
-  background-color: #262626;
-  border-color: #404040;
-  color: #a3a3a3;
-}
-
-.svelte-flow__controls-button:hover {
-  background-color: #404040;
-}
-
-.svelte-flow__minimap {
-  background-color: #171717;
-  border: 1px solid #404040;
-  border-radius: 8px;
-}
-
-.svelte-flow__node {
-  background-color: transparent !important;
-  border: none !important;
-  box-shadow: none !important;
-}
-
-.svelte-flow__handle {
-  border-radius: 50%;
-}
-
-.svelte-flow__handle.connecting {
-  background: #60a5fa !important;
-  box-shadow: 0 0 10px rgba(96, 165, 250, 0.8);
-}
-
-.svelte-flow__connection-line {
-  stroke: #60a5fa;
-  stroke-width: 2px;
-  filter: drop-shadow(0 0 4px rgba(96, 165, 250, 0.7));
-}
-
+/*
+ * Editor canvas styling through the xyflow CSS variables, so the workbench
+ * tokens reach SvelteFlow without overriding its rules. Values follow
+ * docs/design/mockups/boards/shell.css (.canvas, .wire, .fab, .minimap).
+ */
 .workflow-graph-container {
   position: relative;
   overflow: hidden;
+  border: 1px solid var(--pg-border);
+  border-radius: 4px;
+
+  --xy-background-color: transparent;
+  --xy-node-background-color: transparent;
+  --xy-node-border: none;
+  --xy-node-boxshadow-hover: none;
+  --xy-node-boxshadow-selected: none;
+  --xy-node-color: var(--pg-text);
+  --xy-edge-stroke: var(--pg-border-strong);
+  --xy-edge-stroke-width: 1.5;
+  --xy-edge-stroke-selected: var(--pg-text);
+  --xy-connectionline-stroke: var(--pg-accent);
+  --xy-connectionline-stroke-width: 2;
+  --xy-handle-background-color: var(--pg-panel-head);
+  --xy-handle-border-color: var(--pg-border-strong);
+  --xy-controls-button-background-color: var(--pg-panel);
+  --xy-controls-button-background-color-hover: var(--pg-panel-raised);
+  --xy-controls-button-color: var(--pg-text-soft);
+  --xy-controls-button-color-hover: var(--pg-text-bright);
+  --xy-controls-button-border-color: var(--pg-border);
+  --xy-controls-box-shadow: none;
+  --xy-minimap-background-color: var(--pg-panel-sunken);
+  --xy-minimap-mask-background-color: rgba(35, 39, 45, 0.6);
+  --xy-minimap-mask-stroke-color: var(--pg-text-soft);
+  --xy-minimap-mask-stroke-width: 1;
+  --xy-minimap-node-background-color: var(--pg-border-idle);
+  --xy-attribution-background-color: transparent;
+}
+
+/* Dotted drafting-paper ground on the flow element itself. */
+.workflow-graph-container .svelte-flow {
+  background-color: var(--pg-panel-head);
+  background-image: radial-gradient(var(--pg-border) 1px, transparent 1px);
+  background-size: 22px 22px;
 }
 
 .workflow-graph-container.cutting {
   cursor: crosshair;
 }
+
+.workflow-graph-container .svelte-flow__background {
+  display: none;
+}
+
+/*
+ * Wires are neutral on the board. CSS outranks the SVG presentation
+ * attributes ReconnectableEdge sets (type-coloured gradient and glow), so the
+ * main path follows the tokens here; its insert-preview and drift overlays
+ * keep their own colours (see the M5 report).
+ */
+.workflow-graph-container .svelte-flow__edge-path,
+.workflow-graph-container .react-flow__edge-path {
+  stroke: var(--pg-border-strong);
+  stroke-width: 1.5px;
+  filter: none;
+}
+
+.workflow-graph-container .svelte-flow__edge.selected .svelte-flow__edge-path,
+.workflow-graph-container .svelte-flow__edge.selected .react-flow__edge-path {
+  stroke: var(--pg-text);
+  stroke-width: 2px;
+}
+
+.workflow-graph-container .svelte-flow__connection-path {
+  stroke: var(--pg-accent);
+  stroke-width: 2px;
+}
+
+.workflow-graph-container .svelte-flow__handle.connecting {
+  background: var(--pg-accent);
+  border-color: var(--pg-accent);
+}
+
+/* Bottom-left pill group (zoom in, zoom out, fit, lock) as on the board. */
+.workflow-graph-container .svelte-flow__controls {
+  display: flex;
+  flex-direction: row;
+  gap: 6px;
+  padding: 6px;
+  margin: 12px;
+  background: var(--pg-panel-sunken);
+  border: 1px solid var(--pg-border);
+  border-radius: 4px;
+}
+
+.workflow-graph-container .svelte-flow__controls-button {
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--pg-border);
+  border-radius: 4px;
+}
+
+.workflow-graph-container .svelte-flow__controls-button svg {
+  fill: currentColor;
+}
+
+.workflow-graph-container .svelte-flow__minimap {
+  margin: 12px;
+  border: 1px solid var(--pg-border);
+  border-radius: 3px;
+}
+
+/*
+ * The canvas passes a literal mask colour as a MiniMap prop, which wins over
+ * the --xy variables; fill on the mask element follows the tokens instead.
+ */

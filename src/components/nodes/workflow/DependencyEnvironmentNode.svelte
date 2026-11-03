@@ -389,14 +389,3 @@
   </BaseNode>
 </div>
 
-<style>
-  .dependency-env-wrapper :global(.base-node) {
-    border-color: rgba(8, 145, 178, 0.5);
-  }
-
-  .dependency-env-wrapper :global(.node-header) {
-    background-color: rgba(8, 145, 178, 0.2);
-    border-color: rgba(8, 145, 178, 0.3);
-  }
-
-</style>

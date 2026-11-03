@@ -3,6 +3,8 @@
     HealthMonitorService,
     type HealthMonitorState,
   } from '../../services/HealthMonitorService';
+  import { KeyValue, StatusGlyph, type KeyValueRow } from '../workbench/ui';
+  import { healthStatusGlyph } from './serverStatusPresenters';
 
   type Props = {
     healthState: HealthMonitorState;
@@ -18,90 +20,72 @@
     onTriggerRecovery,
   }: Props = $props();
 
-  let healthStatusColor = $derived(
-    healthState.lastResult
-      ? HealthMonitorService.getStatusColor(healthState.lastResult.status)
-      : 'text-neutral-500'
-  );
+  let healthGlyph = $derived(healthStatusGlyph(healthState.lastResult?.status));
 
   let healthStatusLabel = $derived(
     healthState.lastResult
       ? HealthMonitorService.getStatusLabel(healthState.lastResult.status)
       : 'Unknown'
   );
+
+  let healthRows = $derived.by((): KeyValueRow[] => {
+    const result = healthState.lastResult;
+    if (!result) {
+      return [];
+    }
+    const rows: KeyValueRow[] = [
+      { key: 'Consecutive failures', value: String(result.consecutive_failures), mono: true },
+      { key: 'Last check', value: new Date(result.timestamp).toLocaleTimeString(), mono: true },
+    ];
+    if (result.error) {
+      rows.push({ key: 'Error', value: result.error });
+    }
+    return rows;
+  });
 </script>
 
 <div>
   <button
     type="button"
-    class="w-full rounded px-1 py-1 text-xs transition-colors hover:bg-neutral-800/50"
+    class="flex w-full items-center gap-2 rounded px-1 py-1 text-left pg-small hover:bg-pg-panel-raised"
+    aria-expanded={showHealthDetails}
     onclick={() => (showHealthDetails = !showHealthDetails)}
   >
-    <div class="flex items-center justify-between">
-      <div class="flex items-center gap-2">
-        <span class="text-neutral-500">Health:</span>
-        <span class={healthStatusColor}>{healthStatusLabel}</span>
-        {#if healthState.lastResult?.response_time_ms}
-          <span class="text-[10px] text-neutral-600">
-            ({healthState.lastResult.response_time_ms}ms)
-          </span>
-        {/if}
-      </div>
-      <svg
-        class={`h-3 w-3 text-neutral-500 transition-transform ${showHealthDetails ? 'rotate-180' : ''}`}
-        fill="none"
-        stroke="currentColor"
-        viewBox="0 0 24 24"
-      >
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          stroke-width="2"
-          d="M19 9l-7 7-7-7"
-        />
-      </svg>
-    </div>
+    <span class="pg-muted">Health</span>
+    <StatusGlyph state={healthGlyph} small />
+    <span class="min-w-0 flex-1 truncate">{healthStatusLabel}</span>
+    {#if healthState.lastResult?.response_time_ms}
+      <span class="pg-mono pg-muted">{healthState.lastResult.response_time_ms} ms</span>
+    {/if}
+    <span class="pg-muted text-[11px]" aria-hidden="true">{showHealthDetails ? '▴' : '▾'}</span>
   </button>
 
   {#if showHealthDetails}
-    <div class="mt-2 space-y-2 border-l-2 border-neutral-700 pl-2">
-      {#if healthState.lastResult}
-        <div class="space-y-1 text-[10px] text-neutral-500">
-          <div>Consecutive failures: {healthState.lastResult.consecutive_failures}</div>
-          <div>Last check: {new Date(healthState.lastResult.timestamp).toLocaleTimeString()}</div>
-          {#if healthState.lastResult.error}
-            <div class="text-red-400">Error: {healthState.lastResult.error}</div>
-          {/if}
-        </div>
+    <div class="mt-2 flex flex-col gap-2 border-l-2 border-pg-border pl-3">
+      {#if healthRows.length > 0}
+        <KeyValue rows={healthRows} label="Health check" />
       {/if}
 
       <div class="flex gap-2">
-        <button
-          type="button"
-          onclick={onCheckNow}
-          class="flex-1 rounded bg-neutral-700 px-2 py-1 text-[10px] transition-colors hover:bg-neutral-600"
-        >
-          Check Now
+        <button type="button" onclick={onCheckNow} class="pg-btn pg-btn-sm">
+          Check now
         </button>
         {#if healthState.lastResult?.healthy === false}
           <button
             type="button"
             onclick={onTriggerRecovery}
             disabled={healthState.isRecovering}
-            class="flex-1 rounded bg-yellow-700 px-2 py-1 text-[10px] transition-colors hover:bg-yellow-600 disabled:opacity-50"
+            class="pg-btn pg-btn-sm"
           >
             {healthState.isRecovering ? 'Recovering...' : 'Recover'}
           </button>
         {/if}
       </div>
 
-      <div class="text-[10px] text-neutral-600">
-        {#if healthState.isRunning}
-          <span class="text-green-500">● Monitoring active</span>
-        {:else}
-          <span class="text-neutral-500">○ Monitoring inactive</span>
-        {/if}
-      </div>
+      <p class="m-0 flex items-center gap-1.5 pg-muted pg-small">
+        <StatusGlyph state={healthState.isRunning ? 'succeeded' : 'idle'} small />
+        {healthState.isRunning ? 'Monitoring active' : 'Monitoring inactive'}
+      </p>
     </div>
   {/if}
 </div>

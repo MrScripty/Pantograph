@@ -4,24 +4,61 @@ import assert from 'node:assert/strict';
 import {
   DEFAULT_WORKBENCH_STATE,
   WORKBENCH_PAGE_IDS,
+  WORKBENCH_PAGES,
+  WORKBENCH_TAB_GROUPS,
   normalizeWorkbenchPageId,
+  workbenchPagesInGroup,
   withDiagnosticsFocus,
   withSettingsFocus,
   withActiveWorkflowRun,
   withSelectedWorkbenchPage,
 } from './workbenchStore.ts';
 
-test('workbench page order starts at Scheduler and includes reserved pages', () => {
+test('workbench page order follows the tab bar with Sessions first', () => {
   assert.deepEqual(WORKBENCH_PAGE_IDS, [
+    'sessions',
     'scheduler',
     'diagnostics',
-    'graph',
     'io_inspector',
-    'library',
     'network',
+    'graph',
     'node_lab',
+    'library',
     'settings',
   ]);
+  assert.deepEqual(
+    WORKBENCH_PAGES.map((page) => page.id),
+    [...WORKBENCH_PAGE_IDS],
+  );
+});
+
+test('Scheduler stays the default page after Sessions is added', () => {
+  assert.equal(DEFAULT_WORKBENCH_STATE.selected_page_id, 'scheduler');
+  assert.equal(normalizeWorkbenchPageId('sessions'), 'sessions');
+  assert.equal(
+    WORKBENCH_PAGES.find((page) => page.id === 'sessions')?.label,
+    'Sessions',
+  );
+});
+
+test('tab groups partition every page except the pinned Settings tab', () => {
+  assert.deepEqual(WORKBENCH_TAB_GROUPS, ['sessions', 'runs', 'workflows']);
+  assert.deepEqual(
+    workbenchPagesInGroup('sessions').map((page) => page.id),
+    ['sessions'],
+  );
+  assert.deepEqual(
+    workbenchPagesInGroup('runs').map((page) => page.id),
+    ['scheduler', 'diagnostics', 'io_inspector', 'network'],
+  );
+  assert.deepEqual(
+    workbenchPagesInGroup('workflows').map((page) => page.id),
+    ['graph', 'node_lab', 'library'],
+  );
+  assert.deepEqual(
+    workbenchPagesInGroup('settings').map((page) => page.id),
+    ['settings'],
+  );
 });
 
 test('normalizeWorkbenchPageId falls back to Scheduler for unknown values', () => {

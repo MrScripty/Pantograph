@@ -205,18 +205,13 @@
   );
 </script>
 
-<div class="space-y-2">
-  <div class="text-[10px] uppercase tracking-wider text-neutral-600">
-    Built-in inference engine
-  </div>
+<div class="backend-selector">
+  <div class="pg-small pg-muted">Built-in inference engine</div>
 
   {#if isLoading}
-    <div class="flex items-center gap-2 text-xs text-neutral-500">
-      <div class="h-3 w-3 animate-spin rounded-full border border-neutral-500 border-t-transparent"></div>
-      <span>Loading backends...</span>
-    </div>
+    <div class="pg-small pg-muted" role="status">Loading backends</div>
   {:else if backends.length === 0}
-    <div class="text-xs text-neutral-500">No backends available</div>
+    <div class="pg-small pg-muted">No backends available</div>
   {:else}
     <BackendOptionList
       {backends}
@@ -228,23 +223,30 @@
     />
 
     {#if activeBackend}
-      <div class="text-[10px] text-neutral-500">{activeBackend.description}</div>
+      <div class="pg-small pg-muted">{activeBackend.description}</div>
       <BackendCapabilityBadges capabilities={activeBackend.capabilities} />
     {/if}
   {/if}
 
   {#if error}
-    <div class="rounded border border-red-800/50 bg-red-900/20 p-2 text-xs text-red-400">
-      {error}
-    </div>
+    <div class="pg-small pg-muted" role="alert">{error}</div>
   {/if}
 
   <button
     type="button"
-    class="text-[10px] text-neutral-600 transition-colors hover:text-neutral-400 disabled:opacity-50"
+    class="pg-tgl"
     onclick={loadBackends}
     disabled={isLoading}
   >
     Refresh backends
   </button>
 </div>
+
+<style>
+  .backend-selector {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-start;
+  }
+</style>

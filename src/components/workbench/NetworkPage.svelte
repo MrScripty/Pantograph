@@ -1,6 +1,5 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { RefreshCw } from 'lucide-svelte';
   import type {
     LibraryUsageProjectionRecord,
     NodeStatusProjectionRecord,
@@ -12,29 +11,45 @@
   import { workflowService } from '../../services/workflow/WorkflowService';
   import { activeWorkflowRun } from '../../stores/workbenchStore';
   import {
-    buildNetworkFactRows,
+    buildLocalDeviceRows,
+    buildLocalDiskRows,
+    buildLocalIdentityRows,
+    buildLocalInterfaceRows,
+    buildLocalNodeHeader,
+    buildLocalStatCells,
+    buildNetworkDimensionLine,
+    buildNetworkNodeGroups,
+    buildPeerDetail,
+    buildSelectedRunEventLines,
     buildSelectedRunExecutionRows,
-    buildSelectedRunPlacementRows,
+    buildSelectedRunOnLocalNode,
     buildSelectedRunResourceRows,
-    formatCpuUsage,
-    formatNetworkBytes,
+    describeLocalStatusFailure,
+    describeRunProjectionFailure,
+    describeSelectedRunForPeer,
+    DEVICE_MEMORY_NOT_REPORTED,
     formatNetworkProjectionFreshness,
-    formatNetworkTimestamp,
-    formatSchedulerLoad,
-    findSelectedRunPlacement,
-    formatSelectedRunLocalState,
-    formatSessionLoad,
-    formatTransportState,
+    groupDegradationWarnings,
+    resolveSelectedNodeId,
+    type NetworkNodeEntry,
   } from './networkPagePresenters';
-  import { formatLibraryProjectionFreshness } from './libraryUsagePresenters';
+  import { openRunContextPicker } from './shell/runContextStore';
   import {
-    formatSchedulerProjectionFreshness,
-    formatSchedulerTimelineKind,
-    formatSchedulerTimelineSource,
-    formatSchedulerTimestamp,
-    schedulerTimelinePayloadLabel,
-  } from './schedulerPagePresenters';
+    Chip,
+    DimensionLine,
+    GroupHeader,
+    KeyValue,
+    ListRow,
+    LogLine,
+    Panel,
+    StatusGlyph,
+  } from './ui';
   import { formatWorkflowCommandError } from './workflowErrorPresenters';
+
+  const SEGMENT_UNAVAILABLE_TITLE =
+    'The network status does not say who owns a peer yet, so nodes cannot be filtered by owner.';
+  const PAIR_UNAVAILABLE_TITLE = 'Pairing is not available in this build yet.';
+  const FORGET_UNAVAILABLE_TITLE = 'Forgetting a peer is not available in this build yet.';
 
   let status = $state<WorkflowLocalNetworkStatusQueryResponse | null>(null);
   let selectedRunResources = $state<LibraryUsageProjectionRecord[]>([]);
@@ -48,17 +63,54 @@
   let nodeStatusLoading = $state(false);
   let timelineLoading = $state(false);
   let error = $state<string | null>(null);
+  let subscriptionError = $state<string | null>(null);
   let resourceError = $state<string | null>(null);
   let nodeStatusError = $state<string | null>(null);
   let timelineError = $state<string | null>(null);
+
+  // Presentation state owned by this page.
+  let requestedNodeId = $state<string | null>(null);
+  let localExpanded = $state(true);
+  let peersExpanded = $state(true);
+  let eventsExpanded = $state(false);
+
   let localNode = $derived(status?.local_node ?? null);
-  let factRows = $derived(localNode ? buildNetworkFactRows(localNode) : []);
-  let selectedRunPlacement = $derived(
-    localNode ? findSelectedRunPlacement(localNode, $activeWorkflowRun?.workflow_run_id) : null,
+  let peerNodes = $derived(status?.peer_nodes ?? []);
+  let groups = $derived(localNode ? buildNetworkNodeGroups(localNode, peerNodes) : null);
+  let selectedNodeId = $derived(groups ? resolveSelectedNodeId(groups, requestedNodeId) : null);
+  let selectedPeer = $derived(
+    groups && selectedNodeId !== groups.local.nodeId
+      ? (peerNodes.find((peer) => peer.node_id === selectedNodeId) ?? null)
+      : null,
   );
-  let selectedRunPlacementRows = $derived(buildSelectedRunPlacementRows(selectedRunPlacement));
-  let selectedRunResourceRows = $derived(buildSelectedRunResourceRows(selectedRunResources));
-  let selectedRunExecutionRows = $derived(buildSelectedRunExecutionRows(selectedRunNodeStatuses));
+  let dimensionLine = $derived(buildNetworkDimensionLine(localNode, peerNodes, loading));
+  let busy = $derived(loading || timelineLoading || resourceLoading || nodeStatusLoading);
+
+  let localHeader = $derived(localNode ? buildLocalNodeHeader(localNode, peerNodes.length) : null);
+  let statCells = $derived(localNode ? buildLocalStatCells(localNode) : []);
+  let degradations = $derived(localNode ? groupDegradationWarnings(localNode) : null);
+  let deviceRows = $derived(localNode ? buildLocalDeviceRows(localNode) : []);
+  let diskRows = $derived(localNode ? buildLocalDiskRows(localNode) : []);
+  let interfaceRows = $derived(localNode ? buildLocalInterfaceRows(localNode) : []);
+  let identityRows = $derived(localNode ? buildLocalIdentityRows(localNode) : []);
+  let peerDetail = $derived(selectedPeer ? buildPeerDetail(selectedPeer) : null);
+
+  let selectedRunOnNode = $derived(
+    localNode && $activeWorkflowRun ? buildSelectedRunOnLocalNode(localNode, $activeWorkflowRun) : null,
+  );
+  let selectedRunOnPeer = $derived(
+    localNode && peerDetail && $activeWorkflowRun
+      ? describeSelectedRunForPeer(localNode, $activeWorkflowRun, peerDetail.header.title)
+      : null,
+  );
+  let executionRows = $derived(buildSelectedRunExecutionRows(selectedRunNodeStatuses));
+  let resourceRows = $derived(buildSelectedRunResourceRows(selectedRunResources));
+  let eventLines = $derived(buildSelectedRunEventLines(timelineEvents));
+  let statusFailure = $derived(
+    error ? describeLocalStatusFailure(error, localNode?.captured_at_ms ?? null) : null,
+  );
+
+  let statusRequestSerial = 0;
   let resourceRequestSerial = 0;
   let nodeStatusRequestSerial = 0;
   let timelineRequestSerial = 0;
@@ -69,17 +121,28 @@
   }
 
   async function refreshStatus(): Promise<void> {
+    const requestSerial = ++statusRequestSerial;
     loading = true;
-    error = null;
     try {
-      status = await workflowService.queryLocalNetworkStatus({
+      const response = await workflowService.queryLocalNetworkStatus({
         include_disks: true,
         include_network_interfaces: true,
       });
+      if (requestSerial !== statusRequestSerial) {
+        return;
+      }
+      status = response;
+      error = null;
     } catch (statusError) {
+      if (requestSerial !== statusRequestSerial) {
+        return;
+      }
+      // Keep the last status; the panel says it is from an earlier capture.
       error = formatWorkflowCommandError(statusError);
     } finally {
-      loading = false;
+      if (requestSerial === statusRequestSerial) {
+        loading = false;
+      }
     }
   }
 
@@ -200,8 +263,8 @@
     ]);
   }
 
-  function recordSubscriptionError(subscriptionError: unknown): void {
-    error = formatWorkflowCommandError(subscriptionError);
+  function recordSubscriptionError(failure: unknown): void {
+    subscriptionError = formatWorkflowCommandError(failure);
   }
 
   async function refreshFromProjectionInvalidation(projectionKind: string): Promise<void> {
@@ -251,378 +314,579 @@
   });
 </script>
 
-<section class="flex h-full min-h-0 flex-col bg-neutral-950">
-  <div class="flex shrink-0 items-center justify-between border-b border-neutral-800 px-4 py-3">
-    <div>
-      <h1 class="text-base font-semibold text-neutral-100">Network</h1>
-      <div class="mt-1 text-xs text-neutral-500">
-        {localNode?.display_name ?? 'Local Pantograph'}
-      </div>
-    </div>
-    <button
-      type="button"
-      class="inline-flex items-center gap-2 rounded border border-neutral-700 px-3 py-1.5 text-sm text-neutral-300 transition-colors hover:border-neutral-500 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
-      onclick={() => refreshNetworkPage()}
-      disabled={loading || timelineLoading || resourceLoading || nodeStatusLoading}
-    >
-      <RefreshCw
-        size={14}
-        aria-hidden="true"
-        class={loading || timelineLoading || resourceLoading || nodeStatusLoading ? 'animate-spin' : ''}
-      />
-      Refresh
-    </button>
-  </div>
+{#snippet nodeRow(entry: NetworkNodeEntry)}
+  <ListRow
+    glyph={entry.glyph}
+    name={entry.name}
+    version={entry.nodeId}
+    context={entry.line1}
+    detail={entry.line2}
+    time={entry.time}
+    title={entry.timeTitle ? `${entry.name}, ${entry.transportLabel}. ${entry.timeTitle}` : `${entry.name}, ${entry.transportLabel}`}
+    selected={entry.nodeId === selectedNodeId}
+    onselect={() => (requestedNodeId = entry.nodeId)}
+  />
+{/snippet}
 
-  {#if error}
-    <div class="border-b border-red-900 bg-red-950/50 px-4 py-2 text-sm text-red-200">{error}</div>
-  {/if}
+{#snippet degraded(lines: string[])}
+  {#each lines as line (line)}
+    <p class="pg-muted pg-small net-note">{line}</p>
+  {/each}
+{/snippet}
 
-  <div class="min-h-0 flex-1 overflow-auto p-6">
-    {#if !status && loading}
-      <div class="text-sm text-neutral-500">Loading local status</div>
-    {:else if localNode}
-      <div class="space-y-4">
-        <div class="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-900 pb-4">
-          <div class="min-w-0">
-            <div class="truncate text-sm font-semibold text-neutral-100" title={localNode.node_id}>
-              {localNode.display_name}
-            </div>
-            <div class="mt-1 text-xs text-neutral-500">
-              Captured {formatNetworkTimestamp(localNode.captured_at_ms)}
+{#snippet sectionStatus(loadingNow: boolean, failure: string | null, freshness: string)}
+  <span class="pg-muted net-fresh">{loadingNow ? 'Refreshing' : freshness}</span>
+  {#if failure}<p class="pg-muted pg-small net-note">{failure}</p>{/if}
+{/snippet}
+
+<div class="pg-main h-full">
+  <DimensionLine label={dimensionLine} />
+
+  <div class="net-body">
+    <Panel label="Nodes" width="340px">
+      {#snippet top()}
+        <div class="pg-seg net-seg" role="group" aria-label="Show">
+          <button type="button" aria-pressed="true">
+            All nodes{#if groups}<span class="pg-n">{1 + groups.peers.length}</span>{/if}
+          </button>
+          <button type="button" aria-pressed="false" disabled title={SEGMENT_UNAVAILABLE_TITLE}>Shared with me</button>
+          <button type="button" aria-pressed="false" disabled title={SEGMENT_UNAVAILABLE_TITLE}>Mine</button>
+        </div>
+      {/snippet}
+
+      {#if groups}
+        <GroupHeader
+          label="Local"
+          count={1}
+          expanded={localExpanded}
+          controls="network-local-rows"
+          ontoggle={() => (localExpanded = !localExpanded)}
+        />
+        <div id="network-local-rows" hidden={!localExpanded}>
+          {@render nodeRow(groups.local)}
+        </div>
+        <GroupHeader
+          label="Peers"
+          count={groups.peers.length}
+          expanded={peersExpanded}
+          controls="network-peer-rows"
+          ontoggle={() => (peersExpanded = !peersExpanded)}
+        />
+        <div id="network-peer-rows" hidden={!peersExpanded}>
+          {#each groups.peers as peer (peer.nodeId)}
+            {@render nodeRow(peer)}
+          {:else}
+            <p class="pg-muted pg-small net-listnote">No peers are known to this node.</p>
+          {/each}
+        </div>
+      {:else}
+        <p class="pg-muted pg-small net-listnote">
+          {loading ? 'Reading the local status.' : 'Nodes appear here once the local status can be read.'}
+        </p>
+      {/if}
+
+      {#snippet footer()}
+        <button class="pg-btn pg-btn-sm" type="button" disabled title={PAIR_UNAVAILABLE_TITLE}>Pair a node</button>
+        <span class="pg-muted pg-small net-trust">Trusted peers only</span>
+      {/snippet}
+    </Panel>
+
+    <Panel label="Node detail">
+      {#if !localNode}
+        <div class="net-head">
+          <div class="net-headtext">
+            <div class="pg-title">Network</div>
+            <p class="pg-muted pg-small net-sub">
+              {statusFailure ?? 'Reading the local status.'}
+            </p>
+          </div>
+          <div class="net-actions">
+            <button class="pg-btn" type="button" disabled={busy} onclick={() => refreshNetworkPage()}>
+              {busy ? 'Refreshing' : 'Refresh'}
+            </button>
+          </div>
+        </div>
+      {:else if peerDetail}
+        <div class="net-head">
+          <div class="net-headtext">
+            <div class="pg-title">{peerDetail.header.title} <span class="pg-muted">{peerDetail.header.nodeId}</span></div>
+            <div class="pg-muted pg-small net-sub">{peerDetail.header.subtitle}</div>
+            <div class="net-chips">
+              <Chip glyph={peerDetail.header.glyph}>{peerDetail.header.transportLabel}</Chip>
+              {#each peerDetail.header.chips as chip (chip)}<Chip>{chip}</Chip>{/each}
             </div>
           </div>
-          {#if $activeWorkflowRun}
-            <div class="max-w-full truncate rounded border border-neutral-800 px-3 py-1.5 text-xs text-neutral-400">
-              <span class="font-mono text-neutral-200">{$activeWorkflowRun.workflow_run_id}</span>
-              <span class="ml-2 text-neutral-500">{formatSelectedRunLocalState(localNode, $activeWorkflowRun.workflow_run_id)}</span>
-            </div>
-          {/if}
+          <div class="net-actions">
+            <button class="pg-btn" type="button" disabled={busy} onclick={() => refreshNetworkPage()}>
+              {busy ? 'Refreshing' : 'Refresh'}
+            </button>
+            <button class="pg-btn pg-btn-danger" type="button" disabled title={FORGET_UNAVAILABLE_TITLE}>Forget node</button>
+          </div>
+        </div>
+        {#if statusFailure}<p class="pg-muted pg-small net-headnote">{statusFailure}</p>{/if}
+
+        <div class="pg-sec">
+          <h3>Details</h3>
+          <p class="pg-muted pg-small">{peerDetail.note}</p>
         </div>
 
-        {#if localNode.degradation_warnings.length > 0}
-          <div class="rounded border border-amber-900 bg-amber-950/30 p-4">
-            <h2 class="text-sm font-semibold text-amber-100">Degraded Metrics</h2>
-            <ul class="mt-2 space-y-1 text-sm text-amber-200">
-              {#each localNode.degradation_warnings as warning (warning)}
-                <li>{warning}</li>
-              {/each}
-            </ul>
+        {#if selectedRunOnPeer}
+          <div class="pg-sec">
+            <h3>{selectedRunOnPeer.heading}</h3>
+            <p class="pg-muted pg-small">{selectedRunOnPeer.sentence}</p>
           </div>
         {/if}
 
-        <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <div class="rounded border border-neutral-800 bg-neutral-900/60 p-4">
-            <div class="text-xs uppercase tracking-[0.22em] text-neutral-500">Transport</div>
-            <div class="mt-2 text-lg font-semibold text-neutral-100">
-              {formatTransportState(localNode.transport_state)}
-            </div>
-            <div class="mt-2 text-xs text-neutral-500">{status.peer_nodes.length} peers</div>
-          </div>
-          <div class="rounded border border-neutral-800 bg-neutral-900/60 p-4">
-            <div class="text-xs uppercase tracking-[0.22em] text-neutral-500">CPU</div>
-            <div class="mt-2 text-lg font-semibold text-neutral-100">
-              {localNode.system.cpu.logical_core_count} cores
-            </div>
-            <div class="mt-2 text-xs text-neutral-500">
-              {formatCpuUsage(localNode.system.cpu.average_usage_percent)}
+        <div class="pg-sec">
+          <h3>Identity</h3>
+          <KeyValue rows={peerDetail.identityRows} />
+        </div>
+      {:else if localHeader && degradations}
+        <div class="net-head">
+          <div class="net-headtext">
+            <div class="pg-title">{localHeader.title} <span class="pg-muted">{localHeader.nodeId}</span></div>
+            <div class="pg-muted pg-small net-sub">{localHeader.subtitle}</div>
+            <div class="net-chips">
+              <Chip glyph={localHeader.glyph}>{localHeader.transportLabel}</Chip>
+              {#each localHeader.chips as chip (chip)}<Chip>{chip}</Chip>{/each}
             </div>
           </div>
-          <div class="rounded border border-neutral-800 bg-neutral-900/60 p-4">
-            <div class="text-xs uppercase tracking-[0.22em] text-neutral-500">Memory</div>
-            <div class="mt-2 text-lg font-semibold text-neutral-100">
-              {formatNetworkBytes(localNode.system.memory.used_bytes)}
-            </div>
-            <div class="mt-2 text-xs text-neutral-500">
-              {formatNetworkBytes(localNode.system.memory.available_bytes)} available
-            </div>
-          </div>
-          <div class="rounded border border-neutral-800 bg-neutral-900/60 p-4">
-            <div class="text-xs uppercase tracking-[0.22em] text-neutral-500">Scheduler</div>
-            <div class="mt-2 text-lg font-semibold text-neutral-100">
-              {formatSchedulerLoad(localNode)}
-            </div>
-            <div class="mt-2 text-xs text-neutral-500">
-              {formatSessionLoad(localNode)}
-            </div>
+          <div class="net-actions">
+            <button class="pg-btn" type="button" disabled={busy} onclick={() => refreshNetworkPage()}>
+              {busy ? 'Refreshing' : 'Refresh'}
+            </button>
           </div>
         </div>
+        {#if statusFailure}<p class="pg-muted pg-small net-headnote">{statusFailure}</p>{/if}
+        {#if subscriptionError}
+          <p class="pg-muted pg-small net-headnote">
+            Live updates for the selected run are off ({subscriptionError}). Use Refresh to update.
+          </p>
+        {/if}
+        {#if degradations.node.length > 0}
+          <div class="net-headnote">{@render degraded(degradations.node)}</div>
+        {/if}
 
-        <div class="grid gap-4 xl:grid-cols-[24rem_minmax(0,1fr)]">
-          <section class="rounded border border-neutral-800 bg-neutral-900/50 p-4">
-            <h2 class="text-sm font-semibold text-neutral-100">Local Capabilities</h2>
-            <dl class="mt-4 space-y-3 text-xs">
-              {#each factRows as row (row.label)}
-                <div>
-                  <dt class="text-neutral-500">{row.label}</dt>
-                  <dd class="mt-1 truncate text-neutral-200" title={row.value}>{row.value}</dd>
-                </div>
+        <div class="net-stats">
+          {#each statCells as cell (cell.id)}
+            <div class="net-stat">
+              <div class="net-stat-v">{cell.value}</div>
+              <div class="net-stat-l">{cell.label}</div>
+              {#if cell.meterPercent !== null}
+                <div class="pg-meter net-meter" aria-hidden="true"><i style:width="{cell.meterPercent}%"></i></div>
+              {/if}
+              {#if cell.id === 'cpu'}{@render degraded(degradations.cpu)}{/if}
+              {#if cell.id === 'memory'}{@render degraded(degradations.memory)}{/if}
+            </div>
+          {/each}
+        </div>
+
+        <div class="pg-sec">
+          <h3>Devices</h3>
+          <!--
+            WR-006: the local status reports GPU availability only
+            (WorkflowLocalGpuMetrics is { available, reason }). When the
+            projection adds per-device memory totals and reservations, render
+            them here with the shared DeviceLanes part instead of this KeyValue.
+          -->
+          <KeyValue rows={deviceRows} label="GPU" />
+          <p class="pg-muted pg-small net-note">{DEVICE_MEMORY_NOT_REPORTED}</p>
+          {@render degraded(degradations.devices)}
+        </div>
+
+        <div class="pg-sec">
+          {#if !$activeWorkflowRun || !selectedRunOnNode}
+            <h3>Selected run</h3>
+            <p class="pg-muted pg-small">
+              No run selected. Pick one to see its placement, execution and resources on this node.
+            </p>
+            <button class="pg-btn pg-btn-sm net-pick" type="button" onclick={() => openRunContextPicker()}>Pick a run</button>
+          {:else}
+            <h3>{selectedRunOnNode.heading}</h3>
+            <dl class="pg-kv">
+              <dt>Run</dt>
+              <dd class="pg-mono" data-run-id={selectedRunOnNode.runId} title="Ctrl+C copies the run id">{selectedRunOnNode.runId}</dd>
+              <dt>State</dt>
+              <dd>{selectedRunOnNode.state}</dd>
+              {#each selectedRunOnNode.rows as row (row.key)}
+                <dt>{row.key}</dt>
+                <dd class:pg-mono={row.mono}>{row.value}</dd>
               {/each}
             </dl>
-          </section>
-
-          <div class="space-y-4">
-            {#if $activeWorkflowRun}
-              <section class="rounded border border-neutral-800 bg-neutral-900/50 p-4">
-                <h2 class="text-sm font-semibold text-neutral-100">Selected Run Placement</h2>
-                <dl class="mt-4 grid gap-3 text-xs sm:grid-cols-2">
-                  {#each selectedRunPlacementRows as row (row.label)}
-                    <div>
-                      <dt class="text-neutral-500">{row.label}</dt>
-                      <dd
-                        class={`mt-1 truncate text-neutral-200 ${row.mono ? 'font-mono' : ''}`}
-                        title={row.value}
-                      >
-                        {row.value}
-                      </dd>
-                    </div>
-                  {/each}
-                </dl>
-              </section>
-
-              <section class="rounded border border-neutral-800 bg-neutral-900/50">
-                <div class="flex items-start justify-between gap-3 border-b border-neutral-800 px-4 py-3">
-                  <div class="min-w-0">
-                    <h2 class="text-sm font-semibold text-neutral-100">Selected Run Execution</h2>
-                    <div class="mt-1 truncate text-xs text-neutral-500">
-                      {formatNetworkProjectionFreshness(selectedRunNodeStatusProjectionState)}
-                    </div>
-                  </div>
-                  {#if nodeStatusLoading}
-                    <RefreshCw size={12} aria-hidden="true" class="mt-1 shrink-0 animate-spin text-neutral-500" />
-                  {/if}
-                </div>
-                {#if nodeStatusError}
-                  <div class="border-b border-red-900 bg-red-950/50 px-4 py-2 text-sm text-red-200">{nodeStatusError}</div>
-                {/if}
-                {#if nodeStatusLoading && selectedRunExecutionRows.length === 0}
-                  <div class="px-4 py-6 text-sm text-neutral-500">Loading selected-run execution state</div>
-                {:else if selectedRunExecutionRows.length === 0}
-                  <div class="px-4 py-6 text-sm text-neutral-500">No selected-run node status projected</div>
-                {:else}
-                  <div class="overflow-auto">
-                    <table class="w-full min-w-[42rem] text-left text-sm">
-                      <thead class="bg-neutral-950 text-[11px] uppercase tracking-[0.18em] text-neutral-500">
-                        <tr class="border-b border-neutral-800">
-                          <th class="px-4 py-3 font-medium">Node</th>
-                          <th class="px-3 py-3 font-medium">Status</th>
-                          <th class="px-3 py-3 font-medium">Runtime</th>
-                          <th class="px-4 py-3 font-medium">Model</th>
-                        </tr>
-                      </thead>
-                      <tbody class="divide-y divide-neutral-900">
-                        {#each selectedRunExecutionRows as row (row.nodeId)}
-                          <tr>
-                            <td class="max-w-[18rem] px-4 py-2">
-                              <div class="truncate font-mono text-xs text-neutral-200" title={row.nodeId}>{row.nodeId}</div>
-                            </td>
-                            <td class="px-3 py-2">
-                              <span class={`inline-flex rounded border px-2 py-0.5 text-xs ${row.statusClass}`}>
-                                {row.status}
-                              </span>
-                            </td>
-                            <td class="max-w-[18rem] px-3 py-2">
-                              <div class="truncate text-neutral-400" title={row.runtime}>{row.runtime}</div>
-                            </td>
-                            <td class="max-w-[18rem] px-4 py-2">
-                              <div class="truncate text-neutral-400" title={row.model}>{row.model}</div>
-                            </td>
-                          </tr>
-                        {/each}
-                      </tbody>
-                    </table>
-                  </div>
-                {/if}
-              </section>
-
-              <section class="rounded border border-neutral-800 bg-neutral-900/50">
-                <div class="flex items-start justify-between gap-3 border-b border-neutral-800 px-4 py-3">
-                  <div class="min-w-0">
-                    <h2 class="text-sm font-semibold text-neutral-100">Selected Run Resources</h2>
-                    <div class="mt-1 truncate text-xs text-neutral-500">
-                      {formatLibraryProjectionFreshness(selectedRunResourceProjectionState)}
-                    </div>
-                  </div>
-                  {#if resourceLoading}
-                    <RefreshCw size={12} aria-hidden="true" class="mt-1 shrink-0 animate-spin text-neutral-500" />
-                  {/if}
-                </div>
-                {#if resourceError}
-                  <div class="border-b border-red-900 bg-red-950/50 px-4 py-2 text-sm text-red-200">{resourceError}</div>
-                {/if}
-                {#if resourceLoading && selectedRunResourceRows.length === 0}
-                  <div class="px-4 py-6 text-sm text-neutral-500">Loading selected-run resources</div>
-                {:else if selectedRunResourceRows.length === 0}
-                  <div class="px-4 py-6 text-sm text-neutral-500">No selected-run Library usage projected</div>
-                {:else}
-                  <div class="overflow-auto">
-                    <table class="w-full min-w-[42rem] text-left text-sm">
-                      <thead class="bg-neutral-950 text-[11px] uppercase tracking-[0.18em] text-neutral-500">
-                        <tr class="border-b border-neutral-800">
-                          <th class="px-4 py-3 font-medium">Asset</th>
-                          <th class="px-3 py-3 font-medium">Category</th>
-                          <th class="px-3 py-3 font-medium">Cache</th>
-                          <th class="px-3 py-3 font-medium">Network</th>
-                          <th class="px-4 py-3 font-medium">Run Access</th>
-                        </tr>
-                      </thead>
-                      <tbody class="divide-y divide-neutral-900">
-                        {#each selectedRunResourceRows as resource (resource.assetId)}
-                          <tr>
-                            <td class="max-w-[20rem] px-4 py-2">
-                              <div class="truncate font-mono text-xs text-neutral-200" title={resource.assetId}>
-                                {resource.assetId}
-                              </div>
-                            </td>
-                            <td class="px-3 py-2 text-neutral-400">{resource.category}</td>
-                            <td class="px-3 py-2">
-                              <span class={`inline-flex rounded border px-2 py-0.5 text-xs ${resource.cacheClass}`}>
-                                {resource.cacheStatus}
-                              </span>
-                            </td>
-                            <td class="px-3 py-2 text-neutral-400">{resource.networkBytes}</td>
-                            <td class="px-4 py-2 font-mono text-xs text-neutral-300">{resource.accessCount}</td>
-                          </tr>
-                        {/each}
-                      </tbody>
-                    </table>
-                  </div>
-                {/if}
-              </section>
+            {#if selectedRunOnNode.note}
+              <p class="pg-muted pg-small net-note">{selectedRunOnNode.note}</p>
             {/if}
 
-            <section class="rounded border border-neutral-800 bg-neutral-900/50">
-              <div class="border-b border-neutral-800 px-4 py-3">
-                <h2 class="text-sm font-semibold text-neutral-100">Disks</h2>
-              </div>
-              {#if localNode.system.disks.length === 0}
-                <div class="px-4 py-6 text-sm text-neutral-500">Disk metrics unavailable</div>
-              {:else}
-                <div class="overflow-auto">
-                  <table class="w-full min-w-[36rem] text-left text-sm">
-                    <thead class="bg-neutral-950 text-[11px] uppercase tracking-[0.18em] text-neutral-500">
-                      <tr class="border-b border-neutral-800">
-                        <th class="px-4 py-3 font-medium">Name</th>
-                        <th class="px-3 py-3 font-medium">Mount</th>
-                        <th class="px-3 py-3 font-medium">Total</th>
-                        <th class="px-4 py-3 font-medium">Available</th>
-                      </tr>
-                    </thead>
-                    <tbody class="divide-y divide-neutral-900">
-                      {#each localNode.system.disks as disk (disk.name + disk.mount_point)}
-                        <tr>
-                          <td class="px-4 py-2 text-neutral-200">{disk.name}</td>
-                          <td class="px-3 py-2 font-mono text-xs text-neutral-400">{disk.mount_point}</td>
-                          <td class="px-3 py-2 text-neutral-400">{formatNetworkBytes(disk.total_bytes)}</td>
-                          <td class="px-4 py-2 text-neutral-400">{formatNetworkBytes(disk.available_bytes)}</td>
-                        </tr>
-                      {/each}
-                    </tbody>
-                  </table>
-                </div>
+            <div class="net-subhead">
+              <h4>Execution</h4>
+              {@render sectionStatus(
+                nodeStatusLoading,
+                nodeStatusError ? describeRunProjectionFailure('node status for this run', nodeStatusError) : null,
+                formatNetworkProjectionFreshness(selectedRunNodeStatusProjectionState),
+              )}
+            </div>
+            {#if executionRows.length === 0}
+              {#if !nodeStatusError}
+                <p class="pg-muted pg-small">
+                  {nodeStatusLoading ? 'Reading node status.' : 'No node status is projected for this run yet.'}
+                </p>
               {/if}
-            </section>
-
-            <section class="rounded border border-neutral-800 bg-neutral-900/50">
-              <div class="border-b border-neutral-800 px-4 py-3">
-                <h2 class="text-sm font-semibold text-neutral-100">Network Interfaces</h2>
-              </div>
-              {#if localNode.system.network_interfaces.length === 0}
-                <div class="px-4 py-6 text-sm text-neutral-500">Interface metrics unavailable</div>
-              {:else}
-                <div class="overflow-auto">
-                  <table class="w-full min-w-[32rem] text-left text-sm">
-                    <thead class="bg-neutral-950 text-[11px] uppercase tracking-[0.18em] text-neutral-500">
-                      <tr class="border-b border-neutral-800">
-                        <th class="px-4 py-3 font-medium">Name</th>
-                        <th class="px-3 py-3 font-medium">Received</th>
-                        <th class="px-4 py-3 font-medium">Transmitted</th>
+            {:else}
+              <div class="net-tblwrap">
+                <table class="pg-tbl net-tbl">
+                  <thead>
+                    <tr><th scope="col">Node</th><th scope="col">Status</th><th scope="col">Runtime</th><th scope="col">Model</th></tr>
+                  </thead>
+                  <tbody>
+                    {#each executionRows as row (row.nodeId)}
+                      <tr>
+                        <td class="pg-mono net-cell" title={row.nodeId}>{row.nodeId}</td>
+                        <td class="net-status"><StatusGlyph state={row.glyph} small />{row.status}</td>
+                        <td class="net-cell" title={row.runtime}>{row.runtime}</td>
+                        <td class="net-cell" title={row.model}>{row.model}</td>
                       </tr>
-                    </thead>
-                    <tbody class="divide-y divide-neutral-900">
-                      {#each localNode.system.network_interfaces as networkInterface (networkInterface.name)}
-                        <tr>
-                          <td class="px-4 py-2 text-neutral-200">{networkInterface.name}</td>
-                          <td class="px-3 py-2 text-neutral-400">
-                            {formatNetworkBytes(networkInterface.total_received_bytes)}
-                          </td>
-                          <td class="px-4 py-2 text-neutral-400">
-                            {formatNetworkBytes(networkInterface.total_transmitted_bytes)}
-                          </td>
-                        </tr>
-                      {/each}
-                    </tbody>
-                  </table>
-                </div>
-              {/if}
-            </section>
-
-            <section class="rounded border border-neutral-800 bg-neutral-900/50">
-              <div class="flex items-start justify-between gap-3 border-b border-neutral-800 px-4 py-3">
-                <div class="min-w-0">
-                  <h2 class="text-sm font-semibold text-neutral-100">Selected Run Events</h2>
-                  <div class="mt-1 truncate text-xs text-neutral-500">
-                    {formatSchedulerProjectionFreshness(timelineProjectionState)}
-                  </div>
-                </div>
-                {#if timelineLoading}
-                  <RefreshCw size={12} aria-hidden="true" class="mt-1 shrink-0 animate-spin text-neutral-500" />
-                {/if}
+                    {/each}
+                  </tbody>
+                </table>
               </div>
+            {/if}
+
+            <div class="net-subhead">
+              <h4>Resources</h4>
+              {@render sectionStatus(
+                resourceLoading,
+                resourceError ? describeRunProjectionFailure('library usage for this run', resourceError) : null,
+                formatNetworkProjectionFreshness(selectedRunResourceProjectionState),
+              )}
+            </div>
+            {#if resourceRows.length === 0}
+              {#if !resourceError}
+                <p class="pg-muted pg-small">
+                  {resourceLoading ? 'Reading library usage.' : 'No library usage is projected for this run yet.'}
+                </p>
+              {/if}
+            {:else}
+              <div class="net-tblwrap">
+                <table class="pg-tbl net-tbl">
+                  <thead>
+                    <tr>
+                      <th scope="col">Asset</th><th scope="col">Category</th><th scope="col">Cache</th>
+                      <th scope="col" class="net-r">Network</th><th scope="col" class="net-r">Reads</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {#each resourceRows as row (row.assetId)}
+                      <tr>
+                        <td class="pg-mono net-cell" title={row.assetId}>{row.assetId}</td>
+                        <td>{row.category}</td>
+                        <td>{row.cacheStatus}</td>
+                        <td class="pg-num">{row.networkBytes}</td>
+                        <td class="pg-num">{row.accessCount}</td>
+                      </tr>
+                    {/each}
+                  </tbody>
+                </table>
+              </div>
+            {/if}
+          {/if}
+        </div>
+
+        {#if $activeWorkflowRun}
+          <div class="pg-sec">
+            <h3 class="net-disclosure-h">
+              <button
+                type="button"
+                class="net-disclosure"
+                aria-expanded={eventsExpanded}
+                aria-controls="network-run-events"
+                onclick={() => (eventsExpanded = !eventsExpanded)}
+              >
+                <span class="pg-chev" aria-hidden="true">{eventsExpanded ? '▾' : '▸'}</span>
+                Events <span class="pg-n">{eventLines.length}</span>
+              </button>
+              <span class="pg-muted net-fresh">
+                {timelineLoading ? 'Refreshing' : formatNetworkProjectionFreshness(timelineProjectionState)}
+              </span>
+            </h3>
+            <div id="network-run-events" hidden={!eventsExpanded}>
               {#if timelineError}
-                <div class="border-b border-red-900 bg-red-950/50 px-4 py-2 text-sm text-red-200">{timelineError}</div>
-              {/if}
-              {#if !$activeWorkflowRun}
-                <div class="px-4 py-6 text-sm text-neutral-500">No active run selected</div>
-              {:else if timelineLoading && timelineEvents.length === 0}
-                <div class="px-4 py-6 text-sm text-neutral-500">Loading selected-run events</div>
-              {:else if timelineEvents.length === 0}
-                <div class="px-4 py-6 text-sm text-neutral-500">No selected-run scheduler events projected</div>
+                <p class="pg-muted pg-small">{describeRunProjectionFailure('scheduler events for this run', timelineError)}</p>
+              {:else if eventLines.length === 0}
+                <p class="pg-muted pg-small">
+                  {timelineLoading ? 'Reading scheduler events.' : 'No scheduler events are projected for this run yet.'}
+                </p>
               {:else}
-                <div class="divide-y divide-neutral-900">
-                  {#each timelineEvents as event (event.event_id)}
-                    <div class="px-4 py-3">
-                      <div class="flex flex-wrap items-center gap-2">
-                        <span class="text-sm font-medium text-neutral-100">{formatSchedulerTimelineKind(event)}</span>
-                        <span class="rounded border border-neutral-800 px-1.5 py-0.5 text-[11px] text-neutral-500">
-                          {schedulerTimelinePayloadLabel(event)}
-                        </span>
-                      </div>
-                      <div class="mt-1 text-xs text-neutral-500">
-                        {formatSchedulerTimelineSource(event)} · {formatSchedulerTimestamp(event.occurred_at_ms)}
-                      </div>
-                      <div class="mt-1 text-xs text-neutral-300">{event.summary}</div>
-                      {#if event.detail}
-                        <div class="mt-1 text-xs text-neutral-500">{event.detail}</div>
-                      {/if}
-                    </div>
+                <div class="pg-log" role="log" aria-label="Scheduler events for the selected run">
+                  {#each eventLines as line (line.id)}
+                    <LogLine time={line.time} level={line.level} kind={line.kind} message={line.message} source={line.source} />
                   {/each}
                 </div>
               {/if}
-            </section>
+            </div>
+          </div>
+        {/if}
 
-            <section class="rounded border border-neutral-800 bg-neutral-900/50">
-              <div class="border-b border-neutral-800 px-4 py-3">
-                <h2 class="text-sm font-semibold text-neutral-100">Peers</h2>
-              </div>
-              {#if status.peer_nodes.length === 0}
-                <div class="px-4 py-6 text-sm text-neutral-500">No trusted peers connected</div>
-              {:else}
-                <div class="divide-y divide-neutral-900">
-                  {#each status.peer_nodes as peer (peer.node_id)}
-                    <div class="px-4 py-3">
-                      <div class="font-mono text-sm text-neutral-200">{peer.node_id}</div>
-                      <div class="mt-1 text-xs text-neutral-500">{formatTransportState(peer.transport_state)}</div>
-                    </div>
+        <div class="net-split">
+          <div class="pg-sec net-split-cell">
+            <h3>Disks</h3>
+            {#if diskRows.length === 0}
+              <p class="pg-muted pg-small">Disk metrics are not reported.</p>
+            {:else}
+              <table class="pg-tbl net-tbl">
+                <thead><tr><th scope="col">Mount</th><th scope="col" class="net-r">Free</th><th scope="col" class="net-r">Total</th></tr></thead>
+                <tbody>
+                  {#each diskRows as disk (disk.key)}
+                    <tr>
+                      <td class="pg-mono net-cell" title={disk.name}>{disk.mount}</td>
+                      <td class="pg-num">{disk.free}</td>
+                      <td class="pg-num pg-muted">{disk.total}</td>
+                    </tr>
                   {/each}
-                </div>
-              {/if}
-            </section>
+                </tbody>
+              </table>
+            {/if}
+            {@render degraded(degradations.disks)}
+          </div>
+          <div class="pg-sec net-split-cell net-split-right">
+            <h3>Interfaces</h3>
+            {#if interfaceRows.length === 0}
+              <p class="pg-muted pg-small">Interface metrics are not reported.</p>
+            {:else}
+              <table class="pg-tbl net-tbl">
+                <thead><tr><th scope="col">Name</th><th scope="col" class="net-r">Received</th><th scope="col" class="net-r">Sent</th></tr></thead>
+                <tbody>
+                  {#each interfaceRows as networkInterface (networkInterface.name)}
+                    <tr>
+                      <td class="pg-mono net-cell">{networkInterface.name}</td>
+                      <td class="pg-num">{networkInterface.received}</td>
+                      <td class="pg-num">{networkInterface.sent}</td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            {/if}
+            {@render degraded(degradations.interfaces)}
           </div>
         </div>
-      </div>
-    {:else}
-      <div class="text-sm text-neutral-500">Local status unavailable</div>
-    {/if}
+
+        <div class="pg-sec">
+          <h3>Identity</h3>
+          <KeyValue rows={identityRows} />
+        </div>
+      {/if}
+    </Panel>
   </div>
-</section>
+</div>
+
+<style>
+  .net-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    gap: 14px;
+    align-items: stretch;
+  }
+
+  .net-seg button:disabled {
+    cursor: not-allowed;
+    color: var(--pg-text-muted);
+    opacity: 0.7;
+  }
+
+  .net-seg button:disabled:hover {
+    background: transparent;
+    color: var(--pg-text-muted);
+  }
+
+  .net-listnote {
+    padding: 10px 12px;
+    margin: 0;
+  }
+
+  .net-trust {
+    margin-left: auto;
+  }
+
+  .net-head {
+    padding: 16px 18px 12px;
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .net-headtext {
+    flex: 1 1 260px;
+    min-width: 0;
+  }
+
+  .net-sub {
+    margin: 2px 0 0;
+  }
+
+  .net-chips {
+    margin-top: 10px;
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .net-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .net-headnote {
+    margin: 0;
+    padding: 0 18px 10px;
+  }
+
+  .net-headnote .net-note {
+    margin-top: 0;
+  }
+
+  .net-note {
+    margin: 6px 0 0;
+  }
+
+  .net-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(170px, 100%), 1fr));
+    border-top: 1px solid var(--pg-border);
+  }
+
+  .net-stat {
+    padding: 12px 18px;
+    border-left: 1px solid var(--pg-border);
+    min-width: 0;
+  }
+
+  .net-stat:first-child {
+    border-left: 0;
+  }
+
+  .net-stat-v {
+    font-family: var(--pg-font-serif);
+    font-size: 22px;
+    line-height: 1.1;
+    color: var(--pg-text-bright);
+  }
+
+  .net-stat-l {
+    font-size: 12px;
+    color: var(--pg-text-muted);
+    margin-top: 3px;
+  }
+
+  .net-meter {
+    margin-top: 8px;
+  }
+
+  .net-pick {
+    margin-top: 10px;
+  }
+
+  .net-subhead {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin: 16px 0 6px;
+  }
+
+  .net-subhead h4 {
+    margin: 0;
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--pg-text-soft);
+  }
+
+  .net-subhead .net-note {
+    flex-basis: 100%;
+    margin: 0;
+  }
+
+  .net-fresh {
+    font-family: var(--pg-font-mono);
+    font-size: 11px;
+    font-weight: 400;
+  }
+
+  .net-tblwrap {
+    overflow-x: auto;
+    border: 1px solid var(--pg-border-soft);
+    border-radius: 4px;
+  }
+
+  .net-tbl {
+    font-size: 12.5px;
+  }
+
+  .net-tbl th {
+    position: static;
+  }
+
+  .net-r {
+    text-align: right;
+  }
+
+  .net-cell {
+    max-width: 18rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .net-status {
+    white-space: nowrap;
+  }
+
+  .net-status :global(.pg-g) {
+    margin-right: 6px;
+    vertical-align: 0;
+  }
+
+  .net-disclosure-h {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+
+  .net-disclosure {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .net-disclosure .pg-chev {
+    font-size: 10px;
+    color: var(--pg-border-strong);
+    width: 10px;
+  }
+
+  #network-run-events {
+    margin-top: 4px;
+  }
+
+  .net-split {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
+    border-top: 1px solid var(--pg-border);
+  }
+
+  .net-split-cell {
+    border-top: 0;
+    min-width: 0;
+  }
+
+  .net-split-right {
+    border-left: 1px solid var(--pg-border);
+  }
+</style>

@@ -41,28 +41,6 @@
     }))
   );
 
-  const typeColors: Record<string, string> = {
-    string: '#22c55e',
-    prompt: '#3b82f6',
-    number: '#f59e0b',
-    boolean: '#ef4444',
-    image: '#8b5cf6',
-    audio: '#f472b6',
-    audio_stream: '#0ea5e9',
-    stream: '#06b6d4',
-    json: '#f97316',
-    kv_cache: '#84cc16',
-    component: '#ec4899',
-    document: '#14b8a6',
-    tools: '#d97706',
-    embedding: '#6366f1',
-    vector_db: '#a855f7',
-    any: '#6b7280',
-  };
-
-  function getPortColor(port: PortDefinition): string {
-    return typeColors[port.data_type] || typeColors.any;
-  }
 
   function handleOpenGroup() {
     if (group) {
@@ -72,17 +50,17 @@
 </script>
 
 <div
-  class="node-group bg-gradient-to-br from-purple-900/50 to-indigo-900/50 rounded-lg min-w-[200px] relative"
+  class="node-group rounded min-w-[200px] relative"
   class:selected
   class:expanded={isExpanded}
 >
   <!-- Group Header -->
-  <div class="group-header px-3 py-2 bg-purple-800/50 rounded-t-lg border-b border-purple-600/50 flex items-center gap-2">
-    <svg class="w-4 h-4 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+  <div class="group-header px-3 py-2 flex items-center gap-2">
+    <svg class="w-4 h-4 text-pg-text-muted" aria-hidden="true" fill="none" viewBox="0 0 24 24" stroke="currentColor">
       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
     </svg>
-    <span class="text-sm font-medium text-purple-200">{label}</span>
-    <span class="text-xs text-purple-400 ml-auto">{nodeCount} nodes</span>
+    <span class="group-title">{label}</span>
+    <span class="group-count ml-auto">{nodeCount} nodes</span>
   </div>
 
   <!-- Ports Section -->
@@ -91,7 +69,7 @@
       <!-- Input labels (left column) -->
       <div class="input-labels flex flex-col gap-1">
         {#each inputs as input (input.id)}
-          <span class="text-[10px] text-purple-300/70 h-4 leading-4" title="{input.data_type}">
+          <span class="port-label h-4 leading-4" title="{input.data_type}">
             {input.label}
           </span>
         {/each}
@@ -99,7 +77,7 @@
       <!-- Output labels (right column) -->
       <div class="output-labels flex flex-col gap-1 text-right">
         {#each outputs as output (output.id)}
-          <span class="text-[10px] text-purple-300/70 h-4 leading-4" title="{output.data_type}">
+          <span class="port-label h-4 leading-4" title="{output.data_type}">
             {output.label}
           </span>
         {/each}
@@ -108,8 +86,8 @@
   </div>
 
   <!-- Double-click hint -->
-  <div class="hint-section px-3 py-2 border-t border-purple-700/30 flex items-center justify-between">
-    <span class="text-[10px] text-purple-400/60">Open group to edit internals</span>
+  <div class="hint-section px-3 py-2 flex items-center justify-between">
+    <span class="text-[10px] text-pg-text-muted">Open group to edit internals</span>
     <button type="button" class="open-group-btn text-[10px]" onclick={handleOpenGroup}>
       Open
     </button>
@@ -122,7 +100,7 @@
       type="target"
       position={Position.Left}
       id={input.id}
-      style="top: {yPos}px; background: {getPortColor(input)}; width: 10px; height: 10px; border: 2px solid #262626;"
+      style="top: {yPos}px; width: 10px; height: 10px;"
     />
   {/each}
 
@@ -132,25 +110,54 @@
       type="source"
       position={Position.Right}
       id={output.id}
-      style="top: {yPos}px; background: {getPortColor(output)}; width: 10px; height: 10px; border: 2px solid #262626;"
+      style="top: {yPos}px; width: 10px; height: 10px;"
     />
   {/each}
 </div>
 
 <style>
+  /* Token colours only. The 2px border, 37px header and ports padding place
+     the handles at 52px + 20px per port; keep them in step. */
   .node-group {
-    border: 2px dashed #7c3aed;
-    box-shadow: 0 4px 6px -1px rgba(139, 92, 246, 0.2);
+    background: var(--pg-panel);
+    border: 2px dashed var(--pg-border-strong);
+    color: var(--pg-text);
+    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.25);
   }
 
   .node-group.selected {
-    border-color: #a78bfa;
-    box-shadow: 0 0 0 2px #a78bfa, 0 4px 6px -1px rgba(139, 92, 246, 0.3);
+    border-color: var(--pg-text);
+    box-shadow: 0 0 0 1px var(--pg-text);
   }
 
   .node-group.expanded {
     border-style: solid;
-    border-color: #c4b5fd;
+  }
+
+  .group-header {
+    border-bottom: 1px solid var(--pg-border);
+    font-size: 14px;
+    line-height: 20px;
+  }
+
+  .group-title {
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--pg-text-bright);
+  }
+
+  .group-count {
+    font-size: 11px;
+    color: var(--pg-text-muted);
+  }
+
+  .port-label {
+    font-size: 10.5px;
+    color: var(--pg-text-soft);
+  }
+
+  .hint-section {
+    border-top: 1px solid var(--pg-border);
   }
 
   .ports-grid {
@@ -160,21 +167,23 @@
   }
 
   .open-group-btn {
-    border: 1px solid rgba(167, 139, 250, 0.45);
-    background: rgba(124, 58, 237, 0.2);
-    color: #ddd6fe;
-    border-radius: 9999px;
+    border: 1px solid var(--pg-border);
+    background: var(--pg-panel-raised);
+    color: var(--pg-text-soft);
+    border-radius: 4px;
     padding: 0.15rem 0.45rem;
     line-height: 1.2;
     cursor: pointer;
   }
 
   .open-group-btn:hover {
-    background: rgba(124, 58, 237, 0.35);
-    border-color: rgba(167, 139, 250, 0.8);
+    background: var(--pg-panel-selected);
+    color: var(--pg-text);
   }
 
   :global(.node-group .svelte-flow__handle) {
     border-radius: 50%;
+    background: var(--pg-panel-head);
+    border: 1.5px solid var(--pg-border-strong);
   }
 </style>

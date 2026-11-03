@@ -1,13 +1,14 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import BaseNode from '../BaseNode.svelte';
+  import NodeHeaderTitle from './NodeHeaderTitle.svelte';
   import type {
     NodeDefinition,
     WorkflowImageArtifactFormatSettings,
     WorkflowMediaFormatOption,
   } from '../../../services/workflow/types';
   import { workflowService } from '../../../services/workflow/WorkflowService';
-  import { nodeExecutionStates, updateNodeData } from '../../../stores/workflowStore';
+  import { updateNodeData } from '../../../stores/workflowStore';
 
   interface ImageArtifactFormatOverride {
     format_id: string;
@@ -52,8 +53,6 @@
   let formatOptions = $state<WorkflowMediaFormatOption[]>([]);
   let formatLoadError = $state<string | null>(null);
 
-  let executionInfo = $derived($nodeExecutionStates.get(id));
-  let executionState = $derived(executionInfo?.state || 'idle');
   let imageData = $derived(data.image || '');
   let imageSrc = $derived(imageData ? `data:image/png;base64,${imageData}` : '');
   let formatOverride = $derived(normalizeFormatOverride(data.artifact_format_override));
@@ -79,15 +78,6 @@
 
   let showModal = $state(false);
   let modalElement = $state<HTMLDialogElement | null>(null);
-
-  let statusColor = $derived(
-    {
-      idle: 'bg-neutral-500',
-      running: 'bg-violet-500 animate-pulse',
-      success: 'bg-violet-500',
-      error: 'bg-red-500',
-    }[executionState]
-  );
 
   function stopControlEvent(event: Event) {
     event.stopPropagation();
@@ -306,15 +296,7 @@
 <div class="image-output-wrapper">
   <BaseNode {id} {data} {selected}>
     {#snippet header()}
-      <div class="flex items-center gap-2">
-        <div class="w-5 h-5 rounded bg-violet-600 flex items-center justify-center flex-shrink-0">
-          <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-          </svg>
-        </div>
-        <span class="text-sm font-medium text-neutral-200">{data.label || 'Image Output'}</span>
-        <span class="w-2 h-2 rounded-full {statusColor} ml-auto"></span>
-      </div>
+      <NodeHeaderTitle label={data.label || 'Image Output'} />
     {/snippet}
 
       {#if imageSrc}
@@ -333,7 +315,7 @@
           </button>
           <div class="flex justify-end gap-1">
             <button type="button"
-              class="nodrag nopan nowheel text-[10px] text-neutral-400 hover:text-neutral-200 bg-transparent border-0 cursor-pointer px-1"
+              class="nodrag nopan nowheel text-[10px] text-pg-text-muted hover:text-pg-text bg-transparent border-0 cursor-pointer px-1"
               onclick={downloadImage}
               onmousedown={stopControlEvent}
               onmouseup={stopControlEvent}
@@ -344,7 +326,7 @@
               Download
             </button>
             <button type="button"
-              class="nodrag nopan nowheel text-[10px] text-neutral-400 hover:text-neutral-200 bg-transparent border-0 cursor-pointer px-1"
+              class="nodrag nopan nowheel text-[10px] text-pg-text-muted hover:text-pg-text bg-transparent border-0 cursor-pointer px-1"
               onclick={openModal}
               onmousedown={stopControlEvent}
               onmouseup={stopControlEvent}
@@ -357,23 +339,23 @@
           </div>
         </div>
       {:else}
-        <div class="text-xs text-neutral-500 italic">
+        <div class="text-xs text-pg-text-muted italic">
           No image yet
         </div>
       {/if}
 
-      <div class="mt-2 space-y-2 border-t border-neutral-700/70 pt-2">
+      <div class="mt-2 space-y-2 border-t border-pg-border pt-2">
         <div class="flex items-center justify-between gap-2">
-          <label class="text-[10px] text-neutral-400" for={formatSelectId}>Format</label>
+          <label class="text-[10px] text-pg-text-muted" for={formatSelectId}>Format</label>
           {#if isUsingDefaultFormat && defaultFormat}
-            <span class="text-[10px] text-neutral-500">Default {defaultFormat.format_id}</span>
+            <span class="text-[10px] text-pg-text-muted">Default {defaultFormat.format_id}</span>
           {:else if formatOverride}
-            <span class="text-[10px] text-violet-300">Override</span>
+            <span class="text-[10px] text-pg-text-soft">Override</span>
           {/if}
         </div>
         <select
           id={formatSelectId}
-          class="nodrag nopan nowheel w-full rounded border border-neutral-600 bg-neutral-900 px-2 py-1 text-xs text-neutral-200 focus:border-violet-500 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+          class="nodrag nopan nowheel w-full rounded border border-pg-border bg-pg-panel-sunken px-2 py-1 text-xs text-pg-text disabled:cursor-not-allowed disabled:opacity-60"
           value={formatOverride?.format_id ?? DEFAULT_SELECTION_VALUE}
           disabled={!defaultFormat && !formatOverride}
           onchange={handleFormatChange}
@@ -396,10 +378,10 @@
         {#if formatOverride}
           <div class="grid grid-cols-2 gap-2">
             <div class="flex flex-col gap-1">
-              <label class="text-[10px] text-neutral-400" for={qualityInputId}>Quality</label>
+              <label class="text-[10px] text-pg-text-muted" for={qualityInputId}>Quality</label>
               <input
                 id={qualityInputId}
-                class="nodrag nopan nowheel w-full rounded border border-neutral-600 bg-neutral-900 px-2 py-1 text-xs text-neutral-200 focus:border-violet-500 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+                class="nodrag nopan nowheel w-full rounded border border-pg-border bg-pg-panel-sunken px-2 py-1 text-xs text-pg-text disabled:cursor-not-allowed disabled:opacity-60"
                 type="number"
                 min={selectedFormat?.quality_min_percent ?? undefined}
                 max={selectedFormat?.quality_max_percent ?? undefined}
@@ -414,17 +396,17 @@
                 onpointerup={stopControlEvent}
                 onclickcapture={stopControlEvent}
               />
-              <span id={`${qualityInputId}-range`} class="text-[10px] text-neutral-500">
+              <span id={`${qualityInputId}-range`} class="text-[10px] text-pg-text-muted">
                 {qualityRangeLabel}
               </span>
             </div>
             <div class="flex flex-col gap-1">
-              <label class="text-[10px] text-neutral-400" for={colorProfileSelectId}>
+              <label class="text-[10px] text-pg-text-muted" for={colorProfileSelectId}>
                 Color
               </label>
               <select
                 id={colorProfileSelectId}
-                class="nodrag nopan nowheel w-full rounded border border-neutral-600 bg-neutral-900 px-2 py-1 text-xs text-neutral-200 focus:border-violet-500 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+                class="nodrag nopan nowheel w-full rounded border border-pg-border bg-pg-panel-sunken px-2 py-1 text-xs text-pg-text disabled:cursor-not-allowed disabled:opacity-60"
                 value={formatOverride.color_profile_id}
                 disabled={colorProfileOptions.length === 0}
                 onchange={handleColorProfileChange}
@@ -443,7 +425,7 @@
         {/if}
 
         {#if formatLoadError}
-          <div class="text-[10px] text-red-300">{formatLoadError}</div>
+          <div class="text-[10px] text-pg-danger">{formatLoadError}</div>
         {/if}
       </div>
   </BaseNode>
@@ -466,29 +448,20 @@
 </dialog>
 
 <style>
-  .image-output-wrapper :global(.base-node) {
-    border-color: rgba(139, 92, 246, 0.5);
-  }
-
-  .image-output-wrapper :global(.node-header) {
-    background-color: rgba(139, 92, 246, 0.2);
-    border-color: rgba(139, 92, 246, 0.3);
-  }
-
   .image-preview-dialog {
     width: min(96vw, 1600px);
     max-width: 96vw;
     height: min(96vh, 1100px);
     max-height: 96vh;
-    border: 0;
-    border-radius: 16px;
+    border-radius: 4px;
     padding: 0;
-    background: rgba(10, 10, 10, 0.96);
-    color: white;
+    background: var(--pg-panel-sunken);
+    color: var(--pg-text);
+    border: 1px solid var(--pg-border);
   }
 
   .image-preview-dialog::backdrop {
-    background: rgba(0, 0, 0, 0.82);
+    background: rgba(31, 34, 39, 0.82); /* --pg-ink at 82% */
   }
 
   .dialog-content {
@@ -505,23 +478,23 @@
     max-width: 100%;
     max-height: 100%;
     object-fit: contain;
-    border-radius: 12px;
+    border-radius: 4px;
   }
 
   .dialog-close {
     position: absolute;
     top: 1rem;
     right: 1rem;
-    border: 0;
-    border-radius: 999px;
+    border: 1px solid var(--pg-border);
+    border-radius: 4px;
     padding: 0.4rem 0.75rem;
-    background: rgba(38, 38, 38, 0.9);
-    color: rgb(229, 229, 229);
+    background: var(--pg-panel-raised);
+    color: var(--pg-text);
     cursor: pointer;
     font-size: 0.75rem;
   }
 
   .dialog-close:hover {
-    background: rgba(82, 82, 82, 0.95);
+    background: var(--pg-panel-selected);
   }
 </style>

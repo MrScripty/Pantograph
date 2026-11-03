@@ -1,5 +1,7 @@
 <script lang="ts">
   import type { ManagedRuntimeManagerRuntimeView } from '../../services/managedRuntime';
+  import { StatusGlyph } from '../workbench/ui';
+  import { managedRuntimeJobGlyph, sentenceCaseState } from './managedRuntimePresenters';
 
   type Props = {
     runtime: ManagedRuntimeManagerRuntimeView;
@@ -30,53 +32,52 @@
 
 {#if runtime.active_job}
   <div
-    class="mt-3 rounded border border-blue-900/50 bg-blue-950/20 p-3"
+    class="mt-3 rounded border border-pg-border bg-pg-panel-head px-3 py-3"
     role="status"
     aria-live="polite"
   >
     <div class="flex flex-wrap items-start justify-between gap-3">
       <div class="min-w-0 flex-1">
-        <div class="text-[11px] uppercase tracking-wider text-blue-300">Active transfer</div>
-        <div class="mt-1 text-sm font-medium text-blue-100">{runtime.active_job.status}</div>
+        <h5 class="m-0 text-[12.5px] font-bold text-pg-text-soft">Active transfer</h5>
+        <div class="mt-1 text-[13px] text-pg-text-bright">{runtime.active_job.status}</div>
         {#if progressCaption}
-          <div class="mt-1 text-[11px] text-blue-200/80">{progressCaption}</div>
+          <div class="mt-1 pg-muted pg-small">{progressCaption}</div>
         {/if}
       </div>
-      <div class="text-right">
-        <div class="text-[11px] uppercase tracking-wider text-blue-300">State</div>
-        <div class="mt-1 text-sm capitalize text-blue-100">
-          {runtime.active_job.state.replaceAll('_', ' ')}
+      <div class="text-right pg-small">
+        <div class="pg-muted">State</div>
+        <div class="mt-1 flex items-center justify-end gap-1.5">
+          <StatusGlyph state={managedRuntimeJobGlyph(runtime.active_job.state)} small />
+          {sentenceCaseState(runtime.active_job.state)}
         </div>
       </div>
     </div>
 
     {#if runtime.active_job.total > 0}
       <div class="mt-3 flex items-end justify-between gap-3">
-        <div class="text-2xl font-semibold text-white">
+        <div class="pg-mono text-[20px] text-pg-text-bright">
           {Math.round(progressPercent)}%
         </div>
-        <div class="text-right text-[11px] text-neutral-300">
+        <div class="text-right pg-muted pg-small">
           <div>{formatBytes(runtime.active_job.current)} downloaded</div>
           <div>{formatBytes(runtime.active_job.total)} total</div>
         </div>
       </div>
-      <div class="mt-2 h-2.5 overflow-hidden rounded-full bg-neutral-800">
-        <div
-          class="h-2.5 bg-blue-500 transition-all duration-300"
-          style={`width: ${progressPercent}%`}
-        ></div>
+      <div class="pg-meter mt-2" aria-hidden="true">
+        <i class="pg-meter-accent" style={`width: ${progressPercent}%`}></i>
       </div>
-      <div class="mt-2 text-[11px] text-neutral-300">
+      <div class="mt-2 pg-mono pg-muted">
         {formatBytes(runtime.active_job.current)} / {formatBytes(runtime.active_job.total)}
       </div>
     {/if}
 
     {#if runtime.job_artifact}
-      <div class="mt-3 rounded border border-neutral-800 bg-neutral-950/60 p-2 text-[11px] text-neutral-300">
-        <div class="font-medium text-neutral-200">
-          Retained artifact {runtime.job_artifact.archive_name} ({runtime.job_artifact.version})
+      <div class="mt-3 rounded border border-pg-border bg-pg-panel-sunken px-3 py-2 pg-small">
+        <div class="text-pg-text-bright">
+          Retained artifact <span class="pg-mono">{runtime.job_artifact.archive_name}</span>
+          ({runtime.job_artifact.version})
         </div>
-        <div class="mt-1 text-neutral-500">
+        <div class="mt-1 pg-mono pg-muted">
           {formatBytes(runtime.job_artifact.downloaded_bytes)} / {formatBytes(runtime.job_artifact.total_bytes)}
         </div>
       </div>
@@ -86,7 +87,7 @@
       {#if canPauseRuntime}
         <button
           type="button"
-          class="rounded border border-amber-700 px-3 py-1.5 text-xs text-amber-200 transition-colors hover:bg-amber-950/40 disabled:border-neutral-800 disabled:text-neutral-600"
+          class="pg-btn"
           onclick={onPauseRuntime}
           disabled={pauseRequested || cancelRequested}
         >
@@ -97,7 +98,7 @@
       {#if runtime.active_job.cancellable || canDiscardRetainedDownload}
         <button
           type="button"
-          class="rounded border border-red-800 px-3 py-1.5 text-xs text-red-200 transition-colors hover:bg-red-950/40 disabled:border-neutral-800 disabled:text-neutral-600"
+          class="pg-btn pg-btn-danger"
           onclick={onCancelRuntime}
           disabled={cancelRequested || pauseRequested}
         >

@@ -13,6 +13,6 @@ test('workflow graph viewport constants preserve shared SvelteFlow canvas defaul
   assert.deepEqual(WORKFLOW_GRAPH_FIT_VIEW_OPTIONS, { maxZoom: 1 });
   assert.equal(WORKFLOW_GRAPH_MIN_ZOOM, 0.25);
   assert.equal(WORKFLOW_GRAPH_MAX_ZOOM, 2);
-  assert.equal(WORKFLOW_GRAPH_MINIMAP_MASK_COLOR, 'rgba(0, 0, 0, 0.8)');
+  assert.equal(WORKFLOW_GRAPH_MINIMAP_MASK_COLOR, 'rgba(35, 39, 45, 0.6)');
   assert.equal(WORKFLOW_GRAPH_PAN_ACTIVATION_KEY, null);
 });

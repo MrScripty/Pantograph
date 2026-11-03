@@ -1,395 +1,435 @@
 <script lang="ts">
   import type { WorkflowRunGraphProjection } from '../../services/workflow/types';
   import {
-    buildRunGraphCanvasModel,
-    buildRunGraphEdgeRows,
-    buildRunGraphNodeRows,
-    formatRunGraphCountLabel,
-    formatRunGraphTimestamp,
-    resolveRunGraphCounts,
-    resolveRunGraphPresentationLabel,
-    runGraphNodeErrorClass,
-    runGraphStaleDiagnosticClass,
-    type RunGraphNodeArtifactSummaryByNodeId,
+    buildRunGraphSnapshotLayout,
+    clampRunGraphScale,
+    fitRunGraphScale,
     type RunGraphNodeStatusByNodeId,
+    type RunGraphSnapshotNode,
   } from './runGraphPresenters';
+  import StatusGlyph from './ui/StatusGlyph.svelte';
 
+  /**
+   * Read-only surface for a run graph projection (ADR-014). It renders the
+   * captured snapshot and the node status projection; it never reads or writes
+   * the editable graph store. Selection is reported through `onSelectNode` and
+   * owned by the caller.
+   */
   let {
     runGraph,
-    artifactSummaries = {},
     nodeStatuses = {},
-    focusedDiagnosticEventId = null,
-    compact = false,
+    statusesAvailable = true,
     selectedNodeId = null,
     onSelectNode = undefined,
   }: {
     runGraph: WorkflowRunGraphProjection;
-    artifactSummaries?: RunGraphNodeArtifactSummaryByNodeId;
     nodeStatuses?: RunGraphNodeStatusByNodeId;
-    focusedDiagnosticEventId?: string | null;
-    compact?: boolean;
+    /** False when the node status projection could not be read; nodes then claim no status. */
+    statusesAvailable?: boolean;
     selectedNodeId?: string | null;
+    /** Without it the cards are not interactive. */
     onSelectNode?: (nodeId: string) => void;
   } = $props();
 
-  let canvas = $derived(
-    buildRunGraphCanvasModel(
+  const ZOOM_STEP = 0.15;
+
+  let layout = $derived(
+    buildRunGraphSnapshotLayout(
       runGraph.graph,
-      artifactSummaries,
       nodeStatuses,
       runGraph.graph_diagnostics ?? [],
+      statusesAvailable,
     ),
   );
-  let counts = $derived(resolveRunGraphCounts(runGraph.graph));
-  let nodeRows = $derived(buildRunGraphNodeRows(runGraph, artifactSummaries, nodeStatuses));
-  let edgeRows = $derived(buildRunGraphEdgeRows(runGraph));
-  let presentationLabel = $derived(resolveRunGraphPresentationLabel(runGraph));
 
-  function compactValue(value: string, maxLength = 18): string {
-    if (value.length <= maxLength) {
-      return value;
-    }
-    return `${value.slice(0, maxLength - 3)}...`;
+  let viewportWidth = $state(0);
+  let viewportHeight = $state(0);
+  // A manual zoom belongs to the run it was set on; another run starts fitted.
+  let zoom = $state<{ runId: string; value: number } | null>(null);
+  let fitScale = $derived(
+    fitRunGraphScale({ width: viewportWidth, height: viewportHeight }, layout),
+  );
+  let manualZoom = $derived(zoom && zoom.runId === runGraph.workflow_run_id ? zoom.value : null);
+  let scale = $derived(manualZoom ?? fitScale);
+
+  function zoomBy(delta: number): void {
+    zoom = { runId: runGraph.workflow_run_id, value: clampRunGraphScale(scale + delta) };
   }
 
-  function selectNode(nodeId: string): void {
-    onSelectNode?.(nodeId);
+  function fit(): void {
+    zoom = null;
   }
 
-  function nodeStroke(node: (typeof canvas.nodes)[number]): string {
-    if (node.id === selectedNodeId) {
-      return '#f59e0b';
-    }
-    if (node.errorEventId === focusedDiagnosticEventId) {
-      return '#22d3ee';
-    }
-    if (node.errorSeverity === 'fatal' || node.statusClass === 'failed') {
-      return '#ef4444';
-    }
-    if (node.staleSeverity === 'error') {
-      return '#f97316';
-    }
-    if (node.staleSeverity === 'warning') {
-      return '#eab308';
-    }
-    if (node.staleSeverity === 'info') {
-      return '#38bdf8';
-    }
-    if (node.hasOutputArtifacts) {
-      return '#22c55e';
-    }
-    return '#404040';
-  }
-
-  function nodeStrokeWidth(node: (typeof canvas.nodes)[number]): string {
-    if (node.id === selectedNodeId || node.errorEventId === focusedDiagnosticEventId) {
-      return '3';
-    }
-    if (node.staleDiagnosticCount > 0) {
-      return '2.5';
-    }
-    return node.statusClass === 'unknown' && !node.hasOutputArtifacts ? '1' : '2';
-  }
-
-  function nodeAccessibleLabel(node: (typeof canvas.nodes)[number]): string {
-    const parts = [`${node.id} ${node.nodeType}`];
-    if (node.staleBadgeLabel) {
-      parts.push(node.staleBadgeLabel);
-    }
-    if (node.errorBadgeLabel) {
-      parts.push(node.errorBadgeLabel);
+  function nodeAccessibleLabel(node: RunGraphSnapshotNode): string {
+    const parts = [node.label, node.nodeType, node.stateLabel];
+    if (node.note) {
+      parts.push(node.note);
     }
     return parts.join(', ');
   }
 </script>
 
-<div
-  class={compact
-    ? 'grid h-full min-h-0 grid-cols-1 overflow-hidden'
-    : 'grid min-h-0 flex-1 grid-cols-1 overflow-hidden xl:grid-cols-[minmax(0,1fr)_28rem]'}
->
-  <div class="min-h-0 overflow-auto">
-    <div class="border-b border-neutral-900 px-4 py-3">
-      <div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-neutral-500">
-        <span>{formatRunGraphCountLabel(counts)}</span>
-        <span>{presentationLabel}</span>
-        <span>Snapshot {formatRunGraphTimestamp(runGraph.snapshot_created_at_ms)}</span>
-      </div>
-    </div>
+{#snippet card(node: RunGraphSnapshotNode)}
+  <span class="rg-head">
+    <StatusGlyph state={node.glyph} small />
+    <span class="rg-label" title={node.label}>{node.label}</span>
+    <span class="rg-type" title={node.nodeType}>{node.nodeType}</span>
+  </span>
+  <span class="rg-body">
+    {#each node.inputs as port (port.id)}
+      <span class="rg-port rg-in" title={port.dataType ?? undefined}>{port.label}</span>
+    {/each}
+    {#each node.outputs as port (port.id)}
+      <span class="rg-port rg-out" title={port.dataType ?? undefined}>{port.label}</span>
+    {/each}
+    {#if node.hiddenPortCount > 0}
+      <span class="rg-more">{node.hiddenPortCount === 1 ? '1 more port' : `${node.hiddenPortCount} more ports`}</span>
+    {/if}
+    {#if node.note}
+      <span class="rg-note" class:rg-note-danger={node.noteDanger} title={node.note}>{node.note}</span>
+    {/if}
+  </span>
+{/snippet}
 
-    <div class={compact ? 'h-[calc(100%-2.75rem)] min-h-0 p-3' : 'p-4'}>
-      <div class={compact ? 'h-full min-h-[14rem] overflow-hidden rounded border border-neutral-800 bg-neutral-950' : 'h-[30rem] overflow-hidden rounded border border-neutral-800 bg-neutral-950'}>
-        {#if canvas.nodes.length === 0}
-          <div class="flex h-full items-center justify-center text-sm text-neutral-500">No graph nodes captured</div>
-        {:else}
-          <svg
-            role="img"
-            aria-label="Captured workflow graph"
-            class="h-full w-full"
-            viewBox={canvas.viewBox}
-          >
-            <defs>
-              <marker
-                id="run-graph-arrow"
-                markerHeight="8"
-                markerWidth="8"
-                orient="auto"
-                refX="7"
-                refY="4"
-              >
-                <path d="M 0 0 L 8 4 L 0 8 z" fill="#38bdf8" opacity="0.85" />
-              </marker>
-            </defs>
-            {#each canvas.edges as edge (edge.id)}
-              <line
-                x1={edge.sourceX}
-                y1={edge.sourceY}
-                x2={edge.targetX}
-                y2={edge.targetY}
-                stroke={edge.staleSeverity === 'error' ? '#fb923c' : edge.staleSeverity === 'warning' ? '#facc15' : '#38bdf8'}
-                stroke-width={edge.staleDiagnosticCount > 0 ? '3' : '2'}
-                stroke-opacity={edge.staleDiagnosticCount > 0 ? '0.9' : '0.65'}
-                marker-end="url(#run-graph-arrow)"
+<div class="rg">
+  <div
+    class="rg-canvas"
+    role="group"
+    aria-label={`Graph of ${runGraph.workflow_id} v${runGraph.workflow_semantic_version} as run ${runGraph.workflow_run_id} used it, read-only`}
+    bind:clientWidth={viewportWidth}
+    bind:clientHeight={viewportHeight}
+  >
+    {#if layout.nodes.length === 0}
+      <p class="rg-empty">This run captured no graph nodes.</p>
+    {:else}
+      <div class="rg-stage" style:width="{layout.width * scale}px" style:height="{layout.height * scale}px">
+        <div
+          class="rg-plane"
+          style:width="{layout.width}px"
+          style:height="{layout.height}px"
+          style:transform="scale({scale})"
+        >
+          <svg class="rg-wires" width={layout.width} height={layout.height} aria-hidden="true">
+            {#each layout.wires as wire (wire.id)}
+              <path
+                class="rg-wire"
+                class:rg-wire-live={wire.kind === 'live'}
+                class:rg-wire-failed={wire.kind === 'failed'}
+                class:rg-wire-stale={wire.kind === 'stale'}
+                d={wire.d}
               />
             {/each}
-            {#each canvas.nodes as node (node.id)}
-              <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-              <g
-                transform={`translate(${node.x}, ${node.y})`}
-                role={onSelectNode ? 'button' : undefined}
-                aria-label={onSelectNode ? nodeAccessibleLabel(node) : undefined}
-                tabindex={onSelectNode ? 0 : undefined}
-                class={onSelectNode ? 'cursor-pointer outline-none' : ''}
-                onclick={() => selectNode(node.id)}
-                onkeydown={(event) => {
-                  if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault();
-                    selectNode(node.id);
-                  }
-                }}
-              >
-                <rect
-                  width={node.width}
-                  height={node.height}
-                  rx="6"
-                  fill="#171717"
-                  stroke={nodeStroke(node)}
-                  stroke-width={nodeStrokeWidth(node)}
-                />
-                <text x="14" y="26" fill="#f5f5f5" font-size="13" font-family="ui-monospace, monospace">
-                  {compactValue(node.id)}
-                </text>
-                <text x="14" y="48" fill="#a3a3a3" font-size="12" font-family="ui-sans-serif, system-ui">
-                  {compactValue(node.nodeType, 22)}
-                </text>
-                {#if node.artifactCount > 0}
-                  <rect
-                    x="14"
-                    y={node.errorBadgeLabel ? 76 : 58}
-                    width="118"
-                    height="16"
-                    rx="4"
-                    fill={node.hasOutputArtifacts ? '#052e16' : '#262626'}
-                    stroke={node.hasOutputArtifacts ? '#16a34a' : '#525252'}
-                    stroke-width="1"
-                  />
-                  <text x="20" y={node.errorBadgeLabel ? 88 : 70} fill="#d4d4d4" font-size="10" font-family="ui-sans-serif, system-ui">
-                    {compactValue(node.artifactSummaryLabel, 18)}
-                  </text>
-                {/if}
-                {#if node.errorBadgeLabel}
-                  <rect
-                    x="14"
-                    y="58"
-                    width="148"
-                    height="16"
-                    rx="4"
-                    fill={node.errorSeverity === 'warning' ? '#451a03' : '#450a0a'}
-                    stroke={node.errorSeverity === 'warning' ? '#d97706' : '#dc2626'}
-                    stroke-width="1"
-                  />
-                  <text x="20" y="70" fill={node.errorSeverity === 'warning' ? '#fde68a' : '#fecaca'} font-size="10" font-family="ui-sans-serif, system-ui">
-                    {compactValue(node.errorBadgeLabel, 22)}
-                  </text>
-                {/if}
-                {#if node.statusClass !== 'unknown'}
-                  <circle
-                    cx={node.width - 18}
-                    cy="18"
-                    r="6"
-                    fill={node.statusClass === 'completed' ? '#22c55e' : node.statusClass === 'failed' ? '#ef4444' : node.statusClass === 'running' ? '#38bdf8' : '#a3a3a3'}
-                  />
-                {/if}
-                {#if node.staleDiagnosticCount > 0}
-                  <circle
-                    cx={node.width - 18}
-                    cy={node.statusClass !== 'unknown' ? 36 : 18}
-                    r="7"
-                    fill={node.staleSeverity === 'error' ? '#7c2d12' : node.staleSeverity === 'warning' ? '#713f12' : '#164e63'}
-                    stroke={node.staleSeverity === 'error' ? '#fb923c' : node.staleSeverity === 'warning' ? '#facc15' : '#67e8f9'}
-                    stroke-width="1.5"
-                  />
-                  <text
-                    x={node.width - 18}
-                    y={node.statusClass !== 'unknown' ? 40 : 22}
-                    text-anchor="middle"
-                    fill="#fff7ed"
-                    font-size="11"
-                    font-family="ui-sans-serif, system-ui"
-                  >
-                    !
-                  </text>
-                {/if}
-              </g>
-            {/each}
           </svg>
-        {/if}
-      </div>
-    </div>
-  </div>
-
-  {#if !compact}
-  <aside class="min-h-0 overflow-auto border-l border-neutral-800 bg-neutral-950/80">
-    <div class="border-b border-neutral-900 p-4">
-      <h2 class="text-sm font-semibold text-neutral-100">Version</h2>
-      <dl class="mt-3 space-y-3 text-xs">
-        <div>
-          <dt class="text-neutral-500">Workflow</dt>
-          <dd class="mt-1 truncate font-mono text-neutral-200" title={runGraph.workflow_id}>
-            {runGraph.workflow_id}
-          </dd>
-        </div>
-        <div>
-          <dt class="text-neutral-500">Semantic Version</dt>
-          <dd class="mt-1 text-neutral-200">{runGraph.workflow_semantic_version}</dd>
-        </div>
-        <div>
-          <dt class="text-neutral-500">Version ID</dt>
-          <dd class="mt-1 truncate font-mono text-neutral-200" title={runGraph.workflow_version_id}>
-            {runGraph.workflow_version_id}
-          </dd>
-        </div>
-        <div>
-          <dt class="text-neutral-500">Execution Fingerprint</dt>
-          <dd class="mt-1 truncate font-mono text-neutral-200" title={runGraph.workflow_execution_fingerprint}>
-            {runGraph.workflow_execution_fingerprint}
-          </dd>
-        </div>
-        <div>
-          <dt class="text-neutral-500">Presentation Revision</dt>
-          <dd class="mt-1 truncate font-mono text-neutral-200" title={runGraph.workflow_presentation_revision_id}>
-            {runGraph.workflow_presentation_revision_id}
-          </dd>
-        </div>
-      </dl>
-    </div>
-
-    <div class="border-b border-neutral-900 p-4">
-      <h2 class="text-sm font-semibold text-neutral-100">Nodes</h2>
-      <div class="mt-3 max-h-72 overflow-auto rounded border border-neutral-800">
-        <table class="w-full text-left text-xs">
-          <thead class="sticky top-0 bg-neutral-950 text-neutral-500">
-            <tr>
-              <th class="px-3 py-2 font-medium">Node</th>
-              <th class="px-3 py-2 font-medium">Status</th>
-              <th class="px-3 py-2 font-medium">Stale</th>
-              <th class="px-3 py-2 font-medium">Contract</th>
-              <th class="px-3 py-2 font-medium">I/O</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-neutral-900">
-            {#each nodeRows as node (node.nodeId)}
-              <tr class:bg-cyan-950={node.errorEventId === focusedDiagnosticEventId} class:bg-opacity-30={node.errorEventId === focusedDiagnosticEventId}>
-                <td class="max-w-[12rem] px-3 py-2">
-                  <div class="truncate font-mono text-neutral-200" title={node.nodeId}>{node.nodeId}</div>
-                  <div class="truncate text-neutral-500" title={node.nodeType}>{node.nodeType}</div>
-                  <div class="truncate text-neutral-600" title={node.positionLabel}>{node.positionLabel}</div>
-                </td>
-                <td class="max-w-[7rem] px-3 py-2">
-                  <span
-                    class={`inline-flex max-w-full rounded border px-2 py-0.5 text-xs ${node.statusClass === 'completed' ? 'border-green-800 bg-green-950 text-green-200' : node.statusClass === 'failed' ? 'border-red-800 bg-red-950 text-red-200' : node.statusClass === 'running' ? 'border-cyan-800 bg-cyan-950 text-cyan-200' : 'border-neutral-800 bg-neutral-900 text-neutral-400'}`}
-                    title={node.statusLabel}
-                  >
-                    {node.statusLabel}
-                  </span>
-                  {#if node.cacheStatusLabel}
-                    <div class="mt-1 truncate text-[11px] text-neutral-500" title={node.cacheStatusLabel}>
-                      {node.cacheStatusLabel}
-                    </div>
-                  {/if}
-                  {#if node.errorBadgeLabel}
-                    <div
-                      class={`mt-1 truncate rounded border px-2 py-0.5 text-[11px] ${runGraphNodeErrorClass(node.errorSeverity) === 'warning' ? 'border-amber-800 bg-amber-950 text-amber-100' : 'border-red-800 bg-red-950 text-red-100'}`}
-                      title={`${node.errorBadgeLabel} ${node.errorEventId ?? ''}`}
-                    >
-                      {node.errorBadgeLabel}
-                    </div>
-                  {/if}
-                </td>
-                <td class="max-w-[8rem] px-3 py-2">
-                  {#if node.staleBadgeLabel}
-                    <span
-                      class={`inline-flex max-w-full rounded border px-2 py-0.5 text-[11px] ${runGraphStaleDiagnosticClass(node.staleSeverity) === 'error' ? 'border-orange-800 bg-orange-950 text-orange-100' : runGraphStaleDiagnosticClass(node.staleSeverity) === 'warning' ? 'border-yellow-800 bg-yellow-950 text-yellow-100' : 'border-cyan-800 bg-cyan-950 text-cyan-100'}`}
-                      title={node.staleDiagnosticMessages.join('\n')}
-                    >
-                      {node.staleBadgeLabel}
-                    </span>
-                  {:else}
-                    <span class="text-neutral-600">None</span>
-                  {/if}
-                </td>
-                <td class="max-w-[10rem] px-3 py-2">
-                  <div class="truncate text-neutral-300" title={node.contractVersion}>{node.contractVersion}</div>
-                  <div class="truncate font-mono text-neutral-600" title={node.behaviorDigest}>
-                    {node.behaviorDigest}
-                  </div>
-                  <div class="truncate text-neutral-600" title={node.settingsState}>{node.settingsState}</div>
-                </td>
-                <td class="max-w-[9rem] px-3 py-2">
-                  <div
-                    class={node.hasOutputArtifacts ? 'truncate text-green-300' : 'truncate text-neutral-400'}
-                    title={node.artifactSummaryLabel}
-                  >
-                    {node.artifactSummaryLabel}
-                  </div>
-                  <div class="truncate text-neutral-600" title={node.artifactDetailLabel}>
-                    {node.artifactDetailLabel}
-                  </div>
-                </td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <div class="p-4">
-      <h2 class="text-sm font-semibold text-neutral-100">Edges</h2>
-      {#if edgeRows.length === 0}
-        <div class="mt-3 text-xs text-neutral-500">No graph edges captured</div>
-      {:else}
-        <div class="mt-3 space-y-2">
-          {#each edgeRows as edge (edge.edgeId)}
-            <div class="rounded border border-neutral-800 bg-neutral-900/50 p-3 text-xs">
-              <div class="flex items-center justify-between gap-3">
-                <div class="truncate font-mono text-neutral-300" title={edge.edgeId}>{edge.edgeId}</div>
-                {#if edge.staleDiagnosticCount > 0}
-                  <span
-                    class={`shrink-0 rounded border px-2 py-0.5 text-[11px] ${runGraphStaleDiagnosticClass(edge.staleSeverity) === 'error' ? 'border-orange-800 bg-orange-950 text-orange-100' : runGraphStaleDiagnosticClass(edge.staleSeverity) === 'warning' ? 'border-yellow-800 bg-yellow-950 text-yellow-100' : 'border-cyan-800 bg-cyan-950 text-cyan-100'}`}
-                    title={edge.staleDiagnosticMessages.join('\n')}
-                  >
-                    {edge.staleDiagnosticCount}
-                  </span>
-                {/if}
+          {#each layout.nodes as node (node.id)}
+            {#if onSelectNode}
+              <button
+                type="button"
+                class="rg-node"
+                style:left="{node.x}px"
+                style:top="{node.y}px"
+                style:width="{node.width}px"
+                style:min-height="{node.height}px"
+                aria-current={node.id === selectedNodeId ? 'true' : undefined}
+                aria-label={nodeAccessibleLabel(node)}
+                onclick={() => onSelectNode?.(node.id)}
+              >
+                {@render card(node)}
+              </button>
+            {:else}
+              <div
+                class="rg-node"
+                style:left="{node.x}px"
+                style:top="{node.y}px"
+                style:width="{node.width}px"
+                style:min-height="{node.height}px"
+              >
+                {@render card(node)}
               </div>
-              <div class="mt-2 truncate text-neutral-500" title={`${edge.source} -> ${edge.target}`}>
-                {edge.source} -> {edge.target}
-              </div>
-            </div>
+            {/if}
           {/each}
         </div>
-      {/if}
+      </div>
+    {/if}
+  </div>
+
+  {#if layout.nodes.length > 0}
+    <div class="rg-fab rg-legend">
+      <span><StatusGlyph state="running" small /> running now</span>
+      <span><StatusGlyph state="succeeded" small /> done in this run</span>
+      <span><StatusGlyph state="failed" small /> failed</span>
+      <span><StatusGlyph state="queued" small /> not reached</span>
     </div>
-  </aside>
+  {/if}
+
+  {#if layout.nodes.length > 0}
+    <div class="rg-fab rg-zoom" role="group" aria-label="Zoom">
+      <button class="rg-pill" type="button" aria-label="Zoom in" title="Zoom in" onclick={() => zoomBy(ZOOM_STEP)}>+</button>
+      <button class="rg-pill" type="button" aria-label="Zoom out" title="Zoom out" onclick={() => zoomBy(-ZOOM_STEP)}>−</button>
+      <button
+        class="rg-pill"
+        type="button"
+        aria-pressed={manualZoom === null}
+        title="Fit the whole graph"
+        onclick={fit}
+      >
+        Fit
+      </button>
+      <span class="rg-scale" aria-live="polite">{Math.round(scale * 100)}%</span>
+    </div>
   {/if}
 </div>
+
+<style>
+  .rg {
+    position: relative;
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    height: 100%;
+  }
+
+  .rg-canvas {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    overflow: auto;
+    border: 1px solid var(--pg-border);
+    border-radius: 4px;
+    background-color: var(--pg-panel-head);
+    background-image: radial-gradient(var(--pg-border) 1px, transparent 1px);
+    background-size: 22px 22px;
+  }
+
+  .rg-empty {
+    margin: 0;
+    padding: 32px 24px;
+    color: var(--pg-text-muted);
+  }
+
+  .rg-stage {
+    position: relative;
+  }
+
+  .rg-plane {
+    position: absolute;
+    left: 0;
+    top: 0;
+    transform-origin: 0 0;
+  }
+
+  .rg-wires {
+    position: absolute;
+    inset: 0;
+    overflow: visible;
+  }
+
+  .rg-wire {
+    fill: none;
+    stroke: var(--pg-border-strong);
+    stroke-width: 1.5;
+  }
+
+  .rg-wire-live {
+    stroke: var(--pg-accent);
+    stroke-width: 2;
+  }
+
+  .rg-wire-failed {
+    stroke: var(--pg-danger);
+    stroke-dasharray: 4 3;
+  }
+
+  .rg-wire-stale {
+    stroke-dasharray: 2 3;
+  }
+
+  .rg-node {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    border: 1px solid var(--pg-scroll-thumb);
+    border-radius: 4px;
+    background: var(--pg-panel);
+    color: var(--pg-text);
+    text-align: left;
+    font: inherit;
+    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.25);
+  }
+
+  button.rg-node {
+    cursor: pointer;
+  }
+
+  button.rg-node:hover {
+    border-color: var(--pg-border-strong);
+  }
+
+  .rg-node[aria-current='true'] {
+    border-color: var(--pg-text);
+    box-shadow: 0 0 0 1px var(--pg-text);
+  }
+
+  .rg-head {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    height: 32px;
+    padding: 0 9px;
+    border-bottom: 1px solid var(--pg-border);
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--pg-text-bright);
+  }
+
+  .rg-label {
+    min-width: 0;
+    flex: 0 1 auto;
+    /* The name keeps its room; the type truncates first. */
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .rg-type {
+    margin-left: auto;
+    min-width: 0;
+    flex: 0 1000 auto;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-family: var(--pg-font-mono);
+    font-size: 11px;
+    font-weight: 400;
+    color: var(--pg-text-muted);
+  }
+
+  .rg-body {
+    display: flex;
+    flex-direction: column;
+    padding: 6px 0;
+  }
+
+  .rg-port,
+  .rg-more,
+  .rg-note {
+    position: relative;
+    display: block;
+    height: 22px;
+    padding: 0 9px;
+    font-size: 11.5px;
+    line-height: 22px;
+    color: var(--pg-text-soft);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .rg-port {
+    overflow: visible;
+  }
+
+  .rg-out {
+    text-align: right;
+  }
+
+  .rg-in::before,
+  .rg-out::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--pg-panel-head);
+    border: 1.5px solid var(--pg-border-strong);
+    transform: translateY(-50%);
+  }
+
+  .rg-in::before {
+    left: -5px;
+  }
+
+  .rg-out::after {
+    right: -5px;
+  }
+
+  .rg-more {
+    color: var(--pg-text-muted);
+  }
+
+  .rg-note {
+    border-top: 1px solid var(--pg-border);
+    color: var(--pg-text-soft);
+  }
+
+  .rg-note-danger {
+    color: var(--pg-danger);
+  }
+
+  .rg-fab {
+    position: absolute;
+    display: flex;
+    gap: 6px;
+    padding: 6px;
+    background: var(--pg-panel-sunken);
+    border: 1px solid var(--pg-border);
+    border-radius: 4px;
+  }
+
+  /* Bottom right: graphs flow left to right from the top, so this corner is the emptiest. */
+  .rg-legend {
+    right: 12px;
+    bottom: 12px;
+    flex-direction: column;
+    gap: 4px;
+    padding: 8px 10px;
+    font-size: 11.5px;
+    color: var(--pg-text-muted);
+  }
+
+  .rg-legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .rg-zoom {
+    left: 12px;
+    bottom: 12px;
+    align-items: center;
+  }
+
+  .rg-pill {
+    height: 26px;
+    padding: 0 9px;
+    border: 1px solid var(--pg-border);
+    border-radius: 4px;
+    background: var(--pg-panel);
+    color: var(--pg-text-soft);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    font-size: 12px;
+  }
+
+  .rg-pill:hover {
+    border-color: var(--pg-border-strong);
+    color: var(--pg-text-bright);
+  }
+
+  .rg-pill[aria-pressed='true'] {
+    background: var(--pg-text);
+    color: var(--pg-ink);
+    border-color: var(--pg-text);
+  }
+
+  .rg-scale {
+    padding: 0 4px;
+    font-family: var(--pg-font-mono);
+    font-size: 11px;
+    color: var(--pg-text-muted);
+  }
+</style>

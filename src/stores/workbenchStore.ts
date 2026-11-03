@@ -1,21 +1,29 @@
 import { derived, writable, type Readable } from 'svelte/store';
 
 export const WORKBENCH_PAGE_IDS = [
+  'sessions',
   'scheduler',
   'diagnostics',
-  'graph',
   'io_inspector',
-  'library',
   'network',
+  'graph',
   'node_lab',
+  'library',
   'settings',
 ] as const;
 
 export type WorkbenchPageId = (typeof WORKBENCH_PAGE_IDS)[number];
 
+/**
+ * Tab bar group. The shell separates groups with a divider and pins
+ * `settings` to the right edge of the header.
+ */
+export type WorkbenchPageGroup = 'sessions' | 'runs' | 'workflows' | 'settings';
+
 export interface WorkbenchPageDefinition {
   id: WorkbenchPageId;
   label: string;
+  group: WorkbenchPageGroup;
 }
 
 export interface ActiveWorkflowRunContext {
@@ -49,15 +57,23 @@ export interface WorkbenchState {
 }
 
 export const WORKBENCH_PAGES: WorkbenchPageDefinition[] = [
-  { id: 'scheduler', label: 'Scheduler' },
-  { id: 'diagnostics', label: 'Diagnostics' },
-  { id: 'graph', label: 'Graph' },
-  { id: 'io_inspector', label: 'I/O Inspector' },
-  { id: 'library', label: 'Library' },
-  { id: 'network', label: 'Network' },
-  { id: 'node_lab', label: 'Node Editor' },
-  { id: 'settings', label: 'Settings' },
+  { id: 'sessions', label: 'Sessions', group: 'sessions' },
+  { id: 'scheduler', label: 'Scheduler', group: 'runs' },
+  { id: 'diagnostics', label: 'Diagnostics', group: 'runs' },
+  { id: 'io_inspector', label: 'I/O Inspector', group: 'runs' },
+  { id: 'network', label: 'Network', group: 'runs' },
+  { id: 'graph', label: 'Graph', group: 'workflows' },
+  { id: 'node_lab', label: 'Node Editor', group: 'workflows' },
+  { id: 'library', label: 'Library', group: 'workflows' },
+  { id: 'settings', label: 'Settings', group: 'settings' },
 ];
+
+/** Tab groups in header order, left to right, excluding the pinned Settings tab. */
+export const WORKBENCH_TAB_GROUPS: readonly WorkbenchPageGroup[] = ['sessions', 'runs', 'workflows'];
+
+export function workbenchPagesInGroup(group: WorkbenchPageGroup): WorkbenchPageDefinition[] {
+  return WORKBENCH_PAGES.filter((page) => page.group === group);
+}
 
 export const DEFAULT_WORKBENCH_STATE: WorkbenchState = {
   selected_page_id: 'scheduler',

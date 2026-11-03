@@ -1,22 +1,29 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { getWorkflowMiniMapNodeColor } from './workflowMiniMap.ts';
+import {
+  getWorkflowMiniMapNodeColor,
+  WORKFLOW_MINIMAP_GROUP_COLOR,
+  WORKFLOW_MINIMAP_NODE_COLOR,
+} from './workflowMiniMap.ts';
 
 test('getWorkflowMiniMapNodeColor prioritizes group nodes', () => {
-  assert.equal(getWorkflowMiniMapNodeColor({ type: 'node-group' }), '#7c3aed');
-  assert.equal(getWorkflowMiniMapNodeColor({ data: { isGroup: true } }), '#7c3aed');
+  assert.equal(getWorkflowMiniMapNodeColor({ type: 'node-group' }), WORKFLOW_MINIMAP_GROUP_COLOR);
+  assert.equal(getWorkflowMiniMapNodeColor({ data: { isGroup: true } }), WORKFLOW_MINIMAP_GROUP_COLOR);
 });
 
-test('getWorkflowMiniMapNodeColor maps backend categories to stable colors', () => {
-  assert.equal(getWorkflowMiniMapNodeColor({ data: { definition: { category: 'input' } } }), '#2563eb');
-  assert.equal(getWorkflowMiniMapNodeColor({ data: { definition: { category: 'processing' } } }), '#16a34a');
-  assert.equal(getWorkflowMiniMapNodeColor({ data: { definition: { category: 'tool' } } }), '#d97706');
-  assert.equal(getWorkflowMiniMapNodeColor({ data: { definition: { category: 'output' } } }), '#0891b2');
-  assert.equal(getWorkflowMiniMapNodeColor({ data: { definition: { category: 'control' } } }), '#9333ea');
+test('getWorkflowMiniMapNodeColor uses one token colour for every category', () => {
+  for (const category of ['input', 'processing', 'tool', 'output', 'control', 'custom']) {
+    assert.equal(
+      getWorkflowMiniMapNodeColor({ data: { definition: { category } } }),
+      WORKFLOW_MINIMAP_NODE_COLOR,
+    );
+  }
+  assert.equal(getWorkflowMiniMapNodeColor({}), WORKFLOW_MINIMAP_NODE_COLOR);
 });
 
-test('getWorkflowMiniMapNodeColor falls back for unknown nodes', () => {
-  assert.equal(getWorkflowMiniMapNodeColor({}), '#525252');
-  assert.equal(getWorkflowMiniMapNodeColor({ data: { definition: { category: 'custom' } } }), '#525252');
+test('minimap colours are workbench token references, not literals', () => {
+  assert.equal(WORKFLOW_MINIMAP_NODE_COLOR, 'var(--pg-border-idle)');
+  assert.equal(WORKFLOW_MINIMAP_GROUP_COLOR, 'var(--pg-text-muted)');
+  assert.notEqual(WORKFLOW_MINIMAP_NODE_COLOR, WORKFLOW_MINIMAP_GROUP_COLOR);
 });

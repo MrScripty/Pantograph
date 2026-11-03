@@ -1,6 +1,5 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { Play, RefreshCw, Save, Settings, Trash2, Upload, X } from 'lucide-svelte';
   import DeviceConfig from '../DeviceConfig.svelte';
   import ModelConfig from '../ModelConfig.svelte';
   import RagStatus from '../RagStatus.svelte';
@@ -18,7 +17,6 @@
     WorkflowArtifactPolicy,
     WorkflowManagedMediaDependencyId,
     WorkflowManagedMediaDependencyStatus,
-    WorkflowMediaFormatOption,
   } from '../../services/workflow/types';
   import { workflowService } from '../../services/workflow/WorkflowService';
   import {
@@ -27,11 +25,13 @@
   } from '../../stores/workbenchStore';
   import {
     buildArtifactPolicyRows,
+    buildCapabilityRows,
     buildDiagnosticsRetentionCleanupRows,
     buildDiagnosticsRetentionPolicyRows,
     buildDiagnosticsRetentionSettingRows,
     buildManagedMediaDependencyRows,
     findFormatOption,
+    formatCapabilitySummary,
     formatManagedMediaDependencyStatus,
     formatOptionItems,
     formatRangeLabel,
@@ -41,6 +41,7 @@
     parseNullableIntegerField,
   } from './settingsPagePresenters';
   import { formatWorkflowCommandError } from './workflowErrorPresenters';
+  import { Chip, KeyValue, Panel } from './ui';
 
   interface ArtifactPolicyDraft {
     ttl_seconds: string;
@@ -115,6 +116,8 @@
   let diagnosticsRetentionCleanupRows = $derived(
     buildDiagnosticsRetentionCleanupRows(diagnosticsRetentionCleanup),
   );
+  let capabilityRows = $derived(buildCapabilityRows(capabilities));
+  let capabilitySummary = $derived(formatCapabilitySummary(capabilities));
   let imageFormatOptions = $derived(
     formatOptionItems(capabilities?.image_formats ?? [], formatDraft.image.format_id),
   );
@@ -721,53 +724,47 @@
     }
     return values[0];
   }
-
-  function capabilityCount(options: WorkflowMediaFormatOption[] | undefined): string {
-    const count = options?.length ?? 0;
-    return `${count} ${count === 1 ? 'format' : 'formats'}`;
-  }
 </script>
 
-<section class="flex h-full min-h-0 flex-col bg-neutral-950">
-  <div class="flex shrink-0 items-center justify-between border-b border-neutral-800 px-4 py-3">
-    <div class="min-w-0">
-      <h1 class="text-base font-semibold text-neutral-100">Settings</h1>
-      <div class="mt-1 truncate text-xs text-neutral-500">
-        ArtifactStore policy, media artifact defaults, managed inference runtimes, and media dependencies
-      </div>
-    </div>
-    <button
-      type="button"
-      class="inline-flex items-center gap-2 rounded border border-neutral-700 px-3 py-1.5 text-sm text-neutral-300 transition-colors hover:border-neutral-500 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
-      onclick={() => refreshSettingsPage()}
-      disabled={loading}
-    >
-      <RefreshCw size={14} aria-hidden="true" class={loading ? 'animate-spin' : ''} />
-      Refresh
-    </button>
-  </div>
-
-  {#if pageError}
-    <div class="border-b border-red-900 bg-red-950/50 px-4 py-2 text-sm text-red-200" role="alert">
-      {pageError}
-    </div>
+{#snippet sectionNote(error: string | null, message: string | null)}
+  {#if error}
+    <p class="pg-muted pg-small set-note" role="alert">{error}</p>
+  {:else if message}
+    <p class="pg-muted pg-small set-note" role="status">{message}</p>
   {/if}
+{/snippet}
 
-  <div class="grid min-h-0 flex-1 grid-cols-1 overflow-hidden xl:grid-cols-[1fr_24rem]">
-    <div class="min-h-0 overflow-auto">
-      <section class="border-b border-neutral-900 px-4 py-4">
-        <div class="mb-4">
-          <h2 class="text-sm font-semibold text-neutral-100">Runtime And App Settings</h2>
-          <div class="mt-1 text-xs text-neutral-500">
-            Server connection, model paths, device policy, RAG, and sandbox configuration
+<div class="pg-main h-full">
+  <div class="set-body">
+    <Panel label="Settings">
+      {#snippet top()}
+        <div class="set-head">
+          <div class="set-headtext">
+            <h1 class="pg-title set-h1">Settings</h1>
+            <p class="pg-muted pg-small set-sub">
+              ArtifactStore policy, media artifact defaults, managed inference runtimes, and media dependencies
+            </p>
           </div>
+          <button type="button" class="pg-btn" onclick={() => refreshSettingsPage()} disabled={loading}>
+            {loading ? 'Refreshing' : 'Refresh'}
+          </button>
         </div>
-        <div class="grid gap-4 2xl:grid-cols-2">
-          <div class="space-y-4">
+        {#if pageError}
+          <p class="pg-muted pg-small set-note" role="alert">{pageError}</p>
+        {/if}
+      {/snippet}
+
+      <section class="pg-sec" aria-labelledby="settings-runtime-heading">
+        <h2 id="settings-runtime-heading" class="set-h2">Runtime and app settings</h2>
+        <p class="pg-muted pg-small set-sub">
+          Server connection, model paths, device policy, RAG, and sandbox configuration
+        </p>
+        <div class="set-cols">
+          <div class="set-stack">
             <ServerStatus showManagedRuntimePanel={false} />
             <ModelConfig />
           </div>
-          <div class="space-y-4">
+          <div class="set-stack">
             <DeviceConfig />
             <RagStatus />
             <SandboxSettings />
@@ -776,292 +773,231 @@
       </section>
 
       <form
-        id="settings-diagnostics-retention-policy"
-        class="border-b border-neutral-900 px-4 py-4"
+        class="pg-sec"
+        aria-labelledby="settings-artifact-policy-heading"
         onsubmit={(event) => {
           event.preventDefault();
           void saveArtifactPolicy();
         }}
       >
-        <div class="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 class="text-sm font-semibold text-neutral-100">ArtifactStore Policy</h2>
-            <div class="mt-1 text-xs text-neutral-500">
-              {policy ? `${policy.policy_id} v${policy.policy_version}` : 'Policy unavailable'}
-            </div>
+        <div class="set-sechead">
+          <div class="set-headtext">
+            <h2 id="settings-artifact-policy-heading" class="set-h2">ArtifactStore policy</h2>
+            <p class="pg-muted pg-small set-sub">
+              {#if policy}
+                <span class="pg-mono">{policy.policy_id} v{policy.policy_version}</span>
+              {:else}
+                Policy unavailable
+              {/if}
+            </p>
           </div>
-          <button
-            type="submit"
-            class="inline-flex items-center gap-2 rounded border border-cyan-800 bg-cyan-950 px-3 py-1.5 text-sm text-cyan-100 transition-colors hover:border-cyan-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
-            disabled={loading || savingPolicy || !policy}
-          >
-            <Save size={14} aria-hidden="true" />
-            Save Policy
+          <button type="submit" class="pg-btn pg-btn-primary" disabled={loading || savingPolicy || !policy}>
+            Save policy
           </button>
         </div>
 
-        {#if policyError}
-          <div class="mt-3 rounded border border-red-900 bg-red-950/40 px-3 py-2 text-sm text-red-200" role="alert">
-            {policyError}
-          </div>
-        {:else if policyMessage}
-          <div class="mt-3 rounded border border-emerald-900 bg-emerald-950/30 px-3 py-2 text-sm text-emerald-200" role="status">
-            {policyMessage}
-          </div>
-        {/if}
+        {@render sectionNote(policyError, policyMessage)}
 
-        <div class="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          <div>
-            <label for="settings-artifact-ttl" class="mb-2 block text-xs uppercase text-neutral-500">
-              TTL seconds
-            </label>
+        <div class="set-fields">
+          <label class="pg-fl">
+            TTL seconds
             <input
               id="settings-artifact-ttl"
               type="number"
               min="1"
               inputmode="numeric"
               bind:value={policyDraft.ttl_seconds}
-              class="w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-1.5 font-mono text-xs text-neutral-100 placeholder:text-neutral-600 focus:border-cyan-500 focus:outline-none"
+              class="pg-field pg-mono"
               placeholder="unset"
             />
-          </div>
-          <div>
-            <label for="settings-artifact-disk" class="mb-2 block text-xs uppercase text-neutral-500">
-              Max disk bytes
-            </label>
+          </label>
+          <label class="pg-fl">
+            Max disk bytes
             <input
               id="settings-artifact-disk"
               type="number"
               min="0"
               inputmode="numeric"
               bind:value={policyDraft.max_disk_bytes}
-              class="w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-1.5 font-mono text-xs text-neutral-100 placeholder:text-neutral-600 focus:border-cyan-500 focus:outline-none"
+              class="pg-field pg-mono"
               placeholder="unlimited"
             />
-          </div>
-          <div>
-            <label for="settings-artifact-memory" class="mb-2 block text-xs uppercase text-neutral-500">
-              Max memory bytes
-            </label>
+          </label>
+          <label class="pg-fl">
+            Max memory bytes
             <input
               id="settings-artifact-memory"
               type="number"
               min="0"
               inputmode="numeric"
               bind:value={policyDraft.max_memory_bytes}
-              class="w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-1.5 font-mono text-xs text-neutral-100 placeholder:text-neutral-600 focus:border-cyan-500 focus:outline-none"
+              class="pg-field pg-mono"
               placeholder="unlimited"
             />
-          </div>
-          <div>
-            <label for="settings-artifact-single" class="mb-2 block text-xs uppercase text-neutral-500">
-              Max single artifact bytes
-            </label>
+          </label>
+          <label class="pg-fl">
+            Max single artifact bytes
             <input
               id="settings-artifact-single"
               type="number"
               min="0"
               inputmode="numeric"
               bind:value={policyDraft.max_single_artifact_bytes}
-              class="w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-1.5 font-mono text-xs text-neutral-100 placeholder:text-neutral-600 focus:border-cyan-500 focus:outline-none"
+              class="pg-field pg-mono"
               placeholder="unlimited"
             />
-          </div>
-          <div>
-            <label for="settings-artifact-spill" class="mb-2 block text-xs uppercase text-neutral-500">
-              Spill threshold bytes
-            </label>
+          </label>
+          <label class="pg-fl">
+            Spill threshold bytes
             <input
               id="settings-artifact-spill"
               type="number"
               min="0"
               inputmode="numeric"
               bind:value={policyDraft.spill_threshold_bytes}
-              class="w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-1.5 font-mono text-xs text-neutral-100 placeholder:text-neutral-600 focus:border-cyan-500 focus:outline-none"
+              class="pg-field pg-mono"
               placeholder="unset"
             />
-          </div>
-          <label class="flex items-center gap-3 rounded border border-neutral-800 bg-neutral-900/40 px-3 py-2 text-sm text-neutral-200">
-            <input
-              type="checkbox"
-              bind:checked={policyDraft.delete_on_consume}
-              class="h-4 w-4 rounded border-neutral-700 bg-neutral-900 text-cyan-500 focus:ring-cyan-500"
-            />
+          </label>
+          <label class="set-check">
+            <input type="checkbox" bind:checked={policyDraft.delete_on_consume} />
             Delete payload body after consume acknowledgement
           </label>
         </div>
       </form>
 
       <form
-        class="border-b border-neutral-900 px-4 py-4"
+        id="settings-diagnostics-retention-policy"
+        class="pg-sec"
+        aria-labelledby="settings-diagnostics-retention-heading"
         onsubmit={(event) => {
           event.preventDefault();
           void saveDiagnosticsRetentionPolicy();
         }}
       >
-        <div class="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 class="text-sm font-semibold text-neutral-100">Diagnostics Retention Policy</h2>
-            <div class="mt-1 text-xs text-neutral-500">
-              {diagnosticsRetentionPolicy ? `${diagnosticsRetentionPolicy.policy_id} v${diagnosticsRetentionPolicy.policy_version}` : 'Policy unavailable'}
-            </div>
+        <div class="set-sechead">
+          <div class="set-headtext">
+            <h2 id="settings-diagnostics-retention-heading" class="set-h2">Diagnostics retention policy</h2>
+            <p class="pg-muted pg-small set-sub">
+              {#if diagnosticsRetentionPolicy}
+                <span class="pg-mono">{diagnosticsRetentionPolicy.policy_id} v{diagnosticsRetentionPolicy.policy_version}</span>
+              {:else}
+                Policy unavailable
+              {/if}
+            </p>
           </div>
           <button
             type="submit"
-            class="inline-flex items-center gap-2 rounded border border-cyan-800 bg-cyan-950 px-3 py-1.5 text-sm text-cyan-100 transition-colors hover:border-cyan-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
+            class="pg-btn pg-btn-primary"
             disabled={loading || savingDiagnosticsRetention || !diagnosticsRetentionPolicy}
           >
-            <Save size={14} aria-hidden="true" />
-            Save Retention
+            Save retention
           </button>
         </div>
 
-        {#if diagnosticsRetentionError}
-          <div class="mt-3 rounded border border-red-900 bg-red-950/40 px-3 py-2 text-sm text-red-200" role="alert">
-            {diagnosticsRetentionError}
-          </div>
-        {:else if diagnosticsRetentionMessage}
-          <div class="mt-3 rounded border border-emerald-900 bg-emerald-950/30 px-3 py-2 text-sm text-emerald-200" role="status">
-            {diagnosticsRetentionMessage}
-          </div>
-        {/if}
+        {@render sectionNote(diagnosticsRetentionError, diagnosticsRetentionMessage)}
 
-        <div class="mt-4 grid gap-3 md:grid-cols-[12rem_1fr]">
-          <div>
-            <label for="settings-diagnostics-retention-days" class="mb-2 block text-xs uppercase text-neutral-500">
-              Days
-            </label>
+        <div class="set-fields set-fields-retention">
+          <label class="pg-fl">
+            Days
             <input
               id="settings-diagnostics-retention-days"
               type="number"
               min="1"
               inputmode="numeric"
               bind:value={diagnosticsRetentionDays}
-              class="w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-1.5 font-mono text-xs text-neutral-100 placeholder:text-neutral-600 focus:border-cyan-500 focus:outline-none"
+              class="pg-field pg-mono"
             />
-          </div>
-          <div>
-            <label for="settings-diagnostics-retention-explanation" class="mb-2 block text-xs uppercase text-neutral-500">
-              Explanation
-            </label>
+          </label>
+          <label class="pg-fl">
+            Explanation
             <textarea
               id="settings-diagnostics-retention-explanation"
               rows="3"
               bind:value={diagnosticsRetentionExplanation}
-              class="w-full resize-none rounded border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs text-neutral-100 placeholder:text-neutral-600 focus:border-cyan-500 focus:outline-none"
+              class="pg-field set-textarea"
             ></textarea>
-          </div>
+          </label>
         </div>
 
         {#if diagnosticsRetentionSettingRows.length > 0}
-          <dl class="mt-4 grid gap-2 text-xs md:grid-cols-2">
-            {#each diagnosticsRetentionSettingRows as row (row.label)}
-              <div class="rounded border border-neutral-800 bg-neutral-900/40 px-3 py-2">
-                <dt class="text-neutral-500">{row.label}</dt>
-                <dd class={`mt-1 truncate text-neutral-200 ${row.mono ? 'font-mono' : ''}`} title={row.value}>
-                  {row.value}
-                </dd>
-              </div>
-            {/each}
-          </dl>
+          <div class="set-block">
+            <KeyValue rows={diagnosticsRetentionSettingRows} label="Retention settings" />
+          </div>
         {/if}
 
-        <section class="mt-4 rounded border border-neutral-800 bg-neutral-900/40 p-3">
-          <div class="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h3 class="text-sm font-medium text-neutral-100">Retention Cleanup</h3>
-              <div class="mt-1 text-xs text-neutral-500">
+        <section class="pg-card set-card" aria-labelledby="settings-retention-cleanup-heading">
+          <div class="set-sechead">
+            <div class="set-headtext">
+              <h3 id="settings-retention-cleanup-heading" class="set-h3">Retention cleanup</h3>
+              <p class="pg-muted pg-small set-sub">
                 Apply backend retention cleanup using the current diagnostics retention policy.
-              </div>
+              </p>
             </div>
             <button
               type="button"
-              class="inline-flex items-center gap-2 rounded border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-sm text-neutral-200 transition-colors hover:border-neutral-500 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
+              class="pg-btn"
               onclick={() => {
                 void applyDiagnosticsRetentionCleanup();
               }}
               disabled={loading || applyingDiagnosticsRetentionCleanup || !diagnosticsRetentionPolicy}
             >
-              <Trash2 size={14} aria-hidden="true" />
-              {applyingDiagnosticsRetentionCleanup ? 'Applying Cleanup' : 'Apply Cleanup'}
+              {applyingDiagnosticsRetentionCleanup ? 'Applying cleanup' : 'Apply cleanup'}
             </button>
           </div>
 
           {#if diagnosticsRetentionCleanupRows.length > 0}
-            <dl class="mt-3 grid gap-2 text-xs md:grid-cols-2">
-              {#each diagnosticsRetentionCleanupRows as row (row.label)}
-                <div>
-                  <dt class="text-neutral-500">{row.label}</dt>
-                  <dd class={`mt-1 truncate text-neutral-200 ${row.mono ? 'font-mono' : ''}`} title={row.value}>
-                    {row.value}
-                  </dd>
-                </div>
-              {/each}
-            </dl>
+            <div class="set-block">
+              <KeyValue rows={diagnosticsRetentionCleanupRows} label="Last cleanup" />
+            </div>
           {/if}
         </section>
       </form>
 
       <form
-        class="px-4 py-4"
+        class="pg-sec"
+        aria-labelledby="settings-formats-heading"
         onsubmit={(event) => {
           event.preventDefault();
           void saveArtifactFormats();
         }}
       >
-        <div class="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 class="text-sm font-semibold text-neutral-100">Artifact Format Defaults</h2>
-            <div class="mt-1 text-xs text-neutral-500">
-              Image {capabilityCount(capabilities?.image_formats)} / Audio {capabilityCount(capabilities?.audio_formats)} / Video {capabilityCount(capabilities?.video_formats)} / 3D {capabilityCount(capabilities?.three_d_formats)}
-            </div>
+        <div class="set-sechead">
+          <div class="set-headtext">
+            <h2 id="settings-formats-heading" class="set-h2">Artifact format defaults</h2>
+            <p class="pg-muted pg-small set-sub">{capabilitySummary}</p>
           </div>
-          <button
-            type="submit"
-            class="inline-flex items-center gap-2 rounded border border-cyan-800 bg-cyan-950 px-3 py-1.5 text-sm text-cyan-100 transition-colors hover:border-cyan-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
-            disabled={loading || savingFormats || !capabilities}
-          >
-            <Save size={14} aria-hidden="true" />
-            Save Formats
+          <button type="submit" class="pg-btn pg-btn-primary" disabled={loading || savingFormats || !capabilities}>
+            Save formats
           </button>
         </div>
 
-        {#if formatError}
-          <div class="mt-3 rounded border border-red-900 bg-red-950/40 px-3 py-2 text-sm text-red-200" role="alert">
-            {formatError}
-          </div>
-        {:else if formatMessage}
-          <div class="mt-3 rounded border border-emerald-900 bg-emerald-950/30 px-3 py-2 text-sm text-emerald-200" role="status">
-            {formatMessage}
-          </div>
-        {/if}
+        {@render sectionNote(formatError, formatMessage)}
 
-        <div class="mt-4 grid gap-3 2xl:grid-cols-2">
-          <section class="rounded border border-neutral-800 bg-neutral-900/40 p-3">
-            <div class="flex items-center justify-between gap-3">
-              <h3 class="text-sm font-medium text-neutral-100">Image</h3>
-              <span class="text-xs text-neutral-500">{formatRangeLabel(selectedImageFormat?.quality_min_percent, selectedImageFormat?.quality_max_percent, '%')}</span>
+        <div class="set-cards">
+          <section class="pg-card" aria-labelledby="settings-format-image-heading">
+            <div class="set-cardhead">
+              <h3 id="settings-format-image-heading" class="set-h3">Image</h3>
+              <span class="pg-muted pg-small">
+                {formatRangeLabel(selectedImageFormat?.quality_min_percent, selectedImageFormat?.quality_max_percent, '%')}
+              </span>
             </div>
-            <div class="mt-3 grid gap-3 md:grid-cols-3">
-              <div>
-                <label for="settings-image-format" class="mb-2 block text-xs uppercase text-neutral-500">
-                  Format
-                </label>
+            <div class="set-fields set-fields-card">
+              <label class="pg-fl">
+                Format
                 <select
                   id="settings-image-format"
                   bind:value={formatDraft.image.format_id}
                   onchange={normalizeImageFormatDraft}
-                  class="w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs text-neutral-100 focus:border-cyan-500 focus:outline-none"
+                  class="pg-field"
                 >
                   {#each imageFormatOptions as option (option.value)}
                     <option value={option.value}>{option.label}</option>
                   {/each}
                 </select>
-              </div>
-              <div>
-                <label for="settings-image-quality" class="mb-2 block text-xs uppercase text-neutral-500">
-                  Quality percent
-                </label>
+              </label>
+              <label class="pg-fl">
+                Quality percent
                 <input
                   id="settings-image-quality"
                   type="number"
@@ -1069,65 +1005,51 @@
                   max={selectedImageFormat?.quality_max_percent ?? undefined}
                   inputmode="numeric"
                   bind:value={formatDraft.image.quality_percent}
-                  class="w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-1.5 font-mono text-xs text-neutral-100 focus:border-cyan-500 focus:outline-none"
+                  class="pg-field pg-mono"
                 />
-              </div>
-              <div>
-                <label for="settings-image-profile" class="mb-2 block text-xs uppercase text-neutral-500">
-                  Color profile
-                </label>
-                <select
-                  id="settings-image-profile"
-                  bind:value={formatDraft.image.color_profile_id}
-                  class="w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs text-neutral-100 focus:border-cyan-500 focus:outline-none"
-                >
+              </label>
+              <label class="pg-fl">
+                Color profile
+                <select id="settings-image-profile" bind:value={formatDraft.image.color_profile_id} class="pg-field">
                   {#each imageColorProfileOptions as profile (profile)}
                     <option value={profile}>{profile}</option>
                   {/each}
                 </select>
-              </div>
+              </label>
             </div>
           </section>
 
-          <section class="rounded border border-neutral-800 bg-neutral-900/40 p-3">
-            <div class="flex items-center justify-between gap-3">
-              <h3 class="text-sm font-medium text-neutral-100">Audio</h3>
-              <span class="text-xs text-neutral-500">{formatRangeLabel(selectedAudioFormat?.bitrate_min_kbps, selectedAudioFormat?.bitrate_max_kbps, ' kbps')}</span>
+          <section class="pg-card" aria-labelledby="settings-format-audio-heading">
+            <div class="set-cardhead">
+              <h3 id="settings-format-audio-heading" class="set-h3">Audio</h3>
+              <span class="pg-muted pg-small">
+                {formatRangeLabel(selectedAudioFormat?.bitrate_min_kbps, selectedAudioFormat?.bitrate_max_kbps, ' kbps')}
+              </span>
             </div>
-            <div class="mt-3 grid gap-3 md:grid-cols-3">
-              <div>
-                <label for="settings-audio-container" class="mb-2 block text-xs uppercase text-neutral-500">
-                  Container
-                </label>
+            <div class="set-fields set-fields-card">
+              <label class="pg-fl">
+                Container
                 <select
                   id="settings-audio-container"
                   bind:value={formatDraft.audio.container_id}
                   onchange={normalizeAudioFormatDraft}
-                  class="w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs text-neutral-100 focus:border-cyan-500 focus:outline-none"
+                  class="pg-field"
                 >
                   {#each audioFormatOptions as option (option.value)}
                     <option value={option.value}>{option.label}</option>
                   {/each}
                 </select>
-              </div>
-              <div>
-                <label for="settings-audio-codec" class="mb-2 block text-xs uppercase text-neutral-500">
-                  Codec
-                </label>
-                <select
-                  id="settings-audio-codec"
-                  bind:value={formatDraft.audio.codec_id}
-                  class="w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs text-neutral-100 focus:border-cyan-500 focus:outline-none"
-                >
+              </label>
+              <label class="pg-fl">
+                Codec
+                <select id="settings-audio-codec" bind:value={formatDraft.audio.codec_id} class="pg-field">
                   {#each audioCodecOptions as codec (codec)}
                     <option value={codec}>{codec}</option>
                   {/each}
                 </select>
-              </div>
-              <div>
-                <label for="settings-audio-bitrate" class="mb-2 block text-xs uppercase text-neutral-500">
-                  Bitrate kbps
-                </label>
+              </label>
+              <label class="pg-fl">
+                Bitrate kbps
                 <input
                   id="settings-audio-bitrate"
                   type="number"
@@ -1135,51 +1057,43 @@
                   max={selectedAudioFormat?.bitrate_max_kbps ?? undefined}
                   inputmode="numeric"
                   bind:value={formatDraft.audio.bitrate_kbps}
-                  class="w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-1.5 font-mono text-xs text-neutral-100 focus:border-cyan-500 focus:outline-none"
+                  class="pg-field pg-mono"
                 />
-              </div>
+              </label>
             </div>
           </section>
 
-          <section class="rounded border border-neutral-800 bg-neutral-900/40 p-3">
-            <div class="flex items-center justify-between gap-3">
-              <h3 class="text-sm font-medium text-neutral-100">Video</h3>
-              <span class="text-xs text-neutral-500">{formatRangeLabel(selectedVideoFormat?.crf_min, selectedVideoFormat?.crf_max)}</span>
+          <section class="pg-card" aria-labelledby="settings-format-video-heading">
+            <div class="set-cardhead">
+              <h3 id="settings-format-video-heading" class="set-h3">Video</h3>
+              <span class="pg-muted pg-small">
+                {formatRangeLabel(selectedVideoFormat?.crf_min, selectedVideoFormat?.crf_max)}
+              </span>
             </div>
-            <div class="mt-3 grid gap-3 md:grid-cols-4">
-              <div>
-                <label for="settings-video-container" class="mb-2 block text-xs uppercase text-neutral-500">
-                  Container
-                </label>
+            <div class="set-fields set-fields-card">
+              <label class="pg-fl">
+                Container
                 <select
                   id="settings-video-container"
                   bind:value={formatDraft.video.container_id}
                   onchange={normalizeVideoFormatDraft}
-                  class="w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs text-neutral-100 focus:border-cyan-500 focus:outline-none"
+                  class="pg-field"
                 >
                   {#each videoFormatOptions as option (option.value)}
                     <option value={option.value}>{option.label}</option>
                   {/each}
                 </select>
-              </div>
-              <div>
-                <label for="settings-video-codec" class="mb-2 block text-xs uppercase text-neutral-500">
-                  Codec
-                </label>
-                <select
-                  id="settings-video-codec"
-                  bind:value={formatDraft.video.codec_id}
-                  class="w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs text-neutral-100 focus:border-cyan-500 focus:outline-none"
-                >
+              </label>
+              <label class="pg-fl">
+                Codec
+                <select id="settings-video-codec" bind:value={formatDraft.video.codec_id} class="pg-field">
                   {#each videoCodecOptions as codec (codec)}
                     <option value={codec}>{codec}</option>
                   {/each}
                 </select>
-              </div>
-              <div>
-                <label for="settings-video-crf" class="mb-2 block text-xs uppercase text-neutral-500">
-                  CRF
-                </label>
+              </label>
+              <label class="pg-fl">
+                CRF
                 <input
                   id="settings-video-crf"
                   type="number"
@@ -1187,171 +1101,136 @@
                   max={selectedVideoFormat?.crf_max ?? undefined}
                   inputmode="numeric"
                   bind:value={formatDraft.video.crf}
-                  class="w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-1.5 font-mono text-xs text-neutral-100 focus:border-cyan-500 focus:outline-none"
+                  class="pg-field pg-mono"
                 />
-              </div>
-              <div>
-                <label for="settings-video-depth" class="mb-2 block text-xs uppercase text-neutral-500">
-                  Bit depth
-                </label>
-                <select
-                  id="settings-video-depth"
-                  bind:value={formatDraft.video.bit_depth}
-                  class="w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs text-neutral-100 focus:border-cyan-500 focus:outline-none"
-                >
+              </label>
+              <label class="pg-fl">
+                Bit depth
+                <select id="settings-video-depth" bind:value={formatDraft.video.bit_depth} class="pg-field">
                   {#each videoBitDepthOptions as bitDepth (bitDepth)}
                     <option value={bitDepth}>{bitDepth}</option>
                   {/each}
                 </select>
-              </div>
+              </label>
             </div>
           </section>
 
-          <section class="rounded border border-neutral-800 bg-neutral-900/40 p-3">
-            <h3 class="text-sm font-medium text-neutral-100">3D</h3>
-            <div class="mt-3 max-w-sm">
-              <label for="settings-three-d-format" class="mb-2 block text-xs uppercase text-neutral-500">
+          <section class="pg-card" aria-labelledby="settings-format-three-d-heading">
+            <div class="set-cardhead">
+              <h3 id="settings-format-three-d-heading" class="set-h3">3D</h3>
+            </div>
+            <div class="set-fields set-fields-card">
+              <label class="pg-fl">
                 Format
+                <select id="settings-three-d-format" bind:value={formatDraft.three_d.format_id} class="pg-field">
+                  {#each threeDFormatOptions as option (option.value)}
+                    <option value={option.value}>{option.label}</option>
+                  {/each}
+                </select>
               </label>
-              <select
-                id="settings-three-d-format"
-                bind:value={formatDraft.three_d.format_id}
-                class="w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs text-neutral-100 focus:border-cyan-500 focus:outline-none"
-              >
-                {#each threeDFormatOptions as option (option.value)}
-                  <option value={option.value}>{option.label}</option>
-                {/each}
-              </select>
             </div>
           </section>
         </div>
       </form>
 
-      <section class="border-t border-neutral-900 px-4 py-4">
-        <div class="mb-4">
-          <h2 class="text-sm font-semibold text-neutral-100">Managed Inference Runtimes</h2>
-          <div class="mt-1 text-xs text-neutral-500">
-            Install and select sidecar backends required by scheduler workflows, including llama.cpp.
-          </div>
+      <section class="pg-sec" aria-labelledby="settings-runtimes-heading">
+        <h2 id="settings-runtimes-heading" class="set-h2">Managed inference runtimes</h2>
+        <p class="pg-muted pg-small set-sub">
+          Install and select sidecar backends required by scheduler workflows, including llama.cpp.
+        </p>
+        <div class="set-stack set-block">
+          <ManagedRuntimePanel />
+          <ManagedBinaryOverviewPanel />
         </div>
-        <ManagedRuntimePanel />
-        <ManagedBinaryOverviewPanel />
       </section>
 
-      <section class="border-t border-neutral-900 px-4 py-4">
-        <div class="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 class="text-sm font-semibold text-neutral-100">Managed Media Dependencies</h2>
-            <div class="mt-1 text-xs text-neutral-500">
-              FFmpeg, ocioconvert, oiiotool, and OpenColorIO status/actions from backend commands
-            </div>
+      <section class="pg-sec" aria-labelledby="settings-media-heading">
+        <div class="set-sechead">
+          <div class="set-headtext">
+            <h2 id="settings-media-heading" class="set-h2">Managed media dependencies</h2>
+            <p class="pg-muted pg-small set-sub">
+              FFmpeg, ocioconvert, oiiotool, and OpenColorIO status and actions from backend commands
+            </p>
           </div>
           <button
             type="button"
-            class="inline-flex items-center gap-2 rounded border border-neutral-700 px-3 py-1.5 text-sm text-neutral-300 transition-colors hover:border-neutral-500 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
+            class="pg-btn"
             onclick={() => refreshSettingsPage()}
             disabled={loading || managedMediaActionKey !== null}
           >
-            <RefreshCw size={14} aria-hidden="true" class={loading ? 'animate-spin' : ''} />
-            Refresh Dependencies
+            {loading ? 'Refreshing dependencies' : 'Refresh dependencies'}
           </button>
         </div>
 
-        {#if managedMediaError}
-          <div class="mt-3 rounded border border-red-900 bg-red-950/40 px-3 py-2 text-sm text-red-200" role="alert">
-            {managedMediaError}
-          </div>
-        {:else if managedMediaMessage}
-          <div class="mt-3 rounded border border-emerald-900 bg-emerald-950/30 px-3 py-2 text-sm text-emerald-200" role="status">
-            {managedMediaMessage}
-          </div>
-        {/if}
+        {@render sectionNote(managedMediaError, managedMediaMessage)}
 
-        <div class="mt-4 grid gap-3">
+        <div class="set-stack set-block">
           {#each managedMediaDependencies as dependency (dependency.id)}
             {@const presentation = formatManagedMediaDependencyStatus(dependency)}
             {@const selectedVersionOptions = managedMediaVersionOptions(dependency)}
             {@const actionBusy = managedMediaActionInProgress(dependency.id)}
-            <section class="rounded border border-neutral-800 bg-neutral-900/40 p-3">
-              <div class="flex flex-wrap items-start justify-between gap-3">
-                <div class="min-w-0">
-                  <div class="flex flex-wrap items-center gap-2">
-                    <h3 class="text-sm font-medium text-neutral-100">{dependency.display_name}</h3>
-                    <span class={`inline-flex rounded border px-2 py-0.5 text-xs ${presentation.statusClass}`}>
-                      {presentation.readinessLabel}
-                    </span>
-                    <span class="inline-flex rounded border border-neutral-800 bg-neutral-950 px-2 py-0.5 text-xs text-neutral-300">
-                      {presentation.categoryLabel}
-                    </span>
+            {@const dependencyRows = buildManagedMediaDependencyRows(dependency)}
+            {@const rowSplit = Math.ceil(dependencyRows.length / 2)}
+            <section class="pg-card" aria-labelledby={`managed-media-heading-${dependency.id}`}>
+              <div class="set-sechead">
+                <div class="set-headtext">
+                  <div class="set-titleline">
+                    <h3 id={`managed-media-heading-${dependency.id}`} class="set-h3">{dependency.display_name}</h3>
+                    <Chip glyph={presentation.statusGlyph}>{presentation.readinessLabel}</Chip>
+                    <Chip>{presentation.categoryLabel}</Chip>
                   </div>
-                  <div class="mt-1 text-xs text-neutral-500">
-                    {dependency.catalog.source.owner}/{dependency.catalog.source.project} / {presentation.packageLabel} / {dependency.catalog.platform_key}
-                  </div>
+                  <p class="pg-muted pg-small set-sub">
+                    {dependency.catalog.source.owner}/{dependency.catalog.source.project}, {presentation.packageLabel},
+                    <span class="pg-mono">{dependency.catalog.platform_key}</span>
+                  </p>
                 </div>
                 <button
                   type="button"
-                  class="inline-flex items-center gap-2 rounded border border-neutral-700 px-2.5 py-1.5 text-xs text-neutral-300 transition-colors hover:border-neutral-500 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
+                  class="pg-btn pg-btn-sm"
+                  aria-label={`Refresh ${dependency.display_name}`}
                   onclick={() => refreshManagedMediaDependency(dependency.id)}
                   disabled={loading || actionBusy}
                 >
-                  <RefreshCw size={13} aria-hidden="true" class={actionBusy ? 'animate-spin' : ''} />
-                  Refresh
+                  {managedMediaActionKey === `${dependency.id}:refresh` ? 'Refreshing' : 'Refresh'}
                 </button>
               </div>
 
-              <dl class="mt-3 grid gap-2 text-xs md:grid-cols-3 xl:grid-cols-4">
-                {#each buildManagedMediaDependencyRows(dependency) as row (row.label)}
-                  <div class="min-w-0 border-b border-neutral-800 pb-2">
-                    <dt class="text-neutral-500">{row.label}</dt>
-                    <dd class:font-mono={row.mono} class="mt-1 truncate text-neutral-200" title={row.value}>
-                      {row.value}
-                    </dd>
-                  </div>
-                {/each}
-              </dl>
+              <div class="set-kvcols">
+                <KeyValue rows={dependencyRows.slice(0, rowSplit)} label={`${dependency.display_name} catalog`} />
+                <KeyValue rows={dependencyRows.slice(rowSplit)} label={`${dependency.display_name} versions`} />
+              </div>
 
               {#if dependency.missing_files.length > 0}
-                <div class="mt-3 rounded border border-amber-900 bg-amber-950/30 px-3 py-2 text-xs text-amber-200">
-                  Missing: {dependency.missing_files.join(', ')}
-                </div>
+                <p class="pg-muted pg-small set-note">Missing: {dependency.missing_files.join(', ')}</p>
               {/if}
 
-              <div class="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)]">
-                <div class="grid gap-3 md:grid-cols-2">
-                  <div>
-                    <label for={`managed-media-version-${dependency.id}`} class="mb-2 block text-xs uppercase text-neutral-500">
-                      Version
-                    </label>
-                    <input
-                      id={`managed-media-version-${dependency.id}`}
-                      type="text"
-                      bind:value={managedMediaDrafts[dependency.id].version}
-                      class="w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-1.5 font-mono text-xs text-neutral-100 placeholder:text-neutral-600 focus:border-cyan-500 focus:outline-none"
-                      placeholder={dependency.catalog.version}
-                    />
-                  </div>
-                  <div>
-                    <label for={`managed-media-staging-${dependency.id}`} class="mb-2 block text-xs uppercase text-neutral-500">
-                      Staging directory
-                    </label>
-                    <input
-                      id={`managed-media-staging-${dependency.id}`}
-                      type="text"
-                      bind:value={managedMediaDrafts[dependency.id].staging_dir}
-                      class="w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-1.5 font-mono text-xs text-neutral-100 placeholder:text-neutral-600 focus:border-cyan-500 focus:outline-none"
-                      placeholder="/path/to/staged/package"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label for={`managed-media-selected-${dependency.id}`} class="mb-2 block text-xs uppercase text-neutral-500">
-                    Installed version
-                  </label>
+              <div class="set-fields set-fields-media">
+                <label class="pg-fl">
+                  Version
+                  <input
+                    id={`managed-media-version-${dependency.id}`}
+                    type="text"
+                    bind:value={managedMediaDrafts[dependency.id].version}
+                    class="pg-field pg-mono"
+                    placeholder={dependency.catalog.version}
+                  />
+                </label>
+                <label class="pg-fl">
+                  Staging directory
+                  <input
+                    id={`managed-media-staging-${dependency.id}`}
+                    type="text"
+                    bind:value={managedMediaDrafts[dependency.id].staging_dir}
+                    class="pg-field pg-mono"
+                    placeholder="/path/to/staged/package"
+                  />
+                </label>
+                <label class="pg-fl">
+                  Installed version
                   <select
                     id={`managed-media-selected-${dependency.id}`}
                     bind:value={managedMediaDrafts[dependency.id].selected_version}
-                    class="w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs text-neutral-100 focus:border-cyan-500 focus:outline-none"
+                    class="pg-field"
                     disabled={selectedVersionOptions.length === 0}
                   >
                     {#if selectedVersionOptions.length === 0}
@@ -1365,13 +1244,13 @@
                       {/each}
                     {/if}
                   </select>
-                </div>
+                </label>
               </div>
 
-              <div class="mt-3 flex flex-wrap gap-2">
+              <div class="set-actions">
                 <button
                   type="button"
-                  class="inline-flex items-center gap-2 rounded border border-cyan-800 bg-cyan-950 px-2.5 py-1.5 text-xs text-cyan-100 transition-colors hover:border-cyan-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
+                  class="pg-btn pg-btn-sm"
                   onclick={() => installManagedMediaDependency(dependency)}
                   title={
                     managedMediaDrafts[dependency.id].staging_dir.trim().length === 0
@@ -1384,114 +1263,233 @@
                     managedMediaDrafts[dependency.id].staging_dir.trim().length === 0
                   }
                 >
-                  <Upload size={13} aria-hidden="true" />
-                  Install From Staging
+                  Install from staging
                 </button>
                 <button
                   type="button"
-                  class="inline-flex items-center gap-2 rounded border border-neutral-700 px-2.5 py-1.5 text-xs text-neutral-300 transition-colors hover:border-neutral-500 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
+                  class="pg-btn pg-btn-sm"
                   onclick={() => selectManagedMediaDependency(dependency)}
                   disabled={loading || actionBusy || selectedVersionOptions.length === 0}
                 >
-                  <Save size={13} aria-hidden="true" />
                   Select
                 </button>
                 <button
                   type="button"
-                  class="inline-flex items-center gap-2 rounded border border-neutral-700 px-2.5 py-1.5 text-xs text-neutral-300 transition-colors hover:border-neutral-500 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
+                  class="pg-btn pg-btn-sm"
                   onclick={() => setDefaultManagedMediaDependency(dependency)}
                   disabled={loading || actionBusy || selectedVersionOptions.length === 0}
                 >
-                  <Save size={13} aria-hidden="true" />
-                  Set Default
+                  Set default
                 </button>
                 <button
                   type="button"
-                  class="inline-flex items-center gap-2 rounded border border-emerald-800 bg-emerald-950/50 px-2.5 py-1.5 text-xs text-emerald-100 transition-colors hover:border-emerald-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
+                  class="pg-btn pg-btn-sm"
                   onclick={() => activateManagedMediaDependency(dependency)}
                   disabled={loading || actionBusy || selectedVersionOptions.length === 0}
                 >
-                  <Play size={13} aria-hidden="true" />
                   Activate
                 </button>
                 <button
                   type="button"
-                  class="inline-flex items-center gap-2 rounded border border-neutral-700 px-2.5 py-1.5 text-xs text-neutral-300 transition-colors hover:border-neutral-500 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
+                  class="pg-btn pg-btn-sm"
                   onclick={() => clearManagedMediaDependencySelection(dependency)}
                   disabled={loading || actionBusy || !dependency.selection.selected_version}
                 >
-                  <X size={13} aria-hidden="true" />
-                  Clear Selection
+                  Clear selection
                 </button>
                 <button
                   type="button"
-                  class="inline-flex items-center gap-2 rounded border border-red-900 bg-red-950/40 px-2.5 py-1.5 text-xs text-red-100 transition-colors hover:border-red-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
+                  class="pg-btn pg-btn-sm pg-btn-danger"
                   onclick={() => removeManagedMediaDependency(dependency)}
                   disabled={loading || actionBusy || selectedVersionOptions.length === 0}
                 >
-                  <Trash2 size={13} aria-hidden="true" />
-                  Remove Version
+                  Remove version
                 </button>
               </div>
             </section>
           {/each}
         </div>
       </section>
-    </div>
+    </Panel>
 
-    <aside class="min-h-0 overflow-auto border-t border-neutral-800 bg-neutral-950 xl:border-l xl:border-t-0">
-      <section class="border-b border-neutral-900 px-4 py-4">
-        <div class="flex items-center gap-2">
-          <Settings size={15} aria-hidden="true" class="text-cyan-300" />
-          <h2 class="text-sm font-semibold text-neutral-100">ArtifactStore Policy</h2>
-        </div>
-        <dl class="mt-3 space-y-2">
-          {#each policyRows as row (row.label)}
-            <div class="grid grid-cols-[9rem_1fr] gap-2 text-xs">
-              <dt class="text-neutral-500">{row.label}</dt>
-              <dd class:font-mono={row.mono} class="min-w-0 truncate text-neutral-200" title={row.value}>
-                {row.value}
-              </dd>
-            </div>
-          {/each}
-        </dl>
+    <Panel label="Settings summary" width="320px">
+      <section class="pg-sec" aria-labelledby="settings-summary-policy-heading">
+        <h2 id="settings-summary-policy-heading" class="set-h2">ArtifactStore policy</h2>
+        <KeyValue rows={policyRows} />
       </section>
 
-      <section class="border-b border-neutral-900 px-4 py-4">
-        <h2 class="text-sm font-semibold text-neutral-100">Diagnostics Retention</h2>
-        <dl class="mt-3 space-y-2">
-          {#each diagnosticsRetentionPolicyRows as row (row.label)}
-            <div class="grid grid-cols-[9rem_1fr] gap-2 text-xs">
-              <dt class="text-neutral-500">{row.label}</dt>
-              <dd class:font-mono={row.mono} class="min-w-0 truncate text-neutral-200" title={row.value}>
-                {row.value}
-              </dd>
-            </div>
-          {/each}
-        </dl>
+      <section class="pg-sec" aria-labelledby="settings-summary-retention-heading">
+        <h2 id="settings-summary-retention-heading" class="set-h2">Diagnostics retention</h2>
+        <KeyValue rows={diagnosticsRetentionPolicyRows} />
       </section>
 
-      <section class="px-4 py-4">
-        <h2 class="text-sm font-semibold text-neutral-100">Capabilities</h2>
-        <div class="mt-3 grid gap-2 text-xs">
-          <div class="flex items-center justify-between border-b border-neutral-900 pb-2">
-            <span class="text-neutral-500">Image</span>
-            <span class="font-mono text-neutral-200">{capabilityCount(capabilities?.image_formats)}</span>
-          </div>
-          <div class="flex items-center justify-between border-b border-neutral-900 pb-2">
-            <span class="text-neutral-500">Audio</span>
-            <span class="font-mono text-neutral-200">{capabilityCount(capabilities?.audio_formats)}</span>
-          </div>
-          <div class="flex items-center justify-between border-b border-neutral-900 pb-2">
-            <span class="text-neutral-500">Video</span>
-            <span class="font-mono text-neutral-200">{capabilityCount(capabilities?.video_formats)}</span>
-          </div>
-          <div class="flex items-center justify-between">
-            <span class="text-neutral-500">3D</span>
-            <span class="font-mono text-neutral-200">{capabilityCount(capabilities?.three_d_formats)}</span>
-          </div>
-        </div>
+      <section class="pg-sec" aria-labelledby="settings-summary-capabilities-heading">
+        <h2 id="settings-summary-capabilities-heading" class="set-h2">Capabilities</h2>
+        <KeyValue rows={capabilityRows} />
       </section>
-    </aside>
+    </Panel>
   </div>
-</section>
+</div>
+
+<style>
+  .set-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    gap: 14px;
+    align-items: stretch;
+  }
+
+  .set-head,
+  .set-sechead {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .set-headtext {
+    flex: 1 1 260px;
+    min-width: 0;
+  }
+
+  .set-h1 {
+    margin: 0;
+  }
+
+  .set-h2 {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--pg-text-bright);
+  }
+
+  .set-h3 {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--pg-text-bright);
+  }
+
+  .set-sub {
+    margin: 2px 0 0;
+  }
+
+  .set-note {
+    margin: 8px 0 0;
+  }
+
+  .set-block {
+    margin-top: 12px;
+  }
+
+  /* The panel top already draws a rule above the first section. */
+  .pg-sec:first-child {
+    border-top: 0;
+  }
+
+  .pg-sec .set-h2 + :global(.pg-kv) {
+    margin-top: 8px;
+  }
+
+  .set-cols {
+    margin-top: 12px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr));
+    gap: 14px;
+    align-items: start;
+  }
+
+  .set-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    min-width: 0;
+  }
+
+  .set-fields {
+    margin-top: 12px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 10px 14px;
+    align-items: end;
+  }
+
+  .set-fields-retention {
+    grid-template-columns: 12rem minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .set-fields-card {
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    margin-top: 10px;
+  }
+
+  .set-fields-media {
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  }
+
+  /* Outranks the shared `.pg-fl .pg-field` single-line height. */
+  .pg-fl textarea.set-textarea {
+    height: auto;
+    padding: 6px 10px;
+    resize: vertical;
+    line-height: 1.45;
+  }
+
+  .set-check {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 28px;
+    font-size: 13px;
+    color: var(--pg-text);
+    cursor: pointer;
+  }
+
+  .set-check input {
+    width: 15px;
+    height: 15px;
+    accent-color: var(--pg-text);
+  }
+
+  .set-card {
+    margin-top: 12px;
+  }
+
+  .set-cards {
+    margin-top: 12px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(380px, 100%), 1fr));
+    gap: 12px;
+  }
+
+  .set-cardhead {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .set-titleline {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .set-kvcols {
+    margin-top: 12px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
+    gap: 5px 24px;
+    align-items: start;
+  }
+
+  .set-actions {
+    margin-top: 12px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+</style>

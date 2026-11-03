@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+import type { IoArtifactProjectionRecord, ResolvedNodeIoRecord } from '../../services/diagnostics/types';
+import type { WorkflowGraphDiagnostic } from '../../services/workflow/types';
+
 import {
   assertCompleteIoArtifactImageRead,
   buildIoArtifactDescriptorMetadataRows,
@@ -36,6 +39,27 @@ import {
   isNormalResolvedNodeIoDisplayRow,
   isWorkflowInputArtifact,
   isWorkflowOutputArtifact,
+  IO_INSPECTOR_BOUNDARY_NODE_ID,
+  applyIoInspectorBackendFilter,
+  buildIoArtifactChipLabels,
+  buildIoArtifactDetailSections,
+  buildIoInspectorDimensionLabel,
+  buildIoInspectorNodeTree,
+  buildStaleGraphFactCards,
+  countIoInspectorEntriesByDirection,
+  createIoArtifactDownloadUrlOwner,
+  describeIoArtifactAcknowledgeUnavailable,
+  describeIoArtifactReadUnavailable,
+  describeIoArtifactStreamUnavailable,
+  filterIoInspectorNodeTree,
+  findIoInspectorEntry,
+  formatIoInspectorEntryDetail,
+  formatIoInspectorNodeSubLabel,
+  parseGraphCanvasViewBox,
+  partitionGraphDiagnosticsByNode,
+  resolveIoArtifactPreviewMode,
+  resolveIoInspectorSelectedEntryKey,
+  sentenceCaseLabel,
 } from './ioInspectorPresenters.ts';
 
 test('classifyIoArtifactMedia groups common artifact media types', () => {
@@ -793,4 +817,335 @@ test('retention cleanup detail rows expose backend cleanup status', () => {
   assert.equal(rows.find((row) => row.label === 'Expired')?.value, '12');
   assert.equal(rows.find((row) => row.label === 'Last Event Seq')?.value, '44');
   assert.deepEqual(buildRetentionCleanupDetailRows(null), []);
+});
+
+// --- Node and port tree (workbench redesign M3) -----------------------------
+
+
+function treeArtifact(overrides: Partial<IoArtifactProjectionRecord> & { artifact_id: string }): IoArtifactProjectionRecord {
+  return {
+    event_seq: 1,
+    event_id: `event-${overrides.artifact_id}`,
+    occurred_at_ms: 1_000,
+    recorded_at_ms: 1_000,
+    workflow_run_id: 'run-1',
+    workflow_id: 'wf',
+    artifact_role: 'node_output',
+    retention_state: 'retained',
+    ...overrides,
+  };
+}
+
+function resolved(overrides: Partial<ResolvedNodeIoRecord> & Pick<ResolvedNodeIoRecord, 'node_id' | 'port_id' | 'direction'>): ResolvedNodeIoRecord {
+  return { resolution: overrides.direction === 'input' ? 'derived_from_edge' : 'produced_output', ...overrides };
+}
+
+const promptText = treeArtifact({
+  artifact_id: 'art-prompt',
+  producer_node_id: 'prompt',
+  producer_port_id: 'text',
+  consumer_node_id: 'sample',
+  consumer_port_id: 'prompt',
+  media_type: 'text/plain',
+  payload_kind: 'text',
+  size_bytes: 412,
+});
+const decodedImage = treeArtifact({
+  artifact_id: 'art-image',
+  producer_node_id: 'decode',
+  producer_port_id: 'image',
+  media_type: 'image/png',
+  payload_kind: 'image',
+  size_bytes: 4 * 1_048_576,
+  artifact_role: 'workflow_output',
+});
+const latents = treeArtifact({
+  artifact_id: 'art-latents',
+  producer_node_id: 'sample',
+  producer_port_id: 'latents',
+  media_type: 'application/octet-stream',
+  payload_kind: 'generic_binary',
+  retention_state: 'metadata_only',
+  size_bytes: 33 * 1_048_576,
+});
+
+function sampleTree() {
+  return buildIoInspectorNodeTree({
+    graphNodes: [
+      { id: 'prompt', node_type: 'text-input' },
+      { id: 'sample', node_type: 'pytorch-inference' },
+      { id: 'decode', node_type: 'image-output' },
+      { id: 'unload', node_type: 'unload-model' },
+    ],
+    nodeStatuses: [
+      { node_id: 'prompt', status: 'completed' },
+      { node_id: 'sample', status: 'running' },
+      { node_id: 'unload', status: 'queued' },
+    ],
+    resolvedNodeIo: [
+      resolved({ node_id: 'prompt', port_id: 'text', direction: 'output', artifact_id: 'art-prompt' }),
+      resolved({
+        node_id: 'sample',
+        port_id: 'prompt',
+        direction: 'input',
+        artifact_id: 'art-prompt',
+        upstream_node_id: 'prompt',
+        upstream_port_id: 'text',
+      }),
+      resolved({ node_id: 'sample', port_id: 'latents', direction: 'output', artifact_id: 'art-latents' }),
+      resolved({ node_id: 'sample', port_id: '_data', direction: 'output', artifact_id: 'art-latents' }),
+    ],
+    // decodedImage has no resolved row: it must come from its producer metadata.
+    artifacts: [promptText, latents, decodedImage],
+  });
+}
+
+test('node tree lists snapshot nodes in graph order with inputs before outputs', () => {
+  const tree = sampleTree();
+  assert.deepEqual(tree.map((node) => node.nodeId), ['prompt', 'sample', 'decode', 'unload']);
+  const sample = tree[1];
+  assert.equal(sample.nodeType, 'pytorch-inference');
+  assert.equal(sample.status, 'running');
+  assert.deepEqual(
+    sample.entries.map((entry) => [entry.direction, entry.portId, entry.artifact.artifact_id]),
+    [
+      ['input', 'prompt', 'art-prompt'],
+      ['output', 'latents', 'art-latents'],
+    ],
+    'the _data diagnostic port is not listed',
+  );
+  const decode = tree[2];
+  assert.deepEqual(decode.entries.map((entry) => [entry.direction, entry.portId, entry.nodeIo]), [['output', 'image', null]]);
+  assert.deepEqual(tree[3].entries, []);
+});
+
+test('node tree puts artifacts with no node under a trailing workflow boundary group', () => {
+  const tree = buildIoInspectorNodeTree({
+    graphNodes: [{ id: 'a', node_type: 'x' }],
+    nodeStatuses: [],
+    resolvedNodeIo: [],
+    artifacts: [treeArtifact({ artifact_id: 'loose', artifact_role: 'workflow_input' })],
+  });
+  assert.deepEqual(tree.map((node) => [node.nodeId, node.boundary]), [['a', false], [IO_INSPECTOR_BOUNDARY_NODE_ID, true]]);
+  assert.equal(tree[1].entries[0].direction, 'input');
+  assert.equal(formatIoInspectorNodeSubLabel(tree[1]), '1 retained port');
+});
+
+test('node tree does not duplicate an artifact the resolved rows already place', () => {
+  const tree = sampleTree();
+  const promptEntries = tree.flatMap((node) => node.entries).filter((entry) => entry.artifact.artifact_id === 'art-prompt');
+  assert.deepEqual(promptEntries.map((entry) => `${entry.nodeId}:${entry.portId}`), ['prompt:text', 'sample:prompt']);
+  assert.equal(new Set(tree.flatMap((node) => node.entries.map((entry) => entry.key))).size, 4);
+});
+
+test('direction and search filters narrow entries and count per direction', () => {
+  const tree = sampleTree();
+  assert.deepEqual(countIoInspectorEntriesByDirection(tree), { all: 4, input: 1, output: 3 });
+
+  const inputs = filterIoInspectorNodeTree(tree, { direction: 'input', search: '' });
+  assert.equal(inputs.length, 4, 'nodes stay listed without search text');
+  assert.deepEqual(countIoInspectorEntriesByDirection(inputs), { all: 1, input: 1, output: 0 });
+
+  const byPort = filterIoInspectorNodeTree(tree, { direction: 'all', search: 'LATENT' });
+  assert.deepEqual(byPort.map((node) => [node.nodeId, node.entries.map((entry) => entry.portId)]), [['sample', ['latents']]]);
+
+  const byNodeType = filterIoInspectorNodeTree(tree, { direction: 'all', search: 'image-output' });
+  assert.deepEqual(byNodeType.map((node) => node.nodeId), ['decode']);
+
+  const byArtifactId = filterIoInspectorNodeTree(tree, { direction: 'output', search: 'art-prompt' });
+  assert.deepEqual(byArtifactId.map((node) => node.nodeId), ['prompt']);
+});
+
+test('selection keeps the chosen entry and otherwise prefers an image output', () => {
+  const tree = sampleTree();
+  const imageKey = resolveIoInspectorSelectedEntryKey(null, tree);
+  assert.equal(findIoInspectorEntry(tree, imageKey)?.artifact.artifact_id, 'art-image');
+
+  const latentsKey = tree[1].entries[1].key;
+  assert.equal(resolveIoInspectorSelectedEntryKey(latentsKey, tree), latentsKey);
+  assert.equal(resolveIoInspectorSelectedEntryKey('gone', tree), imageKey, 'a vanished entry falls back');
+
+  const noImage = buildIoInspectorNodeTree({ graphNodes: [], nodeStatuses: [], resolvedNodeIo: [], artifacts: [promptText] });
+  assert.equal(findIoInspectorEntry(noImage, resolveIoInspectorSelectedEntryKey(null, noImage))?.direction, 'output');
+  assert.equal(resolveIoInspectorSelectedEntryKey('x', []), null);
+  assert.equal(findIoInspectorEntry(tree, null), null);
+});
+
+test('node and entry labels read as sentences', () => {
+  const tree = sampleTree();
+  assert.equal(formatIoInspectorNodeSubLabel(tree[0]), 'Succeeded, 1 retained port');
+  assert.equal(formatIoInspectorNodeSubLabel(tree[1], 2), 'Running, 2 retained ports, 2 stale graph facts');
+  assert.equal(formatIoInspectorNodeSubLabel(tree[2]), 'No status recorded, 1 retained port');
+  assert.equal(formatIoInspectorNodeSubLabel(tree[3]), 'Queued, not reached yet');
+  assert.equal(formatIoInspectorEntryDetail(decodedImage), 'Image, payload retained');
+  assert.equal(formatIoInspectorEntryDetail(latents), 'Generic binary, metadata retained only');
+  assert.equal(formatIoInspectorEntryDetail({ ...promptText, lifecycle_state: 'streaming' }), 'Text, streaming');
+  assert.deepEqual(buildIoArtifactChipLabels(decodedImage), ['Workflow output', 'Image', 'Payload retained', 'image/png, 4.0 MiB']);
+});
+
+test('dimension line counts nodes, artifacts and kept payload bytes', () => {
+  assert.equal(
+    buildIoInspectorDimensionLabel({ runId: 'run-1', nodeCount: 4, artifacts: [promptText, latents, decodedImage] }),
+    'run-1, 4 nodes, 3 retained artifacts, 4.0 MiB of payloads kept',
+  );
+  assert.equal(
+    buildIoInspectorDimensionLabel({ runId: 'run-1', nodeCount: 1, artifacts: [] }),
+    'run-1, 1 node, 0 retained artifacts, 0 B of payloads kept',
+  );
+  assert.equal(
+    buildIoInspectorDimensionLabel({ runId: 'run-1', nodeCount: 1, artifacts: [], freshness: 'Current at seq 12' }),
+    'run-1, 1 node, 0 retained artifacts, 0 B of payloads kept, projection current at seq 12',
+  );
+});
+
+test('backend filter keeps matching artifacts and the resolved rows that point at them', () => {
+  const cuda = treeArtifact({ artifact_id: 'a', artifact_fact_id: 'fact-a', selected_backend_key: 'cuda' });
+  const cpu = treeArtifact({ artifact_id: 'b', payload_artifact_id: 'payload-b', selected_backend_key: 'cpu' });
+  const rows = [
+    resolved({ node_id: 'n', port_id: 'p', direction: 'output', artifact_fact_id: 'fact-a' }),
+    resolved({ node_id: 'n', port_id: 'q', direction: 'output', payload_artifact_id: 'payload-b' }),
+  ];
+  const unfiltered = applyIoInspectorBackendFilter([cuda, cpu], rows, '  ');
+  assert.equal(unfiltered.artifacts.length, 2);
+  assert.equal(unfiltered.resolvedNodeIo.length, 2);
+  const filtered = applyIoInspectorBackendFilter([cuda, cpu], rows, ' cuda ');
+  assert.deepEqual(filtered.artifacts.map((artifact) => artifact.artifact_id), ['a']);
+  assert.deepEqual(filtered.resolvedNodeIo.map((row) => row.port_id), ['p']);
+});
+
+test('detail sections split origin, making and storage facts', () => {
+  const sections = buildIoArtifactDetailSections(
+    {
+      artifact: {
+        ...decodedImage,
+        runtime_id: 'diffusers',
+        selected_backend_key: 'cuda',
+        read_handle: 'artifact-read://x',
+        lifecycle_state: 'retained',
+        access_modes: ['read', 'download'],
+        content_hash: 'sha256:abc',
+        format: { format_id: 'png', media_type: 'image/png', bit_depth: '8-bit' },
+      },
+      nodeIo: null,
+      direction: 'output',
+      portId: 'image',
+    },
+    (ms) => `t${ms}`,
+  );
+  assert.deepEqual(sections.origin.map((row) => [row.key, row.value]), [
+    ['Producer', 'decode:image'],
+    ['Consumer', 'Unavailable'],
+    ['Direction', 'Output'],
+    ['Observed', 't1000'],
+    ['Provenance', 'From artifact metadata; no resolved node I/O row'],
+  ]);
+  assert.deepEqual(sections.making.map((row) => row.key), ['Runtime', 'Backend', 'Format', 'Format media', 'Bit depth']);
+  assert.deepEqual(sections.storage.map((row) => row.key), [
+    'Payload kind',
+    'Lifecycle',
+    'Access',
+    'Read handle',
+    'Retention',
+    'Availability',
+    'Size',
+    'Payload ref',
+    'Content hash',
+  ]);
+  const withRow = buildIoArtifactDetailSections(
+    { artifact: promptText, nodeIo: resolved({ node_id: 'sample', port_id: 'prompt', direction: 'input', upstream_node_id: 'prompt', upstream_port_id: 'text' }), direction: 'input', portId: 'prompt' },
+    String,
+  );
+  assert.equal(withRow.origin.find((row) => row.key === 'Provenance')?.value, 'From prompt:text');
+  assert.equal(withRow.making[0].key, 'Backend', 'backend is always shown');
+  assert.equal(sentenceCaseLabel('Conversion Command'), 'Conversion command');
+  assert.equal(sentenceCaseLabel('CRF'), 'CRF');
+});
+
+test('preview mode follows the media family and the loaded body', () => {
+  assert.equal(resolveIoArtifactPreviewMode('image', null), 'none');
+  assert.equal(resolveIoArtifactPreviewMode('image', { text: null }), 'image');
+  assert.equal(resolveIoArtifactPreviewMode('audio', { text: null }), 'audio');
+  assert.equal(resolveIoArtifactPreviewMode('json', { text: '{}' }), 'text');
+  assert.equal(resolveIoArtifactPreviewMode('text', { text: '' }), 'text');
+  assert.equal(resolveIoArtifactPreviewMode('video', { text: null }), 'binary');
+  assert.equal(resolveIoArtifactPreviewMode('file', {}), 'binary');
+});
+
+test('disabled artifact actions explain why', () => {
+  assert.equal(describeIoArtifactReadUnavailable({ retention_state: 'retained', read_handle: 'h' }), null);
+  assert.equal(
+    describeIoArtifactReadUnavailable({ retention_state: 'metadata_only' }),
+    'Metadata retained only, so there is no body to read.',
+  );
+  assert.equal(
+    describeIoArtifactReadUnavailable({ retention_state: 'retained', read_handle: 'h', lifecycle_state: 'streaming' }),
+    'The body is streaming; it can be read once it is retained.',
+  );
+  assert.match(describeIoArtifactReadUnavailable({ retention_state: 'retained' }) ?? '', /did not grant/);
+  assert.equal(describeIoArtifactStreamUnavailable({ stream_handle: 's' }), null);
+  assert.equal(describeIoArtifactStreamUnavailable({}), 'This body was not written as a stream.');
+  assert.equal(describeIoArtifactAcknowledgeUnavailable({ artifact_id: 'a', retention_state: 'retained' }), null);
+  assert.match(describeIoArtifactAcknowledgeUnavailable({ artifact_id: 'a', retention_state: 'expired' }) ?? '', /retained/);
+});
+
+test('stale graph facts become muted cards, grouped by node', () => {
+  const diagnostics: WorkflowGraphDiagnostic[] = [
+    { code: 'unknown_node_type', severity: 'error', scope: 'node', node_id: 'sample', message: 'Node type is not registered.', blocking_submission: true },
+    { code: 'unknown_node_type', severity: 'error', scope: 'node', node_id: 'sample', message: 'Node type is not registered.', blocking_submission: true },
+    { code: 'duplicate_edge_id', severity: 'warning', scope: 'graph', message: 'Two edges share an id.', blocking_submission: false },
+  ];
+  const cards = buildStaleGraphFactCards(diagnostics);
+  assert.equal(cards.length, 2, 'duplicates collapse');
+  assert.deepEqual(cards[0], {
+    key: cards[0].key,
+    title: 'Unknown node type',
+    code: 'Error, unknown_node_type',
+    explanation: 'Node type is not registered.',
+    suggestion: 'Try: open the workflow in Graph and fix this node before running it again.',
+  });
+  assert.equal(cards[1].suggestion, null);
+  const parts = partitionGraphDiagnosticsByNode(diagnostics);
+  assert.equal(parts.graph.length, 1);
+  assert.equal(parts.byNodeId.get('sample')?.length, 2);
+});
+
+test('canvas view box parses strings and objects and falls back when malformed', () => {
+  assert.deepEqual(parseGraphCanvasViewBox('-96 -10 400 300'), { x: -96, y: -10, width: 400, height: 300 });
+  assert.deepEqual(parseGraphCanvasViewBox({ x: 1, y: 2, width: 3, height: 4 }), { x: 1, y: 2, width: 3, height: 4 });
+  assert.deepEqual(parseGraphCanvasViewBox('nope'), { x: 0, y: 0, width: 640, height: 360 });
+  assert.deepEqual(parseGraphCanvasViewBox('0 0 0 10'), { x: 0, y: 0, width: 640, height: 360 });
+  assert.deepEqual(parseGraphCanvasViewBox(undefined), { x: 0, y: 0, width: 640, height: 360 });
+});
+
+test('download URL owner revokes after the delay or on dispose, exactly once', () => {
+  const revoked: string[] = [];
+  const timers = new Map<number, () => void>();
+  let nextHandle = 1;
+  const owner = createIoArtifactDownloadUrlOwner({
+    delayMs: 30_000,
+    revoke: (url) => revoked.push(url),
+    schedule: (callback) => {
+      const handle = nextHandle++;
+      timers.set(handle, callback);
+      return handle;
+    },
+    cancel: (handle) => timers.delete(handle),
+  });
+
+  owner.release('blob:a');
+  owner.release('blob:b');
+  assert.equal(owner.pendingCount(), 2);
+  timers.get(1)?.();
+  timers.delete(1);
+  assert.deepEqual(revoked, ['blob:a']);
+  assert.equal(owner.pendingCount(), 1);
+
+  owner.dispose();
+  assert.deepEqual(revoked, ['blob:a', 'blob:b']);
+  assert.equal(timers.size, 0, 'pending timers are cancelled');
+  assert.equal(owner.pendingCount(), 0);
+
+  owner.release('blob:late');
+  assert.deepEqual(revoked, ['blob:a', 'blob:b', 'blob:late'], 'a URL released after dispose is revoked at once');
+  assert.equal(timers.size, 0);
 });

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { AlertTriangle, Loader2, Send } from 'lucide-svelte';
+  import type { Snippet } from 'svelte';
   import {
     isDirty,
     isExecuting,
@@ -7,6 +7,7 @@
     clearNodeRuntimeData,
     clearStreamContent,
     edges,
+    nodes,
     workflowGraph,
     setNodeExecutionState,
     updateNodeRuntimeData,
@@ -18,6 +19,7 @@
     currentGraphId,
     currentGraphType,
     currentSessionId,
+    graphSessionError,
     isReadOnly,
   } from '../stores/graphSessionStore';
   import { workflowService } from '../services/workflow/WorkflowService';
@@ -36,6 +38,15 @@
     setWorkbenchPage,
   } from '../stores/workbenchStore';
   import { formatWorkflowCommandError } from './workbench/workflowErrorPresenters';
+  import {
+    formatEditCurrentLabel,
+    formatEditDimensionLabel,
+    formatWorkflowSaveLine,
+    type GraphPageMode,
+  } from './workbench/graphInspectionPresenters';
+  import Chip from './workbench/ui/Chip.svelte';
+  import StatusGlyph from './workbench/ui/StatusGlyph.svelte';
+  import type { GlyphState } from './workbench/ui/statusGlyph';
   import WorkflowPersistenceControls from './WorkflowPersistenceControls.svelte';
   import {
     applyWorkflowToolbarEvent,
@@ -53,7 +64,33 @@
     workflowValidationProjectionOverlays,
   } from './workflowValidationProjectionOverlays';
 
+  /** The selected run as the toolbar shows it in run mode. */
+  interface ToolbarRun {
+    runId: string;
+    workflowId: string | null;
+    version: string | null;
+    glyph: GlyphState;
+  }
+
+  interface Props {
+    mode: GraphPageMode;
+    run: ToolbarRun | null;
+    /** Dimension line text in run mode; edit mode builds its own from the editor. */
+    runDimLabel: string;
+    modeSwitch: Snippet;
+    panelToggles: Snippet;
+    /** A workflow was picked in the selector: the page switches to editing it. */
+    onworkflowpicked: () => void;
+    /** "Edit current vX" in run mode. */
+    oneditcurrent: () => void;
+  }
+
+  let { mode, run, runDimLabel, modeSwitch, panelToggles, onworkflowpicked, oneditcurrent }: Props =
+    $props();
+
   const DEFAULT_WORKFLOW_SEMANTIC_VERSION = '0.1.0';
+  const SAVE_AS_NEW_UNAVAILABLE =
+    'Creating a workflow from a run snapshot is not available yet: no service saves a run graph as a new workflow.';
   const WORKFLOW_SEMANTIC_VERSION_STORAGE_KEY_PREFIX = 'pantograph.workflowSemanticVersion.';
   const MAX_WORKFLOW_VERSION_CONFLICT_RETRIES = 25;
 
@@ -65,6 +102,7 @@
   let waitingForInput = $state(false);
   let currentValidationSummary = $state<WorkflowGraphCurrentValidationSummaryResponse | null>(null);
   let currentValidationSummaryKey = $state<string | null>(null);
+  let persistenceError = $state<string | null>(null);
 
   let currentSavedWorkflow = $derived(
     $currentGraphType === 'workflow'
@@ -88,6 +126,29 @@
   );
   let submitDisabled = $derived(submitDisabledReason !== null);
   let submitTitle = $derived(submitDisabledReason ?? 'Submit workflow to the scheduler');
+  let loadedWorkflowId = $derived($currentGraphType === 'workflow' ? $currentGraphId : null);
+  let saveLine = $derived(
+    formatWorkflowSaveLine({
+      isDirty: $isDirty,
+      savedModifiedAt: currentSavedWorkflow?.modified ?? null,
+    }),
+  );
+  let dimLabel = $derived(
+    mode === 'run'
+      ? runDimLabel
+      : formatEditDimensionLabel(
+          $isReadOnly ? null : workflowSemanticVersion,
+          $nodes.length,
+          $edges.length,
+        ),
+  );
+  let editCurrentVersion = $derived(
+    run?.workflowId
+      ? run.workflowId === loadedWorkflowId
+        ? workflowSemanticVersion
+        : readStoredWorkflowSemanticVersionOrNull(run.workflowId)
+      : null,
+  );
   let workflowErrorMessage = $derived(workflowError ? formatWorkflowCommandError(workflowError) : null);
   let workflowErrorDiagnostics = $derived(workflowError?.diagnostics ?? null);
   let canOpenWorkflowErrorDiagnostics = $derived(
@@ -111,6 +172,15 @@
         : DEFAULT_WORKFLOW_SEMANTIC_VERSION;
     } catch {
       return DEFAULT_WORKFLOW_SEMANTIC_VERSION;
+    }
+  }
+
+  function readStoredWorkflowSemanticVersionOrNull(workflowId: string): string | null {
+    try {
+      const stored = localStorage.getItem(workflowSemanticVersionStorageKey(workflowId));
+      return stored && isNumericWorkflowSemanticVersion(stored) ? stored : null;
+    } catch {
+      return null;
     }
   }
 
@@ -393,25 +463,45 @@
 
 </script>
 
-<div>
-  <div class="workflow-toolbar h-12 px-4 bg-neutral-900 border-b border-neutral-700 flex items-center justify-between">
-    <WorkflowPersistenceControls />
+<div class="wt">
+  <div class="wt-row">
+    {@render modeSwitch()}
 
-    <div class="flex items-center gap-2">
-      {#if $isReadOnly}
-        <span class="text-xs text-neutral-500 bg-neutral-800 px-2 py-0.5 rounded">(read-only)</span>
-      {/if}
-      {#if $isDirty && !$isReadOnly}
-        <span class="text-amber-400 text-sm" title="Unsaved changes">*</span>
-      {/if}
-    </div>
+    <WorkflowPersistenceControls
+      {mode}
+      editVersion={workflowSemanticVersion}
+      runWorkflow={run?.workflowId ? { workflowId: run.workflowId, version: run.version } : null}
+      {onworkflowpicked}
+      onactionerror={(message) => (persistenceError = message)}
+    >
+      {#snippet middle()}
+        {#if mode === 'edit'}
+          {#if $isReadOnly}
+            <Chip title="System graphs cannot be changed or submitted">read-only system graph</Chip>
+          {:else}
+            <span class="wt-save" class:wt-dirty={$isDirty} role="status">{saveLine}</span>
+          {/if}
+        {:else}
+          <span class="wt-ro">
+            {#if run}<StatusGlyph state={run.glyph} />{/if}
+            read-only, as it ran
+          </span>
+        {/if}
+        <div class="pg-dim wt-dim" title={dimLabel}>
+          <span class="pg-dim-label" title={dimLabel}>{dimLabel}</span>
+        </div>
+        {@render panelToggles()}
+        <span class="wt-vdiv" aria-hidden="true"></span>
+      {/snippet}
+    </WorkflowPersistenceControls>
 
-    <div class="flex items-center gap-2">
-      <label class="flex items-center gap-2 text-xs text-neutral-400">
+    {#if mode === 'edit'}
+      <label class="wt-version">
         Version
         <input
           data-testid="workflow-semantic-version-input"
-          class="h-8 w-24 rounded border bg-neutral-950 px-2 font-mono text-xs text-neutral-200 outline-none transition-colors focus:border-cyan-500 {workflowSemanticVersionInvalid ? 'border-red-600' : 'border-neutral-700'}"
+          class="pg-field pg-mono wt-version-input"
+          class:wt-invalid={workflowSemanticVersionInvalid}
           bind:value={workflowSemanticVersion}
           disabled={$isExecuting}
           title="Workflow semantic version for run attribution"
@@ -421,62 +511,182 @@
       </label>
       <button
         type="button"
-        class="h-8 rounded border border-neutral-700 px-2 text-xs text-neutral-300 transition-colors hover:border-neutral-500 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
+        class="pg-tgl wt-patch"
         onclick={bumpWorkflowSemanticVersion}
         disabled={$isExecuting}
         title="Increment workflow patch version"
       >
         +patch
       </button>
-      <button type="button"
+      <button
+        type="button"
         data-testid="workflow-submit-button"
-        class="px-4 py-1.5 text-sm rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        class:bg-green-600={!$isExecuting}
-        class:hover:bg-green-500={!$isExecuting}
-        class:bg-amber-600={$isExecuting}
-        class:text-white={true}
+        class="pg-btn pg-btn-primary"
         onclick={handleSubmit}
         disabled={submitDisabled}
         title={submitTitle}
         aria-describedby={submitDisabledReason ? 'workflow-submit-disabled-reason' : undefined}
       >
-        {#if $isExecuting}
-          <Loader2 size={14} aria-hidden="true" class="inline-block align-[-2px] mr-1" />
-          Submitting...
-        {:else}
-          <Send size={14} aria-hidden="true" class="inline-block align-[-2px] mr-1" />
-          Submit
-        {/if}
+        {$isExecuting ? 'Submitting…' : 'Submit run'}
       </button>
-    </div>
+    {:else}
+      <button
+        type="button"
+        class="pg-btn"
+        onclick={oneditcurrent}
+        title={run?.workflowId
+          ? `Opens the saved ${run.workflowId} for editing`
+          : 'This run names no saved workflow'}
+        disabled={!run?.workflowId}
+      >
+        {formatEditCurrentLabel(editCurrentVersion)}
+      </button>
+      <button
+        type="button"
+        class="pg-btn"
+        aria-disabled="true"
+        title={SAVE_AS_NEW_UNAVAILABLE}
+      >
+        Save as new workflow
+      </button>
+    {/if}
   </div>
 
-  {#if submitDisabledReason && !$isExecuting}
-    <div
+  {#if mode === 'edit' && submitDisabledReason && !$isExecuting}
+    <p
       id="workflow-submit-disabled-reason"
       data-testid="workflow-submit-disabled-reason"
-      class="border-b border-amber-900 bg-amber-950/40 px-4 py-2 text-xs text-amber-200"
+      class="wt-note"
     >
       Submit unavailable: {submitDisabledReason}
-    </div>
+    </p>
   {/if}
 
-  {#if workflowErrorMessage}
-    <div class="flex items-center justify-between gap-3 border-b border-red-700 bg-red-900/70 px-4 py-2 text-xs text-red-200">
-      <div class="min-w-0 truncate" title={workflowErrorMessage} data-testid="workflow-submit-error">
+  {#if mode === 'edit' && workflowErrorMessage}
+    <div class="wt-note wt-error">
+      <StatusGlyph state="failed" />
+      <span class="wt-error-text" title={workflowErrorMessage} data-testid="workflow-submit-error">
         Workflow submit failed: {workflowErrorMessage}
-      </div>
+      </span>
       {#if canOpenWorkflowErrorDiagnostics}
         <button
           type="button"
-          class="inline-flex shrink-0 items-center gap-1 rounded border border-red-500 px-2 py-1 text-red-100 transition-colors hover:border-red-300 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
+          class="pg-btn pg-btn-sm"
           onclick={openWorkflowErrorDiagnostics}
           aria-label="Open workflow diagnostics for this submit error"
         >
-          <AlertTriangle size={13} aria-hidden="true" />
           Diagnostics
         </button>
       {/if}
     </div>
   {/if}
+
+  {#if persistenceError}
+    <div class="wt-note wt-error">
+      <StatusGlyph state="failed" />
+      <span class="wt-error-text" title={persistenceError}>{persistenceError}</span>
+    </div>
+  {/if}
+
+  {#if $graphSessionError && $graphSessionError !== persistenceError}
+    <div class="wt-note wt-error" data-testid="graph-session-error">
+      <StatusGlyph state="failed" />
+      <span class="wt-error-text" title={$graphSessionError}>{$graphSessionError}</span>
+    </div>
+  {/if}
 </div>
+
+<style>
+  .wt {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: none;
+  }
+
+  .wt-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 0 2px;
+  }
+
+  .wt-save,
+  .wt-ro {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12.5px;
+    color: var(--pg-text-muted);
+    white-space: nowrap;
+  }
+
+  .wt-save.wt-dirty {
+    color: var(--pg-text);
+  }
+
+  /* The dimension line gives way first when the Assistant panel narrows the page. */
+  .wt-dim {
+    flex: 1 1 32px;
+    min-width: 32px;
+    container-type: inline-size;
+  }
+
+  /* Too narrow for a readable summary: keep the rule, drop the words (still in the title). */
+  @container (max-width: 140px) {
+    .wt-dim :global(.pg-dim-label) {
+      display: none;
+    }
+  }
+
+  .wt-vdiv {
+    width: 1px;
+    height: 18px;
+    margin: 0 4px;
+    background: var(--pg-border);
+    flex: none;
+  }
+
+  .wt-version {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12.5px;
+    color: var(--pg-text-muted);
+  }
+
+  .wt-version-input {
+    width: 76px;
+    font-size: 12px;
+  }
+
+  .wt-version-input.wt-invalid {
+    border-color: var(--pg-danger);
+  }
+
+  .wt-patch {
+    height: 30px;
+  }
+
+  .wt-note {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    font-size: 12.5px;
+    color: var(--pg-text-muted);
+    min-width: 0;
+  }
+
+  .wt-error {
+    color: var(--pg-text);
+  }
+
+  .wt-error-text {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+</style>

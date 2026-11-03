@@ -1,5 +1,6 @@
 <script lang="ts">
   import BaseNode from '../BaseNode.svelte';
+  import NodeHeaderTitle from './NodeHeaderTitle.svelte';
   import type { NodeDefinition } from '../../../services/workflow/types';
   import { updateNodeData, edges } from '../../../stores/workflowStore';
 
@@ -68,42 +69,24 @@
 <div class="vector-input-node-wrapper">
   <BaseNode {id} {data} {selected}>
     {#snippet header()}
-      <div class="flex items-center gap-2">
-        <div class="w-5 h-5 rounded bg-indigo-600 flex items-center justify-center flex-shrink-0">
-          <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9h8M8 15h5M4 6h16v12H4z" />
-          </svg>
-        </div>
-        <span class="text-sm font-medium text-neutral-200">{data.label || 'Vector Input'}</span>
-      </div>
+      <NodeHeaderTitle label={data.label || 'Vector Input'} />
     {/snippet}
 
       {#if isVectorConnected}
-        <div class="text-xs text-neutral-400 italic py-1">
+        <div class="text-xs text-pg-text-muted italic py-1">
           Connected to upstream vector
         </div>
       {:else}
         <textarea
-          class="w-full bg-neutral-900 border border-neutral-600 rounded px-2 py-1 text-xs text-neutral-200 resize-none focus:outline-none focus:border-indigo-500"
+          class="w-full bg-pg-panel-sunken border border-pg-border rounded px-2 py-1 text-xs text-pg-text resize-none"
           rows="3"
           placeholder="[0.1, 0.2, 0.3]"
           value={vectorText}
           oninput={handleInput}
         ></textarea>
         {#if parseError}
-          <div class="mt-1 text-[10px] text-red-300">{parseError}</div>
+          <div class="mt-1 text-[10px] text-pg-danger">{parseError}</div>
         {/if}
       {/if}
   </BaseNode>
 </div>
-
-<style>
-  .vector-input-node-wrapper :global(.base-node) {
-    border-color: rgba(79, 70, 229, 0.5);
-  }
-
-  .vector-input-node-wrapper :global(.node-header) {
-    background-color: rgba(79, 70, 229, 0.2);
-    border-color: rgba(79, 70, 229, 0.3);
-  }
-</style>

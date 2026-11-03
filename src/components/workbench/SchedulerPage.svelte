@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { ChevronsUp, RefreshCw, ShieldAlert, SlidersHorizontal, XCircle } from 'lucide-svelte';
+  import { RefreshCw } from 'lucide-svelte';
   import type {
     IoArtifactRetentionSummaryRecord,
     ProjectionStateRecord,
@@ -10,69 +10,86 @@
   } from '../../services/diagnostics/types';
   import { subscribeDiagnosticsProjectionInvalidations } from '../../services/workflow/WorkflowProjectionSubscriptionService';
   import { workflowService } from '../../services/workflow/WorkflowService';
+  import { activeWorkflowRun, setWorkbenchPage, type WorkbenchPageId } from '../../stores/workbenchStore';
   import {
-    activeWorkflowRun,
-    selectActiveWorkflowRun,
-    setWorkbenchPage,
-  } from '../../stores/workbenchStore';
-  import {
+    DEFAULT_SCHEDULER_RUN_FILTERS,
+    clearSchedulerSecondaryFilters,
+    resetSchedulerRunFilters,
     schedulerRunFilters,
+    schedulerViewPreferences,
     setSchedulerRunFilters,
-    SCHEDULER_SORT_OPTIONS,
-    SCHEDULER_STATUS_FILTERS,
-    type SchedulerSortKey,
-    type SchedulerStatusFilter,
+    type SchedulerRunFilters,
+    type SchedulerSecondaryFilterKey,
   } from '../../stores/schedulerRunListStore';
   import {
-    buildSchedulerEstimateRows,
-    buildSchedulerRetentionSummaryRows,
-    buildSchedulerTimelineAttemptRows,
-    buildSchedulerRunListQuery,
-    filterSchedulerTimelineEvents,
+    buildSchedulerFilterFields,
+    buildSchedulerQueueSummary,
+    buildSchedulerStatusSegments,
     filterAndSortSchedulerRuns,
-    formatSchedulerProjectionFreshness,
-    formatSchedulerPolicyLabel,
-    formatSchedulerRetentionLabel,
+    filterSchedulerRunsBySegment,
+    filterSchedulerTimelineEvents,
+    formatSchedulerClockTime,
     formatSchedulerTimelineKind,
     formatSchedulerTimelineSource,
-    formatSchedulerDuration,
-    formatSchedulerDevicePlacementLabel,
-    formatSchedulerEstimateLabel,
-    formatSchedulerModelCacheState,
-    formatSchedulerPlacementLabel,
-    formatSchedulerRuntimePlacementLabel,
     formatSchedulerTimestamp,
-    formatSchedulerPriority,
-    formatSchedulerQueuePosition,
-    formatSchedulerReasonLabel,
-    formatSchedulerStatusLabel,
-    schedulerStatusClass,
-    schedulerAcceptedDateFilterOptions,
-    schedulerBucketFilterOptions,
-    schedulerClientFilterOptions,
-    schedulerClientSessionFilterOptions,
-    schedulerPolicyFilterOptions,
-    schedulerRetentionFilterOptions,
-    schedulerSelectedBackendFilterOptions,
-    schedulerSelectedDeviceClassFilterOptions,
-    schedulerSelectedDeviceFilterOptions,
-    schedulerSelectedNetworkNodeFilterOptions,
-    schedulerSelectedRuntimeFilterOptions,
-    schedulerSelectedRuntimeVariantFilterOptions,
-    formatSchedulerScopeLabel,
+    groupSchedulerRuns,
+    schedulerAdminControlsUnavailableReason,
+    schedulerAppliedFilterChips,
+    schedulerDetailFreshnessText,
+    schedulerEstimateSentence,
+    schedulerFooterState,
+    schedulerQueueControlsUnavailableReason,
+    schedulerResumeUnavailableReason,
+    schedulerRetentionPolicyText,
+    schedulerRetentionText,
+    schedulerRunDetailChips,
+    schedulerRunPlacementText,
+    schedulerRunPolicyText,
+    schedulerRunProgressText,
     schedulerRunSupportsAdminQueueControls,
     schedulerRunSupportsDependencyReadinessResume,
     schedulerRunSupportsQueueControls,
-    schedulerTimelinePayloadLabel,
+    schedulerTimelineAttemptText,
     schedulerTimelineKindFilterOptions,
     schedulerTimelineSourceFilterOptions,
   } from './schedulerPagePresenters';
+  import { formatClockTime, formatRunVersion, runContextStatusLabel } from './shell/runContextPicker';
+  import {
+    refreshRunContextRunList,
+    runContextLiveUpdates,
+    runContextRunList,
+    selectRunContext,
+  } from './shell/runContextStore';
+  import {
+    Chip,
+    DimensionLine,
+    ErrorCard,
+    FilterChip,
+    GroupHeader,
+    ListRow,
+    Panel,
+    SegmentedControl,
+    TwoStepButton,
+    glyphStateForStatus,
+  } from './ui';
   import { formatWorkflowCommandError } from './workflowErrorPresenters';
 
-  let runs = $state<RunListProjectionRecord[]>([]);
-  let loading = $state(false);
-  let error = $state<string | null>(null);
-  let projectionUpdatedAtMs = $state<number | null>(null);
+  // Device memory per lane is not in the local network status projection
+  // (WR-006); the strip says so instead of drawing invented lanes.
+  const DEVICE_MEMORY_UNAVAILABLE = 'Device memory is not reported by this engine build.';
+  const NO_SELECTION_FOOTER = 'Select a run to act on it. The other tabs follow this selection.';
+
+  type SchedulerActionId =
+    | 'cancel'
+    | 'front'
+    | 'priority'
+    | 'dependency-readiness-resume'
+    | 'admin-cancel'
+    | 'admin-front'
+    | 'admin-priority';
+
+  type LiveUpdates = 'connecting' | 'live' | 'unavailable';
+
   let timelineEvents = $state<SchedulerTimelineProjectionRecord[]>([]);
   let timelineProjectionState = $state<ProjectionStateRecord | null>(null);
   let selectedRunEstimate = $state<WorkflowSchedulerEstimateRecord | null>(null);
@@ -85,53 +102,82 @@
   let timelineError = $state<string | null>(null);
   let estimateError = $state<string | null>(null);
   let retentionError = $state<string | null>(null);
-  let actionBusy = $state<string | null>(null);
+  let detailLiveUpdates = $state<LiveUpdates>('connecting');
+  let actionBusy = $state<SchedulerActionId | null>(null);
   let actionError = $state<string | null>(null);
   let actionMessage = $state<string | null>(null);
   let sessionPriorityInput = $state('0');
   let adminPriorityInput = $state('0');
   let timelineKindFilter = $state('all');
   let timelineSourceFilter = $state('all');
-  let adminPriorityRunId = '';
+  let filtersOpen = $state(false);
+  let moreActionsOpen = $state(false);
+  let collapsedGroups = $state<Record<string, boolean>>({});
+  let activeTimelineRunId = $state<string | null>(null);
+  let selectionSyncRunId = '';
   let timelineRequestSerial = 0;
   let estimateRequestSerial = 0;
   let retentionRequestSerial = 0;
-  let activeTimelineRunId = $state<string | null>(null);
-  let refreshInFlight = false;
-  let refreshAgain = false;
-  let eventUnsubscribe: (() => void) | null = null;
-  let projectionUnsubscribe: (() => void) | null = null;
-  let activeRunFilterKey = '';
-  let displayedRuns = $derived(filterAndSortSchedulerRuns(runs, $schedulerRunFilters));
+
+  // The one run-list projection, owned and refreshed by the shell (WR-005).
+  let runs = $derived($runContextRunList.runs);
+  let listLoaded = $derived($runContextRunList.loadedAtMs !== null);
+  let listLoading = $derived($runContextRunList.status === 'loading');
+  let listUnreachable = $derived($runContextRunList.availability.kind === 'unreachable');
+  let activeRunIdValue = $derived($activeWorkflowRun?.workflow_run_id ?? null);
+
+  let filteredRuns = $derived(filterAndSortSchedulerRuns(runs, $schedulerRunFilters));
+  let statusSegments = $derived(buildSchedulerStatusSegments(filteredRuns));
+  let visibleRuns = $derived(filterSchedulerRunsBySegment(filteredRuns, $schedulerRunFilters.statusSegment));
+  let runGroups = $derived(
+    groupSchedulerRuns(visibleRuns, {
+      selectedRunId: activeRunIdValue,
+      nowMs: $runContextRunList.loadedAtMs ?? 0,
+    }),
+  );
+  let filterFields = $derived(buildSchedulerFilterFields(runs, $schedulerRunFilters));
+  let filterChips = $derived(schedulerAppliedFilterChips($schedulerRunFilters));
+  let queueSummary = $derived(
+    buildSchedulerQueueSummary(runs, { loaded: listLoaded, loading: listLoading, unreachable: listUnreachable }),
+  );
+  let liveUpdatesUnavailable = $derived(
+    $runContextLiveUpdates === 'unavailable' || detailLiveUpdates === 'unavailable',
+  );
+  let listRefreshTitle = $derived(
+    $runContextRunList.loadedAtMs === null
+      ? 'Refresh runs'
+      : `Refresh runs (loaded ${formatClockTime($runContextRunList.loadedAtMs)})`,
+  );
+
+  let selectedRunRecord = $derived(runs.find((run) => run.workflow_run_id === activeRunIdValue) ?? null);
+  let footerState = $derived(schedulerFooterState(activeRunIdValue, selectedRunRecord));
+  let queueControlsReason = $derived(schedulerQueueControlsUnavailableReason(selectedRunRecord));
+  let adminControlsReason = $derived(schedulerAdminControlsUnavailableReason(selectedRunRecord));
+  let resumeReason = $derived(schedulerResumeUnavailableReason(selectedRunRecord));
+  let queueControlsDisabled = $derived(queueControlsReason !== null || actionBusy !== null);
+  let adminControlsDisabled = $derived(adminControlsReason !== null || actionBusy !== null);
+  let actionFeedback = $derived(actionBusy ? 'Sending to the scheduler…' : (actionError ?? actionMessage));
+
+  let detailStatus = $derived(selectedRunRecord?.status ?? $activeWorkflowRun?.status ?? null);
+  let detailVersion = $derived(
+    formatRunVersion(selectedRunRecord?.workflow_semantic_version ?? $activeWorkflowRun?.workflow_semantic_version),
+  );
+  let detailChips = $derived(selectedRunRecord ? schedulerRunDetailChips(selectedRunRecord) : []);
   let displayedTimelineEvents = $derived(
     filterSchedulerTimelineEvents(timelineEvents, {
       eventKind: timelineKindFilter,
       sourceComponent: timelineSourceFilter,
     }),
   );
-  let selectedRunEstimateRows = $derived(buildSchedulerEstimateRows(selectedRunEstimate));
-  let selectedRunRetentionRows = $derived(buildSchedulerRetentionSummaryRows(selectedRunRetentionSummary));
   let timelineKindOptions = $derived(schedulerTimelineKindFilterOptions(timelineEvents));
   let timelineSourceOptions = $derived(schedulerTimelineSourceFilterOptions(timelineEvents));
-  let schedulerPolicyOptions = $derived(schedulerPolicyFilterOptions(runs));
-  let retentionPolicyOptions = $derived(schedulerRetentionFilterOptions(runs));
-  let clientOptions = $derived(schedulerClientFilterOptions(runs));
-  let clientSessionOptions = $derived(schedulerClientSessionFilterOptions(runs));
-  let bucketOptions = $derived(schedulerBucketFilterOptions(runs));
-  let selectedRuntimeOptions = $derived(schedulerSelectedRuntimeFilterOptions(runs));
-  let selectedRuntimeVariantOptions = $derived(schedulerSelectedRuntimeVariantFilterOptions(runs));
-  let selectedBackendOptions = $derived(schedulerSelectedBackendFilterOptions(runs));
-  let selectedDeviceClassOptions = $derived(schedulerSelectedDeviceClassFilterOptions(runs));
-  let selectedDeviceOptions = $derived(schedulerSelectedDeviceFilterOptions(runs));
-  let selectedNetworkNodeOptions = $derived(schedulerSelectedNetworkNodeFilterOptions(runs));
-  let acceptedDateOptions = $derived(schedulerAcceptedDateFilterOptions(runs));
-  let selectedRunRecord = $derived(
-    runs.find((run) => run.workflow_run_id === $activeWorkflowRun?.workflow_run_id) ?? null,
-  );
-  let selectedRunHasQueueControls = $derived(schedulerRunSupportsQueueControls(selectedRunRecord));
-  let selectedRunHasAdminQueueControls = $derived(schedulerRunSupportsAdminQueueControls(selectedRunRecord));
-  let selectedRunHasDependencyReadinessResume = $derived(
-    schedulerRunSupportsDependencyReadinessResume(selectedRunRecord),
+  let detailLoading = $derived(timelineLoading || estimateLoading || retentionLoading);
+  let detailFreshness = $derived(
+    schedulerDetailFreshnessText({
+      timeline: timelineProjectionState,
+      estimate: estimateProjectionState,
+      retention: retentionProjectionState,
+    }),
   );
 
   function activeRunId(): string | null {
@@ -142,15 +188,20 @@
     return (event.currentTarget as HTMLInputElement | HTMLSelectElement).value;
   }
 
-  function recordSubscriptionError(subscriptionError: unknown): void {
-    error = formatWorkflowCommandError(subscriptionError);
+  function setFilter(key: SchedulerSecondaryFilterKey, value: string): void {
+    // The store normalises unknown status and sort values back to their defaults.
+    setSchedulerRunFilters({ [key]: value } as Partial<SchedulerRunFilters>);
+  }
+
+  function toggleGroup(groupId: string): void {
+    collapsedGroups = { ...collapsedGroups, [groupId]: !collapsedGroups[groupId] };
+  }
+
+  function openPage(pageId: WorkbenchPageId): void {
+    setWorkbenchPage(pageId);
   }
 
   async function refreshFromProjectionInvalidation(projectionKind: string): Promise<void> {
-    if (projectionKind === 'run_list') {
-      await refreshRuns();
-      return;
-    }
     if (projectionKind === 'scheduler_timeline') {
       await refreshTimeline();
       return;
@@ -164,31 +215,10 @@
     }
   }
 
-  async function refreshRuns(): Promise<void> {
-    if (refreshInFlight) {
-      refreshAgain = true;
-      return;
-    }
-
-    refreshInFlight = true;
-    loading = runs.length === 0;
-    error = null;
-    try {
-      const response = await workflowService.queryRunList(
-        buildSchedulerRunListQuery($schedulerRunFilters, 250),
-      );
-      runs = response.runs;
-      projectionUpdatedAtMs = response.projection_state.updated_at_ms;
-    } catch (refreshError) {
-      error = formatWorkflowCommandError(refreshError);
-    } finally {
-      loading = false;
-      refreshInFlight = false;
-      if (refreshAgain) {
-        refreshAgain = false;
-        void refreshRuns();
-      }
-    }
+  function refreshDetail(): void {
+    void refreshEstimate();
+    void refreshRetentionSummary();
+    void refreshTimeline();
   }
 
   async function refreshTimeline(runId = activeRunId()): Promise<void> {
@@ -297,36 +327,24 @@
     }
   }
 
-  function selectRun(run: RunListProjectionRecord): void {
-    selectActiveWorkflowRun({
-      workflow_run_id: run.workflow_run_id,
-      workflow_id: run.workflow_id,
-      workflow_version_id: run.workflow_version_id ?? null,
-      workflow_semantic_version: run.workflow_semantic_version ?? null,
-      status: run.status,
-    });
-  }
-
-  function openRun(run: RunListProjectionRecord, pageId: 'diagnostics' | 'graph' | 'io_inspector'): void {
-    selectRun(run);
-    setWorkbenchPage(pageId);
-  }
-
-  async function cancelSelectedRun(): Promise<void> {
-    const run = selectedRunRecord;
-    if (!schedulerRunSupportsQueueControls(run)) {
-      return;
-    }
-    actionBusy = 'cancel';
+  /**
+   * Run one scheduler command for `run`, then refresh the shared run list and
+   * this run's detail projections. The scheduler stays the authority: nothing
+   * is changed locally until the projections say so.
+   */
+  async function performAction(
+    action: SchedulerActionId,
+    run: RunListProjectionRecord,
+    acceptedMessage: string,
+    command: () => Promise<unknown>,
+  ): Promise<void> {
+    actionBusy = action;
     actionError = null;
     actionMessage = null;
     try {
-      await workflowService.cancelSessionQueueItem({
-        session_id: run.workflow_execution_session_id as string,
-        workflow_run_id: run.workflow_run_id,
-      });
-      actionMessage = 'Cancel accepted by scheduler';
-      await refreshRuns();
+      await command();
+      actionMessage = acceptedMessage;
+      await refreshRunContextRunList();
       await refreshEstimate(run.workflow_run_id);
       await refreshRetentionSummary(run.workflow_run_id);
       await refreshTimeline(run.workflow_run_id);
@@ -337,939 +355,813 @@
     }
   }
 
-  async function pushSelectedRunToFront(): Promise<void> {
-    const run = selectedRunRecord;
-    if (!schedulerRunSupportsQueueControls(run)) {
-      return;
-    }
-    actionBusy = 'front';
-    actionError = null;
-    actionMessage = null;
-    try {
-      await workflowService.pushSessionQueueItemToFront({
-        session_id: run.workflow_execution_session_id as string,
-        workflow_run_id: run.workflow_run_id,
-      });
-      actionMessage = 'Push-front accepted by scheduler';
-      await refreshRuns();
-      await refreshEstimate(run.workflow_run_id);
-      await refreshRetentionSummary(run.workflow_run_id);
-      await refreshTimeline(run.workflow_run_id);
-    } catch (actionFailure) {
-      actionError = formatWorkflowCommandError(actionFailure);
-    } finally {
-      actionBusy = null;
-    }
-  }
-
-  async function reprioritizeSelectedRun(): Promise<void> {
-    const run = selectedRunRecord;
-    if (!schedulerRunSupportsQueueControls(run)) {
-      return;
-    }
-    const priority = Number(sessionPriorityInput);
+  function parsePriority(input: string): number | null {
+    const priority = Number(input);
     if (!Number.isInteger(priority)) {
       actionError = 'Priority must be an integer';
       actionMessage = null;
-      return;
+      return null;
     }
-    actionBusy = 'priority';
-    actionError = null;
-    actionMessage = null;
-    try {
-      await workflowService.reprioritizeSessionQueueItem({
+    return priority;
+  }
+
+  function cancelSelectedRun(): void {
+    const run = selectedRunRecord;
+    if (!run || !schedulerRunSupportsQueueControls(run)) return;
+    void performAction('cancel', run, 'Cancel accepted by scheduler', () =>
+      workflowService.cancelSessionQueueItem({
+        session_id: run.workflow_execution_session_id as string,
+        workflow_run_id: run.workflow_run_id,
+      }),
+    );
+  }
+
+  function pushSelectedRunToFront(): void {
+    const run = selectedRunRecord;
+    if (!run || !schedulerRunSupportsQueueControls(run)) return;
+    void performAction('front', run, 'Push-front accepted by scheduler', () =>
+      workflowService.pushSessionQueueItemToFront({
+        session_id: run.workflow_execution_session_id as string,
+        workflow_run_id: run.workflow_run_id,
+      }),
+    );
+  }
+
+  function reprioritizeSelectedRun(): void {
+    const run = selectedRunRecord;
+    if (!run || !schedulerRunSupportsQueueControls(run)) return;
+    const priority = parsePriority(sessionPriorityInput);
+    if (priority === null) return;
+    void performAction('priority', run, 'Priority accepted by scheduler', () =>
+      workflowService.reprioritizeSessionQueueItem({
         session_id: run.workflow_execution_session_id as string,
         workflow_run_id: run.workflow_run_id,
         priority,
-      });
-      actionMessage = 'Priority accepted by scheduler';
-      await refreshRuns();
-      await refreshEstimate(run.workflow_run_id);
-      await refreshRetentionSummary(run.workflow_run_id);
-      await refreshTimeline(run.workflow_run_id);
-    } catch (actionFailure) {
-      actionError = formatWorkflowCommandError(actionFailure);
-    } finally {
-      actionBusy = null;
-    }
+      }),
+    );
   }
 
-  async function resumeSelectedRunDependencyReadiness(): Promise<void> {
+  function resumeSelectedRunDependencyReadiness(): void {
     const run = selectedRunRecord;
-    if (!schedulerRunSupportsDependencyReadinessResume(run)) {
-      return;
-    }
-    actionBusy = 'dependency-readiness-resume';
-    actionError = null;
-    actionMessage = null;
-    try {
-      await workflowService.resumeWorkflowExecutionSessionRuntimeDependencyReadiness({
+    if (!run || !schedulerRunSupportsDependencyReadinessResume(run)) return;
+    void performAction('dependency-readiness-resume', run, 'Dependency readiness resume accepted by scheduler', () =>
+      workflowService.resumeWorkflowExecutionSessionRuntimeDependencyReadiness({
         session_id: run.workflow_execution_session_id as string,
         workflow_run_id: run.workflow_run_id,
-      });
-      actionMessage = 'Dependency readiness resume accepted by scheduler';
-      await refreshRuns();
-      await refreshEstimate(run.workflow_run_id);
-      await refreshRetentionSummary(run.workflow_run_id);
-      await refreshTimeline(run.workflow_run_id);
-    } catch (actionFailure) {
-      actionError = formatWorkflowCommandError(actionFailure);
-    } finally {
-      actionBusy = null;
-    }
+      }),
+    );
   }
 
-  async function adminCancelSelectedRun(): Promise<void> {
+  function adminCancelSelectedRun(): void {
     const run = selectedRunRecord;
-    if (!schedulerRunSupportsAdminQueueControls(run)) {
-      return;
-    }
-    actionBusy = 'admin-cancel';
-    actionError = null;
-    actionMessage = null;
-    try {
-      await workflowService.adminCancelQueueItem({
-        workflow_run_id: run.workflow_run_id,
-      });
-      actionMessage = 'Admin cancel accepted by scheduler';
-      await refreshRuns();
-      await refreshEstimate(run.workflow_run_id);
-      await refreshRetentionSummary(run.workflow_run_id);
-      await refreshTimeline(run.workflow_run_id);
-    } catch (actionFailure) {
-      actionError = formatWorkflowCommandError(actionFailure);
-    } finally {
-      actionBusy = null;
-    }
+    if (!run || !schedulerRunSupportsAdminQueueControls(run)) return;
+    void performAction('admin-cancel', run, 'Admin cancel accepted by scheduler', () =>
+      workflowService.adminCancelQueueItem({ workflow_run_id: run.workflow_run_id }),
+    );
   }
 
-  async function adminPushSelectedRunToFront(): Promise<void> {
+  function adminPushSelectedRunToFront(): void {
     const run = selectedRunRecord;
-    if (!schedulerRunSupportsAdminQueueControls(run)) {
-      return;
-    }
-    actionBusy = 'admin-front';
-    actionError = null;
-    actionMessage = null;
-    try {
-      await workflowService.adminPushQueueItemToFront({
-        workflow_run_id: run.workflow_run_id,
-      });
-      actionMessage = 'Admin push-front accepted by scheduler';
-      await refreshRuns();
-      await refreshEstimate(run.workflow_run_id);
-      await refreshRetentionSummary(run.workflow_run_id);
-      await refreshTimeline(run.workflow_run_id);
-    } catch (actionFailure) {
-      actionError = formatWorkflowCommandError(actionFailure);
-    } finally {
-      actionBusy = null;
-    }
+    if (!run || !schedulerRunSupportsAdminQueueControls(run)) return;
+    void performAction('admin-front', run, 'Admin push-front accepted by scheduler', () =>
+      workflowService.adminPushQueueItemToFront({ workflow_run_id: run.workflow_run_id }),
+    );
   }
 
-  async function adminReprioritizeSelectedRun(): Promise<void> {
+  function adminReprioritizeSelectedRun(): void {
     const run = selectedRunRecord;
-    if (!schedulerRunSupportsAdminQueueControls(run)) {
-      return;
-    }
-    const priority = Number(adminPriorityInput);
-    if (!Number.isInteger(priority)) {
-      actionError = 'Priority must be an integer';
-      actionMessage = null;
-      return;
-    }
-    actionBusy = 'admin-priority';
-    actionError = null;
-    actionMessage = null;
-    try {
-      await workflowService.adminReprioritizeQueueItem({
-        workflow_run_id: run.workflow_run_id,
-        priority,
-      });
-      actionMessage = 'Admin priority accepted by scheduler';
-      await refreshRuns();
-      await refreshEstimate(run.workflow_run_id);
-      await refreshRetentionSummary(run.workflow_run_id);
-      await refreshTimeline(run.workflow_run_id);
-    } catch (actionFailure) {
-      actionError = formatWorkflowCommandError(actionFailure);
-    } finally {
-      actionBusy = null;
-    }
+    if (!run || !schedulerRunSupportsAdminQueueControls(run)) return;
+    const priority = parsePriority(adminPriorityInput);
+    if (priority === null) return;
+    void performAction('admin-priority', run, 'Admin priority accepted by scheduler', () =>
+      workflowService.adminReprioritizeQueueItem({ workflow_run_id: run.workflow_run_id, priority }),
+    );
   }
 
+  // The run list is kept current by the shell (startRunContextSync). This page
+  // owns only the selected run's detail projections: one workflow-event
+  // listener and one invalidation subscription, both released on destroy.
   onMount(() => {
     let disposed = false;
-    eventUnsubscribe = workflowService.subscribeEvents(() => {
-      void refreshRuns();
-      void refreshTimeline();
-      void refreshEstimate();
-      void refreshRetentionSummary();
+    let unlistenProjections: (() => void) | null = null;
+    const unsubscribeEvents = workflowService.subscribeEvents(() => {
+      refreshDetail();
     });
-    void subscribeDiagnosticsProjectionInvalidations({
-      projections: ['run_list', 'scheduler_timeline', 'run_detail', 'io_artifact'],
+    subscribeDiagnosticsProjectionInvalidations({
+      projections: ['scheduler_timeline', 'run_detail', 'io_artifact'],
       getActiveRunId: activeRunId,
       refresh: (event) => refreshFromProjectionInvalidation(event.projection_kind),
-      onRefreshError: recordSubscriptionError,
     })
       .then((nextUnlisten) => {
         if (disposed) {
           nextUnlisten();
           return;
         }
-        projectionUnsubscribe = nextUnlisten;
+        unlistenProjections = nextUnlisten;
+        detailLiveUpdates = 'live';
       })
-      .catch(recordSubscriptionError);
+      .catch(() => {
+        if (!disposed) detailLiveUpdates = 'unavailable';
+      });
 
     return () => {
       disposed = true;
-      eventUnsubscribe?.();
-      eventUnsubscribe = null;
-      projectionUnsubscribe?.();
-      projectionUnsubscribe = null;
+      unsubscribeEvents();
+      unlistenProjections?.();
+      unlistenProjections = null;
     };
   });
 
+  // A new active run (from a row here, the header picker or a paste) reloads
+  // the detail projections; older responses are dropped by the request serials.
   $effect(() => {
-    const runId = activeRunId();
+    const runId = activeRunIdValue;
     if (runId === activeTimelineRunId) {
       return;
     }
 
     activeTimelineRunId = runId;
+    timelineKindFilter = 'all';
+    timelineSourceFilter = 'all';
     void refreshTimeline(runId);
     void refreshEstimate(runId);
     void refreshRetentionSummary(runId);
   });
 
-  $effect(() => {
-    const filterKey = JSON.stringify($schedulerRunFilters);
-    if (filterKey === activeRunFilterKey) {
-      return;
-    }
-
-    activeRunFilterKey = filterKey;
-    void refreshRuns();
-  });
-
+  // Priority inputs start from the selected run's projected priority; action
+  // feedback belongs to the run it was about.
   $effect(() => {
     const run = selectedRunRecord;
-    const runId = run?.workflow_run_id ?? '';
-    if (runId === adminPriorityRunId) {
+    const runId = run?.workflow_run_id ?? activeRunIdValue ?? '';
+    if (runId === selectionSyncRunId) {
       return;
     }
-    adminPriorityRunId = runId;
+    selectionSyncRunId = runId;
     sessionPriorityInput = String(run?.scheduler_priority ?? 0);
     adminPriorityInput = String(run?.scheduler_priority ?? 0);
+    actionError = null;
+    actionMessage = null;
+    moreActionsOpen = false;
   });
 </script>
 
-<section class="flex h-full min-h-0 flex-col bg-neutral-950">
-  <div class="flex shrink-0 items-center justify-between border-b border-neutral-800 px-4 py-3">
-    <div>
-      <h1 class="text-base font-semibold text-neutral-100">Scheduler</h1>
-      <div class="mt-1 text-xs text-neutral-500">
-        Projection updated {projectionUpdatedAtMs ? formatSchedulerTimestamp(projectionUpdatedAtMs) : 'when runs are available'}
-      </div>
-    </div>
-    <button
-      type="button"
-      class="inline-flex items-center gap-2 rounded border border-neutral-700 px-3 py-1.5 text-sm text-neutral-300 transition-colors hover:border-neutral-500 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
-      onclick={() => refreshRuns()}
-      disabled={loading}
-    >
-      <RefreshCw size={14} aria-hidden="true" class={loading ? 'animate-spin' : ''} />
-      Refresh
-    </button>
-  </div>
+<div class="pg-main scheduler">
+  <DimensionLine label={queueSummary} />
 
-  {#if error}
-    <div class="border-b border-red-900 bg-red-950/50 px-4 py-2 text-sm text-red-200">{error}</div>
+  {#if $schedulerViewPreferences.showLanes}
+    <section class="pg-lanes" aria-label="Device memory">
+      <span class="pg-mono pg-muted lanes-scope">local</span>
+      <span class="pg-muted pg-small">{DEVICE_MEMORY_UNAVAILABLE}</span>
+    </section>
   {/if}
 
-  <div class="grid shrink-0 gap-3 border-b border-neutral-900 px-4 py-3 md:grid-cols-3 xl:grid-cols-6 2xl:grid-cols-[minmax(12rem,1.5fr)_repeat(11,minmax(8rem,1fr))]">
-    <div class="md:col-span-3 xl:col-span-2 2xl:col-span-1">
-      <label for="scheduler-run-search" class="block text-xs uppercase tracking-[0.18em] text-neutral-500">
-        Search
-      </label>
-      <input
-        id="scheduler-run-search"
-        type="search"
-        value={$schedulerRunFilters.search}
-        oninput={(event) => setSchedulerRunFilters({ search: eventValue(event) })}
-        class="mt-2 w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-cyan-500 focus:outline-none"
-      />
-    </div>
-    <div>
-      <label for="scheduler-status-filter" class="block text-xs uppercase tracking-[0.18em] text-neutral-500">
-        Status
-      </label>
-      <select
-        id="scheduler-status-filter"
-        value={$schedulerRunFilters.status}
-        onchange={(event) =>
-          setSchedulerRunFilters({ status: eventValue(event) as SchedulerStatusFilter })}
-        class="mt-2 w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-cyan-500 focus:outline-none"
-      >
-          {#each SCHEDULER_STATUS_FILTERS as status (status)}
-            <option value={status}>{status === 'all' ? 'All' : formatSchedulerStatusLabel(status)}</option>
-          {/each}
-      </select>
-    </div>
-    <div>
-      <label for="scheduler-sort" class="block text-xs uppercase tracking-[0.18em] text-neutral-500">
-        Sort
-      </label>
-      <select
-        id="scheduler-sort"
-        value={$schedulerRunFilters.sort}
-        onchange={(event) => setSchedulerRunFilters({ sort: eventValue(event) as SchedulerSortKey })}
-        class="mt-2 w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-cyan-500 focus:outline-none"
-      >
-        {#each SCHEDULER_SORT_OPTIONS as option (option.value)}
-          <option value={option.value}>{option.label}</option>
-        {/each}
-      </select>
-    </div>
-    <div>
-      <label for="scheduler-policy-filter" class="block text-xs uppercase tracking-[0.18em] text-neutral-500">
-        Policy
-      </label>
-      <select
-        id="scheduler-policy-filter"
-        value={$schedulerRunFilters.schedulerPolicy}
-        onchange={(event) => setSchedulerRunFilters({ schedulerPolicy: eventValue(event) })}
-        class="mt-2 w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-cyan-500 focus:outline-none"
-      >
-        <option value="all">all</option>
-        {#each schedulerPolicyOptions as policy (policy)}
-          <option value={policy}>{policy}</option>
-        {/each}
-      </select>
-    </div>
-    <div>
-      <label for="scheduler-retention-filter" class="block text-xs uppercase tracking-[0.18em] text-neutral-500">
-        Retention
-      </label>
-      <select
-        id="scheduler-retention-filter"
-        value={$schedulerRunFilters.retentionPolicy}
-        onchange={(event) => setSchedulerRunFilters({ retentionPolicy: eventValue(event) })}
-        class="mt-2 w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-cyan-500 focus:outline-none"
-      >
-        <option value="all">all</option>
-        {#each retentionPolicyOptions as retention (retention)}
-          <option value={retention}>{retention}</option>
-        {/each}
-      </select>
-    </div>
-    <div>
-      <label for="scheduler-client-filter" class="block text-xs uppercase tracking-[0.18em] text-neutral-500">
-        Client
-      </label>
-      <select
-        id="scheduler-client-filter"
-        value={$schedulerRunFilters.client}
-        onchange={(event) => setSchedulerRunFilters({ client: eventValue(event) })}
-        class="mt-2 w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-cyan-500 focus:outline-none"
-      >
-        <option value="all">all</option>
-        {#each clientOptions as client (client)}
-          <option value={client}>{client}</option>
-        {/each}
-      </select>
-    </div>
-    <div>
-      <label for="scheduler-session-filter" class="block text-xs uppercase tracking-[0.18em] text-neutral-500">
-        Session
-      </label>
-      <select
-        id="scheduler-session-filter"
-        value={$schedulerRunFilters.clientSession}
-        onchange={(event) => setSchedulerRunFilters({ clientSession: eventValue(event) })}
-        class="mt-2 w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-cyan-500 focus:outline-none"
-      >
-        <option value="all">all</option>
-        {#each clientSessionOptions as clientSession (clientSession)}
-          <option value={clientSession}>{clientSession}</option>
-        {/each}
-      </select>
-    </div>
-    <div>
-      <label for="scheduler-bucket-filter" class="block text-xs uppercase tracking-[0.18em] text-neutral-500">
-        Bucket
-      </label>
-      <select
-        id="scheduler-bucket-filter"
-        value={$schedulerRunFilters.bucket}
-        onchange={(event) => setSchedulerRunFilters({ bucket: eventValue(event) })}
-        class="mt-2 w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-cyan-500 focus:outline-none"
-      >
-        <option value="all">all</option>
-        {#each bucketOptions as bucket (bucket)}
-          <option value={bucket}>{bucket}</option>
-        {/each}
-      </select>
-    </div>
-    <div>
-      <label for="scheduler-runtime-filter" class="block text-xs uppercase tracking-[0.18em] text-neutral-500">
-        Runtime
-      </label>
-      <select
-        id="scheduler-runtime-filter"
-        value={$schedulerRunFilters.selectedRuntime}
-        onchange={(event) => setSchedulerRunFilters({ selectedRuntime: eventValue(event) })}
-        class="mt-2 w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-cyan-500 focus:outline-none"
-      >
-        <option value="all">all</option>
-        {#each selectedRuntimeOptions as selectedRuntime (selectedRuntime)}
-          <option value={selectedRuntime}>{selectedRuntime}</option>
-        {/each}
-      </select>
-    </div>
-    <div>
-      <label for="scheduler-runtime-variant-filter" class="block text-xs uppercase tracking-[0.18em] text-neutral-500">
-        Variant
-      </label>
-      <select
-        id="scheduler-runtime-variant-filter"
-        value={$schedulerRunFilters.selectedRuntimeVariant}
-        onchange={(event) => setSchedulerRunFilters({ selectedRuntimeVariant: eventValue(event) })}
-        class="mt-2 w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-cyan-500 focus:outline-none"
-      >
-        <option value="all">all</option>
-        {#each selectedRuntimeVariantOptions as selectedRuntimeVariant (selectedRuntimeVariant)}
-          <option value={selectedRuntimeVariant}>{selectedRuntimeVariant}</option>
-        {/each}
-      </select>
-    </div>
-    <div>
-      <label for="scheduler-backend-filter" class="block text-xs uppercase tracking-[0.18em] text-neutral-500">
-        Backend
-      </label>
-      <select
-        id="scheduler-backend-filter"
-        value={$schedulerRunFilters.selectedBackend}
-        onchange={(event) => setSchedulerRunFilters({ selectedBackend: eventValue(event) })}
-        class="mt-2 w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-cyan-500 focus:outline-none"
-      >
-        <option value="all">all</option>
-        {#each selectedBackendOptions as selectedBackend (selectedBackend)}
-          <option value={selectedBackend}>{selectedBackend}</option>
-        {/each}
-      </select>
-    </div>
-    <div>
-      <label for="scheduler-device-class-filter" class="block text-xs uppercase tracking-[0.18em] text-neutral-500">
-        Device Class
-      </label>
-      <select
-        id="scheduler-device-class-filter"
-        value={$schedulerRunFilters.selectedDeviceClass}
-        onchange={(event) => setSchedulerRunFilters({ selectedDeviceClass: eventValue(event) })}
-        class="mt-2 w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-cyan-500 focus:outline-none"
-      >
-        <option value="all">all</option>
-        {#each selectedDeviceClassOptions as selectedDeviceClass (selectedDeviceClass)}
-          <option value={selectedDeviceClass}>{selectedDeviceClass}</option>
-        {/each}
-      </select>
-    </div>
-    <div>
-      <label for="scheduler-device-filter" class="block text-xs uppercase tracking-[0.18em] text-neutral-500">
-        Device
-      </label>
-      <select
-        id="scheduler-device-filter"
-        value={$schedulerRunFilters.selectedDevice}
-        onchange={(event) => setSchedulerRunFilters({ selectedDevice: eventValue(event) })}
-        class="mt-2 w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-cyan-500 focus:outline-none"
-      >
-        <option value="all">all</option>
-        {#each selectedDeviceOptions as selectedDevice (selectedDevice)}
-          <option value={selectedDevice}>{selectedDevice}</option>
-        {/each}
-      </select>
-    </div>
-    <div>
-      <label for="scheduler-network-node-filter" class="block text-xs uppercase tracking-[0.18em] text-neutral-500">
-        Network Node
-      </label>
-      <select
-        id="scheduler-network-node-filter"
-        value={$schedulerRunFilters.selectedNetworkNode}
-        onchange={(event) => setSchedulerRunFilters({ selectedNetworkNode: eventValue(event) })}
-        class="mt-2 w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-cyan-500 focus:outline-none"
-      >
-        <option value="all">all</option>
-        {#each selectedNetworkNodeOptions as selectedNetworkNode (selectedNetworkNode)}
-          <option value={selectedNetworkNode}>{selectedNetworkNode}</option>
-        {/each}
-      </select>
-    </div>
-    <div>
-      <label for="scheduler-accepted-filter" class="block text-xs uppercase tracking-[0.18em] text-neutral-500">
-        Accepted
-      </label>
-      <select
-        id="scheduler-accepted-filter"
-        value={$schedulerRunFilters.acceptedDate}
-        onchange={(event) => setSchedulerRunFilters({ acceptedDate: eventValue(event) })}
-        class="mt-2 w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-cyan-500 focus:outline-none"
-      >
-        <option value="all">all</option>
-        {#each acceptedDateOptions as acceptedDate (acceptedDate)}
-          <option value={acceptedDate}>{acceptedDate}</option>
-        {/each}
-      </select>
-    </div>
-  </div>
-
-  <div class="grid min-h-0 flex-1 grid-cols-1 overflow-hidden xl:grid-cols-[minmax(0,1fr)_24rem]">
-    <div class="min-h-0 overflow-auto">
-      <table class="w-full min-w-[172rem] border-collapse text-left text-sm">
-        <thead class="sticky top-0 z-10 bg-neutral-950 text-[11px] uppercase tracking-[0.18em] text-neutral-500">
-          <tr class="border-b border-neutral-800">
-            <th class="px-4 py-3 font-medium">Run</th>
-            <th class="px-3 py-3 font-medium">Workflow</th>
-            <th class="px-3 py-3 font-medium">Version</th>
-            <th class="px-3 py-3 font-medium">Status</th>
-            <th class="px-3 py-3 font-medium">Scheduler Policy</th>
-            <th class="px-3 py-3 font-medium">Retention</th>
-            <th class="px-3 py-3 font-medium">Client</th>
-            <th class="px-3 py-3 font-medium">Session</th>
-            <th class="px-3 py-3 font-medium">Bucket</th>
-            <th class="px-3 py-3 font-medium">Runtime</th>
-            <th class="px-3 py-3 font-medium">Device</th>
-            <th class="px-3 py-3 font-medium">Network Node</th>
-            <th class="px-3 py-3 font-medium">Queue</th>
-            <th class="px-3 py-3 font-medium">Priority</th>
-            <th class="px-3 py-3 font-medium">Estimate</th>
-            <th class="px-3 py-3 font-medium">Cache</th>
-            <th class="px-3 py-3 font-medium">Reason</th>
-            <th class="px-3 py-3 font-medium">Queued</th>
-            <th class="px-3 py-3 font-medium">Started</th>
-            <th class="px-3 py-3 font-medium">Duration</th>
-            <th class="px-3 py-3 font-medium">Updated</th>
-            <th class="px-4 py-3 font-medium">Open</th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-neutral-900">
-          {#if loading}
-            <tr>
-              <td colspan="22" class="px-4 py-8 text-center text-neutral-500">Loading runs</td>
-            </tr>
-          {:else if runs.length === 0}
-            <tr>
-              <td colspan="22" class="px-4 py-8 text-center text-neutral-500">No workflow runs recorded</td>
-            </tr>
-          {:else if displayedRuns.length === 0}
-            <tr>
-              <td colspan="22" class="px-4 py-8 text-center text-neutral-500">No matching workflow runs</td>
-            </tr>
-          {:else}
-            {#each displayedRuns as run (run.workflow_run_id)}
-              <tr
-                class:bg-cyan-950={$activeWorkflowRun?.workflow_run_id === run.workflow_run_id}
-                class:bg-opacity-30={$activeWorkflowRun?.workflow_run_id === run.workflow_run_id}
-                class="hover:bg-neutral-900/70"
-              >
-                <td class="max-w-[18rem] px-4 py-2">
-                  <button
-                    type="button"
-                    class="max-w-full truncate text-left font-mono text-xs text-neutral-100 hover:text-cyan-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
-                    title={run.workflow_run_id}
-                    onclick={() => selectRun(run)}
-                  >
-                    {run.workflow_run_id}
-                  </button>
-                </td>
-                <td class="max-w-[14rem] truncate px-3 py-2 text-neutral-300" title={run.workflow_id}>
-                  {run.workflow_id}
-                </td>
-                <td class="max-w-[10rem] truncate px-3 py-2 text-neutral-400" title={run.workflow_semantic_version ?? run.workflow_version_id ?? ''}>
-                  {run.workflow_semantic_version ?? run.workflow_version_id ?? 'Unversioned'}
-                </td>
-                <td class="px-3 py-2">
-                  <span class={`inline-flex rounded border px-2 py-0.5 text-xs ${schedulerStatusClass(run.status)}`}>
-                    {formatSchedulerStatusLabel(run.status)}
-                  </span>
-                </td>
-                <td class="max-w-[10rem] truncate px-3 py-2 text-xs text-neutral-400" title={formatSchedulerPolicyLabel(run.scheduler_policy_id)}>
-                  {formatSchedulerPolicyLabel(run.scheduler_policy_id)}
-                </td>
-                <td class="max-w-[10rem] truncate px-3 py-2 text-xs text-neutral-400" title={formatSchedulerRetentionLabel(run.retention_policy_id)}>
-                  {formatSchedulerRetentionLabel(run.retention_policy_id)}
-                </td>
-                <td class="max-w-[10rem] truncate px-3 py-2 font-mono text-xs text-neutral-400" title={formatSchedulerScopeLabel(run.client_id)}>
-                  {formatSchedulerScopeLabel(run.client_id)}
-                </td>
-                <td class="max-w-[12rem] truncate px-3 py-2 font-mono text-xs text-neutral-400" title={formatSchedulerScopeLabel(run.client_session_id)}>
-                  {formatSchedulerScopeLabel(run.client_session_id)}
-                </td>
-                <td class="max-w-[10rem] truncate px-3 py-2 font-mono text-xs text-neutral-400" title={formatSchedulerScopeLabel(run.bucket_id)}>
-                  {formatSchedulerScopeLabel(run.bucket_id)}
-                </td>
-                <td class="max-w-[10rem] truncate px-3 py-2 font-mono text-xs text-neutral-400" title={formatSchedulerRuntimePlacementLabel(run)}>
-                  {formatSchedulerRuntimePlacementLabel(run)}
-                </td>
-                <td class="max-w-[10rem] truncate px-3 py-2 font-mono text-xs text-neutral-400" title={formatSchedulerDevicePlacementLabel(run)}>
-                  {formatSchedulerDevicePlacementLabel(run)}
-                </td>
-                <td class="max-w-[12rem] truncate px-3 py-2 font-mono text-xs text-neutral-400" title={formatSchedulerPlacementLabel(run.selected_network_node_id)}>
-                  {formatSchedulerPlacementLabel(run.selected_network_node_id)}
-                </td>
-                <td class="px-3 py-2 text-xs text-neutral-400">{formatSchedulerQueuePosition(run.scheduler_queue_position)}</td>
-                <td class="px-3 py-2 text-xs text-neutral-400">{formatSchedulerPriority(run.scheduler_priority)}</td>
-                <td class="max-w-[16rem] truncate px-3 py-2 text-xs text-neutral-400" title={formatSchedulerEstimateLabel(run)}>
-                  {formatSchedulerEstimateLabel(run)}
-                </td>
-                <td class="max-w-[12rem] truncate px-3 py-2 text-xs text-neutral-400" title={formatSchedulerModelCacheState(run.model_cache_state)}>
-                  {formatSchedulerModelCacheState(run.model_cache_state)}
-                </td>
-                <td class="max-w-[16rem] truncate px-3 py-2 text-xs text-neutral-400" title={formatSchedulerReasonLabel(run.scheduler_reason)}>
-                  {formatSchedulerReasonLabel(run.scheduler_reason)}
-                </td>
-                <td class="px-3 py-2 text-xs text-neutral-400">{formatSchedulerTimestamp(run.enqueued_at_ms ?? run.accepted_at_ms)}</td>
-                <td class="px-3 py-2 text-xs text-neutral-400">{formatSchedulerTimestamp(run.started_at_ms)}</td>
-                <td class="px-3 py-2 text-xs text-neutral-400">{formatSchedulerDuration(run.duration_ms, run.status)}</td>
-                <td class="px-3 py-2 text-xs text-neutral-400">{formatSchedulerTimestamp(run.last_updated_at_ms)}</td>
-                <td class="px-4 py-2">
-                  <div class="flex items-center gap-2">
-                    <button
-                      type="button"
-                      class="rounded border border-neutral-800 px-2 py-1 text-xs text-neutral-300 hover:border-neutral-600 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
-                      onclick={() => selectRun(run)}
-                    >
-                      Timeline
-                    </button>
-                    <button
-                      type="button"
-                      class="rounded border border-neutral-800 px-2 py-1 text-xs text-neutral-300 hover:border-neutral-600 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
-                      onclick={() => openRun(run, 'diagnostics')}
-                    >
-                      Diagnostics
-                    </button>
-                    <button
-                      type="button"
-                      class="rounded border border-neutral-800 px-2 py-1 text-xs text-neutral-300 hover:border-neutral-600 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
-                      onclick={() => openRun(run, 'graph')}
-                    >
-                      Graph
-                    </button>
-                    <button
-                      type="button"
-                      class="rounded border border-neutral-800 px-2 py-1 text-xs text-neutral-300 hover:border-neutral-600 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
-                      onclick={() => openRun(run, 'io_inspector')}
-                    >
-                      I/O
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            {/each}
-          {/if}
-        </tbody>
-      </table>
-    </div>
-
-    <aside class="min-h-0 overflow-auto border-l border-neutral-800 bg-neutral-950/80">
-      <div class="border-b border-neutral-800 px-4 py-3">
-        <div class="flex items-start justify-between gap-3">
-          <div class="min-w-0">
-            <h2 class="text-sm font-semibold text-neutral-100">Timeline</h2>
-            <div class="mt-1 truncate text-xs text-neutral-500">
-              {#if $activeWorkflowRun}
-                {$activeWorkflowRun.workflow_run_id}
-              {:else}
-                No active run selected
-              {/if}
-            </div>
-          </div>
+  <div class="inbox">
+    <Panel label="Runs" width="380px">
+      {#snippet top()}
+        <div class="search-row">
+          <label for="scheduler-run-search" class="pg-sr-only">Search runs</label>
+          <input
+            id="scheduler-run-search"
+            class="pg-field search"
+            type="search"
+            placeholder="Search runs"
+            value={$schedulerRunFilters.search}
+            oninput={(event) => setSchedulerRunFilters({ search: eventValue(event) })}
+          />
           <button
             type="button"
-            class="inline-flex items-center gap-2 rounded border border-neutral-700 px-2 py-1 text-xs text-neutral-300 transition-colors hover:border-neutral-500 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
-            onclick={() => {
-              void refreshEstimate();
-              void refreshRetentionSummary();
-              void refreshTimeline();
-            }}
-            disabled={timelineLoading || estimateLoading || retentionLoading || !$activeWorkflowRun}
+            class="pg-btn"
+            aria-expanded={filtersOpen}
+            aria-controls={filtersOpen ? 'scheduler-filters' : undefined}
+            onclick={() => (filtersOpen = !filtersOpen)}
           >
-            <RefreshCw
-              size={12}
-              aria-hidden="true"
-              class={timelineLoading || estimateLoading || retentionLoading ? 'animate-spin' : ''}
-            />
-            Refresh
+            Filters{#if filterChips.length > 0}<span class="pg-n">{filterChips.length}</span>{/if}
+          </button>
+          <button
+            type="button"
+            class="pg-btn icon-btn"
+            aria-label="Refresh runs"
+            title={listRefreshTitle}
+            aria-disabled={listLoading ? 'true' : undefined}
+            onclick={() => {
+              if (!listLoading) void refreshRunContextRunList();
+            }}
+          >
+            <RefreshCw size={14} aria-hidden="true" />
           </button>
         </div>
-        <div class="mt-3 text-xs text-neutral-500">
-          {formatSchedulerProjectionFreshness(timelineProjectionState)}
-        </div>
-      </div>
+        <SegmentedControl
+          label="Status"
+          options={statusSegments}
+          value={$schedulerRunFilters.statusSegment}
+          onchange={(segment) => setSchedulerRunFilters({ statusSegment: segment })}
+        />
+        {#if filterChips.length > 0}
+          <div class="chips" role="group" aria-label="Applied filters">
+            {#each filterChips as chip (chip.key)}
+              <FilterChip label={chip.label} onclear={() => setFilter(chip.key, DEFAULT_SCHEDULER_RUN_FILTERS[chip.key])} />
+            {/each}
+            {#if filterChips.length > 1}
+              <button type="button" class="pg-tgl clear-all" onclick={clearSchedulerSecondaryFilters}>Clear all</button>
+            {/if}
+          </div>
+        {/if}
+        {#if filtersOpen}
+          <div id="scheduler-filters" class="filters">
+            {#each filterFields as field (field.key)}
+              <label class="pg-fl" for={field.id}>
+                {field.label}
+                <select
+                  id={field.id}
+                  class="pg-field"
+                  value={field.value}
+                  onchange={(event) => setFilter(field.key, eventValue(event))}
+                >
+                  {#each field.options as option (option.value)}
+                    <option value={option.value}>{option.label}</option>
+                  {/each}
+                </select>
+              </label>
+            {/each}
+          </div>
+        {/if}
+        {#if liveUpdatesUnavailable}
+          <div class="pg-muted pg-small">Live updates are unavailable here; use Refresh to update.</div>
+        {/if}
+      {/snippet}
 
-      {#if timelineError}
-        <div class="border-b border-red-900 bg-red-950/50 px-4 py-2 text-sm text-red-200">{timelineError}</div>
+      {#if !listLoaded}
+        {#if $runContextRunList.errorMessage}
+          <div class="list-note">
+            <ErrorCard
+              title="The run list did not load"
+              explanation={$runContextRunList.errorMessage}
+              suggestion="Retry; if it keeps failing, check the engine log."
+              actionLabel="Retry"
+              onaction={() => void refreshRunContextRunList()}
+            />
+          </div>
+        {:else if listUnreachable}
+          <div class="pg-empty">
+            <p class="empty-text">The run list is unavailable because the engine did not answer.</p>
+            <button type="button" class="pg-btn pg-btn-sm" onclick={() => void refreshRunContextRunList()}>Retry</button>
+          </div>
+        {:else}
+          <div class="pg-empty">Loading runs…</div>
+        {/if}
+      {:else}
+        {#if $runContextRunList.errorMessage}
+          <div class="list-note">
+            <ErrorCard
+              title="The last run list refresh failed"
+              explanation={$runContextRunList.errorMessage}
+              suggestion="The list shows the previous projection. Retry, or check the engine log."
+              actionLabel="Retry"
+              onaction={() => void refreshRunContextRunList()}
+            />
+          </div>
+        {/if}
+        {#if runs.length === 0}
+          <div class="pg-empty">No runs yet. Runs appear here once a workflow is submitted.</div>
+        {:else if runGroups.length === 0}
+          <div class="pg-empty">
+            <p class="empty-text">No runs match the search and filters.</p>
+            <button type="button" class="pg-btn pg-btn-sm" onclick={resetSchedulerRunFilters}>Clear search and filters</button>
+          </div>
+        {:else}
+          {#each runGroups as group (group.id)}
+            {@const expanded = !collapsedGroups[group.id]}
+            <GroupHeader
+              label={group.title}
+              count={group.rows.length}
+              {expanded}
+              controls={expanded ? `scheduler-group-${group.id}` : undefined}
+              ontoggle={() => toggleGroup(group.id)}
+            />
+            {#if expanded}
+              <div id={`scheduler-group-${group.id}`}>
+                {#each group.rows as row (row.runId)}
+                  <ListRow
+                    glyph={row.glyph}
+                    name={row.workflowId}
+                    version={row.versionLabel}
+                    statusLabel={row.statusLabel}
+                    statusDanger={row.statusIsFailure}
+                    context={row.contextSuffix}
+                    detail={row.detail ?? undefined}
+                    time={row.time}
+                    selected={row.selected}
+                    runId={row.runId}
+                    onselect={() => selectRunContext(row.record)}
+                  />
+                {/each}
+              </div>
+            {/if}
+          {/each}
+        {/if}
       {/if}
 
-      <div class="border-b border-neutral-900 px-4 py-3">
-        <div class="flex items-start justify-between gap-3">
-          <div>
-            <h3 class="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">Estimate</h3>
-            <div class="mt-1 text-xs text-neutral-500">
-              {formatSchedulerProjectionFreshness(estimateProjectionState)}
+      {#snippet footer()}
+        <div class="foot">
+          {#if footerState.kind === 'none'}
+            <span class="pg-muted pg-small">{NO_SELECTION_FOOTER}</span>
+          {:else if footerState.kind === 'missing'}
+            <span class="pg-muted pg-small">This run is not in the loaded run list, so no queue actions are offered.</span>
+          {:else if footerState.kind === 'finished'}
+            <span class="pg-muted pg-small">{footerState.workflowId} has finished. No actions available.</span>
+          {:else}
+            <div class="foot-row">
+              <button
+                type="button"
+                class="pg-btn pg-btn-sm"
+                disabled={queueControlsDisabled}
+                title={queueControlsReason ?? 'Push this run to the front of its session queue'}
+                onclick={pushSelectedRunToFront}
+              >
+                Move to front
+              </button>
+              <label class="pg-muted pg-small priority">
+                Priority
+                <input
+                  class="pg-field priority-input"
+                  type="number"
+                  step="1"
+                  value={sessionPriorityInput}
+                  oninput={(event) => {
+                    sessionPriorityInput = eventValue(event);
+                  }}
+                  disabled={queueControlsDisabled}
+                  title={queueControlsReason ?? undefined}
+                />
+              </label>
+              <button
+                type="button"
+                class="pg-btn pg-btn-sm"
+                disabled={queueControlsDisabled}
+                title={queueControlsReason ?? 'Set this run’s priority within its session queue'}
+                onclick={reprioritizeSelectedRun}
+              >
+                Set
+              </button>
             </div>
-          </div>
-          {#if estimateLoading}
-            <RefreshCw size={12} aria-hidden="true" class="mt-1 shrink-0 animate-spin text-neutral-500" />
+            <div class="foot-row">
+              <button
+                type="button"
+                class="pg-tgl"
+                aria-expanded={moreActionsOpen}
+                aria-controls={moreActionsOpen ? 'scheduler-more-actions' : undefined}
+                onclick={() => (moreActionsOpen = !moreActionsOpen)}
+              >
+                More actions <span aria-hidden="true">{moreActionsOpen ? '▾' : '▸'}</span>
+              </button>
+              <TwoStepButton
+                class="push-right"
+                label="Cancel run"
+                confirmLabel="Confirm cancel"
+                onconfirm={cancelSelectedRun}
+                disabled={queueControlsDisabled}
+                disabledReason={queueControlsReason ?? 'Another scheduler action is in progress'}
+              />
+            </div>
+            <!-- Stays mounted while a live run is selected so each outcome is announced. -->
+            <div
+              class="pg-small action-feedback"
+              class:pg-sr-only={!actionFeedback}
+              class:action-error={Boolean(actionError) && !actionBusy}
+              role="status"
+              title={actionFeedback ?? undefined}
+            >
+              {actionFeedback ?? ''}
+            </div>
+            {#if moreActionsOpen}
+              <div id="scheduler-more-actions" class="more">
+                <div class="foot-row">
+                  <button
+                    type="button"
+                    class="pg-btn pg-btn-sm"
+                    disabled={resumeReason !== null || actionBusy !== null}
+                    title={resumeReason ?? 'Resume this run once its runtime dependencies are ready'}
+                    onclick={resumeSelectedRunDependencyReadiness}
+                  >
+                    Resume
+                  </button>
+                  <span class="pg-muted pg-small">Dependency readiness</span>
+                </div>
+                <div class="pg-muted pg-small">GUI admin, acts by run id across sessions</div>
+                <div class="foot-row">
+                  <TwoStepButton
+                    label="Admin cancel"
+                    confirmLabel="Confirm admin cancel"
+                    onconfirm={adminCancelSelectedRun}
+                    disabled={adminControlsDisabled}
+                    disabledReason={adminControlsReason ?? 'Another scheduler action is in progress'}
+                  />
+                  <button
+                    type="button"
+                    class="pg-btn pg-btn-sm"
+                    disabled={adminControlsDisabled}
+                    title={adminControlsReason ?? 'Admin: push this run to the front by run id'}
+                    onclick={adminPushSelectedRunToFront}
+                  >
+                    Front
+                  </button>
+                  <label class="pg-muted pg-small priority">
+                    Priority
+                    <input
+                      class="pg-field priority-input"
+                      type="number"
+                      step="1"
+                      value={adminPriorityInput}
+                      oninput={(event) => {
+                        adminPriorityInput = eventValue(event);
+                      }}
+                      disabled={adminControlsDisabled}
+                      title={adminControlsReason ?? undefined}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    class="pg-btn pg-btn-sm"
+                    disabled={adminControlsDisabled}
+                    title={adminControlsReason ?? 'Admin: set this run’s priority by run id'}
+                    onclick={adminReprioritizeSelectedRun}
+                  >
+                    Set
+                  </button>
+                </div>
+              </div>
+            {/if}
           {/if}
         </div>
-        {#if estimateError}
-          <div class="mt-2 truncate text-xs text-red-200" title={estimateError}>{estimateError}</div>
-        {:else if !$activeWorkflowRun}
-          <div class="mt-3 text-xs text-neutral-500">No active run selected</div>
-        {:else}
-          <dl class="mt-3 grid grid-cols-2 gap-3 text-xs">
-            {#each selectedRunEstimateRows as row (row.label)}
-              <div class="min-w-0">
-                <dt class="text-neutral-600">{row.label}</dt>
-                <dd
-                  class={`mt-1 truncate text-neutral-300 ${row.mono ? 'font-mono' : ''}`}
-                  title={row.value}
-                >
-                  {row.value}
-                </dd>
-              </div>
-            {/each}
-          </dl>
-        {/if}
-      </div>
+      {/snippet}
+    </Panel>
 
-      <div class="border-b border-neutral-900 px-4 py-3">
-        <div class="flex items-start justify-between gap-3">
-          <div>
-            <h3 class="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">Retention</h3>
-            <div class="mt-1 text-xs text-neutral-500">
-              {formatSchedulerProjectionFreshness(retentionProjectionState)}
+    <Panel label="Run detail">
+      {#if $activeWorkflowRun}
+        {@const runId = $activeWorkflowRun.workflow_run_id}
+        <div class="head">
+          <div class="head-main">
+            <div class="pg-title">
+              {selectedRunRecord?.workflow_id ?? $activeWorkflowRun.workflow_id ?? runId}
+              {#if detailVersion}<span class="pg-muted">{detailVersion}</span>{/if}
+            </div>
+            <div class="pg-mono pg-muted run-id" data-run-id={runId} title="Ctrl+C copies the run id">{runId}</div>
+            <div class="chips">
+              <Chip glyph={glyphStateForStatus(detailStatus)}>{runContextStatusLabel(detailStatus)}</Chip>
+              {#each detailChips as chip (chip)}
+                <Chip>{chip}</Chip>
+              {/each}
             </div>
           </div>
-          {#if retentionLoading}
-            <RefreshCw size={12} aria-hidden="true" class="mt-1 shrink-0 animate-spin text-neutral-500" />
-          {/if}
+          <div class="head-actions">
+            <button type="button" class="pg-btn" onclick={() => openPage('diagnostics')}>Diagnostics</button>
+            <button type="button" class="pg-btn" onclick={() => openPage('graph')}>Graph</button>
+            <button type="button" class="pg-btn" onclick={() => openPage('io_inspector')}>I/O</button>
+          </div>
         </div>
-        {#if retentionError}
-          <div class="mt-2 truncate text-xs text-red-200" title={retentionError}>{retentionError}</div>
-        {:else if !$activeWorkflowRun}
-          <div class="mt-3 text-xs text-neutral-500">No active run selected</div>
-        {:else if selectedRunRetentionRows.length === 0}
-          <div class="mt-3 text-xs text-neutral-500">No retained artifact summary projected</div>
-        {:else}
-          <div class="mt-3 grid grid-cols-2 gap-2">
-            {#each selectedRunRetentionRows as row (row.label)}
-              <div class="rounded border border-neutral-800 px-2 py-1.5">
-                <div class="text-[11px] text-neutral-500">{row.label}</div>
-                <div class="mt-1 font-mono text-xs text-neutral-200">{row.count}</div>
+
+        {#if selectedRunRecord}
+          <div class="cells">
+            <div class="pg-sec cell">
+              <h3>Progress</h3>
+              <div>{schedulerRunProgressText(selectedRunRecord)}</div>
+              <div class="pg-muted pg-small">
+                {schedulerEstimateSentence(selectedRunEstimate, { loading: estimateLoading, error: estimateError })}
               </div>
-            {/each}
+            </div>
+            <div class="pg-sec cell">
+              <h3>Placement</h3>
+              <div>{schedulerRunPlacementText(selectedRunRecord)}</div>
+              <div class="pg-muted pg-small">{schedulerRunPolicyText(selectedRunRecord)}</div>
+            </div>
+            <div class="pg-sec cell">
+              <h3>Retention</h3>
+              <div>
+                {schedulerRetentionText(selectedRunRetentionSummary, { loading: retentionLoading, error: retentionError })}
+              </div>
+              <div class="pg-muted pg-small">{schedulerRetentionPolicyText(selectedRunRecord)}</div>
+            </div>
+          </div>
+        {:else}
+          <div class="pg-sec pg-muted pg-small">
+            This run is not in the loaded run list, so its queue and placement facts are not shown. Its scheduler
+            timeline is below.
           </div>
         {/if}
-      </div>
 
-      <div class="border-b border-neutral-900 px-4 py-3">
-        <div class="mb-3 grid grid-cols-2 gap-2">
-          <label class="min-w-0 text-[11px] uppercase tracking-[0.18em] text-neutral-600">
-            Kind
+        <section class="pg-sec" aria-labelledby="scheduler-timeline-heading">
+          <div class="timeline-head">
+            <h3 id="scheduler-timeline-heading">Scheduler timeline</h3>
+            <label class="pg-sr-only" for="scheduler-timeline-kind">Event kind</label>
             <select
-              aria-label="Scheduler timeline kind filter"
-              class="mt-1 w-full rounded border border-neutral-800 bg-neutral-950 px-2 py-1.5 text-xs normal-case tracking-normal text-neutral-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
+              id="scheduler-timeline-kind"
+              class="pg-field timeline-filter"
               value={timelineKindFilter}
               onchange={(event) => {
                 timelineKindFilter = eventValue(event);
               }}
               disabled={timelineEvents.length === 0}
             >
-              <option value="all">All</option>
+              <option value="all">All kinds</option>
               {#each timelineKindOptions as eventKind (eventKind)}
                 <option value={eventKind}>{formatSchedulerTimelineKind({ event_kind: eventKind })}</option>
               {/each}
             </select>
-          </label>
-          <label class="min-w-0 text-[11px] uppercase tracking-[0.18em] text-neutral-600">
-            Source
+            <label class="pg-sr-only" for="scheduler-timeline-source">Event source</label>
             <select
-              aria-label="Scheduler timeline source filter"
-              class="mt-1 w-full rounded border border-neutral-800 bg-neutral-950 px-2 py-1.5 text-xs normal-case tracking-normal text-neutral-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
+              id="scheduler-timeline-source"
+              class="pg-field timeline-filter"
               value={timelineSourceFilter}
               onchange={(event) => {
                 timelineSourceFilter = eventValue(event);
               }}
               disabled={timelineEvents.length === 0}
             >
-              <option value="all">All</option>
+              <option value="all">All sources</option>
               {#each timelineSourceOptions as sourceComponent (sourceComponent)}
                 <option value={sourceComponent}>{formatSchedulerTimelineSource({ source_component: sourceComponent })}</option>
               {/each}
             </select>
-          </label>
-        </div>
-
-        <div class="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            title="Cancel selected queued run"
-            class="inline-flex items-center gap-2 rounded border border-neutral-700 px-2 py-1 text-xs text-neutral-300 transition-colors hover:border-red-500 hover:text-red-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-400 disabled:opacity-50"
-            onclick={() => void cancelSelectedRun()}
-            disabled={!selectedRunHasQueueControls || actionBusy !== null}
-          >
-            <XCircle size={12} aria-hidden="true" />
-            Cancel
-          </button>
-          <button
-            type="button"
-            title="Push selected run to the front of its session queue"
-            class="inline-flex items-center gap-2 rounded border border-neutral-700 px-2 py-1 text-xs text-neutral-300 transition-colors hover:border-cyan-500 hover:text-cyan-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
-            onclick={() => void pushSelectedRunToFront()}
-            disabled={!selectedRunHasQueueControls || actionBusy !== null}
-          >
-            <ChevronsUp size={12} aria-hidden="true" />
-            Front
-          </button>
-          <label class="inline-flex items-center gap-2 text-xs text-neutral-500">
-            Priority
-            <input
-              type="number"
-              step="1"
-              value={sessionPriorityInput}
-              oninput={(event) => {
-                sessionPriorityInput = eventValue(event);
+            <button
+              type="button"
+              class="pg-tgl"
+              aria-disabled={detailLoading ? 'true' : undefined}
+              onclick={() => {
+                if (!detailLoading) refreshDetail();
               }}
-              class="h-7 w-20 rounded border border-neutral-700 bg-neutral-900 px-2 text-xs text-neutral-100 focus:border-cyan-500 focus:outline-none disabled:opacity-50"
-              disabled={!selectedRunHasQueueControls || actionBusy !== null}
-            />
-          </label>
-          <button
-            type="button"
-            title="Set selected run priority within its session queue"
-            class="inline-flex items-center gap-2 rounded border border-neutral-700 px-2 py-1 text-xs text-neutral-300 transition-colors hover:border-cyan-500 hover:text-cyan-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
-            onclick={() => void reprioritizeSelectedRun()}
-            disabled={!selectedRunHasQueueControls || actionBusy !== null}
-          >
-            <SlidersHorizontal size={12} aria-hidden="true" />
-            Set
-          </button>
-          <button
-            type="button"
-            title="Resume selected dependency-readiness-pending run"
-            class="inline-flex items-center gap-2 rounded border border-neutral-700 px-2 py-1 text-xs text-neutral-300 transition-colors hover:border-cyan-500 hover:text-cyan-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
-            onclick={() => void resumeSelectedRunDependencyReadiness()}
-            disabled={!selectedRunHasDependencyReadinessResume || actionBusy !== null}
-          >
-            <RefreshCw size={12} aria-hidden="true" />
-            Resume
-          </button>
-        </div>
-        <div class="mt-3 border-t border-neutral-900 pt-3">
-          <div class="mb-2 text-[11px] uppercase tracking-[0.18em] text-neutral-600">GUI Admin</div>
-          <div class="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              title="Admin cancel selected queued run by run id"
-              class="inline-flex items-center gap-2 rounded border border-neutral-700 px-2 py-1 text-xs text-neutral-300 transition-colors hover:border-red-500 hover:text-red-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-400 disabled:opacity-50"
-              onclick={() => void adminCancelSelectedRun()}
-              disabled={!selectedRunHasAdminQueueControls || actionBusy !== null}
             >
-              <ShieldAlert size={12} aria-hidden="true" />
-              Cancel
-            </button>
-            <button
-              type="button"
-              title="Admin push selected queued run to the front by run id"
-              class="inline-flex items-center gap-2 rounded border border-neutral-700 px-2 py-1 text-xs text-neutral-300 transition-colors hover:border-cyan-500 hover:text-cyan-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
-              onclick={() => void adminPushSelectedRunToFront()}
-              disabled={!selectedRunHasAdminQueueControls || actionBusy !== null}
-            >
-              <ChevronsUp size={12} aria-hidden="true" />
-              Front
-            </button>
-            <label class="inline-flex items-center gap-2 text-xs text-neutral-500">
-              Priority
-              <input
-                type="number"
-                step="1"
-                value={adminPriorityInput}
-                oninput={(event) => {
-                  adminPriorityInput = eventValue(event);
-                }}
-                class="h-7 w-20 rounded border border-neutral-700 bg-neutral-900 px-2 text-xs text-neutral-100 focus:border-cyan-500 focus:outline-none disabled:opacity-50"
-                disabled={!selectedRunHasAdminQueueControls || actionBusy !== null}
-              />
-            </label>
-            <button
-              type="button"
-              title="Admin set selected queued run priority by run id"
-              class="inline-flex items-center gap-2 rounded border border-neutral-700 px-2 py-1 text-xs text-neutral-300 transition-colors hover:border-cyan-500 hover:text-cyan-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
-              onclick={() => void adminReprioritizeSelectedRun()}
-              disabled={!selectedRunHasAdminQueueControls || actionBusy !== null}
-            >
-              <SlidersHorizontal size={12} aria-hidden="true" />
-              Set
+              {detailLoading ? 'Refreshing' : 'Refresh'}
             </button>
           </div>
-        </div>
-        {#if actionMessage || actionError}
-          <div
-            class="mt-2 truncate text-xs"
-            class:text-red-200={Boolean(actionError)}
-            class:text-neutral-500={!actionError}
-            title={actionError ?? actionMessage ?? ''}
-          >
-            {actionError ?? actionMessage}
-          </div>
-        {/if}
-      </div>
 
-      {#if !$activeWorkflowRun}
-        <div class="px-4 py-8 text-sm text-neutral-500">Select a run to inspect scheduler events</div>
-      {:else if timelineLoading && timelineEvents.length === 0}
-        <div class="px-4 py-8 text-sm text-neutral-500">Loading timeline</div>
-      {:else if timelineEvents.length === 0}
-        <div class="px-4 py-8 text-sm text-neutral-500">No scheduler timeline events projected</div>
-      {:else if displayedTimelineEvents.length === 0}
-        <div class="px-4 py-8 text-sm text-neutral-500">No matching scheduler timeline events</div>
+          {#if timelineError}
+            <ErrorCard
+              title="The scheduler timeline did not load"
+              explanation={timelineError}
+              suggestion="Refresh; if it keeps failing, open Diagnostics for this run."
+              actionLabel="Refresh"
+              onaction={refreshDetail}
+            />
+          {:else if timelineLoading && timelineEvents.length === 0}
+            <div class="pg-muted pg-small">Loading the scheduler timeline…</div>
+          {:else if timelineEvents.length === 0}
+            <div class="pg-muted pg-small">No scheduler events are projected for this run yet.</div>
+          {:else if displayedTimelineEvents.length === 0}
+            <div class="pg-muted pg-small">No events match the kind and source filters.</div>
+          {:else}
+            <div class="ev">
+              {#each displayedTimelineEvents as event (event.event_id)}
+                {@const attempt = schedulerTimelineAttemptText(event)}
+                <span class="ev-t" title={formatSchedulerTimestamp(event.occurred_at_ms)}>
+                  {formatSchedulerClockTime(event.occurred_at_ms)}
+                </span>
+                <span class="ev-m">
+                  {event.summary}
+                  <span class="pg-muted ev-src">
+                    {formatSchedulerTimelineKind(event)}, {formatSchedulerTimelineSource(event)}
+                  </span>
+                  {#if event.detail}<span class="pg-muted pg-small ev-line">{event.detail}</span>{/if}
+                  {#if attempt}<span class="pg-mono pg-muted ev-line ev-attempt">{attempt}</span>{/if}
+                </span>
+              {/each}
+            </div>
+          {/if}
+          <div class="pg-muted pg-small timeline-foot">
+            Node-level events for this run are in
+            <button type="button" class="linkish" onclick={() => openPage('diagnostics')}>Diagnostics</button>.
+          </div>
+          <div class="pg-muted pg-small">{detailFreshness}</div>
+        </section>
       {:else}
-        <div class="divide-y divide-neutral-900">
-          {#each displayedTimelineEvents as event (event.event_id)}
-            {@const attemptRows = buildSchedulerTimelineAttemptRows(event)}
-            <article class="px-4 py-3">
-              <div class="flex items-center justify-between gap-3">
-                <div class="font-mono text-[11px] text-neutral-500">seq {event.event_seq}</div>
-                <div class="text-[11px] text-neutral-600">{schedulerTimelinePayloadLabel(event)}</div>
-              </div>
-              <div class="mt-2 text-xs font-semibold text-neutral-200">
-                {formatSchedulerTimelineKind(event)}
-              </div>
-              <div class="mt-1 text-xs text-neutral-500">
-                {formatSchedulerTimelineSource(event)} · {formatSchedulerTimestamp(event.occurred_at_ms)}
-              </div>
-              <div class="mt-2 text-sm text-neutral-300">{event.summary}</div>
-              {#if event.detail}
-                <div class="mt-1 text-xs text-neutral-500">{event.detail}</div>
-              {/if}
-              {#if attemptRows.length > 0}
-                <dl class="mt-3 grid grid-cols-1 gap-x-4 gap-y-2 border-t border-neutral-900 pt-3 sm:grid-cols-2">
-                  {#each attemptRows as row (row.label)}
-                    <div class="min-w-0">
-                      <dt class="text-[11px] uppercase text-neutral-600">{row.label}</dt>
-                      <dd class="truncate font-mono text-xs text-neutral-300" title={row.value}>{row.value}</dd>
-                    </div>
-                  {/each}
-                </dl>
-              {/if}
-            </article>
-          {/each}
-        </div>
+        <div class="pg-empty">Select a run to see its progress, placement and timeline.</div>
       {/if}
-    </aside>
+    </Panel>
   </div>
-</section>
+</div>
+
+<style>
+  .scheduler {
+    height: 100%;
+    box-sizing: border-box;
+  }
+
+  .lanes-scope {
+    font-size: 11px;
+    flex: none;
+  }
+
+  .inbox {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    gap: 14px;
+    align-items: stretch;
+  }
+
+  .search-row {
+    display: flex;
+    gap: 8px;
+  }
+
+  .search {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .icon-btn {
+    width: 30px;
+    padding: 0;
+    justify-content: center;
+    flex: none;
+  }
+
+  .chips {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .clear-all {
+    height: 24px;
+  }
+
+  .filters {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px 10px;
+    padding: 10px;
+    border: 1px dashed var(--pg-border);
+    border-radius: 4px;
+    max-height: 32vh;
+    overflow: auto;
+  }
+
+  .list-note {
+    padding: 10px 12px;
+  }
+
+  .empty-text {
+    margin: 0 0 10px;
+  }
+
+  .foot {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .foot-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 8px;
+    align-items: center;
+    min-width: 0;
+  }
+
+  .foot-row :global(.push-right) {
+    margin-left: auto;
+  }
+
+  .priority {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .priority-input {
+    width: 54px;
+    height: 28px;
+    padding: 0 6px;
+  }
+
+  .action-feedback {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--pg-text-muted);
+  }
+
+  .action-feedback.action-error {
+    color: var(--pg-danger);
+  }
+
+  .more {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--pg-border-soft);
+  }
+
+  .head {
+    padding: 16px 18px 14px;
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .head-main {
+    flex: 1 1 260px;
+    min-width: 0;
+  }
+
+  .run-id {
+    margin-top: 2px;
+    overflow-wrap: anywhere;
+  }
+
+  .head-main .chips {
+    margin-top: 10px;
+  }
+
+  .head-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .cells {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+    border-top: 1px solid var(--pg-border);
+  }
+
+  .cell {
+    border-top: 0;
+  }
+
+  .cell + .cell {
+    border-left: 1px solid var(--pg-border);
+  }
+
+  .timeline-head {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+  }
+
+  .timeline-head h3 {
+    margin: 0 auto 0 0;
+  }
+
+  .timeline-filter {
+    height: 26px;
+    font-size: 12.5px;
+    max-width: 180px;
+  }
+
+  .ev {
+    display: grid;
+    grid-template-columns: 66px 1fr;
+    gap: 5px 14px;
+    font-size: 13.5px;
+  }
+
+  .ev-t {
+    font-family: var(--pg-font-mono);
+    font-size: 12px;
+    color: var(--pg-text-muted);
+    padding-top: 1px;
+  }
+
+  .ev-m {
+    min-width: 0;
+  }
+
+  .ev-src {
+    font-size: 12px;
+    margin-left: 4px;
+  }
+
+  .ev-line {
+    display: block;
+  }
+
+  .ev-attempt {
+    font-size: 11.5px;
+    overflow-wrap: anywhere;
+  }
+
+  .timeline-foot {
+    margin-top: 10px;
+  }
+
+  .linkish {
+    border: 0;
+    padding: 0;
+    background: none;
+    color: var(--pg-text);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    cursor: pointer;
+    font: inherit;
+  }
+</style>

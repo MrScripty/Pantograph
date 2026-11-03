@@ -4,21 +4,26 @@ import assert from 'node:assert/strict';
 import type { WorkflowRunGraphProjection } from '../../services/workflow/types.ts';
 import {
   buildRunGraphCanvasModel,
-  buildRunGraphEdgeRows,
-  buildRunGraphNodeArtifactSummaries,
-  buildRunGraphNodeRows,
   buildRunGraphNodeStatusMap,
-  formatRunGraphArtifactDetail,
-  formatRunGraphArtifactSummary,
   formatRunGraphNodeCacheStatusLabel,
   formatRunGraphNodeStatusLabel,
-  formatRunGraphCountLabel,
-  runGraphNodeStatusClass,
-  runGraphNodeErrorClass,
-  runGraphStaleDiagnosticClass,
-  resolveRunGraphCounts,
   resolveRunGraphPresentationLabel,
+  buildRunGraphNodeFacts,
+  buildRunGraphSnapshotLayout,
+  createRunGraphRequestGate,
+  formatRunGraphDuration,
+  formatRunGraphNodeRunSentence,
+  resolveRunGraphSelectedNodeId,
+  runGraphNodeGlyph,
+  runGraphSettingRows,
+  runGraphWireKind,
+  clampRunGraphScale,
+  fitRunGraphScale,
+  RUN_GRAPH_CARD_HEADER,
+  RUN_GRAPH_CARD_ROW,
+  type RunGraphNodeStatusByNodeId,
 } from './runGraphPresenters.ts';
+import type { NodeStatusProjectionRecord } from '../../services/diagnostics/types.ts';
 
 function createRunGraph(): WorkflowRunGraphProjection {
   return {
@@ -107,43 +112,6 @@ function createRunGraph(): WorkflowRunGraphProjection {
   };
 }
 
-test('resolveRunGraphCounts and labels use the immutable graph snapshot', () => {
-  const runGraph = createRunGraph();
-
-  assert.deepEqual(resolveRunGraphCounts(runGraph.graph), {
-    nodeCount: 2,
-    edgeCount: 1,
-  });
-  assert.equal(formatRunGraphCountLabel({ nodeCount: 2, edgeCount: 1 }), '2 nodes / 1 edges');
-});
-
-test('buildRunGraphNodeRows joins topology versions without editor state', () => {
-  const rows = buildRunGraphNodeRows(createRunGraph());
-
-  assert.deepEqual(rows.map((row) => row.nodeId), ['input-1', 'output-1']);
-  assert.equal(rows[0].contractVersion, '1.0.0');
-  assert.equal(rows[0].behaviorDigest, 'digest-input');
-  assert.equal(rows[0].positionLabel, '10, 20');
-  assert.equal(rows[0].settingsState, 'Run settings captured');
-  assert.equal(rows[0].artifactSummaryLabel, 'No retained I/O');
-  assert.equal(rows[0].statusLabel, 'No status');
-});
-
-test('buildRunGraphEdgeRows renders captured graph edges before topology fallback', () => {
-  const rows = buildRunGraphEdgeRows(createRunGraph());
-
-  assert.deepEqual(rows, [
-    {
-      edgeId: 'edge-1',
-      source: 'input-1:text',
-      target: 'output-1:value',
-      staleDiagnosticCount: 0,
-      staleSeverity: null,
-      staleDiagnosticMessages: [],
-    },
-  ]);
-});
-
 test('resolveRunGraphPresentationLabel distinguishes complete and fallback layouts', () => {
   const runGraph = createRunGraph();
   assert.equal(resolveRunGraphPresentationLabel(runGraph), 'Presentation revision');
@@ -191,20 +159,6 @@ test('run graph presenters expose backend stale graph diagnostics', () => {
     },
   ];
 
-  const rows = buildRunGraphNodeRows(runGraph);
-  const outputRow = rows.find((row) => row.nodeId === 'output-1');
-  assert.equal(outputRow?.staleDiagnosticCount, 1);
-  assert.equal(outputRow?.staleSeverity, 'error');
-  assert.equal(outputRow?.staleBadgeLabel, '1 stale graph fact');
-  assert.deepEqual(outputRow?.staleDiagnosticMessages, [
-    'node type diffusion-inference is retired',
-  ]);
-  assert.equal(runGraphStaleDiagnosticClass(outputRow?.staleSeverity), 'error');
-
-  const edgeRows = buildRunGraphEdgeRows(runGraph);
-  assert.equal(edgeRows[0].staleDiagnosticCount, 1);
-  assert.deepEqual(edgeRows[0].staleDiagnosticMessages, ['edge target node is missing']);
-
   const canvas = buildRunGraphCanvasModel(runGraph.graph, {}, {}, runGraph.graph_diagnostics);
   const outputNode = canvas.nodes.find((node) => node.id === 'output-1');
   assert.equal(outputNode?.staleDiagnosticCount, 1);
@@ -213,89 +167,26 @@ test('run graph presenters expose backend stale graph diagnostics', () => {
   assert.equal(canvas.edges[0].staleSeverity, 'error');
 });
 
-test('buildRunGraphNodeArtifactSummaries groups retained node io facts', () => {
-  const summaries = buildRunGraphNodeArtifactSummaries([
-    {
-      node_id: 'input-1',
-      artifact_role: 'node_input',
-      event_seq: 10,
-      payload_ref: 'artifact://input',
-      media_type: 'text/plain',
+test('buildRunGraphCanvasModel exposes artifact availability', () => {
+  const summaries = {
+    'output-1': {
+      nodeId: 'output-1',
+      inputCount: 0,
+      outputCount: 1,
+      artifactCount: 1,
+      payloadRefCount: 1,
+      latestEventSeq: 14,
+      mediaTypes: ['image/png'],
     },
-    {
-      node_id: 'input-1',
-      artifact_role: 'node_output',
-      event_seq: 12,
-      payload_ref: null,
-      media_type: 'application/json',
-    },
-    {
-      node_id: 'output-1',
-      artifact_role: 'node_output',
-      event_seq: 14,
-      payload_ref: 'artifact://output',
-      media_type: 'image/png',
-    },
-    {
-      node_id: null,
-      artifact_role: 'workflow_output',
-      event_seq: 15,
-      payload_ref: 'artifact://workflow-output',
-      media_type: 'text/plain',
-    },
-  ]);
-
-  assert.deepEqual(summaries['input-1'], {
-    nodeId: 'input-1',
-    inputCount: 1,
-    outputCount: 1,
-    artifactCount: 2,
-    payloadRefCount: 1,
-    latestEventSeq: 12,
-    mediaTypes: ['application/json', 'text/plain'],
-  });
-  assert.equal(summaries['output-1'].outputCount, 1);
-  assert.equal(summaries['output-1'].payloadRefCount, 1);
-  assert.equal(Object.hasOwn(summaries, 'workflow-output'), false);
-});
-
-test('buildRunGraphNodeRows and canvas expose artifact availability labels', () => {
-  const summaries = buildRunGraphNodeArtifactSummaries([
-    {
-      node_id: 'output-1',
-      artifact_role: 'node_output',
-      event_seq: 14,
-      payload_ref: 'artifact://output',
-      media_type: 'image/png',
-    },
-  ]);
-
-  const rows = buildRunGraphNodeRows(createRunGraph(), summaries);
-  const outputRow = rows.find((row) => row.nodeId === 'output-1');
-  assert.equal(outputRow?.artifactSummaryLabel, '1 output / 0 inputs');
-  assert.equal(outputRow?.artifactDetailLabel, '1 artifact, 1 payload reference, image/png');
-  assert.equal(outputRow?.hasOutputArtifacts, true);
+  };
 
   const canvas = buildRunGraphCanvasModel(createRunGraph().graph, summaries);
   const outputNode = canvas.nodes.find((node) => node.id === 'output-1');
   assert.equal(outputNode?.artifactCount, 1);
+  assert.equal(outputNode?.artifactSummaryLabel, '1 output / 0 inputs');
+  const inputNode = canvas.nodes.find((node) => node.id === 'input-1');
+  assert.equal(inputNode?.artifactSummaryLabel, 'No retained I/O');
   assert.equal(outputNode?.hasOutputArtifacts, true);
-});
-
-test('formatRunGraphArtifactSummary distinguishes metadata-only nodes', () => {
-  const summary = buildRunGraphNodeArtifactSummaries([
-    {
-      node_id: 'input-1',
-      artifact_role: 'node_input',
-      event_seq: 10,
-      payload_ref: null,
-      media_type: null,
-    },
-  ])['input-1'];
-
-  assert.equal(formatRunGraphArtifactSummary(null), 'No retained I/O');
-  assert.equal(formatRunGraphArtifactSummary(summary), '0 outputs / 1 input');
-  assert.equal(formatRunGraphArtifactDetail(summary), '1 artifact, 0 payload references, media unknown');
 });
 
 test('buildRunGraphNodeStatusMap keeps the latest node status by event sequence', () => {
@@ -347,12 +238,6 @@ test('buildRunGraphNodeStatusMap keeps the latest node status by event sequence'
   assert.equal(statuses['output-1'].status, 'completed');
   assert.equal(formatRunGraphNodeCacheStatusLabel(statuses['output-1'].execution_cache_status), 'Cache hit');
   assert.equal(formatRunGraphNodeStatusLabel(statuses['output-1'].status), 'Completed');
-  assert.equal(runGraphNodeStatusClass(statuses['output-1'].status), 'completed');
-
-  const rows = buildRunGraphNodeRows(createRunGraph(), {}, statuses);
-  const outputRow = rows.find((row) => row.nodeId === 'output-1');
-  assert.equal(outputRow?.statusLabel, 'Completed');
-  assert.equal(outputRow?.cacheStatusLabel, 'Cache hit');
 
   const canvas = buildRunGraphCanvasModel(createRunGraph().graph, {}, statuses);
   const outputNode = canvas.nodes.find((node) => node.id === 'output-1');
@@ -388,13 +273,208 @@ test('run graph presenters expose node diagnostic error badges', () => {
     },
   ]);
 
-  const rows = buildRunGraphNodeRows(createRunGraph(), {}, statuses);
-  const outputRow = rows.find((row) => row.nodeId === 'output-1');
-  assert.equal(outputRow?.errorEventId, 'error-event-1');
-  assert.equal(outputRow?.errorBadgeLabel, 'Fatal: node_execution_failed');
-  assert.equal(runGraphNodeErrorClass(outputRow?.errorSeverity), 'fatal');
-
   const canvas = buildRunGraphCanvasModel(createRunGraph().graph, {}, statuses);
   const outputNode = canvas.nodes.find((node) => node.id === 'output-1');
   assert.equal(outputNode?.errorBadgeLabel, 'Fatal: node_execution_failed');
+});
+
+function nodeStatus(
+  nodeId: string,
+  status: NodeStatusProjectionRecord['status'],
+  extra: Partial<NodeStatusProjectionRecord> = {},
+): NodeStatusProjectionRecord {
+  return {
+    workflow_run_id: 'run-1',
+    workflow_id: 'workflow-a',
+    node_id: nodeId,
+    status,
+    last_event_seq: 1,
+    last_updated_at_ms: 1_000,
+    ...extra,
+  };
+}
+
+function createDefinedRunGraph(): WorkflowRunGraphProjection {
+  const runGraph = createRunGraph();
+  runGraph.graph.nodes[0].data = {
+    label: 'Prompt',
+    definition: {
+      label: 'Text Input',
+      inputs: [],
+      outputs: [
+        { id: 'text', label: 'Text', data_type: 'string' },
+        { id: 'unused', label: 'Unused', data_type: 'string' },
+      ],
+    },
+  };
+  runGraph.graph.nodes[1].data = {
+    definition: {
+      label: 'Text Output',
+      inputs: [{ id: 'value', label: 'Value', data_type: 'string' }],
+      outputs: [],
+    },
+  };
+  return runGraph;
+}
+
+test('run node glyphs follow the status vocabulary and never guess without statuses', () => {
+  assert.deepEqual(runGraphNodeGlyph(nodeStatus('a', 'running'), true), { glyph: 'running', label: 'Running' });
+  assert.deepEqual(runGraphNodeGlyph(nodeStatus('a', 'completed'), true), { glyph: 'succeeded', label: 'Completed' });
+  assert.deepEqual(runGraphNodeGlyph(nodeStatus('a', 'failed'), true), { glyph: 'failed', label: 'Failed' });
+  assert.deepEqual(runGraphNodeGlyph(nodeStatus('a', 'cancelled'), true), { glyph: 'cancelled', label: 'Cancelled' });
+  assert.deepEqual(runGraphNodeGlyph(nodeStatus('a', 'waiting'), true), { glyph: 'waiting', label: 'Waiting' });
+  assert.deepEqual(runGraphNodeGlyph(null, true), { glyph: 'queued', label: 'Not reached' });
+  assert.deepEqual(runGraphNodeGlyph(null, false), { glyph: 'idle', label: 'No status' });
+});
+
+test('wires leaving a running node are live and wires leaving a failed node are failed', () => {
+  assert.equal(runGraphWireKind('running', 0), 'live');
+  assert.equal(runGraphWireKind('failed', 2), 'failed');
+  assert.equal(runGraphWireKind('completed', 1), 'stale');
+  assert.equal(runGraphWireKind(null, 0), 'idle');
+});
+
+test('snapshot layout shifts positions, draws connected ports and anchors wires on them', () => {
+  const runGraph = createDefinedRunGraph();
+  const statuses: RunGraphNodeStatusByNodeId = { 'input-1': nodeStatus('input-1', 'running') };
+  const layout = buildRunGraphSnapshotLayout(runGraph.graph, statuses, [], true);
+
+  const input = layout.nodes.find((node) => node.id === 'input-1');
+  const output = layout.nodes.find((node) => node.id === 'output-1');
+  assert.ok(input && output);
+  assert.equal(input.label, 'Prompt');
+  assert.equal(output.label, 'Text Output');
+  assert.equal(input.x, 48);
+  assert.equal(input.y, 48);
+  assert.equal(output.x, 338);
+  assert.deepEqual(input.outputs.map((port) => port.id), ['text']);
+  assert.equal(input.hiddenPortCount, 1);
+  assert.equal(input.glyph, 'running');
+  assert.equal(output.glyph, 'queued');
+  assert.equal(output.stateLabel, 'Not reached');
+
+  const [wire] = layout.wires;
+  assert.equal(wire.kind, 'live');
+  const sourceY = input.y + RUN_GRAPH_CARD_HEADER + 6 + RUN_GRAPH_CARD_ROW / 2;
+  const targetY = output.y + RUN_GRAPH_CARD_HEADER + 6 + RUN_GRAPH_CARD_ROW / 2;
+  assert.ok(wire.d.startsWith(`M ${input.x + input.width} ${sourceY} `));
+  assert.ok(wire.d.endsWith(`${output.x} ${targetY}`));
+  assert.ok(layout.width >= output.x + output.width);
+});
+
+test('snapshot layout falls back to edge handles when nodes carry no definition', () => {
+  const runGraph = createRunGraph();
+  const layout = buildRunGraphSnapshotLayout(
+    runGraph.graph,
+    { 'input-1': nodeStatus('input-1', 'failed', { error_code: 'oom', error_severity: 'fatal' }) },
+    [],
+    true,
+  );
+  const input = layout.nodes.find((node) => node.id === 'input-1');
+  assert.deepEqual(input?.outputs, [{ id: 'text', label: 'text', dataType: null }]);
+  assert.equal(input?.note, 'Fatal: oom');
+  assert.equal(input?.noteDanger, true);
+  assert.equal(layout.wires[0].kind, 'failed');
+  assert.deepEqual(buildRunGraphSnapshotLayout({ nodes: [], edges: [] }), {
+    width: 0,
+    height: 0,
+    nodes: [],
+    wires: [],
+  });
+});
+
+test('selected run node defaults to the running node, then the failed node, then the first', () => {
+  const graph = createRunGraph().graph;
+  assert.equal(resolveRunGraphSelectedNodeId('output-1', graph, {}), 'output-1');
+  assert.equal(resolveRunGraphSelectedNodeId('missing', graph, {}), 'input-1');
+  assert.equal(
+    resolveRunGraphSelectedNodeId(null, graph, { 'output-1': nodeStatus('output-1', 'failed') }),
+    'output-1',
+  );
+  assert.equal(
+    resolveRunGraphSelectedNodeId(null, graph, {
+      'input-1': nodeStatus('input-1', 'failed'),
+      'output-1': nodeStatus('output-1', 'running'),
+    }),
+    'output-1',
+  );
+  assert.equal(resolveRunGraphSelectedNodeId(null, { nodes: [], edges: [] }, {}), null);
+});
+
+test('run node facts read captured settings, ports, contract and run status', () => {
+  const runGraph = createDefinedRunGraph();
+  runGraph.graph_settings.nodes[0].data = { prompt: 'hello', batch_size: 64, nested: { a: 1 } };
+  const facts = buildRunGraphNodeFacts(runGraph, 'input-1', {
+    'input-1': nodeStatus('input-1', 'completed', { duration_ms: 1_200, execution_cache_status: 'cache_hit' }),
+  });
+  assert.ok(facts);
+  assert.equal(facts.label, 'Prompt');
+  assert.equal(facts.glyph, 'succeeded');
+  assert.deepEqual(facts.settings, [
+    { key: 'Prompt', value: 'hello' },
+    { key: 'Batch size', value: '64', mono: true },
+  ]);
+  assert.equal(facts.settingsNote, null);
+  assert.deepEqual(facts.ports.map((port) => `${port.direction}:${port.id}`), ['out:text', 'out:unused']);
+  assert.equal(facts.contractRows[0].value, '1.0.0');
+  assert.equal(facts.runSentence, 'Completed in 1.2 s.');
+  assert.deepEqual(facts.runRows, [{ key: 'Cache', value: 'Cache hit' }]);
+
+  const output = buildRunGraphNodeFacts(runGraph, 'output-1', {});
+  assert.equal(output?.settingsNote, 'No plain settings were captured for this node.');
+  assert.equal(output?.runSentence, 'Not reached in this run.');
+  assert.equal(buildRunGraphNodeFacts(runGraph, 'missing', {}), null);
+
+  runGraph.graph_settings.nodes = [];
+  assert.equal(
+    buildRunGraphNodeFacts(runGraph, 'input-1', {}, false)?.settingsNote,
+    'This run did not capture settings for this node.',
+  );
+});
+
+test('run sentences explain failures in words and durations read naturally', () => {
+  assert.equal(
+    formatRunGraphNodeRunSentence(nodeStatus('a', 'failed', { error: 'out of memory, needed 14.2 GB.' })),
+    'Failed: out of memory, needed 14.2 GB.',
+  );
+  assert.equal(
+    formatRunGraphNodeRunSentence(nodeStatus('a', 'failed', { error_code: 'oom' })),
+    'Failed: Error: oom.',
+  );
+  assert.equal(formatRunGraphNodeRunSentence(null, false), 'Node status is unavailable for this run.');
+  assert.equal(formatRunGraphDuration(420), '420 ms');
+  assert.equal(formatRunGraphDuration(38_000), '38.0 s');
+  assert.equal(formatRunGraphDuration(663_000), '11m 03s');
+});
+
+test('setting rows keep plain scalars and shorten long text', () => {
+  const long = 'x'.repeat(200);
+  const rows = runGraphSettingRows({ label: 'skip', definition: {}, empty: ' ', flag: true, text: long });
+  assert.deepEqual(rows.map((row) => row.key), ['Flag', 'Text']);
+  assert.equal(rows[1].value.length, 120);
+  assert.ok(rows[1].value.endsWith('…'));
+  assert.deepEqual(runGraphSettingRows(null), []);
+  assert.deepEqual(runGraphSettingRows(['a']), []);
+});
+
+test('request gate applies only the newest load and nothing after invalidation', () => {
+  const gate = createRunGraphRequestGate();
+  const first = gate.begin();
+  const second = gate.begin();
+  assert.equal(gate.isCurrent(first), false);
+  assert.equal(gate.isCurrent(second), true);
+  gate.invalidate();
+  assert.equal(gate.isCurrent(second), false);
+
+  const other = createRunGraphRequestGate();
+  const otherToken = other.begin();
+  assert.equal(other.isCurrent(otherToken), true, 'gates are scoped to their owner');
+});
+
+test('fit scale shrinks large snapshots to the viewport and never enlarges small ones', () => {
+  assert.equal(fitRunGraphScale({ width: 1024, height: 524 }, { width: 2000, height: 500 }), 0.5);
+  assert.equal(fitRunGraphScale({ width: 1200, height: 800 }, { width: 400, height: 300 }), 1);
+  assert.equal(fitRunGraphScale({ width: 0, height: 0 }, { width: 400, height: 300 }), 1);
+  assert.equal(fitRunGraphScale({ width: 124, height: 124 }, { width: 10_000, height: 10_000 }), 0.35);
+  assert.equal(clampRunGraphScale(9), 1.5);
 });
