@@ -174,7 +174,9 @@ try {
   await browser.setWindowSize(1440, 1000);
   await browser.url(`http://${host}:${vitePort}/`);
   await browser.waitUntil(async () => browser.execute(() => Boolean(window.d02?.ready)), {
-    timeout: 20_000,
+    // Vite re-optimises the dependency graph on every start (two Svelte plugin
+    // instances rewrite its metadata), which took 26 s after the main merge.
+    timeout: 90_000,
     timeoutMsg: 'fixture did not become ready',
   });
   const fixtureError = await browser.execute(() => document.body.dataset.fixtureError ?? null);
