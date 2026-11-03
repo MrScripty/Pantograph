@@ -407,3 +407,34 @@ Issue IDs assigned at merge: WR-M9-2 was already WR-056 (dropped duplicate WR-05
 - Working tree: 105 modified, 20 new, 1 deleted (`GraphSelector.svelte`);
   nothing committed. The pre-commit traceability hook was simulated by the
   agents over their file lists; the real hook runs at commit time (WR-003).
+
+## 2026-11-03, port onto main and pull requests (integration owner)
+
+- The source branch `feat/workbench-redesign` sits on
+  `codex/pantograph-rpc-workflow-2026-09-26` (forked from main 2026-09-09, 37
+  unmerged commits, 417 behind), so its commits were cherry-picked with `-x`
+  onto `origin/main` (46aad5841) in a worktree. Replacement lineage:
+  4352fce1b → e7d22d224 (design docs); cc2260d76 → 6fa30ce9f (source);
+  fca20d6ab → 753b94fe4 (e2e harnesses); 2c5aae1d0 → 3af3f09d0 (plan).
+  Twelve files conflicted with fixes main gained since September; each was
+  resolved by keeping the redesign and re-applying main's behavioural change
+  (toolbar typed submit inputs and seed checks, image output node artifact
+  decode and URL lifecycle, number input seed validation, text output empty
+  branch, external connection `canConnect` gating, Library browser-host
+  capability gating, I/O Inspector page-lifecycle fencing on download, shell
+  "Loopback browser host" chip). Branch-only commit 6126c5a34's complete-image
+  guard (`assertCompleteIoArtifactImageRead`) reaches main through the port
+  because the redesigned page depends on it.
+- Follow-ups on the ported branch: a08e027fa adds an eslint environment for
+  the plan's tooling scripts; b90eb6349 removes `artifactDownloadLifecycle.ts`,
+  which nothing imports after the redesign.
+- Gates on the ported branch: typecheck pass; test:frontend 873/873;
+  lint:a11y pass; lint:critical pass; eslint `--max-warnings 0` on every
+  changed file pass; `TRACEABILITY_MODE=range` against origin/main pass
+  (225 changed paths); vite build pass; combined walkthrough identical to the
+  source branch; WebKitGTK I/O harness PASS.
+- Pull requests: #96 `docs/workbench-redesign-design` → `main` (design docs);
+  #97 `feat/workbench-redesign-main` → `docs/workbench-redesign-design`
+  (implementation, stacked). The source branch `feat/workbench-redesign` is
+  superseded by the port and can be retired once #97 is integrated
+  (disposition: `superseded`, its commits are patch-equivalent to the port).
