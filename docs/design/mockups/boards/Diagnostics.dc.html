@@ -1,0 +1,408 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Diagnostics tab</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&amp;family=Atkinson+Hyperlegible:wght@400;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<link rel="stylesheet" href="./shell.css">
+<style>
+.facet{display:grid;grid-template-columns:1fr auto;gap:3px 12px;font-size:12.5px;padding:6px 12px 10px}
+.facet .n{font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#A3A9B4}
+.facet .bar{grid-column:1/-1;height:3px;background:#23272D;border-radius:2px;margin-bottom:4px}
+.facet .bar i{display:block;height:100%;background:#6B717B;border-radius:2px}
+.facet .k{color:#C9CDD4}
+.cmp{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(200px,100%),1fr));gap:12px 18px}
+.cmp .big{font-family:Newsreader,Georgia,serif;font-size:22px;color:#fff;line-height:1.1}
+.cmp .lbl{font-size:12px;color:#A3A9B4;margin-top:2px}
+</style>
+</helmet>
+<div class="root" style="--accent: {{accent}}">
+  <header class="hdr">
+    <div class="brand">Pantograph</div>
+    <nav aria-label="Workspaces" style="display:flex;align-items:center">
+      <a class="tab" href="#sessions">Sessions</a>
+      <span class="vdiv" aria-hidden="true"></span>
+      <a class="tab" href="#scheduler">Scheduler</a>
+      <a class="tab" href="#diagnostics" aria-current="page">Diagnostics</a>
+      <a class="tab" href="#io">I/O Inspector</a>
+      <a class="tab" href="#network">Network</a>
+      <span class="vdiv" aria-hidden="true"></span>
+      <a class="tab" href="#graph">Graph</a>
+      <a class="tab" href="#nodes">Node Editor</a>
+      <a class="tab" href="#library">Library</a>
+    </nav>
+    <div style="flex:1"></div>
+    <!--ctx-start-->
+    <div class="ctxwrap" onMouseEnter="{{ctxHoverOn}}" onMouseLeave="{{ctxHoverOff}}">
+      <sc-if value="{{ctxHas}}" hint-placeholder-val="{{ true }}">
+        <div class="ctx" aria-label="Run context">
+          <button class="ctxbtn" type="button" aria-haspopup="listbox" aria-expanded="{{pickerOpen}}" onClick="{{togglePicker}}" title="{{ctxRun.id}}, click to change run">
+            <span class="g {{ctxRun.glyph}}" aria-hidden="true" style="margin-top:0"></span>
+            <span class="ctxname">{{ctxRun.wf}} <span class="muted">v{{ctxRun.ver}}</span></span>
+            <span class="muted" aria-hidden="true" style="font-size:10px">▾</span>
+          </button>
+          <button class="x" type="button" aria-label="Clear run context" onClick="{{clearSel}}">×</button>
+        </div>
+      </sc-if>
+      <sc-if value="{{ctxNone}}" hint-placeholder-val="{{ false }}">
+        <button class="ctx ctxbtn ctxempty" type="button" aria-haspopup="listbox" aria-expanded="{{pickerOpen}}" onClick="{{togglePicker}}">Pick a run <span aria-hidden="true" style="font-size:10px">▾</span></button>
+      </sc-if>
+      <sc-if value="{{pickerOpen}}" hint-placeholder-val="{{ false }}">
+        <div class="pop" role="dialog" aria-label="Pick a run">
+          <div style="padding:10px 10px 6px">
+            <label for="ctx-q" style="position:absolute;left:-9999px">Search runs or paste a run id</label>
+            <input id="ctx-q" class="field" data-key="ctx-q" data-autofocus="1" type="search" placeholder="Search runs, or paste a run id" value="{{pickerQuery}}" onInput="{{setQuery}}" style="width:100%">
+          </div>
+          <div class="poplist">
+            <sc-for list="{{pickerGroups}}" as="pg" hint-placeholder-count="2">
+              <div class="pophead">{{pg.title}} <span class="n">{{pg.n}}</span></div>
+              <sc-for list="{{pg.runs}}" as="r" hint-placeholder-count="2">
+                <button class="poprow" type="button" aria-current="{{r.selected}}" onClick="{{r.pick}}" onMouseEnter="{{r.hoverOn}}" onMouseLeave="{{r.hoverOff}}">
+                  <span class="g {{r.glyph}}" aria-hidden="true"></span>
+                  <span style="min-width:0"><b>{{r.wf}}</b> <span class="ver">v{{r.ver}}</span><span class="sub">{{r.statusLabel}}{{r.contextSuffix}}</span></span>
+                  <span class="time">{{r.id}}</span>
+                </button>
+              </sc-for>
+            </sc-for>
+            <sc-if value="{{pickerEmpty}}" hint-placeholder-val="{{ false }}"><div class="muted small" style="padding:10px 12px">{{pickerEmptyText}}</div></sc-if>
+          </div>
+          <div class="popfoot">Hover a run in Scheduler and press Ctrl+C to copy its id. Hover this chip and press Ctrl+V to view a copied run.</div>
+        </div>
+      </sc-if>
+    </div>
+    <sc-if value="{{copied}}" hint-placeholder-val="{{ false }}"><div class="toast" role="status">Copied {{copiedId}}</div></sc-if>
+    <!--ctx-end-->
+    <div class="engine muted"><span class="eng" aria-hidden="true"></span>Local engine</div>
+    <a class="tab" href="#settings">Settings</a>
+    <button class="tgl" type="button" aria-pressed="false" style="margin-left:6px"><svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true" style="stroke:currentColor;fill:none;stroke-width:1.8"><path d="M4 5h16v11H9l-5 4z"/></svg>Assistant</button>
+  </header>
+
+  <main class="main">
+    <sc-if value="{{noSel}}" hint-placeholder-val="{{ false }}">
+      <div class="dimrow"><div class="dim" role="presentation"><span class="dim-label">no run selected</span></div></div>
+      <div class="panel" style="flex:1;display:flex;align-items:center;justify-content:center">
+        <div style="text-align:center;max-width:420px">
+          <div class="title" style="font-size:20px">Which run do you want to look into?</div>
+          <div class="muted small" style="margin:6px 0 14px">Diagnostics shows the events, errors and placement of one run. Pick one here, select it in the Scheduler, or paste a run id.</div>
+          <button class="btn primary" type="button" onClick="{{openPicker}}">Pick a run</button>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{hasSel}}" hint-placeholder-val="{{ true }}">
+    <div class="dimrow"><div class="dim" role="presentation"><span class="dim-label">{{dimLine}}</span></div></div>
+
+    <div style="flex:1;min-height:0;display:flex;gap:14px;align-items:stretch">
+
+      <section class="panel col" aria-label="Run facts" style="flex:0 0 300px">
+        <div class="scroll">
+          <div style="padding:14px 14px 12px">
+            <div class="title" style="font-size:20px">{{sel.wf}} <span class="muted">v{{sel.ver}}</span></div>
+            <div class="mono muted" style="margin-top:2px" onMouseEnter="{{sel.hoverOn}}" onMouseLeave="{{sel.hoverOff}}" title="Ctrl+C copies the run id">{{sel.id}}</div>
+            <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap">
+              <span class="chip"><span class="g {{sel.glyph}}" aria-hidden="true"></span>{{sel.statusLabel}}</span>
+              <span class="chip">{{sel.placement}}</span>
+              <span class="chip">from {{sel.client}}, session {{sel.session}}</span>
+            </div>
+          </div>
+          <div class="sec" style="padding:12px 14px">
+            <h3>Timing</h3>
+            <div class="kv">
+              <sc-for list="{{timing}}" as="t" hint-placeholder-count="4"><span class="k">{{t.k}}</span><span>{{t.v}}</span></sc-for>
+            </div>
+          </div>
+          <div class="sec" style="padding:12px 14px">
+            <h3>Placement</h3>
+            <div class="kv">
+              <span class="k">Runtime</span><span>{{sel.runtime}}, cuda backend</span>
+              <span class="k">Device</span><span>{{sel.placementLong}}</span>
+              <span class="k">Model</span><span class="mono" style="font-size:12px">{{sel.model}}</span>
+              <span class="k">Policy</span><span>fair-share, bucket default</span>
+              <span class="k">Reason</span><span>{{reason}}</span>
+              <span class="k">Retention</span><span>7 days, {{retention}}</span>
+            </div>
+          </div>
+          <button class="ghead" type="button" aria-expanded="{{factsOpen}}" onClick="{{toggleFacts}}">Nodes by status <span class="n">{{nodeCount}}</span><span class="chev" aria-hidden="true">{{factsChev}}</span></button>
+          <sc-if value="{{factsOpen}}" hint-placeholder-val="{{ true }}">
+            <div class="facet">
+              <sc-for list="{{facets}}" as="f" hint-placeholder-count="4">
+                <span class="k">{{f.label}}</span><span class="n">{{f.n}}</span><span class="bar" aria-hidden="true"><i style="width:{{f.pct}}%"></i></span>
+              </sc-for>
+            </div>
+          </sc-if>
+          <button class="ghead" type="button" aria-expanded="{{cmpOpen}}" onClick="{{toggleCmp}}">Compared with earlier runs <span class="chev" aria-hidden="true">{{cmpChev}}</span></button>
+          <sc-if value="{{cmpOpen}}" hint-placeholder-val="{{ true }}">
+            <div style="padding:10px 14px 14px" class="small">
+              <div class="cmp">
+                <div><div class="big">{{cmp.failed}}</div><div class="lbl">runs of v{{sel.ver}} failed</div></div>
+                <div><div class="big">{{cmp.median}}</div><div class="lbl">median duration when it succeeds</div></div>
+              </div>
+              <div class="muted" style="margin-top:10px">{{cmp.note}}</div>
+              <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap"><button class="pill" type="button">Only v{{sel.ver}}</button><button class="pill" type="button">Only {{sel.device}}</button><button class="pill" type="button">Last 7 days</button></div>
+            </div>
+          </sc-if>
+          <div class="sec" style="padding:12px 14px">
+            <h3>Projection</h3>
+            <div class="muted small">Current at seq 1 842. Run list and node status rebuilt 20:05:50.</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel col" aria-label="Events" style="flex:1">
+        <div class="ptop" style="flex-direction:row;align-items:center;gap:10px">
+          <div class="seg" role="group" aria-label="Show" style="flex:none">
+            <sc-for list="{{levels}}" as="l" hint-placeholder-count="3">
+              <button type="button" aria-pressed="{{l.active}}" onClick="{{l.pick}}" style="flex:none;padding:0 10px">{{l.label}} <span class="n">{{l.n}}</span></button>
+            </sc-for>
+          </div>
+          <div class="seg" role="group" aria-label="Source" style="flex:none">
+            <sc-for list="{{sources}}" as="s" hint-placeholder-count="4">
+              <button type="button" aria-pressed="{{s.active}}" onClick="{{s.pick}}" style="flex:none;padding:0 10px">{{s.label}}</button>
+            </sc-for>
+          </div>
+          <label for="dg-search" style="position:absolute;left:-9999px">Search events</label>
+          <input id="dg-search" class="field" type="search" placeholder="Search events" style="flex:1;min-width:120px">
+          <label class="tgl" style="cursor:pointer"><input type="checkbox" style="margin:0" checked> Follow</label>
+        </div>
+
+        <sc-if value="{{hasError}}" hint-placeholder-val="{{ false }}">
+          <div style="margin:10px 12px 0;padding:10px 12px;border:1px solid #5A4247;border-left:3px solid #E39A9A;border-radius:4px;background:#2E333A;display:flex;gap:12px;align-items:flex-start">
+            <span class="g g-failed" aria-hidden="true" style="margin-top:5px"></span>
+            <div style="flex:1;min-width:0">
+              <div><b>{{err.title}}</b> <span class="muted small">{{err.code}}</span></div>
+              <div class="small" style="margin-top:2px">{{err.text}}</div>
+              <div class="small muted" style="margin-top:6px">{{err.hint}}</div>
+            </div>
+            <button class="btn sm" type="button" onClick="{{jumpErr}}">Show in log</button>
+          </div>
+        </sc-if>
+
+        <div class="scroll log" style="padding-bottom:12px" role="log" aria-label="Run events">
+          <sc-for list="{{lines}}" as="e" hint-placeholder-count="12">
+            <div class="ln {{e.cls}}">
+              <span class="t">{{e.t}}</span>
+              <span class="g {{e.glyph}}" aria-hidden="true"></span>
+              <span class="m"><b>{{e.kind}}</b> {{e.msg}}<span class="muted"> {{e.src}}</span></span>
+            </div>
+          </sc-for>
+          <div class="muted small" style="padding:10px 12px;font-family:'Atkinson Hyperlegible',sans-serif">{{lineCount}} of {{lineTotal}} events shown. Payload bodies for this run are in <a href="#io">I/O Inspector</a>.</div>
+        </div>
+      </section>
+    </div>
+    </sc-if>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#D9B06A","options":["#D9B06A","#9FB7D9","#A7C4A0"]},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  /*ctx-start*/
+  catalog() {
+    return [
+      { id: 'run_01JB2K7Q3M', wf: 'ingest-docs-rag', ver: '1.4.0', status: 'running', runtime: 'llama.cpp', device: 'cuda:0', deviceName: 'RTX 4090', vram: 17.2, queue: 0, prio: 0, est: 'About 2 min left', node: 'embed_chunks', pct: '61%', reason: '', started: '20:01:40', dur: '4m 12s', updated: '20:05:51', client: 'gui', session: 's-4f2a' },
+      { id: 'run_01JB2K9F0A', wf: 'image-gen-sdxl', ver: '0.9.2', status: 'running', runtime: 'diffusers', device: 'cuda:1', deviceName: 'RTX 3090', vram: 9.8, queue: 0, prio: 0, est: 'About 40 s left', node: 'sample', pct: 'step 18 of 30', reason: '', started: '20:04:02', dur: '1m 49s', updated: '20:05:50', client: 'gui', session: 's-4f2a' },
+      { id: 'run_01JB2KB4ZT', wf: 'transcribe-meeting', ver: '2.1.0', status: 'waiting', runtime: 'whisper', device: 'cuda:0', deviceName: 'RTX 4090', vram: 8, queue: 1, prio: 5, est: 'Starts after ingest-docs-rag', node: '', pct: '', reason: 'needs 8 GB on cuda:0, 6.8 GB free', started: '—', dur: '—', updated: '20:05:12', client: 'cli', session: 's-9c01' },
+      { id: 'run_01JB2KC1PX', wf: 'summarize-daily', ver: '1.0.3', status: 'queued', runtime: 'llama.cpp', device: 'cuda:1', deviceName: 'RTX 3090', vram: 6, queue: 2, prio: 0, est: 'About 6 min', node: '', pct: '', reason: 'next on cuda:1, model cached', started: '—', dur: '—', updated: '20:04:40', client: 'gui', session: 's-4f2a' },
+      { id: 'run_01JB2KD8RN', wf: 'embed-corpus', ver: '1.4.0', status: 'queued', runtime: 'llama.cpp', device: '', deviceName: '', vram: 7, queue: 3, prio: 0, est: 'About 9 min', node: '', pct: '', reason: 'cold load, 12 s', started: '—', dur: '—', updated: '20:04:41', client: 'gui', session: 's-4f2a' },
+      { id: 'run_01JB2KE2QW', wf: 'image-gen-sdxl', ver: '0.9.2', status: 'queued', runtime: 'diffusers', device: '', deviceName: '', vram: 9.8, queue: 4, prio: 0, est: 'About 2 min', node: '', pct: '', reason: 'model cached', started: '—', dur: '—', updated: '20:04:55', client: 'gui', session: 's-4f2a' },
+      { id: 'run_01JB2JZ0MT', wf: 'summarize-daily', ver: '1.0.3', status: 'succeeded', runtime: 'llama.cpp', device: 'cuda:0', deviceName: 'RTX 4090', vram: 6, queue: 0, prio: 0, est: 'Finished in 38 s', node: '', pct: '', reason: '', started: '19:52:10', dur: '38 s', updated: '19:52:48', client: 'gui', session: 's-4f2a' },
+      { id: 'run_01JB2JV7KD', wf: 'embed-corpus', ver: '1.3.9', status: 'succeeded', runtime: 'llama.cpp', device: 'cuda:0', deviceName: 'RTX 4090', vram: 7, queue: 0, prio: 0, est: 'Finished in 11m 03s', node: '', pct: '', reason: '', started: '19:38:01', dur: '11m 03s', updated: '19:49:04', client: 'gui', session: 's-4f2a' },
+      { id: 'run_01JB2JT3HB', wf: 'image-gen-sdxl', ver: '0.9.1', status: 'failed', runtime: 'diffusers', device: 'cuda:1', deviceName: 'RTX 3090', vram: 14.2, queue: 0, prio: 0, est: 'Stopped after 22 s', node: 'load_model', pct: '', reason: 'out of memory, needed 14.2 GB', started: '19:35:20', dur: '22 s', updated: '19:35:42', client: 'gui', session: 's-4f2a' },
+      { id: 'run_01JB2JQ9XA', wf: 'transcribe-meeting', ver: '2.0.0', status: 'cancelled', runtime: 'whisper', device: 'cuda:0', deviceName: 'RTX 4090', vram: 8, queue: 0, prio: 0, est: 'Stopped after 1m 10s', node: 'transcribe', pct: '', reason: 'cancelled from the GUI', started: '19:30:05', dur: '1m 10s', updated: '19:31:15', client: 'gui', session: 's-4f2a' }
+    ];
+  }
+  wfMap() {
+    return {
+      'ingest-docs-rag': { model: 'pumas://models/bge-m3', nodes: [['read_docs', 'read-file', 'text'], ['chunking', 'expand-settings', 'settings'], ['split', 'processing', 'chunks'], ['embed_chunks', 'embedding', 'embedding'], ['index', 'vector-output', ''], ['manifest', 'write-file', '']] },
+      'image-gen-sdxl': { model: 'pumas://models/sdxl-base-1.0', nodes: [['prompt', 'text-input', 'text'], ['load_model', 'puma-lib', 'model_path'], ['sample', 'pytorch-inference', 'latents'], ['decode', 'image-output', 'image'], ['unload', 'unload-model', '']] },
+      'transcribe-meeting': { model: 'pumas://models/whisper-large-v3', nodes: [['audio', 'audio-input', 'audio'], ['transcribe', 'onnx-inference', 'transcript'], ['notes', 'text-output', 'text']] },
+      'summarize-daily': { model: 'pumas://models/qwen3-8b-instruct', nodes: [['fetch', 'read-file', 'text'], ['summarize', 'llm-inference', 'response'], ['write', 'write-file', '']] },
+      'embed-corpus': { model: 'pumas://models/bge-m3', nodes: [['read', 'read-file', 'text'], ['embed', 'embedding', 'embedding'], ['index', 'vector-output', '']] }
+    };
+  }
+  nodeStates(run) {
+    const wf = this.wfMap()[run.wf] || { nodes: [['start', 'processing', 'out'], ['end', 'text-output', '']] };
+    const idx = wf.nodes.findIndex((n) => n[0] === run.node);
+    return wf.nodes.map(([id, type, port], i) => {
+      let state = 'queued';
+      if (run.status === 'succeeded') state = 'succeeded';
+      else if (run.status === 'running') state = i < idx ? 'succeeded' : i === idx ? 'running' : 'queued';
+      else if (run.status === 'failed') state = i < idx ? 'succeeded' : i === idx ? 'failed' : 'skipped';
+      else if (run.status === 'cancelled') state = i < idx ? 'succeeded' : i === idx ? 'cancelled' : 'skipped';
+      const glyph = state === 'skipped' ? 'g-cancelled' : 'g-' + state;
+      return { id, type, port, state, glyph, label: state === 'skipped' ? 'skipped' : state };
+    });
+  }
+  decorateRun(r) {
+    const labels = { running: 'Running', waiting: 'Waiting', queued: 'Queued', succeeded: 'Succeeded', failed: 'Failed', cancelled: 'Cancelled' };
+    const isLive = r.status === 'running' || r.status === 'waiting' || r.status === 'queued';
+    let context = '';
+    if (r.status === 'running') context = ', ' + r.node + (r.pct ? ' ' + r.pct : '');
+    else if (r.status === 'waiting') context = ', ' + r.reason;
+    else if (r.status === 'queued') context = ', #' + r.queue + ' in queue';
+    else if (r.reason) context = ', ' + r.reason;
+    else context = ', ' + r.dur;
+    const placement = r.device ? r.runtime + ' on ' + r.device : r.runtime + ', device not assigned yet';
+    const placementLong = r.device ? r.runtime + ' on ' + r.device + ' (' + r.deviceName + ')' : 'Not assigned to a device yet';
+    let progress = r.est;
+    if (r.status === 'running') progress = r.node + ', ' + r.pct;
+    else if (r.status === 'waiting') progress = 'Waiting: ' + r.reason;
+    else if (r.status === 'queued') progress = 'Queue position ' + r.queue + ', ' + r.reason;
+    else if (r.status === 'failed') progress = 'Failed in ' + r.node + ': ' + r.reason;
+    const chips = [];
+    if (r.device) chips.push({ text: r.runtime + ' on ' + r.device });
+    if (r.prio) chips.push({ text: 'priority ' + r.prio });
+    if (r.queue) chips.push({ text: '#' + r.queue + ' in queue' });
+    return { ...r, glyph: 'g-' + r.status, stClass: r.status === 'failed' ? 'st-failed' : '', statusLabel: labels[r.status], contextSuffix: context, placement, placementLong, progress, chips, isLive,
+      model: (this.wfMap()[r.wf] || {}).model || 'none', hoverOn: () => { this._hoverRun = r.id; }, hoverOff: () => { if (this._hoverRun === r.id) this._hoverRun = null; } };
+  }
+  ctxBind() {
+    if (this._ctxBound || typeof document === 'undefined') return;
+    this._ctxBound = true;
+    const isField = (t) => t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT');
+    document.addEventListener('keydown', (e) => {
+      const k = (e.key || '').toLowerCase(); const mod = e.ctrlKey || e.metaKey;
+      if (e.key === 'Escape' && this.state && this.state.pickerOpen) { this.setState({ pickerOpen: false }); return; }
+      if (!mod || isField(e.target)) return;
+      if (k === 'c' && this._hoverRun) this.copyRun(this._hoverRun);
+      if (k === 'v' && this._hoverCtx) { e.preventDefault(); this.pasteRun(); }
+    });
+    document.addEventListener('mousedown', (e) => {
+      if (this.state && this.state.pickerOpen && !(e.target.closest && e.target.closest('.ctxwrap'))) this.setState({ pickerOpen: false });
+    });
+    window.addEventListener('storage', (e) => { if (e.key === 'pg.run') this.setState({ run: e.newValue || null }); });
+  }
+  copyRun(id) {
+    try { localStorage.setItem('pg.clip', id); } catch (_) {}
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(id).catch(() => {});
+    this.setState({ copied: id });
+    clearTimeout(this._copyT); this._copyT = setTimeout(() => this.setState({ copied: null }), 1600);
+  }
+  pasteRun() {
+    const apply = (text) => { const id = (text || '').trim(); if (this.catalog().some((r) => r.id === id)) this.pickRun(id); else this.setState({ pickerOpen: true, pickerQuery: id }); };
+    let fallback = ''; try { fallback = localStorage.getItem('pg.clip') || ''; } catch (_) {}
+    if (navigator.clipboard && navigator.clipboard.readText) navigator.clipboard.readText().then(apply, () => apply(fallback)); else apply(fallback);
+  }
+  pickRun(id) {
+    try { localStorage.setItem('pg.run', id || ''); } catch (_) {}
+    this.setState({ run: id || null, pickerOpen: false, pickerQuery: '', confirmCancel: false });
+  }
+  ctxRunId(fallback) {
+    const st = this.state || {};
+    if ('run' in st) return st.run;
+    try { const v = localStorage.getItem('pg.run'); if (v !== null) return v || null; } catch (_) {}
+    return fallback;
+  }
+  ctxVals(fallbackId) {
+    this.ctxBind();
+    const st = this.state || {};
+    const runId = this.ctxRunId(fallbackId);
+    const all = this.catalog();
+    const selRaw = all.find((r) => r.id === runId);
+    const sel = this.decorateRun(selRaw || all[0]);
+    const qRaw = st.pickerQuery || ''; const q = qRaw.toLowerCase();
+    const match = (r) => !q || r.wf.includes(q) || r.id.toLowerCase().includes(q) || ('v' + r.ver).includes(q);
+    const groups = [['Running', ['running']], ['Waiting for memory', ['waiting']], ['Queued', ['queued']], ['Finished today', ['succeeded', 'failed', 'cancelled']]]
+      .map(([title, keys]) => { const runs = all.filter((r) => keys.includes(r.status) && match(r)).map((r) => ({ ...this.decorateRun(r), selected: r.id === runId, pick: () => this.pickRun(r.id) })); return { title, n: runs.length, runs }; })
+      .filter((g) => g.n);
+    const total = groups.reduce((n, g) => n + g.n, 0);
+    return {
+      runId, hasSel: !!selRaw, noSel: !selRaw, sel, ctxHas: !!selRaw, ctxNone: !selRaw, ctxRun: sel,
+      pickerOpen: !!st.pickerOpen, pickerQuery: qRaw, pickerGroups: groups,
+      pickerEmpty: total === 0, pickerEmptyText: q.startsWith('run_') ? 'No run with id ' + qRaw + ' in today\'s history.' : 'No runs match.',
+      togglePicker: () => this.setState({ pickerOpen: !st.pickerOpen }),
+      openPicker: () => this.setState({ pickerOpen: true }),
+      setQuery: (e) => { const v = e.target.value; if (all.some((r) => r.id === v.trim())) this.pickRun(v.trim()); else this.setState({ pickerQuery: v }); },
+      clearSel: () => this.pickRun(null),
+      ctxHoverOn: () => { this._hoverCtx = true; }, ctxHoverOff: () => { this._hoverCtx = false; },
+      copied: !!st.copied, copiedId: st.copied || ''
+    };
+  }
+  /*ctx-end*/
+  events(run) {
+    if (run.id === 'run_01JB2JT3HB') return [
+      { t: '19:35:02.114', lvl: 'info', src: 'scheduler', kind: 'accepted', msg: 'from gui, session s-4f2a' },
+      { t: '19:35:02.115', lvl: 'info', src: 'scheduler', kind: 'enqueued', msg: 'fair-share, priority 0, position 2' },
+      { t: '19:35:11.402', lvl: 'info', src: 'scheduler', kind: 'queue placement', msg: 'cuda:1 preferred, 9.8 GB free, model not cached' },
+      { t: '19:35:18.030', lvl: 'info', src: 'scheduler', kind: 'admitted', msg: 'placed on cuda:1 with diffusers 0.31, 14.2 GB requested' },
+      { t: '19:35:18.031', lvl: 'info', src: 'library', kind: 'asset accessed', msg: 'pumas://models/sdxl-base-1.0, cache miss, 6.9 GB read from disk' },
+      { t: '19:35:20.207', lvl: 'info', src: 'runtime', kind: 'run started', msg: 'diffusers worker pid 48112 on cuda:1' },
+      { t: '19:35:20.209', lvl: 'info', src: 'node', kind: 'load_model', msg: 'started' },
+      { t: '19:35:24.880', lvl: 'warn', src: 'runtime', kind: 'memory pressure', msg: 'cuda:1 at 22.9 of 24 GB, image-gen-sdxl run_01JB2K9F0A holding 9.8 GB' },
+      { t: '19:35:31.117', lvl: 'info', src: 'runtime', kind: 'model load', msg: 'unet weights 5.1 GB mapped, vae pending' },
+      { t: '19:35:41.960', lvl: 'error', src: 'runtime', kind: 'runtime_model_load_failed', msg: 'CUDA out of memory, tried to allocate 1.9 GB on cuda:1, 0.4 GB free' },
+      { t: '19:35:42.004', lvl: 'error', src: 'node', kind: 'load_model', msg: 'failed, phase runtime model load' },
+      { t: '19:35:42.010', lvl: 'info', src: 'runtime', kind: 'worker exited', msg: 'pid 48112, code 1, 14.2 GB released' },
+      { t: '19:35:42.221', lvl: 'info', src: 'scheduler', kind: 'run terminal', msg: 'failed after 22 s, 3 downstream nodes skipped' },
+      { t: '19:35:42.230', lvl: 'info', src: 'retention', kind: 'retention', msg: 'no payloads retained, metadata kept 7 days' }
+    ];
+    const ms = (t, add) => { if (!t || t === '—') return '—'; const [h, m, s] = t.split(':').map(Number); const tot = h * 3600 + m * 60 + s + add; const p = (n) => String(n).padStart(2, '0'); return p(Math.floor(tot / 3600) % 24) + ':' + p(Math.floor(tot / 60) % 60) + ':' + p(tot % 60) + '.' + String((add * 137) % 1000).padStart(3, '0'); };
+    const acc = run.started !== '—' ? ms(run.started, -28) : ms(run.updated, -2);
+    const out = [
+      { t: acc, lvl: 'info', src: 'scheduler', kind: 'accepted', msg: 'from ' + run.client + ', session ' + run.session },
+      { t: acc, lvl: 'info', src: 'scheduler', kind: 'enqueued', msg: 'fair-share, priority ' + run.prio + (run.queue ? ', position ' + run.queue : '') }
+    ];
+    if (run.status === 'waiting') { out.push({ t: ms(run.updated, 0), lvl: 'warn', src: 'scheduler', kind: 'waiting for memory', msg: run.reason }); return out; }
+    if (run.status === 'queued') { out.push({ t: ms(run.updated, 0), lvl: 'info', src: 'scheduler', kind: 'queue placement', msg: run.reason }); return out; }
+    out.push({ t: ms(run.started, -2), lvl: 'info', src: 'scheduler', kind: 'admitted', msg: 'placed on ' + run.device + ' with ' + run.runtime + ', ' + run.vram + ' GB reserved' });
+    out.push({ t: ms(run.started, -1), lvl: 'info', src: 'library', kind: 'asset accessed', msg: this.decorateRun(run).model + ', cache hit' });
+    out.push({ t: ms(run.started, 0), lvl: 'info', src: 'runtime', kind: 'run started', msg: run.runtime + ' worker on ' + run.device });
+    const nodes = this.nodeStates(run); let k = 1;
+    nodes.forEach((n) => {
+      if (n.state === 'queued' || n.state === 'skipped') return;
+      out.push({ t: ms(run.started, k++), lvl: 'info', src: 'node', kind: n.id, msg: 'started' });
+      if (n.state === 'succeeded') out.push({ t: ms(run.started, k += 3), lvl: 'info', src: 'node', kind: n.id, msg: 'completed, outputs retained' });
+      if (n.state === 'running') out.push({ t: ms(run.updated, 0), lvl: 'info', src: 'node', kind: n.id, msg: 'progress ' + run.pct });
+      if (n.state === 'cancelled') out.push({ t: ms(run.updated, 0), lvl: 'warn', src: 'node', kind: n.id, msg: 'cancelled while running' });
+    });
+    if (run.status === 'succeeded') out.push({ t: ms(run.updated, 0), lvl: 'info', src: 'scheduler', kind: 'run terminal', msg: 'succeeded after ' + run.dur + ', artifacts kept 7 days' });
+    if (run.status === 'cancelled') out.push({ t: ms(run.updated, 1), lvl: 'info', src: 'scheduler', kind: 'run terminal', msg: 'cancelled from the GUI after ' + run.dur });
+    return out;
+  }
+  renderVals() {
+    const st = this.state || {};
+    const ctx = this.ctxVals('run_01JB2JT3HB');
+    const sel = ctx.sel;
+    const lvl = st.lvl || 'all';
+    const src = st.src || 'all';
+    const all = ctx.hasSel ? this.events(sel) : [];
+    const lvlDefs = [['all', 'All', all.length], ['warn', 'Warnings', all.filter((e) => e.lvl === 'warn').length], ['error', 'Errors', all.filter((e) => e.lvl === 'error').length]];
+    const levels = lvlDefs.map(([key, label, n]) => ({ key, label, n, active: key === lvl, pick: () => this.setState({ lvl: key }) }));
+    const sources = [['all', 'All sources'], ['scheduler', 'Scheduler'], ['runtime', 'Runtime'], ['node', 'Nodes']].map(([key, label]) => ({ key, label, active: key === src, pick: () => this.setState({ src: key }) }));
+    const glyph = { info: 'g-succeeded', warn: 'g-warn', error: 'g-failed' };
+    const lines = all.filter((e) => (lvl === 'all' || e.lvl === lvl) && (src === 'all' || e.src === src)).map((e) => ({ ...e, glyph: glyph[e.lvl], cls: e.lvl === 'error' ? 'err' : '' }));
+    const nodes = ctx.hasSel ? this.nodeStates(sel) : [];
+    const byState = (s) => nodes.filter((n) => n.state === s).length;
+    const facets = [['Running', 'running'], ['Completed', 'succeeded'], ['Failed', 'failed'], ['Skipped', 'skipped'], ['Not reached', 'queued'], ['Cancelled', 'cancelled']].map(([label, s]) => ({ label, n: byState(s), pct: nodes.length ? Math.round(byState(s) / nodes.length * 100) : 0 })).filter((f) => f.n);
+    const timing = sel.status === 'queued' || sel.status === 'waiting'
+      ? [{ k: 'Accepted', v: sel.updated }, { k: 'Queue', v: sel.status === 'waiting' ? 'assigned, ' + sel.reason : 'position ' + sel.queue + ', ' + sel.reason }, { k: 'Estimate', v: sel.est }]
+      : [{ k: 'Accepted', v: sel.started }, { k: 'Started', v: sel.started }, { k: sel.isLive ? 'Running for' : 'Stopped', v: sel.isLive ? sel.dur + ', ' + sel.est : sel.updated + ', ran ' + sel.dur }];
+    const failed = sel.status === 'failed';
+    const cmp = failed
+      ? { failed: '3 of 14', median: '1m 49s', note: 'All 3 failures were out of memory in load_model on cuda:1. v0.9.2 has not failed.' }
+      : { failed: '0 of 14', median: sel.status === 'succeeded' ? sel.dur : '2m 10s', note: 'Every run of v' + sel.ver + ' this week finished. This one is ' + (sel.isLive ? 'on pace with the median.' : 'within 10% of the median.') };
+    const factsOpen = !st.factsClosed, cmpOpen = !st.cmpClosed;
+    const statusWord = { running: 'running', waiting: 'waiting for memory', queued: 'queued', succeeded: 'succeeded', failed: 'failed', cancelled: 'cancelled' }[sel.status];
+    return {
+      ...ctx,
+      accent: this.props.accent ?? '#D9B06A',
+      dimLine: sel.id + ', ' + statusWord + (sel.status === 'failed' ? ' ' + sel.updated + ' after ' + sel.dur + ', 1 error in ' + sel.node : sel.isLive ? ', ' + sel.est.toLowerCase() : ' ' + sel.updated + ' after ' + sel.dur),
+      reason: sel.status === 'waiting' ? sel.reason : sel.device ? (sel.status === 'failed' ? 'cold model load' : 'model cached, warm session reused') : 'not placed yet',
+      retention: sel.status === 'failed' ? 'metadata only' : 'payloads retained',
+      levels, sources, lines, lineCount: lines.length, lineTotal: all.length,
+      facets, nodeCount: nodes.length, timing, cmp,
+      hasError: failed,
+      err: { title: 'Out of memory in load_model', code: 'runtime_model_load_failed, phase runtime model load', text: 'diffusers needed 14.2 GB on cuda:1 and 9.8 GB was free. image-gen-sdxl was running there at the same time.', hint: 'Try: request a 14.2 GB reservation in the run\'s placement, or queue it behind image-gen-sdxl with a lower priority.' },
+      factsOpen, factsChev: factsOpen ? '▾' : '▸', toggleFacts: () => this.setState({ factsClosed: factsOpen }),
+      cmpOpen, cmpChev: cmpOpen ? '▾' : '▸', toggleCmp: () => this.setState({ cmpClosed: cmpOpen }),
+      jumpErr: () => this.setState({ lvl: 'error', src: 'all' })
+    };
+  }
+}
+</script>
+</body>
+</html>

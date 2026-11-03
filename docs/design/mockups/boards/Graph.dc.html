@@ -1,0 +1,437 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Graph tab</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&amp;family=Atkinson+Hyperlegible:wght@400;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<link rel="stylesheet" href="./shell.css">
+<style>
+.wfsel{display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 10px;border:1px solid #4A5059;border-radius:4px;background:#23272D;cursor:pointer;font-size:13px}
+.wfsel .mono{font-size:11.5px;color:#A3A9B4}
+.pal button.pi{display:grid;grid-template-columns:1fr auto;gap:0 8px;padding:5px 12px 5px 22px;font-size:12.5px}
+.pal .pi .mono{font-size:11px;color:#8A909A}
+.prop label{display:block}
+.prop .field{width:100%;height:28px;margin-top:3px}
+.save{font-size:12.5px;color:#A3A9B4;white-space:nowrap}
+.save.dirty{color:#E4E6EA}
+.mode{display:flex;border:1px solid #4A5059;border-radius:4px;overflow:hidden;background:#23272D}
+.mode button{height:30px;padding:0 10px;border:0;background:transparent;color:#B8BDC6;cursor:pointer;font-size:12.5px;white-space:nowrap}
+.mode button+button{border-left:1px solid #3B4048}
+.mode button[aria-pressed="true"]{background:#E4E6EA;color:#1F2227}
+.mode button:hover{color:#fff}.mode button[aria-pressed="true"]:hover{color:#1F2227}
+.wfpop{position:absolute;left:0;top:34px;z-index:60;width:320px;background:#23272D;border:1px solid #4A5059;border-radius:4px;box-shadow:0 10px 28px rgba(0,0,0,.45)}
+.wfpop button{display:flex;gap:8px;align-items:center;width:100%;padding:7px 12px;border:0;border-top:1px solid #3B4048;background:transparent;color:#E4E6EA;text-align:left;cursor:pointer;font-size:13px}
+.wfpop button:hover{background:#3A3F47}
+.wfpop button[aria-current="true"]{background:#434A54;box-shadow:inset 3px 0 0 #E4E6EA}
+.wfpop .mono{margin-left:auto;font-size:11px;color:#A3A9B4}
+.ro{font-size:12.5px;color:#A3A9B4;display:flex;align-items:center;gap:8px;white-space:nowrap}
+</style>
+</helmet>
+<div class="root" style="--accent: {{accent}}">
+  <header class="hdr">
+    <div class="brand">Pantograph</div>
+    <nav aria-label="Workspaces" style="display:flex;align-items:center">
+      <a class="tab" href="#sessions">Sessions</a>
+      <span class="vdiv" aria-hidden="true"></span>
+      <a class="tab" href="#scheduler">Scheduler</a>
+      <a class="tab" href="#diagnostics">Diagnostics</a>
+      <a class="tab" href="#io">I/O Inspector</a>
+      <a class="tab" href="#network">Network</a>
+      <span class="vdiv" aria-hidden="true"></span>
+      <a class="tab" href="#graph" aria-current="page">Graph</a>
+      <a class="tab" href="#nodes">Node Editor</a>
+      <a class="tab" href="#library">Library</a>
+    </nav>
+    <div style="flex:1"></div>
+    <!--ctx-start-->
+    <div class="ctxwrap" onMouseEnter="{{ctxHoverOn}}" onMouseLeave="{{ctxHoverOff}}">
+      <sc-if value="{{ctxHas}}" hint-placeholder-val="{{ true }}">
+        <div class="ctx" aria-label="Run context">
+          <button class="ctxbtn" type="button" aria-haspopup="listbox" aria-expanded="{{pickerOpen}}" onClick="{{togglePicker}}" title="{{ctxRun.id}}, click to change run">
+            <span class="g {{ctxRun.glyph}}" aria-hidden="true" style="margin-top:0"></span>
+            <span class="ctxname">{{ctxRun.wf}} <span class="muted">v{{ctxRun.ver}}</span></span>
+            <span class="muted" aria-hidden="true" style="font-size:10px">▾</span>
+          </button>
+          <button class="x" type="button" aria-label="Clear run context" onClick="{{clearSel}}">×</button>
+        </div>
+      </sc-if>
+      <sc-if value="{{ctxNone}}" hint-placeholder-val="{{ false }}">
+        <button class="ctx ctxbtn ctxempty" type="button" aria-haspopup="listbox" aria-expanded="{{pickerOpen}}" onClick="{{togglePicker}}">Pick a run <span aria-hidden="true" style="font-size:10px">▾</span></button>
+      </sc-if>
+      <sc-if value="{{pickerOpen}}" hint-placeholder-val="{{ false }}">
+        <div class="pop" role="dialog" aria-label="Pick a run">
+          <div style="padding:10px 10px 6px">
+            <label for="ctx-q" style="position:absolute;left:-9999px">Search runs or paste a run id</label>
+            <input id="ctx-q" class="field" data-key="ctx-q" data-autofocus="1" type="search" placeholder="Search runs, or paste a run id" value="{{pickerQuery}}" onInput="{{setQuery}}" style="width:100%">
+          </div>
+          <div class="poplist">
+            <sc-for list="{{pickerGroups}}" as="pg" hint-placeholder-count="2">
+              <div class="pophead">{{pg.title}} <span class="n">{{pg.n}}</span></div>
+              <sc-for list="{{pg.runs}}" as="r" hint-placeholder-count="2">
+                <button class="poprow" type="button" aria-current="{{r.selected}}" onClick="{{r.pick}}" onMouseEnter="{{r.hoverOn}}" onMouseLeave="{{r.hoverOff}}">
+                  <span class="g {{r.glyph}}" aria-hidden="true"></span>
+                  <span style="min-width:0"><b>{{r.wf}}</b> <span class="ver">v{{r.ver}}</span><span class="sub">{{r.statusLabel}}{{r.contextSuffix}}</span></span>
+                  <span class="time">{{r.id}}</span>
+                </button>
+              </sc-for>
+            </sc-for>
+            <sc-if value="{{pickerEmpty}}" hint-placeholder-val="{{ false }}"><div class="muted small" style="padding:10px 12px">{{pickerEmptyText}}</div></sc-if>
+          </div>
+          <div class="popfoot">Hover a run in Scheduler and press Ctrl+C to copy its id. Hover this chip and press Ctrl+V to view a copied run.</div>
+        </div>
+      </sc-if>
+    </div>
+    <sc-if value="{{copied}}" hint-placeholder-val="{{ false }}"><div class="toast" role="status">Copied {{copiedId}}</div></sc-if>
+    <!--ctx-end-->
+    <div class="engine muted"><span class="eng" aria-hidden="true"></span>Local engine</div>
+    <a class="tab" href="#settings">Settings</a>
+    <button class="tgl" type="button" aria-pressed="false" style="margin-left:6px"><svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true" style="stroke:currentColor;fill:none;stroke-width:1.8"><path d="M4 5h16v11H9l-5 4z"/></svg>Assistant</button>
+  </header>
+
+  <main class="main" style="gap:8px">
+    <div style="display:flex;align-items:center;gap:8px;padding:6px 0 2px;flex:none">
+      <div class="mode" role="group" aria-label="What to show">
+        <button type="button" aria-pressed="{{editMode}}" onClick="{{setEdit}}">Edit workflow</button>
+        <button type="button" aria-pressed="{{runMode}}" onClick="{{setRun}}" title="{{runModeTitle}}">{{runModeLabel}}</button>
+      </div>
+      <div style="position:relative">
+        <button class="wfsel" type="button" aria-haspopup="listbox" aria-expanded="{{wfOpen}}" onClick="{{toggleWf}}"><b>{{wfName}}</b><span class="mono">v{{version}}</span><span class="muted" aria-hidden="true">▾</span></button>
+        <sc-if value="{{wfOpen}}" hint-placeholder-val="{{ false }}">
+          <div class="wfpop" role="listbox" aria-label="Saved workflows">
+            <div class="pophead" style="border-top:0">Saved workflows</div>
+            <sc-for list="{{wfList}}" as="w" hint-placeholder-count="5">
+              <button type="button" role="option" aria-current="{{w.current}}" onClick="{{w.pick}}">{{w.name}}<span class="mono">v{{w.ver}} · {{w.when}}</span></button>
+            </sc-for>
+            <div class="popfoot">Picking a workflow switches to editing it. To see a workflow as a run used it, pick the run instead.</div>
+          </div>
+        </sc-if>
+      </div>
+      <sc-if value="{{editMode}}" hint-placeholder-val="{{ true }}"><span class="save {{saveCls}}" role="status">{{saveLine}}</span></sc-if>
+      <sc-if value="{{runMode}}" hint-placeholder-val="{{ false }}"><span class="ro"><span class="g {{sel.glyph}}" aria-hidden="true" style="margin-top:0"></span>read-only, as it ran</span></sc-if>
+      <div class="dim" role="presentation"><span class="dim-label">{{dimLine}}</span></div>
+      <sc-if value="{{editMode}}" hint-placeholder-val="{{ true }}"><button class="tgl" type="button" aria-pressed="{{palOpen}}" onClick="{{togglePal}}">Nodes</button></sc-if>
+      <button class="tgl" type="button" aria-pressed="{{propOpen}}" onClick="{{toggleProp}}">Properties</button>
+      <span class="vdiv" aria-hidden="true"></span>
+      <sc-if value="{{editMode}}" hint-placeholder-val="{{ true }}">
+        <button class="btn" type="button" onClick="{{save}}" aria-disabled="{{clean}}">Save</button>
+        <label class="muted small" style="display:flex;align-items:center;gap:6px">Version <input class="field mono" style="width:76px;height:30px" value="{{version}}" aria-label="Workflow version"><button class="tgl" type="button" style="height:30px" onClick="{{bump}}">+patch</button></label>
+        <button class="btn primary" type="button" onClick="{{submit}}" title="{{submitTitle}}">{{submitLabel}}</button>
+      </sc-if>
+      <sc-if value="{{runMode}}" hint-placeholder-val="{{ false }}">
+        <button class="btn" type="button" onClick="{{setEdit}}" title="Opens the current version of {{wfName}} for editing">Edit current v{{editVersion}}</button>
+        <button class="btn" type="button" onClick="{{forkRun}}">{{forkLabel}}</button>
+      </sc-if>
+    </div>
+
+    <sc-if value="{{dirty}}" hint-placeholder-val="{{ false }}">
+      <div class="small muted" style="flex:none">Submit will save v{{version}} first. {{dirtyNote}}</div>
+    </sc-if>
+    <sc-if value="{{runMismatch}}" hint-placeholder-val="{{ false }}">
+      <div class="small muted" style="flex:none">The selected run is of {{sel.wf}}, not {{wfName}}. <button class="tgl" type="button" style="height:22px" onClick="{{setRun}}">Show {{sel.wf}} as run</button> or keep editing {{wfName}}.</div>
+    </sc-if>
+
+    <div style="flex:1;min-height:0;display:flex;gap:10px;align-items:stretch">
+      <sc-if value="{{showPal}}" hint-placeholder-val="{{ true }}">
+        <section class="panel col pal tree" aria-label="Node palette" style="flex:0 0 232px">
+          <div class="ptop" style="padding:8px 10px">
+            <label for="g-pal" style="position:absolute;left:-9999px">Search nodes</label>
+            <input id="g-pal" class="field" type="search" placeholder="Search nodes" style="height:28px">
+          </div>
+          <div class="scroll" style="padding:4px 0">
+            <sc-for list="{{palette}}" as="cat" hint-placeholder-count="5">
+              <button type="button" aria-expanded="{{cat.open}}" onClick="{{cat.toggle}}" style="font-weight:700;font-size:12.5px;color:#C9CDD4"><span style="font-size:10px;color:#8A909A">{{cat.chev}}</span>{{cat.label}}<span class="typ">{{cat.n}}</span></button>
+              <sc-if value="{{cat.open}}" hint-placeholder-val="{{ true }}">
+                <sc-for list="{{cat.items}}" as="it" hint-placeholder-count="3">
+                  <button class="pi" type="button" draggable="true"><span>{{it.label}}</span><span class="mono">{{it.ports}}</span></button>
+                </sc-for>
+              </sc-if>
+            </sc-for>
+          </div>
+          <div class="pfoot small muted" style="min-height:36px;padding:6px 12px">Drag onto the canvas, or double-click to add.</div>
+        </section>
+      </sc-if>
+
+      <div class="canvas" role="application" aria-label="Workflow canvas">
+        <svg width="100%" height="100%" aria-hidden="true" style="position:absolute;inset:0">
+          <sc-for list="{{wires}}" as="w" hint-placeholder-count="6"><path class="wire {{w.cls}}" d="{{w.d}}"/></sc-for>
+        </svg>
+        <sc-for list="{{nodes}}" as="n" hint-placeholder-count="6">
+          <div class="gnode" style="left:{{n.x}}px;top:{{n.y}}px" aria-current="{{n.selected}}" role="button" tabindex="0" onClick="{{n.pick}}">
+            <div class="nh"><span class="g {{n.glyph}}" aria-hidden="true"></span>{{n.label}}<span class="mono">{{n.type}}</span></div>
+            <sc-for list="{{n.ins}}" as="p" hint-placeholder-count="2"><div class="pt in">{{p}}</div></sc-for>
+            <sc-for list="{{n.outs}}" as="p" hint-placeholder-count="1"><div class="pt out">{{p}}</div></sc-for>
+            <sc-if value="{{n.hasNote}}" hint-placeholder-val="{{ false }}"><div style="padding:5px 9px;border-top:1px solid #4A5059;font-size:11.5px;color:#C9CDD4">{{n.note}}</div></sc-if>
+          </div>
+        </sc-for>
+        <div class="fab" style="left:12px;bottom:12px"><button class="pill" type="button" aria-label="Zoom in">+</button><button class="pill" type="button" aria-label="Zoom out">−</button><button class="pill" type="button">Fit</button><button class="pill" type="button" aria-pressed="true">Snap</button></div>
+        <sc-if value="{{runMode}}" hint-placeholder-val="{{ false }}">
+          <div class="fab" style="right:12px;top:12px;flex-direction:column;gap:4px;font-size:11.5px;color:#A3A9B4;padding:8px 10px"><span><span class="g g-running" aria-hidden="true" style="width:8px;height:8px;margin-top:0"></span> running now</span><span><span class="g g-succeeded" aria-hidden="true" style="width:8px;height:8px;margin-top:0"></span> done in this run</span><span><span class="g g-failed" aria-hidden="true" style="width:8px;height:8px;margin-top:0"></span> failed</span><span><span class="g g-queued" aria-hidden="true" style="width:8px;height:8px;margin-top:0"></span> not reached</span></div>
+        </sc-if>
+        <div class="minimap" aria-hidden="true"><i style="left:12px;top:22px"></i><i style="left:12px;top:48px"></i><i style="left:36px;top:30px"></i><i style="left:62px;top:36px"></i><i style="left:90px;top:30px"></i><i style="left:90px;top:58px"></i><span class="view" style="left:4px;top:8px;width:118px;height:66px"></span></div>
+      </div>
+
+      <sc-if value="{{propOpen}}" hint-placeholder-val="{{ true }}">
+        <section class="panel col prop" aria-label="Node properties" style="flex:0 0 300px">
+          <sc-if value="{{hasNode}}" hint-placeholder-val="{{ true }}">
+            <div class="scroll">
+              <div style="padding:14px 14px 10px">
+                <div class="title" style="font-size:20px">{{node.label}}</div>
+                <div class="mono muted" style="margin-top:2px">{{node.type}} · {{node.id}}</div>
+                <sc-if value="{{runMode}}" hint-placeholder-val="{{ false }}"><div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap"><span class="chip"><span class="g {{node.glyph}}" aria-hidden="true"></span>{{node.stateLabel}}</span></div></sc-if>
+              </div>
+              <div class="sec" style="padding:12px 14px;display:grid;gap:10px">
+                <h3 style="margin:0">Settings</h3>
+                <sc-for list="{{node.fields}}" as="f" hint-placeholder-count="3">
+                  <label class="fl">{{f.k}}<input class="field" value="{{f.v}}" onChange="{{markDirty}}" aria-readonly="{{runMode}}"></label>
+                </sc-for>
+                <sc-if value="{{runMode}}" hint-placeholder-val="{{ false }}"><div class="muted small">Values as they were when the run started. Switch to Edit workflow to change them.</div></sc-if>
+              </div>
+              <div class="sec" style="padding:12px 14px">
+                <h3>Ports</h3>
+                <div class="kv small">
+                  <sc-for list="{{node.portRows}}" as="p" hint-placeholder-count="3"><span class="k">{{p.dir}}</span><span class="mono" style="font-size:12px">{{p.name}} <span class="muted">{{p.type}}</span></span></sc-for>
+                </div>
+              </div>
+              <sc-if value="{{runMode}}" hint-placeholder-val="{{ false }}">
+                <div class="sec" style="padding:12px 14px">
+                  <h3>In this run</h3>
+                  <div class="small">{{node.runNote}}</div>
+                  <div style="margin-top:8px;display:flex;gap:6px"><a class="btn sm" href="#io">I/O</a><a class="btn sm" href="#diagnostics">Diagnostics</a></div>
+                </div>
+              </sc-if>
+            </div>
+            <sc-if value="{{editMode}}" hint-placeholder-val="{{ true }}"><div class="pfoot"><button class="btn sm" type="button">Duplicate</button><button class="btn sm danger" type="button" style="margin-left:auto">Remove node</button></div></sc-if>
+          </sc-if>
+          <sc-if value="{{noNode}}" hint-placeholder-val="{{ false }}">
+            <div class="empty">Select a node to see its settings.</div>
+          </sc-if>
+        </section>
+      </sc-if>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#D9B06A","options":["#D9B06A","#9FB7D9","#A7C4A0"]},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  /*ctx-start*/
+  catalog() {
+    return [
+      { id: 'run_01JB2K7Q3M', wf: 'ingest-docs-rag', ver: '1.4.0', status: 'running', runtime: 'llama.cpp', device: 'cuda:0', deviceName: 'RTX 4090', vram: 17.2, queue: 0, prio: 0, est: 'About 2 min left', node: 'embed_chunks', pct: '61%', reason: '', started: '20:01:40', dur: '4m 12s', updated: '20:05:51', client: 'gui', session: 's-4f2a' },
+      { id: 'run_01JB2K9F0A', wf: 'image-gen-sdxl', ver: '0.9.2', status: 'running', runtime: 'diffusers', device: 'cuda:1', deviceName: 'RTX 3090', vram: 9.8, queue: 0, prio: 0, est: 'About 40 s left', node: 'sample', pct: 'step 18 of 30', reason: '', started: '20:04:02', dur: '1m 49s', updated: '20:05:50', client: 'gui', session: 's-4f2a' },
+      { id: 'run_01JB2KB4ZT', wf: 'transcribe-meeting', ver: '2.1.0', status: 'waiting', runtime: 'whisper', device: 'cuda:0', deviceName: 'RTX 4090', vram: 8, queue: 1, prio: 5, est: 'Starts after ingest-docs-rag', node: '', pct: '', reason: 'needs 8 GB on cuda:0, 6.8 GB free', started: '—', dur: '—', updated: '20:05:12', client: 'cli', session: 's-9c01' },
+      { id: 'run_01JB2KC1PX', wf: 'summarize-daily', ver: '1.0.3', status: 'queued', runtime: 'llama.cpp', device: 'cuda:1', deviceName: 'RTX 3090', vram: 6, queue: 2, prio: 0, est: 'About 6 min', node: '', pct: '', reason: 'next on cuda:1, model cached', started: '—', dur: '—', updated: '20:04:40', client: 'gui', session: 's-4f2a' },
+      { id: 'run_01JB2KD8RN', wf: 'embed-corpus', ver: '1.4.0', status: 'queued', runtime: 'llama.cpp', device: '', deviceName: '', vram: 7, queue: 3, prio: 0, est: 'About 9 min', node: '', pct: '', reason: 'cold load, 12 s', started: '—', dur: '—', updated: '20:04:41', client: 'gui', session: 's-4f2a' },
+      { id: 'run_01JB2KE2QW', wf: 'image-gen-sdxl', ver: '0.9.2', status: 'queued', runtime: 'diffusers', device: '', deviceName: '', vram: 9.8, queue: 4, prio: 0, est: 'About 2 min', node: '', pct: '', reason: 'model cached', started: '—', dur: '—', updated: '20:04:55', client: 'gui', session: 's-4f2a' },
+      { id: 'run_01JB2JZ0MT', wf: 'summarize-daily', ver: '1.0.3', status: 'succeeded', runtime: 'llama.cpp', device: 'cuda:0', deviceName: 'RTX 4090', vram: 6, queue: 0, prio: 0, est: 'Finished in 38 s', node: '', pct: '', reason: '', started: '19:52:10', dur: '38 s', updated: '19:52:48', client: 'gui', session: 's-4f2a' },
+      { id: 'run_01JB2JV7KD', wf: 'embed-corpus', ver: '1.3.9', status: 'succeeded', runtime: 'llama.cpp', device: 'cuda:0', deviceName: 'RTX 4090', vram: 7, queue: 0, prio: 0, est: 'Finished in 11m 03s', node: '', pct: '', reason: '', started: '19:38:01', dur: '11m 03s', updated: '19:49:04', client: 'gui', session: 's-4f2a' },
+      { id: 'run_01JB2JT3HB', wf: 'image-gen-sdxl', ver: '0.9.1', status: 'failed', runtime: 'diffusers', device: 'cuda:1', deviceName: 'RTX 3090', vram: 14.2, queue: 0, prio: 0, est: 'Stopped after 22 s', node: 'load_model', pct: '', reason: 'out of memory, needed 14.2 GB', started: '19:35:20', dur: '22 s', updated: '19:35:42', client: 'gui', session: 's-4f2a' },
+      { id: 'run_01JB2JQ9XA', wf: 'transcribe-meeting', ver: '2.0.0', status: 'cancelled', runtime: 'whisper', device: 'cuda:0', deviceName: 'RTX 4090', vram: 8, queue: 0, prio: 0, est: 'Stopped after 1m 10s', node: 'transcribe', pct: '', reason: 'cancelled from the GUI', started: '19:30:05', dur: '1m 10s', updated: '19:31:15', client: 'gui', session: 's-4f2a' }
+    ];
+  }
+  wfMap() {
+    return {
+      'ingest-docs-rag': { model: 'pumas://models/bge-m3', nodes: [['read_docs', 'read-file', 'text'], ['chunking', 'expand-settings', 'settings'], ['split', 'processing', 'chunks'], ['embed_chunks', 'embedding', 'embedding'], ['index', 'vector-output', ''], ['manifest', 'write-file', '']] },
+      'image-gen-sdxl': { model: 'pumas://models/sdxl-base-1.0', nodes: [['prompt', 'text-input', 'text'], ['load_model', 'puma-lib', 'model_path'], ['sample', 'pytorch-inference', 'latents'], ['decode', 'image-output', 'image'], ['unload', 'unload-model', '']] },
+      'transcribe-meeting': { model: 'pumas://models/whisper-large-v3', nodes: [['audio', 'audio-input', 'audio'], ['transcribe', 'onnx-inference', 'transcript'], ['notes', 'text-output', 'text']] },
+      'summarize-daily': { model: 'pumas://models/qwen3-8b-instruct', nodes: [['fetch', 'read-file', 'text'], ['summarize', 'llm-inference', 'response'], ['write', 'write-file', '']] },
+      'embed-corpus': { model: 'pumas://models/bge-m3', nodes: [['read', 'read-file', 'text'], ['embed', 'embedding', 'embedding'], ['index', 'vector-output', '']] }
+    };
+  }
+  nodeStates(run) {
+    const wf = this.wfMap()[run.wf] || { nodes: [['start', 'processing', 'out'], ['end', 'text-output', '']] };
+    const idx = wf.nodes.findIndex((n) => n[0] === run.node);
+    return wf.nodes.map(([id, type, port], i) => {
+      let state = 'queued';
+      if (run.status === 'succeeded') state = 'succeeded';
+      else if (run.status === 'running') state = i < idx ? 'succeeded' : i === idx ? 'running' : 'queued';
+      else if (run.status === 'failed') state = i < idx ? 'succeeded' : i === idx ? 'failed' : 'skipped';
+      else if (run.status === 'cancelled') state = i < idx ? 'succeeded' : i === idx ? 'cancelled' : 'skipped';
+      const glyph = state === 'skipped' ? 'g-cancelled' : 'g-' + state;
+      return { id, type, port, state, glyph, label: state === 'skipped' ? 'skipped' : state };
+    });
+  }
+  decorateRun(r) {
+    const labels = { running: 'Running', waiting: 'Waiting', queued: 'Queued', succeeded: 'Succeeded', failed: 'Failed', cancelled: 'Cancelled' };
+    const isLive = r.status === 'running' || r.status === 'waiting' || r.status === 'queued';
+    let context = '';
+    if (r.status === 'running') context = ', ' + r.node + (r.pct ? ' ' + r.pct : '');
+    else if (r.status === 'waiting') context = ', ' + r.reason;
+    else if (r.status === 'queued') context = ', #' + r.queue + ' in queue';
+    else if (r.reason) context = ', ' + r.reason;
+    else context = ', ' + r.dur;
+    const placement = r.device ? r.runtime + ' on ' + r.device : r.runtime + ', device not assigned yet';
+    const placementLong = r.device ? r.runtime + ' on ' + r.device + ' (' + r.deviceName + ')' : 'Not assigned to a device yet';
+    let progress = r.est;
+    if (r.status === 'running') progress = r.node + ', ' + r.pct;
+    else if (r.status === 'waiting') progress = 'Waiting: ' + r.reason;
+    else if (r.status === 'queued') progress = 'Queue position ' + r.queue + ', ' + r.reason;
+    else if (r.status === 'failed') progress = 'Failed in ' + r.node + ': ' + r.reason;
+    const chips = [];
+    if (r.device) chips.push({ text: r.runtime + ' on ' + r.device });
+    if (r.prio) chips.push({ text: 'priority ' + r.prio });
+    if (r.queue) chips.push({ text: '#' + r.queue + ' in queue' });
+    return { ...r, glyph: 'g-' + r.status, stClass: r.status === 'failed' ? 'st-failed' : '', statusLabel: labels[r.status], contextSuffix: context, placement, placementLong, progress, chips, isLive,
+      model: (this.wfMap()[r.wf] || {}).model || 'none', hoverOn: () => { this._hoverRun = r.id; }, hoverOff: () => { if (this._hoverRun === r.id) this._hoverRun = null; } };
+  }
+  ctxBind() {
+    if (this._ctxBound || typeof document === 'undefined') return;
+    this._ctxBound = true;
+    const isField = (t) => t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT');
+    document.addEventListener('keydown', (e) => {
+      const k = (e.key || '').toLowerCase(); const mod = e.ctrlKey || e.metaKey;
+      if (e.key === 'Escape' && this.state && this.state.pickerOpen) { this.setState({ pickerOpen: false }); return; }
+      if (!mod || isField(e.target)) return;
+      if (k === 'c' && this._hoverRun) this.copyRun(this._hoverRun);
+      if (k === 'v' && this._hoverCtx) { e.preventDefault(); this.pasteRun(); }
+    });
+    document.addEventListener('mousedown', (e) => {
+      if (this.state && this.state.pickerOpen && !(e.target.closest && e.target.closest('.ctxwrap'))) this.setState({ pickerOpen: false });
+    });
+    window.addEventListener('storage', (e) => { if (e.key === 'pg.run') this.setState({ run: e.newValue || null }); });
+  }
+  copyRun(id) {
+    try { localStorage.setItem('pg.clip', id); } catch (_) {}
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(id).catch(() => {});
+    this.setState({ copied: id });
+    clearTimeout(this._copyT); this._copyT = setTimeout(() => this.setState({ copied: null }), 1600);
+  }
+  pasteRun() {
+    const apply = (text) => { const id = (text || '').trim(); if (this.catalog().some((r) => r.id === id)) this.pickRun(id); else this.setState({ pickerOpen: true, pickerQuery: id }); };
+    let fallback = ''; try { fallback = localStorage.getItem('pg.clip') || ''; } catch (_) {}
+    if (navigator.clipboard && navigator.clipboard.readText) navigator.clipboard.readText().then(apply, () => apply(fallback)); else apply(fallback);
+  }
+  pickRun(id) {
+    try { localStorage.setItem('pg.run', id || ''); } catch (_) {}
+    this.setState({ run: id || null, pickerOpen: false, pickerQuery: '', confirmCancel: false });
+  }
+  ctxRunId(fallback) {
+    const st = this.state || {};
+    if ('run' in st) return st.run;
+    try { const v = localStorage.getItem('pg.run'); if (v !== null) return v || null; } catch (_) {}
+    return fallback;
+  }
+  ctxVals(fallbackId) {
+    this.ctxBind();
+    const st = this.state || {};
+    const runId = this.ctxRunId(fallbackId);
+    const all = this.catalog();
+    const selRaw = all.find((r) => r.id === runId);
+    const sel = this.decorateRun(selRaw || all[0]);
+    const qRaw = st.pickerQuery || ''; const q = qRaw.toLowerCase();
+    const match = (r) => !q || r.wf.includes(q) || r.id.toLowerCase().includes(q) || ('v' + r.ver).includes(q);
+    const groups = [['Running', ['running']], ['Waiting for memory', ['waiting']], ['Queued', ['queued']], ['Finished today', ['succeeded', 'failed', 'cancelled']]]
+      .map(([title, keys]) => { const runs = all.filter((r) => keys.includes(r.status) && match(r)).map((r) => ({ ...this.decorateRun(r), selected: r.id === runId, pick: () => this.pickRun(r.id) })); return { title, n: runs.length, runs }; })
+      .filter((g) => g.n);
+    const total = groups.reduce((n, g) => n + g.n, 0);
+    return {
+      runId, hasSel: !!selRaw, noSel: !selRaw, sel, ctxHas: !!selRaw, ctxNone: !selRaw, ctxRun: sel,
+      pickerOpen: !!st.pickerOpen, pickerQuery: qRaw, pickerGroups: groups,
+      pickerEmpty: total === 0, pickerEmptyText: q.startsWith('run_') ? 'No run with id ' + qRaw + ' in today\'s history.' : 'No runs match.',
+      togglePicker: () => this.setState({ pickerOpen: !st.pickerOpen }),
+      openPicker: () => this.setState({ pickerOpen: true }),
+      setQuery: (e) => { const v = e.target.value; if (all.some((r) => r.id === v.trim())) this.pickRun(v.trim()); else this.setState({ pickerQuery: v }); },
+      clearSel: () => this.pickRun(null),
+      ctxHoverOn: () => { this._hoverCtx = true; }, ctxHoverOff: () => { this._hoverCtx = false; },
+      copied: !!st.copied, copiedId: st.copied || ''
+    };
+  }
+  /*ctx-end*/
+  layouts() {
+    return {
+      'ingest-docs-rag': {
+        nodes: [
+          { id: 'read_docs', label: 'Source folder', type: 'read-file', x: 64, y: 90, ins: [], outs: ['text'], fields: [{ k: 'Path', v: '~/docs/handbook' }, { k: 'Glob', v: '**/*.md' }], runNote: 'Read 312 files, 48 MB, in 1.2 s.' },
+          { id: 'chunking', label: 'Chunking', type: 'expand-settings', x: 64, y: 290, ins: [], outs: ['settings'], fields: [{ k: 'Chunk size', v: '512' }, { k: 'Overlap', v: '64' }], runNote: 'Settings applied.' },
+          { id: 'split', label: 'Split', type: 'processing', x: 356, y: 136, ins: ['text', 'settings'], outs: ['chunks'], fields: [{ k: 'Strategy', v: 'markdown headings' }], runNote: 'Produced 9 804 chunks.' },
+          { id: 'embed_chunks', label: 'embed_chunks', type: 'embedding', x: 648, y: 182, ins: ['text', 'model'], outs: ['embedding', 'metadata'], fields: [{ k: 'Model', v: 'pumas://models/bge-m3' }, { k: 'Batch size', v: '64' }, { k: 'Device', v: 'auto' }], runNote: 'Running on cuda:0, 61%, about 2 min left. 17.2 GB reserved.' },
+          { id: 'index', label: 'Index', type: 'vector-output', x: 940, y: 152, ins: ['embedding'], outs: [], fields: [{ k: 'Collection', v: 'handbook' }, { k: 'Store', v: 'local lancedb' }], runNote: 'Not reached yet.' },
+          { id: 'manifest', label: 'Manifest', type: 'write-file', x: 940, y: 372, ins: ['metadata', 'chunks'], outs: [], fields: [{ k: 'Path', v: '~/docs/handbook.index.json' }], runNote: 'Not reached yet.' }
+        ],
+        wires: [
+          { d: 'M 232 132 C 290 132, 300 178, 356 178', from: 'read_docs' }, { d: 'M 232 332 C 290 332, 300 201, 356 201', from: 'chunking' },
+          { d: 'M 524 224 C 580 224, 590 224, 648 224', from: 'split' }, { d: 'M 816 270 C 870 270, 880 194, 940 194', from: 'embed_chunks' },
+          { d: 'M 816 293 C 870 293, 880 414, 940 414', from: 'embed_chunks' }, { d: 'M 524 224 C 560 224, 560 437, 940 437', from: 'split' }
+        ]
+      }
+    };
+  }
+  genericLayout(wfName) {
+    const wf = this.wfMap()[wfName] || { nodes: [['start', 'processing', 'out'], ['end', 'text-output', '']] };
+    const model = (this.wfMap()[wfName] || {}).model || '';
+    const fieldsFor = { 'read-file': [{ k: 'Path', v: '~/inbox' }], 'audio-input': [{ k: 'Source', v: 'meeting.wav' }], 'text-input': [{ k: 'Text', v: 'A pantograph on a drafting table…' }], 'puma-lib': [{ k: 'Model', v: model }], 'llm-inference': [{ k: 'Model', v: model }, { k: 'Temperature', v: '0.7' }], 'onnx-inference': [{ k: 'Model', v: model }, { k: 'Language', v: 'auto' }], 'pytorch-inference': [{ k: 'Steps', v: '30' }, { k: 'CFG', v: '6.5' }], embedding: [{ k: 'Model', v: model }, { k: 'Batch size', v: '64' }], 'write-file': [{ k: 'Path', v: '~/out' }], 'image-output': [{ k: 'Format', v: 'png' }], 'vector-output': [{ k: 'Collection', v: wfName }], 'text-output': [{ k: 'Format', v: 'markdown' }], 'unload-model': [] };
+    const nodes = wf.nodes.map(([id, type, port], i) => ({ id, label: id, type, x: 64 + i * 262, y: 160 + (i % 2) * 46, ins: i ? [wf.nodes[i - 1][2] || 'in'] : [], outs: port ? [port] : [], fields: fieldsFor[type] || [{ k: 'Setting', v: 'default' }], runNote: '' }));
+    const wires = nodes.slice(1).map((n, i) => { const a = nodes[i]; const y1 = a.y + 42 + (a.ins.length * 23); const y2 = n.y + 42; return { d: 'M ' + (a.x + 168) + ' ' + y1 + ' C ' + (a.x + 220) + ' ' + y1 + ', ' + (n.x - 50) + ' ' + y2 + ', ' + n.x + ' ' + y2, from: a.id }; });
+    return { nodes, wires };
+  }
+  renderVals() {
+    const st = this.state || {};
+    const ctx = this.ctxVals('run_01JB2K7Q3M');
+    const sel = ctx.sel;
+    const current = { 'ingest-docs-rag': '1.4.1', 'image-gen-sdxl': '0.9.2', 'transcribe-meeting': '2.1.0', 'summarize-daily': '1.0.3', 'embed-corpus': '1.4.0' };
+    const wfName = st.wf || (ctx.hasSel ? sel.wf : 'ingest-docs-rag');
+    const runMode = ctx.hasSel && (st.mode ? st.mode === 'run' : true) && sel.wf === wfName;
+    const editMode = !runMode;
+    const layout = this.layouts()[wfName] || this.genericLayout(wfName);
+    const states = runMode ? this.nodeStates(sel) : [];
+    const stateOf = (id) => states.find((s) => s.id === id) || { state: 'idle', glyph: 'g-idle', label: '' };
+    const nodeSel = 'node' in st && st.node ? st.node : (runMode && sel.node ? sel.node : layout.nodes[0].id);
+    const runNotes = (n, s) => {
+      if (n.runNote && sel.id === 'run_01JB2K7Q3M') return n.runNote;
+      return { running: 'Running on ' + sel.device + ', ' + sel.pct + ', ' + sel.est.toLowerCase() + '.', succeeded: 'Completed, outputs retained for 7 days.', failed: 'Failed: ' + sel.reason + '.', skipped: 'Skipped because an earlier node failed.', cancelled: 'Cancelled while running.', queued: 'Not reached yet.' }[s] || '';
+    };
+    const nodes = layout.nodes.map((n) => { const s = stateOf(n.id); return { ...n, glyph: runMode ? s.glyph : 'g-idle', stateLabel: s.label, selected: n.id === nodeSel, hasNote: runMode && s.state === 'running', note: runMode && s.state === 'running' ? sel.pct + ', ' + sel.est.toLowerCase() : '', runNote: runNotes(n, s.state), pick: () => this.setState({ node: n.id }) }; });
+    const wires = layout.wires.map((w) => { const s = stateOf(w.from).state; return { d: w.d, cls: !runMode ? '' : s === 'running' ? 'live' : s === 'failed' ? 'err' : '' }; });
+    const node = nodes.find((n) => n.id === nodeSel);
+    const closed = st.closed || {};
+    const palette = [
+      ['input', 'Input', [['Text input', '0:1'], ['Number input', '0:1'], ['Selection', '0:1'], ['Read file', '0:1'], ['Audio input', '0:1']]],
+      ['processing', 'Processing', [['LLM inference', '4:3'], ['Embedding', '2:2'], ['PyTorch inference', '2:1'], ['ONNX inference', '3:1'], ['RAG search', '2:1']]],
+      ['tool', 'Tools', [['Puma lib', '0:2'], ['Expand settings', '0:1'], ['Dependency env', '0:1'], ['Unload model', '1:0']]],
+      ['output', 'Output', [['Text output', '1:0'], ['Image output', '1:0'], ['Vector output', '1:0'], ['Write file', '1:0'], ['Audio output', '1:0']]],
+      ['control', 'Control', [['Tool loop', '2:2']]]
+    ].map(([key, label, items]) => { const open = !closed[key]; return { key, label, n: items.length, open, chev: open ? '▾' : '▸', items: items.map(([l, p]) => ({ label: l, ports: p })), toggle: () => this.setState({ closed: { ...closed, [key]: open } }) }; });
+    const wfList = [['ingest-docs-rag', '20:04'], ['image-gen-sdxl', '20:04'], ['transcribe-meeting', 'Oct 29'], ['summarize-daily', 'Oct 28'], ['embed-corpus', 'Oct 28']].map(([name, when]) => ({ name, ver: current[name], when, current: name === wfName, pick: () => this.setState({ wf: name, mode: 'edit', wfOpen: false, node: null, dirty: false, version: null }) }));
+    const dirty = !!st.dirty;
+    const version = runMode ? sel.ver : (st.version || current[wfName]);
+    const submitted = !!st.submitted;
+    const forked = !!st.forked;
+    const typeOf = (p) => ({ model: 'model_ref', settings: 'json', embedding: 'tensor', metadata: 'json', chunks: 'json', image: 'image', audio: 'audio', latents: 'tensor', model_path: 'json' }[p] || 'text');
+    return {
+      ...ctx,
+      accent: this.props.accent ?? '#D9B06A',
+      wfName, version, editVersion: current[wfName],
+      runMode, editMode,
+      runModeLabel: ctx.hasSel ? 'As run ' + sel.id.slice(-6) : 'As a run…',
+      runModeTitle: ctx.hasSel ? 'Show ' + sel.wf + ' v' + sel.ver + ' exactly as ' + sel.id + ' used it' : 'Pick a run first',
+      setRun: () => { if (!ctx.hasSel) { this.setState({ pickerOpen: true }); return; } this.setState({ mode: 'run', wf: sel.wf, node: null }); },
+      setEdit: () => this.setState({ mode: 'edit', node: null }),
+      runMismatch: ctx.hasSel && editMode && sel.wf !== wfName,
+      wfOpen: !!st.wfOpen, toggleWf: () => this.setState({ wfOpen: !st.wfOpen }), wfList,
+      dirty, clean: !dirty,
+      saveCls: dirty ? 'dirty' : '', saveLine: dirty ? 'Unsaved changes' : 'Saved 20:04',
+      dirtyNote: ctx.hasSel && sel.wf === wfName && sel.isLive ? 'The running ' + sel.id + ' keeps using v' + sel.ver + '.' : '',
+      dimLine: runMode ? layout.nodes.length + ' nodes as ' + sel.id + ' ran them, ' + sel.statusLabel.toLowerCase() + (sel.isLive ? ', ' + sel.est.toLowerCase() : ' ' + sel.updated) : 'Editing v' + version + ', ' + layout.nodes.length + ' nodes, ' + layout.wires.length + ' edges',
+      palOpen: !st.palClosed, showPal: editMode && !st.palClosed, togglePal: () => this.setState({ palClosed: !st.palClosed }),
+      propOpen: !st.propClosed, toggleProp: () => this.setState({ propClosed: !st.propClosed }),
+      palette, nodes, wires,
+      hasNode: !!node, noNode: !node,
+      node: node ? { ...node, portRows: [...node.ins.map((p) => ({ dir: 'in', name: p, type: typeOf(p) })), ...node.outs.map((p) => ({ dir: 'out', name: p, type: typeOf(p) }))] } : nodes[0],
+      markDirty: () => { if (editMode) this.setState({ dirty: true }); },
+      save: () => this.setState({ dirty: false }),
+      bump: () => { const p = version.split('.'); p[2] = String(+p[2] + 1); this.setState({ version: p.join('.'), dirty: true }); },
+      submitLabel: submitted ? 'Queued as run_01JB2KF…' : 'Submit run',
+      submitTitle: dirty ? 'Saves v' + version + ' and queues a run' : 'Queues a run of v' + version,
+      submit: () => { this.setState({ submitted: true, dirty: false }); setTimeout(() => this.setState({ submitted: false }), 3000); },
+      forkLabel: forked ? 'Saved as ' + wfName + '-from-' + sel.id.slice(-4) : 'Save as new workflow',
+      forkRun: () => { this.setState({ forked: true }); setTimeout(() => this.setState({ forked: false }), 3000); }
+    };
+  }
+}
+</script>
+</body>
+</html>
