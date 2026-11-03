@@ -207,10 +207,11 @@ One milestone per page, each with the goal "the page matches its board using rea
 
 ## Blockers
 
-- `none`
+- M6 Node Editor: superseded premise (WR-066). PR #95 adds node authoring and rewrites the same three files; M6b must redo the page on top of it once #95 is on this branch.
 
 ## Re-Plan Triggers
 
+- Triggered 2026-11-03 for M6 by PR #95 (WR-066): the Node Editor is re-planned as M6b over the authoring API.
 - A page needs a projection field the backend does not expose and the mockup
   depends on it materially (record in issues; if it blocks the page's main
   layout, replan that milestone).

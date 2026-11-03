@@ -407,3 +407,9 @@ Issue IDs assigned at merge: WR-M9-2 was already WR-056 (dropped duplicate WR-05
 - Working tree: 105 modified, 20 new, 1 deleted (`GraphSelector.svelte`);
   nothing committed. The pre-commit traceability hook was simulated by the
   agents over their file lists; the real hook runs at commit time (WR-003).
+
+## 2026-11-03, integration path changed to merges
+
+- The owner rejected the cherry-pick port ("we need proper merges"; cherry-picks leave stray branches). PRs #96/#97 closed, their branches and worktree removed. New path: merge `origin/main` into the RPC branch (in progress), fast-forward it onto `codex/pantograph-rpc-workflow-2026-09-26`, open PR #98 from that branch; merge it into `feat/workbench-redesign` (twelve frontend conflicts, resolutions known from the port), re-run gates, PR #99 stacked on #98. Both PRs are open as drafts.
+- Found while checking `b4854d8d6`: PR #95 (node authoring) overlaps M6; recorded as WR-066 and a re-plan trigger; M6b follows the merge.
+
