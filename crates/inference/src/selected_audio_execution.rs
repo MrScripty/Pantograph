@@ -359,6 +359,8 @@ pub(crate) fn fixture() -> (
         library_root_id: Some("test-root".into()),
         storage_kind: package.artifact.storage_kind.clone(),
         validation_state: ModelValidationState::Valid,
+        verification_source_fingerprint: None,
+        verification_observed_from_cache_at: None,
         content_fingerprint: Some("synthetic-content-r1".into()),
         package_facts_contract_version: Some(package.package_facts_contract_version),
     };

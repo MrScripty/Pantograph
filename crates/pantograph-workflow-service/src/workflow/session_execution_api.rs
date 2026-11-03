@@ -47,7 +47,7 @@ use super::runtime_dispatch_assignment::WorkflowRuntimeDispatchAssignmentReposit
 use super::runtime_dispatch_assignment::{
     WorkflowRuntimeDispatchAssignmentId, WorkflowRuntimeDispatchAssignmentRecord,
 };
-use super::session_io_artifacts::workflow_io_artifact_metadata;
+use super::session_io_artifacts::{workflow_io_artifact_metadata, WorkflowIoArtifactAttribution};
 use super::session_scheduler_runner::{
     WorkflowSchedulerRunContext, WorkflowSchedulerSessionRunner,
 };
@@ -111,6 +111,9 @@ fn resumed_run_started_at(dequeued_at_ms: u64) -> std::time::Instant {
         .checked_sub(Duration::from_millis(elapsed_ms))
         .unwrap_or_else(std::time::Instant::now)
 }
+
+/// Model and runtime ids attributed to each node output of a run, keyed by node id.
+type RuntimeDispatchOutputAttribution = HashMap<String, (Option<String>, Option<String>)>;
 
 impl WorkflowService {
     fn resolve_execution_session_attribution(
@@ -1305,7 +1308,7 @@ impl WorkflowService {
     fn runtime_dispatch_output_attribution(
         &self,
         workflow_run_id: &str,
-    ) -> Result<HashMap<String, (Option<String>, Option<String>)>, WorkflowServiceError> {
+    ) -> Result<RuntimeDispatchOutputAttribution, WorkflowServiceError> {
         let repository = self
             .runtime_dispatch_assignment_repository
             .lock()
@@ -1370,8 +1373,10 @@ impl WorkflowService {
                     .unwrap_or(workflow_semantic_version),
                 role_label,
                 binding,
-                model_id.as_deref(),
-                runtime_id.as_deref(),
+                WorkflowIoArtifactAttribution {
+                    model_id: model_id.as_deref(),
+                    runtime_id: runtime_id.as_deref(),
+                },
             )?;
             let mut ledger = diagnostics_ledger.lock().map_err(|_| {
                 WorkflowServiceError::Internal("diagnostics ledger lock poisoned".to_string())

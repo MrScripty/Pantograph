@@ -68,8 +68,6 @@ use std::future::Future;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Mutex;
 use std::task::{Context, Poll};
-#[cfg(feature = "standalone")]
-use workflow_nodes::pumas_rpc::PumasRpcClient;
 
 async fn run_workflow_through_scheduler(
     runtime: &EmbeddedRuntime,

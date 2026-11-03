@@ -2257,7 +2257,9 @@ mod tests {
             pumas_package_facts: Some(PumasDispatchPackageFactsBridgeOutcome::Projected {
                 facts: Box::new(PumasDispatchPackageFactsProjection {
                     model_ref: intent.model_ref.clone(),
+                    package_facts_contract_version: package.package_facts_contract_version,
                     artifact_kind: package.artifact.artifact_kind.clone(),
+                    storage_kind: package.artifact.storage_kind.clone(),
                     validation_state: package.artifact.validation_state.clone(),
                     task: package.task.clone(),
                     backend_hints: package.backend_hints.clone(),
@@ -2283,6 +2285,8 @@ mod tests {
                         library_root_id: target.library_root_id.clone(),
                         storage_kind: "LibraryOwned".into(),
                         validation_state: "Valid".into(),
+                        verification_source_fingerprint: None,
+                        verification_observed_from_cache_at: None,
                         content_fingerprint: None,
                         package_facts_contract_version: Some(
                             package.package_facts_contract_version,
@@ -2609,7 +2613,9 @@ mod tests {
             pumas_package_facts: Some(PumasDispatchPackageFactsBridgeOutcome::Projected {
                 facts: Box::new(PumasDispatchPackageFactsProjection {
                     model_ref: intent.model_ref.clone(),
+                    package_facts_contract_version: package_facts.package_facts_contract_version,
                     artifact_kind: package_facts.artifact.artifact_kind.clone(),
+                    storage_kind: package_facts.artifact.storage_kind.clone(),
                     validation_state: package_facts.artifact.validation_state.clone(),
                     task: package_facts.task.clone(),
                     backend_hints: package_facts.backend_hints.clone(),
@@ -2631,6 +2637,8 @@ mod tests {
                         library_root_id: Some("text-test-root".into()),
                         storage_kind: "LibraryOwned".into(),
                         validation_state: "Valid".into(),
+                        verification_source_fingerprint: None,
+                        verification_observed_from_cache_at: None,
                         content_fingerprint: None,
                         package_facts_contract_version: Some(
                             package_facts.package_facts_contract_version,

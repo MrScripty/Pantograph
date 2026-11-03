@@ -690,7 +690,7 @@ fn bounded_pumas_error_message(error: impl std::fmt::Display) -> String {
     let message = error.to_string();
     let mut bounded = message.chars().take(MAX_ERROR_BYTES).collect::<String>();
     if message.chars().count() > MAX_ERROR_BYTES {
-        bounded.push_str("…");
+        bounded.push('…');
     }
     bounded
 }
@@ -1001,7 +1001,7 @@ fn compact_intent_diagnostics(
                 .take(MAX_MESSAGE_BYTES)
                 .collect::<String>();
             if diagnostic.message.chars().count() > MAX_MESSAGE_BYTES {
-                message.push_str("…");
+                message.push('…');
             }
             format!("{:?}: {message}", diagnostic.code)
         })
